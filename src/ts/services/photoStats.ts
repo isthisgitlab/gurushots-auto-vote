@@ -15,46 +15,45 @@
  *   - The caller only asks for the photos whose ORDER the popularity tiers
  *     actually decide (see selectEnrichmentSet in photoPicker/tiers.ts), so a fill
  *     that matched the theme cleanly costs zero extra requests.
- *   - Results are cached PERSISTENTLY, so coverage accumulates across fills
- *     instead of being re-fetched. A cache hit is free and unlimited.
+ *   - Results are cached PERSISTENTLY (photoStats/cache.ts), so coverage
+ *     accumulates across fills instead of being re-fetched. A cache hit is
+ *     free and unlimited.
  *   - Only MAX_ENRICH_PER_FILL photos are newly fetched per fill, and the
  *     selection prefers photos with no cached stats. A large library therefore
  *     converges to full coverage over successive fills rather than being
  *     permanently pinned to one slice of it.
+ *
+ * A second caller shares this cache: the picker's Show stats display, which
+ * reads the same endpoint for the likes and Guru-picks counts shown on a
+ * photo's tile. A display entry therefore carries five numbers, and one
+ * without the display pair still counts as measured for ranking while a
+ * display read fetches it again.
  *
  * A failed or deferred refresh keeps the last measured counts available for
  * ranking. Only a photo never measured is stats-unknown; the picker ranks it
  * below photos with known stats rather than treating missing data as zero.
  * Enrichment must never turn a fill that would succeed into a failure — same
  * contract as resolveSemanticScores in autoFill/candidates.ts.
- *
- * Cache scope: process-global and NOT token-scoped, so switching accounts
- * without restarting reuses entries. Accepted: photo ids are platform-unique
- * and vote counts are public data. This matches the equally unscoped vecCache
- * in services/semantic/index.ts.
- *
- * Platform note: the persistent store is fs on Electron/CLI and Capacitor
- * Preferences on the Android app WebView, but MEMORY-ONLY in the Android
- * headless background service — that runtime rebuilds coverage from scratch on
- * each start.
  */
 
-import * as logger from './../logger';
+import * as logger from '../logger';
 import { oneLine } from '../format/logSafe';
-import { createJsonStore } from '../settings/storage';
-import { isPlainObject } from '../plainObject';
+import { errorMessage } from '../errorMessage';
+import {
+    __resetCacheForTests,
+    cacheKeyFor,
+    isFresh,
+    loadCache,
+    markDirty,
+    nonNegInt,
+    persistCache,
+    toStats,
+} from './photoStats/cache';
+
+import type { PhotoStatsEntry } from './photoStats/cache';
 
 import type { PickerPhoto } from '../types/photoPicker';
 import type { FillLogger, RankDeps } from '../types/autoFill';
-import { errorMessage } from '../errorMessage';
-
-/**
- * One photo's cached ranking signals.
- */
-type PhotoStatsEntry = { votes: number; views: number; achievementCount: number; fetchedAt: number };
-
-/** The persisted stats cache file. */
-export type PhotoStatsFile = { version: number; photos: Record<string, PhotoStatsEntry> };
 
 // Newly fetched photos per fill. Cache hits do not count against this — a
 // fully-cached candidate set enriches completely with zero requests.
@@ -71,29 +70,6 @@ const ENRICH_CONCURRENCY = 5;
 // active challenge.
 const FAILURE_BREAKER_THRESHOLD = 3;
 
-// Vote counts move while a challenge is live, so refresh after a day. Expiry
-// schedules a new lookup; it must not erase the last measured vote count from
-// ranking when the lookup budget or an API failure postpones that refresh.
-const STATS_TTL_MS = 24 * 60 * 60 * 1000;
-
-// Bounds the persisted cache. Entries are tiny (three numbers), so this is
-// generous; on overflow the oldest entries are dropped.
-const MAX_CACHE_ENTRIES = 5000;
-
-// Defence-in-depth ceiling on the achievement count taken from an untrusted
-// payload. Only the COUNT is ever stored or ranked on — the achievements array
-// itself (which carries long descriptions and icon URLs) is never retained, so
-// a huge array cannot inflate the cache or the candidate objects.
-const MAX_ACHIEVEMENT_COUNT = 999;
-
-// Photo ids are untrusted strings and become cache KEYS, so MAX_CACHE_ENTRIES
-// alone does not bound the file: 5000 entries whose values are three numbers
-// each is tiny, but 5000 megabyte-long keys is not. Real GuruShots ids are
-// 32-char hex; anything past this is malformed and simply goes uncached (it is
-// still enriched for the current fill, just never persisted). Same
-// bound-the-untrusted-input reflex as MAX_LABELS_PER_PHOTO in photoPicker/labels.ts.
-const MAX_PHOTO_ID_LENGTH = 128;
-
 // Ceiling on newly fetched photos across a whole voting pass, not just one
 // fill. MAX_ENRICH_PER_FILL bounds a single challenge; runVotingPass walks
 // every active challenge, and a user with many of them would otherwise
@@ -101,11 +77,6 @@ const MAX_PHOTO_ID_LENGTH = 128;
 // the consecutive-failure breaker: that one reacts to the endpoint pushing
 // back, this one caps volume even when every request succeeds.
 const MAX_ENRICH_PER_PASS = 200;
-
-const statsStore = createJsonStore({ fileName: 'photo-stats.json', prefKey: 'gurushots-photo-stats' });
-
-let cache: Map<string, PhotoStatsEntry> | null = null;
-let cacheDirty = false;
 
 /**
  * The request allowance of one run of enrichment: how many lookups it may start,
@@ -136,104 +107,11 @@ const newBudget = (cap: number, quiet: boolean): StatsBudget => ({
 const passBudget = newBudget(MAX_ENRICH_PER_PASS, false);
 
 /**
- * A fresh, quiet budget for a run that is not part of a voting pass: one fill's lookups, as a ranking makes
- * a single enrichment call, which is already limited to MAX_ENRICH_PER_FILL.
+ * A fresh, quiet budget for a run that is not part of a voting pass: one fill's
+ * lookups by default, or the caller's own cap (the photo-stats display queue
+ * asks for its batch size).
  */
-const createStatsBudget = (): StatsBudget => newBudget(MAX_ENRICH_PER_FILL, true);
-
-// Only ids short enough to be safe cache keys are persisted; see
-// MAX_PHOTO_ID_LENGTH. Both callers pass an already-stringified id (a persisted
-// Object.keys key, or String(photo.id)). Returns null for anything unusable.
-const cacheKeyFor = (id: string): string | null => {
-    if (id === '' || id.length > MAX_PHOTO_ID_LENGTH) return null;
-    return id;
-};
-
-const nonNegInt = (value: unknown): number => {
-    const n = Number(value);
-    if (!Number.isFinite(n) || n < 0) return 0;
-    return Math.floor(n);
-};
-
-/**
- * Extract the three ranking signals from an untrusted get_image_data payload.
- * Everything else in the response is discarded.
- */
-const toStats = (
-    payload: { votes?: number; views?: number; achievements?: unknown[] } | null | undefined,
-): { votes: number; views: number; achievementCount: number } => ({
-    votes: nonNegInt(payload?.votes),
-    views: nonNegInt(payload?.views),
-    achievementCount: Math.min(
-        Array.isArray(payload?.achievements) ? payload.achievements.length : 0,
-        MAX_ACHIEVEMENT_COUNT,
-    ),
-});
-
-const isFresh = (entry: PhotoStatsEntry | undefined, now: number) =>
-    entry && Number.isFinite(entry.fetchedAt) && now - entry.fetchedAt >= 0 && now - entry.fetchedAt < STATS_TTL_MS;
-
-/**
- * Hydrate the in-memory cache from the persistent store. Any corruption is
- * treated as an empty cache — stats are a re-fetchable optimisation, never
- * something worth failing a fill over.
- */
-const loadCache = (): Map<string, PhotoStatsEntry> => {
-    if (cache) return cache;
-    cache = new Map();
-    try {
-        const raw = statsStore.readRaw();
-        if (!raw) return cache;
-        const parsed: unknown = JSON.parse(raw);
-        const photos = isPlainObject(parsed) ? parsed.photos : null;
-        if (!isPlainObject(photos)) return cache;
-        // Own-property iteration: the ids are remote-controlled, and a
-        // "__proto__" key in the file must not reach the prototype chain. A Map
-        // is immune to that on write, but Object.keys keeps the read honest too.
-        for (const id of Object.keys(photos)) {
-            const entry = photos[id];
-            if (!isPlainObject(entry)) continue;
-            if (cacheKeyFor(id) === null) continue;
-            cache.set(id, {
-                votes: nonNegInt(entry.votes),
-                views: nonNegInt(entry.views),
-                achievementCount: Math.min(nonNegInt(entry.achievementCount), MAX_ACHIEVEMENT_COUNT),
-                fetchedAt: Number.isFinite(entry.fetchedAt) ? (entry.fetchedAt as number) : 0,
-            });
-        }
-    } catch (error) {
-        logger
-            .withCategory('autoSubmit')
-            .debug(`photoStats: could not read the stats cache: ${errorMessage(error) || error}`, null);
-        cache = new Map();
-    }
-    return cache;
-};
-
-const persistCache = () => {
-    if (!cacheDirty || !cache) return;
-    try {
-        // Drop the oldest entries when over the cap.
-        if (cache.size > MAX_CACHE_ENTRIES) {
-            const sorted = Array.from(cache.entries()).sort((a, b) => b[1].fetchedAt - a[1].fetchedAt);
-            cache = new Map(sorted.slice(0, MAX_CACHE_ENTRIES));
-        }
-        // Object.create(null), not {}: a photo id of "__proto__" assigned onto a
-        // normal object literal hits the inherited accessor and reassigns that
-        // object's prototype instead of storing a key, silently dropping the
-        // entry on every write. loadCache already guards the read side with
-        // Object.keys; this is the matching write-side guard.
-        const photos = Object.create(null) as Record<string, PhotoStatsEntry>;
-        for (const [id, entry] of cache) photos[id] = entry;
-        const file: PhotoStatsFile = { version: 1, photos };
-        statsStore.writeRaw(JSON.stringify(file));
-        cacheDirty = false;
-    } catch (error) {
-        logger
-            .withCategory('autoSubmit')
-            .debug(`photoStats: could not persist the stats cache: ${errorMessage(error) || error}`, null);
-    }
-};
+const createStatsBudget = (cap = MAX_ENRICH_PER_FILL): StatsBudget => newBudget(cap, true);
 
 /**
  * Reset the per-pass failure breaker. Called at the start of each voting pass
@@ -267,55 +145,68 @@ const forEachChunked = async <T>(items: T[], budget: StatsBudget, worker: (item:
     }
 };
 
+/** The deps of one enrichment call, plus what a display read does differently. */
+type EnrichDeps = Pick<RankDeps, 'getImageData' | 'statsBudget'> & {
+    logger?: FillLogger;
+    /** Most photos newly fetched this call (default MAX_ENRICH_PER_FILL). */
+    maxFetch?: number;
+    /** An entry whose likes/guruPicks are missing needs a fetch too (display reads; default false). */
+    needDisplay?: boolean;
+    /**
+     * Land lookups in the shared store and mark it dirty (default true). With
+     * false a landed lookup lives only in this call's answer: mock mode reads
+     * this way, so its numbers never reach the real cache file.
+     */
+    persist?: boolean;
+};
+
+/** A candidate waiting for a fetch, and whether an entry (stale or complete) already measured it. */
+type FetchQueueItem = { photo: PickerPhoto; everMeasured: boolean };
+
+/** What one in-flight lookup works with: its budget, where numbers land, and how it reads. */
+type FetchContext = {
+    token: string;
+    getImageData: NonNullable<RankDeps['getImageData']>;
+    budget: StatsBudget;
+    /** Every id this call has an answer for so far (cache hits included). */
+    resolved: Map<string, PhotoStatsEntry>;
+    store: Map<string, PhotoStatsEntry>;
+    persist: boolean;
+    log: typeof logger | FillLogger;
+    now: number;
+};
+
 /**
- * Enrich candidate photos with their real votes/views/achievement count.
+ * Split candidates into cache hits (free) and fetch candidates.
  *
- * Returns a NEW array the same length and order as `photos`. Enriched entries
- * are shallow copies carrying `statsKnown: true`; everything else is returned
- * untouched with `statsKnown: false`. The input objects are never mutated —
- * they flow on to the submit path.
+ * Ordering, stated precisely because it decides which photos get measured
+ * first when a contested set is bigger than one fill's budget:
  *
- * @param photos - candidates to enrich
+ *   1. Anything already fresh in the cache costs nothing and is resolved
+ *      outright — it never competes for the budget.
+ *   2. Among the rest, NEVER-measured photos come before ones whose entry
+ *      merely went stale. A stale entry still has usable numbers from its
+ *      last lookup, so spending the budget re-confirming it while another
+ *      photo has never been looked at at all is strictly worse for coverage.
+ *   3. Only within each of those groups does `views` order the queue.
+ *
+ * That third step IS a views-ranked ordering, and it is worth being honest
+ * about what it does and does not do. It never feeds the ranking tiers —
+ * votes/achievements/views are compared only once real numbers arrive — it
+ * just picks the reading order, and views is a decent prior for "which
+ * photo is likely to have lots of votes". Because measured photos leave the
+ * queue permanently, coverage still reaches every candidate; views only
+ * affects how soon. What must never happen is views DECIDING the submission;
+ * consulting views for the reading order is harmless.
  */
-const enrichCandidates = async (
+const splitByCache = (
     photos: PickerPhoto[],
-    token: string,
-    deps: Pick<RankDeps, 'getImageData' | 'statsBudget'> & { logger?: FillLogger },
-): Promise<PickerPhoto[]> => {
-    const log = (deps && deps.logger) || logger;
-    const budget = deps?.statsBudget ?? passBudget;
-    if (!Array.isArray(photos) || photos.length === 0) return [];
-    const getImageData = deps && deps.getImageData;
-    if (typeof getImageData !== 'function' || !token) {
-        return photos.map((photo) => ({ ...photo, statsKnown: false }));
-    }
-
-    const now = Date.now();
-    const store = loadCache();
-
-    // Split into cache hits (free) and fetch candidates.
-    //
-    // Ordering, stated precisely because it decides which photos get measured
-    // first when a contested set is bigger than one fill's budget:
-    //
-    //   1. Anything already fresh in the cache costs nothing and is resolved
-    //      outright — it never competes for the budget.
-    //   2. Among the rest, NEVER-measured photos come before ones whose entry
-    //      merely went stale. A stale entry still has usable numbers from its
-    //      last lookup, so spending the budget re-confirming it while another
-    //      photo has never been looked at at all is strictly worse for coverage.
-    //   3. Only within each of those groups does `views` order the queue.
-    //
-    // That third step IS a views-ranked ordering, and it is worth being honest
-    // about what it does and does not do. It never feeds the ranking tiers —
-    // votes/achievements/views are compared only once real numbers arrive — it
-    // just picks the reading order, and views is a decent prior for "which
-    // photo is likely to have lots of votes". Because measured photos leave the
-    // queue permanently, coverage still reaches every candidate; views only
-    // affects how soon. What must never happen is views DECIDING the submission;
-    // consulting views for the reading order is harmless.
-    const needFetch: Array<{ photo: PickerPhoto; everMeasured: boolean }> = [];
+    store: Map<string, PhotoStatsEntry>,
+    now: number,
+    needDisplay: boolean,
+): { resolved: Map<string, PhotoStatsEntry>; needFetch: FetchQueueItem[] } => {
     const resolved: Map<string, PhotoStatsEntry> = new Map();
+    const needFetch: FetchQueueItem[] = [];
     const seen: Set<string> = new Set();
     for (const photo of photos) {
         const id = photo && photo.id !== undefined && photo.id !== null ? String(photo.id) : null;
@@ -328,100 +219,157 @@ const enrichCandidates = async (
         if (entry) {
             resolved.set(id, entry);
         }
-        if (!isFresh(entry, now)) {
+        // Ranking reads an entry as done whatever it holds; a display read
+        // re-fetches one that predates the display pair.
+        const displayIncomplete =
+            needDisplay && entry !== undefined && (entry.likes === undefined || entry.guruPicks === undefined);
+        if (!isFresh(entry, now) || displayIncomplete) {
             needFetch.push({ photo, everMeasured: entry !== undefined });
         }
     }
+    return { resolved, needFetch };
+};
 
-    let fetchList: PickerPhoto[] = [];
-    if (!breakerOpen(budget)) {
-        fetchList = needFetch
-            .slice()
-            .sort((a, b) => {
-                if (a.everMeasured !== b.everMeasured) return a.everMeasured ? 1 : -1;
-                return nonNegInt(b.photo?.views) - nonNegInt(a.photo?.views);
-            })
-            .slice(0, MAX_ENRICH_PER_FILL)
-            .map((candidate) => candidate.photo);
-    }
-
-    if (fetchList.length > 0) {
-        await forEachChunked(fetchList, budget, async (photo) => {
-            if (breakerOpen(budget)) return null;
-            const id = String(photo.id);
-            budget.fetched++;
-            if (budget.fetched >= budget.cap && !budget.capLogged) {
-                budget.capLogged = true;
-                if (!budget.quiet) {
-                    log.withCategory('autoSubmit').warning(
-                        `autoSubmit: reached this cycle's limit of ${MAX_ENRICH_PER_PASS} photo-stat lookups; remaining challenges rank on what is already known and resume next cycle`,
-                        null,
-                    );
-                }
-            }
-            let payload;
-            try {
-                payload = await getImageData(id, token);
-            } catch (error) {
-                log.withCategory('autoSubmit').debug(
-                    `photoStats: get_image_data failed for photo ${oneLine(id)}: ${oneLine(errorMessage(error) || error)}`,
+/**
+ * One queued lookup: reads the photo's record and lands its numbers in the
+ * call's answers (and the shared store, when this call persists). Never throws
+ * — a failed read counts against the breaker and leaves the last measured
+ * entry, if any, as the answer.
+ */
+const lookupOne = async (photo: PickerPhoto, ctx: FetchContext): Promise<null> => {
+    if (breakerOpen(ctx.budget)) return null;
+    const id = String(photo.id);
+    ctx.budget.fetched++;
+    if (ctx.budget.fetched >= ctx.budget.cap && !ctx.budget.capLogged) {
+        ctx.budget.capLogged = true;
+        if (!ctx.budget.quiet) {
+            ctx.log
+                .withCategory('autoSubmit')
+                .warning(
+                    `autoSubmit: reached this cycle's limit of ${MAX_ENRICH_PER_PASS} photo-stat lookups; remaining challenges rank on what is already known and resume next cycle`,
                     null,
                 );
-                payload = null;
-            }
-            if (!payload) {
-                budget.consecutiveFailures++;
-                if (breakerOpen(budget) && !budget.breakerLogged) {
-                    budget.breakerLogged = true;
-                    if (!budget.quiet) {
-                        log.withCategory('autoSubmit').warning(
-                            `autoSubmit: photo-stats lookups failed ${FAILURE_BREAKER_THRESHOLD} times in a row; skipping stat enrichment for the rest of this pass — ranking falls back to views and upload date`,
-                            null,
-                        );
-                    }
-                }
-                return null;
-            }
-            budget.consecutiveFailures = 0;
-            const stats = { ...toStats(payload), fetchedAt: now };
-            // Always usable for THIS fill; only persisted when the id is a safe
-            // cache key (see MAX_PHOTO_ID_LENGTH).
-            resolved.set(id, stats);
-            if (cacheKeyFor(id) !== null) {
-                store.set(id, stats);
-                cacheDirty = true;
-            }
-            return null;
-        });
-        persistCache();
+        }
     }
+    let payload;
+    try {
+        payload = await ctx.getImageData(id, ctx.token);
+    } catch (error) {
+        ctx.log
+            .withCategory('autoSubmit')
+            .debug(
+                `photoStats: get_image_data failed for photo ${oneLine(id)}: ${oneLine(errorMessage(error) || error)}`,
+                null,
+            );
+        payload = null;
+    }
+    if (!payload) {
+        ctx.budget.consecutiveFailures++;
+        if (breakerOpen(ctx.budget) && !ctx.budget.breakerLogged) {
+            ctx.budget.breakerLogged = true;
+            if (!ctx.budget.quiet) {
+                ctx.log
+                    .withCategory('autoSubmit')
+                    .warning(
+                        `autoSubmit: photo-stats lookups failed ${FAILURE_BREAKER_THRESHOLD} times in a row; skipping stat enrichment for the rest of this pass — ranking falls back to views and upload date`,
+                        null,
+                    );
+            }
+        }
+        return null;
+    }
+    ctx.budget.consecutiveFailures = 0;
+    const stats = { ...toStats(payload), fetchedAt: ctx.now };
+    // A successful read without the field means none of them: 0
+    // completes the entry for display, so it is not refetched. An entry
+    // loaded from an older cache file keeps its absent pair — that is
+    // the upgrade path (loadCache leaves absent fields absent).
+    if (stats.likes === undefined) stats.likes = 0;
+    if (stats.guruPicks === undefined) stats.guruPicks = 0;
+    // Always usable for THIS call; persisted only when persisting was
+    // asked for and the id is a safe cache key (see MAX_PHOTO_ID_LENGTH).
+    ctx.resolved.set(id, stats);
+    if (ctx.persist && cacheKeyFor(id) !== null) {
+        ctx.store.set(id, stats);
+        markDirty();
+    }
+    return null;
+};
 
-    return photos.map((photo) => {
+/** Fetch the queued photos under the budget: never-measured first, then views-ranked (see splitByCache). */
+const fetchQueued = async (queue: FetchQueueItem[], ctx: FetchContext, maxFetch: number): Promise<void> => {
+    if (breakerOpen(ctx.budget)) return;
+    const fetchList = queue
+        .slice()
+        .sort((a, b) => {
+            if (a.everMeasured !== b.everMeasured) return a.everMeasured ? 1 : -1;
+            return nonNegInt(b.photo?.views) - nonNegInt(a.photo?.views);
+        })
+        .slice(0, maxFetch)
+        .map((candidate) => candidate.photo);
+    if (fetchList.length === 0) return;
+    await forEachChunked(fetchList, ctx.budget, (photo) => lookupOne(photo, ctx));
+    persistCache();
+};
+
+/** The answer array: the input order, each photo a copy carrying its landed numbers. */
+const applyResolved = (photos: PickerPhoto[], resolved: Map<string, PhotoStatsEntry>): PickerPhoto[] =>
+    photos.map((photo) => {
         const id = photo && photo.id !== undefined && photo.id !== null ? String(photo.id) : null;
         const stats = id ? resolved.get(id) : null;
         if (!stats) return { ...photo, statsKnown: false };
-        // Assign the three ranking fields explicitly rather than spreading the
+        // Assign the ranking fields explicitly rather than spreading the
         // API payload: Object.assign/spread of an untrusted JSON object can
-        // carry a "__proto__" key, and only these three are ever ranked on.
+        // carry a "__proto__" key, and only these fields are ever kept.
         return {
             ...photo,
             votes: stats.votes,
             views: stats.views,
             achievementCount: stats.achievementCount,
+            ...(stats.likes === undefined ? null : { likes: stats.likes }),
+            ...(stats.guruPicks === undefined ? null : { guruPicks: stats.guruPicks }),
             statsKnown: true,
         };
     });
+
+/**
+ * Enrich candidate photos with their real votes/views/achievement count, and
+ * — when the entry has them — the likes/Guru-picks display pair.
+ *
+ * Returns a NEW array the same length and order as `photos`. Enriched entries
+ * are shallow copies carrying `statsKnown: true`; everything else is returned
+ * untouched with `statsKnown: false`. The input objects are never mutated —
+ * they flow on to the submit path.
+ *
+ * @param photos - candidates to enrich
+ */
+const enrichCandidates = async (photos: PickerPhoto[], token: string, deps: EnrichDeps): Promise<PickerPhoto[]> => {
+    const log = (deps && deps.logger) || logger;
+    const budget = deps?.statsBudget ?? passBudget;
+    const maxFetch = deps?.maxFetch ?? MAX_ENRICH_PER_FILL;
+    const needDisplay = deps?.needDisplay === true;
+    const persist = deps?.persist !== false;
+    if (!Array.isArray(photos) || photos.length === 0) return [];
+    const getImageData = deps && deps.getImageData;
+    if (typeof getImageData !== 'function' || !token) {
+        return photos.map((photo) => ({ ...photo, statsKnown: false }));
+    }
+
+    const now = Date.now();
+    const store = loadCache();
+    const { resolved, needFetch } = splitByCache(photos, store, now, needDisplay);
+    await fetchQueued(needFetch, { token, getImageData, budget, resolved, store, persist, log, now }, maxFetch);
+    return applyResolved(photos, resolved);
 };
 
 /** Test-only: drop the in-memory cache and per-pass budget state. */
 const __resetForTests = () => {
-    cache = null;
-    cacheDirty = false;
+    __resetCacheForTests();
     resetPassState();
 };
 
-export const initializePhotoStatsAsync = statsStore.initializeAsync;
-export const flushPhotoStatsWrites = statsStore.flushPendingWrites;
+export { initializePhotoStatsAsync, flushPhotoStatsWrites, STATS_TTL_MS, MAX_CACHE_ENTRIES } from './photoStats/cache';
+export type { PhotoStatsFile } from './photoStats/cache';
 
 export {
     enrichCandidates,
@@ -430,7 +378,5 @@ export {
     statsBudgetTripped,
     MAX_ENRICH_PER_FILL,
     MAX_ENRICH_PER_PASS,
-    MAX_CACHE_ENTRIES,
-    STATS_TTL_MS,
     __resetForTests,
 };

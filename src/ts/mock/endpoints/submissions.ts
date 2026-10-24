@@ -9,6 +9,26 @@ import { simulateApiResponse, mockMethod } from '../simulate';
 import { buildLibraryPhotos, buildImageStats } from '../photoLibrary';
 import type * as submissionsModule from '../../api/submissions';
 
+import type { LibraryOrder } from '../../librarySort';
+import type { LibraryPhoto } from '../../types/gurushots';
+
+/** What the mock library serves: a library photo whose votes and upload date are always set (the fixture guarantees them). */
+type MockLibraryPhoto = LibraryPhoto & { labels: string[]; votes: number; upload_date: number };
+
+/**
+ * Reorder the mock library the way the live endpoint's `order`+`sort` pair
+ * does: votes by the mock's vote count, newest/oldest by upload date. An
+ * absent order sorts votes desc, as the real server's own default does; only
+ * `'default'` (the API's own order, no sort sent) keeps the fixture order.
+ */
+const orderedBy = (items: MockLibraryPhoto[], order?: LibraryOrder | 'default') => {
+    if (order === 'default') return items;
+    const byDate = order === 'newest' || order === 'oldest';
+    const key = (item: MockLibraryPhoto) => (byDate ? item.upload_date : item.votes);
+    const sorted = [...items].sort((a, b) => key(b) - key(a));
+    return order === 'oldest' ? sorted.reverse() : sorted;
+};
+
 /**
  * Simulate fetching the user's challenge-eligible photo library.
  * Mirrors /rest/get_photos_private; returns the mock library
@@ -34,13 +54,16 @@ const getEligiblePhotos: typeof submissionsModule.getEligiblePhotos = mockMethod
         await simulateApiResponse({}, 400);
         const search = typeof options.search === 'string' ? options.search.trim().toLowerCase() : '';
         if (search === '') {
-            return items;
+            return orderedBy(items, options.order);
         }
         // EXACT tag match, matching the live endpoint. get_photos_private
         // answers "staircase" with 23 photos but "stair" and "stairs" with
         // none — it is a tag lookup, not a text search, which is the whole
         // reason tagResolver exists.
-        return items.filter((item) => item.labels.some((label) => label.toLowerCase() === search));
+        return orderedBy(
+            items.filter((item) => item.labels.some((label) => label.toLowerCase() === search)),
+            options.order,
+        );
     },
 );
 
@@ -87,9 +110,12 @@ const getEligiblePhotosWalk: typeof submissionsModule.getEligiblePhotosWalk = mo
         const items = buildLibraryPhotos(Math.floor(Date.now() / 1000));
         await simulateApiResponse({}, 400);
         const search = typeof options.search === 'string' ? options.search.trim().toLowerCase() : '';
-        // The same exact-tag filter as the mock getEligiblePhotos search.
-        const found =
-            search === '' ? items : items.filter((item) => item.labels.some((l) => l.toLowerCase() === search));
+        // The same exact-tag filter as the mock getEligiblePhotos search, and
+        // the same order semantics.
+        const found = orderedBy(
+            search === '' ? items : items.filter((item) => item.labels.some((l) => l.toLowerCase() === search)),
+            options.order,
+        );
         const start = mockStart(options);
         const { skip, maxKept } = options;
         if (maxKept === LIBRARY_BATCH_PHOTOS) {

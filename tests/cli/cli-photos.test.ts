@@ -32,7 +32,7 @@ const handlers = invalid<{
     };
 }>(handlersModule).__handlers;
 import type * as photosModule from '../../src/ts/cli/commands/photos';
-const { listPhotosCmd, suggestPhotosCmd, parseSearchFlag } =
+const { listPhotosCmd, suggestPhotosCmd, parseSearchFlag, parseSortFlag, BAD_SORT_TEXT } =
     require('../../src/ts/cli/commands/photos') as typeof photosModule;
 
 const text = (level: string) => calls.filter((c) => c.level === level).map((c) => c.msg);
@@ -68,7 +68,16 @@ describe('list-photos', () => {
             memberId: 'm',
         });
         await expect(listPhotosCmd('5', 'pink')).resolves.toBe(0);
-        expect(handlers['get-library-photos']).toHaveBeenCalledWith(null, '5', 'pink');
+        expect(handlers['get-library-photos']).toHaveBeenCalledWith(
+            null,
+            '5',
+            'pink',
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+        );
         const info = text('info');
         const stdout = text('stdout');
         // The persisted log gets the count and the cut-short flag, never a photo.
@@ -157,8 +166,8 @@ describe('list-photos', () => {
         await listPhotosCmd('5', null);
         await listPhotosCmd(null, 'pink');
         expect(handlers['get-library-photos'].mock.calls).toEqual([
-            [null, '5', null],
-            [null, null, 'pink'],
+            [null, '5', null, undefined, undefined, undefined, undefined, undefined],
+            [null, null, 'pink', undefined, undefined, undefined, undefined, undefined],
         ]);
     });
 
@@ -329,6 +338,67 @@ describe('list-photos', () => {
         expect(parseSearchFlag(['--search', 'a'])).toBe('a');
         expect(parseSearchFlag(['--search'])).toBeNull();
         expect(parseSearchFlag(['x'])).toBeNull();
+    });
+});
+
+describe('list-photos --sort', () => {
+    const okListing = {
+        success: true,
+        photos: [photos[0]],
+        truncated: false,
+        wonIds: [],
+        wonCount: 0,
+        preview: false,
+        readAtMs: 1_700_000_000_000,
+        allowedKnown: true,
+        memberId: 'm',
+    };
+
+    test('a valid sort is passed to the handler as the seventh argument', async () => {
+        handlers['get-library-photos'].mockResolvedValue(okListing);
+        await expect(listPhotosCmd('5', null, 'newest')).resolves.toBe(0);
+        expect(handlers['get-library-photos']).toHaveBeenCalledWith(
+            null,
+            '5',
+            null,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            'newest',
+        );
+    });
+
+    test('no sort asks for the default votes order', async () => {
+        handlers['get-library-photos'].mockResolvedValue(okListing);
+        await listPhotosCmd('5', null);
+        expect(handlers['get-library-photos']).toHaveBeenCalledWith(
+            null,
+            '5',
+            null,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+        );
+    });
+
+    test.each([['strongest'], ['toString'], ['__proto__'], ['']])(
+        'a sort that is not a library order (%s) refuses with the usage text and exits 1',
+        async (sort) => {
+            handlers['get-library-photos'].mockResolvedValue(okListing);
+            await expect(listPhotosCmd('5', null, sort)).resolves.toBe(1);
+            expect(handlers['get-library-photos']).not.toHaveBeenCalled();
+            expect(text('error')[0]).toContain(BAD_SORT_TEXT);
+        },
+    );
+
+    test('parseSortFlag reads both spellings and nothing else', () => {
+        expect(parseSortFlag(['--sort=newest'])).toBe('newest');
+        expect(parseSortFlag(['--sort', 'oldest'])).toBe('oldest');
+        expect(parseSortFlag(['--sort'])).toBeNull();
+        expect(parseSortFlag(['x'])).toBeNull();
     });
 });
 

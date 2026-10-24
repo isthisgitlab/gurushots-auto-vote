@@ -4,7 +4,8 @@
  * get-auto-claim-status, get-bankroll, get-auto-join-active,
  * get-member-challenges and join-challenge (account.ts); play-auto-turbo and
  * apply-turbo-to-entry (turbo.ts); fill-challenge-now, submit-picked-photos,
- * suggest-photos and apply-boost-to-entry (entries.ts); get-library-photos (library.ts).
+ * suggest-photos and apply-boost-to-entry (entries.ts); get-library-photos
+ * (library.ts); get-photo-stats (photoStats.ts).
  *
  * The turbo and boost flows are kept structurally separate (different
  * sanitisation, different result shapes, different log categories) —
@@ -31,6 +32,7 @@ import {
     handleApplyBoostToEntry,
 } from './actions/entries';
 import { handleGetLibraryPhotos } from './actions/library';
+import { handleGetPhotoStats } from './actions/photoStats';
 
 import type { IpcMain } from 'electron';
 import type { IpcHandlerMap } from './registerHandlers';
@@ -53,6 +55,7 @@ const buildHandlers = () =>
         'join-challenge': handleJoinChallenge,
         'forget-unconfirmed-payment': handleForgetUnconfirmedPayment,
         'get-library-photos': handleGetLibraryPhotos,
+        'get-photo-stats': handleGetPhotoStats,
     }) satisfies IpcHandlerMap;
 
 const register = (ipcMain: IpcMain) => {

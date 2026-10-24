@@ -75,6 +75,10 @@ export interface PickerPhoto extends LibraryPhoto {
     achievementCount?: number;
     /** A raw achievements array (mocks, tests, a payload that inlines it). */
     achievements?: unknown[];
+    /** The like count photoStats.ts carries for display; absent until a display read lands it. */
+    likes?: number;
+    /** The Guru-picks count photoStats.ts carries for display; absent until a display read lands it. */
+    guruPicks?: number;
 }
 
 /** One photo's semantic match: best-label similarity (0..1) and on-theme label count. */

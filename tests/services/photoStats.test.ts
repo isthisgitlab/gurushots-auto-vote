@@ -495,3 +495,193 @@ describe('photoStats.enrichCandidates', () => {
         expect(persisted[`p${MAX_CACHE_ENTRIES + 9}`]).toBeUndefined();
     });
 });
+
+describe('photoStats display pair (likes / guruPicks)', () => {
+    beforeEach(() => {
+        storeData = null;
+        photoStats.__resetForTests();
+        resetPassState();
+        jest.clearAllMocks();
+    });
+
+    const payload = (votes: number, views: number, achievementCount = 0) => ({
+        votes,
+        views,
+        achievements: Array.from({ length: achievementCount }, (_, i) => ({ name: `a${i}` })),
+    });
+
+    test('a payload with likes and guru_picks lands them as numbers, and nothing else of the payload', async () => {
+        const getImageData = jest
+            .fn()
+            .mockResolvedValue({ ...payload(10, 20, 1), likes: 4, guru_picks: 2, title: 'server text' });
+        const out = await enrichCandidates([photo('p1')], 'tok', { getImageData });
+        expect(out[0]).toEqual(expect.objectContaining({ likes: 4, guruPicks: 2, statsKnown: true }));
+        expect((out[0] as { title?: unknown }).title).toBeUndefined();
+        expect((out[0] as { guru_picks?: unknown }).guru_picks).toBeUndefined();
+    });
+
+    test('a payload without them lands 0s — a successful read means none, so the entry is complete for display', async () => {
+        const getImageData = jest.fn().mockResolvedValue(payload(10, 20, 1));
+        const out = await enrichCandidates([photo('p1')], 'tok', { getImageData });
+        expect(out[0]).toEqual(
+            expect.objectContaining({ votes: 10, views: 20, likes: 0, guruPicks: 0, statsKnown: true }),
+        );
+    });
+
+    test('a hostile display value is coerced like the ranking numbers', async () => {
+        const getImageData = jest.fn().mockResolvedValue({ ...payload(1, 1), likes: -5, guru_picks: 2.9 });
+        const out = await enrichCandidates([photo('p1')], 'tok', { getImageData });
+        expect(out[0].likes).toBe(0);
+        expect(out[0].guruPicks).toBe(2);
+    });
+
+    test('the map enrichCandidates returns copies them from a cache hit too', async () => {
+        storeData = JSON.stringify({
+            version: 1,
+            photos: { hit: { votes: 7, views: 8, achievementCount: 0, fetchedAt: Date.now(), likes: 9, guruPicks: 1 } },
+        });
+        const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
+        const out = await enrichCandidates([photo('hit')], 'tok', { getImageData });
+        expect(getImageData).not.toHaveBeenCalled();
+        expect(out[0]).toEqual(expect.objectContaining({ likes: 9, guruPicks: 1, statsKnown: true }));
+    });
+});
+
+describe('photoStats.loadCache and the display pair', () => {
+    beforeEach(() => {
+        storeData = null;
+        photoStats.__resetForTests();
+        resetPassState();
+        jest.clearAllMocks();
+    });
+
+    const payload = (votes: number, views: number) => ({ votes, views, achievements: [] });
+
+    test('an entry without likes keeps them absent and still ranks as fresh', async () => {
+        storeData = JSON.stringify({
+            version: 1,
+            photos: { old: { votes: 1, views: 2, achievementCount: 0, fetchedAt: Date.now() } },
+        });
+        const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
+        const out = await enrichCandidates([photo('old')], 'tok', { getImageData });
+        expect(getImageData).not.toHaveBeenCalled();
+        expect(out[0]).toEqual(expect.objectContaining({ votes: 1, statsKnown: true }));
+        expect(out[0].likes).toBeUndefined();
+        expect(out[0].guruPicks).toBeUndefined();
+    });
+
+    test.each([
+        ['a numeric string', '7', 7],
+        ['a negative number', -5, 0],
+        ['a fraction', 2.9, 2],
+    ])('a persisted likes of %s reads as nonNegInt (%p)', async (_label, stored, expected) => {
+        storeData = JSON.stringify({
+            version: 1,
+            photos: {
+                e: { votes: 1, views: 1, achievementCount: 0, fetchedAt: Date.now(), likes: stored, guruPicks: stored },
+            },
+        });
+        const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
+        const out = await enrichCandidates([photo('e')], 'tok', { getImageData });
+        expect(out[0].likes).toBe(expected);
+        expect(out[0].guruPicks).toBe(expected);
+    });
+});
+
+describe('photoStats.enrichCandidates options', () => {
+    beforeEach(() => {
+        storeData = null;
+        photoStats.__resetForTests();
+        resetPassState();
+        jest.clearAllMocks();
+    });
+
+    const payload = (votes: number, views: number) => ({ votes, views, achievements: [] });
+
+    test('maxFetch bounds the photos newly fetched by this call', async () => {
+        const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
+        const many = Array.from({ length: 10 }, (_, i) => photo(`m${i}`));
+        await enrichCandidates(many, 'tok', { getImageData, maxFetch: 3 });
+        expect(getImageData).toHaveBeenCalledTimes(3);
+    });
+
+    test('needDisplay fetches a fresh entry without the pair, and not one that has it', async () => {
+        storeData = JSON.stringify({
+            version: 1,
+            photos: {
+                bare: { votes: 1, views: 2, achievementCount: 0, fetchedAt: Date.now() },
+                full: { votes: 3, views: 4, achievementCount: 0, fetchedAt: Date.now(), likes: 5, guruPicks: 6 },
+            },
+        });
+        const getImageData = jest.fn().mockResolvedValue({ ...payload(9, 9), likes: 8, guru_picks: 7 });
+        // Without needDisplay a fresh entry costs nothing.
+        await enrichCandidates([photo('bare')], 'tok', { getImageData });
+        expect(getImageData).not.toHaveBeenCalled();
+        // With it, the pair-less entry is fetched and the complete one is not.
+        const out = await enrichCandidates([photo('bare'), photo('full')], 'tok', { getImageData, needDisplay: true });
+        expect(getImageData).toHaveBeenCalledTimes(1);
+        expect(getImageData).toHaveBeenCalledWith('bare', 'tok');
+        expect(out[0]).toEqual(expect.objectContaining({ likes: 8, guruPicks: 7, statsKnown: true }));
+    });
+
+    test('persist:false answers a landed lookup without ever writing the store', async () => {
+        const getImageData = jest.fn().mockResolvedValue({ ...payload(4, 5), likes: 6, guru_picks: 7 });
+        const out = await enrichCandidates([photo('pp')], 'tok', { getImageData, persist: false });
+        expect(out[0]).toEqual(expect.objectContaining({ votes: 4, likes: 6, guruPicks: 7, statsKnown: true }));
+        expect(storeData).toBeNull();
+        // The next call fetches again: nothing was kept.
+        getImageData.mockClear();
+        await enrichCandidates([photo('pp')], 'tok', { getImageData });
+        expect(getImageData).toHaveBeenCalledTimes(1);
+    });
+
+    test("createStatsBudget(cap) spends the caller's cap, not the fill default", async () => {
+        const budget = createStatsBudget(2);
+        const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
+        const many = Array.from({ length: 5 }, (_, i) => photo(`c${i}`));
+        await enrichCandidates(many, 'tok', { getImageData, statsBudget: budget });
+        expect(getImageData).toHaveBeenCalledTimes(2);
+        expect(statsBudgetTripped(budget)).toBe(false);
+    });
+});
+
+describe('photoStats.persistCache trims in place', () => {
+    beforeEach(() => {
+        storeData = null;
+        photoStats.__resetForTests();
+        resetPassState();
+        jest.clearAllMocks();
+    });
+
+    const payload = (votes: number, views: number) => ({ votes, views, achievements: [] });
+
+    test("a concurrent call's landed lookup survives a trim that happened while it ran", async () => {
+        const now = Date.now();
+        const photos: Record<string, unknown> = {};
+        for (let i = 0; i < MAX_CACHE_ENTRIES + 10; i++) {
+            photos[`p${i}`] = { votes: i, views: 0, achievementCount: 0, fetchedAt: now - i };
+        }
+        storeData = JSON.stringify({ version: 1, photos });
+        photoStats.__resetForTests();
+
+        type Payload = { votes: number; views: number; achievements: unknown[] };
+        let releaseLate!: (value: Payload) => void;
+        const lateGate = new Promise<Payload>((resolve) => (releaseLate = resolve));
+        const getImageData = jest
+            .fn<ReturnType<NonNullable<RankDeps['getImageData']>>, Parameters<NonNullable<RankDeps['getImageData']>>>()
+            .mockImplementation((id) => (String(id) === 'late-one' ? lateGate : Promise.resolve(payload(1, 1))));
+
+        // `late` starts fetching and hangs; the trimmer overflows the cache and
+        // persists while it runs; then `late` lands and writes.
+        const late = enrichCandidates([photo('late-one')], 'tok', { getImageData });
+        await enrichCandidates([photo('trim-one')], 'tok', { getImageData });
+        releaseLate(payload(9, 9));
+        await late;
+
+        const persisted = parseJsonAs(storeData, isPhotoStatsFile).photos;
+        // With a replaced Map the late write went into one nobody reads and was lost.
+        expect(persisted['late-one']).toBeDefined();
+        expect(persisted['trim-one']).toBeDefined();
+        expect(Object.keys(persisted).length).toBeLessThanOrEqual(MAX_CACHE_ENTRIES);
+    });
+});

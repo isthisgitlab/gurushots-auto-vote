@@ -65,7 +65,9 @@ const MOCK_LIBRARY_TAGS = Array.from(
  *
  * @param now - epoch seconds the upload dates are relative to
  */
-const buildLibraryPhotos = (now: number): Array<LibraryPhoto & { labels: string[] }> => [
+const buildLibraryPhotos = (
+    now: number,
+): Array<LibraryPhoto & { labels: string[]; votes: number; upload_date: number }> => [
     {
         id: 'photo_pink_flower_001',
         labels: MOCK_PHOTO_LABELS.photo_pink_flower_001,
@@ -174,24 +176,40 @@ const buildLibraryPhotos = (now: number): Array<LibraryPhoto & { labels: string[
  * API would have reported as 0), so mock mode actually exercises the
  * enrichment tier instead of ranking identically either way. `photo_old_008`
  * is the important case: oldest, lowest views, but by far the most votes and
- * achievements — it should win a no-theme-match fill.
+ * achievements — it should win a no-theme-match fill. Every entry carries the
+ * likes and Guru-picks counts the picker's Show stats display reads.
  *
  * Built fresh per call so a caller mutating a returned `achievements` array
  * never leaks into the next read.
  */
-const buildImageStats = (): Record<string, { votes: number; views: number; achievements: string[] }> => ({
-    photo_pink_flower_001: { votes: 3120, views: 1820, achievements: ['top_100'] },
-    photo_nature_landscape_002: { votes: 1780, views: 1110, achievements: [] },
-    photo_urban_003: { votes: 890, views: 640, achievements: [] },
-    photo_recent_004: { votes: 240, views: 95, achievements: [] },
-    photo_pink_petal_005: { votes: 4010, views: 2230, achievements: ['top_50', 'top_100'] },
-    photo_animal_006: { votes: 1560, views: 980, achievements: ['top_100'] },
-    photo_blocked_007: { votes: 9990, views: 5000, achievements: ['elite'] },
-    photo_old_008: { votes: 12400, views: 70, achievements: ['elite', 'top_30', 'top_50', 'top_100'] },
-    photo_won_009: { votes: 6400, views: 3100, achievements: ['winner'] },
-    [SUGGESTED_PHOTO_IDS[0]]: { votes: 2100, views: 1340, achievements: ['top_100'] },
-    [SUGGESTED_PHOTO_IDS[1]]: { votes: 1650, views: 1020, achievements: [] },
-    [SUGGESTED_PHOTO_IDS[2]]: { votes: 960, views: 730, achievements: [] },
+const buildImageStats = (): Record<
+    string,
+    { votes: number; views: number; likes: number; guru_picks: number; achievements: string[] }
+> => ({
+    photo_pink_flower_001: { votes: 3120, views: 1820, likes: 214, guru_picks: 4, achievements: ['top_100'] },
+    photo_nature_landscape_002: { votes: 1780, views: 1110, likes: 96, guru_picks: 0, achievements: [] },
+    photo_urban_003: { votes: 890, views: 640, likes: 31, guru_picks: 1, achievements: [] },
+    photo_recent_004: { votes: 240, views: 95, likes: 3, guru_picks: 0, achievements: [] },
+    photo_pink_petal_005: {
+        votes: 4010,
+        views: 2230,
+        likes: 486,
+        guru_picks: 7,
+        achievements: ['top_50', 'top_100'],
+    },
+    photo_animal_006: { votes: 1560, views: 980, likes: 88, guru_picks: 2, achievements: ['top_100'] },
+    photo_blocked_007: { votes: 9990, views: 5000, likes: 1201, guru_picks: 12, achievements: ['elite'] },
+    photo_old_008: {
+        votes: 12400,
+        views: 70,
+        likes: 24,
+        guru_picks: 1,
+        achievements: ['elite', 'top_30', 'top_50', 'top_100'],
+    },
+    photo_won_009: { votes: 6400, views: 3100, likes: 655, guru_picks: 9, achievements: ['winner'] },
+    [SUGGESTED_PHOTO_IDS[0]]: { votes: 2100, views: 1340, likes: 140, guru_picks: 3, achievements: ['top_100'] },
+    [SUGGESTED_PHOTO_IDS[1]]: { votes: 1650, views: 1020, likes: 77, guru_picks: 0, achievements: [] },
+    [SUGGESTED_PHOTO_IDS[2]]: { votes: 960, views: 730, likes: 15, guru_picks: 1, achievements: [] },
 });
 
 export { MOCK_LIBRARY_TAGS, SUGGESTED_PHOTO_IDS, buildImageStats, buildLibraryPhotos, hexPhotoId };

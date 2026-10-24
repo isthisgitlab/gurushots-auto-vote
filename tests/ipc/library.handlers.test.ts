@@ -490,6 +490,78 @@ describe('paged reads (start and keep)', () => {
     });
 });
 
+describe('the order (7th argument)', () => {
+    const walkOf = (...ids: string[]): WalkResult => ({
+        items: ids.map((id) => ({ id, permission: { allowed: true, message: null } })),
+        truncated: false,
+    });
+
+    test.each([
+        ['toString'],
+        ['__proto__'],
+        ['constructor'],
+        ['hasOwnProperty'],
+        ['Votes'],
+        ['stale'],
+        [null],
+        [7],
+        [{}],
+    ])('refuses the order %j before looking up the token', async (order) => {
+        const strategy = stubStrategy();
+        await expect(call('5', undefined, 'fresh', 'submit', undefined, undefined, order)).resolves.toEqual({
+            success: false,
+            error: 'invalid-args',
+        });
+        expect(auth.requireAuthToken).not.toHaveBeenCalled();
+        expect(strategy.getEligiblePhotosWalk).not.toHaveBeenCalled();
+    });
+
+    test('a date order reaches the walk; a votes order reads exactly as before, with no order named', async () => {
+        const walk = newWalk(walkOf('a'));
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        await call('5', undefined, 'fresh', 'submit', undefined, undefined, 'oldest');
+        expect(walk.mock.calls[0][2]).toMatchObject({ order: 'oldest' });
+        __resetLibraryThrottle();
+        await call('5', undefined, 'fresh', 'submit', undefined, undefined, 'votes');
+        expect('order' in (walk.mock.calls[1][2] as object)).toBe(false);
+        __resetLibraryThrottle();
+        await call('5');
+        expect('order' in (walk.mock.calls[2][2] as object)).toBe(false);
+    });
+
+    test("a non-votes order is always read fresh: 'cached' walks, answers preview: false, and keeps nothing", async () => {
+        const walk = newWalk(walkOf('a'));
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        // A cached request with an order walks (the cache holds vote-ordered listings only)...
+        await expect(call('5', undefined, 'cached', 'submit', undefined, undefined, 'newest')).resolves.toMatchObject({
+            success: true,
+            preview: false,
+        });
+        expect(walk).toHaveBeenCalledTimes(1);
+        // ...and the ordered read was not kept: a cached request without an order walks again.
+        __resetLibraryThrottle();
+        await expect(call('5', undefined, 'cached')).resolves.toMatchObject({ preview: false });
+        expect(walk).toHaveBeenCalledTimes(2);
+        __resetLibraryThrottle();
+        // Nor is an ordered cached request answered from an earlier vote-ordered listing.
+        await expect(call('5', undefined, 'cached', 'submit', undefined, undefined, 'oldest')).resolves.toMatchObject({
+            preview: false,
+        });
+        expect(walk).toHaveBeenCalledTimes(3);
+    });
+
+    test('an ordered batch read runs with start and keep like any other', async () => {
+        const walk = newWalk({ items: walkOf('a').items, truncated: true, nextStart: 100 });
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        await expect(call('5', undefined, 'fresh', 'submit', 100, 50, 'newest')).resolves.toMatchObject({
+            success: true,
+            preview: false,
+            nextStart: 100,
+        });
+        expect(walk.mock.calls[0][2]).toMatchObject({ order: 'newest', start: 100, maxKept: 50 });
+    });
+});
+
 describe('without a challenge id (get_photos_private needs one)', () => {
     test('borrows an active challenge and says the allowed flags do not apply', async () => {
         const strategy = stubStrategy();

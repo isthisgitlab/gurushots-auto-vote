@@ -45,6 +45,9 @@ export interface ImageRecord {
     id?: string;
     votes?: number;
     views?: number;
+    likes?: number;
+    /** The Guru-picks COUNT, not a list. */
+    guru_picks?: number;
     /** Only the count is read; the entries' own shape is not relied on. */
     achievements?: unknown[];
 }

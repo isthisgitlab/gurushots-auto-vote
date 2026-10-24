@@ -140,6 +140,7 @@ export const joinChallenge = forward('joinChallenge');
 export const forgetUnconfirmedPayment = forward('forgetUnconfirmedPayment');
 export const getOpenChosenAnnotations = forward('getOpenChosenAnnotations');
 export const getLibraryPhotos = forward('getLibraryPhotos');
+export const getPhotoStats = forward('getPhotoStats');
 export const runVotingCycle = forward('runVotingCycle');
 export const runVotingCycleForChallenge = forward('runVotingCycleForChallenge');
 export const voteOnChallengeManual = forward('voteOnChallengeManual');

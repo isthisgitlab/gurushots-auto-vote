@@ -21,7 +21,7 @@ import {
 import { pinCmd, PIN_USAGE } from './commands/pin';
 import { showBankroll } from './commands/bankroll';
 import { showDiscover, joinChallengeCmd, forgetPaymentCmd } from './commands/join';
-import { listPhotosCmd, suggestPhotosCmd, parseSearchFlag } from './commands/photos';
+import { listPhotosCmd, suggestPhotosCmd, parseSearchFlag, parseSortFlag } from './commands/photos';
 import { checkUpdates } from './commands/update';
 import { isPinnableImageId } from '../settings';
 import {
@@ -142,17 +142,29 @@ const runForgetPayment: CommandHandler = async (argv) => {
 };
 
 const LIST_PHOTOS_USAGE =
-    'Usage: list-photos [--challenge=<id>] [--search=<tag>]  or  list-photos --challenge=<id> --suggest';
+    'Usage: list-photos [--challenge=<id>] [--search=<tag>] [--sort=votes|newest|oldest]  or  list-photos --challenge=<id> --suggest';
 
 const runListPhotos: CommandHandler = async (argv) => {
     const { challengeId, rest } = extractChallenge(argv);
     const suggestFlags = rest.filter((arg) => arg === '--suggest');
     const listRest = rest.filter((arg) => arg !== '--suggest');
     const search = parseSearchFlag(listRest);
-    // Anything that is neither a --search flag nor its value is a typo.
+    const sort = parseSortFlag(listRest);
+    // Anything that is neither a --search/--sort flag nor its value is a typo.
     const unexpected = listRest.filter(
-        (arg, i) => arg !== '--search' && !arg.startsWith('--search=') && listRest[i - 1] !== '--search',
+        (arg, i) =>
+            arg !== '--search' &&
+            !arg.startsWith('--search=') &&
+            arg !== '--sort' &&
+            !arg.startsWith('--sort=') &&
+            listRest[i - 1] !== '--search' &&
+            listRest[i - 1] !== '--sort',
     );
+    // A --sort with no value of its own (nothing after it, or another flag) names
+    // what it is missing, not just "wrong arguments".
+    if (listRest.some((arg) => arg === '--sort') && sort === null) {
+        return usageError('--sort needs one of votes|newest|oldest', LIST_PHOTOS_USAGE);
+    }
     if (unexpected.length > 0 || (listRest.some((arg) => arg === '--search') && search === null)) {
         return usageError('Wrong arguments', LIST_PHOTOS_USAGE);
     }
@@ -163,7 +175,7 @@ const runListPhotos: CommandHandler = async (argv) => {
         }
         return suggestPhotosCmd(challengeId);
     }
-    return listPhotosCmd(challengeId, search);
+    return listPhotosCmd(challengeId, search, sort);
 };
 
 const runBoost = async (challengeId: string, rest: string[]) => {

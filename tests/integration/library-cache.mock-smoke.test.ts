@@ -66,12 +66,16 @@ test('a Refresh re-read of the on-screen extent replaces the kept listing with t
     const walked = await library(first, 'cached');
     expect(walked).toMatchObject({ success: true, preview: false, truncated: false, nextStart: 12 });
 
-    // Refresh asks for the 8 photos on screen: the walk serves the extent (two mock pages of 4)…
-    const extent = await library(first, 'fresh', 0, 8);
-    expect(extent.photos).toHaveLength(8);
+    // Refresh asks for a 4-photo extent: under the mock's votes order the won
+    // photo rides in page one (skipped, so only three were kept there) and the
+    // page that crosses the extent is kept whole — two pages, 7 photos, a
+    // SMALLER listing than the full walk above.
+    const extent = await library(first, 'fresh', 0, 4);
+    expect(extent.photos).toHaveLength(7);
     expect(extent).toMatchObject({ success: true, preview: false, truncated: true, nextStart: 8 });
 
-    // …and the next cached opening answers the NEWER keep-8 listing, not the older full walk.
+    // …and the next cached opening answers the NEWER, smaller extent listing,
+    // not the older full walk.
     const again = await library(first, 'cached');
     expect(again).toEqual(extent);
 });

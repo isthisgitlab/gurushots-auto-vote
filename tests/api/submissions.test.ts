@@ -672,6 +672,38 @@ describe('getEligiblePhotos usage option', () => {
     });
 });
 
+describe('getEligiblePhotos order mapping (librarySort)', () => {
+    const token = 'tok-123';
+    const { makePostRequest } = jest.mocked(require('../../src/ts/api/api-client') as typeof api_clientModule);
+
+    beforeEach(() => jest.clearAllMocks());
+
+    test.each([
+        ['votes', 'order=votes&sort=desc'],
+        ['newest', 'order=date&sort=desc'],
+        ['oldest', 'order=date&sort=asc'],
+    ])('%s is mapped to the fixed literals %s', async (order, wire) => {
+        makePostRequest.mockResolvedValueOnce({ items: [] });
+        await getEligiblePhotos('1', token, { order: invalid(order) });
+        expect(makePostRequest.mock.calls[0][2]).toBe(`c_id=1&limit=100&${wire}&start=0&usage=submit`);
+    });
+
+    test('a paginated walk carries its order on every page, continuations included', async () => {
+        const page = (start: number) => ({ items: Array.from({ length: 2 }, (_, i) => ({ id: `p${start + i}` })) });
+        makePostRequest
+            .mockResolvedValueOnce(page(0))
+            .mockResolvedValueOnce(page(2))
+            .mockResolvedValueOnce({ items: [] });
+        await getEligiblePhotos('1', token, { order: 'oldest', paginate: true, limit: 2 });
+        expect(makePostRequest).toHaveBeenCalledTimes(3);
+        for (const [, , body] of makePostRequest.mock.calls) {
+            expect(body).toContain('order=date&sort=asc');
+        }
+        // The walk's cross-page id dedupe is unchanged by the order.
+        expect(makePostRequest.mock.calls[1][2]).toContain('start=2');
+    });
+});
+
 describe('getEligiblePhotos readState: a failed first page is told apart from an empty library', () => {
     const token = 'tok-123';
     const { makePostRequest } = jest.mocked(require('../../src/ts/api/api-client') as typeof api_clientModule);

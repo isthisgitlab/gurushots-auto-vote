@@ -1,6 +1,8 @@
 /**
- * IPC handler behind the Chosen Photos chooser and the CLI `list-photos`: a
- * read-only listing of the signed-in member's photo library.
+ * The get-library-photos IPC handler behind the Chosen Photos chooser and the
+ * CLI `list-photos`: a read-only listing of the signed-in member's photo
+ * library. Its sibling get-photo-stats (actions/photoStats.ts) serves the
+ * picker's per-photo display stats.
  *
  * The listing is the server's own eligible-photo walk (get_photos_private),
  * which is paginated and slow, so reads are throttled to one walk at a time per
@@ -16,6 +18,7 @@ import * as logger from '../../logger';
 import * as apiFactory from '../../apiFactory';
 import * as auth from '../../services/auth';
 import { resolveMemberId } from '../../services/autoFill';
+import { isLibraryOrder } from '../../librarySort';
 import {
     CHOSEN_PHOTO_ID_RE,
     LIBRARY_BATCH_PHOTOS,
@@ -29,9 +32,11 @@ import { dropEpoch, readFresh, readLatest, writeListing } from '../../services/l
 import { errorResult } from '../errorResult';
 import { isIdArg } from '../isIdArg';
 import { isUsageArg, refuseInvalidArgs } from './shared';
+import { SUPERSEDED, createThrottle } from './throttle';
 
 import type { IpcReplyFn } from '../registerHandlers';
 import type { LibraryPhoto } from '../../types/gurushots';
+import type { LibraryOrder } from '../../librarySort';
 import type { LibraryUsage } from '../../types/photoPicker';
 
 // Shortest gap between the end of one walk and the start of the next. The chooser
@@ -47,53 +52,7 @@ const MAX_MESSAGE_LENGTH = 200;
 // How much of the raw HTML message is converted: markup makes the raw text longer than what it shows.
 const MAX_RAW_MESSAGE_LENGTH = 4 * MAX_MESSAGE_LENGTH;
 
-/** What a throttled request resolves to when a newer request took its place in the queue. */
-const SUPERSEDED = Symbol('superseded');
-
-// `run` settles the caller's promise itself and never rejects.
-type Pending = { run: () => Promise<void>; drop: () => void };
-
-// One walk in flight in this process, at most one waiting behind it.
-let pending: Pending | null = null;
-let running = false;
-let lastEndedAt = 0;
-let timer: ReturnType<typeof setTimeout> | undefined;
-
-const pump = (): void => {
-    if (running || !pending || timer !== undefined) return;
-    const delay = lastEndedAt + MIN_WALK_INTERVAL_MS - Date.now();
-    if (delay > 0) {
-        timer = setTimeout(() => {
-            timer = undefined;
-            pump();
-        }, delay);
-        return;
-    }
-    const next = pending;
-    pending = null;
-    running = true;
-    void next.run().finally(() => {
-        running = false;
-        lastEndedAt = Date.now();
-        pump();
-    });
-};
-
-/**
- * Run `job` as the only walk in flight: it starts at once when none is running
- * and the minimum gap has passed, otherwise it waits — and a request that
- * arrives while another is already waiting replaces it (the older caller gets
- * SUPERSEDED), because only the newest search is still wanted.
- */
-const throttled = <T>(job: () => Promise<T>): Promise<T | typeof SUPERSEDED> =>
-    new Promise((resolve, reject) => {
-        pending?.drop();
-        pending = {
-            run: () => job().then(resolve, reject),
-            drop: () => resolve(SUPERSEDED),
-        };
-        pump();
-    });
+const walkThrottle = createThrottle(MIN_WALK_INTERVAL_MS);
 
 /**
  * The search term as sent to the server: control characters stripped, trimmed,
@@ -173,6 +132,10 @@ const answerFromCache = (contextId: string | number | null, usage: LibraryUsage)
  *   batch size (a wider re-read replaces the older entry); a continuation (`start > 0`) never is, and `'cached'`
  *   refuses one.
  * @param keep - how many photos a `start` batch counts before it stops (default 100); given only with `start`.
+ * @param order - a whole-library server sort (`librarySort.ts`): `'votes'` is the default the app always sent;
+ *   `'newest'`/`'oldest'` sort on date entered. Any other value is refused. A non-votes order is always read
+ *   fresh — the cache holds vote-ordered listings only — so a `'cached'` request with one walks as `'fresh'`,
+ *   answers `preview: false`, and is neither written to nor answered from the cache.
  */
 const handleGetLibraryPhotos = (async (
     event: unknown,
@@ -182,16 +145,21 @@ const handleGetLibraryPhotos = (async (
     usage?: LibraryUsage,
     start?: number | null,
     keep?: number | null,
+    order?: LibraryOrder,
 ) => {
     const hasChallenge = challengeId !== undefined && challengeId !== null;
     const hasSearch = search !== undefined && search !== null;
     const hasStart = start !== undefined && start !== null;
     const hasKeep = keep !== undefined && keep !== null;
+    // A non-votes order always reads fresh: the listing cache holds vote-ordered reads only, so an
+    // ordered read must not be answered from it, kept in it, or held back by a `'cached'` mode.
+    const orderedFresh = order !== undefined && order !== 'votes';
     if (
         (hasChallenge && !isIdArg(challengeId)) ||
         (hasSearch && typeof search !== 'string') ||
         (mode !== undefined && mode !== 'cached' && mode !== 'fresh') ||
         (usage !== undefined && !isUsageArg(usage)) ||
+        (order !== undefined && !isLibraryOrder(order)) ||
         // A batch read starts at a non-negative offset and keeps at most one full walk's worth of photos.
         (hasStart && !(Number.isSafeInteger(start) && start >= 0)) ||
         (hasKeep && !(Number.isSafeInteger(keep) && keep >= 1 && keep <= MAX_LIBRARY_KEEP_PHOTOS)) ||
@@ -210,7 +178,7 @@ const handleGetLibraryPhotos = (async (
         // The cache keys the challenge asked for: the settings and rules choosers ask for none, whatever one is borrowed.
         const contextId = challengeId ?? null;
         const readUsage = usage ?? 'submit';
-        if (mode === 'cached' && term === undefined) {
+        if (mode === 'cached' && term === undefined && !orderedFresh) {
             const cached = answerFromCache(contextId, readUsage);
             if (cached) return cached;
         }
@@ -221,7 +189,7 @@ const handleGetLibraryPhotos = (async (
         // The borrowing lookup is a request of its own, so it runs inside the
         // throttled job like the walk it serves.
         const readState = { firstPageFailed: false };
-        const outcome = await throttled(async () => {
+        const outcome = await walkThrottle.run(async () => {
             const readAtMs = Date.now();
             const readThrough = challengeId ?? (await borrowChallengeId(strategy, token));
             // Nothing to read the library through: no active challenge and no open one seen yet.
@@ -231,6 +199,9 @@ const handleGetLibraryPhotos = (async (
                 logLabel: 'library',
                 usage: readUsage,
                 skip: hasWonChallenge,
+                // An explicit votes order reads the same wire as no order, so it is not
+                // named; a date order reaches fetchPhotoPage and every continuation of it.
+                ...(orderedFresh ? { order } : {}),
             };
             const walk = await strategy.getEligiblePhotosWalk(
                 readThrough,
@@ -283,6 +254,7 @@ const handleGetLibraryPhotos = (async (
         // whose token the stored sign-in no longer is (a login replaced it while the walk ran) writes nothing:
         // a request still in flight must not refill what a logout or account switch emptied.
         const keepCached =
+            !orderedFresh &&
             term === undefined &&
             (listing.photos.length > 0 || listing.wonCount > 0 || !listing.truncated) &&
             (!hasStart || start === 0);
@@ -298,11 +270,7 @@ const handleGetLibraryPhotos = (async (
 
 // Test-only: forget the throttle state between cases.
 const __resetLibraryThrottle = (): void => {
-    clearTimeout(timer);
-    timer = undefined;
-    pending = null;
-    running = false;
-    lastEndedAt = 0;
+    walkThrottle.reset();
 };
 
 export { handleGetLibraryPhotos, mapPhoto, hasWonChallenge, __resetLibraryThrottle, MIN_WALK_INTERVAL_MS };

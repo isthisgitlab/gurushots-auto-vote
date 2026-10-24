@@ -12,6 +12,7 @@
 
 import * as logger from '../../logger';
 import { stripTerminalControl } from '../../format/logSafe';
+import { isLibraryOrder } from '../../librarySort';
 import { ensureAuthenticated, INVALID_ID_TEXT } from '../guards';
 
 import type { NullEventHandlers } from '../../types/cli';
@@ -59,6 +60,25 @@ const parseSearchFlag = (argv: string[]): string | null => {
     return null;
 };
 
+/**
+ * `--sort=votes|newest|oldest` (or `--sort <name>`) from an argument list.
+ * A bare `--sort` whose next argument is another flag (or the end) has no
+ * value and reads as null, the same way a missing `--search` value does.
+ */
+const parseSortFlag = (argv: string[]): string | null => {
+    for (let i = 0; i < argv.length; i++) {
+        if (argv[i] === '--sort') {
+            const value = argv[i + 1];
+            return typeof value === 'string' && !value.startsWith('--') ? value : null;
+        }
+        if (argv[i].startsWith('--sort=')) return argv[i].slice('--sort='.length);
+    }
+    return null;
+};
+
+/** The text a `--sort` value that is not a library order is refused with. */
+const BAD_SORT_TEXT = 'Use --sort=votes, --sort=newest or --sort=oldest.';
+
 type Listing = Extract<Awaited<ReturnType<ActionHandlers['get-library-photos']>>, { success: true }>;
 
 /** How many photos the listing left out for having won a challenge, and why (a cut-short listing may hide more). */
@@ -93,11 +113,30 @@ const printPhotos = (listing: Listing): void => {
  *
  * @param challengeId - read the library as this challenge sees it (the allowed flags then apply to it)
  * @param search - a tag to narrow the listing to
+ * @param sort - a whole-library server order (`votes`|`newest`|`oldest`, checked with isLibraryOrder);
+ *   null reads the default votes order
  * @returns the exit code
  */
-const listPhotosCmd = async (challengeId: string | null, search: string | null): Promise<number> => {
+const listPhotosCmd = async (
+    challengeId: string | null,
+    search: string | null,
+    sort: string | null = null,
+): Promise<number> => {
     if (!ensureAuthenticated()) return 1;
-    const result = await handlers()['get-library-photos'](null, challengeId, search);
+    if (sort !== null && !isLibraryOrder(sort)) {
+        ui().error(`Could not list your photos: "${stripTerminalControl(sort)}" is not a sort. ${BAD_SORT_TEXT}`);
+        return 1;
+    }
+    const result = await handlers()['get-library-photos'](
+        null,
+        challengeId,
+        search,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        sort ?? undefined,
+    );
     if (!result?.success) {
         const code = String(result?.error);
         const reason = Object.hasOwn(REFUSALS, code) ? REFUSALS[code] : stripTerminalControl(code);
@@ -169,4 +208,4 @@ const suggestPhotosCmd = async (challengeId: string): Promise<number> => {
     return 0;
 };
 
-export { listPhotosCmd, suggestPhotosCmd, parseSearchFlag };
+export { listPhotosCmd, suggestPhotosCmd, parseSearchFlag, parseSortFlag, BAD_SORT_TEXT };

@@ -760,13 +760,17 @@ describe('forget-payment', () => {
 
 describe('list-photos', () => {
     test.each([
-        [['list-photos'], null, null],
-        [['list-photos', '--challenge=5'], '5', null],
-        [['list-photos', '--search=sunset'], null, 'sunset'],
-        [['list-photos', '--search', 'sun set', '--challenge', '5'], '5', 'sun set'],
-    ])('%j reads the library', async (argv, challengeId, search) => {
+        [['list-photos'], null, null, null],
+        [['list-photos', '--challenge=5'], '5', null, null],
+        [['list-photos', '--search=sunset'], null, 'sunset', null],
+        [['list-photos', '--search', 'sun set', '--challenge', '5'], '5', 'sun set', null],
+        [['list-photos', '--sort=newest'], null, null, 'newest'],
+        [['list-photos', '--sort', 'oldest', '--challenge', '5'], '5', null, 'oldest'],
+        [['list-photos', '--sort=newest', '--search=sunset'], null, 'sunset', 'newest'],
+        [['list-photos', '--sort=votes'], null, null, 'votes'],
+    ])('%j reads the library', async (argv, challengeId, search, sort) => {
         const m = await run(argv);
-        expect(m.photos.listPhotosCmd).toHaveBeenCalledWith(challengeId, search);
+        expect(m.photos.listPhotosCmd).toHaveBeenCalledWith(challengeId, search, sort);
         expect(m.exitCodes).toEqual([0]);
     });
 
@@ -781,11 +785,15 @@ describe('list-photos', () => {
         [['list-photos', '--search=a', 'stray']],
         [['list-photos', '--searchx']],
         [['list-photos', '--search-term=a']],
-        // --suggest ranks for one challenge and is not a search.
+        [['list-photos', '--sort=a', 'stray']],
+        [['list-photos', '--sortx']],
+        [['list-photos', '--sort-term=a']],
+        // --suggest ranks for one challenge and is not a search or a sort.
         [['list-photos', '--suggest']],
         [['list-photos', '--search=a', '--suggest']],
         [['list-photos', '--challenge=5', '--suggest', '--search=a']],
         [['list-photos', '--challenge=5', '--suggest', '--search', 'a']],
+        [['list-photos', '--challenge=5', '--suggest', '--sort=newest']],
         [['list-photos', '--challenge=5', '--suggest', '--suggest']],
         [['list-photos', '--challenge=5', '--suggest', 'stray']],
     ])('%j is a usage error', async (argv) => {
@@ -794,10 +802,38 @@ describe('list-photos', () => {
         expect(m.photos.suggestPhotosCmd).not.toHaveBeenCalled();
         expect(m.msgs('error')).toEqual(['Wrong arguments']);
         expect(m.msgs('info')).toEqual([
-            'Usage: list-photos [--challenge=<id>] [--search=<tag>]  or  list-photos --challenge=<id> --suggest',
+            'Usage: list-photos [--challenge=<id>] [--search=<tag>] [--sort=votes|newest|oldest]  or  list-photos --challenge=<id> --suggest',
         ]);
         expect(m.exitCodes).toEqual([1]);
     });
+
+    // A --sort with no value of its own (end of the line, or another flag next)
+    // names what it is missing rather than the generic wrong-arguments text.
+    test.each([
+        [['list-photos', '--sort']],
+        [['list-photos', '--sort', '--search=sunset']],
+        [['list-photos', '--challenge=5', '--sort', '--suggest']],
+    ])('%j is refused with the --sort message', async (argv) => {
+        const m = await run(argv);
+        expect(m.photos.listPhotosCmd).not.toHaveBeenCalled();
+        expect(m.photos.suggestPhotosCmd).not.toHaveBeenCalled();
+        expect(m.msgs('error')).toEqual(['--sort needs one of votes|newest|oldest']);
+        expect(m.msgs('info')).toEqual([
+            'Usage: list-photos [--challenge=<id>] [--search=<tag>] [--sort=votes|newest|oldest]  or  list-photos --challenge=<id> --suggest',
+        ]);
+        expect(m.exitCodes).toEqual([1]);
+    });
+
+    // An unknown sort VALUE passes the parse table and is refused by the command itself.
+    test.each([[['list-photos', '--sort=strongest']], [['list-photos', '--sort=toString']]])(
+        '%j hands the unknown sort to the command, which refuses it',
+        async (argv) => {
+            const m = await run(argv);
+            expect(m.photos.listPhotosCmd).toHaveBeenCalledWith(null, null, argv[1]!.slice('--sort='.length));
+            expect(m.photos.suggestPhotosCmd).not.toHaveBeenCalled();
+            expect(m.exitCodes).toEqual([0]);
+        },
+    );
 
     test.each([[['list-photos', '--challenge=5', '--suggest']], [['list-photos', '--suggest', '--challenge', '5']]])(
         '%j ranks the challenge’s photos without reading the library',
