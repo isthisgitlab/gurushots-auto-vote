@@ -152,20 +152,25 @@ const titleSubject = (title: string | null | undefined, ignoreWords?: IgnoreWord
 // its length at 200 chars before matching, and withoutLetterPhrases runs the same
 // patterns as a global `replace` over up to MAX_TOKENISE_CHARS (4096) chars of
 // description text — ReDoS defense-in-depth either way: no pattern has nested
-// quantifiers, and every alternation is anchored on a \b (or ^/start-of-text)
-// plus a literal word, so a scan is linear in the input. The captured value is a
-// single [a-z] char used ONLY in a first-character equality check downstream —
-// never interpolated into a query, template, or eval.
+// quantifiers, every alternation is anchored on a \b (or ^/start-of-text) plus a
+// literal word, and each whitespace run is crossed a bounded number of times, so
+// a scan is linear in the input. The captured value is a single [a-z] char used
+// only in a first-character equality check downstream and, uppercased, inside a
+// log line, still as one [a-z] character — never interpolated into a query,
+// template, or eval.
 //
 // The trailing (?![\w-]) (instead of \b) forces the captured letter to be a
 // standalone token: "Begins With Love" → null (next char is a word char) and
 // "Begins With L-A" → null (next char is '-'); "Begins With L" / "...L." → 'l'.
 // The letter may also be quoted ("start with 'S'", `start with the letter "S"`,
 // "Begins With \"L\"") and the article may be "an" ("begins with an S") — the
-// phrasings GuruShots descriptions ship. The bare "a" article is deliberately NOT
-// accepted, because "Begins With A" names the letter A.
+// phrasings GuruShots descriptions ship. A bare "a" is the letter only when no
+// word follows it: at the end of the text (trailing spaces included) or before
+// a separator, possibly after spaces — a newline or an ellipsis counts as a
+// separator. A hyphen counts only in the spaced " - " form, so "Begins With
+// A-V" is null. A quoted 'a' always counts.
 const LETTER_CHALLENGE_RE =
-    /\b(?:begin(?:s|ning)?|start(?:s|ing)?)\s+with\s+(?:the\s+|an\s+)?(?:letter\s+)?(?:([a-z])|['"‘“]\s*([a-z])\s*['"’”])(?![\w-])/i;
+    /\b(?:begin(?:s|ning)?|start(?:s|ing)?)\s+with\s+(?:the\s+|an\s+)?(?:letter\s+)?(?:([b-z])(?![\w-])|(a)(?=\s*$|\s*[–—:;,.!?|)…\n]|\s+-)|['"‘“]\s*([a-z])\s*['"’”](?![\w-]))/i;
 // "C is for…", "A is for Apple". The (?:^|\s) guard forces the letter to be a
 // standalone leading token: "What is for dinner" / "This is for you" → null
 // (the single letter before "is" is the tail of a word), and "Q&A is for
@@ -190,7 +195,10 @@ const LETTER_IS_FOR_RE = /(?:^|\s)([a-z])\s+is\s+for\b/i;
 // Quote pairs are matched by open-class/close-class rather than a backreference
 // because the curly pairs differ on each side (U+2018/U+2019, U+201C/U+201D);
 // a mismatched pair is accepted since this parses messy titles, not validates.
-const LETTER_NAMED_RE = /\bletters?\s*:?\s*(?:['"‘“]\s*([a-z])\s*['"’”]|([a-z])(?=\s*(?:[-–—:;,.!?|]|$)))/i;
+// The colon rides inside the whitespace run as an optional group (`\s*(?::\s*)?`)
+// rather than a second `\s*` beside it: a second `\s*` would make a failed match
+// cross the run twice — quadratic time on a long run.
+const LETTER_NAMED_RE = /\bletters?\s*(?::\s*)?(?:['"‘“]\s*([a-z])\s*['"’”]|([a-z])(?=\s*(?:[-–—:;,.!?|]|$)))/i;
 // The three letter-phrase matchers in detection order. detectLetterPrefix and
 // withoutLetterPhrases both read this list, so what a title is DETECTED by is
 // exactly what a text is STRIPPED by — the two cannot drift.

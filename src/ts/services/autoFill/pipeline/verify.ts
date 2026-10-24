@@ -9,11 +9,9 @@ import {
     scorePhoto,
     splitByChosen,
     detectLetterPrefix,
-    parseNegation,
-    tokenise,
+    letterTitleLeftovers,
     wholeLabelStems,
     startsWithLetter,
-    withoutLetterPhrases,
 } from '../../photoPicker';
 import * as lexicon from '../../semantic/lexicon';
 import { rankVisually } from '../../visionVerifier';
@@ -135,16 +133,18 @@ const recordUncertainSubmission = async ({
     // On a letter challenge the challenge's OWN rule ("label starts with S") is
     // in force, so a matching letter label is evidence — but only when the
     // letter is the title's ONLY subject: the whole negation-adjusted title,
-    // its letter phrases stripped, must tokenise to nothing. "The Letter \"S\""
-    // is exempt; "Letter S - Challenge" keeps its format word and "Color Hunt:
-    // The Letter S" its subject words, and any non-letter title has letter ===
-    // null — all three keep today's evidence rules.
+    // its letter phrases stripped, must tokenise to nothing (letterTitleLeftovers
+    // in the photoPicker module, read for every title). The whole-title gate,
+    // pinned title by title in tests/services/autoFill.chosen.test.ts: 'The
+    // Letter "S"' and 'Letter S - Challenge' are exempt — "challenge" is
+    // boilerplate, so the stripped title tokenises to nothing — while 'Letter
+    // S - 10 Hours' ("hours") and 'Color Hunt: The Letter S' ("color", "hunt")
+    // still name words, and a non-letter title keeps today's evidence rules.
     const letter = detectLetterPrefix(challenge?.title);
-    const negation = parseNegation(challenge?.title, ignoreWords);
-    const positiveTitle = negation.active ? negation.positiveTitle : challenge?.title;
-    const letterIsOnlySubject =
-        letter !== null &&
-        tokenise(withoutLetterPhrases(positiveTitle), { ignoreWords, compounds: 'replace' }).length === 0;
+    const leftovers = letterTitleLeftovers(challenge, ignoreWords);
+    // leftovers is null exactly when letter is — both read the same title — so
+    // the guard above is what settles the non-null case for the check below.
+    const onlySubject = letter !== null && leftovers!.length === 0;
     for (const id of picked) {
         const entry = scored.find((candidate) => String(candidate.id) === String(id));
         // Should Include Tags are a user preference, not evidence that the
@@ -156,10 +156,14 @@ const recordUncertainSubmission = async ({
                 ? visualEvidence.has(id)
                 : entry.semantic !== 0 ||
                   scorePhoto(entry.photo, subjectWords) !== 0 ||
-                  (letterIsOnlySubject && startsWithLetter(wholeLabelStems(entry.photo), letter)))
+                  (onlySubject && startsWithLetter(wholeLabelStems(entry.photo), letter)))
         )
             continue;
-        const reason = visualEvidence ? 'visual check did not confirm the subject' : 'no subject match';
+        const reason = visualEvidence
+            ? 'visual check did not confirm the subject'
+            : leftovers !== null && leftovers.length > 0
+              ? `no subject match (the title also names ${leftovers.map((s) => `"${s}"`).join(', ')})`
+              : 'no subject match';
         try {
             deps.entryAges.markUncertain(challenge, id, Math.floor(Date.now() / 1000));
             deps.logger

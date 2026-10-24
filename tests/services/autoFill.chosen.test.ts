@@ -680,6 +680,57 @@ describe('the uncertain-submission record on a letter challenge', () => {
         expect(await run('Snakes: Starting With S', ['Sun'])).toBe(true);
         expect(await run('Color Hunt: The Letter S', ['Sun'])).toBe(true);
     });
+
+    test('the whole-title gate, pinned title by title', async () => {
+        // The gate reads the whole stripped title, not the subject tail:
+        // "challenge" is boilerplate (a stopword), so 'Letter S - Challenge' is
+        // exempt, while "hours" and the Color Hunt words still name something.
+        // Format words such as "hours" count as leftover words on purpose, so
+        // the spend gate stays conservative.
+        expect(await run('The Letter "S"', ['Sun'])).toBe(false);
+        expect(await run('Letter S - Challenge', ['Sun'])).toBe(false);
+        expect(await run('Letter S - 10 Hours', ['Sun'])).toBe(true);
+    });
+
+    test('a fallback pick on a letter-only title keeps the plain reason', async () => {
+        const ledger = createMemoryEntryAgeLedger();
+        const { logger, lines } = makeLog();
+        const challenge = makeChallenge({ title: 'The Letter "S"' });
+        await recordUncertainSubmission({
+            challenge,
+            label: 'autoSubmit',
+            scored: [entry(['Dog'])],
+            picked: ['p1'],
+            visualEvidence: null,
+            ignoreWords: null,
+            chosenIds: null,
+            deps: invalid<RankDeps & FillDeps>({ logger, entryAges: ledger }),
+        });
+        expect(ledger.isUncertain(challenge.id, 'p1')).toBe(true);
+        const warning = lines.warning[0];
+        expect(warning).toContain('no subject match');
+        expect(warning).not.toContain('the title also names');
+    });
+
+    test('a letter title with leftover words names them in the warning reason', async () => {
+        const ledger = createMemoryEntryAgeLedger();
+        const { logger, lines } = makeLog();
+        const challenge = makeChallenge({ title: 'Color Hunt: The Letter S' });
+        await recordUncertainSubmission({
+            challenge,
+            label: 'autoSubmit',
+            scored: [entry(['Sun'])],
+            picked: ['p1'],
+            visualEvidence: null,
+            ignoreWords: null,
+            chosenIds: null,
+            deps: invalid<RankDeps & FillDeps>({ logger, entryAges: ledger }),
+        });
+        expect(ledger.isUncertain(challenge.id, 'p1')).toBe(true);
+        expect(lines.warning).toEqual([
+            expect.stringContaining('no subject match (the title also names "color", "hunt")'),
+        ]);
+    });
 });
 
 describe('looking for a chosen photo the themed fetch missed', () => {

@@ -30,6 +30,32 @@ import type { ChallengeText, ExcludedConceptName, IgnoreWords, TagOptions } from
 // few nouns; a welcome_message can be arbitrarily long prose.
 const MAX_CHALLENGE_KEYWORDS = 48;
 
+// Letter phrases are stripped only on a letter challenge; every other title
+// keeps its text exactly as it was.
+const stripIfLetter = (letter: string | null, text: string | null | undefined): string | null | undefined =>
+    letter === null ? text : withoutLetterPhrases(text);
+
+/**
+ * The stems a letter challenge's title still names after its letter phrases are
+ * stripped — null when the title is not a letter challenge. Empty means the
+ * letter is the ONLY subject: the whole negation-adjusted title reduces to
+ * nothing. This is the spend gate for the uncertain-submission record (the
+ * autoFill pipeline): only then does a matching letter label count as subject
+ * evidence, so automatic Boost/Turbo may spend on it. 'The Letter "S"' leaves
+ * nothing; 'Color Hunt: The Letter S' leaves ["color", "hunt"]; a non-letter
+ * title is null and keeps the stricter evidence rules.
+ */
+const letterTitleLeftovers = (
+    challenge: ChallengeText | null | undefined,
+    ignoreWords: IgnoreWords,
+): string[] | null => {
+    const letter = detectLetterPrefix(challenge?.title);
+    if (letter === null) return null;
+    const negation = parseNegation(challenge?.title, ignoreWords);
+    const positiveTitle = negation.active ? negation.positiveTitle : challenge?.title;
+    return tokenise(stripIfLetter(letter, positiveTitle), { ignoreWords, compounds: 'replace' });
+};
+
 // The label stems each description concept catches, keyed by its noun.
 const CONCEPT_LABEL_STEMS: Record<ExcludedConceptName, ReadonlySet<string>> = {
     people: PEOPLE_LABEL_STEMS,
@@ -75,12 +101,9 @@ const buildChallengeKeywords = (
     // Compound mode: adjacent words the model knows ("Close Up") become one
     // term, so "Close Up" stops matching "Closed".
     const opts = { ignoreWords, compounds: 'replace' as const };
-    const fromTitle = tokenise(letter === null ? title : withoutLetterPhrases(title), opts);
+    const fromTitle = tokenise(stripIfLetter(letter, title), opts);
     const fromUrl = letter === null ? tokenise(challenge?.url, opts) : [];
-    const fromWelcome = tokenise(
-        letter === null ? challenge?.welcome_message : withoutLetterPhrases(challenge?.welcome_message),
-        opts,
-    );
+    const fromWelcome = tokenise(stripIfLetter(letter, challenge?.welcome_message), opts);
     // A title word judged not-the-subject ("fun" in "Balloon Fun") is dropped
     // from every source: the slug and the prose repeat it, and here it would
     // score every photo vision-labelled "Fun" as on theme.
@@ -143,9 +166,7 @@ const buildThemeKeywords = (challenge: ChallengeText | null | undefined, ignoreW
     // Pooling is where an abstract word hurts most — "fun" averaged into
     // "balloon" drags the theme toward parties and laughter — so only the
     // subject words are pooled (see abstractTitleWords).
-    const fromTitle = withoutAbstract(
-        dropNegated(tokenise(letter === null ? subject : withoutLetterPhrases(subject), opts), negation),
-    );
+    const fromTitle = withoutAbstract(dropNegated(tokenise(stripIfLetter(letter, subject), opts), negation));
     if (fromTitle.length > 0) return Array.from(new Set(fromTitle)).slice(0, MAX_CHALLENGE_KEYWORDS);
     // A letter challenge's slug ("the-letter-s") restates the title and cannot
     // be stripped, so with the phrase gone there is no signal left in it either:
@@ -192,7 +213,7 @@ const visualSubjectWords = (challenge: ChallengeText | null | undefined, ignoreW
     // buildThemeKeywords does.
     const letter = detectLetterPrefix(challenge?.title);
     const subject = titleSubject(title, ignoreWords);
-    const words = rawTokenise(letter === null ? subject : withoutLetterPhrases(subject), {
+    const words = rawTokenise(stripIfLetter(letter, subject), {
         ignoreWords,
         compounds: 'replace',
     }).filter((word) => !negated.has(stem(word)) && !NEGATION_MARKER_STEMS.has(stem(word)));
@@ -292,4 +313,5 @@ export {
     visualSubjectWords,
     buildSearchTerms,
     compoundSpellings,
+    letterTitleLeftovers,
 };

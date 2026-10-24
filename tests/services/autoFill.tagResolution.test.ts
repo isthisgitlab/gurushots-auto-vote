@@ -220,8 +220,25 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
         );
         expect(category.info).toHaveBeenCalledWith(
             expect.stringContaining(
-                'is a letter challenge ("L"), so photos with a label starting with "L" are ranked first ' +
+                'is a letter challenge ("L"), so only photos with a label starting with "L" are considered ' +
                     '(the whole library if none has one)',
+            ),
+            null,
+        );
+    });
+
+    test('a letter challenge that still names a subject says so in its theme line', async () => {
+        const { logger, category } = makeLogger();
+        await fetchCandidatesForChallenge(
+            invalid({ id: 'c-apple', title: 'A is for Apple' }),
+            'tok',
+            {},
+            { getEligiblePhotos: makeGetEligiblePhotos(), logger },
+        );
+        expect(category.info).toHaveBeenCalledWith(
+            expect.stringContaining(
+                'is a letter challenge ("A"), so only photos with a label starting with "A" are considered ' +
+                    '(the whole library if none has one); its subject is "apple"',
             ),
             null,
         );

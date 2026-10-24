@@ -6,6 +6,7 @@
 
 import {
     buildSearchTerms,
+    buildThemeKeywords,
     compoundSpellings,
     detectLetterPrefix,
     descriptionExclusions,
@@ -17,6 +18,7 @@ import { getSemanticScores } from '../semantic';
 import * as lexicon from '../semantic/lexicon';
 import { resolveTermsToTags } from '../tagResolver';
 import { resolveMemberId } from './memberIdentity';
+import { hasEligible, readUnfilteredLibrary } from './unfilteredLibrary';
 
 import type { Challenge } from '../../types/gurushots';
 import type { ChallengeTheme, IgnoreWords, PickerPhoto, SemanticScore, TagOptions } from '../../types/photoPicker';
@@ -141,11 +143,14 @@ const THEMED_SEARCH_MIN_BUDGET_MS = 1500;
 const describeTheme = (theme: ChallengeTheme, challenge: Challenge, ignoreWords: IgnoreWords): string => {
     const letter = detectLetterPrefix(challenge?.title);
     const upper = letter === null ? null : letter.toUpperCase();
+    // A letter challenge that still names a subject ("A is for Apple") says so.
+    const keptSubject = upper === null ? [] : buildThemeKeywords(challenge, ignoreWords);
+    const subjectNote = keptSubject.length > 0 ? `; its subject is ${keptSubject.map((s) => `"${s}"`).join(', ')}` : '';
     const letterVerdict =
         upper === null
             ? null
-            : `is a letter challenge ("${upper}"), so photos with a label starting with "${upper}" ` +
-              'are ranked first (the whole library if none has one)';
+            : `is a letter challenge ("${upper}"), so only photos with a label starting with "${upper}" are ` +
+              `considered (the whole library if none has one)${subjectNote}`;
     const verdict =
         theme.kind === 'open'
             ? 'reads as an open theme, so its title and description are not matched against your photos'
@@ -160,45 +165,6 @@ const describeTheme = (theme: ChallengeTheme, challenge: Challenge, ignoreWords:
         .replace(/\s+/g, ' ')
         .trim();
     return `${verdict}${exclusion}. Description: "${description}"`;
-};
-
-/** Whether a candidate list holds a photo the challenge allows. */
-const hasEligible = (list: PickerPhoto[]) =>
-    list.some((p) => p && p.permission && p.permission.allowed === true && p.id);
-
-/**
- * The unfiltered library read: the vote-ordered walk, then the API's default order when that holds nothing
- * eligible. A caller that started `trace.readFailed` at false is told when both reads failed on their first page.
- */
-const readUnfilteredLibrary = async (
-    challengeId: string | number,
-    token: string,
-    getEligiblePhotos: RankDeps['getEligiblePhotos'],
-    {
-        logLabel,
-        usageOpt,
-        trace,
-    }: { logLabel: string; usageOpt: { usage?: string }; trace?: { walkedUnfiltered: boolean; readFailed?: boolean } },
-): Promise<PickerPhoto[]> => {
-    // Only a caller that asked (by starting `readFailed` at false) gets the read tracked.
-    const byVotesRead = { firstPageFailed: false };
-    const defaultRead = { firstPageFailed: false };
-    const tracked = (readState: typeof byVotesRead) => (trace?.readFailed === undefined ? {} : { readState });
-    const byVotes = await getEligiblePhotos(challengeId, token, {
-        paginate: true,
-        logLabel,
-        ...tracked(byVotesRead),
-        ...usageOpt,
-    });
-    if (hasEligible(byVotes)) return byVotes;
-    const byDefault = await getEligiblePhotos(challengeId, token, {
-        order: 'default',
-        logLabel,
-        ...tracked(defaultRead),
-        ...usageOpt,
-    });
-    if (trace && byVotesRead.firstPageFailed && defaultRead.firstPageFailed) trace.readFailed = true;
-    return byDefault;
 };
 
 /**

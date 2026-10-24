@@ -212,6 +212,10 @@ describe('letter challenges — the letter phrase is not the subject', () => {
             expect(withoutLetterPhrases('C is for…')).toBe(' …');
         });
 
+        test('a bare "a" article is not a letter phrase: description prose keeps its object', () => {
+            expect(withoutLetterPhrases('photos must start with a smile')).toBe('photos must start with a smile');
+        });
+
         test('a non-string is empty', () => {
             expect(withoutLetterPhrases(null)).toBe('');
             expect(withoutLetterPhrases(undefined)).toBe('');
@@ -244,6 +248,15 @@ describe('letter challenges — the letter phrase is not the subject', () => {
         expect(visualSubjectWords({ title: 'Begins With L' })).toEqual([]);
     });
 
+    test('a series tail that is only the letter phrase leaves nothing — the accepted trade-off', () => {
+        // titleSubject takes the tail "Starting With S", the strip empties it,
+        // and the series prefix "Snakes" is not read back in its place: ranking
+        // falls to the description and votes. Named as an accepted cost where
+        // the strip order is decided (buildThemeKeywords in keywords.ts).
+        expect(buildThemeKeywords({ title: 'Snakes: Starting With S' })).toEqual([]);
+        expect(visualSubjectWords({ title: 'Snakes: Starting With S' })).toEqual([]);
+    });
+
     test('the real 136581 description keeps its example subjects as keywords, never the rule words', () => {
         // Neither "letter" (the stripped title) nor "start" (the stripped
         // description) may come back; the slug is not consulted either.
@@ -270,13 +283,18 @@ describe('letter challenges — the letter phrase is not the subject', () => {
     });
 
     test.each([
-        ["Share your shots that start with 'S' this week.", ['start']],
-        ['Share your shots that start with the letter "S" this week.', ['start', 'letter']],
-        ['Share your shots: anything that begins with an S this week.', ['begin']],
+        ["Share your shots that start with 'S' this week. Sunsets are welcome too.", ['start'], 'sunset'],
+        [
+            'Share your shots that start with the letter "S" this week. Sunsets are welcome too.',
+            ['start', 'letter'],
+            'sunset',
+        ],
+        ['Share your shots: anything that begins with an S this week. Sunsets are welcome too.', ['begin'], 'sunset'],
     ] as const)(
         'a description that restates the rule (%s) leaves no rule word among the keywords',
-        (welcome, banned) => {
+        (welcome, banned, kept) => {
             const keywords = buildChallengeKeywords({ title: 'The Letter "S"', welcome_message: welcome });
+            expect(keywords).toContain(kept);
             expect(keywords).not.toContain('letter');
             expect(keywords).not.toContain('start');
             expect(keywords).not.toContain('begin');

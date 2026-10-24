@@ -20,6 +20,7 @@ import {
     visualSubjectWords,
     buildSearchTerms,
     compoundSpellings,
+    letterTitleLeftovers,
 } from './photoPicker/keywords';
 import { wholeLabelStems, labelWordStems, labelStemGroups, scorePhoto } from './photoPicker/labels';
 import {
@@ -72,4 +73,5 @@ export {
     tokeniseTagList,
     wholeLabelStems,
     compoundSpellings,
+    letterTitleLeftovers,
 };

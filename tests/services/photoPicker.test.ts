@@ -651,11 +651,24 @@ describe('photoPicker', () => {
             expect(detectLetterPrefix('Begins With "L"')).toBe('l');
             expect(detectLetterPrefix("Starts With 'S'")).toBe('s');
         });
-        test('the "an" article before the letter parses; the bare "a" article still names letter A', () => {
+        test('the "an" article before the letter parses; a bare "a" is the letter only when no word follows', () => {
             expect(detectLetterPrefix('Begins With an S')).toBe('s');
-            // Deliberate: "Begins With A" names the letter A itself, so the
-            // bare-`a` article is not accepted as an article.
+            // A bare "a" is the letter at the end of the text or before a
+            // separator — never an article before another word; a quoted 'a'
+            // always counts.
             expect(detectLetterPrefix('Begins With A')).toBe('a');
+            expect(detectLetterPrefix('Begins With A ')).toBe('a'); // trailing spaces still end the text
+            expect(detectLetterPrefix('Begins With A\t')).toBe('a'); // any whitespace ends the text
+            expect(detectLetterPrefix('Begins With A\n')).toBe('a');
+            expect(detectLetterPrefix('Begins With A: Apples')).toBe('a');
+            expect(detectLetterPrefix('Begins With A - Apples')).toBe('a'); // hyphen only after spaces
+            expect(detectLetterPrefix('Begins With A-V')).toBeNull(); // a bare hyphen is not a separator
+            expect(detectLetterPrefix('Begins With A…')).toBe('a'); // an ellipsis is a separator
+            expect(detectLetterPrefix('Share shots that start with A\nExamples: apples')).toBe('a'); // a newline is a separator
+            expect(detectLetterPrefix("Starts With 'A'")).toBe('a');
+            expect(detectLetterPrefix('Starts With a Smile')).toBeNull();
+            expect(detectLetterPrefix('Begins With a Bang')).toBeNull();
+            expect(detectLetterPrefix('Begins With L')).toBe('l');
         });
         test('out-of-scope title forms return null', () => {
             expect(detectLetterPrefix('L Words')).toBeNull();
@@ -1303,9 +1316,9 @@ describe('photoPicker', () => {
             '* ALLSTAR Level reward: 50 coins Scores of success and splendid shooting!';
         const challenge = { title: 'The Letter "S"', url: 'the-letter-s', welcome_message: DESC };
 
-        test('a description word picks the matching S photo over a low-voted same-letter one', () => {
-            const snake = allowed('snake', ['Snake'], 1000, { votes: 500 });
-            const symbol = allowed('symbol', ['Symbol'], 9000, { votes: 5 });
+        test('a description word picks the matching S photo over a higher-voted same-letter one', () => {
+            const snake = allowed('snake', ['Snake'], 1000, { votes: 5 });
+            const symbol = allowed('symbol', ['Symbol'], 9000, { votes: 500 });
             expect(pickPhotosForChallenge(challenge, [symbol, snake], 1)).toEqual(['snake']);
         });
 
@@ -1321,7 +1334,7 @@ describe('photoPicker', () => {
             expect(pickPhotosForChallenge(plain, [symbol, sunset], 1)).toEqual(['sunset']);
         });
 
-        test('the visual check is skipped in both cases: the title has no visual subject', () => {
+        test('visualSubjectWords is empty in both cases: the title has no visual subject', () => {
             expect(visualSubjectWords(challenge)).toEqual([]);
             expect(
                 visualSubjectWords({
