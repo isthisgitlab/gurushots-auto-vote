@@ -619,6 +619,44 @@ describe('the loaded-photo sort', () => {
         expect([...result.current.sortStats.keys()]).toEqual(['photo-0']);
         expect(result.current.sortStats.get('photo-0')).toEqual(result.current.stats.get('photo-0'));
     });
+
+    test('re-choosing the sort it already holds reads nothing and re-snapshots nothing', async () => {
+        getStats().mockResolvedValue(answer([stat(0)]));
+        const { result } = renderHook(() => usePhotoStatsLoader());
+        act(() => {
+            result.current.setTileIds(ids(1));
+            result.current.setSortBy('ratio');
+        });
+        await waitFor(() => expect(result.current.statsRead).toBe(true));
+        expect(result.current.statsProgress).toBeNull();
+        const snapshot = result.current.sortStats;
+        act(() => {
+            result.current.setSortBy('ratio');
+        });
+        await flush();
+        expect(getStats()).toHaveBeenCalledTimes(1);
+        expect(result.current.statsProgress).toBeNull();
+        // The same Map object: no fresh snapshot was taken.
+        expect(result.current.sortStats).toBe(snapshot);
+    });
+
+    test('Library re-chosen while Library is the sort does nothing', async () => {
+        getStats().mockResolvedValue(answer([stat(0)]));
+        const { result } = renderHook(() => usePhotoStatsLoader());
+        act(() => {
+            result.current.setTileIds(ids(1));
+        });
+        await flush();
+        const snapshot = result.current.sortStats;
+        act(() => {
+            result.current.setSortBy('library');
+        });
+        await flush();
+        expect(getStats()).not.toHaveBeenCalled();
+        expect(result.current.showStats).toBe(false);
+        expect(result.current.statsProgress).toBeNull();
+        expect(result.current.sortStats).toBe(snapshot);
+    });
 });
 
 describe('restarts while a call is out', () => {

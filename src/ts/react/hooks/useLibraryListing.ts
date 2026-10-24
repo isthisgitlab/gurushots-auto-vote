@@ -330,11 +330,12 @@ export function useLibraryListing(
      * top, under a new request id, so the answer of a read in the older order can never land; the
      * re-read is fresh like Refresh and Retry — a switch back to Votes cannot be answered by a
      * narrower cached listing — and keeps the extent on screen. When idle it only arms the next read.
-     * A non-votes order is read fresh by the handler whatever the mode asks, so no cached
-     * vote-ordered listing can answer for it.
+     * Setting the order it already holds reads nothing. A non-votes order is read fresh by the
+     * handler whatever the mode asks, so no cached vote-ordered listing can answer for it.
      */
     const setOrder = useCallback(
         (next: LibraryOrder) => {
+            if (next === orderRef.current) return;
             orderRef.current = next;
             setOrderState(next);
             const current = latestState.current;

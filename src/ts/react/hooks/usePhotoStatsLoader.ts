@@ -239,6 +239,7 @@ export function usePhotoStatsLoader() {
     const statsMapRef = useRef(stats);
     const [sortStats, setSortStats] = useState<ReadonlyMap<string, TileStats>>(new Map());
     const [sortBy, setSortByState] = useState<LoadedSort>('library');
+    const sortByRef = useRef<LoadedSort>('library');
     const [showStats, setShowStatsState] = useState(false);
     const showStatsRef = useRef(false);
     const [statsProgress, setStatsProgress] = useState<StatsProgress | null>(null);
@@ -277,9 +278,14 @@ export function usePhotoStatsLoader() {
         [queue],
     );
 
-    /** The loaded-photo sort: a change applies from the Map at once; one needing stats turns Show stats on. */
+    /**
+     * The loaded-photo sort: a change applies from the Map at once; one needing stats turns Show
+     * stats on. Setting the sort it already holds reads nothing.
+     */
     const setSortBy = useCallback(
         (next: LoadedSort) => {
+            if (next === sortByRef.current) return;
+            sortByRef.current = next;
             setSortByState(next);
             if (next === 'library') return;
             setSortStats(new Map(statsMapRef.current));

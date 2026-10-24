@@ -1180,4 +1180,15 @@ describe('the order', () => {
         expect(getLibrary().mock.calls[1]).toEqual([7, undefined, 'fresh', 'submit', 0, 100, 'newest']);
         await waitFor(() => expect(result.current.state).toMatchObject({ status: 'ready', order: 'newest' }));
     });
+
+    test('a ready listing given the order it already holds reads nothing and stays ready', async () => {
+        getLibrary().mockResolvedValue(answer());
+        const { result } = renderHook(() => useLibraryListing(7, { onDemand: true }));
+        await act(async () => result.current.load(''));
+        expect(result.current.state).toMatchObject({ status: 'ready', order: 'votes' });
+        await act(async () => result.current.setOrder('votes'));
+        // The same value re-chosen: no fresh re-read goes out, so no loading flash.
+        expect(getLibrary()).toHaveBeenCalledTimes(1);
+        expect(result.current.state).toMatchObject({ status: 'ready', order: 'votes' });
+    });
 });
