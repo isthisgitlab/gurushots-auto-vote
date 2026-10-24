@@ -13,6 +13,7 @@ import type { CategoryLogger } from '../../src/ts/logger';
 import type { FillDeps, FillLogger, FillSettings } from '../../src/ts/types/autoFill';
 import type { FillSchedule } from '../../src/ts/services/scheduleRemap';
 import type { ActionResult, Challenge, ImageRecord } from '../../src/ts/types/gurushots';
+import { isPlainObject } from '../../src/ts/plainObject';
 import { invalid } from '../helpers/invalid';
 
 jest.mock('../../src/ts/services/semantic/lexicon', () => ({
@@ -3736,5 +3737,79 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         expect(getImageData).toHaveBeenCalledWith('tiedB', 'tok');
         expect(getImageData).not.toHaveBeenCalledWith('pink', 'tok');
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['pink', 'tiedB'], 'tok');
+    });
+
+    test('a mock-mode fill measures stats but never persists them', async () => {
+        // Mock photo ids pass cacheKeyFor, so without the persist guard every
+        // mock fill would write mock numbers into the real photo-stats.json —
+        // the same leak the get-photo-stats handler already guards.
+        const getEligiblePhotos = jest
+            .fn()
+            .mockResolvedValue([libraryPhoto('soccer', 1203, 9000), libraryPhoto('portfolio', 400, 1000)]);
+        const getImageData = jest.fn(async () => ({ votes: 500, views: 10, achievements: [] }));
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+
+        const result = await maybeAutoFillChallenge(abstractChallenge(), 'tok', NOW, {
+            settings: invalid<jest.MockedObject<FillSettings>>({
+                ...makeSettings({ autoSubmit: true }),
+                getSetting: jest.fn((key: string) => key === 'mock'),
+            }),
+            logger: makeLogger(),
+            getEligiblePhotos,
+            getImageData,
+            submitToChallenge,
+        });
+
+        expect(result).toBe('submitted');
+        expect(getImageData).toHaveBeenCalled(); // ranking still read the mock stats
+        expect(statsStoreData).toBeNull(); // none of them reached the shared cache file
+    });
+
+    test('a real-mode fill still persists stat lookups', async () => {
+        const getEligiblePhotos = jest
+            .fn()
+            .mockResolvedValue([libraryPhoto('soccer', 1203, 9000), libraryPhoto('portfolio', 400, 1000)]);
+        const getImageData = jest.fn(async () => ({ votes: 500, views: 10, achievements: [] }));
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+
+        const result = await maybeAutoFillChallenge(abstractChallenge(), 'tok', NOW, {
+            settings: invalid<jest.MockedObject<FillSettings>>({
+                ...makeSettings({ autoSubmit: true }),
+                getSetting: jest.fn((key: string) => (key === 'mock' ? false : null)),
+            }),
+            logger: makeLogger(),
+            getEligiblePhotos,
+            getImageData,
+            submitToChallenge,
+        });
+
+        expect(result).toBe('submitted');
+        const raw = statsStoreData;
+        if (typeof raw !== 'string') throw new Error('the stats cache file was not written');
+        const parsed: unknown = JSON.parse(raw);
+        const photos = isPlainObject(parsed) && isPlainObject(parsed.photos) ? parsed.photos : {};
+        expect(Object.keys(photos).sort()).toEqual(['portfolio', 'soccer']);
+    });
+
+    test('a fill with no settings module at all still persists stat lookups', async () => {
+        // fillChallengeNow runs without settings; absence must read as real
+        // mode, not as "never persist".
+        const getImageData = jest.fn(async () => ({ votes: 500, views: 10, achievements: [] }));
+        const result = await fillChallengeNow(abstractChallenge({ maxSubmits: 2 }), 'tok', 'all', {
+            logger: makeLogger(),
+            getEligiblePhotos: jest
+                .fn()
+                .mockResolvedValue([libraryPhoto('soccer', 1203, 9000), libraryPhoto('portfolio', 400, 1000)]),
+            getImageData,
+            submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
+        });
+
+        expect(result.success).toBe(true);
+        expect(getImageData).toHaveBeenCalled();
+        const raw = statsStoreData;
+        if (typeof raw !== 'string') throw new Error('the stats cache file was not written');
+        const parsed: unknown = JSON.parse(raw);
+        const photos = isPlainObject(parsed) && isPlainObject(parsed.photos) ? parsed.photos : {};
+        expect(Object.keys(photos).sort()).toEqual(['portfolio', 'soccer']);
     });
 });

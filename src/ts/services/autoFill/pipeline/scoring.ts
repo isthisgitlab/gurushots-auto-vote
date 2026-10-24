@@ -155,7 +155,13 @@ const scoreFillCandidates = async ({
     const contested = selectBlockEnrichmentSet(scored, wantCount, chosenIds, chosen?.inOrder === true);
     const contestedIds = new Set(contested.map((photo) => String(photo.id)));
     if (contested.length > 0) {
-        const enriched = await enrichCandidates(contested, token, deps);
+        // Mock ids must not land in the real photo-stats cache — same rule as
+        // the get-photo-stats handler's `persist: !mock`. Absent settings read
+        // as real mode, so the default behaviour is unchanged.
+        const enriched = await enrichCandidates(contested, token, {
+            ...deps,
+            persist: deps.settings?.getSetting?.('mock') !== true,
+        });
         const statsById = new Map(enriched.map((photo) => [String(photo.id), photo]));
         for (const entry of scored) {
             const fresh = statsById.get(String(entry.id));
