@@ -65,9 +65,14 @@ const INTENT: ChallengeValues = {
 
 const onDirtyChange = jest.fn();
 
-const withSchema = () =>
+const withSchema = (
+    profileLimits: { maxChallengeProfiles: number; maxProfileNameLength: number } = {
+        maxChallengeProfiles: 50,
+        maxProfileNameLength: 60,
+    },
+) =>
     mockApi.getSettingsSchema.mockResolvedValue(
-        invalid({ schema: SCHEMA, defaults: DEFAULTS, groups: GROUPS, tiers: TIERS }),
+        invalid({ schema: SCHEMA, defaults: DEFAULTS, groups: GROUPS, tiers: TIERS, profileLimits }),
     );
 const withProfiles = (profiles: Record<string, ChallengeValues>) =>
     mockApi.getChallengeProfiles.mockReset().mockResolvedValue(invalid(profiles));
@@ -102,6 +107,9 @@ const selectEl = () => screen.getByRole<HTMLSelectElement>('combobox', { name: '
 const exposureInput = () => screen.getByLabelText<HTMLInputElement>(/^app\.exposure/);
 const saveButton = () => screen.getByRole<HTMLButtonElement>('button', { name: 'app.saveProfile' });
 const discardButton = () => screen.getByRole<HTMLButtonElement>('button', { name: 'app.discardProfileChanges' });
+const saveAsInput = () => screen.getByLabelText<HTMLInputElement>('app.saveAsNewLabel');
+const saveAsButton = () =>
+    screen.getByRole<HTMLButtonElement>('button', { name: /app\.(saveAsNewProfile|confirmRename|confirmOverwrite)/ });
 
 // A <select>'s onChange stays a native 'change' listener under preact/compat
 // (see ChallengeProfilesBar.test.tsx), so dispatch the real event.
@@ -198,6 +206,8 @@ describe('ProfilesSection — editing a picked profile', () => {
         expect(saveButton().getAttribute('aria-busy')).toBe('true');
         // A switch during a save would race the write: the select is disabled too.
         expect(selectEl().disabled).toBe(true);
+        // Either save holds the Save-as row's button as well.
+        expect(saveAsButton().getAttribute('aria-disabled')).toBe('true');
 
         resolveSave(true);
         await screen.findByText('app.profileSaved');
@@ -423,5 +433,285 @@ describe('ProfilesSection — the schema bands', () => {
         changeSelect(selectEl(), 'Just Participate');
         expect(screen.getByText('app.intentModified')).toBeTruthy();
         expect(screen.queryByText('app.intentBuiltIn')).toBeNull();
+    });
+});
+
+describe('ProfilesSection — the Save as new profile row', () => {
+    test('the row exists only with a picked profile, and its label names the input', async () => {
+        await renderSection();
+        expect(screen.queryByLabelText('app.saveAsNewLabel')).toBeNull();
+        changeSelect(selectEl(), 'tactic');
+        expect(saveAsInput()).toBeTruthy();
+        expect(screen.getByText('app.saveAsHint')).toBeTruthy();
+    });
+
+    test('a new name saves a new profile: the input clears, the select shows it, focus follows', async () => {
+        await renderSection();
+        changeSelect(selectEl(), 'tactic');
+        fireEvent.change(exposureInput(), { target: { value: '90' } });
+        mockApi.getChallengeProfiles.mockClear();
+        mockApi.getChallengeProfiles.mockResolvedValue(
+            invalid({ tactic: TACTIC, brand: { exposure: 90, extra: true } }),
+        );
+        fireEvent.change(saveAsInput(), { target: { value: '  brand  ' } });
+        fireEvent.click(saveAsButton());
+
+        await waitFor(() =>
+            expect(mockApi.saveChallengeProfile).toHaveBeenCalledWith('brand', { exposure: 90, extra: true }),
+        );
+        await waitFor(() => expect(selectEl().value).toBe('brand'));
+        expect(saveAsInput().value).toBe('');
+        expect(await screen.findByText('app.profileSaved')).toBeTruthy();
+        await waitFor(() => expect(document.activeElement).toBe(selectEl()));
+        // The row re-read the profiles itself.
+        expect(mockApi.getChallengeProfiles).toHaveBeenCalledTimes(1);
+    });
+
+    test('a case-only rename on a dirty form asks first, then renames on the second press', async () => {
+        await renderSection();
+        changeSelect(selectEl(), 'tactic');
+        fireEvent.change(exposureInput(), { target: { value: '90' } });
+        fireEvent.change(saveAsInput(), { target: { value: 'Tactic' } });
+        fireEvent.click(saveAsButton());
+
+        expect(mockApi.saveChallengeProfile).not.toHaveBeenCalled();
+        expect(screen.getByText('app.saveAsRenameDirtyText')).toBeTruthy();
+        expect(saveAsButton().textContent).toBe('app.confirmRename');
+
+        mockApi.getChallengeProfiles.mockClear();
+        mockApi.getChallengeProfiles.mockResolvedValue(invalid({ Tactic: { exposure: 90, extra: true } }));
+        fireEvent.click(saveAsButton());
+        await waitFor(() =>
+            expect(mockApi.saveChallengeProfile).toHaveBeenCalledWith('Tactic', { exposure: 90, extra: true }),
+        );
+        await waitFor(() => expect(selectEl().value).toBe('Tactic'));
+        expect(saveAsInput().value).toBe('');
+        expect(document.activeElement).toBe(selectEl());
+    });
+
+    test('a case-only rename on a clean form arms the plain rename sentence', async () => {
+        await renderSection();
+        changeSelect(selectEl(), 'tactic');
+        fireEvent.change(saveAsInput(), { target: { value: 'Tactic' } });
+        fireEvent.click(saveAsButton());
+
+        expect(mockApi.saveChallengeProfile).not.toHaveBeenCalled();
+        expect(screen.getByText('app.saveAsRenameText')).toBeTruthy();
+        expect(screen.queryByText('app.saveAsRenameDirtyText')).toBeNull();
+    });
+
+    test('another profile’s name arms Overwrite?, the second press saves under the stored name', async () => {
+        await renderSection({ tactic: TACTIC, other: {} });
+        changeSelect(selectEl(), 'tactic');
+        // A casing that differs from the stored one: the overwrite must send
+        // the stored name, never re-case another profile by typing at it.
+        fireEvent.change(saveAsInput(), { target: { value: 'OTHER' } });
+        fireEvent.click(saveAsButton());
+
+        expect(mockApi.saveChallengeProfile).not.toHaveBeenCalled();
+        expect(screen.getByText('app.saveAsOverwriteText')).toBeTruthy();
+        expect(saveAsButton().textContent).toBe('app.confirmOverwrite');
+
+        mockApi.getChallengeProfiles.mockClear();
+        mockApi.getChallengeProfiles.mockResolvedValue(
+            invalid({ tactic: TACTIC, other: { exposure: 80, extra: true } }),
+        );
+        fireEvent.click(saveAsButton());
+        await waitFor(() =>
+            expect(mockApi.saveChallengeProfile).toHaveBeenCalledWith('other', { exposure: 80, extra: true }),
+        );
+        expect(mockApi.saveChallengeProfile).not.toHaveBeenCalledWith('OTHER', expect.anything());
+        await waitFor(() => expect(selectEl().value).toBe('other'));
+    });
+
+    test('editing the name disarms an armed confirm', async () => {
+        await renderSection();
+        changeSelect(selectEl(), 'tactic');
+        fireEvent.change(saveAsInput(), { target: { value: 'Tactic' } });
+        fireEvent.click(saveAsButton());
+        expect(saveAsButton().textContent).toBe('app.confirmRename');
+
+        // Back to the idle label — a press would arm again, never fire.
+        fireEvent.change(saveAsInput(), { target: { value: 'Tactic2' } });
+        expect(saveAsButton().textContent).toBe('app.saveAsNewProfile');
+    });
+
+    test('switching profiles disarms an armed confirm', async () => {
+        await renderSection();
+        changeSelect(selectEl(), 'tactic');
+        fireEvent.change(saveAsInput(), { target: { value: 'JUST PARTICIPATE' } });
+        fireEvent.click(saveAsButton());
+        expect(saveAsButton().textContent).toBe('app.confirmOverwrite');
+
+        // The draft is clean, so the switch needs no confirm.
+        changeSelect(selectEl(), 'Just Participate');
+        expect(saveAsButton().textContent).toBe('app.saveAsNewProfile');
+        fireEvent.click(saveAsButton());
+        expect(mockApi.saveChallengeProfile).not.toHaveBeenCalled();
+    });
+
+    test('the same name on a clean form reports no changes; on a dirty form it plain-saves', async () => {
+        await renderSection();
+        changeSelect(selectEl(), 'tactic');
+        fireEvent.change(saveAsInput(), { target: { value: 'tactic' } });
+        fireEvent.click(saveAsButton());
+
+        expect(screen.getByText('app.saveAsNoChanges')).toBeTruthy();
+        expect(mockApi.saveChallengeProfile).not.toHaveBeenCalled();
+
+        fireEvent.change(exposureInput(), { target: { value: '90' } });
+        fireEvent.click(saveAsButton());
+        await waitFor(() =>
+            expect(mockApi.saveChallengeProfile).toHaveBeenCalledWith('tactic', { exposure: 90, extra: true }),
+        );
+        // A landed plain save tidies the row and follows the Save-profile
+        // focus flow to the select.
+        await waitFor(() => expect(saveAsInput().value).toBe(''));
+        expect(document.activeElement).toBe(selectEl());
+    });
+
+    test.each([
+        ['required', '', 'app.profileNameRequired'],
+        ['too long', 'x'.repeat(61), 'app.profileNameTooLong'],
+        ['reserved', '__proto__', 'app.profileNameReserved'],
+    ])('a %s name shows its message in the row region and refocuses the input', async (_label, typed, message) => {
+        await renderSection();
+        changeSelect(selectEl(), 'tactic');
+        fireEvent.change(saveAsInput(), { target: { value: typed } });
+        fireEvent.click(saveAsButton());
+
+        expect(screen.getByText(message)).toBeTruthy();
+        expect(document.activeElement).toBe(saveAsInput());
+        expect(mockApi.saveChallengeProfile).not.toHaveBeenCalled();
+    });
+
+    test('a new name at the cap shows the limit error', async () => {
+        withSchema({ maxChallengeProfiles: 2, maxProfileNameLength: 60 });
+        withProfiles({ tactic: TACTIC, other: {} });
+        render(
+            <SettingsNavProvider value={shownNav('profiles')}>
+                <ProfilesSection isOpen={true} onDirtyChange={onDirtyChange} />
+            </SettingsNavProvider>,
+        );
+        await waitFor(() => expect(screen.queryByText('common.loading')).toBeNull());
+        changeSelect(selectEl(), 'tactic');
+        fireEvent.change(saveAsInput(), { target: { value: 'third' } });
+        fireEvent.click(saveAsButton());
+
+        expect(screen.getByText('app.profileLimitReached')).toBeTruthy();
+        expect(mockApi.saveChallengeProfile).not.toHaveBeenCalled();
+    });
+
+    test('a refused new-name save shows profileSaveAsError in the row, never the shared alert', async () => {
+        mockApi.saveChallengeProfile.mockResolvedValue(false);
+        await renderSection();
+        changeSelect(selectEl(), 'tactic');
+        fireEvent.change(saveAsInput(), { target: { value: 'brand' } });
+        fireEvent.click(saveAsButton());
+
+        expect(await screen.findByText('app.profileSaveAsError')).toBeTruthy();
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(document.activeElement).toBe(saveAsInput());
+    });
+
+    test('a refused overwrite shows profileEditSaveError in the row region, never the shared alert', async () => {
+        mockApi.saveChallengeProfile.mockResolvedValue(false);
+        await renderSection();
+        changeSelect(selectEl(), 'tactic');
+        fireEvent.change(saveAsInput(), { target: { value: 'Just Participate' } });
+        fireEvent.click(saveAsButton());
+        fireEvent.click(saveAsButton());
+
+        expect(await screen.findByText('app.profileEditSaveError')).toBeTruthy();
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(document.activeElement).toBe(saveAsInput());
+    });
+
+    test('both save buttons are held while the Save-as write is out, and a held press sends nothing', async () => {
+        let resolveSaveAs!: (value: boolean) => void;
+        mockApi.saveChallengeProfile.mockReturnValue(
+            invalid(
+                new Promise<boolean>((resolve) => {
+                    resolveSaveAs = resolve;
+                }),
+            ),
+        );
+        await renderSection();
+        changeSelect(selectEl(), 'tactic');
+        fireEvent.change(saveAsInput(), { target: { value: 'brand' } });
+        mockApi.getChallengeProfiles.mockClear();
+        mockApi.getChallengeProfiles.mockResolvedValue(
+            invalid({ tactic: TACTIC, brand: { exposure: 80, extra: true } }),
+        );
+        fireEvent.click(saveAsButton());
+
+        expect(saveAsButton().getAttribute('aria-disabled')).toBe('true');
+        expect(saveButton().disabled).toBe(true);
+        fireEvent.click(saveAsButton());
+        expect(mockApi.saveChallengeProfile).toHaveBeenCalledTimes(1);
+
+        resolveSaveAs(true);
+        await screen.findByText('app.profileSaved');
+        expect(saveAsButton().getAttribute('aria-disabled')).toBe('false');
+    });
+
+    test('Enter in the name input runs Save as (the row is a form)', async () => {
+        await renderSection();
+        changeSelect(selectEl(), 'tactic');
+        fireEvent.change(exposureInput(), { target: { value: '90' } });
+        fireEvent.change(saveAsInput(), { target: { value: 'brand' } });
+        fireEvent.submit(saveAsInput().closest('form') as HTMLFormElement);
+
+        await waitFor(() =>
+            expect(mockApi.saveChallengeProfile).toHaveBeenCalledWith('brand', { exposure: 90, extra: true }),
+        );
+    });
+
+    test('switching profiles clears the row’s message', async () => {
+        await renderSection();
+        changeSelect(selectEl(), 'tactic');
+        fireEvent.change(saveAsInput(), { target: { value: '' } });
+        fireEvent.click(saveAsButton());
+        expect(screen.getByText('app.profileNameRequired')).toBeTruthy();
+
+        // The draft is clean, so the switch needs no confirm.
+        changeSelect(selectEl(), 'Just Participate');
+        expect(screen.queryByText('app.profileNameRequired')).toBeNull();
+    });
+
+    test('an armed confirm falls back to its idle label after the confirm timeout', async () => {
+        await renderSection();
+        changeSelect(selectEl(), 'tactic');
+        fireEvent.change(saveAsInput(), { target: { value: 'Tactic' } });
+        jest.useFakeTimers();
+        try {
+            fireEvent.click(saveAsButton());
+            expect(saveAsButton().textContent).toBe('app.confirmRename');
+
+            act(() => {
+                jest.advanceTimersByTime(4000);
+            });
+            expect(saveAsButton().textContent).toBe('app.saveAsNewProfile');
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    test('a refused plain save (same name, dirty form) shows the Save-profile alert and its focus flow', async () => {
+        mockApi.saveChallengeProfile.mockResolvedValue(false);
+        await renderSection();
+        changeSelect(selectEl(), 'tactic');
+        fireEvent.change(exposureInput(), { target: { value: '90' } });
+        fireEvent.change(saveAsInput(), { target: { value: 'tactic' } });
+        fireEvent.click(saveAsButton());
+
+        await waitFor(() =>
+            expect(mockApi.saveChallengeProfile).toHaveBeenCalledWith('tactic', { exposure: 90, extra: true }),
+        );
+        // The refusal is Save profile's own: the shared alert shows it and the
+        // Save button takes the focus; the row itself adds no message.
+        const alert = await screen.findByRole('alert');
+        expect(within(alert).getByText('app.profileEditSaveError')).toBeTruthy();
+        await waitFor(() => expect(document.activeElement).toBe(saveButton()));
     });
 });

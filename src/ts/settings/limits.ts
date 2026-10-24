@@ -99,6 +99,19 @@ const API_TIMEOUT_MIN_SEC = 1;
 const API_TIMEOUT_MAX_SEC = 300;
 const API_MAX_RETRIES_MAX = 10;
 
+// Profile names a stored profiles map must never carry: a bare
+// `profiles['__proto__'] = …` assignment reassigns the map's prototype
+// instead of storing data (silent data loss + corrupted lookups), so these
+// names are rejected on write and skipped on read — same guard family as
+// getTitlePins' own-property iteration.
+const RESERVED_PROFILE_NAMES = new Set(['__proto__', 'constructor', 'prototype']);
+
+// Identity key for a profile name: trimmed + lowercased (the normalizeTitle
+// contract) so "Portrait" and "portrait" are one profile, latest casing wins.
+// One copy here for both the settings facade and the renderer's profile-name
+// helper; non-strings (a hand-edited blob) read as ''.
+const normalizeProfileName = (name: unknown): string => (typeof name === 'string' ? name.trim().toLowerCase() : '');
+
 export {
     API_TIMEOUT_MIN_SEC,
     API_TIMEOUT_MAX_SEC,
@@ -118,4 +131,6 @@ export {
     MAX_LIBRARY_KEEP_PHOTOS,
     CHOSEN_PHOTO_ID_RE,
     MAX_UPCOMING_HOURS,
+    RESERVED_PROFILE_NAMES,
+    normalizeProfileName,
 };

@@ -415,3 +415,287 @@ describe('useProfileEditor — save and discard', () => {
         expect(view.result.current.profiles.tactic).toEqual({ exposure: 95, extra: true });
     });
 });
+
+describe('useProfileEditor — saveAs', () => {
+    test('success re-reads directly, selects the stored key and lands the sent baseline', async () => {
+        const { result } = await open();
+        act(() => result.current.selectProfile('tactic'));
+        act(() => result.current.changeOverride('exposure', 90));
+        // The backend stored the sent values under the new name; the re-read
+        // is a second, direct getChallengeProfiles call.
+        mockApi.getChallengeProfiles.mockClear();
+        mockApi.getChallengeProfiles.mockResolvedValue(
+            invalid({ tactic: { exposure: 80, extra: true }, Brand: { exposure: 90, extra: true } }),
+        );
+        let answer = false;
+        await act(async () => {
+            answer = await result.current.saveAs('Brand');
+        });
+        expect(answer).toBe(true);
+        expect(mockApi.saveChallengeProfile).toHaveBeenCalledWith('Brand', { exposure: 90, extra: true });
+        expect(mockApi.getChallengeProfiles).toHaveBeenCalledTimes(1);
+        expect(result.current.selected).toBe('Brand');
+        expect(result.current.profiles).toEqual({
+            tactic: { exposure: 80, extra: true },
+            Brand: { exposure: 90, extra: true },
+        });
+        expect(result.current.savedNote).toBe(true);
+        expect(result.current.saveError).toBe(false);
+        expect(result.current.loadFailed).toBe(false);
+        // The sent copy is the new baseline; the draft lands clean.
+        expect(result.current.overrides).toEqual({ exposure: 90, extra: true });
+        expect(result.current.isDirty()).toBe(false);
+    });
+
+    test('a case-only rename on a clean form keeps the values and selects the sent casing', async () => {
+        const { result } = await open();
+        act(() => result.current.selectProfile('tactic'));
+        mockApi.getChallengeProfiles.mockClear();
+        mockApi.getChallengeProfiles.mockResolvedValue(invalid({ Tactic: { exposure: 80, extra: true } }));
+        let answer = false;
+        await act(async () => {
+            answer = await result.current.saveAs('Tactic');
+        });
+        expect(answer).toBe(true);
+        expect(mockApi.saveChallengeProfile).toHaveBeenCalledWith('Tactic', { exposure: 80, extra: true });
+        expect(result.current.selected).toBe('Tactic');
+        expect(result.current.overrides).toEqual({ exposure: 80, extra: true });
+        expect(result.current.isDirty()).toBe(false);
+    });
+
+    test('a failed re-read falls back to the local merge without the load-failed alert', async () => {
+        const { result } = await open();
+        act(() => result.current.selectProfile('tactic'));
+        act(() => result.current.changeOverride('exposure', 90));
+        mockApi.getChallengeProfiles.mockClear();
+        mockApi.getChallengeProfiles.mockRejectedValueOnce(new Error('ipc down'));
+        let answer = false;
+        await act(async () => {
+            answer = await result.current.saveAs('Tactic');
+        });
+        expect(answer).toBe(true);
+        expect(mockApi.logError).toHaveBeenCalledWith('Error loading challenge profiles: ipc down');
+        // The same-normalised key is replaced, the sent casing kept.
+        expect(result.current.profiles).toEqual({ Tactic: { exposure: 90, extra: true } });
+        expect(result.current.selected).toBe('Tactic');
+        expect(result.current.savedNote).toBe(true);
+        expect(result.current.loadFailed).toBe(false);
+        expect(result.current.isDirty()).toBe(false);
+    });
+
+    test('a re-read that answers nothing merges locally too', async () => {
+        const { result } = await open();
+        act(() => result.current.selectProfile('tactic'));
+        mockApi.getChallengeProfiles.mockClear();
+        mockApi.getChallengeProfiles.mockResolvedValueOnce(invalid(null));
+        await act(async () => {
+            await result.current.saveAs('Brand');
+        });
+        expect(mockApi.logError).toHaveBeenCalledWith('Error loading challenge profiles: the read answered nothing');
+        // A different name lands next to the old one.
+        expect(result.current.profiles).toEqual({
+            tactic: { exposure: 80, extra: true },
+            Brand: { exposure: 80, extra: true },
+        });
+        expect(result.current.selected).toBe('Brand');
+        expect(result.current.loadFailed).toBe(false);
+    });
+
+    test('a re-read rejected with a plain string logs it verbatim and still merges locally', async () => {
+        const { result } = await open();
+        act(() => result.current.selectProfile('tactic'));
+        mockApi.getChallengeProfiles.mockClear();
+        mockApi.getChallengeProfiles.mockRejectedValueOnce(invalid('plain failure'));
+        let answer = false;
+        await act(async () => {
+            answer = await result.current.saveAs('Brand');
+        });
+        expect(answer).toBe(true);
+        expect(mockApi.logError).toHaveBeenCalledWith('Error loading challenge profiles: plain failure');
+        expect(result.current.profiles).toEqual({
+            tactic: { exposure: 80, extra: true },
+            Brand: { exposure: 80, extra: true },
+        });
+    });
+
+    test('a refused saveAs answers false without the shared saveError or a re-read', async () => {
+        mockApi.saveChallengeProfile.mockResolvedValue(false);
+        const { result } = await open();
+        act(() => result.current.selectProfile('tactic'));
+        act(() => result.current.changeOverride('exposure', 90));
+        mockApi.getChallengeProfiles.mockClear();
+        let answer = true;
+        await act(async () => {
+            answer = await result.current.saveAs('Brand');
+        });
+        expect(answer).toBe(false);
+        expect(result.current.saveError).toBe(false);
+        expect(result.current.savedNote).toBe(false);
+        expect(result.current.selected).toBe('tactic');
+        expect(result.current.isDirty()).toBe(true);
+        expect(mockApi.getChallengeProfiles).not.toHaveBeenCalled();
+    });
+
+    test('a thrown saveAs is logged and answers false without saveError', async () => {
+        mockApi.saveChallengeProfile.mockRejectedValue(new Error('ipc down'));
+        const { result } = await open();
+        act(() => result.current.selectProfile('tactic'));
+        act(() => result.current.changeOverride('exposure', 90));
+        let answer = true;
+        await act(async () => {
+            answer = await result.current.saveAs('Brand');
+        });
+        expect(answer).toBe(false);
+        expect(mockApi.logError).toHaveBeenCalledWith('Error saving challenge profile: ipc down');
+        expect(result.current.saveError).toBe(false);
+    });
+
+    test('a saveAs rejected with a plain string logs it verbatim and answers false', async () => {
+        mockApi.saveChallengeProfile.mockRejectedValueOnce(invalid('save blew up'));
+        const { result } = await open();
+        act(() => result.current.selectProfile('tactic'));
+        let answer = true;
+        await act(async () => {
+            answer = await result.current.saveAs('Brand');
+        });
+        expect(answer).toBe(false);
+        expect(mockApi.logError).toHaveBeenCalledWith('Error saving challenge profile: save blew up');
+        expect(result.current.saveError).toBe(false);
+    });
+
+    test('a saveAs that resolves after close changes nothing', async () => {
+        const view = await open();
+        act(() => view.result.current.selectProfile('tactic'));
+        act(() => view.result.current.changeOverride('exposure', 90));
+        let resolveSave!: (value: boolean) => void;
+        mockApi.saveChallengeProfile.mockReturnValue(
+            invalid(
+                new Promise<boolean>((resolve) => {
+                    resolveSave = resolve;
+                }),
+            ),
+        );
+        let saving!: Promise<boolean>;
+        await act(async () => {
+            saving = view.result.current.saveAs('Brand');
+        });
+        view.rerender({ isOpen: false });
+
+        await act(async () => {
+            resolveSave(true);
+            await saving;
+        });
+        expect(view.result.current.selected).toBeNull();
+        expect(view.result.current.profiles).toEqual(PROFILES);
+        expect(view.result.current.savedNote).toBe(false);
+        expect(view.result.current.saveError).toBe(false);
+    });
+
+    test('a saveAs that resolves after a switch is dropped without a re-read', async () => {
+        const view = await open();
+        act(() => view.result.current.selectProfile('tactic'));
+        act(() => view.result.current.changeOverride('exposure', 90));
+        let resolveSave!: (value: boolean) => void;
+        mockApi.saveChallengeProfile.mockReturnValue(
+            invalid(
+                new Promise<boolean>((resolve) => {
+                    resolveSave = resolve;
+                }),
+            ),
+        );
+        let saving!: Promise<boolean>;
+        await act(async () => {
+            saving = view.result.current.saveAs('Brand');
+        });
+        // The select is held during a write in the UI; the hook guards the
+        // settle regardless of how the switch happened.
+        act(() => view.result.current.selectProfile('other'));
+
+        mockApi.getChallengeProfiles.mockClear();
+        await act(async () => {
+            resolveSave(true);
+            await saving;
+        });
+        expect(view.result.current.selected).toBe('other');
+        expect(view.result.current.profiles.tactic).toEqual({ exposure: 80, extra: true });
+        expect(view.result.current.savedNote).toBe(false);
+        expect(mockApi.getChallengeProfiles).not.toHaveBeenCalled();
+    });
+
+    test('a close during the re-read selects and seeds nothing', async () => {
+        const view = await open();
+        act(() => view.result.current.selectProfile('tactic'));
+        act(() => view.result.current.changeOverride('exposure', 90));
+        // The save lands at once; the re-read hangs.
+        let resolveRead!: (value: unknown) => void;
+        mockApi.getChallengeProfiles.mockClear();
+        mockApi.getChallengeProfiles.mockReturnValue(
+            invalid(
+                new Promise((resolve) => {
+                    resolveRead = resolve;
+                }),
+            ),
+        );
+        let saving!: Promise<boolean>;
+        await act(async () => {
+            saving = view.result.current.saveAs('Brand');
+        });
+        view.rerender({ isOpen: false });
+
+        await act(async () => {
+            resolveRead({ Brand: { exposure: 90, extra: true } });
+            await saving;
+        });
+        // The late answer applies to no open session: the data, the selection
+        // and the draft all stay what the close left behind.
+        expect(view.result.current.selected).toBeNull();
+        expect(view.result.current.profiles).toEqual(PROFILES);
+        expect(view.result.current.overrides).toEqual({});
+        expect(view.result.current.savedNote).toBe(false);
+    });
+
+    test('a stale saveAs settling after a newer save started does not clear the newer saving flag', async () => {
+        const view = await open();
+        act(() => view.result.current.selectProfile('tactic'));
+        act(() => view.result.current.changeOverride('exposure', 90));
+        let resolveFirst!: (value: boolean) => void;
+        mockApi.saveChallengeProfile.mockReturnValueOnce(
+            invalid(
+                new Promise<boolean>((resolve) => {
+                    resolveFirst = resolve;
+                }),
+            ),
+        );
+        let first!: Promise<boolean>;
+        await act(async () => {
+            first = view.result.current.saveAs('Brand');
+        });
+        // The switch makes the save-as stale; a newer save takes the flag.
+        act(() => view.result.current.selectProfile('other'));
+        let resolveSecond!: (value: boolean) => void;
+        mockApi.saveChallengeProfile.mockReturnValueOnce(
+            invalid(
+                new Promise<boolean>((resolve) => {
+                    resolveSecond = resolve;
+                }),
+            ),
+        );
+        let second!: Promise<boolean>;
+        await act(async () => {
+            second = view.result.current.save();
+        });
+        expect(view.result.current.saving).toBe(true);
+
+        await act(async () => {
+            resolveFirst(true);
+            await first;
+        });
+        expect(view.result.current.saving).toBe(true);
+
+        await act(async () => {
+            resolveSecond(true);
+            await second;
+        });
+        expect(view.result.current.saving).toBe(false);
+    });
+});

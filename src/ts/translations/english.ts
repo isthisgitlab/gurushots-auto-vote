@@ -1499,6 +1499,18 @@ export const app = {
     profileSaved: 'Profile saved.',
     profileEditSaveError:
         "Couldn't save the profile. A value may be out of range, or a challenge rule that uses this profile clashes with a challenge's own settings. Check the values, or the challenges those rules match, and try again.",
+    saveAsNewLabel: 'New profile name',
+    saveAsNewProfile: 'Save as new profile',
+    confirmRename: 'Rename?',
+    saveAsRenameText: 'This renames “{from}” to “{to}”.',
+    saveAsRenameDirtyText: 'This renames “{from}” to “{to}” and saves your changes.',
+    saveAsOverwriteText: 'Replace “{name}”? Challenge rules that use it get these values.',
+    saveAsNoChanges: 'No changes to save.',
+    profileSaveAsError:
+        "Couldn't save the profile under this name. A value may be out of range, or the settings can't be saved right now. Check the values and try again.",
+    profileNameReserved: 'That name is reserved — choose another.',
+    saveAsHint:
+        'Saves these values under a new name. The profile you picked stays as it was, unless you type its own name.',
     setInProfile: 'Set in profile',
     discardProfileChanges: 'Discard changes',
     intentBuiltIn: 'Built-in preset',

@@ -1527,6 +1527,18 @@ export const app = {
     profileSaved: 'Profils saglabāts.',
     profileEditSaveError:
         'Neizdevās saglabāt profilu. Iespējams, kāda vērtība ir ārpus diapazona, vai arī kāds izaicinājuma noteikums, kas izmanto šo profilu, konfliktē ar izaicinājuma paša uzstādījumiem. Pārbaudi vērtības vai izaicinājumus, kuriem šie noteikumi atbilst, un mēģini vēlreiz.',
+    saveAsNewLabel: 'Jaunā profila nosaukums',
+    saveAsNewProfile: 'Saglabāt kā jaunu profilu',
+    confirmRename: 'Pārsaukt?',
+    saveAsRenameText: 'Profils „{from}” tiks pārsaukts par „{to}”.',
+    saveAsRenameDirtyText: 'Profils „{from}” tiks pārsaukts par „{to}”, un izmaiņas tiks saglabātas.',
+    saveAsOverwriteText: 'Aizstāt „{name}”? Izaicinājumu noteikumi, kas to izmanto, saņems šīs vērtības.',
+    saveAsNoChanges: 'Nav izmaiņu, ko saglabāt.',
+    profileSaveAsError:
+        'Neizdevās saglabāt profilu ar šādu nosaukumu. Iespējams, kāda vērtība ir ārpus diapazona, vai arī uzstādījumus pašlaik nevar saglabāt. Pārbaudi vērtības un mēģini vēlreiz.',
+    profileNameReserved: 'Šis nosaukums ir rezervēts — izvēlies citu.',
+    saveAsHint:
+        'Saglabā šīs vērtības ar jaunu nosaukumu. Izvēlētais profils paliek, kā bija, ja vien neieraksti tā paša nosaukumu.',
     setInProfile: 'Iestatīts profilā',
     discardProfileChanges: 'Atmest izmaiņas',
     intentBuiltIn: 'Iebūvēta sagatave',

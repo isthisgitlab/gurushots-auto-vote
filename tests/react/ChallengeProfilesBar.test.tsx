@@ -105,6 +105,16 @@ describe('ChallengeProfilesBar', () => {
         expect(mockApi.saveChallengeProfile).not.toHaveBeenCalled();
     });
 
+    test('a reserved name shows a specific error and never hits IPC', async () => {
+        renderBar();
+        fireEvent.change(nameInput(), { target: { value: '__proto__' } });
+        await act(async () => {
+            fireEvent.click(saveButton());
+        });
+        expect(document.body.textContent).toContain('app.profileNameReserved');
+        expect(mockApi.saveChallengeProfile).not.toHaveBeenCalled();
+    });
+
     test('over-long name shows the length error with the IPC-provided limit', async () => {
         renderBar();
         fireEvent.change(nameInput(), { target: { value: 'x'.repeat(61) } });

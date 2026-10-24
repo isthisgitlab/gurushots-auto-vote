@@ -3,6 +3,7 @@ import { useIpcQuery } from '@/api/useIpcQuery';
 import { useLatestRef } from './useLatestRef';
 import * as ipc from '@/api/ipc';
 import { valuesEqual } from '@/utils/valuesEqual';
+import { normalizeProfileName } from '@/utils/profileName';
 import { ON_ONLY_KEYS } from '../../settings/ruleBehaviour';
 import { errorMessage } from '../../errorMessage';
 
@@ -236,6 +237,96 @@ export function useProfileEditor({
         }
     }, [isOpenRef, saveIdRef, selectedRef, overridesRef, setProfiles]);
 
+    /**
+     * Save the current draft under another name (also the case-only rename,
+     * and the overwrite of another profile — the caller confirms those). The
+     * name must already pass checkProfileName: this sends it trimmed, with a
+     * copy of the draft. Shares saveIdRef/saving with save; a refused or
+     * failed save answers false and leaves the shared saveError alone (that
+     * alert is Save profile's — the Save-as row shows its own message).
+     */
+    const saveAs = useCallback(
+        async (newName: string): Promise<boolean> => {
+            const trimmed = newName.trim();
+            const startedFrom = selectedRef.current;
+            // One copy of what this save sends: an edit made while the write
+            // is out belongs to the next save, not to this one's baseline.
+            const values = { ...overridesRef.current };
+            const id = ++saveIdRef.current;
+            setSaving(true);
+            try {
+                const saved = await ipc.saveChallengeProfile(trimmed, values);
+                // The answer applies only while this open session still edits
+                // the profile it started from.
+                if (!isOpenRef.current || selectedRef.current !== startedFrom) return false;
+                if (saved !== true) return false;
+                // Re-read directly, not through the query's refetch: apply
+                // would reseed the form from the old selected name, and the
+                // backend may have replaced a name that matches only
+                // case-insensitively (renaming the rules that use it).
+                let fresh: StoredProfiles | null = null;
+                let readFailed = false;
+                try {
+                    fresh = await ipc.getChallengeProfiles();
+                } catch (err) {
+                    readFailed = true;
+                    await ipc.logRendererError(`Error loading challenge profiles: ${errorMessage(err) || err}`);
+                }
+                // A close (or a switch) during the re-read selects and seeds
+                // nothing.
+                if (!isOpenRef.current || selectedRef.current !== startedFrom) return false;
+                if (!readFailed && fresh && typeof fresh === 'object') {
+                    setProfiles(fresh);
+                    // Select the stored key that normalises to the sent name
+                    // — the save may have changed only the casing.
+                    const sentKey = normalizeProfileName(trimmed);
+                    let storedKey = trimmed;
+                    for (const key of Object.keys(fresh)) {
+                        if (normalizeProfileName(key) === sentKey) {
+                            storedKey = key;
+                            break;
+                        }
+                    }
+                    baselineRef.current = values;
+                    setSelected(storedKey);
+                    setSaveError(false);
+                    setSavedNote(true);
+                    return true;
+                }
+                if (!readFailed) {
+                    await ipc.logRendererError('Error loading challenge profiles: the read answered nothing');
+                }
+                // The re-read failed after the save landed: merge locally the
+                // way the backend does — the same-normalised key replaced, the
+                // sent casing kept — so the tab shows the landed state without
+                // flipping to its load-failed alert.
+                setProfiles((prev) => {
+                    const merged: StoredProfiles = {};
+                    const sentKey = normalizeProfileName(trimmed);
+                    for (const key of Object.keys(prev)) {
+                        if (normalizeProfileName(key) === sentKey) continue;
+                        merged[key] = prev[key];
+                    }
+                    merged[trimmed] = values;
+                    return merged;
+                });
+                baselineRef.current = values;
+                setSelected(trimmed);
+                setSaveError(false);
+                setSavedNote(true);
+                return true;
+            } catch (err) {
+                // Always logged; never the shared saveError — the row reports
+                // this save's failure itself.
+                await ipc.logRendererError(`Error saving challenge profile: ${errorMessage(err) || err}`);
+                return false;
+            } finally {
+                if (saveIdRef.current === id) setSaving(false);
+            }
+        },
+        [isOpenRef, saveIdRef, selectedRef, overridesRef, setProfiles],
+    );
+
     return {
         profiles,
         selected,
@@ -255,6 +346,7 @@ export function useProfileEditor({
         saveError,
         savedNote,
         save,
+        saveAs,
         discard,
     };
 }
