@@ -87,7 +87,7 @@ export const errors = {
         'No more suggestions. Every photo that fits has been shown. Press Auto to start again from the best.',
     suggestBusy: 'The photos were not ranked. Another ranking is still running. Wait for it to finish, then try again.',
     suggestChallengeEnded:
-        'The photos were not ranked. This challenge has ended or could not be read. Close this dialog and open the challenge again.',
+        'The photos were not ranked. This challenge has ended or could not be read. Close this dialog and try again.',
     suggestFailed:
         'The photos were not ranked. GuruShots did not answer, or the ranking did not finish. Try again in a moment.',
     fetchChallengesFailed: 'The challenges could not be loaded. GuruShots did not answer. Try again in a moment.',

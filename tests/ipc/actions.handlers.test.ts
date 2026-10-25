@@ -71,6 +71,9 @@ const setToken = (token: string | null) => {
 const stubStrategy = <O extends object = {}>(overrides: O = invalid<O>({})) => {
     const strategy = {
         getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [] }),
+        // The suggest handler's discover fallback reads this on every active-list miss; a default
+        // null keeps that miss answering challenge-ended instead of crashing into the catch.
+        getMemberChallenges: jest.fn().mockResolvedValue(null),
         applyTurbo: jest.fn(),
         applyBoostToEntry: jest.fn(),
         getEligiblePhotos: jest.fn(),
