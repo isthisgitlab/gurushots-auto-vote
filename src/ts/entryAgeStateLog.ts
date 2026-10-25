@@ -27,6 +27,7 @@ import * as logger from './logger';
 import { throughStore } from './settings/storeTransport';
 import { isPlainObject } from './plainObject';
 import { errorKind } from './errorMessage';
+import { parseUntrustedJsonObject } from './parseUntrustedJson';
 import { finiteOr } from './numbers';
 
 // How many entry ids (and exact / uncertain ids) one record keeps.
@@ -66,30 +67,28 @@ const idList = (value: unknown): string[] => (Array.isArray(value) ? value.slice
  * stores the record without it.
  */
 const parseState = (raw: string | null): State => {
-    try {
-        const parsed: unknown = JSON.parse(raw || '{}');
-        if (!isPlainObject(parsed)) return {};
-        const state: State = {};
-        for (const [id, stored] of Object.entries(parsed)) {
-            if (isRecord(stored)) {
-                const record: LegacyEntryAgeRecord = { ...stored };
-                // A field the record type no longer holds rides in the spread otherwise.
-                delete (record as Record<string, unknown>).memberId;
-                state[id] = {
-                    ...record,
-                    pending: isString(record.pending) && record.pending !== '' ? record.pending : null,
-                    uncertain: idList(record.uncertain),
-                    exact: idList(record.exact),
-                    observed: record.observed !== false,
-                    firstSeen: Math.max(finiteOr(record.firstSeen, 0), 0),
-                };
-            }
+    const parsed = parseUntrustedJsonObject(
+        () => raw,
+        'boost',
+        () => 'entry-age ledger unreadable (not JSON)',
+    );
+    const state: State = {};
+    for (const [id, stored] of Object.entries(parsed)) {
+        if (isRecord(stored)) {
+            const record: LegacyEntryAgeRecord = { ...stored };
+            // A field the record type no longer holds rides in the spread otherwise.
+            delete (record as Record<string, unknown>).memberId;
+            state[id] = {
+                ...record,
+                pending: isString(record.pending) && record.pending !== '' ? record.pending : null,
+                uncertain: idList(record.uncertain),
+                exact: idList(record.exact),
+                observed: record.observed !== false,
+                firstSeen: Math.max(finiteOr(record.firstSeen, 0), 0),
+            };
         }
-        return state;
-    } catch {
-        logger.withCategory('boost').warning('entry-age ledger unreadable (not JSON)', null);
-        return {};
     }
+    return state;
 };
 
 /** The change a write logs: `edit` made of the parsed stored state and stringified back, bookkeeping starting clean. */

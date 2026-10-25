@@ -22,10 +22,10 @@
  */
 
 import type { RawJsonStore, SwapBackRecord } from './types/stores';
-import * as logger from './logger';
 import { createJsonStore } from './settings/storage';
 import { isPlainObject } from './plainObject';
 import { errorMessage } from './errorMessage';
+import { parseUntrustedJsonObject } from './parseUntrustedJson';
 
 const swapBackStore = createJsonStore({ fileName: 'swapBacks.json', prefKey: 'gs_swap_backs' });
 
@@ -47,17 +47,12 @@ const isRecord = (r: unknown): r is SwapBackRecord =>
  * still be swapped back on gurushots.com.
  */
 const createLedger = (store: RawJsonStore) => {
-    const read = (): Record<string, unknown> => {
-        try {
-            const parsed: unknown = JSON.parse(store.readRaw() || '{}');
-            return isPlainObject(parsed) ? parsed : {};
-        } catch (error) {
-            logger
-                .withCategory('currency')
-                .warning(`swap-back ledger unreadable: ${errorMessage(error) ?? String(error)}`, null);
-            return {};
-        }
-    };
+    const read = (): Record<string, unknown> =>
+        parseUntrustedJsonObject(
+            () => store.readRaw(),
+            'currency',
+            (error) => `swap-back ledger unreadable: ${errorMessage(error) ?? String(error)}`,
+        );
 
     /** @param state */
     const write = (state: Record<string, unknown>) => {

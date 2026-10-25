@@ -270,4 +270,4 @@ export {
     initialState,
     scenarioStepLock,
 };
-export type { ResetResult, SetResult, StateLock };
+export type { StateLock };
