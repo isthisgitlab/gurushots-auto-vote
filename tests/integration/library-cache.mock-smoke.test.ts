@@ -110,6 +110,8 @@ test('the story of a chooser opened again, for another challenge, after a submit
     await library(first, 'fresh');
     expect(await library(first, 'cached')).toMatchObject({ preview: false });
     await clearAuthToken();
+    // The logout core returned the mode to the environment default; the story continues in mock mode.
+    settings.setSetting('mock', true);
     settings.setSetting('token', 'smoke-token');
     const afterLogout = await library(first, 'cached');
     expect(afterLogout).toMatchObject({ preview: false });

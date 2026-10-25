@@ -222,20 +222,19 @@ const openEventStream = (res: ServerResponse, clients: Set<ServerResponse>) => {
     res.on('close', () => clients.delete(res));
 };
 
-// Same as Electron's logout: always drop the token, and put the mock flag back
-// to the environment default.
+// The shared logout core always drops the token and puts the mock flag back
+// to the environment default; this shell only answers JSON.
 const logout = async (res: ServerResponse) => {
     try {
         await clearAuthToken();
     } catch (err) {
         logger.withCategory('authentication').error('Logout failed to clear token', err);
-        // A logout the settings refused did not log anyone out: say so, and leave the mock flag as it is.
+        // A logout the settings refused did not log anyone out: say so.
         if (err instanceof LogoutNotSavedError) {
             sendJson(res, 200, { result: { success: false, error: LOGOUT_NOT_SAVED } });
             return;
         }
     }
-    settings.setSetting('mock', settings.getEnvironmentInfo().defaultMock);
     sendJson(res, 200, { result: { success: true } });
 };
 

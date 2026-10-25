@@ -547,14 +547,13 @@ describe('invoke', () => {
 });
 
 describe('logout', () => {
-    test('clears the token and resets mock to the environment default', async () => {
+    test('clears the token through the shared logout core', async () => {
         const reply = await request('POST', '/api/logout', { headers: JSON_HEADERS, body: '{"args":[]}' });
         expect(parsed(reply)).toEqual({ result: { success: true } });
         expect(auth.clearAuthToken).toHaveBeenCalled();
-        expect(settings.setSetting).toHaveBeenCalledWith('mock', false);
     });
 
-    test('a logout the settings refused is answered as refused, and the mock flag is left alone', async () => {
+    test('a logout the settings refused is answered as refused', async () => {
         auth.clearAuthToken.mockRejectedValueOnce(new auth.LogoutNotSavedError());
         settings.setSetting.mockClear();
 

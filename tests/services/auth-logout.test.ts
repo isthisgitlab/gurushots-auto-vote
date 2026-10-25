@@ -32,6 +32,8 @@ jest.mock('../../src/ts/settings', () => {
             return true;
         }),
         forgetOpenChallengeIds: jest.fn(),
+        // The mocked environment boots in mock mode: a logout must land back on this default.
+        getEnvironmentInfo: jest.fn(() => ({ defaultMock: true })),
         flushPendingWrites: jest.fn(async () => {
             // The async flush is what actually persists.
             state.flushCalls++;
@@ -136,23 +138,49 @@ describe('clearAuthToken', () => {
         expect(settings.flushPendingWrites).toHaveBeenCalledTimes(1);
     });
 
-    it('flushes after the clear write, never before', async () => {
+    it('returns the mode to the environment default when the sign-out holds', async () => {
+        settings.__state.cached.mock = false;
+
+        await clearAuthToken();
+
+        expect(settings.setSetting).toHaveBeenCalledWith('mock', true);
+        expect(settings.__state.cached.mock).toBe(true);
+        expect(settings.__state.persisted.mock).toBe(true);
+    });
+
+    it('leaves the mock flag as it is when the settings refuse the sign-out', async () => {
+        settings.__state.cached.mock = false;
+        settings.setSetting.mockReturnValueOnce(false);
+
+        await expect(clearAuthToken()).rejects.toThrow('logout-not-saved');
+
+        // Only the refused token write was attempted — no reset rode along.
+        expect(settings.setSetting).toHaveBeenCalledTimes(1);
+        expect(settings.__state.cached.mock).toBe(false);
+    });
+
+    it('queues the mock reset before the flush, so the one durable write covers both', async () => {
         const order: string[] = [];
+        let mockPendingAtFlush: unknown;
         settings.setSetting.mockImplementation(
             invalid<typeof settingsModule.setSetting>((key: string, value: unknown) => {
-                order.push('set');
+                order.push(key);
                 settings.__state.cached[key] = value;
                 return true;
             }),
         );
         settings.flushPendingWrites.mockImplementation(async () => {
+            mockPendingAtFlush = settings.__state.cached.mock;
             order.push('flush');
             settings.__state.persisted = { ...settings.__state.cached };
         });
 
         await clearAuthToken();
 
-        expect(order).toEqual(['set', 'flush']);
+        // A Capacitor OS kill between the writes still loses the session: the reset
+        // must already be queued when the flush — the only durability point — runs.
+        expect(order).toEqual(['token', 'mock', 'flush']);
+        expect(mockPendingAtFlush).toBe(true);
     });
 
     it('reports a logout the settings refused, never takes it for one, and keeps what is remembered of the account that is still logged in', async () => {

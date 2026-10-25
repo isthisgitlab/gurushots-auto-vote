@@ -674,7 +674,9 @@ repeated six times is one that gets forgotten at one of them.
        `settings.json` as it is — nothing imports it again unasked once the marker says the import ran. The CLI refuses
        `start-fresh` while the import may pass by itself (the blocking `settings-import-failed`), unless `--force` is
        added.
-       A sign-out is `setSetting('token', '')`: where the stored settings are not in use it is refused, and
+       A sign-out is `setSetting('token', '')`, with `setSetting('mock', settings.getEnvironmentInfo().defaultMock)`
+       queued in the same durable write (a refused sign-out touches neither): where the stored settings are not in use
+       it is refused, and
        `clearAuthToken` throws `LogoutNotSavedError`, and each shell tells the user truthfully (the CLI exits 1 saying
        they are still logged in; Electron's main process shows a dialog and keeps the window; the web shell answers
        `logout-not-saved` and Capacitor rethrows, and the App shows an alert instead of the login screen, saying whether

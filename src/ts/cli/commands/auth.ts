@@ -84,8 +84,8 @@ const handleLogin = async (): Promise<boolean> => {
 };
 
 /**
- * Clear the saved authentication token. Mirrors the GUI/Capacitor `logout`
- * (both just blank the token in settings); the next vote/run reports
+ * Log out through the shared logout core: it clears the token durably and
+ * returns the mode to the environment default; the next vote/run reports
  * "Not authenticated" until the user logs in again.
  */
 const handleLogout = async (): Promise<boolean> => {

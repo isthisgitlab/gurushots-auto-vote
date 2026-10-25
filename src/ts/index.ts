@@ -204,9 +204,6 @@ ipcMain.on('logout', (event) => {
         })
         .finally(() => {
             if (refused) return;
-            // Reset mock value to environment default while preserving theme and remember me settings
-            const envInfo = settings.getEnvironmentInfo();
-            settings.setSetting('mock', envInfo.defaultMock);
 
             // Re-check the window here, not just at entry. clearAuthToken awaits a settings
             // flush, and the user can close the main window during that await — dereferencing

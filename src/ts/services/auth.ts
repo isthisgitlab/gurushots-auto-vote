@@ -118,8 +118,11 @@ class LogoutNotSavedError extends Error {
  * leave the old token persisted and silently restore the session on next
  * launch. On Electron/CLI the write is synchronous and the flush no-ops.
  *
- * Shell-specific behavior (window teardown, mock reset, event emission,
- * logging wording) stays with each caller.
+ * Shell-specific behavior (window teardown, event emission, logging
+ * wording) stays with each caller. A logout also returns the mode to the
+ * environment default: the reset is queued in the same durable write as the
+ * cleared token — the one flush covers both — and only when the save held,
+ * so a refused logout leaves everything as it is.
  *
  * @returns true when a token was actually cleared.
  * @throws when the sign-out could not be saved (the settings refuse the write): a logout that did not hold is reported,
@@ -130,7 +133,14 @@ const clearAuthToken = async (): Promise<boolean> => {
     const hadToken = !!settings.getSetting('token');
     const saved = settings.setSetting('token', '');
     // A refused sign-out leaves the user logged in: what is remembered about the account stays.
-    if (saved) forgetAccountMemory();
+    if (saved) {
+        forgetAccountMemory();
+        // Order is load-bearing: the mock reset must be QUEUED BEFORE the flush —
+        // on Capacitor the flush is the only thing that makes a write-behind write
+        // durable, so a reset placed after it would never survive an OS kill.
+        // The reset's own false return is ignored on purpose: the token clear already held, and that is what matters.
+        settings.setSetting('mock', settings.getEnvironmentInfo().defaultMock);
+    }
     await settings.flushPendingWrites();
     if (!saved) throw new LogoutNotSavedError();
     return hadToken;

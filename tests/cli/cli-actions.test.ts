@@ -33,6 +33,7 @@ jest.mock('../../src/ts/settings', () => ({
     getEffectiveSetting: jest.fn(),
     flushPendingWrites: jest.fn(async () => {}),
     forgetOpenChallengeIds: jest.fn(),
+    getEnvironmentInfo: jest.fn(() => ({ defaultMock: true })),
 }));
 
 jest.mock('../../src/ts/apiFactory', () => {
@@ -352,12 +353,13 @@ describe('CLI runVotingCycle — challenges gated on success', () => {
 });
 
 describe('CLI logout command', () => {
-    test('clears the stored token when one is present', async () => {
+    test('clears the stored token when one is present, and returns the mode to the environment default', async () => {
         settings.getSetting.mockReturnValue('tok');
 
         await handleLogout();
 
         expect(settings.setSetting).toHaveBeenCalledWith('token', '');
+        expect(settings.setSetting).toHaveBeenCalledWith('mock', true);
         expect(contains(msgsAt('success'), 'Logged out')).toBe(true);
     });
 

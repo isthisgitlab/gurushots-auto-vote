@@ -955,7 +955,7 @@ describe('logout IPC', () => {
         expect(m.auth.clearAuthToken).not.toHaveBeenCalled();
     });
 
-    it('clears the token, resets mock, then swaps to the existing login window after the main window closes', async () => {
+    it('clears the token, then swaps to the existing login window after the main window closes', async () => {
         m.ipcMain.handlers['login-success']({});
         const main = mainWin()!;
         const login = loginWin()!;
@@ -964,7 +964,6 @@ describe('logout IPC', () => {
         await flush();
 
         expect(m.auth.clearAuthToken).toHaveBeenCalled();
-        expect(m.settings.setSetting).toHaveBeenCalledWith('mock', true);
         // Logging out is its own confirmation — no boost prompt on the way out.
         expect(m.quitGuard.bypassQuitGuard).toHaveBeenCalled();
         expect(main.close).toHaveBeenCalled();
