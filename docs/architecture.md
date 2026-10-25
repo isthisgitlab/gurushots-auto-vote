@@ -93,6 +93,10 @@ Domain terms used throughout, in reader's terms:
 - **≤1 boost and ≤1 turbo per challenge, on different entries** — enforced by `pickEntryAvoidingConflict()`
   (`services/decisions/entryPick.ts`) plus a `reflectEntryFlag` marker. Entry-pick logic lives in
   the shared decision core (behind the `VotingLogic` facade) rather than in `api/boost.ts` so mock mode honours the same rule.
+- `services/VotingLogic.ts` (like `services/autoFill.ts`, `services/joinChallenges.ts` and the
+  `scheduling/cadenceChain.ts` / `scheduling/thresholdWindow.ts` barrels) is a re-export barrel, not a deep
+  interface: it hides nothing, but it buys import-path stability under the length-limit split policy, and is
+  kept deliberately for that reason.
 - **Sleep boost** (`runSuspendBoost` / `runSuspendBoosts` in `services/votingOrchestrator/boost.ts`, driven by
   `windows/suspendBoost.ts` on `powerMonitor` `'suspend'`): not a fork of the pass — it reuses `runBoost`'s target
   resolution, uncertain-photo skip and turboed-only skip, and is reached through the strategy's
