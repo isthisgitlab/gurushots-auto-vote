@@ -124,6 +124,7 @@ import type * as snapGameModule from '../../src/ts/strategies/real/snapGame';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import type { CategoryLogger } from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 
 const { runTurboGame, joinChallenge, fetchChallengesAndVote } = main;
 const { runSnapGame } = jest.mocked(require('../../src/ts/strategies/real/snapGame') as typeof snapGameModule);
@@ -359,6 +360,18 @@ describe('runTurboGame (dispatch)', () => {
 
 describe('submit and swap record when the photo went in', () => {
     const landed = { ok: true, raw: { success: true } };
+
+    // The landed submit and swap run the real chosen-photos consumption
+    // through the facade: it reads and writes settings, so these tests sit on
+    // the planted store, never the developer's real config. Scoped here — the
+    // headless seam also flips runtime.isHeadlessService(), which the rest of
+    // the file's strategy wiring must not see.
+    beforeEach(() => {
+        installHeadlessStore();
+    });
+    afterEach(() => {
+        removeHeadlessStore();
+    });
 
     test('a submit that landed is recorded exactly, and the endpoint’s result is returned as it came', async () => {
         const mark = jest

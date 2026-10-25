@@ -203,7 +203,7 @@ test('an upcoming challenge cannot be joined yet, nothing is spent, and the open
     expect(await join({}, 900001, false)).toEqual(expect.objectContaining({ success: true, status: 'joined' }));
 });
 
-test('a fill with the pick-order setting on submits the chosen photos in list order', async () => {
+test('a fill consumes the chosen photos it enters: the emptied list reads as no preference until re-planted', async () => {
     const strategy = getApiStrategy();
     const challenge = invalid<Challenge>({
         id: Number(UPCOMING_FREE),
@@ -213,9 +213,12 @@ test('a fill with the pick-order setting on submits the chosen photos in list or
         close_time: Math.floor(Date.now() / 1000) + 3600,
         member: { ranking: { entries: [] } },
     });
+    // The consumption holds for ids the facts cache has not seen active — the
+    // join-time hold — so the challenge is seeded before the fills.
+    settings.rememberChallengeTitles([{ id: Number(UPCOMING_FREE), title: 'Pink Flowers' }]);
     settings.setChallengeOverride('chosenPhotos', UPCOMING_FREE, [FIRST, SECOND]);
-    const submit = async (inOrder: boolean) => {
-        settings.setChallengeOverride('chosenPhotosInOrder', UPCOMING_FREE, inOrder);
+    settings.setChallengeOverride('chosenPhotosInOrder', UPCOMING_FREE, true);
+    const submit = async () => {
         const submitToChallenge = jest.fn(strategy.submitToChallenge);
         await fillChallengeNow(challenge, 'smoke-token', 'all', {
             settings,
@@ -229,10 +232,24 @@ test('a fill with the pick-order setting on submits the chosen photos in list or
         });
         return submitToChallenge.mock.calls.map(([, ids]) => ids);
     };
-    // In order: the list's first photo goes first, though the scorer prefers the pink flower.
-    const [ordered] = await submit(true);
-    expect(ordered.slice(0, 2)).toEqual([FIRST, SECOND]);
-    // Off: the scorer orders the chosen photos, and the pink one is first.
-    const [ranked] = await submit(false);
-    expect(ranked[0]).toBe(SECOND);
+
+    // In order: the list's first photos go first, though the scorer prefers the pink flower.
+    const [first] = await submit();
+    expect(first).toEqual([FIRST, SECOND, 'photo_pink_petal_005']);
+
+    // The entered photos are used up: the list emptied and the key went away
+    // (the pick-order flag stays), so the challenge reads as no preference.
+    expect(settings.getChallengeOverrides(UPCOMING_FREE)).toEqual({ chosenPhotosInOrder: true });
+
+    // Without re-planting, the next fill has no chosen block: the stated
+    // general-pool ranking of the remaining eligible photos fills the slots
+    // (the themed search returns the two pink photos; photo_old_008 reached
+    // the first pick only through the list's own library walk).
+    const [general] = await submit();
+    expect(general).toEqual(['photo_pink_flower_001', 'photo_pink_petal_005']);
+
+    // Re-planting the list brings the chosen block back, positions intact.
+    settings.setChallengeOverride('chosenPhotos', UPCOMING_FREE, [FIRST, SECOND]);
+    const [replanted] = await submit();
+    expect(replanted.slice(0, 2)).toEqual([FIRST, SECOND]);
 });

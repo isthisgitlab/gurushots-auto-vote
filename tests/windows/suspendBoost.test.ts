@@ -45,6 +45,7 @@ jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(),
     getEffectiveSetting: jest.fn(),
     getEnvironmentInfo: jest.fn(),
+    consumeChosenPhotos: jest.fn(() => false),
 }));
 jest.mock('../../src/ts/apiFactory', () => ({ getApiStrategy: jest.fn() }));
 jest.mock('../../src/ts/services/VotingLogic', () => ({ describeDeadlineActions: jest.fn() }));

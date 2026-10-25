@@ -808,13 +808,13 @@ export const app: typeof english.app = {
         'Vēlamais kritērijs automātiskai iesniegšanai un manuālajām pogām: atbilstošie foto iegūst augstāku vietu, nekas netiek izslēgts; ja nekas nesakrīt, kārto kā parasti. Tie paši vārdu noteikumi.',
     chosenPhotos: 'Izvēlētie foto',
     chosenPhotosDesc:
-        'Foto, ko automātiskā pievienošanās un iesniegšana mēģina pirmos; tiem jāiztur tagu uzstādījumi, un tos kārto kā pašas izvēles vai tavā secībā (uzstādījums zemāk). Vienam foto tikai viens izaicinājums.',
+        'Foto, ko automātiskā pievienošanās un iesniegšana mēģina pirmos; tiem jāiztur tagu uzstādījumi, un tos kārto kā pašas izvēles vai tavā secībā (uzstādījums zemāk). Vienam foto tikai viens izaicinājums. Ja „Iesniegt tikai izvēlētos foto” ir izslēgts, katrs izvēlētais foto pamet sarakstu, tiklīdz tas ir ievadīts izaicinājumā; iztukšots saraksts noņem paša izaicinājuma uzstādījumu, un tad spēkā stājas noteikuma vai globālais saraksts. Ja „Iesniegt tikai izvēlētos foto” ir ieslēgts, saraksts tiek paturēts (skatīt „Iesniegt tikai izvēlētos foto”).',
     chosenPhotosInOrder: 'Izmantot izvēlētos foto tādā secībā, kādā tos izvēlējos',
     chosenPhotosInOrderDesc:
         'Iesniedz izvēlētos foto tavā izvēles secībā (numuri izvēlnē), nevis kārtojot. Neizmantojamus izlaiž un ņem nākamo; atlikušās vietas aizpilda pēc kārtojuma. Pēc noklusējuma izslēgts.',
     chosenPhotosOnly: 'Iesniegt tikai izvēlētos foto',
     chosenPhotosOnlyDesc:
-        'Automātiskā pievienošanās un iesniegšana neizvēlas pašas — bez derīga izvēlētā foto izaicinājumu izlaiž. Manuālās pogas tomēr izvēlas; apmaksātā pievienošanās iesniedz foto, lai monētas nepazūd.',
+        'Automātiskā pievienošanās un iesniegšana neizvēlas pašas — bez derīga izvēlētā foto izaicinājumu izlaiž. Manuālās pogas tomēr izvēlas; apmaksātā pievienošanās iesniedz foto, lai monētas nepazūd. Automātiskā pievienošanās un iesniegšana ievada tikai šī izaicinājuma izvēlētos foto, un kamēr „Iesniegt tikai izvēlētos foto” ir ieslēgts, tā saraksts tiek paturēts: kad visi izvēlētie foto jau ir ievadīti, tās vairs pašas neievada nevienu foto, kamēr tu nepievieno foto vai neizslēdz „Iesniegt tikai izvēlētos foto”. Foto var piegādāt arī noteikums vai globālais saraksts, un jebkurā slānī iestatītais „Iesniegt tikai izvēlētos foto” paliek spēkā.',
     chosenPhotosCount: 'Izvēlēto foto: {count}',
     choosePhotos: 'Izvēlēties foto',
     photosClear: 'Notīrīt',

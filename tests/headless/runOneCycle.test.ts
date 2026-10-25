@@ -6,7 +6,11 @@
  */
 
 jest.mock('../../src/ts/apiFactory', () => ({ getApiStrategy: jest.fn() }));
+// Partial factory: the shell's four reads stay mocked, the rest of the facade
+// (the chosen-photos consumption above all) rides along real.
 jest.mock('../../src/ts/settings', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/settings')>('../../src/ts/settings'),
     getSetting: jest.fn(),
     setSetting: jest.fn(),
     loadSettings: jest.fn(() => ({ checkFrequencyMin: 2, checkFrequencyMax: 2 })),
@@ -21,6 +25,7 @@ import type * as randomDelayModule from '../../src/ts/scheduling/randomDelay';
 import type * as indexModule from '../../src/ts/headless/index';
 import type * as loggerModule from '../../src/ts/logger';
 import type { HeadlessGlobals } from '../../src/ts/types/capacitor';
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import { invalid } from '../helpers/invalid';
 import { isBoolean, isNumber, isShape, isString, optional, parseJsonAs } from '../helpers/parseJson';
 const { OFFLINE_RETRY_MS } = require('../../src/ts/scheduling/randomDelay') as typeof randomDelayModule;
@@ -40,6 +45,13 @@ const isCyclePayload = isShape<CyclePayload>({
 });
 
 const g = globalThis as HeadlessGlobals;
+
+// The 'defensive fallbacks' suite narrows the global logger mock to the levels
+// it asserts on; the mock-endpoint pass below needs the full category logger
+// (its .api preamble included), captured here before any test re-pointed it.
+const fullWithCategory = jest
+    .mocked(require('../../src/ts/logger') as typeof loggerModule)
+    .withCategory.getMockImplementation();
 
 describe('headless runOneCycle', () => {
     let onCycleComplete: jest.Mock<void, [string]>;
@@ -414,6 +426,90 @@ describe('headless runOneCycle', () => {
 
             await expect(g.GS!.runOneCycle()).resolves.toBeUndefined();
             expect(info).toHaveBeenCalledWith('[headless] onCycleComplete failed', 'bridge detached');
+        });
+    });
+
+    // The chosen-photos lazy net over the REAL facade, a planted store and the
+    // real mock strategy: the shell's own reads stay on the outer beforeEach's
+    // mocks, the pass's settings resolve over the store. The mock session ids
+    // are random, so the joined challenge with an entry is looked up, not named.
+    describe('chosen-photos lazy net (real facade, planted store)', () => {
+        const realSettings = jest.requireActual('../../src/ts/settings') as typeof settingsModule;
+        const realApiFactory = jest.requireActual('../../src/ts/apiFactory') as typeof apiFactoryModule;
+        // The full mock passes still cross many awaits; the fake clock keeps
+        // them quick, with headroom for the two drains.
+        jest.setTimeout(60_000);
+
+        beforeEach(() => {
+            installHeadlessStore();
+            jest.useFakeTimers();
+            jest.mocked(require('../../src/ts/logger') as typeof loggerModule).withCategory.mockImplementation(
+                fullWithCategory!,
+            );
+            settings.loadSettings.mockReturnValue(
+                invalid({ app: { checkFrequencyMin: 2, checkFrequencyMax: 2, mock: true } }),
+            );
+            settings.getSetting.mockImplementation(
+                (key) => (key === 'token' ? 'tok' : key === 'mock' ? true : undefined) as string | boolean | undefined,
+            );
+            // The pass's settings reads resolve over the planted store.
+            settings.getEffectiveSetting.mockImplementation(realSettings.getEffectiveSetting);
+            apiFactory.getApiStrategy.mockImplementation(realApiFactory.getApiStrategy);
+            realApiFactory.refreshApi();
+        });
+
+        afterEach(() => {
+            jest.useRealTimers();
+            removeHeadlessStore();
+            settings.rememberChallengeTitles([]);
+        });
+
+        // Drain the pass's awaits while the fake clock advances past the mock
+        // endpoints' simulated delays (the settle loop tests/mock/entryTimes
+        // uses), instead of paying them in real time.
+        const settle = async <T>(promise: Promise<T>): Promise<T> => {
+            let done = false;
+            const tracked = promise.finally(() => {
+                done = true;
+            });
+            tracked.catch(() => {});
+            while (!done) {
+                await jest.advanceTimersByTimeAsync(500);
+            }
+            return promise;
+        };
+
+        const joinedWithEntries = async () => {
+            const { challenges } = await realApiFactory.getApiStrategy({ mock: true }).getActiveChallenges('tok');
+            const joined = challenges.find((challenge) => (challenge.member?.ranking?.entries?.length ?? 0) > 0);
+            if (!joined) throw new Error('fixture has no joined challenge with entries');
+            return String(joined.id);
+        };
+
+        // The shell skips a mock-mode cycle on purpose (reportSkipped in
+        // headless/index.ts), so the two passes here drive the strategy the
+        // shell would drive in real mode: the same fetch, the same pass, the
+        // same lazy net, over the planted store.
+        const pass = () => realApiFactory.getApiStrategy({ mock: true }).fetchChallengesAndVote('tok');
+
+        test('Only on holds the list across a pass with entries; off, the next pass consumes it and deletes the key', async () => {
+            const id = await settle(joinedWithEntries());
+            settings.setChallengeOverride('chosenPhotos', id, ['entry_001']);
+            settings.setChallengeOverride('chosenPhotosOnly', id, true);
+
+            await settle(pass());
+
+            // Held: the pass's fetch knows the challenge and its entry, and Only kept the list.
+            expect(settings.getChallengeOverrides(id)).toEqual({
+                chosenPhotos: ['entry_001'],
+                chosenPhotosOnly: true,
+            });
+
+            settings.removeChallengeOverride('chosenPhotosOnly', id);
+            await settle(pass());
+
+            // The same entry leaves the list, and the emptied record goes with it.
+            expect(settings.getChallengeOverrides(id)).toEqual({});
         });
     });
 });

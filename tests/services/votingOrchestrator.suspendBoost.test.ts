@@ -7,6 +7,7 @@
 jest.mock('../../src/ts/settings', () => ({
     getEffectiveSetting: jest.fn(() => false),
     getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
+    consumeChosenPhotos: jest.fn(() => false),
 }));
 
 jest.mock('../../src/ts/services/VotingLogic', () => ({

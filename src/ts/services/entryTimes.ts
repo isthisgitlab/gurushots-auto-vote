@@ -1,16 +1,19 @@
 /**
- * When each entry went into its challenge, recorded and shown. The API reports no per-entry submit time, so the
+ * When each entry went into its challenge, recorded and shown, and each entered chosen photo
+ * consumed from its challenge's own Chosen Photos list. The API reports no per-entry submit time, so the
  * app's entry-age ledger (entryAgeStore) keeps one: the exact time of every photo the app submits or swaps in
  * (`withEntryTimes`), and for photos submitted elsewhere the time a challenge fetch first showed them
  * (`annotateEntryTimes`, which puts the answer on each entry as `appEntered` for the UI).
  *
  * Bookkeeping never changes a result: a ledger failure is logged (the message only — the ledger holds image and
  * member ids) and the API result, or the fetched response, is returned as it was, so it can never turn a submit or
- * swap that landed (a spend, sent once) or a good fetch into a failure.
+ * swap that landed (a spend, sent once) or a good fetch into a failure. The chosen-id consumption is guarded the
+ * same way and runs beside the ledger mark: a failure in one bookkeeping system never skips the other.
  */
 
 import * as logger from '../logger';
 import { errorKind } from '../errorMessage';
+import { consumeChosenPhotos } from '../settings';
 import type { submitToChallenge as SubmitToChallenge } from '../api/submissions';
 import type { swapPhoto as SwapPhoto } from '../api/currency';
 import type { ActiveChallengesResponse, Challenge, RankingEntry } from '../types/gurushots';
@@ -95,15 +98,28 @@ export const withEntryTimes = (
             logFailure('submit time not recorded', error);
         }
     };
+    const consume = (challengeId: string | number, imageIds: string[]) => {
+        try {
+            consumeChosenPhotos(challengeId, imageIds);
+        } catch (error) {
+            logFailure('chosen photos not consumed', error);
+        }
+    };
     return {
         submitToChallenge: async (challengeId, imageIds, token) => {
             const result = await api.submitToChallenge(challengeId, imageIds, token);
-            if (result.ok) mark(challengeId, imageIds);
+            if (result.ok) {
+                mark(challengeId, imageIds);
+                consume(challengeId, imageIds);
+            }
             return result;
         },
         swapPhoto: async (challengeId, oldImageId, newImageId, token) => {
             const result = await api.swapPhoto(challengeId, oldImageId, newImageId, token);
-            if (result.ok) mark(challengeId, [newImageId]);
+            if (result.ok) {
+                mark(challengeId, [newImageId]);
+                consume(challengeId, [newImageId]);
+            }
             return result;
         },
     };

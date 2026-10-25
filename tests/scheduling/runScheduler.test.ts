@@ -15,6 +15,7 @@ jest.mock('../../src/ts/settings', () => ({
     loadSettings: jest.fn(),
     getSetting: jest.fn(),
     getEffectiveSetting: jest.fn(),
+    consumeChosenPhotos: jest.fn(() => false),
 }));
 
 import { invalid } from '../helpers/invalid';

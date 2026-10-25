@@ -799,13 +799,13 @@ export const app = {
         'Soft preference for auto-submit and the manual buttons: matching photos rank higher but nothing is excluded; if none match, the normal ranking decides. Same word rules as Must Include Tags.',
     chosenPhotos: 'Chosen Photos',
     chosenPhotosDesc:
-        "Photos auto-join and auto-submit try first; they must still fit your tag settings and rank like the app's own picks, or go in your pick order (setting below). A photo can be in only one challenge.",
+        "Photos auto-join and auto-submit try first; they must still fit your tag settings and rank like the app's own picks, or go in your pick order (setting below). A photo can be in only one challenge. With Submit Only off, each chosen photo leaves the list once it is entered in the challenge; an emptied list removes the challenge's own setting, and a rule or global list then applies. With Submit Only on, the list is kept (see Submit Only Chosen Photos).",
     chosenPhotosInOrder: 'Use Chosen Photos in the order I picked them',
     chosenPhotosInOrderDesc:
         "Enters the chosen photos in your pick order (the chooser's numbers) instead of ranking them. Unusable photos are skipped and the next is used; leftover slots fill by ranking. Off by default.",
     chosenPhotosOnly: 'Submit Only Chosen Photos',
     chosenPhotosOnlyDesc:
-        'Auto-join and auto-submit never pick a photo: a challenge with no usable chosen photo is skipped. Manual buttons still pick; a paid, unlocked join still submits a pick so its coins are not wasted.',
+        "Auto-join and auto-submit never pick a photo: a challenge with no usable chosen photo is skipped. Manual buttons still pick; a paid, unlocked join still submits a pick so its coins are not wasted. Auto-join and auto-submit enter only this challenge's chosen photos, and its list is kept while Submit Only is on: once every chosen photo has been entered, they enter no more photos on their own until you add photos or turn Submit Only off. A rule or global list can also supply the photos, and Submit Only set at any layer keeps holding.",
     chosenPhotosCount: 'Chosen photos: {count}',
     choosePhotos: 'Choose photos',
     photosClear: 'Clear',

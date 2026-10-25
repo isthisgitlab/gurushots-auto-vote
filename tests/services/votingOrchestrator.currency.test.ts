@@ -9,6 +9,7 @@
 
 jest.mock('../../src/ts/settings', () => ({
     getEffectiveSetting: jest.fn(() => false),
+    consumeChosenPhotos: jest.fn(() => false),
 }));
 
 jest.mock('../../src/ts/services/VotingLogic', () => ({

@@ -92,6 +92,7 @@ export const getChallengeOverride = challengeOverrides.getChallengeOverride;
 export const setChallengeOverride = challengeOverrides.setChallengeOverride;
 export const setChallengeOverrides = challengeOverrides.setChallengeOverrides;
 export const removeChallengeOverride = challengeOverrides.removeChallengeOverride;
+export const consumeChosenPhotos = challengeOverrides.consumeChosenPhotos;
 export const getEffectiveSetting = challengeOverrides.getEffectiveSetting;
 // Challenge rules (survive challenge rotation)
 export const getTitleRules = titleRules.getTitleRules;

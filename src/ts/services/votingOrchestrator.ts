@@ -60,6 +60,9 @@ import { runScenarioStep } from './scenarioRunner';
 import * as cancellation from '../voting/cancellation';
 import { beginVotingPass, isVotingPassRunning } from '../voting/passActivity';
 import { failureText } from '../format/logSafe';
+import { errorKind } from '../errorMessage';
+import { consumeChosenPhotos } from '../settings';
+import { getEntries } from './autoFill/challengeState';
 import { buildFillDeps, cancelPass } from './votingOrchestrator/context';
 import { runDeadlineActions } from './votingOrchestrator/actionRunners';
 import { playAutoTurbo } from './votingOrchestrator/turbo';
@@ -159,6 +162,26 @@ const processChallenge = async (
     logger
         .withCategory('voting')
         .progress(`Processing challenge ${position}/${total}: ${challenge.title}`, position, total);
+
+    // Lazy net for Chosen Photos: entries made outside the app's chosen-photo
+    // paths (the GuruShots site, an unclear submit that landed later, a
+    // join-time list the facts cache did not know yet) leave the stored list
+    // here, on the first pass whose fetch knows the challenge — rule-layer
+    // Submit Only resolves correctly, because the pass's active fetch has
+    // refreshed the cache. Contained like the other bookkeeping: a failure
+    // logs one line and the challenge's cycle continues untouched. Above the
+    // Manual Only skip on purpose, so a Manual Only challenge's external
+    // entries are consumed too.
+    try {
+        consumeChosenPhotos(
+            challenge.id,
+            getEntries(challenge).map((entry) => String(entry?.id)),
+        );
+    } catch (error) {
+        logger
+            .withCategory('voting')
+            .warning(`${logger.challengeTag(challenge)} chosen photos not consumed (${errorKind(error)})`, null);
+    }
 
     // Manual Only: nothing below runs on this challenge. Checked live, after the cancellation
     // check, so a switch turned on mid-pass takes effect from the next challenge.

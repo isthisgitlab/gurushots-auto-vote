@@ -15,6 +15,7 @@
 jest.mock('../../src/ts/settings', () => ({
     getEffectiveSetting: jest.fn(() => false),
     getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
+    consumeChosenPhotos: jest.fn(() => false),
 }));
 
 jest.mock('../../src/ts/services/VotingLogic', () => ({
@@ -1552,5 +1553,39 @@ describe('per-challenge clock', () => {
         expect(observed[1]).toBeGreaterThan(observed[0]);
 
         spy.mockRestore();
+    });
+});
+
+describe('chosen-photos lazy net', () => {
+    test('a consume failure is swallowed: the challenge is still fully processed', async () => {
+        settingsMock.consumeChosenPhotos.mockImplementationOnce(() => {
+            throw new Error('store down');
+        });
+        const api = makeApi([makeChallenge()]);
+
+        const result = await runVotingPass('tok', null, deps(api));
+
+        expect(result.success).toBe(true);
+        expect(settingsMock.consumeChosenPhotos).toHaveBeenCalledWith(101, []);
+        expect(votingLogic.evaluateVotingDecision).toHaveBeenCalledTimes(1);
+        const warnings = jest
+            .mocked(logger.withCategory)
+            .mock.results.flatMap((r) =>
+                jest.mocked(r.value as CategoryLogger).warning.mock.calls.map((call) => String(call[0])),
+            );
+        expect(warnings).toEqual(['[Challenge 101: Orchestrated] chosen photos not consumed (Error)']);
+    });
+
+    test("a Manual Only challenge's entries are consumed before the skip", async () => {
+        settingsMock.getEffectiveSetting.mockImplementation((key) => key === 'manualPhotosOnly');
+        const challenge = makeChallenge({ member: { ranking: { entries: [{ id: 'p1' }] } } });
+        const api = makeApi([challenge]);
+
+        const result = await runVotingPass('tok', null, deps(api));
+
+        expect(result.success).toBe(true);
+        expect(settingsMock.consumeChosenPhotos).toHaveBeenCalledWith(101, ['p1']);
+        // The skip held: nothing below the lazy net ran on the challenge.
+        expect(votingLogic.evaluateVotingDecision).not.toHaveBeenCalled();
     });
 });

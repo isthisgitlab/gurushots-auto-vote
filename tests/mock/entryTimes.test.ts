@@ -36,6 +36,10 @@ import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
 import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
+// The ok submits and swaps now run the real chosen-photos consumption through
+// the facade: it reads and writes settings, so every test sits on the planted
+// store, never the developer's real config.
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 
 const { runVotingPass } = jest.mocked(
     require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule,
@@ -70,9 +74,13 @@ const listing = (id: number, entryIds: string[]) =>
 
 beforeEach(() => {
     jest.useFakeTimers();
+    installHeadlessStore();
     clearSessionCache();
 });
-afterEach(() => jest.useRealTimers());
+afterEach(() => {
+    jest.useRealTimers();
+    removeHeadlessStore();
+});
 
 describe('mock mode records when a photo went in', () => {
     test('a submit through the mock client is exact, and its result is the endpoint’s own', async () => {
