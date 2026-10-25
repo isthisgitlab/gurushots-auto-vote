@@ -984,6 +984,7 @@ describe('suggest-photos', () => {
     });
 
     test('a joined challenge ranks from the active list without ignoreOnly, reading no discover list', async () => {
+        const strategy = stubLive();
         await expect(suggest()).resolves.toEqual({
             success: true,
             memberId: 'member-9',
@@ -992,6 +993,8 @@ describe('suggest-photos', () => {
         });
         const [, , , , opts] = autoFill.suggestFillPhotos.mock.calls[0];
         expect(opts).toEqual({ usage: undefined, exclude: new Set(), ignoreOnly: false });
+        // The default stub would answer a discover read instead of throwing, so say it outright.
+        expect(strategy.getMemberChallenges).not.toHaveBeenCalled();
     });
 
     test('an open-list hit ranks the Discover-row challenge with ignoreOnly', async () => {
