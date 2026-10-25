@@ -127,7 +127,7 @@ function PhotoChooserBody({
     // joined, so it cannot (suggestPhotos would answer challenge-ended).
     const showAuto = canSuggest && challengeId !== null;
     const picker = usePhotoPicker({ challengeId, usage: 'submit', alwaysFresh: false, selected });
-    const { state, known, revalidating, recheckFailed, retry, refresh, resetLoadPhotos } = picker;
+    const { refresh, resetLoadPhotos } = picker;
     // A mirror of the selection the stable `toggle` reads at call time (it must stay identity-stable:
     // the memoised tiles skip their re-render by it).
     const selectedRef = useRef(selected);
@@ -264,32 +264,16 @@ function PhotoChooserBody({
                     </>
                 ))}
             <PhotoGrid
-                state={state}
-                known={known}
+                picker={picker}
                 selected={selected}
                 locked={false}
                 hasChallenge={challengeId !== null}
-                search={picker.isSearch}
-                revalidating={revalidating}
-                recheckFailed={recheckFailed}
-                loadMore={() => void picker.loadMore()}
-                loadingMore={picker.loadingMore}
-                loadMoreFailed={picker.loadMoreFailed}
                 onToggle={toggle}
-                onRetry={retry}
                 onRefresh={refreshListing}
                 savedPicks={{ memberId: picker.suggestedMemberId ?? currentMember }}
                 idleKey={idleKey}
                 idleWithPicksKey={idleWithPicksKey}
-                extraPhotos={picker.suggestedKnown}
-                idleMemberId={picker.suggestedMemberId}
-                idleIds={picker.idleShown}
                 recommendedIds={recommendedIds}
-                stats={picker.stats}
-                sortStats={picker.sortStats}
-                sortBy={picker.sortBy}
-                showStats={picker.showStats}
-                onTileIds={picker.setTileIds}
                 tileSlot={
                     challengeId !== null && pinsError === null
                         ? (id) =>

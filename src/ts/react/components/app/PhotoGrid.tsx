@@ -9,9 +9,8 @@ import { MissingTile, PendingTile, PhotoTile, SavedPickTile } from './PhotoTile'
 import { MAX_CHOSEN_PHOTOS } from '../../../settings/limits';
 
 import type { FocusEvent, ReactNode } from 'react';
-import type { LoadedSort } from '../../../librarySort';
-import type { TileStats } from '@/hooks/usePhotoStatsLoader';
-import type { LibraryPhoto, ListState } from '@/hooks/useLibraryListing';
+import type { usePhotoPicker } from '@/hooks/usePhotoPicker';
+import type { LibraryPhoto } from '@/hooks/useLibraryListing';
 
 const TILE_GRID = 'grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4';
 
@@ -40,45 +39,29 @@ const TILE_GRID = 'grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4';
  * its empty-listing text there instead, so nothing is announced twice.
  */
 export function PhotoGrid({
-    state,
-    known,
+    picker,
     selected,
     locked,
     lockedKey = 'app.photoChooserTileLocked',
     hasChallenge,
-    search,
-    revalidating,
-    recheckFailed,
     submit = false,
     refreshDisabled = false,
-    loadMore,
-    loadingMore,
-    loadMoreFailed,
     blockedIds,
     blockedKey = 'app.photoChooserNotEligible',
     onToggle,
-    onRetry,
     onRefresh,
     max = MAX_CHOSEN_PHOTOS,
     fullKey = 'app.photoChooserListFull',
     numbered = true,
-    extraPhotos,
-    idleMemberId = null,
-    idleIds,
     idleKey = 'app.pickIdle',
     idleWithPicksKey = 'app.pickIdleWithPicks',
     savedPicks = null,
     keepIds,
     recommendedIds,
     tileSlot,
-    stats,
-    sortStats,
-    sortBy,
-    showStats,
-    onTileIds,
 }: {
-    state: ListState;
-    known: Map<string, LibraryPhoto>;
+    /** The picker behind the grid: its listing state, read actions and stats session, read as one value. */
+    picker: ReturnType<typeof usePhotoPicker>;
     selected: string[];
     /** The tiles are inert (the submit modal holds picking while it works). */
     locked: boolean;
@@ -86,28 +69,15 @@ export function PhotoGrid({
     lockedKey?: string;
     /** The listing is read for a challenge (and says which photos it accepts), not for the library alone. */
     hasChallenge: boolean;
-    /** The listing on screen came from a search: tiles say only what a search can know about a missing pick. */
-    search: boolean;
-    /** The library is being read again (a preview's re-check, or a Refresh). */
-    revalidating: boolean;
-    /** The last re-read failed, so what is shown is the library as last loaded. */
-    recheckFailed: boolean;
     /** The grid is the submit modal's: its re-check-failed line says picking is held. */
     submit?: boolean;
     /** Refresh cannot be pressed now (a submit is running). */
     refreshDisabled?: boolean;
-    /** Reads the batch after the listing on screen and appends it. */
-    loadMore: () => void;
-    /** The batch read is on its way: Load more is held, and so are the toolbar's Load photos and Refresh. */
-    loadingMore: boolean;
-    /** Why the last Load more failed (an error code, or `'failed'`); null when it did not. */
-    loadMoreFailed: string | null;
     /** Photos the caller already knows cannot be picked (the listing does not say), shown blocked. */
     blockedIds?: ReadonlySet<string>;
     /** The translation key of what a tile in `blockedIds` says. */
     blockedKey?: string;
     onToggle: (id: string) => void;
-    onRetry: () => void;
     onRefresh: () => void;
     /** How many photos may be selected: the rest are offered no more. */
     max?: number;
@@ -115,12 +85,6 @@ export function PhotoGrid({
     fullKey?: string;
     /** Selected tiles show their position (a list's order); off for a plain set. */
     numbered?: boolean;
-    /** Records of photos the listing may not return (the suggestions), looked up after it for a selected id. */
-    extraPhotos?: ReadonlyMap<string, LibraryPhoto>;
-    /** The member that owns the `extraPhotos`: with no listing read yet, the selected tiles take it for their thumbnails. */
-    idleMemberId?: string | null;
-    /** The ids the idle grid shows, in place whether picked or not (default: the selected ones). */
-    idleIds?: string[];
     /** The translation key of the idle line shown while nothing is read. */
     idleKey?: string;
     /** The translation key of the idle line shown while something is picked. */
@@ -136,18 +100,41 @@ export function PhotoGrid({
      * which tiles get content. Absent, the tile is the grid cell as before (the submit modal).
      */
     tileSlot?: (id: string) => ReactNode;
-    /** The stats the Show-stats loader has read, by photo id: a full tile's line and label come from here. */
-    stats?: ReadonlyMap<string, TileStats>;
-    /** The snapshot the loaded-photo sort goes by, so answers landing mid-run cannot move the tiles. */
-    sortStats?: ReadonlyMap<string, TileStats>;
-    /** The loaded-photo sort the toolbar selected (default `library`: the listing's own order). */
-    sortBy?: LoadedSort;
-    /** Show stats is on: full tiles carry their ratio, likes and Guru picks. */
-    showStats?: boolean;
-    /** Reports the ids the grid renders as full photo tiles, for the picker's stats loader. */
-    onTileIds?: (ids: string[]) => void;
 }) {
     const { t } = useTranslation();
+    const {
+        state,
+        known,
+        /** The library is being read again (a preview's re-check, or a Refresh). */
+        revalidating,
+        /** The last re-read failed, so what is shown is the library as last loaded. */
+        recheckFailed,
+        /** Records of photos the listing may not return (the suggestions), looked up after it for a selected id. */
+        suggestedKnown,
+        /** The member that owns `suggestedKnown`: with no listing read yet, the selected tiles take it for their thumbnails. */
+        suggestedMemberId,
+        /** The ids the idle grid shows, in place whether picked or not (this opening's picks). */
+        idleShown,
+        /** The stats the Show-stats loader has read, by photo id: a full tile's line and label come from here. */
+        stats,
+        /** The snapshot the loaded-photo sort goes by, so answers landing mid-run cannot move the tiles. */
+        sortStats,
+        /** The loaded-photo sort the toolbar selected (default `library`: the listing's own order). */
+        sortBy,
+        /** Show stats is on: full tiles carry their ratio, likes and Guru picks. */
+        showStats,
+        /** Reports the ids the grid renders as full photo tiles, for the picker's stats loader. */
+        setTileIds,
+        /** Reads the batch after the listing on screen and appends it. */
+        loadMore,
+        /** The batch read is on its way: Load more is held, and so are the toolbar's Load photos and Refresh. */
+        loadingMore,
+        /** Why the last Load more failed (an error code, or `'failed'`); null when it did not. */
+        loadMoreFailed,
+        /** The listing on screen came from a search: tiles say only what a search can know about a missing pick. */
+        isSearch,
+        retry,
+    } = picker;
     const recommended = new Set(recommendedIds ?? []);
     // Every won id this chooser has been told of: a search that no longer lists a chosen photo still knows it has won.
     const everWon = useRef(new Set<string>());
@@ -156,7 +143,7 @@ export function PhotoGrid({
     const lastFocusedTile = useRef<Element | null>(null);
     const hiddenLineRef = useRef<HTMLDivElement>(null);
     // The ids of the full photo tiles the last render made, and the set they were last reported
-    // under: the stats loader asks for them (see onTileIds).
+    // under: the stats loader asks for them (see setTileIds).
     const tileIds: string[] = [];
     const reportedTileIds = useRef<string | null>(null);
     // Load more waits while any read is in flight: its own batch, or a re-read of the listing on screen (a
@@ -207,12 +194,11 @@ export function PhotoGrid({
             // photos Auto named keep their tiles from the records it brought, so a pick never goes invisible. An
             // unpicked one keeps its place, so it can be picked again.
             const chosenIdle = new Set(selected);
-            const shownIdleIds = idleIds ?? selected;
             const numberOf = new Map(selected.map((id, index) => [id, index + 1]));
             const position = (id: string): number | null => (numbered ? (numberOf.get(id) ?? null) : null);
             const atCap = selected.length >= max;
-            const tiles = shownIdleIds.map((id) => {
-                const record = extraPhotos?.get(id);
+            const tiles = idleShown.map((id) => {
+                const record = suggestedKnown.get(id);
                 if (record) {
                     tileIds.push(id);
                     return cell(
@@ -220,7 +206,7 @@ export function PhotoGrid({
                         <PhotoTile
                             key={id}
                             photo={record}
-                            memberId={idleMemberId}
+                            memberId={suggestedMemberId}
                             selected={chosenIdle.has(id)}
                             position={position(id)}
                             recommended={recommended.has(id)}
@@ -231,8 +217,8 @@ export function PhotoGrid({
                             locked={locked}
                             lockedKey={lockedKey}
                             onToggle={onToggle}
-                            stats={stats?.get(id) ?? null}
-                            showStats={showStats === true}
+                            stats={stats.get(id) ?? null}
+                            showStats={showStats}
                         />,
                     );
                 }
@@ -295,7 +281,7 @@ export function PhotoGrid({
                             <p>{t(state.error ? 'app.photoChooserLoadError' : 'app.photoChooserLoadErrorNoDetail')}</p>
                             {state.error && <p className="text-xs">{ipcErrorText(state.error, t)}</p>}
                         </div>
-                        <button type="button" className="btn btn-sm" onClick={onRetry}>
+                        <button type="button" className="btn btn-sm" onClick={retry}>
                             {t('app.photoChooserRetry')}
                         </button>
                     </div>
@@ -309,7 +295,7 @@ export function PhotoGrid({
         // A preview's photos carry no marks and are not remembered in `known`, so the selection is looked up in them.
         const previewPhotos = listing.preview ? new Map(listing.photos.map((photo) => [photo.id, photo])) : null;
         const lookup = (id: string): LibraryPhoto | undefined =>
-            (previewPhotos ?? known).get(id) ?? extraPhotos?.get(id);
+            (previewPhotos ?? known).get(id) ?? suggestedKnown.get(id);
         const atCap = selected.length >= max;
         const refusedHere = (photo: LibraryPhoto): boolean => listing.allowedKnown && !photo.allowed;
         const blockedReasonOf = (photo: LibraryPhoto): string | null => {
@@ -330,8 +316,8 @@ export function PhotoGrid({
         // sort snapshot, never from the live Map a running read is still filling in.
         const shownPhotos = reorderLoadedPhotos(
             listing.photos.filter((photo) => !hiddenFromGrid(photo)),
-            sortBy ?? 'library',
-            sortStats ?? new Map(),
+            sortBy,
+            sortStats,
         );
         // The ids the listing returns, as a set: a pick's "listed or not" is a lookup, not a scan per pick.
         const listedIds = new Set(listing.photos.map((photo) => photo.id));
@@ -367,8 +353,8 @@ export function PhotoGrid({
                     locked={locked}
                     lockedKey={lockedKey}
                     onToggle={onToggle}
-                    stats={stats?.get(photo.id) ?? null}
-                    showStats={showStats === true}
+                    stats={stats.get(photo.id) ?? null}
+                    showStats={showStats}
                 />,
             );
         };
@@ -434,7 +420,7 @@ export function PhotoGrid({
                         aria-disabled={loadMoreHeld}
                         aria-busy={loadingMore}
                         onClick={() => {
-                            if (!loadMoreHeld) loadMore();
+                            if (!loadMoreHeld) void loadMore();
                         }}
                         {...keepFocus}
                     >
@@ -516,7 +502,7 @@ export function PhotoGrid({
                                             lockedKey={lockedKey}
                                             onToggle={onToggle}
                                             noteKey={
-                                                search
+                                                isSearch
                                                     ? 'app.photoChooserUnreachedTileNoteSearch'
                                                     : 'app.photoChooserUnreachedTileNote'
                                             }
@@ -531,7 +517,7 @@ export function PhotoGrid({
                                         position={shown(id)}
                                         count={listing.photos.length}
                                         hasChallenge={hasChallenge}
-                                        search={search}
+                                        search={isSearch}
                                         won={won.has(id)}
                                         onToggle={onToggle}
                                     />,
@@ -551,13 +537,13 @@ export function PhotoGrid({
     // grid's render order, so the loader reads the visible top first.
     const tileIdsKey = [...tileIds].sort().join('\n');
     useEffect(() => {
-        if (onTileIds === undefined || reportedTileIds.current === tileIdsKey) return;
+        if (reportedTileIds.current === tileIdsKey) return;
         reportedTileIds.current = tileIdsKey;
-        onTileIds(tileIds);
+        setTileIds(tileIds);
         // tileIds is this render's collection of the same set the key names; listing it in deps
         // would re-run the effect every render for a report the key guard would drop anyway.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [onTileIds, tileIdsKey]);
+    }, [setTileIds, tileIdsKey]);
     return (
         <>
             {/* One live region at the same place in every state, so a line that arrives in it is announced. It is

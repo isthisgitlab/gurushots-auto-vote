@@ -20,6 +20,7 @@ import { app, errors } from '../../src/ts/translations/english';
 import { MAX_CHOSEN_PHOTOS } from '../../src/ts/settings/limits';
 import { invalid } from '../helpers/invalid';
 import type { usePhotoPicker } from '@/hooks/usePhotoPicker';
+import type { TileStats } from '@/hooks/usePhotoStatsLoader';
 import type { EntryPinKind } from '../../src/ts/types/settings';
 import type { WindowApi } from '../../src/ts/types/ipc';
 
@@ -806,25 +807,44 @@ describe('selection', () => {
         expect(onSave).not.toHaveBeenCalled();
     });
 });
+// A picker fixture for the direct PhotoGrid renders below: the fields the grid reads. The rest of
+// the hook's return is only for the toolbar and the modals, which these blocks do not render.
+const gridPicker = (over: Partial<ReturnType<typeof usePhotoPicker>> = {}): ReturnType<typeof usePhotoPicker> =>
+    invalid<ReturnType<typeof usePhotoPicker>>({
+        state: { status: 'idle' },
+        known: new Map<string, LibraryPhoto>(),
+        revalidating: false,
+        recheckFailed: false,
+        loadMore: jest.fn<Promise<void>, []>(),
+        loadingMore: false,
+        loadMoreFailed: null,
+        isSearch: false,
+        retry: jest.fn<number, []>(() => 1),
+        suggestedKnown: new Map<string, LibraryPhoto>(),
+        suggestedMemberId: null,
+        idleShown: [],
+        stats: new Map<string, TileStats>(),
+        sortStats: new Map<string, TileStats>(),
+        sortBy: 'library',
+        showStats: false,
+        setTileIds: jest.fn<void, [readonly string[]]>(),
+        ...over,
+    });
+
 describe('PhotoGrid numbering when a selected photo is left out of the grid', () => {
     // Selected [1, 9, 2], where 9 is not in the listing: it keeps its place and its number.
     const grid = () => {
         const photos = [photo(1), photo(2), photo(3)];
         return render(
             <PhotoGrid
-                state={{ status: 'ready', listing: listing(photos), order: 'votes' }}
-                known={new Map(photos.map((p) => [p.id, p]))}
+                picker={gridPicker({
+                    state: { status: 'ready', listing: listing(photos), order: 'votes' },
+                    known: new Map(photos.map((p) => [p.id, p])),
+                })}
                 selected={[idOf(1), idOf(9), idOf(2)]}
                 locked={false}
                 hasChallenge
-                search={false}
-                revalidating={false}
-                recheckFailed={false}
-                loadMore={jest.fn()}
-                loadingMore={false}
-                loadMoreFailed={null}
                 onToggle={jest.fn()}
-                onRetry={jest.fn()}
                 onRefresh={jest.fn()}
             />,
         );
@@ -847,19 +867,14 @@ describe('PhotoGrid as a plain set (max, fullKey, numbered)', () => {
     const grid = (props: Partial<Parameters<typeof PhotoGrid>[0]> = {}) =>
         render(
             <PhotoGrid
-                state={{ status: 'ready', listing: listing(photos), order: 'votes' }}
-                known={new Map(photos.map((p) => [p.id, p]))}
+                picker={gridPicker({
+                    state: { status: 'ready', listing: listing(photos), order: 'votes' },
+                    known: new Map(photos.map((p) => [p.id, p])),
+                })}
                 selected={[idOf(1), idOf(9)]}
                 locked={false}
                 hasChallenge
-                search={false}
-                revalidating={false}
-                recheckFailed={false}
-                loadMore={jest.fn()}
-                loadingMore={false}
-                loadMoreFailed={null}
                 onToggle={jest.fn()}
-                onRetry={jest.fn()}
                 onRefresh={jest.fn()}
                 {...props}
             />,
@@ -906,20 +921,12 @@ describe('PhotoGrid before any listing is read (idle)', () => {
     const grid = (props: Partial<Parameters<typeof PhotoGrid>[0]> = {}) =>
         render(
             <PhotoGrid
-                state={{ status: 'idle' }}
-                known={new Map()}
+                picker={gridPicker()}
                 selected={[]}
                 locked={false}
                 hasChallenge
-                search={false}
-                revalidating={false}
-                recheckFailed={false}
                 numbered={false}
-                loadMore={jest.fn()}
-                loadingMore={false}
-                loadMoreFailed={null}
                 onToggle={jest.fn()}
-                onRetry={jest.fn()}
                 onRefresh={jest.fn()}
                 {...props}
             />,
@@ -927,14 +934,14 @@ describe('PhotoGrid before any listing is read (idle)', () => {
     const idleLine = () => screen.getByText(/^Photos are not loaded yet/);
 
     test('with no picks it says nothing is loaded and shows no tile', () => {
-        grid({ extraPhotos: extra });
+        grid({ picker: gridPicker({ suggestedKnown: extra }) });
         expect(idleLine().getAttribute('role')).toBe('status');
         expect(idleLine().textContent).toBe('Photos are not loaded yet. Load photos, search, or press Auto.');
         expect(screen.queryByRole('button')).toBeNull();
     });
 
     test('the idle line is the caller’s key, so a chooser without Auto can name its own', () => {
-        grid({ extraPhotos: extra, idleKey: 'app.photoChooserIdle' });
+        grid({ picker: gridPicker({ suggestedKnown: extra }), idleKey: 'app.photoChooserIdle' });
         expect(screen.getByText(/^Your photos are not loaded yet\./).textContent).toBe(
             'Your photos are not loaded yet. Load photos or search.',
         );
@@ -942,7 +949,11 @@ describe('PhotoGrid before any listing is read (idle)', () => {
 
     test('a pick found in extraPhotos shows as a pressed, unnumbered tile with the idle member’s thumbnail and toggles', () => {
         const onToggle = jest.fn();
-        grid({ selected: [idOf(2)], extraPhotos: extra, idleMemberId: MEMBER, onToggle });
+        grid({
+            picker: gridPicker({ idleShown: [idOf(2)], suggestedKnown: extra, suggestedMemberId: MEMBER }),
+            selected: [idOf(2)],
+            onToggle,
+        });
         expect(screen.getByText(/^Your picks can be submitted as they are/).getAttribute('role')).toBe('status');
         expect(screen.queryByText(/^Photos are not loaded yet/)).toBeNull();
         expect(screen.getAllByRole('button')).toHaveLength(1);
@@ -956,7 +967,11 @@ describe('PhotoGrid before any listing is read (idle)', () => {
 
     test('idleIds keeps an unpicked tile in place, offered again while there is room and held at the cap', () => {
         const onToggle = jest.fn();
-        const props = { selected: [idOf(2)], idleIds: [idOf(1), idOf(2)], extraPhotos: extra, onToggle };
+        const props = {
+            picker: gridPicker({ idleShown: [idOf(1), idOf(2)], suggestedKnown: extra }),
+            selected: [idOf(2)],
+            onToggle,
+        };
         const { unmount } = grid({ ...props, max: 3 });
         expect(screen.getAllByRole('button')).toHaveLength(2);
         expect(tile(1).getAttribute('aria-pressed')).toBe('false');
@@ -970,7 +985,7 @@ describe('PhotoGrid before any listing is read (idle)', () => {
     });
 
     test('a pick missing from extraPhotos renders nothing while no saved picks are allowed', () => {
-        grid({ selected: [idOf(9)], extraPhotos: extra });
+        grid({ picker: gridPicker({ suggestedKnown: extra }), selected: [idOf(9)] });
         expect(screen.queryByRole('button')).toBeNull();
     });
 
@@ -983,8 +998,8 @@ describe('PhotoGrid before any listing is read (idle)', () => {
     test('a saved pick without a record shows as a stub with the member it is allowed, numbered when the grid is', () => {
         const onToggle = jest.fn();
         grid({
+            picker: gridPicker({ idleShown: [idOf(9), idOf(1)], suggestedKnown: extra }),
             selected: [idOf(9), idOf(1)],
-            extraPhotos: extra,
             savedPicks: { memberId: MEMBER },
             numbered: true,
             onToggle,
@@ -1005,6 +1020,7 @@ describe('PhotoGrid before any listing is read (idle)', () => {
 
     test('a stub with no member is text-only, and a locked one says the locked key and is inert', () => {
         grid({
+            picker: gridPicker({ idleShown: [idOf(9)] }),
             selected: [idOf(9)],
             savedPicks: { memberId: null },
             locked: true,
@@ -1019,7 +1035,13 @@ describe('PhotoGrid before any listing is read (idle)', () => {
 
     test('an unpicked stub at the cap says the list is full in its name too, and is inert; a picked one stays removable', () => {
         const onToggle = jest.fn();
-        grid({ selected: [idOf(1)], idleIds: [idOf(1), idOf(9)], savedPicks: { memberId: MEMBER }, max: 1, onToggle });
+        grid({
+            picker: gridPicker({ idleShown: [idOf(1), idOf(9)] }),
+            selected: [idOf(1)],
+            savedPicks: { memberId: MEMBER },
+            max: 1,
+            onToggle,
+        });
         const held = screen.getByRole('button', { name: new RegExp(`^Chosen photo ${shortOf(9)}: List full`) });
         expect(held.getAttribute('aria-pressed')).toBe('false');
         expect(held.getAttribute('aria-disabled')).toBe('true');
@@ -1031,20 +1053,12 @@ describe('PhotoGrid before any listing is read (idle)', () => {
     test('a stub that leaves the page hands the focus to the grid’s status line, as a read tile does', () => {
         const { rerender } = render(
             <PhotoGrid
-                state={{ status: 'idle' }}
-                known={new Map()}
+                picker={gridPicker({ idleShown: [idOf(9)] })}
                 selected={[idOf(9)]}
                 locked={false}
                 hasChallenge
-                search={false}
-                revalidating={false}
-                recheckFailed={false}
-                loadMore={jest.fn()}
-                loadingMore={false}
-                loadMoreFailed={null}
                 savedPicks={{ memberId: MEMBER }}
                 onToggle={jest.fn()}
-                onRetry={jest.fn()}
                 onRefresh={jest.fn()}
             />,
         );
@@ -1053,20 +1067,12 @@ describe('PhotoGrid before any listing is read (idle)', () => {
         expect(document.activeElement).toBe(stub);
         rerender(
             <PhotoGrid
-                state={{ status: 'idle' }}
-                known={new Map()}
+                picker={gridPicker({ idleShown: [idOf(9)] })}
                 selected={[idOf(9)]}
                 locked={false}
                 hasChallenge
-                search={false}
-                revalidating={false}
-                recheckFailed={false}
-                loadMore={jest.fn()}
-                loadingMore={false}
-                loadMoreFailed={null}
                 savedPicks={null}
                 onToggle={jest.fn()}
-                onRetry={jest.fn()}
                 onRefresh={jest.fn()}
             />,
         );

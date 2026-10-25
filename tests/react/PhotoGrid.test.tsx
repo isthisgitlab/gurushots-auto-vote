@@ -11,8 +11,10 @@ import { fireEvent, render, screen } from './helpers/test-utils';
 import { PhotoGrid } from '@/components/app/PhotoGrid';
 import { mockTranslator } from './helpers/setup';
 import { app, errors } from '../../src/ts/translations/english';
+import { invalid } from '../helpers/invalid';
 import type { TileStats } from '@/hooks/usePhotoStatsLoader';
-import type { ListState, LibraryPhoto } from '@/hooks/useLibraryListing';
+import type { LibraryPhoto } from '@/hooks/useLibraryListing';
+import type { usePhotoPicker } from '@/hooks/usePhotoPicker';
 import type { WindowApi } from '../../src/ts/types/ipc';
 
 type Listing = Extract<Awaited<ReturnType<WindowApi['getLibraryPhotos']>>, { success: true }>;
@@ -52,23 +54,42 @@ const english = (key: string) =>
           : key;
 
 type Props = Parameters<typeof PhotoGrid>[0];
+type Picker = ReturnType<typeof usePhotoPicker>;
+
+// The picker fields PhotoGrid reads, as a fixture. The rest of the hook's return is only for the
+// toolbar and the modals, which this file never renders — a partial fixture, through invalid.
+const basePicker = (over: Partial<Picker> = {}): Picker =>
+    invalid<Picker>({
+        state: {
+            status: 'ready',
+            listing: listing([photo(1), photo(2)], { truncated: true, nextStart: 2 }),
+            order: 'votes',
+        },
+        known: new Map<string, LibraryPhoto>(),
+        revalidating: false,
+        recheckFailed: false,
+        loadMore: jest.fn<Promise<void>, []>(),
+        loadingMore: false,
+        loadMoreFailed: null,
+        isSearch: false,
+        retry: jest.fn<number, []>(() => 1),
+        suggestedKnown: new Map<string, LibraryPhoto>(),
+        suggestedMemberId: null,
+        idleShown: [],
+        stats: new Map<string, TileStats>(),
+        sortStats: new Map<string, TileStats>(),
+        sortBy: 'library',
+        showStats: false,
+        setTileIds: jest.fn<void, [readonly string[]]>(),
+        ...over,
+    });
+
 const baseProps = (over: Partial<Props> = {}): Props => ({
-    state: {
-        status: 'ready',
-        listing: listing([photo(1), photo(2)], { truncated: true, nextStart: 2 }),
-    } as ListState,
-    known: new Map<string, LibraryPhoto>(),
+    picker: basePicker(),
     selected: [],
     locked: false,
     hasChallenge: true,
-    search: false,
-    revalidating: false,
-    recheckFailed: false,
-    loadMore: jest.fn<void, []>(),
-    loadingMore: false,
-    loadMoreFailed: null,
     onToggle: jest.fn<void, [string]>(),
-    onRetry: jest.fn<void, []>(),
     onRefresh: jest.fn<void, []>(),
     ...over,
 });
@@ -105,20 +126,25 @@ describe('the Load more button', () => {
         const first = grid();
         expect(more()).toBeTruthy();
         first.unmount();
-        grid({ state: { status: 'ready', listing: listing([photo(1), photo(2)]) } as ListState });
+        grid({
+            picker: basePicker({ state: { status: 'ready', listing: listing([photo(1), photo(2)]), order: 'votes' } }),
+        });
         expect(screen.queryByRole('button', { name: 'Load more photos' })).toBeNull();
         grid({
-            state: {
-                status: 'ready',
-                listing: listing([photo(1), photo(2)], { truncated: true, preview: true }),
-            } as ListState,
+            picker: basePicker({
+                state: {
+                    status: 'ready',
+                    listing: listing([photo(1), photo(2)], { truncated: true, preview: true }),
+                    order: 'votes',
+                },
+            }),
         });
         expect(screen.queryByRole('button', { name: 'Load more photos' })).toBeNull();
     });
 
     test('a press reads the next batch', () => {
-        const loadMore = jest.fn<void, []>();
-        grid({ loadMore });
+        const loadMore = jest.fn<Promise<void>, []>();
+        grid({ picker: basePicker({ loadMore }) });
         fireEvent.click(more());
         expect(loadMore).toHaveBeenCalledTimes(1);
     });
@@ -127,15 +153,15 @@ describe('the Load more button', () => {
         ['the batch read is on its way', { loadingMore: true }],
         ['the listing is being read again', { revalidating: true }],
     ])('is held while %s, and a press sends nothing', (_name, over) => {
-        const loadMore = jest.fn<void, []>();
-        grid({ loadMore, ...over });
+        const loadMore = jest.fn<Promise<void>, []>();
+        grid({ picker: basePicker({ loadMore, ...over }) });
         expect(more().getAttribute('aria-disabled')).toBe('true');
         fireEvent.click(more());
         expect(loadMore).not.toHaveBeenCalled();
     });
 
     test('the batch read shows on the button itself as busy', () => {
-        grid({ loadingMore: true });
+        grid({ picker: basePicker({ loadingMore: true }) });
         expect(more().getAttribute('aria-busy')).toBe('true');
         expect(more().querySelector('.sr-only')).not.toBeNull();
     });
@@ -152,7 +178,7 @@ describe('the Load more button', () => {
             "Couldn't load more photos. The read was interrupted. Press Load more photos to try again.",
         ],
     ])('%s shows in an alert of its own', (_name, failure, text) => {
-        grid({ loadMoreFailed: failure });
+        grid({ picker: basePicker({ loadMoreFailed: failure }) });
         expect(screen.getByRole('alert').textContent).toBe(text);
         // Photos were read here, so the neutral first-read text never takes over the Load-more alert.
         expect(
@@ -163,33 +189,33 @@ describe('the Load more button', () => {
     });
 
     test('the alert clears when the retry reads on', () => {
-        const loadMore = jest.fn<void, []>();
-        const { rerender } = grid({ loadMore, loadMoreFailed: 'library-read-failed' });
+        const loadMore = jest.fn<Promise<void>, []>();
+        const { rerender } = grid({ picker: basePicker({ loadMore, loadMoreFailed: 'library-read-failed' }) });
         expect(screen.getByRole('alert')).toBeTruthy();
         fireEvent.click(more());
         expect(loadMore).toHaveBeenCalledTimes(1);
-        rerender(<PhotoGrid {...baseProps({ loadMore, loadMoreFailed: null })} />);
+        rerender(<PhotoGrid {...baseProps({ picker: basePicker({ loadMore, loadMoreFailed: null }) })} />);
         expect(screen.queryByRole('alert')).toBeNull();
     });
 });
 
 describe('the plain states of a read', () => {
     test('a loading listing shows the loader and no Load more button', () => {
-        grid({ state: { status: 'loading' } as ListState });
+        grid({ picker: basePicker({ state: { status: 'loading' } }) });
         expect(screen.getByText('Loading your photos…')).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Load more photos' })).toBeNull();
     });
 
     test('a failed first Load photos offers Retry with the neutral text, not the Load-more wording', () => {
-        const onRetry = jest.fn<void, []>();
-        grid({ onRetry, state: { status: 'error', error: 'library-read-failed' } as ListState });
+        const retry = jest.fn<number, []>(() => 1);
+        grid({ picker: basePicker({ retry, state: { status: 'error', error: 'library-read-failed' } }) });
         expect(screen.getByText("Your photos couldn't be loaded (details below). Try again.")).toBeTruthy();
         expect(
             screen.getByText('Your photos could not be read. The library read failed before it finished. Try again.'),
         ).toBeTruthy();
         expect(screen.queryByText(/Load more photos/)).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-        expect(onRetry).toHaveBeenCalledTimes(1);
+        expect(retry).toHaveBeenCalledTimes(1);
     });
 });
 
@@ -198,16 +224,21 @@ describe('the Showing line', () => {
         const first = grid();
         expect(statusRegion().textContent).toBe('Showing 2 photo(s).');
         first.unmount();
-        grid({ state: { status: 'ready', listing: listing([photo(1), photo(2)]) } as ListState });
+        grid({
+            picker: basePicker({ state: { status: 'ready', listing: listing([photo(1), photo(2)]), order: 'votes' } }),
+        });
         expect(statusRegion().textContent).toBe('Showing 2 photo(s).');
     });
 
     test('the count is the tiles the grid shows, not the refused ones it hides', () => {
         grid({
-            state: {
-                status: 'ready',
-                listing: listing([photo(1, { allowed: false, message: 'In another challenge' }), photo(2)]),
-            } as ListState,
+            picker: basePicker({
+                state: {
+                    status: 'ready',
+                    listing: listing([photo(1, { allowed: false, message: 'In another challenge' }), photo(2)]),
+                    order: 'votes',
+                },
+            }),
         });
         expect(statusRegion().textContent).toBe(
             "Showing 1 photo(s).Hidden: 1 photo(s) GuruShots won't take in this challenge.",
@@ -224,7 +255,9 @@ describe('the Showing line', () => {
     });
 
     test('the final batch leaves the line and takes the button away, so the region never goes empty', () => {
-        grid({ state: { status: 'ready', listing: listing([photo(1), photo(2)]) } as ListState });
+        grid({
+            picker: basePicker({ state: { status: 'ready', listing: listing([photo(1), photo(2)]), order: 'votes' } }),
+        });
         expect(statusRegion().textContent).toBe('Showing 2 photo(s).');
         expect(screen.queryByRole('button', { name: 'Load more photos' })).toBeNull();
     });
@@ -232,7 +265,7 @@ describe('the Showing line', () => {
 
 describe('an empty listing', () => {
     test('the live region holds the empty text instead of a Showing 0 line, with no second copy in the body', () => {
-        grid({ state: { status: 'ready', listing: listing([]) } as ListState });
+        grid({ picker: basePicker({ state: { status: 'ready', listing: listing([]), order: 'votes' } }) });
         expect(statusRegion().textContent).toBe(
             'No photos found. Try another tag, or upload photos to your GuruShots library and press Refresh.',
         );
@@ -242,10 +275,9 @@ describe('an empty listing', () => {
 
     test('a complete one where every match has won says so in the region', () => {
         grid({
-            state: {
-                status: 'ready',
-                listing: listing([], { wonIds: [idOf(7)], wonCount: 1 }),
-            } as ListState,
+            picker: basePicker({
+                state: { status: 'ready', listing: listing([], { wonIds: [idOf(7)], wonCount: 1 }), order: 'votes' },
+            }),
         });
         expect(statusRegion().textContent).toBe(
             'No photos you can enter were found: every match has won a challenge. Try another tag, or upload new photos to your GuruShots library and press Refresh.',
@@ -256,7 +288,13 @@ describe('an empty listing', () => {
     test('a preview keeps its empty text as a body paragraph — its region names no count', () => {
         grid({
             hasChallenge: false,
-            state: { status: 'ready', listing: listing([], { preview: true, allowedKnown: false }) } as ListState,
+            picker: basePicker({
+                state: {
+                    status: 'ready',
+                    listing: listing([], { preview: true, allowedKnown: false }),
+                    order: 'votes',
+                },
+            }),
         });
         expect(statusRegion().textContent).toBe('');
         expect(screen.getByText(/No photos found/)).toBeTruthy();
@@ -268,10 +306,13 @@ describe('hiding refused photos in a challenge-bound grid', () => {
 
     test('without submit the refused photos are hidden and counted, and the appended batch keeps hiding', () => {
         const first = grid({
-            state: {
-                status: 'ready',
-                listing: listing([photo(1), refusedAt(2)], { truncated: true, nextStart: 2 }),
-            } as ListState,
+            picker: basePicker({
+                state: {
+                    status: 'ready',
+                    listing: listing([photo(1), refusedAt(2)], { truncated: true, nextStart: 2 }),
+                    order: 'votes',
+                },
+            }),
         });
         expect(screen.queryByRole('button', { name: /^Photo 00000002:/ })).toBeNull();
         expect(statusRegion().textContent).toBe(
@@ -280,10 +321,13 @@ describe('hiding refused photos in a challenge-bound grid', () => {
         first.unmount();
         // Load more appended its batch: the truncation is gone, and the new refused photo is hidden with the rest.
         grid({
-            state: {
-                status: 'ready',
-                listing: listing([photo(1), refusedAt(2), refusedAt(3)]),
-            } as ListState,
+            picker: basePicker({
+                state: {
+                    status: 'ready',
+                    listing: listing([photo(1), refusedAt(2), refusedAt(3)]),
+                    order: 'votes',
+                },
+            }),
         });
         expect(screen.queryByRole('button', { name: /^Photo 00000003:/ })).toBeNull();
         expect(statusRegion().textContent).toBe(
@@ -293,7 +337,10 @@ describe('hiding refused photos in a challenge-bound grid', () => {
 
     test('a picked refused photo stays shown, and unticking it hides it and hands the focus to the status line', () => {
         const shown = listing([photo(1), refusedAt(2)]);
-        const { rerender } = grid({ selected: [idOf(2)], state: { status: 'ready', listing: shown } as ListState });
+        const { rerender } = grid({
+            picker: basePicker({ state: { status: 'ready', listing: shown, order: 'votes' } }),
+            selected: [idOf(2)],
+        });
         const tileEl = screen.getByRole('button', { name: /^Photo 00000002:/ });
         expect(tileEl.getAttribute('aria-pressed')).toBe('true');
         expect(tileEl.textContent).toContain('In another challenge');
@@ -301,7 +348,12 @@ describe('hiding refused photos in a challenge-bound grid', () => {
         expect(screen.queryByText(/^Hidden: /)).toBeNull();
         tileEl.focus();
         rerender(
-            <PhotoGrid {...baseProps({ selected: [], state: { status: 'ready', listing: shown } as ListState })} />,
+            <PhotoGrid
+                {...baseProps({
+                    picker: basePicker({ state: { status: 'ready', listing: shown, order: 'votes' } }),
+                    selected: [],
+                })}
+            />,
         );
         expect(screen.queryByRole('button', { name: /^Photo 00000002:/ })).toBeNull();
         // The Hidden line keeps the status region on screen, so the handed-off focus is not on a hidden element.
@@ -315,13 +367,18 @@ describe('hiding refused photos in a challenge-bound grid', () => {
         const all = listing([refusedAt(1), refusedAt(2)]);
         const noneLine =
             "GuruShots won't take any of the listed photos in this challenge. Search by tag to find others, or upload new photos and press Refresh.";
-        const { rerender } = grid({ state: { status: 'ready', listing: all } as ListState });
+        const { rerender } = grid({
+            picker: basePicker({ state: { status: 'ready', listing: all, order: 'votes' } }),
+        });
         expect(statusRegion().textContent).toBe(
             `Showing 0 photo(s).Hidden: 2 photo(s) GuruShots won't take in this challenge.${noneLine}`,
         );
         rerender(
             <PhotoGrid
-                {...baseProps({ selected: [idOf(1)], state: { status: 'ready', listing: all } as ListState })}
+                {...baseProps({
+                    picker: basePicker({ state: { status: 'ready', listing: all, order: 'votes' } }),
+                    selected: [idOf(1)],
+                })}
             />,
         );
         // The picked refused photo is shown; the other is hidden and counted, and nothing more is claimed.
@@ -334,10 +391,13 @@ describe('hiding refused photos in a challenge-bound grid', () => {
     test('a no-challenge grid hides nothing', () => {
         grid({
             hasChallenge: false,
-            state: {
-                status: 'ready',
-                listing: listing([photo(1, { allowed: false, message: 'No' }), photo(2)], { allowedKnown: false }),
-            } as ListState,
+            picker: basePicker({
+                state: {
+                    status: 'ready',
+                    listing: listing([photo(1, { allowed: false, message: 'No' }), photo(2)], { allowedKnown: false }),
+                    order: 'votes',
+                },
+            }),
         });
         expect(screen.getByRole('button', { name: /^Photo 00000001:/ })).toBeTruthy();
         expect(screen.getByRole('button', { name: /^Photo 00000002:/ })).toBeTruthy();
@@ -348,10 +408,13 @@ describe('hiding refused photos in a challenge-bound grid', () => {
 describe('a preview in the grid', () => {
     test('a challenge-bound preview is never rendered: the loader holds its place', () => {
         grid({
-            state: {
-                status: 'ready',
-                listing: listing([photo(1), photo(2)], { preview: true, allowedKnown: false }),
-            } as ListState,
+            picker: basePicker({
+                state: {
+                    status: 'ready',
+                    listing: listing([photo(1), photo(2)], { preview: true, allowedKnown: false }),
+                    order: 'votes',
+                },
+            }),
         });
         expect(screen.getByText('Loading your photos…')).toBeTruthy();
         expect(screen.queryByRole('button', { name: /^Photo / })).toBeNull();
@@ -363,11 +426,13 @@ describe('a preview in the grid', () => {
         grid({
             hasChallenge: false,
             selected: [idOf(9)],
-            recheckFailed: false,
-            state: {
-                status: 'ready',
-                listing: listing([photo(1)], { preview: true, allowedKnown: false }),
-            } as ListState,
+            picker: basePicker({
+                state: {
+                    status: 'ready',
+                    listing: listing([photo(1)], { preview: true, allowedKnown: false }),
+                    order: 'votes',
+                },
+            }),
         });
         expect(screen.getByRole('button', { name: /^Photo 00000001:/ })).toBeTruthy();
         // A preview names no count in the grid's live region; its header line says what it is.
@@ -384,11 +449,14 @@ describe('a preview in the grid', () => {
         grid({
             hasChallenge: false,
             selected: [idOf(9)],
-            recheckFailed: true,
-            state: {
-                status: 'ready',
-                listing: listing([photo(1)], { preview: true, allowedKnown: false }),
-            } as ListState,
+            picker: basePicker({
+                recheckFailed: true,
+                state: {
+                    status: 'ready',
+                    listing: listing([photo(1)], { preview: true, allowedKnown: false }),
+                    order: 'votes',
+                },
+            }),
         });
         expect(screen.getByRole('button', { name: /^Photo 00000001:/ })).toBeTruthy();
         expect(
@@ -408,7 +476,11 @@ describe('the focus hand-off', () => {
         expect(document.activeElement).toBe(button);
         rerender(
             <PhotoGrid
-                {...baseProps({ state: { status: 'ready', listing: listing([photo(1), photo(2)]) } as ListState })}
+                {...baseProps({
+                    picker: basePicker({
+                        state: { status: 'ready', listing: listing([photo(1), photo(2)]), order: 'votes' },
+                    }),
+                })}
             />,
         );
         expect(screen.queryByRole('button', { name: 'Load more photos' })).toBeNull();
@@ -423,10 +495,13 @@ describe('a chosen pick no batch has shown', () => {
     ])('%s: a won pick keeps its missing tile, which says why it is gone', (_name, truncated) => {
         grid({
             selected: [idOf(9)],
-            state: {
-                status: 'ready',
-                listing: listing([photo(1), photo(2)], { truncated, wonIds: [idOf(9)], wonCount: 1 }),
-            } as ListState,
+            picker: basePicker({
+                state: {
+                    status: 'ready',
+                    listing: listing([photo(1), photo(2)], { truncated, wonIds: [idOf(9)], wonCount: 1 }),
+                    order: 'votes',
+                },
+            }),
         });
         const won = screen.getByRole('button', {
             name: new RegExp(`^Chosen photo ${shortOf(9)}: Has won a challenge`),
@@ -453,7 +528,7 @@ describe('a chosen pick no batch has shown', () => {
     test('in a complete listing the same pick is a missing tile with the challenge’s likely reasons', () => {
         grid({
             selected: [idOf(9)],
-            state: { status: 'ready', listing: listing([photo(1), photo(2)]) } as ListState,
+            picker: basePicker({ state: { status: 'ready', listing: listing([photo(1), photo(2)]), order: 'votes' } }),
         });
         const missing = screen.getByRole('button', {
             name: new RegExp(
@@ -466,7 +541,7 @@ describe('a chosen pick no batch has shown', () => {
 
 describe('a search listing', () => {
     test('a truncated one shows an unreached pick as a stub whose note names both ways to reach it', () => {
-        grid({ search: true, selected: [idOf(9)] });
+        grid({ picker: basePicker({ isSearch: true }), selected: [idOf(9)] });
         expect(
             screen.getByRole('button', {
                 name: new RegExp(
@@ -478,12 +553,15 @@ describe('a search listing', () => {
 
     test('a won pick in a truncated one keeps the won text on its missing tile — the only one a cut-off listing shows', () => {
         grid({
-            search: true,
+            picker: basePicker({
+                isSearch: true,
+                state: {
+                    status: 'ready',
+                    listing: listing([photo(1), photo(2)], { truncated: true, wonIds: [idOf(9)], wonCount: 1 }),
+                    order: 'votes',
+                },
+            }),
             selected: [idOf(9)],
-            state: {
-                status: 'ready',
-                listing: listing([photo(1), photo(2)], { truncated: true, wonIds: [idOf(9)], wonCount: 1 }),
-            } as ListState,
         });
         expect(
             screen.getByRole('button', { name: new RegExp(`^Chosen photo ${shortOf(9)}: Has won a challenge`) }),
@@ -496,10 +574,12 @@ describe('a search listing', () => {
         ['without a challenge', false],
     ])('a complete one %s says the pick is not in these results, never that it was deleted', (_name, hasChallenge) => {
         grid({
-            search: true,
             hasChallenge,
             selected: [idOf(9)],
-            state: { status: 'ready', listing: listing([photo(1), photo(2)]) } as ListState,
+            picker: basePicker({
+                isSearch: true,
+                state: { status: 'ready', listing: listing([photo(1), photo(2)]), order: 'votes' },
+            }),
         });
         const missing = screen.getByRole('button', {
             name: new RegExp(
@@ -511,19 +591,25 @@ describe('a search listing', () => {
 });
 
 describe('the loaded-photo sort', () => {
-    const listingOf = (ids: number[]) => ({ status: 'ready', listing: listing(ids.map((n) => photo(n))) }) as ListState;
+    const listingOf = (ids: number[]): Picker['state'] => ({
+        status: 'ready',
+        listing: listing(ids.map((n) => photo(n))),
+        order: 'votes',
+    });
 
     test('ratio: known values descending, a views-0 ratio after every real one, unknown last, ties keep the listing order', () => {
         grid({
-            sortBy: 'ratio',
-            sortStats: new Map([
-                [idOf(1), tileStat(1, { votes: 30, views: 10 })],
-                [idOf(2), tileStat(2, { votes: 30, views: 15 })],
-                [idOf(3), tileStat(3, { votes: 5, views: 0 })],
-                // 4 ties with 1 and is listed after it, so it keeps its place behind it.
-                [idOf(4), tileStat(4, { votes: 30, views: 10 })],
-            ]),
-            state: listingOf([5, 2, 1, 4, 3, 6]),
+            picker: basePicker({
+                sortBy: 'ratio',
+                sortStats: new Map([
+                    [idOf(1), tileStat(1, { votes: 30, views: 10 })],
+                    [idOf(2), tileStat(2, { votes: 30, views: 15 })],
+                    [idOf(3), tileStat(3, { votes: 5, views: 0 })],
+                    // 4 ties with 1 and is listed after it, so it keeps its place behind it.
+                    [idOf(4), tileStat(4, { votes: 30, views: 10 })],
+                ]),
+                state: listingOf([5, 2, 1, 4, 3, 6]),
+            }),
         });
         // 5 and 6 have no stats: unknown last, in the listing's order; 3 is known but has no views.
         expect(tileOrder()).toEqual([shortOf(1), shortOf(4), shortOf(2), shortOf(3), shortOf(5), shortOf(6)]);
@@ -535,23 +621,25 @@ describe('the loaded-photo sort', () => {
             [idOf(2), tileStat(2, { likes: 9, guruPicks: 3 })],
             [idOf(3), tileStat(3, { likes: 1, guruPicks: 9 })],
         ]);
-        const first = grid({ sortBy: 'likes', sortStats: stats, state: listingOf([1, 2, 3]) });
+        const first = grid({ picker: basePicker({ sortBy: 'likes', sortStats: stats, state: listingOf([1, 2, 3]) }) });
         expect(tileOrder()).toEqual([shortOf(2), shortOf(1), shortOf(3)]);
         first.unmount();
-        grid({ sortBy: 'guruPicks', sortStats: stats, state: listingOf([1, 2, 3]) });
+        grid({ picker: basePicker({ sortBy: 'guruPicks', sortStats: stats, state: listingOf([1, 2, 3]) }) });
         expect(tileOrder()).toEqual([shortOf(3), shortOf(2), shortOf(1)]);
     });
 
     test('the pinned picks the listing does not return stay first in pick order', () => {
         grid({
-            sortBy: 'ratio',
-            sortStats: new Map([
-                [idOf(1), tileStat(1, { votes: 100, views: 1 })],
-                [idOf(9), tileStat(9, { votes: 1, views: 100 })],
-            ]),
-            known: new Map([[idOf(9), photo(9)]]),
+            picker: basePicker({
+                sortBy: 'ratio',
+                sortStats: new Map([
+                    [idOf(1), tileStat(1, { votes: 100, views: 1 })],
+                    [idOf(9), tileStat(9, { votes: 1, views: 100 })],
+                ]),
+                known: new Map([[idOf(9), photo(9)]]),
+                state: listingOf([1, 2]),
+            }),
             selected: [idOf(9)],
-            state: listingOf([1, 2]),
         });
         expect(tileOrder()[0]).toBe(shortOf(9));
     });
@@ -562,14 +650,22 @@ describe('the loaded-photo sort', () => {
             [idOf(2), tileStat(2, { votes: 100, views: 1 })],
             [idOf(3), tileStat(3, { votes: 2, views: 1 })],
         ]);
-        const first = grid({ sortBy: 'ratio', state: listingOf([1, 2, 3]) });
+        const first = grid({ picker: basePicker({ sortBy: 'ratio', state: listingOf([1, 2, 3]) }) });
         expect(tileOrder()).toEqual([shortOf(1), shortOf(2), shortOf(3)]);
         // The live Map fills in while the run is out; the sort snapshot is still empty, so nothing moves.
-        first.rerender(<PhotoGrid {...baseProps({ sortBy: 'ratio', stats, state: listingOf([1, 2, 3]) })} />);
+        first.rerender(
+            <PhotoGrid
+                {...baseProps({ picker: basePicker({ sortBy: 'ratio', stats, state: listingOf([1, 2, 3]) }) })}
+            />,
+        );
         expect(tileOrder()).toEqual([shortOf(1), shortOf(2), shortOf(3)]);
         // The run ends: the loader hands the grid its refreshed snapshot, and the tiles reorder once.
         first.rerender(
-            <PhotoGrid {...baseProps({ sortBy: 'ratio', stats, sortStats: stats, state: listingOf([1, 2, 3]) })} />,
+            <PhotoGrid
+                {...baseProps({
+                    picker: basePicker({ sortBy: 'ratio', stats, sortStats: stats, state: listingOf([1, 2, 3]) }),
+                })}
+            />,
         );
         // 2 (100 votes per view), then 3 (2), then 1 (0.01).
         expect(tileOrder()).toEqual([shortOf(2), shortOf(3), shortOf(1)]);
@@ -580,101 +676,123 @@ describe('the loaded-photo sort', () => {
             [idOf(1), tileStat(1, { votes: 1, views: 100 })],
             [idOf(2), tileStat(2, { votes: 100, views: 1 })],
         ]);
-        const first = grid({ sortStats: stats, state: listingOf([1, 2]) });
+        const first = grid({ picker: basePicker({ sortStats: stats, state: listingOf([1, 2]) }) });
         expect(tileOrder()).toEqual([shortOf(1), shortOf(2)]);
-        first.rerender(<PhotoGrid {...baseProps({ sortBy: 'ratio', sortStats: stats, state: listingOf([1, 2]) })} />);
+        first.rerender(
+            <PhotoGrid
+                {...baseProps({ picker: basePicker({ sortBy: 'ratio', sortStats: stats, state: listingOf([1, 2]) }) })}
+            />,
+        );
         expect(tileOrder()).toEqual([shortOf(2), shortOf(1)]);
         expect(jest.mocked(window.api.getPhotoStats)).not.toHaveBeenCalled();
     });
     test('a reorder of the same tiles (a run ending under a loaded sort) reports nothing new', () => {
-        const onTileIds = jest.fn<void, [string[]]>();
+        const setTileIds = jest.fn<void, [readonly string[]]>();
         const stats = new Map([
             [idOf(1), tileStat(1, { votes: 1, views: 100 })],
             [idOf(2), tileStat(2, { votes: 100, views: 1 })],
         ]);
         // The run is out: the empty snapshot keeps the listing's order, and the ids were reported.
-        const first = grid({ sortBy: 'ratio', onTileIds, state: listingOf([1, 2]) });
+        const first = grid({ picker: basePicker({ sortBy: 'ratio', setTileIds, state: listingOf([1, 2]) }) });
         expect(tileOrder()).toEqual([shortOf(1), shortOf(2)]);
-        expect(onTileIds).toHaveBeenCalledTimes(1);
+        expect(setTileIds).toHaveBeenCalledTimes(1);
         // The run ends: the refreshed snapshot reorders the tiles — the same set, so no new report.
         first.rerender(
             <PhotoGrid
-                {...baseProps({ sortBy: 'ratio', onTileIds, stats, sortStats: stats, state: listingOf([1, 2]) })}
+                {...baseProps({
+                    picker: basePicker({
+                        sortBy: 'ratio',
+                        setTileIds,
+                        stats,
+                        sortStats: stats,
+                        state: listingOf([1, 2]),
+                    }),
+                })}
             />,
         );
         expect(tileOrder()).toEqual([shortOf(2), shortOf(1)]);
-        expect(onTileIds).toHaveBeenCalledTimes(1);
+        expect(setTileIds).toHaveBeenCalledTimes(1);
     });
 });
 
 describe('the ids reported for the stats loader', () => {
     test('the listed photos shown are reported; refused hidden ones and stub tiles are not', () => {
-        const onTileIds = jest.fn<void, [string[]]>();
+        const setTileIds = jest.fn<void, [readonly string[]]>();
         grid({
-            onTileIds,
+            picker: basePicker({
+                setTileIds,
+                state: {
+                    status: 'ready',
+                    listing: listing([photo(1), photo(2, { allowed: false, message: 'No' }), photo(3)], {
+                        truncated: true,
+                        nextStart: 3,
+                    }),
+                    order: 'votes',
+                },
+            }),
             selected: [idOf(9)],
-            state: {
-                status: 'ready',
-                listing: listing([photo(1), photo(2, { allowed: false, message: 'No' }), photo(3)], {
-                    truncated: true,
-                    nextStart: 3,
-                }),
-            } as ListState,
         });
         // 2 is refused and hidden; 9 is an unreached pick, so it renders as a saved-pick stub.
-        expect(onTileIds).toHaveBeenCalledWith([idOf(1), idOf(3)]);
+        expect(setTileIds).toHaveBeenCalledWith([idOf(1), idOf(3)]);
     });
 
     test('the report comes once per change: a re-render with the same tiles sends nothing', () => {
-        const onTileIds = jest.fn<void, [string[]]>();
-        const props = baseProps({ onTileIds });
+        const setTileIds = jest.fn<void, [readonly string[]]>();
+        const props = baseProps({ picker: basePicker({ setTileIds }) });
         const first = render(<PhotoGrid {...props} />);
         first.rerender(<PhotoGrid {...props} />);
-        expect(onTileIds).toHaveBeenCalledTimes(1);
+        expect(setTileIds).toHaveBeenCalledTimes(1);
     });
 
     test("the report keeps the grid's render order, so the loader reads the visible top first", () => {
-        const onTileIds = jest.fn<void, [string[]]>();
+        const setTileIds = jest.fn<void, [readonly string[]]>();
         grid({
-            onTileIds,
-            state: { status: 'ready', listing: listing([photo(3), photo(1), photo(2)]) } as ListState,
+            picker: basePicker({
+                setTileIds,
+                state: { status: 'ready', listing: listing([photo(3), photo(1), photo(2)]), order: 'votes' },
+            }),
         });
-        expect(onTileIds).toHaveBeenCalledWith([idOf(3), idOf(1), idOf(2)]);
+        expect(setTileIds).toHaveBeenCalledWith([idOf(3), idOf(1), idOf(2)]);
     });
 
     test('while idle, only the records the grid shows as full tiles are reported', () => {
-        const onTileIds = jest.fn<void, [string[]]>();
+        const setTileIds = jest.fn<void, [readonly string[]]>();
         grid({
-            onTileIds,
-            extraPhotos: new Map([[idOf(7), photo(7)]]),
-            idleIds: [idOf(7), idOf(8)],
-            state: { status: 'idle' } as ListState,
+            picker: basePicker({
+                setTileIds,
+                suggestedKnown: new Map([[idOf(7), photo(7)]]),
+                idleShown: [idOf(7), idOf(8)],
+                state: { status: 'idle' },
+            }),
         });
         // 8 is a saved pick without a record: a stub, never asked for.
-        expect(onTileIds).toHaveBeenCalledWith([idOf(7)]);
+        expect(setTileIds).toHaveBeenCalledWith([idOf(7)]);
     });
     test('a refused photo hidden under a Ratio sort: the shown order is right and the hidden photo is not asked for', () => {
-        const onTileIds = jest.fn<void, [string[]]>();
+        const setTileIds = jest.fn<void, [readonly string[]]>();
         grid({
-            sortBy: 'ratio',
-            onTileIds,
-            sortStats: new Map([
-                [idOf(1), tileStat(1, { votes: 1, views: 100 })],
-                // Photo 2 is refused and hidden, so it never takes a place in the order.
-                [idOf(2), tileStat(2, { votes: 50, views: 100 })],
-                [idOf(3), tileStat(3, { votes: 100, views: 100 })],
-            ]),
-            state: {
-                status: 'ready',
-                listing: listing([photo(1), photo(2, { allowed: false, message: 'No' }), photo(3)], {
-                    truncated: true,
-                    nextStart: 3,
-                }),
-            } as ListState,
+            picker: basePicker({
+                sortBy: 'ratio',
+                setTileIds,
+                sortStats: new Map([
+                    [idOf(1), tileStat(1, { votes: 1, views: 100 })],
+                    // Photo 2 is refused and hidden, so it never takes a place in the order.
+                    [idOf(2), tileStat(2, { votes: 50, views: 100 })],
+                    [idOf(3), tileStat(3, { votes: 100, views: 100 })],
+                ]),
+                state: {
+                    status: 'ready',
+                    listing: listing([photo(1), photo(2, { allowed: false, message: 'No' }), photo(3)], {
+                        truncated: true,
+                        nextStart: 3,
+                    }),
+                    order: 'votes',
+                },
+            }),
         });
         // The hidden photo does not displace anyone: 3 (ratio 1.0) before 1 (0.01), and only the
         // shown ids are reported to the loader, in the order the grid displays them.
         expect(tileOrder()).toEqual([shortOf(3), shortOf(1)]);
-        expect(onTileIds).toHaveBeenCalledWith([idOf(3), idOf(1)]);
+        expect(setTileIds).toHaveBeenCalledWith([idOf(3), idOf(1)]);
     });
 });

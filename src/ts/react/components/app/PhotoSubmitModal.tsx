@@ -277,22 +277,14 @@ function PhotoSubmitBody({
                 </p>
             </PhotoPickerToolbar>
             <PhotoGrid
-                state={state}
-                known={known}
+                picker={picker}
                 selected={selected}
                 locked={locked}
                 lockedKey={lockedKey}
                 hasChallenge
-                search={picker.isSearch}
-                revalidating={picker.revalidating}
-                recheckFailed={picker.recheckFailed}
-                loadMore={() => void picker.loadMore()}
-                loadingMore={picker.loadingMore}
-                loadMoreFailed={picker.loadMoreFailed}
                 submit
                 refreshDisabled={submitting}
                 onToggle={toggle}
-                onRetry={retry}
                 onRefresh={refreshListing}
                 // With one slot the modal swaps the pick, so the grid never stops offering tiles.
                 max={max === 1 ? Number.POSITIVE_INFINITY : max}
@@ -300,16 +292,8 @@ function PhotoSubmitBody({
                 blockedIds={blocked?.ids}
                 blockedKey={blocked?.reasonKey}
                 numbered={false}
-                extraPhotos={picker.suggestedKnown}
-                idleMemberId={picker.suggestedMemberId}
-                idleIds={picker.idleShown}
                 idleWithPicksKey={texts.idleWithPicks}
                 keepIds={keepIds}
-                stats={picker.stats}
-                sortStats={picker.sortStats}
-                sortBy={picker.sortBy}
-                showStats={picker.showStats}
-                onTileIds={picker.setTileIds}
             />
             <StickyModalFooter>
                 {alert}
