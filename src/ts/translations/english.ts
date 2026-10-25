@@ -87,7 +87,7 @@ export const errors = {
         'No more suggestions. Every photo that fits has been shown. Press Auto to start again from the best.',
     suggestBusy: 'The photos were not ranked. Another ranking is still running. Wait for it to finish, then try again.',
     suggestChallengeEnded:
-        'The photos were not ranked. This challenge has ended or could not be read. Close this dialog and reopen the card.',
+        'The photos were not ranked. This challenge has ended or could not be read. Close this dialog and open the challenge again.',
     suggestFailed:
         'The photos were not ranked. GuruShots did not answer, or the ranking did not finish. Try again in a moment.',
     fetchChallengesFailed: 'The challenges could not be loaded. GuruShots did not answer. Try again in a moment.',
@@ -821,8 +821,6 @@ export const app = {
     photoRecommended: 'Recommended photo',
     photoChooserHelpAuto:
         "Used first, but they must still pass your tag filters. Ranked like the app's own picks, or in your pick order if that setting is on. Nothing is read until you load, search or press Auto.",
-    photoChooserHelpChallenge:
-        "Used first, but they must still pass your tag filters. Ranked like the app's own picks, or in your pick order if that setting is on. Nothing is read until you load or search.",
     photoChooserHelpNoChallenge:
         "Used first, but they must still pass your tag filters. Ranked like the app's own picks, or in your pick order if that setting is on. What a challenge accepts is checked when photos are entered.",
     photoChooserSearchLabel: 'Search your photos by tag',

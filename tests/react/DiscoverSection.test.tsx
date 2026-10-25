@@ -1315,14 +1315,14 @@ describe('chosen photos', () => {
         expect(screen.getAllByText('app.choosePhotos')).toHaveLength(2);
     });
 
-    test('Choose photos opens the chooser idle (no Auto on a row), and saving its own list works', async () => {
+    test('Choose photos opens the chooser idle (Auto available on a row), and saving its own list works', async () => {
         renderSection();
         await screen.findByText('Free One');
         fireEvent.click(screen.getAllByText('app.choosePhotos')[0]);
-        // Nothing is read on open, and a row's challenge is not joined, so there is no Auto.
+        // Nothing is read on open, and the row's chooser offers Auto.
         await screen.findByRole('dialog');
         expect(window.api.getLibraryPhotos).not.toHaveBeenCalled();
-        expect(screen.queryByRole('button', { name: 'app.pickAuto' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'app.pickAuto' })).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadPhotos' }));
         await waitFor(() =>
             expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(900001, undefined, 'cached', 'submit', 0, 100),

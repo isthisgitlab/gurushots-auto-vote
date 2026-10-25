@@ -48,7 +48,13 @@ beforeEach(() => {
     mockTranslator.t.mockImplementation(english);
     getMemberChallenges = jest.fn();
     joinChallenge = jest.fn().mockResolvedValue({ success: true, status: 'joined' });
-    window.api = invalid({ onSettingsChanged: undefined, getMemberChallenges, joinChallenge });
+    window.api = invalid({
+        onSettingsChanged: undefined,
+        getMemberChallenges,
+        joinChallenge,
+        // The row chooser reads the row's pins; none are stored, so its pin controls stay idle.
+        getEntryPins: jest.fn().mockResolvedValue({ boost: null, turbo: null }),
+    });
 });
 
 afterEach(() => {
@@ -95,6 +101,15 @@ describe('an upcoming row', () => {
         await settle();
         const choose = screen.getByRole<HTMLButtonElement>('button', { name: 'Choose photos for Soon' });
         expect(choose.disabled).toBe(false);
+    });
+
+    test('its Choose photos chooser offers Auto', async () => {
+        renderSection([upcoming(2, 'Soon', 3600)]);
+        await settle();
+        fireEvent.click(screen.getByRole<HTMLButtonElement>('button', { name: 'Choose photos for Soon' }));
+        await settle();
+        expect(screen.getByRole('dialog')).toBeTruthy();
+        expect(screen.getByRole('button', { name: app.pickAuto })).toBeTruthy();
     });
 
     test('explains when chosen photos get used, once it has some', async () => {

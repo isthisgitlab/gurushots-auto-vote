@@ -972,9 +972,61 @@ describe('suggest-photos', () => {
     });
 
     test('answers challenge-ended when the live challenge is gone or could not be read', async () => {
-        stubLive([{ id: 999 }]);
+        stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [{ id: 999 }] }),
+            getMemberChallenges: jest.fn().mockResolvedValue(null),
+        });
         await expect(suggest()).resolves.toEqual({ success: false, error: 'challenge-ended' });
         expect(autoFill.suggestFillPhotos).not.toHaveBeenCalled();
+    });
+
+    test('a joined challenge ranks from the active list without ignoreOnly, reading no discover list', async () => {
+        await expect(suggest()).resolves.toEqual({
+            success: true,
+            memberId: 'member-9',
+            photos: [mapped('a1'), mapped('b2')],
+            statsLimited: false,
+        });
+        const [, , , , opts] = autoFill.suggestFillPhotos.mock.calls[0];
+        expect(opts).toEqual({ usage: undefined, exclude: new Set(), ignoreOnly: false });
+    });
+
+    test('an open-list hit ranks the Discover-row challenge with ignoreOnly', async () => {
+        const openChallenge = { id: 555, title: 'O' };
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [] }),
+            getMemberChallenges: jest.fn().mockResolvedValue([openChallenge]),
+        });
+        await expect(suggest('555')).resolves.toMatchObject({ success: true });
+        expect(strategy.getMemberChallenges).toHaveBeenCalledTimes(1);
+        expect(strategy.getMemberChallenges).toHaveBeenCalledWith('tok', 'open');
+        const [challenge, , , , opts] = autoFill.suggestFillPhotos.mock.calls[0];
+        expect(challenge).toBe(openChallenge);
+        expect(opts).toEqual({ usage: undefined, exclude: new Set(), ignoreOnly: true });
+    });
+
+    test('an upcoming-list hit ranks the Discover-row challenge with ignoreOnly after the open list misses', async () => {
+        const upcomingChallenge = { id: 777, title: 'U' };
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [] }),
+            getMemberChallenges: jest.fn().mockResolvedValueOnce(null).mockResolvedValueOnce([upcomingChallenge]),
+        });
+        await expect(suggest('777')).resolves.toMatchObject({ success: true });
+        expect(strategy.getMemberChallenges).toHaveBeenNthCalledWith(1, 'tok', 'open');
+        expect(strategy.getMemberChallenges).toHaveBeenNthCalledWith(2, 'tok', 'upcoming');
+        const [challenge, , , , opts] = autoFill.suggestFillPhotos.mock.calls[0];
+        expect(challenge).toBe(upcomingChallenge);
+        expect(opts).toEqual({ usage: undefined, exclude: new Set(), ignoreOnly: true });
+    });
+
+    test('answers challenge-ended when the active list and both discover lists miss (a failed read is a miss)', async () => {
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue(null),
+            getMemberChallenges: jest.fn().mockResolvedValue(null),
+        });
+        await expect(suggest('999')).resolves.toEqual({ success: false, error: 'challenge-ended' });
+        expect(autoFill.suggestFillPhotos).not.toHaveBeenCalled();
+        expect(strategy.getMemberChallenges).toHaveBeenCalledTimes(2);
     });
 
     test('ranks the live challenge with settings and the strategy, no submitter, and answers the mapped photos with the member id', async () => {
@@ -1007,7 +1059,7 @@ describe('suggest-photos', () => {
             await buildHandlers()['suggest-photos']({}, '123', usage);
             const [, , , count, opts] = autoFill.suggestFillPhotos.mock.calls[0];
             expect(count).toBeUndefined();
-            expect(opts).toEqual({ usage, exclude: new Set() });
+            expect(opts).toEqual({ usage, exclude: new Set(), ignoreOnly: false });
         },
     );
 
@@ -1023,7 +1075,7 @@ describe('suggest-photos', () => {
     test('passes the exclude ids on to the ranking as a set, and logs their count, not the ids', async () => {
         await buildHandlers()['suggest-photos']({}, '123', 'submit', ['a1', 'b2', 'a1']);
         const [, , , , opts] = autoFill.suggestFillPhotos.mock.calls[0];
-        expect(opts).toEqual({ usage: 'submit', exclude: new Set(['a1', 'b2']) });
+        expect(opts).toEqual({ usage: 'submit', exclude: new Set(['a1', 'b2']), ignoreOnly: false });
         expect(logCategories('info', '📝 Photo suggestions request: Challenge=123, Excluded=3', null)).toEqual([
             'autoSubmit',
         ]);
@@ -1111,7 +1163,12 @@ describe('suggest-photos', () => {
         finish(suggested());
         await expect(first).resolves.toMatchObject({ success: true });
         expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(1);
-        // The flag was released: this one reaches the live-challenge read, which no longer has 124.
+        // The flag was released: this one reaches the challenge resolution, which no longer has 124
+        // (the discover lists miss too).
+        stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }),
+            getMemberChallenges: jest.fn().mockResolvedValue(null),
+        });
         await expect(suggest('124')).resolves.toEqual({ success: false, error: 'challenge-ended' });
     });
 

@@ -50,13 +50,19 @@ type SuggestResult =
  *   It reaches the candidate fetch and the chosen-photo lookup alike. `exclude`: ids an earlier run named
  *   (paging on to the next-best); they leave the pool like the entered photos, and a run they leave with
  *   nothing to answer is `no-more-suggestions`, since a run with the same rules found photos before.
+ *   `ignoreOnly` never enforces Submit Only Chosen Photos (a Discover row's ranking builds the chosen list;
+ *   the chosen photos still rank first).
  */
 const suggestFillPhotos = async (
     challenge: Challenge,
     token: string,
     deps: RankDeps,
     count: number = SUGGEST_COUNT,
-    { usage, exclude = new Set() }: { usage?: LibraryUsage; exclude?: ReadonlySet<string> } = {},
+    {
+        usage,
+        exclude = new Set(),
+        ignoreOnly,
+    }: { usage?: LibraryUsage; exclude?: ReadonlySet<string>; ignoreOnly?: boolean } = {},
 ): Promise<SuggestResult> => {
     const { settings, logger } = deps;
     const label = 'suggest';
@@ -80,8 +86,9 @@ const suggestFillPhotos = async (
         challenge,
         token,
         deps: runDeps,
-        // A swap goes in whatever Submit Only says: the chosen photos rank first, but no gate keeps the picker empty.
-        ignoreOnly: usage === 'swap',
+        // A swap goes in whatever Submit Only says: the chosen photos rank first, but no gate keeps the picker
+        // empty. The same holds for a Discover row's ranking (the opts flag).
+        ignoreOnly: usage === 'swap' || ignoreOnly === true,
     });
     if (enforceOnly && unentered.length === 0) {
         log.info(`${label}: every chosen photo is already entered in ${tag}, and Submit Only is on`, null);

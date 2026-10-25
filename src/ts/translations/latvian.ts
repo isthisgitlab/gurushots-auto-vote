@@ -90,7 +90,7 @@ export const errors: typeof english.errors = {
         'Vairāk ieteikumu nav. Visi piemērotie foto jau ir parādīti. Spied „Automātiski”, lai sāktu no jauna ar labākajiem.',
     suggestBusy: 'Foto netika sarindoti. Cita rindošana vēl turpinās. Pagaidi, kamēr tā beidzas, un mēģini vēlreiz.',
     suggestChallengeEnded:
-        'Foto netika sarindoti. Izaicinājums ir beidzies vai to nevarēja nolasīt. Aizver šo dialoglodziņu un atver kartīti vēlreiz.',
+        'Foto netika sarindoti. Izaicinājums ir beidzies vai to nevarēja nolasīt. Aizver šo dialoglodziņu un atver izaicinājumu vēlreiz.',
     suggestFailed: 'Foto netika sarindoti. GuruShots neatbildēja vai rindošana nepabeidzās. Mēģini vēlreiz pēc brīža.',
     fetchChallengesFailed: 'Izaicinājumus neizdevās ielādēt. GuruShots neatbildēja. Mēģini vēlreiz pēc brīža.',
     libraryReadFailed:
@@ -830,8 +830,6 @@ export const app: typeof english.app = {
     photoRecommended: 'Ieteiktais foto',
     photoChooserHelpAuto:
         'Tos izmanto pirmos, bet tiem jāiztur tagu filtri. Kārto kā pašas izvēles vai tavā secībā, ja tas uzstādīts. Neko nelasa, līdz ielādē, meklē vai spiež „Automātiski”.',
-    photoChooserHelpChallenge:
-        'Tos izmanto pirmos, bet tiem jāiztur tagu filtri. Kārto kā pašas izvēles vai tavā secībā, ja tas uzstādīts (noteikums vai izaicinājums pēc pievienošanās). Neko nelasa, līdz ielādē vai meklē.',
     photoChooserHelpNoChallenge:
         'Tos izmanto pirmos, bet tiem jāiztur tagu filtri; ko izaicinājums pieņem, pārbauda iesniedzot. Kārto kā pašas izvēles vai tavā secībā, ja tas uzstādīts.',
     photoChooserSearchLabel: 'Meklēt savus foto pēc taga',

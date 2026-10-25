@@ -119,7 +119,6 @@ const setup = (
     over: Partial<{
         value: string[];
         challengeId: string | number | null;
-        canSuggest: boolean;
         recommendedIds: string[];
         onSave: jest.MockedFunction<(ids: string[]) => boolean | Promise<boolean>>;
         onClose: jest.MockedFunction<() => void>;
@@ -183,10 +182,9 @@ describe('opening', () => {
         expect(screen.getByText(/^Auto ranks your photos/).textContent).toContain('Nothing is saved');
     });
 
-    test('a Discover row (a challenge, but not joined) offers no Auto and its help says so', () => {
-        setup({ canSuggest: false });
+    test('with no challenge no Auto is offered, and nothing ranks', () => {
+        setup({ challengeId: null });
         expect(screen.queryByRole('button', { name: 'Auto' })).toBeNull();
-        // The challenge is real, so the listing would read through it — but nothing ranks.
         expect(jest.mocked(window.api.suggestPhotos)).not.toHaveBeenCalled();
         expect(screen.getByText(/^Your photos are not loaded yet\./).textContent).toBe(
             'Your photos are not loaded yet. Load photos or search.',
@@ -2371,7 +2369,7 @@ describe('the toolbar: order, loaded-photo sort and Show stats', () => {
     test('a failed call (not a missing one) leaves the status empty and the warning carries the failure', async () => {
         getStats().mockReset().mockRejectedValue(new Error('down'));
         // Without Auto, so the toolbar's status region is the only aria-live one on the page.
-        setup({ canSuggest: false });
+        setup({ challengeId: null });
         await opened();
         fireEvent.click(showStatsBox());
         await screen.findByText(
@@ -2382,8 +2380,8 @@ describe('the toolbar: order, loaded-photo sort and Show stats', () => {
         expect(getStats()).toHaveBeenCalledTimes(1);
     });
 
-    test('the stats status region is mounted where Auto is not (a Discover row)', async () => {
-        setup({ canSuggest: false });
+    test('the stats status region is mounted where Auto is not (no challenge)', async () => {
+        setup({ challengeId: null });
         await opened();
         expect(screen.queryByRole('button', { name: 'Auto' })).toBeNull();
         fireEvent.click(showStatsBox());

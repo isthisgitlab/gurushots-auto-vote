@@ -43,7 +43,6 @@ function PhotoChooserBody({
     value,
     challengeId,
     clearMeansInherit,
-    canSuggest,
     recommendedIds,
     onSave,
     onClose,
@@ -52,7 +51,6 @@ function PhotoChooserBody({
     value: string[];
     challengeId: string | number | null;
     clearMeansInherit: boolean;
-    canSuggest: boolean;
     /** The photo ids GuruShots suggests for the challenge, marked on their tiles (a Discover row's chooser). */
     recommendedIds?: ReadonlyArray<string>;
     onSave: (ids: string[]) => boolean | Promise<boolean>;
@@ -83,9 +81,10 @@ function PhotoChooserBody({
         readFailureIsError: true,
     });
     const { run: runSetEntryPin } = useAsyncIpcAction(ipc.setEntryPin);
-    // Auto ranks for a challenge the photos could be entered into: a Discover row's challenge is not
-    // joined, so it cannot (suggestPhotos would answer challenge-ended).
-    const showAuto = canSuggest && challengeId !== null;
+    // Auto shows whenever the chooser names a challenge — the suggest handler resolves un-joined
+    // Discover rows from the open/upcoming lists, so a row's chooser ranks too; without a challenge
+    // there is nothing to rank for.
+    const showAuto = challengeId !== null;
     const picker = usePhotoPicker({ challengeId, usage: 'submit', alwaysFresh: false, selected });
     const { refresh, resetLoadPhotos } = picker;
     // A mirror of the selection the stable `toggle` reads at call time (it must stay identity-stable:
@@ -141,11 +140,7 @@ function PhotoChooserBody({
     const atCap = selected.length >= MAX_CHOSEN_PHOTOS;
     const idleKey = showAuto ? 'app.photoChooserIdleAuto' : 'app.photoChooserIdle';
     const idleWithPicksKey = showAuto ? 'app.photoChooserIdlePicksAuto' : 'app.photoChooserIdlePicks';
-    const helpKey = showAuto
-        ? 'app.photoChooserHelpAuto'
-        : challengeId !== null
-          ? 'app.photoChooserHelpChallenge'
-          : 'app.photoChooserHelpNoChallenge';
+    const helpKey = showAuto ? 'app.photoChooserHelpAuto' : 'app.photoChooserHelpNoChallenge';
     // One help line the pin toggles name (aria-describedby); a failed read takes the toggles, and with them
     // the line, away.
     const pinHelpId = useId();
@@ -285,8 +280,8 @@ function PhotoChooserBody({
  * false (or a throw) the modal stays open on an error. With a `challengeId`, saving also writes the
  * draft's Boost / Turbo pins (a failed pin write keeps the modal open on its own error). `clearMeansInherit` says
  * that saving nothing removes the list this layer holds, so the layer inherits
- * the one from the settings or rules above it. `canSuggest` (default true) turns
- * Auto off for a challenge the member is not joined in (a Discover row).
+ * the one from the settings or rules above it. Auto is offered whenever a `challengeId` is given (the
+ * suggest handler resolves un-joined Discover rows too); without one it is not offered.
  */
 export function PhotoChooserModal({
     isOpen,
@@ -294,7 +289,6 @@ export function PhotoChooserModal({
     value,
     challengeId = null,
     clearMeansInherit = false,
-    canSuggest = true,
     recommendedIds,
     onSave,
 }: {
@@ -303,7 +297,6 @@ export function PhotoChooserModal({
     value: string[];
     challengeId?: string | number | null;
     clearMeansInherit?: boolean;
-    canSuggest?: boolean;
     /** The photo ids GuruShots suggests for the challenge; their tiles carry the recommended mark. */
     recommendedIds?: ReadonlyArray<string>;
     onSave: (ids: string[]) => boolean | Promise<boolean>;
@@ -331,7 +324,6 @@ export function PhotoChooserModal({
                     value={value}
                     challengeId={challengeId}
                     clearMeansInherit={clearMeansInherit}
-                    canSuggest={canSuggest}
                     recommendedIds={recommendedIds}
                     onSave={onSave}
                     onClose={onClose}

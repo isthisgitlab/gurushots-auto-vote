@@ -271,6 +271,21 @@ describe('suggestFillPhotos', () => {
             expect(lines.info.filter((line) => line.includes('Submit Only is on'))).toEqual([]);
         });
 
+        test('an ignoreOnly ranking (a Discover row) never enforces it: with every chosen photo entered it still suggests, and the chosen photos still rank first', async () => {
+            const { logger, lines } = makeLog();
+            const entered = makeDeps({ logger, settings: { chosen: ['p1', 'p2'], only: true } });
+            const challenge = makeChallenge([{ id: 'p1' }, { id: 'p2' }]);
+            const result = await suggestFillPhotos(challenge, 'tok', entered, undefined, { ignoreOnly: true });
+            expect(result.status).toBe('suggested');
+            const chosenFirst = makeDeps({ logger, settings: { chosen: ['p7'], only: true } });
+            const ids = suggestedIds(
+                await suggestFillPhotos(makeChallenge(), 'tok', chosenFirst, undefined, { ignoreOnly: true }),
+            ) as string[];
+            expect(ids[0]).toBe('p7');
+            expect(ids).toHaveLength(SUGGEST_COUNT);
+            expect(lines.info.filter((line) => line.includes('Submit Only is on'))).toEqual([]);
+        });
+
         test('answers only the chosen photos that are not entered yet', async () => {
             const deps = makeDeps({ settings: { chosen: ['p5', 'p6', 'p7'], only: true } });
             const challenge = makeChallenge([{ id: 'p6' }]);

@@ -6,6 +6,8 @@ import * as apiFactory from '../../apiFactory';
 import * as auth from '../../services/auth';
 import * as autoFill from '../../services/autoFill';
 import { dropContext } from '../../services/libraryCache';
+import { fetchUpcoming } from '../../services/discoverChallenges';
+import { findActiveChallenge } from '../../services/findActiveChallenge';
 import { CHOSEN_PHOTO_ID_RE, MAX_CHOSEN_PHOTOS, MAX_SUGGEST_EXCLUDE } from '../../settings/limits';
 import { sanitizeForLog, refuseInvalidArgs, isUsageArg, fetchLiveChallenge } from './shared';
 import { mapPhoto } from './library';
@@ -185,11 +187,26 @@ const handleSuggestPhotos = (async (
         if (!guard.ok) return guard.response;
 
         const strategy = apiFactory.getApiStrategy();
-        const liveChallenge = await fetchLiveChallenge(strategy, guard.token, challengeId);
-        if (!liveChallenge) return { success: false as const, error: 'challenge-ended' as const };
+        // A Discover row's challenge is un-joined; it resolves from the open/upcoming lists and still ranks —
+        // the same library read the join flow makes. A failed list read is indistinguishable from a miss and
+        // answers challenge-ended (pre-existing conflation, kept).
+        let fromDiscover = false;
+        let challenge = await fetchLiveChallenge(strategy, guard.token, challengeId);
+        if (!challenge) {
+            const open = await strategy.getMemberChallenges(guard.token, 'open');
+            challenge = findActiveChallenge(open, challengeId);
+            if (!challenge) {
+                challenge = findActiveChallenge(
+                    await fetchUpcoming(guard.token, strategy.getMemberChallenges),
+                    challengeId,
+                );
+            }
+            fromDiscover = challenge !== null;
+        }
+        if (!challenge) return { success: false as const, error: 'challenge-ended' as const };
 
         const result = await autoFill.suggestFillPhotos(
-            liveChallenge,
+            challenge,
             guard.token,
             {
                 settings,
@@ -201,7 +218,7 @@ const handleSuggestPhotos = (async (
                 getCurrentMemberProfile: strategy.getCurrentMemberProfile,
             },
             undefined,
-            { usage, exclude: new Set(exclude) },
+            { usage, exclude: new Set(exclude), ignoreOnly: fromDiscover },
         );
         if (result.status === 'fetch-error') return { success: false as const, error: 'fetch-failed' as const };
         if (result.status !== 'suggested') return { success: false as const, error: result.status };

@@ -192,9 +192,6 @@ function RowPhotoChooser({
             challengeId={challenge?.id ?? null}
             // GuruShots' suggested photos for this challenge, from the listing: their tiles say so.
             recommendedIds={challenge?.suggestedPhotoIds}
-            // The row's challenge is not joined, so Auto cannot rank for it (it would answer
-            // challenge-ended); the chooser hides the button.
-            canSuggest={false}
             clearMeansInherit
             onSave={save}
         />
