@@ -82,7 +82,7 @@
 - **Semantic lexicon**: `pnpm fetch:embeddings` (manual, network — downloads the pinned GloVe archive once into gitignored `scripts/.cache/`, then prunes/quantizes it into the committed `scripts/lexicon-embeddings.json`; MUST be re-run after editing `scripts/lexicon-concepts.json`, offline once cached) · `pnpm build:lexicon` (offline, deterministic — intermediate → `src/assets/semantic-vectors.json`; CI diffs the output) · `pnpm verify:lexicon` (statistical gate for `SEMANTIC_MATCH_FLOOR`)
 - **Web shell**: `pnpm web` builds the CSS and renderer, then serves the UI on localhost (`--port=<n>`). It prints a launch URL ending in `#t=<per-run token>`; every `/api/` request must carry that token.
 - **Third-party notices**: `pnpm build:notices` regenerates `src/assets/THIRD_PARTY_NOTICES.txt` from `pnpm-lock.yaml` and the vendored license texts; CI checks it is current, so run it after any dependency change.
-- **Android dependency verification**: `scripts/android-verification-metadata.sh` regenerates `android/gradle/verification-metadata.xml` (the SHA-256 of every artifact Gradle resolves; needs JDK 21, the Android SDK and Docker). Run it after any change to the Android dependency graph, including a Dependabot `@capacitor/*` bump, and commit the result; CI checks it.
+- **Android dependency verification**: `scripts/android-verification-metadata.sh` regenerates `android/gradle/verification-metadata.xml` (the SHA-256 of every artifact Gradle resolves; needs JDK 21 or newer (CI builds on 27), the Android SDK and Docker). Run it after any change to the Android dependency graph, including a Dependabot `@capacitor/*` bump, and commit the result; CI checks it.
 
 ## Dependencies & Type Checking
 

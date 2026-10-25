@@ -15,7 +15,7 @@
 # The second form runs only the one-to-one check of a versions list against an artifacts list (no Gradle, nothing
 # written) and exits non-zero, naming the offending coordinates, when a module has no version or more than one.
 #
-# Needs: JDK 21 (JAVA_HOME or on PATH), the Android SDK (android/local.properties or ANDROID_HOME), a network or a Gradle
+# Needs: JDK 21 or newer — CI builds on 27 (JAVA_HOME or on PATH), the Android SDK (android/local.properties or ANDROID_HOME), a network or a Gradle
 # cache, and `cap sync android` already done (`pnpm build:prep && pnpm exec cap sync android`), as for any local Android
 # build. No Docker.
 
