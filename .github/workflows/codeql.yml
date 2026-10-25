@@ -66,7 +66,7 @@ jobs:
               if: matrix.language == 'javascript-typescript'
               run: printf '%s\n' '{"type":"module"}' > src/ts/package.json
 
-            - name: Setup Java (JDK 27 — Capacitor 8's Java 21 source/target sets the floor; 27 passes the local Android gate)
+            - name: Setup Java (JDK 27 — Capacitor 8's Java 21 source/target sets the floor)
               if: matrix.language == 'java-kotlin'
               uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
               with:

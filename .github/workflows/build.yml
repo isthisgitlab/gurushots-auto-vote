@@ -92,7 +92,7 @@ jobs:
               with:
                   cache-vision-model: 'true'
 
-            - name: Setup Java (JDK 27 — Capacitor 8's Java 21 source/target sets the floor; 27 passes the local Android gate)
+            - name: Setup Java (JDK 27 — Capacitor 8's Java 21 source/target sets the floor)
               uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
               with:
                   distribution: 'temurin'
@@ -469,7 +469,7 @@ jobs:
                   download-bumped: 'true'
                   cache-vision-model: 'true'
 
-            - name: Setup Java (JDK 27 — Capacitor 8's Java 21 source/target sets the floor; 27 passes the local Android gate)
+            - name: Setup Java (JDK 27 — Capacitor 8's Java 21 source/target sets the floor)
               uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
               with:
                   distribution: 'temurin'
