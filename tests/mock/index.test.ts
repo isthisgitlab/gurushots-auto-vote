@@ -70,8 +70,6 @@ jest.mock('../../src/ts/mock/voting', () => ({
 jest.mock('../../src/ts/mock/boost', () => ({
     __esModule: true,
     mockBoostSuccess: { success: true, boost_applied: true },
-    mockBoostFailure: { error: 'Boost failed' },
-    mockBoostAlreadyUsed: { error: 'Boost already used' },
 }));
 
 // Mock console methods
@@ -423,26 +421,26 @@ describe('mock/index', () => {
                 );
             });
 
-            test('should return error when boost already used', async () => {
+            test('should resolve null when boost already used (transport failure contract)', async () => {
                 const challenge = invalid<Challenge>({
                     title: 'Test Challenge',
-                    member: { boost: { state: 'USED' } },
+                    // A pickable entry: the pick runs in the real applyBoost this mock
+                    // delegates to, so the fake transport (where the state reads) is reached.
+                    member: { boost: { state: 'USED' }, ranking: { entries: [{ id: 'e1' }] } },
                 });
 
-                await expect(mockIndex.mockApiClient.applyBoost(challenge, 'test-token')).rejects.toEqual(
-                    boost.mockBoostAlreadyUsed,
-                );
+                await expect(mockIndex.mockApiClient.applyBoost(challenge, 'test-token')).resolves.toBeNull();
+                expect(logger.__mockInfoFn).toHaveBeenCalledWith('Boost already used', null);
             });
 
-            test('should return error when boost not available', async () => {
+            test('should resolve null when boost not available (transport failure contract)', async () => {
                 const challenge = invalid<Challenge>({
                     title: 'Test Challenge',
-                    member: { boost: { state: 'NOT_AVAILABLE' } },
+                    member: { boost: { state: 'NOT_AVAILABLE' }, ranking: { entries: [{ id: 'e1' }] } },
                 });
 
-                await expect(mockIndex.mockApiClient.applyBoost(challenge, 'test-token')).rejects.toEqual(
-                    boost.mockBoostFailure,
-                );
+                await expect(mockIndex.mockApiClient.applyBoost(challenge, 'test-token')).resolves.toBeNull();
+                expect(logger.__mockInfoFn).toHaveBeenCalledWith('Boost not available', null);
             });
         });
 

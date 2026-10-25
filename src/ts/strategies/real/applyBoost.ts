@@ -9,6 +9,8 @@ import { pickBoostEntry } from '../../services/VotingLogic';
 
 import type { Challenge, SuccessResponse } from '../../types/gurushots';
 
+export type BoostImagePost = typeof boostImage;
+
 /**
  * Applies a boost to a photo in a challenge.
  *
@@ -20,7 +22,11 @@ import type { Challenge, SuccessResponse } from '../../types/gurushots';
  * @param token - Authentication token
  * @returns API response or null if boost failed
  */
-const applyBoost = async (challenge: Challenge, token: string): Promise<SuccessResponse | null> => {
+const applyBoost = async (
+    challenge: Challenge,
+    token: string,
+    post: BoostImagePost = boostImage,
+): Promise<SuccessResponse | null> => {
     const { id, member } = challenge;
     const challengeId = id?.toString?.() || '';
     const entries = member?.ranking?.entries;
@@ -44,7 +50,7 @@ const applyBoost = async (challenge: Challenge, token: string): Promise<SuccessR
         return null;
     }
 
-    const response = await boostImage(challengeId, boostImageId, token);
+    const response = await post(challengeId, boostImageId, token);
     if (!response) return null;
 
     // Raise the conflict flag on the local challenge object now that the boost landed.

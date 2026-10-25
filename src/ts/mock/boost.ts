@@ -18,24 +18,4 @@ const mockBoostSuccess = {
     expires_at: Math.floor(Date.now() / 1000) + 3600,
 };
 
-/**
- * Mock boost application failure response
- */
-const mockBoostFailure = {
-    success: false,
-    error: 'No boost available',
-    code: 'BOOST_UNAVAILABLE',
-    message: 'You have no boosts available for this challenge',
-};
-
-/**
- * Mock boost already used response
- */
-const mockBoostAlreadyUsed = {
-    success: false,
-    error: 'Boost already used',
-    code: 'BOOST_USED',
-    message: 'You have already used your boost for this challenge',
-};
-
-export { mockBoostSuccess, mockBoostFailure, mockBoostAlreadyUsed };
+export { mockBoostSuccess };
