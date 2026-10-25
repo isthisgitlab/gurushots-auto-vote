@@ -225,7 +225,7 @@ const missionVoteQuota = (
 };
 
 /**
- * Count one landed join / fill / turbo win / boost against the mission.
+ * Count one landed fill / turbo win / boost against the mission.
  */
 const consumeMission = (needs: MissionNeeds | null | undefined, kind: MissionKind) => {
     if (!needs || !(needs[kind] > 0)) return;
