@@ -34,9 +34,11 @@ export const rewardsSettings = {
         label: 'app.missionSaveTurbos',
         description: 'app.missionSaveTurbosDesc',
     },
-    // Join early: during a "Join N challenges" or "Win Turbo" mission the
-    // auto-join timing window is lifted until the mission is met — a turbo is
-    // only winnable in a joined challenge (the type/tag/coin filters stay).
+    // Join early: during a "Win Turbo" mission the auto-join timing window is
+    // lifted until it has enough joined challenges to win its remaining turbos
+    // — a turbo is only winnable in a joined challenge (the type/tag/coin
+    // filters stay). A "Join challenges" mission always follows the auto-join
+    // timing.
     missionJoinEarly: {
         type: 'boolean',
         default: false,

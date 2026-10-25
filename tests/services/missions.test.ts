@@ -177,15 +177,6 @@ describe('classifyMission', () => {
         );
         expect(classifyMission({ id: 1, name: 'Daily mission', description: 'Reach the top' })).toBeNull();
     });
-
-    test('a join mission that names fills in its description is not a fill mission', async () => {
-        const needs = await loadMissionNeeds('tok', NOW_MS, {
-            getMyMissions: jest.fn(async () => [
-                mission('Join 3 challenges', 0, 3, { description: 'Join 3 challenges and get 2 fills' }),
-            ]),
-        });
-        expect(needs).toEqual({ join: 3, fill: 0, turbo: 0, boost: 0, vote: 0 });
-    });
 });
 
 describe('loadMissionNeeds', () => {
@@ -200,7 +191,7 @@ describe('loadMissionNeeds', () => {
             mission('Play 6 Duels', 0, 6),
         ]);
         await expect(loadMissionNeeds('tok', NOW_MS, d)).resolves.toEqual({
-            join: 5,
+            join: 0,
             fill: 2,
             turbo: 4,
             boost: 0,

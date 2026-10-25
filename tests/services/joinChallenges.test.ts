@@ -1002,7 +1002,7 @@ describe('runJoinPass — join window', () => {
         expect(deps.submitToChallenge).toHaveBeenCalledTimes(1);
     });
 
-    describe('Join Early for Missions', () => {
+    describe('Join Early for Turbo Missions', () => {
         const far = (id: number) => ({
             id,
             join_coins: 0,
@@ -1030,14 +1030,15 @@ describe('runJoinPass — join window', () => {
             invalid<LoggerMock>(require('../../src/ts/logger'))
                 .withCategory()
                 .info.mock.calls.map(([msg]) => msg)
-                .filter((msg) => msg.includes('early for the active missions'));
+                .filter((msg) => msg.includes('early for the turbo mission'));
 
-        test('a join mission lifts the window until it is met, and each join counts it down', async () => {
+        test('a join mission waits for the window', async () => {
             withJoinEarly(true);
             const missions = { join: 2, fill: 0, turbo: 0, boost: 0, vote: 0 };
             const res = await runJoinPass('tok', NOW_MS, farDeps(), missions);
-            expect(statuses(res)).toEqual(['joined', 'joined', 'skipped:too-early']);
-            expect(missions.join).toBe(0);
+            expect(statuses(res)).toEqual(['skipped:too-early', 'skipped:too-early', 'skipped:too-early']);
+            expect(missions.join).toBe(2);
+            expect(earlyNotices()).toEqual([]);
         });
 
         test('a turbo mission joins early only for the turbos it is short of', async () => {
@@ -1050,7 +1051,7 @@ describe('runJoinPass — join window', () => {
             // A join is not a turbo win: the turbo mission counts down only when one is won.
             expect(missions.turbo).toBe(3);
             expect(deps.getActiveChallenges).toHaveBeenCalledWith('tok');
-            expect(earlyNotices()).toEqual(['joining up to 2 challenge(s) early for the active missions']);
+            expect(earlyNotices()).toEqual(['joining up to 2 challenge(s) early for the turbo mission(s)']);
         });
 
         test('a turbo mission joins the earliest closing challenge before later ones', async () => {
@@ -1329,15 +1330,15 @@ describe('runJoinPass — join window', () => {
             }
         });
 
-        test('with both missions active, the larger need sets how many join early', async () => {
+        test("a turbo mission's shortfall sets how many join early", async () => {
             withJoinEarly(true);
-            const res = await runJoinPass('tok', NOW_MS, farDeps(), { join: 1, fill: 0, turbo: 2, boost: 0, vote: 0 });
+            const res = await runJoinPass('tok', NOW_MS, farDeps(), { join: 0, fill: 0, turbo: 2, boost: 0, vote: 0 });
             expect(statuses(res)).toEqual(['joined', 'joined', 'skipped:too-early']);
         });
 
-        test('keeps the window while the setting is off, even with missions needing joins', async () => {
+        test('keeps the window while the setting is off, even with a turbo mission needing joins', async () => {
             withJoinEarly(false);
-            const res = await runJoinPass('tok', NOW_MS, farDeps(), { join: 2, fill: 0, turbo: 2, boost: 0, vote: 0 });
+            const res = await runJoinPass('tok', NOW_MS, farDeps(), { join: 0, fill: 0, turbo: 2, boost: 0, vote: 0 });
             expect(statuses(res)).toEqual(['skipped:too-early', 'skipped:too-early', 'skipped:too-early']);
         });
 

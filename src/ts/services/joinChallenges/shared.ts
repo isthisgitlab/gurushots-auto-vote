@@ -25,7 +25,7 @@ export interface JoinDeps {
     getEligiblePhotosWalk?: typeof submissionsApi.getEligiblePhotosWalk;
     searchTagAutocomplete?: typeof tagsApi.searchTagAutocomplete;
     getCurrentMemberProfile?: typeof tagsApi.getCurrentMemberProfile;
-    /** The joined challenges, to count the turbos a turbo mission can still win (Join Early for Missions). */
+    /** The joined challenges, to count the turbos a turbo mission can still win (Join Early for Turbo Missions). */
     getActiveChallenges?: (token: string) => Promise<ActiveChallengesResponse>;
     /** null in mock mode */
     joinStateStore?: RawJsonStore | null;
