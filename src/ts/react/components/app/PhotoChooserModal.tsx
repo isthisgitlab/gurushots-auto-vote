@@ -4,6 +4,7 @@ import { Modal } from '@/components/ui/Modal';
 import { StickyModalFooter } from '@/components/ui/StickyModalFooter';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { interp } from '@/utils/interp';
+import { PIN_KINDS, pinDraftWithout, pinOf, planPinCommits, toggledPinDraft } from '@/utils/entryPinDraft';
 import { useEntryPins } from '@/api/useEntryPins';
 import { useAsyncIpcAction } from '@/api/useAsyncIpcAction';
 import * as ipc from '@/api/ipc';
@@ -17,54 +18,13 @@ import { useChooserSave } from '@/hooks/usePhotoChooser';
 import { usePhotoPicker } from '@/hooks/usePhotoPicker';
 import { MAX_CHOSEN_PHOTOS } from '../../../settings/limits';
 
-import type { EntryPinKind, EntryPins } from '../../../types/settings';
+import type { EntryPinKind } from '../../../types/settings';
+import type { PinDraft } from '@/utils/entryPinDraft';
 import type { LibraryPhoto } from '@/hooks/useLibraryListing';
-
-// The two features a chosen photo can be pinned for, in save order.
-const PIN_KINDS = ['boost', 'turbo'] as const;
 
 /** A kind's feature name, as the pin strings fill {kind}. */
 const kindName = (kind: EntryPinKind, t: (key: string) => string): string =>
     t(kind === 'boost' ? 'app.boost' : 'app.turbo');
-
-/**
- * The chooser's pin draft: per kind the pin to save (an id, or null to clear), or absent while the kind
- * is still what the stored pins say.
- */
-type PinDraft = { [K in EntryPinKind]?: string | null };
-
-/** The pin a kind would save: the draft's value when it has one, the stored pin otherwise. */
-const pinOf = (draft: PinDraft, stored: EntryPins, kind: EntryPinKind): string | null => {
-    const value = draft[kind];
-    return value === undefined ? stored[kind] : value;
-};
-
-/**
- * The draft after a toggle of `imageId` for `kind`, mirroring setEntryPin: pinning a photo for one kind
- * clears the other kind when it names the same photo, and a draft value equal to the stored pin is dropped,
- * so a toggle taken back is no unsaved change.
- */
-const toggledPinDraft = (prev: PinDraft, stored: EntryPins, kind: EntryPinKind, imageId: string): PinDraft => {
-    const other: EntryPinKind = kind === 'boost' ? 'turbo' : 'boost';
-    const next: PinDraft = { ...prev };
-    next[kind] = pinOf(prev, stored, kind) === imageId ? null : imageId;
-    if (next[kind] !== null && pinOf(prev, stored, other) === imageId) next[other] = null;
-    for (const changed of [kind, other]) {
-        if (next[changed] === stored[changed]) delete next[changed];
-    }
-    return next;
-};
-
-/** The draft after `imageId` left the selection: a draft pin naming it is dropped, back to the stored pin. */
-const pinDraftWithout = (prev: PinDraft, imageId: string): PinDraft => {
-    const next: PinDraft = { ...prev };
-    for (const kind of PIN_KINDS) {
-        if (next[kind] === imageId) {
-            delete next[kind];
-        }
-    }
-    return next;
-};
 
 // The chooser's sticky footer pins the save-error alert and the buttons. Sized for the worst case on a
 // phone (320px, Latvian): py-4, a multi-line save-error alert, the gaps and the buttons, about 10-11rem,
@@ -141,22 +101,17 @@ function PhotoChooserBody({
     // Clears a kind's pin at its next Save: the elsewhere line's Clear pin button.
     const clearPinDraft = (kind: EntryPinKind) => setPinDraft((prev) => ({ ...prev, [kind]: null }));
 
-    // The pin writes of a save: every changed kind is attempted once, after the host's save (useChooserSave
-    // runs them), and the failures collected; any failure keeps the chooser open. A null whose stored photo
-    // the draft moved to the other kind is not sent: that write clears it atomically, so a partial state
-    // cannot survive a failed second write. Only reachable with a challenge — the pin controls, and so a
-    // changed draft, exist only for one.
+    // The pin writes of a save: the changed kinds `planPinCommits` orders, each attempted once after
+    // the host's save (useChooserSave runs them), the failures collected; any failure keeps the
+    // chooser open. Only reachable with a challenge — the pin controls, and so a changed draft, exist
+    // only for one.
     let commit: (() => Promise<boolean>) | undefined;
     if (challengeId !== null) {
         const challengeKey = challengeId;
         commit = async () => {
             const failures: Array<{ kind: EntryPinKind; code: string }> = [];
-            for (const kind of PIN_KINDS) {
-                const next = pinDraft[kind];
-                if (next === undefined) continue;
-                const other: EntryPinKind = kind === 'boost' ? 'turbo' : 'boost';
-                if (next === null && storedPins[kind] === pinDraft[other]) continue;
-                const outcome = await runSetEntryPin(kind, challengeKey, next);
+            for (const { kind, imageId } of planPinCommits(pinDraft, storedPins)) {
+                const outcome = await runSetEntryPin(kind, challengeKey, imageId);
                 if (!outcome.success) failures.push({ kind, code: outcome.error });
             }
             if (failures.length > 0) {

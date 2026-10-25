@@ -1,11 +1,28 @@
 import type { Challenge, RankingEntry } from '../types/gurushots';
-import type { EntryPinKind, EntryPins } from '../types/settings';
+import type { EntryPinKind, EntryPinRecord, EntryPins } from '../types/settings';
 /**
  * How a pinned photo (settings/entryPins) reads against a challenge's current
- * entries. Pure and dependency-free, so the Node-side picks
- * (services/decisions/entryPick) and the renderer's pin controls answer
- * "is this pin usable?" identically.
+ * entries, and the one rule a pin write follows (`applyPinToRecord`). Pure and
+ * dependency-free, so the Node-side picks (services/decisions/entryPick), the
+ * renderer's pin controls and the chooser's draft answer identically.
  */
+
+/**
+ * The one pin-write rule, over a challenge's `{ boost?, turbo? }` record: a photo is pinned for at
+ * most one of Boost/Turbo, so pinning `imageId` for `kind` sets it and takes the record's other
+ * kind's pin on the same photo away, while `imageId` null clears `kind`. Mutates `record` and
+ * returns it — the stored write (`settings/entryPins`) and the chooser's draft run the same rule.
+ */
+const applyPinToRecord = (record: EntryPinRecord, kind: EntryPinKind, imageId: string | null): EntryPinRecord => {
+    if (imageId === null) {
+        delete record[kind];
+    } else {
+        record[kind] = imageId;
+        const other = kind === 'boost' ? 'turbo' : 'boost';
+        if (record[other] === imageId) delete record[other];
+    }
+    return record;
+};
 
 /**
  * The pin's state on one challenge. `hit` carries the LIVE entry, so a stored
@@ -82,5 +99,5 @@ const livePinKindOf = (challenge: Challenge, entry: RankingEntry, pins: EntryPin
         (kind) => pins[kind] === String(entry.id) && !entry[CONFLICT_FIELD[kind]] && canStillFire(challenge, kind),
     ) ?? null;
 
-export { findPinnedEntry, canStillFire, featureNeverFires, unusablePins, livePinKindOf };
+export { applyPinToRecord, findPinnedEntry, canStillFire, featureNeverFires, unusablePins, livePinKindOf };
 export type { PinResolution, NeverFiresReason };

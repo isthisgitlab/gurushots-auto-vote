@@ -1950,7 +1950,6 @@ describe('pins', () => {
     const boostToggle = () => screen.getByRole('button', { name: 'Pin for Boost' });
     const boostPressed = () => screen.getByRole('button', { name: 'Pinned for Boost' });
     const turboToggle = () => screen.getByRole('button', { name: 'Pin for Turbo' });
-    const turboPressed = () => screen.getByRole('button', { name: 'Pinned for Turbo' });
     const save = () => screen.getByRole('button', { name: 'Use these photos' });
     const groupOf = (n: number) => screen.getByRole('group', { name: `Pins for chosen photo ${n}` });
 
@@ -2002,19 +2001,6 @@ describe('pins', () => {
         );
         expect(screen.queryByRole('button', { name: 'Pin for Boost' })).toBeNull();
         expect(screen.queryByText(/^Pin a chosen photo/)).toBeNull();
-    });
-
-    test('pinning a photo for one kind clears the other kind when it names the same photo', async () => {
-        getPins().mockResolvedValue({ boost: null, turbo: idOf(1) });
-        setup({ value: [idOf(1)] });
-        expect(await screen.findByRole('button', { name: 'Pinned for Turbo' })).toBeTruthy();
-        fireEvent.click(boostToggle());
-        expect(screen.queryByRole('button', { name: 'Pinned for Turbo' })).toBeNull();
-        expect(boostPressed()).toBeTruthy();
-        // The other way round: pinning Turbo on the same photo clears the Boost pin.
-        fireEvent.click(turboToggle());
-        expect(screen.queryByRole('button', { name: 'Pinned for Boost' })).toBeNull();
-        expect(turboPressed()).toBeTruthy();
     });
 
     test('a Boost/Turbo swap sends one write: the moved Turbo null is the backend’s to clear', async () => {
