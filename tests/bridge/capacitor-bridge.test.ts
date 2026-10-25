@@ -45,7 +45,7 @@ jest.mock('../../src/ts/services/UpdateChecker', () => ({
 }));
 jest.mock('../../src/ts/services/auth', () => {
     class LogoutNotSavedError extends Error {}
-    return { clearAuthToken: jest.fn(), LogoutNotSavedError };
+    return { logout: jest.fn(async () => true), LogoutNotSavedError };
 });
 jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(),
@@ -331,18 +331,17 @@ describe('Capacitor bridge', () => {
         test('logout clears the token before emitting', async () => {
             const onLogout = jest.fn();
             bridge.subscribe('logout', onLogout);
-            auth.clearAuthToken.mockResolvedValue(invalid(undefined));
 
             await api.logout();
 
-            expect(auth.clearAuthToken).toHaveBeenCalled();
+            expect(auth.logout).toHaveBeenCalled();
             expect(onLogout).toHaveBeenCalledTimes(1);
         });
 
         test('logout still emits when clearing the token fails', async () => {
             const onLogout = jest.fn();
             bridge.subscribe('logout', onLogout);
-            auth.clearAuthToken.mockRejectedValue(new Error('prefs write failed'));
+            auth.logout.mockRejectedValue(new Error('prefs write failed'));
 
             await api.logout();
 
@@ -355,7 +354,7 @@ describe('Capacitor bridge', () => {
         test('does not log anyone out: nothing is emitted, and the caller is told', async () => {
             const onLogout = jest.fn();
             bridge.subscribe('logout', onLogout);
-            auth.clearAuthToken.mockRejectedValue(new auth.LogoutNotSavedError());
+            auth.logout.mockRejectedValue(new auth.LogoutNotSavedError());
 
             await expect(api.logout()).rejects.toBeInstanceOf(auth.LogoutNotSavedError);
 

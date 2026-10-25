@@ -35,7 +35,7 @@ import * as scenariosHandlers from '../ipc/scenarios.handlers';
 import { buildReleaseUpdateHandlers } from '../ipc/releaseUpdates';
 import { invokeHandler } from '../ipc/registerHandlers';
 import * as updateChecker from '../services/UpdateChecker';
-import { clearAuthToken, LogoutNotSavedError } from '../services/auth';
+import { logout as sharedLogout, LogoutNotSavedError } from '../services/auth';
 import { LOGOUT_NOT_SAVED } from '../ipc/logoutCode';
 import { initializeHeaders } from '../api/randomizer';
 import * as settings from '../settings';
@@ -226,7 +226,7 @@ const openEventStream = (res: ServerResponse, clients: Set<ServerResponse>) => {
 // to the environment default; this shell only answers JSON.
 const logout = async (res: ServerResponse) => {
     try {
-        await clearAuthToken();
+        await sharedLogout();
     } catch (err) {
         logger.withCategory('authentication').error('Logout failed to clear token', err);
         // A logout the settings refused did not log anyone out: say so.

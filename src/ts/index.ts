@@ -1,7 +1,7 @@
 import { app, ipcMain, shell } from 'electron';
 import * as settings from './settings';
 import * as logger from './logger';
-import { clearAuthToken, LogoutNotSavedError } from './services/auth';
+import { logout, LogoutNotSavedError } from './services/auth';
 import * as logIpc from './ipc/log.handlers';
 import * as updateIpc from './ipc/update.handlers';
 import * as miscIpc from './ipc/misc.handlers';
@@ -186,7 +186,7 @@ ipcMain.on('logout', (event) => {
     let refused = false;
     void (async () => {
         // Always clear the token on logout (regardless of stay logged in setting)
-        await clearAuthToken();
+        await logout();
     })()
         .catch((err) => {
             logger.withCategory('authentication').error('Logout failed to clear token', err);
@@ -205,7 +205,7 @@ ipcMain.on('logout', (event) => {
         .finally(() => {
             if (refused) return;
 
-            // Re-check the window here, not just at entry. clearAuthToken awaits a settings
+            // Re-check the window here, not just at entry. logout awaits a settings
             // flush, and the user can close the main window during that await — dereferencing
             // a destroyed window inside .finally() threw an unhandled rejection in the main
             // process, which has no global handler. Nothing left to tear down in that case,

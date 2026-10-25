@@ -119,32 +119,52 @@ class LogoutNotSavedError extends Error {
  * launch. On Electron/CLI the write is synchronous and the flush no-ops.
  *
  * Shell-specific behavior (window teardown, event emission, logging
- * wording) stays with each caller. A logout also returns the mode to the
- * environment default: the reset is queued in the same durable write as the
- * cleared token — the one flush covers both — and only when the save held,
- * so a refused logout leaves everything as it is.
+ * wording) stays with each caller.
  *
+ * @param resetMode - true only for the explicit-logout wrapper (`logout`): a held
+ *   save then also queues the mode's return to the environment default.
  * @returns true when a token was actually cleared.
  * @throws when the sign-out could not be saved (the settings refuse the write): a logout that did not hold is reported,
  *   never taken for one. (One made while the stored settings have not been read yet is refused like any save then, and
  *   reported the same way.)
  */
-const clearAuthToken = async (): Promise<boolean> => {
+const clearAuthTokenCore = async ({ resetMode }: { resetMode: boolean }): Promise<boolean> => {
     const hadToken = !!settings.getSetting('token');
     const saved = settings.setSetting('token', '');
     // A refused sign-out leaves the user logged in: what is remembered about the account stays.
     if (saved) {
         forgetAccountMemory();
-        // Order is load-bearing: the mock reset must be QUEUED BEFORE the flush —
-        // on Capacitor the flush is the only thing that makes a write-behind write
-        // durable, so a reset placed after it would never survive an OS kill.
-        // The reset's own false return is ignored on purpose: the token clear already held, and that is what matters.
-        settings.setSetting('mock', settings.getEnvironmentInfo().defaultMock);
+        if (resetMode) {
+            // Order is load-bearing: the mock reset must be QUEUED BEFORE the flush —
+            // on Capacitor the flush is the only thing that makes a write-behind write
+            // durable, so a reset placed after it would never survive an OS kill.
+            // The reset's own false return is ignored on purpose: the token clear already held, and that is what matters.
+            settings.setSetting('mock', settings.getEnvironmentInfo().defaultMock);
+        }
     }
     await settings.flushPendingWrites();
     if (!saved) throw new LogoutNotSavedError();
     return hadToken;
 };
+
+/**
+ * Clear the token — and nothing else. For paths that are not an explicit logout
+ * (the stay-logged-in quit path, any auth-failure cleanup): the mode is left
+ * exactly as it is. The explicit-logout wrapper (`logout`) adds the mode reset.
+ *
+ * @returns true when a token was actually cleared.
+ */
+const clearAuthToken = (): Promise<boolean> => clearAuthTokenCore({ resetMode: false });
+
+/**
+ * An explicit logout: everything `clearAuthToken` does, plus the mode's return
+ * to the environment default. The reset is queued in the same durable write as
+ * the cleared token — the one flush covers both — and only when the save held,
+ * so a refused logout leaves everything as it is.
+ *
+ * @returns true when a token was actually cleared.
+ */
+const logout = (): Promise<boolean> => clearAuthTokenCore({ resetMode: true });
 
 /**
  * Store the token a login just obtained. When it differs from the one stored, the account may have
@@ -183,6 +203,7 @@ export {
     requireAuthToken,
     extractAuthResult,
     clearAuthToken,
+    logout,
     switchAccountToken,
     clearTokenUnlessStayingLoggedIn,
     LogoutNotSavedError,

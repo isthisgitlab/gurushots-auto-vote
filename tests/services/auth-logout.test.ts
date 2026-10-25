@@ -47,7 +47,7 @@ const settings = jest.mocked(settingsModule as typeof settingsModule & { __state
 import type * as authModule from '../../src/ts/services/auth';
 import type * as openChallengeCacheModule from '../../src/ts/services/openChallengeCache';
 import type * as chosenPhotosModule from '../../src/ts/services/autoFill/chosenPhotos';
-const { clearAuthToken, switchAccountToken } = require('../../src/ts/services/auth') as typeof authModule;
+const { clearAuthToken, logout, switchAccountToken } = require('../../src/ts/services/auth') as typeof authModule;
 
 describe('clearAuthToken', () => {
     beforeEach(() => {
@@ -138,10 +138,51 @@ describe('clearAuthToken', () => {
         expect(settings.flushPendingWrites).toHaveBeenCalledTimes(1);
     });
 
-    it('returns the mode to the environment default when the sign-out holds', async () => {
+    it('does not touch the mock flag — the mode reset belongs to the explicit logout', async () => {
         settings.__state.cached.mock = false;
 
         await clearAuthToken();
+
+        // The quit path clears the token only: no reset write, and the environment was never asked for its default.
+        expect(settings.setSetting).toHaveBeenCalledTimes(1);
+        expect(settings.setSetting).toHaveBeenCalledWith('token', '');
+        expect(settings.getEnvironmentInfo).not.toHaveBeenCalled();
+        expect(settings.__state.cached.mock).toBe(false);
+    });
+
+    it('reports a logout the settings refused, never takes it for one, and keeps what is remembered of the account that is still logged in', async () => {
+        settings.setSetting.mockReturnValueOnce(false);
+
+        await expect(clearAuthToken()).rejects.toThrow('logout-not-saved');
+
+        expect(settings.forgetOpenChallengeIds).not.toHaveBeenCalled();
+        expect(settings.flushPendingWrites).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports false when no token was set', async () => {
+        settings.__state.cached = { token: '' };
+        expect(await clearAuthToken()).toBe(false);
+    });
+});
+
+/**
+ * The explicit-logout wrapper: everything clearAuthToken does, plus the mode's
+ * return to the environment default. A quit with stay-logged-in off must never
+ * reset the mode — only an explicit logout does — so the reset lives behind
+ * this wrapper, not in the shared core.
+ */
+describe('logout', () => {
+    beforeEach(() => {
+        settings.__state.cached = { token: 'old-token' };
+        settings.__state.persisted = { token: 'old-token' };
+        settings.__state.flushCalls = 0;
+        jest.clearAllMocks();
+    });
+
+    it('returns the mode to the environment default when the sign-out holds', async () => {
+        settings.__state.cached.mock = false;
+
+        await logout();
 
         expect(settings.setSetting).toHaveBeenCalledWith('mock', true);
         expect(settings.__state.cached.mock).toBe(true);
@@ -152,7 +193,7 @@ describe('clearAuthToken', () => {
         settings.__state.cached.mock = false;
         settings.setSetting.mockReturnValueOnce(false);
 
-        await expect(clearAuthToken()).rejects.toThrow('logout-not-saved');
+        await expect(logout()).rejects.toThrow('logout-not-saved');
 
         // Only the refused token write was attempted — no reset rode along.
         expect(settings.setSetting).toHaveBeenCalledTimes(1);
@@ -175,26 +216,12 @@ describe('clearAuthToken', () => {
             settings.__state.persisted = { ...settings.__state.cached };
         });
 
-        await clearAuthToken();
+        await logout();
 
         // A Capacitor OS kill between the writes still loses the session: the reset
         // must already be queued when the flush — the only durability point — runs.
         expect(order).toEqual(['token', 'mock', 'flush']);
         expect(mockPendingAtFlush).toBe(true);
-    });
-
-    it('reports a logout the settings refused, never takes it for one, and keeps what is remembered of the account that is still logged in', async () => {
-        settings.setSetting.mockReturnValueOnce(false);
-
-        await expect(clearAuthToken()).rejects.toThrow('logout-not-saved');
-
-        expect(settings.forgetOpenChallengeIds).not.toHaveBeenCalled();
-        expect(settings.flushPendingWrites).toHaveBeenCalledTimes(1);
-    });
-
-    it('reports false when no token was set', async () => {
-        settings.__state.cached = { token: '' };
-        expect(await clearAuthToken()).toBe(false);
     });
 });
 

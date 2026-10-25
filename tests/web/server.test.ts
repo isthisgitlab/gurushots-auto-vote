@@ -71,7 +71,7 @@ jest.mock('../../src/ts/services/UpdateChecker', () => ({
 }));
 jest.mock('../../src/ts/services/auth', () => {
     class LogoutNotSavedError extends Error {}
-    return { clearAuthToken: jest.fn(async () => true), LogoutNotSavedError };
+    return { logout: jest.fn(async () => true), LogoutNotSavedError };
 });
 jest.mock('../../src/ts/api/randomizer', () => ({ initializeHeaders: jest.fn() }));
 jest.mock('../../src/ts/settings', () => ({
@@ -310,7 +310,7 @@ describe('access token', () => {
                 success: false,
                 error: 'web-shell-token',
             });
-            expect(auth.clearAuthToken).not.toHaveBeenCalled();
+            expect(auth.logout).not.toHaveBeenCalled();
         },
     );
 
@@ -550,11 +550,11 @@ describe('logout', () => {
     test('clears the token through the shared logout core', async () => {
         const reply = await request('POST', '/api/logout', { headers: JSON_HEADERS, body: '{"args":[]}' });
         expect(parsed(reply)).toEqual({ result: { success: true } });
-        expect(auth.clearAuthToken).toHaveBeenCalled();
+        expect(auth.logout).toHaveBeenCalled();
     });
 
     test('a logout the settings refused is answered as refused', async () => {
-        auth.clearAuthToken.mockRejectedValueOnce(new auth.LogoutNotSavedError());
+        auth.logout.mockRejectedValueOnce(new auth.LogoutNotSavedError());
         settings.setSetting.mockClear();
 
         const reply = await request('POST', '/api/logout', { headers: JSON_HEADERS, body: '' });
@@ -564,7 +564,7 @@ describe('logout', () => {
     });
 
     test('a failed token flush is logged and the logout still completes', async () => {
-        auth.clearAuthToken.mockRejectedValueOnce(new Error('disk full'));
+        auth.logout.mockRejectedValueOnce(new Error('disk full'));
         const reply = await request('POST', '/api/logout', { headers: JSON_HEADERS, body: '' });
         expect(reply.status).toBe(200);
         expect(mockLog.error).toHaveBeenCalledWith('Logout failed to clear token', expect.any(Error));

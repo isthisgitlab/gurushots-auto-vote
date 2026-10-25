@@ -39,7 +39,7 @@ jest.mock('../../src/ts/apiFactory', () => {
     return { __mw: middleware, getMiddleware: jest.fn(() => middleware), refreshApi: jest.fn() };
 });
 
-jest.mock('../../src/ts/services/auth', () => ({ clearAuthToken: jest.fn() }));
+jest.mock('../../src/ts/services/auth', () => ({ logout: jest.fn() }));
 
 jest.mock('../../src/ts/cli/prompts', () => ({
     createReadlineInterface: jest.fn(),
@@ -88,7 +88,7 @@ const apiFactory = jest.mocked(
         }
     >(apiFactoryModule),
 );
-const { clearAuthToken } = jest.mocked(require('../../src/ts/services/auth') as typeof authModule);
+const { logout } = jest.mocked(require('../../src/ts/services/auth') as typeof authModule);
 import promptsModule = require('../../src/ts/cli/prompts');
 const prompts = jest.mocked(promptsModule);
 // The handler-module mocks expose their jest.fn table for the assertions.
@@ -131,7 +131,7 @@ beforeEach(() => {
         prompts.askYesNo,
         apiFactory.__mw.cliLogin,
         updateChecker.checkForUpdates,
-        clearAuthToken,
+        logout,
     ].forEach((m) => m.mockReset());
     apiFactory.__mw.isAuthenticated.mockReturnValue(true);
     exitSpy = jest.spyOn(process, 'exit').mockImplementation((code) => {
@@ -225,19 +225,19 @@ describe('auth: login', () => {
 
 describe('auth: logout', () => {
     test('reports a cleared token', async () => {
-        clearAuthToken.mockResolvedValue(true);
+        logout.mockResolvedValue(true);
         await handleLogout();
         expect(msgs('success')).toEqual(['Logged out — token cleared']);
     });
 
     test('reports already logged out', async () => {
-        clearAuthToken.mockResolvedValue(false);
+        logout.mockResolvedValue(false);
         await handleLogout();
         expect(msgs('info')).toEqual(['Already logged out — no token was set']);
     });
 
     test('a logout the saved settings refused says so in words, not by its code', async () => {
-        clearAuthToken.mockRejectedValue(new Error('logout-not-saved'));
+        logout.mockRejectedValue(new Error('logout-not-saved'));
 
         await expect(handleLogout()).resolves.toBe(false);
 
@@ -245,7 +245,7 @@ describe('auth: logout', () => {
     });
 
     test('a logout refused for a reason that carries no message is still told', async () => {
-        clearAuthToken.mockRejectedValue('weird');
+        logout.mockRejectedValue('weird');
 
         await expect(handleLogout()).resolves.toBe(false);
 
@@ -253,7 +253,7 @@ describe('auth: logout', () => {
     });
 
     test('a logout the settings refused is an error, not a success: the user is told they are still logged in', async () => {
-        clearAuthToken.mockRejectedValue(new Error('The sign-out could not be saved'));
+        logout.mockRejectedValue(new Error('The sign-out could not be saved'));
 
         await expect(handleLogout()).resolves.toBe(false);
 

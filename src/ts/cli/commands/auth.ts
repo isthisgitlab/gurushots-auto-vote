@@ -7,7 +7,7 @@
 import * as logger from '../../logger';
 import * as settings from '../../settings';
 import { refreshApi, getMiddleware } from '../../apiFactory';
-import { clearAuthToken } from '../../services/auth';
+import { logout } from '../../services/auth';
 import { errorMessage } from '../../errorMessage';
 import { LOGOUT_NOT_SAVED } from '../../ipc/logoutCode';
 import { createReadlineInterface, askYesNo, askInput, askSecret } from '../prompts';
@@ -91,7 +91,7 @@ const handleLogin = async (): Promise<boolean> => {
 const handleLogout = async (): Promise<boolean> => {
     let hadToken: boolean;
     try {
-        hadToken = await clearAuthToken();
+        hadToken = await logout();
     } catch (error) {
         logger
             .withCategory('authentication')
@@ -100,7 +100,7 @@ const handleLogout = async (): Promise<boolean> => {
             );
         return false;
     }
-    // The sign-out is refused while the saved settings are not in use (clearAuthToken throws then), so a saved token
+    // The sign-out is refused while the saved settings are not in use (logout throws then), so a saved token
     // is gone exactly when this answers true.
     if (hadToken) {
         logger.withCategory('authentication').success('Logged out — token cleared');
