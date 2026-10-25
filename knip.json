@@ -20,7 +20,7 @@
         "@/*": ["src/ts/react/*"]
     },
     "ignoreDependencies": ["postject"],
-    "ignoreBinaries": ["osascript", "notify-send", "pgrep"],
+    "ignoreBinaries": ["notify-send", "pgrep"],
     "rules": {
         "exports": "off",
         "nsExports": "off"
