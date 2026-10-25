@@ -276,7 +276,7 @@ export function SettingsRecoveryNotice({ returnFocusTo }: { returnFocusTo?: RefO
                                             else actionButtons.current.delete(action);
                                         }}
                                         type="button"
-                                        className={`btn btn-sm ${ACTIONS[action].primary ? 'btn-neutral' : 'btn-outline'}`}
+                                        className={`btn btn-sm max-sm:min-h-10 ${ACTIONS[action].primary ? 'btn-neutral' : 'btn-outline'}`}
                                         onClick={() => request(action)}
                                         disabled={busy !== null}
                                         aria-busy={busy === action}
@@ -287,7 +287,11 @@ export function SettingsRecoveryNotice({ returnFocusTo }: { returnFocusTo?: RefO
                             </div>
                         )}
                     </div>
-                    <button type="button" className="btn btn-sm" onClick={() => setDismissedKey(noticeKey(recovery))}>
+                    <button
+                        type="button"
+                        className="btn btn-sm max-sm:min-h-10"
+                        onClick={() => setDismissedKey(noticeKey(recovery))}
+                    >
                         {t('errors.dismiss')}
                     </button>
                 </div>
@@ -315,7 +319,7 @@ export function SettingsRecoveryNotice({ returnFocusTo }: { returnFocusTo?: RefO
                     </div>
                 </div>
                 {outcome && (
-                    <button type="button" className="btn btn-sm" onClick={dismissOutcome}>
+                    <button type="button" className="btn btn-sm max-sm:min-h-10" onClick={dismissOutcome}>
                         {t('errors.dismiss')}
                     </button>
                 )}

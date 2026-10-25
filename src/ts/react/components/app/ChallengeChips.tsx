@@ -35,11 +35,10 @@ export function ChipListPanel({
  * ChallengeCard (id="challenge-<id>"). Content is caller-supplied so a
  * chip can carry extra detail (e.g. the boost countdown); `className`
  * appends DaisyUI button modifiers so a caller can set a chip apart
- * (e.g. BoostWindowBanner's `btn-info` chips). The chip keeps
- * the stock btn-sm height like every other button; a title too long for
- * the row is truncated by ChipTitle rather than wrapping the chip taller.
- * Other buttons now carry a mobile-only 40px floor (`max-sm:min-h-10`) while
- * the chips intentionally keep the stock `btn-sm` height at every size.
+ * (e.g. BoostWindowBanner's `btn-info` chips). The chip keeps the stock
+ * `btn-sm` height at every size while other buttons carry a mobile-only
+ * 40px floor (`max-sm:min-h-10`); a title too long for the row is
+ * truncated by ChipTitle rather than wrapping the chip taller.
  */
 export function ChallengeChip({
     challengeId,
