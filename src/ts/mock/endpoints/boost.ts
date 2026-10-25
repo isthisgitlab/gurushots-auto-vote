@@ -41,9 +41,9 @@ const applyBoost: typeof applyBoostModule.applyBoost = mockMethod(
                 return simulateApiResponse(boost.mockBoostSuccess, 1500);
             }
             if (boostState === 'USED') {
-                logger.withCategory('voting').info('Boost already used', null);
+                logger.withCategory('voting').infoT('mb8ff0ba416b3', [], null);
             } else {
-                logger.withCategory('voting').info('Boost not available', null);
+                logger.withCategory('voting').infoT('m00a78f312ea3', [], null);
             }
             return simulateApiResponse(null, 800);
         };

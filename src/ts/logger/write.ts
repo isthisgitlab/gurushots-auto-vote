@@ -50,6 +50,7 @@ const writeLog = (
     data: unknown = null,
     category: string | null = null,
     icon: string = LEVEL_ICONS[level],
+    template?: LogEntry['template'],
 ) => {
     try {
         const context = getContext();
@@ -77,7 +78,10 @@ const writeLog = (
         // JSON.stringify escapes embedded CR/LF into a literal \n.
         if (sanitized != null && typeof sanitized !== 'object') sanitized = stripTerminalControl(sanitized);
         const seq = nextSeq++;
-        const entry = { seq, level, context, category: cat, timestamp, message, data: sanitized };
+        // The template rides only on the in-memory entries (ring buffer + GUI
+        // fan-out); the log file and console keep the rendered line alone.
+        const templateField = template ? { template } : {};
+        const entry = { seq, level, context, category: cat, timestamp, message, data: sanitized, ...templateField };
 
         recentLogs.push(entry);
         if (recentLogs.length > MAX_RECENT) recentLogs.shift();
@@ -108,6 +112,7 @@ const writeLog = (
                 category: cat,
                 timestamp: getTimeString(),
                 message,
+                ...templateField,
             });
         }
     } catch (error) {

@@ -68,8 +68,8 @@ const boostEntryById = async (
     return boostResult;
 };
 
-const logBoostTarget = (challenge: Challenge, message: string) => {
-    logger.withCategory('boost').info(`${logger.challengeTag(challenge)} ${message}`, null);
+const logBoostTarget = (challenge: Challenge, key: string, params: unknown[]) => {
+    logger.withCategory('boost').infoT(key, [logger.challengeTag(challenge), ...params], null);
 };
 
 /**
@@ -103,12 +103,7 @@ const hasEntries = (challenge: Challenge): boolean => {
 
 /** Log why no entry can take the boost, so it is skipped rather than sent to fail. */
 const logNoBoostEntry = (challenge: Challenge) => {
-    logBoostTarget(
-        challenge,
-        hasEntries(challenge)
-            ? 'no entry can take the boost (every entry has Turbo or is pinned for Turbo) — boost skipped'
-            : 'no entry to boost yet — boost skipped',
-    );
+    logBoostTarget(challenge, hasEntries(challenge) ? 'maa2d3401e212' : 'md99c0b138489', []);
 };
 
 /**
@@ -157,21 +152,18 @@ const resolveBoostTarget = async (ctx: ActionContext): Promise<BoostTarget | nul
     if (filled.reason === 'challenge-gone') {
         // The live re-check confirmed the challenge left the active list —
         // boosting an existing entry on it would just be a second failing call.
-        logBoostTarget(challenge, 'challenge left the active list — boost skipped');
+        logBoostTarget(challenge, 'm68af6d2b3623', []);
         return null;
     }
     // 'always' mode falls back to the configured Boost Entry when no fresh photo can be submitted
     // (full / none / failed); with none that can take the boost either, it is skipped, not sent to fail.
     const fallback = existing();
     if (!fallback) {
-        logBoostTarget(
-            challenge,
-            `boost fill-new unavailable (${filled.reason}); no entry can take the boost — boost skipped`,
-        );
+        logBoostTarget(challenge, 'm7c8a6b6fc65b', [filled.reason]);
         wakeAtPinRelease(ctx);
         return null;
     }
-    logBoostTarget(challenge, `boost fill-new unavailable (${filled.reason}); boosting existing entry`);
+    logBoostTarget(challenge, 'm6c65118e63fa', [filled.reason]);
     return fallback;
 };
 
@@ -190,12 +182,7 @@ const applyAvailableBoost = async (
     // Surface the override so an applied boost on a challenge with
     // Auto-Apply Boost off is explained rather than looking like a bug.
     if (!settings.getEffectiveSetting('autoBoost', challenge.id.toString())) {
-        logger
-            .withCategory('boost')
-            .info(
-                `${logger.challengeTag(challenge)} Emergency Submit window — applying available boost despite Auto-Apply Boost being off`,
-                null,
-            );
+        logger.withCategory('boost').infoT('m1dd20ed44833', [logger.challengeTag(challenge)], null);
     }
     const timeDisplay = formatDuration(timeUntilDisplayBase);
 
@@ -246,10 +233,19 @@ const logBoostNotReady = (
     // Both branches render the threshold they actually use: the key-unlocked window
     // is a setting, so it is read here rather than restated as a constant.
     const keyUnlockedWindow = votingLogic.getEffectiveKeyUnlockedBoostTime(challenge.id.toString());
-    const reason = isTimerBasedAvailable
-        ? `${timeDisplay} until deadline (threshold: ${effectiveBoostTime / 60}m)`
-        : `${timeDisplay} until challenge ends (needs ≤ ${Math.round(keyUnlockedWindow / 60)}m to auto-apply)`;
-    logger.withCategory('voting').info(`${logger.challengeTag(challenge)} Boost not ready - ${reason}`, null);
+    if (isTimerBasedAvailable) {
+        logger
+            .withCategory('voting')
+            .infoT('m9c4743591d36', [logger.challengeTag(challenge), timeDisplay, effectiveBoostTime / 60], null);
+    } else {
+        logger
+            .withCategory('voting')
+            .infoT(
+                'mf56a828d276b',
+                [logger.challengeTag(challenge), timeDisplay, Math.round(keyUnlockedWindow / 60)],
+                null,
+            );
+    }
 };
 
 /**
@@ -277,10 +273,7 @@ const holdBoostForFreshEntry = (ctx: ActionContext, imageId: string): boolean =>
     if (holdUntil === null) return false;
     const { challenge, now } = ctx;
     challenge.boostHoldUntil = holdUntil;
-    logBoostTarget(
-        challenge,
-        `Boost held ${formatDuration(holdUntil - now)} — photo ${imageId} entered the challenge too recently to be boosted yet`,
-    );
+    logBoostTarget(challenge, 'mcf9ca1fdf16b', [formatDuration(holdUntil - now), imageId]);
     return true;
 };
 
@@ -304,7 +297,7 @@ const skipForUncertainPhoto = (ctx: ActionContext, target: BoostTarget, isTimerB
     ) {
         return false;
     }
-    logBoostTarget(challenge, `auto-Boost skipped for uncertain auto-submitted photo ${oneLine(target.imageId)}`);
+    logBoostTarget(challenge, 'mefe4e859a5ca', [oneLine(target.imageId)]);
     return true;
 };
 
@@ -316,7 +309,7 @@ export const runBoost = async (ctx: ActionContext) => {
     const { isTimerBasedAvailable, isKeyUnlockedAvailable } = readBoostAvailability(challenge);
     if (!isTimerBasedAvailable && !isKeyUnlockedAvailable) return;
 
-    logger.withCategory('voting').info(`${logger.challengeTag(challenge)} Boost available`, null);
+    logger.withCategory('voting').infoT('mf275019cebb9', [logger.challengeTag(challenge)], null);
 
     // Use the centralized voting logic service for boost decisions.
     // emergency:true lets shouldApplyBoost apply an available boost
@@ -332,9 +325,7 @@ export const runBoost = async (ctx: ActionContext) => {
             logBoostNotReady(challenge, isTimerBasedAvailable, timeUntilDisplayBase, effectiveBoostTime);
             return;
         }
-        logger
-            .withCategory('boost')
-            .info(`${logger.challengeTag(challenge)} Boost due early for the boost mission (${boostNeed} to go)`, null);
+        logger.withCategory('boost').infoT('m5ad141b74f8c', [logger.challengeTag(challenge), boostNeed], null);
     }
     const target = await resolveBoostTarget(ctx);
     if (
@@ -373,10 +364,7 @@ const resolveSuspendBoostTarget = (ctx: ActionContext): BoostTarget | null => {
     if (!existing) {
         if (!blocked && hasEntries(challenge) && votingLogic.resolveBoostFillNewMode(challenge, cid) !== 'no') {
             // Fill-new would have put the boost on a fresh photo, and the pin keeps the existing one.
-            logBoostTarget(
-                challenge,
-                'every entry has Turbo or is pinned for Turbo, and a new photo cannot be submitted before sleep — boost skipped',
-            );
+            logBoostTarget(challenge, 'mc37905687d16', []);
         } else {
             // No entry yet, or every entry turboed or pinned for Turbo with the pin never giving way
             // (the conflict row describeDeadlineActions keeps); applyBoost would only fail.
@@ -385,16 +373,10 @@ const resolveSuspendBoostTarget = (ctx: ActionContext): BoostTarget | null => {
         return null;
     }
     if (votingLogic.resolveBoostFillNewMode(challenge, challenge.id.toString()) !== 'no') {
-        logBoostTarget(
-            challenge,
-            'boost fill-new is on, but a new photo cannot be submitted before sleep; boosting existing entry',
-        );
+        logBoostTarget(challenge, 'm21b1261f69f8', []);
     }
     if (existing.atRelease) {
-        logBoostTarget(
-            challenge,
-            `photo ${oneLine(existing.imageId)} is pinned for Turbo, which gives way at its release time after the device sleeps — boosting it now`,
-        );
+        logBoostTarget(challenge, 'mc93c515e28d4', [oneLine(existing.imageId)]);
     }
     return existing;
 };
@@ -418,16 +400,13 @@ export const runSuspendBoost = async (ctx: ActionContext): Promise<SuspendBoostO
     const { challenge, now } = ctx;
     const { isTimerBasedAvailable, isKeyUnlockedAvailable } = readBoostAvailability(challenge);
     if (!isTimerBasedAvailable && !isKeyUnlockedAvailable) {
-        logBoostTarget(challenge, 'boost no longer available — nothing to send before sleep');
+        logBoostTarget(challenge, 'm94322a7a4ec8', []);
         return 'skipped';
     }
     const target = resolveSuspendBoostTarget(ctx);
     if (!target || skipForUncertainPhoto(ctx, target, isTimerBasedAvailable)) return 'skipped';
     if (freshEntryHoldUntil(ctx, target.imageId) !== null) {
-        logBoostTarget(
-            challenge,
-            `photo ${oneLine(target.imageId)} has not finished "Wait Before Boosting a New Photo", but the device is going to sleep — boosting it now`,
-        );
+        logBoostTarget(challenge, 'm9c0719be2c97', [oneLine(target.imageId)]);
     }
     const landed = await applyAvailableBoost(
         ctx,

@@ -646,6 +646,41 @@ describe('withCategory', () => {
         expectLast({ message: invalid(expect.stringContaining('25% (1/4)')) });
     });
 
+    test('the T-methods render the catalog English and attach the template', () => {
+        const { logger } = loadLogger();
+        const log = logger.withCategory('voting');
+        const expectLast = (fields: Partial<LoggerModule.LogEntry>) =>
+            expect(lastEntry(logger)).toMatchObject({ category: 'voting', ...fields });
+
+        // The rendered line is byte-identical to the plain call the emitter replaced.
+        log.info('[Challenge 42: Sunset] Submitting votes for 3 images', null);
+        const plain = lastEntry(logger).message;
+        log.infoT('mc0e03d96165c', ['[Challenge 42: Sunset]', 3], null);
+        expect(lastEntry(logger).message).toBe(plain);
+        expectLast({
+            level: 'INFO',
+            message: 'ℹ️ [Challenge 42: Sunset] Submitting votes for 3 images',
+            template: { key: 'mc0e03d96165c', params: ['[Challenge 42: Sunset]', 3] },
+        });
+
+        log.warningT('m8dc9275e52f1', ['[Challenge 42: Sunset]']);
+        expectLast({ level: 'WARN', message: '⚠️ [Challenge 42: Sunset] No vote images available — skipping' });
+        log.errorT('m01a2b02c3145', [], { challengeId: '42' });
+        expectLast({ level: 'ERROR', message: '❌ Selected boost entry has no id', data: { challengeId: '42' } });
+    });
+
+    test('a T-entry carries its template to the GUI fan-out; a plain entry carries none', () => {
+        const { logger } = loadLogger();
+        const sink = jest.fn<void, [LoggerModule.GuiLogEntry]>();
+        g.sendLogToGUI = sink;
+        logger.withCategory('voting').infoT('mf275019cebb9', ['[Challenge 1: X]'], null);
+        logger.info('plain');
+        expect(sink.mock.calls[0][0]).toMatchObject({
+            template: { key: 'mf275019cebb9', params: ['[Challenge 1: X]'] },
+        });
+        expect(sink.mock.lastCall?.[0]).not.toHaveProperty('template');
+    });
+
     test('operations started on a scoped logger end at the start level and category', () => {
         const { logger } = loadLogger();
         const log = logger.withCategory('api');

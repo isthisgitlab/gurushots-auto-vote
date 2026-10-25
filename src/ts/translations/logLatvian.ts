@@ -248,6 +248,7 @@ export const logMessages = {
     m5a6d92dd49a4:
         'Neizdevās izmantot Boost izaicinājumā "{0}" (iemeslu skati žurnālā). Lai izmantotu Boost vienam konkrētam foto, norādi --image=<id>',
     m5a89e42191e3: 'backgroundActivity: enerģijas taupīšanas bloķētājs nav pieejams: {0}',
+    m5ad141b74f8c: '{0} Boost tiek veikts agrāk Boost misijas izpildei (vēl jāizpilda: {1})',
     m5b02d5838c5b: '{0}: iesniegšanas laikā izaicinājumā {1} radās izņēmums: {2}',
     m5b38ce53a4b3: 'Kļūda, apstrādājot get-setting pieprasījumu uzstādījumam "{0}":',
     m5b4b2f837716: '🔄 Apmaiņas priekšskatījuma pieprasījums: izaicinājums={0}, foto={1}',

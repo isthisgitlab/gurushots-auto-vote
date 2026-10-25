@@ -70,6 +70,9 @@ jest.mock('../../src/ts/logger', () => {
         success: jest.fn(),
         error: jest.fn(),
         debug: jest.fn(),
+        infoT: jest.fn(),
+        warningT: jest.fn(),
+        errorT: jest.fn(),
     };
     return { withCategory: jest.fn(() => scoped), challengeTag: jest.fn(() => '[challenge]') };
 });

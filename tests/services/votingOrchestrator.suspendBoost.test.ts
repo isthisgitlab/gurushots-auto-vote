@@ -42,6 +42,7 @@ import autoFillModule = require('../../src/ts/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
 import type * as boostModule from '../../src/ts/services/votingOrchestrator/boost';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
+import { renderLogTemplate } from '../helpers/logTemplate';
 import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import type { VotingPassApi } from '../../src/ts/types/votingPass';
@@ -52,12 +53,26 @@ const { createMemoryEntryAgeLedger } = require('../../src/ts/entryAgeStore') as 
 
 const NOW = Math.floor(Date.now() / 1000);
 
-const log = {
+// The T-methods render through the real catalog onto the same level fn, so the
+// assertions below keep reading today's rendered lines.
+type SinkFn = jest.Mock<void, unknown[]>;
+type TemplateFn = jest.Mock<void, [string, unknown[], unknown?]>;
+const log: Record<'info' | 'error' | 'debug' | 'startOperation' | 'endOperation', SinkFn> &
+    Record<'infoT' | 'warningT' | 'errorT', TemplateFn> = {
     info: jest.fn<void, unknown[]>(),
     error: jest.fn<void, unknown[]>(),
     debug: jest.fn<void, unknown[]>(),
     startOperation: jest.fn<void, unknown[]>(),
     endOperation: jest.fn<void, unknown[]>(),
+    infoT: jest.fn<void, [string, unknown[], unknown?]>((key, params, data) =>
+        log.info(renderLogTemplate(key, params), data),
+    ),
+    warningT: jest.fn<void, [string, unknown[], unknown?]>((key, params, data) =>
+        log.info(renderLogTemplate(key, params), data),
+    ),
+    errorT: jest.fn<void, [string, unknown[], unknown?]>((key, params, data) =>
+        log.error(renderLogTemplate(key, params), data),
+    ),
 };
 const messages = (level: keyof typeof log) =>
     log[level].mock.calls.map((c) => c.filter((a: unknown) => typeof a === 'string').join(' | '));

@@ -1,7 +1,7 @@
 import { logMessages as englishLogMessages } from '../../src/ts/translations/logEnglish';
 import { logMessages as latvianLogMessages } from '../../src/ts/translations/logLatvian';
 import { localizeLogMessage } from '../../src/ts/react/components/logs/localizeLogMessage';
-import { sentenceCaseLogMessage } from '../../src/ts/format/logSafe';
+import { sentenceCaseLogMessage, splitIcon } from '../../src/ts/format/logSafe';
 import { formatOversleptMessage } from '../../src/ts/scheduling/cadenceChain/oversleep';
 import { formatChosenSkipMessage } from '../../src/ts/services/autoFill/chosenPhotos';
 import { formatTagSearchFallbackMessage } from '../../src/ts/services/autoFill/candidates';
@@ -226,5 +226,72 @@ describe('Latvian log messages', () => {
         expect(localizeLogMessage('❌ upstream-specific-operation failed: upstream-specific-error')).toBe(
             '❌ upstream-specific-operation failed: upstream-specific-error',
         );
+    });
+});
+
+describe('forward template localization', () => {
+    const forward = (key: string, params: unknown[], message: string) => localizeLogMessage(message, { key, params });
+
+    test('localizes the chosen-photos tally line from its template and params', () => {
+        expect(
+            forward(
+                'm039ae621e4d5',
+                ['join', '[Challenge 42: Sunset]', 1, 0, 2, 0],
+                'ℹ️ join: looked for your chosen photos outside the themed search for [Challenge 42: Sunset] — 1 found, 0 not allowed here, 2 not in your library, 0 not reached',
+            ),
+        ).toBe(
+            'ℹ️ Pievienošanās: izvēlētie foto meklēti arī ārpus tēmas meklēšanas izaicinājumam [Izaicinājums 42: Sunset] — atrasti 1, šeit nav atļauti 0, tavā bibliotēkā nav 2, nesasniegti 0',
+        );
+    });
+
+    test('an entry whose key is missing from the catalogs falls back to the reverse matcher', () => {
+        expect(forward('mffffffffffff', [], 'upstream-specific-error')).toBe('upstream-specific-error');
+        expect(forward('mffffffffffff', [], 'ℹ️ Invalid timestamp provided')).toBe('ℹ️ Norādīts nederīgs laika zīmogs');
+    });
+
+    test('matches the reverse matcher on the migrated voting/fill lines', () => {
+        const cases: Array<[string, unknown[]]> = [
+            ['m00a78f312ea3', []],
+            ['mb8ff0ba416b3', []],
+            ['ma3387d8a60e8', []],
+            ['m243099e8f79d', []],
+            ['m01a2b02c3145', []],
+            ['m1176fb70d7ae', []],
+            ['mc0e03d96165c', ['[Challenge 42: Sunset]', 3]],
+            ['md9eea27255b5', ['[Challenge 42: Sunset]', 'normal threshold: exposure 10% < 90%']],
+            ['me55acfad2b92', ['[Challenge 42: Sunset]', 'normal threshold: exposure 90% >= 90%']],
+            ['m8dc9275e52f1', ['[Challenge 42: Sunset]']],
+            ['mf275019cebb9', ['[Challenge 42: Sunset]']],
+            ['m5ad141b74f8c', ['[Challenge 42: Sunset]', 2]],
+            ['m9c4743591d36', ['[Challenge 42: Sunset]', '10m', 10]],
+            ['mf56a828d276b', ['[Challenge 42: Sunset]', '10m', 15]],
+            ['m7c8a6b6fc65b', ['[Challenge 42: Sunset]', 'no-slots']],
+            ['m6c65118e63fa', ['[Challenge 42: Sunset]', 'no-slots']],
+            ['m68af6d2b3623', ['[Challenge 42: Sunset]']],
+            ['maa2d3401e212', ['[Challenge 42: Sunset]']],
+            ['md99c0b138489', ['[Challenge 42: Sunset]']],
+            ['mcf9ca1fdf16b', ['[Challenge 42: Sunset]', '9m', 'e1']],
+            ['mefe4e859a5ca', ['[Challenge 42: Sunset]', 'e1']],
+            ['m94322a7a4ec8', ['[Challenge 42: Sunset]']],
+            ['mc37905687d16', ['[Challenge 42: Sunset]']],
+            ['m21b1261f69f8', ['[Challenge 42: Sunset]']],
+            ['mc93c515e28d4', ['[Challenge 42: Sunset]', 'e1']],
+            ['m9c0719be2c97', ['[Challenge 42: Sunset]', 'e1']],
+        ];
+        for (const [key, params] of cases) {
+            const english = englishLogMessages[key as keyof typeof englishLogMessages]
+                .replace(/[\r\n\v\f\u0085\u2028\u2029]+/g, ' ')
+                .replace(slots, (_, index: string) => String(params[Number(index)]));
+            // A template that leads with its own icon is emitted bare; the rest carry the level icon.
+            const prefixes = splitIcon(english).icon !== '' ? [''] : ['', 'ℹ️ ', '⚠️ ', '❌ ', '🔍 '];
+            for (const prefix of prefixes) {
+                for (const body of [english, sentenceCaseLogMessage(english)]) {
+                    // The reference is the reverse matcher on the catalog's own
+                    // wording; the forward path must land on the same line for
+                    // every casing the logger can emit.
+                    expect(forward(key, params, prefix + body)).toBe(localizeLogMessage(prefix + english));
+                }
+            }
+        }
     });
 });

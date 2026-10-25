@@ -110,17 +110,31 @@ jest.mock('../../src/ts/logger', () => {
         __mockApiFn: mockApiFn,
     };
 
-    mock.withCategory = jest.fn(() => ({
-        info: mockInfoFn,
-        error: mockErrorFn,
-        debug: mockDebugFn,
-        success: mockSuccessFn,
-        warning: jest.fn(),
-        api: mockApiFn,
-        progress: jest.fn(),
-        startOperation: jest.fn(),
-        endOperation: jest.fn(),
-    }));
+    mock.withCategory = jest.fn(() => {
+        const { renderLogTemplate } = require('../helpers/logTemplate') as typeof import('../helpers/logTemplate');
+        const mockWarningFn = jest.fn();
+        return {
+            info: mockInfoFn,
+            error: mockErrorFn,
+            debug: mockDebugFn,
+            success: mockSuccessFn,
+            warning: mockWarningFn,
+            api: mockApiFn,
+            progress: jest.fn(),
+            startOperation: jest.fn(),
+            endOperation: jest.fn(),
+            // Rendered onto the shared fns, so the assertions below keep reading today's lines.
+            infoT: jest.fn((key: string, params: unknown[], data: unknown) => {
+                mockInfoFn(renderLogTemplate(key, params), data);
+            }),
+            warningT: jest.fn((key: string, params: unknown[], data: unknown) => {
+                mockWarningFn(renderLogTemplate(key, params), data);
+            }),
+            errorT: jest.fn((key: string, params: unknown[], data: unknown) => {
+                mockErrorFn(renderLogTemplate(key, params), data);
+            }),
+        };
+    });
 
     return mock;
 });

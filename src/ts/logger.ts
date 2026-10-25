@@ -1,8 +1,9 @@
 import { oneLine } from './format/logSafe';
 import { isSourceCode, getAppName, getContext, setContext, clearContext, devMode, cliMode } from './logger/context';
 import { currentLogFiles, cleanupOldLogs } from './logger/files';
-import { buildProgressMessage } from './logger/format';
+import { buildProgressMessage, LEVEL_ICONS } from './logger/format';
 import { sanitizeForLog, sanitizeLogString, redactMessage } from './logger/sanitize';
+import { logMessages as englishTemplates } from './translations/logEnglish';
 import {
     writeLog,
     printLine as printToConsole,
@@ -115,14 +116,40 @@ export type CategoryLogger = {
     success: (message: string, data?: unknown, duration?: number | null) => void;
     warning: (message: string, data?: unknown) => void;
     progress: (message: string, current?: number | null, total?: number | null) => void;
+    infoT: (key: string, params: unknown[], data?: unknown) => void;
+    warningT: (key: string, params: unknown[], data?: unknown) => void;
+    errorT: (key: string, params: unknown[], data?: unknown) => void;
     startOperation: (operationId: string, message: string, level?: LogLevel) => number;
     endOperation: typeof endOperation;
+};
+
+// Substitutes String(param) for the {n} slots of a log-catalog template.
+const templateSlots = /\{(\d+)\}/g;
+const renderTemplate = (template: string, params: unknown[]): string =>
+    template.replace(templateSlots, (_, index: string) => String(params[Number(index)]));
+
+// The T-methods' shared write path: renders the English template for the
+// message — log files and the CLI keep today's rendered lines — and attaches
+// { key, params } to the entry so the Logs page can localize forward instead
+// of reverse-matching the wording.
+const writeTemplate = (level: LogLevel, key: string, params: unknown[], data: unknown, category: string): void => {
+    writeLog(
+        level,
+        renderTemplate(englishTemplates[key as keyof typeof englishTemplates], params),
+        data,
+        category,
+        LEVEL_ICONS[level],
+        { key, params },
+    );
 };
 
 // Category logging - creates a logger bound to a category
 export const withCategory = (category: string): CategoryLogger => ({
     info: (message, data) => writeLog('INFO', message, data, category),
     error: (message, data) => writeLog('ERROR', message, data, category),
+    infoT: (key, params, data) => writeTemplate('INFO', key, params, data, category),
+    warningT: (key, params, data) => writeTemplate('WARN', key, params, data, category),
+    errorT: (key, params, data) => writeTemplate('ERROR', key, params, data, category),
     debug: (message, data) => {
         if (apiOrDebugEnabled()) writeLog('DEBUG', message, data, category);
     },

@@ -89,18 +89,32 @@ jest.mock('../src/ts/logger', () => ({
         MIDDLEWARE: 'middleware',
         UPDATE: 'update',
     },
-    withCategory: jest.fn(() => ({
-        info: jest.fn(),
-        error: jest.fn(),
-        debug: jest.fn(),
-        success: jest.fn(),
-        warning: jest.fn(),
-        api: jest.fn(),
-        apiRequest: jest.fn(),
-        startOperation: jest.fn(),
-        endOperation: jest.fn(),
-        progress: jest.fn(),
-    })),
+    // The T-methods render through the real catalog and land on the same level
+    // fn, so assertions written against the plain methods keep passing.
+    withCategory: jest.fn(() => {
+        const { renderLogTemplate } = require('./helpers/logTemplate') as typeof import('./helpers/logTemplate');
+        const log = {
+            info: jest.fn(),
+            error: jest.fn(),
+            debug: jest.fn(),
+            success: jest.fn(),
+            warning: jest.fn(),
+            api: jest.fn(),
+            apiRequest: jest.fn(),
+            startOperation: jest.fn(),
+            endOperation: jest.fn(),
+            progress: jest.fn(),
+        };
+        const tMethod =
+            (line: (message: string, data: unknown) => void) => (key: string, params: unknown[], data?: unknown) =>
+                line(renderLogTemplate(key, params), data);
+        return {
+            ...log,
+            infoT: jest.fn(tMethod(log.info)),
+            warningT: jest.fn(tMethod(log.warning)),
+            errorT: jest.fn(tMethod(log.error)),
+        };
+    }),
 }));
 
 // Global test timeout

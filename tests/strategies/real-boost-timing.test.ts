@@ -127,6 +127,9 @@ jest.mock('../../src/ts/logger', () => {
             endOperation: mockEndOperationFn,
             progress: jest.fn(),
             success: jest.fn(),
+            infoT: jest.fn(),
+            warningT: jest.fn(),
+            errorT: jest.fn(),
         })),
         challengeTag: (c: { id?: unknown; title?: unknown } | string | null | undefined, t?: string) =>
             c && typeof c === 'object'

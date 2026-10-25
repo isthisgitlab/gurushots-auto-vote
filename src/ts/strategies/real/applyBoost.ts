@@ -31,22 +31,17 @@ const applyBoost = async (
     const challengeId = id?.toString?.() || '';
     const entries = member?.ranking?.entries;
     if (!Array.isArray(entries) || entries.length === 0) {
-        logger.withCategory('voting').error('No entries available for boosting', { challengeId });
+        logger.withCategory('voting').errorT('ma3387d8a60e8', [], { challengeId });
         return null;
     }
     const picked = pickBoostEntry(challenge, challengeId, Math.floor(Date.now() / 1000));
     if (!picked) {
-        logger
-            .withCategory('voting')
-            .error(
-                "Couldn't apply Boost — every entry has Turbo or is pinned for Turbo (Boost and Turbo can't share an entry). Add another entry or unpin the photo",
-                { challengeId },
-            );
+        logger.withCategory('voting').errorT('m243099e8f79d', [], { challengeId });
         return null;
     }
     const boostImageId = picked.id;
     if (!boostImageId) {
-        logger.withCategory('voting').error('Selected boost entry has no id', { challengeId });
+        logger.withCategory('voting').errorT('m01a2b02c3145', [], { challengeId });
         return null;
     }
 

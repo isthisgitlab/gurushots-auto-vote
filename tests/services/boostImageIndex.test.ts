@@ -49,22 +49,35 @@ jest.mock('../../src/ts/api/api-client', () => ({
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8',
 }));
 
-jest.mock('../../src/ts/logger', () => ({
-    withCategory: jest.fn(() => ({
+jest.mock('../../src/ts/logger', () => {
+    const { renderLogTemplate } = require('../helpers/logTemplate') as typeof import('../helpers/logTemplate');
+    const info = jest.fn();
+    const warning = jest.fn();
+    const error = jest.fn();
+    // The T-methods render through the real catalog onto the same level fn, so
+    // the assertions below keep reading today's rendered lines.
+    const tInto = (line: (message: string, data: unknown) => void) => (key: string, params: unknown[], data: unknown) =>
+        line(renderLogTemplate(key, params), data);
+    return {
+        withCategory: jest.fn(() => ({
+            info,
+            warning,
+            error,
+            debug: jest.fn(),
+            success: jest.fn(),
+            startOperation: jest.fn(),
+            endOperation: jest.fn(),
+            infoT: jest.fn(tInto(info)),
+            warningT: jest.fn(tInto(warning)),
+            errorT: jest.fn(tInto(error)),
+        })),
         error: jest.fn(),
         info: jest.fn(),
         debug: jest.fn(),
         warning: jest.fn(),
         success: jest.fn(),
-        startOperation: jest.fn(),
-        endOperation: jest.fn(),
-    })),
-    error: jest.fn(),
-    info: jest.fn(),
-    debug: jest.fn(),
-    warning: jest.fn(),
-    success: jest.fn(),
-}));
+    };
+});
 
 const setBoostIndex = (value: unknown) => {
     settings.getEffectiveSetting.mockImplementation((key) => (key === 'boostImageIndex' ? value : undefined));

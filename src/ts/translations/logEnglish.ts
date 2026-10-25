@@ -242,6 +242,7 @@ export const logMessages = {
     m5a6d92dd49a4:
         'Failed to apply boost to "{0}" (see log for reason). To boost one photo yourself, pass --image=<id>',
     m5a89e42191e3: 'backgroundActivity: power-save blocker unavailable: {0}',
+    m5ad141b74f8c: '{0} Boost due early for the boost mission ({1} to go)',
     m5b02d5838c5b: '{0}: submit threw for {1}: {2}',
     m5b38ce53a4b3: 'Error handling get-setting request for key "{0}":',
     m5b4b2f837716: '🔄 Swap preview request: Challenge={0}, Image={1}',
