@@ -600,7 +600,10 @@ repeated six times is one that gets forgotten at one of them.
 - **Don't hand-roll `fs`.** `createJsonStore({fileName, prefKey})` (`settings/storage.ts`) is
   the reusable three-platform JSON store: sync fs at `userData/<fileName>` (mode `0o600`) on Electron/CLI,
   hydrate-once cache + ordered async write-behind to `@capacitor/preferences` on Capacitor, and the native
-  keyed preference bridge (`settings/storeTransport.ts`) on the Android headless service. Every consumer is
+  keyed preference bridge (`settings/storeTransport.ts`) on the Android headless service. The write-protocol
+  state behind that transport (the write serials and the cached and stored texts) changes in one place only,
+  `settings/settingsFileProtocol.ts`: the factory bodies and the method helpers read it and make every change
+  through its named transitions. Every consumer is
   listed in the store registry `settings/localData.ts` (`LOCAL_DATA_STORES`) — also what "Delete all local
   data" removes — and `tests/settings/localData.test.ts` fails for a `createJsonStore` call site missing there.
 - **The configuration (`config.json`, `ConfigV2` in `types/config.ts`, `version: 2`; the `gurushots-config` key on

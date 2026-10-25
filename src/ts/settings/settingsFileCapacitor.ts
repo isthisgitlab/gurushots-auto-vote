@@ -2,8 +2,9 @@
  * The Capacitor half of `createSettingsFile` (storage.ts): the Android headless service's writes (through its native
  * bridge) and the app window's write-behind to @capacitor/preferences — what runs on the queued writes' turns, once
  * the write chain reaches them. The helpers take the per-file `state` object (one is made per `createSettingsFile`
- * call, storage.ts:163) and mutate it in place; none of them reaches the file object itself, and none of them imports
- * storage.ts, so every `jest.mock('settings/storage')` a test makes keeps ruling over all of this.
+ * call); its write-protocol fields change only through the transitions in settingsFileProtocol.ts. None of them
+ * reaches the file object itself, and none of them imports storage.ts, so every `jest.mock('settings/storage')` a
+ * test makes keeps ruling over all of this.
  *
  * The dropped-save reporting (`DroppedSaveOps`) is passed in by the factory too: only the configuration reports
  * given-up saves, so the helpers take the ops (or null) rather than reaching the save-dropped state themselves.
@@ -14,16 +15,18 @@ import * as logger from '../logger';
 import { getCapacitorPreferences } from './capacitorPreferences';
 import { compareAndWrite } from '../services/NativeAutovoteBridge';
 import { headlessSettingsWrite, headlessStore, keyedSettingsBridge, saveThroughCas } from './storeTransport';
+import {
+    hydrate,
+    noteMovedAside,
+    notePersisted,
+    restoreCacheToPersisted,
+    undoQuarantine,
+} from './settingsFileProtocol';
 
 import type { HeadlessSettingsBridge } from './storeTransport';
 import type { DroppedSaveOps } from './saveDropped';
-import type {
-    QueuedWriteOutcome,
-    SettingsFileOptions,
-    SettingsFileState,
-    WriteIfAbsentResult,
-    WriteResult,
-} from './storageTypes';
+import type { SettingsFileState } from './settingsFileProtocol';
+import type { QueuedWriteOutcome, SettingsFileOptions, WriteIfAbsentResult, WriteResult } from './storageTypes';
 
 // Saves the text the app window changed (`data`, made from `base`, the cache before the change): only if
 // Preferences still holds what was last known of it, else the change is made again on what the background service
@@ -47,8 +50,7 @@ const saveThroughCasWith = async (
         },
         (expected, text) => compareAndWrite(prefKey, expected, text),
     );
-    state.persistedJson = saved;
-    if (serial === state.writeSerial) state.cachedJson = saved;
+    notePersisted(state, saved, serial);
     return result;
 };
 
@@ -82,7 +84,7 @@ export const failQueuedWrite = (
 ): QueuedWriteOutcome => {
     logger.withCategory('settings').error('Capacitor preferences write failed:', err);
     if (issuedIn !== state.writeGeneration) return 'failed';
-    if (serial === state.writeSerial) state.cachedJson = state.persistedJson;
+    restoreCacheToPersisted(state, serial);
     if (!dropped) return 'failed';
     dropped.markAfter(state.writeSerial);
     dropped.setDropped(true, dropped.causeOf(err), userChange);
@@ -160,13 +162,11 @@ export const hydrateFromPreferences = async (state: SettingsFileState, prefKey: 
     try {
         const prefs = getCapacitorPreferences();
         const { value } = await prefs.get({ key: prefKey });
-        state.cachedJson = value; // null if no preferences entry exists
-        state.persistedJson = value;
+        hydrate(state, value); // null if no preferences entry exists
         state.hasBackupKey = (await prefs.keys()).keys.some((key) => key.startsWith(`${prefKey}${CORRUPT_SUFFIX}`));
     } catch (err) {
         logger.withCategory('settings').error('Capacitor preferences read failed:', err);
-        state.cachedJson = null;
-        state.persistedJson = null;
+        hydrate(state, null);
     } finally {
         state.capacitorInitialized = true;
     }
@@ -183,7 +183,7 @@ export const moveToBackupKey = async (
     const preferences = getCapacitorPreferences();
     await preferences.set({ key: backupKey, value: raw });
     await preferences.remove({ key: prefKey });
-    state.persistedJson = null;
+    noteMovedAside(state);
     return true;
 };
 
@@ -192,8 +192,7 @@ export const moveToBackupKey = async (
 // place of it), and there is no copy of it.
 export const restoreAfterFailedMove = (state: SettingsFileState, hadBackupKey: boolean, err: unknown): boolean => {
     logger.withCategory('settings').error('Capacitor preferences backup write failed:', err);
-    state.cachedJson = state.persistedJson;
-    state.hasBackupKey = hadBackupKey;
+    undoQuarantine(state, hadBackupKey);
     return false;
 };
 

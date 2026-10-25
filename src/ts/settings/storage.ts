@@ -54,14 +54,14 @@ import {
     writeIfAbsentMethod,
     writeMethod,
 } from './settingsFileMethods';
+import { issueQueuedWrite } from './settingsFileProtocol';
 
 import type { DroppedSaveOps } from './saveDropped';
+import type { SettingsFileState } from './settingsFileProtocol';
 import type {
     QuarantineResult,
     QueuedWriteOutcome,
-    SettingsFileDeps,
     SettingsFileOptions,
-    SettingsFileState,
     WriteIfAbsentResult,
     WriteResult,
 } from './storageTypes';
@@ -77,9 +77,10 @@ const UNIMPORTABLE_SUFFIX = '_unimportable';
 const createSettingsFile = (options: SettingsFileOptions) => {
     const { fileName, prefKey, filePath, rebase, dedicatedBridge, reportsDroppedSaves } = options;
 
-    // The per-file state: one object per call, mutated in place here and by the helpers the object is passed to
-    // (settingsFileCapacitor.ts, settingsFileMethods.ts, settingsFileNode.ts). Two settings files exist, so none of
-    // it may sit at module level.
+    // The per-file state: one object per call. Its write-protocol fields (writeSerial, writeGeneration, cachedJson,
+    // persistedJson) change only through the transitions in settingsFileProtocol.ts; this body and the helpers the
+    // object is passed to (settingsFileCapacitor.ts, settingsFileMethods.ts, settingsFileNode.ts) read them and
+    // change them through those. Two settings files exist, so none of it may sit at module level.
     const state: SettingsFileState = {
         capacitorInitialized: false,
         cachedJson: null,
@@ -114,7 +115,7 @@ const createSettingsFile = (options: SettingsFileOptions) => {
         userChange: boolean,
     ): Promise<QueuedWriteOutcome> => {
         const issuedIn = state.writeGeneration;
-        const serial = ++state.writeSerial;
+        const serial = issueQueuedWrite(state);
         const ended = state.writeChain
             .then(() => runQueuedWrite(state, prefKey, droppedOps, update, issuedIn, serial))
             .catch((err: unknown) => failQueuedWrite(state, droppedOps, err, issuedIn, serial, userChange));
@@ -122,20 +123,23 @@ const createSettingsFile = (options: SettingsFileOptions) => {
         return ended;
     };
 
-    const deps: SettingsFileDeps = { prefKey, filePath, rebase, bridge, sweepOnce, queueWrite: queueCapacitorWrite };
-
+    // Each method body takes the state and the explicit parts of the factory's wiring it needs (the queue and the
+    // bridge are the factory's).
     return {
-        readRaw: (): string | null => readRawMethod(state, deps),
-        write: (data: string): WriteResult => writeMethod(state, deps, data),
+        readRaw: (): string | null => readRawMethod(state, bridge, filePath),
+        write: (data: string): WriteResult =>
+            writeMethod(state, bridge, rebase, queueCapacitorWrite, filePath, sweepOnce, data),
         /** `write`, for the caller that has no use for `landed`. */
-        writeRaw: (data: string): boolean => writeMethod(state, deps, data).ok,
-        writeIfAbsent: (data: string): WriteIfAbsentResult => writeIfAbsentMethod(state, deps, data),
-        location: (): string => locationMethod(deps),
+        writeRaw: (data: string): boolean =>
+            writeMethod(state, bridge, rebase, queueCapacitorWrite, filePath, sweepOnce, data).ok,
+        writeIfAbsent: (data: string): WriteIfAbsentResult =>
+            writeIfAbsentMethod(state, bridge, queueCapacitorWrite, filePath, data),
+        location: (): string => locationMethod(prefKey, filePath),
         isLoaded: (): boolean => isLoadedMethod(state),
         isPersisted: (): boolean => isPersistedMethod(state),
-        hasQuarantined: (): boolean => hasQuarantinedMethod(state, deps),
-        quarantineRaw: (raw: string): QuarantineResult => quarantineRawMethod(state, deps, raw),
-        initializeAsync: async (): Promise<void> => initializeAsyncMethod(state, deps),
+        hasQuarantined: (): boolean => hasQuarantinedMethod(state, filePath),
+        quarantineRaw: (raw: string): QuarantineResult => quarantineRawMethod(state, prefKey, filePath, raw),
+        initializeAsync: async (): Promise<void> => initializeAsyncMethod(state, prefKey),
         /** The in-flight Capacitor write-behind chain (see flushPendingWrites). */
         flush: () => state.writeChain,
         discard: async (): Promise<void> => discardMethod(state),
