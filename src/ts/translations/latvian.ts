@@ -1,7 +1,9 @@
 // Latvian translations for GuruShots Auto Vote
 // aislop-ignore-file complexity/file-too-large -- flat translation dictionary; one file per language keeps key parity reviewable
+import type * as english from './english';
+
 // Common/shared translations
-export const common = {
+export const common: typeof english.common = {
     global: 'Globāli:',
     languageEnglish: 'English',
     languageLatvian: 'Latviešu',
@@ -24,7 +26,7 @@ export const common = {
     ok: 'Labi',
 };
 // Error / recovery UI
-export const errors = {
+export const errors: typeof english.errors = {
     boundaryTitle: 'Kaut kas nogāja greizi',
     logoutNotSavedStopped: 'Automātiskā balsošana ir apturēta. Palaid to vēlreiz, lai turpinātu balsot.',
     logoutFailedTitle: 'Izrakstīšanās nepabeidzās',
@@ -110,7 +112,7 @@ export const errors = {
         'Pēdējais balsošanas cikls neizdevās. GuruShots neatbildēja vai noraidīja pieprasījumu. Automātiskā balsošana mēģinās vēlreiz nākamajā ciklā; sīkāka informācija ir žurnālos.',
 };
 // First-run onboarding
-export const onboarding = {
+export const onboarding: typeof english.onboarding = {
     title: 'Laipni lūdzam GuruShots Auto Vote',
     intro: 'Šī lietotne pēc grafika automātiski balso tavos aktīvajos GuruShots izaicinājumos un uztur tavu redzamību augstu — tev pašam nekas nav jādara.',
     howItWorksTitle: 'Kā tas darbojas',
@@ -122,7 +124,7 @@ export const onboarding = {
     gotIt: 'Sapratu',
 };
 // Menu translations
-export const menu = {
+export const menu: typeof english.menu = {
     edit: 'Rediģēt',
     undo: 'Atsaukt',
     redo: 'Atkārtot',
@@ -155,7 +157,7 @@ export const menu = {
     updateError: 'Atjaunināšanas kļūda',
     updateErrorMessage: 'Neizdevās pārbaudīt atjauninājumus.',
 };
-export const quitGuard = {
+export const quitGuard: typeof english.quitGuard = {
     title: 'Aizvērt, lai gan drīz jāizmanto Boost?',
     detail: 'Automātiskā balsošana darbojas un drīz izmantos Boost šajos izaicinājumos. Ja aizvērsi lietotni, šie Boost netiks izmantoti.',
     dueIn: 'Boost pēc {time}',
@@ -164,7 +166,7 @@ export const quitGuard = {
     quitAnyway: 'Tomēr aizvērt',
 };
 // Login screen specific
-export const login = {
+export const login: typeof english.login = {
     heading: 'Pieteikšanās',
     loadingModeInfo: 'Ielādē informāciju par režīmu…',
     loggingIn: 'Piesakās…',
@@ -183,7 +185,7 @@ export const login = {
     usernameRequired: 'Lietotājvārds ir obligāts',
 };
 // App screen specific
-export const app = {
+export const app: typeof english.app = {
     activeChallenges: 'Aktīvie izaicinājumi',
     addCustomTimezone: 'Pievienot pielāgotu laika joslu',
     addTimezone: 'Pievienot laika joslu',
@@ -1643,7 +1645,7 @@ export const app = {
         'Iekšējs — tā paziņojuma versija, ko apstiprināji (lietotne nav saistīta ar GuruShots); paziņojums tiek rādīts vēlreiz, ja tā teksts būtiski mainās',
 };
 // Logs page specific
-export const logs = {
+export const logs: typeof english.logs = {
     title: 'Žurnāli',
     status: 'Statuss',
     empty: 'Vēl nav žurnāla ierakstu.',
@@ -1674,7 +1676,7 @@ export const logs = {
     },
 };
 // Theme picker labels, keyed by DaisyUI theme name (settings/uiDefaults.ts THEMES)
-export const themes = {
+export const themes: typeof english.themes = {
     light: 'Gaišs',
     dark: 'Tumšs',
     cupcake: 'Kēksiņš',
@@ -1712,7 +1714,7 @@ export const themes = {
     silk: 'Zīds',
 };
 // notice
-export const notice = {
+export const notice: typeof english.notice = {
     title: 'Pirms lieto lietotni',
     unofficial:
         'Šī nav oficiāla GuruShots lietotne. GuruShots Auto Vote ir citu izstrādāts rīks, kas nav saistīts ar GuruShots, un GuruShots to nav apstiprinājis vai atbalstījis.',
@@ -1821,7 +1823,7 @@ export const notice = {
         'Uzstādījums atkal rāda saglabāto vērtību. Noņem izaicinājumu atsevišķos uzstādījumus un scenārijus, kas vairs nav vajadzīgi, un nomaini to vēlreiz.',
 };
 // about
-export const about = {
+export const about: typeof english.about = {
     title: 'Par lietotni un datiem',
     donateDesc: 'Ja lietotne jums noder, varat atbalstīt tās izstrādi ar ziedojumu vietnē donatr.ee.',
     donateButton: 'Atbalstīt izstrādi',
