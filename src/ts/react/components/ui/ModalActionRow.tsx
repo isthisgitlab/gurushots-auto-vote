@@ -54,7 +54,7 @@ export function ModalActionRow({
             <div className="flex flex-wrap justify-end gap-2">
                 {/* Below sm the secondary takes the whole first row, so Cancel and Save wrap together onto the second. */}
                 <div className="mr-auto max-sm:basis-full">
-                    <button className="btn btn-error btn-sm" onClick={() => void onSecondary()}>
+                    <button className="btn btn-error btn-sm max-sm:min-h-10" onClick={() => void onSecondary()}>
                         {secondaryIcon === 'trash' ? (
                             <StrokeIcon d={ICON_PATHS.trash} className={ROW_ICON_CLASS} />
                         ) : (
@@ -63,11 +63,11 @@ export function ModalActionRow({
                         {secondaryLabel}
                     </button>
                 </div>
-                <button className="btn btn-outline btn-sm" onClick={onCancel}>
+                <button className="btn btn-outline btn-sm max-sm:min-h-10" onClick={onCancel}>
                     {t('app.cancel')}
                 </button>
                 <button
-                    className="btn btn-neutral btn-sm"
+                    className="btn btn-neutral btn-sm max-sm:min-h-10"
                     onClick={() => void onSave()}
                     disabled={saving}
                     aria-busy={saving}

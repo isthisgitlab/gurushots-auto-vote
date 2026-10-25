@@ -243,7 +243,7 @@ export function SwapEntryButton({
                 <button
                     ref={pickRef}
                     type="button"
-                    className="btn btn-sm btn-outline"
+                    className="btn btn-sm btn-outline max-sm:min-h-10"
                     title={t('app.swapPickLabel')}
                     aria-describedby={pickHintId}
                     disabled={preview.loading || commit.loading}
@@ -270,7 +270,7 @@ export function SwapEntryButton({
                 <SwapWarningLines {...warnings} />
                 <button
                     type="button"
-                    className="btn btn-outline btn-sm"
+                    className="btn btn-outline btn-sm max-sm:min-h-10"
                     disabled={commit.loading}
                     onClick={handleChoose}
                 >

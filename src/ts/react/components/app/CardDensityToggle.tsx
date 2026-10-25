@@ -21,7 +21,7 @@ export function CardDensityToggle({
 }) {
     const { t } = useTranslation();
     return (
-        <button className="btn btn-ghost btn-sm shrink-0" onClick={() => void onToggle()}>
+        <button className="btn btn-ghost btn-sm shrink-0 max-sm:min-h-10" onClick={() => void onToggle()}>
             <StrokeIcon
                 d={isCompact ? ICON_PATHS.expand : ICON_PATHS.collapse}
                 className="w-4 h-4 mr-1"

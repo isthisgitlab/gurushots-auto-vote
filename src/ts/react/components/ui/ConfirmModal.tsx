@@ -50,7 +50,7 @@ export function ConfirmModal({
                 )}
             </div>
             <ModalActions>
-                <button className="btn btn-outline btn-sm" onClick={onClose} disabled={working}>
+                <button className="btn btn-outline btn-sm max-sm:min-h-10" onClick={onClose} disabled={working}>
                     {t(cancelLabel)}
                 </button>
                 <ConfirmButton

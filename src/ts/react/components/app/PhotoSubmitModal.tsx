@@ -75,12 +75,17 @@ function SubmitFooter({
     const label = count > 0 ? interp(t(texts.submitCount), { count }) : t(texts.submit);
     return (
         <div className="flex flex-wrap justify-end gap-2">
-            <button type="button" className="btn btn-outline btn-sm" disabled={submitting} onClick={onCancel}>
+            <button
+                type="button"
+                className="btn btn-outline btn-sm max-sm:min-h-10"
+                disabled={submitting}
+                onClick={onCancel}
+            >
                 {t('app.cancel')}
             </button>
             <button
                 type="button"
-                className="btn btn-neutral btn-sm"
+                className="btn btn-neutral btn-sm max-sm:min-h-10"
                 disabled={count === 0 || held || submitting}
                 aria-busy={submitting}
                 onClick={onSubmit}
@@ -235,7 +240,12 @@ function PhotoSubmitBody({
                     {t(texts.noSlots)}
                 </p>
                 <ModalActions>
-                    <button type="button" className="btn btn-outline btn-sm" disabled={submitting} onClick={onClose}>
+                    <button
+                        type="button"
+                        className="btn btn-outline btn-sm max-sm:min-h-10"
+                        disabled={submitting}
+                        onClick={onClose}
+                    >
                         {t('app.close')}
                     </button>
                 </ModalActions>

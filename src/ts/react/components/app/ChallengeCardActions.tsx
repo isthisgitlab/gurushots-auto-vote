@@ -106,7 +106,7 @@ export function FillButtons({
             </ActionButton>
             {slotsRemaining > 1 && (
                 <button
-                    className="btn btn-sm btn-neutral"
+                    className="btn btn-sm btn-neutral max-sm:min-h-10"
                     onClick={() => void onFill('all')}
                     disabled={filling || picking}
                     aria-busy={filling}
@@ -118,7 +118,7 @@ export function FillButtons({
             )}
             {/* "Pick…" alone does not say what it does; the sentence is its description (a title is lost on touch). */}
             <button
-                className="btn btn-sm btn-outline"
+                className="btn btn-sm btn-outline max-sm:min-h-10"
                 title={t('app.fillPickLabel')}
                 aria-describedby={pickHintId}
                 onClick={onPick}
@@ -139,7 +139,7 @@ export function FillButtons({
  */
 function SettingsButton({ onClick, label }: { onClick: () => void; label: string }) {
     return (
-        <button className="btn btn-ghost btn-sm" onClick={onClick}>
+        <button className="btn btn-ghost btn-sm max-sm:min-h-10" onClick={onClick}>
             <StrokeIcon d={ICON_PATHS.cog} className="w-4 h-4 mr-1" />
             {label}
         </button>

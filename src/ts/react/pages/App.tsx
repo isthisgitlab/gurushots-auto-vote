@@ -204,7 +204,7 @@ function LogoutProblemAlert({
                     {problem.stopped && ` ${t('errors.logoutNotSavedStopped')}`}
                 </p>
             </div>
-            <button type="button" className="btn btn-sm" onClick={onDismiss}>
+            <button type="button" className="btn btn-sm max-sm:min-h-10" onClick={onDismiss}>
                 {t('errors.dismiss')}
             </button>
         </div>

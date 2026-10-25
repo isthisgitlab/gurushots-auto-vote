@@ -178,7 +178,7 @@ export function Modal({
                         )}
                         {showCloseButton && (
                             <button
-                                className="btn btn-sm btn-square btn-outline"
+                                className="btn btn-sm btn-square btn-outline max-sm:min-h-10 max-sm:min-w-10"
                                 onClick={onClose}
                                 aria-label={closeLabel()}
                             >

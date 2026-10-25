@@ -42,7 +42,7 @@ type Summary = NonNullable<ReturnType<typeof useScenarioStatusModule.useScenario
 function ResetButton({ label, onReset }: { label: string; onReset: () => void }) {
     const { t } = useTranslation();
     return (
-        <button type="button" className="btn btn-error btn-sm" onClick={onReset}>
+        <button type="button" className="btn btn-error btn-sm max-sm:min-h-10" onClick={onReset}>
             {t(label)}
         </button>
     );

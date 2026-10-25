@@ -107,7 +107,7 @@ function MissedBoostsJump({
               : interp(t('app.missedBoostsKeysUnknown'), labels);
     return (
         <FocusDropdown
-            triggerClassName="btn btn-sm btn-warning"
+            triggerClassName="btn btn-sm btn-warning max-sm:min-h-10"
             describedBy={hintId}
             menuClassName="menu z-[1] mt-1 p-2 shadow bg-base-100 rounded-box w-64 max-w-[calc(100vw-2rem)]"
             trigger={

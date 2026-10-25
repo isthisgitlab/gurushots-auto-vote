@@ -38,6 +38,8 @@ export function ChipListPanel({
  * (e.g. BoostWindowBanner's `btn-info` chips). The chip keeps
  * the stock btn-sm height like every other button; a title too long for
  * the row is truncated by ChipTitle rather than wrapping the chip taller.
+ * Other buttons now carry a mobile-only 40px floor (`max-sm:min-h-10`) while
+ * the chips intentionally keep the stock `btn-sm` height at every size.
  */
 export function ChallengeChip({
     challengeId,

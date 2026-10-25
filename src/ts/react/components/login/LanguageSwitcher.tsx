@@ -29,7 +29,7 @@ export function LanguageSwitcher() {
         <div className="flex justify-end mb-4">
             <FocusDropdown
                 className="dropdown-end"
-                triggerClassName="btn btn-outline btn-sm"
+                triggerClassName="btn btn-outline btn-sm max-sm:min-h-10"
                 menuClassName="z-[1] menu p-2 shadow bg-base-100 rounded-box w-32"
                 trigger={
                     <>

@@ -141,7 +141,7 @@ function JoinButton({
     );
     return (
         <button
-            className={`btn btn-sm ${paid ? 'btn-latvian' : 'btn-neutral'}`}
+            className={`btn btn-sm max-sm:min-h-10 ${paid ? 'btn-latvian' : 'btn-neutral'}`}
             id={`discover-join-${id}`}
             aria-label={busy ? undefined : label}
             onClick={onClick}
@@ -258,7 +258,7 @@ function RowOutcome({
                     : ipcErrorText(outcome.error, t) || t('app.discoverGenericError'))}
             {meta.forget && (
                 <button
-                    className="btn btn-ghost btn-sm ml-1"
+                    className="btn btn-ghost btn-sm ml-1 max-sm:min-h-10"
                     aria-label={interp(t('app.discoverForgetPaymentLabel'), { title: name })}
                     onClick={onForget}
                     disabled={busy}
@@ -378,7 +378,7 @@ function DiscoverRow({
             </div>
             <div className="flex items-center gap-2">
                 <button
-                    className="btn btn-outline btn-sm"
+                    className="btn btn-outline btn-sm max-sm:min-h-10"
                     aria-label={interp(t('app.discoverChoosePhotosLabel'), { title: name })}
                     onClick={onChoose}
                 >
@@ -488,7 +488,11 @@ export function DiscoverSection({
                 </summary>
                 <div className="collapse-content px-3 pb-3">
                     <div className="flex justify-end mb-2">
-                        <button className="btn btn-outline btn-sm" onClick={() => void refetch()} disabled={loading}>
+                        <button
+                            className="btn btn-outline btn-sm max-sm:min-h-10"
+                            onClick={() => void refetch()}
+                            disabled={loading}
+                        >
                             {t('app.discoverRefresh')}
                         </button>
                     </div>

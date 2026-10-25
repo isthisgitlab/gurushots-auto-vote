@@ -64,11 +64,11 @@ export function JoinConfirmModal({
                             )}
                         </div>
                         <ModalActions>
-                            <button className="btn btn-outline btn-sm" onClick={dismiss}>
+                            <button className="btn btn-outline btn-sm max-sm:min-h-10" onClick={dismiss}>
                                 {t('app.cancel')}
                             </button>
                             <button
-                                className="btn btn-latvian btn-sm"
+                                className="btn btn-latvian btn-sm max-sm:min-h-10"
                                 onClick={() => void onConfirm()}
                                 disabled={insufficient}
                             >

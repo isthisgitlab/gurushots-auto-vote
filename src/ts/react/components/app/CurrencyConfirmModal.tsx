@@ -87,11 +87,11 @@ export function CurrencyConfirmModal({
                 </p>
             </div>
             <ModalActions>
-                <button className="btn btn-outline btn-sm" onClick={onClose} disabled={spending}>
+                <button className="btn btn-outline btn-sm max-sm:min-h-10" onClick={onClose} disabled={spending}>
                     {t('app.cancel')}
                 </button>
                 <button
-                    className="btn btn-latvian btn-sm"
+                    className="btn btn-latvian btn-sm max-sm:min-h-10"
                     onClick={() => void onConfirm()}
                     disabled={spending || spendHeld}
                     aria-busy={spending}

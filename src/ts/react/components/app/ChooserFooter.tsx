@@ -35,13 +35,22 @@ export function ChooserFooter({
             )}
             <div className="flex flex-wrap justify-end gap-2">
                 {/* Below sm Clear takes the whole first row, so Cancel and Save wrap together onto the second. */}
-                <button type="button" className="btn btn-error btn-sm mr-auto max-sm:basis-full" onClick={onClear}>
+                <button
+                    type="button"
+                    className="btn btn-error btn-sm mr-auto max-sm:basis-full max-sm:min-h-10"
+                    onClick={onClear}
+                >
                     {t('app.photosClear')}
                 </button>
-                <button type="button" className="btn btn-outline btn-sm" onClick={onClose}>
+                <button type="button" className="btn btn-outline btn-sm max-sm:min-h-10" onClick={onClose}>
                     {t('app.cancel')}
                 </button>
-                <button type="button" className="btn btn-neutral btn-sm" disabled={saving} onClick={onSave}>
+                <button
+                    type="button"
+                    className="btn btn-neutral btn-sm max-sm:min-h-10"
+                    disabled={saving}
+                    onClick={onSave}
+                >
                     {saving && <LoadingSpinner size="xs" decorative />}
                     {t('app.photoChooserUse')}
                 </button>

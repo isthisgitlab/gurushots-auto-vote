@@ -30,7 +30,7 @@ export function Navbar({
             <div className="navbar-end w-auto shrink-0 gap-2">
                 <button
                     type="button"
-                    className="btn btn-primary btn-sm"
+                    className="btn btn-primary btn-sm max-sm:min-h-10"
                     onClick={openDonatePage}
                     title={t('about.donateDesc')}
                     aria-label={t('app.donate')}
@@ -40,7 +40,7 @@ export function Navbar({
                 </button>
                 {showLogs && (
                     <button
-                        className="btn btn-outline btn-sm"
+                        className="btn btn-outline btn-sm max-sm:min-h-10"
                         onClick={onLogsClick}
                         title={t('logs.title')}
                         aria-label={t('logs.title')}
@@ -49,7 +49,7 @@ export function Navbar({
                     </button>
                 )}
                 <button
-                    className="btn btn-outline btn-sm"
+                    className="btn btn-outline btn-sm max-sm:min-h-10"
                     onClick={onSettingsClick}
                     title={t('app.settings')}
                     aria-label={t('app.settings')}
@@ -57,7 +57,7 @@ export function Navbar({
                     <StrokeIcon className="w-4 h-4" d={ICON_PATHS.cog} />
                 </button>
                 <button
-                    className="btn btn-outline btn-sm"
+                    className="btn btn-outline btn-sm max-sm:min-h-10"
                     onClick={() => void onLogout()}
                     title={t('app.logout')}
                     aria-label={t('app.logout')}
