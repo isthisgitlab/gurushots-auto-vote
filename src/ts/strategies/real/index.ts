@@ -31,6 +31,7 @@ import { swapBackLedger } from '../../swapBackStore';
 import { autoSpendLedger } from '../../currencyAutoStore';
 import { entryAgeLedger } from '../../entryAgeStore';
 import { withEntryTimes } from '../../services/entryTimes';
+import { CURRENCY_ENDPOINTS } from '../../services/currencyAuto';
 import {
     scenarioStateLedger,
     scenarioStateLoaded,
@@ -43,19 +44,22 @@ import * as logger from '../../logger';
 import * as settings from '../../settings';
 import { runVotingPass } from '../../services/votingOrchestrator';
 import { runSuspendBoosts } from '../../services/votingOrchestrator/boost';
+import { VOTING_PASS_ENDPOINTS } from '../../services/votingOrchestrator/context';
 import { createMetadataEntryTracker } from '../../services/newEntryTracker';
 import {
     runJoinPass,
     joinChallengeSingle,
     forgetUnconfirmedPayment as forgetPayment,
 } from '../../services/joinChallenges';
-import { runClaimPass } from '../../services/autoClaim';
+import { JOIN_ENDPOINTS } from '../../services/joinChallenges/shared';
+import { runClaimPass, CLAIM_ENDPOINTS } from '../../services/autoClaim';
 import { loadMissionNeeds, registerMissionNeeds } from '../../services/missions';
 import * as runtime from '../../runtime';
 import { joinStateStore, acquireUnlockLock, refreshJoinStateAsync } from '../../joinStateStore';
 
 import type { Challenge, TurboGameResult, TurboMiniGameResult } from '../../types/gurushots';
 import { errorMessage } from '../../errorMessage';
+import { pickEndpoints } from '../../pickEndpoints';
 
 // The submit and swap every real caller goes through: a photo that went in is recorded at its exact time (the ledger
 // the UI's "Submitted …" reads). Late-bound to the api module, so a replaced endpoint is the one that is called.
@@ -70,57 +74,6 @@ const { submitToChallenge, swapPhoto } = withEntryTimes(
 // One instance for the process: the tracker is stateless (it reads and writes
 // metadata.json on each call), but building it per pass would be pointless churn.
 const metadataEntryTracker = createMetadataEntryTracker();
-
-// Deps bundle shared by the automatic join pass and the manual single-join path.
-// joinStateStore persists the paid-unlock markers; acquireUnlockLock guards the
-// unlock critical section across processes (real strategy only — mock passes a
-// null store and no lock).
-const joinDeps = {
-    getMemberChallenges,
-    getBankroll,
-    coinsUnlock,
-    submitToChallenge,
-    getEligiblePhotos,
-    // The chosen-photos lookup of the join's photo pick; optional there.
-    getEligiblePhotosWalk,
-    // Tag resolution for the join flow's photo pick. pickJoinPhoto reads these
-    // off deps and no-ops without them, so omitting the pair here silently
-    // reverts joins to unfiltered-library behavior.
-    getCurrentMemberProfile,
-    searchTagAutocomplete,
-    // Counts the turbos a turbo mission can still win (Join Early for Missions).
-    getActiveChallenges,
-    // The member's library photos the web read suggests per un-joined challenge; the join's
-    // photo pick reads these off deps and no-ops without them, like the tag pair above.
-    getSuggestedPhotoIds,
-    joinStateStore,
-    acquireUnlockLock,
-    refreshJoinState: refreshJoinStateAsync,
-};
-
-// Endpoints the automatic currency spends use (services/currencyAuto.ts) — the
-// same surface services/currencyActions.ts reads off the strategy for a manual
-// spend, plus getVoteImages for the exposure-fill shortfall check.
-const currencyStrategy = {
-    getActiveChallenges,
-    getBankroll,
-    keyUnlock,
-    swapPhoto,
-    exposureAutofill,
-    getVoteImages,
-    getEligiblePhotos,
-    getImageData,
-    searchTagAutocomplete,
-    getCurrentMemberProfile,
-};
-
-// Endpoints for the hourly prize-claim pre-step (services/autoClaim.ts).
-const claimDeps = {
-    getMyCompletedChallenges,
-    claimChallengeResources,
-    getMyMissions,
-    claimMissionPrize,
-};
 
 /**
  * Manual single-challenge join (real strategy). Paid joins require an explicit
@@ -223,16 +176,13 @@ const runTurboGame = async (
 };
 
 /**
- * The user forgetting a claim whose payment could not be confirmed (real strategy): the next join asks the price again.
+ * Every endpoint the four bundles below project from, as the api/* modules
+ * (and the entry-time-recording submit and swap) export them right now.
+ * votingPassApi reads it per call so jest.mock'd api modules take effect; the
+ * join, currency and claim bundles are module-level consts and project once
+ * at load.
  */
-const forgetUnconfirmedPayment = (challengeId: string | number, token: string) =>
-    forgetPayment(challengeId, token, joinDeps);
-
-/**
- * The endpoints runVotingPass reads off `deps.api`. Read per call (not at module
- * load) so jest.mock'd api modules take effect.
- */
-const votingPassApi = () => ({
+const realClient = () => ({
     getActiveChallenges,
     getVoteImages,
     submitVotes,
@@ -244,11 +194,51 @@ const votingPassApi = () => ({
     getImageData,
     submitToChallenge,
     runTurboGame,
-    // votingOrchestrator/context.ts copies these into fillDeps; without them the
-    // auto-fill path loses tag resolution in real mode only.
     getCurrentMemberProfile,
     searchTagAutocomplete,
+    getMemberChallenges,
+    getBankroll,
+    coinsUnlock,
+    getSuggestedPhotoIds,
+    keyUnlock,
+    swapPhoto,
+    exposureAutofill,
+    getMyCompletedChallenges,
+    claimChallengeResources,
+    getMyMissions,
+    claimMissionPrize,
 });
+
+// Deps bundle shared by the automatic join pass and the manual single-join path.
+// joinStateStore persists the paid-unlock markers; acquireUnlockLock guards the
+// unlock critical section across processes (real strategy only — mock passes a
+// null store and no lock).
+const joinDeps = {
+    ...pickEndpoints(realClient(), JOIN_ENDPOINTS),
+    joinStateStore,
+    acquireUnlockLock,
+    refreshJoinState: refreshJoinStateAsync,
+};
+
+// Endpoints the automatic currency spends use (services/currencyAuto.ts) — the
+// same surface services/currencyActions.ts reads off the strategy for a manual
+// spend, plus getVoteImages for the exposure-fill shortfall check.
+const currencyStrategy = pickEndpoints(realClient(), CURRENCY_ENDPOINTS);
+
+// Endpoints for the hourly prize-claim pre-step (services/autoClaim.ts).
+const claimDeps = pickEndpoints(realClient(), CLAIM_ENDPOINTS);
+
+/**
+ * The user forgetting a claim whose payment could not be confirmed (real strategy): the next join asks the price again.
+ */
+const forgetUnconfirmedPayment = (challengeId: string | number, token: string) =>
+    forgetPayment(challengeId, token, joinDeps);
+
+/**
+ * The endpoints runVotingPass reads off `deps.api`. Read per call (not at module
+ * load) so jest.mock'd api modules take effect.
+ */
+const votingPassApi = () => pickEndpoints(realClient(), VOTING_PASS_ENDPOINTS);
 
 /**
  * Apply the boosts of the given challenges now, over the same endpoints and

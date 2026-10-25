@@ -5,7 +5,12 @@
  * single-challenge run, and never allowed to abort voting.
  */
 
-jest.mock('../../src/ts/services/autoClaim', () => ({ runClaimPass: jest.fn() }));
+// The CLAIM_ENDPOINTS name list rides along; a whole-module factory would leave it undefined for the mock strategy.
+jest.mock('../../src/ts/services/autoClaim', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/services/autoClaim')>('../../src/ts/services/autoClaim'),
+    runClaimPass: jest.fn(),
+}));
 jest.mock('../../src/ts/services/joinChallenges', () => ({
     runJoinPass: jest.fn(async () => undefined),
     joinChallengeSingle: jest.fn(),

@@ -52,7 +52,7 @@ const loadFillCandidates = async ({
           walkedUnfiltered: boolean;
       }
 > => {
-    const { logger, getEligiblePhotos, searchTagAutocomplete, getCurrentMemberProfile } = deps;
+    const { logger } = deps;
     // One lookup for the whole fill — see resolveIgnoreWords for why it is not
     // threaded in from each caller like the tag settings are.
     const ignoreWords = resolveIgnoreWords(deps.settings, challenge);
@@ -64,12 +64,9 @@ const loadFillCandidates = async ({
             challenge,
             token,
             { mustIncludeTags, shouldIncludeTags, ignoreWords },
-            // Forward the tag-resolution pair. This call rebuilds a fresh deps
-            // object rather than spreading `deps`, so anything not named here is
-            // silently dropped — which is how resolution can look wired (the
-            // orchestrator supplies it) while never reaching THIS path, the one
-            // that does ordinary auto-fill, emergency fill and manual fill.
-            { getEligiblePhotos, logger, searchTagAutocomplete, getCurrentMemberProfile, usage, trace },
+            // The whole deps bundle, so a dep added upstream reaches this path
+            // (auto-fill, emergency fill and manual fill alike) unnamed.
+            { ...deps, usage, trace },
         );
     } catch (error) {
         logger

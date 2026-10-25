@@ -19,7 +19,12 @@ jest.mock('../../src/ts/scenarioStateStore', () => ({
     refreshScenarioStateAsync: jest.fn(async () => {}),
 }));
 jest.mock('../../src/ts/services/joinChallenges', () => ({ runJoinPass: jest.fn(), joinChallengeSingle: jest.fn() }));
-jest.mock('../../src/ts/services/autoClaim', () => ({ runClaimPass: jest.fn() }));
+// The CLAIM_ENDPOINTS name list rides along (see the non-configurable-getter note in strategies/real.test.ts).
+jest.mock('../../src/ts/services/autoClaim', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/services/autoClaim')>('../../src/ts/services/autoClaim'),
+    runClaimPass: jest.fn(),
+}));
 jest.mock('../../src/ts/settings', () => {
     const actual = jest.requireActual<typeof import('../../src/ts/settings')>('../../src/ts/settings');
     return { __esModule: true, ...actual };
@@ -34,6 +39,7 @@ const { backgroundServiceOwnsScenarios } = jest.mocked(
 const { refreshScenarioStateAsync, scenarioStateLoaded } = jest.mocked(
     require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule,
 );
+const { scenarioStateLedger } = require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
 import joinChallengesModule = require('../../src/ts/services/joinChallenges');
 import autoClaimModule = require('../../src/ts/services/autoClaim');
 const { runJoinPass } = jest.mocked(joinChallengesModule);
@@ -55,11 +61,12 @@ test('re-reads the scenario state before the pass when the background service ow
     expect(runVotingPass.mock.calls[0][2].scenarios!.enabled!()).toBe(false);
 });
 
-test('elsewhere the pass starts straight away and owns scenarios', async () => {
+test('elsewhere the pass starts straight away and owns scenarios, over the persisted state ledger', async () => {
     backgroundServiceOwnsScenarios.mockReturnValue(false);
     await fetchChallengesAndVote('tok', '7');
     expect(refreshScenarioStateAsync).not.toHaveBeenCalled();
     expect(runVotingPass.mock.calls[0][2].scenarios!.enabled!()).toBe(true);
+    expect(runVotingPass.mock.calls[0][2].scenarios!.ledger).toBe(scenarioStateLedger);
 });
 
 test('with the background service the window leaves the fills, the exposure rule’s and a mission’s, to it: one loop counts them', async () => {

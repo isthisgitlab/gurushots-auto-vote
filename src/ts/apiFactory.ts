@@ -80,36 +80,32 @@ const withMockDebug =
         return fn(...args);
     };
 
+/** The client with every own function property behind the debug preamble. */
+type DebugWrapped<T> = { [K in keyof T]: T[K] };
+
+/**
+ * Wraps every own property of `obj` in withMockDebug, keyed by the property
+ * name (`labels` renames one). Runs once at module load, so the wrapped
+ * methods are the client's as they are now.
+ */
+const wrapWithDebug = <T extends Record<string, (...args: never[]) => unknown>>(
+    obj: T,
+    labels: Partial<Record<keyof T, string>>,
+): DebugWrapped<T> => {
+    const wrapped = {} as DebugWrapped<T>;
+    for (const name of Object.keys(obj) as Array<keyof T & string>) {
+        wrapped[name] = withMockDebug(labels[name] ?? name, obj[name]) as DebugWrapped<T>[typeof name];
+    }
+    return wrapped;
+};
+
 /**
  * Each method is the matching mockApiClient method behind the debug
  * preamble. (The `authenticate` log label is 'authentication' so log lines
  * keep a stable wording.)
  */
 const mockApi: ApiStrategy = {
-    authenticate: withMockDebug('authentication', mockApiClient.authenticate),
-    fetchChallengesAndVote: withMockDebug('fetchChallengesAndVote', mockApiClient.fetchChallengesAndVote),
-    applyBoostsOnSuspend: withMockDebug('applyBoostsOnSuspend', mockApiClient.applyBoostsOnSuspend),
-    runTurboGame: withMockDebug('runTurboGame', mockApiClient.runTurboGame),
-    getActiveChallenges: withMockDebug('getActiveChallenges', mockApiClient.getActiveChallenges),
-    getVoteImages: withMockDebug('getVoteImages', mockApiClient.getVoteImages),
-    submitVotes: withMockDebug('submitVotes', mockApiClient.submitVotes),
-    applyBoost: withMockDebug('applyBoost', mockApiClient.applyBoost),
-    applyBoostToEntry: withMockDebug('applyBoostToEntry', mockApiClient.applyBoostToEntry),
-    applyTurbo: withMockDebug('applyTurbo', mockApiClient.applyTurbo),
-    getEligiblePhotos: withMockDebug('getEligiblePhotos', mockApiClient.getEligiblePhotos),
-    getEligiblePhotosWalk: withMockDebug('getEligiblePhotosWalk', mockApiClient.getEligiblePhotosWalk),
-    getImageData: withMockDebug('getImageData', mockApiClient.getImageData),
-    submitToChallenge: withMockDebug('submitToChallenge', mockApiClient.submitToChallenge),
-    getMemberChallenges: withMockDebug('getMemberChallenges', mockApiClient.getMemberChallenges),
-    getBankroll: withMockDebug('getBankroll', mockApiClient.getBankroll),
-    getCurrentMemberProfile: withMockDebug('getCurrentMemberProfile', mockApiClient.getCurrentMemberProfile),
-    searchTagAutocomplete: withMockDebug('searchTagAutocomplete', mockApiClient.searchTagAutocomplete),
-    joinChallenge: withMockDebug('joinChallenge', mockApiClient.joinChallenge),
-    forgetUnconfirmedPayment: withMockDebug('forgetUnconfirmedPayment', mockApiClient.forgetUnconfirmedPayment),
-    keyUnlock: withMockDebug('keyUnlock', mockApiClient.keyUnlock),
-    swapPhoto: withMockDebug('swapPhoto', mockApiClient.swapPhoto),
-    exposureAutofill: withMockDebug('exposureAutofill', mockApiClient.exposureAutofill),
-    getSuggestedPhotoIds: withMockDebug('getSuggestedPhotoIds', mockApiClient.getSuggestedPhotoIds),
+    ...wrapWithDebug(mockApiClient, { authenticate: 'authentication' }),
     getStrategyType: () => 'MockAPI',
 };
 

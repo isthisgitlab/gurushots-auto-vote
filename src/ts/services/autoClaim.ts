@@ -31,6 +31,17 @@ interface ClaimDeps {
 }
 
 /**
+ * The endpoint names `ClaimDeps` carries; both strategies project them from
+ * this one list (pickEndpoints).
+ */
+export const CLAIM_ENDPOINTS = [
+    'getMyCompletedChallenges',
+    'claimChallengeResources',
+    'getMyMissions',
+    'claimMissionPrize',
+] as const;
+
+/**
  * One claimable item: a finished challenge or a mission.
  */
 type ClaimItem = { id: string | number; name?: string; title?: string };

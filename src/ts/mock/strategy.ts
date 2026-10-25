@@ -13,16 +13,18 @@
 import * as logger from '../logger';
 import { runVotingPass } from '../services/votingOrchestrator';
 import { runSuspendBoosts } from '../services/votingOrchestrator/boost';
+import { VOTING_PASS_ENDPOINTS } from '../services/votingOrchestrator/context';
 import { createMemoryEntryTracker } from '../services/newEntryTracker';
 import {
     runJoinPass,
     joinChallengeSingle,
     forgetUnconfirmedPayment as forgetPayment,
 } from '../services/joinChallenges';
-import type { JoinDeps } from '../services/joinChallenges';
-import { runClaimPass } from '../services/autoClaim';
+import { JOIN_ENDPOINTS } from '../services/joinChallenges/shared';
+import { runClaimPass, CLAIM_ENDPOINTS } from '../services/autoClaim';
 import { loadMissionNeeds, registerMissionNeeds } from '../services/missions';
 import * as runtime from '../runtime';
+import { pickEndpoints } from '../pickEndpoints';
 import { mockSwapBackLedger } from '../swapBackStore';
 import { createMemoryAutoSpendLedger } from '../currencyAutoStore';
 import { createMemoryEntryAgeLedger } from '../entryAgeStore';
@@ -30,7 +32,9 @@ import { mockScenarioStateLedger } from '../scenarioStateStore';
 import { mockMethod } from './simulate';
 
 import type { MissionNeeds } from '../services/missions';
+import type { JoinDeps } from '../services/joinChallenges';
 import type { VotingPassDeps } from '../types/votingPass';
+import { CURRENCY_ENDPOINTS } from '../services/currencyAuto';
 import type { MockEndpoints } from './apiClient';
 import type * as realModule from '../strategies/real';
 import { errorMessage } from '../errorMessage';
@@ -43,65 +47,6 @@ const mockEntryTracker = createMemoryEntryTracker();
 const mockAutoSpendLedger = createMemoryAutoSpendLedger();
 // Shared with the mock endpoints (mock/apiClient.ts), so a fetch sees what the pass and a manual submit recorded.
 const mockEntryAgeLedger = createMemoryEntryAgeLedger();
-
-// Endpoints runVotingPass reads off `api`.
-const VOTING_PASS_ENDPOINTS = [
-    'getActiveChallenges',
-    'getVoteImages',
-    'submitVotes',
-    'applyBoost',
-    'applyBoostToEntry',
-    'applyTurbo',
-    'getEligiblePhotos',
-    'getEligiblePhotosWalk',
-    'getImageData',
-    'submitToChallenge',
-    'runTurboGame',
-    'searchTagAutocomplete',
-    'getCurrentMemberProfile',
-] as const;
-
-// Endpoints the automatic currency spends use (services/currencyAuto.ts).
-const CURRENCY_ENDPOINTS = [
-    'getActiveChallenges',
-    'getBankroll',
-    'keyUnlock',
-    'swapPhoto',
-    'exposureAutofill',
-    'getVoteImages',
-    'getEligiblePhotos',
-    'getImageData',
-    'searchTagAutocomplete',
-    'getCurrentMemberProfile',
-] as const;
-
-// Endpoints the join flow uses (services/joinChallenges.ts).
-const JOIN_ENDPOINTS = [
-    'getMemberChallenges',
-    'getSuggestedPhotoIds',
-    'getBankroll',
-    'coinsUnlock',
-    'submitToChallenge',
-    'getEligiblePhotos',
-    'getEligiblePhotosWalk',
-    'searchTagAutocomplete',
-    'getCurrentMemberProfile',
-    'getActiveChallenges',
-] as const;
-
-// Endpoints for the hourly prize-claim pre-step (services/autoClaim.ts).
-const CLAIM_ENDPOINTS = [
-    'getMyCompletedChallenges',
-    'claimChallengeResources',
-    'getMyMissions',
-    'claimMissionPrize',
-] as const;
-
-/**
- * The named endpoints as they are on the client right now.
- */
-const pickEndpoints = <C extends object, K extends keyof C>(client: C, names: readonly K[]): Pick<C, K> =>
-    Object.fromEntries(names.map((name) => [name, client[name]])) as Pick<C, K>;
 
 /**
  * Join deps over the mock endpoints. joinStateStore is null — mock mode must

@@ -56,6 +56,23 @@ export interface CurrencyPassDeps {
 }
 
 /**
+ * The endpoint names `strategy` carries; both strategies project it from this
+ * one list (pickEndpoints).
+ */
+export const CURRENCY_ENDPOINTS = [
+    'getActiveChallenges',
+    'getBankroll',
+    'keyUnlock',
+    'swapPhoto',
+    'exposureAutofill',
+    'getVoteImages',
+    'getEligiblePhotos',
+    'getImageData',
+    'searchTagAutocomplete',
+    'getCurrentMemberProfile',
+] as const;
+
+/**
  * One challenge's context in a voting pass. `currency` is absent when the pass
  * has no currency endpoints.
  */

@@ -8,6 +8,9 @@ jest.mock('../../src/ts/metadata', () => ({ updateChallengeVoteMetadata: jest.fn
 jest.mock('../../src/ts/services/votingOrchestrator', () => ({
     runVotingPass: jest.fn(async () => ({ success: true, message: 'pass' })),
 }));
+jest.mock('../../src/ts/services/votingOrchestrator/boost', () => ({
+    runSuspendBoosts: jest.fn(async () => []),
+}));
 jest.mock('../../src/ts/services/missions', () => ({
     loadMissionNeeds: jest.fn(async () => null),
     registerMissionNeeds: jest.fn(() => null),
@@ -17,20 +20,33 @@ jest.mock('../../src/ts/services/joinChallenges', () => ({
     joinChallengeSingle: jest.fn(),
     forgetUnconfirmedPayment: jest.fn(),
 }));
-jest.mock('../../src/ts/services/autoClaim', () => ({ runClaimPass: jest.fn(async () => undefined) }));
+// The CLAIM_ENDPOINTS name list rides along; a whole-module factory would leave it undefined for the strategy.
+jest.mock('../../src/ts/services/autoClaim', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/services/autoClaim')>('../../src/ts/services/autoClaim'),
+    runClaimPass: jest.fn(async () => undefined),
+}));
 
 import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
+import type * as boostModule from '../../src/ts/services/votingOrchestrator/boost';
 import type * as indexModule from '../../src/ts/mock/index';
 import type * as strategyModule from '../../src/ts/mock/strategy';
 import type * as apiFactoryModule from '../../src/ts/apiFactory';
+import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
+import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 const { runVotingPass } = jest.mocked(
     require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule,
 );
+const { runSuspendBoosts } = jest.mocked(
+    require('../../src/ts/services/votingOrchestrator/boost') as typeof boostModule,
+);
 const { mockApiClient, clearSessionCache } = require('../../src/ts/mock/index') as typeof indexModule;
 const { mockEntryAgeLedger } = require('../../src/ts/mock/strategy') as typeof strategyModule;
+const { mockScenarioStateLedger } = require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
+const { entryAgeLedger } = require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
 const { getApiStrategy } = require('../../src/ts/apiFactory') as typeof apiFactoryModule;
 
 const settle = async <T>(promise: Promise<T>): Promise<T> => {
@@ -110,5 +126,26 @@ describe('mock mode records when a photo went in', () => {
             challenges: [],
             fetchFailed: true,
         });
+    });
+});
+
+describe('mock mode runs the pass and the sleep boost over the in-memory stores', () => {
+    test('the pass runs scenarios over the in-memory scenario ledger', async () => {
+        await settle(mockApiClient.fetchChallengesAndVote('tok'));
+        const deps = runVotingPass.mock.calls.at(-1)![2];
+        expect(deps.scenarios).toEqual({ ledger: mockScenarioStateLedger });
+    });
+
+    test('the sleep-boost binder passes its challenges, token and instant through, over the in-memory entry ages', async () => {
+        const challenges = [invalid<Challenge>({ id: 1 })];
+
+        await settle(mockApiClient.applyBoostsOnSuspend(challenges, 'tok', 1_700_000_000));
+
+        const [passed, token, deps, now] = runSuspendBoosts.mock.calls[0];
+        expect(passed).toBe(challenges);
+        expect(token).toBe('tok');
+        expect(now).toBe(1_700_000_000);
+        expect(deps.entryAges).toBe(mockEntryAgeLedger);
+        expect(deps.entryAges).not.toBe(entryAgeLedger);
     });
 });

@@ -50,6 +50,23 @@ export interface JoinDeps {
 }
 
 /**
+ * The endpoint names `JoinDeps` carries (everything but the state stores and
+ * seams); both strategies project them from this one list (pickEndpoints).
+ */
+export const JOIN_ENDPOINTS = [
+    'getMemberChallenges',
+    'getSuggestedPhotoIds',
+    'getBankroll',
+    'coinsUnlock',
+    'submitToChallenge',
+    'getEligiblePhotos',
+    'getEligiblePhotosWalk',
+    'searchTagAutocomplete',
+    'getCurrentMemberProfile',
+    'getActiveChallenges',
+] as const;
+
+/**
  * One join's result. `charged` is coins spent THIS call; `maybeCharged` is the cost of an unlock that got no
  * answer, which may or may not have been spent (a pass counts it against its budget and balance, and does not
  * report it as charged).

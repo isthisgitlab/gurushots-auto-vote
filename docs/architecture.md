@@ -334,9 +334,11 @@ repeated six times is one that gets forgotten at one of them.
   pre-resolution fallback. Nothing here can fail a fill. **That optionality is a safety net, not the
   shipping state** — every real path supplies them: `strategies/real/index.ts` (the `api:` bundle `buildFillDeps`
   in `services/votingOrchestrator/context.ts` copies into `fillDeps`, and `joinDeps`), `ipc/actions/entries.ts` (manual Fill Now), and both mock
-  bundles. Note `loadFillCandidates` (`services/autoFill/pipeline/scoring.ts`) rebuilds a fresh deps object for its
-  `fetchCandidatesForChallenge` call rather than spreading `deps`, so a dep added upstream must be named
-  there too or it is silently dropped for auto-fill, emergency fill and manual fill alike.
+  bundles. Both strategies project those bundles from one shared name list per bundle (`VOTING_PASS_ENDPOINTS` in
+  `services/votingOrchestrator/context.ts`, `JOIN_ENDPOINTS` in `services/joinChallenges/shared.ts`, `CURRENCY_ENDPOINTS` in
+  `services/currencyAuto.ts`, `CLAIM_ENDPOINTS` in `services/autoClaim.ts`), and `loadFillCandidates`
+  (`services/autoFill/pipeline/scoring.ts`) spreads `deps`, so an endpoint added to a bundle type fails
+  `pnpm typecheck` at the projection call site until every mode names it.
 
 ### 3c. Chosen photos
 
