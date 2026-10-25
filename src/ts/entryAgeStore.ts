@@ -30,6 +30,7 @@ import type { Challenge } from './types/gurushots';
 import { createJsonStore } from './settings/storage';
 import { createStateLog, MAX_IDS } from './entryAgeStateLog';
 import type { State, StoredEntryAgeRecord } from './entryAgeStateLog';
+import { createMemoryRawJsonStore } from './parseUntrustedJson';
 import { finiteOr } from './numbers';
 
 // `shared`: the Android background service records entries too (gs_entry_ages is on its native allow-list), and each
@@ -383,15 +384,7 @@ const createEntryAgeLedger = (store: RawJsonStore, refreshStore?: () => Promise<
 };
 
 /** Ledger over an in-memory store — mock mode, tests. */
-const createMemoryEntryAgeLedger = () => {
-    let raw: string | null = null;
-    return createEntryAgeLedger({
-        readRaw: () => raw,
-        writeRaw: (data) => {
-            raw = data;
-        },
-    });
-};
+const createMemoryEntryAgeLedger = () => createEntryAgeLedger(createMemoryRawJsonStore());
 
 const entryAgeLedger = createEntryAgeLedger(entryAgeStore, entryAgeStore.refreshAsync);
 

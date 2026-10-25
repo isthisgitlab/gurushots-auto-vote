@@ -25,6 +25,7 @@ import { createJsonStore } from './settings/storage';
 import { isPlainObject } from './plainObject';
 import { fileErrorMessage } from './errorMessage';
 import { storeLoaded, throughStore } from './settings/storeTransport';
+import { createMemoryRawJsonStore } from './parseUntrustedJson';
 import * as runtime from './runtime';
 
 // `strict`: a write the service's native bridge did not persist is a failed write: the cap is only as good as the count.
@@ -238,15 +239,7 @@ const createAutoSpendLedger = (
 };
 
 /** Ledger over an in-memory store — mock mode, tests. */
-const createMemoryAutoSpendLedger = () => {
-    let raw: string | null = null;
-    return createAutoSpendLedger({
-        readRaw: () => raw,
-        writeRaw: (data) => {
-            raw = data;
-        },
-    });
-};
+const createMemoryAutoSpendLedger = () => createAutoSpendLedger(createMemoryRawJsonStore());
 
 const autoSpendLedger = createAutoSpendLedger(autoSpendStore, () => storeLoaded(AUTO_SPEND_KEY), recoveryStep);
 

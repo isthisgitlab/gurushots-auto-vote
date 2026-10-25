@@ -56,6 +56,7 @@ import * as logger from './logger';
 import { createJsonStore } from './settings/storage';
 import { storeLoaded } from './settings/storeTransport';
 import { fileErrorMessage } from './errorMessage';
+import { createMemoryRawJsonStore } from './parseUntrustedJson';
 import { acquireUnlockLock } from './joinStateStore';
 import { createStateFile, epochOf, isRecord, isTombstone } from './scenarioStateFile';
 import type { Mutation, ResetResult, StateLock } from './scenarioStateFile';
@@ -215,15 +216,7 @@ const createStateLedger = (
 };
 
 /** Ledger over an in-memory store — mock mode, tests. */
-const createMemoryStateLedger = () => {
-    let raw: string | null = null;
-    return createStateLedger({
-        readRaw: () => raw,
-        writeRaw: (data) => {
-            raw = data;
-        },
-    });
-};
+const createMemoryStateLedger = () => createStateLedger(createMemoryRawJsonStore());
 
 const scenarioStateLedger = createStateLedger(
     scenarioStateStore,

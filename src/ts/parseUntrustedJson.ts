@@ -4,8 +4,11 @@
  * the text cannot be parsed at all, say so once in the caller's category with
  * the caller's words, then answer empty all the same. `readRaw` runs inside
  * the try, so a store whose read itself throws lands in the same warning.
+ *
+ * The module also holds the in-memory raw-JSON store the mock-mode ledgers sit on.
  */
 
+import type { RawJsonStore } from './types/stores';
 import * as logger from './logger';
 import { isPlainObject } from './plainObject';
 
@@ -29,4 +32,19 @@ const parseUntrustedJsonObject = (
     }
 };
 
-export { parseUntrustedJsonObject };
+/**
+ * A raw-JSON store over one string in memory — mock mode, tests. Every call
+ * makes a store of its own, empty (null: never written) until written.
+ * @returns the store ({readRaw, writeRaw}) over that string
+ */
+const createMemoryRawJsonStore = (): RawJsonStore => {
+    let raw: string | null = null;
+    return {
+        readRaw: () => raw,
+        writeRaw: (data) => {
+            raw = data;
+        },
+    };
+};
+
+export { createMemoryRawJsonStore, parseUntrustedJsonObject };

@@ -25,7 +25,7 @@ import type { RawJsonStore, SwapBackRecord } from './types/stores';
 import { createJsonStore } from './settings/storage';
 import { isPlainObject } from './plainObject';
 import { errorMessage } from './errorMessage';
-import { parseUntrustedJsonObject } from './parseUntrustedJson';
+import { createMemoryRawJsonStore, parseUntrustedJsonObject } from './parseUntrustedJson';
 
 const swapBackStore = createJsonStore({ fileName: 'swapBacks.json', prefKey: 'gs_swap_backs' });
 
@@ -123,15 +123,7 @@ const createLedger = (store: RawJsonStore) => {
 };
 
 /** Ledger over an in-memory store — mock mode, tests. */
-const createMemoryLedger = () => {
-    let raw: string | null = null;
-    return createLedger({
-        readRaw: () => raw,
-        writeRaw: (data) => {
-            raw = data;
-        },
-    });
-};
+const createMemoryLedger = () => createLedger(createMemoryRawJsonStore());
 
 const swapBackLedger = createLedger(swapBackStore);
 
