@@ -27,6 +27,7 @@ export const logMessages = {
     m0a782435feef: 'Atjauninājumu pārbaude izlaista — nesen jau pārbaudīts',
     m0a78a3ca3e9b: 'Nederīgs {0} metadatos: {1}; noņem',
     m0a7ef884cc20: '  REAL  — savienojas ar īsto GuruShots API (darba vide)',
+    m0b1eceae3843: 'Kļūda, atsvaidzinot izaicinājumu noteikumus:',
     m0b5c6f44876d: 'Kļūda, saglabājot profilu',
     m0b945b754745: 'Saņemts SIGTERM signāls. Beidz darbu...',
     m0d42be55edef: 'Pieteikšanās tokens sākas ar mock_: {0}',

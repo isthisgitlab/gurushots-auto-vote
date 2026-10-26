@@ -11,8 +11,9 @@
  * mocked at module top with controllable state objects.
  */
 
-import { act, fireEvent, pickOption, render, screen, waitFor } from './helpers/test-utils';
+import { act, fireEvent, pickOption, render, screen, waitFor, within } from './helpers/test-utils';
 import { SettingsModal } from '@/components/app/SettingsModal';
+import { fireSettingsChanged } from './helpers/setup';
 import { selectTab } from '../helpers/selectTab';
 import type { TitleRule } from '../../src/ts/types/settings';
 import type { UiResetHandler } from '../../src/ts/types/settingsEditor';
@@ -132,6 +133,15 @@ const findTimezoneAddButton = () => {
 beforeEach(() => {
     resetHookState();
     document.documentElement.removeAttribute('data-theme');
+});
+
+// Tests that save rules set persistent mock answers; hand the setup defaults
+// back so no implementation leaks into another test (the global beforeEach's
+// clearAllMocks keeps implementations).
+afterEach(() => {
+    jest.mocked(window.api.getTitleRules).mockReset().mockResolvedValue([]);
+    jest.mocked(window.api.getChallengeProfiles).mockReset().mockResolvedValue({});
+    jest.mocked(window.api.saveChallengeProfile).mockReset().mockResolvedValue(true);
 });
 
 describe('SettingsModal — timezone "+" inline-add', () => {
@@ -468,6 +478,22 @@ describe('SettingsModal — title-tag-rules save', () => {
 
         await waitFor(() => expect(onClose).toHaveBeenCalled());
         expect(window.api.setTitleRules).toHaveBeenCalledWith([rule]);
+    });
+
+    test('a landed rule save closes even when its trailing refresh fails', async () => {
+        jest.mocked(window.api.getTitleRules)
+            .mockResolvedValueOnce([{ title: 'Hats', mustIncludeTags: [], shouldIncludeTags: [] }])
+            .mockRejectedValueOnce(new Error('disk')); // the refresh after the landed write
+        const onClose = jest.fn();
+
+        render(<SettingsModal isOpen={true} onClose={onClose} />);
+        await screen.findByDisplayValue('Hats');
+
+        clickSave();
+
+        await waitFor(() => expect(onClose).toHaveBeenCalled());
+        expect(screen.queryByText('app.titleTagRulesSaveError')).toBeNull();
+        expect(window.api.logError).toHaveBeenCalledWith('Error refreshing title rules: disk');
     });
 
     test('loads saved profiles into each title rule profile selector', async () => {
@@ -1119,7 +1145,9 @@ describe('SettingsModal — save outcomes', () => {
     });
 
     test('editing a title rule after a rejected save clears the title error', async () => {
-        jest.mocked(window.api.getTitleRules).mockResolvedValueOnce([
+        // Not a Once: the write was rejected, so the trailing refresh reads the
+        // unchanged disk rules back.
+        jest.mocked(window.api.getTitleRules).mockResolvedValue([
             { title: 'Hats', mustIncludeTags: [], shouldIncludeTags: [] },
         ]);
         jest.mocked(window.api.setTitleRules).mockResolvedValueOnce(false);
@@ -1287,5 +1315,39 @@ describe('SettingsModal — editing rules without a pending error', () => {
         expect(screen.getByDisplayValue('speed')).toBeTruthy();
         expect(screen.getByDisplayValue('Caps')).toBeTruthy();
         expect(document.querySelector('[role="alert"]')).toBeNull();
+    });
+});
+
+describe('SettingsModal — the Rules tab follows a profile saved in the Profiles tab', () => {
+    test('a save-as in the Profiles tab lists the new name in the Rules tab without reopening', async () => {
+        jest.mocked(window.api.getTitleRules).mockResolvedValue([
+            { title: 'Portraits', profile: 'tactic', mustIncludeTags: [], shouldIncludeTags: [] },
+        ]);
+        jest.mocked(window.api.getChallengeProfiles).mockResolvedValue(invalid({ tactic: { exposure: 80 } }));
+        // The shells' timing: the write's own broadcast fires inside the call,
+        // and the fresh store is what every later read answers.
+        jest.mocked(window.api.saveChallengeProfile).mockImplementation(async () => {
+            jest.mocked(window.api.getChallengeProfiles).mockResolvedValue(
+                invalid({ tactic: { exposure: 80 }, brand: { exposure: 90 } }),
+            );
+            fireSettingsChanged();
+            return true;
+        });
+
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+
+        selectTab('app.challengeProfiles');
+        const picker = await screen.findByRole<HTMLSelectElement>('combobox', { name: 'app.challengeProfiles' });
+        act(() => {
+            pickOption(picker, 'tactic');
+        });
+        fireEvent.change(screen.getByLabelText('app.saveAsNewLabel'), { target: { value: 'brand' } });
+        fireEvent.click(screen.getByRole('button', { name: 'app.saveAsNewProfile' }));
+        await waitFor(() => expect(window.api.saveChallengeProfile).toHaveBeenCalledWith('brand', { exposure: 80 }));
+
+        selectTab('app.titleTagRules');
+        const profileSelect = screen.getByLabelText<HTMLSelectElement>('app.titleRuleProfile');
+        await waitFor(() => expect(within(profileSelect).getByRole('option', { name: 'brand' })).toBeTruthy());
+        expect(profileSelect.value).toBe('tactic');
     });
 });

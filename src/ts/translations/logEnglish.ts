@@ -27,6 +27,7 @@ export const logMessages = {
     m0a782435feef: 'Update check skipped - checked recently',
     m0a78a3ca3e9b: 'Invalid {0} in metadata: {1}, removing',
     m0a7ef884cc20: '  REAL  - Connect to actual GuruShots API (production)',
+    m0b1eceae3843: 'Error refreshing title rules:',
     m0b5c6f44876d: 'Error saving profile',
     m0b945b754745: 'Received SIGTERM signal. Exiting...',
     m0d42be55edef: 'Token starts with mock_: {0}',

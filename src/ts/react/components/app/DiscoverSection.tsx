@@ -61,7 +61,7 @@ function ChosenChip({ name, onClick }: { name: string; onClick: () => void }) {
     return (
         <button
             type="button"
-            className="badge badge-outline badge-sm mt-0.5 min-h-6"
+            className="badge badge-warning badge-sm mt-0.5 min-h-6"
             title={t('app.discoverChosenChipHint')}
             aria-label={interp(t('app.discoverChosenChipLabel'), { title: name })}
             onClick={onClick}
