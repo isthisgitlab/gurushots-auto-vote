@@ -67,9 +67,9 @@ const APP_TIER = 'app';
 
 // The modal box's classes. The fixed height's 5em gutter is measured inside the system bars
 // (safe-area insets, see TALL_MODAL_BOX_HEIGHT), so switching to a short tab cannot shrink and
-// re-centre the box and move the tab row under the pointer; flex-col plus the footer's mt-auto keep Save /
-// Reset all / Cancel at the bottom on a short tab. The height and flex apply once the tabbed
-// form shows — the first-load spinner keeps the plain auto-height box.
+// re-centre the box and move the tab row under the pointer; flex-col plus the footer's mt-auto
+// keep Save / Reset all / Cancel at the bottom on a short tab. The height and flex apply once
+// the tabbed form shows — the first-load spinner keeps the plain auto-height box.
 const SETTINGS_MODAL_BOX_CLASS = `${STICKY_FOOTER_SCROLL_PADDING} ${SETTINGS_NAV_SCROLL_PADDING}`;
 const SETTINGS_MODAL_FORM_BOX_CLASS = `${SETTINGS_MODAL_BOX_CLASS} ${TALL_MODAL_BOX_HEIGHT} flex flex-col`;
 

@@ -4,7 +4,9 @@ import { StrokeIcon, ICON_PATHS } from './StrokeIcon';
 import type { ComponentChildren } from 'preact';
 
 // The 5em gutter, measured inside the system bars (safe-area insets), so a tall modal stays
-// clear of the Android status and navigation bars.
+// clear of the Android status and navigation bars. The insets are non-zero only when Capacitor
+// passes them through to env() (its default insetsHandling, WebView 140+); on older WebViews
+// Capacitor pads the native view and 100vh already excludes the bars.
 export const TALL_MODAL_BOX_HEIGHT = 'h-[calc(100vh-5em-env(safe-area-inset-top)-env(safe-area-inset-bottom))]';
 
 // The elements Tab can land on inside the dialog.
@@ -167,8 +169,9 @@ export function Modal({
             aria-modal="true"
             aria-labelledby={title ? titleId : undefined}
         >
-            {/* Backdrop */}
-            <div className="modal-backdrop bg-black/50" onClick={onClose} aria-hidden="true" />
+            {/* Backdrop: fixed to the viewport so it also dims and catches taps in the
+                overlay's safe-area padding. */}
+            <div className="modal-backdrop fixed inset-0 bg-black/50" onClick={onClose} aria-hidden="true" />
 
             {/* Modal box */}
             <div

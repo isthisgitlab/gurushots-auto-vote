@@ -175,6 +175,9 @@ describe('Modal', () => {
         expect(box.classList.contains('max-h-[calc(100vh-env(safe-area-inset-top)-env(safe-area-inset-bottom))]')).toBe(
             true,
         );
+        const backdrop = document.querySelector('.modal-backdrop')!;
+        expect(backdrop.classList.contains('fixed')).toBe(true);
+        expect(backdrop.classList.contains('inset-0')).toBe(true);
     });
 
     test('restores focus to the trigger element when closed', () => {
