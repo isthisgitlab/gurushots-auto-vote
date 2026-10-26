@@ -493,7 +493,8 @@ describe('SettingsModal — title-tag-rules save', () => {
 
         await waitFor(() => expect(onClose).toHaveBeenCalled());
         expect(screen.queryByText('app.titleTagRulesSaveError')).toBeNull();
-        expect(window.api.logError).toHaveBeenCalledWith('Error refreshing title rules: disk');
+        // The trailing refresh is fire-and-forget: wait for its logged failure.
+        await waitFor(() => expect(window.api.logError).toHaveBeenCalledWith('Error refreshing title rules: disk'));
     });
 
     test('loads saved profiles into each title rule profile selector', async () => {
@@ -1145,8 +1146,10 @@ describe('SettingsModal — save outcomes', () => {
     });
 
     test('editing a title rule after a rejected save clears the title error', async () => {
-        // Not a Once: the write was rejected, so the trailing refresh reads the
-        // unchanged disk rules back.
+        // Not a Once: persist()'s fire-and-forget trailing refresh reads the
+        // disk after the rejection — with the default answer it would empty
+        // the editor before the assertions. The write was refused, so the
+        // disk is the unchanged rules.
         jest.mocked(window.api.getTitleRules).mockResolvedValue([
             { title: 'Hats', mustIncludeTags: [], shouldIncludeTags: [] },
         ]);
@@ -1323,13 +1326,14 @@ describe('SettingsModal — the Rules tab follows a profile saved in the Profile
         jest.mocked(window.api.getTitleRules).mockResolvedValue([
             { title: 'Portraits', profile: 'tactic', mustIncludeTags: [], shouldIncludeTags: [] },
         ]);
-        jest.mocked(window.api.getChallengeProfiles).mockResolvedValue(invalid({ tactic: { exposure: 80 } }));
+        jest.mocked(window.api.getChallengeProfiles).mockResolvedValue({ tactic: { exposure: 80 } });
         // The shells' timing: the write's own broadcast fires inside the call,
         // and the fresh store is what every later read answers.
         jest.mocked(window.api.saveChallengeProfile).mockImplementation(async () => {
-            jest.mocked(window.api.getChallengeProfiles).mockResolvedValue(
-                invalid({ tactic: { exposure: 80 }, brand: { exposure: 90 } }),
-            );
+            jest.mocked(window.api.getChallengeProfiles).mockResolvedValue({
+                tactic: { exposure: 80 },
+                brand: { exposure: 90 },
+            });
             fireSettingsChanged();
             return true;
         });

@@ -670,9 +670,7 @@ describe('SettingsModal — a refused Save selects and marks the tabs', () => {
 
         save();
         await screen.findByText('app.titleTagRulesSaveError');
-        // persist()'s trailing refresh settles before the refusal returns and
-        // reveals the tab, so it is not on screen the moment the error is.
-        const tab = await screen.findByRole('tab', { name: 'app.titleTagRules' });
+        const tab = screen.getByRole('tab', { name: 'app.titleTagRules' });
         await waitFor(() => expect(document.activeElement).toBe(tab));
         expect(filterInput().value).toBe('');
     });

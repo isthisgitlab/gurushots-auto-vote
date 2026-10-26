@@ -27,7 +27,6 @@ export const logMessages = {
     m0a782435feef: 'Update check skipped - checked recently',
     m0a78a3ca3e9b: 'Invalid {0} in metadata: {1}, removing',
     m0a7ef884cc20: '  REAL  - Connect to actual GuruShots API (production)',
-    m0b1eceae3843: 'Error refreshing title rules:',
     m0b5c6f44876d: 'Error saving profile',
     m0b945b754745: 'Received SIGTERM signal. Exiting...',
     m0d42be55edef: 'Token starts with mock_: {0}',
@@ -85,6 +84,7 @@ export const logMessages = {
     m1dc37b518aae: '{0} turbo fill-new unavailable ({1}); applying to existing entry',
     m1dd20ed44833: '{0} Emergency Submit window — applying available boost despite Auto-Apply Boost being off',
     m1f609b07986f: '\nTo change mode, run: login',
+    m1f84e040c2d1: 'Error loading title rules: {0}',
     m1f91f6908c64: 'manualFill: settings module not provided to fillChallengeNow for {0}; tag rules will not apply',
     m1fda900da68a: 'Could not reach GuruShots to join {0}. Check your connection and try again.',
     m1fecc1f1c369: 'Error reading auto-claim status:',
@@ -546,6 +546,7 @@ export const logMessages = {
     mc3272028233f: 'saveChallengeProfile rejected: profile cap of {0} reached',
     mc37905687d16:
         '{0} every entry has Turbo or is pinned for Turbo, and a new photo cannot be submitted before sleep — boost skipped',
+    mc37aa3fa056b: 'Error refreshing title rules: {0}',
     mc3b9ce1fd7b0: 'Returning mock vote images: {0}',
     mc4b4ee719e16: '{0}: {1} is no longer in the active challenge list — not submitting a new photo to it',
     mc4fd1aabad50: '{0}: chosen photos entered — removed from the list: {1}',

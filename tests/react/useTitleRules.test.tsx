@@ -36,8 +36,8 @@ afterEach(() => {
 
 /** Renders the hook open on a settled load, then clears the fetch counters. */
 const openOn = async (rules: TitleRule[], profiles: Record<string, ChallengeValues>) => {
-    mockApi.getTitleRules.mockResolvedValue(invalid(rules));
-    mockApi.getChallengeProfiles.mockResolvedValue(invalid(profiles));
+    mockApi.getTitleRules.mockResolvedValue(rules);
+    mockApi.getChallengeProfiles.mockResolvedValue(profiles);
     const hook = renderHook(() => useTitleRules(true));
     await waitFor(() => expect(hook.result.current.loading).toBe(false));
     mockApi.getTitleRules.mockClear();
@@ -106,8 +106,8 @@ describe('the settings-changed refresh — clean editor', () => {
     test('a profile saved elsewhere arrives in profiles after a broadcast', async () => {
         const { result } = await openOn([RULE_A], { tactic: { exposure: 80 } });
 
-        mockApi.getTitleRules.mockResolvedValue(invalid([RULE_A]));
-        mockApi.getChallengeProfiles.mockResolvedValue(invalid({ tactic: { exposure: 80 }, brand: { exposure: 90 } }));
+        mockApi.getTitleRules.mockResolvedValue([RULE_A]);
+        mockApi.getChallengeProfiles.mockResolvedValue({ tactic: { exposure: 80 }, brand: { exposure: 90 } });
         await fire();
 
         expect(result.current.profiles).toEqual({ tactic: { exposure: 80 }, brand: { exposure: 90 } });
@@ -120,8 +120,8 @@ describe('the settings-changed refresh — clean editor', () => {
             tactic: { exposure: 80 },
         });
 
-        mockApi.getTitleRules.mockResolvedValue(invalid([{ title: 'A', profile: 'Tactic', mustIncludeTags: ['x'] }]));
-        mockApi.getChallengeProfiles.mockResolvedValue(invalid({ Tactic: { exposure: 80 } }));
+        mockApi.getTitleRules.mockResolvedValue([{ title: 'A', profile: 'Tactic', mustIncludeTags: ['x'] }]);
+        mockApi.getChallengeProfiles.mockResolvedValue({ Tactic: { exposure: 80 } });
         await fire();
 
         expect(result.current.profiles).toEqual({ Tactic: { exposure: 80 } });
@@ -134,8 +134,8 @@ describe('the settings-changed refresh — clean editor', () => {
             gone: { exposure: 80 },
         });
 
-        mockApi.getTitleRules.mockResolvedValue(invalid([{ title: 'A', mustIncludeTags: ['x'] }]));
-        mockApi.getChallengeProfiles.mockResolvedValue(invalid({}));
+        mockApi.getTitleRules.mockResolvedValue([{ title: 'A', mustIncludeTags: ['x'] }]);
+        mockApi.getChallengeProfiles.mockResolvedValue({});
         await fire();
 
         expect(result.current.profiles).toEqual({});
@@ -151,8 +151,8 @@ describe('the settings-changed refresh — clean editor', () => {
         act(() => result.current.change(draft));
         expect(result.current.isDirty()).toBe(true);
 
-        mockApi.getTitleRules.mockResolvedValue(invalid([free, variant, { title: 'Ed', mustIncludeTags: [] }]));
-        mockApi.getChallengeProfiles.mockResolvedValue(invalid({ tactic: { exposure: 80 } }));
+        mockApi.getTitleRules.mockResolvedValue([free, variant, { title: 'Ed', mustIncludeTags: [] }]);
+        mockApi.getChallengeProfiles.mockResolvedValue({ tactic: { exposure: 80 } });
         await fire();
 
         expect(result.current.rules[0]).toBe(free); // untouched, same object
@@ -165,8 +165,8 @@ describe('the settings-changed refresh — clean editor', () => {
         const draft: TitleRule[] = [{ ...RULE_A, profile: 'tactic' }];
         act(() => result.current.change(draft));
 
-        mockApi.getTitleRules.mockResolvedValue(invalid(null));
-        mockApi.getChallengeProfiles.mockResolvedValue(invalid(null));
+        mockApi.getTitleRules.mockResolvedValue(null);
+        mockApi.getChallengeProfiles.mockResolvedValue(null);
         await fire();
 
         expect(mockApi.logError).toHaveBeenCalledWith('Error refreshing title rules: unexpected payload');
@@ -175,9 +175,24 @@ describe('the settings-changed refresh — clean editor', () => {
         expect(result.current.isDirty()).toBe(true);
     });
 
+    test('a refresh answering valid rules and a null profiles payload keeps the state and logs', async () => {
+        const loadedProfiles = { tactic: { exposure: 80 } };
+        const { result } = await openOn([RULE_A], loadedProfiles);
+        const draft: TitleRule[] = [{ ...RULE_A, profile: 'tactic' }];
+        act(() => result.current.change(draft));
+
+        mockApi.getChallengeProfiles.mockResolvedValue(null); // a read error answers null
+        await fire();
+
+        expect(mockApi.logError).toHaveBeenCalledWith('Error refreshing title rules: unexpected payload');
+        expect(result.current.rules).toEqual(draft); // the draft keeps its profile
+        expect(result.current.profiles).toEqual(loadedProfiles); // not replaced
+        expect(result.current.isDirty()).toBe(true);
+    });
+
     test('a clean editor keeps its rules when a refresh answers malformed payloads', async () => {
         const { result } = await openOn([RULE_A], {});
-        mockApi.getTitleRules.mockResolvedValue(invalid(null));
+        mockApi.getTitleRules.mockResolvedValue(null);
         await fire();
 
         expect(mockApi.logError).toHaveBeenCalledWith('Error refreshing title rules: unexpected payload');
@@ -203,8 +218,8 @@ describe('the settings-changed refresh — dirty draft', () => {
         expect(result.current.isDirty()).toBe(true);
 
         // Only the profiles changed on disk; the rules answer is unchanged.
-        mockApi.getTitleRules.mockResolvedValue(invalid([RULE_A]));
-        mockApi.getChallengeProfiles.mockResolvedValue(invalid({ tactic: { exposure: 80 }, brand: { exposure: 90 } }));
+        mockApi.getTitleRules.mockResolvedValue([RULE_A]);
+        mockApi.getChallengeProfiles.mockResolvedValue({ tactic: { exposure: 80 }, brand: { exposure: 90 } });
         await fire();
 
         expect(result.current.rules).toBe(draft); // identity kept — the reconcile changed nothing
@@ -218,8 +233,8 @@ describe('the settings-changed refresh — dirty draft', () => {
         act(() => result.current.change(draft));
 
         const freshDisk: TitleRule[] = [{ title: 'B', mustIncludeTags: [] }];
-        mockApi.getTitleRules.mockResolvedValue(invalid(freshDisk));
-        mockApi.getChallengeProfiles.mockResolvedValue(invalid({}));
+        mockApi.getTitleRules.mockResolvedValue(freshDisk);
+        mockApi.getChallengeProfiles.mockResolvedValue({});
         await fire();
 
         expect(result.current.rules).toEqual(draft); // edits kept
@@ -234,8 +249,8 @@ describe('the settings-changed refresh — dirty draft', () => {
         act(() => result.current.change(edit));
         expect(result.current.isDirty()).toBe(true);
 
-        mockApi.getTitleRules.mockResolvedValue(invalid(edit)); // the same edit landed from elsewhere
-        mockApi.getChallengeProfiles.mockResolvedValue(invalid({}));
+        mockApi.getTitleRules.mockResolvedValue(edit); // the same edit landed from elsewhere
+        mockApi.getChallengeProfiles.mockResolvedValue({});
         await fire();
 
         expect(result.current.isDirty()).toBe(false);
@@ -249,8 +264,8 @@ describe('the settings-changed refresh — dirty draft', () => {
         const draft: TitleRule[] = [one, { title: 'Two', mustIncludeTags: ['z'] }];
         act(() => result.current.change(draft));
 
-        mockApi.getTitleRules.mockResolvedValue(invalid([{ title: 'One', mustIncludeTags: ['x'] }, two]));
-        mockApi.getChallengeProfiles.mockResolvedValue(invalid({ keep: { exposure: 70 } }));
+        mockApi.getTitleRules.mockResolvedValue([{ title: 'One', mustIncludeTags: ['x'] }, two]);
+        mockApi.getChallengeProfiles.mockResolvedValue({ keep: { exposure: 70 } });
         await fire();
 
         expect(result.current.rules).toEqual([
@@ -268,32 +283,24 @@ describe('the settings-changed refresh — dirty draft', () => {
         const draft: TitleRule[] = [{ title: 'One', profile: 'tactic', mustIncludeTags: ['x', 'extra'] }];
         act(() => result.current.change(draft));
 
-        mockApi.getTitleRules.mockResolvedValue(invalid([{ title: 'One', profile: 'Tactic', mustIncludeTags: ['x'] }]));
-        mockApi.getChallengeProfiles.mockResolvedValue(invalid({ Tactic: { exposure: 80 } }));
+        mockApi.getTitleRules.mockResolvedValue([{ title: 'One', profile: 'Tactic', mustIncludeTags: ['x'] }]);
+        mockApi.getChallengeProfiles.mockResolvedValue({ Tactic: { exposure: 80 } });
         await fire();
 
         expect(result.current.rules).toEqual([{ title: 'One', profile: 'Tactic', mustIncludeTags: ['x', 'extra'] }]);
     });
 
-    test('a draft rule set to "None" (profile: \'\') is untouched and keeps a shown rule-save error', async () => {
+    test('a draft rule set to "None" (profile: \'\') is untouched by the reconcile', async () => {
         const { result } = await openOn([{ title: 'A', mustIncludeTags: ['x'] }], {});
         const draft: TitleRule[] = [{ title: 'A', mustIncludeTags: ['x'], profile: '' }];
         act(() => result.current.change(draft));
 
-        // The shown error: a rejected save, with the '' draft still on screen.
-        mockApi.setTitleRules.mockResolvedValueOnce(false);
-        await act(async () => {
-            expect(await result.current.persist()).toBe(false);
-        });
-        expect(result.current.error).toBe(true);
-
-        mockApi.getTitleRules.mockResolvedValue(invalid([{ title: 'A', mustIncludeTags: ['x'] }]));
-        mockApi.getChallengeProfiles.mockResolvedValue(invalid({}));
+        mockApi.getTitleRules.mockResolvedValue([{ title: 'A', mustIncludeTags: ['x'] }]);
+        mockApi.getChallengeProfiles.mockResolvedValue({});
         await fire();
 
         expect(result.current.rules).toBe(draft); // identity kept — '' is "None", not a name to reconcile
         expect(result.current.rules[0]).toBe(draft[0]);
-        expect(result.current.error).toBe(true); // the refresh changed nothing, so the error stays
     });
 });
 
@@ -312,9 +319,13 @@ describe('the settings-changed refresh — around the load', () => {
         // The load has not settled: nothing fetched beyond the initial load.
         expect(mockApi.getTitleRules).toHaveBeenCalledTimes(1);
 
-        await act(async () => resolveRules(invalid([RULE_A])));
+        await act(async () => resolveRules([RULE_A]));
         await waitFor(() => expect(mockApi.getTitleRules).toHaveBeenCalledTimes(2)); // one refresh, not two
+        await tick();
         expect(hook.result.current.loading).toBe(false);
+        // The refresh's own answers reached the editor.
+        expect(hook.result.current.rules).toEqual([]);
+        expect(hook.result.current.profiles).toEqual({});
     });
 
     test('a broadcast that lands after onLoad but before the next render still refreshes', async () => {
@@ -333,14 +344,14 @@ describe('the settings-changed refresh — around the load', () => {
                 inWindowFired = true;
                 fireSettingsChanged();
             }
-            return invalid([RULE_A]);
+            return [RULE_A];
         });
-        mockApi.getChallengeProfiles.mockResolvedValue(invalid({}));
+        mockApi.getChallengeProfiles.mockResolvedValue({});
         const hook = renderHook(() => useTitleRules(true));
 
         await act(async () => {
             fireSettingsChanged(); // during the load: the missed flag
-            releaseLoad(invalid([RULE_A]));
+            releaseLoad([RULE_A]);
         });
         await tick();
 
@@ -351,9 +362,12 @@ describe('the settings-changed refresh — around the load', () => {
     });
 
     test('no broadcast during the load means no refresh follows it', async () => {
-        await openOn([RULE_A], {});
-        await act(async () => {});
-        expect(mockApi.getTitleRules).toHaveBeenCalledTimes(0);
+        mockApi.getTitleRules.mockResolvedValue([RULE_A]);
+        mockApi.getChallengeProfiles.mockResolvedValue({});
+        const hook = renderHook(() => useTitleRules(true));
+        await waitFor(() => expect(hook.result.current.loading).toBe(false));
+        await tick(); // a stray refresh would surface here
+        expect(mockApi.getTitleRules).toHaveBeenCalledTimes(1);
     });
 
     test('a broadcast around a failed load starts no refresh', async () => {
@@ -383,7 +397,7 @@ describe('the settings-changed refresh — around the load', () => {
                     rejectRules = reject;
                 }),
             )
-            .mockResolvedValueOnce(invalid([RULE_A])); // the reopened session's load
+            .mockResolvedValueOnce([RULE_A]); // the reopened session's load
 
         const hook = renderHook(({ open }) => useTitleRules(open), { initialProps: { open: true } });
         await fire();
@@ -398,6 +412,33 @@ describe('the settings-changed refresh — around the load', () => {
         expect(mockApi.getTitleRules).toHaveBeenCalledTimes(2);
     });
 
+    test('a broadcast during the reopened load waits for it, and its fresh data reaches the editor', async () => {
+        mockApi.getTitleRules.mockResolvedValue([RULE_A]); // the first open's load
+        mockApi.getChallengeProfiles.mockResolvedValue({});
+        const hook = renderHook(({ open }) => useTitleRules(open), { initialProps: { open: true } });
+        await waitFor(() => expect(hook.result.current.loading).toBe(false));
+
+        hook.rerender({ open: false }); // the cleanup resets the applied flag
+        let releaseLoad!: (rules: TitleRule[]) => void;
+        mockApi.getTitleRules.mockReturnValueOnce(
+            new Promise((resolve) => {
+                releaseLoad = resolve;
+            }),
+        );
+        hook.rerender({ open: true }); // the reopened session's load, held pending
+
+        // The fresh answers are what only the missed broadcast's refresh reads.
+        mockApi.getTitleRules.mockResolvedValue([{ title: 'FRESH', mustIncludeTags: [] }]);
+        mockApi.getChallengeProfiles.mockResolvedValue({ brand: { exposure: 90 } });
+        await fire(); // during the pending load: only the missed flag
+
+        await act(async () => releaseLoad([RULE_A]));
+        await waitFor(() => expect(hook.result.current.profiles).toEqual({ brand: { exposure: 90 } }));
+        // Two loads + exactly one refresh, and the refresh's data is what shows.
+        expect(mockApi.getTitleRules).toHaveBeenCalledTimes(3);
+        expect(hook.result.current.rules).toEqual([{ title: 'FRESH', mustIncludeTags: [] }]);
+    });
+
     test('no subscription while closed, cleanup unsubscribes, and a host without the event still mounts', async () => {
         const closed = renderHook(() => useTitleRules(false));
         expect(mockApi.onSettingsChanged).not.toHaveBeenCalled();
@@ -405,7 +446,9 @@ describe('the settings-changed refresh — around the load', () => {
 
         const hook = await openOn([RULE_A], {});
         expect(mockApi.onSettingsChanged).toHaveBeenCalledTimes(1);
-        const unsubscribe = invalid<() => void>(mockApi.onSettingsChanged.mock.results[0]?.value);
+        const unsubscribe: unknown = mockApi.onSettingsChanged.mock.results[0]?.value;
+        expect(unsubscribe).toBeDefined();
+        if (typeof unsubscribe !== 'function') throw new Error('the subscription returned no unsubscribe');
         hook.unmount();
         await tick();
         expect(unsubscribe).toHaveBeenCalledTimes(1);
@@ -423,22 +466,33 @@ describe('the settings-changed refresh — around the load', () => {
 });
 
 describe('the settings-changed refresh — error state', () => {
-    test('a refresh that changes the draft clears a shown rule-save error', async () => {
+    test('a refresh never changes the rule-save error', async () => {
         const { result } = await openOn([{ title: 'One', profile: 'gone', mustIncludeTags: ['x'] }], {
             gone: { exposure: 80 },
         });
+        const draft: TitleRule[] = [{ title: 'One', profile: 'gone', mustIncludeTags: ['x', 'extra'] }];
+        act(() => result.current.change(draft));
+
         mockApi.setTitleRules.mockResolvedValueOnce(false);
         await act(async () => {
             expect(await result.current.persist()).toBe(false);
         });
         expect(result.current.error).toBe(true);
 
-        mockApi.getTitleRules.mockResolvedValue(invalid([{ title: 'One', mustIncludeTags: ['x'] }]));
-        mockApi.getChallengeProfiles.mockResolvedValue(invalid({}));
+        // A refresh that reconciles the draft leaves the shown error alone…
+        mockApi.getTitleRules.mockResolvedValue([{ title: 'One', mustIncludeTags: ['x'] }]);
+        mockApi.getChallengeProfiles.mockResolvedValue({});
         await fire();
+        expect(result.current.rules).toEqual([{ title: 'One', mustIncludeTags: ['x', 'extra'] }]);
+        expect(result.current.error).toBe(true);
 
+        // …and with no error, a refresh never sets one.
+        act(() => result.current.change([{ title: 'One', mustIncludeTags: ['x', 'extra'] }]));
         expect(result.current.error).toBe(false);
-        expect(result.current.rules).toEqual([{ title: 'One', mustIncludeTags: ['x'] }]);
+        await fire();
+        // The edited rule has no profile, so the refresh returns the draft unchanged.
+        expect(result.current.rules).toEqual([{ title: 'One', mustIncludeTags: ['x', 'extra'] }]);
+        expect(result.current.error).toBe(false);
     });
 
     test('a refresh that leaves a rejected draft unchanged keeps the error', async () => {
@@ -451,23 +505,6 @@ describe('the settings-changed refresh — error state', () => {
 
         await fire(); // answers the unchanged disk rules
         expect(result.current.error).toBe(true);
-    });
-
-    test('persist()’s refresh after a rejected write reconciles the draft and keeps the error', async () => {
-        const { result } = await openOn([{ title: 'One', profile: 'gone', mustIncludeTags: ['x'] }], {
-            gone: { exposure: 80 },
-        });
-        const draft: TitleRule[] = [{ title: 'One', profile: 'gone', mustIncludeTags: ['x', 'extra'] }];
-        act(() => result.current.change(draft));
-
-        mockApi.getChallengeProfiles.mockResolvedValue(invalid({})); // the profile is gone on disk
-        mockApi.setTitleRules.mockResolvedValueOnce(false);
-        await act(async () => {
-            expect(await result.current.persist()).toBe(false);
-        });
-
-        expect(result.current.error).toBe(true); // the trailing refresh never clears it
-        expect(result.current.rules).toEqual([{ title: 'One', mustIncludeTags: ['x', 'extra'] }]);
     });
 
     test('a skipped write (a failed load) starts no refresh', async () => {
@@ -491,36 +528,98 @@ describe('the settings-changed refresh — persist and superseding', () => {
         await act(async () => {
             await result.current.persist();
         });
+        await tick(); // the fire-and-forget trailing refresh lands
         expect(mockApi.getTitleRules).toHaveBeenCalledTimes(1); // exactly the trailing refresh
 
         mockApi.setTitleRules.mockResolvedValueOnce(false);
         await act(async () => {
             await result.current.persist();
         });
+        await tick();
         expect(mockApi.getTitleRules).toHaveBeenCalledTimes(2); // and one after the rejection
+    });
+
+    test('persist() returns before its trailing refresh applies, and the draft is reconciled when it lands', async () => {
+        const { result } = await openOn([{ title: 'One', profile: 'gone', mustIncludeTags: ['x'] }], {
+            gone: { exposure: 80 },
+        });
+        const draft: TitleRule[] = [{ title: 'One', profile: 'gone', mustIncludeTags: ['x', 'extra'] }];
+        act(() => result.current.change(draft));
+
+        // The write is refused and the refresh's read is held, so the return
+        // demonstrably comes first.
+        mockApi.getChallengeProfiles.mockResolvedValue({}); // the profile is gone on disk
+        let releaseRules!: (rules: TitleRule[]) => void;
+        mockApi.getTitleRules.mockReturnValueOnce(
+            new Promise((resolve) => {
+                releaseRules = resolve;
+            }),
+        );
+        mockApi.setTitleRules.mockResolvedValueOnce(false);
+        await act(async () => {
+            expect(await result.current.persist()).toBe(false);
+        });
+        // Returned before the trailing refresh applied: the draft is untouched.
+        expect(result.current.error).toBe(true);
+        expect(result.current.rules).toEqual(draft);
+
+        await act(async () => releaseRules([{ title: 'One', mustIncludeTags: ['x'] }]));
+        await tick();
+        // When the refresh lands, it reconciles the draft against the disk.
+        expect(result.current.rules).toEqual([{ title: 'One', mustIncludeTags: ['x', 'extra'] }]);
+    });
+
+    test('a refresh resolved during the write is dropped by persist()', async () => {
+        const { result } = await openOn([RULE_A], {});
+
+        let staleResolve!: (rules: TitleRule[]) => void;
+        mockApi.getTitleRules.mockReturnValueOnce(
+            new Promise((resolve) => {
+                staleResolve = resolve;
+            }),
+        );
+        await fire(); // refresh in flight on the stale answer
+        expect(mockApi.getTitleRules).toHaveBeenCalledTimes(1);
+
+        mockApi.setTitleRules.mockImplementationOnce(async () => {
+            staleResolve([{ title: 'STALE', mustIncludeTags: [] }]); // settles during the write
+            return true;
+        });
+        await act(async () => {
+            expect(await result.current.persist()).toBe(true);
+        });
+        // persist()'s counter bump at start dropped it before it could apply.
+        expect(result.current.rules).toEqual([RULE_A]);
+        await tick(); // the trailing refresh lands, answering the same
+        expect(result.current.rules).toEqual([RULE_A]);
+        expect(mockApi.logError).not.toHaveBeenCalled();
     });
 
     test('broadcasts around a landed save end in one correct, clean state', async () => {
         const { result } = await openOn([RULE_A], {});
-        act(() => result.current.change([{ title: 'B', mustIncludeTags: [] }]));
+        const draft: TitleRule[] = [{ title: 'B', mustIncludeTags: [] }];
+        act(() => result.current.change(draft));
 
-        // The shells' timing: the write's own broadcast fires inside the call.
+        // The shells' timing: the write's own broadcast fires inside the call,
+        // and the disk answers the written rules from then on.
         mockApi.setTitleRules.mockImplementation(async () => {
+            mockApi.getTitleRules.mockResolvedValue(draft);
             fireSettingsChanged();
             return true;
         });
         await act(async () => {
             expect(await result.current.persist()).toBe(true);
         });
+        await tick(); // the fire-and-forget trailing refresh lands
         await fire(); // the watcher's late broadcast, after the write settled
 
         expect(result.current.isDirty()).toBe(false);
         expect(result.current.error).toBe(false);
-        expect(result.current.rules).toEqual([RULE_A]);
+        expect(result.current.rules).toEqual(draft); // the saved draft is what the editor holds
         expect(result.current.profiles).toEqual({});
     });
 
-    test('a refresh started before persist() settles dropped', async () => {
+    test('a refresh started before persist() settles is dropped', async () => {
         const { result } = await openOn([RULE_A], {});
 
         let staleResolve!: (rules: TitleRule[]) => void;
@@ -535,9 +634,10 @@ describe('the settings-changed refresh — persist and superseding', () => {
         await act(async () => {
             expect(await result.current.persist()).toBe(true);
         });
+        await tick(); // the trailing refresh lands
         expect(result.current.rules).toEqual([RULE_A]); // the trailing refresh's answer
 
-        await act(async () => staleResolve(invalid([{ title: 'STALE', mustIncludeTags: [] }])));
+        await act(async () => staleResolve([{ title: 'STALE', mustIncludeTags: [] }]));
         await act(async () => {});
         expect(result.current.rules).toEqual([RULE_A]); // the stale refresh never applied
         expect(mockApi.logError).not.toHaveBeenCalled();
@@ -553,12 +653,12 @@ describe('the settings-changed refresh — persist and superseding', () => {
                     staleResolve = resolve;
                 }),
             )
-            .mockResolvedValueOnce(invalid([{ title: 'FRESH', mustIncludeTags: [] }]));
+            .mockResolvedValueOnce([{ title: 'FRESH', mustIncludeTags: [] }]);
         await fire(); // refresh 1, pending on the stale answer
         await fire(); // refresh 2 supersedes it and answers FRESH
 
         await waitFor(() => expect(result.current.rules).toEqual([{ title: 'FRESH', mustIncludeTags: [] }]));
-        await act(async () => staleResolve(invalid([{ title: 'STALE', mustIncludeTags: [] }])));
+        await act(async () => staleResolve([{ title: 'STALE', mustIncludeTags: [] }]));
         await act(async () => {});
         expect(result.current.rules).toEqual([{ title: 'FRESH', mustIncludeTags: [] }]);
     });
@@ -573,7 +673,7 @@ describe('the settings-changed refresh — persist and superseding', () => {
                     staleReject = reject;
                 }),
             )
-            .mockResolvedValueOnce(invalid([{ title: 'FRESH', mustIncludeTags: [] }]));
+            .mockResolvedValueOnce([{ title: 'FRESH', mustIncludeTags: [] }]);
         await fire(); // refresh 1, pending on the rejecting answer
         await fire(); // refresh 2 supersedes it and applies FRESH
 
@@ -585,8 +685,8 @@ describe('the settings-changed refresh — persist and superseding', () => {
     });
 
     test('a refresh that settles after close/reopen is dropped', async () => {
-        mockApi.getTitleRules.mockResolvedValue(invalid([RULE_A]));
-        mockApi.getChallengeProfiles.mockResolvedValue(invalid({}));
+        mockApi.getTitleRules.mockResolvedValue([RULE_A]);
+        mockApi.getChallengeProfiles.mockResolvedValue({});
         const hook = renderHook(({ open }) => useTitleRules(open), { initialProps: { open: true } });
         await waitFor(() => expect(hook.result.current.loading).toBe(false));
 
@@ -602,7 +702,7 @@ describe('the settings-changed refresh — persist and superseding', () => {
         hook.rerender({ open: true }); // the reopened session's own load
         await waitFor(() => expect(hook.result.current.loading).toBe(false));
 
-        await act(async () => staleResolve(invalid([{ title: 'STALE', mustIncludeTags: [] }])));
+        await act(async () => staleResolve([{ title: 'STALE', mustIncludeTags: [] }]));
         await act(async () => {});
         expect(hook.result.current.rules).toEqual([RULE_A]); // the reopened load's answer
         expect(hook.result.current.error).toBe(false);

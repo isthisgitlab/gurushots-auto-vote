@@ -214,6 +214,18 @@ describe('Latvian log messages', () => {
         }
     });
 
+    test('translates the title-rules refresh and load failures', () => {
+        expect(localizeLogMessage('Error refreshing title rules: disk')).toBe(
+            'Kļūda, atsvaidzinot izaicinājumu noteikumus: disk',
+        );
+        expect(localizeLogMessage('❌ Error refreshing title rules: disk')).toBe(
+            '❌ Kļūda, atsvaidzinot izaicinājumu noteikumus: disk',
+        );
+        expect(localizeLogMessage('Error loading title rules: disk')).toBe(
+            'Kļūda, ielādējot izaicinājumu noteikumus: disk',
+        );
+    });
+
     test('leaves unknown technical text intact and handles unmatched icons', () => {
         expect(localizeLogMessage('upstream-specific-error')).toBe('upstream-specific-error');
         expect(localizeLogMessage('ℹ️ upstream-specific-error')).toBe('ℹ️ upstream-specific-error');

@@ -351,7 +351,7 @@ flatbuffers 25.9.23
   License: Apache-2.0
   Copyright Google Inc. and the FlatBuffers project
 
-follow-redirects 1.16.1
+follow-redirects 1.16.2
   License: MIT
   Copyright 2014–present Olivier Lalonde <olalonde@gmail.com>, James Talmage <james@talmage.io>, Ruben Verborgh
 

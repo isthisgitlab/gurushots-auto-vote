@@ -27,7 +27,6 @@ export const logMessages = {
     m0a782435feef: 'Atjauninājumu pārbaude izlaista — nesen jau pārbaudīts',
     m0a78a3ca3e9b: 'Nederīgs {0} metadatos: {1}; noņem',
     m0a7ef884cc20: '  REAL  — savienojas ar īsto GuruShots API (darba vide)',
-    m0b1eceae3843: 'Kļūda, atsvaidzinot izaicinājumu noteikumus:',
     m0b5c6f44876d: 'Kļūda, saglabājot profilu',
     m0b945b754745: 'Saņemts SIGTERM signāls. Beidz darbu...',
     m0d42be55edef: 'Pieteikšanās tokens sākas ar mock_: {0}',
@@ -86,6 +85,7 @@ export const logMessages = {
     m1dd20ed44833:
         '{0} Ārkārtas iesniegšanas logs — izmanto pieejamo Boost, lai gan "Automātiski izmantot Boost" ir izslēgts',
     m1f609b07986f: '\nLai mainītu režīmu, palaid: login',
+    m1f84e040c2d1: 'Kļūda, ielādējot izaicinājumu noteikumus: {0}',
     m1f91f6908c64:
         'Manuālā iesniegšana: funkcijai fillChallengeNow nav nodots uzstādījumu modulis izaicinājumam {0}; tagu noteikumi netiks piemēroti',
     m1fda900da68a:
@@ -559,6 +559,7 @@ export const logMessages = {
     mc3272028233f: 'saveChallengeProfile noraidīts: sasniegts profilu skaita ierobežojums {0}',
     mc37905687d16:
         '{0} Katram foto ir Turbo vai tas ir piesprausts Turbo, un pirms miega jaunu foto iesniegt nevar — Boost izlaists',
+    mc37aa3fa056b: 'Kļūda, atsvaidzinot izaicinājumu noteikumus: {0}',
     mc3b9ce1fd7b0: 'Atgriež testa balsošanas foto: {0}',
     mc4b4ee719e16: '{0}: {1} vairs nav aktīvo izaicinājumu sarakstā — jaunu foto tam neiesniedz',
     mc4fd1aabad50: '{0}: izvēlētie foto iesniegti — no saraksta izņemti: {1}',
