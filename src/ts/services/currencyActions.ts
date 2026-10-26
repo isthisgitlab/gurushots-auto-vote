@@ -19,6 +19,7 @@
 import { errorMessage } from '../errorMessage';
 import { findActiveChallenge } from './findActiveChallenge';
 import { rankCandidatesForChallenge, resolveMemberId } from './autoFill';
+import { swappedOutIds } from './autoFill/challengeState';
 import { resetPassState as resetPhotoStatsPassState } from './photoStats';
 import { dropChallenge } from './libraryCache';
 import { CURRENCY_OUTCOME, blockedOutcome, swapExcludedIds } from '../voting/currencyActions';
@@ -110,14 +111,6 @@ const entryIds = (challenge: Challenge) =>
             .map((entry) => entry?.id)
             .filter((id) => id !== undefined && id !== null && id !== '')
             .map(String),
-    );
-
-// Every photo swapped out of the challenge so far (the API's swap history).
-const swappedOutIds = (challenge: Challenge) =>
-    new Set(
-        (Array.isArray(challenge?.member?.ranking?.swaps) ? challenge.member.ranking.swaps : []).map((s) =>
-            String(s?.id),
-        ),
     );
 
 // How many swaps the challenge's swap history holds.

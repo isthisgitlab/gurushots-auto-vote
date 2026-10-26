@@ -5,6 +5,7 @@
 import { finalizePick } from '../../photoPicker';
 import { createStatsBudget, statsBudgetTripped } from '../../photoStats';
 import { enteredIds } from '../chosenPhotos';
+import { swappedOutIds } from '../challengeState';
 import type { Challenge } from '../../../types/gurushots';
 import type { LibraryUsage, PickerPhoto } from '../../../types/photoPicker';
 import type { FetchErrorResult, RankDeps } from '../../../types/autoFill';
@@ -32,8 +33,8 @@ type SuggestResult =
 
 /**
  * Ranks a challenge's photos the way the scheduled auto-fill picks (tag rules, Chosen Photos and Submit Only,
- * semantic score, popularity stats, the local image check) and answers the top `count`, best first. Nothing
- * is submitted, and the dependencies carry no submitter.
+ * the swap history, semantic score, popularity stats, the local image check) and answers the top `count`, best
+ * first. Nothing is submitted, and the dependencies carry no submitter.
  *
  * Side effects, by design: the chosen-photo walk memo and its retry timer (resolveMissingChosen), the
  * photo-stats cache, and `suggest:` log lines that name the challenge and counts, never a photo (the shared
@@ -46,8 +47,9 @@ type SuggestResult =
  *
  * @param deps - settings is optional only so failure-path unit tests can omit it, in which case tag rules
  *   degrade to "no filter".
- * @param opts - `usage`: what the eligibility is read for (`'submit'` by default; the swap picker asks `'swap'`).
- *   It reaches the candidate fetch and the chosen-photo lookup alike. `exclude`: ids an earlier run named
+ * @param opts - `usage`: what the eligibility is read for (`'submit'` by default; the swap picker asks `'swap'`,
+ *   which alone keeps the photos the swap history took out in the pool). It reaches the candidate fetch and the
+ *   chosen-photo lookup alike. `exclude`: ids an earlier run named
  *   (paging on to the next-best); they leave the pool like the entered photos, and a run they leave with
  *   nothing to answer is `no-more-suggestions`, since a run with the same rules found photos before.
  *   `ignoreOnly` never enforces Submit Only Chosen Photos (a Discover row's ranking builds the chosen list;
@@ -126,8 +128,16 @@ const suggestFillPhotos = async (
 
     // Photos already entered, and those already shown, are removed BEFORE scoring and enrichment: finalizePick
     // truncates after sorting, so filtering afterwards could leave fewer than `count` when the top photos are out.
+    // A photo the swap history took out is hidden too — the suggestions match what the fill would enter —
+    // unless the user chose it; the swap picker keeps them, since it is what can swap one back in.
     const entered = enteredIds(challenge);
-    const pool = eligible.filter((photo) => !entered.has(String(photo.id)) && !exclude.has(String(photo.id)));
+    const swapped = usage !== 'swap' ? swappedOutIds(challenge) : null;
+    const pool = eligible.filter(
+        (photo) =>
+            !entered.has(String(photo.id)) &&
+            !exclude.has(String(photo.id)) &&
+            (!swapped?.has(String(photo.id)) || chosenSettings.ids.includes(String(photo.id))),
+    );
     const { scored, chosenIds, orderedIds } = await scoreFillCandidates({
         label,
         challenge,

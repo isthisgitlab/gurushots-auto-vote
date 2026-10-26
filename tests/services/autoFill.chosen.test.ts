@@ -62,17 +62,24 @@ const photo = (id: string, labels: string[] = ['Pink'], extra: Partial<PickerPho
 // A due fill: one entry, a 4-slot challenge ten minutes from closing.
 const makeChallenge = ({
     entries = [{ id: 'existing' }],
+    swaps,
     maxSubmits = 4,
     closeIn = 600,
     title = 'Pink In Nature',
-}: { entries?: unknown[]; maxSubmits?: number; closeIn?: number; title?: string } = {}) =>
+}: {
+    entries?: unknown[];
+    swaps?: unknown[];
+    maxSubmits?: number;
+    closeIn?: number;
+    title?: string;
+} = {}) =>
     buildChallenge({
         id: 'c1',
         title,
         url: 'pink-in-nature23',
         max_photo_submits: maxSubmits,
         close_time: NOW + closeIn,
-        member: { ranking: { entries } },
+        member: { ranking: { entries, swaps } },
     });
 
 const makeLog = () => {
@@ -258,6 +265,26 @@ describe('chosen photos rank first', () => {
         expect(await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps)).toBe('submitted');
         expect(submittedIds(deps)).toEqual([['theme-b']]);
         expect(deps.getEligiblePhotosWalk).not.toHaveBeenCalled();
+    });
+
+    test('a photo the challenge swapped out is filled again when the user chose it', async () => {
+        // Newest upload wins a tie, so the swapped-out photo would rank best on its own.
+        const library = [
+            photo('theme-a', ['Pink'], { upload_date: 9200 }),
+            photo('swapped', ['Pink'], { upload_date: 9500 }),
+        ];
+        const plain = makeDeps({ library });
+        expect(await maybeAutoFillChallenge(makeChallenge({ swaps: [{ id: 'swapped' }] }), 'tok', NOW, plain)).toBe(
+            'submitted',
+        );
+        expect(submittedIds(plain)).toEqual([['theme-a']]);
+
+        // The same photo in the chosen list is allowed back in.
+        const chosen = makeDeps({ library, settings: { chosen: ['swapped'] } });
+        expect(await maybeAutoFillChallenge(makeChallenge({ swaps: [{ id: 'swapped' }] }), 'tok', NOW, chosen)).toBe(
+            'submitted',
+        );
+        expect(submittedIds(chosen)).toEqual([['swapped']]);
     });
 
     test('the visual re-rank only chooses between chosen photos, and a block it cannot reorder is left alone', async () => {

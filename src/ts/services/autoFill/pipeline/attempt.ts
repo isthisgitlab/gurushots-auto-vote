@@ -3,7 +3,7 @@
  */
 
 import { finalizePick } from '../../photoPicker';
-import { refreshChallengeState } from '../challengeState';
+import { refreshChallengeState, swappedOutIds } from '../challengeState';
 import { resolveSemanticScores } from '../candidates';
 import {
     clearChosenSkip,
@@ -214,7 +214,7 @@ const runFillAttempt = async ({
         return loaded;
     }
     const { ignoreWords } = loaded;
-    const { eligible, semanticScores } = await addMissedChosen({
+    const { eligible: fetched, semanticScores } = await addMissedChosen({
         label,
         challenge,
         token,
@@ -224,6 +224,12 @@ const runFillAttempt = async ({
         inOrder: chosenSettings.inOrder,
         loaded,
     });
+    // A photo the swap history took out is not picked again on its own; listing
+    // it in Chosen Photos allows it.
+    const swapped = swappedOutIds(challenge);
+    const eligible = fetched.filter(
+        (photo) => !swapped.has(String(photo.id)) || chosenSettings.ids.includes(String(photo.id)),
+    );
 
     // The stand-down probe asks what the NORMAL path would do, so it sees the
     // setting as saved even where this path would not honour Submit Only.

@@ -68,6 +68,7 @@ const makeChallenge = ({
     closeIn = 600,
     maxSubmits = 4,
     entries = [],
+    swaps,
     title = 'Pink In Nature',
     url = 'pink-in-nature23',
 }: {
@@ -75,6 +76,7 @@ const makeChallenge = ({
     closeIn?: number;
     maxSubmits?: number;
     entries?: unknown[];
+    swaps?: unknown[];
     title?: string;
     url?: string;
 } = {}) =>
@@ -84,7 +86,7 @@ const makeChallenge = ({
         url,
         max_photo_submits: maxSubmits,
         close_time: 1_000_000 + closeIn,
-        member: { ranking: { entries } },
+        member: { ranking: { entries, swaps } },
     });
 
 const NOW = 1_000_000;
@@ -639,6 +641,37 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
             settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos,
+            submitToChallenge,
+        });
+        expect(result).toBe('no-eligible-photos');
+        expect(submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('a photo swapped out of the challenge is not picked again; the next one is', async () => {
+        // Newest upload wins a tie, so the swapped-out photo ranks best without the swap history.
+        const challenge = makeChallenge({ entries: [{ id: 'e1' }], swaps: [{ id: 'swapped' }] });
+        const submitToChallenge = jest
+            .fn<ReturnType<SubmitToChallenge>, Parameters<SubmitToChallenge>>()
+            .mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoSubmit: true }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest
+                .fn()
+                .mockResolvedValue([allowedPhoto('swapped', ['Pink'], 9500), allowedPhoto('fresh', ['Pink'], 9000)]),
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+        expect(submitToChallenge.mock.calls[0][1]).toEqual(['fresh']);
+    });
+
+    test('the only eligible photo being swapped out leaves the fill with no pick', async () => {
+        const challenge = makeChallenge({ entries: [{ id: 'e1' }], swaps: [{ id: 'only' }] });
+        const submitToChallenge = jest.fn();
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoSubmit: true }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('only')]),
             submitToChallenge,
         });
         expect(result).toBe('no-eligible-photos');

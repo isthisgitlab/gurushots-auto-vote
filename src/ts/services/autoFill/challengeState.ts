@@ -16,6 +16,14 @@ const getEntries = (challenge: Partial<Challenge> | null | undefined): RankingEn
     return Array.isArray(entries) ? entries : [];
 };
 
+// Every photo swapped out of the challenge so far (the API's swap history).
+const swappedOutIds = (challenge: Partial<Challenge> | null | undefined): Set<string> =>
+    new Set(
+        (Array.isArray(challenge?.member?.ranking?.swaps) ? challenge.member.ranking.swaps : []).map((s) =>
+            String(s?.id),
+        ),
+    );
+
 const getSlotsRemaining = (challenge: Partial<Challenge> | null | undefined): number => {
     const max = finiteOr(challenge?.max_photo_submits, 0);
     return Math.max(0, max - getEntries(challenge).length);
@@ -217,4 +225,4 @@ const refreshChallengeState = async (
     return 'refreshed';
 };
 
-export { getEntries, getSlotsRemaining, reflectNewEntry, reflectEntryFlag, refreshChallengeState };
+export { getEntries, getSlotsRemaining, swappedOutIds, reflectNewEntry, reflectEntryFlag, refreshChallengeState };

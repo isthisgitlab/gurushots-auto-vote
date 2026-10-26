@@ -69,13 +69,13 @@ const photo = (id: string, labels: string[] = ['Pink'], extra: Partial<PickerPho
 const library = (): PickerPhoto[] =>
     Array.from({ length: 8 }, (_, i) => photo(`p${i}`, ['Pink'], { upload_date: 9000 - i, views: 100 - i }));
 
-const makeChallenge = (entries: unknown[] = [{ id: 'existing' }]) =>
+const makeChallenge = (entries: unknown[] = [{ id: 'existing' }], swaps?: unknown[]) =>
     buildChallenge({
         id: 'c1',
         title: 'Pink In Nature',
         url: 'pink-in-nature23',
         max_photo_submits: 4,
-        member: { ranking: { entries } },
+        member: { ranking: { entries, swaps } },
     });
 
 const makeLog = () => {
@@ -223,6 +223,35 @@ describe('suggestFillPhotos', () => {
         const result = await suggestFillPhotos(makeChallenge(), 'tok', deps);
         expect(result).toMatchObject({ status: 'fetch-error' });
         expect(lines.warning.join('\n')).toContain('suggest: failed to fetch eligible photos for [Challenge c1]');
+    });
+
+    describe('the swap history', () => {
+        // `swapped` is the newest upload, so without the swap history it ranks first.
+        const swappedOut = () => makeChallenge([{ id: 'existing' }], [{ id: 'swapped' }]);
+        const photos = () => [photo('swapped', ['Pink'], { upload_date: 9500 }), ...library()];
+
+        test('a swapped-out photo is hidden for submit usage', async () => {
+            const ids = suggestedIds(
+                await suggestFillPhotos(swappedOut(), 'tok', makeDeps({ photos: photos() })),
+            ) as string[];
+            expect(ids).not.toContain('swapped');
+            expect(ids).toHaveLength(SUGGEST_COUNT);
+        });
+
+        test('the swap picker (usage swap) still shows it, best first', async () => {
+            const ids = suggestedIds(
+                await suggestFillPhotos(swappedOut(), 'tok', makeDeps({ photos: photos() }), SUGGEST_COUNT, {
+                    usage: 'swap',
+                }),
+            ) as string[];
+            expect(ids[0]).toBe('swapped');
+        });
+
+        test('a swapped-out photo the user chose is shown', async () => {
+            const deps = makeDeps({ photos: photos(), settings: { chosen: ['swapped'] } });
+            const ids = suggestedIds(await suggestFillPhotos(swappedOut(), 'tok', deps)) as string[];
+            expect(ids[0]).toBe('swapped');
+        });
     });
 
     test('drops an id the visual check answers that is not among the candidates', async () => {
