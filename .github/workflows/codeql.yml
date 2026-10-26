@@ -40,7 +40,7 @@ jobs:
                     - language: javascript-typescript
                       # No compilation needed for JS/TS sources.
                       build-mode: none
-                      runner: ubuntu-slim
+                      runner: ubuntu-latest
                     - language: java-kotlin
                       # The Capacitor app ships custom Kotlin/Java in every
                       # signed release APK. Manual build-mode with an explicit
