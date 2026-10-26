@@ -1002,7 +1002,7 @@ describe('runJoinPass — join window', () => {
         expect(deps.submitToChallenge).toHaveBeenCalledTimes(1);
     });
 
-    describe('Join Early for Turbo Missions', () => {
+    describe('Join Early for Missions', () => {
         const far = (id: number) => ({
             id,
             join_coins: 0,
@@ -1030,15 +1030,145 @@ describe('runJoinPass — join window', () => {
             invalid<LoggerMock>(require('../../src/ts/logger'))
                 .withCategory()
                 .info.mock.calls.map(([msg]) => msg)
-                .filter((msg) => msg.includes('early for the turbo mission'));
+                .filter((msg) => msg.includes('early for the active mission'));
+        // The one-per-pass not-completable line of the join-mission dry run.
+        const notCompletableNotices = () =>
+            invalid<LoggerMock>(require('../../src/ts/logger'))
+                .withCategory()
+                .info.mock.calls.map(([msg]) => msg)
+                .filter((msg) => msg.includes('join mission needs'));
 
-        test('a join mission waits for the window', async () => {
+        test('a join mission joins early when the open list can complete it', async () => {
             withJoinEarly(true);
             const missions = { join: 2, fill: 0, turbo: 0, boost: 0, vote: 0 };
             const res = await runJoinPass('tok', NOW_MS, farDeps(), missions);
+            expect(statuses(res)).toEqual(['joined', 'joined', 'skipped:too-early']);
+            expect(missions.join).toBe(0);
+            expect(earlyNotices()).toEqual(['joining up to 2 challenge(s) early for the active missions']);
+            expect(notCompletableNotices()).toEqual([]);
+        });
+
+        test('a join mission waits for the window when the open list cannot complete it', async () => {
+            withJoinEarly(true);
+            const missions = { join: 4, fill: 0, turbo: 0, boost: 0, vote: 0 };
+            const res = await runJoinPass('tok', NOW_MS, farDeps(), missions);
             expect(statuses(res)).toEqual(['skipped:too-early', 'skipped:too-early', 'skipped:too-early']);
+            expect(missions.join).toBe(4);
+            expect(earlyNotices()).toEqual([]);
+            expect(notCompletableNotices()).toEqual([
+                'join mission needs 4 but only 3 of the open challenges would join — waiting for the auto-join timing',
+            ]);
+        });
+
+        test('a type-excluded candidate does not count toward the join mission, in open-list order', async () => {
+            settings.getEffectiveSetting.mockImplementation((k) => {
+                const map: Record<string, unknown> = {
+                    ...DEFAULT_SETTINGS,
+                    autoJoinExcludeTypes: ' Flash , Exhibition ',
+                    autoJoinWithinHoursOfEnd: 24,
+                    missionJoinEarly: true,
+                };
+                return map[k];
+            });
+            const deps = makeDeps({
+                getMemberChallenges: openList([
+                    { id: 1, join_coins: 0, type: 'flash', close_time: NOW_SEC + 48 * HOUR },
+                    { id: 2, join_coins: 0, type: 'contest', close_time: NOW_SEC + 48 * HOUR },
+                ]),
+            });
+            const missions = { join: 2, fill: 0, turbo: 0, boost: 0, vote: 0 };
+            const res = await runJoinPass('tok', NOW_MS, deps, missions);
+            // The scope refusal comes before the timing window, so the excluded one is not a too-early.
+            expect(statuses(res)).toEqual(['skipped:excluded-type', 'skipped:too-early']);
             expect(missions.join).toBe(2);
             expect(earlyNotices()).toEqual([]);
+            expect(notCompletableNotices()).toEqual([
+                'join mission needs 2 but only 1 of the open challenges would join — waiting for the auto-join timing',
+            ]);
+        });
+
+        test('a join mission joins early exactly at the boundary: two qualifying for a need of two', async () => {
+            withJoinEarly(true);
+            const deps = makeDeps({ getMemberChallenges: openList([far(1), far(2)]) });
+            const missions = { join: 2, fill: 0, turbo: 0, boost: 0, vote: 0 };
+            const res = await runJoinPass('tok', NOW_MS, deps, missions);
+            expect(statuses(res)).toEqual(['joined', 'joined']);
+            expect(missions.join).toBe(0);
+            expect(earlyNotices()).toEqual(['joining up to 2 challenge(s) early for the active missions']);
+            expect(notCompletableNotices()).toEqual([]);
+        });
+
+        test('the join-mission dry run counts cumulative affordability but spends nothing', async () => {
+            withJoinEarly(true);
+            settings.getEffectiveSetting.mockImplementation((k) => {
+                const map: Record<string, unknown> = {
+                    ...DEFAULT_SETTINGS,
+                    autoJoinCycleCoinBudget: 200, // funds two of the three 100-coin joins
+                    autoJoinWithinHoursOfEnd: 24,
+                    missionJoinEarly: true,
+                };
+                return map[k];
+            });
+            const bankrollRow = { coins: 1000 };
+            const deps = makeDeps({
+                getMemberChallenges: openList([far(1), far(2), far(3)].map((c) => ({ ...c, join_coins: 100 }))),
+                getBankroll: double<'getBankroll'>(async () => bankrollRow),
+            });
+            const bankrollBefore = { ...bankrollRow };
+            const budgetBefore = settings.getEffectiveSetting('autoJoinCycleCoinBudget', null);
+            const res = await runJoinPass('tok', NOW_MS, deps, { join: 3, fill: 0, turbo: 0, boost: 0, vote: 0 });
+            // Two affordable of three: not completable, no lift, everything defers.
+            expect(statuses(res)).toEqual(['skipped:too-early', 'skipped:too-early', 'skipped:too-early']);
+            expect(earlyNotices()).toEqual([]);
+            expect(notCompletableNotices()).toEqual([
+                'join mission needs 3 but only 2 of the open challenges would join — waiting for the auto-join timing',
+            ]);
+            // The dry run worked on copies: the real pass's balance and budget are untouched by it.
+            expect(bankrollRow).toEqual(bankrollBefore);
+            expect(settings.getEffectiveSetting('autoJoinCycleCoinBudget', null)).toBe(budgetBefore);
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        });
+
+        test('a candidate auto-join is off for does not count toward the join mission either', async () => {
+            withJoinEarly(true);
+            rulesGive((target) => (titleOf(target) === 'Off' ? { autoJoin: false } : {}));
+            const deps = makeDeps({
+                getMemberChallenges: openList([
+                    { id: 1, join_coins: 0, type: 'flash', title: 'Off', close_time: NOW_SEC + 48 * HOUR },
+                    { id: 2, join_coins: 0, type: 'flash', title: 'Far', close_time: NOW_SEC + 48 * HOUR },
+                ]),
+            });
+            const res = await runJoinPass('tok', NOW_MS, deps, { join: 2, fill: 0, turbo: 0, boost: 0, vote: 0 });
+            expect(statuses(res)).toEqual(['skipped:autojoin-off', 'skipped:too-early']);
+            expect(notCompletableNotices()).toEqual([
+                'join mission needs 2 but only 1 of the open challenges would join — waiting for the auto-join timing',
+            ]);
+        });
+
+        test('an unreadable balance counts no paid candidate toward the join mission', async () => {
+            withJoinEarly(true);
+            const deps = makeDeps({
+                getMemberChallenges: openList([far(1), far(2)].map((c) => ({ ...c, join_coins: 100 }))),
+                getBankroll: double<'getBankroll'>(async () => null),
+            });
+            const res = await runJoinPass('tok', NOW_MS, deps, { join: 2, fill: 0, turbo: 0, boost: 0, vote: 0 });
+            expect(statuses(res)).toEqual(['skipped:too-early', 'skipped:too-early']);
+            expect(notCompletableNotices()).toEqual([
+                'join mission needs 2 but only 0 of the open challenges would join — waiting for the auto-join timing',
+            ]);
+        });
+
+        test('a join mission short of its need stays quiet while a turbo lift is active', async () => {
+            withJoinEarly(true);
+            const missions = { join: 4, fill: 0, turbo: 3, boost: 0, vote: 0 };
+            const res = await runJoinPass('tok', NOW_MS, farDeps(), missions);
+            // The turbo shortfall lifts the window for 3 joins; they land, but the join need of 4 stays unmet —
+            // the not-completable line stays silent, since an early lift is active all the same.
+            expect(statuses(res)).toEqual(['joined', 'joined', 'joined']);
+            expect(missions.join).toBe(1);
+            expect(missions.turbo).toBe(3);
+            expect(earlyNotices()).toEqual(['joining up to 3 challenge(s) early for the active missions']);
+            expect(notCompletableNotices()).toEqual([]);
         });
 
         test('a turbo mission joins early only for the turbos it is short of', async () => {
@@ -1051,7 +1181,8 @@ describe('runJoinPass — join window', () => {
             // A join is not a turbo win: the turbo mission counts down only when one is won.
             expect(missions.turbo).toBe(3);
             expect(deps.getActiveChallenges).toHaveBeenCalledWith('tok');
-            expect(earlyNotices()).toEqual(['joining up to 2 challenge(s) early for the turbo mission(s)']);
+            expect(earlyNotices()).toEqual(['joining up to 2 challenge(s) early for the active missions']);
+            expect(notCompletableNotices()).toEqual([]);
         });
 
         test('a turbo mission joins the earliest closing challenge before later ones', async () => {
@@ -1340,12 +1471,14 @@ describe('runJoinPass — join window', () => {
             withJoinEarly(false);
             const res = await runJoinPass('tok', NOW_MS, farDeps(), { join: 0, fill: 0, turbo: 2, boost: 0, vote: 0 });
             expect(statuses(res)).toEqual(['skipped:too-early', 'skipped:too-early', 'skipped:too-early']);
+            expect(notCompletableNotices()).toEqual([]);
         });
 
         test('without a mission read (none followed or unreadable) the window stays', async () => {
             withJoinEarly(true);
             const res = await runJoinPass('tok', NOW_MS, farDeps());
             expect(statuses(res)).toEqual(['skipped:too-early', 'skipped:too-early', 'skipped:too-early']);
+            expect(notCompletableNotices()).toEqual([]);
         });
 
         test('a met mission leaves the window in place', async () => {

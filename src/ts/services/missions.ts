@@ -12,8 +12,8 @@
  *
  * Read at the start of a voting cycle — only while one of the mission settings
  * is on — and handed to the join pre-step and the voting pass as a mutable
- * MissionNeeds. Each step that lands a fill, a turbo win or a boost counts it down
- * (consumeMission), so the rest of the cycle doesn't overshoot on the
+ * MissionNeeds. Each step that lands a join, a fill, a turbo win or a boost counts it
+ * down (consumeMission), so the rest of the cycle doesn't overshoot on the
  * progress the server reported at its start. The headless Android pass also
  * refreshes progress before using a saved Turbo.
  *
@@ -37,8 +37,8 @@ type MissionKind = 'join' | 'fill' | 'turbo' | 'boost' | 'vote';
 export type FillMission = { id: string; required: number; current: number; remaining: number; spentThisPass: number };
 
 /** How many actions active missions still need, with each Turbo need paired to its deadline.
- * `join` is intentionally always 0 — no setting follows join missions; they are met by
- * ordinary, settings-governed joins.
+ * `join` is what a join mission still needs, joined early only while the open
+ * list can complete it (see runJoinPass).
  */
 export type MissionNeeds = Record<MissionKind, number> & {
     turboRequirements?: Array<{ remaining: number; expiresAtSec: number | null }>;
@@ -63,15 +63,15 @@ const ALL_STAR = /all.?star/i;
 const FLASH = /\bflash/i;
 
 // The settings that follow each mission kind. Joining early serves a turbo
-// mission: a turbo is only winnable in a joined challenge. A join mission is
-// met by ordinary, settings-governed joins, so nothing follows it.
+// mission — a turbo is only winnable in a joined challenge — and a join
+// mission while the open list can complete it.
 const MISSION_SETTINGS: Readonly<
     Record<
         MissionKind,
         ReadonlyArray<'missionJoinEarly' | 'missionUseFills' | 'missionSaveTurbos' | 'missionUseBoosts' | 'missionVote'>
     >
 > = Object.freeze({
-    join: [],
+    join: ['missionJoinEarly'],
     fill: ['missionUseFills'],
     turbo: ['missionSaveTurbos', 'missionJoinEarly'],
     boost: ['missionUseBoosts'],
@@ -225,7 +225,7 @@ const missionVoteQuota = (
 };
 
 /**
- * Count one landed fill / turbo win / boost against the mission.
+ * Count one landed join / fill / turbo win / boost against the mission.
  */
 const consumeMission = (needs: MissionNeeds | null | undefined, kind: MissionKind) => {
     if (!needs || !(needs[kind] > 0)) return;

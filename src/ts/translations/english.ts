@@ -1164,9 +1164,9 @@ export const app = {
     missionSaveTurbos: 'Save Turbos for Missions',
     missionSaveTurbosDesc:
         'Holds off earning a challenge\'s Turbo so a "Win Turbo" mission has some to win. A saved Turbo is still earned when that mission is active, or an hour before its Auto-Apply time. Off by default.',
-    missionJoinEarly: 'Join Early for Turbo Missions',
+    missionJoinEarly: 'Join Early for Missions',
     missionJoinEarlyDesc:
-        'While a "Win Turbo" mission is active, joins without waiting for the auto-join timing until it has enough joined challenges to win its remaining turbos. A "Join challenges" mission always follows the auto-join timing. Type, tag and coin filters still apply. Off by default.',
+        'While a "Join N challenges" or "Win Turbo" mission is active, joins without waiting for the auto-join timing. A join mission joins early only when enough open challenges remain to complete it; otherwise its joins wait for the auto-join timing. Type, tag and coin filters still apply. Off by default.',
     missionUseFills: 'Use Fills for Missions',
     missionUseFillsDesc:
         'While a "Use Fill" mission is active, spend fills on challenges below 100% exposure until the mission is done. Keeps your fill reserve. Off by default.',

@@ -1,6 +1,6 @@
 /**
  * The automatic per-cycle join pass: the balance and budget kept accurate as it
- * spends, the join window, and the turbo-mission-driven early joins.
+ * spends, the join window, and the mission-driven early joins.
  */
 
 import * as logger from '../../logger';
@@ -8,6 +8,7 @@ import * as settings from '../../settings';
 import * as cancellation from '../../voting/cancellation';
 import { shouldJoinChallenge, joinFreshRefusalWhy } from '../VotingLogic';
 import { isKnownTurboMode } from '../../voting/turboMode';
+import { consumeMission } from '../missions';
 import type { Bankroll, Challenge } from '../../types/gurushots';
 import type { MissionNeeds } from '../missions';
 import { errorMessage } from '../../errorMessage';
@@ -32,7 +33,7 @@ type JoinPassState = {
     remainingBudget: number;
     nowSec: number;
     missingCloseTimeLogged: boolean;
-    /** Joins still to make without the timing window, for the active turbo missions. */
+    /** Joins still to make without the timing window, for the active missions. */
     earlyJoins: number;
 };
 
@@ -115,9 +116,8 @@ const decideCandidateJoin = (
     pass: JoinPassState,
     alreadyPaid: boolean,
 ) => {
-    // Join Early for Turbo Missions lifts the timing window while a turbo
-    // mission wants joins: these would join later anyway, the mission wants
-    // them now.
+    // Join Early for Missions lifts the timing window while a mission wants
+    // joins: these would join later anyway, the mission wants them now.
     const joinEarly = pass.earlyJoins > 0;
     if (joinEarly) {
         const closeTime = Number(challenge?.close_time);
@@ -217,6 +217,23 @@ const claimWhateverCost = async (challenge: { id?: string | number }, deps: Join
 };
 
 /**
+ * The two entry gates `joinCandidate` decides before anything else, shared
+ * with the join-mission dry run in runJoinPass so the probe counts the same
+ * candidates the pass would act on. A non-null value is the status
+ * `joinCandidate` returns for the refusal.
+ */
+const joinCandidateGateRefusal = (
+    challenge: Challenge,
+): 'skipped:autojoin-off' | 'skipped:manual-photos-only' | null => {
+    // Per-candidate enable (master → profile): skip titles auto-join is off
+    // for, BEFORE resolving the rest of the config (avoid redundant work).
+    if (resolveJoinSetting('autoJoin', challenge) !== true) return 'skipped:autojoin-off';
+    // Manual Only: the join would enter a photo by itself, so it is left to the user.
+    if (resolveJoinSetting('manualPhotosOnly', challenge) === true) return 'skipped:manual-photos-only';
+    return null;
+};
+
+/**
  * Decide and (when due) perform one candidate's join, keeping the pass's
  * balance and budget in step with what it spent.
  *
@@ -228,16 +245,11 @@ const joinCandidate = async (
     deps: JoinDeps,
     pass: JoinPassState,
 ): Promise<string> => {
-    // Per-candidate enable (master → profile): skip titles auto-join is off
-    // for, BEFORE resolving the rest of the config (avoid redundant work).
-    if (resolveJoinSetting('autoJoin', challenge) !== true) {
-        return 'skipped:autojoin-off';
-    }
-    // Manual Only: the join would enter a photo by itself, so it is left to the user.
-    if (resolveJoinSetting('manualPhotosOnly', challenge) === true) {
+    const gateRefusal = joinCandidateGateRefusal(challenge);
+    if (gateRefusal === 'skipped:manual-photos-only') {
         await noteUnenteredPaidJoin(challenge, deps);
-        return 'skipped:manual-photos-only';
     }
+    if (gateRefusal !== null) return gateRefusal;
     const alreadyPaid = await paidAlready(challenge, deps);
     const cfg = resolveCandidateConfig(challenge);
     const decision = decideCandidateJoin(challenge, cfg, pass, alreadyPaid);
@@ -311,10 +323,10 @@ const rememberOpenList = (candidates: Array<Challenge | null>): void => {
  *   (converted to seconds to match `close_time`); defaults to Date.now()
  * @param missions what the active missions still need
  *   (services/missions.ts). With missionJoinEarly on, the timing window is
- *   lifted for as many joins as a "Win Turbo" mission is short of turbos — a
+ *   lifted while a mission wants joins: a join mission only while the open
+ *   list can complete it, a turbo mission for the turbos it is short of — a
  *   turbo is only winnable in a joined challenge, so each join brings one
- *   (earlyJoinsFor). A join mission is met by ordinary, settings-governed
- *   joins.
+ *   (earlyJoinsFor).
  */
 const runJoinPass = async (
     token: string,
@@ -366,15 +378,70 @@ const runJoinPass = async (
         missingCloseTimeLogged: false,
         earlyJoins: await earlyJoinsFor(token, deps, missions, nowSec),
     };
+    // A join mission lifts the window only while the currently open challenges
+    // are enough to complete it. A dry run over a scratch state counts what
+    // the production decision predicate would join with the window lifted.
+    const joinNeed = missions?.join ?? 0;
+    if (settings.getEffectiveSetting('missionJoinEarly', null) === true && joinNeed > 0) {
+        // The probe's earlyJoins stays at 1, deliberately not decremented per
+        // counted join — it asks "would this join with the window lifted?",
+        // while the real pass counts its lifts down.
+        const probePass: JoinPassState = {
+            // A shallow copy, never the real pass's object: the pass mutates
+            // bankroll.coins in place in its spend accounting, so a shared
+            // reference would double-charge the real pass's balance before
+            // any join runs. remainingBudget is a number and copies by value.
+            bankroll: bankroll ? { ...bankroll } : null,
+            remainingBudget: pass.remainingBudget,
+            nowSec,
+            missingCloseTimeLogged: false,
+            earlyJoins: 1,
+        };
+        let wouldJoin = 0;
+        // The probe iterates the list as fetched — not the close_time sort the
+        // pass uses once a lift is active; the order divergence only matters
+        // under a binding budget and is absorbed by the next cycle's
+        // re-decide.
+        for (const challenge of candidates) {
+            if (joinCandidateGateRefusal(challenge) !== null) continue;
+            // alreadyPaid: false deliberately undercounts candidates with an
+            // unlock claim on file (the real pass joins those submit-only,
+            // spending nothing) — conservative, accepted.
+            const decision = decideCandidateJoin(challenge, resolveCandidateConfig(challenge), probePass, false);
+            if (!decision.join) continue;
+            wouldJoin += 1;
+            // Count cumulative affordability across the cycle, not each
+            // candidate in isolation. The copy is always here when a
+            // decrement happens: a paid join only passes its affordability
+            // check with a known balance (balance-unknown refuses it), the
+            // same invariant the pass's own spend accounting relies on.
+            if (decision.needsCoins > 0) {
+                probePass.remainingBudget -= decision.needsCoins;
+                const probeBankroll = probePass.bankroll as Bankroll;
+                probeBankroll.coins = Number(probeBankroll.coins) - decision.needsCoins;
+            }
+        }
+        if (wouldJoin >= joinNeed) {
+            pass.earlyJoins = Math.max(pass.earlyJoins, joinNeed);
+        } else if (pass.earlyJoins === 0) {
+            // One per pass, beside the early-join notice: the mission cannot
+            // be completed by what is open now, so nothing joins early.
+            cat().info(
+                `join mission needs ${joinNeed} but only ${wouldJoin} of the open challenges would join — waiting for the auto-join timing`,
+                null,
+            );
+        }
+    }
     // Explain up front why joins may land outside the configured timing.
     if (pass.earlyJoins > 0) {
-        cat().info(`joining up to ${pass.earlyJoins} challenge(s) early for the turbo mission(s)`, null);
+        cat().info(`joining up to ${pass.earlyJoins} challenge(s) early for the active missions`, null);
     }
 
     const results: Array<{ id: string | number | undefined; status: string }> = [];
     let joined = 0;
-    // A turbo mission may need fewer joins than there are open challenges. Spend
-    // those joins on the ones ending soonest, so their turbos can be won first.
+    // A turbo mission, or a join mission whose open list can complete it, may
+    // want fewer joins than there are open challenges. Spend those joins on
+    // the ones ending soonest, so their turbos can be won first.
     const orderedCandidates =
         pass.earlyJoins > 0
             ? [...candidates].sort((a, b) => (a?.close_time ?? Infinity) - (b?.close_time ?? Infinity))
@@ -388,6 +455,8 @@ const runJoinPass = async (
         if (status === 'joined') {
             joined += 1;
             pass.earlyJoins -= 1;
+            // Any landed join serves the mission — early or in-window — so it consumes the need in both cases.
+            consumeMission(missions, 'join');
         }
         results.push({ id: challenge?.id, status });
     }

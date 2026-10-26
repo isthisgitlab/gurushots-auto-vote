@@ -292,6 +292,8 @@ export const logMessages = {
     m6b2800cb055b: '{0}: rejected by the server for {1}',
     m6b4c8ffc5f32: 'Error loading settings:',
     m6c44109e191c: '=== GuruShots Bankroll ===',
+    m6c4e2a8f0b13:
+        'join mission needs {0} but only {1} of the open challenges would join — waiting for the auto-join timing',
     m6c5636455c2d: 'Applied profile "{0}" to challenge {1}',
     m6c65118e63fa: '{0} boost fill-new unavailable ({1}); boosting existing entry',
     m6c805ef29084: 'Title profile conflicts with manual overrides for "{0}"',
@@ -422,7 +424,7 @@ export const logMessages = {
     m9a1f89a92ee8: 'Renamed {0} {1} to {2} (value {3})',
     m9a274bb9e06b: '🌐 Using REAL API strategy for production',
     m9af18ab83ac0: 'Applying boost to challenge {0}',
-    m9af941258be6: 'joining up to {0} challenge(s) early for the turbo mission(s)',
+    m9af941258be6: 'joining up to {0} challenge(s) early for the active missions',
     m9b901c6d995c: '⏰ Approaching a scenario step for "{0}" (phase {1}) — next cycle in {2}s',
     m9bf8122676f3: 'Setting {0} can only be set on a challenge or a profile, not globally',
     m9c0719be2c97:

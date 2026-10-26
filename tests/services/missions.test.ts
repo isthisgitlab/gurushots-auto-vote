@@ -191,7 +191,7 @@ describe('loadMissionNeeds', () => {
             mission('Play 6 Duels', 0, 6),
         ]);
         await expect(loadMissionNeeds('tok', NOW_MS, d)).resolves.toEqual({
-            join: 0,
+            join: 5,
             fill: 2,
             turbo: 4,
             boost: 0,

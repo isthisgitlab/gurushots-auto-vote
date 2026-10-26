@@ -1185,9 +1185,9 @@ export const app: typeof english.app = {
     missionSaveTurbos: 'Taupīt Turbo misijām',
     missionSaveTurbosDesc:
         'Aizturas katra izaicinājuma Turbo iegūšanu, lai misijai „Win Turbo” būtu ko iegūt. Pietaupīto Turbo iegūst, kad misija aktīva vai stundu pirms izmantošanas laika. Pēc noklusējuma izslēgts.',
-    missionJoinEarly: 'Pievienoties nekavējoties Turbo misijām',
+    missionJoinEarly: 'Pievienoties nekavējoties misiju laikā',
     missionJoinEarlyDesc:
-        'Kamēr aktīva misija „Win Turbo”, pievienojas, negaidot automātiskās pievienošanās laiku, līdz misijai pietiek izaicinājumu, kuros iegūt atlikušos Turbo; „Join challenges” misija vienmēr ievēro automātiskās pievienošanās laiku. Tipu, tagu un monētu filtri joprojām darbojas. Pēc noklusējuma izslēgts.',
+        'Kamēr aktīva misija „Join challenges” vai „Win Turbo”, pievienojas, negaidot automātiskās pievienošanās laiku. „Join challenges” misija pievienojas nekavējoties tikai tad, ja atvērto izaicinājumu pietiek, lai misiju izpildītu; citādi tās pievienošanās gaida automātiskās pievienošanās laiku. Tipu, tagu un monētu filtri joprojām darbojas. Pēc noklusējuma izslēgts.',
     missionUseFills: 'Izmantot uzpildes misijām',
     missionUseFillsDesc:
         'Kamēr aktīva misija „Use Fill”, lietotne izmanto uzpildes izaicinājumos, kuros redzamība ir zem 100 %, līdz misija izpildīta. Uzpilžu rezerve paliek neskarta. Pēc noklusējuma izslēgts.',

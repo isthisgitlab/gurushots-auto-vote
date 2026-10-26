@@ -81,12 +81,12 @@ describe('LogEntry', () => {
                     level: 'INFO',
                     context: 'GUI',
                     category: 'join',
-                    message: 'ℹ️ joining up to 4 challenge(s) early for the turbo mission(s)',
+                    message: 'ℹ️ joining up to 4 challenge(s) early for the active missions',
                 }}
             />,
         );
         expect(container.textContent).toContain(
-            '[T1] ℹ️ INFO GUI join Joining up to 4 challenge(s) early for the turbo mission(s)',
+            '[T1] ℹ️ INFO GUI join Joining up to 4 challenge(s) early for the active missions',
         );
     });
 

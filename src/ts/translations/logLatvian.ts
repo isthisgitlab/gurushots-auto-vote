@@ -298,6 +298,8 @@ export const logMessages = {
     m6b2800cb055b: '{0}: serveris noraidīja pieprasījumu izaicinājumam {1}',
     m6b4c8ffc5f32: 'Kļūda, ielādējot uzstādījumus:',
     m6c44109e191c: '=== GuruShots Bankroll ===',
+    m6c4e2a8f0b13:
+        '„Join challenges” misijai vajag {0}, bet pievienojas tikai {1} no atvērtajiem izaicinājumiem — gaida automātiskās pievienošanās laiku',
     m6c5636455c2d: 'Profils "{0}" piemērots izaicinājumam {1}',
     m6c65118e63fa: '{0} Nevar iesniegt jaunu foto Boost izmantošanai ({1}); izmanto Boost esošajam foto',
     m6c805ef29084: 'Virsraksta profils ir pretrunā ar manuālajām individuālajām vērtībām izaicinājumam "{0}"',
@@ -431,7 +433,7 @@ export const logMessages = {
     m9a1f89a92ee8: '{0} {1} pārdēvēts par {2} (vērtība {3})',
     m9a274bb9e06b: '🌐 Izmanto īsto API stratēģiju darba videi',
     m9af18ab83ac0: 'Izmanto Boost izaicinājumā {0}',
-    m9af941258be6: 'Turbo misiju dēļ priekšlaikus pievienojas līdz {0} izaicinājumiem',
+    m9af941258be6: 'Aktīvo misiju dēļ priekšlaikus pievienojas līdz {0} izaicinājumiem',
     m9b901c6d995c: '⏰ Tuvojas scenārija solis izaicinājumā "{0}" (fāze {1}) — nākamais cikls pēc {2} s',
     m9bf8122676f3: 'Uzstādījumu {0} var norādīt tikai izaicinājumam vai profilam, nevis globāli',
     m9c0719be2c97:

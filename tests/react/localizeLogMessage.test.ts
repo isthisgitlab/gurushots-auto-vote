@@ -103,11 +103,19 @@ describe('Latvian log messages', () => {
 
     test('translates the join and challenge fetch lines before and after sentence casing', () => {
         for (const message of [
-            'ℹ️ joining up to 4 challenge(s) early for the turbo mission(s)',
-            'ℹ️ Joining up to 4 challenge(s) early for the turbo mission(s)',
+            'ℹ️ joining up to 4 challenge(s) early for the active missions',
+            'ℹ️ Joining up to 4 challenge(s) early for the active missions',
         ]) {
             expect(localizeLogMessage(message)).toBe(
-                'ℹ️ Turbo misiju dēļ priekšlaikus pievienojas līdz 4 izaicinājumiem',
+                'ℹ️ Aktīvo misiju dēļ priekšlaikus pievienojas līdz 4 izaicinājumiem',
+            );
+        }
+        for (const message of [
+            'ℹ️ join mission needs 4 but only 3 of the open challenges would join — waiting for the auto-join timing',
+            'ℹ️ Join mission needs 4 but only 3 of the open challenges would join — waiting for the auto-join timing',
+        ]) {
+            expect(localizeLogMessage(message)).toBe(
+                'ℹ️ „Join challenges” misijai vajag 4, bet pievienojas tikai 3 no atvērtajiem izaicinājumiem — gaida automātiskās pievienošanās laiku',
             );
         }
         for (const message of ['✅ retrieved 24 challenges (1734ms)', '✅ Retrieved 24 challenges (1734ms)']) {
