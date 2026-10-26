@@ -146,8 +146,8 @@ const COMMAND_ROWS: readonly CommandRow[] = [
         ],
     ),
     row('swap-back', challengeCommand(SWAP_BACK_USAGE, runSwapBack), [
-        "  swap-back - Swap a photo that was swapped out while boosted/turbo'd back in (it gets",
-        '             its boost/turbo back): swap-back --challenge=<id> --image=<current id> [--yes]',
+        "  swap-back - Swap a photo that was swapped out while boosted, turbo'd or guru-picked back in (it",
+        "             gets its boost/turbo/Guru's pick back): swap-back --challenge=<id> --image=<current id> [--yes]",
     ]),
     row(
         'fill-exposure',

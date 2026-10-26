@@ -83,7 +83,7 @@ test('no alternative: the card swap picker opens with the reason; no modal, no i
     await waitFor(() => expect(onChoose).toHaveBeenCalledTimes(1));
     expect(onChoose).toHaveBeenCalledWith(
         ENTRY,
-        { actioned: true, pinned: 'turbo' },
+        { actioned: true, pinned: 'turbo', guruPick: false },
         swapButton(),
         'app.swapPickNoSuggestion',
     );
@@ -100,7 +100,7 @@ test('Pick… opens the card picker straight away with the entry, the warnings a
     expect(screen.getByText('app.swapPickLabel').id).toBe(pickButton().getAttribute('aria-describedby'));
     fireEvent.click(pickButton());
     expect(onChoose).toHaveBeenCalledTimes(1);
-    expect(onChoose).toHaveBeenCalledWith(ENTRY, { actioned: true, pinned: 'boost' }, pickButton());
+    expect(onChoose).toHaveBeenCalledWith(ENTRY, { actioned: true, pinned: 'boost', guruPick: false }, pickButton());
     expect(window.api.previewSwapPhoto).not.toHaveBeenCalled();
     expect(screen.queryByText('app.currencySwapTitle')).toBeNull();
 });
@@ -133,7 +133,7 @@ test('Choose another photo… closes the suggestion and hands over to the card p
     fireEvent.click(swapButton());
     fireEvent.click(await screen.findByText('app.currencySwapChoose'));
     await waitFor(() => expect(screen.queryByText('app.currencySwapTitle')).toBeNull());
-    expect(onChoose).toHaveBeenCalledWith(ENTRY, { actioned: false, pinned: 'boost' }, swapButton());
+    expect(onChoose).toHaveBeenCalledWith(ENTRY, { actioned: false, pinned: 'boost', guruPick: false }, swapButton());
     expect(window.api.swapEntryPhoto).not.toHaveBeenCalled();
     expect(onSpent).not.toHaveBeenCalled();
 });
@@ -192,6 +192,20 @@ test('warns when the entry is boosted or turbo-charged', async () => {
     renderButton({ warnActioned: true });
     fireEvent.click(swapButton());
     expect(await screen.findByText('app.currencySwapBoostedWarning')).toBeTruthy();
+});
+
+test('warns when the entry carries a Guru pick', async () => {
+    renderButton({ warnGuruPick: true });
+    fireEvent.click(swapButton());
+    expect(await screen.findByText('app.currencySwapGuruPickWarning')).toBeTruthy();
+    expect(screen.queryByText('app.currencySwapBoostedWarning')).toBeNull();
+});
+
+test('stays quiet about a Guru pick when the entry carries none', async () => {
+    renderButton({ warnGuruPick: false });
+    fireEvent.click(swapButton());
+    await screen.findByText('app.currencySwapTitle');
+    expect(screen.queryByText('app.currencySwapGuruPickWarning')).toBeNull();
 });
 
 test('a not-available commit still refreshes (the state moved under us)', async () => {
@@ -284,6 +298,19 @@ describe('SwapBackButton', () => {
             fireEvent.click(screen.getByText(/app\.currencySwapBack$/));
             expect(mockTranslator.t).toHaveBeenCalledWith('app.turbo', expect.anything());
             expect(mockTranslator.t).not.toHaveBeenCalledWith('app.boost', expect.anything());
+        } finally {
+            mockTranslator.t.mockImplementation((key) => key);
+        }
+    });
+
+    test('a guruPick record shows the dedicated Guru-pick body, never the boost label', () => {
+        mockTranslator.t.mockImplementation((key) => (key === 'app.boost' ? 'BOOST' : key));
+        try {
+            renderSwapBack({ ...SWAP_BACK, kind: 'guruPick' });
+            fireEvent.click(screen.getByText(/app\.currencySwapBack$/));
+            expect(screen.getByText('app.currencySwapBackBodyGuruPick')).toBeTruthy();
+            expect(mockTranslator.t).not.toHaveBeenCalledWith('app.boost', expect.anything());
+            expect(mockTranslator.t).not.toHaveBeenCalledWith('app.turbo', expect.anything());
         } finally {
             mockTranslator.t.mockImplementation((key) => key);
         }

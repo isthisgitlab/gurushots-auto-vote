@@ -210,6 +210,36 @@ describe('refreshChallengeState — warnings and flag carry-over', () => {
         expect(entries.find((e) => e.id === 'e1')).toEqual({ id: 'e1', turbo: true });
         expect(entries.find((e) => e.id === 'e2')).toEqual({ id: 'e2', boosted: true });
     });
+
+    test('carries a local guru pick across the refresh; a fresh pick of its own stays', async () => {
+        const { logger } = makeCapturingLogger();
+        // The fresh read answers a numeric id where the previous read had a string one.
+        const challenge = makeChallenge({
+            entries: [
+                { id: '777', guru_pick: true },
+                // A truthy non-boolean is not a pick (exactly true), so nothing is carried.
+                { id: 'not-bool', guru_pick: invalid<boolean>('yes') },
+                { id: 'e9' },
+            ],
+        });
+        const response = freshList('c1', [
+            { id: 777, guru_pick: false },
+            { id: 'not-bool' },
+            { id: 'e9', guru_pick: true },
+        ]);
+        const result = await refreshChallengeState(
+            challenge,
+            'tok',
+            { getActiveChallenges: jest.fn().mockResolvedValue(response), logger },
+            'fillNew',
+        );
+        expect(result).toBe('refreshed');
+        const entries = challenge.member!.ranking!.entries!;
+        expect(entries.find((e) => String(e.id) === '777')?.guru_pick).toBe(true);
+        expect(entries.find((e) => e.id === 'not-bool')?.guru_pick).toBeUndefined();
+        // A fresh flag the server itself reports is never cleared.
+        expect(entries.find((e) => e.id === 'e9')?.guru_pick).toBe(true);
+    });
 });
 
 describe('rankCandidatesForChallenge', () => {

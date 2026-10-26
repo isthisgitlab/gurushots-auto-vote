@@ -269,6 +269,30 @@ describe('compact ChallengeCard tile', () => {
         expect(text).toContain('📷 #300');
     });
 
+    test('a guru-picked entry carries the sr-only label and the rank stays visible', () => {
+        const challenge = makeChallenge();
+        challenge.member!.ranking!.entries![2].guru_pick = true; // the plain '📷' entry becomes ⭐
+        const { container } = renderCard(challenge);
+        const text = container.textContent;
+        expect(text).toContain('app.entryGuruPicked');
+        expect(text).toContain('#300');
+        // The ⭐ glyph comes before the label and the rank, and is never doubled.
+        expect(text).toContain('⭐');
+        expect(text.indexOf('⭐')).toBeLessThan(text.indexOf('#300'));
+        expect(text).not.toContain('⭐⭐');
+    });
+
+    test('a boosted entry that also carries a pick appends exactly one aria-hidden ⭐', () => {
+        const challenge = makeChallenge();
+        challenge.member!.ranking!.entries![0].guru_pick = true; // the boosted 🚀 entry
+        const { container } = renderCard(challenge);
+        const text = container.textContent;
+        // 🚀 with the appended ⭐ right behind it, then the sr-only label and the rank.
+        expect(text).toContain('🚀⭐app.entryGuruPicked #12');
+        expect(text).not.toContain('⭐⭐⭐');
+        expect(text).not.toContain('🚀🚀');
+    });
+
     test('is not full-width, so tiles share a grid row', () => {
         const { container } = renderCard();
         const card = container.querySelector('#challenge-202')!;
@@ -484,6 +508,14 @@ describe('getEntryStatus', () => {
         expect(getEntryStatus(invalid({ turbo: true })).icon).toBe('⚡');
         expect(getEntryStatus(invalid({ guru_pick: true })).icon).toBe('⭐');
         expect(getEntryStatus(invalid({})).icon).toBe('📷');
+    });
+
+    test('a pick riding on boost or turbo is reported beside their icon', () => {
+        expect(getEntryStatus(invalid({ boosted: true, guru_pick: true }))).toMatchObject({
+            icon: '🚀',
+            isGuruPick: true,
+        });
+        expect(getEntryStatus(invalid({ guru_pick: true }))).toMatchObject({ icon: '⭐', isGuruPick: true });
     });
 
     test('entry.boost (eligibility) does not count as boosted', () => {

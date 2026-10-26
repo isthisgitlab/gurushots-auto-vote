@@ -282,6 +282,37 @@ describe('swapEntry', () => {
         expect(strategy.swapPhoto).toHaveBeenCalledWith(555, 'old', 'fresh', 'tok');
     });
 
+    test('without a guard a guru-picked live entry is swapped out anyway (manual swaps pass none)', async () => {
+        const challenge = makeChallenge();
+        challenge.member.ranking.entries![1].guru_pick = true; // 'old' is guru-picked
+        const strategy = stubStrategy({ challenge });
+        expect(await swapEntry(555, 'old', 'fresh', 'tok', { strategy, logger })).toEqual({
+            ok: true,
+            outcome: 'ok',
+        });
+        expect(strategy.swapPhoto).toHaveBeenCalledWith(555, 'old', 'fresh', 'tok');
+    });
+
+    test('a guard refusing the live entry spends nothing', async () => {
+        const strategy = stubStrategy();
+        const guard = jest.fn((entry: { id?: unknown } | undefined) => entry?.id !== 'old');
+        expect(await swapEntry(555, 'old', 'fresh', 'tok', { strategy, logger, guard })).toEqual({
+            ok: false,
+            outcome: 'not-available',
+        });
+        expect(guard).toHaveBeenCalledWith(expect.objectContaining({ id: 'old' }));
+        expect(strategy.swapPhoto).not.toHaveBeenCalled();
+    });
+
+    test('a guard that allows the live entry lets the swap through', async () => {
+        const strategy = stubStrategy();
+        expect(await swapEntry(555, 'old', 'fresh', 'tok', { strategy, logger, guard: () => true })).toEqual({
+            ok: true,
+            outcome: 'ok',
+        });
+        expect(strategy.swapPhoto).toHaveBeenCalledWith(555, 'old', 'fresh', 'tok');
+    });
+
     test('drops the photo chooser’s cached listing of the challenge', async () => {
         const cache =
             require('../../src/ts/services/libraryCache') as typeof import('../../src/ts/services/libraryCache');

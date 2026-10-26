@@ -10,6 +10,7 @@ import * as currencyActions from '../currencyActions';
 import { isManualPhotosOnly } from '../manualPhotosOnly';
 import { submitNewEntryForAction, reflectNewEntry, reflectEntryFlag, getSlotsRemaining } from '../autoFill';
 import { selectEntry, entriesOf } from '../../scenarios/selectors';
+import { isGuruPicked } from '../../voting/currencyAuto';
 import { isKeyUnlockedBoost } from '../../voting/boostWindow';
 import { isKnownTurboMode } from '../../voting/turboMode';
 import type {
@@ -87,6 +88,11 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
         if (!(await refreshLive(ctx))) return skipped('the challenge is no longer active');
         const target = selectEntry(action.entry, challenge, selectContext(state));
         if (!target) return skipped('no entry matches the swap target');
+        // A refusal, not a re-selection: the selectors know nothing of guru picks, so the rule's
+        // condition and its swap still resolve the same photo — the swap just never fires on one.
+        if ('skipProtected' in action.entry && action.entry.skipProtected === true && isGuruPicked(target)) {
+            return skipped('the swap target is guru-picked');
+        }
         if (newPhoto !== null && entriesOf(challenge).some((entry) => String(entry.id) === newPhoto)) {
             return skipped(`photo ${newPhoto} is already entered`);
         }

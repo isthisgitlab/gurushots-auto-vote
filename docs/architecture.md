@@ -502,7 +502,9 @@ repeated six times is one that gets forgotten at one of them.
   is held (never when the file is unreadable), else flagged unconfirmed. Forgetting a claim whose file is locked
   answers `busy`. Spends of currency (keys, swaps, fills) that are unclear say so (`outcome: 'unclear'`,
   never "rejected"); an unclear swap re-reads the live entries and records the swap in the swap-back ledger
-  when it did land; and a scenario step whose spend is unclear counts toward the scenario's `spent` limit
+  when it did land (the ledger holds one kind per record — `boost`, `turbo` or `guruPick`, priority in that
+  order — for the boosted, turbo'd or guru-picked photo the slot's original carries, whose swap-back restores it);
+  and a scenario step whose spend is unclear counts toward the scenario's `spent` limit
   (conservatively, so a limit is never exceeded), is retried from the same step, and says it "may have gone
   through" (the status line words it in the user's language from the marker on `inFlight` or the stopped rule's
   `fired` record and the action, not as a skipped step). Such a step as a rule's first commits the rule (`inFlight` at that index), so the

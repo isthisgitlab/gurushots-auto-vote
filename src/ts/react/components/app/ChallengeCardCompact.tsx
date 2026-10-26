@@ -169,14 +169,19 @@ export function ChallengeCardCompact({
                     aria-label={t('app.entryDetails')}
                 >
                     {entries.map((entry) => {
-                        const { icon } = getEntryStatus(entry);
+                        const { icon, isGuruPick } = getEntryStatus(entry);
                         const pinned = livePinKindOf(challenge, entry, pins);
                         return (
                             <span
                                 key={entry.id}
                                 title={`${t('app.rank')} ${entry.rank} (${entry.votes} ${t('app.votes')})`}
                             >
-                                {icon} #{entry.rank}
+                                {/* The icon keeps its own span so the rank never hides with it; a ⭐ icon is
+                                    aria-hidden because the Guru-picked label below names it. */}
+                                <span aria-hidden={icon === '⭐' ? true : undefined}>{icon}</span>
+                                {isGuruPick && icon !== '⭐' && <span aria-hidden="true">⭐</span>}
+                                {isGuruPick && <span className="sr-only">{t('app.entryGuruPicked')}</span>} #
+                                {entry.rank}
                                 {pinned && (
                                     <>
                                         <span aria-hidden="true">{pinned === 'boost' ? '🚀📌' : '⚡📌'}</span>

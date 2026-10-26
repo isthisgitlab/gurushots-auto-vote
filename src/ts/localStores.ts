@@ -46,7 +46,7 @@ const LOCAL_STORES = [
         flush: () => void flushJoinStateWrites(),
     },
     {
-        // Swap-back records (which slot can restore a boosted/turbo'd photo).
+        // Swap-back records (which slot can restore a boosted, turbo'd or guru-picked photo).
         initialize: initializeSwapBackAsync,
         flush: () => void flushSwapBackWrites(),
     },

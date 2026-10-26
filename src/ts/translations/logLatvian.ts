@@ -737,6 +737,11 @@ export const logMessages = {
     mfdf8dd6a7033:
         '{0} Jauna foto iesniegšana Turbo izmantošanai: nevar iesniegt jaunu foto, un citu foto nav — Turbo izlaists',
     mfe5c1ae043d9: 'Otrās instances palaišana bloķēta — vēl nav loga, ko fokusēt (lietotne vēl startē).',
+    m4f9c1b6d8e72: 'Tīmekļa aktīvo izaicinājumu saraksts nav pieejams; Turbo režīms un Guru izvēles nav zināmi',
+    m6c3e9f1a5b87: 'Tīmekļa aktīvo izaicinājumu pārklājums nolasīts',
+    m8b5d2e7c4a93: 'Tīmekļa Guru izvēles salīdzinātas ar mobilajiem ierakstiem',
+    m2a7d4f8c3e91:
+        'Apmaiņa: apmaināmais foto ir ar Boost, Turbo vai Guru izvēli — apmaiņa izaicinājumam {0} netiek tērēta',
     mfe760929b17d: 'Pieprasa aktīvos izaicinājumus no API',
     mfebf9a3cde39: 'Saglabātais pieteikšanās tokens notīrīts ("Palikt pieteicies" ir izslēgts)',
     mfedb076cd73d: 'NativeAutovoteBridge.getPlugin neizdevās',

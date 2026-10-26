@@ -231,6 +231,27 @@ describe('choosing the replacement', () => {
         expect(await screen.findByText(app.currencySwapBoostedWarning)).toBeTruthy();
     });
 
+    test('the confirm shows the Guru-pick warning for a guru-picked entry', async () => {
+        const picked = makeChallenge();
+        picked.member!.ranking!.entries![0].guru_pick = true;
+        render(
+            <ChallengeCard
+                challenge={picked}
+                timeRemaining="2h"
+                timezone="local"
+                autovoteRunning={false}
+                onVoteComplete={jest.fn()}
+                onSettingsClick={jest.fn()}
+                bankroll={FULL}
+                onCurrencySpent={onCurrencySpent}
+            />,
+        );
+        await openPicker();
+        fireEvent.click(tile(PICK_ID));
+        fireEvent.click(useThisPhoto());
+        expect(await screen.findByText(app.currencySwapGuruPickWarning)).toBeTruthy();
+    });
+
     test('no suggestion: the picker opens with the reason, with no error under the button', async () => {
         window.api.previewSwapPhoto = jest
             .fn()

@@ -81,6 +81,8 @@ type FixtureCtx = Parameters<typeof runAutoKey>[0] & {
         strategy: {
             getBankroll: jest.MockedFunction<CurrencyPassDeps['strategy']['getBankroll']>;
             getVoteImages: jest.MockedFunction<CurrencyPassDeps['strategy']['getVoteImages']>;
+            getActiveChallenges: jest.MockedFunction<CurrencyPassDeps['strategy']['getActiveChallenges']>;
+            swapPhoto: jest.MockedFunction<CurrencyPassDeps['strategy']['swapPhoto']>;
         };
         spendLedger: ReturnType<typeof createMemoryAutoSpendLedger>;
     };
@@ -370,6 +372,100 @@ describe('runAutoSwap', () => {
         currencyActions.swapEntry.mockResolvedValueOnce({ ok: false, outcome: 'api-failed' });
         expect(await runAutoSwap(ctx)).toBe(false);
         expect(ctx.challenge.member.ranking.entries.map((e) => e.id)).toEqual(['e1', 'e2']);
+    });
+
+    describe('the live guard on the spend (the real swapEntry)', () => {
+        // The guarded spend is the real service one: the pass's snapshot says the target is plain,
+        // while the LIVE challenge the strategy answers is what the guard reads.
+        const realSwapEntry = jest.requireActual<typeof currencyActionsModule>(
+            '../../src/ts/services/currencyActions',
+        ).swapEntry;
+
+        const runWithLive = async (
+            liveEntries: Partial<RankingEntry>[],
+            { allowProtected = false }: { allowProtected?: boolean } = {},
+        ) => {
+            const ctx = makeCtx();
+            const live = makeChallenge();
+            // The live re-check reads the real clock, so the live challenge must be running now
+            // (the pass snapshot's frozen NOW only feeds the runner's own gates).
+            live.start_time = Math.floor(Date.now() / 1000) - 3600;
+            live.close_time = Math.floor(Date.now() / 1000) + 3600;
+            live.member.ranking.entries = invalid<RankingEntry[]>(
+                liveEntries.map((entry) => ({ member_id: 'm', ...entry })),
+            );
+            ctx.currency.strategy.getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [live] });
+            ctx.currency.strategy.swapPhoto = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+            const onSwapped = jest.fn();
+            ctx.currency.swapLedger = invalid({ onSwapped });
+            currencyActions.swapEntry.mockImplementationOnce(realSwapEntry);
+            set({ autoSwapAllowBoosted: allowProtected });
+            return { ctx, swapPhoto: ctx.currency.strategy.swapPhoto, onSwapped, ok: await runAutoSwap(ctx) };
+        };
+
+        test('a photo that gained a guru pick before the spend is not swapped out', async () => {
+            const { swapPhoto, onSwapped, ok } = await runWithLive([
+                { id: 'e1', votes: 50 },
+                { id: 'e2', votes: 5, guru_pick: true },
+            ]);
+            expect(ok).toBe(false);
+            expect(swapPhoto).not.toHaveBeenCalled();
+            expect(onSwapped).not.toHaveBeenCalled();
+        });
+
+        test('a photo that gained a boost before the spend is not swapped out', async () => {
+            const { swapPhoto, onSwapped, ok } = await runWithLive([
+                { id: 'e1', votes: 50 },
+                { id: 'e2', votes: 5, boosted: true },
+            ]);
+            expect(ok).toBe(false);
+            expect(swapPhoto).not.toHaveBeenCalled();
+            expect(onSwapped).not.toHaveBeenCalled();
+        });
+
+        test('a plain live entry is swapped out', async () => {
+            const { swapPhoto, onSwapped, ok, ctx } = await runWithLive([
+                { id: 'e1', votes: 50 },
+                { id: 'e2', votes: 5 },
+            ]);
+            expect(ok).toBe(true);
+            expect(swapPhoto).toHaveBeenCalledWith(555, 'e2', 'new1', 'tok');
+            expect(onSwapped).toHaveBeenCalledWith(555, expect.objectContaining({ id: 'e2' }), 'new1');
+            expect(ctx.challenge.member.ranking.entries.map((e) => e.id)).toEqual(['e1', 'new1']);
+        });
+
+        test('allowProtected skips the guard: a live pick may be swapped out', async () => {
+            const { swapPhoto, ok } = await runWithLive(
+                [
+                    { id: 'e1', votes: 50 },
+                    { id: 'e2', votes: 5, guru_pick: true },
+                ],
+                { allowProtected: true },
+            );
+            expect(ok).toBe(true);
+            expect(swapPhoto).toHaveBeenCalledWith(555, 'e2', 'new1', 'tok');
+        });
+
+        test('the pass snapshot carries the guard only while protected entries stay refused', async () => {
+            const ctx = makeCtx();
+            await runAutoSwap(ctx);
+            expect(currencyActions.swapEntry).toHaveBeenLastCalledWith(
+                555,
+                'e2',
+                'new1',
+                'tok',
+                expect.objectContaining({ guard: expect.any(Function) }),
+            );
+            set({ autoSwapAllowBoosted: true });
+            await runAutoSwap(makeCtx());
+            expect(currencyActions.swapEntry).toHaveBeenLastCalledWith(
+                555,
+                'e2',
+                'new1',
+                'tok',
+                expect.objectContaining({ guard: undefined }),
+            );
+        });
     });
 });
 

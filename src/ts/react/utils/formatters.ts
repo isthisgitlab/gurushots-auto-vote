@@ -12,6 +12,7 @@ import { formatEndTimeIn } from '../../format/endTime';
 import { finiteOr } from '../../numbers';
 import { interp } from './interp';
 import { LEVEL_BADGE_CLASS, LEVEL_PROGRESS_CLASS } from './levelBadge';
+import { isGuruPicked } from '../../voting/currencyAuto';
 
 // The shared core's formatter, so the renderer, the CLI, and the voting pass
 // (services/votingOrchestrator/boost.ts) all format durations identically — see src/ts/format/duration.ts —
@@ -214,25 +215,29 @@ export const statusText = (status: ResourceStatus<string>, t: (key: string) => s
  * Display state of one submitted entry — the photo's own boost/turbo/guru-pick
  * status, as opposed to getBoostStatus/getTurboStatus which describe the
  * challenge-level resource. Boost and turbo are mutually exclusive on an entry,
- * so the first match wins.
+ * so the first match wins; a Guru's pick can ride on either, which is why it is
+ * reported separately from the icon.
  *
  * entry.boost is an eligibility indicator, not an applied flag — the API marks
  * an applied boost with the separate boolean entry.boosted. Reading entry.boost
  * would light the rocket on entries that are merely eligible.
  *
- * The icon alone says which state it is; no colour varies with it.
+ * The icon alone says which single state it is (boost > turbo > guru pick);
+ * no colour varies with it. A guru-picked entry that is also boosted/turbo'd
+ * shows that icon plus the Guru-picked badge.
  *
  * @param entry - Entry record from challenge.member.ranking.entries
  */
 export const getEntryStatus = (
     entry: RankingEntry | null | undefined,
-): { isBoosted: boolean; isTurboed: boolean; icon: string } => {
+): { isBoosted: boolean; isTurboed: boolean; isGuruPick: boolean; icon: string } => {
     const isBoosted = entry?.boosted === true;
     const isTurboed = !!entry?.turbo;
-    const base = { isBoosted, isTurboed };
+    const isGuruPick = isGuruPicked(entry);
+    const base = { isBoosted, isTurboed, isGuruPick };
     if (isBoosted) return { ...base, icon: '🚀' };
     if (isTurboed) return { ...base, icon: '⚡' };
-    if (entry?.guru_pick) return { ...base, icon: '⭐' };
+    if (isGuruPick) return { ...base, icon: '⭐' };
     return { ...base, icon: '📷' };
 };
 

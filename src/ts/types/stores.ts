@@ -64,14 +64,15 @@ export interface MetadataFile {
     [challengeId: string]: ChallengeMetadataEntry | UpdateCheckData;
 }
 
-/** One swap-back record: a slot holding a replacement for a boosted/turbo'd photo. */
+/** One swap-back record: a slot holding a replacement for a boosted, turbo'd or guru-picked photo. */
 export interface SwapBackRecord {
     /** The photo now in the slot. */
     currentId: string;
-    /** The boosted/turbo'd original to swap back in. */
+    /** The boosted, turbo'd or guru-picked original to swap back in. */
     previousId: string;
     previousMemberId: string;
-    kind: 'boost' | 'turbo';
+    /** What the original carries; priority boost > turbo > guruPick when it carries several. */
+    kind: 'boost' | 'turbo' | 'guruPick';
     /** ms timestamp, for pruning. */
     at: number;
 }

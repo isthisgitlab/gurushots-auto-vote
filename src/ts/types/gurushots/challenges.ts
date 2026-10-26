@@ -123,8 +123,9 @@ export interface ActiveChallengesResponse {
 
 /**
  * The WEB get_my_active_challenges: each challenge's id, the member turbo (the
- * only read that reports a `mode`) and the challenge-level fields the mobile
- * read omits — every field is what may arrive, and api/challenges.ts
+ * only read that reports a `mode`), the per-entry Guru's picks (`member.ranking.entries`,
+ * narrowed by readOverlay in api/challenges.ts) and the challenge-level fields
+ * the mobile read omits — every field is what may arrive, and api/challenges.ts
  * shape-checks it before use.
  */
 export interface WebActiveChallengesResponse {
@@ -138,7 +139,7 @@ export interface WebActiveChallengesResponse {
         achievements_and_prizes?: PrizeTier[];
         member?: {
             turbo?: MemberTurbo | null;
-            ranking?: { total?: Pick<RankingTotal, 'benchmark'> };
+            ranking?: { total?: Pick<RankingTotal, 'benchmark'>; entries?: unknown[] };
         };
     }>;
     /** Untrusted elements: the member's own suggested library photos per challenge they have NOT joined, narrowed by readSuggestions in api/challenges.ts. */

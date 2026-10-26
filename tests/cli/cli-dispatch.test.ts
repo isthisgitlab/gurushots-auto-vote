@@ -453,8 +453,8 @@ const COMMANDS_BLOCK = `Commands:
   swap     - Spend a swap to replace an entered photo: without --to it suggests a different one,
              with --to=<id> it swaps in the photo you name (list-photos --challenge=<id> shows them):
              swap --challenge=<id> --image=<id> [--to=<id>] [--yes]
-  swap-back - Swap a photo that was swapped out while boosted/turbo'd back in (it gets
-             its boost/turbo back): swap-back --challenge=<id> --image=<current id> [--yes]
+  swap-back - Swap a photo that was swapped out while boosted, turbo'd or guru-picked back in (it
+             gets its boost/turbo/Guru's pick back): swap-back --challenge=<id> --image=<current id> [--yes]
   fill-exposure - Spend a fill to top exposure up to 100%: fill-exposure --challenge=<id> [--yes]
              Currency actions spend nothing without --yes; they print the cost first.
   start    - Start continuous voting on a schedule (runs until stopped with Ctrl+C)

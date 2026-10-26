@@ -1152,6 +1152,25 @@ describe('actions', () => {
             expect(state().lastError).toBeNull();
             expect(state().fired).toEqual({});
         });
+
+        test('skipProtected refuses to swap a guru-picked target, without re-selecting', async () => {
+            setup(single([{ type: 'swap', entry: { by: 'fewestVotes', skipProtected: true }, with: 'best' }]));
+            const c = challenge();
+            c.member.ranking.entries[1].guru_pick = true; // 'b' is the fewest votes and guru-picked
+            await run(c);
+            expect(currencyActions.swapEntry).not.toHaveBeenCalled();
+            expect(c.member.ranking.entries.map((e) => e.id)).toEqual(['a', 'b']);
+            expect(state().lastError!.message).toContain('the swap target is guru-picked');
+        });
+
+        test('without skipProtected a guru-picked target is swapped like any other', async () => {
+            setup(single([{ type: 'swap', entry: { by: 'fewestVotes' }, with: 'best' }]));
+            const c = challenge();
+            c.member.ranking.entries[1].guru_pick = true;
+            await run(c);
+            expect(currencyActions.swapEntry).toHaveBeenCalledWith(7, 'b', 'n1', 'tok', expect.anything());
+            expect(c.member.ranking.entries[1]).toEqual({ id: 'n1', member_id: 'm' });
+        });
     });
 
     describe('boost and turbo', () => {
@@ -1161,6 +1180,15 @@ describe('actions', () => {
             expect(pass.api.applyBoostToEntry).toHaveBeenCalledWith(7, 'a', 'tok');
             expect(c.member.ranking.entries[0].boosted).toBe(true);
             expect(c.member.boost!.state).toBe('USED');
+        });
+
+        test('boost with skipProtected still targets a guru-picked entry (only a swap refuses)', async () => {
+            setup(single([{ type: 'boost', entry: { by: 'fewestVotes', skipProtected: true } }]));
+            const c = challenge();
+            c.member.ranking.entries[1].guru_pick = true;
+            await run(c);
+            expect(pass.api.applyBoostToEntry).toHaveBeenCalledWith(7, 'b', 'tok');
+            expect(c.member.ranking.entries[1].boosted).toBe(true);
         });
 
         test('turbo applies a won turbo', async () => {

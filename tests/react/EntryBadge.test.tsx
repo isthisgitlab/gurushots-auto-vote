@@ -391,6 +391,54 @@ describe('EntryBadge — layout: an info row, then an actions row', () => {
         expect(actions.textContent).not.toContain('app.rank');
     });
 
+    describe('the Guru-picked badge', () => {
+        test('a guru-picked entry shows the badge instead of the ⭐ icon, never both', () => {
+            const { container } = renderBadge({ entry: baseEntry({ guru_pick: true }) });
+            const info = badge(container).firstElementChild!;
+            expect(info.textContent).toContain('app.entryGuruPicked');
+            const infoBadge = info.querySelector('.badge')!;
+            expect(infoBadge.textContent).toContain('⭐');
+            expect(infoBadge.classList.contains('badge-info')).toBe(true);
+            // The standalone icon span is gone with it.
+            expect(
+                Array.from(info.children).some(
+                    (child) => child.textContent === '⭐' && !child.classList.contains('badge'),
+                ),
+            ).toBe(false);
+        });
+
+        test('a plain entry shows neither the badge nor a Guru-picked label', () => {
+            const { container } = renderBadge();
+            const info = badge(container).firstElementChild!;
+            expect(info.querySelector('.badge-info')).toBeNull();
+            expect(info.textContent).not.toContain('app.entryGuruPicked');
+        });
+
+        test('a boosted entry that also carries a pick keeps its 🚀 icon and gains the badge', () => {
+            const { container } = renderBadge({ entry: baseEntry({ boosted: true, guru_pick: true }) });
+            const boostedInfo = badge(container).firstElementChild!;
+            expect(boostedInfo.textContent).toContain('🚀');
+            const infoBadge = boostedInfo.querySelector('.badge-info')!;
+            expect(infoBadge.textContent).toContain('app.entryGuruPicked');
+        });
+    });
+
+    test('the Swap button is told about a guru pick through its warnings', async () => {
+        const onChooseSwap = jest.fn();
+        renderBadge({
+            entry: baseEntry({ guru_pick: true }),
+            swapAvailable: true,
+            onChooseSwap,
+        });
+        fireEvent.click(screen.getByText(/app\.swapPick$/).closest('button')!);
+        await act(async () => {});
+        expect(onChooseSwap).toHaveBeenCalledWith(
+            expect.objectContaining({ guru_pick: true }),
+            expect.objectContaining({ guruPick: true }),
+            expect.anything(),
+        );
+    });
+
     test('the swap-back button is in the actions row beside Swap', () => {
         const { container } = renderBadge({
             swapAvailable: true,

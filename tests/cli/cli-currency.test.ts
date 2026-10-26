@@ -81,6 +81,7 @@ const { unlockBoostCmd, swapCmd, swapBackCmd, fillExposureCmd } =
 
 const msgsAt = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
 const contains = (arr: string[], sub: string) => arr.some((s) => s.includes(sub));
+const { renderLogTemplate } = require('../helpers/logTemplate') as typeof import('../helpers/logTemplate');
 
 beforeEach(() => {
     logger.__calls.length = 0;
@@ -216,6 +217,25 @@ describe('swap-back', () => {
         expect(handlers['swap-back-entry-photo']).not.toHaveBeenCalled();
         expect(contains(msgsAt('info'), 'repl → orig (gets its boost back)')).toBe(true);
         expect(contains(msgsAt('info'), 'swap-back --challenge=111 --image=repl --yes')).toBe(true);
+    });
+
+    test.each([
+        ['turbo', 'turbo'],
+        ['guruPick', "Guru's pick"],
+    ])('a %s record names its kind through the fixed map, never the raw value', async (kind, label) => {
+        handlers['get-swap-backs'].mockResolvedValue({
+            success: true,
+            items: [{ currentId: 'repl', previousId: 'orig', previousMemberId: 'm', kind }],
+        });
+        await swapBackCmd('111', { imageId: 'repl' });
+        // The line the logger writes, rendered the way its catalog template renders.
+        expect(contains(msgsAt('info'), renderLogTemplate('m79974ad853a3', ['Sunset', 'repl', 'orig', label]))).toBe(
+            true,
+        );
+
+        handlers['swap-back-entry-photo'].mockResolvedValue({ success: true, outcome: 'ok' });
+        await swapBackCmd('111', { imageId: 'repl', yes: true });
+        expect(contains(msgsAt('success'), `its ${label} is back`)).toBe(true);
     });
 
     test('with --yes: swaps back with confirmed=true', async () => {

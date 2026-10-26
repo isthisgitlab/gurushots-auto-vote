@@ -375,17 +375,21 @@ export const app: typeof english.app = {
     currencySwap: 'Apmainīt',
     currencySwapTitle: 'Apmainīt šo foto?',
     currencySwapBody:
-        'Pašreizējo foto aizstās foto, ko lietotne izvēlējās šim izaicinājumam. Aizstāto foto nevar apmainīt atpakaļ.',
+        'Pašreizējo foto aizstās foto, ko lietotne izvēlējās šim izaicinājumam. Aizstāto foto vēlāk var apmainīt atpakaļ, atkal to izvēloties; foto ar Boost, Turbo vai Guru izvēli kartīte piedāvā „Apmainīt atpakaļ”.',
     currencySwapChoose: 'Izvēlēties citu foto…',
     currencySwapCurrent: 'Pašreizējais foto',
     currencySwapReplacement: 'Jaunais foto',
     currencySwapYourPick: 'Tavs izvēlētais foto',
-    currencySwapChosenBody: 'Pašreizējo foto aizstās tavs izvēlētais foto. Aizstāto foto nevar apmainīt atpakaļ.',
+    currencySwapChosenBody:
+        'Pašreizējo foto aizstās tavs izvēlētais foto. Aizstāto foto vēlāk var apmainīt atpakaļ, atkal to izvēloties; foto ar Boost, Turbo vai Guru izvēli kartīte piedāvā „Apmainīt atpakaļ”.',
     currencySwapBoostedWarning:
         'Šim foto ir Boost vai Turbo. Tas paliek pie šī foto — jaunajam foto tā nebūs, un šajā izaicinājumā to vairs nevarēs izmantot, ja vien šo foto neapmainīsi atpakaļ.',
+    currencySwapGuruPickWarning:
+        'Šis foto ir Guru izvēlēts. Izvēle paliek pie šī foto — aizstājošajam foto tās nebūs. Ja šo foto apmainīsi atpakaļ, izvēle atgriežas.',
     currencySwapBack: 'Apmainīt atpakaļ',
     currencySwapBackTitle: 'Apmainīt atpakaļ sākotnējo foto?',
     currencySwapBackBody: 'Tavs sākotnējais foto atgriežas šajā vietā un atgūst savu {kind}.',
+    currencySwapBackBodyGuruPick: 'Tavs sākotnējais foto atgriežas šajā vietā un atgūst savu Guru izvēli.',
     currencySwapBackOriginal: 'Sākotnējais foto',
     currencyCost: 'Maksā: 1 {unit}.',
     currencyBalance: 'Atlikums ({currency}): {current}; pēc tam paliks: {resulting}.',
@@ -617,7 +621,7 @@ export const app: typeof english.app = {
     sbField_phase: 'Fāze',
     sbField_message: 'Ziņa',
     sbField_index: 'Vieta',
-    sbField_skipProtected: 'Izlaist iesniegumus ar Boost vai Turbo',
+    sbField_skipProtected: 'Izlaist iesniegumus ar Boost vai Turbo; Guru izvēlēto foto nekad neapmaina',
     sbNew: 'Jauns scenārijs',
     sbEdit: 'Rediģēt',
     sbTitleNew: 'Jauns scenārijs',
@@ -1119,12 +1123,12 @@ export const app: typeof english.app = {
     autoSwapAfterPercentDesc: 'Apmainīt tikai tad, kad pagājusi šī izaicinājuma daļa. 0 = bez nosacījuma.',
     autoSwapImageIndex: 'Apmaināmais foto',
     autoSwapImageIndexDesc:
-        'Kuru foto aizstāt: 1 = pirmo, 2 = otro utt. 0 = pēdējo. Foto ar Boost vai Turbo izlaiž un ņem iepriekšējo, ja vien zemāk tas nav atļauts.',
+        'Kuru foto aizstāt: 1 = pirmo, 2 = otro utt. 0 = pēdējo. Foto ar Boost, Turbo vai Guru izvēli izlaiž un ņem iepriekšējo, ja vien zemāk tas nav atļauts.',
     autoSwapLowestVotes: 'Apmainīt foto ar vismazāk balsīm',
     autoSwapLowestVotesDesc: 'Neņemt vērā „Apmaināmais foto” un aizstāt to foto, kuram ir vismazāk balsu.',
-    autoSwapAllowBoosted: 'Atļaut apmainīt foto ar Boost/Turbo',
+    autoSwapAllowBoosted: 'Atļaut apmainīt foto ar Boost, Turbo vai Guru izvēli',
     autoSwapAllowBoostedDesc:
-        'Pēc noklusējuma foto ar Boost vai Turbo nekad neapmaina — Boost/Turbo paliek pie foto. Ieslēdz, lai to atļautu; tad kartīte piedāvās apmainīt sākotnējo foto atpakaļ.',
+        'Pēc noklusējuma foto ar Boost, Turbo vai Guru izvēli neapmaina — tā Boost, Turbo vai Guru izvēle paliek pie foto (par Guru izvēli lietotne uzzina no GuruShots; ja tas neizdodas, tā var to nezināt). Ieslēdz, lai to atļautu; tad kartīte piedāvās apmainīt sākotnējo foto atpakaļ.',
     autoSwapMaxVotes: 'Apmainīt tikai zem balsu skaita',
     autoSwapMaxVotesDesc:
         'Apmainīt tikai tad, ja izvēlētajam foto ir mazāk balsu par šo skaitu. 0 = bez balsu nosacījuma.',
@@ -1240,6 +1244,7 @@ export const app: typeof english.app = {
     english: 'English',
     entries: 'Foto',
     entryDetails: 'Informācija par foto',
+    entryGuruPicked: 'Guru izvēlēts',
     entryPhoto: 'Iesniegtais foto',
     entrySubmitted: 'Iesniegts {time}',
     entrySubmittedOrEarlier: 'Iesniegts {time} vai agrāk',

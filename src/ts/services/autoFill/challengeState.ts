@@ -116,31 +116,37 @@ const mergeLocalEntries = (prevEntries: RankingEntry[], freshEntries: RankingEnt
 };
 
 /**
- * Id → raised boost/turbo flags for every id-bearing entry that has either set.
+ * Id → raised boost/turbo/guru-pick flags for every id-bearing entry that has
+ * any of them set.
  */
-const collectRaisedEntryFlags = (entries: RankingEntry[]): Map<string, { turbo: boolean; boosted: boolean }> => {
-    const flags: Map<string, { turbo: boolean; boosted: boolean }> = new Map();
+const collectRaisedEntryFlags = (
+    entries: RankingEntry[],
+): Map<string, { turbo: boolean; boosted: boolean; guruPick: boolean }> => {
+    const flags: Map<string, { turbo: boolean; boosted: boolean; guruPick: boolean }> = new Map();
     for (const entry of entries) {
         if (!entry || entry.id == null) continue;
-        if (entry.turbo || entry.boosted) {
-            flags.set(String(entry.id), { turbo: !!entry.turbo, boosted: !!entry.boosted });
+        if (entry.turbo || entry.boosted || entry.guru_pick === true) {
+            flags.set(String(entry.id), {
+                turbo: !!entry.turbo,
+                boosted: !!entry.boosted,
+                guruPick: entry.guru_pick === true,
+            });
         }
     }
     return flags;
 };
 
 /**
- * Carry locally-raised boost/turbo flags across the member swap.
+ * Carry locally-raised boost/turbo/guru-pick flags across the member swap.
  *
  * Replacing `member` wholesale means an entry that IS in the fresh payload comes back
  * with the server's flags — and the server has not registered an apply from seconds ago,
- * so it reports turbo/boosted false. That would silently undo reflectEntryFlag: with the
- * default action order (turbo, then autoSubmit, then boost) a turbo applied earlier in the
- * pass would have its flag wiped by the refresh, and boost would then pick the very entry
- * turbo had just consumed. Only ever raise a flag, never clear one — if either side says an
- * entry is taken, treat it as taken. That errs toward using a different entry, which is the
- * safe direction: boost and turbo may both be spent, but never on the same entry. Mutates
- * `freshEntries`.
+ * so it reports turbo/boosted false (and a Guru's pick the web read carried may be missing,
+ * for instance when the web read failed this time). That would silently undo
+ * reflectEntryFlag and drop a guru pick the app already showed. Only ever raise a flag,
+ * never clear one — if either side says an entry is taken, treat it as taken. That errs
+ * toward using a different entry, which is the safe direction: boost and turbo may both
+ * be spent, but never on the same entry. Mutates `freshEntries`.
  */
 const carryLocalEntryFlags = (prevEntries: RankingEntry[], freshEntries: RankingEntry[]) => {
     const localFlags = collectRaisedEntryFlags(prevEntries);
@@ -150,6 +156,7 @@ const carryLocalEntryFlags = (prevEntries: RankingEntry[], freshEntries: Ranking
         if (!flags) continue;
         if (flags.turbo) entry.turbo = true;
         if (flags.boosted) entry.boosted = true;
+        if (flags.guruPick) entry.guru_pick = true;
     }
 };
 

@@ -92,7 +92,8 @@ function PinToggles({
  * @param props.bankroll - For the swap confirm modal's balance line
  * @param props.onSwapped - called after a swap / swap back spent
  * @param props.onChooseSwap - opens the card's swap picker for this entry
- * @param props.swapBack - Swap-back offer for this slot (the original was swapped out while boosted/turbo'd)
+ * @param props.swapBack - Swap-back offer for this slot (the original was swapped out while boosted, turbo'd or
+ *   guru-picked)
  * @param props.pin - the pin toggles (absent = none shown)
  * @param props.timezone - the timezone setting the entry's submit time is written in
  */
@@ -130,7 +131,7 @@ export function EntryBadge({
     const { applyTurbo, loading: turboing, error: turboError, clearError: clearTurboError } = useTurbo();
 
     // Shared with the compact card's glyph row so both read one mapping.
-    const { isBoosted: isEntryBoosted, isTurboed: isEntryTurboed, icon } = getEntryStatus(entry);
+    const { isBoosted: isEntryBoosted, isTurboed: isEntryTurboed, isGuruPick, icon } = getEntryStatus(entry);
     // Boost and turbo are mutually exclusive on a single entry —
     // applying one locks out the other on the same photo. Hide both
     // buttons whenever the entry is already in either state.
@@ -167,7 +168,13 @@ export function EntryBadge({
         <div className="rounded-box border-base-300 flex flex-col items-start gap-2 border p-2 text-left text-xs">
             <div className="flex flex-wrap items-center gap-1">
                 <EntryPhoto entry={entry} />
-                <span>{icon}</span>
+                {/* A ⭐ icon is replaced by the Guru-picked badge (which carries its own ⭐), never doubled. */}
+                {icon !== '⭐' && <span>{icon}</span>}
+                {isGuruPick && (
+                    <span className="badge badge-sm badge-info">
+                        <span aria-hidden="true">⭐</span> {t('app.entryGuruPicked')}
+                    </span>
+                )}
                 <span>
                     {t('app.rank')} {entry.rank} ({entry.votes} {t('app.votes')})
                 </span>
@@ -210,6 +217,7 @@ export function EntryBadge({
                                 bankroll={bankroll}
                                 warnActioned={isEntryActioned}
                                 warnPinned={pin?.livePin ?? null}
+                                warnGuruPick={isGuruPick}
                                 onSpent={onSwapped}
                                 onChoose={onChooseSwap}
                             />

@@ -553,6 +553,86 @@ describe('challenges', () => {
                 ]);
             });
 
+            test("the web read's Guru's picks raise guru_pick on the mobile entries whose ids match", async () => {
+                makePostRequest.mockResolvedValueOnce({
+                    challenges: [
+                        {
+                            id: 1,
+                            title: 'A',
+                            member: {
+                                ranking: {
+                                    entries: [
+                                        { id: 'e1', guru_pick: false },
+                                        { id: 'e2', guru_pick: true },
+                                    ],
+                                },
+                            },
+                        },
+                        { id: 2, title: 'B', member: { ranking: { entries: [{ id: '3' }] } } },
+                    ],
+                });
+                makePostRequest.mockResolvedValueOnce({
+                    challenges: [
+                        {
+                            id: 1,
+                            member: {
+                                ranking: {
+                                    entries: [
+                                        { id: 'e1', guru_pick: true },
+                                        { id: 'nope', guru_pick: true },
+                                    ],
+                                },
+                            },
+                        },
+                        { id: 2, member: { ranking: { entries: [{ id: 3, guru_pick: true }] } } },
+                    ],
+                });
+
+                const result = await getActiveChallenges(mockToken);
+
+                // Raised from the web read; an unknown web id touches nothing.
+                expect(result.challenges[0].member?.ranking?.entries?.[0]?.guru_pick).toBe(true);
+                // A mobile true is kept (and counted as matched), never cleared.
+                expect(result.challenges[0].member?.ranking?.entries?.[1]?.guru_pick).toBe(true);
+                // A numeric web id matches a string mobile id.
+                expect(result.challenges[1].member?.ranking?.entries?.[0]?.guru_pick).toBe(true);
+                expect(result.challenges[1].member?.ranking?.entries?.[0]?.id).toBe('3');
+            });
+
+            test('a mobile challenge without member or ranking entries takes the overlay without throwing', async () => {
+                makePostRequest.mockResolvedValueOnce({
+                    challenges: [
+                        { id: 1, title: 'A' },
+                        { id: 2, title: 'B', member: { turbo: { state: 'WON' } } },
+                    ],
+                });
+                makePostRequest.mockResolvedValueOnce({
+                    challenges: [
+                        { id: 1, member: { ranking: { entries: [{ id: 'e1', guru_pick: true }] } } },
+                        { id: 2, member: { ranking: { entries: [{ id: 'e2', guru_pick: true }] } } },
+                    ],
+                });
+
+                const result = await getActiveChallenges(mockToken);
+
+                expect(result.challenges[0].member).toBeUndefined();
+                expect(result.challenges[1].member?.turbo).toEqual({ state: 'WON' });
+                expect(result.challenges[1].member?.ranking).toBeUndefined();
+            });
+
+            test('a web read that fails leaves the mobile guru_pick flags as they are', async () => {
+                makePostRequest.mockResolvedValueOnce({
+                    challenges: [
+                        { id: 1, title: 'A', member: { ranking: { entries: [{ id: 'e1', guru_pick: true }] } } },
+                    ],
+                });
+                makePostRequest.mockResolvedValueOnce(null);
+
+                const result = await getActiveChallenges(mockToken);
+
+                expect(result.challenges[0].member?.ranking?.entries?.[0]?.guru_pick).toBe(true);
+            });
+
             test('a shape-check failure inside one challenge is omitted for that challenge only', async () => {
                 makePostRequest.mockResolvedValueOnce({
                     challenges: [
@@ -975,6 +1055,42 @@ describe('challenges', () => {
             expect(overlay?.suggestions).toEqual(new Map([['603', [photoId(9)]]]));
         });
 
+        test('collects the String ids of the web entries whose guru_pick is true, and nothing else', async () => {
+            makePostRequest.mockResolvedValueOnce(
+                invalid({
+                    challenges: [
+                        {
+                            id: 31,
+                            member: {
+                                ranking: {
+                                    entries: [
+                                        // The shape the live web body carries: string ids, boolean guru_pick.
+                                        { id: '429487321', guru_pick: true, member: {}, image: { id: 'x' } },
+                                        { id: 84512, guru_pick: true },
+                                        { id: '429487322', guru_pick: false },
+                                        { id: '429487323' },
+                                        'bad',
+                                        { guru_pick: true },
+                                        { id: null, guru_pick: true },
+                                    ],
+                                },
+                            },
+                        },
+                        { id: '32', member: { ranking: {} } },
+                        { id: 33 },
+                    ],
+                }),
+            );
+
+            const overlay = await fetchWebActiveOverlay(mockToken);
+
+            expect(overlay?.byId.get('31')?.guruPickIds).toEqual(['429487321', '84512']);
+            expect(overlay?.byId.get('31')?.turbo).toBeNull();
+            // No entries array → the field stays off.
+            expect(overlay?.byId.get('32')?.guruPickIds).toBeUndefined();
+            expect(overlay?.byId.get('33')?.guruPickIds).toBeUndefined();
+        });
+
         test.each([
             ['a failed request', null, true],
             ['a body without a challenge list', { success: true }, false],
@@ -985,7 +1101,7 @@ describe('challenges', () => {
             await expect(fetchWebActiveOverlay(mockToken)).resolves.toBeNull();
 
             expect(logger.__mockWarningFn).toHaveBeenCalledWith(
-                'Web active challenges unavailable; turbo mode unknown',
+                "Web active challenges unavailable; turbo mode and Guru's picks unknown",
                 {
                     requestFailed,
                 },

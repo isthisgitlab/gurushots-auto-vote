@@ -88,12 +88,15 @@ type BenchmarkRow = NonNullable<RankingTotal['benchmark']>[number];
 
 /**
  * What the WEB get_my_active_challenges overlays onto one challenge of the
- * mobile list: its turbo (the only read that reports a `mode`), plus the
- * challenge-level fields the mobile read omits. A field that fails its shape
- * check is left off the overlay, so the mobile value stands.
+ * mobile list: its turbo (the only read that reports a `mode`), the ids of the
+ * member's entries the web read marks `guru_pick`, plus the challenge-level
+ * fields the mobile read omits. A field that fails its shape check is left off
+ * the overlay, so the mobile value stands.
  */
 interface WebChallengeOverlay {
     turbo: MemberTurbo | null;
+    /** `String(id)` of each web entry with `guru_pick: true`; absent when the element carries no entries array. */
+    guruPickIds?: string[];
     guru_pick_enable?: boolean;
     top_photographer_enable?: boolean;
     levels_rank_enable?: boolean;
@@ -112,16 +115,34 @@ interface WebActiveOverlay {
 /**
  * Reads one challenge's overlay off its web element. The turbo keeps the exact
  * old semantics (null when the member or the turbo is not an object); every
- * other field is taken only when its shape checks out.
+ * other field is taken only when its shape checks out. The Guru's picks are a
+ * set of string ids, never object keys, and nothing else is copied from the
+ * web entries — the mobile rows stay the source of everything else.
  */
 const readOverlay = (element: Record<string, unknown>): WebChallengeOverlay => {
     const overlay: WebChallengeOverlay = { turbo: null };
     const member = isPlainObject(element.member) ? element.member : null;
     if (member) {
         overlay.turbo = isMemberTurbo(member.turbo) ? member.turbo : null;
-        if (isPlainObject(member.ranking) && isPlainObject(member.ranking.total)) {
-            const benchmark = member.ranking.total.benchmark;
-            if (isObjectArray<BenchmarkRow>(benchmark)) overlay.benchmark = benchmark;
+        if (isPlainObject(member.ranking)) {
+            if (isPlainObject(member.ranking.total)) {
+                const benchmark = member.ranking.total.benchmark;
+                if (isObjectArray<BenchmarkRow>(benchmark)) overlay.benchmark = benchmark;
+            }
+            if (Array.isArray(member.ranking.entries)) {
+                const entries: unknown[] = member.ranking.entries;
+                const guruPickIds: string[] = [];
+                for (const entry of entries) {
+                    if (
+                        isPlainObject(entry) &&
+                        (typeof entry.id === 'string' || typeof entry.id === 'number') &&
+                        entry.guru_pick === true
+                    ) {
+                        guruPickIds.push(String(entry.id));
+                    }
+                }
+                overlay.guruPickIds = guruPickIds;
+            }
         }
     }
     if (typeof element.guru_pick_enable === 'boolean') overlay.guru_pick_enable = element.guru_pick_enable;
@@ -162,10 +183,11 @@ const readSuggestions = (response: WebActiveChallengesResponse): Map<string, str
 
 /**
  * Reads the WEB get_my_active_challenges — the only read that reports the
- * turbo `mode` ('classic' | 'snap') and the snap-aware turbo state; the mobile
- * read has neither — plus the challenge-level fields the mobile read omits and
- * the photo ids suggested per challenge the member has NOT joined. The body
- * also carries other members' profile data, which is never logged (it is on
+ * turbo `mode` ('classic' | 'snap') and the snap-aware turbo state, the
+ * per-entry Guru's picks (the mobile read may not carry the per-entry flag), and the
+ * challenge-level fields the mobile read omits, plus the photo ids suggested
+ * per challenge the member has NOT joined. The body also carries other
+ * members' profile data, which is never logged (it is on
  * BODY_UNLOGGED_URLS); only flags and counts reach the log.
  *
  * @param token - Authentication token
@@ -180,17 +202,30 @@ const fetchWebActiveOverlay = async (token: string): Promise<WebActiveOverlay | 
         '',
     );
     if (!response || !Array.isArray(response.challenges)) {
-        logger.withCategory('api').warning('Web active challenges unavailable; turbo mode unknown', {
+        logger.withCategory('api').warning("Web active challenges unavailable; turbo mode and Guru's picks unknown", {
             requestFailed: !response,
         });
         return null;
     }
     const byId = new Map<string, WebChallengeOverlay>();
     const elements: unknown[] = response.challenges;
+    let entriesPresent = false;
+    let guruPickCount = 0;
     for (const element of elements) {
         if (!isPlainObject(element) || (typeof element.id !== 'string' && typeof element.id !== 'number')) continue;
-        byId.set(String(element.id), readOverlay(element));
+        const overlay = readOverlay(element);
+        byId.set(String(element.id), overlay);
+        if (overlay.guruPickIds !== undefined) {
+            entriesPresent = true;
+            guruPickCount += overlay.guruPickIds.length;
+        }
     }
+    // Counts only, never ids or bodies: the URL stays on BODY_UNLOGGED_URLS.
+    logger.withCategory('api').debug('Web active challenges overlay read', {
+        challenges: byId.size,
+        guruPickIds: guruPickCount,
+        entriesPresent,
+    });
     return { byId, suggestions: readSuggestions(response) };
 };
 

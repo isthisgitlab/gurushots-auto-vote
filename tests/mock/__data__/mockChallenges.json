@@ -2432,7 +2432,7 @@
                         "percent": 7.94,
                         "exposure": 74,
                         "points": 93,
-                        "guru_picks": 0,
+                        "guru_picks": 1,
                         "next_message": "1141 votes to next level",
                         "benchmark": [
                             {
@@ -2461,7 +2461,7 @@
                             "rank": 153,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "guru_pick": false,
+                            "guru_pick": true,
                             "boost": 1,
                             "turbo": false,
                             "boosting": false,

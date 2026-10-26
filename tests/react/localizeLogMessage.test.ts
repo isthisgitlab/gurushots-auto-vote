@@ -135,6 +135,27 @@ describe('Latvian log messages', () => {
         }
     });
 
+    test('translates the web Guru-pick lines and the guarded swap refusal', () => {
+        const tag = '[Challenge 555: Sunset]';
+        expect(localizeLogMessage("⚠️ Web active challenges unavailable; turbo mode and Guru's picks unknown")).toBe(
+            '⚠️ Tīmekļa aktīvo izaicinājumu saraksts nav pieejams; Turbo režīms un Guru izvēles nav zināmi',
+        );
+        expect(localizeLogMessage('🔍 Web active challenges overlay read')).toBe(
+            '🔍 Tīmekļa aktīvo izaicinājumu pārklājums nolasīts',
+        );
+        expect(localizeLogMessage("🔍 Web Guru's picks matched against the mobile entries")).toBe(
+            '🔍 Tīmekļa Guru izvēles salīdzinātas ar mobilajiem ierakstiem',
+        );
+        for (const message of [
+            `⚠️ swap: the photo to swap out is boosted, turbo'd or guru-picked — not spending a swap for ${tag}`,
+            `⚠️ swap: The photo to swap out is boosted, turbo'd or guru-picked — not spending a swap for ${tag}`,
+        ]) {
+            expect(localizeLogMessage(message)).toBe(
+                '⚠️ Apmaiņa: apmaināmais foto ir ar Boost, Turbo vai Guru izvēli — apmaiņa izaicinājumam [Izaicinājums 555: Sunset] netiek tērēta',
+            );
+        }
+    });
+
     test('translates generated photo ranking details', () => {
         const coverage =
             '; past-performance figures have been looked up for 1 of 2 of them so far, and the rest are looked up a batch per fill';

@@ -24,9 +24,16 @@ import * as settings from '../settings';
 import * as currencyActions from './currencyActions';
 import * as votingLogic from './VotingLogic';
 import { CURRENCY_FIELD, CURRENCY_OUTCOME, challengeAllows } from '../voting/currencyActions';
-import { isRuleOpen, pickSwapTarget, votePoolReach, fillBeatsVoting } from '../voting/currencyAuto';
+import {
+    isGuruPicked,
+    isProtectedEntry,
+    isRuleOpen,
+    pickSwapTarget,
+    votePoolReach,
+    fillBeatsVoting,
+} from '../voting/currencyAuto';
 
-import type { Challenge, ChallengeMember, MemberRanking, VoteImagesResponse } from '../types/gurushots';
+import type { Challenge, ChallengeMember, MemberRanking, RankingEntry, VoteImagesResponse } from '../types/gurushots';
 import type { CurrencyAction, CurrencyStrategy, SwapBackLedger, SwapCandidate } from './currencyActions';
 import type * as currencyAutoStore from '../currencyAutoStore';
 import { neediestFillMission } from './missions';
@@ -210,9 +217,12 @@ const runAutoKey = guarded('key', async (ctx) => {
  * Spend a SWAP to replace one entry once the autoSwap rule is open, until the
  * challenge's swap history reaches autoSwapMax. The target follows
  * autoSwapImageIndex (0 = last, 1-4 = slot) or, with autoSwapLowestVotes, the
- * entry with the fewest votes; boosted/turbo'd entries are skipped unless
- * autoSwapAllowBoosted (the swap-back ledger then records them). A photo pinned
- * for a Boost or Turbo that can still fire is protected the same way.
+ * entry with the fewest votes; boosted/turbo'd/guru-picked entries are skipped
+ * unless autoSwapAllowBoosted (the swap-back ledger then records them). A photo
+ * pinned for a Boost or Turbo that can still fire is protected the same way.
+ * Unless allowed, the spend also carries a guard over the LIVE entry, so a
+ * boost/turbo/Guru's pick that landed between the pass's start and the swap
+ * still refuses it.
  *
  * @returns true when a swap was spent
  */
@@ -228,10 +238,11 @@ const runAutoSwap = guarded('swap', async (ctx) => {
     const maxSwaps = settings.getEffectiveSetting('autoSwapMax', id);
     if (swapsDone >= maxSwaps) return false;
 
+    const allowProtected = settings.getEffectiveSetting('autoSwapAllowBoosted', id) === true;
     const target = pickSwapTarget(entriesOf(challenge), {
         imageIndex: settings.getEffectiveSetting('autoSwapImageIndex', id),
         lowestVotes: settings.getEffectiveSetting('autoSwapLowestVotes', id) === true,
-        allowProtected: settings.getEffectiveSetting('autoSwapAllowBoosted', id) === true,
+        allowProtected,
         maxVotes: settings.getEffectiveSetting('autoSwapMaxVotes', id),
         protectedIds: votingLogic.livePinnedIds(challenge, id),
     });
@@ -242,6 +253,11 @@ const runAutoSwap = guarded('swap', async (ctx) => {
     if (!(await reserveAllows('swap', ctx))) return false;
 
     const deps = { strategy: ctx.currency.strategy, logger, settings };
+    // Unless the user allows protected entries, the spend re-checks the LIVE entry under the lock, so a
+    // boost/turbo/Guru's pick that landed after the pass's snapshot still refuses it.
+    const guard = allowProtected
+        ? undefined
+        : (entry: RankingEntry | undefined) => entry !== undefined && !isProtectedEntry(entry) && !isGuruPicked(entry);
     // Cast, not annotated: the closure below assigns it, which the checker's
     // narrowing of a plain `= null` initializer can't see.
     let candidate = null as SwapCandidate | null;
@@ -256,6 +272,7 @@ const runAutoSwap = guarded('swap', async (ctx) => {
             ...deps,
             ledger: ctx.currency.swapLedger ?? null,
             maxSwaps,
+            guard,
         });
     });
     if (!result?.ok || !candidate) return false;

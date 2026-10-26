@@ -297,12 +297,16 @@ const previewSwap = async (
 /**
  * Spends a SWAP to replace entered photo `imageId` with `newImageId`. Refuses
  * (spending nothing) with `not-available` when `imageId` is no longer entered,
- * or with `already-entered` when `newImageId` is already entered / equals `imageId`.
+ * when `guard` refuses the live entry (the automatic swap passes one so a photo
+ * that gained a boost/turbo/Guru's pick between the pass's start and this spend
+ * is never swapped out), or with `already-entered` when `newImageId` is already
+ * entered / equals `imageId`.
  *
  * @param deps - ledger: the swap-back
  *   ledger (swapBackStore.ts), told about every successful swap so a swapped-out
- *   boosted/turbo'd photo can be swapped back later; maxSwaps: spend nothing when the live
- *   challenge's swap history already holds that many
+ *   boosted, turbo'd or guru-picked photo can be swapped back later; guard: given the live
+ *   entry about to be swapped out, false refuses the spend (nothing sent);
+ *   maxSwaps: spend nothing when the live challenge's swap history already holds that many
  */
 const swapEntry = async (
     challengeId: string | number,
@@ -314,7 +318,14 @@ const swapEntry = async (
         logger,
         ledger = null,
         maxSwaps,
-    }: { strategy: CurrencyStrategy; logger: Logger; ledger?: SwapBackLedger | null; maxSwaps?: number },
+        guard,
+    }: {
+        strategy: CurrencyStrategy;
+        logger: Logger;
+        ledger?: SwapBackLedger | null;
+        maxSwaps?: number;
+        guard?: (entry: RankingEntry | undefined) => boolean;
+    },
 ): Promise<SpendOutcome> => {
     const { blocked, challenge } = await checkLive('swap', challengeId, token, strategy);
     if (blocked) return { ok: false, outcome: blocked };
@@ -329,6 +340,10 @@ const swapEntry = async (
         return { ok: false, outcome: CURRENCY_OUTCOME.alreadyEntered };
     }
     const oldEntry = findEntry(challenge, imageId);
+    if (guard && !guard(oldEntry)) {
+        cat(logger).warningT('m2a7d4f8c3e91', [logger.challengeTag(challenge)], null);
+        return { ok: false, outcome: CURRENCY_OUTCOME.notAvailable };
+    }
     const result = await settleUnclearSwap(
         spendResult(logger, 'swap', challenge, await strategy.swapPhoto(challenge.id, imageId, newImageId, token)),
         challenge.id,
@@ -343,10 +358,11 @@ const swapEntry = async (
 };
 
 /**
- * Spends a SWAP to put a photo that was swapped out while boosted/turbo'd back
- * into the slot now holding `currentImageId` — the photo gets its boost/turbo
- * back. The original comes from the swap-back ledger, never from the caller,
- * and must still be in this challenge's swap history (not entered).
+ * Spends a SWAP to put a photo that was swapped out while boosted, turbo'd or
+ * guru-picked back into the slot now holding `currentImageId` — the photo gets
+ * its boost/turbo/Guru's pick back. The original comes from the swap-back
+ * ledger, never from the caller, and must still be in this challenge's swap
+ * history (not entered).
  *
  * @param currentImageId - the replacement now in the slot
  */

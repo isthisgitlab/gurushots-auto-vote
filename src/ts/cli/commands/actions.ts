@@ -17,6 +17,7 @@ import { findActiveChallenge } from '../../services/findActiveChallenge';
 import { CHOSEN_PHOTO_ID_RE } from '../../settings/limits';
 
 import type { Challenge } from '../../types/gurushots';
+import type { SwapBackRecord } from '../../types/stores';
 import type { NullEventHandlers } from '../../types/cli';
 import type * as actions_handlersModule from '../../ipc/actions.handlers';
 import type * as currency_handlersModule from '../../ipc/currency.handlers';
@@ -334,9 +335,20 @@ const swapCmd = async (
 };
 
 /**
- * Spend a SWAP to put a photo swapped out while boosted/turbo'd back into the
- * slot now holding `imageId` — it gets its boost/turbo back. Only swaps made
- * through this app are known (the API history has no boost flag).
+ * What each stored swap-back kind reads as in the CLI lines: a fixed map, never
+ * a key built from the stored value.
+ */
+const SWAP_BACK_KINDS: Record<SwapBackRecord['kind'], string> = {
+    boost: 'boost',
+    turbo: 'turbo',
+    guruPick: "Guru's pick",
+};
+
+/**
+ * Spend a SWAP to put a photo swapped out while boosted, turbo'd or guru-picked
+ * back into the slot now holding `imageId` — it gets its boost/turbo/Guru's
+ * pick back. Only swaps made through this app are known (the mobile swap
+ * history has no such flag; the web one's the app does not read).
  * Returns false on a usage error (no --image).
  */
 const swapBackCmd = async (
@@ -361,7 +373,7 @@ const swapBackCmd = async (
             logger
                 .withCategory('currency')
                 .info(
-                    `Swap back in "${challenge.title}": ${imageId} → ${record.previousId} (gets its ${record.kind} back)`,
+                    `Swap back in "${challenge.title}": ${imageId} → ${record.previousId} (gets its ${SWAP_BACK_KINDS[record.kind]} back)`,
                 );
             await printCost('swaps');
             logger
@@ -372,7 +384,7 @@ const swapBackCmd = async (
         const result = await currencyHandlers()['swap-back-entry-photo'](null, challengeId, imageId, true);
         reportSpend(
             result,
-            `Swapped ${record.previousId} back into "${challenge.title}" — its ${record.kind} is back.`,
+            `Swapped ${record.previousId} back into "${challenge.title}" — its ${SWAP_BACK_KINDS[record.kind]} is back.`,
         );
     } catch (err) {
         logger.withCategory('currency').error(`Failed to swap back: ${errorMessage(err) || err}`);

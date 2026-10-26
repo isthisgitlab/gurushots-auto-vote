@@ -12,6 +12,9 @@ const { createLedger, createMemoryLedger } = require('../../src/ts/swapBackStore
 
 const boosted = { id: 'A', member_id: 'm', boosted: true };
 const turboed = { id: 'A', member_id: 'm', turbo: true };
+const picked = { id: 'A', member_id: 'm', guru_pick: true };
+const boostedAndPicked = { id: 'A', member_id: 'm', boosted: true, guru_pick: true };
+const turboedAndPicked = { id: 'A', member_id: 'm', turbo: true, guru_pick: true };
 const plain = { id: 'A', member_id: 'm' };
 
 describe('onSwapped', () => {
@@ -27,6 +30,29 @@ describe('onSwapped', () => {
         const ledger = createMemoryLedger();
         ledger.onSwapped(7, turboed, 'B');
         expect(ledger.list(7)[0].kind).toBe('turbo');
+    });
+
+    test('a guru-picked photo records kind guruPick', () => {
+        const ledger = createMemoryLedger();
+        ledger.onSwapped(7, picked, 'B');
+        expect(ledger.list(7)).toEqual([
+            expect.objectContaining({ currentId: 'B', previousId: 'A', previousMemberId: 'm', kind: 'guruPick' }),
+        ]);
+    });
+
+    test("a boosted and a turbo'd photo that also carry a pick record the boost/turbo only", () => {
+        const ledger = createMemoryLedger();
+        ledger.onSwapped(7, boostedAndPicked, 'B');
+        ledger.onSwapped(8, turboedAndPicked, 'B');
+        expect(ledger.list(7)[0].kind).toBe('boost');
+        expect(ledger.list(8)[0].kind).toBe('turbo');
+    });
+
+    test('a truthy non-boolean guru_pick is no pick; a plain photo records nothing', () => {
+        const ledger = createMemoryLedger();
+        ledger.onSwapped(7, { id: 'A', guru_pick: 1 }, 'B');
+        ledger.onSwapped(7, plain, 'C');
+        expect(ledger.list(7)).toEqual([]);
     });
 
     test('a plain photo swapped out records nothing', () => {
@@ -133,5 +159,23 @@ describe('defensive reads and writes', () => {
         const ledger = createMemoryLedger();
         ledger.onSwapped(7, { id: 'A', boosted: true }, 'B');
         expect(ledger.list(7)[0].previousMemberId).toBe('');
+    });
+
+    test('a guruPick record survives write() and list(), an unknown kind is dropped', () => {
+        let raw = '';
+        const ledger = createLedger({
+            readRaw: () => raw,
+            writeRaw: (data) => {
+                raw = data;
+            },
+        });
+        ledger.onSwapped(7, picked, 'B');
+        // A second ledger over the stored text reads the guruPick record back.
+        expect(createLedger({ readRaw: () => raw, writeRaw: jest.fn() }).list(7)).toEqual([
+            expect.objectContaining({ currentId: 'B', previousId: 'A', kind: 'guruPick' }),
+        ]);
+        // A hand-written unknown kind reads as nothing.
+        raw = JSON.stringify({ 8: [{ currentId: 'X', previousId: 'Y', kind: 'vibe', at: Date.now() }] });
+        expect(ledger.list(8)).toEqual([]);
     });
 });

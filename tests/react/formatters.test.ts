@@ -264,12 +264,37 @@ describe('getEntryStatus', () => {
             getEntryStatus(invalid(entry)),
         );
         expect(states.map((state) => state.icon)).toEqual(['🚀', '⚡', '⭐', '📷']);
-        for (const state of states) expect(Object.keys(state).sort()).toEqual(['icon', 'isBoosted', 'isTurboed']);
+        for (const state of states) {
+            expect(Object.keys(state).sort()).toEqual(['icon', 'isBoosted', 'isGuruPick', 'isTurboed']);
+        }
     });
 
     test('guru pick and plain entries', () => {
         expect(getEntryStatus(invalid({ guru_pick: true })).icon).toBe('⭐');
-        expect(getEntryStatus(undefined)).toMatchObject({ isBoosted: false, isTurboed: false, icon: '📷' });
+        expect(getEntryStatus(undefined)).toMatchObject({
+            isBoosted: false,
+            isTurboed: false,
+            isGuruPick: false,
+            icon: '📷',
+        });
+    });
+
+    test('isGuruPick rides on a boosted or turboed entry, whose icon stays theirs', () => {
+        expect(getEntryStatus(invalid({ boosted: true, guru_pick: true }))).toMatchObject({
+            isBoosted: true,
+            isGuruPick: true,
+            icon: '🚀',
+        });
+        expect(getEntryStatus(invalid({ turbo: true, guru_pick: true }))).toMatchObject({
+            isTurboed: true,
+            isGuruPick: true,
+            icon: '⚡',
+        });
+    });
+
+    test('a truthy non-boolean guru_pick is no pick', () => {
+        expect(getEntryStatus(invalid({ guru_pick: 1 })).isGuruPick).toBe(false);
+        expect(getEntryStatus(invalid({ guru_pick: 'yes' })).icon).toBe('📷');
     });
 });
 

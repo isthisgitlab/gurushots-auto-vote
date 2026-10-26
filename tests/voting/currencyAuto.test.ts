@@ -9,7 +9,7 @@ import type * as entrySlotModule from '../../src/ts/voting/entrySlot';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
-const { ruleOpensAt, isRuleOpen, isProtectedEntry, pickSwapTarget, votePoolReach, fillBeatsVoting } =
+const { ruleOpensAt, isRuleOpen, isProtectedEntry, isGuruPicked, pickSwapTarget, votePoolReach, fillBeatsVoting } =
     require('../../src/ts/voting/currencyAuto') as typeof currencyAutoModule;
 const { resolveEntryIndex } = require('../../src/ts/voting/entrySlot') as typeof entrySlotModule;
 
@@ -101,6 +101,23 @@ describe('isProtectedEntry', () => {
     });
 });
 
+describe('isGuruPicked', () => {
+    test.each([
+        [{ guru_pick: true }, true],
+        [{ guru_pick: false }, false],
+        [{}, false],
+        [null, false],
+        [undefined, false],
+    ])('%p → %p', (entry, expected) => {
+        expect(isGuruPicked(entry)).toBe(expected);
+    });
+
+    test('a truthy non-boolean is not a pick (exactly true)', () => {
+        expect(isGuruPicked({ guru_pick: 1 })).toBe(false);
+        expect(isGuruPicked({ guru_pick: 'yes' })).toBe(false);
+    });
+});
+
 describe('pickSwapTarget', () => {
     const a = { id: 'a', votes: 30 };
     const b = { id: 'b', votes: 10 };
@@ -132,6 +149,16 @@ describe('pickSwapTarget', () => {
         const boosted = { id: 'x', votes: 1, boosted: true };
         expect(pickSwapTarget([boosted], {})).toBeNull();
         expect(pickSwapTarget([boosted], { allowProtected: true })).toBe(boosted);
+    });
+
+    test('a guru-picked entry is skipped unless protected entries are allowed', () => {
+        const picked = { id: 'g', votes: 1, guru_pick: true };
+        expect(pickSwapTarget([a, picked], {})).toBe(a);
+        expect(pickSwapTarget([a, picked], { imageIndex: 0 })).toBe(a);
+        expect(pickSwapTarget([picked], {})).toBeNull();
+        expect(pickSwapTarget([picked], { allowProtected: true })).toBe(picked);
+        expect(pickSwapTarget([a, picked], { lowestVotes: true })).toBe(a);
+        expect(pickSwapTarget([a, picked], { lowestVotes: true, allowProtected: true })).toBe(picked);
     });
 
     test('a protected id is never picked unless protected entries are allowed', () => {

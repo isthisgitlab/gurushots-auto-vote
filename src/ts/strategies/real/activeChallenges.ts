@@ -9,6 +9,7 @@ import { annotateEntryTimes } from '../../services/entryTimes';
 import { entryAgeLedger } from '../../entryAgeStore';
 import { refreshTeamMatch, settledTeamMatch } from './teamMatch';
 import { beginSuggestedPhotos, storeSuggestedPhotos } from './suggestedPhotos';
+import * as logger from '../../logger';
 
 import type { ActiveChallengesResponse } from '../../types/gurushots';
 
@@ -22,10 +23,12 @@ const TEAM_MATCH_WAIT_MS = 2000;
  * and the challenge has a member, and the overlay fields (benchmark,
  * first_prizes, achievements_and_prizes, the rank flags) whenever it covers
  * the challenge at all — the benchmark merged into `member.ranking.total`
- * without touching the mobile read's own fields. A failed mobile fetch
- * (flagged `fetchFailed`) must never reach the pin/prune logic — a network
- * blip would wipe pins. The server mutates `title` while an event (turbo) is
- * active; pinning keeps display and title-rule matching stable (see
+ * without touching the mobile read's own fields. The web read's per-entry
+ * Guru's picks raise `guru_pick` on the mobile entries whose id matches (only
+ * raises; a failed web read leaves the mobile flags as they are). A failed
+ * mobile fetch (flagged `fetchFailed`) must never reach the pin/prune logic —
+ * a network blip would wipe pins. The server mutates `title` while an event
+ * (turbo) is active; pinning keeps display and title-rule matching stable (see
  * services/challengeTitlePin).
  */
 const fetchAndPin = async (token: string): Promise<ActiveChallengesResponse> => {
@@ -42,12 +45,23 @@ const fetchAndPin = async (token: string): Promise<ActiveChallengesResponse> => 
         // Only the read that started a refresh waits for it, and for 2 s at most; every other read takes the
         // cache as it is, so a slow team read delays one list read per refresh window, never the spend-critical re-reads.
         const teamMatch = await settledTeamMatch(token, startedRefresh ? TEAM_MATCH_WAIT_MS : 0);
+        let matchedPicks = 0;
         for (const challenge of response.challenges) {
             const overlay = webOverlay?.byId.get(String(challenge.id));
             if (overlay) {
                 const { turbo } = overlay;
                 if (turbo && challenge.member) {
                     challenge.member.turbo = turbo;
+                }
+                if (overlay.guruPickIds) {
+                    // Only raises: the mobile read's own guru_pick is never cleared.
+                    const picks = new Set(overlay.guruPickIds);
+                    for (const entry of challenge.member?.ranking?.entries ?? []) {
+                        if (entry && picks.has(String(entry.id))) {
+                            matchedPicks += 1;
+                            entry.guru_pick = true;
+                        }
+                    }
                 }
                 // The overlay fields copy only when the web read carried them; the mobile values stay otherwise.
                 if (overlay.guru_pick_enable !== undefined) challenge.guru_pick_enable = overlay.guru_pick_enable;
@@ -67,6 +81,13 @@ const fetchAndPin = async (token: string): Promise<ActiveChallengesResponse> => 
             if (teamMatch && String(challenge.id) === teamMatch.challengeId) {
                 challenge.teamMatch = teamMatch.teamMatch;
             }
+        }
+        // How many mobile rows carry a web pick id, whether or not they already said so:
+        // picks but no matches means the two reads disagree on entry ids.
+        if (webOverlay) {
+            logger.withCategory('api').debug("Web Guru's picks matched against the mobile entries", {
+                matched: matchedPicks,
+            });
         }
         // Only a read that succeeded may rewrite the cached suggestions.
         if (webOverlay) storeSuggestedPhotos(token, webOverlay.suggestions);

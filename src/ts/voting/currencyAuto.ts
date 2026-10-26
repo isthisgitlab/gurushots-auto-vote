@@ -75,13 +75,23 @@ const isProtectedEntry = (entry: RankingEntry): boolean =>
     entry?.boosted === true || entry?.boosting === true || entry?.turbo === true;
 
 /**
+ * True when GuruShots marks the entry as a Guru's pick — exactly `guru_pick === true`.
+ * The parameter stays loose on purpose: it takes web elements, the swap-back
+ * ledger's oldEntry and a RankingEntry without a cast. The pick belongs to the
+ * photo, so swapping it out loses it and swapping it back in restores it —
+ * the same protection a boost/turbo gets.
+ */
+const isGuruPicked = (entry: { guru_pick?: unknown } | null | undefined): boolean => entry?.guru_pick === true;
+
+/**
  * The entry an automatic swap should replace, or null when none qualifies.
  *
  *   - lowestVotes: the candidate with the fewest votes (ties → the later slot,
  *     the more recent photo); otherwise the configured slot (imageIndex: 1-4, 0 =
  *     last), stepping backward (wrapping) past protected entries.
- *   - allowProtected: when false, boosted/turbo'd entries and the `protectedIds`
- *     (the photos pinned for a still-spendable Boost or Turbo) are never picked.
+ *   - allowProtected: when false, boosted/turbo'd/guru-picked entries and the
+ *     `protectedIds` (the photos pinned for a still-spendable Boost or Turbo)
+ *     are never picked.
  *   - maxVotes > 0: the picked entry must have fewer votes than this.
  */
 const pickSwapTarget = (
@@ -102,7 +112,9 @@ const pickSwapTarget = (
 ): RankingEntry | null => {
     if (!Array.isArray(entries) || entries.length === 0) return null;
     const eligible = (entry: RankingEntry) =>
-        entry && (allowProtected || (!isProtectedEntry(entry) && !protectedIds.includes(String(entry.id))));
+        entry &&
+        (allowProtected ||
+            (!isProtectedEntry(entry) && !isGuruPicked(entry) && !protectedIds.includes(String(entry.id))));
     const votesOf = (entry: RankingEntry) => {
         const votes = Number(entry?.votes);
         return Number.isFinite(votes) ? votes : 0;
@@ -165,4 +177,4 @@ const fillBeatsVoting = (exposure: number, reach: number | null, belowPct: numbe
     return reachable < belowPct;
 };
 
-export { ruleOpensAt, isRuleOpen, isProtectedEntry, pickSwapTarget, votePoolReach, fillBeatsVoting };
+export { ruleOpensAt, isRuleOpen, isProtectedEntry, isGuruPicked, pickSwapTarget, votePoolReach, fillBeatsVoting };
