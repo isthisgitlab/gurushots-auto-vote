@@ -6,7 +6,7 @@
 import * as logger from '../../logger';
 import * as settings from '../../settings';
 import * as cancellation from '../../voting/cancellation';
-import { shouldJoinChallenge, joinFreshRefusalWhy } from '../VotingLogic';
+import { joinFreshRefusalWhy } from '../VotingLogic';
 import { isKnownTurboMode } from '../../voting/turboMode';
 import { consumeMission } from '../missions';
 import type { Bankroll, Challenge } from '../../types/gurushots';
@@ -14,6 +14,8 @@ import type { MissionNeeds } from '../missions';
 import { errorMessage } from '../../errorMessage';
 import { cat } from './shared';
 import type { JoinDeps } from './shared';
+import { decideCandidateJoin, joinCandidateGateRefusal, joinMissionLift } from './joinMissionLift';
+import type { JoinPassState } from './joinMissionLift';
 import {
     anyTitleRuleEnablesAutoJoin,
     resolveCandidateConfig,
@@ -22,20 +24,6 @@ import {
 } from './settingsResolution';
 import { performJoin } from './performJoin';
 import { claimOf, pruneClosedClaims, refreshClaims } from './unlockMarker';
-
-/**
- * Mutable per-pass join state: the balance and budget kept locally accurate as
- * the pass spends, the clock the join window is measured against, and whether
- * the one-per-pass missing-timing diagnostic has fired.
- */
-type JoinPassState = {
-    bankroll: Bankroll | null;
-    remainingBudget: number;
-    nowSec: number;
-    missingCloseTimeLogged: boolean;
-    /** Joins still to make without the timing window, for the active missions. */
-    earlyJoins: number;
-};
 
 /**
  * One balance read for the whole pass. A throw here (or a null return) means
@@ -90,7 +78,7 @@ const turboJoinsNeeded = async (
 };
 
 /**
- * Joins still to make without the timing window (Join Early for Turbo Missions):
+ * Joins still to make without the timing window (Join Early for Missions):
  * as many as a turbo mission is short of turbos.
  */
 const earlyJoinsFor = async (
@@ -109,39 +97,6 @@ const earlyJoinsFor = async (
  * computing a window against 0, which would fail every candidate closed.
  */
 const toPassNowSec = (now: number): number => Math.floor((Number.isFinite(now) && now > 0 ? now : Date.now()) / 1000);
-
-const decideCandidateJoin = (
-    challenge: Challenge,
-    cfg: ReturnType<typeof resolveCandidateConfig>,
-    pass: JoinPassState,
-    alreadyPaid: boolean,
-) => {
-    // Join Early for Missions lifts the timing window while a mission wants
-    // joins: these would join later anyway, the mission wants them now.
-    const joinEarly = pass.earlyJoins > 0;
-    if (joinEarly) {
-        const closeTime = Number(challenge?.close_time);
-        if (!Number.isFinite(closeTime) || closeTime <= 0) {
-            return { join: false, needsCoins: 0, reason: 'close-time-unknown' };
-        }
-        if (closeTime <= pass.nowSec) return { join: false, needsCoins: 0, reason: 'already-closed' };
-    }
-    return shouldJoinChallenge({
-        challenge,
-        bankroll: pass.bankroll,
-        remainingBudget: pass.remainingBudget,
-        includeTypes: cfg.includeTypes,
-        excludeTypes: cfg.excludeTypes,
-        maxCoins: cfg.maxCoins,
-        hasProfileMatch: cfg.hasProfileMatch,
-        includeTags: cfg.includeTags,
-        excludeTags: cfg.excludeTags,
-        joinWithinSec: joinEarly ? 0 : cfg.joinWithinSec,
-        joinAfterPercentElapsed: joinEarly ? 0 : cfg.joinAfterPercentElapsed,
-        nowSec: pass.nowSec,
-        alreadyPaid,
-    });
-};
 
 /**
  * Both timing fields get the same one-per-pass diagnostic: each means the window
@@ -214,23 +169,6 @@ const claimWhateverCost = async (challenge: { id?: string | number }, deps: Join
     if (challenge?.id == null || !deps.joinStateStore) return false;
     if (!(await refreshClaims(deps))) return false;
     return claimOf(deps.joinStateStore, challenge.id) !== null;
-};
-
-/**
- * The two entry gates `joinCandidate` decides before anything else, shared
- * with the join-mission dry run in runJoinPass so the probe counts the same
- * candidates the pass would act on. A non-null value is the status
- * `joinCandidate` returns for the refusal.
- */
-const joinCandidateGateRefusal = (
-    challenge: Challenge,
-): 'skipped:autojoin-off' | 'skipped:manual-photos-only' | null => {
-    // Per-candidate enable (master → profile): skip titles auto-join is off
-    // for, BEFORE resolving the rest of the config (avoid redundant work).
-    if (resolveJoinSetting('autoJoin', challenge) !== true) return 'skipped:autojoin-off';
-    // Manual Only: the join would enter a photo by itself, so it is left to the user.
-    if (resolveJoinSetting('manualPhotosOnly', challenge) === true) return 'skipped:manual-photos-only';
-    return null;
 };
 
 /**
@@ -379,55 +317,16 @@ const runJoinPass = async (
         earlyJoins: await earlyJoinsFor(token, deps, missions, nowSec),
     };
     // A join mission lifts the window only while the currently open challenges
-    // are enough to complete it. A dry run over a scratch state counts what
-    // the production decision predicate would join with the window lifted.
+    // are enough to complete it.
     const joinNeed = missions?.join ?? 0;
     if (settings.getEffectiveSetting('missionJoinEarly', null) === true && joinNeed > 0) {
-        // The probe's earlyJoins stays at 1, deliberately not decremented per
-        // counted join — it asks "would this join with the window lifted?",
-        // while the real pass counts its lifts down.
-        const probePass: JoinPassState = {
-            // A shallow copy, never the real pass's object: the pass mutates
-            // bankroll.coins in place in its spend accounting, so a shared
-            // reference would double-charge the real pass's balance before
-            // any join runs. remainingBudget is a number and copies by value.
-            bankroll: bankroll ? { ...bankroll } : null,
-            remainingBudget: pass.remainingBudget,
-            nowSec,
-            missingCloseTimeLogged: false,
-            earlyJoins: 1,
-        };
-        let wouldJoin = 0;
-        // The probe iterates the list as fetched — not the close_time sort the
-        // pass uses once a lift is active; the order divergence only matters
-        // under a binding budget and is absorbed by the next cycle's
-        // re-decide.
-        for (const challenge of candidates) {
-            if (joinCandidateGateRefusal(challenge) !== null) continue;
-            // alreadyPaid: false deliberately undercounts candidates with an
-            // unlock claim on file (the real pass joins those submit-only,
-            // spending nothing) — conservative, accepted.
-            const decision = decideCandidateJoin(challenge, resolveCandidateConfig(challenge), probePass, false);
-            if (!decision.join) continue;
-            wouldJoin += 1;
-            // Count cumulative affordability across the cycle, not each
-            // candidate in isolation. The copy is always here when a
-            // decrement happens: a paid join only passes its affordability
-            // check with a known balance (balance-unknown refuses it), the
-            // same invariant the pass's own spend accounting relies on.
-            if (decision.needsCoins > 0) {
-                probePass.remainingBudget -= decision.needsCoins;
-                const probeBankroll = probePass.bankroll as Bankroll;
-                probeBankroll.coins = Number(probeBankroll.coins) - decision.needsCoins;
-            }
-        }
-        if (wouldJoin >= joinNeed) {
-            pass.earlyJoins = Math.max(pass.earlyJoins, joinNeed);
-        } else if (pass.earlyJoins === 0) {
+        const result = joinMissionLift(candidates, joinNeed, bankroll, pass.remainingBudget, nowSec);
+        pass.earlyJoins = Math.max(pass.earlyJoins, result.lift);
+        if (result.wouldJoin < joinNeed && pass.earlyJoins === 0) {
             // One per pass, beside the early-join notice: the mission cannot
             // be completed by what is open now, so nothing joins early.
             cat().info(
-                `join mission needs ${joinNeed} but only ${wouldJoin} of the open challenges would join — waiting for the auto-join timing`,
+                `join mission needs ${joinNeed} but only ${result.wouldJoin} of the open challenges would join — waiting for the auto-join timing`,
                 null,
             );
         }

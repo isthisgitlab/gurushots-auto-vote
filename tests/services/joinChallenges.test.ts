@@ -1145,6 +1145,22 @@ describe('runJoinPass — join window', () => {
             ]);
         });
 
+        test('a manual-photos-only candidate does not count toward the join mission either', async () => {
+            withJoinEarly(true);
+            rulesGive((target) => (titleOf(target) === 'Manual' ? { manualPhotosOnly: true } : {}));
+            const deps = makeDeps({
+                getMemberChallenges: openList([
+                    { id: 1, join_coins: 0, type: 'flash', title: 'Manual', close_time: NOW_SEC + 48 * HOUR },
+                    { id: 2, join_coins: 0, type: 'flash', title: 'Far', close_time: NOW_SEC + 48 * HOUR },
+                ]),
+            });
+            const res = await runJoinPass('tok', NOW_MS, deps, { join: 2, fill: 0, turbo: 0, boost: 0, vote: 0 });
+            expect(statuses(res)).toEqual(['skipped:manual-photos-only', 'skipped:too-early']);
+            expect(notCompletableNotices()).toEqual([
+                'join mission needs 2 but only 1 of the open challenges would join — waiting for the auto-join timing',
+            ]);
+        });
+
         test('an unreadable balance counts no paid candidate toward the join mission', async () => {
             withJoinEarly(true);
             const deps = makeDeps({
