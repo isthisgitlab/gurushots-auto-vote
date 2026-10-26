@@ -20,6 +20,7 @@ import { buildChallenge } from '../helpers/challengeFixtures';
 import type { useTurbo } from '@/api/useTurbo';
 import type { useFillChallenge } from '@/api/useFillChallenge';
 import { invalid } from '../helpers/invalid';
+import type { Challenge } from '../../src/ts/types/gurushots';
 
 const mockChallengeSettings = {
     hasCustomSettings: false,
@@ -298,6 +299,21 @@ describe('compact ChallengeCard tile', () => {
         const card = container.querySelector('#challenge-202')!;
         expect(card).not.toBeNull();
         expect(card.classList.contains('col-span-full')).toBe(false);
+    });
+
+    test('display fields the read left unreadable show an em dash, never a bare figure or fraction', () => {
+        const { container } = renderCard(
+            makeChallenge({
+                players: invalid<Challenge['players']>(null),
+                max_photo_submits: invalid<Challenge['max_photo_submits']>(null),
+                member: { ranking: { exposure: { exposure_factor: invalid<number>(null) } } },
+            }),
+        );
+        const text = container.textContent ?? '';
+        expect(text).toContain('—');
+        expect(text).not.toContain('55%');
+        expect(text).not.toContain('3/4');
+        expect(text).not.toContain(`17 / ${(1234).toLocaleString()}`);
     });
 });
 

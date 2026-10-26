@@ -20,7 +20,8 @@ import { stripTerminalControl } from '../../format/logSafe';
 import { isInteger } from '../../numbers';
 import { printableChallengeId } from './pin';
 import { openBoostWindows } from '../../voting/boostWindow';
-import { findActiveChallenge } from '../../services/findActiveChallenge';
+import { findActionableChallenge } from '../../services/findActiveChallenge';
+import { isMarkedChallenge } from '../../challengeMarks';
 import { clearTokenUnlessStayingLoggedIn } from '../../services/auth';
 
 // Reuse the GUI's single-challenge manual-vote handler (votes to 100%,
@@ -122,12 +123,18 @@ const voteChallengeManual = async (
     let title;
     try {
         const resp = await getMiddleware().getActiveChallenges();
-        const challenge = findActiveChallenge(resp?.challenges as Challenge[] | undefined, challengeId);
-        if (!challenge) {
+        const found = findActionableChallenge(resp, challengeId);
+        if ('refused' in found) {
+            // The vote handler re-reads and refuses the same way (its own
+            // mechanic refuses a marked challenge); this is the worded line.
+            if (found.refused === 'data-incomplete') {
+                logger.withCategory('challenges').error(`Challenge ${challengeId}: challenge data cannot be read`);
+                return { success: false, error: 'challenge data cannot be read' };
+            }
             logger.withCategory('challenges').error(`Challenge ${challengeId} not found among active challenges`);
             return { success: false, error: `Challenge ${challengeId} not found` };
         }
-        title = challenge.title;
+        title = found.challenge.title;
     } catch (err) {
         logger.withCategory('challenges').error(`Failed to fetch challenges: ${errorMessage(err) || err}`);
         return { success: false, error: 'Failed to fetch challenges' };
@@ -380,6 +387,11 @@ const logStanding = (challenges: Challenge[] | null, fetchError: unknown) => {
         return;
     }
     const lines = challenges.flatMap((challenge) => {
+        // A marked challenge's rank cannot be read: say so instead of a line
+        // built on data the actions refuse.
+        if (isMarkedChallenge(challenge)) {
+            return [`  • ${stripTerminalControl(challenge.title)} — (data cannot be read)`];
+        }
         const total = challenge?.member?.ranking?.total;
         const tail = total ? rankingTail(total) : null;
         return [

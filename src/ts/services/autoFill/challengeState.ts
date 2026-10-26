@@ -171,6 +171,11 @@ const carryLocalEntryFlags = (prevEntries: RankingEntry[], freshEntries: Ranking
  *   'refreshed'   – fresh member state merged into `challenge` (in place)
  *   'gone'        – fetch succeeded with a non-empty list that does not
  *                   contain this challenge → caller must skip the submit
+ *   'invalid'     – the read itself cannot be trusted: a prune-unsafe read
+ *                   (it dropped elements) that does not contain this
+ *                   challenge → caller must skip the submit; the challenge
+ *                   may be the element that was dropped, which cannot be
+ *                   told from "gone"
  *   'unavailable' – dep not wired, fetch threw, payload malformed, or the
  *                   challenges list came back empty → caller proceeds with
  *                   the pass-start data (stale-over-skip policy)
@@ -188,7 +193,7 @@ const refreshChallengeState = async (
     token: string,
     { getActiveChallenges, logger }: Pick<RankDeps, 'getActiveChallenges'> & { logger: FillLogger },
     label: string,
-): Promise<'refreshed' | 'gone' | 'unavailable'> => {
+): Promise<'refreshed' | 'gone' | 'invalid' | 'unavailable'> => {
     if (typeof getActiveChallenges !== 'function') return 'unavailable';
     const log = logger.withCategory('autoSubmit');
     // Collapse CR/LF in the cause before interpolation (same forgery guard
@@ -212,6 +217,9 @@ const refreshChallengeState = async (
     }
     const fresh = response.challenges.find((c) => String(c?.id) === String(challenge.id));
     if (!fresh) {
+        // Absence on a prune-unsafe read is not "gone": the dropped element may be this very challenge, so no
+        // caller may act on the data at hand either — the read says nothing usable about it.
+        if (response.pruneUnsafe === true) return 'invalid';
         log.info(
             `${label}: ${logger.challengeTag(challenge)} is no longer in the active challenge list — not submitting a new photo to it`,
             null,

@@ -1,7 +1,7 @@
 /**
  * isIdArg is the runtime boundary check for challenge / image ids received
- * over IPC: a non-blank string within the id length cap or a finite number,
- * nothing else.
+ * over IPC: a value the shared id rule (src/ts/ids.ts) accepts — a positive
+ * safe integer, or a token that starts with a letter or digit — nothing else.
  */
 
 import type * as isIdArgModule from '../../src/ts/ipc/isIdArg';
@@ -12,7 +12,6 @@ describe('isIdArg', () => {
     test.each([
         ['a string id', '123'],
         ['a numeric id', 123],
-        ['zero', 0],
         ['a string at the length cap', 'x'.repeat(MAX_IPC_ID_LENGTH)],
     ])('accepts %s', (_label, value) => {
         expect(isIdArg(value)).toBe(true);
@@ -22,6 +21,18 @@ describe('isIdArg', () => {
         ['an empty string', ''],
         ['a blank string', '   '],
         ['a string one over the length cap', 'x'.repeat(MAX_IPC_ID_LENGTH + 1)],
+        ['zero', 0],
+        ['a negative number', -1],
+        ['a fraction', 1.5],
+        ['an unsafe integer', 2 ** 53],
+        ['the string zero', '0'],
+        ['a negative string id', '-1'],
+        ['a string with surrounding spaces', ' 12 '],
+        ['the string null', 'null'],
+        ['the string undefined', 'undefined'],
+        ['the string constructor', 'constructor'],
+        ['the string prototype', 'prototype'],
+        ['a prototype-poisoning key', '__proto__'],
         ['NaN', NaN],
         ['Infinity', Infinity],
         ['an object', { id: 1 }],

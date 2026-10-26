@@ -432,6 +432,11 @@ function SimulatePanel({ draft }: { draft: ScenarioDraft }) {
         if (response?.success) {
             setResult(response);
             setError(null);
+        } else if (response?.error === 'challenge-data-incomplete') {
+            // A marked challenge refuses the preview: nothing is wrong with the
+            // scenario, so the refusal words its own next step.
+            setResult(null);
+            setError({ what: 'app.sbSimulateDataIncomplete', next: 'app.scenarioErrorNextRefresh' });
         } else {
             setResult(null);
             setError({

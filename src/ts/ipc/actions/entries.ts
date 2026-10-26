@@ -7,12 +7,14 @@ import * as auth from '../../services/auth';
 import * as autoFill from '../../services/autoFill';
 import { dropContext } from '../../services/libraryCache';
 import { fetchUpcoming } from '../../services/discoverChallenges';
-import { findActiveChallenge } from '../../services/findActiveChallenge';
+import { findActiveChallenge, findActionableChallenge } from '../../services/findActiveChallenge';
+import { isMarkedChallenge } from '../../challengeMarks';
 import { CHOSEN_PHOTO_ID_RE, MAX_CHOSEN_PHOTOS, MAX_SUGGEST_EXCLUDE } from '../../settings/limits';
-import { sanitizeForLog, refuseInvalidArgs, isUsageArg, fetchLiveChallenge } from './shared';
+import { sanitizeForLog, refuseInvalidArgs, isUsageArg, fetchLiveChallenge, liveRefusalError } from './shared';
 import { mapPhoto } from './library';
 
 import type { IpcReplyFn } from '../registerHandlers';
+import type { ActiveChallengesResponse } from '../../types/gurushots';
 import type { LibraryUsage } from '../../types/photoPicker';
 
 /**
@@ -45,10 +47,11 @@ const handleFillChallengeNow = (async (event: unknown, challengeId: string | num
         if (!guard.ok) return guard.response;
 
         const strategy = apiFactory.getApiStrategy();
-        const liveChallenge = await fetchLiveChallenge(strategy, guard.token, challengeId);
-        if (!liveChallenge) {
-            return { success: false as const, error: 'Challenge no longer active' };
+        const live = await fetchLiveChallenge(strategy, guard.token, challengeId);
+        if ('refused' in live) {
+            return liveRefusalError(live.refused);
         }
+        const liveChallenge = live.challenge;
 
         try {
             const result = await autoFill.fillChallengeNow(liveChallenge, guard.token, safeMode, {
@@ -122,10 +125,11 @@ const handleSubmitPickedPhotos = (async (event: unknown, challengeId: string | n
         if (!guard.ok) return guard.response;
 
         const strategy = apiFactory.getApiStrategy();
-        const liveChallenge = await fetchLiveChallenge(strategy, guard.token, challengeId);
-        if (!liveChallenge) {
-            return { success: false as const, error: 'Challenge no longer active' };
+        const live = await fetchLiveChallenge(strategy, guard.token, challengeId);
+        if ('refused' in live) {
+            return liveRefusalError(live.refused);
         }
+        const liveChallenge = live.challenge;
 
         try {
             return await autoFill.submitPickedPhotos(liveChallenge, guard.token, imageIds, {
@@ -187,11 +191,25 @@ const handleSuggestPhotos = (async (
         if (!guard.ok) return guard.response;
 
         const strategy = apiFactory.getApiStrategy();
+        const response: ActiveChallengesResponse | null = await strategy.getActiveChallenges(guard.token);
+        const live = findActionableChallenge(response, challengeId);
+        // A MARKED challenge never falls through to the open list: the refusal
+        // is the answer, not a miss. A data-incomplete that comes from absence
+        // on a prune-unsafe read is different — a Discover row is un-joined, so
+        // it was never in the active list to begin with, and it resolves from
+        // the open/upcoming lists like any miss.
+        if (
+            'refused' in live &&
+            live.refused === 'data-incomplete' &&
+            isMarkedChallenge(findActiveChallenge(response?.challenges, challengeId))
+        ) {
+            return liveRefusalError(live.refused);
+        }
         // A Discover row's challenge is un-joined; it resolves from the open/upcoming lists and still ranks —
         // the same library read the join flow makes. A failed list read is indistinguishable from a miss and
         // answers challenge-ended (pre-existing conflation, kept).
         let fromDiscover = false;
-        let challenge = await fetchLiveChallenge(strategy, guard.token, challengeId);
+        let challenge = 'challenge' in live ? live.challenge : null;
         if (!challenge) {
             const open = await strategy.getMemberChallenges(guard.token, 'open');
             challenge = findActiveChallenge(open, challengeId);

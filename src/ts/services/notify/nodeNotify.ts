@@ -122,9 +122,12 @@ const createNodeDeadlineNotifier = (
             for (const challenge of list) {
                 try {
                     const { actions } = describeDeadlineActions(challenge, now) || {};
+                    // dataIssues carries the boundary's mark, so the decision
+                    // core skips a challenge whose data cannot be read.
                     perChallengeActions.push({
                         id: challenge?.id,
                         title: challenge?.title,
+                        dataIssues: challenge?.dataIssues,
                         actions: Array.isArray(actions) ? actions : [],
                     });
                 } catch {

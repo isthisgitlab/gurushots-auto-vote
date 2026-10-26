@@ -795,6 +795,167 @@ describe('createCadenceChain', () => {
     });
 });
 
+// The marked-read cap: a new degraded read (a non-empty marked-id set that
+// differs from the previous decision's) caps the next wait once to
+// OFFLINE_RETRY_MS; the same set does not cap again, an empty set never caps,
+// and pruneUnsafe plays no part.
+describe('marked-read cap', () => {
+    const { __resetMarkedReadCapForTests } =
+        require('../../src/ts/scheduling/cadenceChain') as typeof cadenceChainModule;
+
+    beforeEach(() => {
+        jest.useFakeTimers();
+        __resetMarkedReadCapForTests();
+    });
+
+    afterEach(() => {
+        jest.clearAllTimers();
+        jest.useRealTimers();
+        jest.clearAllMocks();
+    });
+
+    const markedFar = (id: number): Challenge => ({ ...farChallenge(), id, dataIssues: ['close_time'] });
+
+    test('a fresh fetch with a new marked set caps once; the same set does not cap again', async () => {
+        // runCycle returns a non-array, so every re-arm re-fetches and sees the
+        // same marked set — the second decision must NOT cap again.
+        const deps = makeDeps({ fetchChallenges: jest.fn(async () => ({ challenges: [markedFar(1)] })) });
+        const chain = createCadenceChain(invalid(deps));
+
+        await chain.scheduleNext(false, Date.now());
+        await jest.advanceTimersByTimeAsync(OFFLINE_RETRY_MS);
+        await flushMicrotasks();
+        expect(deps.runCycle).toHaveBeenCalledTimes(1);
+
+        await jest.advanceTimersByTimeAsync(OFFLINE_RETRY_MS);
+        await flushMicrotasks();
+        expect(deps.runCycle).toHaveBeenCalledTimes(1);
+        await jest.advanceTimersByTimeAsync(FIXED_DELAY_MS - OFFLINE_RETRY_MS);
+        await flushMicrotasks();
+        expect(deps.runCycle).toHaveBeenCalledTimes(2);
+    });
+
+    test('a handed-over list with a new marked set caps too', async () => {
+        const deps = makeDeps();
+        const chain = createCadenceChain(invalid(deps));
+
+        await chain.scheduleNext([markedFar(5)]);
+
+        await jest.advanceTimersByTimeAsync(OFFLINE_RETRY_MS - 1);
+        await flushMicrotasks();
+        expect(deps.runCycle).not.toHaveBeenCalled();
+        await jest.advanceTimersByTimeAsync(1);
+        await flushMicrotasks();
+        expect(deps.runCycle).toHaveBeenCalledTimes(1);
+    });
+
+    test('a different non-empty set caps again', async () => {
+        const lists = [{ challenges: [markedFar(1)] }, { challenges: [markedFar(2)] }];
+        let call = 0;
+        const deps = makeDeps({
+            fetchChallenges: jest.fn(async () => lists[Math.min(call++, lists.length - 1)]),
+        });
+        const chain = createCadenceChain(invalid(deps));
+
+        await chain.scheduleNext(false, Date.now());
+        await jest.advanceTimersByTimeAsync(OFFLINE_RETRY_MS);
+        await flushMicrotasks();
+        expect(deps.runCycle).toHaveBeenCalledTimes(1);
+
+        // {2} differs from {1} → capped once more.
+        await jest.advanceTimersByTimeAsync(OFFLINE_RETRY_MS);
+        await flushMicrotasks();
+        expect(deps.runCycle).toHaveBeenCalledTimes(2);
+    });
+
+    test('a failed fetch in between does not make the same marked set cap again', async () => {
+        // The outage's empty list must not become the tracker's "previous" set:
+        // the same marked set after the outage is not a new degradation.
+        const lists = [
+            { challenges: [markedFar(1)] },
+            { challenges: [], fetchFailed: true },
+            { challenges: [markedFar(1)] },
+        ];
+        let call = 0;
+        const deps = makeDeps({
+            fetchChallenges: jest.fn(async () => lists[Math.min(call++, lists.length - 1)]),
+        });
+        const chain = createCadenceChain(invalid(deps));
+
+        // 1st read: new set → capped.
+        await chain.scheduleNext(false, Date.now());
+        await jest.advanceTimersByTimeAsync(OFFLINE_RETRY_MS);
+        await flushMicrotasks();
+        expect(deps.runCycle).toHaveBeenCalledTimes(1);
+
+        // Outage: capped via the offline retry, tracker untouched.
+        await jest.advanceTimersByTimeAsync(OFFLINE_RETRY_MS);
+        await flushMicrotasks();
+        expect(deps.runCycle).toHaveBeenCalledTimes(2);
+
+        // Same set as the 1st read → the normal cadence stands.
+        await jest.advanceTimersByTimeAsync(OFFLINE_RETRY_MS);
+        await flushMicrotasks();
+        expect(deps.runCycle).toHaveBeenCalledTimes(2);
+        await jest.advanceTimersByTimeAsync(FIXED_DELAY_MS - OFFLINE_RETRY_MS);
+        await flushMicrotasks();
+        expect(deps.runCycle).toHaveBeenCalledTimes(3);
+    });
+
+    test('an empty set never caps, even after a marked read', async () => {
+        let marked = true;
+        const deps = makeDeps({
+            fetchChallenges: jest.fn(async () => ({ challenges: [marked ? markedFar(1) : farChallenge()] })),
+        });
+        const chain = createCadenceChain(invalid(deps));
+
+        await chain.scheduleNext(false, Date.now());
+        await jest.advanceTimersByTimeAsync(OFFLINE_RETRY_MS);
+        await flushMicrotasks();
+        expect(deps.runCycle).toHaveBeenCalledTimes(1);
+
+        // {} differs from {1} but is empty → no cap; only the full cadence fires.
+        marked = false;
+        await jest.advanceTimersByTimeAsync(OFFLINE_RETRY_MS);
+        await flushMicrotasks();
+        expect(deps.runCycle).toHaveBeenCalledTimes(1);
+        await jest.advanceTimersByTimeAsync(FIXED_DELAY_MS - OFFLINE_RETRY_MS);
+        await flushMicrotasks();
+        expect(deps.runCycle).toHaveBeenCalledTimes(2);
+    });
+
+    test('pruneUnsafe alone does not affect cadence', async () => {
+        const deps = makeDeps({
+            fetchChallenges: jest.fn(async () => ({ challenges: [farChallenge()], pruneUnsafe: true })),
+        });
+        const chain = createCadenceChain(invalid(deps));
+
+        await chain.scheduleNext(false, Date.now());
+
+        await jest.advanceTimersByTimeAsync(OFFLINE_RETRY_MS);
+        await flushMicrotasks();
+        expect(deps.runCycle).not.toHaveBeenCalled();
+        await jest.advanceTimersByTimeAsync(FIXED_DELAY_MS - OFFLINE_RETRY_MS);
+        await flushMicrotasks();
+        expect(deps.runCycle).toHaveBeenCalledTimes(1);
+    });
+
+    test('a boundary-mode decision with a new marked set caps to the retry too', async () => {
+        const deps = makeDeps({ resolveLastMinuteCheckMinutes: jest.fn(() => 2) });
+        const chain = createCadenceChain(invalid(deps));
+
+        await chain.scheduleNext([{ ...inWindowChallenge(), dataIssues: ['member'] }]);
+
+        // The 2-min last-minute cadence is capped to the 30s retry.
+        await jest.advanceTimersByTimeAsync(OFFLINE_RETRY_MS - 1);
+        await flushMicrotasks();
+        expect(deps.runCycle).not.toHaveBeenCalled();
+        await jest.advanceTimersByTimeAsync(1);
+        await flushMicrotasks();
+        expect(deps.runCycle).toHaveBeenCalledTimes(1);
+    });
+});
+
 // The gate itself, unit-tested away from the timer plumbing.
 describe('oversleptBy', () => {
     const { oversleptBy, OVERSLEEP_ABSOLUTE_MS, OVERSLEEP_ALWAYS_MS } =

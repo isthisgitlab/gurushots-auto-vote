@@ -52,6 +52,14 @@ describe('computeDueNotifications — lead-time boundary', () => {
         expect(computeDueNotifications([challenge('1', 'x', [action('boost', -30)])], NOW, opts)).toHaveLength(0);
     });
 
+    test('a marked challenge (dataIssues) is skipped entirely', () => {
+        const marked = { ...challenge('1', 'x', [action('boost', 120)]), dataIssues: ['close_time'] };
+        expect(computeDueNotifications([marked], NOW, opts)).toHaveLength(0);
+        // An empty array is not a mark.
+        const clean = { ...challenge('1', 'x', [action('boost', 120)]), dataIssues: [] };
+        expect(computeDueNotifications([clean], NOW, opts)).toHaveLength(1);
+    });
+
     test('excludes null / NaN dueAt without throwing', () => {
         const acts = [
             { action: 'boost', dueAt: null },

@@ -6,8 +6,9 @@
  */
 
 import type * as findActiveChallengeModule from '../../src/ts/services/findActiveChallenge';
+import type { ActiveChallengesResponse } from '../../src/ts/types/gurushots';
 
-const { findActiveChallenge } =
+const { findActiveChallenge, findActionableChallenge } =
     require('../../src/ts/services/findActiveChallenge') as typeof findActiveChallengeModule;
 import { invalid } from '../helpers/invalid';
 
@@ -48,5 +49,39 @@ describe('findActiveChallenge', () => {
         expect(findActiveChallenge(null, '111')).toBeNull();
         expect(findActiveChallenge(undefined, '111')).toBeNull();
         expect(findActiveChallenge(invalid<{ id?: unknown }[]>({ challenges }), '111')).toBeNull();
+    });
+});
+
+describe('findActionableChallenge', () => {
+    const clean = { id: 111, title: 'Clean' };
+    const marked = { id: 222, title: 'Marked', dataIssues: ['close_time'] };
+    const response = (challenges: object[], pruneUnsafe = false): ActiveChallengesResponse =>
+        invalid<ActiveChallengesResponse>({ challenges, pruneUnsafe });
+
+    test('a clean challenge resolves', () => {
+        expect(findActionableChallenge(response([marked, clean]), '111')).toEqual({ challenge: clean });
+    });
+
+    test('a found-and-marked challenge is refused as data-incomplete', () => {
+        expect(findActionableChallenge(response([marked]), 222)).toEqual({ refused: 'data-incomplete' });
+    });
+
+    test('a challenge missing from a safe read is not-found', () => {
+        expect(findActionableChallenge(response([clean]), '999')).toEqual({ refused: 'not-found' });
+    });
+
+    test('a challenge missing from a prune-unsafe read is refused as data-incomplete (it may be the dropped one)', () => {
+        expect(findActionableChallenge(response([clean], true), '999')).toEqual({ refused: 'data-incomplete' });
+    });
+
+    test('an empty dataIssues array does not refuse', () => {
+        expect(findActionableChallenge(response([{ id: 1, dataIssues: [] }]), 1)).toEqual({
+            challenge: { id: 1, dataIssues: [] },
+        });
+    });
+
+    test('a null response answers not-found', () => {
+        expect(findActionableChallenge(null, '111')).toEqual({ refused: 'not-found' });
+        expect(findActionableChallenge(undefined, '111')).toEqual({ refused: 'not-found' });
     });
 });

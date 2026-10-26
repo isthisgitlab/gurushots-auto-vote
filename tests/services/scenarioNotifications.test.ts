@@ -99,6 +99,27 @@ describe('createScenarioNotifier', () => {
         expect(readOutbox).not.toHaveBeenCalled();
     });
 
+    test('a marked challenge is skipped: its data cannot be read, so its notices wait', async () => {
+        const readOutbox = jest.fn(() => outbox);
+        const deliver = jest.fn();
+        const notify = createScenarioNotifier({
+            isEnabled: () => true,
+            readOutbox,
+            translate: T,
+            deliver,
+            startedAt: START,
+        });
+        await notify(
+            invalid([
+                { id: 1, title: 'Marked', dataIssues: ['close_time'] },
+                { id: 2, title: 'Show' },
+            ]),
+        );
+        expect(readOutbox).toHaveBeenCalledTimes(1);
+        expect(readOutbox).toHaveBeenCalledWith(expect.objectContaining({ id: 2 }));
+        expect(deliver).toHaveBeenCalledWith({ title: 'Scenario — Show', body: 'hello' });
+    });
+
     test('a failure is logged, a failing log is swallowed, and runs never overlap', async () => {
         const log = jest.fn();
         const failing = createScenarioNotifier({

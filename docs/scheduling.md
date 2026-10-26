@@ -62,6 +62,16 @@ its own resolver (sync settings read on Node, async IPC in the WebView).
 This keeps the next cycle from sleeping past a challenge's last-minute
 boundary, so the final voting push starts on time.
 
+**A new degraded read caps the next wait once.** When a read carries marked
+challenges (`dataIssues` — the active-challenge boundary,
+`challengeIntegrity.ts`) and its marked-id set differs from the previous
+decision's, the next wait is capped once to the offline retry interval
+(`OFFLINE_RETRY_MS`), whatever mode decided it, so the loop re-reads soon
+after a new degradation arrives. The same set on the next decision does not
+cap again — the normal cadence resumes — an empty set never caps, and a
+failed read skips the tracker entirely, so its empty list cannot reset the
+previous set.
+
 **Flash challenges never drive the cadence.** `eligibleChallenges`
 (`scheduling/scheduledFill.ts`) filters `type !== 'flash'`, so a flash
 challenge's close time cannot shorten the sleep — even though

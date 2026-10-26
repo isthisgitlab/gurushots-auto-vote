@@ -409,6 +409,7 @@ describe('cleanup-stale-metadata', () => {
         ['missing', undefined],
         ['an item that is not an id', ['1', {}]],
         ['a blank id', ['1', '  ']],
+        ['an untrimmed id', ['1', ' 8 ']],
         ['an over-long id', ['9'.repeat(65)]],
     ])('refuses %s without touching the metadata', async (_name, ids) => {
         await expect(handlers['cleanup-stale-metadata']({}, invalid(ids))).resolves.toEqual({
@@ -436,9 +437,9 @@ describe('cleanup-stale-challenge-setting', () => {
         expect(settings.cleanupStaleChallengeSetting).toHaveBeenCalledWith(['1', '2']);
     });
 
-    test('ids are compared the way perChallenge is keyed: numeric ids become strings, untrimmed ones are trimmed', async () => {
+    test('ids are compared the way perChallenge is keyed: numeric ids become strings', async () => {
         jest.mocked(settings.cleanupStaleChallengeSetting).mockReturnValue(true);
-        await handlers['cleanup-stale-challenge-setting']({}, [7, ' 8 ', '9']);
+        await handlers['cleanup-stale-challenge-setting']({}, [7, '8', '9']);
         expect(settings.cleanupStaleChallengeSetting).toHaveBeenCalledWith(['7', '8', '9']);
     });
 
@@ -448,6 +449,7 @@ describe('cleanup-stale-challenge-setting', () => {
         ['empty, which would prune every challenge', []],
         ['an item that is not an id', ['1', {}]],
         ['a blank id', ['1', '  ']],
+        ['an untrimmed id', ['1', ' 8 ']],
         ['an over-long id', ['9'.repeat(65)]],
     ])('refuses %s without touching the settings', async (_name, ids) => {
         jest.mocked(settings.cleanupStaleChallengeSetting).mockClear();
@@ -773,7 +775,7 @@ describe('set-entry-pin', () => {
     ] as const)('%s is its own error code, with no broadcast', async (_name, outcome, error) => {
         const broadcast = jest.fn();
         jest.mocked(settings.setEntryPin).mockReturnValue(outcome);
-        await expect(pin(broadcast, 'boost', 100, 'has space')).resolves.toEqual({ success: false, error });
+        await expect(pin(broadcast, 'boost', 100, 'img_a')).resolves.toEqual({ success: false, error });
         expect(broadcast).not.toHaveBeenCalled();
     });
 

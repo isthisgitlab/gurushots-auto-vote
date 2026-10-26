@@ -13,6 +13,7 @@ import type * as teamMatchModule from '../../src/ts/strategies/real/teamMatch';
 import type * as suggestedPhotosModule from '../../src/ts/strategies/real/suggestedPhotos';
 import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
 import type { CategoryLogger } from '../../src/ts/logger';
+import { APP_SET_CHALLENGE_FIELDS } from '../../src/ts/challengeIntegrity';
 import { invalid } from '../helpers/invalid';
 
 // The logger factory below also exports its shared debug/endOperation mocks.
@@ -61,8 +62,15 @@ jest.mock('../../src/ts/logger', () => {
     const mockDebugFn = jest.fn();
     const mockEndOperationFn = jest.fn();
     const mockWarningFn = jest.fn();
+    const mockWarningTFn = jest.fn();
 
     return {
+        challengeTag: jest.fn(
+            (c: { id?: string | number; title?: string } | string | number | null | undefined, t?: string | null) =>
+                c && typeof c === 'object'
+                    ? `[Challenge ${c.id ?? 'unknown'}: ${c.title ?? 'unknown'}]`
+                    : `[Challenge ${c ?? 'unknown'}: ${t ?? 'unknown'}]`,
+        ),
         debug: jest.fn(),
         error: jest.fn(),
         startOperation: jest.fn(),
@@ -78,11 +86,15 @@ jest.mock('../../src/ts/logger', () => {
             startOperation: jest.fn(),
             endOperation: mockEndOperationFn,
             progress: jest.fn(),
+            warningT: mockWarningTFn,
+            infoT: jest.fn(),
+            errorT: jest.fn(),
         })),
         // Export the mock functions for testing
         __mockDebugFn: mockDebugFn,
         __mockEndOperationFn: mockEndOperationFn,
         __mockWarningFn: mockWarningFn,
+        __mockWarningTFn: mockWarningTFn,
     };
 });
 
@@ -113,6 +125,8 @@ describe('challenges', () => {
                         id: '12345',
                         title: 'Test Challenge 1',
                         url: 'challenge-1-url',
+                        start_time: 1_800_000_000,
+                        close_time: 1_800_086_400,
                         member: {
                             ranking: {
                                 exposure: { exposure_factor: 75 },
@@ -124,6 +138,8 @@ describe('challenges', () => {
                         id: '67890',
                         title: 'Test Challenge 2',
                         url: 'challenge-2-url',
+                        start_time: 1_800_000_000,
+                        close_time: 1_800_086_400,
                         member: {
                             ranking: {
                                 exposure: { exposure_factor: 100 },
@@ -148,10 +164,14 @@ describe('challenges', () => {
                 }),
             );
 
-            expect(result).toEqual(mockResponse);
+            // The boundary ran with app-set stripping on: a clean read carries
+            // both flags as real booleans and leaves the challenges whole.
+            expect(result.challenges).toEqual(mockResponse.challenges);
+            expect(result.fetchFailed).toBe(false);
+            expect(result.pruneUnsafe).toBe(false);
             // Positive wiring: the fetched list must pass through the pin hook
             // (the identity mock would hide a dropped or mis-arged call).
-            expect(pinChallengeTitles).toHaveBeenCalledWith(mockResponse.challenges);
+            expect(pinChallengeTitles).toHaveBeenCalledWith(mockResponse.challenges, false);
             expect(logger.withCategory).toHaveBeenCalledWith('api');
             // Presence only — never a slice of the token itself (a tokenPrefix
             // field would bypass the logger's key-based redaction).
@@ -259,7 +279,15 @@ describe('challenges', () => {
             const refresh = jest.spyOn(entryAgeLedger, 'refresh').mockResolvedValue(undefined);
             makePostRequest.mockResolvedValueOnce({
                 challenges: [
-                    { id: '12345', title: 'T', member: { ranking: { entries: [{ id: 'e1' }, { id: 'e2' }] } } },
+                    {
+                        id: '12345',
+                        title: 'T',
+                        // Well-formed timestamps: a boundary-marked challenge is
+                        // neither observed nor annotated (services/entryTimes).
+                        start_time: 1_799_900_000,
+                        close_time: 1_800_100_000,
+                        member: { ranking: { entries: [{ id: 'e1' }, { id: 'e2' }] } },
+                    },
                 ],
             });
 
@@ -322,12 +350,16 @@ describe('challenges', () => {
 
             expect(first).toBe(second); // same in-flight promise shared
 
-            resolveRequest!({ challenges: [{ id: '1' }] });
+            resolveRequest!({ challenges: [{ id: '1', start_time: 1, close_time: 2 }] });
             const [r1, r2] = await Promise.all([first, second]);
 
             // One mobile read plus its web turbo read, shared by both callers.
             expect(makePostRequest).toHaveBeenCalledTimes(2);
-            expect(r1).toEqual({ challenges: [{ id: '1' }] });
+            expect(r1).toEqual({
+                challenges: [{ id: '1', start_time: 1, close_time: 2 }],
+                fetchFailed: false,
+                pruneUnsafe: false,
+            });
             expect(r2).toBe(r1);
         });
 
@@ -335,14 +367,173 @@ describe('challenges', () => {
             makePostRequest
                 .mockResolvedValueOnce({ challenges: [] })
                 .mockResolvedValueOnce({ challenges: [] })
-                .mockResolvedValueOnce({ challenges: [{ id: '2' }] })
+                .mockResolvedValueOnce({ challenges: [{ id: '2', start_time: 1, close_time: 2 }] })
                 .mockResolvedValueOnce({ challenges: [] });
 
             await getActiveChallenges(mockToken);
             const second = await getActiveChallenges(mockToken);
 
             expect(makePostRequest).toHaveBeenCalledTimes(4);
-            expect(second).toEqual({ challenges: [{ id: '2' }] });
+            expect(second).toEqual({
+                challenges: [{ id: '2', start_time: 1, close_time: 2 }],
+                fetchFailed: false,
+                pruneUnsafe: false,
+            });
+        });
+
+        describe('the boundary check on the real read', () => {
+            const valid = { start_time: 1_800_000_000, close_time: 1_800_086_400 };
+
+            test('strips every app-set field the server may have pre-seeded, iterating the constant', async () => {
+                for (const field of APP_SET_CHALLENGE_FIELDS) {
+                    makePostRequest.mockResolvedValueOnce({
+                        challenges: [
+                            {
+                                id: 7,
+                                title: 'S',
+                                ...valid,
+                                [field]: field === 'boostHoldUntil' ? 1_800_000_000 : { us: {}, them: {} },
+                            },
+                        ],
+                    });
+                    makePostRequest.mockResolvedValueOnce({ challenges: [] });
+
+                    const result = await getActiveChallenges(mockToken);
+
+                    expect(result.challenges[0]).not.toHaveProperty(field);
+                }
+            });
+
+            test('a server-sent fetchFailed cannot fake a failed read', async () => {
+                makePostRequest.mockResolvedValueOnce({
+                    challenges: [{ id: 7, title: 'S', ...valid }],
+                    fetchFailed: true,
+                });
+                makePostRequest.mockResolvedValueOnce({ challenges: [] });
+
+                const result = await getActiveChallenges(mockToken);
+
+                expect(result.fetchFailed).toBe(false);
+                // A successful read runs the pin/prune and overlay logic — it is not an outage.
+                expect(pinChallengeTitles).toHaveBeenCalledWith(result.challenges, false);
+            });
+
+            test('id-less elements are dropped and the read is flagged prune-unsafe', async () => {
+                const kept = { id: 7, title: 'S', ...valid };
+                makePostRequest.mockResolvedValueOnce({
+                    challenges: [kept, null, 'text', { title: 'no id' }],
+                });
+                makePostRequest.mockResolvedValueOnce({ challenges: [] });
+
+                const result = await getActiveChallenges(mockToken);
+
+                expect(result.challenges).toEqual([kept]);
+                expect(result.pruneUnsafe).toBe(true);
+                // Only the kept rows reach the pin/prune logic, flagged so the
+                // pruning knows the read is prune-unsafe.
+                expect(pinChallengeTitles).toHaveBeenCalledWith([kept], true);
+            });
+
+            test('the read flag reaches the pin hook: true when prune-unsafe, false on a clean read', async () => {
+                const kept = { id: 8, title: 'K', ...valid };
+                makePostRequest.mockResolvedValueOnce({ challenges: [{ title: 'no id' }, kept] });
+                makePostRequest.mockResolvedValueOnce({ challenges: [] });
+                await getActiveChallenges(mockToken);
+                expect(pinChallengeTitles).toHaveBeenLastCalledWith([kept], true);
+
+                const list = [{ id: 9, title: 'C', ...valid }];
+                makePostRequest.mockResolvedValueOnce({ challenges: list });
+                makePostRequest.mockResolvedValueOnce({ challenges: [] });
+                await getActiveChallenges(mockToken);
+                expect(pinChallengeTitles).toHaveBeenLastCalledWith(list, false);
+            });
+
+            test('a malformed challenge is marked and the merge skips it', async () => {
+                const marked: {
+                    id: number;
+                    title: string;
+                    member: { turbo: { state: string } };
+                    dataIssues?: string[];
+                } = { id: 1, title: 'Broken', member: { turbo: { state: 'WON' } } };
+                const healthy = { id: 2, title: 'Ok', ...valid, member: { turbo: { state: 'WON' } } };
+                makePostRequest.mockResolvedValueOnce({ challenges: [marked, healthy] });
+                makePostRequest.mockResolvedValueOnce({
+                    challenges: [
+                        { id: 1, member: { turbo: { state: 'FREE', mode: 'classic' } } },
+                        { id: 2, member: { turbo: { state: 'FREE', mode: 'classic' } } },
+                    ],
+                });
+
+                const result = await getActiveChallenges(mockToken);
+
+                expect(marked.dataIssues).toEqual(['start_time', 'close_time']);
+                // The marked challenge keeps its mobile data; the healthy one takes the overlay.
+                expect(result.challenges[0].member?.turbo).toEqual({ state: 'WON' });
+                expect(result.challenges[1].member?.turbo).toEqual({ state: 'FREE', mode: 'classic' });
+            });
+
+            test('the merge skips a string member without throwing', async () => {
+                const badMember: {
+                    id: number;
+                    title: string;
+                    start_time: number;
+                    close_time: number;
+                    member: string;
+                    dataIssues?: string[];
+                } = { id: 1, title: 'Primitive member', ...valid, member: 'none' };
+                makePostRequest.mockResolvedValueOnce({ challenges: [badMember] });
+                makePostRequest.mockResolvedValueOnce({
+                    challenges: [
+                        {
+                            id: 1,
+                            member: {
+                                turbo: { state: 'FREE' },
+                                ranking: { total: { benchmark: [{ benchmark: '1', score: '1' }] } },
+                            },
+                        },
+                    ],
+                });
+
+                const result = await getActiveChallenges(mockToken);
+
+                // Marked by the boundary, and the overlay left the row exactly as it arrived.
+                expect(badMember.dataIssues).toEqual(['member']);
+                expect(result.challenges[0]).toEqual(badMember);
+            });
+
+            test('a null member carries no mark, and the merge still skips it without making one up', async () => {
+                const nullMember: {
+                    id: number;
+                    title: string;
+                    start_time: number;
+                    close_time: number;
+                    member: null;
+                    dataIssues?: string[];
+                } = { id: 1, title: 'Null member', ...valid, member: null };
+                makePostRequest.mockResolvedValueOnce({ challenges: [nullMember] });
+                makePostRequest.mockResolvedValueOnce({
+                    challenges: [
+                        {
+                            id: 1,
+                            member: {
+                                turbo: { state: 'FREE' },
+                                ranking: { total: { benchmark: [{ benchmark: '1', score: '1' }] } },
+                            },
+                        },
+                    ],
+                });
+
+                const result = await getActiveChallenges(mockToken);
+
+                // §1: null never marks — and the merge's own guard still skips
+                // the row, so the overlay never creates a member for it. The
+                // member is asserted on the fixture itself: the merge mutates
+                // that same object in place, so a dropped guard would replace
+                // the null with {} right here and fail this assertion.
+                expect(nullMember.dataIssues).toBeUndefined();
+                expect(nullMember.member).toBeNull();
+                expect(result.challenges[0]).toEqual(nullMember);
+            });
         });
 
         describe('the web overlay on the merged list', () => {
@@ -350,9 +541,21 @@ describe('challenges', () => {
             const mobileTurbo = { state: 'WON', time_to_open: null };
             const mobileResponse = () => ({
                 challenges: [
-                    { id: 1, title: 'A', member: { turbo: { ...mobileTurbo }, boost: { state: 'USED' } } },
-                    { id: '2', title: 'B', member: { turbo: { ...mobileTurbo } } },
-                    { id: 3, title: 'C' },
+                    {
+                        id: 1,
+                        title: 'A',
+                        start_time: 1_800_000_000,
+                        close_time: 1_800_086_400,
+                        member: { turbo: { ...mobileTurbo }, boost: { state: 'USED' } },
+                    },
+                    {
+                        id: '2',
+                        title: 'B',
+                        start_time: 1_800_000_000,
+                        close_time: 1_800_086_400,
+                        member: { turbo: { ...mobileTurbo } },
+                    },
+                    { id: 3, title: 'C', start_time: 1_800_000_000, close_time: 1_800_086_400 },
                 ],
             });
 
@@ -401,10 +604,10 @@ describe('challenges', () => {
 
                 const result = await getActiveChallenges(mockToken);
 
-                expect(result.fetchFailed).toBeUndefined();
+                expect(result.fetchFailed).toBe(false);
                 expect(result.challenges[0].member?.turbo).toEqual(mobileTurbo);
                 expect(result.challenges[1].member?.turbo).toEqual(mobileTurbo);
-                expect(pinChallengeTitles).toHaveBeenCalledWith(result.challenges);
+                expect(pinChallengeTitles).toHaveBeenCalledWith(result.challenges, false);
             });
 
             test('a failed mobile fetch is returned as it is; the web result is not applied', async () => {
@@ -435,7 +638,15 @@ describe('challenges', () => {
             test('overlay fields land even when the web turbo is null; the mobile total fields are never overwritten', async () => {
                 const benchmark = [{ benchmark: '10', score: '1411' }];
                 makePostRequest.mockResolvedValueOnce({
-                    challenges: [{ id: 1, title: 'A', member: { ranking: { total: { votes: 5, rank: 2 } } } }],
+                    challenges: [
+                        {
+                            id: 1,
+                            title: 'A',
+                            start_time: 1_800_000_000,
+                            close_time: 1_800_086_400,
+                            member: { ranking: { total: { votes: 5, rank: 2 } } },
+                        },
+                    ],
                 });
                 makePostRequest.mockResolvedValueOnce({
                     challenges: [
@@ -481,7 +692,7 @@ describe('challenges', () => {
 
             test('a tier whose prizes are not an array of plain objects loses the field; so does a non-array first_prizes', async () => {
                 makePostRequest.mockResolvedValueOnce({
-                    challenges: [{ id: 1, title: 'A' }],
+                    challenges: [{ id: 1, title: 'A', start_time: 1_800_000_000, close_time: 1_800_086_400 }],
                 });
                 makePostRequest.mockResolvedValueOnce({
                     challenges: [
@@ -515,9 +726,21 @@ describe('challenges', () => {
                 const webBenchmark = { id: 0, member: { ranking: { total: { benchmark } } } };
                 makePostRequest.mockResolvedValueOnce({
                     challenges: [
-                        { id: 1, title: 'No member' },
-                        { id: 2, title: 'No ranking', member: { boost: { state: 'USED' } } },
-                        { id: 3, title: 'No total', member: { ranking: { exposure: { exposure_factor: 9 } } } },
+                        { id: 1, title: 'No member', start_time: 1_800_000_000, close_time: 1_800_086_400 },
+                        {
+                            id: 2,
+                            title: 'No ranking',
+                            start_time: 1_800_000_000,
+                            close_time: 1_800_086_400,
+                            member: { boost: { state: 'USED' } },
+                        },
+                        {
+                            id: 3,
+                            title: 'No total',
+                            start_time: 1_800_000_000,
+                            close_time: 1_800_086_400,
+                            member: { ranking: { exposure: { exposure_factor: 9 } } },
+                        },
                     ],
                 });
                 makePostRequest.mockResolvedValueOnce({
@@ -540,7 +763,15 @@ describe('challenges', () => {
 
             test('a challenge the web read does not cover is untouched', async () => {
                 makePostRequest.mockResolvedValueOnce({
-                    challenges: [{ id: 1, title: 'A', member: { ranking: { total: { votes: 1 } } } }],
+                    challenges: [
+                        {
+                            id: 1,
+                            title: 'A',
+                            start_time: 1_800_000_000,
+                            close_time: 1_800_086_400,
+                            member: { ranking: { total: { votes: 1 } } },
+                        },
+                    ],
                 });
                 makePostRequest.mockResolvedValueOnce({
                     challenges: [{ id: 999, member: { turbo: { state: 'FREE' } } }],
@@ -549,7 +780,13 @@ describe('challenges', () => {
                 const result = await getActiveChallenges(mockToken);
 
                 expect(result.challenges).toEqual([
-                    { id: 1, title: 'A', member: { ranking: { total: { votes: 1 } } } },
+                    {
+                        id: 1,
+                        title: 'A',
+                        start_time: 1_800_000_000,
+                        close_time: 1_800_086_400,
+                        member: { ranking: { total: { votes: 1 } } },
+                    },
                 ]);
             });
 
@@ -559,6 +796,8 @@ describe('challenges', () => {
                         {
                             id: 1,
                             title: 'A',
+                            start_time: 1_800_000_000,
+                            close_time: 1_800_086_400,
                             member: {
                                 ranking: {
                                     entries: [
@@ -568,7 +807,13 @@ describe('challenges', () => {
                                 },
                             },
                         },
-                        { id: 2, title: 'B', member: { ranking: { entries: [{ id: '3' }] } } },
+                        {
+                            id: 2,
+                            title: 'B',
+                            start_time: 1_800_000_000,
+                            close_time: 1_800_086_400,
+                            member: { ranking: { entries: [{ id: '3' }] } },
+                        },
                     ],
                 });
                 makePostRequest.mockResolvedValueOnce({
@@ -602,8 +847,14 @@ describe('challenges', () => {
             test('a mobile challenge without member or ranking entries takes the overlay without throwing', async () => {
                 makePostRequest.mockResolvedValueOnce({
                     challenges: [
-                        { id: 1, title: 'A' },
-                        { id: 2, title: 'B', member: { turbo: { state: 'WON' } } },
+                        { id: 1, title: 'A', start_time: 1_800_000_000, close_time: 1_800_086_400 },
+                        {
+                            id: 2,
+                            title: 'B',
+                            start_time: 1_800_000_000,
+                            close_time: 1_800_086_400,
+                            member: { turbo: { state: 'WON' } },
+                        },
                     ],
                 });
                 makePostRequest.mockResolvedValueOnce({
@@ -623,7 +874,13 @@ describe('challenges', () => {
             test('a web read that fails leaves the mobile guru_pick flags as they are', async () => {
                 makePostRequest.mockResolvedValueOnce({
                     challenges: [
-                        { id: 1, title: 'A', member: { ranking: { entries: [{ id: 'e1', guru_pick: true }] } } },
+                        {
+                            id: 1,
+                            title: 'A',
+                            start_time: 1_800_000_000,
+                            close_time: 1_800_086_400,
+                            member: { ranking: { entries: [{ id: 'e1', guru_pick: true }] } },
+                        },
                     ],
                 });
                 makePostRequest.mockResolvedValueOnce(null);
@@ -636,8 +893,8 @@ describe('challenges', () => {
             test('a shape-check failure inside one challenge is omitted for that challenge only', async () => {
                 makePostRequest.mockResolvedValueOnce({
                     challenges: [
-                        { id: 1, title: 'A' },
-                        { id: 2, title: 'B' },
+                        { id: 1, title: 'A', start_time: 1_800_000_000, close_time: 1_800_086_400 },
+                        { id: 2, title: 'B', start_time: 1_800_000_000, close_time: 1_800_086_400 },
                     ],
                 });
                 makePostRequest.mockResolvedValueOnce({
@@ -662,7 +919,12 @@ describe('challenges', () => {
                 const result = await getActiveChallenges(mockToken);
 
                 // Every malformed field is left off challenge 1 — the mobile shape stands.
-                expect(result.challenges[0]).toEqual({ id: 1, title: 'A' });
+                expect(result.challenges[0]).toEqual({
+                    id: 1,
+                    title: 'A',
+                    start_time: 1_800_000_000,
+                    close_time: 1_800_086_400,
+                });
                 // Challenge 2 keeps the fields its web element carried valid.
                 expect(result.challenges[1].guru_pick_enable).toBe(true);
                 expect(result.challenges[1].first_prizes).toEqual([{ type: 'EXPOSURE_AUTOFILL', amount: 2 }]);
@@ -676,8 +938,8 @@ describe('challenges', () => {
             const teamMatch = { us: { name: 'Home Team', votes: 7514 }, them: { name: 'Poland Gurus', votes: 8258 } };
             const list = () => ({
                 challenges: [
-                    { id: 1, title: 'A' },
-                    { id: '135938', title: 'B' },
+                    { id: 1, title: 'A', start_time: 1_800_000_000, close_time: 1_800_086_400 },
+                    { id: '135938', title: 'B', start_time: 1_800_000_000, close_time: 1_800_086_400 },
                 ],
             });
 
@@ -728,10 +990,12 @@ describe('challenges', () => {
 
                     const first = getActiveChallenges(mockToken);
                     await jest.advanceTimersByTimeAsync(2000);
-                    await expect(first).resolves.toEqual(list());
+                    const firstResult = await first;
+                    expect(firstResult.challenges).toEqual(list().challenges);
 
                     // No timer advance: the second read must not wait at all.
-                    await expect(getActiveChallenges(mockToken)).resolves.toEqual(list());
+                    const second = await getActiveChallenges(mockToken);
+                    expect(second.challenges).toEqual(list().challenges);
                     expect(settledTeamMatch.mock.calls).toEqual([
                         [mockToken, 2000],
                         [mockToken, 0],
@@ -754,7 +1018,7 @@ describe('challenges', () => {
                     await jest.advanceTimersByTimeAsync(2000);
                     const result = await pending;
 
-                    expect(result).toEqual(list());
+                    expect(result.challenges).toEqual(list().challenges);
                 } finally {
                     jest.useRealTimers();
                 }
@@ -782,7 +1046,7 @@ describe('challenges', () => {
 
                 const result = await getActiveChallenges(mockToken);
 
-                expect(result).toEqual(list());
+                expect(result.challenges).toEqual(list().challenges);
                 expect(result.challenges.some((challenge) => 'teamMatch' in challenge)).toBe(false);
             });
 

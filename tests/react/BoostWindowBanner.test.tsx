@@ -16,8 +16,10 @@ import { invalid } from '../helpers/invalid';
 
 const now = () => Math.floor(Date.now() / 1000);
 
+// The member standing is present, as every active challenge's is — without it
+// the challenge is a minimal card and stays out of the banner.
 const challenge = (id: number, title: string, boost: MemberBoost) =>
-    invalid<Challenge>({ id, title, member: { boost } });
+    invalid<Challenge>({ id, title, member: { boost, ranking: { exposure: { exposure_factor: 50 } } } });
 
 describe('BoostWindowBanner', () => {
     afterEach(() => jest.restoreAllMocks());

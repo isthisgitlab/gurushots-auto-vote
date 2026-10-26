@@ -533,6 +533,21 @@ describe('dry-run-scenario', () => {
             error: 'challenge-not-found',
         });
     });
+
+    test('a marked challenge, or one a prune-unsafe read lost, refuses as challenge-data-incomplete', async () => {
+        strategy.getActiveChallenges.mockResolvedValueOnce(
+            invalid({ challenges: [{ id: 7, dataIssues: ['close_time'], member: { ranking: { entries: [] } } }] }),
+        );
+        await expect(handlers['dry-run-scenario'](null, 7)).resolves.toEqual({
+            success: false,
+            error: 'challenge-data-incomplete',
+        });
+        strategy.getActiveChallenges.mockResolvedValueOnce(invalid({ challenges: [], pruneUnsafe: true }));
+        await expect(handlers['simulate-scenario'](null, 7)).resolves.toEqual({
+            success: false,
+            error: 'challenge-data-incomplete',
+        });
+    });
 });
 
 describe('simulate-scenario', () => {

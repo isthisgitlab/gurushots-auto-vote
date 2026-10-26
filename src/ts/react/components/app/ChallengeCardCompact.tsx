@@ -8,6 +8,7 @@ import type { DeadlineAction } from './DeadlineTimeline';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { statusBadgeClass, toneBadgeClass } from '@/utils/statTone';
+import { countText, exposureText } from '@/utils/challengeCardView';
 import { getEntryStatus, statusText } from '@/utils/formatters';
 import { ChallengeBadgeRow } from './ChallengeBadgeRow';
 import { CardDensityToggle } from './CardDensityToggle';
@@ -144,13 +145,16 @@ export function ChallengeCardCompact({
                     />
                 </Stat>
                 <Stat icon="📊" label={t('app.exposure')}>
-                    <span className={toneBadgeClass(exposureTone, 'sm')}>{exposureFactor}%</span>
+                    <span className={toneBadgeClass(exposureTone, 'sm')}>{exposureText(exposureFactor)}</span>
                 </Stat>
                 <Stat icon="🏆" label={t('app.rank')}>
-                    {hasRank ? `${rank.toLocaleString()} / ${challenge.players.toLocaleString()}` : '—'}
+                    {hasRank ? `${rank.toLocaleString()} / ${countText(challenge.players)}` : '—'}
                 </Stat>
                 <Stat icon="🖼" label={t('app.yourEntries')}>
-                    {entries.length}/{challenge.max_photo_submits}
+                    {/* A max the read left non-finite shows no fraction — never "1/undefined". */}
+                    {Number.isFinite(challenge.max_photo_submits)
+                        ? `${entries.length}/${challenge.max_photo_submits}`
+                        : '—'}
                 </Stat>
                 <Stat icon="🚀" label={t('app.boost')}>
                     <StatusText status={boostStatus} />

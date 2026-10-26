@@ -62,6 +62,8 @@ export const errors = {
         'Snap was not finished. The game was interrupted, or GuruShots did not confirm an answer. Try again later; it continues where it stopped.',
     challengeNoLongerActive:
         'This challenge is no longer open, so the action was not made. Refresh the list to see the current challenges.',
+    challengeDataIncomplete:
+        "This challenge's data cannot be read, so the action was not made — GuruShots sent it with fields the app cannot use safely. Try again after the next refresh.",
     boostFailed: 'The boost was not applied. GuruShots refused it or did not answer. Try again in a moment.',
     pinFailed: "Couldn't save the pin. The settings file could not be written. Try again.",
     pinCapReached:
@@ -207,6 +209,10 @@ export const app = {
     boostWindowOpen: 'Boost window open',
     boostOpenBadge: 'Boost open',
     lowExposure: 'Low exposure',
+    challengeDataUnreadable:
+        'Challenge data cannot be read — GuruShots sent this challenge with fields the app cannot use safely. Automatic and manual actions are paused for it in the app until a refresh brings readable data. If it ends soon, check it on GuruShots.',
+    rankingDataPending:
+        'Ranking data not available yet — the card shows exposure, entries and actions once GuruShots sends it.',
     jumpToChallenge: 'Jump to challenge',
     deadlineTimeline: 'Upcoming actions',
     deadlineTimelineApprox: 'approximate — may shift as photos are submitted',
@@ -395,6 +401,8 @@ export const app = {
     // Currency action outcomes (what happened → why → what next)
     currencyOutcomeNotAvailable:
         'Not available on this challenge right now — it may already be done. The card will refresh.',
+    currencyOutcomeDataIncomplete:
+        'Challenge data cannot be read — GuruShots sent this challenge with fields the app cannot use safely, so nothing was spent. The card will refresh.',
     currencyOutcomeNoBalance: 'You have none of that currency left, so nothing was spent.',
     currencyOutcomeBalanceUnknown: 'Your balance could not be checked, so nothing was spent. Try again in a moment.',
     currencyOutcomeNoAlternative:
@@ -417,6 +425,7 @@ export const app = {
     scenariosLoadError: "Scenarios couldn't be loaded. Close and reopen the settings to try again.",
     scenariosEmpty: 'No scenarios yet. Start from a template or import one someone shared.',
     scenarioErrorNext: 'Fix it and try again.',
+    scenarioErrorNextRefresh: 'Try again after the next refresh.',
     scenarioStartsIn: 'starts in phase {phase}',
     scenarioPhaseSummary: 'Phase {phase}: {rules} rule(s)',
     scenarioSpends: 'Spends: {actions}',
@@ -656,6 +665,8 @@ export const app = {
     sbSimulatePausedManual: 'Paused (Manual Only) — this is what would run if Manual Only were off now.',
     sbSimulateNothing: 'Nothing would run.',
     sbSimulateFailed: 'The simulation could not run.',
+    sbSimulateDataIncomplete:
+        'Challenge data cannot be read — GuruShots sent this challenge with fields the app cannot use safely.',
     sbStop_closed: 'Stops: the challenge closes.',
     sbStop_idle: 'Stops: nothing more is time-based — the plan then waits on votes, rank or boost.',
     sbStop_halted: 'Stops: the scenario halts.',

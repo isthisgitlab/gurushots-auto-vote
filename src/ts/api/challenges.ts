@@ -8,6 +8,7 @@ import { makePostRequest, createCommonHeaders } from './api-client';
 import { ENDPOINTS, createWebHeaders } from './constants';
 import * as logger from '../logger';
 import { isPlainObject } from '../plainObject';
+import { normalizeActiveChallenges } from '../challengeIntegrity';
 
 import type {
     ActiveChallengesResponse,
@@ -24,7 +25,10 @@ import type {
  * (strategies/real/activeChallenges.ts).
  *
  * @param token - Authentication token
- * @returns Response containing array of active challenges, or
+ * @returns Response containing array of active challenges — run through the
+ *   boundary (normalizeActiveChallenges, with app-set stripping on), so every
+ *   challenge is checked once: malformed ones carry `dataIssues`, elements
+ *   without an id are dropped (`pruneUnsafe`) — or
  *   `{ challenges: [], fetchFailed: true }` if the request fails
  */
 const fetchActiveChallenges = async (token: string): Promise<ActiveChallengesResponse> => {
@@ -63,7 +67,9 @@ const fetchActiveChallenges = async (token: string): Promise<ActiveChallengesRes
     });
 
     logger.withCategory('api').endOperation(operationId, `retrieved ${challengeCount} challenges`);
-    return response;
+    // The boundary runs before anything sees the list (the overlay merge
+    // included); the debug lines above still log the body as it arrived.
+    return normalizeActiveChallenges(response, true);
 };
 
 // aislop-ignore-next-line ai-slop/thin-wrapper -- type guard narrowing to MemberTurbo; isPlainObject only narrows to Record<string, unknown>

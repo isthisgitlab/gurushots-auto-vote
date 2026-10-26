@@ -1,5 +1,6 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { interp } from '@/utils/interp';
+import { exposureText } from '@/utils/challengeCardView';
 import { StatusBadge } from '../ui/StatusBadge';
 import { PulseDot } from '../ui/PulseDot';
 import { ChallengeKindBadges } from './ChallengeKindBadges';
@@ -130,7 +131,7 @@ export function ChallengeBadgeRow({
             {lowExposure && (
                 <StatusBadge variant="error" className="gap-1 font-semibold">
                     <PulseDot variant="error" pulse={exposureFactor === 0} size="status-sm" onBadge />
-                    👁 {t('app.exposure')} {exposureFactor}%
+                    👁 {t('app.exposure')} {exposureText(exposureFactor)}
                 </StatusBadge>
             )}
             <ChallengeKindBadges challenge={challenge} showPhotoCount={showPhotoCount} />

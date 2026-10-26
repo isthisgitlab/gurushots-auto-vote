@@ -9,6 +9,8 @@ import { annotateEntryTimes } from '../../services/entryTimes';
 import { entryAgeLedger } from '../../entryAgeStore';
 import { refreshTeamMatch, settledTeamMatch } from './teamMatch';
 import { beginSuggestedPhotos, storeSuggestedPhotos } from './suggestedPhotos';
+import { isMarkedChallenge } from '../../challengeMarks';
+import { isPlainObject } from '../../plainObject';
 import * as logger from '../../logger';
 
 import type { ActiveChallengesResponse } from '../../types/gurushots';
@@ -47,6 +49,16 @@ const fetchAndPin = async (token: string): Promise<ActiveChallengesResponse> => 
         const teamMatch = await settledTeamMatch(token, startedRefresh ? TEAM_MATCH_WAIT_MS : 0);
         let matchedPicks = 0;
         for (const challenge of response.challenges) {
+            // A marked challenge is refused downstream — the overlay must not
+            // make its data look healthier by merging onto it. Same for a
+            // member that is present but not an object, where the old merge
+            // threw on a primitive (the boundary marks both, so this is the
+            // local second line of defense). The member is read into a local
+            // first, so the guard's narrowing cannot union Record into the
+            // property's own type for the rest of the loop body.
+            if (isMarkedChallenge(challenge)) continue;
+            const member = challenge.member;
+            if (member !== undefined && !isPlainObject(member)) continue;
             const overlay = webOverlay?.byId.get(String(challenge.id));
             if (overlay) {
                 const { turbo } = overlay;
@@ -91,7 +103,8 @@ const fetchAndPin = async (token: string): Promise<ActiveChallengesResponse> => 
         }
         // Only a read that succeeded may rewrite the cached suggestions.
         if (webOverlay) storeSuggestedPhotos(token, webOverlay.suggestions);
-        pinChallengeTitles(response.challenges);
+        // A prune-unsafe read must not read absence from the list as "gone".
+        pinChallengeTitles(response.challenges, response.pruneUnsafe === true);
         await annotateEntryTimes(response, entryAgeLedger);
     }
     return response;

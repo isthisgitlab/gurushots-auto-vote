@@ -102,6 +102,24 @@ describe('createNodeDeadlineNotifier', () => {
         expect(deliver).toHaveBeenCalledTimes(1);
     });
 
+    test('a marked challenge never notifies; the same window on an unmarked one does', async () => {
+        const deliver = jest.fn();
+        const notify = createNodeDeadlineNotifier({
+            getSetting: settingGetter(boostOn),
+            describeDeadlineActions: describeWith(act('boost', 120)),
+            translate: (k) => k,
+            deliver,
+        });
+
+        // The marked challenge alone: its in-window action is never delivered.
+        await notify(invalid([{ id: 'm', title: 'Marked', dataIssues: ['close_time'] }]), NOW);
+        expect(deliver).not.toHaveBeenCalled();
+
+        // The same window on an unmarked challenge: delivered.
+        await notify(invalid([{ id: 'ok', title: 'Clean' }]), NOW + 1);
+        expect(deliver).toHaveBeenCalledTimes(1);
+    });
+
     test('coalesces multiple simultaneously-due actions into a single delivery', async () => {
         const deliver = jest.fn();
         const notify = createNodeDeadlineNotifier({

@@ -19,6 +19,9 @@ const CURRENCY_OUTCOME = Object.freeze({
     ok: 'ok',
     needsConfirm: 'needs-confirm',
     notAvailable: 'not-available',
+    // The live challenge carries malformed fields (dataIssues), or the read that
+    // would list it dropped elements — the spend refuses without touching it.
+    dataIncomplete: 'data-incomplete',
     noBalance: 'no-balance',
     balanceUnknown: 'balance-unknown',
     noAlternative: 'no-alternative',

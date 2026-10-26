@@ -62,6 +62,7 @@ import { beginVotingPass, isVotingPassRunning } from '../voting/passActivity';
 import { failureText } from '../format/logSafe';
 import { errorKind } from '../errorMessage';
 import { consumeChosenPhotos } from '../settings';
+import { isMarkedChallenge } from '../challengeMarks';
 import { getEntries } from './autoFill/challengeState';
 import { buildFillDeps, cancelPass } from './votingOrchestrator/context';
 import { runDeadlineActions } from './votingOrchestrator/actionRunners';
@@ -94,18 +95,35 @@ const abortPass = (msg: string, allChallenges: Challenge[], level: 'error' | 'wa
     return { success: false, error: msg, challenges: allChallenges };
 };
 
+// The error a scoped Run on a marked challenge answers with (the shared IPC refusal code).
+const DATA_INCOMPLETE_ERROR = 'challenge-data-incomplete';
+// The log-catalog key of the marked-challenge skip line ('{0}: challenge data cannot be read — skipped this pass').
+const MARKED_SKIP_KEY = 'm704cb4f5be48';
+
+/**
+ * The pass's skip of a challenge the boundary marked (`dataIssues`): one line, challengeTag + codes only —
+ * the boundary's convention.
+ */
+const logMarkedSkip = (challenge: Challenge) =>
+    logger
+        .withCategory('voting')
+        .warningT(MARKED_SKIP_KEY, [logger.challengeTag(challenge)], { codes: challenge.dataIssues });
+
 /**
  * Cleanup stale metadata against the full active list — must run before any
  * per-challenge filter so we don't drop metadata for challenges the user is
- * simply not running this pass.
+ * simply not running this pass. A prune-unsafe read (it dropped elements that
+ * could not carry an identity) skips the cleanup entirely: an id the read
+ * dropped would purge live metadata.
  */
 const pruneStaleMetadata = (
-    cleanupStaleMetadata: (activeChallengeIds: string[]) => boolean,
+    cleanupStaleMetadata: (activeChallengeIds: string[], pruneUnsafe?: boolean) => boolean,
     allChallenges: Challenge[],
+    pruneUnsafe: boolean,
 ) => {
     try {
         const activeChallengeIds = allChallenges.map((challenge) => challenge.id.toString());
-        const cleanupSuccess = cleanupStaleMetadata(activeChallengeIds);
+        const cleanupSuccess = cleanupStaleMetadata(activeChallengeIds, pruneUnsafe);
         if (cleanupSuccess) {
             logger.withCategory('api').debug('Successfully cleaned up stale metadata', null);
         } else {
@@ -157,6 +175,14 @@ const processChallenge = async (
     // Check for cancellation before processing each challenge
     if (cancellation.isCancelled()) {
         return cancelPass(pass.allChallenges);
+    }
+
+    // A challenge the boundary marked (present but malformed fields) is skipped whole: nothing below it — the
+    // chosen photos, the scenario step, turbo, boost, the key/swap/fill spends, the entry-age observe or the
+    // new-entry baseline — may act on data that failed the check. The rest of the pass goes on without it.
+    if (isMarkedChallenge(challenge)) {
+        logMarkedSkip(challenge);
+        return null;
     }
 
     logger
@@ -284,7 +310,10 @@ const runVotingPass = async (
         // Get all active challenges
         logger.withCategory('challenges').info('🔄 Loading active challenges', null);
         const turboSnapshot = turboRunSnapshot();
-        const { challenges: allChallenges, fetchFailed } = await api.getActiveChallenges(token);
+        const response = await api.getActiveChallenges(token);
+        const { challenges: allChallenges, fetchFailed } = response;
+        // A read that dropped elements it could not identify: stale-metadata cleanup must not run on it.
+        const pruneUnsafe = response.pruneUnsafe === true;
 
         // A failed fetch is not an empty account. makePostRequest resolves null once retries
         // are exhausted, which would otherwise arrive here as an empty list and be reported
@@ -302,11 +331,18 @@ const runVotingPass = async (
             return { success: true, message: 'No active challenges found', challenges: allChallenges };
         }
 
-        if (cleanupStaleMetadata) pruneStaleMetadata(cleanupStaleMetadata, allChallenges);
+        if (cleanupStaleMetadata) pruneStaleMetadata(cleanupStaleMetadata, allChallenges, pruneUnsafe);
 
         const scope = selectPassChallenges(allChallenges, challengeIdFilter);
         if (scope.result) return scope.result;
         const { challenges } = scope;
+
+        // A per-card Run on a marked challenge is refused, never "completed successfully": nothing ran on it.
+        if (challengeIdFilter != null && isMarkedChallenge(challenges[0])) {
+            logMarkedSkip(challenges[0]);
+            logger.withCategory('voting').endOperation('voting-process', null, 'the challenge data cannot be read');
+            return { success: false, error: DATA_INCOMPLETE_ERROR, challenges: allChallenges };
+        }
 
         const scopedState = challengeIdFilter != null ? manualOnlyState(challenges[0]) : 'off';
         // Fail closed, but say what happened: an unreadable switch is a failed Run, not a Manual Only one.
@@ -336,7 +372,9 @@ const runVotingPass = async (
             missionVoteQuota: planMissionVotes(
                 missions,
                 challengeIdFilter,
-                allChallenges.filter((challenge) => !isManualOnlyFailClosed(challenge)),
+                allChallenges.filter(
+                    (challenge) => !isManualOnlyFailClosed(challenge) && !isMarkedChallenge(challenge),
+                ),
             ),
             allChallenges,
             turboSnapshot,

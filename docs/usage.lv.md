@@ -93,6 +93,8 @@ Grafiskajai lietotnei un CLI uzstādījumi ir kopīgi: izmaiņu, ko CLI veic ar 
 
 Cikls ir viena visu jūsu aktīvo izaicinājumu apstrāde. Katram izaicinājumam lietotne pēc kārtas izmanto **Boost**, ja pienācis laiks, spēlē minispēli vai izmanto **Turbo**, ja tas iespējams, **automātiski iesniedz** foto tukšā vietā, ja pienācis laiks, un pēc tam **balso**, līdz sasniegts mērķis, ko nosaka turpmāk aprakstītie noteikumi.
 
+Izaicinājums, kura datus lietotne nevar droši nolasīt (GuruShots to nosūtīja ar laukiem, kurus tā nevar droši izmantot), rāda minimālu kartīti — tikai nosaukumu un beigu laiku — ar paziņojumu, ka automātiskās un manuālās darbības tam ir apturētas, līdz atsvaidzināšana sniedz nolasāmus datus; konkrētā izaicinājuma **⚙️** uzstādījumu poga paliek.
+
 ### Redzamības noteikumi (kurš mērķis ir spēkā)
 
 Katram izaicinājumam ir redzamības **slieksnis** ("balsot, kamēr mana redzamība ir zem šī līmeņa") un balsošanas **mērķis** ("turpināt balsot līdz šim %"). Spēkā ir pirmais atbilstošais noteikums:

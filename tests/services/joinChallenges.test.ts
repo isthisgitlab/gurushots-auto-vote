@@ -1442,6 +1442,48 @@ describe('runJoinPass — join window', () => {
             expect(deps.submitToChallenge).toHaveBeenCalledTimes(1);
         });
 
+        test('a marked challenge counts as a pending turbo, so it alone does not drive the early join', async () => {
+            withJoinEarly(true);
+            const deps = makeDeps({
+                getMemberChallenges: openList([far(1)]),
+                getActiveChallenges: double<'getActiveChallenges'>(async () => ({
+                    challenges: [
+                        // Without the mark this TIMER-without-open-time would hold no turbo (joins: 1).
+                        { id: 100, dataIssues: ['close_time'], member: { turbo: { state: 'TIMER', mode: 'classic' } } },
+                    ],
+                })),
+            });
+            const res = await runJoinPass('tok', NOW_MS, deps, {
+                join: 0,
+                fill: 0,
+                turbo: 1,
+                boost: 0,
+                vote: 0,
+                turboRequirements: [{ remaining: 1, expiresAtSec: NOW_SEC + 3 * HOUR }],
+            });
+            expect(res.joined).toBe(0);
+        });
+
+        test('a read that dropped elements joins nothing early: the pending count could be short', async () => {
+            withJoinEarly(true);
+            const deps = makeDeps({
+                getMemberChallenges: openList([far(1)]),
+                getActiveChallenges: double<'getActiveChallenges'>(async () => ({
+                    challenges: [],
+                    pruneUnsafe: true,
+                })),
+            });
+            const res = await runJoinPass('tok', NOW_MS, deps, {
+                join: 0,
+                fill: 0,
+                turbo: 1,
+                boost: 0,
+                vote: 0,
+                turboRequirements: [{ remaining: 1, expiresAtSec: NOW_SEC + 3 * HOUR }],
+            });
+            expect(res.joined).toBe(0);
+        });
+
         test('a challenge joined for a turbo mission stops the next cycle joining another for it', async () => {
             withJoinEarly(true);
             const missions = { join: 0, fill: 0, turbo: 1, boost: 0, vote: 0 };

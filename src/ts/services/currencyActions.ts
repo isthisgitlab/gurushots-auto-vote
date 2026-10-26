@@ -18,6 +18,7 @@
 
 import { errorMessage } from '../errorMessage';
 import { findActiveChallenge } from './findActiveChallenge';
+import { isMarkedChallenge } from '../challengeMarks';
 import { rankCandidatesForChallenge, resolveMemberId } from './autoFill';
 import { swappedOutIds } from './autoFill/challengeState';
 import { resetPassState as resetPhotoStatsPassState } from './photoStats';
@@ -86,8 +87,9 @@ const cat = (logger: Logger) => logger.withCategory('currency');
  * Reads the live challenge and bankroll. `readFailed` tells a failed challenge
  * read (no usable response, or one flagged `fetchFailed`) from a read that worked
  * but does not list the challenge (closed or gone): checkLive maps the first onto
- * apiFailed and the second onto notAvailable. An unreadable bankroll is left null
- * for blockedOutcome to map onto balanceUnknown.
+ * apiFailed and the second onto notAvailable. `pruneUnsafe` marks a read that
+ * dropped elements, so a missing challenge may be the dropped one. An unreadable
+ * bankroll is left null for blockedOutcome to map onto balanceUnknown.
  */
 const loadLive = async (challengeId: string | number, token: string, strategy: CurrencyStrategy) => {
     const [challengesResponse, bankroll] = await Promise.all([
@@ -96,7 +98,12 @@ const loadLive = async (challengeId: string | number, token: string, strategy: C
     ]);
     const readFailed =
         !challengesResponse || !!challengesResponse.fetchFailed || !Array.isArray(challengesResponse.challenges);
-    return { challenge: findActiveChallenge(challengesResponse?.challenges, challengeId), bankroll, readFailed };
+    return {
+        challenge: findActiveChallenge(challengesResponse?.challenges, challengeId),
+        bankroll,
+        readFailed,
+        pruneUnsafe: challengesResponse?.pruneUnsafe === true,
+    };
 };
 
 const entriesOf = (challenge: Challenge): RankingEntry[] =>
@@ -129,9 +136,22 @@ const checkLive = async (
 ): Promise<
     { blocked: CurrencyOutcome; challenge: null } | { blocked: CurrencyOutcome | null; challenge: Challenge }
 > => {
-    const { challenge, bankroll, readFailed } = await loadLive(challengeId, token, strategy);
+    const { challenge, bankroll, readFailed, pruneUnsafe } = await loadLive(challengeId, token, strategy);
     if (!challenge) {
-        return { blocked: readFailed ? CURRENCY_OUTCOME.apiFailed : CURRENCY_OUTCOME.notAvailable, challenge: null };
+        // On a read that dropped elements the missing challenge may be the one
+        // that was dropped, which cannot be told from "gone": refuse as
+        // data-incomplete, not not-available.
+        return {
+            blocked: readFailed
+                ? CURRENCY_OUTCOME.apiFailed
+                : pruneUnsafe
+                  ? CURRENCY_OUTCOME.dataIncomplete
+                  : CURRENCY_OUTCOME.notAvailable,
+            challenge: null,
+        };
+    }
+    if (isMarkedChallenge(challenge)) {
+        return { blocked: CURRENCY_OUTCOME.dataIncomplete, challenge: null };
     }
     // blockedOutcome only ever answers a CURRENCY_OUTCOME value or null.
     const blocked = blockedOutcome(action, challenge, bankroll, nowSec()) as CurrencyOutcome | null;
@@ -174,8 +194,13 @@ const settleUnclearSwap = async (
     let landed = false;
     try {
         const { challenge } = await loadLive(challengeId, token, strategy);
-        const ids = challenge ? entryIds(challenge) : new Set<string>();
-        landed = ids.has(entered.in) && !ids.has(entered.out);
+        // A marked challenge cannot be settled either — its entries cannot be
+        // read — so the request stays unclear (it may have gone through), the
+        // same as a read that answers nothing.
+        if (challenge && !isMarkedChallenge(challenge)) {
+            const ids = entryIds(challenge);
+            landed = ids.has(entered.in) && !ids.has(entered.out);
+        }
     } catch (error) {
         cat(logger).warning(
             `swap: could not read the challenge to settle an unanswered request: ${errorMessage(error) || error}`,

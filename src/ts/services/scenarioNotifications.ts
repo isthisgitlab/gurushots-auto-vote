@@ -12,6 +12,7 @@
  */
 
 import { sanitizeNotificationText, interpolate } from './deadlineNotifications';
+import { isMarkedChallenge } from '../challengeMarks';
 
 import type { Challenge } from '../types/gurushots';
 import { errorMessage } from '../errorMessage';
@@ -110,6 +111,9 @@ const createScenarioNotifier = ({
             if (!(await isEnabled())) return;
             const outboxes: ChallengeOutbox[] = [];
             for (const challenge of challenges) {
+                // A marked challenge's data cannot be read — its notices wait
+                // until the data reads again, like every action on it.
+                if (isMarkedChallenge(challenge)) continue;
                 const outbox = await readOutbox(challenge);
                 if (Array.isArray(outbox) && outbox.length) {
                     outboxes.push({

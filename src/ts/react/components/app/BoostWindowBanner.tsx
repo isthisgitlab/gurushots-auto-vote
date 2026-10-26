@@ -3,6 +3,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { formatDuration } from '@/utils/formatters';
 import { interp } from '@/utils/interp';
 import { openBoostWindows } from '../../../voting/boostWindow';
+import { isMinimalCardChallenge } from '@/utils/challengeAlerts';
 import { useTick } from '@/hooks/useTick';
 import { ChallengeAlertPanel } from './ChallengeChips';
 
@@ -31,14 +32,17 @@ export function BoostWindowBanner({ challenges }: { challenges: Challenge[] }) {
     // already running, and key-unlocked windows never gain a countdown with
     // passing time. The duplicate openBoostWindows pass is O(n log n) over a
     // handful of challenges — accepted cost of the shared-hook shape.
-    const hasCountdown = openBoostWindows(challenges, Math.floor(Date.now() / 1000)).some((c) => c.remaining != null);
+    // Minimal-card challenges stay out of the banner: their fields cannot be
+    // read safely, so no window may be claimed from them.
+    const alertable = challenges.filter((c) => !isMinimalCardChallenge(c));
+    const hasCountdown = openBoostWindows(alertable, Math.floor(Date.now() / 1000)).some((c) => c.remaining != null);
     const now = useTick(1000, hasCountdown);
 
     return (
         <ChallengeAlertPanel
             icon="🚀"
             label={t('app.boostWindowOpen')}
-            items={openBoostWindows(challenges, now)}
+            items={openBoostWindows(alertable, now)}
             chipClassName="btn-info"
             dotVariant="info"
             detail={countdownDetail(t)}

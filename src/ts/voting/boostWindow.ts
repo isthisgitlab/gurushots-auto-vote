@@ -1,3 +1,5 @@
+import { isMarkedChallenge } from '../challengeMarks';
+
 import type { Challenge, MemberBoost } from '../types/gurushots';
 
 /**
@@ -59,6 +61,9 @@ const secondsToBoostDeadline = (challenge: Challenge | null | undefined, now: nu
  * Challenges whose boost window is open right now, as display entries sorted
  * soonest-expiring first. Shared by the CLI status view and the GUI banner.
  *
+ * A challenge the boundary marked (its data cannot be read) never shows:
+ * every action refuses it, so advertising its window would invite one.
+ *
  * Only timed windows (state AVAILABLE with a future timeout) carry a
  * countdown; key-unlocked boosts (AVAILABLE_KEY) never expire, so their
  * `remaining` is null and they sort last.
@@ -71,7 +76,7 @@ const openBoostWindows = (
     now: number,
 ): Array<{ id: Challenge['id']; title: string; remaining: number | null }> =>
     (challenges || [])
-        .filter((c) => isBoostWindowOpen(c.member?.boost, now))
+        .filter((c) => !isMarkedChallenge(c) && isBoostWindowOpen(c.member?.boost, now))
         .map((c) => {
             const boost = c.member?.boost;
             const remaining =

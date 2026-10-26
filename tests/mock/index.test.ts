@@ -287,12 +287,16 @@ describe('mock/index', () => {
                 mockIndex.clearSessionCache();
                 challenges.generateMockChallenges.mockReturnValueOnce(
                     invalid({
-                        challenges: [{ id: '2', title: 'Generated Challenge' }],
+                        challenges: [{ id: '2', title: 'Generated Challenge', start_time: 1, close_time: 2 }],
                     }),
                 );
                 const result = await mockIndex.mockApiClient.getActiveChallenges('any-token');
 
-                expect(result).toEqual({ challenges: [{ id: '2', title: 'Generated Challenge' }] });
+                expect(result).toEqual({
+                    challenges: [{ id: '2', title: 'Generated Challenge', start_time: 1, close_time: 2 }],
+                    fetchFailed: false,
+                    pruneUnsafe: false,
+                });
                 expect(logger.__mockApiFn).toHaveBeenCalledWith('Mock getActiveChallenges', null);
             });
 
@@ -306,6 +310,8 @@ describe('mock/index', () => {
                             {
                                 id: 'fresh',
                                 title: 'Fresh Challenge',
+                                start_time: 1,
+                                close_time: 2,
                             },
                         ],
                     }),
@@ -314,7 +320,11 @@ describe('mock/index', () => {
                 const result = await mockIndex.mockApiClient.getActiveChallenges('test-token');
 
                 expect(challenges.generateMockChallenges).toHaveBeenCalled();
-                expect(result).toEqual({ challenges: [{ id: 'fresh', title: 'Fresh Challenge' }] });
+                expect(result).toEqual({
+                    challenges: [{ id: 'fresh', title: 'Fresh Challenge', start_time: 1, close_time: 2 }],
+                    fetchFailed: false,
+                    pruneUnsafe: false,
+                });
             });
 
             test('should resolve an empty challenge list for missing token (real-API parity)', async () => {
@@ -630,6 +640,9 @@ describe('mock/index', () => {
                     id: '1',
                     title: 'Fillable',
                     url: 'no-vote-images-url',
+                    // The boundary (challengeIntegrity) marks a challenge without one, and the pass
+                    // skips marked challenges whole — the fill-new options would never fire.
+                    start_time: now - 60,
                     close_time: now + 600,
                     max_photo_submits: 4,
                     member: {
@@ -721,6 +734,8 @@ describe('mock/index', () => {
                             id: '1',
                             title: 'OneSlot',
                             url: 'no-vote-images-url',
+                            // The boundary marks a challenge without one, and the pass skips marked challenges.
+                            start_time: now - 60,
                             close_time: now + 600,
                             max_photo_submits: 2, // 1 entry below → exactly one free slot
                             member: {

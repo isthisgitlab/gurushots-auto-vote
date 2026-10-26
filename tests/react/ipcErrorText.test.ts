@@ -22,6 +22,8 @@ describe('ipcErrorText', () => {
         ['Snap question could not be answered', 'errors.snapUnanswerable'],
         ['Snap was interrupted; try again later', 'errors.snapInterrupted'],
         ['Challenge no longer active', 'errors.challengeNoLongerActive'],
+        ['challenge-data-incomplete', 'errors.challengeDataIncomplete'],
+        ['challenge data cannot be read', 'errors.challengeDataIncomplete'],
         ['pin-cap-reached', 'errors.pinCapReached'],
         ['pin-write-failed', 'errors.pinFailed'],
         ['library-read-failed', 'errors.libraryReadFailed'],

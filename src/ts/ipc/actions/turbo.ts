@@ -8,7 +8,7 @@ import * as votingLogic from '../../services/VotingLogic';
 import { recordManualTurboWin } from '../../services/missions';
 import { isKnownTurboMode } from '../../voting/turboMode';
 import { claimTurboRun, releaseTurboRun } from '../../services/turboRunLock';
-import { sanitizeForLog, refuseInvalidArgs, fetchLiveChallenge } from './shared';
+import { sanitizeForLog, refuseInvalidArgs, fetchLiveChallenge, liveRefusalError } from './shared';
 
 import type { IpcReplyFn } from '../registerHandlers';
 import type { Challenge, SnapStopReason, TurboGameResult } from '../../types/gurushots';
@@ -115,10 +115,11 @@ const turboRunResponse = ((result: TurboGameResult | null | undefined) => {
  */
 const runManualTurbo = (async (challengeId: string | number, safeTitle: string, token: string) => {
     const strategy = apiFactory.getApiStrategy();
-    const liveChallenge = await fetchLiveChallenge(strategy, token, challengeId);
-    if (!liveChallenge) {
-        return { success: false as const, error: 'Challenge no longer active' };
+    const live = await fetchLiveChallenge(strategy, token, challengeId);
+    if ('refused' in live) {
+        return liveRefusalError(live.refused);
     }
+    const liveChallenge = live.challenge;
     const now = Math.floor(Date.now() / 1000);
     if (!votingLogic.shouldPlayAutoTurbo(liveChallenge, now)) {
         const unplayable = turboUnplayableError(liveChallenge, now);

@@ -11,6 +11,7 @@ import * as votingLogic from './VotingLogic';
 import * as logger from '../logger';
 import * as settings from '../settings';
 import { isManualPhotosOnly } from './manualPhotosOnly';
+import { isMarkedChallenge } from '../challengeMarks';
 import { manualOnlyOnLine } from './votingOrchestrator/manualOnly';
 
 import type { ApiStrategy } from '../apiFactory';
@@ -32,10 +33,17 @@ const STAGGER_MS = 1000;
  *   { outcome: 'no-images',    targetExposure }
  *   { outcome: 'voted',        targetExposure, imageCount }
  *
+ * A challenge the boundary marked (its data cannot be read) is refused before
+ * anything is evaluated: 'not-eligible' with the reason, which both the
+ * single-card handler and the vote-all loop already surface.
+ *
  * @param strategy - API strategy (real or mock)
  * @param now - Unix seconds
  */
 const submitVotesForChallenge = async (challenge: Challenge, strategy: ApiStrategy, token: string, now: number) => {
+    if (isMarkedChallenge(challenge)) {
+        return { outcome: 'not-eligible', errorMessage: 'challenge data cannot be read' };
+    }
     const { shouldAllowVoting, errorMessage, targetExposure } = votingLogic.evaluateManualVotingToHundred(
         challenge,
         now,

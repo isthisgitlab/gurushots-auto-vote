@@ -93,6 +93,8 @@ Settings are shared with the GUI: a `set-setting` from the CLI is picked up by t
 
 A cycle is a single pass over all your active challenges. For each one the app, in order: applies **boost** if it's due, plays/applies **turbo** if eligible, **auto-submits** a photo to an empty entry slot if it's time, and then **votes** up to the target the rules below resolve.
 
+A challenge whose data the app cannot read safely — GuruShots sent it with fields it cannot use — shows a minimal card: title and end time only, with a notice that automatic and manual actions are paused for it until a refresh brings readable data; the per-challenge **⚙️** settings button stays.
+
 ### The exposure rules (which target applies)
 
 Each challenge has an exposure **trigger** ("vote while my exposure is below this") and a vote **target** ("keep voting up to this %"). The first matching rule wins:

@@ -118,6 +118,41 @@ describe('annotateEntryTimes', () => {
         const at = response.challenges[0].member?.ranking?.entries?.[1]?.appEntered?.at ?? 0;
         expect(at).toBeGreaterThanOrEqual(before);
     });
+
+    test('a marked challenge is neither observed nor annotated, but its entries still lose a forged appEntered', async () => {
+        const ledger = createMemoryEntryAgeLedger();
+        ledger.observe(challenge(1, ['old']), NOW - 100);
+        ledger.markSubmitted(1, ['mine'], NOW - 50);
+        const marked = invalid<Challenge>({
+            id: 1,
+            close_time: NOW + 3600,
+            dataIssues: ['close_time'],
+            member: {
+                ranking: {
+                    entries: [
+                        { id: 'old', appEntered: { at: 1, exact: true } },
+                        { id: 'mine', appEntered: { at: 2, exact: true } },
+                    ],
+                },
+            },
+        });
+        const sibling = challenge(2, ['x']);
+        const response: ActiveChallengesResponse = { challenges: [marked, sibling] };
+        const observeAll = jest.spyOn(ledger, 'observeAll');
+
+        await annotateEntryTimes(response, ledger, NOW);
+
+        // observeAll saw only the unmarked sibling…
+        expect(observeAll).toHaveBeenCalledTimes(1);
+        expect(observeAll).toHaveBeenCalledWith([sibling], NOW);
+        // …the marked challenge's entries lost the forged field and got nothing
+        // back, and its record is untouched.
+        expect(marked.member?.ranking?.entries?.[0]).not.toHaveProperty('appEntered');
+        expect(marked.member?.ranking?.entries?.[1]).not.toHaveProperty('appEntered');
+        expect(ledger.enteredAt(1, 'mine')).toBe(NOW - 50);
+        // The sibling is annotated as usual.
+        expect(sibling.member?.ranking?.entries?.[0]?.appEntered).toEqual({ at: NOW, exact: false });
+    });
 });
 
 describe('annotateEntryTimes and a ledger refresh that does not come back', () => {

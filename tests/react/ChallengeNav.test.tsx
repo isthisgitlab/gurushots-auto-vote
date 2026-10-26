@@ -50,6 +50,26 @@ describe('ChallengeNav', () => {
         expect(screen.queryByRole('button')).toBeNull();
     });
 
+    test('a minimal-card challenge keeps its chip but shows no status dots', () => {
+        const nowSec = Math.floor(Date.now() / 1000);
+        // Marked, yet carrying an open boost window and a low readable exposure:
+        // neither may be claimed from fields the app cannot use safely.
+        const marked = invalid<Challenge>({
+            id: 21,
+            title: 'Marked',
+            dataIssues: ['member.boost.timeout'],
+            start_time: nowSec - 3600,
+            close_time: nowSec + 3600,
+            member: { boost: { state: 'AVAILABLE_KEY' }, ranking: { exposure: { exposure_factor: 5 } } },
+        });
+        render(<ChallengeNav challenges={[marked, challenge(22, 'Plain')]} />);
+
+        const [markedChip, plainChip] = screen.getAllByRole('button');
+        expect(markedChip.textContent).toMatch(/Marked/);
+        expect(markedChip.querySelector('[data-testid^="pulse-dot"]')).toBeNull();
+        expect(plainChip.querySelector('[data-testid^="pulse-dot"]')).toBeNull();
+    });
+
     test('lists every challenge by title in order', () => {
         render(<ChallengeNav challenges={[challenge(1, 'Alpha'), challenge(2, 'Bravo'), challenge(3, 'Charlie')]} />);
 
@@ -223,8 +243,15 @@ describe('ChallengeNav', () => {
         jest.mocked(window.api.getTitleProfile).mockImplementation(async (_title, id) =>
             id === '1' ? titleRuleInfo({ profile: { name: '4 pics', values: { exposureTarget: 90 } } }) : null,
         );
+        const nowSec = Math.floor(Date.now() / 1000);
         const boosted = (id: number, title: string) =>
-            invalid<Challenge>({ id, title, member: { boost: { state: 'AVAILABLE_KEY' } } });
+            invalid<Challenge>({
+                id,
+                title,
+                start_time: nowSec - 3600,
+                close_time: nowSec + 3600,
+                member: { boost: { state: 'AVAILABLE_KEY' }, ranking: { exposure: { exposure_factor: 50 } } },
+            });
 
         render(<ChallengeNav challenges={[boosted(1, 'Profiled boost'), boosted(2, 'Plain boost')]} />);
 

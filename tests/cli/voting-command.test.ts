@@ -166,6 +166,27 @@ describe('voteChallengeManual fallbacks', () => {
         });
     });
 
+    test('a marked challenge refuses with the worded reason, before the handler runs', async () => {
+        mw.getActiveChallenges.mockResolvedValue(
+            invalid({ challenges: [{ id: 111, title: 'Sunset', dataIssues: ['close_time'] }] }),
+        );
+        await expect(voteChallengeManual('111')).resolves.toEqual({
+            success: false,
+            error: 'challenge data cannot be read',
+        });
+        expect(msgs('error')).toEqual(['Challenge 111: challenge data cannot be read']);
+        expect(votingHandlers['vote-on-challenge-manual']).not.toHaveBeenCalled();
+    });
+
+    test('a challenge lost by a prune-unsafe read refuses as unreadable, like every channel', async () => {
+        mw.getActiveChallenges.mockResolvedValue(invalid({ challenges: [], pruneUnsafe: true }));
+        await expect(voteChallengeManual('111')).resolves.toEqual({
+            success: false,
+            error: 'challenge data cannot be read',
+        });
+        expect(votingHandlers['vote-on-challenge-manual']).not.toHaveBeenCalled();
+    });
+
     test('success without a message uses the default wording', async () => {
         votingHandlers['vote-on-challenge-manual'].mockResolvedValue(invalid({ success: true }));
         await voteChallengeManual('111');

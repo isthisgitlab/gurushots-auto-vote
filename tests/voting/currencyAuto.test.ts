@@ -6,7 +6,7 @@
 
 import type * as currencyAutoModule from '../../src/ts/voting/currencyAuto';
 import type * as entrySlotModule from '../../src/ts/voting/entrySlot';
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type { Challenge, RankingEntry } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 const { ruleOpensAt, isRuleOpen, isProtectedEntry, isGuruPicked, pickSwapTarget, votePoolReach, fillBeatsVoting } =
@@ -183,9 +183,23 @@ describe('pickSwapTarget', () => {
         expect(pickSwapTarget([lowTurbo], { lowestVotes: true })).toBeNull();
     });
 
-    test('missing votes count as 0', () => {
+    test('a non-finite vote count is never picked by the lowest-votes compare', () => {
         const noVotes = { id: 'n' };
-        expect(pickSwapTarget([a, noVotes], { lowestVotes: true })).toBe(noVotes);
+        const badVotes = invalid<RankingEntry>({ id: 'x', votes: Number.NaN });
+        const infinite = invalid<RankingEntry>({ id: 'inf', votes: Number.POSITIVE_INFINITY });
+        // It used to read as 0 votes and win; now the readable entries win instead.
+        expect(pickSwapTarget([a, noVotes], { lowestVotes: true })).toBe(a);
+        expect(pickSwapTarget([a, badVotes], { lowestVotes: true })).toBe(a);
+        expect(pickSwapTarget([a, infinite], { lowestVotes: true })).toBe(a);
+        expect(pickSwapTarget([noVotes, badVotes], { lowestVotes: true })).toBeNull();
+    });
+
+    test('under a vote ceiling a non-finite count is never picked; with no ceiling slot mode still picks it', () => {
+        const noVotes = { id: 'n' };
+        expect(pickSwapTarget([a, noVotes], { imageIndex: 0, maxVotes: 10 })).toBeNull();
+        expect(pickSwapTarget([invalid({ id: 'x', votes: Number.NaN })], { maxVotes: 1 })).toBeNull();
+        expect(pickSwapTarget([a, noVotes], { imageIndex: 0 })).toBe(noVotes);
+        expect(pickSwapTarget([a, noVotes], { imageIndex: 0, maxVotes: 0 })).toBe(noVotes);
     });
 
     test('maxVotes: the target must have fewer votes than the ceiling', () => {

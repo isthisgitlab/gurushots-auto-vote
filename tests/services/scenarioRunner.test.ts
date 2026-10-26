@@ -1801,6 +1801,173 @@ describe('rule execution', () => {
         });
     });
 
+    describe('a settle whose re-read cannot be trusted (a marked challenge, or the read dropped it)', () => {
+        const unclear = { ok: false, outcome: 'unclear' } as const;
+        // nowSec() reads Date.now(); freezing it per pass separates the first `unclearAt` from a later lastError.
+        const freezeAt = (offset: number) => jest.spyOn(Date, 'now').mockReturnValue((NOW + offset) * 1000);
+
+        test('a pending-origin retry over an unreadable re-read keeps the spend in flight, counted and lost, and never spends again', async () => {
+            setup(single([{ type: 'unlockBoost' }]));
+            const c = challenge();
+            c.member.boost!.state = 'LOCKED';
+            ledger.set(7, {
+                ...initialState('Plan', 'main', NOW),
+                inFlight: { ruleId: 'r1', actionIndex: 0, pending: 'unlockBoost' },
+            });
+
+            const first = freezeAt(10);
+            autoFill.refreshChallengeState.mockResolvedValueOnce('invalid');
+            await run(c);
+            first.mockRestore();
+            expect(currencyActions.unlockBoostWithKey).not.toHaveBeenCalled();
+            expect(state().inFlight).toEqual({
+                ruleId: 'r1',
+                actionIndex: 0,
+                unclear: ['unlockBoost'],
+                unclearAt: NOW + 10,
+                lost: ['unlockBoost'],
+            });
+            expect(state().spent.keys).toBe(1);
+            expect(state().fired).toEqual({});
+
+            // A repeated unreadable re-read counts nothing twice, appends nothing, and keeps the first `unclearAt`
+            // — the card can tell the later problem from the original one.
+            const second = freezeAt(20);
+            autoFill.refreshChallengeState.mockResolvedValueOnce('invalid');
+            await run(c);
+            second.mockRestore();
+            expect(currencyActions.unlockBoostWithKey).not.toHaveBeenCalled();
+            expect(state().inFlight).toEqual({
+                ruleId: 'r1',
+                actionIndex: 0,
+                unclear: ['unlockBoost'],
+                unclearAt: NOW + 10,
+                lost: ['unlockBoost'],
+            });
+            expect(state().spent.keys).toBe(1);
+            expect(state().lastError!.at).toBe(NOW + 20);
+
+            // A clean re-read that shows the spend landed settles it: the rule finishes, nothing is spent again.
+            c.member.boost!.state = 'AVAILABLE_KEY';
+            await run(c);
+            expect(currencyActions.unlockBoostWithKey).not.toHaveBeenCalled();
+            expect(state().inFlight).toBeNull();
+            expect(state().fired.r1).toBeDefined();
+            expect(state().spent.keys).toBe(1);
+        });
+
+        test('an unclear-origin retry over an unreadable re-read counts nothing twice and appends no duplicate', async () => {
+            currencyActions.unlockBoostWithKey.mockResolvedValueOnce(unclear);
+            setup(single([{ type: 'unlockBoost' }]));
+            const c = challenge();
+            c.member.boost!.state = 'LOCKED';
+            const first = freezeAt(10);
+            await run(c);
+            first.mockRestore();
+            expect(state().inFlight).toEqual({
+                ruleId: 'r1',
+                actionIndex: 0,
+                unclear: ['unlockBoost'],
+                unclearAt: NOW + 10,
+            });
+            expect(state().spent.keys).toBe(1);
+
+            const second = freezeAt(20);
+            autoFill.refreshChallengeState.mockResolvedValueOnce('invalid');
+            await run(c);
+            second.mockRestore();
+            expect(currencyActions.unlockBoostWithKey).toHaveBeenCalledTimes(1);
+            expect(state().inFlight).toEqual({
+                ruleId: 'r1',
+                actionIndex: 0,
+                unclear: ['unlockBoost'],
+                unclearAt: NOW + 10,
+            });
+            expect(state().inFlight).not.toHaveProperty('lost');
+            expect(state().spent.keys).toBe(1);
+            // Not halted: the re-read said nothing usable, so the step is retried rather than given up on.
+            expect(state().fired).toEqual({});
+
+            c.member.boost!.state = 'AVAILABLE_KEY';
+            await run(c);
+            expect(currencyActions.unlockBoostWithKey).toHaveBeenCalledTimes(1);
+            expect(state().inFlight).toBeNull();
+            expect(state().fired.r1).toBeDefined();
+            expect(state().spent.keys).toBe(1);
+        });
+
+        test('a swap settle over an unreadable re-read keeps the spend in flight instead of halting', async () => {
+            currencyActions.previewSwap.mockResolvedValue(
+                invalid({ ok: true, candidate: { id: 'n1', member_id: 'm' } }),
+            );
+            currencyActions.swapEntry.mockResolvedValueOnce(unclear);
+            setup(single([{ type: 'swap', entry: { by: 'mostVotes' }, with: { memory: 'held' } }]));
+            ledger.set(7, { ...initialState('Plan', 'main', NOW), memory: { held: 'n1' } });
+            const c = challenge();
+            await run(c);
+            expect(state().spent.swaps).toBe(1);
+
+            autoFill.refreshChallengeState.mockResolvedValueOnce('invalid');
+            await run(c);
+            expect(currencyActions.swapEntry).toHaveBeenCalledTimes(1);
+            expect(state().fired).toEqual({});
+            expect(state().inFlight).toEqual(
+                expect.objectContaining({ ruleId: 'r1', actionIndex: 0, unclear: ['swap'] }),
+            );
+            expect(state().spent.swaps).toBe(1);
+        });
+
+        test('a committed rule defers at a step whose re-read cannot be trusted, and resumes there next pass', async () => {
+            currencyActions.fillExposure.mockResolvedValueOnce(invalid({ ok: true }));
+            pass.api.applyBoostToEntry.mockResolvedValueOnce(null);
+            setup(single([{ type: 'fillExposure' }, { type: 'boost', entry: { by: 'bestRank' } }]));
+            const c = challenge();
+            await run(c);
+            expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 1 });
+            expect(state().spent.fills).toBe(1);
+
+            autoFill.refreshChallengeState.mockResolvedValueOnce('invalid');
+            await run(c);
+            // Deferred, not failed: the boost was not applied again, the rule holds at the step, and the
+            // pass-1 problem is left as it was (a deferred step records no problem of its own).
+            expect(pass.api.applyBoostToEntry).toHaveBeenCalledTimes(1);
+            expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 1 });
+            expect(state().lastError!.message).toContain('was refused');
+            expect(state().fired).toEqual({});
+            expect(log.warning).toHaveBeenCalledWith(expect.stringContaining('challenge data cannot be read'), null);
+
+            await run(c);
+            expect(pass.api.applyBoostToEntry).toHaveBeenCalledTimes(2);
+            expect(state().inFlight).toBeNull();
+            expect(state().fired.r1).toBeDefined();
+        });
+
+        test('enterPhoto best: an unreadable fill (data-incomplete) defers the step instead of failing it', async () => {
+            autoFill.submitNewEntryForAction.mockResolvedValue({ ok: false, imageId: null, reason: 'data-incomplete' });
+            setup(single([{ type: 'enterPhoto', photo: 'best' }]));
+            await run();
+            // A failed step would record "no photo was entered (data-incomplete)"; a deferred one records nothing.
+            expect(state().fired).toEqual({});
+            expect(state().lastError).toBeNull();
+            expect(log.warning).toHaveBeenCalledWith(expect.stringContaining('challenge data cannot be read'), null);
+        });
+    });
+
+    test('a data-incomplete live check fails the spend step (never a skip): a committed rule retries it', async () => {
+        currencyActions.fillExposure.mockResolvedValueOnce(invalid({ ok: true }));
+        currencyActions.unlockBoostWithKey.mockResolvedValueOnce({ ok: false, outcome: 'data-incomplete' });
+        setup(single([{ type: 'fillExposure' }, { type: 'unlockBoost' }]));
+        await run();
+        // A committed rule passes over a skipped step for good; this one stops the rule at the step instead.
+        expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 1 });
+        expect(state().lastError!.message).toContain('unlockBoost was refused (data-incomplete)');
+
+        currencyActions.unlockBoostWithKey.mockResolvedValueOnce(invalid({ ok: true }));
+        await run();
+        expect(currencyActions.unlockBoostWithKey).toHaveBeenCalledTimes(2);
+        expect(state().fired.r1).toBeDefined();
+    });
+
     test('a committed rule passes over a permanently skipped step and still reaches its goto', async () => {
         currencyActions.swapEntry.mockResolvedValue({ ok: true, outcome: 'ok' });
         setup(

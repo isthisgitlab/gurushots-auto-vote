@@ -3,6 +3,7 @@
 import { getRandomCheckFrequencyMs, anchoredWaitMs, MIN_CYCLE_GAP_MS, OFFLINE_RETRY_MS } from '../randomDelay';
 import { computeNextCycleDelayMs } from '../thresholdWindow';
 import { effectiveTimezone } from '../../settings/uiDefaults';
+import { isMarkedChallenge } from '../../challengeMarks';
 
 import type { ActiveChallengesResponse, Challenge } from '../../types/gurushots';
 import type { CadenceDecision } from '../thresholdWindow';
@@ -34,6 +35,38 @@ export const DECISION_ERROR_MESSAGE = 'Error computing next cycle delay; using n
 const normalWaitMs = (delayMs: number, previousCycleStartMs: number | null, fetchFailed: boolean): number => {
     const waitMs = anchoredWaitMs(delayMs, previousCycleStartMs);
     return fetchFailed ? Math.min(waitMs, OFFLINE_RETRY_MS) : waitMs;
+};
+
+const sameIdSet = (a: ReadonlySet<string>, b: ReadonlySet<string>): boolean =>
+    a.size === b.size && [...a].every((id) => b.has(id));
+
+/**
+ * The one-wait cap for a degraded read: when a read's marked-id set is
+ * non-empty and differs from the tracker's previous set, the next wait is
+ * capped once to OFFLINE_RETRY_MS, so the loop re-reads soon after a new
+ * degradation arrives. The same set on the next decision does not cap again —
+ * the normal cadence resumes and nothing polls every 30 s — and an empty set
+ * never caps. `pruneUnsafe` plays no part here: only the marks do.
+ *
+ * Each tracker keeps its previous set in memory; the cadence chain and the
+ * headless loop each hold one.
+ */
+export const createMarkedReadCap = (): ((challenges: readonly Challenge[]) => number | null) => {
+    let previous: ReadonlySet<string> = new Set();
+    return (challenges) => {
+        const marked = new Set(challenges.filter(isMarkedChallenge).map((challenge) => String(challenge.id)));
+        const changed = marked.size > 0 && !sameIdSet(marked, previous);
+        previous = marked;
+        return changed ? OFFLINE_RETRY_MS : null;
+    };
+};
+
+// The cadence chain's in-memory previous marked-id set.
+let capForNewMarks = createMarkedReadCap();
+
+/** Test-only: clear the chain's in-memory previous marked-id set. */
+export const __resetMarkedReadCapForTests = (): void => {
+    capForNewMarks = createMarkedReadCap();
 };
 
 /**
@@ -91,7 +124,9 @@ type DecisionDeps = Pick<
  * anchored to the *start* of the previous cycle so the gap between cycle
  * starts ≈ the rolled delay regardless of how long the cycle took; in
  * approaching/last-minute/scheduled mode the wait runs from cycle
- * completion so the boundary is never undershot.
+ * completion so the boundary is never undershot. A new degraded read (a
+ * non-empty marked-id set that differs from the previous decision's) caps
+ * the wait once to OFFLINE_RETRY_MS, in either mode.
  *
  * @param deps - the chain's host transport (see createCadenceChain)
  *   the wait plus the list/clock snapshot for the onCycleChallenges hook
@@ -130,15 +165,22 @@ const decideNextWait = async (
         resolveScenarioWake: deps.resolveScenarioWake,
     });
 
+    // A new degraded read caps the next wait once, whatever mode decided it.
+    // A failed read skips the tracker entirely: its empty list must not reset
+    // the previous set, or the same marked set after the outage would cap
+    // again as if new.
+    const capMs = fetchFailedNow ? null : capForNewMarks(challenges);
+
     if (decision.mode === 'normal') {
-        const waitMs = normalWaitMs(decision.delayMs, previousCycleStartMs, fetchFailedNow);
+        const uncapped = normalWaitMs(decision.delayMs, previousCycleStartMs, fetchFailedNow);
+        const waitMs = capMs === null ? uncapped : Math.min(uncapped, capMs);
         await deps.log.cadence(
             'normal',
             `Next cycle in ${(waitMs / 60_000).toFixed(2)} min (target ${(decision.delayMs / 60_000).toFixed(2)} min between starts, range ${settings.checkFrequencyMin}-${settings.checkFrequencyMax})`,
         );
         return { waitMs, cycleChallenges: challenges, cycleNow: now };
     }
-    const waitMs = decision.delayMs;
+    const waitMs = capMs === null ? decision.delayMs : Math.min(decision.delayMs, capMs);
     await deps.log.cadence(decision.mode, describeBoundaryCadence(decision, waitMs));
     return { waitMs, cycleChallenges: challenges, cycleNow: now };
 };

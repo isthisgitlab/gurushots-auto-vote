@@ -403,11 +403,11 @@ describe('progress', () => {
         expect(caption.id).not.toBe('');
     });
 
-    test('a ranking total without a percentage shows no percentage text', () => {
+    test('a ranking total without a percentage shows neither bar nor % text', () => {
         const { container } = renderCard(
             withTotal({ votes: 5, rank: 1, level: 5, level_name: 'ALL STAR', next_message: '' }),
         );
-        expect(container.querySelector('progress')!.parentElement!.textContent).toBe('');
+        expect(container.querySelector('progress')).toBeNull();
     });
 
     test('levels past the named table fall back to LEVEL n', () => {
@@ -580,7 +580,8 @@ describe('fill', () => {
         unmount();
         renderCard(makeChallenge({ max_photo_submits: undefined, member: { ranking: { entries: undefined } } }));
         expect(screen.queryByText('+1')).toBeNull();
-        expect(screen.getByText('0/')).toBeTruthy();
+        // No fraction off an unreadable max — never "0/undefined".
+        expect(screen.getByText('app.yourEntries').nextElementSibling?.textContent).toBe('—');
     });
 });
 
@@ -1385,5 +1386,66 @@ describe('levels_rank_enable off hides the level lines alone', () => {
         unmount();
         renderCard(withLevels(undefined));
         expect(screen.getByText('POPULAR 1')).toBeTruthy();
+    });
+});
+
+describe('display fields the read left unreadable', () => {
+    const withTotal = (total: RankingTotal) =>
+        makeChallenge({
+            ranking_levels: { level_2: 500, level_7: 9000 },
+            member: { ranking: { total } },
+        });
+
+    test('counts that are not finite numbers show an em dash in the stats grid', () => {
+        const { unmount } = renderCard(
+            makeChallenge({
+                entries: invalid<Challenge['entries']>(null),
+                players: invalid<Challenge['players']>(null),
+            }),
+        );
+        expect(screen.getByText('app.entries').nextElementSibling?.textContent).toBe('—');
+        expect(screen.getByText('app.players').nextElementSibling?.textContent).toBe('—');
+        unmount();
+        renderCard(makeChallenge({ entries: invalid<Challenge['entries']>(Number.NaN) }));
+        expect(screen.getByText('app.entries').nextElementSibling?.textContent).toBe('—');
+    });
+
+    test('a non-finite exposure shows an em dash and hides the Vote button; a finite one below 100 shows both', () => {
+        const { unmount } = renderCard(
+            makeChallenge({ member: { ranking: { exposure: { exposure_factor: invalid<number>(null) } } } }),
+        );
+        expect(screen.getByText('app.exposure').nextElementSibling?.textContent).toBe('—');
+        expect(screen.queryByText('app.vote')).toBeNull();
+        unmount();
+        renderCard(makeChallenge({ member: { ranking: { exposure: { exposure_factor: 45 } } } }));
+        expect(screen.getByText('app.exposure').nextElementSibling?.textContent).toBe('45%');
+        expect(screen.getByText('app.vote')).toBeTruthy();
+    });
+
+    test('no bar without a readable percentage, and no level badge without level fields', () => {
+        // Level fields present, percentage absent: the badge alone.
+        const noPercent = renderCard(
+            withTotal({ votes: 5, rank: 1, level: 5, level_name: 'ALL STAR', next_message: '' }),
+        );
+        expect(noPercent.container.querySelector('progress')).toBeNull();
+        expect(screen.getByText('ALL STAR 5')).toBeTruthy();
+        noPercent.unmount();
+        // Percentage present, level fields missing: the bar alone.
+        const noLevel = renderCard(withTotal({ votes: 5, rank: 1, percent: 40, next_message: '' }));
+        expect(noLevel.container.querySelector('progress')).not.toBeNull();
+        expect(screen.queryByText(/(POPULAR|ALL STAR) \d/)).toBeNull();
+        noLevel.unmount();
+        // Level fields of the wrong kind: still no badge.
+        renderCard(
+            withTotal({
+                votes: 5,
+                rank: 1,
+                level: invalid<number>(null),
+                level_name: invalid<string>(null),
+                percent: 1,
+                next_message: '',
+            }),
+        );
+        expect(screen.queryByText('null null')).toBeNull();
     });
 });

@@ -199,7 +199,12 @@ const maybeEmergencyFillChallenge = async (
     });
     if (attempt.status === 'no-pick') return 'no-eligible-photos';
     // Emergency fill ignores Submit Only Chosen Photos, so it never answers 'no-chosen'.
-    if (attempt.status === 'probe-stand-down' || attempt.status === 'gone' || attempt.status === 'refresh-stand-down') {
+    if (
+        attempt.status === 'probe-stand-down' ||
+        attempt.status === 'gone' ||
+        attempt.status === 'invalid' ||
+        attempt.status === 'refresh-stand-down'
+    ) {
         return 'skipped';
     }
     if (attempt.status !== 'submitted') return 'error';

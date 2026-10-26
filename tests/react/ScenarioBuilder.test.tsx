@@ -383,6 +383,24 @@ describe('simulate', () => {
         expect((await screen.findByRole('alert')).textContent).toContain('app.sbSimulateFailed');
         expect(screen.queryByText('app.sbSimulateNothing')).toBeNull();
     });
+
+    test('a challenge whose data cannot be read refuses with its own next step, not the scenario one', async () => {
+        jest.mocked(window.api.simulateScenario).mockResolvedValueOnce(
+            invalid({ success: false, error: 'challenge-data-incomplete' }),
+        );
+        await renderBuilder();
+        const picker = await screen.findByLabelText<HTMLSelectElement>('app.sbSimulateOn');
+        await waitFor(() => expect(within(picker).getByText('Show')).toBeTruthy());
+        changeSelect(picker, '7');
+        click('app.sbSimulate');
+        // Both keys render in one span, so the assertions read the span's text; the lookahead tells the
+        // default next step apart from the refusal one ("…NextRefresh").
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toContain('app.sbSimulateDataIncomplete');
+        expect(alert.textContent).toContain('app.scenarioErrorNextRefresh');
+        expect(alert.textContent).not.toMatch(/app\.scenarioErrorNext(?!Refresh)/);
+        expect(alert.textContent).not.toContain('app.sbSimulateFailed');
+    });
 });
 
 describe('save', () => {

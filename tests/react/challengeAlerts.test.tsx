@@ -12,12 +12,15 @@
 import { render, screen } from './helpers/test-utils';
 import {
     isLowExposure,
+    isMinimalCardChallenge,
     isMissedBoost,
     lowExposureChallenges,
     missedBoostChallenges,
     LOW_EXPOSURE_THRESHOLD,
 } from '@/utils/challengeAlerts';
+import { isMarkedChallenge } from '../../src/ts/challengeMarks';
 import { LowExposureBanner } from '@/components/app/LowExposureBanner';
+import { BoostWindowBanner } from '@/components/app/BoostWindowBanner';
 import { ChallengeNav } from '@/components/app/ChallengeNav';
 import { ChallengeCard } from '@/components/app/ChallengeCard';
 import { buildChallenge } from '../helpers/challengeFixtures';
@@ -125,7 +128,9 @@ describe('challengeAlerts helpers', () => {
     });
 });
 
-// Running, boost-enabled challenge whose boost state is configurable.
+// Running, boost-enabled challenge whose boost state is configurable. The member
+// standing is present, as every active challenge's is — without it the challenge
+// is a minimal card and flagged nowhere.
 const missed = (id: number, title: string, closeIn = 3600, state = 'MISSED') =>
     invalid<Challenge>({
         id,
@@ -133,7 +138,7 @@ const missed = (id: number, title: string, closeIn = 3600, state = 'MISSED') =>
         boost_enable: true,
         start_time: nowSec() - 3600,
         close_time: nowSec() + closeIn,
-        member: { boost: { state } },
+        member: { boost: { state }, ranking: { exposure: { exposure_factor: 50 } } },
     });
 
 describe('isMissedBoost', () => {
@@ -273,5 +278,67 @@ describe('ChallengeNav status dots', () => {
         expect(starved.querySelector('[data-testid="pulse-dot-error"]')).not.toBeNull();
         expect(starved.textContent).toMatch(/app\.lowExposure/);
         expect(plain.querySelector('[data-testid^="pulse-dot"]')).toBeNull();
+    });
+});
+
+// A challenge the boundary marked, whose boost window and exposure are still readable:
+// neither may be claimed from fields the app cannot use safely.
+const markedRunning = (id: number, title: string, exposure: number, boost: BoostFixture = { state: 'UNAVAILABLE' }) =>
+    invalid<Challenge>({ ...running(id, title, exposure, boost), dataIssues: ['member'] });
+
+describe('minimal-card predicates', () => {
+    const now = nowSec();
+
+    test('isMarkedChallenge is true only for a non-empty dataIssues list', () => {
+        expect(isMarkedChallenge(invalid<Challenge>({ id: 1, dataIssues: ['member'] }))).toBe(true);
+        expect(isMarkedChallenge(invalid<Challenge>({ id: 1 }))).toBe(false);
+        expect(isMarkedChallenge(invalid<Challenge>({ id: 1, dataIssues: [] }))).toBe(false);
+    });
+
+    test('isMinimalCardChallenge: marked, unranked or without an exposure object — not a null factor', () => {
+        expect(isMinimalCardChallenge(null)).toBe(true);
+        expect(isMinimalCardChallenge(invalid<Challenge>({ id: 1, dataIssues: ['member'] }))).toBe(true);
+        expect(isMinimalCardChallenge(invalid<Challenge>({ id: 1 }))).toBe(true);
+        expect(isMinimalCardChallenge(invalid<Challenge>({ id: 1, member: {} }))).toBe(true);
+        expect(isMinimalCardChallenge(invalid<Challenge>({ id: 1, member: { ranking: {} } }))).toBe(true);
+        expect(
+            isMinimalCardChallenge(
+                invalid<Challenge>({ id: 1, member: { ranking: { exposure: { exposure_factor: null } } } }),
+            ),
+        ).toBe(false);
+        expect(isMinimalCardChallenge(running(1, 'a', 50))).toBe(false);
+    });
+
+    test('isLowExposure skips a marked challenge and an exposure object without a factor', () => {
+        expect(isLowExposure({ ...running(1, 'a', 0), dataIssues: ['member'] }, now)).toBe(false);
+        expect(
+            isLowExposure(invalid<Challenge>({ ...running(1, 'a', 0), member: { ranking: { exposure: {} } } }), now),
+        ).toBe(false);
+    });
+
+    test('isMissedBoost skips a marked challenge', () => {
+        expect(isMissedBoost({ ...missed(1, 'a'), dataIssues: ['member'] }, now)).toBe(false);
+        expect(isMissedBoost(missed(1, 'a'), now)).toBe(true);
+    });
+});
+
+describe('minimal-card challenges stay out of the banners', () => {
+    test('LowExposureBanner skips a marked challenge even at 0%', () => {
+        render(<LowExposureBanner challenges={[markedRunning(1, 'Marked', 0)]} />);
+        expect(screen.queryByRole('button')).toBeNull();
+    });
+
+    test('BoostWindowBanner skips a marked challenge even with its window open, and keeps a readable one', () => {
+        render(
+            <BoostWindowBanner
+                challenges={[
+                    markedRunning(2, 'Marked', 50, { state: 'AVAILABLE' }),
+                    running(3, 'Boosty', 50, { state: 'AVAILABLE_KEY' }),
+                ]}
+            />,
+        );
+        const buttons = screen.getAllByRole('button');
+        expect(buttons).toHaveLength(1);
+        expect(buttons[0].textContent).toMatch(/Boosty/);
     });
 });

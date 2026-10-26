@@ -1,7 +1,7 @@
 import { Fragment, useId, useMemo, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { formatEndTime, getLevelStatus, isBoostAvailable, statusText } from '@/utils/formatters';
-import { getNextLevelInfo } from '@/utils/challengeCardView';
+import { countText, exposureText, getNextLevelInfo } from '@/utils/challengeCardView';
 import { sanitizeWelcomeMessage } from '@/utils/sanitizeWelcomeMessage';
 import { statusBadgeClass, toneBadgeClass } from '@/utils/statTone';
 import { prizeItemsText } from '@/utils/prizeText';
@@ -137,6 +137,9 @@ function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; 
         userProgress.level as number,
         userProgress.level_name as string,
     );
+    // The level badge names its fields: a missing or garbled level or name shows none (the
+    // incident shape the boundary warns about), while the bar and the rank can still render.
+    const levelShown = typeof userProgress.level === 'number' && typeof userProgress.level_name === 'string';
     const showLevels = challenge.levels_rank_enable !== false;
     const scores = parseBenchmarkScores(userProgress.benchmark);
     const listed = ([1, 10, 100] as const).flatMap((group) => {
@@ -166,7 +169,7 @@ function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; 
                 <span id={progressLabelId} className="text-xs font-medium">
                     {t('app.yourProgress')}
                 </span>
-                {showLevels && (
+                {showLevels && levelShown && (
                     <span className={`badge badge-sm ${colorClass}`}>
                         {userProgress.level_name} {userProgress.level}
                     </span>
@@ -188,17 +191,21 @@ function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; 
                 </div>
             )}
             <div className="flex items-center gap-2">
-                <progress
-                    className={`progress ${progressClass} w-full`}
-                    value={userProgress.percent}
-                    max="100"
-                    aria-labelledby={progressLabelId}
-                />
-                {/* The bar alone says it by colour and length; the progress element already announces the value. */}
-                {userProgress.percent !== undefined && (
-                    <span className="text-xs tabular-nums shrink-0" aria-hidden="true">
-                        {Math.round(userProgress.percent)}%
-                    </span>
+                {/* The bar and its % label only for a readable percentage; the incident shape the
+                    boundary warns about (a missing or garbled one) shows neither. */}
+                {typeof userProgress.percent === 'number' && (
+                    <>
+                        <progress
+                            className={`progress ${progressClass} w-full`}
+                            value={userProgress.percent}
+                            max="100"
+                            aria-labelledby={progressLabelId}
+                        />
+                        {/* The bar alone says it by colour and length; the progress element already announces the value. */}
+                        <span className="text-xs tabular-nums shrink-0" aria-hidden="true">
+                            {Math.round(userProgress.percent)}%
+                        </span>
+                    </>
                 )}
             </div>
             {showLevels && challenge.type !== 'flash' && (
@@ -248,7 +255,7 @@ function StatusCells({
             </StatCell>
             <StatCell label={t('app.exposure')}>
                 <div className={STAT_VALUE}>
-                    <span className={toneBadgeClass(view.exposureTone, 'md')}>{view.exposureFactor}%</span>
+                    <span className={toneBadgeClass(view.exposureTone, 'md')}>{exposureText(view.exposureFactor)}</span>
                 </div>
                 {actions.fillExposureButton}
             </StatCell>
@@ -271,7 +278,10 @@ function StatusCells({
             </StatCell>
             <StatCell label={t('app.yourEntries')}>
                 <div className={STAT_VALUE}>
-                    {view.entries.length}/{challenge.max_photo_submits}
+                    {/* A max the read left non-finite shows no fraction — never "1/undefined". */}
+                    {Number.isFinite(challenge.max_photo_submits)
+                        ? `${view.entries.length}/${challenge.max_photo_submits}`
+                        : '—'}
                 </div>
                 {view.canFill && (
                     <div className="flex flex-wrap gap-2 justify-center">
@@ -525,10 +535,10 @@ export function ChallengeCardDetail({
             {/* Challenge Statistics — stacks 2-up on phones, 4-up on tablets+. */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                 <StatCell label={t('app.entries')}>
-                    <div className={STAT_VALUE}>{challenge.entries.toLocaleString()}</div>
+                    <div className={STAT_VALUE}>{countText(challenge.entries)}</div>
                 </StatCell>
                 <StatCell label={t('app.players')}>
-                    <div className={STAT_VALUE}>{challenge.players.toLocaleString()}</div>
+                    <div className={STAT_VALUE}>{countText(challenge.players)}</div>
                 </StatCell>
                 <StatCell label={t('app.votes')}>
                     <div className={STAT_VALUE}>{(challenge.votes ?? 0).toLocaleString()}</div>

@@ -54,6 +54,7 @@ const makeChallenge = (overrides: object = {}) =>
     invalid<FixtureChallenge>({
         id: 555,
         title: 'Anything Goes',
+        url: 'https://exampleshots.test/c/anything-goes',
         start_time: NOW - 12 * H,
         close_time: NOW + 12 * H,
         boost_enable: true,
@@ -363,6 +364,50 @@ describe('runAutoSwap', () => {
         expect(await runAutoSwap(makeCtx({ challenge }))).toBe(false);
     });
 
+    describe('the missing swap-history warning', () => {
+        test('warns once per challenge when the history is absent, and still swaps', async () => {
+            const ctx = makeCtx({ challenge: makeChallenge({ id: 777 }) });
+            delete ctx.challenge.member.ranking.swaps;
+            expect(await runAutoSwap(ctx)).toBe(true);
+            expect(
+                warningLines().filter((line) =>
+                    line.includes("swap cap uses the server's swap history, which is missing"),
+                ),
+            ).toHaveLength(1);
+            // The same challenge again: still swaps, never warns twice.
+            const again = makeCtx({ challenge: makeChallenge({ id: 777 }) });
+            delete again.challenge.member.ranking.swaps;
+            expect(await runAutoSwap(again)).toBe(true);
+            expect(
+                warningLines().filter((line) =>
+                    line.includes("swap cap uses the server's swap history, which is missing"),
+                ),
+            ).toHaveLength(1);
+        });
+
+        test('a challenge whose history is present says nothing', async () => {
+            const ctx = makeCtx({ challenge: makeChallenge({ id: 888 }) });
+            expect(await runAutoSwap(ctx)).toBe(true);
+            expect(
+                warningLines().filter((line) =>
+                    line.includes("swap cap uses the server's swap history, which is missing"),
+                ),
+            ).toHaveLength(0);
+        });
+
+        test('autoSwap off warns nothing', async () => {
+            set({ autoSwap: false });
+            const ctx = makeCtx({ challenge: makeChallenge({ id: 999 }) });
+            delete ctx.challenge.member.ranking.swaps;
+            expect(await runAutoSwap(ctx)).toBe(false);
+            expect(
+                warningLines().filter((line) =>
+                    line.includes("swap cap uses the server's swap history, which is missing"),
+                ),
+            ).toHaveLength(0);
+        });
+    });
+
     test('a failed preview or swap spends nothing and changes nothing', async () => {
         currencyActions.previewSwap.mockResolvedValueOnce({ ok: false, outcome: 'no-alternative' });
         const ctx = makeCtx();
@@ -500,6 +545,20 @@ describe('runAutoExposureFill', () => {
         expect(ctx.currency.strategy.getVoteImages).toHaveBeenCalledWith(ctx.challenge, 'tok');
     });
 
+    test('no fill when the pool must be read but the challenge has no URL', async () => {
+        const ctx = makeCtx({ pool: pool(20, [40]) });
+        delete ctx.challenge.url;
+        expect(await runAutoExposureFill(ctx, undefined)).toBe(false);
+        expect(ctx.currency.strategy.getVoteImages).not.toHaveBeenCalled();
+    });
+
+    test('a pool the pass already voted from fills without a URL', async () => {
+        const ctx = makeCtx();
+        delete ctx.challenge.url;
+        expect(await runAutoExposureFill(ctx, null)).toBe(true);
+        expect(ctx.currency.strategy.getVoteImages).not.toHaveBeenCalled();
+    });
+
     test('no fill while exposure is at or above the threshold', async () => {
         set({ autoExposureFillBelow: 20 });
         expect(await runAutoExposureFill(makeCtx(), null)).toBe(false);
@@ -584,6 +643,16 @@ const infoLines = (): string[] =>
         .mocked(require('../../src/ts/logger') as typeof loggerModule)
         .withCategory.mock.results.flatMap((result) =>
             jest.mocked((result.value as loggerModule.CategoryLogger).info).mock.calls.map((call) => String(call[0])),
+        );
+
+// The same, for warnings (the T-methods render onto the warning fn too).
+const warningLines = (): string[] =>
+    jest
+        .mocked(require('../../src/ts/logger') as typeof loggerModule)
+        .withCategory.mock.results.flatMap((result) =>
+            jest
+                .mocked((result.value as loggerModule.CategoryLogger).warning)
+                .mock.calls.map((call) => String(call[0])),
         );
 
 // The mission needs a pass hands over, with one "Use Fill" mission (id 77: 1 of 3 done) unless told otherwise.

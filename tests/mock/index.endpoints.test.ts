@@ -23,16 +23,26 @@ jest.mock('../../src/ts/services/missions', () => ({
         needs ? jest.fn() : null,
     ),
 }));
+// Partial mock: the real module spread, so rememberChallengeTitles can be
+// spied on (swc's real-module exports are non-configurable getters).
+jest.mock('../../src/ts/settings', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/settings')>('../../src/ts/settings'),
+}));
 
 import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(loggerModule);
 import metadataModule = require('../../src/ts/metadata');
 const metadata = jest.mocked(metadataModule);
+import settingsModule = require('../../src/ts/settings');
 import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
 import type * as joinChallengesModule from '../../src/ts/services/joinChallenges';
 import type * as missionsModule from '../../src/ts/services/missions';
 import type * as indexModule from '../../src/ts/mock/index';
 import type * as photoLibraryModule from '../../src/ts/mock/photoLibrary';
+import type * as sessionCacheModule from '../../src/ts/mock/sessionCache';
+import type * as challengeIntegrityModule from '../../src/ts/challengeIntegrity';
+import type * as plainObjectModule from '../../src/ts/plainObject';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import { LIBRARY_BATCH_PHOTOS } from '../../src/ts/settings/limits';
 import { invalid } from '../helpers/invalid';
@@ -49,6 +59,10 @@ const { loadMissionNeeds, registerMissionNeeds } = jest.mocked(
     require('../../src/ts/services/missions') as typeof missionsModule,
 );
 const { mockApiClient, clearSessionCache } = require('../../src/ts/mock/index') as typeof indexModule;
+const { getSessionCache } = require('../../src/ts/mock/sessionCache') as typeof sessionCacheModule;
+const { __resetForTests: resetBoundaryLogState } =
+    require('../../src/ts/challengeIntegrity') as typeof challengeIntegrityModule;
+const { isPlainObject } = require('../../src/ts/plainObject') as typeof plainObjectModule;
 const { buildLibraryPhotos, SUGGESTED_PHOTO_IDS } =
     require('../../src/ts/mock/photoLibrary') as typeof photoLibraryModule;
 
@@ -67,9 +81,16 @@ const settle = async <T>(promise: Promise<T>): Promise<T> => {
 };
 
 let cat: {
-    [K in 'api' | 'debug' | 'info' | 'success' | 'warning' | 'error']: jest.MockedFunction<
-        loggerModule.CategoryLogger[K]
-    >;
+    [K in
+        | 'api'
+        | 'debug'
+        | 'info'
+        | 'success'
+        | 'warning'
+        | 'error'
+        | 'warningT'
+        | 'infoT'
+        | 'errorT']: jest.MockedFunction<loggerModule.CategoryLogger[K]>;
 };
 beforeEach(() => {
     jest.useFakeTimers();
@@ -80,6 +101,9 @@ beforeEach(() => {
         success: jest.fn(),
         warning: jest.fn(),
         error: jest.fn(),
+        warningT: jest.fn(),
+        infoT: jest.fn(),
+        errorT: jest.fn(),
     };
     logger.withCategory.mockReturnValue(invalid(cat));
     clearSessionCache();
@@ -125,6 +149,108 @@ describe('no-token contract for every endpoint not covered elsewhere', () => {
     ])('%s resolves its failure shape and logs the auth error', async (_name, call, expected) => {
         await expect(call()).resolves.toEqual(expected);
         expect(cat.error).toHaveBeenCalledWith(expect.stringMatching(/^No token provided/), null);
+    });
+});
+
+describe('the active-challenge boundary on the mock read', () => {
+    const getChallenges = () => settle(mockApiClient.getActiveChallenges('tok'));
+
+    beforeEach(() => {
+        // Fresh log-dedup state per test: the generated ids can repeat across
+        // sessions (a random base id), and the same codes must log again.
+        resetBoundaryLogState();
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
+    test('the facts are remembered from the normalized list, marks included', async () => {
+        // Capture the mark AT CALL TIME: the boundary mutates the same object
+        // in place, so comparing arguments after the fact could not tell
+        // whether the facts saw the list before or after normalize ran.
+        const original = settingsModule.rememberChallengeTitles;
+        let seenIssues: Array<string[] | undefined> = [];
+        const rememberSpy = jest
+            .spyOn(settingsModule, 'rememberChallengeTitles')
+            .mockImplementation((challenges, pruneUnsafe) => {
+                seenIssues = (challenges ?? []).map((challenge) => challenge.dataIssues);
+                return original(challenges, pruneUnsafe);
+            });
+        const bad: {
+            id: number;
+            title: string;
+            url: string;
+            start_time: number;
+            close_time: number;
+            dataIssues?: string[];
+        } = { id: 9002, title: 'Bad close', url: 'bad-close', start_time: 1_800_000_000, close_time: 1e11 };
+        const cache = getSessionCache();
+        cache.challenges = invalid<NonNullable<typeof cache.challenges>>({ challenges: [bad] });
+
+        await getChallenges();
+
+        // normalize marked it BEFORE the facts memory ran: the mark was already
+        // on the list at call time, and the prune-unsafe flag came along.
+        expect(seenIssues).toEqual([['close_time']]);
+        expect(rememberSpy).toHaveBeenCalledWith([bad], false);
+    });
+
+    test('the generated mock challenges produce no marks', async () => {
+        const result = await getChallenges();
+
+        expect(result.challenges.length).toBeGreaterThan(0);
+        expect(result.fetchFailed).toBe(false);
+        expect(result.pruneUnsafe).toBe(false);
+        for (const challenge of result.challenges) expect(challenge.dataIssues).toBeUndefined();
+        // No marks and no incident shape: every mock total carries level, level_name and percent.
+        expect(cat.warningT).not.toHaveBeenCalled();
+    });
+
+    test('most mock challenges carry no swaps, and that warning logs at debug level only', async () => {
+        const result = await getChallenges();
+        const swapLess = result.challenges.filter((challenge) => !Array.isArray(challenge.member?.ranking?.swaps));
+        expect(swapLess.length).toBeGreaterThan(0);
+
+        const swapLessWarnings = cat.debug.mock.calls.filter(
+            ([_message, data]) =>
+                isPlainObject(data) &&
+                Array.isArray(data.codes) &&
+                (data.codes as unknown[]).includes('ranking.swaps_absent'),
+        );
+        // One debug line per swap-less challenge, carrying the codes only.
+        expect(swapLessWarnings).toHaveLength(swapLess.length);
+        expect(cat.warning).not.toHaveBeenCalled();
+        expect(cat.warningT).not.toHaveBeenCalled();
+    });
+
+    test('boostHoldUntil survives a re-read in the middle of a pass', async () => {
+        const first = await getChallenges();
+        first.challenges[0].boostHoldUntil = 1_800_000_000;
+
+        const second = await getChallenges();
+
+        // Stripping is off on the mock read: the pass-set field survives.
+        expect(second.challenges[0].boostHoldUntil).toBe(1_800_000_000);
+    });
+
+    test('a fixed mock object loses its mark on the next read', async () => {
+        const fixed: { id: number; title: string; url: string; start_time: number; close_time: number | string } = {
+            id: 9001,
+            title: 'Fixed',
+            url: 'fixed',
+            start_time: 1_800_000_000,
+            close_time: 'nonsense',
+        };
+        const cache = getSessionCache();
+        cache.challenges = invalid<NonNullable<typeof cache.challenges>>({ challenges: [fixed] });
+
+        const marked = await getChallenges();
+        expect(marked.challenges[0].dataIssues).toEqual(['close_time']);
+
+        fixed.close_time = 1_800_086_400;
+        const clean = await getChallenges();
+        expect(clean.challenges[0].dataIssues).toBeUndefined();
     });
 });
 

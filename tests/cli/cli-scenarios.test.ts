@@ -572,6 +572,18 @@ describe('scenario-reset / dry-run / vocabulary', () => {
         await expect(cmd.scenarioDryRunCmd('7')).resolves.toBe(1);
     });
 
+    test('a challenge whose data cannot be read is worded, never the raw code', async () => {
+        h['dry-run-scenario'].mockResolvedValueOnce({ success: false, error: 'challenge-data-incomplete' });
+        await expect(cmd.scenarioDryRunCmd('7')).resolves.toBe(1);
+        expect(text('error')).toContain("The challenge's data cannot be read, so the scenario cannot be checked");
+        expect(text('error')).not.toContain('challenge-data-incomplete');
+
+        h['simulate-scenario'].mockResolvedValueOnce({ success: false, error: 'challenge-data-incomplete' });
+        await expect(cmd.scenarioSimulateCmd('7')).resolves.toBe(1);
+        expect(text('error')).toContain("The challenge's data cannot be read, so the scenario cannot be checked");
+        expect(text('error')).not.toContain('challenge-data-incomplete');
+    });
+
     test('simulate prints the timeline and why it stops', async () => {
         h['simulate-scenario'].mockResolvedValueOnce(
             invalid({

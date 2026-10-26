@@ -80,6 +80,21 @@ describe('entry-age ledger', () => {
         expect(store.peek()['1'].entered).toEqual({ a: 0 });
     });
 
+    test('a record a fetch stops observing (a marked challenge) expires only by its closeTime', () => {
+        const ledger = createMemoryEntryAgeLedger();
+        ledger.observe(challenge(1, ['a']), NOW); // closes at NOW + 3600
+
+        // Other challenges keep writing (each write sweeps the store); the
+        // unobserved record simply stays.
+        ledger.observe(challenge(2, ['x']), NOW + 1800);
+        expect(ledger.enteredAt(1, 'a')).not.toBeNull();
+
+        // Past its close time, the next write that changes something drops it —
+        // there is no "not observed recently" expiry.
+        ledger.observe(challenge(2, ['x', 'y']), NOW + 3601);
+        expect(ledger.enteredAt(1, 'a')).toBeNull();
+    });
+
     test('ignores entries without an id and a challenge without one', () => {
         const store = rawStore(null);
         const ledger = createEntryAgeLedger(store);

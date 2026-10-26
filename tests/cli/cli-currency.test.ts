@@ -80,6 +80,7 @@ const { unlockBoostCmd, swapCmd, swapBackCmd, fillExposureCmd } =
     require('../../src/ts/cli/commands/actions') as typeof actionsModule;
 
 const msgsAt = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
+const allMsgs = () => logger.__calls.map((c) => String(c.msg));
 const contains = (arr: string[], sub: string) => arr.some((s) => s.includes(sub));
 const { renderLogTemplate } = require('../helpers/logTemplate') as typeof import('../helpers/logTemplate');
 
@@ -121,6 +122,13 @@ describe.each([
         await cmd('111', { yes: true });
         expect(contains(msgsAt('error'), 'may or may not have gone through')).toBe(true);
         expect(contains(msgsAt('error'), 'rejected')).toBe(false);
+    });
+
+    test('a data-incomplete refusal reads as words, never the raw code', async () => {
+        handlers[channel].mockResolvedValue({ success: false, outcome: 'data-incomplete' });
+        await cmd('111', { yes: true });
+        expect(contains(msgsAt('error'), "challenge's data cannot be read")).toBe(true);
+        expect(contains(allMsgs(), 'data-incomplete')).toBe(false);
     });
 
     test('unknown challenge: nothing dispatched', async () => {

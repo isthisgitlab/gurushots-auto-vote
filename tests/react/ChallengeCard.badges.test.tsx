@@ -142,6 +142,22 @@ describe('ChallengeCard badge row — logical/state badges', () => {
         expect([...badges].every((badge) => badge.classList.contains('badge-sm'))).toBe(true);
     });
 
+    test('a non-finite exposure figure reads as an em dash in the low-exposure badge', () => {
+        const { container } = render(
+            <ChallengeBadgeRow
+                challenge={makeChallenge()}
+                boostOpen={false}
+                boostTimeLeft={null}
+                lowExposure
+                exposureFactor={invalid<number>(null)}
+                showAutoSubmitBadge={false}
+                showManualPhotosBadge={false}
+                hasCustomSettings={false}
+            />,
+        );
+        expect(badgeByText(container, '👁 app.exposure —')).toBeTruthy();
+    });
+
     test('badge fallback (no type) also gets the icon and the ghost variant', () => {
         const { container } = renderCard(makeChallenge({ type: null, badge: 'Special' }));
         const fallback = badgeByText(container, '🏁 Special');

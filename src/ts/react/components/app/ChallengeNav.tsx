@@ -6,7 +6,7 @@ import type { CustomizationKind } from '@/hooks/useCustomizedChallengeIds';
 import { ChipListPanel, ChallengeChip, ChipTitle } from './ChallengeChips';
 import { PulseDot } from '../ui/PulseDot';
 import { isBoostWindowOpen } from '../../../voting/boostWindow';
-import { isLowExposure } from '@/utils/challengeAlerts';
+import { isLowExposure, isMinimalCardChallenge } from '@/utils/challengeAlerts';
 import { chipToneOf } from '@/utils/customizationTone';
 
 /** What a customization kind means for a chip: manual overrides, an automatic profile, rule values alone. */
@@ -46,8 +46,11 @@ function NavChip({
     ]
         .filter(Boolean)
         .join(' · ');
-    const boostOpen = isBoostWindowOpen(c?.member?.boost, nowSec);
-    const lowExposure = isLowExposure(c, nowSec);
+    // A minimal-card challenge carries no status dots: its fields cannot be
+    // read safely, so neither window nor exposure may be claimed from them.
+    const minimal = isMinimalCardChallenge(c);
+    const boostOpen = !minimal && isBoostWindowOpen(c?.member?.boost, nowSec);
+    const lowExposure = !minimal && isLowExposure(c, nowSec);
     const tone = chipToneOf(kind);
     return (
         <ChallengeChip challengeId={c?.id} className={tone}>

@@ -3,7 +3,7 @@ import { formatDuration } from '@/utils/formatters';
 import { openBoostWindows } from '../../../voting/boostWindow';
 import { isKnownTurboMode } from '../../../voting/turboMode';
 import { useTick } from '@/hooks/useTick';
-import { lowExposureChallenges, missedBoostChallenges } from '@/utils/challengeAlerts';
+import { isMinimalCardChallenge, lowExposureChallenges, missedBoostChallenges } from '@/utils/challengeAlerts';
 import { scrollToChallenge } from '@/utils/scrollToChallenge';
 import { interp } from '@/utils/interp';
 import { FocusDropdown } from '@/components/ui/FocusDropdown';
@@ -207,7 +207,13 @@ export function StatusHeader({
     const list = challenges;
     const nowSec = Math.floor(Date.now() / 1000);
     const activeCount = list.length;
-    const boostsAvailable = openBoostWindows(list, nowSec).length;
+    // Minimal-card challenges stay out of every boost-window surface (the
+    // banner, the nav chips, the card): their fields cannot be read safely, so
+    // no window may be claimed from them here either.
+    const boostsAvailable = openBoostWindows(
+        list.filter((c) => !isMinimalCardChallenge(c)),
+        nowSec,
+    ).length;
     const turbosAvailable = list.filter((c) => isTurboAvailable(c.member?.turbo, nowSec)).length;
     const missedBoosts = missedBoostChallenges(list, nowSec);
     const lowExposureCount = lowExposureChallenges(list, nowSec).length;

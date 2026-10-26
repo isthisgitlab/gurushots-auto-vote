@@ -40,13 +40,15 @@ const BASE_MS = 1_700_000_000_000;
 const wrap = (ui: ComponentChild) => render(<TranslationProvider>{ui}</TranslationProvider>);
 
 // A running, boost-enabled challenge with a MISSED boost, closing `closeIn` s from BASE_MS.
+// The member standing is present, as every active challenge's is — without it the
+// challenge is a minimal card and the missed-boost list skips it.
 const missedChallenge = (id: string, title: string, closeIn: number) => ({
     id,
     title,
     boost_enable: true,
     start_time: BASE_MS / 1000 - 3600,
     close_time: BASE_MS / 1000 + closeIn,
-    member: { boost: { state: 'MISSED' }, turbo: { state: 'NONE' } },
+    member: { boost: { state: 'MISSED' }, turbo: { state: 'NONE' }, ranking: { exposure: { exposure_factor: 50 } } },
 });
 
 const missedChallenges = invalid<Challenge[]>([
@@ -236,14 +238,51 @@ describe('StatusHeader', () => {
 
     test('counts active challenges and available boosts/turbos', () => {
         const challenges = invalid<Challenge[]>([
-            { id: 'a', member: { boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'WON', mode: 'classic' } } },
-            { id: 'b', member: { boost: { state: 'USED' }, turbo: { state: 'NONE' } } },
-            { id: 'c', member: { boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'FREE' } } },
+            {
+                id: 'a',
+                member: {
+                    boost: { state: 'AVAILABLE_KEY' },
+                    turbo: { state: 'WON', mode: 'classic' },
+                    ranking: { exposure: { exposure_factor: 50 } },
+                },
+            },
+            {
+                id: 'b',
+                member: {
+                    boost: { state: 'USED' },
+                    turbo: { state: 'NONE' },
+                    ranking: { exposure: { exposure_factor: 50 } },
+                },
+            },
+            {
+                id: 'c',
+                member: {
+                    boost: { state: 'AVAILABLE_KEY' },
+                    turbo: { state: 'FREE' },
+                    ranking: { exposure: { exposure_factor: 50 } },
+                },
+            },
         ]);
         wrap(<StatusHeader challenges={challenges} nextRunAt={null} running={true} />);
         const text = screen.getByTestId('status-header').textContent;
         expect(text).toContain('3'); // active
         expect(text).toContain('2'); // boosts (two AVAILABLE_KEY) and turbos (WON + FREE)
+    });
+
+    test('an unranked challenge with an open boost window stays out of the boosts count', () => {
+        const challenges = invalid<Challenge[]>([
+            // Unmarked, but without its member standing: a minimal card, whose
+            // window the banner, the nav and the card do not show either.
+            { id: 'm', member: { boost: { state: 'AVAILABLE_KEY' } } },
+            {
+                id: 'k',
+                member: { boost: { state: 'AVAILABLE_KEY' }, ranking: { exposure: { exposure_factor: 50 } } },
+            },
+        ]);
+        const { container } = wrap(<StatusHeader challenges={challenges} nextRunAt={null} running={true} />);
+        const stats = Array.from(container.querySelectorAll('.font-semibold')).map((n) => n.textContent);
+        // active, boosts, turbos: only the ranked challenge's window counts.
+        expect(stats.slice(0, 3)).toEqual(['2', '1', '0']);
     });
 
     test('a TIMER turbo counts once its cooldown has elapsed, not before or without a time', () => {

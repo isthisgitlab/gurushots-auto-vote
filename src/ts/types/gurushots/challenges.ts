@@ -113,12 +113,18 @@ export interface Challenge {
     boostHoldUntil?: UnixSeconds;
     /** App-set, never from the API (like `appEntered`): the team match running on this challenge, when the member's team has one. */
     teamMatch?: TeamMatch;
+    /**
+     * App-set, never from the API: the boundary's stable codes (challengeIntegrity) for the wire
+     * fields that are present but malformed. Actions refuse the challenge while it carries any.
+     */
+    dataIssues?: string[];
 }
 
-/** get_my_active_challenges. `fetchFailed` marks a failed request (empty list). */
+/** get_my_active_challenges. `fetchFailed` marks a failed request (empty list). `pruneUnsafe` marks a read that dropped id-less rows, so absence from this list is not "gone". */
 export interface ActiveChallengesResponse {
     challenges: Challenge[];
     fetchFailed?: boolean;
+    pruneUnsafe?: boolean;
 }
 
 /**

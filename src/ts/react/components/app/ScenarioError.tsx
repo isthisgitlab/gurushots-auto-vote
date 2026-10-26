@@ -6,10 +6,12 @@ import { scenarioIssueText, scenarioPathText } from '@/utils/scenarioIssueText';
 import type { ScenarioIssue } from '../../../settings/scenarioSchema';
 
 /**
- * A failed scenario request: the translation key of what happened, and the
+ * A failed scenario request: the translation key of what happened, the key of
+ * the next step (`next` overrides the default "Fix it and try again." — a
+ * refusal where nothing is wrong with the scenario words its own), and the
  * validator's issues when the handler returned any.
  */
-export type ScenarioErrorInfo = { what: string; issues?: ScenarioIssue[] };
+export type ScenarioErrorInfo = { what: string; next?: string; issues?: ScenarioIssue[] };
 
 /**
  * The validator issues a scenario IPC result carries: present only on a
@@ -42,7 +44,7 @@ export function ScenarioError({ error }: { error: ScenarioErrorInfo | null }) {
     return (
         <div className="alert alert-error py-2 text-sm flex-col items-start" role="alert">
             <span>
-                {t(error.what)} {t('app.scenarioErrorNext')}
+                {t(error.what)} {t(error.next ?? 'app.scenarioErrorNext')}
             </span>
             {issues.length > 0 && (
                 <ul className="text-xs list-disc ml-4">

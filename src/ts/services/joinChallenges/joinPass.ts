@@ -24,6 +24,7 @@ import {
 } from './settingsResolution';
 import { performJoin } from './performJoin';
 import { claimOf, pruneClosedClaims, refreshClaims } from './unlockMarker';
+import { isMarkedChallenge } from '../../challengeMarks';
 
 /**
  * One balance read for the whole pass. A throw here (or a null return) means
@@ -46,7 +47,8 @@ const PENDING_TURBO_STATES = new Set(['FREE', 'IN_PROGRESS', 'TIMER']);
  * How many joins a "Win Turbo" mission still needs: its remaining wins minus
  * the turbos in joined challenges that can be won before the mission expires.
  * A join with a timely turbo stops another early join on the next cycle.
- * An unreadable active list yields 0 — never join early blind.
+ * An unreadable active list yields 0 — never join early blind. So does a read
+ * that dropped elements: the pending count could be short of the truth.
  */
 const turboJoinsNeeded = async (
     token: string,
@@ -56,12 +58,15 @@ const turboJoinsNeeded = async (
 ): Promise<number> => {
     const turboNeed = missions?.turbo ?? 0;
     if (turboNeed <= 0 || !deps.getActiveChallenges) return 0;
-    const { challenges, fetchFailed } = await deps.getActiveChallenges(token);
-    if (fetchFailed) return 0;
+    const { challenges, fetchFailed, pruneUnsafe } = await deps.getActiveChallenges(token);
+    if (fetchFailed || pruneUnsafe) return 0;
     const requirements = missions?.turboRequirements ?? [{ remaining: turboNeed, expiresAtSec: null }];
     let joinsNeeded = 0;
     for (const { remaining, expiresAtSec: deadline } of requirements) {
         const pending = challenges.filter((c) => {
+            // A marked challenge's turbo state cannot be read: it still counts
+            // as a pending turbo, so it alone never drives an early join.
+            if (isMarkedChallenge(c)) return true;
             const state = c?.member?.turbo?.state ?? '';
             // A turbo without a known mode is never played, so it earns nothing toward the mission.
             if (!PENDING_TURBO_STATES.has(state) || !isKnownTurboMode(c?.member?.turbo)) return false;

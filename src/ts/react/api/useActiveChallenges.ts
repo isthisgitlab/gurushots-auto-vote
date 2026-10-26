@@ -25,10 +25,11 @@ const payloadKey = (challenges: Challenge[]): string | null => {
 /**
  * Prunes stale per-challenge data against the challenges now on screen:
  * stale challenge settings only while autovote is stopped, stale metadata on
- * every call.
+ * every call. A prune-unsafe read (the boundary dropped elements that could
+ * not carry an identity) prunes nothing: absence from this list is not "gone".
  */
-const cleanupStale = async (challenges: Challenge[], autovoteRunning: boolean): Promise<void> => {
-    if (challenges.length === 0) return;
+const cleanupStale = async (challenges: Challenge[], autovoteRunning: boolean, pruneUnsafe: boolean): Promise<void> => {
+    if (challenges.length === 0 || pruneUnsafe) return;
     const activeChallengeIds = challenges.map((c) => c.id.toString());
     if (!autovoteRunning) {
         await window.api.cleanupStaleChallengeSetting(activeChallengeIds);
@@ -106,7 +107,7 @@ export function useActiveChallenges(autovoteRunning: boolean = false): {
                 setData(challenges);
             }
 
-            if (!skipCleanup) await cleanupStale(challenges, autovoteRunningRef.current);
+            if (!skipCleanup) await cleanupStale(challenges, autovoteRunningRef.current, result?.pruneUnsafe === true);
         },
         [],
     );

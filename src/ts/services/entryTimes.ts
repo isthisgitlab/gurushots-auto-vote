@@ -14,6 +14,7 @@
 import * as logger from '../logger';
 import { errorKind } from '../errorMessage';
 import { consumeChosenPhotos } from '../settings';
+import { isMarkedChallenge } from '../challengeMarks';
 import type { submitToChallenge as SubmitToChallenge } from '../api/submissions';
 import type { swapPhoto as SwapPhoto } from '../api/currency';
 import type { ActiveChallengesResponse, Challenge, RankingEntry } from '../types/gurushots';
@@ -54,7 +55,8 @@ const refreshWithin = async (ledger: EntryAgeLedger): Promise<void> => {
 /**
  * Sets `appEntered` on every entry of a fetched response: the time the ledger has for it, exact for a photo the app
  * submitted, else the first fetch that showed it. The field is the app's own: whatever the server sent under that name
- * is deleted first, even when the ledger fails. A failed fetch is left alone.
+ * is deleted first, even when the ledger fails. A marked challenge's entries are stripped but never annotated. A failed
+ * fetch is left alone.
  *
  * @param now - Unix seconds
  */
@@ -70,8 +72,11 @@ export const annotateEntryTimes = async (
     // The background service records entries in its own context: see what it wrote.
     await refreshWithin(ledger);
     try {
-        const times = ledger.observeAll(response.challenges, now);
-        for (const challenge of response.challenges) {
+        // Marked challenges are skipped: observing entries off fields the
+        // boundary failed would stamp times the data cannot support.
+        const observable = response.challenges.filter((challenge) => !isMarkedChallenge(challenge));
+        const times = ledger.observeAll(observable, now);
+        for (const challenge of observable) {
             for (const entry of entriesOf(challenge)) {
                 const time = times[String(challenge.id)]?.[String(entry?.id)];
                 if (time) entry.appEntered = { at: time.at, exact: time.exact };

@@ -95,6 +95,19 @@ describe('AsyncActionButton', () => {
     });
 
     test.each([
+        // The per-card Run refuses a marked challenge with the fixed code; the single-challenge
+        // vote answers with manualVote's log wording. Both word as the same data-cannot-be-read text.
+        ['challenge-data-incomplete'],
+        ['challenge data cannot be read'],
+    ])('a %s refusal is worded as the data-cannot-be-read text', async (error) => {
+        const { props, container } = renderButton({
+            action: jest.fn().mockResolvedValue({ success: false, error }),
+        });
+        fireEvent.click(container.querySelector('button')!);
+        await waitFor(() => expect(props.onError).toHaveBeenLastCalledWith('errors.challengeDataIncomplete'));
+    });
+
+    test.each([
         ['an error the app has no wording for', { success: false, error: 'boom: ECONNRESET' }],
         ['a result without an error', { success: false }],
         ['no result at all', undefined],

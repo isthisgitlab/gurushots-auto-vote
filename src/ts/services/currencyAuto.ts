@@ -97,6 +97,10 @@ type RulePrefix = 'autoKey' | 'autoSwap' | 'autoExposureFill';
 
 const log = () => logger.withCategory('currency');
 
+// Challenges already told that their swap history is missing: the warning is
+// once per challenge, not once per pass.
+const warnedMissingSwaps = new Set<string>();
+
 const RESERVE_KEY = Object.freeze({
     key: 'currencyReserveKeys',
     swap: 'currencyReserveSwaps',
@@ -235,6 +239,15 @@ const runAutoSwap = guarded('swap', async (ctx) => {
 
     const ranking = (challenge.member as ChallengeMember).ranking;
     const swapsDone = Array.isArray(ranking?.swaps) ? ranking.swaps.length : 0;
+    // Without the challenge's swap history, both the local cap check and the
+    // live re-check count 0 swaps (an absent history reads as none), so
+    // autoSwapMax is not enforced for this challenge. The local swap count
+    // that closes this is planned separately (Phase 2). Say so once per
+    // challenge.
+    if (ranking?.swaps === undefined && !warnedMissingSwaps.has(id)) {
+        warnedMissingSwaps.add(id);
+        log().warningT('m3f9d9c9bac44', [logger.challengeTag(challenge)]);
+    }
     const maxSwaps = settings.getEffectiveSetting('autoSwapMax', id);
     if (swapsDone >= maxSwaps) return false;
 
@@ -325,6 +338,9 @@ const runAutoExposureFill: (ctx: CurrencyCtx, votePool: VotePool | null | undefi
         const below = settings.getEffectiveSetting('autoExposureFillBelow', id);
         if (!(exposure < below)) return false;
 
+        // The vote-pool read needs the challenge's URL: without it the read
+        // cannot run, so the shortfall cannot be judged and no fill is spent.
+        if (votePool === undefined && !challenge.url) return false;
         const pool = votePool === undefined ? await ctx.currency.strategy.getVoteImages(challenge, token) : votePool;
         // votePoolReach reads the pool through optional chaining; null (no pool) yields null.
         const reach = votePoolReach(pool as VoteImagesResponse);

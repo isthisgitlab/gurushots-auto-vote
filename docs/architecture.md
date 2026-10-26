@@ -431,6 +431,12 @@ repeated six times is one that gets forgotten at one of them.
 - **Defensive optional-chaining on every per-challenge API read** — one unguarded throw dumps the entire
   remaining pass into the outer catch, so each per-challenge property access is optional-chained, and each
   challenge body is independently try/caught for isolation.
+- **The active-challenge boundary** (`challengeIntegrity.ts`, `normalizeActiveChallenges` — the step both the
+  real and the mock read call before anything else sees the list): a field that is present but malformed
+  **marks** the challenge (`dataIssues`), and a marked challenge refuses every automatic and manual action,
+  while its settings, title pins and metadata are kept. Only an element that cannot carry an identity (no
+  usable id) is dropped from the list, which makes the read `pruneUnsafe`: nothing is pruned and every
+  previous id stays alive, so absence from the list never means "gone" off a degraded read.
 - The new-entry tracker (`services/newEntryTracker.ts`) compares entry ids as **SETS, not positions** — the
   server reorders `member.ranking.entries` between polls, so a positional diff would force a vote every
   cycle. An empty entries array is **not** recorded over a non-empty baseline (a degraded API response must

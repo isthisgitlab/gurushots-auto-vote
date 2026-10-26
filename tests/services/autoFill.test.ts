@@ -3047,6 +3047,37 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
         expect(deps.submitToChallenge).not.toHaveBeenCalled();
     });
 
+    test('challenge absent from a PRUNE-UNSAFE fresh list → invalid (it may be the dropped element) → skipped', async () => {
+        const challenge = dueChallenge();
+        const deps = dueDeps({
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [{ id: 'other-challenge' }],
+                pruneUnsafe: true,
+            }),
+        });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, deps);
+        expect(result).toBe('skipped');
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('refreshChallengeState: absent on a prune-unsafe read → invalid, not gone', async () => {
+        const challenge = dueChallenge();
+        const deps = {
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [{ id: 'other' }], pruneUnsafe: true }),
+            logger: makeLogger(),
+        };
+        expect(await refreshChallengeState(challenge, 'tok', deps, 'autoSubmit')).toBe('invalid');
+    });
+
+    test('refreshChallengeState: the challenge present on a prune-unsafe read still refreshes', async () => {
+        // The flag alone does not invalidate the read — only an absence it could have caused does.
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }] });
+        const response = { ...freshList('c1', [{ id: 'e1' }]), pruneUnsafe: true };
+        const deps = { getActiveChallenges: jest.fn().mockResolvedValue(response), logger: makeLogger() };
+        expect(await refreshChallengeState(challenge, 'tok', deps, 'autoSubmit')).toBe('refreshed');
+        expect(challenge.member!.ranking!.entries!.map((e) => e.id)).toEqual(['e1']);
+    });
+
     test('success log "(N slots remain)" reflects the refreshed count, not the stale one', async () => {
         // 4-slot challenge, target 4 at T-9m, 1 stale entry (3 slots free).
         // Fresh state shows a manual entry → 2 entries, 2 slots free; after
@@ -3229,6 +3260,23 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
         expect(deps.submitToChallenge).not.toHaveBeenCalled();
     });
 
+    test('emergencySubmit: a prune-unsafe re-read without the challenge → skipped, no submit', async () => {
+        const challenge = makeChallenge({ maxSubmits: 2, entries: [], closeIn: 200 });
+        const deps = {
+            settings: makeSettings({ autoSubmit: false, emergencySubmit: 300 }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            submitToChallenge: jest.fn(),
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [{ id: 'some-other-id' }],
+                pruneUnsafe: true,
+            }),
+        };
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, deps);
+        expect(result).toBe('skipped');
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
     test('emergencySubmit: refresh rejects → batch proceeds on pass-start data', async () => {
         const challenge = makeChallenge({ maxSubmits: 2, entries: [], closeIn: 200 });
         const deps = {
@@ -3304,6 +3352,23 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
         };
         const result = await submitNewEntryForAction(challenge, 'tok', deps);
         expect(result).toEqual({ ok: false, imageId: null, reason: 'challenge-gone' });
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('fillNew: a prune-unsafe re-read without the challenge → data-incomplete, no submit', async () => {
+        const challenge = makeChallenge({ maxSubmits: 1, entries: [] });
+        const deps = {
+            settings: makeSettings(),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            submitToChallenge: jest.fn(),
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [{ id: 'some-other-id' }],
+                pruneUnsafe: true,
+            }),
+        };
+        const result = await submitNewEntryForAction(challenge, 'tok', deps);
+        expect(result).toEqual({ ok: false, imageId: null, reason: 'data-incomplete' });
         expect(deps.submitToChallenge).not.toHaveBeenCalled();
     });
 });

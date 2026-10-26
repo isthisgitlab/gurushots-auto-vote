@@ -232,14 +232,22 @@ const setChallengeEntryIds = (challengeId: string, entryIds: string[]): boolean 
 /**
  * Clean up metadata for challenges that no longer exist
  * @param activeChallengeIds - Array of currently active challenge IDs
+ * @param pruneUnsafe - True when the active-challenge read dropped elements
+ *   that could not carry an identity (the response's `pruneUnsafe`): absence
+ *   from the id list is not "gone", so nothing is cleaned up
  * @returns True if cleanup was successful, false otherwise
  */
-const cleanupStaleMetadata = (activeChallengeIds: string[]): boolean => {
+const cleanupStaleMetadata = (activeChallengeIds: string[], pruneUnsafe = false): boolean => {
     // Safety check: don't cleanup if we have no active challenges (likely an error state)
     if (!activeChallengeIds || activeChallengeIds.length === 0) {
         logger
             .withCategory('api')
             .debug('Skipping metadata cleanup: no active challenges provided (possibly loading error)', null);
+        return true;
+    }
+
+    if (pruneUnsafe) {
+        logger.withCategory('api').debug('Skipping metadata cleanup: the read dropped unreadable challenges', null);
         return true;
     }
 

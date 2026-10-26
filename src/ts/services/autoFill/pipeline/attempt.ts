@@ -290,6 +290,9 @@ const runFillAttempt = async ({
         if (refresh === 'gone') {
             return { status: 'gone' };
         }
+        if (refresh === 'invalid') {
+            return { status: 'invalid' };
+        }
         if (refresh === 'refreshed') {
             const verdict = onRefreshed(picked);
             if (verdict && verdict.standDown) {

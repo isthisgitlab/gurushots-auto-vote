@@ -10,6 +10,7 @@ import { BusyContent } from '@/components/ui/LoadingSpinner';
 // rejection — never a raw code or status in front of the user.
 const OUTCOME_KEY: Partial<Record<string, string>> = {
     'not-available': 'app.currencyOutcomeNotAvailable',
+    'data-incomplete': 'app.currencyOutcomeDataIncomplete',
     'no-balance': 'app.currencyOutcomeNoBalance',
     'balance-unknown': 'app.currencyOutcomeBalanceUnknown',
     'no-alternative': 'app.currencyOutcomeNoAlternative',

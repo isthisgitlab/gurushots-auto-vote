@@ -20,6 +20,10 @@ const KNOWN_ERRORS: Record<string, string> = {
     'Snap question could not be answered': 'errors.snapUnanswerable',
     'Snap was interrupted; try again later': 'errors.snapInterrupted',
     'Challenge no longer active': 'errors.challengeNoLongerActive',
+    // A marked challenge (dataIssues): the actions answer the fixed code, the single-challenge vote answers
+    // with manualVote's log wording.
+    'challenge-data-incomplete': 'errors.challengeDataIncomplete',
+    'challenge data cannot be read': 'errors.challengeDataIncomplete',
     'not-enough-slots': 'errors.pickNotEnoughSlots',
     'already-entered': 'errors.pickAlreadyEntered',
     'submit-rejected': 'errors.pickRejected',

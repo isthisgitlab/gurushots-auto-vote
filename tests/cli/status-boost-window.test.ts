@@ -371,3 +371,45 @@ describe('CLI status — Standing section', () => {
         expect(printedLines().filter((s) => s.includes('unavailable') && s.includes('network down'))).toHaveLength(2);
     });
 });
+
+describe('CLI status — a marked challenge', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        apiFactory.__isAuthenticated.mockReturnValue(true);
+    });
+
+    test('Standing reads "(data cannot be read)" and no boost window shows', async () => {
+        apiFactory.__getActiveChallenges.mockResolvedValue({
+            challenges: [
+                invalid<Challenge>({
+                    id: 'Marked',
+                    title: 'Marked',
+                    dataIssues: ['close_time'],
+                    member: { boost: { state: 'AVAILABLE_KEY' }, ranking: { total: { rank: 3 } } },
+                }),
+            ],
+        });
+
+        await showStatus();
+
+        // The parenthetical replaces the rank line, and the open boost window is filtered away.
+        expect(bulletLines()).toEqual(['  • Marked — (data cannot be read)']);
+    });
+
+    test('an empty dataIssues array keeps the ordinary rank line', async () => {
+        apiFactory.__getActiveChallenges.mockResolvedValue({
+            challenges: [
+                invalid<Challenge>({
+                    id: 'Ranked',
+                    title: 'Ranked',
+                    dataIssues: [],
+                    member: { boost: { state: 'USED' }, ranking: { total: { rank: 3 } } },
+                }),
+            ],
+        });
+
+        await showStatus();
+
+        expect(bulletLines()).toEqual(['  • Ranked — rank 3']);
+    });
+});

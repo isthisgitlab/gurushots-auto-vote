@@ -92,7 +92,10 @@ const isGuruPicked = (entry: { guru_pick?: unknown } | null | undefined): boolea
  *   - allowProtected: when false, boosted/turbo'd/guru-picked entries and the
  *     `protectedIds` (the photos pinned for a still-spendable Boost or Turbo)
  *     are never picked.
- *   - maxVotes > 0: the picked entry must have fewer votes than this.
+ *   - maxVotes > 0: the picked entry must have fewer votes than this. An entry
+ *     whose vote count is not a finite number is never picked either way — the
+ *     lowest-votes compare could read it as the fewest, and under a ceiling the
+ *     count is unreadable. With no ceiling set (0), slot mode still picks it.
  */
 const pickSwapTarget = (
     entries: readonly RankingEntry[] | null | undefined,
@@ -115,15 +118,23 @@ const pickSwapTarget = (
         entry &&
         (allowProtected ||
             (!isProtectedEntry(entry) && !isGuruPicked(entry) && !protectedIds.includes(String(entry.id))));
-    const votesOf = (entry: RankingEntry) => {
+    const votesOf = (entry: RankingEntry): number | null => {
         const votes = Number(entry?.votes);
-        return Number.isFinite(votes) ? votes : 0;
+        return Number.isFinite(votes) ? votes : null;
     };
 
     let target = null;
     if (lowestVotes) {
+        let lowest = Number.POSITIVE_INFINITY;
         for (const entry of entries) {
-            if (eligible(entry) && (target === null || votesOf(entry) <= votesOf(target))) target = entry;
+            if (!eligible(entry)) continue;
+            const votes = votesOf(entry);
+            // A non-finite vote count never wins the compare — it would read as the fewest.
+            if (votes === null) continue;
+            if (votes <= lowest) {
+                target = entry;
+                lowest = votes;
+            }
         }
     } else {
         const start = resolveEntryIndex(entries, imageIndex) as number;
@@ -137,7 +148,11 @@ const pickSwapTarget = (
     }
     if (target === null) return null;
     const ceiling = positive(maxVotes);
-    return ceiling > 0 && votesOf(target) >= ceiling ? null : target;
+    if (ceiling > 0) {
+        const votes = votesOf(target);
+        if (votes === null || votes >= ceiling) return null;
+    }
+    return target;
 };
 
 /**

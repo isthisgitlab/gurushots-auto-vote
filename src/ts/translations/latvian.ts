@@ -64,6 +64,8 @@ export const errors: typeof english.errors = {
         'Snap netika pabeigts. Spēle tika pārtraukta vai GuruShots neapstiprināja atbildi. Mēģini vēlreiz vēlāk; spēle turpināsies no pārtraukuma vietas.',
     challengeNoLongerActive:
         'Šis izaicinājums vairs nav atvērts, tāpēc darbība netika veikta. Atsvaidzini sarakstu, lai redzētu pašreizējos izaicinājumus.',
+    challengeDataIncomplete:
+        'Šī izaicinājuma datus nevar nolasīt, tāpēc darbība netika veikta — GuruShots to nosūtīja ar laukiem, kurus lietotne nevar droši izmantot. Mēģini vēlreiz pēc nākamās atsvaidzināšanas.',
     boostFailed: 'Boost netika piemērots. GuruShots to noraidīja vai neatbildēja. Mēģini vēlreiz pēc brīža.',
     pinFailed: 'Piespraudi neizdevās saglabāt. Uzstādījumu failu neizdevās ierakstīt. Mēģini vēlreiz.',
     pinCapReached:
@@ -211,6 +213,10 @@ export const app: typeof english.app = {
     boostWindowOpen: 'Boost logs ir atvērts',
     boostOpenBadge: 'Boost atvērts',
     lowExposure: 'Zema redzamība',
+    challengeDataUnreadable:
+        'Izaicinājuma datus nevar nolasīt — GuruShots nosūtīja šo izaicinājumu ar laukiem, kurus lietotne nevar droši izmantot. Automātiskās un manuālās darbības šim izaicinājumam lietotnē ir apturētas, līdz atsvaidzināšana sniedz nolasāmus datus. Ja tas beidzas drīz, pārbaudi to GuruShots.',
+    rankingDataPending:
+        'Reitinga dati vēl nav pieejami — kartīte rādīs redzamību, foto un darbības, tiklīdz GuruShots tos nosūta.',
     jumpToChallenge: 'Pāriet uz izaicinājumu',
     deadlineTimeline: 'Gaidāmās darbības',
     deadlineTimelineApprox: 'aptuveni — var mainīties, pievienojot foto',
@@ -401,6 +407,8 @@ export const app: typeof english.app = {
     // Valūtas darbību rezultāti
     currencyOutcomeNotAvailable:
         'Šajā izaicinājumā šobrīd nav pieejams — iespējams, jau izdarīts. Kartīte atjaunosies.',
+    currencyOutcomeDataIncomplete:
+        'Izaicinājuma datus nevar nolasīt — GuruShots nosūtīja šo izaicinājumu ar laukiem, kurus lietotne nevar droši izmantot, tāpēc nekas netika iztērēts. Kartīte atjaunosies.',
     currencyOutcomeNoBalance: 'Šīs valūtas vairs nav, tāpēc nekas netika iztērēts.',
     currencyOutcomeBalanceUnknown:
         'Neizdevās pārbaudīt atlikumu, tāpēc nekas netika iztērēts. Pēc brīža mēģini vēlreiz.',
@@ -424,6 +432,7 @@ export const app: typeof english.app = {
     scenariosLoadError: 'Scenārijus neizdevās ielādēt. Aizver uzstādījumus un atver tos vēlreiz.',
     scenariosEmpty: 'Scenāriju vēl nav. Sāc no šablona vai importē kāda cita kopīgotu scenāriju.',
     scenarioErrorNext: 'Izlabo to un mēģini vēlreiz.',
+    scenarioErrorNextRefresh: 'Mēģini vēlreiz pēc nākamās atsvaidzināšanas.',
     scenarioStartsIn: 'sākas fāzē {phase}',
     scenarioPhaseSummary: 'Fāze {phase}, noteikumu skaits: {rules}',
     scenarioSpends: 'Tērē: {actions}',
@@ -664,6 +673,8 @@ export const app: typeof english.app = {
     sbSimulatePausedManual: 'Apturēts („Tikai manuāli”) — šādi notiktu, ja „Tikai manuāli” tagad būtu izslēgts.',
     sbSimulateNothing: 'Nekas netiktu izpildīts.',
     sbSimulateFailed: 'Simulāciju neizdevās palaist.',
+    sbSimulateDataIncomplete:
+        'Izaicinājuma datus nevar nolasīt — GuruShots nosūtīja šo izaicinājumu ar laukiem, kurus lietotne nevar droši izmantot.',
     sbStop_closed: 'Beidzas: izaicinājums noslēdzas.',
     sbStop_idle: 'Beidzas: nekas vairs nav atkarīgs no laika — tālāk plāns gaida balsis, vietu vai Boost.',
     sbStop_halted: 'Beidzas: scenārijs apstājas.',

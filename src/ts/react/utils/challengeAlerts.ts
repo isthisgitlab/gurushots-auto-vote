@@ -1,4 +1,6 @@
 import { challengeAllows } from '../../voting/currencyActions';
+import { isMarkedChallenge } from '../../challengeMarks';
+
 import type { Challenge } from '../../types/gurushots';
 import type { RankedChallenge } from '../../types/rendererUtils';
 /**
@@ -20,6 +22,20 @@ import type { RankedChallenge } from '../../types/rendererUtils';
 export const LOW_EXPOSURE_THRESHOLD = 10;
 
 /**
+ * Whether the list shows the minimal card for this challenge: it is marked, or
+ * its member standing never arrived (no `member.ranking`, or no `ranking.exposure`
+ * object). The second case is a render decision only — it never marks. Shared by
+ * ChallengeCard, ChallengeNav and these alert predicates, so a challenge whose
+ * data cannot be read safely is displayed and flagged nowhere. Lives here rather
+ * than in challengeCardView, which already imports this module (the reverse
+ * would be a cycle).
+ *
+ * @param challenge - Active challenge from the API
+ */
+export const isMinimalCardChallenge = (challenge: Challenge | null | undefined): boolean =>
+    challenge == null || isMarkedChallenge(challenge) || challenge.member?.ranking?.exposure == null;
+
+/**
  * Whether a challenge is running: started and not yet closed.
  *
  * @param challenge - Active challenge from the API
@@ -31,12 +47,14 @@ export const isChallengeLive = (challenge: Challenge, now: number): boolean =>
 /**
  * Whether a challenge's exposure is low enough to flag. Only running
  * challenges count: before start there is nothing to vote for, and after close
- * a 0% is final rather than actionable.
+ * a 0% is final rather than actionable. A minimal-card challenge (marked, or
+ * without its member standing) is never flagged.
  *
  * @param challenge - Active challenge from the API
  * @param now - Current time (Unix seconds)
  */
 export const isLowExposure = (challenge: Challenge, now: number): boolean => {
+    if (isMinimalCardChallenge(challenge)) return false;
     const exposure = challenge?.member?.ranking?.exposure?.exposure_factor;
     if (typeof exposure !== 'number') return false;
     if (!isChallengeLive(challenge, now)) return false;
@@ -61,13 +79,16 @@ export const lowExposureChallenges = (
 /**
  * Whether a challenge's boost was missed but can still be recovered by spending
  * a key. The challenge-side half of the card's key-unlock gate (running,
- * boost-enabled) is reused as-is, so the two can't drift apart.
+ * boost-enabled) is reused as-is, so the two can't drift apart. A minimal-card
+ * challenge is never flagged.
  *
  * @param challenge - Active challenge from the API
  * @param now - Current time (Unix seconds)
  */
 export const isMissedBoost = (challenge: Challenge, now: number): boolean =>
-    challenge?.member?.boost?.state === 'MISSED' && challengeAllows('key', challenge, now);
+    !isMinimalCardChallenge(challenge) &&
+    challenge?.member?.boost?.state === 'MISSED' &&
+    challengeAllows('key', challenge, now);
 
 /**
  * Challenges with a recoverable missed boost as display entries, soonest

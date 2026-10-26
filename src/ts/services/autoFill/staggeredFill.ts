@@ -104,7 +104,12 @@ const maybeAutoFillChallenge = async (
     });
     if (attempt.status === 'no-pick') return 'no-eligible-photos';
     // 'no-chosen': Submit Only Chosen Photos left the challenge alone (already explained in the log).
-    if (attempt.status === 'gone' || attempt.status === 'refresh-stand-down' || attempt.status === 'no-chosen') {
+    if (
+        attempt.status === 'gone' ||
+        attempt.status === 'invalid' ||
+        attempt.status === 'refresh-stand-down' ||
+        attempt.status === 'no-chosen'
+    ) {
         return 'skipped';
     }
     if (attempt.status !== 'submitted') return 'error';

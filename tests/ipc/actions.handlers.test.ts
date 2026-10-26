@@ -550,9 +550,14 @@ describe('id-taking action handlers — invalid args', () => {
         ['an empty string', ''],
         ['a blank string', '   '],
         ['a string over the id length cap', 'x'.repeat(65)],
+        ['zero', 0],
+        ['a negative id', -1],
+        ['a fraction', 1.5],
+        ['the string zero', '0'],
+        ['an untrimmed id', ' 12 '],
+        ['a reserved word', 'null'],
     ];
     const VALID_IDS: Array<[string, string | number]> = [
-        ['zero', 0],
         ['a numeric id', 123],
         ['a string at the id length cap', 'x'.repeat(64)],
     ];
@@ -756,6 +761,89 @@ describe('fill-challenge-now', () => {
         // an empty stub instead of the real module would break tag-rule
         // resolution and silently degrade.
         expect(depsArg.settings).toBe(settings);
+    });
+});
+
+describe('a live lookup that refuses (marked / prune-unsafe)', () => {
+    const markedChallenge = { id: 123, title: 'C', dataIssues: ['close_time'] };
+
+    test('fill-challenge-now answers challenge-data-incomplete for a marked challenge', async () => {
+        stubAuthGuardOk();
+        stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [markedChallenge] }) });
+        const result = await buildHandlers()['fill-challenge-now']({}, '123', 'one');
+        expect(result).toEqual({ success: false, error: 'challenge-data-incomplete' });
+        expect(autoFill.fillChallengeNow).not.toHaveBeenCalled();
+    });
+
+    test('fill-challenge-now answers challenge-data-incomplete when a prune-unsafe read lost the challenge', async () => {
+        stubAuthGuardOk();
+        stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [], pruneUnsafe: true }) });
+        await expect(buildHandlers()['fill-challenge-now']({}, '123', 'one')).resolves.toEqual({
+            success: false,
+            error: 'challenge-data-incomplete',
+        });
+    });
+
+    test('submit-picked-photos answers challenge-data-incomplete for a marked challenge', async () => {
+        stubAuthGuardOk();
+        autoFill.submitPickedPhotos.mockReset();
+        stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [markedChallenge] }) });
+        const result = await buildHandlers()['submit-picked-photos']({}, '123', ['a']);
+        expect(result).toEqual({ success: false, error: 'challenge-data-incomplete' });
+        expect(autoFill.submitPickedPhotos).not.toHaveBeenCalled();
+    });
+
+    test('suggest-photos answers challenge-data-incomplete and never falls through to the open list', async () => {
+        stubAuthGuardOk();
+        autoFill.suggestFillPhotos
+            .mockReset()
+            .mockResolvedValue({ status: 'suggested' as const, photos: [], statsLimited: false });
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [markedChallenge] }),
+            getMemberChallenges: jest.fn(),
+        });
+        const result = await buildHandlers()['suggest-photos']({}, '123');
+        expect(result).toEqual({ success: false, error: 'challenge-data-incomplete' });
+        expect(strategy.getMemberChallenges).not.toHaveBeenCalled();
+        expect(autoFill.suggestFillPhotos).not.toHaveBeenCalled();
+    });
+
+    test('suggest-photos falls through to the open list when the id is only missing from a prune-unsafe read', async () => {
+        // A Discover row is un-joined, so it was never in the active list: the
+        // prune-unsafe mark of that read is not a refusal for it.
+        stubAuthGuardOk();
+        autoFill.suggestFillPhotos.mockReset().mockResolvedValue({
+            status: 'suggested',
+            photos: [{ id: 'a1', labels: ['Pink'], permission: { allowed: true } }],
+            statsLimited: false,
+        });
+        autoFill.resolveMemberId.mockReset().mockResolvedValue('member-9');
+        const openChallenge = { id: 'open-1', title: 'Open' };
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [], pruneUnsafe: true }),
+            getMemberChallenges: jest.fn().mockResolvedValue([openChallenge]),
+        });
+        const result = await buildHandlers()['suggest-photos']({}, 'open-1');
+        expect(strategy.getMemberChallenges).toHaveBeenCalledWith('tok', 'open');
+        expect(autoFill.suggestFillPhotos).toHaveBeenCalledWith(
+            openChallenge,
+            'tok',
+            expect.anything(),
+            undefined,
+            expect.objectContaining({ ignoreOnly: true }),
+        );
+        expect(result).toMatchObject({ success: true, memberId: 'member-9' });
+    });
+
+    test('play-auto-turbo answers challenge-data-incomplete before the turbo read', async () => {
+        setToken('tok');
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [markedChallenge] }),
+        });
+        votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(true);
+        const result = await buildHandlers()['play-auto-turbo']({}, '123', 'Title');
+        expect(result).toEqual({ success: false, error: 'challenge-data-incomplete' });
+        expect(strategy.runTurboGame).not.toHaveBeenCalled();
     });
 });
 

@@ -108,6 +108,31 @@ describe('submitVotesForChallenge', () => {
         expect(result.outcome).toBe('not-eligible');
         expect(result.errorMessage).toContain('has not started');
     });
+
+    test('a marked challenge is refused before anything is evaluated', async () => {
+        const challenge = challengeWithExposure(50);
+        challenge.dataIssues = ['close_time'];
+        const strategy = { getVoteImages: jest.fn(), submitVotes: jest.fn() };
+
+        const result = await submitVotesForChallenge(challenge, invalid(strategy), 'tok', NOW());
+
+        expect(result).toEqual({ outcome: 'not-eligible', errorMessage: 'challenge data cannot be read' });
+        expect(strategy.getVoteImages).not.toHaveBeenCalled();
+        expect(strategy.submitVotes).not.toHaveBeenCalled();
+    });
+
+    test('an empty dataIssues array does not refuse', async () => {
+        const challenge = challengeWithExposure(50);
+        challenge.dataIssues = [];
+        const strategy = {
+            getVoteImages: jest.fn().mockResolvedValue({ images: [{ id: 'i1' }] }),
+            submitVotes: jest.fn().mockResolvedValue({ ok: true }),
+        };
+
+        expect(await submitVotesForChallenge(challenge, invalid(strategy), 'tok', NOW()).then((r) => r.outcome)).toBe(
+            'voted',
+        );
+    });
 });
 
 describe('voteAllChallengesManual', () => {

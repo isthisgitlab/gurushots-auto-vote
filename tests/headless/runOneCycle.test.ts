@@ -326,6 +326,84 @@ describe('headless runOneCycle', () => {
         });
     });
 
+    // The marked-read cap: the headless loop keeps its own previous marked-id
+    // set (challengeIntegrity's dataIssues). A new non-empty marked set caps
+    // the next delay once to OFFLINE_RETRY_MS; the same set does not cap
+    // again, an empty set never caps, and pruneUnsafe plays no part.
+    describe('marked-read cap', () => {
+        const { __resetMarkedReadCapForTests } = require('../../src/ts/headless/index') as typeof indexModule;
+
+        beforeEach(() => {
+            __resetMarkedReadCapForTests();
+        });
+
+        const markedFar = (id: number) => ({
+            id,
+            type: 'default',
+            close_time: Math.floor(FIXED_NOW_MS / 1000) + 7200,
+            dataIssues: ['close_time'],
+        });
+
+        // lastPayload() reads the first report; two cycles in one test need the latest one.
+        const latestPayload = () => parseJsonAs(onCycleComplete.mock.calls.at(-1)![0], isCyclePayload);
+
+        test('a handed-over list whose marked set is new caps the next delay once', async () => {
+            const fetchChallengesAndVote = jest.fn().mockResolvedValue({ success: true, challenges: [markedFar(11)] });
+            const getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [] });
+            apiFactory.getApiStrategy.mockReturnValue(invalid({ fetchChallengesAndVote, getActiveChallenges }));
+
+            await g.GS!.runOneCycle();
+            expect(latestPayload().nextDelayMs).toBe(OFFLINE_RETRY_MS);
+
+            // The same set on the next tick — the normal 2-min cadence stands.
+            await g.GS!.runOneCycle();
+            expect(latestPayload().nextDelayMs).toBe(120_000);
+        });
+
+        test('a fresh fetch with a new marked set caps too', async () => {
+            const getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [markedFar(12)] });
+            apiFactory.getApiStrategy.mockReturnValue(invalid({ getActiveChallenges }));
+
+            await expect(computeNextDelayMs('tok', null)).resolves.toBe(OFFLINE_RETRY_MS);
+        });
+
+        test('an empty marked set never caps', async () => {
+            const getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [] });
+            apiFactory.getApiStrategy.mockReturnValue(invalid({ getActiveChallenges }));
+
+            await expect(computeNextDelayMs('tok', null)).resolves.toBe(120_000);
+        });
+
+        test('a failed fetch in between does not make the same marked set cap again', async () => {
+            // The outage's empty list must not become the tracker's "previous"
+            // set: the same marked set after the outage is not new.
+            const lists = [
+                { challenges: [markedFar(21)] },
+                { challenges: [], fetchFailed: true },
+                { challenges: [markedFar(21)] },
+            ];
+            let call = 0;
+            const getActiveChallenges = jest.fn(async () => lists[Math.min(call++, lists.length - 1)]);
+            apiFactory.getApiStrategy.mockReturnValue(invalid({ getActiveChallenges }));
+
+            // 1st read: new set → capped. Outage: capped via the offline retry,
+            // tracker untouched. Same set as the 1st read → normal cadence.
+            await expect(computeNextDelayMs('tok', null)).resolves.toBe(OFFLINE_RETRY_MS);
+            await expect(computeNextDelayMs('tok', null)).resolves.toBe(OFFLINE_RETRY_MS);
+            await expect(computeNextDelayMs('tok', null)).resolves.toBe(120_000);
+        });
+
+        test('pruneUnsafe alone does not cap', async () => {
+            const getActiveChallenges = jest.fn().mockResolvedValue({
+                challenges: [{ id: 13, type: 'default', close_time: Math.floor(FIXED_NOW_MS / 1000) + 7200 }],
+                pruneUnsafe: true,
+            });
+            apiFactory.getApiStrategy.mockReturnValue(invalid({ getActiveChallenges }));
+
+            await expect(computeNextDelayMs('tok', null)).resolves.toBe(120_000);
+        });
+    });
+
     describe('defensive fallbacks', () => {
         const logger = jest.mocked(require('../../src/ts/logger') as typeof loggerModule);
         let info: jest.MockedFunction<loggerModule.CategoryLogger['info']>;

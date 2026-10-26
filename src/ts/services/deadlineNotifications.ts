@@ -20,6 +20,8 @@
  * Pango markup, or look like a CLI flag to an argv-based notifier.
  */
 
+import { isMarkedChallenge } from '../challengeMarks';
+
 /**
  * Action key → translation key for its user-facing label. Owned here (the pure,
  * Node-safe module) rather than in the React DeadlineTimeline so both the
@@ -89,15 +91,20 @@ const interpolate = (template: string, params: Record<string, string | number | 
 /**
  * Decide which upcoming actions are within the notification lead window.
  *
+ * A challenge the boundary marked (its data cannot be read) is skipped: every
+ * action refuses it, so its deadlines never notify.
+ *
  * @param perChallengeActions - one entry per
  *   challenge; `actions` is describeDeadlineActions' output (`[{action, dueAt}]`,
  *   `dueAt` = absolute Unix seconds the action fires, or null/NaN when unknown).
+ *   `dataIssues` is the boundary's mark, when the host threads it through.
  * @param now - Unix timestamp (seconds)
  */
 const computeDueNotifications = (
     perChallengeActions: ReadonlyArray<{
         id?: string | number | null;
         title?: string | null;
+        dataIssues?: string[];
         actions: ReadonlyArray<{ action: string; dueAt: number | null }>;
     }>,
     now: number,
@@ -125,6 +132,7 @@ const computeDueNotifications = (
 
     for (const challenge of perChallengeActions) {
         if (!challenge || typeof challenge !== 'object') continue;
+        if (isMarkedChallenge(challenge)) continue;
         const challengeId = challenge.id != null ? String(challenge.id) : '';
         if (!challengeId) continue;
         const title = sanitizeNotificationText(challenge.title);

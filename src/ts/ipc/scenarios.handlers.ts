@@ -30,7 +30,7 @@ import { registerHandlers } from './registerHandlers';
 import { errorResult } from './errorResult';
 import { isIdArg } from './isIdArg';
 import { getScenarioStatus, ledgerForMode, stepLockForMode } from '../services/scenarioStatus';
-import { findActiveChallenge } from '../services/findActiveChallenge';
+import { findActionableChallenge } from '../services/findActiveChallenge';
 import { evaluateScenario, startState } from '../scenarios/evaluate';
 import { simulateScenario } from '../scenarios/simulate';
 import { entriesOf } from '../scenarios/selectors';
@@ -38,7 +38,6 @@ import { recordVoteSample } from '../scenarios/speed';
 import { isManualPhotosOnly } from '../services/manualPhotosOnly';
 import { SCENARIO_TEMPLATES } from '../scenarios/templates';
 import { refreshScenarioStateAsync } from '../scenarioStateStore';
-import { ALL_KEY } from '../scenarioStateFile';
 import { backgroundServiceOwnsScenarios } from '../services/scenarioRunner';
 
 import type { IpcMain } from 'electron';
@@ -144,8 +143,13 @@ const loadLiveScenario = async (
     if (status.corrupt) return refuse(status.corrupt === 'unloaded' ? 'state-unloaded' : 'state-unreadable');
     const strategy = apiFactory.getApiStrategy();
     const response: ActiveChallengesResponse | null = await strategy.getActiveChallenges(guard.token);
-    const challenge = findActiveChallenge(response?.challenges, challengeId);
-    if (!challenge) return refuse('challenge-not-found');
+    const found = findActionableChallenge(response, challengeId);
+    // A marked challenge (or one a prune-unsafe read dropped) refuses: a
+    // preview must not judge a plan on data that cannot be read.
+    if ('refused' in found) {
+        return refuse(found.refused === 'data-incomplete' ? 'challenge-data-incomplete' : 'challenge-not-found');
+    }
+    const challenge = found.challenge;
     const now = Math.floor(Date.now() / 1000);
     return {
         ok: true,
@@ -285,8 +289,7 @@ const buildHandlers = () =>
         },
 
         'reset-scenario-state': async (event: unknown, challengeId: string | number) => {
-            // The state file keeps its count of resets of every challenge under ALL_KEY: that is no challenge's id.
-            if (!isIdArg(challengeId) || String(challengeId) === ALL_KEY) return invalidArgs;
+            if (!isIdArg(challengeId)) return invalidArgs;
             return safely('reset-scenario-state', () => resetScenario(challengeId));
         },
 

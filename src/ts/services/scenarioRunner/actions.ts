@@ -27,9 +27,11 @@ import type { ScenarioState } from '../../types/stores';
 import {
     BOOST_APPLICABLE,
     currencyDeps,
+    deferred,
     done,
     failed,
     lockedCurrencySpend,
+    noAnswer,
     refreshLive,
     rememberedPhoto,
     selectContext,
@@ -60,12 +62,14 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
             const filled = await submitNewEntryForAction(challenge, pass.token, pass.fillDeps);
             if (filled.reason === 'no-slots') return skipped('no free entry slot');
             if (filled.reason === 'challenge-gone') return skipped('the challenge is no longer active');
+            if (filled.reason === 'data-incomplete') return deferred('challenge data cannot be read');
             if (filled.reason === 'no-eligible') return skipped('no eligible photo to enter');
             if (filled.reason === 'no-chosen') return skipped('no chosen photo can be entered');
             if (!filled.ok) return failed(`no photo was entered (${filled.reason})`);
             enteredId = String(filled.imageId);
         } else {
-            if (!(await refreshLive(ctx))) return skipped('the challenge is no longer active');
+            const stale = await refreshLive(ctx);
+            if (stale) return stale;
             if (getSlotsRemaining(challenge) <= 0) return skipped('no free entry slot');
             if (entriesOf(challenge).some((entry) => String(entry.id) === photoId)) {
                 return skipped(`photo ${photoId} is already entered`);
@@ -85,7 +89,8 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
         const newPhoto = rememberedPhoto(action.with, state);
         if (newPhoto === undefined)
             return skipped(`memory slot "${(action.with as { memory: string }).memory}" is empty`);
-        if (!(await refreshLive(ctx))) return skipped('the challenge is no longer active');
+        const stale = await refreshLive(ctx);
+        if (stale) return stale;
         const target = selectEntry(action.entry, challenge, selectContext(state));
         if (!target) return skipped('no entry matches the swap target');
         // A refusal, not a re-selection: the selectors know nothing of guru picks, so the rule's
@@ -138,7 +143,8 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
 
     boost: async (action, ctx, state) => {
         const { challenge, pass } = ctx;
-        if (!(await refreshLive(ctx))) return skipped('the challenge is no longer active');
+        const stale = await refreshLive(ctx);
+        if (stale) return stale;
         if (!BOOST_APPLICABLE.has(challenge.member?.boost?.state)) {
             return skipped(`the boost is not available (${challenge.member?.boost?.state ?? 'unknown'})`);
         }
@@ -154,7 +160,8 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
 
     turbo: async (action, ctx, state) => {
         const { challenge, pass } = ctx;
-        if (!(await refreshLive(ctx))) return skipped('the challenge is no longer active');
+        const stale = await refreshLive(ctx);
+        if (stale) return stale;
         if (challenge.member?.turbo?.state !== 'WON') {
             return skipped(`no won turbo to apply (${challenge.member?.turbo?.state ?? 'unknown'})`);
         }
@@ -218,7 +225,8 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
 /**
  * Whether a spend that got no answer has positively taken effect on the live challenge: the boost is unlocked by a
  * key, the exposure is full, the replacement photo is entered. Anything the live state cannot show — a swap whose
- * replacement a selector chooses, a challenge that is gone — is not it.
+ * replacement a selector chooses, a challenge that is gone — is not it. The caller re-reads live first and hands
+ * over the step's blocking outcome (null when the live state is good to read on).
  */
 const spendLanded = async (
     action: ScenarioAction & { type: SpendAction },
@@ -226,7 +234,6 @@ const spendLanded = async (
     state: ScenarioState,
 ): Promise<{ landed: boolean; remember: Record<string, string> }> => {
     const none = { landed: false, remember: {} };
-    if (!(await refreshLive(ctx))) return none;
     const { challenge } = ctx;
     if (action.type === 'unlockBoost') {
         // Unlocked, or already applied to a photo since: either way the key was spent.
@@ -246,6 +253,10 @@ const spendLanded = async (
  * The retry of a step whose spend got no answer. It never spends: it passes over the step when the live challenge
  * shows the spend landed, and otherwise ends the rule, since the step cannot be repeated and the steps after it
  * were meant to follow a spend that did happen.
+ *
+ * A re-read that cannot be trusted (a marked challenge, or a prune-unsafe read that dropped elements) is neither:
+ * like the spend itself, it gave no answer — the same outcome keeps the spend in flight, counted, and the next
+ * pass settles it again, never spending it.
  */
 const settleUnclearSpend = async (
     action: ScenarioAction & { type: SpendAction },
@@ -253,7 +264,16 @@ const settleUnclearSpend = async (
     state: ScenarioState,
     from: Retry,
 ): Promise<ActionOutcome> => {
-    const { landed, remember } = await spendLanded(action, ctx, state);
+    const blocked = await refreshLive(ctx);
+    if (blocked?.status === 'deferred') {
+        // A spend that got no answer was counted when it was marked; one recovered from its pending marker is
+        // counted now, and its type stays `lost` so the card can tell that origin.
+        return {
+            ...noAnswer(action.type, from.count),
+            ...(from.origin === 'pending' ? { origin: 'pending' as const } : {}),
+        };
+    }
+    const { landed, remember } = blocked ? { landed: false, remember: {} } : await spendLanded(action, ctx, state);
     // A spend that got no answer was counted when it was marked; one recovered from its pending marker is counted now.
     if (landed) return done({ remember, ...(from.count ? { spent: limitOf(action.type) } : {}) });
     return unclearHalted(action.type, from);
