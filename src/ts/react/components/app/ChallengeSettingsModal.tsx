@@ -7,7 +7,7 @@ import { SettingsChallengeProvider } from '@/contexts/SettingsChallengeContext';
 import { useChallengeOverrides } from '@/hooks/useChallengeOverrides';
 import { useScrollPanelIntoView } from '@/hooks/useScrollPanelIntoView';
 import { bandTabs, tierSchemaEntries } from '@/utils/groupSettings';
-import { Modal } from '@/components/ui/Modal';
+import { Modal, TALL_MODAL_BOX_HEIGHT } from '@/components/ui/Modal';
 import { UnsavedChangesModal } from '@/components/ui/UnsavedChangesModal';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
@@ -54,9 +54,9 @@ const MANUAL_ONLY_SCROLL_PADDING = 'scroll-pt-16 md:scroll-pt-12';
 const TAB_ROW_SCROLL_PADDING = 'scroll-pt-12';
 
 // A steady box height so switching tabs never resizes the modal, and a flex column so the body grows
-// while the action row pins to the bottom. The 5em below the base `.modal-box` max-height (100vh) is
-// a deliberate gutter keeping the box clear of the viewport edges.
-const MODAL_BOX_CLASS = 'h-[calc(100vh-5em)] flex flex-col';
+// while the action row pins to the bottom. The 5em gutter of TALL_MODAL_BOX_HEIGHT, measured inside
+// the system bars (safe-area insets), keeps the box clear of the viewport edges.
+const MODAL_BOX_CLASS = `${TALL_MODAL_BOX_HEIGHT} flex flex-col`;
 
 // This modal's tab / panel DOM ids. The `challenge-settings-` prefix keeps them away from the global
 // settings modal's, which can be mounted at the same time (both modals portal to the body).

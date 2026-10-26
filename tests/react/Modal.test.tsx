@@ -156,6 +156,27 @@ describe('Modal', () => {
         expect(outerBox!.contains(screen.getByText('inner body'))).toBe(false);
     });
 
+    test('pads the overlay and caps the box by the safe-area insets (Android system bars)', () => {
+        render(
+            <Modal isOpen onClose={() => {}} title="T">
+                <button type="button">inside</button>
+            </Modal>,
+        );
+        const dialog = screen.getByRole('dialog');
+        for (const cls of [
+            'pt-[env(safe-area-inset-top)]',
+            'pr-[env(safe-area-inset-right)]',
+            'pb-[env(safe-area-inset-bottom)]',
+            'pl-[env(safe-area-inset-left)]',
+        ]) {
+            expect(dialog.classList.contains(cls)).toBe(true);
+        }
+        const box = document.querySelector('.modal-box')!;
+        expect(box.classList.contains('max-h-[calc(100vh-env(safe-area-inset-top)-env(safe-area-inset-bottom))]')).toBe(
+            true,
+        );
+    });
+
     test('restores focus to the trigger element when closed', () => {
         const trigger = document.createElement('button');
         document.body.appendChild(trigger);

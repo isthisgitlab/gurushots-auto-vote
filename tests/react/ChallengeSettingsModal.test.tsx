@@ -9,6 +9,7 @@
  */
 import { act, fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal';
+import { TALL_MODAL_BOX_HEIGHT } from '@/components/ui/Modal';
 import { mockApi } from './helpers/setup';
 import { titleRuleInfo } from './helpers/titleRules';
 import type { useSettingsSchema } from '@/api/useSettingsSchema';
@@ -787,7 +788,7 @@ describe('ChallengeSettingsModal load failure', () => {
         // The steady box belongs to the form (same plain box the spinner case
         // keeps in the tabs suite) — the alert must not inherit its classes.
         const box = document.querySelector('.modal-box')!.classList;
-        expect(box.contains('h-[calc(100vh-5em)]')).toBe(false);
+        expect(box.contains(TALL_MODAL_BOX_HEIGHT)).toBe(false);
         expect(box.contains('flex')).toBe(false);
         expect(box.contains('flex-col')).toBe(false);
     });

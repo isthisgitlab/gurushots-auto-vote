@@ -3,6 +3,10 @@ import { rendererTranslator } from '../../../translations/renderer';
 import { StrokeIcon, ICON_PATHS } from './StrokeIcon';
 import type { ComponentChildren } from 'preact';
 
+// The 5em gutter, measured inside the system bars (safe-area insets), so a tall modal stays
+// clear of the Android status and navigation bars.
+export const TALL_MODAL_BOX_HEIGHT = 'h-[calc(100vh-5em-env(safe-area-inset-top)-env(safe-area-inset-bottom))]';
+
 // The elements Tab can land on inside the dialog.
 const FOCUSABLE_SELECTOR =
     'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -158,7 +162,7 @@ export function Modal({
     // opened from inside another would be sized and clipped by the outer box.
     return createPortal(
         <div
-            className="modal modal-open z-50"
+            className="modal modal-open z-50 pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]"
             role="dialog"
             aria-modal="true"
             aria-labelledby={title ? titleId : undefined}
@@ -167,7 +171,11 @@ export function Modal({
             <div className="modal-backdrop bg-black/50" onClick={onClose} aria-hidden="true" />
 
             {/* Modal box */}
-            <div ref={modalBoxRef} tabIndex={-1} className={`modal-box ${sizeClass} ${className}`}>
+            <div
+                ref={modalBoxRef}
+                tabIndex={-1}
+                className={`modal-box max-h-[calc(100vh-env(safe-area-inset-top)-env(safe-area-inset-bottom))] ${sizeClass} ${className}`}
+            >
                 {/* Header with title and close button */}
                 {(title || showCloseButton) && (
                     <div className="flex items-center justify-between mb-4">

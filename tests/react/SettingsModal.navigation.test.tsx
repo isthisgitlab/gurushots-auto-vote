@@ -8,6 +8,7 @@
 
 import { act, fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { SettingsModal } from '@/components/app/SettingsModal';
+import { TALL_MODAL_BOX_HEIGHT } from '@/components/ui/Modal';
 import { SettingsSectionPanel } from '@/components/app/SettingsSectionPanel';
 import { SETTINGS_NAV_SCROLL_PADDING } from '@/components/app/SettingsNavBar';
 import { settingsPanelId, settingsTabId, useSettingsNav } from '@/contexts/SettingsNavContext';
@@ -252,7 +253,7 @@ describe('SettingsModal — tabs', () => {
         const box = document.querySelector('.modal-box')!;
         for (const name of SETTINGS_NAV_SCROLL_PADDING.split(' ')) expect(box.classList.contains(name)).toBe(true);
         // The fixed box height keeps a short tab from shrinking and re-centring it.
-        expect(box.classList.contains('h-[calc(100vh-5em)]')).toBe(true);
+        expect(box.classList.contains(TALL_MODAL_BOX_HEIGHT)).toBe(true);
         expect(box.classList.contains('flex')).toBe(true);
         expect(box.classList.contains('flex-col')).toBe(true);
         const bar = filterInput().closest('.sticky')!;

@@ -13,6 +13,7 @@
 
 import { act, fireEvent, pickOption, render, screen, waitFor, within } from './helpers/test-utils';
 import { SettingsModal } from '@/components/app/SettingsModal';
+import { TALL_MODAL_BOX_HEIGHT } from '@/components/ui/Modal';
 import { fireSettingsChanged } from './helpers/setup';
 import { selectTab } from '../helpers/selectTab';
 import type { TitleRule } from '../../src/ts/types/settings';
@@ -738,7 +739,7 @@ describe('SettingsModal — loading state', () => {
         expect(screen.queryByRole('heading', { level: 4, name: 'app.applicationSettings' })).toBeNull();
         // The spinner keeps the plain box: the fixed height is the tabbed form's, not its.
         const box = document.querySelector('.modal-box')!;
-        expect(box.classList.contains('h-[calc(100vh-5em)]')).toBe(false);
+        expect(box.classList.contains(TALL_MODAL_BOX_HEIGHT)).toBe(false);
         expect(box.classList.contains('flex')).toBe(false);
         expect(box.classList.contains('flex-col')).toBe(false);
     });

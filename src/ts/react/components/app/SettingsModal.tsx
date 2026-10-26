@@ -25,7 +25,7 @@ import {
     SETTING_CELL_CLASS,
 } from '@/utils/groupSettings';
 import { matchesFilterTexts, matchesSettingFilter } from '@/utils/matchesSettingFilter';
-import { Modal } from '@/components/ui/Modal';
+import { Modal, TALL_MODAL_BOX_HEIGHT } from '@/components/ui/Modal';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { UnsavedChangesModal } from '@/components/ui/UnsavedChangesModal';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
@@ -65,13 +65,13 @@ type SchemaFormProps = {
 // They render with the Application tab, not as a tier tab of their own.
 const APP_TIER = 'app';
 
-// The modal box's classes. The fixed height is a deliberate 5em gutter below the base
-// .modal-box max-height: 100vh, so switching to a short tab cannot shrink and re-centre the
-// box and move the tab row under the pointer; flex-col plus the footer's mt-auto keep Save /
+// The modal box's classes. The fixed height's 5em gutter is measured inside the system bars
+// (safe-area insets, see TALL_MODAL_BOX_HEIGHT), so switching to a short tab cannot shrink and
+// re-centre the box and move the tab row under the pointer; flex-col plus the footer's mt-auto keep Save /
 // Reset all / Cancel at the bottom on a short tab. The height and flex apply once the tabbed
 // form shows — the first-load spinner keeps the plain auto-height box.
 const SETTINGS_MODAL_BOX_CLASS = `${STICKY_FOOTER_SCROLL_PADDING} ${SETTINGS_NAV_SCROLL_PADDING}`;
-const SETTINGS_MODAL_FORM_BOX_CLASS = `${SETTINGS_MODAL_BOX_CLASS} h-[calc(100vh-5em)] flex flex-col`;
+const SETTINGS_MODAL_FORM_BOX_CLASS = `${SETTINGS_MODAL_BOX_CLASS} ${TALL_MODAL_BOX_HEIGHT} flex flex-col`;
 
 // Challenge types seen on the live API (verified 2026-09-19). Suggestions for
 // the rule type field only — it stays free text, so a type this build has never

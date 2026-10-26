@@ -9,6 +9,7 @@
  */
 import { fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal';
+import { TALL_MODAL_BOX_HEIGHT } from '@/components/ui/Modal';
 import { selectTab } from '../helpers/selectTab';
 import { defaultTranslate, mockApi, mockTranslator } from './helpers/setup';
 import type { useSettingsSchema } from '@/api/useSettingsSchema';
@@ -234,7 +235,7 @@ describe('ChallengeSettingsModal tabs', () => {
         const box = document.querySelector('.modal-box')!.classList;
         expect(box.contains('scroll-pt-12')).toBe(true);
         expect(box.contains('scroll-pb-60')).toBe(true);
-        expect(box.contains('h-[calc(100vh-5em)]')).toBe(true);
+        expect(box.contains(TALL_MODAL_BOX_HEIGHT)).toBe(true);
         expect(box.contains('flex-col')).toBe(true);
     });
 
@@ -245,7 +246,7 @@ describe('ChallengeSettingsModal tabs', () => {
         expect(screen.getByRole('status').textContent).toBe('common.loading');
 
         const box = document.querySelector('.modal-box')!.classList;
-        expect(box.contains('h-[calc(100vh-5em)]')).toBe(false);
+        expect(box.contains(TALL_MODAL_BOX_HEIGHT)).toBe(false);
         expect(box.contains('flex-col')).toBe(false);
     });
 
