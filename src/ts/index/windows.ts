@@ -19,7 +19,8 @@ function holdForOpenBoosts(event: { preventDefault: () => void }, proceed: () =>
         autovoteRunning: autovoteSessionLive(),
         dialog,
         parent: appState.mainWindow,
-        t: (key) => translationManager.t(key),
+        // The core uses closures, no `this`, so the method passes unbound.
+        t: translationManager.t,
         locale: translationManager.getCurrentLanguage(),
         proceed,
     });

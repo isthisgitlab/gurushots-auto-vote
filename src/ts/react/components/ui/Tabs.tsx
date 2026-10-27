@@ -121,7 +121,7 @@ export function TabList<T extends string>({
                             <span className="badge badge-sm" aria-hidden="true">
                                 {tab.badge}
                             </span>
-                            <span className="sr-only">{` ${t('app.tabOverrideCount').replace('{0}', String(tab.badge))}`}</span>
+                            <span className="sr-only">{` ${t('app.tabOverrideCount', { '0': tab.badge })}`}</span>
                         </>
                     )}
                 </button>

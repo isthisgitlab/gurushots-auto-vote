@@ -85,10 +85,9 @@ function OverridesSummary({
                 <span>{t('app.challengeOverrideInfo')}</span>
             </div>
             <p className="text-xs" role="status">
-                {t(overrideCount ? 'app.overridesActiveSummary' : 'app.overridesNoneSummary').replace(
-                    '{0}',
-                    String(overrideCount),
-                )}
+                {overrideCount
+                    ? t('app.overridesActiveSummary', { count: overrideCount })
+                    : t('app.overridesNoneSummary')}
                 {titleRules?.profile && !titleRules.suppressed && (
                     <>
                         {' · '}

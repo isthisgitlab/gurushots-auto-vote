@@ -3,7 +3,6 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
 import { useActiveChallenges } from '@/api/useActiveChallenges';
-import { interp } from '@/utils/interp';
 import * as ipc from '@/api/ipc';
 import { useLatestRef } from '@/hooks/useLatestRef';
 import { valuesEqual } from '@/utils/valuesEqual';
@@ -92,7 +91,7 @@ function PhaseSettings({
                         <button
                             type="button"
                             className="btn btn-sm btn-ghost text-error"
-                            aria-label={interp(t('app.actionOnItem'), {
+                            aria-label={t('app.actionOnItem', {
                                 action: t('app.sbRemove'),
                                 item: config ? t(config.label) : key,
                             })}
@@ -209,7 +208,7 @@ function PhaseEditor({
     const setRules = (next: ScenarioDraftRule[]) => onDraft(setIn(draft, ['phases', name, 'rules'], next));
     // Every rule repeats the same three buttons: the rule's position makes each one's accessible name unique.
     const ruleActionLabel = (actionKey: string, index: number) =>
-        interp(t('app.actionOnItem'), { action: t(actionKey), item: interp(t('app.sbRuleN'), { n: index + 1 }) });
+        t('app.actionOnItem', { action: t(actionKey), item: t('app.sbRuleN', { n: index + 1 }) });
     return (
         <section className="rounded-lg border border-base-300 p-3 space-y-3">
             <div className="flex gap-2 items-end">
@@ -231,7 +230,7 @@ function PhaseEditor({
                     type="button"
                     className="btn btn-sm btn-ghost text-error"
                     disabled={phases.length <= 1}
-                    aria-label={interp(t('app.actionOnItem'), { action: t('app.sbRemovePhase'), item: name })}
+                    aria-label={t('app.actionOnItem', { action: t('app.sbRemovePhase'), item: name })}
                     onClick={() => onDraft(removePhase(draft, name))}
                 >
                     {t('app.sbRemovePhase')}
@@ -479,7 +478,7 @@ function SimulatePanel({ draft }: { draft: ScenarioDraft }) {
                                 <li key={`${event.at}:${event.ruleId}:${index}`}>
                                     <span className="font-mono">{new Date(event.at * 1000).toLocaleString()}</span> · [
                                     {event.phase}] {event.label}: {event.actions.join(', ')}
-                                    {event.toPhase && ` · ${interp(t('app.sbToPhase'), { phase: event.toPhase })}`}
+                                    {event.toPhase && ` · ${t('app.sbToPhase', { phase: event.toPhase })}`}
                                 </li>
                             ))}
                         </ol>

@@ -14,6 +14,7 @@ import type { ComponentChildren } from 'preact';
 import type { useCustomTimezoneInput } from '@/hooks/useCustomTimezoneInput';
 import type { UiChangeHandler, UiResetHandler, UiValues } from '../../../types/settingsEditor';
 import type { SettingFilterTexts } from '@/utils/matchesSettingFilter';
+import type { Translate } from '../../../translations/translator';
 import type { ReactNode } from 'react';
 
 export type TimezoneInputState = ReturnType<typeof useCustomTimezoneInput>;
@@ -98,7 +99,7 @@ export const APPLICATION_CELLS = {
  * The searchable texts of one hand-written cell: its label and field labels as names, its description.
  */
 const cellTexts = (
-    t: (key: string) => string,
+    t: Translate,
     {
         labelKey,
         descKey,
@@ -112,14 +113,13 @@ const cellTexts = (
 /**
  * Every text of the section's hand-written cells, for the settings filter.
  */
-export const applicationCellTexts = (t: (key: string) => string): SettingFilterTexts[] =>
+export const applicationCellTexts = (t: Translate): SettingFilterTexts[] =>
     Object.values(APPLICATION_CELLS).map((cell) => cellTexts(t, cell));
 
 /**
  * The accessible name of a UI setting's reset button: the action and the setting it resets.
  */
-const resetLabel = (t: (key: string) => string, labelKey: string): string =>
-    `${t('app.resetToDefault')}: ${t(labelKey)}`;
+const resetLabel = (t: Translate, labelKey: string): string => `${t('app.resetToDefault')}: ${t(labelKey)}`;
 
 /**
  * UiFormProps plus the tab-title match a cell inherits: with it the cell shows even when the

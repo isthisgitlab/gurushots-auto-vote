@@ -4,7 +4,6 @@ import { ipcErrorText } from '@/api/ipcErrorText';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { formatDuration } from '@/utils/formatters';
-import { interp } from '@/utils/interp';
 import { useTick } from '@/hooks/useTick';
 
 /**
@@ -15,7 +14,7 @@ function ResumeCountdown({ startAt }: { startAt: number }) {
     const { t } = useTranslation();
     const now = useTick(1000);
     const remaining = Math.max(0, Math.ceil(startAt / 1000) - now);
-    return <span>{interp(t('app.resumeHold'), { time: formatDuration(remaining, { includeSeconds: true }) })}</span>;
+    return <span>{t('app.resumeHold', { time: formatDuration(remaining, { includeSeconds: true }) })}</span>;
 }
 
 /**

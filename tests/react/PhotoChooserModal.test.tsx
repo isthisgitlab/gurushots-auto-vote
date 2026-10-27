@@ -16,13 +16,14 @@ import { useImageLoads } from '@/hooks/useImageLoads';
 import { Modal } from '@/components/ui/Modal';
 import { mockTranslator } from './helpers/setup';
 import { rememberCurrentMember } from '../../src/ts/react/hooks/currentMember';
-import { app, errors } from '../../src/ts/translations/english';
+import { createTranslator } from '../../src/ts/translations/translator';
 import { MAX_CHOSEN_PHOTOS } from '../../src/ts/settings/limits';
 import { invalid } from '../helpers/invalid';
 import type { usePhotoPicker } from '@/hooks/usePhotoPicker';
 import type { TileStats } from '@/hooks/usePhotoStatsLoader';
 import type { EntryPinKind } from '../../src/ts/types/settings';
 import type { WindowApi } from '../../src/ts/types/ipc';
+import type { Translate } from '../../src/ts/translations/translator';
 
 // The live picker instances, so a test can press loadMore: the saved-list read keys on the listing the
 // appended batch leaves (the same one on screen), and one case presses it directly.
@@ -75,12 +76,9 @@ const listing = (photos: LibraryPhoto[], over: Partial<Listing> = {}): Listing =
     ...over,
 });
 
-const english = (key: string) =>
-    key.startsWith('app.')
-        ? ((app as Record<string, string>)[key.slice(4)] ?? key)
-        : key.startsWith('errors.')
-          ? ((errors as Record<string, string>)[key.slice(7)] ?? key)
-          : key;
+// The real English strings (plural groups included), placeholders filled like the real t fills them.
+const translator = createTranslator();
+const english: Translate = (key, vars) => translator.t(key, vars, 'en');
 
 const deferred = <T,>() => {
     let resolve!: (value: T) => void;
@@ -328,7 +326,7 @@ describe('closing with unsaved picks', () => {
         );
         expect(screen.queryByText(discardTitle)).toBeNull();
 
-        fireEvent.click(screen.getByRole('button', { name: 'common.closeModal' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Close modal' }));
         fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }));
         expect(onClose).toHaveBeenCalledTimes(1);
         expect(onSave).not.toHaveBeenCalled();
@@ -479,12 +477,12 @@ describe('listing and tiles', () => {
         getLibrary().mockResolvedValue(listing([photo(1), photo(2)], { truncated: true, nextStart: 2 }));
         setup();
         loadPhotos();
-        expect(await screen.findByText('Showing 2 photo(s).')).toBeTruthy();
+        expect(await screen.findByText('Showing 2 photos.')).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Load more photos' })).toBeTruthy();
         getLibrary().mockResolvedValue(listing([photo(1), photo(2)]));
         fireEvent.click(screen.getByRole('button', { name: 'Load more photos' }));
         await waitFor(() => expect(screen.queryByRole('button', { name: 'Load more photos' })).toBeNull());
-        expect(screen.getByText('Showing 2 photo(s).')).toBeTruthy();
+        expect(screen.getByText('Showing 2 photos.')).toBeTruthy();
         // Nothing new came back, and that is not a failure.
         expect(screen.queryByRole('alert')).toBeNull();
     });
@@ -667,7 +665,7 @@ describe('selection', () => {
         setup();
         await opened();
         expect(
-            screen.getByText("Hidden: 2 photo(s) that have won a challenge. A winning photo can't be entered again."),
+            screen.getByText("Hidden: 2 photos that have won a challenge. A winning photo can't be entered again."),
         ).toBeTruthy();
     });
 
@@ -675,7 +673,8 @@ describe('selection', () => {
         getLibrary().mockResolvedValue(listing([photo(1)], { wonIds: [idOf(7)], wonCount: 1500 }));
         setup();
         await opened();
-        expect(screen.getByText(/^Hidden: 1500 photo\(s\)/)).toBeTruthy();
+        // The count reads through t, so the reader language's thousands grouping applies.
+        expect(screen.getByText(/^Hidden: 1,500 photos/)).toBeTruthy();
     });
 
     test('a cut-off listing says at least that many were hidden', async () => {
@@ -684,7 +683,7 @@ describe('selection', () => {
         await opened();
         expect(
             screen.getByText(
-                "Hidden: at least 1 photo(s) that have won a challenge. A winning photo can't be entered again. Press Load more photos to look for more.",
+                "Hidden: at least 1 photo that has won a challenge. A winning photo can't be entered again. Press Load more photos to look for more.",
             ),
         ).toBeTruthy();
     });
@@ -1103,7 +1102,7 @@ describe('eligibility', () => {
         expect(await screen.findByRole('button', { name: /^Photo 00000002:/ })).toBeTruthy();
         expect(screen.queryByRole('button', { name: /^Photo 00000001:/ })).toBeNull();
         expect(screen.queryByRole('button', { name: /^Photo 00000003:/ })).toBeNull();
-        expect(screen.getByText("Hidden: 2 photo(s) GuruShots won't take in this challenge.")).toBeTruthy();
+        expect(screen.getByText("Hidden: 2 photos GuruShots won't take in this challenge.")).toBeTruthy();
     });
 
     test('a refused photo without a message gets a generic reason, and stays removable once chosen', async () => {
@@ -1825,14 +1824,14 @@ describe('Load more', () => {
         loadPhotos();
         expect(await screen.findByRole('button', { name: /^Photo 00000001:/ })).toBeTruthy();
         expect(getLibrary().mock.calls[0]).toEqual([7, undefined, 'cached', 'submit', 0, 100]);
-        expect(screen.getByText('Showing 2 photo(s).')).toBeTruthy();
+        expect(screen.getByText('Showing 2 photos.')).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Load more photos' }));
         expect(await screen.findByRole('button', { name: /^Photo 00000003:/ })).toBeTruthy();
         expect(getLibrary().mock.calls[1]).toEqual([7, undefined, 'fresh', 'submit', 2, 100]);
         // The last batch says the listing is complete: the button is gone and nothing failed.
         expect(screen.queryByRole('button', { name: 'Load more photos' })).toBeNull();
         expect(screen.queryByRole('alert')).toBeNull();
-        expect(screen.getByText('Showing 3 photo(s).')).toBeTruthy();
+        expect(screen.getByText('Showing 3 photos.')).toBeTruthy();
     });
 
     test('while the batch read is in flight, Load more, the toolbar Load photos and Refresh are held', async () => {
@@ -1872,7 +1871,7 @@ describe('Load more', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Load more photos' }));
         await screen.findByRole('button', { name: /^Photo 00000003:/ });
         expect(screen.queryByRole('alert')).toBeNull();
-        expect(screen.getByText('Showing 3 photo(s).')).toBeTruthy();
+        expect(screen.getByText('Showing 3 photos.')).toBeTruthy();
     });
 
     test('a failure the app has no wording for falls back to the load-more text', async () => {

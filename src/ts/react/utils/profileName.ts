@@ -9,6 +9,8 @@
 
 import { RESERVED_PROFILE_NAMES, normalizeProfileName } from '../../settings/limits';
 
+import type { Translate } from '../../translations/translator';
+
 export { normalizeProfileName };
 
 // How long an armed confirm button (delete / overwrite / rename) stays armed
@@ -56,13 +58,11 @@ export const checkProfileName = (trimmed: string, names: string[], limits?: Prof
  * `existing` and `ok` (those are decisions the caller acts on, not errors).
  * tooLong and limit fill the bound into the existing `{0}` strings.
  */
-const profileNameCheckMessage = (check: ProfileNameCheck, t: (key: string) => string): string | null => {
+const profileNameCheckMessage = (check: ProfileNameCheck, t: Translate): string | null => {
     if (check === 'required') return t('app.profileNameRequired');
-    if (typeof check === 'object' && 'tooLong' in check)
-        return t('app.profileNameTooLong').replace('{0}', String(check.tooLong));
+    if (typeof check === 'object' && 'tooLong' in check) return t('app.profileNameTooLong', { '0': check.tooLong });
     if (check === 'reserved') return t('app.profileNameReserved');
-    if (typeof check === 'object' && 'limit' in check)
-        return t('app.profileLimitReached').replace('{0}', String(check.limit));
+    if (typeof check === 'object' && 'limit' in check) return t('app.profileLimitReached', { '0': check.limit });
     return null;
 };
 

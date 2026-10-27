@@ -10,9 +10,11 @@ import { ChallengeCard } from '@/components/app/ChallengeCard';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import { mockTranslator } from './helpers/setup';
 import { app, errors } from '../../src/ts/translations/english';
+import { createTranslator } from '../../src/ts/translations/translator';
 import { invalid } from '../helpers/invalid';
 import type { Bankroll } from '../../src/ts/types/gurushots';
 import type { WindowApi } from '../../src/ts/types/ipc';
+import type { Translate } from '../../src/ts/translations/translator';
 
 const mockChallengeSettings = {
     hasCustomSettings: false,
@@ -50,11 +52,9 @@ const SUGGESTED = { id: 'e'.repeat(32), member_id: MEMBER };
 
 const FULL: Bankroll = { keys: 0, swaps: 2, fills: 0, coins: 0 };
 
-const english = (key: string) => {
-    const [group, name] = key.split('.');
-    const table = (group === 'errors' ? errors : app) as Record<string, string>;
-    return table[name] ?? key;
-};
+// The real English strings (plural groups included), placeholders filled like the real t fills them.
+const translator = createTranslator();
+const english: Translate = (key, vars) => translator.t(key, vars, 'en');
 
 const makeChallenge = () => {
     const nowSec = Math.floor(Date.now() / 1000);

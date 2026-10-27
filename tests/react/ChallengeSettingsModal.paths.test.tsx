@@ -6,7 +6,7 @@
  */
 import { act, fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal';
-import { mockApi, mockTranslator } from './helpers/setup';
+import { mockApi, mockTranslator, fillTemplate } from './helpers/setup';
 import { titleRuleInfo } from './helpers/titleRules';
 import type { useSettingsSchema } from '@/api/useSettingsSchema';
 import type { Challenge } from '../../src/ts/types/gurushots';
@@ -83,7 +83,7 @@ const HHMM = /\d\d:\d\d/.source;
 beforeEach(() => {
     window.api = invalid(mockApi);
     resetSchema();
-    mockTranslator.t.mockImplementation((key) => TEMPLATES[key] ?? key);
+    mockTranslator.t.mockImplementation((key, vars) => fillTemplate(TEMPLATES[key] ?? key, vars));
     mockApi.getTitleProfile.mockReset().mockResolvedValue(null);
     mockApi.getChallengeOverrides.mockReset().mockResolvedValue({});
     mockApi.getSettings.mockReset().mockResolvedValue(invalid({ app: { timezone: 'UTC', checkFrequencyMax: 30 } }));

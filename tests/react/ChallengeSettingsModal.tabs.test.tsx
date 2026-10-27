@@ -11,7 +11,7 @@ import { fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal';
 import { TALL_MODAL_BOX_HEIGHT } from '@/components/ui/Modal';
 import { selectTab } from '../helpers/selectTab';
-import { defaultTranslate, mockApi, mockTranslator } from './helpers/setup';
+import { defaultTranslate, mockApi, mockTranslator, fillTemplate } from './helpers/setup';
 import type { useSettingsSchema } from '@/api/useSettingsSchema';
 import { invalid } from '../helpers/invalid';
 
@@ -192,8 +192,8 @@ describe('ChallengeSettingsModal tabs', () => {
         });
         mockApi.getChallengeOverrides.mockResolvedValue({ boostTime: 5, staleKey: 1 });
         // The echoing translator hides an interpolated count; surface it for the summary key.
-        mockTranslator.t.mockImplementation((key: string) =>
-            key === 'app.overridesActiveSummary' ? '{0} overrides' : key,
+        mockTranslator.t.mockImplementation((key, vars) =>
+            fillTemplate(key === 'app.overridesActiveSummary' ? '{count} overrides' : key, vars),
         );
         renderModal();
         await waitFor(() => expect(document.querySelector('p[role="status"]')!.textContent).toBe('2 overrides'));

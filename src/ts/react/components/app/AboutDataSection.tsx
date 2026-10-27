@@ -6,13 +6,13 @@ import { openDonatePage } from '@/api/donate';
 import { useImportRefText } from '@/api/useImportReport';
 import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import { matchesFilterTexts } from '@/utils/matchesSettingFilter';
-import { interp } from '@/utils/interp';
 import { dateLocale } from '@/utils/formatters';
 import { LicensesModal } from './LicensesModal';
 import { DeleteLocalDataModal } from './DeleteLocalDataModal';
 
 import type { ImportReport } from '@/api/useImportReport';
 import type { SettingFilterTexts } from '@/utils/matchesSettingFilter';
+import type { Translate } from '../../../translations/translator';
 
 /**
  * What the import of settings.json left unresolved, read-only: when it ran and the references that
@@ -29,7 +29,7 @@ function ImportReportBlock({ report }: { report: ImportReport | null }) {
         <div className="mb-4 text-sm">
             <h6 className="font-medium mb-1">{t('about.importTitle')}</h6>
             <p className="text-xs text-base-content/70 mb-1">
-                {interp(t(settingsFile ? 'about.importAt' : 'about.importAtAndroid'), {
+                {t(settingsFile ? 'about.importAt' : 'about.importAtAndroid', {
                     date: Number.isNaN(date.getTime()) ? report.at : date.toLocaleDateString(dateLocale()),
                 })}
             </p>
@@ -65,7 +65,7 @@ const ABOUT_DATA_DESCRIPTION_KEYS = ['about.donateDesc', 'about.licensesDesc', '
  * The texts of the block the settings filter searches, like the section's cells. `hasReport` adds
  * the import heading to the names — that heading renders only while a report is shown.
  */
-export const aboutDataTexts = (t: (key: string) => string, hasReport: boolean): SettingFilterTexts => ({
+export const aboutDataTexts = (t: Translate, hasReport: boolean): SettingFilterTexts => ({
     names: [...ABOUT_DATA_NAME_KEYS.map((key) => t(key)), ...(hasReport ? [t('about.importTitle')] : [])],
     descriptions: ABOUT_DATA_DESCRIPTION_KEYS.map((key) => t(key)),
 });
@@ -73,12 +73,8 @@ export const aboutDataTexts = (t: (key: string) => string, hasReport: boolean): 
 /**
  * Whether the block matches the settings filter `query`.
  */
-export const aboutDataMatchesFilter = (
-    t: (key: string) => string,
-    query: string,
-    namesOnly: boolean,
-    hasReport: boolean,
-): boolean => matchesFilterTexts(aboutDataTexts(t, hasReport), query, namesOnly);
+export const aboutDataMatchesFilter = (t: Translate, query: string, namesOnly: boolean, hasReport: boolean): boolean =>
+    matchesFilterTexts(aboutDataTexts(t, hasReport), query, namesOnly);
 
 /**
  * The Application panel's last block: the donation row, the third-party licenses, the report of the settings import,

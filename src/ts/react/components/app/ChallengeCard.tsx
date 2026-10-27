@@ -10,7 +10,6 @@ import { useChallengeSettings } from '@/hooks/useChallengeSettings';
 import { useTick, useRerenderAt } from '@/hooks/useTick';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { formatEndTime } from '@/utils/formatters';
-import { interp } from '@/utils/interp';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { ChallengeCardCompact } from './ChallengeCardCompact';
 import { ChallengeCardDetail } from './ChallengeCardDetail';
@@ -20,6 +19,7 @@ import { useChallengeCardActions, buildCompactActionRow } from './ChallengeCardA
 
 import type { Bankroll, Challenge } from '../../../types/gurushots';
 import type { DeadlineActionsState } from '@/api/useDeadlineActions';
+import type { Translate } from '../../../translations/translator';
 
 /**
  * Everything the card derives from its challenge at one tick (see
@@ -37,7 +37,7 @@ export type ChallengeCardView = ReturnType<typeof deriveChallengeCardView>;
  * @param releaseAt - when the pin gives way (Unix seconds), or null
  */
 const conflictWarning = (
-    t: (key: string) => string,
+    t: Translate,
     timezone: string,
     kind: 'boost' | 'turbo',
     blockedBy: DeadlineActionsState['boostBlockedBy'],
@@ -50,7 +50,7 @@ const conflictWarning = (
             : releaseAt === null
               ? 'app.conflictPinNever'
               : 'app.conflictPinReleases';
-    return interp(t(key), {
+    return t(key, {
         kind: t(kind === 'boost' ? 'app.boost' : 'app.turbo'),
         other: t(kind === 'boost' ? 'app.turbo' : 'app.boost'),
         time: releaseAt === null ? '' : formatEndTime(releaseAt, timezone),

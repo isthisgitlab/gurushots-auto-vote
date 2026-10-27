@@ -3,11 +3,11 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { useImageLoads } from '@/hooks/useImageLoads';
 import { buildPhotoUrl } from '@/utils/formatters';
-import { interp } from '@/utils/interp';
 import { TileStatsLine, withStatsLabel } from './TileStats';
 
 import type { LibraryPhoto } from '@/hooks/useLibraryListing';
 import type { TileStats } from '@/hooks/usePhotoStatsLoader';
+import type { Translate } from '../../../translations/translator';
 
 // Edge length requested from the photo CDN for a tile (the grid shows them ~150px wide).
 const TILE_PX = 240;
@@ -46,7 +46,7 @@ const tileReason = ({
     full: boolean;
     fullKey: string;
     allowedKnown: boolean;
-    t: (key: string) => string;
+    t: Translate;
 }): string | null => {
     // Nothing can be added yet, so the tile must not say it can be.
     if (locked) return t(lockedKey);
@@ -62,9 +62,9 @@ const tileReason = ({
  * Server strings (tags, reason) are React text children only.
  */
 /** A tile's name, with "Number 3 in your list." added after it when it is a selected one. */
-const withPosition = (label: string, t: (key: string) => string, position: number | null): string => {
+const withPosition = (label: string, t: Translate, position: number | null): string => {
     if (position === null) return label;
-    return `${label.replace(/[.!?]*$/, '.')} ${interp(t('app.photoChooserPosition'), { n: position })}`;
+    return `${label.replace(/[.!?]*$/, '.')} ${t('app.photoChooserPosition', { n: position })}`;
 };
 
 /** The visible number on a selected tile: the order the photos are saved in (named in the tile's label too). */
@@ -77,8 +77,8 @@ function PositionBadge({ position }: { position: number | null }) {
 }
 
 /** A tile's name with "Suggestion #3." added after it when it stands in the suggestions. */
-const withRank = (label: string, t: (key: string) => string, rank: number | null): string =>
-    rank === null ? label : `${label.replace(/[.!?]*$/, '.')} ${interp(t('app.pickSuggestionRank'), { n: rank })}.`;
+const withRank = (label: string, t: Translate, rank: number | null): string =>
+    rank === null ? label : `${label.replace(/[.!?]*$/, '.')} ${t('app.pickSuggestionRank', { n: rank })}.`;
 
 /** The visible "#3" on a suggestion's tile: its rank, fixed whatever is picked. */
 function RankBadge({ rank }: { rank: number | null }) {
@@ -86,7 +86,7 @@ function RankBadge({ rank }: { rank: number | null }) {
     return rank === null ? null : (
         <span
             role="img"
-            aria-label={interp(t('app.pickSuggestionRank'), { n: rank })}
+            aria-label={t('app.pickSuggestionRank', { n: rank })}
             className="badge badge-outline badge-sm self-start"
         >
             #{rank}
@@ -186,7 +186,7 @@ function PhotoTileBase({
     const tone = selected ? 'border-base-content ring-2 ring-base-content' : 'border-base-300';
     const composed = withRank(
         withPosition(
-            interp(t('app.photoChooserTileLabel'), {
+            t('app.photoChooserTileLabel', {
                 id: shortId(photo.id),
                 labels,
                 reason: reason ?? '',
@@ -282,11 +282,7 @@ export function SavedPickTile({
         <button
             type="button"
             aria-pressed={selected}
-            aria-label={withPosition(
-                interp(t('app.photoChooserSavedTileLabel'), { id: shortId(id), reason }),
-                t,
-                position,
-            )}
+            aria-label={withPosition(t('app.photoChooserSavedTileLabel', { id: shortId(id), reason }), t, position)}
             aria-disabled={unavailable}
             className={`${TILE_BASE} ${tone}`}
             onClick={() => {
@@ -341,13 +337,13 @@ export function MissingTile({
     onToggle: (id: string) => void;
 }) {
     const { t } = useTranslation();
-    const text = won ? t('app.photoChooserWonInList') : interp(t(missingKey(hasChallenge, search)), { count });
+    const text = won ? t('app.photoChooserWonInList') : t(missingKey(hasChallenge, search), { count });
     return (
         <button
             type="button"
             aria-pressed
             aria-label={withPosition(
-                interp(t('app.photoChooserMissingTileLabel'), { id: shortId(id), reason: text }),
+                t('app.photoChooserMissingTileLabel', { id: shortId(id), reason: text }),
                 t,
                 position,
             )}
@@ -384,7 +380,7 @@ export function PendingTile({
             aria-pressed
             aria-disabled={!recheckFailed}
             aria-label={withPosition(
-                interp(t('app.photoChooserMissingTileLabel'), { id: shortId(id), reason: text }),
+                t('app.photoChooserMissingTileLabel', { id: shortId(id), reason: text }),
                 t,
                 position,
             )}

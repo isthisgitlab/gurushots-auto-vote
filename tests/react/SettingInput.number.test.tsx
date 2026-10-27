@@ -22,6 +22,7 @@ import { SettingInput, SettingLabel, numberRangeMessage, parseNumberInput } from
 import { SAVE_ERROR_ID } from '@/components/ui/ModalActionRow';
 import type { SerializableSchemaEntry } from '../../src/ts/ipc/settings.handlers';
 import { invalid } from '../helpers/invalid';
+import { fillTemplate } from './helpers/setup';
 
 const renderNumber = (over: Partial<ComponentProps<typeof SettingInput>> = {}) => {
     const props = {
@@ -89,10 +90,12 @@ describe('SettingInput — number', () => {
         expect(parseNumberInput('')).toBe('');
         expect(parseNumberInput('x')).toBe('');
         expect(parseNumberInput('12')).toBe(12);
-        expect(numberRangeMessage({ min: 1, max: 5 }, (key) => `${key} {min}-{max}`)).toBe(
+        expect(numberRangeMessage({ min: 1, max: 5 }, (key, vars) => fillTemplate(`${key} {min}-{max}`, vars))).toBe(
             'app.validationOutOfRange 1-5',
         );
-        expect(numberRangeMessage({ min: 3 }, (key) => `${key} {min}`)).toBe('app.validationAtLeast 3');
+        expect(numberRangeMessage({ min: 3 }, (key, vars) => fillTemplate(`${key} {min}`, vars))).toBe(
+            'app.validationAtLeast 3',
+        );
         expect(numberRangeMessage({}, (key) => key)).toBe('app.validationInvalidValue');
     });
 

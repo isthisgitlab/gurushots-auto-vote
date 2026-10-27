@@ -10,7 +10,6 @@ import { outcomeMeta } from '@/utils/discoverOutcome';
 import type { OutcomeVariant } from '@/utils/discoverOutcome';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { ToneNote } from '@/components/ui/ToneNote';
-import { interp } from '@/utils/interp';
 import { formatDuration, formatEndTime } from '@/utils/formatters';
 import * as ipc from '@/api/ipc';
 import { ipcErrorText, joinRefusalText } from '@/api/ipcErrorText';
@@ -63,7 +62,7 @@ function ChosenChip({ name, onClick }: { name: string; onClick: () => void }) {
             type="button"
             className="badge badge-warning badge-sm mt-0.5 min-h-6"
             title={t('app.discoverChosenChipHint')}
-            aria-label={interp(t('app.discoverChosenChipLabel'), { title: name })}
+            aria-label={t('app.discoverChosenChipLabel', { title: name })}
             onClick={onClick}
         >
             {t('app.discoverChosenChip')}
@@ -83,7 +82,7 @@ function ChosenMarks({ c, name, onChoose }: { c: OpenChallenge; name: string; on
     if (c.chosenEffectiveCount === 0) return null;
     return (
         <div className="text-xs text-base-content/70 mt-0.5">
-            {interp(t('app.discoverChosenInherited'), { count: c.chosenEffectiveCount })}
+            {t('app.discoverChosenInherited', { count: c.chosenEffectiveCount })}
         </div>
     );
 }
@@ -121,23 +120,22 @@ function JoinButton({
 }) {
     const { t } = useTranslation();
     const paid = cost > 0 && !retry;
-    const label = interp(
-        t(
-            retry
-                ? 'app.discoverRetrySubmitLabel'
-                : blocked === 'full'
-                  ? 'app.discoverJoinFullLabel'
-                  : blocked === 'price-unknown'
-                    ? 'app.discoverJoinPriceUnknownLabel'
-                    : waiting === 'notStarted'
-                      ? 'app.discoverJoinNotStartedLabel'
-                      : waiting === 'startingNow'
-                        ? 'app.discoverJoinOpeningLabel'
-                        : paid
-                          ? 'app.discoverJoinPaidLabel'
-                          : 'app.discoverJoinLabel',
-        ),
-        { title: name, coins: cost },
+    // Only discoverJoinPaidLabel names the cost; every other label takes the title alone.
+    const label = t(
+        retry
+            ? 'app.discoverRetrySubmitLabel'
+            : blocked === 'full'
+              ? 'app.discoverJoinFullLabel'
+              : blocked === 'price-unknown'
+                ? 'app.discoverJoinPriceUnknownLabel'
+                : waiting === 'notStarted'
+                  ? 'app.discoverJoinNotStartedLabel'
+                  : waiting === 'startingNow'
+                    ? 'app.discoverJoinOpeningLabel'
+                    : paid
+                      ? 'app.discoverJoinPaidLabel'
+                      : 'app.discoverJoinLabel',
+        { title: name, count: cost },
     );
     return (
         <button
@@ -214,9 +212,7 @@ function StartLine({ c, nowSec }: { c: OpenChallenge; nowSec: number }) {
     const left = secondsToStart(c, nowSec);
     return (
         <div className="text-xs text-base-content/70 mt-0.5">
-            {left === null
-                ? t('app.discoverStartingNow')
-                : interp(t('app.discoverStartsIn'), { time: formatDuration(left) })}
+            {left === null ? t('app.discoverStartingNow') : t('app.discoverStartsIn', { time: formatDuration(left) })}
         </div>
     );
 }
@@ -251,12 +247,17 @@ function RowOutcome({
         <>
             {refused ??
                 (meta.key
-                    ? interp(t(meta.key), { coins: outcome.cost ?? cost, have: outcome.coins })
+                    ? t(meta.key, {
+                          coins: outcome.cost ?? cost,
+                          have: outcome.coins,
+                          // discoverPriceChanged's plural selector.
+                          count: outcome.cost ?? cost,
+                      })
                     : ipcErrorText(outcome.error, t) || t('app.discoverGenericError'))}
             {meta.forget && (
                 <button
                     className="btn btn-ghost btn-sm ml-1 max-sm:min-h-10"
-                    aria-label={interp(t('app.discoverForgetPaymentLabel'), { title: name })}
+                    aria-label={t('app.discoverForgetPaymentLabel', { title: name })}
                     onClick={onForget}
                     disabled={busy}
                 >
@@ -328,7 +329,7 @@ function DiscoverRow({
                     <ChallengeTagBadges tags={listedTags(c)} />
                     <span>
                         {cost > 0
-                            ? interp(t('app.discoverCostPaid'), { coins: cost })
+                            ? t('app.discoverCostPaid', { count: cost })
                             : blocked === 'price-unknown'
                               ? t('app.discoverPriceUnknown')
                               : t('app.discoverCostFree')}
@@ -376,7 +377,7 @@ function DiscoverRow({
             <div className="flex items-center gap-2">
                 <button
                     className="btn btn-outline btn-sm max-sm:min-h-10"
-                    aria-label={interp(t('app.discoverChoosePhotosLabel'), { title: name })}
+                    aria-label={t('app.discoverChoosePhotosLabel', { title: name })}
                     onClick={onChoose}
                 >
                     {t('app.choosePhotos')}
@@ -407,9 +408,7 @@ function CountBadge({ list, nowSec }: { list: OpenChallenge[]; nowSec: number })
     const open = list.filter((c) => c.status !== 'upcoming').length;
     if (open + upcoming === 0) return null;
     const label =
-        upcoming > 0
-            ? interp(t('app.discoverCountSplit'), { open, upcoming })
-            : interp(t('app.discoverCountLabel'), { count: open });
+        upcoming > 0 ? t('app.discoverCountSplit', { open, upcoming }) : t('app.discoverCountLabel', { count: open });
     return (
         <span className="badge badge-neutral badge-sm" role="img" aria-label={label}>
             {upcoming > 0 ? label : open}

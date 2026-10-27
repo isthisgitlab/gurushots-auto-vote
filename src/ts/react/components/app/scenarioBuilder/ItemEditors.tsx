@@ -1,6 +1,5 @@
 import { useId } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
-import { interp } from '@/utils/interp';
 import {
     CONDITION_FIELDS,
     ACTION_FIELDS,
@@ -483,7 +482,7 @@ function ListControls({
     onRemove: () => void;
 }) {
     const { t } = useTranslation();
-    const nameOf = (actionKey: string) => interp(t('app.actionOnItem'), { action: t(actionKey), item: itemName });
+    const nameOf = (actionKey: string) => t('app.actionOnItem', { action: t(actionKey), item: itemName });
     return (
         <div className="flex gap-1 shrink-0">
             <button

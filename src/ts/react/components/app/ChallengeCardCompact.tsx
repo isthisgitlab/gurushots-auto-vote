@@ -17,7 +17,6 @@ import type { TimeRemaining } from './Countdown';
 import { DeadlineTimeline } from './DeadlineTimeline';
 import { ScenarioStatusLine } from './ScenarioStatusLine';
 import { livePinKindOf, unusablePins } from '../../../voting/entryPins';
-import { interp } from '@/utils/interp';
 import type * as useScenarioStatusModule from '@/api/useScenarioStatus';
 
 /**
@@ -118,8 +117,8 @@ export function ChallengeCardCompact({
         const nameVars = { ...names, kind: names[notApplying[0]] };
         const both = notApplying.length > 1;
         notApplyingNote = {
-            short: interp(t(both ? 'app.pinNotApplyingShortBoth' : 'app.pinNotApplyingShort'), nameVars),
-            long: interp(t(both ? 'app.pinNotApplyingBoth' : 'app.pinNotApplying'), nameVars),
+            short: t(both ? 'app.pinNotApplyingShortBoth' : 'app.pinNotApplyingShort', nameVars),
+            long: t(both ? 'app.pinNotApplyingBoth' : 'app.pinNotApplying', nameVars),
         };
     }
 

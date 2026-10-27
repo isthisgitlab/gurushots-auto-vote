@@ -8,10 +8,11 @@
 import { render, screen } from './helpers/test-utils';
 import { PhotoTile } from '@/components/app/PhotoTile';
 import { mockTranslator } from './helpers/setup';
-import { app } from '../../src/ts/translations/english';
+import { createTranslator } from '../../src/ts/translations/translator';
 
 import type { TileStats } from '@/hooks/usePhotoStatsLoader';
 import type { LibraryPhoto } from '@/hooks/useLibraryListing';
+import type { Translate } from '../../src/ts/translations/translator';
 
 const MEMBER = 'c'.repeat(32);
 const photo: LibraryPhoto = {
@@ -42,8 +43,9 @@ const tile = (over: Partial<Parameters<typeof PhotoTile>[0]> = {}) =>
         />,
     );
 
-const english = (key: string) =>
-    key.startsWith('app.') ? ((app as Record<string, string>)[key.slice(4)] ?? key) : key;
+// The real English strings, placeholders filled like the real t fills them.
+const translator = createTranslator();
+const english: Translate = (key, vars) => translator.t(key, vars, 'en');
 
 beforeEach(() => {
     mockTranslator.t.mockImplementation(english);

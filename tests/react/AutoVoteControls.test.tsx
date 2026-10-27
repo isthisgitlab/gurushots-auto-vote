@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, act } from './helpers/test-utils';
 import { AutoVoteControls } from '@/components/app/AutoVoteControls';
-import { mockTranslator } from './helpers/setup';
+import { mockTranslator, fillTemplate } from './helpers/setup';
 
 const BASE_MS = 1_700_000_000_000;
 
@@ -191,8 +191,8 @@ describe('AutoVoteControls', () => {
         beforeEach(() => {
             jest.useFakeTimers();
             jest.setSystemTime(BASE_MS);
-            mockTranslator.t.mockImplementation((key: string) =>
-                key === 'app.resumeHold' ? 'Resumes in {time}.' : key,
+            mockTranslator.t.mockImplementation((key, vars) =>
+                fillTemplate(key === 'app.resumeHold' ? 'Resumes in {time}.' : key, vars),
             );
         });
         afterEach(() => {

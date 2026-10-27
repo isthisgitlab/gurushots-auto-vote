@@ -5,7 +5,7 @@ import { isKnownTurboMode } from '../../../voting/turboMode';
 import { useTick } from '@/hooks/useTick';
 import { isMinimalCardChallenge, lowExposureChallenges, missedBoostChallenges } from '@/utils/challengeAlerts';
 import { scrollToChallenge } from '@/utils/scrollToChallenge';
-import { interp } from '@/utils/interp';
+
 import { FocusDropdown } from '@/components/ui/FocusDropdown';
 import { useId } from 'react';
 
@@ -101,10 +101,10 @@ function MissedBoostsJump({
     const labels = { unlock: t('app.currencyKeyUnlock'), details: t('app.details') };
     const hint =
         Number(keys) > 0
-            ? interp(t('app.missedBoostsHint'), labels)
+            ? t('app.missedBoostsHint', labels)
             : Number.isFinite(keys)
               ? t('app.missedBoostsNoKeys')
-              : interp(t('app.missedBoostsKeysUnknown'), labels);
+              : t('app.missedBoostsKeysUnknown', labels);
     return (
         <FocusDropdown
             triggerClassName="btn btn-sm btn-warning max-sm:min-h-10"

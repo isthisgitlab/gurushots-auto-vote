@@ -2,7 +2,6 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
 import { getGroupApplicability } from '@/utils/challengeApplicability';
 import { formatSettingDefault } from '@/utils/formatters';
-import { interp } from '@/utils/interp';
 import { sourceBadgeTone } from '@/utils/customizationTone';
 import type { CustomizationSource } from '@/utils/customizationTone';
 import { getScheduleShift } from '../../../services/scheduleRemap';
@@ -78,10 +77,10 @@ function ValueSourceBadge({
         );
     if (ruleSource !== undefined) {
         // A rule without a title is named by its place in the list, in the UI's language.
-        const title = ruleSource.title ?? interp(t('app.ruleNumber'), { n: ruleSource.index });
+        const title = ruleSource.title ?? t('app.ruleNumber', { n: ruleSource.index });
         return (
             <SourceBadge source="rule" icon="📏">
-                {interp(t('app.fromRule'), { title })}
+                {t('app.fromRule', { title })}
             </SourceBadge>
         );
     }
@@ -168,9 +167,10 @@ function ChallengeSettingCell({
             />
             {scheduleShift > 0 && (
                 <ToneNote tone="info" className="text-xs mt-1">
-                    {t('app.autoSubmitScheduleShiftHint')
-                        .replace('{0}', String(shiftedChallenge.max_photo_submits))
-                        .replace('{1}', String(shiftedChallenge.max_photo_submits + scheduleShift))}
+                    {t('app.autoSubmitScheduleShiftHint', {
+                        count: shiftedChallenge.max_photo_submits,
+                        '1': String(shiftedChallenge.max_photo_submits + scheduleShift),
+                    })}
                 </ToneNote>
             )}
             <SettingHintList hints={hintsFor(key)} />

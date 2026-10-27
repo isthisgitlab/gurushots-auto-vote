@@ -7,7 +7,6 @@ import { HoursMinutesDraftField } from './HoursMinutesFields';
 import { TimeField, ScheduleField, TimeOfDayListField, TimeListField } from './TimeSettingFields';
 import { PhotosField } from './ChosenPhotosField';
 import { useScenarios } from '@/api/useScenarios';
-import { interp } from '@/utils/interp';
 
 export { SCHEDULED_FILL_MAX_ENTRIES } from './TimeSettingFields';
 
@@ -205,9 +204,9 @@ function isNumberInvalid(value: unknown, { min, max }: Pick<SerializableSchemaEn
 export function numberRangeMessage({ min, max }: Pick<SerializableSchemaEntry, 'min' | 'max'>, t: Translate): string {
     const hasMin = typeof min === 'number';
     if (hasMin && typeof max === 'number') {
-        return t('app.validationOutOfRange').replace('{min}', String(min)).replace('{max}', String(max));
+        return t('app.validationOutOfRange', { min, max });
     }
-    return hasMin ? t('app.validationAtLeast').replace('{min}', String(min)) : t('app.validationInvalidValue');
+    return hasMin ? t('app.validationAtLeast', { min }) : t('app.validationInvalidValue');
 }
 
 /**
@@ -318,9 +317,7 @@ function ScenarioField({ id, settingKey, config, value, onChange, onReset, disab
                         {name}
                     </option>
                 ))}
-                {missing && (
-                    <option value={current}>{interp(t('app.scenarioMissingOption'), { name: current })}</option>
-                )}
+                {missing && <option value={current}>{t('app.scenarioMissingOption', { name: current })}</option>}
             </select>
         </ControlRow>
     );

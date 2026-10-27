@@ -8,11 +8,12 @@ import { act, fireEvent, pickOption, render, screen, waitFor, within } from './h
 import { PICK_TEXTS, PhotoSubmitModal } from '@/components/app/PhotoSubmitModal';
 import type { PickOutcome } from '@/components/app/PhotoSubmitModal';
 import { mockTranslator } from './helpers/setup';
-import { app, errors } from '../../src/ts/translations/english';
+import { createTranslator } from '../../src/ts/translations/translator';
 import { invalid } from '../helpers/invalid';
 import { MAX_SUGGEST_EXCLUDE } from '../../src/ts/settings/limits';
 import type { usePhotoPicker } from '@/hooks/usePhotoPicker';
 import type { WindowApi } from '../../src/ts/types/ipc';
+import type { Translate } from '../../src/ts/translations/translator';
 
 // The live picker instances, so a test can press loadMore directly: the keepIds contract already
 // runs through the real component wiring.
@@ -58,12 +59,9 @@ const listing = (photos: LibraryPhoto[], over: Partial<Listing> = {}): Listing =
     ...over,
 });
 
-const english = (key: string) =>
-    key.startsWith('app.')
-        ? ((app as Record<string, string>)[key.slice(4)] ?? key)
-        : key.startsWith('errors.')
-          ? ((errors as Record<string, string>)[key.slice(7)] ?? key)
-          : key;
+// The real English strings (plural groups included), placeholders filled like the real t fills them.
+const translator = createTranslator();
+const english: Translate = (key, vars) => translator.t(key, vars, 'en');
 
 const getLibrary = () => jest.mocked(window.api.getLibraryPhotos);
 
@@ -406,7 +404,7 @@ describe('a listing as last loaded, and Refresh', () => {
         // The fresh listing replaces the loader: the refused photo is hidden and counted, the rest pickable.
         await waitFor(() => expect(screen.queryByText('Loading your photos…')).toBeNull());
         expect(document.querySelector<HTMLElement>('[role="status"][tabindex="-1"]')?.textContent).toBe(
-            "Showing 1 photo(s).Hidden: 1 photo(s) GuruShots won't take in this challenge.",
+            "Showing 1 photo.Hidden: 1 photo GuruShots won't take in this challenge.",
         );
         expect(tile(2).getAttribute('aria-disabled')).toBe('false');
         fireEvent.click(tile(2));
@@ -1594,7 +1592,9 @@ describe('Pick… loads photos on demand', () => {
 
 describe('photos the challenge refuses', () => {
     const refused = (n: number) => photo(n, { allowed: false, message: `No ${n}` });
-    const hiddenLine = (count: number) => `Hidden: ${count} photo(s) GuruShots won't take in this challenge.`;
+    // The hidden line reads the count through the plural group: one photo, otherwise photos.
+    const hiddenLine = (count: number) =>
+        `Hidden: ${count} ${count === 1 ? 'photo' : 'photos'} GuruShots won't take in this challenge.`;
     const noneAccepted =
         "GuruShots won't take any of the listed photos in this challenge. Search by tag to find others, or upload new photos and press Refresh.";
     const has = (n: number) => screen.queryByRole('button', { name: new RegExp(`^Photo ${shortOf(n)}:`) }) !== null;
@@ -1637,7 +1637,7 @@ describe('photos the challenge refuses', () => {
         expect(has(3)).toBe(false);
         expect(has(4)).toBe(true);
         expect(statusRegion()).toBe(region);
-        expect(region?.textContent).toBe(`Showing 2 photo(s).${hiddenLine(2)}`);
+        expect(region?.textContent).toBe(`Showing 2 photos.${hiddenLine(2)}`);
         expect(screen.queryByText(noneAccepted)).toBeNull();
     });
 
@@ -1655,7 +1655,7 @@ describe('photos the challenge refuses', () => {
         await act(async () => answer.resolve(listing([refused(1), refused(2)])));
         await screen.findByText(noneAccepted);
         expect(statusRegion()).toBe(region);
-        expect(region?.textContent).toBe(`Showing 0 photo(s).${hiddenLine(2)}${noneAccepted}`);
+        expect(region?.textContent).toBe(`Showing 0 photos.${hiddenLine(2)}${noneAccepted}`);
     });
 
     test('the region is still the same one when the read fails', async () => {
@@ -1679,10 +1679,10 @@ describe('photos the challenge refuses', () => {
         await loadedAll();
         expect(
             screen.getByText(
-                "Hidden: at least 1 photo(s) GuruShots won't take in this challenge. Press Load more photos to look for others.",
+                "Hidden: at least 1 photo GuruShots won't take in this challenge. Press Load more photos to look for others.",
             ),
         ).toBeTruthy();
-        expect(screen.getByText('Showing 2 photo(s).')).toBeTruthy();
+        expect(screen.getByText('Showing 2 photos.')).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Load more photos' })).toBeTruthy();
     });
 
@@ -1789,7 +1789,7 @@ describe('photos the challenge refuses', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Refresh photos' }));
         await waitFor(() => expect(has(2)).toBe(false));
         expect(document.activeElement).toBe(statusRegion());
-        expect(document.activeElement?.textContent).toBe(`Showing 2 photo(s).${hiddenLine(1)}`);
+        expect(document.activeElement?.textContent).toBe(`Showing 2 photos.${hiddenLine(1)}`);
     });
 
     test('the focus is left alone when it has moved off the tile before the read hides it', async () => {
@@ -2044,14 +2044,14 @@ describe('Load more', () => {
         setupLoaded();
         await opened();
         expect(getLibrary().mock.calls[0]).toEqual([7, undefined, 'cached', 'submit', 0, 100]);
-        expect(screen.getByText('Showing 2 photo(s).')).toBeTruthy();
+        expect(screen.getByText('Showing 2 photos.')).toBeTruthy();
         fireEvent.click(more());
         expect(await screen.findByRole('button', { name: /^Photo 00000003:/ })).toBeTruthy();
         expect(getLibrary().mock.calls[2]).toEqual([7, undefined, 'fresh', 'submit', 2, 100]);
         // The last batch says the listing is complete: the button is gone and nothing failed.
         expect(screen.queryByRole('button', { name: 'Load more photos' })).toBeNull();
         expect(screen.queryByRole('alert')).toBeNull();
-        expect(screen.getByText('Showing 3 photo(s).')).toBeTruthy();
+        expect(screen.getByText('Showing 3 photos.')).toBeTruthy();
     });
 
     test('a pick past the first batch survives a re-open: the re-check reads the cached accepted extent', async () => {
@@ -2130,14 +2130,14 @@ describe('Load more', () => {
         expect(await screen.findByRole('button', { name: /^Photo 00000002:/ })).toBeTruthy();
         expect(
             await screen.findByText(
-                "Hidden: at least 1 photo(s) GuruShots won't take in this challenge. Press Load more photos to look for others.",
+                "Hidden: at least 1 photo GuruShots won't take in this challenge. Press Load more photos to look for others.",
             ),
         ).toBeTruthy();
-        expect(screen.getByText('Showing 1 photo(s).')).toBeTruthy();
+        expect(screen.getByText('Showing 1 photo.')).toBeTruthy();
         fireEvent.click(more());
         // Photo 3 is refused, so the grid hides it: the batch joins the hidden count, the shown count stays.
-        await screen.findByText("Hidden: 2 photo(s) GuruShots won't take in this challenge.");
-        expect(screen.getByText('Showing 1 photo(s).')).toBeTruthy();
+        await screen.findByText("Hidden: 2 photos GuruShots won't take in this challenge.");
+        expect(screen.getByText('Showing 1 photo.')).toBeTruthy();
     });
 });
 

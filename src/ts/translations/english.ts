@@ -341,8 +341,10 @@ export const app = {
     autoSubmitSchedule: 'Auto-Submit Schedule',
     autoSubmitScheduleDesc:
         '0h 0m turns an image off. Each row: have at least this many entries once this much time remains — "Image 2 ≤ 48h" submits photo 2 at 48 hours left. Behind schedule it catches up, one photo per cycle.',
-    autoSubmitScheduleShiftHint:
-        'This challenge allows {0} photos, fewer than the schedule covers — times shift toward the end: the final photo uses the Image {1} time.',
+    autoSubmitScheduleShiftHint_one:
+        'This challenge allows {count} photo, fewer than the schedule covers — times shift toward the end: the final photo uses the Image {1} time.',
+    autoSubmitScheduleShiftHint_other:
+        'This challenge allows {count} photos, fewer than the schedule covers — times shift toward the end: the final photo uses the Image {1} time.',
     autoSubmitScheduleImage: 'Image',
     autoSubmitScheduleOff: 'no time set — may still be submitted while catching up to a later image',
     autoSubmitScheduleEmpty: 'All images are off — auto-submit will never submit anything.',
@@ -427,7 +429,8 @@ export const app = {
     scenarioErrorNext: 'Fix it and try again.',
     scenarioErrorNextRefresh: 'Try again after the next refresh.',
     scenarioStartsIn: 'starts in phase {phase}',
-    scenarioPhaseSummary: 'Phase {phase}: {rules} rule(s)',
+    scenarioPhaseSummary_one: 'Phase {phase}: {count} rule',
+    scenarioPhaseSummary_other: 'Phase {phase}: {count} rules',
     scenarioSpends: 'Spends: {actions}',
     scenarioSpendsNothing: 'Spends nothing.',
     scenarioLimits: 'Limits: {limits}',
@@ -725,7 +728,8 @@ export const app = {
     discoverUnavailableList: 'Could not load open challenges. Check your connection and try again.',
     discoverUntitled: 'Untitled challenge',
     discoverCostFree: 'free',
-    discoverCostPaid: '{coins} coins',
+    discoverCostPaid_one: '{count} coin',
+    discoverCostPaid_other: '{count} coins',
     discoverFull: 'Full',
     discoverJoinFullLabel: 'Join {title} — the challenge is full',
     discoverPriceUnknown: 'Price unknown',
@@ -736,7 +740,8 @@ export const app = {
     discoverJoin: 'Join',
     discoverJoinPaid: 'Join (paid)',
     discoverJoinLabel: 'Join {title}',
-    discoverJoinPaidLabel: 'Join (paid) {title}, {coins} coins',
+    discoverJoinPaidLabel_one: 'Join (paid) {title}, {count} coin',
+    discoverJoinPaidLabel_other: 'Join (paid) {title}, {count} coins',
     discoverJoining: 'Joining…',
     discoverChecking: 'Checking…',
     discoverPendingNoPhoto:
@@ -770,12 +775,14 @@ export const app = {
     discoverRetrySubmit: 'Retry submit',
     discoverRetrySubmitLabel: 'Retry submit for {title}',
     discoverConfirmTitle: 'Join paid challenge?',
-    discoverConfirmBody: 'Joining "{title}" costs {coins} coins.',
+    discoverConfirmBody_one: 'Joining "{title}" costs {count} coin.',
+    discoverConfirmBody_other: 'Joining "{title}" costs {count} coins.',
     discoverConfirmBalance: 'You have {current} coins; this costs {cost}, leaving {resulting}.',
     discoverConfirmBalanceUnknown: 'Your current coin balance could not be read.',
     discoverConfirmInsufficient:
         'You have {current} coins; this challenge costs {cost} — not enough to join. Earn more coins, then try again.',
-    discoverConfirmSpend: 'Spend {coins} coins',
+    discoverConfirmSpend_one: 'Spend {count} coin',
+    discoverConfirmSpend_other: 'Spend {count} coins',
     // Discover join outcomes
     discoverJoined: 'Joined.',
     discoverUnaffordable: 'Not enough coins to join (needs {coins}, you have {have}).',
@@ -787,7 +794,10 @@ export const app = {
     discoverNoPhoto: 'No eligible photo to submit. No coins were charged.',
     discoverUnavailable: 'This challenge is no longer open to join.',
     discoverNotStarted: 'This challenge has not started yet. You can join once it starts.',
-    discoverPriceChanged: 'The cost changed to {coins} coins. Nothing was spent — press Join to confirm the new cost.',
+    discoverPriceChanged_one:
+        'The cost changed to {count} coin. Nothing was spent — press Join to confirm the new cost.',
+    discoverPriceChanged_other:
+        'The cost changed to {count} coins. Nothing was spent — press Join to confirm the new cost.',
     discoverBusy: 'A join is already in progress. Try again in a moment.',
     validationOutOfRange: 'Enter a value between {min} and {max}.',
     validationAtLeast: 'Enter a value of {min} or more.',
@@ -799,8 +809,10 @@ export const app = {
     teamMatchBehind: 'behind',
     teamMatchTied: 'tied',
     teamStandingActive: 'You #{position} · active',
-    teamStandingOverStandby: '+{votes} votes over standby',
-    teamStandingStandby: 'Standby · {votes} votes to active',
+    teamStandingOverStandby_one: '+{count} vote over standby',
+    teamStandingOverStandby_other: '+{count} votes over standby',
+    teamStandingStandby_one: 'Standby · {count} vote to active',
+    teamStandingStandby_other: 'Standby · {count} votes to active',
     teamMatchNotRunning: 'Match not running',
     teamChallenge: 'Team match',
     customBadge: 'custom',
@@ -849,14 +861,22 @@ export const app = {
         "Your photos can't be listed yet: the library is read through a challenge, and you have no active or joinable challenge right now. Join one or wait until one opens, then try again.",
     photoChooserEligibilityLater:
         'Eligibility is not checked here for any challenge; it is checked when the app submits.',
-    photoChooserShowing: 'Showing {count} photo(s).',
-    photoChooserWonHidden:
-        "Hidden: {count} photo(s) that have won a challenge. A winning photo can't be entered again.",
-    photoChooserWonHiddenTruncated:
-        "Hidden: at least {count} photo(s) that have won a challenge. A winning photo can't be entered again. Press Load more photos to look for more.",
-    photoChooserRefusedHidden: "Hidden: {count} photo(s) GuruShots won't take in this challenge.",
-    photoChooserRefusedHiddenTruncated:
-        "Hidden: at least {count} photo(s) GuruShots won't take in this challenge. Press Load more photos to look for others.",
+    photoChooserShowing_one: 'Showing {count} photo.',
+    photoChooserShowing_other: 'Showing {count} photos.',
+    photoChooserWonHidden_one:
+        "Hidden: {count} photo that has won a challenge. A winning photo can't be entered again.",
+    photoChooserWonHidden_other:
+        "Hidden: {count} photos that have won a challenge. A winning photo can't be entered again.",
+    photoChooserWonHiddenTruncated_one:
+        "Hidden: at least {count} photo that has won a challenge. A winning photo can't be entered again. Press Load more photos to look for more.",
+    photoChooserWonHiddenTruncated_other:
+        "Hidden: at least {count} photos that have won a challenge. A winning photo can't be entered again. Press Load more photos to look for more.",
+    photoChooserRefusedHidden_one: "Hidden: {count} photo GuruShots won't take in this challenge.",
+    photoChooserRefusedHidden_other: "Hidden: {count} photos GuruShots won't take in this challenge.",
+    photoChooserRefusedHiddenTruncated_one:
+        "Hidden: at least {count} photo GuruShots won't take in this challenge. Press Load more photos to look for others.",
+    photoChooserRefusedHiddenTruncated_other:
+        "Hidden: at least {count} photos GuruShots won't take in this challenge. Press Load more photos to look for others.",
     photoChooserNoneAccepted:
         "GuruShots won't take any of the listed photos in this challenge. Search by tag to find others, or upload new photos and press Refresh.",
     photoChooserNoneAcceptedTruncated:
@@ -1305,8 +1325,10 @@ export const app = {
     prize: 'Prize',
     rank: 'Rank',
     // Challenge detail: benchmark scores, prize tiers, track badges
-    benchmarkScore: 'Top {target}: {score} votes',
-    benchmarkGap: '+{n} votes to top {target}',
+    benchmarkScore_one: 'Top {target}: {count} vote',
+    benchmarkScore_other: 'Top {target}: {count} votes',
+    benchmarkGap_one: '+{count} vote to top {target}',
+    benchmarkGap_other: '+{count} votes to top {target}',
     prizeTierTopPhotographer: 'Top photographer #{min}–{max}',
     prizeTierTopPhotographerSingle: 'Top photographer #{min}',
     prizeTierTopPhoto: 'Top photo #{min}–{max}',
@@ -1496,7 +1518,8 @@ export const app = {
     downloadInBrowser: 'Download in Browser',
     overridden: 'Overridden',
     usingGlobal: 'Using global',
-    overridesActiveSummary: '{0} manual override(s); other settings use the profile/global baseline.',
+    overridesActiveSummary_one: '{count} manual override; other settings use the profile/global baseline.',
+    overridesActiveSummary_other: '{count} manual overrides; other settings use the profile/global baseline.',
     overridesNoneSummary: 'No manual overrides; using the profile/global baseline.',
     enableOverride: 'Enable override for this challenge',
     clearAll: 'Clear all',

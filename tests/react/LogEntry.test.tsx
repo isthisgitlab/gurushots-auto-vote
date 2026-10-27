@@ -14,7 +14,7 @@ describe('LogEntry', () => {
     test('shows an existing log message in the selected Latvian language', async () => {
         mockApi.getSetting.mockResolvedValue('lv');
         const translator = createTranslator();
-        mockTranslator.t.mockImplementation((key) => translator.t(key, 'lv'));
+        mockTranslator.t.mockImplementation((key) => translator.t(key, undefined, 'lv'));
         try {
             const { container } = render(
                 <LogEntry
@@ -43,7 +43,7 @@ describe('LogEntry', () => {
     ])('localizes the title-rules failure lines in Latvian (%s)', async (message, latvian) => {
         mockApi.getSetting.mockResolvedValue('lv');
         const translator = createTranslator();
-        mockTranslator.t.mockImplementation((key) => translator.t(key, 'lv'));
+        mockTranslator.t.mockImplementation((key) => translator.t(key, undefined, 'lv'));
         try {
             const { container } = render(
                 <LogEntry

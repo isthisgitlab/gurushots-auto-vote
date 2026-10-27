@@ -10,9 +10,10 @@ import { rendererTranslator } from '../../translations/renderer';
 import { buildPhotoUrl, entryPhotoUrl } from '../../format/photoUrl';
 import { formatEndTimeIn } from '../../format/endTime';
 import { finiteOr } from '../../numbers';
-import { interp } from './interp';
 import { LEVEL_BADGE_CLASS, LEVEL_PROGRESS_CLASS } from './levelBadge';
 import { isGuruPicked } from '../../voting/currencyAuto';
+
+import type { Translate } from '../../translations/translator';
 
 // The shared core's formatter, so the renderer, the CLI, and the voting pass
 // (services/votingOrchestrator/boost.ts) all format durations identically — see src/ts/format/duration.ts —
@@ -28,9 +29,9 @@ export { formatDuration };
 export { buildPhotoUrl, entryPhotoUrl };
 
 /** A chosen-photos list as its size ("none" when empty). */
-const formatPhotoCount = (value: unknown, t: (key: string) => string): string => {
+const formatPhotoCount = (value: unknown, t: Translate): string => {
     const count = Array.isArray(value) ? value.length : 0;
-    return count === 0 ? t('app.none') : interp(t('app.chosenPhotosCount'), { count });
+    return count === 0 ? t('app.none') : t('app.chosenPhotosCount', { count });
 };
 
 /**
@@ -53,7 +54,7 @@ const formatPhotoCount = (value: unknown, t: (key: string) => string): string =>
 export const formatSettingDefault = (
     value: unknown,
     config: Pick<SerializableSchemaEntry, 'type' | 'unit'> | null | undefined,
-    t: (key: string) => string,
+    t: Translate,
 ): string => {
     if (config?.type === 'schedule') {
         // A schedule setting holds { count, seconds } rows (config.type says so).
@@ -203,12 +204,11 @@ const STATUS_TEXT_KEYS: Record<string, string> = {
  *
  * @param t - Translation lookup
  */
-export const statusText = (status: ResourceStatus<string>, t: (key: string) => string): string => {
+export const statusText = (status: ResourceStatus<string>, t: Translate): string => {
     if (status.code === 'other') return status.raw ?? '';
-    const text = t(STATUS_TEXT_KEYS[status.code]);
     return status.code === 'availableMinutes'
-        ? interp(text, { time: formatDuration((status.minutes ?? 0) * 60) })
-        : text;
+        ? t(STATUS_TEXT_KEYS[status.code], { time: formatDuration((status.minutes ?? 0) * 60) })
+        : t(STATUS_TEXT_KEYS[status.code]);
 };
 
 /**

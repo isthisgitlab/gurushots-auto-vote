@@ -6,7 +6,7 @@
 import { useRef } from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from './helpers/test-utils';
 import { SettingsRecoveryNotice } from '@/components/app/SettingsRecoveryNotice';
-import { mockTranslator, defaultTranslate, fireSettingsChanged } from './helpers/setup';
+import { mockTranslator, defaultTranslate, fillTemplate, fireSettingsChanged } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
 import type { RendererGlobals } from '../../src/ts/types/capacitor';
 
@@ -31,7 +31,9 @@ describe('SettingsRecoveryNotice', () => {
         ['settings-unreadable', 'Unreadable'],
         ['settings-import-failed', 'Import'],
     ])('%s says what happened, why with the path, and what next', async (code, key) => {
-        mockTranslator.t.mockImplementation((text) => (text === `notice.recovery${key}Why` ? 'Why at {path}' : text));
+        mockTranslator.t.mockImplementation((text, vars) =>
+            fillTemplate(text === `notice.recovery${key}Why` ? 'Why at {path}' : text, vars),
+        );
         answer({ code, path: '/data/config.json.corrupt-1' });
         render(<SettingsRecoveryNotice />);
 
@@ -224,8 +226,8 @@ describe('SettingsRecoveryNotice actions', () => {
 
     describe('a failed import offers Retry and Start fresh', () => {
         test('words the file by name and offers both, and nothing else', async () => {
-            mockTranslator.t.mockImplementation((text) =>
-                text === 'notice.recoveryImportWhy' ? 'File at {path}' : text,
+            mockTranslator.t.mockImplementation((text, vars) =>
+                fillTemplate(text === 'notice.recoveryImportWhy' ? 'File at {path}' : text, vars),
             );
             answer({ code: 'settings-import-failed', path: '/data/settings.json', blocking: true });
             render(<SettingsRecoveryNotice />);
@@ -724,10 +726,13 @@ describe('SettingsRecoveryNotice actions', () => {
         });
 
         test('the settled advice says where the files are: it carries the path settings.json sits at', async () => {
-            mockTranslator.t.mockImplementation((text) =>
-                text === 'notice.recoveryImportSettledNext'
-                    ? 'delete config.json in the folder of settings.json ({path})'
-                    : text,
+            mockTranslator.t.mockImplementation((text, vars) =>
+                fillTemplate(
+                    text === 'notice.recoveryImportSettledNext'
+                        ? 'delete config.json in the folder of settings.json ({path})'
+                        : text,
+                    vars,
+                ),
             );
             answer({ code: 'settings-import-failed', path: '/data/settings.json', blocking: false, detail: 'corrupt' });
             render(<SettingsRecoveryNotice />);

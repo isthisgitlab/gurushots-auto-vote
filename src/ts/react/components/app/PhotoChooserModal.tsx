@@ -3,7 +3,6 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal } from '@/components/ui/Modal';
 import { StickyModalFooter } from '@/components/ui/StickyModalFooter';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
-import { interp } from '@/utils/interp';
 import { PIN_KINDS, pinDraftWithout, pinOf, planPinCommits, toggledPinDraft } from '@/utils/entryPinDraft';
 import { useEntryPins } from '@/api/useEntryPins';
 import { useAsyncIpcAction } from '@/api/useAsyncIpcAction';
@@ -21,10 +20,10 @@ import { MAX_CHOSEN_PHOTOS } from '../../../settings/limits';
 import type { EntryPinKind } from '../../../types/settings';
 import type { PinDraft } from '@/utils/entryPinDraft';
 import type { LibraryPhoto } from '@/hooks/useLibraryListing';
+import type { Translate } from '../../../translations/translator';
 
 /** A kind's feature name, as the pin strings fill {kind}. */
-const kindName = (kind: EntryPinKind, t: (key: string) => string): string =>
-    t(kind === 'boost' ? 'app.boost' : 'app.turbo');
+const kindName = (kind: EntryPinKind, t: Translate): string => t(kind === 'boost' ? 'app.boost' : 'app.turbo');
 
 // The chooser's sticky footer pins the save-error alert and the buttons. Sized for the worst case on a
 // phone (320px, Latvian): py-4, a multi-line save-error alert, the gaps and the buttons, about 10-11rem,
@@ -129,13 +128,10 @@ function PhotoChooserBody({
         hostSave();
     };
     const pinSaveErrorText = pinSaveError
-        ? interp(
-              t(pinSaveError.kinds.length === 2 ? 'app.photoChooserPinSaveErrorBoth' : 'app.photoChooserPinSaveError'),
-              {
-                  kind: kindName(pinSaveError.kinds[0], t),
-                  reason: ipcErrorText(pinSaveError.code, t),
-              },
-          )
+        ? t(pinSaveError.kinds.length === 2 ? 'app.photoChooserPinSaveErrorBoth' : 'app.photoChooserPinSaveError', {
+              kind: kindName(pinSaveError.kinds[0], t),
+              reason: ipcErrorText(pinSaveError.code, t),
+          })
         : undefined;
     const atCap = selected.length >= MAX_CHOSEN_PHOTOS;
     const idleKey = showAuto ? 'app.photoChooserIdleAuto' : 'app.photoChooserIdle';
@@ -189,7 +185,7 @@ function PhotoChooserBody({
                 onToggle={toggle}
             >
                 <p className="text-xs" role="status">
-                    {interp(t('app.photoChooserCount'), { count: selected.length, max: MAX_CHOSEN_PHOTOS })}
+                    {t('app.photoChooserCount', { count: selected.length, max: MAX_CHOSEN_PHOTOS })}
                     {atCap && ` ${t('app.photoChooserLimitReached')}`}
                 </p>
             </PhotoPickerToolbar>
@@ -205,7 +201,7 @@ function PhotoChooserBody({
                         </p>
                         {elsewhereKinds.map((kind) => (
                             <p key={kind} className="text-base-content/70 flex items-center gap-2 text-xs">
-                                <span>{interp(t('app.photoChooserPinElsewhere'), { kind: kindName(kind, t) })}</span>
+                                <span>{t('app.photoChooserPinElsewhere', { kind: kindName(kind, t) })}</span>
                                 <button type="button" className="btn btn-xs" onClick={() => clearPinDraft(kind)}>
                                     {t('app.pinClear')}
                                 </button>
@@ -230,7 +226,7 @@ function PhotoChooserBody({
                               selected.includes(id) ? (
                                   <div
                                       role="group"
-                                      aria-label={interp(t('app.photoChooserPinGroup'), {
+                                      aria-label={t('app.photoChooserPinGroup', {
                                           n: selected.indexOf(id) + 1,
                                       })}
                                       className="flex flex-wrap gap-1"

@@ -4,10 +4,10 @@
  * carries the same facts for a screen reader — and its numbers take the UI language's formatting.
  */
 
-import { interp } from '@/utils/interp';
 import { dateLocale } from '@/utils/formatters';
 
 import type { TileStats } from '@/hooks/usePhotoStatsLoader';
+import type { Translate } from '../../../translations/translator';
 
 // Number formats per locale and fraction digits: one stats answer re-renders many tiles at once.
 const formats = new Map<string, Intl.NumberFormat>();
@@ -42,17 +42,17 @@ export function TileStatsLine({ stats, dim }: { stats: TileStats; dim: string })
 }
 
 /** A tile's name with the read stats added after it, the way withPosition and withRank add theirs. */
-export const withStatsLabel = (label: string, t: (key: string) => string, stats: TileStats): string => {
+export const withStatsLabel = (label: string, t: Translate, stats: TileStats): string => {
     const count = numberFormat(dateLocale());
     const tail =
         stats.views > 0
-            ? interp(t('app.photoChooserTileStats'), {
+            ? t('app.photoChooserTileStats', {
                   ratio: ratioText(stats),
                   likes: count.format(stats.likes),
                   guruPicks: count.format(stats.guruPicks),
               })
             : // No views to divide by: the visible line keeps its dash, but the name says so in words.
-              interp(t('app.photoChooserTileStatsNoViews'), {
+              t('app.photoChooserTileStatsNoViews', {
                   likes: count.format(stats.likes),
                   guruPicks: count.format(stats.guruPicks),
               });

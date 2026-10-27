@@ -296,8 +296,8 @@ describe('SwapBackButton', () => {
         try {
             renderSwapBack({ ...SWAP_BACK, kind: 'turbo' });
             fireEvent.click(screen.getByText(/app\.currencySwapBack$/));
-            expect(mockTranslator.t).toHaveBeenCalledWith('app.turbo', expect.anything());
-            expect(mockTranslator.t).not.toHaveBeenCalledWith('app.boost', expect.anything());
+            expect(mockTranslator.t).toHaveBeenCalledWith('app.turbo', undefined, 'en');
+            expect(mockTranslator.t).not.toHaveBeenCalledWith('app.boost', undefined, 'en');
         } finally {
             mockTranslator.t.mockImplementation((key) => key);
         }
@@ -309,8 +309,8 @@ describe('SwapBackButton', () => {
             renderSwapBack({ ...SWAP_BACK, kind: 'guruPick' });
             fireEvent.click(screen.getByText(/app\.currencySwapBack$/));
             expect(screen.getByText('app.currencySwapBackBodyGuruPick')).toBeTruthy();
-            expect(mockTranslator.t).not.toHaveBeenCalledWith('app.boost', expect.anything());
-            expect(mockTranslator.t).not.toHaveBeenCalledWith('app.turbo', expect.anything());
+            expect(mockTranslator.t).not.toHaveBeenCalledWith('app.boost', undefined, 'en');
+            expect(mockTranslator.t).not.toHaveBeenCalledWith('app.turbo', undefined, 'en');
         } finally {
             mockTranslator.t.mockImplementation((key) => key);
         }

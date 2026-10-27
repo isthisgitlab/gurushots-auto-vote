@@ -8,7 +8,7 @@ import type { ComponentChildren, ErrorInfo } from 'preact';
  * ErrorBoundary is a class (no hooks) and, more importantly, an error boundary
  * must not depend on React context that may itself be part of what broke.
  */
-const tr = (key: string) => rendererTranslator.t(key);
+const tr = rendererTranslator.t;
 
 export type ErrorBoundaryProps = { children?: ComponentChildren };
 export type ErrorBoundaryState = { error: Partial<Error> | null };

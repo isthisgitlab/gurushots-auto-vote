@@ -116,7 +116,7 @@ const formatOffset = (seconds: number, t: Translate): string =>
  */
 const sourceLabel = (source: NonNullable<WindowHintState['next']>['source'], t: Translate): string =>
     source.kind === 'beforeEnd'
-        ? t('app.scheduledFillSourceBeforeEnd').replace('{0}', formatOffset(source.seconds, t))
+        ? t('app.scheduledFillSourceBeforeEnd', { '0': formatOffset(source.seconds, t) })
         : source.value;
 
 /**
@@ -124,15 +124,16 @@ const sourceLabel = (source: NonNullable<WindowHintState['next']>['source'], t: 
  * start–end in the app timezone plus the trigger that opens it.
  */
 const nextWindowText = (
-    template: string,
+    key: string,
     { next, durationSec }: PendingWindow,
     { timezone, t }: { timezone: string; t: Translate },
 ): string =>
-    template
-        .replace('{0}', formatClockInTz(next.start, timezone))
-        .replace('{1}', formatClockInTz(next.start + durationSec, timezone))
-        .replace('{2}', timezone)
-        .replace('{3}', sourceLabel(next.source, t));
+    t(key, {
+        '0': formatClockInTz(next.start, timezone),
+        '1': formatClockInTz(next.start + durationSec, timezone),
+        '2': timezone,
+        '3': sourceLabel(next.source, t),
+    });
 
 /**
  * Pre-boost fill: the fill spends votes, so any setting that blocks voting
@@ -270,7 +271,7 @@ const shortWindowHints = (
     { checkFrequencyMax, t }: { checkFrequencyMax: number; t: Translate },
 ): SettingHint[] =>
     win.active && checkFrequencyMax > 0 && win.durationMin < checkFrequencyMax
-        ? [{ tone: 'warning', text: t(templateKey).replace('{0}', String(checkFrequencyMax)) }]
+        ? [{ tone: 'warning', text: t(templateKey, { '0': checkFrequencyMax }) }]
         : [];
 
 /**
@@ -288,7 +289,7 @@ function scheduledFillStatusHints(ctx: ChallengeHintContext): SettingHint[] {
     if (fill.enabled && fill.next) {
         hints.push({
             tone: 'info',
-            text: nextWindowText(t('app.scheduledFillNextHint'), fill as PendingWindow, ctx),
+            text: nextWindowText('app.scheduledFillNextHint', fill as PendingWindow, ctx),
         });
     }
     return hints;
@@ -302,7 +303,7 @@ function wastedFillWindowHints({ fill, t }: { fill: WindowHintState; t: Translat
     const wasted = fill.beforeEnds.filter((sec) => sec < fill.durationSec);
     if (wasted.length === 0) return [];
     const offsets = wasted.map((sec) => formatOffset(sec, t)).join(', ');
-    return [{ tone: 'warning', text: t('app.scheduledFillWastedWindowHint').replace('{0}', offsets) }];
+    return [{ tone: 'warning', text: t('app.scheduledFillWastedWindowHint', { '0': offsets }) }];
 }
 
 function fillReplacesHints({
@@ -340,12 +341,12 @@ function votingPauseStatusHints(ctx: ChallengeHintContext): SettingHint[] {
         const until = formatClockInTz((pause as PendingWindow).next.start + pause.durationSec, timezone);
         hints.push({
             tone: 'warning',
-            text: t('app.votingPauseActiveHint').replace('{0}', until).replace('{1}', timezone),
+            text: t('app.votingPauseActiveHint', { '0': until, '1': timezone }),
         });
     } else if (pause.active && pause.next) {
         hints.push({
             tone: 'info',
-            text: nextWindowText(t('app.votingPauseNextHint'), pause as PendingWindow, ctx),
+            text: nextWindowText('app.votingPauseNextHint', pause as PendingWindow, ctx),
         });
     }
     // Daily pauses that leave no uncovered moment — outside the

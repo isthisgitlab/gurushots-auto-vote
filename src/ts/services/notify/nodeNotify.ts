@@ -35,20 +35,21 @@ import { getScenarioStatus } from '../scenarioStatus';
 
 import type { Challenge } from '../../types/gurushots';
 import type { OutboxItem } from '../scenarioNotifications';
+import type { Translate, TranslateVars } from '../../translations/translator';
 import { errorMessage } from '../../errorMessage';
 
 const notifyTranslator = createTranslator();
 
 /**
- * Resolve a raw i18n template in the user's saved language through the shared
- * translator core (same English fallback as the UI). Returns the key itself
- * when it doesn't resolve to a string, so the notification still shows
- * something.
+ * Resolve an i18n template in the user's saved language through the shared
+ * translator core (same English fallback as the UI); `{placeholder}` vars are
+ * filled by the core. Returns the key itself when it doesn't resolve to a
+ * string, so the notification still shows something.
  * @param key - dotted key, e.g. 'app.notifyBody'
  */
-const nodeTranslate = (key: string): string => {
+const nodeTranslate = (key: string, vars?: TranslateVars): string => {
     try {
-        return notifyTranslator.t(key, settings.getSetting('language'));
+        return notifyTranslator.t(key, vars, settings.getSetting('language'));
     } catch {
         return key;
     }
@@ -98,7 +99,7 @@ const createNodeDeadlineNotifier = (
             now: number,
         ) => { actions: Array<{ action: string; dueAt: number | null }> };
         getSetting?: (key: string) => unknown;
-        translate?: (key: string) => string;
+        translate?: Translate;
         deliver?: (n: { title: string; body: string }) => void;
     } = {},
 ): ((challenges: Challenge[] | null | undefined, now: number) => Promise<void>) => {
@@ -161,7 +162,7 @@ const createNodeScenarioNotifier = (
     deps: {
         getSetting?: (key: string) => unknown;
         getStatus?: (challengeId: string) => { state: { outbox?: OutboxItem[] } | null };
-        translate?: (key: string) => string;
+        translate?: Translate;
         deliver?: (n: { title: string; body: string }) => void;
     } = {},
 ): ((challenges: Challenge[]) => Promise<void>) => {

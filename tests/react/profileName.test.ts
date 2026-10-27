@@ -13,6 +13,8 @@ import {
     normalizeProfileName,
     profileNameCheckMessage,
 } from '@/utils/profileName';
+import { fillTemplate } from './helpers/setup';
+import type { Translate } from '../../src/ts/translations/translator';
 
 const LIMITS = { maxChallengeProfiles: 3, maxProfileNameLength: 10 };
 
@@ -23,18 +25,20 @@ describe('normalizeProfileName', () => {
 });
 
 describe('profileNameCheckMessage', () => {
-    const t = (key: string): string => key;
+    const t: Translate = (key) => key;
 
     test('an error result carries its translated message, the bounds filled in', () => {
         expect(profileNameCheckMessage('required', t)).toBe('app.profileNameRequired');
         expect(
-            profileNameCheckMessage({ tooLong: 10 }, (key) =>
-                key === 'app.profileNameTooLong' ? 'too long (max {0})' : key,
+            profileNameCheckMessage({ tooLong: 10 }, (key, vars) =>
+                fillTemplate(key === 'app.profileNameTooLong' ? 'too long (max {0})' : key, vars),
             ),
         ).toBe('too long (max 10)');
         expect(profileNameCheckMessage('reserved', t)).toBe('app.profileNameReserved');
         expect(
-            profileNameCheckMessage({ limit: 3 }, (key) => (key === 'app.profileLimitReached' ? 'cap {0}' : key)),
+            profileNameCheckMessage({ limit: 3 }, (key, vars) =>
+                fillTemplate(key === 'app.profileLimitReached' ? 'cap {0}' : key, vars),
+            ),
         ).toBe('cap 3');
     });
 

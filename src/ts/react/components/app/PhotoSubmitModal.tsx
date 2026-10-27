@@ -3,7 +3,6 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { StickyModalFooter, STICKY_FOOTER_SCROLL_PADDING } from '@/components/ui/StickyModalFooter';
 import { BusyContent } from '@/components/ui/LoadingSpinner';
-import { interp } from '@/utils/interp';
 import { usePhotoPicker } from '@/hooks/usePhotoPicker';
 import { PhotoPickerToolbar } from './PhotoPicker';
 import { PhotoGrid } from './PhotoGrid';
@@ -72,7 +71,7 @@ function SubmitFooter({
     onCancel: () => void;
 }) {
     const { t } = useTranslation();
-    const label = count > 0 ? interp(t(texts.submitCount), { count }) : t(texts.submit);
+    const label = count > 0 ? t(texts.submitCount, { count }) : t(texts.submit);
     return (
         <div className="flex flex-wrap justify-end gap-2">
             <button
@@ -283,7 +282,7 @@ function PhotoSubmitBody({
                 onToggle={toggle}
             >
                 <p className="text-xs" role="status">
-                    {interp(t(over ? texts.overCap : texts.count), { count: selected.length, max })}
+                    {t(over ? texts.overCap : texts.count, { count: selected.length, max })}
                 </p>
             </PhotoPickerToolbar>
             <PhotoGrid

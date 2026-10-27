@@ -12,21 +12,28 @@ import { render, act } from '@testing-library/preact';
 import { AutovoteProvider, useAutovote } from '@/contexts/AutovoteContext';
 import * as foregroundService from '../../src/ts/services/ForegroundServiceController';
 import * as nativeAutovote from '../../src/ts/services/NativeAutovoteBridge';
-import { mockApi, mockTranslator } from './helpers/setup';
+import { mockApi, mockTranslator, defaultTranslate, fillTemplate } from './helpers/setup';
 import type { ComponentProps } from 'preact';
 import type { RenderResult } from '@testing-library/preact';
 import type * as cadenceChainModule from '../../src/ts/scheduling/cadenceChain';
 import type * as deadlineNotifierModule from '../../src/ts/react/notifications/deadlineNotifier';
+import type * as scenarioNotifierModule from '../../src/ts/react/notifications/scenarioNotifier';
 import type { RendererGlobals } from '../../src/ts/types/capacitor';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 type ChainDeps = Parameters<typeof cadenceChainModule.createCadenceChain>[0];
 type NotifierDeps = Parameters<typeof deadlineNotifierModule.createDeadlineNotifier>[0];
+type ScenarioNotifierDeps = Parameters<typeof scenarioNotifierModule.createRendererScenarioNotifier>[0];
 
-const captured: { chainDeps: ChainDeps | null; notifierDeps: NotifierDeps | null } = {
+const captured: {
+    chainDeps: ChainDeps | null;
+    notifierDeps: NotifierDeps | null;
+    scenarioDeps: ScenarioNotifierDeps | null;
+} = {
     chainDeps: null,
     notifierDeps: null,
+    scenarioDeps: null,
 };
 const g = globalThis as RendererGlobals;
 
@@ -50,6 +57,19 @@ jest.mock('../../src/ts/react/notifications/deadlineNotifier', () => {
         createDeadlineNotifier: (deps: NotifierDeps) => {
             captured.notifierDeps = deps;
             return actual.createDeadlineNotifier(deps);
+        },
+    };
+});
+
+jest.mock('../../src/ts/react/notifications/scenarioNotifier', () => {
+    const actual = jest.requireActual<typeof scenarioNotifierModule>(
+        '../../src/ts/react/notifications/scenarioNotifier',
+    );
+    return {
+        ...actual,
+        createRendererScenarioNotifier: (deps: ScenarioNotifierDeps) => {
+            captured.scenarioDeps = deps;
+            return actual.createRendererScenarioNotifier(deps);
         },
     };
 });
@@ -106,6 +126,7 @@ describe('AutovoteContext', () => {
         window.api = invalid(mockApi);
         captured.chainDeps = null;
         captured.notifierDeps = null;
+        captured.scenarioDeps = null;
         delete g.Capacitor;
 
         const now = Math.floor(Date.now() / 1000);
@@ -155,7 +176,7 @@ describe('AutovoteContext', () => {
                 'app.autovoteNotificationPreparing': 'Preparing the first cycle',
                 'app.autovoteNotificationLastCycle': 'Last cycle: {time}',
             };
-            mockTranslator.t.mockImplementation((key: string) => words[key] ?? key);
+            mockTranslator.t.mockImplementation((key, vars) => fillTemplate(words[key] ?? key, vars));
             renderProvider({ onChallengesRefresh });
 
             await act(async () => {
@@ -821,6 +842,17 @@ describe('AutovoteContext', () => {
             mockTranslator.t.mockImplementation((k) => `T:${k}`);
             expect(deps.translate('a.b')).toBe('T:a.b');
             expect(mockTranslator.t).toHaveBeenCalledWith('a.b');
+            mockTranslator.t.mockImplementation((k) => k);
+
+            // The seam hands the translator method itself, not a key-only
+            // wrapper: a vars call reaches the translator and comes back
+            // interpolated.
+            mockTranslator.t.mockImplementation(defaultTranslate);
+            expect(deps.translate('app.timeLeft', { time: '5m' })).toBe('5m left');
+            expect(deps.translate('app.timeLeft')).toBe('{time} left');
+            expect(mockTranslator.t).toHaveBeenCalledWith('app.timeLeft', { time: '5m' });
+            // The same shared translate reaches the scenario notifier.
+            expect(captured.scenarioDeps!.translate('app.timeLeft', { time: '5m' })).toBe('5m left');
             mockTranslator.t.mockImplementation((k) => k);
 
             const savedLog = window.api.logDebug;

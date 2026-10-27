@@ -20,6 +20,14 @@ import { invalid } from '../helpers/invalid';
 import { parseJson, parseJsonObject } from '../helpers/parseJson';
 import { mockTranslator } from './helpers/setup';
 import { app, errors } from '../../src/ts/translations/english';
+import { createTranslator } from '../../src/ts/translations/translator';
+import type { Translate } from '../../src/ts/translations/translator';
+
+// The real English strings (plural groups included), placeholders filled like the real t fills them.
+const realEnglish: Translate = (() => {
+    const translator = createTranslator();
+    return (key, vars) => translator.t(key, vars, 'en');
+})();
 
 jest.mock('@/components/app/EntryBadge', () => ({
     EntryBadge: ({
@@ -606,12 +614,7 @@ describe('pick', () => {
         readAtMs: 1_700_000_000_000,
         allowedKnown: true,
     });
-    const english = (key: string) =>
-        key.startsWith('app.')
-            ? ((app as Record<string, string>)[key.slice(4)] ?? key)
-            : key.startsWith('errors.')
-              ? ((errors as Record<string, string>)[key.slice(7)] ?? key)
-              : key;
+    const english: Translate = realEnglish;
     const tile = (n: number) =>
         screen.getByRole('button', { name: new RegExp(`^Photo ${String(n).padStart(8, '0')}:`) });
     const pickButton = () => screen.getByRole('button', { name: app.fillPick });
@@ -861,8 +864,7 @@ describe('entries, tags and alerts', () => {
                 .mockResolvedValue({ success: true, actions: [], ...blocked(blockedBy) });
         };
         const alerts = () => screen.getAllByRole('alert').map((alert) => alert.textContent);
-        const english = (key: string) =>
-            key.startsWith('app.') ? ((app as Record<string, string>)[key.slice(4)] ?? key) : key;
+        const english: Translate = realEnglish;
 
         beforeEach(() => mockTranslator.t.mockImplementation(english));
         afterEach(() => mockTranslator.t.mockImplementation((key) => key));
@@ -1056,8 +1058,7 @@ describe('entries, tags and alerts', () => {
 });
 
 describe('benchmark scores and the gap to chase', () => {
-    const english = (key: string) =>
-        key.startsWith('app.') ? ((app as Record<string, string>)[key.slice(4)] ?? key) : key;
+    const english: Translate = realEnglish;
     const rows = (over: Partial<Record<'one' | 'ten' | 'hundred', string>> = {}) =>
         (
             [
@@ -1154,8 +1155,7 @@ describe('benchmark scores and the gap to chase', () => {
 });
 
 describe('prize tiers', () => {
-    const english = (key: string) =>
-        key.startsWith('app.') ? ((app as Record<string, string>)[key.slice(4)] ?? key) : key;
+    const english: Translate = realEnglish;
 
     beforeEach(() => mockTranslator.t.mockImplementation(english));
     afterEach(() => mockTranslator.t.mockImplementation((key) => key));
@@ -1321,8 +1321,7 @@ describe('prize tiers', () => {
 });
 
 describe('track badges', () => {
-    const english = (key: string) =>
-        key.startsWith('app.') ? ((app as Record<string, string>)[key.slice(4)] ?? key) : key;
+    const english: Translate = realEnglish;
 
     beforeEach(() => mockTranslator.t.mockImplementation(english));
     afterEach(() => mockTranslator.t.mockImplementation((key) => key));
@@ -1347,8 +1346,7 @@ describe('track badges', () => {
 });
 
 describe('levels_rank_enable off hides the level lines alone', () => {
-    const english = (key: string) =>
-        key.startsWith('app.') ? ((app as Record<string, string>)[key.slice(4)] ?? key) : key;
+    const english: Translate = realEnglish;
     const withLevels = (levels_rank_enable: boolean | undefined) =>
         makeChallenge({
             ...(levels_rank_enable === undefined ? {} : { levels_rank_enable }),

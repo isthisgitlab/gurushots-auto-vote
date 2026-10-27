@@ -8,12 +8,14 @@
 import { render } from './helpers/test-utils';
 import { mockTranslator } from './helpers/setup';
 import { ChallengeBadgeRow } from '@/components/app/ChallengeBadgeRow';
-import { app } from '../../src/ts/translations/english';
+import { createTranslator } from '../../src/ts/translations/translator';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import type { TeamMatch, TeamStanding } from '../../src/ts/types/gurushots';
+import type { Translate } from '../../src/ts/translations/translator';
 
-const english = (key: string) =>
-    key.startsWith('app.') ? ((app as Record<string, string>)[key.slice(4)] ?? key) : key;
+// The real English strings, plural groups included, so the substituted opponent and totals can be asserted.
+const translator = createTranslator();
+const english: Translate = (key, vars) => translator.t(key, vars, 'en');
 
 beforeEach(() => mockTranslator.t.mockImplementation(english));
 afterEach(() => mockTranslator.t.mockImplementation((key) => key));

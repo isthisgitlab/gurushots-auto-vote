@@ -2,7 +2,6 @@ import { useId, useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { useSwapPhoto, useSwapBack } from '@/api/useCurrencyActions';
-import { interp } from '@/utils/interp';
 import { entryPhotoUrl } from '@/utils/formatters';
 import { alreadyEntered, spentOrStale } from '@/utils/spentOrStale';
 import { CURRENCY_OUTCOME } from '../../../voting/currencyActions';
@@ -134,7 +133,7 @@ export function SwapWarningLines({ actioned, pinned, guruPick }: SwapWarnings) {
             {guruPick && <ToneNote tone="warning">{t('app.currencySwapGuruPickWarning')}</ToneNote>}
             {pinned && (
                 <ToneNote tone="warning">
-                    {interp(t('app.pinSwapWarning'), { kind: t(pinned === 'boost' ? 'app.boost' : 'app.turbo') })}
+                    {t('app.pinSwapWarning', { kind: t(pinned === 'boost' ? 'app.boost' : 'app.turbo') })}
                 </ToneNote>
             )}
         </>
@@ -325,9 +324,9 @@ export function SwapBackButton({
             case 'guruPick':
                 return t('app.currencySwapBackBodyGuruPick');
             case 'turbo':
-                return interp(t('app.currencySwapBackBody'), { kind: t('app.turbo') });
+                return t('app.currencySwapBackBody', { kind: t('app.turbo') });
             case 'boost':
-                return interp(t('app.currencySwapBackBody'), { kind: t('app.boost') });
+                return t('app.currencySwapBackBody', { kind: t('app.boost') });
         }
     };
 

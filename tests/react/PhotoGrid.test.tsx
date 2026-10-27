@@ -10,12 +10,13 @@
 import { fireEvent, render, screen } from './helpers/test-utils';
 import { PhotoGrid } from '@/components/app/PhotoGrid';
 import { mockTranslator } from './helpers/setup';
-import { app, errors } from '../../src/ts/translations/english';
+import { createTranslator } from '../../src/ts/translations/translator';
 import { invalid } from '../helpers/invalid';
 import type { TileStats } from '@/hooks/usePhotoStatsLoader';
 import type { LibraryPhoto } from '@/hooks/useLibraryListing';
 import type { usePhotoPicker } from '@/hooks/usePhotoPicker';
 import type { WindowApi } from '../../src/ts/types/ipc';
+import type { Translate } from '../../src/ts/translations/translator';
 
 type Listing = Extract<Awaited<ReturnType<WindowApi['getLibraryPhotos']>>, { success: true }>;
 
@@ -46,12 +47,9 @@ const listing = (photos: LibraryPhoto[], over: Partial<Listing> = {}): Listing =
     ...over,
 });
 
-const english = (key: string) =>
-    key.startsWith('app.')
-        ? ((app as Record<string, string>)[key.slice(4)] ?? key)
-        : key.startsWith('errors.')
-          ? ((errors as Record<string, string>)[key.slice(7)] ?? key)
-          : key;
+// The real English strings (plural groups included), placeholders filled like the real t fills them.
+const translator = createTranslator();
+const english: Translate = (key, vars) => translator.t(key, vars, 'en');
 
 type Props = Parameters<typeof PhotoGrid>[0];
 type Picker = ReturnType<typeof usePhotoPicker>;
@@ -222,12 +220,12 @@ describe('the plain states of a read', () => {
 describe('the Showing line', () => {
     test('a non-preview listing says what is shown, in the grid’s live region, complete or not', () => {
         const first = grid();
-        expect(statusRegion().textContent).toBe('Showing 2 photo(s).');
+        expect(statusRegion().textContent).toBe('Showing 2 photos.');
         first.unmount();
         grid({
             picker: basePicker({ state: { status: 'ready', listing: listing([photo(1), photo(2)]), order: 'votes' } }),
         });
-        expect(statusRegion().textContent).toBe('Showing 2 photo(s).');
+        expect(statusRegion().textContent).toBe('Showing 2 photos.');
     });
 
     test('the count is the tiles the grid shows, not the refused ones it hides', () => {
@@ -241,7 +239,7 @@ describe('the Showing line', () => {
             }),
         });
         expect(statusRegion().textContent).toBe(
-            "Showing 1 photo(s).Hidden: 1 photo(s) GuruShots won't take in this challenge.",
+            "Showing 1 photo.Hidden: 1 photo GuruShots won't take in this challenge.",
         );
     });
 
@@ -258,7 +256,7 @@ describe('the Showing line', () => {
         grid({
             picker: basePicker({ state: { status: 'ready', listing: listing([photo(1), photo(2)]), order: 'votes' } }),
         });
-        expect(statusRegion().textContent).toBe('Showing 2 photo(s).');
+        expect(statusRegion().textContent).toBe('Showing 2 photos.');
         expect(screen.queryByRole('button', { name: 'Load more photos' })).toBeNull();
     });
 });
@@ -269,7 +267,7 @@ describe('an empty listing', () => {
         expect(statusRegion().textContent).toBe(
             'No photos found. Try another tag, or upload photos to your GuruShots library and press Refresh.',
         );
-        expect(screen.queryByText('Showing 0 photo(s).')).toBeNull();
+        expect(screen.queryByText('Showing 0 photos.')).toBeNull();
         expect(screen.getAllByText(/No photos found/)).toHaveLength(1);
     });
 
@@ -282,7 +280,7 @@ describe('an empty listing', () => {
         expect(statusRegion().textContent).toBe(
             'No photos you can enter were found: every match has won a challenge. Try another tag, or upload new photos to your GuruShots library and press Refresh.',
         );
-        expect(screen.queryByText('Showing 0 photo(s).')).toBeNull();
+        expect(screen.queryByText('Showing 0 photos.')).toBeNull();
     });
 
     test('a preview keeps its empty text as a body paragraph — its region names no count', () => {
@@ -316,7 +314,7 @@ describe('hiding refused photos in a challenge-bound grid', () => {
         });
         expect(screen.queryByRole('button', { name: /^Photo 00000002:/ })).toBeNull();
         expect(statusRegion().textContent).toBe(
-            "Showing 1 photo(s).Hidden: at least 1 photo(s) GuruShots won't take in this challenge. Press Load more photos to look for others.",
+            "Showing 1 photo.Hidden: at least 1 photo GuruShots won't take in this challenge. Press Load more photos to look for others.",
         );
         first.unmount();
         // Load more appended its batch: the truncation is gone, and the new refused photo is hidden with the rest.
@@ -331,7 +329,7 @@ describe('hiding refused photos in a challenge-bound grid', () => {
         });
         expect(screen.queryByRole('button', { name: /^Photo 00000003:/ })).toBeNull();
         expect(statusRegion().textContent).toBe(
-            "Showing 1 photo(s).Hidden: 2 photo(s) GuruShots won't take in this challenge.",
+            "Showing 1 photo.Hidden: 2 photos GuruShots won't take in this challenge.",
         );
     });
 
@@ -359,7 +357,7 @@ describe('hiding refused photos in a challenge-bound grid', () => {
         // The Hidden line keeps the status region on screen, so the handed-off focus is not on a hidden element.
         expect(document.activeElement).toBe(statusRegion());
         expect(statusRegion().textContent).toBe(
-            "Showing 1 photo(s).Hidden: 1 photo(s) GuruShots won't take in this challenge.",
+            "Showing 1 photo.Hidden: 1 photo GuruShots won't take in this challenge.",
         );
     });
 
@@ -371,7 +369,7 @@ describe('hiding refused photos in a challenge-bound grid', () => {
             picker: basePicker({ state: { status: 'ready', listing: all, order: 'votes' } }),
         });
         expect(statusRegion().textContent).toBe(
-            `Showing 0 photo(s).Hidden: 2 photo(s) GuruShots won't take in this challenge.${noneLine}`,
+            `Showing 0 photos.Hidden: 2 photos GuruShots won't take in this challenge.${noneLine}`,
         );
         rerender(
             <PhotoGrid
@@ -384,7 +382,7 @@ describe('hiding refused photos in a challenge-bound grid', () => {
         // The picked refused photo is shown; the other is hidden and counted, and nothing more is claimed.
         expect(screen.getByRole('button', { name: /^Photo 00000001:/ }).getAttribute('aria-pressed')).toBe('true');
         expect(statusRegion().textContent).toBe(
-            "Showing 1 photo(s).Hidden: 1 photo(s) GuruShots won't take in this challenge.",
+            "Showing 1 photo.Hidden: 1 photo GuruShots won't take in this challenge.",
         );
     });
 
@@ -436,7 +434,7 @@ describe('a preview in the grid', () => {
         });
         expect(screen.getByRole('button', { name: /^Photo 00000001:/ })).toBeTruthy();
         // A preview names no count in the grid's live region; its header line says what it is.
-        expect(screen.queryByText('Showing 1 photo(s).')).toBeNull();
+        expect(screen.queryByText('Showing 1 photo.')).toBeNull();
         expect(
             screen.getByText('Showing your photos as last loaded while the app checks for anything new…'),
         ).toBeTruthy();

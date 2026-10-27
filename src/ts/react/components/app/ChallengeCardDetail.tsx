@@ -19,7 +19,6 @@ import { FillButtons } from './ChallengeCardActions';
 import { InlineError } from '@/components/ui/InlineError';
 import * as ipc from '@/api/ipc';
 import { ipcErrorText } from '@/api/ipcErrorText';
-import { interp } from '@/utils/interp';
 import { useFocusRestore } from '@/hooks/useFocusRestore';
 import { canStillFire, livePinKindOf, unusablePins } from '../../../voting/entryPins';
 import { challengePageUrl } from '@/utils/challengePageUrl';
@@ -145,9 +144,7 @@ function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; 
     const listed = ([1, 10, 100] as const).flatMap((group) => {
         const score = scores[group];
         // Each present group is labelled on its own, so one missing score cannot shift the rest under wrong labels.
-        return score === undefined
-            ? []
-            : [interp(t('app.benchmarkScore'), { target: group, score: score.toLocaleString() })];
+        return score === undefined ? [] : [t('app.benchmarkScore', { target: group, count: score })];
     });
     // The gap names a positive integer rank and a readable vote count (0 is a real count):
     // anything else the server sends drops it.
@@ -187,7 +184,7 @@ function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; 
                 <div className="text-xs text-base-content/70 mb-1">
                     {listed.length > 0 && listed.join(' · ')}
                     {listed.length > 0 && gap !== null && ' · '}
-                    {gap !== null && interp(t('app.benchmarkGap'), { n: gap.n.toLocaleString(), target: gap.target })}
+                    {gap !== null && t('app.benchmarkGap', { count: gap.n, target: gap.target })}
                 </div>
             )}
             <div className="flex items-center gap-2">
@@ -311,7 +308,7 @@ function DanglingPinNote({
     onClear: (button: HTMLButtonElement) => void | Promise<void>;
 }) {
     const { t } = useTranslation();
-    const text = interp(t(state === 'gone' ? 'app.pinGoneNote' : 'app.pinConflictNote'), {
+    const text = t(state === 'gone' ? 'app.pinGoneNote' : 'app.pinConflictNote', {
         kind: t(kind === 'boost' ? 'app.boost' : 'app.turbo'),
         other: t(kind === 'boost' ? 'app.turbo' : 'app.boost'),
     });
@@ -437,13 +434,11 @@ function PrizesPanel({ tiers }: { tiers: PrizeTier[] }) {
         // A one-rank window names the rank alone, never a "#n–n" range.
         if (type === 'MEMBER') {
             return min === max
-                ? interp(t('app.prizeTierTopPhotographerSingle'), { min })
-                : interp(t('app.prizeTierTopPhotographer'), { min, max });
+                ? t('app.prizeTierTopPhotographerSingle', { min })
+                : t('app.prizeTierTopPhotographer', { min, max });
         }
         if (type === 'IMAGE') {
-            return min === max
-                ? interp(t('app.prizeTierTopPhotoSingle'), { min })
-                : interp(t('app.prizeTierTopPhoto'), { min, max });
+            return min === max ? t('app.prizeTierTopPhotoSingle', { min }) : t('app.prizeTierTopPhoto', { min, max });
         }
         return null;
     };

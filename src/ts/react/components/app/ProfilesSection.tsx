@@ -6,7 +6,6 @@ import { useSettingsSchema } from '@/api/useSettingsSchema';
 import { useProfileEditor } from '@/hooks/useProfileEditor';
 import { tierSchemaEntries } from '@/utils/groupSettings';
 import { CONFIRM_TIMEOUT_MS, checkProfileName, profileNameCheckMessage } from '@/utils/profileName';
-import { interp } from '@/utils/interp';
 import { getIntentByName, intentValuesMatch } from '../../../settings/intentProfiles';
 import { InlineLoader, LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
@@ -279,11 +278,11 @@ export function ProfilesSection({
     const saveAsLive =
         saveAsErrorText ||
         (saveAsConfirming === 'rename' &&
-            interp(dirty ? t('app.saveAsRenameDirtyText') : t('app.saveAsRenameText'), {
+            t(dirty ? 'app.saveAsRenameDirtyText' : 'app.saveAsRenameText', {
                 from: selectedName,
                 to: saveAsName.trim(),
             })) ||
-        (saveAsConfirming === 'overwrite' && interp(t('app.saveAsOverwriteText'), { name: saveAsTarget })) ||
+        (saveAsConfirming === 'overwrite' && t('app.saveAsOverwriteText', { name: saveAsTarget })) ||
         '';
 
     return (

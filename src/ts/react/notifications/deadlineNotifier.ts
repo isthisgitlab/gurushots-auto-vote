@@ -25,6 +25,7 @@
  */
 
 import type { Challenge } from '../../types/gurushots';
+import type { Translate } from '../../translations/translator';
 
 import {
     NOTIFY_CONFIG_KEYS,
@@ -102,7 +103,7 @@ export function createDeadlineNotifier({
 }: {
     getSetting: (key: string) => Promise<unknown>;
     getDeadlineActions: GetDeadlineActions;
-    translate: (key: string) => string;
+    translate: Translate;
     deliver: (n: { title: string; body: string }) => void;
     log?: (message: string) => void;
 }): (challenges: readonly Challenge[], now: number) => Promise<void> {

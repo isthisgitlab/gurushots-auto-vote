@@ -4,7 +4,6 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import { useIpcQuery } from '@/api/useIpcQuery';
 import * as ipc from '@/api/ipc';
-import { interp } from '@/utils/interp';
 import { errorMessage } from '../../../errorMessage';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { BusyContent } from '@/components/ui/LoadingSpinner';
@@ -259,13 +258,13 @@ export function SettingsRecoveryNotice({ returnFocusTo }: { returnFocusTo?: RefO
                         <p ref={heading} tabIndex={-1} className="font-semibold">
                             {t(keys.what)}
                         </p>
-                        <p className="break-words">{interp(t(keys.why), { path: recovery.path })}</p>
+                        <p className="break-words">{t(keys.why, { path: recovery.path })}</p>
                         {keepsSignIn && (
                             <p className="break-words">
                                 {t(settingsFile ? 'notice.recoverySignInKept' : 'notice.recoverySignInKeptAndroid')}
                             </p>
                         )}
-                        <p className="break-words">{interp(t(keys.next), { path: recovery.path })}</p>
+                        <p className="break-words">{t(keys.next, { path: recovery.path })}</p>
                         {offered.length > 0 && (
                             <div className="flex flex-wrap gap-2 pt-1">
                                 {offered.map((action) => (

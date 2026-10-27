@@ -10,8 +10,10 @@ import { mockTranslator } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
 import { isKindBadgeText } from '../helpers/kindBadges';
 import { app } from '../../src/ts/translations/english';
+import { createTranslator } from '../../src/ts/translations/translator';
 import type { OpenChallenge } from '../../src/ts/types/gurushots';
 import type { WindowApi } from '../../src/ts/types/ipc';
+import type { Translate } from '../../src/ts/translations/translator';
 
 const NOW_MS = 1_800_000_000_000;
 const NOW_SEC = NOW_MS / 1000;
@@ -26,10 +28,8 @@ type MemberChallenges = jest.MockedFunction<WindowApi['getMemberChallenges']>;
 const answer = (items: OpenChallenge[]) => ({ success: true as const, items });
 
 // The English text with its placeholders filled in, so what a user reads is what is asserted.
-const english = (key: string, ...rest: unknown[]) => {
-    void rest;
-    return key.startsWith('app.') ? ((app as Record<string, string>)[key.slice(4)] ?? key) : key;
-};
+const translator = createTranslator();
+const english: Translate = (key, vars) => translator.t(key, vars, 'en');
 
 let getMemberChallenges: MemberChallenges;
 let joinChallenge: jest.MockedFunction<WindowApi['joinChallenge']>;

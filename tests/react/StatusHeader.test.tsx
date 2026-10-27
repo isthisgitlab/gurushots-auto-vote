@@ -6,7 +6,7 @@ import { scrollToChallenge } from '@/utils/scrollToChallenge';
 import type { ComponentChild } from 'preact';
 import type { Bankroll, Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
-import { mockTranslator } from './helpers/setup';
+import { mockTranslator, fillTemplate } from './helpers/setup';
 import { app as englishApp } from '../../src/ts/translations/english';
 import { app as latvianApp } from '../../src/ts/translations/latvian';
 
@@ -412,12 +412,14 @@ describe('StatusHeader', () => {
         describe.each([
             ['English', englishApp],
             ['Latvian', latvianApp],
-        ])('with real %s strings', (_language, strings: typeof englishApp) => {
+        ])('with real %s strings', (_language, strings: typeof englishApp | typeof latvianApp) => {
             const byKey = new Map(Object.entries(strings));
             let previousTranslator: ReturnType<typeof mockTranslator.t.getMockImplementation>;
             beforeEach(() => {
                 previousTranslator = mockTranslator.t.getMockImplementation();
-                mockTranslator.t.mockImplementation((key) => byKey.get(key.replace(/^app\./, '')) ?? key);
+                mockTranslator.t.mockImplementation((key, vars) =>
+                    fillTemplate(byKey.get(key.replace(/^app\./, '')) ?? key, vars),
+                );
             });
             afterEach(() => {
                 mockTranslator.t.mockImplementation(previousTranslator);

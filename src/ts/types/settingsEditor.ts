@@ -6,11 +6,13 @@
 import type { SerializableSchemaEntry } from '../ipc/settings.handlers';
 import type { getUiDefaultSettings } from '../settings/uiDefaults';
 
+import type { Translate } from '../translations/translator';
+
 /** The settings schema as get-settings-schema sends it: key -> projected entry (no validators). */
 export type RendererSchema = Record<string, SerializableSchemaEntry>;
 
 /** Translation lookup handed to the pure helpers (the `t` of useTranslation). */
-export type Translate = (key: string) => string;
+export type { Translate };
 
 /** A settings field's change callback: the setting key and its new value. */
 export type SettingChangeHandler = (key: string, value: unknown) => void;

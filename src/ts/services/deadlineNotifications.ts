@@ -22,6 +22,8 @@
 
 import { isMarkedChallenge } from '../challengeMarks';
 
+import type { Translate } from '../translations/translator';
+
 /**
  * Action key → translation key for its user-facing label. Owned here (the pure,
  * Node-safe module) rather than in the React DeadlineTimeline so both the
@@ -78,15 +80,6 @@ const sanitizeNotificationText = (value: string | null | undefined, maxLength: n
         .replace(/^[\s-]+/, '')
         .trim()
         .slice(0, maxLength);
-
-/**
- * Fill `{placeholder}` tokens in a translated template. The app's translation
- * layer (translations/translator.ts `t()`) does no interpolation of its own, so the
- * templates carry `{minutes}` / `{title}` / `{count}` and we substitute here.
- * Unknown tokens are left intact rather than blanked.
- */
-const interpolate = (template: string, params: Record<string, string | number | null | undefined>): string =>
-    template.replace(/\{(\w+)\}/g, (match: string, key: string) => (params[key] != null ? String(params[key]) : match));
 
 /**
  * Decide which upcoming actions are within the notification lead window.
@@ -208,12 +201,13 @@ const createDedupe = (): { filterNew: <T extends { fireKey: string }>(due: reado
  * same cycle coalesce into one grouped toast rather than N simultaneous ones.
  * Returns null when there is nothing to show.
  *
- * @param translate - returns a raw template (may carry
- *   `{placeholders}`); the host passes its own t()/Node translator.
+ * @param translate - the host's t()/Node translator; the shared translator
+ *   core (translations/translator.ts) fills the `{placeholder}` tokens from
+ *   the vars each call passes — an unknown token renders as an empty string.
  */
 const formatNotification = (
     entries: Array<{ title: string; action: string; secondsUntil: number }>,
-    translate: (key: string) => string,
+    translate: Translate,
 ): { title: string; body: string } | null => {
     const list = Array.isArray(entries) ? entries : [];
     if (list.length === 0) return null;
@@ -224,9 +218,9 @@ const formatNotification = (
         const e = list[0];
         const actionLabel = t(ACTION_LABEL_KEY[e.action] || '') || e.action;
         return {
-            title: sanitizeNotificationText(interpolate(t('app.notifyTitle'), { action: actionLabel })),
+            title: sanitizeNotificationText(t('app.notifyTitle', { action: actionLabel })),
             body: sanitizeNotificationText(
-                interpolate(t('app.notifyBody'), { title: e.title, action: actionLabel, minutes: minutesOf(e) }),
+                t('app.notifyBody', { title: e.title, action: actionLabel, minutes: minutesOf(e) }),
             ),
         };
     }
@@ -234,9 +228,7 @@ const formatNotification = (
     const minMinutes = Math.min(...list.map(minutesOf));
     return {
         title: sanitizeNotificationText(t('app.notifyGroupTitle')),
-        body: sanitizeNotificationText(
-            interpolate(t('app.notifyGroupBody'), { count: list.length, minutes: minMinutes }),
-        ),
+        body: sanitizeNotificationText(t('app.notifyGroupBody', { count: list.length, minutes: minMinutes })),
     };
 };
 
@@ -265,7 +257,6 @@ export {
     ACTION_LABEL_KEY,
     NOTIFY_CONFIG_KEYS,
     sanitizeNotificationText,
-    interpolate,
     computeDueNotifications,
     createDedupe,
     formatNotification,

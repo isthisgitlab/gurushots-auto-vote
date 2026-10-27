@@ -1,7 +1,6 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { useConfirmedAction } from '@/hooks/useConfirmedAction';
-import { interp } from '@/utils/interp';
 import * as ipc from '@/api/ipc';
 
 import type { Challenge } from '../../../types/gurushots';
@@ -73,7 +72,7 @@ export function ScenarioResetModal({
                 <p>
                     {everyChallenge
                         ? t('app.scenarioResetAllBody')
-                        : interp(t('app.scenarioResetBody'), { title: challenge.title || challenge.url })}
+                        : t('app.scenarioResetBody', { title: challenge.title || challenge.url })}
                 </p>
             )}
         </ConfirmModal>

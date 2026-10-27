@@ -1,7 +1,6 @@
 import type { EntryEnteredTime } from '../../../types/gurushots';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { formatEndTime } from '@/utils/formatters';
-import { interp } from '@/utils/interp';
 
 /**
  * When an entry went into its challenge, as the app recorded it. An exact time (the app submitted the photo) reads
@@ -17,12 +16,12 @@ export function EntryTime({ time, timezone }: { time: EntryEnteredTime | undefin
     const { t } = useTranslation();
     if (!time || !(time.at > 0)) return null;
     const when = formatEndTime(time.at, timezone);
-    if (time.exact) return <span className="text-xs">{interp(t('app.entrySubmitted'), { time: when })}</span>;
+    if (time.exact) return <span className="text-xs">{t('app.entrySubmitted', { time: when })}</span>;
     const long = t('app.entrySubmittedOrEarlierLong');
     return (
         <span className="text-xs italic text-base-content/70" title={long}>
-            <span aria-hidden="true">{interp(t('app.entrySubmittedOrEarlier'), { time: when })}</span>
-            <span className="sr-only">{`${interp(t('app.entrySubmittedOrEarlier'), { time: when })}. ${long}`}</span>
+            <span aria-hidden="true">{t('app.entrySubmittedOrEarlier', { time: when })}</span>
+            <span className="sr-only">{`${t('app.entrySubmittedOrEarlier', { time: when })}. ${long}`}</span>
         </span>
     );
 }

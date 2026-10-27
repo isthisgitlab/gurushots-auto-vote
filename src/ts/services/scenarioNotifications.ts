@@ -11,10 +11,11 @@
  * replays old ones.
  */
 
-import { sanitizeNotificationText, interpolate } from './deadlineNotifications';
+import { sanitizeNotificationText } from './deadlineNotifications';
 import { isMarkedChallenge } from '../challengeMarks';
 
 import type { Challenge } from '../types/gurushots';
+import type { Translate } from '../translations/translator';
 import { errorMessage } from '../errorMessage';
 
 /** Longest notification body; a scenario notice is itself capped at 120 characters. */
@@ -55,26 +56,23 @@ const createNoticeTracker = (startedAt: number) => {
 /**
  * One OS notification for this cycle's new notices — several coalesce into one.
  *
- * @param translate - returns a raw template
+ * @param translate - the host's t(); the shared translator core fills the
+ *   `{placeholder}` tokens from the vars each call passes
  */
 const formatScenarioNotification = (
     notices: Array<{ challengeTitle: string; message: string }>,
-    translate: (key: string) => string,
+    translate: Translate,
 ): { title: string; body: string } | null => {
     if (notices.length === 0) return null;
     if (notices.length === 1) {
         const [notice] = notices;
         return {
-            title: sanitizeNotificationText(
-                interpolate(translate('app.scenarioNotifyTitle'), { title: notice.challengeTitle }),
-            ),
+            title: sanitizeNotificationText(translate('app.scenarioNotifyTitle', { title: notice.challengeTitle })),
             body: sanitizeNotificationText(notice.message, MAX_BODY),
         };
     }
     return {
-        title: sanitizeNotificationText(
-            interpolate(translate('app.scenarioNotifyGroupTitle'), { count: notices.length }),
-        ),
+        title: sanitizeNotificationText(translate('app.scenarioNotifyGroupTitle', { count: notices.length })),
         body: sanitizeNotificationText(notices.map((n) => `${n.challengeTitle}: ${n.message}`).join(' · '), MAX_BODY),
     };
 };
@@ -97,7 +95,7 @@ const createScenarioNotifier = ({
 }: {
     isEnabled: () => boolean | Promise<boolean>;
     readOutbox: (challenge: Challenge) => OutboxItem[] | null | undefined | Promise<OutboxItem[] | null | undefined>;
-    translate: (key: string) => string;
+    translate: Translate;
     deliver: (n: { title: string; body: string }) => void;
     log?: (message: string) => void;
     startedAt?: number;

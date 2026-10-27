@@ -2,21 +2,22 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useSettings } from '@/api/useSettings';
 import { dateLocale } from '@/utils/formatters';
-import { interp } from '@/utils/interp';
 import { effectiveTimezone } from '../../../settings/uiDefaults';
+
+import type { Translate } from '../../../translations/translator';
 
 /**
  * When the listing was read, as the line above the photos words it: the time, with the date when it is not
  * today, in the timezone the settings name ('local' for the device's).
  */
-const readAtText = (readAtMs: number, timezone: string, t: (key: string) => string): string => {
+const readAtText = (readAtMs: number, timezone: string, t: Translate): string => {
     const at = new Date(readAtMs);
     const locale = dateLocale();
     const inZone = (zone: Intl.DateTimeFormatOptions): string => {
         const time = at.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: false, ...zone });
         const date = at.toLocaleDateString(locale, zone);
-        if (date === new Date().toLocaleDateString(locale, zone)) return interp(t('app.photoChooserAsOf'), { time });
-        return interp(t('app.photoChooserAsOfDate'), { date, time });
+        if (date === new Date().toLocaleDateString(locale, zone)) return t('app.photoChooserAsOf', { time });
+        return t('app.photoChooserAsOfDate', { date, time });
     };
     return inZone(timezone === 'local' ? {} : { timeZone: timezone });
 };

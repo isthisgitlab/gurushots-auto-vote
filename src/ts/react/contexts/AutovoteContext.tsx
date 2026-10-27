@@ -17,7 +17,6 @@ import { createDeadlineNotifier, deliverElectronNotification } from '../notifica
 import { createRendererScenarioNotifier } from '../notifications/scenarioNotifier';
 import { useLatestRef } from '../hooks/useLatestRef';
 import { rendererTranslator } from '../../translations/renderer';
-import { interp } from '../utils/interp';
 import * as ipc from '../api/ipc';
 import { isNativePlatform } from '../api/usePlatformCapabilities';
 import { dateLocale } from '../utils/formatters';
@@ -135,7 +134,7 @@ function recordCycleSuccess(dispatch: Dispatch<AutovoteAction>) {
     const lastRunStr = new Date().toLocaleTimeString(dateLocale());
     dispatch({ type: ACTIONS.UPDATE_LAST_RUN, payload: lastRunStr });
     void foregroundService.update({
-        body: interp(rendererTranslator.t('app.autovoteNotificationLastCycle'), { time: lastRunStr }),
+        body: rendererTranslator.t('app.autovoteNotificationLastCycle', { time: lastRunStr }),
     });
 }
 
@@ -210,7 +209,8 @@ function createRendererDeadlineNotifier(): CycleNotifier | null {
     if (!deliver) return null;
     const shared = {
         getSetting: (key: string) => ipc.getGlobalDefault(key),
-        translate: (key: string) => rendererTranslator.t(key),
+        // The core uses closures, no `this`, so the method passes unbound.
+        translate: rendererTranslator.t,
         deliver,
         log: (msg: string) => ipc.logRendererDebug(msg),
     };

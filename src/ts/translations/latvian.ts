@@ -186,8 +186,19 @@ export const login: typeof english.login = {
     usernamePlaceholder: 'Ievadi savu lietotājvārdu',
     usernameRequired: 'Lietotājvārds ir obligāts',
 };
-// App screen specific
-export const app: typeof english.app = {
+// App screen specific. A Latvian sentence can work for every number, so a
+// group here may define only _other: English's _zero/_one/_two/_few/_many
+// keys stay optional, while plain and _other keys remain required.
+type LatvianApp = {
+    [K in keyof typeof english.app as K extends `${string}_${'zero' | 'one' | 'two' | 'few' | 'many'}`
+        ? never
+        : K]: (typeof english.app)[K];
+} & {
+    [K in keyof typeof english.app as K extends `${string}_${'zero' | 'one' | 'two' | 'few' | 'many'}`
+        ? K
+        : never]?: (typeof english.app)[K];
+};
+export const app: LatvianApp = {
     activeChallenges: 'Aktīvie izaicinājumi',
     addCustomTimezone: 'Pievienot pielāgotu laika joslu',
     addTimezone: 'Pievienot laika joslu',
@@ -347,8 +358,8 @@ export const app: typeof english.app = {
     autoSubmitSchedule: 'Automātiskās iesniegšanas grafiks',
     autoSubmitScheduleDesc:
         '0h 0min izslēdz attiecīgo foto. Katra rinda: kad līdz beigām atlicis šis laiks, jābūt vismaz tik foto, piemēram, „Foto 2 ≤ 48h”. Atpaliekot, lietotne grafiku panāk pa vienam foto ciklā.',
-    autoSubmitScheduleShiftHint:
-        'Šis izaicinājums atļauj {0} foto — mazāk, nekā aptver grafiks, tāpēc laiki nobīdās uz beigām: pēdējais foto izmanto Foto {1} laiku.',
+    autoSubmitScheduleShiftHint_other:
+        'Šis izaicinājums atļauj {count} foto — mazāk, nekā aptver grafiks, tāpēc laiki nobīdās uz beigām: pēdējais foto izmanto Foto {1} laiku.',
     autoSubmitScheduleImage: 'Foto',
     autoSubmitScheduleOff: 'laiks nav uzstādīts — foto var iesniegt, panākot kādu vēlāku foto',
     autoSubmitScheduleEmpty: 'Visi foto ir izslēgti — automātiskā iesniegšana neko neiesniegs.',
@@ -434,7 +445,7 @@ export const app: typeof english.app = {
     scenarioErrorNext: 'Izlabo to un mēģini vēlreiz.',
     scenarioErrorNextRefresh: 'Mēģini vēlreiz pēc nākamās atsvaidzināšanas.',
     scenarioStartsIn: 'sākas fāzē {phase}',
-    scenarioPhaseSummary: 'Fāze {phase}, noteikumu skaits: {rules}',
+    scenarioPhaseSummary_other: 'Fāze {phase}, noteikumu skaits: {count}',
     scenarioSpends: 'Tērē: {actions}',
     scenarioSpendsNothing: 'Neko netērē.',
     scenarioLimits: 'Limiti: {limits}',
@@ -733,7 +744,7 @@ export const app: typeof english.app = {
     discoverUnavailableList: 'Neizdevās ielādēt atvērtos izaicinājumus. Pārbaudi savienojumu un mēģini vēlreiz.',
     discoverUntitled: 'Izaicinājums bez nosaukuma',
     discoverCostFree: 'bezmaksas',
-    discoverCostPaid: 'monētas: {coins}',
+    discoverCostPaid_other: 'monētas: {count}',
     discoverFull: 'Pilns',
     discoverJoinFullLabel: 'Pievienoties izaicinājumam „{title}” — tas ir pilns',
     discoverPriceUnknown: 'Cena nav zināma',
@@ -744,7 +755,7 @@ export const app: typeof english.app = {
     discoverJoin: 'Pievienoties',
     discoverJoinPaid: 'Pievienoties (maksas)',
     discoverJoinLabel: 'Pievienoties izaicinājumam „{title}”',
-    discoverJoinPaidLabel: 'Pievienoties (maksas) izaicinājumam „{title}”, monētas: {coins}',
+    discoverJoinPaidLabel_other: 'Pievienoties (maksas) izaicinājumam „{title}”, monētas: {count}',
     discoverJoining: 'Pievienojas…',
     discoverChecking: 'Pārbauda…',
     discoverPendingNoPhoto:
@@ -779,12 +790,12 @@ export const app: typeof english.app = {
     discoverRetrySubmit: 'Mēģināt iesniegt vēlreiz',
     discoverRetrySubmitLabel: 'Mēģināt vēlreiz iesniegt izaicinājumam „{title}”',
     discoverConfirmTitle: 'Pievienoties maksas izaicinājumam?',
-    discoverConfirmBody: 'Pievienošanās izaicinājumam „{title}” maksā monētas: {coins}.',
+    discoverConfirmBody_other: 'Pievienošanās izaicinājumam „{title}” maksā monētas: {count}.',
     discoverConfirmBalance: 'Monētu atlikums: {current}; maksa: {cost}; paliks: {resulting}.',
     discoverConfirmBalanceUnknown: 'Neizdevās nolasīt tavu pašreizējo monētu atlikumu.',
     discoverConfirmInsufficient:
         'Monētu atlikums: {current}, bet šis izaicinājums maksā {cost} — ar to nepietiek, lai pievienotos. Nopelni vairāk monētu un mēģini vēlreiz.',
-    discoverConfirmSpend: 'Tērēt monētas: {coins}',
+    discoverConfirmSpend_other: 'Tērēt monētas: {count}',
     // Atklāšanas pievienošanās rezultāti
     discoverJoined: 'Pievienojies.',
     discoverUnaffordable: 'Nepietiek monētu, lai pievienotos (vajag {coins}, tev ir {have}).',
@@ -796,8 +807,8 @@ export const app: typeof english.app = {
     discoverNoPhoto: 'Nav piemērota foto, ko iesniegt. Monētas netika norakstītas.',
     discoverUnavailable: 'Šim izaicinājumam vairs nevar pievienoties.',
     discoverNotStarted: 'Šis izaicinājums vēl nav sācies. Pievienoties varēs, kad tas sāksies.',
-    discoverPriceChanged:
-        'Cena mainījusies — tagad monētas: {coins}. Nekas netika iztērēts; nospied „Pievienoties”, lai apstiprinātu jauno cenu.',
+    discoverPriceChanged_other:
+        'Cena mainījusies — tagad monētas: {count}. Nekas netika iztērēts; nospied „Pievienoties”, lai apstiprinātu jauno cenu.',
     discoverBusy: 'Pievienošanās jau notiek. Mēģini vēlreiz pēc brīža.',
     validationOutOfRange: 'Ievadi vērtību no {min} līdz {max}.',
     validationAtLeast: 'Ievadi vērtību, kas nav mazāka par {min}.',
@@ -809,8 +820,10 @@ export const app: typeof english.app = {
     teamMatchBehind: 'atpaliek',
     teamMatchTied: 'neizšķirts',
     teamStandingActive: 'Tu #{position} · sastāvā',
-    teamStandingOverStandby: '+{votes} balsis virs rezervista',
-    teamStandingStandby: 'Rezervists · {votes} balsis līdz sastāvam',
+    teamStandingOverStandby_one: '+{count} balss virs rezervista',
+    teamStandingOverStandby_other: '+{count} balsis virs rezervista',
+    teamStandingStandby_one: 'Rezervists · {count} balss līdz sastāvam',
+    teamStandingStandby_other: 'Rezervists · {count} balsis līdz sastāvam',
     teamMatchNotRunning: 'Mačs nenotiek',
     teamChallenge: 'Komandu mačs',
     customBadge: 'pielāgots',
@@ -859,13 +872,13 @@ export const app: typeof english.app = {
         'Tavus foto vēl nevar parādīt: bibliotēku nolasa caur izaicinājumu, bet aktīva vai pievienojama izaicinājuma šobrīd nav. Pievienojies kādam vai uzgaidi un mēģini vēlreiz.',
     photoChooserEligibilityLater:
         'Šeit netiek pārbaudīts, vai foto der kādam izaicinājumam; to pārbauda iesniegšanas brīdī.',
-    photoChooserShowing: 'Rāda {count} foto.',
-    photoChooserWonHidden:
+    photoChooserShowing_other: 'Rāda {count} foto.',
+    photoChooserWonHidden_other:
         'Paslēpti foto, kas uzvarējuši izaicinājumā: {count}. Uzvarējušo foto nevar iesniegt vēlreiz.',
-    photoChooserWonHiddenTruncated:
+    photoChooserWonHiddenTruncated_other:
         'Paslēpti foto, kas uzvarējuši izaicinājumā: vismaz {count}. Uzvarējušo foto nevar iesniegt vēlreiz. Spied „Ielādēt vairāk foto”, lai meklētu vēl.',
-    photoChooserRefusedHidden: 'Paslēpti foto, ko GuruShots šajā izaicinājumā nepieņem: {count}.',
-    photoChooserRefusedHiddenTruncated:
+    photoChooserRefusedHidden_other: 'Paslēpti foto, ko GuruShots šajā izaicinājumā nepieņem: {count}.',
+    photoChooserRefusedHiddenTruncated_other:
         'Paslēpti foto, ko GuruShots šajā izaicinājumā nepieņem: vismaz {count}. Spied „Ielādēt vairāk foto”, lai meklētu citus.',
     photoChooserNoneAccepted:
         'GuruShots šajā izaicinājumā nepieņem nevienu no uzskaitītajiem foto. Meklē pēc taga, lai atrastu citus, vai augšupielādē jaunus foto un spied „Atsvaidzināt”.',
@@ -1329,8 +1342,10 @@ export const app: typeof english.app = {
     prize: 'Balva',
     rank: 'Vieta',
     // Izaicinājuma detaļas: Top rezultāti, balvu pakāpes, treku nozīmītes
-    benchmarkScore: 'Top {target}: {score} balsis',
-    benchmarkGap: '+{n} balsis līdz top {target}',
+    benchmarkScore_one: 'Top {target}: {count} balss',
+    benchmarkScore_other: 'Top {target}: {count} balsis',
+    benchmarkGap_one: '+{count} balss līdz top {target}',
+    benchmarkGap_other: '+{count} balsis līdz top {target}',
     prizeTierTopPhotographer: 'Top fotogrāfs #{min}–{max}',
     prizeTierTopPhotographerSingle: 'Top fotogrāfs #{min}',
     prizeTierTopPhoto: 'Top foto #{min}–{max}',
@@ -1525,7 +1540,7 @@ export const app: typeof english.app = {
     downloadInBrowser: 'Lejupielādēt pārlūkā',
     overridden: 'Pielāgots',
     usingGlobal: 'Izmanto globālo',
-    overridesActiveSummary: 'Manuāli pielāgoti: {0}; pārējie izmanto profila vai globālos uzstādījumus.',
+    overridesActiveSummary_other: 'Manuāli pielāgoti: {count}; pārējie izmanto profila vai globālos uzstādījumus.',
     overridesNoneSummary: 'Nav manuālu pielāgojumu; izmanto profila vai globālos uzstādījumus.',
     enableOverride: 'Pielāgot šim izaicinājumam',
     clearAll: 'Notīrīt visu',

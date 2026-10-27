@@ -1,3 +1,5 @@
+import type { Translate } from '../../translations/translator';
+
 /**
  * The translation key for each failure a handler (or the login path behind it) reports, by the exact text or
  * machine code it answers with. Handler wording is English and written for the log, so nothing reaches a user
@@ -52,7 +54,7 @@ const KNOWN_ERRORS: Record<string, string> = {
  */
 export const ipcErrorText = <E extends string | null | undefined>(
     error: E,
-    t: (key: string) => string,
+    t: Translate,
     fallbackKey = 'errors.actionFailed',
 ) => (error ? t(Object.hasOwn(KNOWN_ERRORS, error) ? KNOWN_ERRORS[error] : fallbackKey) : error);
 
@@ -69,7 +71,7 @@ const JOIN_REFUSALS: Record<string, string> = {
  *
  * @param t - the translation function (useTranslation().t)
  */
-export const joinRefusalText = (reason: string | null | undefined, t: (key: string) => string): string | null =>
+export const joinRefusalText = (reason: string | null | undefined, t: Translate): string | null =>
     reason && Object.hasOwn(JOIN_REFUSALS, reason) ? t(JOIN_REFUSALS[reason]) : null;
 
 /** The translation key for each code the photo suggestions (Pick… > Auto) answer with. */
@@ -88,7 +90,7 @@ const SUGGEST_ERRORS: Record<string, string> = {
  * have (not logged in, invalid arguments) its usual text, and anything else (`fetch-failed`, `suggest-failed`)
  * says the ranking failed. A missing error stays missing.
  */
-export const suggestErrorText = <E extends string | null | undefined>(error: E, t: (key: string) => string) =>
+export const suggestErrorText = <E extends string | null | undefined>(error: E, t: Translate) =>
     error && Object.hasOwn(SUGGEST_ERRORS, error)
         ? t(SUGGEST_ERRORS[error])
         : ipcErrorText(error, t, 'errors.suggestFailed');

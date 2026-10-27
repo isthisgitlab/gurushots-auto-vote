@@ -9,7 +9,6 @@
 import { useId, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { BusyContent } from '@/components/ui/LoadingSpinner';
-import { interp } from '@/utils/interp';
 import { suggestErrorText } from '@/api/ipcErrorText';
 import { LIBRARY_ORDERS, LOADED_SORTS, isLibraryOrder, isLoadedSort } from '../../../librarySort';
 import { SuggestedStrip } from './SuggestedStrip';
@@ -81,7 +80,7 @@ function PickerStatsControls({ picker }: { picker: ReturnType<typeof usePhotoPic
     let status = '';
     if (showStats) {
         if (picker.statsProgress)
-            status = interp(t('app.pickStatsReading'), {
+            status = t('app.pickStatsReading', {
                 done: picker.statsProgress.done,
                 total: picker.statsProgress.total,
             });
@@ -166,7 +165,7 @@ function PickerStatsControls({ picker }: { picker: ReturnType<typeof usePhotoPic
             listing lands. */}
             {sortNeedsStats && picker.state.status === 'ready' && (
                 <p className="text-base-content/70 text-xs">
-                    {interp(t('app.pickLoadedSortHelp'), {
+                    {t('app.pickLoadedSortHelp', {
                         count: shownCount,
                         order: t(ORDER_NAME_KEYS[picker.state.order]),
                     })}
@@ -176,7 +175,7 @@ function PickerStatsControls({ picker }: { picker: ReturnType<typeof usePhotoPic
                 <div role="alert" className="alert alert-warning py-2 text-sm">
                     <div className="flex-1">
                         <p>
-                            {interp(t(sortNeedsStats ? 'app.pickStatsMissingSorted' : 'app.pickStatsMissing'), {
+                            {t(sortNeedsStats ? 'app.pickStatsMissingSorted' : 'app.pickStatsMissing', {
                                 count: picker.statsMissing.length,
                             })}
                         </p>
@@ -246,8 +245,7 @@ export function PhotoPickerToolbar({
     const autoKey = picker.shownIds.length > 0 ? 'app.pickAutoNext' : 'app.pickAuto';
     let autoStatus = '';
     if (picker.suggesting) autoStatus = t(autoRunningKey);
-    else if (picker.suggested)
-        autoStatus = interp(t('app.pickSuggestedCount'), { count: picker.suggested.photos.length });
+    else if (picker.suggested) autoStatus = t('app.pickSuggestedCount', { count: picker.suggested.photos.length });
     // Add suggestions has nothing to do when every suggestion is picked already; with one slot it swaps
     // in #1, so it has nothing to do only when #1 is the whole pick.
     const nothingToAdd =

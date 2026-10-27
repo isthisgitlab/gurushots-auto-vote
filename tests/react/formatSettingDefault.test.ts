@@ -1,17 +1,20 @@
 import type * as formattersModule from '../../src/ts/react/utils/formatters';
+import { fillTemplate } from './helpers/setup';
+import type { Translate } from '../../src/ts/translations/translator';
 const { formatSettingDefault } = require('../../src/ts/react/utils/formatters') as typeof formattersModule;
 
-// Minimal stand-in for the React translation function. Maps the keys this
-// helper looks up to their English strings; unknown keys echo back so a
-// missing mapping is visible in a failing assertion rather than silent.
-const t = (key: string) => {
+// Minimal stand-in for the React translation function: maps the keys this
+// helper looks up to their English strings, filling the placeholders like the
+// real t does; unknown keys echo back so a missing mapping is visible in a
+// failing assertion rather than silent.
+const t: Translate = (key, vars) => {
     const dict: Record<string, string> = {
         'app.none': '(none)',
         'app.hours': 'hours',
         'app.minutes': 'minutes',
         'app.chosenPhotosCount': 'Chosen photos: {count}',
     };
-    return dict[key] ?? key;
+    return fillTemplate(dict[key] ?? key, vars);
 };
 
 describe('formatSettingDefault', () => {

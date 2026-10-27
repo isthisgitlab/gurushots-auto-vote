@@ -4,7 +4,7 @@
 
 import { render, screen, fireEvent } from './helpers/test-utils';
 import { CurrencyConfirmModal, currencyOutcomeText } from '@/components/app/CurrencyConfirmModal';
-import { mockTranslator } from './helpers/setup';
+import { mockTranslator, fillTemplate } from './helpers/setup';
 import type { Bankroll } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
@@ -15,7 +15,7 @@ const STRINGS: Record<string, string> = {
 };
 
 beforeEach(() => {
-    mockTranslator.t.mockImplementation((key) => STRINGS[key] ?? key);
+    mockTranslator.t.mockImplementation((key, vars) => fillTemplate(STRINGS[key] ?? key, vars));
 });
 
 afterEach(() => {

@@ -1,15 +1,16 @@
 import type { Challenge } from '../../../types/gurushots';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { formatDuration } from '@/utils/formatters';
-import { interp } from '@/utils/interp';
 import { openBoostWindows } from '../../../voting/boostWindow';
 import { isMinimalCardChallenge } from '@/utils/challengeAlerts';
 import { useTick } from '@/hooks/useTick';
 import { ChallengeAlertPanel } from './ChallengeChips';
 
-const countdownDetail = (t: (key: string) => string) => (c: { remaining: number | null }) =>
+import type { Translate } from '../../../translations/translator';
+
+const countdownDetail = (t: Translate) => (c: { remaining: number | null }) =>
     c.remaining != null && (
-        <span className="font-semibold">· {interp(t('app.timeLeft'), { time: formatDuration(c.remaining) })}</span>
+        <span className="font-semibold">· {t('app.timeLeft', { time: formatDuration(c.remaining) })}</span>
     );
 
 /**

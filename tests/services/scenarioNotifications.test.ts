@@ -10,13 +10,25 @@ import { invalid } from '../helpers/invalid';
 const { createNoticeTracker, formatScenarioNotification, createScenarioNotifier } =
     require('../../src/ts/services/scenarioNotifications') as typeof scenarioNotificationsModule;
 
-const T = (key: string) =>
-    (
-        ({
-            'app.scenarioNotifyTitle': 'Scenario — {title}',
-            'app.scenarioNotifyGroupTitle': '{count} updates',
-        }) as Record<string, string>
-    )[key];
+/** Fill `{name}` tokens the way the translator core does: a missing var renders as an empty string. */
+const fill = (text: string, vars?: Record<string, string | number | null | undefined>): string =>
+    vars === undefined
+        ? text
+        : text.replace(/\{(\w+)\}/g, (_match, name: string) => {
+              const value = vars[name];
+              return value === null || value === undefined ? '' : String(value);
+          });
+
+const T = (key: string, vars?: Record<string, string | number | null | undefined>): string =>
+    fill(
+        (
+            {
+                'app.scenarioNotifyTitle': 'Scenario — {title}',
+                'app.scenarioNotifyGroupTitle': '{count} updates',
+            } as Record<string, string>
+        )[key],
+        vars,
+    );
 const START = 1000;
 
 describe('createNoticeTracker', () => {

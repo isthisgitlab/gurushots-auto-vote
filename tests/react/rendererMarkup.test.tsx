@@ -20,8 +20,15 @@ import type { RendererSchema } from '../../src/ts/types/settingsEditor';
 const { readFileSync, writeFileSync } = jest.requireActual<typeof import('node:fs')>('node:fs');
 const DATA_FILE = join(__dirname, '__data__', 'rendererMarkup.json');
 const PHASES = ['main', 'later'];
-// Keeps the placeholders so the clock / offset substitutions show in the markup.
-const translate = (key: string) => `${key} {0} {1} {2} {3}`;
+// Keeps the placeholders so the clock / offset substitutions show in the markup:
+// a token the caller fills is replaced, the rest stay visible.
+const translate = (key: string, vars?: Record<string, string | number | null | undefined>): string => {
+    const text = `${key} {0} {1} {2} {3}`;
+    if (vars === undefined) return text;
+    return text.replace(/\{(\w+)\}/g, (token, name: string) =>
+        Object.hasOwn(vars, name) ? String(vars[name]) : token,
+    );
+};
 const noop = () => undefined;
 
 type Markup = Record<string, string>;

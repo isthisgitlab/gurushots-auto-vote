@@ -7,19 +7,28 @@
 
 import { act, render, screen, fireEvent, waitFor, within } from './helpers/test-utils';
 import { DiscoverSection } from '@/components/app/DiscoverSection';
-import { fireSettingsChanged, mockApi, mockTranslator } from './helpers/setup';
+import { fillTemplate, fireSettingsChanged, mockApi, mockTranslator } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
-import { app } from '../../src/ts/translations/english';
+import { app, errors } from '../../src/ts/translations/english';
+import { createTranslator } from '../../src/ts/translations/translator';
 import type { OpenChallenge } from '../../src/ts/types/gurushots';
 import type { WindowApi } from '../../src/ts/types/ipc';
 import type { RendererGlobals } from '../../src/ts/types/capacitor';
 import type { JoinOutcome } from '@/components/app/DiscoverSection';
+import type { Translate } from '../../src/ts/translations/translator';
 
 type JoinApi = WindowApi['joinChallenge'];
 type ListApi = WindowApi['getMemberChallenges'];
 // Typed mocks of the two calls this file drives; what they answer is a partial fixture, so it goes through invalid().
 const joinMock = () => jest.fn<ReturnType<JoinApi>, Parameters<JoinApi>>();
 const listMock = () => jest.fn<ReturnType<ListApi>, Parameters<ListApi>>();
+
+// The components hand the placeholder values to t as a second argument now; fill
+// them like the real t does, so an assertion on composed text keeps reading.
+const withVars =
+    (impl: (key: string) => string) =>
+    (key: string, vars?: Record<string, string | number | null | undefined>): string =>
+        fillTemplate(impl(key), vars);
 
 const items = invalid<OpenChallenge[]>([
     {
@@ -71,7 +80,9 @@ test('renders collapsed by default with an open-count badge', async () => {
 });
 
 test('the count badge is an image named with its count, not a bare number', async () => {
-    mockTranslator.t.mockImplementation((key) => (key === 'app.discoverCountLabel' ? '{count} open challenges' : key));
+    mockTranslator.t.mockImplementation(
+        withVars((key) => (key === 'app.discoverCountLabel' ? '{count} open challenges' : key)),
+    );
     try {
         render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
         await screen.findByText('Free One');
@@ -143,7 +154,9 @@ test('a price that rose after it was shown spends nothing: the row says so, and 
     window.api.joinChallenge = joinMock().mockImplementation(async (_id, spendCoins) =>
         invalid(priceAsk(spendCoins ? 150 : 100)),
     );
-    mockTranslator.t.mockImplementation((key) => (key === 'app.discoverPriceChanged' ? 'Now {coins} coins' : key));
+    mockTranslator.t.mockImplementation(
+        withVars((key) => (key === 'app.discoverPriceChanged' ? 'Now {count} coins' : key)),
+    );
     try {
         render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
         await screen.findByText('Paid One');
@@ -200,9 +213,9 @@ describe('what a join answered is announced', () => {
 describe('a price that rose', () => {
     const confirmTexts = (key: string) =>
         key === 'app.discoverConfirmBody'
-            ? 'Costs {coins}'
+            ? 'Costs {count}'
             : key === 'app.discoverConfirmSpend'
-              ? 'Spend {coins}'
+              ? 'Spend {count}'
               : key;
 
     test('the next confirmation, before the list is read again, shows and names the new cost', async () => {
@@ -215,7 +228,7 @@ describe('a price that rose', () => {
             // Asked at 100, confirmed at 100 but now 150 (so repriced), asked again: 150.
             invalid(spendCoins ? priceAsk(150) : priceAsk(asked++ === 0 ? 100 : 150)),
         );
-        mockTranslator.t.mockImplementation(confirmTexts);
+        mockTranslator.t.mockImplementation(withVars(confirmTexts));
         try {
             render(
                 <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
@@ -248,7 +261,7 @@ describe('a price that rose', () => {
         window.api.joinChallenge = joinMock().mockImplementation(async (_id, spendCoins) =>
             invalid(spendCoins ? priceAsk(150) : priceAsk(asked++ === 0 ? 100 : 120)),
         );
-        mockTranslator.t.mockImplementation(confirmTexts);
+        mockTranslator.t.mockImplementation(withVars(confirmTexts));
         try {
             render(
                 <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
@@ -279,7 +292,9 @@ test.each([
         window.api.joinChallenge = joinMock()
             .mockResolvedValueOnce(invalid(answer))
             .mockResolvedValue(invalid({ success: true, status: 'joined' }));
-        mockTranslator.t.mockImplementation((key) => (key === 'app.discoverConfirmSpend' ? 'Spend {coins}' : key));
+        mockTranslator.t.mockImplementation(
+            withVars((key) => (key === 'app.discoverConfirmSpend' ? 'Spend {count}' : key)),
+        );
         try {
             render(
                 <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
@@ -324,12 +339,14 @@ describe('a paid row that was already charged', () => {
         window.api.joinChallenge = joinMock().mockImplementation(async (_id, spendCoins) =>
             invalid(spendCoins ? { success: true, status: 'joined' } : priceAsk(120)),
         );
-        mockTranslator.t.mockImplementation((key) =>
-            key === 'app.discoverConfirmBody'
-                ? 'Costs {coins}'
-                : key === 'app.discoverConfirmSpend'
-                  ? 'Spend {coins}'
-                  : key,
+        mockTranslator.t.mockImplementation(
+            withVars((key) =>
+                key === 'app.discoverConfirmBody'
+                    ? 'Costs {count}'
+                    : key === 'app.discoverConfirmSpend'
+                      ? 'Spend {count}'
+                      : key,
+            ),
         );
         try {
             render(
@@ -388,12 +405,14 @@ describe('a paid row that was already charged', () => {
                           release[Number(id)] = () => resolve(invalid(priceAsk(id === 11 ? 100 : 200)));
                       }),
             );
-            mockTranslator.t.mockImplementation((key) =>
-                key === 'app.discoverConfirmBody'
-                    ? 'Join {title} for {coins}'
-                    : key === 'app.discoverConfirmSpend'
-                      ? 'Spend {coins}'
-                      : key,
+            mockTranslator.t.mockImplementation(
+                withVars((key) =>
+                    key === 'app.discoverConfirmBody'
+                        ? 'Join {title} for {count}'
+                        : key === 'app.discoverConfirmSpend'
+                          ? 'Spend {count}'
+                          : key,
+                ),
             );
             try {
                 render(
@@ -470,8 +489,8 @@ describe('a paid row that was already charged', () => {
             if (betaAsks++ === 0) return Promise.resolve(invalid({ success: false, status: 'charged-pending-submit' }));
             return new Promise((resolve) => (release = () => resolve(invalid(priceAsk(250)))));
         });
-        mockTranslator.t.mockImplementation((key) =>
-            key === 'app.discoverConfirmBody' ? 'Join {title} for {coins}' : key,
+        mockTranslator.t.mockImplementation(
+            withVars((key) => (key === 'app.discoverConfirmBody' ? 'Join {title} for {count}' : key)),
         );
         try {
             render(
@@ -521,8 +540,10 @@ describe('two joins at once', () => {
                     release[Number(id)] = () => resolve(invalid({ success: false, status: 'busy' }));
                 }),
         );
-        mockTranslator.t.mockImplementation((key) =>
-            key === 'app.discoverJoinLabel' ? 'Join {title}' : key === 'app.discoverJoining' ? 'Joining…' : key,
+        mockTranslator.t.mockImplementation(
+            withVars((key) =>
+                key === 'app.discoverJoinLabel' ? 'Join {title}' : key === 'app.discoverJoining' ? 'Joining…' : key,
+            ),
         );
         try {
             render(
@@ -653,12 +674,14 @@ describe('edge paths', () => {
     });
 
     test('each Join button is named by its challenge, free or paid, and the busy one by its own text', async () => {
-        mockTranslator.t.mockImplementation((key) =>
-            key === 'app.discoverJoinLabel'
-                ? 'Join {title}'
-                : key === 'app.discoverJoinPaidLabel'
-                  ? 'Join (paid) {title}, {coins} coins'
-                  : key,
+        mockTranslator.t.mockImplementation(
+            withVars((key) =>
+                key === 'app.discoverJoinLabel'
+                    ? 'Join {title}'
+                    : key === 'app.discoverJoinPaidLabel'
+                      ? 'Join (paid) {title}, {count} coins'
+                      : key,
+            ),
         );
         try {
             renderSection();
@@ -806,12 +829,14 @@ describe('edge paths', () => {
             window.api.joinChallenge = joinMock().mockResolvedValue(
                 invalid({ success: false, status: 'charged-pending-submit', ...(reason ? { reason } : {}) }),
             );
-            mockTranslator.t.mockImplementation((key) =>
-                key === 'app.discoverRetrySubmitLabel'
-                    ? 'Retry submit for {title}'
-                    : key === 'app.discoverJoinPaidLabel'
-                      ? 'Join (paid) {title}, {coins} coins'
-                      : key,
+            mockTranslator.t.mockImplementation(
+                withVars((key) =>
+                    key === 'app.discoverRetrySubmitLabel'
+                        ? 'Retry submit for {title}'
+                        : key === 'app.discoverJoinPaidLabel'
+                          ? 'Join (paid) {title}, {count} coins'
+                          : key,
+                ),
             );
             try {
                 renderSection();
@@ -891,8 +916,8 @@ describe('edge paths', () => {
         );
 
         test('the button is named by its challenge', async () => {
-            mockTranslator.t.mockImplementation((key) =>
-                key === 'app.discoverForgetPaymentLabel' ? 'Not charged for {title}' : key,
+            mockTranslator.t.mockImplementation(
+                withVars((key) => (key === 'app.discoverForgetPaymentLabel' ? 'Not charged for {title}' : key)),
             );
             try {
                 window.api.joinChallenge = pendingWith('unconfirmed');
@@ -909,7 +934,9 @@ describe('edge paths', () => {
             window.api.getMemberChallenges = listMock().mockResolvedValue(
                 invalid({ success: true, items: [{ ...items[1], title: '', url: 'paid-challenge-url' }] }),
             );
-            mockTranslator.t.mockImplementation((key) => (key === 'app.discoverForgetBody' ? 'Forget {title}?' : key));
+            mockTranslator.t.mockImplementation(
+                withVars((key) => (key === 'app.discoverForgetBody' ? 'Forget {title}?' : key)),
+            );
             try {
                 window.api.joinChallenge = pendingWith('unconfirmed');
                 renderSection();
@@ -1057,12 +1084,14 @@ describe('edge paths', () => {
                 await screen.findByText('app.discoverForgetTitle');
             };
             const withText = () =>
-                mockTranslator.t.mockImplementation((key) =>
-                    key === 'app.discoverForgetBalances'
-                        ? 'Before {before}, now {now}'
-                        : key === 'app.discoverForgetBalanceBefore'
-                          ? 'Before {before}'
-                          : key,
+                mockTranslator.t.mockImplementation(
+                    withVars((key) =>
+                        key === 'app.discoverForgetBalances'
+                            ? 'Before {before}, now {now}'
+                            : key === 'app.discoverForgetBalanceBefore'
+                              ? 'Before {before}'
+                              : key,
+                    ),
                 );
 
             test('it is set beside the balance GuruShots reports now, read when the dialog opens', async () => {
@@ -1164,8 +1193,8 @@ describe('edge paths', () => {
 
     test('the Retry submit button is named by its challenge', async () => {
         window.api.joinChallenge = spendLater({ status: 'charged-pending-submit', cost: 100 });
-        mockTranslator.t.mockImplementation((key) =>
-            key === 'app.discoverRetrySubmitLabel' ? 'Retry submit for {title}' : key,
+        mockTranslator.t.mockImplementation(
+            withVars((key) => (key === 'app.discoverRetrySubmitLabel' ? 'Retry submit for {title}' : key)),
         );
         try {
             renderSection();
@@ -1212,8 +1241,8 @@ describe('edge paths', () => {
                 ],
             }),
         );
-        mockTranslator.t.mockImplementation((key) =>
-            key === 'app.discoverConfirmBody' ? 'join {title} for {coins}' : key,
+        mockTranslator.t.mockImplementation(
+            withVars((key) => (key === 'app.discoverConfirmBody' ? 'join {title} for {count}' : key)),
         );
         window.api.joinChallenge = spendLater({ success: true, status: 'joined' }, 10);
         try {
@@ -1354,12 +1383,14 @@ describe('chosen photos', () => {
 
     test('the Choose photos button and the Chosen chip are named by their challenge', async () => {
         own['900001'] = [PHOTO];
-        mockTranslator.t.mockImplementation((key) =>
-            key === 'app.discoverChoosePhotosLabel'
-                ? 'Choose photos for {title}'
-                : key === 'app.discoverChosenChipLabel'
-                  ? 'Chosen photos for {title}'
-                  : key,
+        mockTranslator.t.mockImplementation(
+            withVars((key) =>
+                key === 'app.discoverChoosePhotosLabel'
+                    ? 'Choose photos for {title}'
+                    : key === 'app.discoverChosenChipLabel'
+                      ? 'Chosen photos for {title}'
+                      : key,
+            ),
         );
         try {
             renderSection();
@@ -1486,8 +1517,9 @@ describe('chosen photos', () => {
 });
 
 describe('capacity and join safety on a row', () => {
-    const english = (key: string) =>
-        key.startsWith('app.') ? ((app as Record<string, string>)[key.slice(4)] ?? key) : key;
+    // The real English strings (plural groups included), placeholders filled like the real t fills them.
+    const translator = createTranslator();
+    const english: Translate = (key, vars) => translator.t(key, vars, 'en');
     // The full challenge: its head count has reached the cap the listing names.
     const fullOne = invalid<OpenChallenge>({
         ...items[0],
@@ -1612,9 +1644,9 @@ describe('capacity and join safety on a row', () => {
     });
 
     test.each([
-        ['full', 'errors.joinRefusedFull'],
-        ['price-unknown', 'errors.joinRefusedPriceUnknown'],
-    ])('a join the live list refused as %s gets the refusal text, not the generic one', async (reason, key) => {
+        ['full', errors.joinRefusedFull],
+        ['price-unknown', errors.joinRefusedPriceUnknown],
+    ])('a join the live list refused as %s gets the refusal text, not the generic one', async (reason, text) => {
         window.api.joinChallenge = joinMock().mockResolvedValue(
             invalid({ success: false, status: 'failed-no-charge', reason }),
         );
@@ -1622,8 +1654,8 @@ describe('capacity and join safety on a row', () => {
         await screen.findByText('Free One');
         fireEvent.click(screen.getByRole('button', { name: 'Join Free One' }));
 
-        const line = await screen.findByText(key);
+        const line = await screen.findByText(text);
         expect(line.closest('[role="alert"]')).not.toBeNull();
-        expect(screen.queryByText('app.discoverFailedNoCharge')).toBeNull();
+        expect(screen.queryByText(app.discoverFailedNoCharge)).toBeNull();
     });
 });

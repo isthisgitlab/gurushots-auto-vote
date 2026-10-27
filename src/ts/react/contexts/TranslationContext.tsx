@@ -6,14 +6,15 @@ import * as ipc from '../api/ipc';
 
 import type { ComponentChildren } from 'preact';
 import type { IpcQueryTools } from '../api/useIpcQuery';
+import type { TranslateVars } from '../../translations/translator';
 import { errorMessage } from '../../errorMessage';
 
 /**
  * What useTranslation returns.
  */
 export interface TranslationContextValue {
-    /** the key's text in the current language */
-    t: (key: string) => string;
+    /** the key's text in the current language, with the placeholders filled */
+    t: (key: string, vars?: TranslateVars) => string;
     language: string;
     /** resolves whether the language was saved */
     setLanguage: (lang: string) => Promise<boolean>;
@@ -75,7 +76,10 @@ export function TranslationProvider({ children }: { children?: ComponentChildren
 
     // A new `t` per language re-renders memoized consumers, so the text
     // always matches `language`.
-    const t = useCallback((key: string): string => rendererTranslator.t(key, language), [language]);
+    const t = useCallback(
+        (key: string, vars?: TranslateVars): string => rendererTranslator.t(key, vars, language),
+        [language],
+    );
 
     // Persist first; the UI switches only once the language is saved. The
     // set-setting handler reports a rejected write as `false` rather than

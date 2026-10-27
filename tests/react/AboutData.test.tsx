@@ -8,7 +8,7 @@ import { act, fireEvent, render, screen, waitFor, within } from './helpers/test-
 import { AboutDataSection } from '@/components/app/AboutDataSection';
 import { useImportReport } from '@/api/useImportReport';
 import { SettingsNavProvider } from '@/contexts/SettingsNavContext';
-import { mockTranslator, defaultTranslate } from './helpers/setup';
+import { mockTranslator, defaultTranslate, fillTemplate } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
 import { IMPORT_REF_ENGLISH } from '../../src/ts/settings/importRefs';
 import type { ImportRefText } from '../../src/ts/settings/importRefs';
@@ -576,7 +576,9 @@ describe('the import report in About and data', () => {
     });
 
     test('says when it ran, in the date format of the page language', async () => {
-        mockTranslator.t.mockImplementation((text) => (text === 'about.importAt' ? 'On {date}' : text));
+        mockTranslator.t.mockImplementation((key, vars) =>
+            fillTemplate(key === 'about.importAt' ? 'On {date}' : key, vars),
+        );
         answer({ success: true, report: { at: '2026-10-16T12:00:00.000Z', refsBlocked: [], acknowledged: true } });
         renderWithReport();
 
@@ -585,7 +587,9 @@ describe('the import report in About and data', () => {
     });
 
     test('a date that cannot be read is shown as stored', async () => {
-        mockTranslator.t.mockImplementation((text) => (text === 'about.importAt' ? 'On {date}' : text));
+        mockTranslator.t.mockImplementation((key, vars) =>
+            fillTemplate(key === 'about.importAt' ? 'On {date}' : key, vars),
+        );
         answer({ success: true, report: { at: 'sometime', refsBlocked: [], acknowledged: true } });
         renderWithReport();
 

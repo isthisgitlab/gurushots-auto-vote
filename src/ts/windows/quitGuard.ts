@@ -32,6 +32,7 @@ import { formatDuration } from '../format/duration';
 
 import type { BrowserWindow, Dialog, MessageBoxOptions } from 'electron';
 import type { Challenge } from '../types/gurushots';
+import type { Translate } from '../translations/translator';
 
 /**
  * describeDeadlineActions' shape, as far as the guard reads it.
@@ -131,12 +132,12 @@ const imminentBoosts = (now: number, describe: DescribeDeadlineActions): Array<{
         dueIn: dueAt - now,
     }));
 
-const describeBoost = (b: { title: string; dueIn: number }, t: (key: string) => string, locale: string) =>
-    `• ${b.title} — ${b.dueIn <= 0 ? t('quitGuard.dueNow') : t('quitGuard.dueIn').replace('{time}', formatDuration(b.dueIn, { locale }))}`;
+const describeBoost = (b: { title: string; dueIn: number }, t: Translate, locale: string) =>
+    `• ${b.title} — ${b.dueIn <= 0 ? t('quitGuard.dueNow') : t('quitGuard.dueIn', { time: formatDuration(b.dueIn, { locale }) })}`;
 
 const quitDialogOptions = (
     boosts: Array<{ title: string; dueIn: number }>,
-    t: (key: string) => string,
+    t: Translate,
     locale: string,
 ): MessageBoxOptions => ({
     type: 'warning',
@@ -176,7 +177,7 @@ const holdQuitForOpenBoosts = (
         autovoteRunning: boolean;
         dialog: Pick<Dialog, 'showMessageBox'>;
         parent: BrowserWindow | null;
-        t: (key: string) => string;
+        t: Translate;
         locale?: string;
         proceed: () => void;
         now?: number;

@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { BusyContent, InlineLoader } from '@/components/ui/LoadingSpinner';
-import { interp } from '@/utils/interp';
 import { ipcErrorText } from '@/api/ipcErrorText';
 import { reorderLoadedPhotos } from '@/utils/loadedPhotoSort';
 import { ListingHeader } from './ListingHeader';
@@ -371,17 +370,15 @@ export function PhotoGrid({
                     <p className={`text-base-content/70 ${listing.photos.length === 0 ? 'text-sm' : 'text-xs'}`}>
                         {listing.photos.length === 0
                             ? t(emptyKey)
-                            : interp(t('app.photoChooserShowing'), { count: shownPhotos.length })}
+                            : t('app.photoChooserShowing', { count: shownPhotos.length })}
                     </p>
                 )}
                 {refusedHidden > 0 && (
                     <p className="text-base-content/70 text-xs">
-                        {interp(
-                            t(
-                                listing.truncated
-                                    ? 'app.photoChooserRefusedHiddenTruncated'
-                                    : 'app.photoChooserRefusedHidden',
-                            ),
+                        {t(
+                            listing.truncated
+                                ? 'app.photoChooserRefusedHiddenTruncated'
+                                : 'app.photoChooserRefusedHidden',
                             { count: refusedHidden },
                         )}
                     </p>
@@ -449,16 +446,9 @@ export function PhotoGrid({
                     )}
                     {listing.wonCount > 0 && (
                         <p className="text-base-content/70 text-xs">
-                            {interp(
-                                t(
-                                    listing.truncated
-                                        ? 'app.photoChooserWonHiddenTruncated'
-                                        : 'app.photoChooserWonHidden',
-                                ),
-                                {
-                                    count: listing.wonCount,
-                                },
-                            )}
+                            {t(listing.truncated ? 'app.photoChooserWonHiddenTruncated' : 'app.photoChooserWonHidden', {
+                                count: listing.wonCount,
+                            })}
                         </p>
                     )}
                     {listing.preview && listing.photos.length === 0 && (

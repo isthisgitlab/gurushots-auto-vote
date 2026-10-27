@@ -1,5 +1,4 @@
 import { useTranslation } from '@/contexts/TranslationContext';
-import { interp } from '@/utils/interp';
 import { exposureText } from '@/utils/challengeCardView';
 import { StatusBadge } from '../ui/StatusBadge';
 import { PulseDot } from '../ui/PulseDot';
@@ -18,11 +17,9 @@ function TeamStandingBadge({ standing }: { standing: TeamStanding }) {
     const { t } = useTranslation();
     const label =
         standing.kind === 'active'
-            ? interp(t('app.teamStandingActive'), { position: standing.position.toLocaleString() }) +
-              (standing.cushion === null
-                  ? ''
-                  : ` · ${interp(t('app.teamStandingOverStandby'), { votes: standing.cushion.toLocaleString() })}`)
-            : interp(t('app.teamStandingStandby'), { votes: standing.votesToActive.toLocaleString() });
+            ? t('app.teamStandingActive', { position: standing.position.toLocaleString() }) +
+              (standing.cushion === null ? '' : ` · ${t('app.teamStandingOverStandby', { count: standing.cushion })}`)
+            : t('app.teamStandingStandby', { count: standing.votesToActive });
     return <StatusBadge variant="ghost">{label}</StatusBadge>;
 }
 
@@ -49,12 +46,13 @@ function TeamMatchBadges({ teamMatch }: { teamMatch: TeamMatch }) {
         <>
             <StatusBadge variant="ghost" className="h-auto py-0.5 wrap-anywhere">
                 <span aria-hidden="true">👥 </span>
-                {t('app.teamMatchVs').replace('{opponent}', () => teamMatch.them.name)}
+                {t('app.teamMatchVs', { opponent: teamMatch.them.name })}
             </StatusBadge>
             <StatusBadge variant="ghost">
-                {t('app.teamMatchVotes')
-                    .replace('{us}', teamMatch.us.votes.toLocaleString())
-                    .replace('{them}', teamMatch.them.votes.toLocaleString())}
+                {t('app.teamMatchVotes', {
+                    us: teamMatch.us.votes.toLocaleString(),
+                    them: teamMatch.them.votes.toLocaleString(),
+                })}
             </StatusBadge>
             <StatusBadge variant={variant} className="font-semibold">
                 {sign}

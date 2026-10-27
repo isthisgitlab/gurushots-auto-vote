@@ -3,7 +3,6 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { TagsField } from './SettingInput';
 import { HoursMinutesDraftField } from './HoursMinutesFields';
 import { useScenarios } from '@/api/useScenarios';
-import { interp } from '@/utils/interp';
 
 import type { LooseRecord, TitleRule } from '../../../types/settings';
 
@@ -156,7 +155,7 @@ export function RuleScenarioSelect({ rule, onPatch }: { rule: TitleRule; onPatch
                     </option>
                 ))}
                 {current !== '' && !names.includes(current) && (
-                    <option value={current}>{interp(t('app.scenarioMissingOption'), { name: current })}</option>
+                    <option value={current}>{t('app.scenarioMissingOption', { name: current })}</option>
                 )}
             </select>
         </div>

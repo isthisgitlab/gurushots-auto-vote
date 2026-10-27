@@ -292,7 +292,7 @@ function RowListFooter({
             )}
             {atCap && (
                 <ToneNote tone="warning" as="span" role="status" className="text-xs">
-                    {t('app.scheduledFillMaxEntries').replace('{0}', String(SCHEDULED_FILL_MAX_ENTRIES))}
+                    {t('app.scheduledFillMaxEntries', { '0': SCHEDULED_FILL_MAX_ENTRIES })}
                 </ToneNote>
             )}
             <SettingResetButton settingKey={settingKey} labelKey={labelKey} onReset={onReset} />

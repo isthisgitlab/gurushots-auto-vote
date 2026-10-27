@@ -6,7 +6,7 @@
 import { act, render, screen, waitFor, fireEvent } from './helpers/test-utils';
 import { ScenariosSection } from '@/components/app/ScenariosSection';
 import { SettingsNavProvider } from '@/contexts/SettingsNavContext';
-import { mockTranslator, defaultTranslate } from './helpers/setup';
+import { mockTranslator, defaultTranslate, fillTemplate } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
 
 import type { SettingsNav } from '@/contexts/SettingsNavContext';
@@ -322,14 +322,17 @@ describe('import', () => {
     });
 
     test('each flagged setting names its phase as "(phase N)"', async () => {
-        mockTranslator.t.mockImplementation((key) =>
-            key === 'app.scenarioFlagged'
-                ? 'Review: {settings}'
-                : key === 'app.scenarioStatusPhase'
-                  ? 'phase {phase}'
-                  : key === 'app.chosenPhotos'
-                    ? 'Chosen Photos'
-                    : key,
+        mockTranslator.t.mockImplementation((key, vars) =>
+            fillTemplate(
+                key === 'app.scenarioFlagged'
+                    ? 'Review: {settings}'
+                    : key === 'app.scenarioStatusPhase'
+                      ? 'phase {phase}'
+                      : key === 'app.chosenPhotos'
+                        ? 'Chosen Photos'
+                        : key,
+                vars,
+            ),
         );
         try {
             jest.mocked(window.api.previewScenarioImport).mockResolvedValueOnce(

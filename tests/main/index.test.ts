@@ -268,7 +268,14 @@ jest.mock('../../src/ts/index/session', () => ({
 }));
 jest.mock('../../src/ts/index/permissions', () => ({ installPermissionHandlers: jest.fn() }));
 jest.mock('../../src/ts/translations/index', () => ({
-    translationManager: { t: (k: string) => k, getCurrentLanguage: () => 'lv' },
+    translationManager: {
+        // Vars-aware echo: a template var shows in the output, so the seam test
+        // can see a wrapper that drops the `vars` argument.
+        t: jest.fn((key: string, vars?: Record<string, string | number>) =>
+            vars === undefined ? key : `${key} ${JSON.stringify(vars)}`,
+        ),
+        getCurrentLanguage: () => 'lv',
+    },
 }));
 
 const originalPlatform = process.platform;
@@ -601,6 +608,9 @@ describe('quit guard wiring', () => {
         expect(heldEvent).toBe(event);
         expect(deps).toMatchObject({ autovoteRunning: true, dialog: m.electron.dialog, parent: mainWin() });
         expect(deps.t('quitGuard.title')).toBe('quitGuard.title');
+        // The translator method itself is handed over, not a key-only wrapper:
+        // a template var survives the seam.
+        expect(deps.t('quitGuard.dueIn', { time: '9m' })).toBe('quitGuard.dueIn {"time":"9m"}');
         // The dialog's times are written in the UI language.
         expect(deps.locale).toBe('lv');
         expect(m.lifecycle.clearTokenOnQuit).not.toHaveBeenCalled();

@@ -4,7 +4,6 @@ import { useSettingsChallengeId } from '@/contexts/SettingsChallengeContext';
 import { useImageLoads } from '@/hooks/useImageLoads';
 import { useCurrentMember } from '@/hooks/currentMember';
 import { buildPhotoUrl } from '@/utils/formatters';
-import { interp } from '@/utils/interp';
 import { SAVE_ERROR_ID } from '@/components/ui/ModalActionRow';
 import { SettingResetButton } from './SettingResetButton';
 import { PhotoChooserModal } from './PhotoChooserModal';
@@ -38,7 +37,7 @@ function ChosenPhotoChip({ id, position, memberId }: { id: string; position: num
                 <img
                     ref={imageRef}
                     src={url}
-                    alt={interp(t('app.chosenPhotoThumbAlt'), { n: position, id: short })}
+                    alt={t('app.chosenPhotoThumbAlt', { n: position, id: short })}
                     loading="lazy"
                     referrerPolicy="no-referrer"
                     className="h-8 w-8 rounded object-cover"
