@@ -2,7 +2,9 @@
  * The get-library-photos IPC handler behind the Chosen Photos chooser and the
  * CLI `list-photos`: a read-only listing of the signed-in member's photo
  * library. Its sibling get-photo-stats (actions/photoStats.ts) serves the
- * picker's per-photo display stats.
+ * picker's per-photo display stats. The search-photo-tags handler below it
+ * serves the picker's search box the library's tags that contain a partial
+ * term, as one-click exact searches.
  *
  * The listing is the server's own eligible-photo walk (get_photos_private),
  * which is paginated and slow, so reads are throttled to one walk at a time per
@@ -25,6 +27,7 @@ import {
     MAX_LIBRARY_KEEP_PHOTOS,
     MAX_TAG_LENGTH,
     MAX_WON_IDS,
+    MIN_AUTOCOMPLETE_CHARS,
 } from '../../settings/limits';
 import { htmlToText } from '../../format/htmlToText';
 import { asPreview } from '../../libraryPreview';
@@ -53,6 +56,12 @@ const MAX_MESSAGE_LENGTH = 200;
 const MAX_RAW_MESSAGE_LENGTH = 4 * MAX_MESSAGE_LENGTH;
 
 const walkThrottle = createThrottle(MIN_WALK_INTERVAL_MS);
+
+// Shortest gap between two tag-autocomplete reads, so the CLI, the web shell or a script
+// cannot outrun the renderer's 300 ms debounce the way it could an unguarded endpoint.
+const TAG_THROTTLE_MS = 300;
+
+const tagThrottle = createThrottle(TAG_THROTTLE_MS);
 
 /**
  * The search term as sent to the server: control characters stripped, trimmed,
@@ -271,6 +280,73 @@ const handleGetLibraryPhotos = (async (
 // Test-only: forget the throttle state between cases.
 const __resetLibraryThrottle = (): void => {
     walkThrottle.reset();
+    tagThrottle.reset();
 };
 
-export { handleGetLibraryPhotos, mapPhoto, hasWonChallenge, __resetLibraryThrottle, MIN_WALK_INTERVAL_MS };
+// A tag bound for the search box goes on to an exact server match, so a tag carrying a
+// format or control character (\p{Cf}, \p{Cc}) is dropped whole rather than stripped:
+// a stripped tag no longer exact-matches the photos it came from, and stripping can
+// create duplicates. This also drops emoji ZWJ tags — an accepted cost, since the user
+// can still type such a tag into the box.
+const TAG_WITH_INVISIBLES = /[\p{Cc}\p{Cf}]/u;
+
+/**
+ * The autocomplete tags offered as one-click searches: duplicates removed, invisibles and
+ * tags longer than MAX_TAG_LENGTH dropped. The length guard is against the strategy's
+ * contract — the real API caps a tag at 120 and the mock can return anything — because
+ * cleanSearch cuts a search to MAX_TAG_LENGTH, so a click on a longer tag would search a
+ * cut tag and miss.
+ */
+const usableTags = (tags: Array<string>): Array<string> => {
+    const kept: Array<string> = [];
+    const seen: Set<string> = new Set();
+    for (const tag of tags) {
+        if (seen.has(tag)) continue;
+        if (tag.length > MAX_TAG_LENGTH || TAG_WITH_INVISIBLES.test(tag)) continue;
+        seen.add(tag);
+        kept.push(tag);
+    }
+    return kept;
+};
+
+/**
+ * The search-photo-tags IPC handler behind the picker's search box: the tags of the
+ * signed-in member's library that CONTAIN the term (search_autocomplete), offered as
+ * one-click exact searches. Unlike get-library-photos this is one cheap request, not a
+ * library walk; it is still throttled to one read at a time with a newer term replacing
+ * one that waits, answered `{success:false, error:'superseded'}`.
+ *
+ * Known limit: searchTagAutocomplete answers [] for a failed request, so a network
+ * failure is indistinguishable from "no matches" here — both show no suggestions.
+ */
+const handleSearchPhotoTags = (async (event: unknown, term?: string) => {
+    if (typeof term !== 'string') return refuseInvalidArgs('autoSubmit', 'search-photo-tags');
+    try {
+        const clean = cleanSearch(term);
+        // Under the server's own minimum the endpoint answers nothing at all, so a request
+        // would be a guaranteed wasted round-trip.
+        if (clean === undefined || clean.length < MIN_AUTOCOMPLETE_CHARS) return { success: true as const, tags: [] };
+        const guard = auth.requireAuthToken('tag suggestions');
+        if (!guard.ok) return guard.response;
+        const { token } = guard;
+        const strategy = apiFactory.getApiStrategy();
+        const memberId = await resolveMemberId(token, strategy.getCurrentMemberProfile, logger, 'library');
+        if (memberId === null) return { success: true as const, tags: [] };
+        const items = await tagThrottle.run(() => strategy.searchTagAutocomplete(token, clean, memberId));
+        if (items === SUPERSEDED) return { success: false as const, error: 'superseded' as const };
+        return { success: true as const, tags: usableTags(items) };
+    } catch (error) {
+        logger.withCategory('autoSubmit').error('Error handling search-photo-tags request:', error);
+        return errorResult(error, 'Failed to look up matching tags');
+    }
+}) satisfies IpcReplyFn;
+
+export {
+    handleGetLibraryPhotos,
+    handleSearchPhotoTags,
+    mapPhoto,
+    hasWonChallenge,
+    __resetLibraryThrottle,
+    MIN_WALK_INTERVAL_MS,
+    TAG_THROTTLE_MS,
+};

@@ -1448,7 +1448,7 @@ test('explains how chosen photos are used: ranked, or in the picked order when t
     expect(help).toContain('must still pass your tag filters');
     expect(help).toContain("Ranked like the app's own picks");
     expect(help).toContain('in your pick order if that setting is on');
-    expect(help).toContain('Nothing is read until you load, search or press Auto');
+    expect(help).toContain('No photos are read until you load, search or press Auto');
 });
 
 test('Escape closes only the chooser when it is open inside another modal', async () => {

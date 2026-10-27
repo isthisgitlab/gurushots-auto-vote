@@ -37,6 +37,12 @@ const MAX_VOTING_PAUSE_MINUTES = 720;
 // library listing accepts (the same free-text field the server matches tags with).
 const MAX_TAG_LENGTH = 50;
 
+// The shortest partial term the tag autocomplete answers at all: the endpoint returns nothing
+// under three characters ("st" -> []), so a shorter probe is a guaranteed wasted round-trip.
+// The auto-fill resolver's backoff stops here for the same reason, and the picker's tag
+// suggestions skip the request below it.
+const MIN_AUTOCOMPLETE_CHARS = 3;
+
 // Longest an auto-join timing window may run, in hours before a candidate's
 // close_time (30 days — longer than any real challenge, so at or above it the
 // window behaves as "always in window" while still bounding a corrupted
@@ -127,6 +133,7 @@ export {
     MAX_SCHEDULED_FILL_ENTRIES,
     MAX_VOTING_PAUSE_MINUTES,
     MAX_TAG_LENGTH,
+    MIN_AUTOCOMPLETE_CHARS,
     MAX_JOIN_WINDOW_HOURS,
     MAX_CHOSEN_PHOTOS,
     MAX_ANNOTATED_IDS,

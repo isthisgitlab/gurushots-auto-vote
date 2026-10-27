@@ -32,6 +32,7 @@
  */
 
 import { buildThemeKeywords, matches, stem, tokenise, SEMANTIC_MATCH_FLOOR } from './photoPicker';
+import { MIN_AUTOCOMPLETE_CHARS } from '../settings/limits';
 import * as lexicon from './semantic/lexicon';
 
 import type { ChallengeText, IgnoreWords } from '../types/photoPicker';
@@ -42,11 +43,6 @@ import type { FillLogger } from '../types/autoFill';
 // word and a tag ("stairs"->"stair", "lighthouses"->"lighthouse") without
 // walking a long word down to a meaningless prefix.
 const MAX_BACKOFF_STEPS = 2;
-// Must match MIN_AUTOCOMPLETE_CHARS in api/tags.ts — both encode the same server
-// behavior (nothing is returned below three characters). Kept local rather than
-// imported because business logic does not reach into src/ts/api/*; if one
-// moves, move the other.
-const MIN_TERM_LENGTH = 3;
 
 // Resolution is a narrowing step, not a broadening one: more terms means more
 // single-page searches on a path that can run close to a deadline, and the
@@ -145,7 +141,7 @@ const resolveTermsToTags = async (
         // Lexicon problems must never break a fill; lexical matching still works.
     }
 
-    const usable = terms.filter((term) => typeof term === 'string' && term.length >= MIN_TERM_LENGTH);
+    const usable = terms.filter((term) => typeof term === 'string' && term.length >= MIN_AUTOCOMPLETE_CHARS);
     if (usable.length === 0) return [];
 
     // One backoff CHAIN per term, chains run concurrently.
@@ -162,7 +158,7 @@ const resolveTermsToTags = async (
         usable.map(async (term) => {
             for (let step = 0; step <= MAX_BACKOFF_STEPS; step++) {
                 const probe = term.slice(0, term.length - step);
-                if (probe.length < MIN_TERM_LENGTH) break;
+                if (probe.length < MIN_AUTOCOMPLETE_CHARS) break;
 
                 let items: unknown;
                 try {

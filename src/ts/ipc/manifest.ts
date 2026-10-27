@@ -102,6 +102,7 @@ const invokeChannels = [
     'join-challenge',
     'forget-unconfirmed-payment',
     'get-library-photos',
+    'search-photo-tags',
     'get-photo-stats',
     'get-auto-join-active',
     'get-auto-claim-status',

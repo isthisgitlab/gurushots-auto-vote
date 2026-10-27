@@ -846,12 +846,14 @@ export const app = {
     photoChooserTitle: 'Choose photos',
     photoRecommended: 'Recommended photo',
     photoChooserHelpAuto:
-        "Used first, but they must still pass your tag filters. Ranked like the app's own picks, or in your pick order if that setting is on. Nothing is read until you load, search or press Auto.",
+        "Used first, but they must still pass your tag filters. Ranked like the app's own picks, or in your pick order if that setting is on. No photos are read until you load, search or press Auto.",
     photoChooserHelpNoChallenge:
         "Used first, but they must still pass your tag filters. Ranked like the app's own picks, or in your pick order if that setting is on. What a challenge accepts is checked when photos are entered.",
     photoChooserSearchLabel: 'Search your photos by tag',
     photoChooserSearchPlaceholder: 'e.g. sunset…',
     photoChooserSearch: 'Search',
+    photoChooserTagMatches: 'Matching tags',
+    photoChooserTagMatchesFound: 'Matching tags found',
     photoChooserCount: '{count} of {max} chosen',
     photoChooserLoading: 'Loading your photos…',
     photoChooserLoadError: "Your photos couldn't be loaded (details below). Try again.",

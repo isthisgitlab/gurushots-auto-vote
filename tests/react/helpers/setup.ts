@@ -89,6 +89,7 @@ Object.assign(mockApi, {
         readAtMs: 1_700_000_000_000,
         allowedKnown: true,
     }),
+    searchPhotoTags: jest.fn().mockResolvedValue({ success: true, tags: [] }),
 
     // Per-challenge overrides
     getChallengeOverride: jest.fn().mockResolvedValue(null),

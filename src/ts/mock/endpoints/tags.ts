@@ -5,6 +5,7 @@
 
 import { simulateApiResponse, mockMethod } from '../simulate';
 import { MOCK_LIBRARY_TAGS } from '../photoLibrary';
+import { MIN_AUTOCOMPLETE_CHARS } from '../../settings/limits';
 import type * as tagsModule from '../../api/tags';
 
 /**
@@ -41,8 +42,8 @@ const searchTagAutocomplete: typeof tagsModule.searchTagAutocomplete = mockMetho
     async (token, term) => {
         await simulateApiResponse({}, 150);
         const text = typeof term === 'string' ? term.trim().toLowerCase() : '';
-        // The live endpoint answers nothing under three characters.
-        if (text.length < 3) return [];
+        // The live endpoint answers nothing under MIN_AUTOCOMPLETE_CHARS characters.
+        if (text.length < MIN_AUTOCOMPLETE_CHARS) return [];
         return MOCK_LIBRARY_TAGS.filter((tag) => tag.includes(text)).slice(0, 5);
     },
 );

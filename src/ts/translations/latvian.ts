@@ -857,12 +857,14 @@ export const app: LatvianApp = {
     photoChooserTitle: 'Izvēlēties foto',
     photoRecommended: 'Ieteiktais foto',
     photoChooserHelpAuto:
-        'Tos izmanto pirmos, bet tiem jāiztur tagu filtri. Kārto kā pašas izvēles vai tavā secībā, ja tas uzstādīts. Neko nelasa, līdz ielādē, meklē vai spiež „Automātiski”.',
+        'Tos izmanto pirmos, bet tiem jāiztur tagu filtri. Kārto kā pašas izvēles vai tavā secībā, ja tas uzstādīts. Nevienu foto nelasa, līdz ielādē, meklē vai spiež „Automātiski”.',
     photoChooserHelpNoChallenge:
         'Tos izmanto pirmos, bet tiem jāiztur tagu filtri; ko izaicinājums pieņem, pārbauda iesniedzot. Kārto kā pašas izvēles vai tavā secībā, ja tas uzstādīts.',
     photoChooserSearchLabel: 'Meklēt savus foto pēc taga',
     photoChooserSearchPlaceholder: 'piem., saulriets…',
     photoChooserSearch: 'Meklēt',
+    photoChooserTagMatches: 'Atbilstošie tagi',
+    photoChooserTagMatchesFound: 'Atrasti atbilstošie tagi',
     photoChooserCount: 'Izvēlēto foto: {count} no {max}',
     photoChooserLoading: 'Ielādē tavus foto…',
     photoChooserLoadError: 'Tavus foto neizdevās ielādēt (sīkāka informācija ir zemāk). Mēģini vēlreiz.',

@@ -6,11 +6,13 @@
  * Auto's status — the caller's count line — so every chooser keeps its live regions in the same order.
  */
 
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { BusyContent } from '@/components/ui/LoadingSpinner';
 import { suggestErrorText } from '@/api/ipcErrorText';
+import { useTagSuggestions } from '@/api/useTagSuggestions';
 import { LIBRARY_ORDERS, LOADED_SORTS, isLibraryOrder, isLoadedSort } from '../../../librarySort';
+import { MIN_AUTOCOMPLETE_CHARS } from '../../../settings/limits';
 import { SuggestedStrip } from './SuggestedStrip';
 
 import type { ReactNode } from 'react';
@@ -33,19 +35,43 @@ const SORT_NAME_KEYS: Record<LoadedSort, string> = {
     guruPicks: 'app.pickSortGuruPicks',
 };
 
-/** The search box: submitting reads the listing again for the (trimmed) term. */
+/** Most tag-suggestion buttons shown, whatever the endpoint answered. */
+const MAX_SUGGESTED_BUTTONS = 8;
+
+/**
+ * The search box: submitting reads the listing again for the (trimmed) term. Below the box,
+ * the library's tags that contain the typed text (3+ characters, debounced) are offered as
+ * one-click exact searches — the endpoint matches a tag exactly, so a partial term finds
+ * nothing on its own.
+ */
 function SearchForm({ onSearch }: { onSearch: (term: string) => void }) {
     const { t } = useTranslation();
     const [text, setText] = useState('');
+    const inputRef = useRef<HTMLInputElement>(null);
+    const { tags, replied } = useTagSuggestions(text);
+    const trimmed = text.trim();
+    const enough = trimmed.length >= MIN_AUTOCOMPLETE_CHARS;
+    // The live line empties only below the minimum or on a current reply with no tags, and
+    // fills only when a current reply has tags and the line is empty — so typing on from
+    // "flo" to "flow" never re-announces it, and the per-keystroke clear does not touch it.
+    const [liveFilled, setLiveFilled] = useState(false);
+    useEffect(() => {
+        if (!enough) setLiveFilled(false);
+        else if (replied) setLiveFilled(tags.length > 0);
+    }, [enough, replied, tags.length]);
+    // A tag equal to the text (trimmed, case-insensitive) is hidden: pressing it would
+    // re-run the search already in the box.
+    const shownTags = tags.filter((tag) => tag.toLowerCase() !== trimmed.toLowerCase()).slice(0, MAX_SUGGESTED_BUTTONS);
     return (
         <form
             className="flex flex-wrap items-center gap-2"
             onSubmit={(event) => {
                 event.preventDefault();
-                onSearch(text.trim());
+                onSearch(trimmed);
             }}
         >
             <input
+                ref={inputRef}
                 type="search"
                 name="photo-search"
                 className="input input-sm min-w-40 flex-1"
@@ -60,6 +86,41 @@ function SearchForm({ onSearch }: { onSearch: (term: string) => void }) {
             <button type="submit" className="btn btn-outline btn-sm">
                 {t('app.photoChooserSearch')}
             </button>
+            {enough && (
+                // Always rendered while the text is long enough (even before a reply), with a
+                // one-row minimum height, so the row keeps its height and the grid does not
+                // jump on every keystroke. The label shows only with buttons: a bare "Matching
+                // tags" above nothing is misleading.
+                <div
+                    role="group"
+                    aria-label={t('app.photoChooserTagMatches')}
+                    className="flex min-h-8 w-full flex-wrap items-center gap-2"
+                >
+                    {shownTags.length > 0 && (
+                        <span className="text-base-content/70 text-xs">{t('app.photoChooserTagMatches')}</span>
+                    )}
+                    {shownTags.map((tag) => (
+                        // type="button": the click must not also submit the partial text.
+                        <button
+                            key={tag}
+                            type="button"
+                            className="btn btn-sm btn-ghost"
+                            onClick={() => {
+                                setText(tag);
+                                onSearch(tag);
+                                // Back to the box, so focus never falls to <body> in the modal.
+                                inputRef.current?.focus();
+                            }}
+                        >
+                            {tag}
+                        </button>
+                    ))}
+                </div>
+            )}
+            {/* Always mounted, so a screen reader announces the text that arrives in it. */}
+            <p aria-live="polite" className="sr-only">
+                {liveFilled ? t('app.photoChooserTagMatchesFound') : ''}
+            </p>
         </form>
     );
 }
