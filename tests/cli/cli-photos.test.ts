@@ -15,7 +15,7 @@ jest.mock('../../src/ts/cli/guards', () => ({
     INVALID_ID_TEXT: 'Invalid challenge or image id.',
 }));
 jest.mock('../../src/ts/ipc/actions.handlers', () => {
-    const handlers = { 'get-library-photos': jest.fn(), 'suggest-photos': jest.fn() };
+    const handlers = { 'get-library-photos': jest.fn(), 'suggest-photos': jest.fn(), 'search-photo-tags': jest.fn() };
     return { __handlers: handlers, buildHandlers: jest.fn(() => handlers) };
 });
 
@@ -29,10 +29,11 @@ const handlers = invalid<{
     __handlers: {
         'get-library-photos': jest.Mock<Promise<unknown>, unknown[]>;
         'suggest-photos': jest.Mock<Promise<unknown>, unknown[]>;
+        'search-photo-tags': jest.Mock<Promise<unknown>, unknown[]>;
     };
 }>(handlersModule).__handlers;
 import type * as photosModule from '../../src/ts/cli/commands/photos';
-const { listPhotosCmd, suggestPhotosCmd, parseSearchFlag, parseSortFlag, BAD_SORT_TEXT } =
+const { listPhotosCmd, suggestPhotosCmd, parseSearchFlag, parseSortFlag, BAD_SORT_TEXT, shellQuote } =
     require('../../src/ts/cli/commands/photos') as typeof photosModule;
 
 const text = (level: string) => calls.filter((c) => c.level === level).map((c) => c.msg);
@@ -52,6 +53,7 @@ beforeEach(() => {
     guards.ensureAuthenticated.mockReturnValue(true);
     handlers['get-library-photos'].mockReset();
     handlers['suggest-photos'].mockReset();
+    handlers['search-photo-tags'].mockReset();
 });
 
 describe('list-photos', () => {
@@ -494,5 +496,125 @@ describe('list-photos --suggest', () => {
         handlers['suggest-photos'].mockResolvedValue(undefined);
         await expect(suggestPhotosCmd('5')).resolves.toBe(1);
         expect(text('error')).toEqual(['Could not suggest photos: undefined']);
+    });
+});
+
+describe('shellQuote', () => {
+    test('wraps in single quotes and reopens around each embedded quote', () => {
+        expect(shellQuote('')).toBe("''");
+        expect(shellQuote('stair')).toBe(`'stair'`);
+        expect(shellQuote("it's")).toBe(`'it'\\''s'`);
+    });
+});
+
+describe('list-photos --search tag suggestions', () => {
+    const tagReply = (tags: string[]) => ({ success: true, tags });
+    const noPhotos = {
+        success: true,
+        photos: [],
+        truncated: false,
+        wonIds: [],
+        wonCount: 0,
+        preview: false,
+        readAtMs: 1_700_000_000_000,
+        allowedKnown: false,
+        memberId: null,
+    };
+
+    test('zero photos: the matching tags follow the "No photos found" line, the hint carries --challenge/--sort', async () => {
+        handlers['get-library-photos'].mockResolvedValue(noPhotos);
+        handlers['search-photo-tags'].mockResolvedValue(tagReply(['spiral staircase', 'stairs']));
+        await expect(listPhotosCmd('5', 'stair', 'newest')).resolves.toBe(0);
+        expect(handlers['search-photo-tags']).toHaveBeenCalledWith(null, 'stair');
+        expect(text('info')).toEqual(['No photos found for "stair".']);
+        expect(text('stdout')).toEqual([
+            'Matching tags: spiral staircase, stairs',
+            `Search one with: list-photos --search='spiral staircase' --challenge='5' --sort='newest'`,
+        ]);
+    });
+
+    test('with photos too the tag lines come after the listing, and never reach the log files', async () => {
+        handlers['get-library-photos'].mockResolvedValue({ ...noPhotos, photos });
+        handlers['search-photo-tags'].mockResolvedValue(tagReply(['pinkish', 'pink flower']));
+        await expect(listPhotosCmd(null, 'pink')).resolves.toBe(0);
+        expect(text('stdout')).toEqual([
+            '  • p1  [Pink, Flower]',
+            '  • p2  [Car]',
+            'Matching tags: pinkish, pink flower',
+            `Search one with: list-photos --search='pinkish'`,
+        ]);
+        // The tag lines are terminal only, like the photo lines.
+        expect(text('info').join('')).not.toMatch(/pinkish|pink flower|Matching tags/);
+        expect(text('warning')).toEqual([]);
+    });
+
+    test('the tag equal to the term is hidden, and a reply of only that prints nothing', async () => {
+        handlers['get-library-photos'].mockResolvedValue(noPhotos);
+        handlers['search-photo-tags'].mockResolvedValue(tagReply(['Staircase', 'staircase steel']));
+        await expect(listPhotosCmd(null, 'staircase')).resolves.toBe(0);
+        expect(text('stdout')).toEqual([
+            'Matching tags: staircase steel',
+            `Search one with: list-photos --search='staircase steel'`,
+        ]);
+        calls.length = 0;
+        handlers['search-photo-tags'].mockResolvedValue(tagReply(['Staircase']));
+        await expect(listPhotosCmd(null, 'staircase')).resolves.toBe(0);
+        expect(text('stdout')).toEqual([]);
+    });
+
+    test.each([
+        ['an empty reply', tagReply([])],
+        ['a superseded reply', { success: false, error: 'superseded' }],
+        ['a null reply', null],
+    ])('%s prints nothing and keeps exit 0', async (_name, reply) => {
+        handlers['get-library-photos'].mockResolvedValue(noPhotos);
+        handlers['search-photo-tags'].mockResolvedValue(reply);
+        await expect(listPhotosCmd(null, 'stair')).resolves.toBe(0);
+        expect(text('stdout')).toEqual([]);
+    });
+
+    test('a term shorter than 3 characters: the empty reply prints no tag lines', async () => {
+        handlers['get-library-photos'].mockResolvedValue(noPhotos);
+        handlers['search-photo-tags'].mockResolvedValue(tagReply([]));
+        await expect(listPhotosCmd(null, 'st')).resolves.toBe(0);
+        expect(text('info')).toEqual(['No photos found for "st".']);
+        expect(text('stdout')).toEqual([]);
+    });
+
+    test.each([
+        ['spiral staircase', `--search='spiral staircase'`],
+        ["it's", `--search='it'\\''s'`],
+        ['$(x)', `--search='$(x)'`],
+        ['`x`', `--search='\`x\`'`],
+    ])('the hint quotes a tag the shell must not split or run: %s', async (tag, expectedFlag) => {
+        handlers['get-library-photos'].mockResolvedValue(noPhotos);
+        handlers['search-photo-tags'].mockResolvedValue(tagReply([tag]));
+        await expect(listPhotosCmd(null, 'nope')).resolves.toBe(0);
+        expect(text('stdout')[1]).toBe(`Search one with: list-photos ${expectedFlag}`);
+    });
+
+    test('no --search, or an empty one, never asks for tags', async () => {
+        handlers['get-library-photos'].mockResolvedValue(noPhotos);
+        await expect(listPhotosCmd('5', null)).resolves.toBe(0);
+        await expect(listPhotosCmd('5', '')).resolves.toBe(0);
+        expect(handlers['search-photo-tags']).not.toHaveBeenCalled();
+    });
+
+    test('a failed listing stops before the tag lookup', async () => {
+        handlers['get-library-photos'].mockResolvedValue({ success: false, error: 'superseded' });
+        handlers['search-photo-tags'].mockResolvedValue(tagReply(['stairs']));
+        await expect(listPhotosCmd('5', 'stair')).resolves.toBe(1);
+        expect(handlers['search-photo-tags']).not.toHaveBeenCalled();
+    });
+
+    test('control characters are stripped from the printed tags and from the hint', async () => {
+        handlers['get-library-photos'].mockResolvedValue(noPhotos);
+        handlers['search-photo-tags'].mockResolvedValue(tagReply(['sta\u0007irs\u001b[31m']));
+        await expect(listPhotosCmd('5', 'stair')).resolves.toBe(0);
+        expect(text('stdout')).toEqual([
+            'Matching tags: stairs',
+            `Search one with: list-photos --search='stairs' --challenge='5'`,
+        ]);
+        expect((text('stdout').join('') + text('info').join('')).match(/\p{Cc}/u)).toBeNull();
     });
 });

@@ -13,6 +13,7 @@ import { suggestErrorText } from '@/api/ipcErrorText';
 import { useTagSuggestions } from '@/api/useTagSuggestions';
 import { LIBRARY_ORDERS, LOADED_SORTS, isLibraryOrder, isLoadedSort } from '../../../librarySort';
 import { MIN_AUTOCOMPLETE_CHARS } from '../../../settings/limits';
+import { suggestedTags } from '../../../tagSuggestions';
 import { SuggestedStrip } from './SuggestedStrip';
 
 import type { ReactNode } from 'react';
@@ -34,9 +35,6 @@ const SORT_NAME_KEYS: Record<LoadedSort, string> = {
     likes: 'app.pickSortLikes',
     guruPicks: 'app.pickSortGuruPicks',
 };
-
-/** Most tag-suggestion buttons shown, whatever the endpoint answered. */
-const MAX_SUGGESTED_BUTTONS = 8;
 
 /**
  * The search box: submitting reads the listing again for the (trimmed) term. Below the box,
@@ -61,7 +59,7 @@ function SearchForm({ onSearch }: { onSearch: (term: string) => void }) {
     }, [enough, replied, tags.length]);
     // A tag equal to the text (trimmed, case-insensitive) is hidden: pressing it would
     // re-run the search already in the box.
-    const shownTags = tags.filter((tag) => tag.toLowerCase() !== trimmed.toLowerCase()).slice(0, MAX_SUGGESTED_BUTTONS);
+    const shownTags = suggestedTags(tags, trimmed);
     return (
         <form
             className="flex flex-wrap items-center gap-2"

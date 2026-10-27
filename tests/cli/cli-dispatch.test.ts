@@ -476,6 +476,8 @@ const COMMANDS_BLOCK = `Commands:
              them for auto-join / auto-submit. With --challenge each photo shows whether that challenge accepts
              it. --sort orders the whole library on the server — votes (the default), newest or oldest (the
              date the photo was added to your library) — and the whole listing comes out in that order.
+             --search matches a tag exactly, and also lists the tags in your library that contain the term (3+
+             characters), so a partial term still shows the full tag to search with.
   list-photos --challenge=<id> --suggest - Rank your photos for that challenge by your auto-submit rules and list
              the top 5, best first. It is a ranking under those rules, not a replay of the next fill, and
              nothing is submitted. It cannot be combined with --search or --sort.

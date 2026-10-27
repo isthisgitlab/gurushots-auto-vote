@@ -5,7 +5,10 @@
  * behind the Pick… "Auto" button. Everything the
  * server sent is stripped of terminal control characters before it is printed,
  * and the per-photo listing goes to the terminal only — the log files get a
- * count and whether the list was cut short, never the photos. `--suggest` prints
+ * count and whether the list was cut short, never the photos. `--search` also
+ * prints the library's tags that contain the term — terminal only, best effort,
+ * like the picker's suggestions — with a hint to rerun the search for one of
+ * them, quoted for the shell. `--suggest` prints
  * the ranked ids to the terminal only too, and its own log lines carry counts (the
  * shared visual check logs its shortlist of photo ids as it does for every fill).
  */
@@ -13,6 +16,7 @@
 import * as logger from '../../logger';
 import { stripTerminalControl } from '../../format/logSafe';
 import { isLibraryOrder } from '../../librarySort';
+import { suggestedTags } from '../../tagSuggestions';
 import { ensureAuthenticated, INVALID_ID_TEXT } from '../guards';
 
 import type { NullEventHandlers } from '../../types/cli';
@@ -94,6 +98,33 @@ const printWonHidden = (listing: Listing): void => {
 };
 
 /**
+ * A value as one POSIX shell word: wrapped in single quotes, with each single
+ * quote inside closed and reopened (`'\''`). The rerun hint is pasted into a
+ * shell, so a tag it carries must not split into two arguments or run as code.
+ */
+const shellQuote = (value: string): string => `'${value.replaceAll("'", `'\\''`)}'`;
+
+/**
+ * The picker's tag suggestions, best effort like in the GUI: the library's tags
+ * that CONTAIN the term, minus the term itself, offered for one exact search.
+ * A failed, superseded or empty reply prints nothing, and both lines are
+ * terminal only, like the photo lines. Never changes the exit code.
+ */
+const printTagSuggestions = async (search: string, challengeId: string | null, sort: string | null): Promise<void> => {
+    const reply = await handlers()['search-photo-tags'](null, search);
+    if (!reply?.success) return;
+    const tags = suggestedTags(reply.tags, search);
+    if (tags.length === 0) return;
+    logger.printLine(`Matching tags: ${tags.map((tag) => stripTerminalControl(tag)).join(', ')}`);
+    const rerun = [
+        `--search=${shellQuote(stripTerminalControl(tags[0]))}`,
+        ...(challengeId === null ? [] : [`--challenge=${shellQuote(stripTerminalControl(challengeId))}`]),
+        ...(sort === null ? [] : [`--sort=${shellQuote(stripTerminalControl(sort))}`]),
+    ].join(' ');
+    logger.printLine(`Search one with: list-photos ${rerun}`);
+};
+
+/**
  * Print each photo as `id  allowed|not allowed  [labels]` on the terminal only —
  * the log files never get a photo.
  */
@@ -150,6 +181,7 @@ const listPhotosCmd = async (
                 ? `No photos you can enter were found ${where}; ${wonHiddenText(result)}.`
                 : `No photos found ${where}.`,
         );
+        if (search) await printTagSuggestions(search, challengeId, sort);
         return 0;
     }
     ui().info(`=== Your photos (${result.photos.length}${result.truncated ? ', list cut short' : ''}) ===`);
@@ -169,6 +201,7 @@ const listPhotosCmd = async (
             `Choose photos with: set-setting chosenPhotos '["<id>"]' --challenge=${stripTerminalControl(challengeId)}`,
         );
     }
+    if (search) await printTagSuggestions(search, challengeId, sort);
     return 0;
 };
 
@@ -208,4 +241,4 @@ const suggestPhotosCmd = async (challengeId: string): Promise<number> => {
     return 0;
 };
 
-export { listPhotosCmd, suggestPhotosCmd, parseSearchFlag, parseSortFlag, BAD_SORT_TEXT };
+export { listPhotosCmd, suggestPhotosCmd, parseSearchFlag, parseSortFlag, BAD_SORT_TEXT, shellQuote };
