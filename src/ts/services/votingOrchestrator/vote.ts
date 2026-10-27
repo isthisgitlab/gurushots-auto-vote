@@ -101,9 +101,11 @@ export const voteOnChallenge = async (
             .infoT('me55acfad2b92', [logger.challengeTag(challenge), decision.voteReason], null);
 
         const voteImages = await pass.api.getVoteImages(challenge, pass.token);
-        // A capped mission pool is handed to the fill step whole, like any other.
+        // The body (an empty images array included) is handed to the fill step whole, like any other.
         outcome.votePool = voteImages ?? null;
-        if (voteImages && voteImages.images) {
+        // Only a pool with images to vote on is voted: an empty pool is a real
+        // answer (nothing left), a null one a failed read — both skip the vote.
+        if (voteImages && Array.isArray(voteImages.images) && voteImages.images.length > 0) {
             outcome.cancelled = await submitVoteImages(
                 challenge,
                 voteImages,

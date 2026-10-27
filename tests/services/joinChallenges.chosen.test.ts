@@ -21,9 +21,16 @@ jest.mock('../../src/ts/logger', () => {
         success: (m: string) => lines.success.push(m),
         warning: (m: string) => lines.warning.push(m),
     };
+    // The T-methods render through the real catalog onto the same sink arrays.
+    const { renderLogTemplate } = require('../helpers/logTemplate') as typeof import('../helpers/logTemplate');
+    const tMethods = {
+        infoT: (key: string, params: unknown[]) => lines.info.push(renderLogTemplate(key, params)),
+        warningT: (key: string, params: unknown[]) => lines.warning.push(renderLogTemplate(key, params)),
+        errorT: (key: string, params: unknown[]) => lines.error.push(renderLogTemplate(key, params)),
+    };
     return {
         __lines: lines,
-        withCategory: jest.fn(() => level),
+        withCategory: jest.fn(() => ({ ...level, ...tMethods })),
         challengeTag: (c: { id?: string | number } | null) => `challenge ${c?.id}`,
     };
 });

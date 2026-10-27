@@ -98,7 +98,7 @@ export const errors = {
     joinRefusedFull:
         'Could not join: the challenge is full, so no player slot is left. Nothing was charged. Refresh the list, and join if a slot frees up.',
     joinRefusedPriceUnknown:
-        "Could not join: the challenge's price is unknown — GuruShots did not send it, so the app could not confirm a spend. Nothing was charged. Refresh the list, or join the challenge on gurushots.com.",
+        'Could not join: the price could not be read as a usable price, so the app could not confirm a spend. Nothing was charged. Refresh the list, or join the challenge on gurushots.com.',
     tokenNotSaved:
         "Your login was accepted but could not be saved: the settings could not be written. Check the settings file's permissions and free disk space, then log in again.",
     tokenNotSavedAndroid:
@@ -735,7 +735,7 @@ export const app = {
     discoverPriceUnknown: 'Price unknown',
     discoverJoinPriceUnknownLabel: 'Join {title} — its price is unknown',
     discoverPriceUnknownHint:
-        'The price of this challenge is unknown: GuruShots did not send it, so the app cannot ask you to confirm a spend. Refresh the list, or join the challenge on gurushots.com.',
+        'The price of this challenge could not be read as a usable price, so the app cannot ask you to confirm a spend. Refresh the list, or join the challenge on gurushots.com.',
     discoverRecommended: 'Recommended by GuruShots',
     discoverJoin: 'Join',
     discoverJoinPaid: 'Join (paid)',
@@ -1147,7 +1147,8 @@ export const app = {
     autoSwapMaxVotes: 'Swap Only Below Votes',
     autoSwapMaxVotesDesc: 'Only swap when the chosen entry has fewer votes than this. 0 = no vote condition.',
     autoSwapMax: 'Max Swaps In This Challenge',
-    autoSwapMaxDesc: 'Stop auto-swapping once this challenge has had this many swaps (manual swaps count too).',
+    autoSwapMaxDesc:
+        'Stop auto-swapping once this challenge has had this many swaps (manual swaps count too). When GuruShots sends no swap history, the app counts only its own auto-swaps; it does not count manual or scenario swaps.',
     autoExposureFill: 'Auto-Use a Fill',
     autoExposureFillDesc:
         'Spends a fill to top exposure up to 100% — only when exposure is below the threshold below AND voting cannot close the gap. Usually needed in flash challenges.',

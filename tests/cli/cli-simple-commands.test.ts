@@ -764,7 +764,7 @@ describe('join', () => {
         handlers['join-challenge'].mockResolvedValue(invalid({ status: 'failed-no-charge', reason: 'price-unknown' }));
         await joinChallengeCmd('7');
         expect(msgs('error')).toEqual([
-            'GuruShots did not send the price for 7, so it is not known what joining costs — no coins were charged. Run "discover" again to refresh it, or join the challenge on gurushots.com.',
+            'The price for 7 could not be read as a usable price, so it is not known what joining costs — no coins were charged. Run "discover" again to refresh it, or join the challenge on gurushots.com.',
         ]);
     });
 

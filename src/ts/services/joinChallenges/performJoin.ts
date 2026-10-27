@@ -25,6 +25,7 @@ import * as logger from '../../logger';
 import * as cancellation from '../../voting/cancellation';
 import type { Challenge } from '../../types/gurushots';
 import { sanitizeLogString } from '../../logger/sanitize';
+import { isValidId } from '../../ids';
 import { cat, inFlight, lockFor } from './shared';
 import type { Claim, JoinDeps, JoinOutcome, UnlockState } from './shared';
 import { alreadyJoined, claimsStale, failedNoCharge, unlockUnderLock } from './paidUnlock';
@@ -210,6 +211,13 @@ const performJoin = async (
     }: { manual?: boolean; submitOnly?: boolean; coinsBefore?: number | null; priceCeiling?: number } = {},
 ): Promise<JoinOutcome> => {
     const id = challenge?.id;
+    // An open-list row with an unusable id joins nothing: String(id) would key the in-flight set, the
+    // claim and the cross-process lock on "undefined". The row is server-controlled, so the line names
+    // it through the sanitized tag, never by printing it. Before any lock, claim or request.
+    if (!isValidId(id)) {
+        cat().warningT('me63c0d7b952a', [logger.challengeTag(challenge)], null);
+        return failedNoCharge();
+    }
     const key = String(id);
     if (inFlight.has(key)) {
         return { status: 'busy', charged: 0 };

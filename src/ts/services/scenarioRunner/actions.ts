@@ -204,7 +204,10 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
     vote: async (action, ctx) => {
         const { challenge, pass } = ctx;
         const voteImages = await pass.api.getVoteImages(challenge, pass.token);
-        if (!voteImages) return failed('the vote images could not be loaded');
+        // An empty pool is no more votable than a failed read: both leave nothing to submit.
+        if (!voteImages || !Array.isArray(voteImages.images) || voteImages.images.length === 0) {
+            return failed('the vote images could not be loaded');
+        }
         const response = await pass.api.submitVotes(voteImages, pass.token, action.toExposure);
         return response ? done() : failed('the votes could not be submitted');
     },

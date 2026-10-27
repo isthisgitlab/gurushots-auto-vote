@@ -167,8 +167,10 @@ const paidJoinRefusal = (
  *                    has reached it.
  *   price-unknown  — the member still owes the unlock (`submit_state` is
  *                    'join_unlock') but `join_coins` is not a positive
- *                    integer, so there is no price to consent to. A free
- *                    'join' state is never price-unknown.
+ *                    integer, so there is no price to consent to; or the price
+ *                    reads as a positive fraction (any `submit_state`), which
+ *                    no unlock priced in whole coins can cost. A free 'join'
+ *                    state is refused only at such a fractional price.
  *
  * This guards a join that would still SPEND something. A paid retry — coins
  * already spent, only the submit left — ALWAYS takes precedence and is never
@@ -191,8 +193,10 @@ const joinFreshRefusal = (
     if (Number.isFinite(maxPlayers) && maxPlayers > 0 && Number.isFinite(players) && players >= maxPlayers) {
         return 'full';
     }
+    const price = Number(challenge?.join_coins);
+    // A positive fraction is no price to consent to, whatever the submit state.
+    if (Number.isFinite(price) && price > 0 && !Number.isInteger(price)) return 'price-unknown';
     if (challenge?.member?.submit_state === 'join_unlock') {
-        const price = Number(challenge?.join_coins);
         if (!Number.isInteger(price) || price <= 0) return 'price-unknown';
     }
     return null;
@@ -206,7 +210,7 @@ const joinFreshRefusal = (
  * @param refusal a `joinFreshRefusal` reason
  */
 const joinFreshRefusalWhy = (refusal: 'full' | 'price-unknown'): string =>
-    refusal === 'full' ? 'it is full (max players reached)' : 'it needs a paid unlock but its price could not be read';
+    refusal === 'full' ? 'it is full (max players reached)' : 'its price could not be read as a usable price';
 
 /**
  * @returns lowercase-trimmed type ('' = none) and string tags
@@ -261,9 +265,10 @@ const normalizeJoinFacets = (
  * Capacity and price readability are vetoes too, for a FRESH join only
  * (`joinFreshRefusal`): a full challenge, or one that still owes an unlock
  * (`submit_state` 'join_unlock') whose price is not a readable positive
- * integer, is never joined fresh — there is nothing to submit into, or no
- * price to consent to. A paid RETRY (`alreadyPaid`) always takes precedence
- * and is never blocked, so a paid unlock is never stranded.
+ * integer — or whose price reads as a positive fraction on any state — is
+ * never joined fresh; there is nothing to submit into, or no price to consent
+ * to. A paid RETRY (`alreadyPaid`) always takes precedence and is never
+ * blocked, so a paid unlock is never stranded.
  *
  * @param params.bankroll live balance, or null if unread
  * @param params.remainingBudget coins still spendable this cycle (0 = paid off)

@@ -6,8 +6,18 @@
 
 jest.mock('../../src/ts/logger', () => {
     const level = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
+    // The T-methods render through the real catalog and land on the same level
+    // fn, so assertions written against the plain methods keep passing.
+    const { renderLogTemplate } = require('../helpers/logTemplate') as typeof import('../helpers/logTemplate');
+    const t = (line: LogMock) => (key: string, params: unknown[], data?: unknown) =>
+        line(renderLogTemplate(key, params), data);
     return {
-        withCategory: jest.fn(() => level),
+        withCategory: jest.fn(() => ({
+            ...level,
+            infoT: jest.fn(t(level.info)),
+            warningT: jest.fn(t(level.warning)),
+            errorT: jest.fn(t(level.error)),
+        })),
         challengeTag: (c: { id?: string | number } | null) => `challenge ${c?.id}`,
     };
 });
@@ -4481,4 +4491,89 @@ describe("the join's photo pick under a failing suggested-photos read", () => {
             );
         },
     );
+});
+
+describe('the spend-path guards on the join list', () => {
+    const warned = () => invalid<LoggerMock>(require('../../src/ts/logger')).withCategory().warning;
+    // A claim whose join went through, old enough for the list to end it.
+    const joinedOld = { unlockedAt: RECENT - 7 * 60 * 60 * 1000, joinedAt: RECENT - 7 * 60 * 60 * 1000 };
+
+    test('a clean list still prunes', async () => {
+        const store = fileWith({ '7': joinedOld, '12': joinedOld });
+        const deps = makeDeps({ getMemberChallenges: openList([{ id: 5 }, { id: 12 }]), joinStateStore: store });
+        await pruneClosedClaims([{ id: 5 }, { id: 12 }], deps);
+        expect(Object.keys(store.read())).toEqual(['12']);
+    });
+
+    test('a list with a row that has no usable id prunes nothing, and says so once per run of such reads', async () => {
+        const store = fileWith({ '7': joinedOld });
+        const deps = makeDeps({ getMemberChallenges: openList([{ id: 5 }, null]), joinStateStore: store });
+        // A clean read that keeps the claim first, so the once-per-run notice is armed for this test.
+        await pruneClosedClaims([{ id: 5 }, { id: 7 }], deps);
+        warned().mockClear();
+        const bad = [{ id: 5 }, null];
+        await pruneClosedClaims(bad, deps);
+        expect(store.writeRaw).not.toHaveBeenCalled();
+        expect(store.read()).toEqual({ '7': joinedOld });
+        expect(warned()).toHaveBeenCalledTimes(1);
+        expect(warned()).toHaveBeenCalledWith(expect.stringContaining('no usable id'), null);
+        // The next consecutive read of a list that cannot prove closure says nothing more.
+        await pruneClosedClaims(bad, deps);
+        expect(warned()).toHaveBeenCalledTimes(1);
+    });
+
+    test('a readable list after a bad one re-arms the skip notice', async () => {
+        const store = fileWith({ '7': joinedOld });
+        const deps = makeDeps({ getMemberChallenges: openList([{ id: 5 }, null]), joinStateStore: store });
+        await pruneClosedClaims([{ id: 5 }], deps);
+        await pruneClosedClaims([{ id: 5 }, null], deps);
+        await pruneClosedClaims([{ id: 5 }], deps);
+        await pruneClosedClaims([{ id: 5 }, null], deps);
+        expect(warned()).toHaveBeenCalledTimes(2);
+    });
+
+    test('an open-list row with no usable id is not joined and writes no claim', async () => {
+        const store = fileWith({});
+        const deps = makeDeps({
+            getMemberChallenges: openList([{ id: 'undefined', title: 'Broken', join_coins: 0, type: 'flash' }]),
+            joinStateStore: store,
+        });
+        const res = await runJoinPass('tok', Date.now(), deps);
+        expect(res.results).toEqual([{ id: 'undefined', status: 'failed-no-charge' }]);
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(store.writeRaw).not.toHaveBeenCalled();
+        expect(warned()).toHaveBeenCalledWith(expect.stringContaining('no usable id'), null);
+    });
+
+    test.each([
+        ['null row', null],
+        ['no id', { title: 'No id' }],
+        ['zero id', { id: 0 }],
+        ['negative id', { id: -4 }],
+    ])('performJoin refuses a %s before any lock, claim or request', async (_label, row) => {
+        const store = fileWith({});
+        const deps = makeDeps({ joinStateStore: store });
+        const res = await performJoin(invalid(row), 'tok', deps, 0);
+        expect(res).toEqual({ status: 'failed-no-charge', charged: 0 });
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(store.writeRaw).not.toHaveBeenCalled();
+    });
+
+    test('a claimed paid retry with a fractional join_coins still takes the paid-retry path and submits', async () => {
+        // The fresh-guard now refuses a fractional price, but a claim on file beats it: the coins
+        // were paid when the price was whole, and only the submit is left.
+        const store = fileWith({ '3': { unlockedAt: RECENT } });
+        const deps = makeDeps({
+            getMemberChallenges: openList([{ id: 3, join_coins: 1.5, type: 'flash' }]),
+            getBankroll: balance({ coins: 500 }),
+            joinStateStore: store,
+        });
+        const res = await joinChallengeSingle(3, 'tok', deps);
+        expect(res).toMatchObject({ status: 'joined', challengeId: 3 });
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(deps.submitToChallenge).toHaveBeenCalledTimes(1);
+        expect(store.read()).toEqual({ '3': expect.objectContaining({ joinedAt: expect.any(Number) }) });
+    });
 });

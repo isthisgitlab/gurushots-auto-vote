@@ -17,7 +17,10 @@ import type { Challenge, SuccessResponse, VoteImagesResponse } from '../types/gu
  *
  * @param challenge - Challenge object containing title and URL
  * @param token - Authentication token
- * @returns Response containing images to vote on, or null if request failed
+ * @returns The response body when the read succeeded and `images` is an array
+ *   (empty or not — an empty pool is a real answer), or null when the request
+ *   failed or the body could not be read as a pool (`success: false`, `images`
+ *   missing or not an array)
  */
 const getVoteImages = async (challenge: Challenge, token: string): Promise<VoteImagesResponse | null> => {
     const operationId = `get-vote-images-${challenge.id}`;
@@ -34,11 +37,19 @@ const getVoteImages = async (challenge: Challenge, token: string): Promise<VoteI
 
     const response = await makePostRequest<VoteImagesResponse>(ENDPOINTS.voteImages, headers, data);
 
+    // A failed request and an unreadable body are one outcome: null. An empty
+    // images array is a real (spent) pool and comes back as the body, so the
+    // callers can tell "nothing left to vote on" from "could not read".
+    if (!response || response.success === false || !Array.isArray(response.images)) {
+        logger.withCategory('api').endOperation(operationId, 'the vote images could not be read, returning null');
+        return null;
+    }
+
     // No-images is an expected branch (mock-mode, or pool emptied between cycles).
     // The outer voting op reports the user-visible line; we close at DEBUG.
-    if (!response || !response.images || response.images.length === 0) {
-        logger.withCategory('api').endOperation(operationId, 'no images available, returning null');
-        return null;
+    if (response.images.length === 0) {
+        logger.withCategory('api').endOperation(operationId, 'no images in the pool, returning it');
+        return response;
     }
 
     logger.withCategory('api').endOperation(operationId, `retrieved ${response.images.length} images`);

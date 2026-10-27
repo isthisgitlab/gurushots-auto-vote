@@ -457,9 +457,23 @@ describe('joinFreshRefusal — capacity and price readability', () => {
             'price-unknown',
         );
     });
-    test('a free join state is never price-unknown', () => {
+    test('a positive fractional price is refused for any submit state', () => {
+        for (const join_coins of [1.5, invalid<number>('1.5')]) {
+            expect(refusalOf({ join_coins })).toBe('price-unknown');
+            expect(refusalOf({ member: { submit_state: 'join' }, join_coins })).toBe('price-unknown');
+            expect(refusalOf({ member: { submit_state: 'join_unlock' }, join_coins })).toBe('price-unknown');
+        }
+    });
+    test('whole, zero and unreadable prices keep working, whatever the state', () => {
+        for (const join_coins of [12, invalid<number>('12'), 0, invalid<number>('free')]) {
+            expect(refusalOf({ join_coins })).toBeNull();
+        }
+        expect(refusalOf({})).toBeNull();
+    });
+    test('a free join state is price-unknown only at a positive fraction', () => {
         expect(refusalOf({ member: { submit_state: 'join' } })).toBeNull();
         expect(refusalOf({ member: { submit_state: 'join' }, join_coins: 0 })).toBeNull();
+        expect(refusalOf({ member: { submit_state: 'join' }, join_coins: 2.5 })).toBe('price-unknown');
         expect(refusalOf({})).toBeNull();
     });
     test('full is reported before price-unknown when both apply', () => {
@@ -477,6 +491,12 @@ describe('capacity and price readability veto a FRESH join, never a paid retry',
         expect(
             call({ challenge: { id: 1, type: 'flash', join_coins: 0, member: { submit_state: 'join_unlock' } } }),
         ).toMatchObject({ join: false, reason: 'price-unknown' });
+    });
+    test('a positive fractional price on a free row is refused with reason price-unknown', () => {
+        expect(call({ challenge: { id: 1, type: 'flash', join_coins: 1.5 } })).toMatchObject({
+            join: false,
+            reason: 'price-unknown',
+        });
     });
     test('a paid retry of a full challenge still submits', () => {
         expect(

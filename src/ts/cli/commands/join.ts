@@ -192,7 +192,7 @@ const joinLine = (
             }
             if (result?.reason === 'price-unknown') {
                 return error(
-                    `GuruShots did not send the price for ${challengeId}, so it is not known what joining costs — no coins were charged. Run "discover" again to refresh it, or join the challenge on gurushots.com.`,
+                    `The price for ${challengeId} could not be read as a usable price, so it is not known what joining costs — no coins were charged. Run "discover" again to refresh it, or join the challenge on gurushots.com.`,
                 );
             }
             return error(`Could not join ${challengeId}. No coins were charged.`);

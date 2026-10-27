@@ -107,7 +107,7 @@ export const errors: typeof english.errors = {
     joinRefusedFull:
         'Neizdevās pievienoties: izaicinājums ir pilns, brīvu vietu vairs nav. Monētas netika norakstītas. Atsvaidzini sarakstu un pievienojies, tiklīdz atbrīvojas kāda vieta.',
     joinRefusedPriceUnknown:
-        'Neizdevās pievienoties: cena nav zināma — GuruShots to nenosūtīja, tāpēc nevarēja apstiprināt tēriņu. Monētas netika norakstītas. Atsvaidzini sarakstu vai pievienojies vietnē.',
+        'Neizdevās pievienoties: cenu neizdevās nolasīt kā lietojamu cenu, tāpēc nevarēja apstiprināt tēriņu. Monētas netika norakstītas. Atsvaidzini sarakstu vai pievienojies vietnē.',
     boundaryBody:
         'Daļa lietotnes pārstāja darboties. Informācija ir saglabāta žurnālos. Pārlādē lietotni, lai turpinātu; ja tas atkārtojas, žurnālos redzams, kas neizdevās.',
     votingFailed:
@@ -750,7 +750,7 @@ export const app: LatvianApp = {
     discoverPriceUnknown: 'Cena nav zināma',
     discoverJoinPriceUnknownLabel: 'Pievienoties izaicinājumam „{title}” — cena nav zināma',
     discoverPriceUnknownHint:
-        'Šī izaicinājuma cena nav zināma: GuruShots to nenosūtīja, tāpēc lietotne nevar lūgt atļauju iztērēt monētas. Atsvaidzini sarakstu vai pievienojies izaicinājumam GuruShots vietnē.',
+        'Šī izaicinājuma cenu neizdevās nolasīt kā lietojamu cenu, tāpēc lietotne nevar lūgt atļauju iztērēt monētas. Atsvaidzini sarakstu vai pievienojies izaicinājumam GuruShots vietnē.',
     discoverRecommended: 'GuruShots ieteikts',
     discoverJoin: 'Pievienoties',
     discoverJoinPaid: 'Pievienoties (maksas)',
@@ -1158,7 +1158,7 @@ export const app: LatvianApp = {
         'Apmainīt tikai tad, ja izvēlētajam foto ir mazāk balsu par šo skaitu. 0 = bez balsu nosacījuma.',
     autoSwapMax: 'Maks. apmaiņu šajā izaicinājumā',
     autoSwapMaxDesc:
-        'Pārtraukt automātisko apmaiņu, kad šajā izaicinājumā izdarīts tik daudz apmaiņu (manuālās arī skaitās).',
+        'Pārtraukt automātisko apmaiņu, kad šajā izaicinājumā izdarīts tik daudz apmaiņu (manuālās arī skaitās). Ja GuruShots nesūta apmaiņu vēsturi, lietotne skaita tikai savas automātiskās apmaiņas; manuālās un scenāriju apmaiņas tā neskaita.',
     autoExposureFill: 'Automātiski izmantot uzpildi',
     autoExposureFillDesc:
         'Iztērē uzpildi, lai paceltu redzamību līdz 100 %, — tikai ja tā ir zem zemāk norādītā sliekšņa UN balsot to nesasniedz. Parasti noder zibens izaicinājumos.',

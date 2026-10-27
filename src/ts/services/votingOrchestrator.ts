@@ -216,6 +216,11 @@ const processChallenge = async (
     // The challenge's scenario runs first: its actions (and a phase change)
     // land before the built-in steps, which then read the new phase's
     // settings overlay through getEffectiveSetting.
+    // Whether GuruShots sent a swap history is recorded before the step on
+    // purpose: the scenario swap (and the auto swap's own reflect) write a
+    // swaps array onto this object, so the auto-swap cap branch is decided on
+    // the history as sent, never on the object at call time.
+    const swapHistorySent = Array.isArray(challenge.member?.ranking?.swaps);
     await runScenarioStep(challenge, now, pass);
 
     await playAutoTurbo(challenge, now, pass);
@@ -224,7 +229,7 @@ const processChallenge = async (
     // run ahead of the deadline actions on purpose: an unlocked boost is then
     // available to the boost runner this same pass, and a swap happens before a
     // boost/turbo lands, so neither spends on the photo about to be replaced.
-    const currencyCtx = { challenge, token: pass.token, now, currency: pass.currency };
+    const currencyCtx = { challenge, token: pass.token, now, currency: pass.currency, swapHistorySent };
     await currencyAuto.runAutoKey(currencyCtx);
     await currencyAuto.runAutoSwap(currencyCtx);
 

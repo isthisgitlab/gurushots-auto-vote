@@ -91,15 +91,29 @@ interface CurrencyCtx {
     currency?: CurrencyPassDeps | null;
 }
 
+/**
+ * The swap runner's context: it also carries whether GuruShots sent a swap
+ * history for this challenge, recorded before the scenario step could write
+ * one onto the pass's challenge object — the cap branch is decided on the
+ * history as the server sent it, never on the object at call time.
+ */
+interface SwapCtx extends CurrencyCtx {
+    swapHistorySent: boolean;
+}
+
 type LiveCurrencyCtx = CurrencyCtx & { currency: CurrencyPassDeps };
 
 type RulePrefix = 'autoKey' | 'autoSwap' | 'autoExposureFill';
 
 const log = () => logger.withCategory('currency');
 
-// Challenges already told that their swap history is missing: the warning is
-// once per challenge, not once per pass.
-const warnedMissingSwaps = new Set<string>();
+// Challenges already told that their auto-swaps are counted locally: the
+// notice is once per challenge, not once per pass.
+const localSwapCountSaid = new Set<string>();
+
+// Challenges whose latest vote-pool read was unreadable: the fill skip is said
+// once per run of consecutive unreadable reads, and a readable pool re-arms it.
+const unreadablePoolSaid = new Set<string>();
 
 const RESERVE_KEY = Object.freeze({
     key: 'currencyReserveKeys',
@@ -176,10 +190,10 @@ const lockedSpend = async <T>(
  * Wraps a runner so a throw is logged, never propagated into the pass.
  */
 const guarded =
-    <A extends unknown[]>(
+    <C extends CurrencyCtx, A extends unknown[]>(
         action: CurrencyAction,
-        runner: (ctx: CurrencyCtx, ...rest: A) => Promise<boolean>,
-    ): ((ctx: CurrencyCtx, ...rest: A) => Promise<boolean>) =>
+        runner: (ctx: C, ...rest: A) => Promise<boolean>,
+    ): ((ctx: C, ...rest: A) => Promise<boolean>) =>
     async (ctx, ...rest) => {
         try {
             return await runner(ctx, ...rest);
@@ -218,8 +232,13 @@ const runAutoKey = guarded('key', async (ctx) => {
 });
 
 /**
- * Spend a SWAP to replace one entry once the autoSwap rule is open, until the
- * challenge's swap history reaches autoSwapMax. The target follows
+ * Spend a SWAP to replace one entry once the autoSwap rule is open, capped by
+ * autoSwapMax. When GuruShots sent a swap history (`swapHistorySent`), the
+ * server count decides and the auto-spend ledger is not read or written. When
+ * it did not, auto-swaps are counted locally in the ledger under `swap:<id>`
+ * — manual and scenario swaps are not visible then, so they do not count —
+ * and the count is written down before the spend, so a swap that gets no
+ * answer stays counted (fail closed, like the fills). The target follows
  * autoSwapImageIndex (0 = last, 1-4 = slot) or, with autoSwapLowestVotes, the
  * entry with the fewest votes; boosted/turbo'd/guru-picked entries are skipped
  * unless autoSwapAllowBoosted (the swap-back ledger then records them). A photo
@@ -230,26 +249,37 @@ const runAutoKey = guarded('key', async (ctx) => {
  *
  * @returns true when a swap was spent
  */
-const runAutoSwap = guarded('swap', async (ctx) => {
+const runAutoSwap: (ctx: SwapCtx) => Promise<boolean> = guarded('swap', async (ctx: SwapCtx) => {
     const { challenge, token } = ctx;
     const id = String(challenge.id);
     if (settings.getEffectiveSetting('autoSwap', id) !== true) return false;
     if (isManualPhotosOnly(settings, id)) return false;
     if (!baseGate('swap', 'autoSwap', ctx)) return false;
 
-    const ranking = (challenge.member as ChallengeMember).ranking;
-    const swapsDone = Array.isArray(ranking?.swaps) ? ranking.swaps.length : 0;
-    // Without the challenge's swap history, both the local cap check and the
-    // live re-check count 0 swaps (an absent history reads as none), so
-    // autoSwapMax is not enforced for this challenge. The local swap count
-    // that closes this is planned separately (Phase 2). Say so once per
-    // challenge.
-    if (ranking?.swaps === undefined && !warnedMissingSwaps.has(id)) {
-        warnedMissingSwaps.add(id);
-        log().warningT('m3f9d9c9bac44', [logger.challengeTag(challenge)]);
-    }
+    const ledger = ctx.currency.spendLedger;
+    const countedLocally = !ctx.swapHistorySent;
     const maxSwaps = settings.getEffectiveSetting('autoSwapMax', id);
-    if (swapsDone >= maxSwaps) return false;
+    // The ledger the swap is counted against, when the history is missing. Narrowed here, so the
+    // lock's closure below can use it.
+    const localLedger = countedLocally && ledger ? ledger : null;
+    if (countedLocally) {
+        // Say once per challenge what the missing history costs, where the
+        // help text's caveat applies.
+        if (!localSwapCountSaid.has(id)) {
+            localSwapCountSaid.add(id);
+            log().infoT('m9a2f47c1b8e3', [logger.challengeTag(challenge)]);
+        }
+        // No ledger to count against: refuse, as the fill path does. Both strategies always
+        // supply one, so this is a guard branch.
+        if (!localLedger) return false;
+        // An untrusted ledger reads as unlimited, so this refuses too (fail closed, like fills).
+        if (localLedger.fills(`swap:${id}`) >= maxSwaps) return false;
+    } else {
+        // History present: the server count decides — the pass's snapshot here, the live
+        // challenge again inside swapEntry — and the ledger is not read or written.
+        const swaps = challenge.member?.ranking?.swaps;
+        if ((Array.isArray(swaps) ? swaps.length : 0) >= maxSwaps) return false;
+    }
 
     const allowProtected = settings.getEffectiveSetting('autoSwapAllowBoosted', id) === true;
     const target = pickSwapTarget(entriesOf(challenge), {
@@ -274,19 +304,48 @@ const runAutoSwap = guarded('swap', async (ctx) => {
     // Cast, not annotated: the closure below assigns it, which the checker's
     // narrowing of a plain `= null` initializer can't see.
     let candidate = null as SwapCandidate | null;
+    // Set only when this call reserved the local count: only a count this call reserved is ever taken back.
+    let reserved = false;
     const result = await lockedSpend('swap', challenge, async () => {
         const preview = await currencyActions.previewSwap(challenge.id, target.id, token, deps, {
             excludeSwapped: true,
         });
         if (!preview?.ok) return preview;
         candidate = preview.candidate;
+        if (localLedger) {
+            // The count is written down inside the lock, right before the spend, and held to the cap
+            // where it is written — the store's compare-and-write, so a count the Android background
+            // service saved since the check above is not spent past.
+            if (!(await localLedger.reserveFill(`swap:${id}`, { max: maxSwaps }))) {
+                // Read again the way the fill path does, so a reached cap does not read as a save failure.
+                if (localLedger.fills(`swap:${id}`) >= maxSwaps) {
+                    log().infoT('mb7d30a5f264c', [logger.challengeTag(challenge), maxSwaps]);
+                } else {
+                    log().warningT('mc581e9d04a7f', [logger.challengeTag(challenge)]);
+                }
+                // Not spent: a not-ok outcome, never the ok preview, or the caller would read the
+                // refused swap as a landed one and reflect it onto the pass.
+                return { ok: false, outcome: CURRENCY_OUTCOME.notAvailable };
+            }
+            reserved = true;
+        }
         // The pass's own count of swaps may be old by now: the cap is checked again on the live challenge.
-        return currencyActions.swapEntry(challenge.id, target.id, candidate.id, token, {
+        const spent = await currencyActions.swapEntry(challenge.id, target.id, candidate.id, token, {
             ...deps,
             ledger: ctx.currency.swapLedger ?? null,
             maxSwaps,
             guard,
         });
+        // A swap that got no answer may have been made: it stays counted.
+        if (
+            reserved &&
+            localLedger &&
+            spent.outcome !== CURRENCY_OUTCOME.ok &&
+            spent.outcome !== CURRENCY_OUTCOME.unclear
+        ) {
+            await localLedger.releaseFill(`swap:${id}`);
+        }
+        return spent;
     });
     if (!result?.ok || !candidate) return false;
 
@@ -295,7 +354,7 @@ const runAutoSwap = guarded('swap', async (ctx) => {
     const slot = entries.indexOf(target);
     entries[slot] = { id: candidate.id, member_id: candidate.member_id, votes: 0, turbo: false, boosted: false };
     // The target came from ranking.entries, so the ranking block is present.
-    const swapped = ranking as MemberRanking;
+    const swapped = (challenge.member as ChallengeMember).ranking as MemberRanking;
     swapped.swaps = [...(Array.isArray(swapped.swaps) ? swapped.swaps : []), { id: String(target.id) }];
     return true;
 });
@@ -318,9 +377,12 @@ const reflectFill = (challenge: Challenge) => {
  * done (typically a flash challenge that ran out of photos). Capped per
  * challenge by autoExposureFillMax.
  *
- * `votePool` is the getVoteImages response this pass voted from (null = none
- * available); undefined = voting didn't run, so the pool is fetched here to
- * judge the shortfall. Resolves true when a fill was spent.
+ * `votePool` is the getVoteImages response this pass voted from. undefined =
+ * voting didn't run, so the pool is fetched here to judge the shortfall. A
+ * null pool, or one whose exposure figure cannot be read, is a failed or
+ * unreadable read — never "voting cannot help" — so no fill is spent on it
+ * (fail closed); only an empty images array (a spent pool) keeps the fill
+ * path. Resolves true when a fill was spent.
  */
 const runAutoExposureFill: (ctx: CurrencyCtx, votePool: VotePool | null | undefined) => Promise<boolean> = guarded(
     'fill',
@@ -342,8 +404,20 @@ const runAutoExposureFill: (ctx: CurrencyCtx, votePool: VotePool | null | undefi
         // cannot run, so the shortfall cannot be judged and no fill is spent.
         if (votePool === undefined && !challenge.url) return false;
         const pool = votePool === undefined ? await ctx.currency.strategy.getVoteImages(challenge, token) : votePool;
-        // votePoolReach reads the pool through optional chaining; null (no pool) yields null.
+        // votePoolReach reads the pool through optional chaining; null (no readable pool) yields null.
         const reach = votePoolReach(pool as VoteImagesResponse);
+        const images = pool?.images;
+        const spentPool = Array.isArray(images) && images.length === 0;
+        // A failed or unreadable read is not "voting cannot help": no fill is spent on it. Said once
+        // per run of consecutive unreadable reads; a readable pool re-arms the warning.
+        if (pool === null || (!spentPool && reach === null)) {
+            if (!unreadablePoolSaid.has(id)) {
+                unreadablePoolSaid.add(id);
+                log().warningT('md24b6f8a31e9', [logger.challengeTag(challenge)]);
+            }
+            return false;
+        }
+        unreadablePoolSaid.delete(id);
         if (!fillBeatsVoting(exposure, reach, below)) {
             log().debug(
                 `${logger.challengeTag(challenge)} auto fill: voting can still reach ${below}% — not spending a fill`,

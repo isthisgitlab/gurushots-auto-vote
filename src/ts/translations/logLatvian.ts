@@ -29,6 +29,7 @@ export const logMessages = {
     m0a7ef884cc20: '  REAL  — savienojas ar īsto GuruShots API (darba vide)',
     m0b5c6f44876d: 'Kļūda, saglabājot profilu',
     m0b945b754745: 'Saņemts SIGTERM signāls. Beidz darbu...',
+    m0c95f2d8ab4: 'balsošanas foto kopā nav neviena foto, atgriež to',
     m0d42be55edef: 'Pieteikšanās tokens sākas ar mock_: {0}',
     m0d4995f00c99: 'Ielādēti izaicinājumi: {0}',
     m0d57f523b49c: 'Atjaunināšanas kļūda:',
@@ -70,6 +71,7 @@ export const logMessages = {
     m175837b996b9: 'Kļūda, atjauninot testa metadatus: {0}',
     m17b50fd455a7: 'Lietošana: join <id> [--yes]',
     m17ddf8c1b4a8: 'Lietotājs atcēla balsošanu',
+    m17e4b9a30dc: 'balsošanas foto neizdevās nolasīt, atgriež null',
     m17fefd341256: 'Tūlīt atjauninās izaicinājuma {0} testa metadatus; sākotnējā redzamība: {1} %',
     m1835b5e7fd26: '{0} Boost pirms miega izraisīja kļūdu: {1}',
     m190e87b7c392: '🛑 Aptur nepārtraukto balsošanu...',
@@ -181,7 +183,6 @@ export const logMessages = {
     m3ef824a95305: 'Nevar nolasīt swap-back uzskaiti: {0}',
     m3f0ad2e947e2: 'Kļūda, nolasot {0} žurnālu',
     m3f74bd18d787: 'Izrakstoties neizdevās notīrīt pieteikšanās tokenu',
-    m3f9d9c9bac44: '{0} automātiskā apmaiņa: apmaiņas ierobežojums izmanto servera apmaiņu vēsturi, kuras trūkst',
     m3f9fdcb52d97: 'Skalārā vērtība {0} {1} pārvērsta par {2}',
     m3faab6e5b6cb: 'Veiksmīgi apstrādāti visi izaicinājumi: {0}',
     m403be3834f59:
@@ -216,7 +217,6 @@ export const logMessages = {
     m4c4e7b390448: 'Pieteikšanās tokens saglabāts {0} režīmam',
     m4c57716eb494: 'Balsošanai pieejamo foto skaits: {0}',
     m4d34df58adb5: 'Norādītais pieteikšanās tokens: {0}',
-    m4d99d99e1952: 'nav foto, atgriež null',
     m4da881dd3712: '⏰ Tuvojas automātiskais {0} noteikums izaicinājumā "{1}" — nākamais cikls pēc {2} s',
     m4db442090e9c: 'Uzstādījums {0} neatbalsta individuālas vērtības izaicinājumiem',
     m4f653f002d6c: 'ielādēti foto: {0}',
@@ -439,6 +439,8 @@ export const logMessages = {
     m98ce238c0102: 'Neizdevās balsot izaicinājumā "{0}": {1}',
     m99173c79d86f: 'Kļūda, uzstādot "{0}"',
     m9a1f89a92ee8: '{0} {1} pārdēvēts par {2} (vērtība {3})',
+    m9a2f47c1b8e3:
+        '{0} automātiskā apmaiņa: GuruShots nesūtīja apmaiņu vēsturi — automātiskās apmaiņas rēķina pati lietotne; manuālās un scenāriju apmaiņas netiek skaitītas',
     m9a274bb9e06b: '🌐 Izmanto īsto API stratēģiju darba videi',
     m9af18ab83ac0: 'Izmanto Boost izaicinājumā {0}',
     m9af941258be6: 'Aktīvo misiju dēļ priekšlaikus pievienojas līdz {0} izaicinājumiem',
@@ -535,6 +537,8 @@ export const logMessages = {
     mb73b787f423c: 'Sāk autentificēšanos...',
     mb7875ee58b05: '{0} Automātiskā iesniegšana: foto iesniegts (pieejams nākamajām darbībām šajā ciklā)',
     mb7a169226f47: 'Funkcijai applyChallengeProfile nepieciešams izaicinājuma ID',
+    mb7d30a5f264c:
+        '{0} automātiskā apmaiņa: vietējais automātisko apmaiņu skaits ir sasniedzis robežu ({1}) — neapmaina',
     mb859a88491a1:
         'Automātiskā iesniegšana: grafiks paredz ne vairāk kā {0} foto, bet {1} atļauj {2} — atlikušās vietas atstātas ārkārtas iesniegšanai',
     mb8994dacf04e: 'Neizdevās pievienoties izaicinājumam {0}. Monētas netika iekasētas.',
@@ -578,6 +582,8 @@ export const logMessages = {
     mc4fd1aabad50: '{0}: izvēlētie foto iesniegti — no saraksta izņemti: {1}',
     mc510d628cbf9: 'Uzstādījums "{0}" neatbalsta individuālas vērtības izaicinājumiem',
     mc5243e10ff3e: 'Neizdevās uzstādīt globālo noklusējuma vērtību "{0}" — vērtība neizturēja pārbaudi',
+    mc581e9d04a7f:
+        '{0} automātiskā apmaiņa: apmaiņu skaitu neizdevās saglabāt — neapmaina; mēģinās vēlreiz nākamajā ciklā',
     mc740a107f995: '=== Izaicinājuma {0} uzstādījumi ===',
     mc8cd4963a8ea: 'Neizdevās atiestatīt visus uzstādījumus',
     mc8d226aceff9: 'Dzēsts profils "{0}"',
@@ -613,6 +619,8 @@ export const logMessages = {
     md0cd0e7510bc: '🔄 Sāk manuālu balsošanu visos izaicinājumos (neņemot vērā sliekšņus)...',
     md0e704578e0f: 'Izaicinājumam {2} uzstādīts {0} = {1}',
     md23e590a3c70: 'Vizuālā pārbaude izaicinājumam {0} nav pieejama: {1}',
+    md24b6f8a31e9:
+        '{0} automātiskā uzpilde: balsu foto kopu neizdevās nolasīt — uzpilde netiek tērēta; mēģinās vēlreiz nākamajā ciklā',
     md3164bc85e73: 'Neapstrādāts Promise noraidījums',
     md3ca853b0731: 'Kļūda, tīrot uzstādījumus:',
     md3dd1adf13a3: '{0}: burtu izaicinājums "{1}" ({2}); ielādē visu bibliotēku, lai filtrētu pēc tagiem klienta pusē',
@@ -664,6 +672,7 @@ export const logMessages = {
     me5aa4b569a2c: '{0} Turbo saglabāts misijai',
     me5d193efc730: 'Fails {0} ir importēts vēlreiz; lietotie uzstādījumi un pieteikšanās ir novietoti malā šeit: {1}.',
     me62feb22135b: 'Boost veiksmīgi izmantots foto {0}',
+    me63c0d7b952a: '{0} izaicinājumam nav lietojama ID — nepievienojas',
     me648c2aaaba9: '✅ Iesniedz manuālās balsis...',
     me64f12743d74: '{0}: serveris noraidīja iesniegšanu izaicinājumam {1}: {2}',
     me6e1b5a136a3: 'Pilna informācija par {0} cikla kļūdu:',
@@ -727,6 +736,7 @@ export const logMessages = {
     mf716fb1193ce: 'Shēmas uzstādījumu globālās noklusējuma vērtības:',
     mf74643f70b41: 'Kļūda, apstrādājot get-active-challenges pieprasījumu:',
     mf7a0649dc927: 'Neizdevās ielādēt jaunos uzstādījumus salīdzināšanai:',
+    mf81a3e6c47b: 'atvērto izaicinājumu sarakstā ir rinda bez lietojama ID — šoreiz maksājumu ieraksti netiek iztīrīti',
     mf81316b0770e: '              join <id> --yes    (maksas izaicinājumi — tērē monētas)',
     mf8914347572e:
         '{0}: izaicinājumā {1} nekas neatbilda tēmai. Pēc iepriekšējiem rezultātiem atlasīti: {2} — {3} no {4} vienlīdz neatbilstošiem kandidātiem{5}. Sadaļā Uzstādījumi pievieno nosaukumam tagu noteikumu.',

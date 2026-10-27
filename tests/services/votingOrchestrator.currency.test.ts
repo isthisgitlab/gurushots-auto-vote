@@ -59,7 +59,10 @@ const challenge = () =>
         id: 101,
         title: 'Currency',
         close_time: NOW + 3600,
-        member: { boost: { state: 'LOCKED' }, ranking: { entries: [], exposure: { exposure_factor: 10 } } },
+        member: {
+            boost: { state: 'LOCKED' },
+            ranking: { entries: [], exposure: { exposure_factor: 10 }, swaps: [] },
+        },
     });
 
 const makeApi = (voteImages: { images: { id: string }[] } | null = { images: [{ id: 'i1' }] }) => ({
@@ -147,10 +150,47 @@ test('an empty vote pool reaches the fill rule as null', async () => {
     expect(currencyAuto.runAutoExposureFill.mock.calls[0][1]).toBeNull();
 });
 
+test('an empty pool body is not voted, and reaches the fill rule as the body', async () => {
+    vote();
+    const api = makeApi({ images: [] });
+    await run(api);
+    expect(api.submitVotes).not.toHaveBeenCalled();
+    expect(currencyAuto.runAutoExposureFill.mock.calls[0][1]).toEqual({ images: [] });
+});
+
 test('no vote this pass → the fill rule gets undefined and judges the pool itself', async () => {
     await run(makeApi());
     expect(currencyAuto.runAutoExposureFill.mock.calls[0]).toHaveLength(2);
     expect(currencyAuto.runAutoExposureFill.mock.calls[0][1]).toBeUndefined();
+});
+
+test('a scenario swap this pass does not hide the missing history: the cap branch sees swapHistorySent false', async () => {
+    // The scenario step writes a swaps array onto a challenge that was sent with none; the flag
+    // must already have been recorded, so the auto-swap cap cannot take the server branch.
+    const api = makeApi();
+    const sentWithNone = buildChallenge({
+        id: 101,
+        title: 'Currency',
+        close_time: NOW + 3600,
+        member: { boost: { state: 'LOCKED' }, ranking: { entries: [], exposure: { exposure_factor: 10 } } },
+    });
+    api.getActiveChallenges = jest.fn(async () => ({ challenges: [sentWithNone] }));
+    runScenarioStep.mockImplementationOnce(async (passed) => {
+        const member = (passed as { member?: { ranking?: { swaps?: unknown } } }).member;
+        if (member?.ranking) member.ranking.swaps = [{ id: 'e0' }];
+    });
+    await run(api);
+    expect(currencyAuto.runAutoSwap).toHaveBeenCalledWith(
+        expect.objectContaining({
+            challenge: expect.objectContaining({ id: 101 }),
+            swapHistorySent: false,
+        }),
+    );
+});
+
+test('a challenge sent with a swap history takes the server branch: swapHistorySent true', async () => {
+    await run(makeApi());
+    expect(currencyAuto.runAutoSwap).toHaveBeenCalledWith(expect.objectContaining({ swapHistorySent: true }));
 });
 
 test('a vote that threw skips the fill (the pool is unknown)', async () => {

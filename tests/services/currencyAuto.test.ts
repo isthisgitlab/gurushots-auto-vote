@@ -42,6 +42,13 @@ const { createMemoryAutoSpendLedger, createAutoSpendLedger } =
 const NOW = 1_000_000;
 const H = 3600;
 const OK = { ok: true, outcome: 'ok' };
+// A readable, spent pool: the fill's shortfall check needs one to spend at all.
+// The key and swap runners ignore it, so the shared-gates table passes one for all.
+const spentPool = () =>
+    invalid<Parameters<typeof runAutoExposureFill>[1]>({
+        voting: { exposure: { exposure_factor: 0 } },
+        images: [],
+    });
 
 let values: Record<string, unknown>;
 const set = (overrides: Record<string, unknown>) => Object.assign(values, overrides);
@@ -78,6 +85,7 @@ const makeChallenge = (overrides: object = {}) =>
 
 type FixtureCtx = Parameters<typeof runAutoKey>[0] & {
     challenge: FixtureChallenge;
+    swapHistorySent: boolean;
     currency: CurrencyPassDeps & {
         strategy: {
             getBankroll: jest.MockedFunction<CurrencyPassDeps['strategy']['getBankroll']>;
@@ -89,15 +97,24 @@ type FixtureCtx = Parameters<typeof runAutoKey>[0] & {
     };
 };
 // The currency block is a partial double: only the endpoints the runners call.
+// The fixture challenge carries a `swaps: []` history, so `swapHistorySent`
+// defaults to true; a test that deletes or replaces it sets the flag itself.
 const makeCtx = ({
     challenge = makeChallenge(),
     bankroll = { keys: 3, swaps: 3, fills: 3 },
     pool = null,
-}: { challenge?: FixtureChallenge; bankroll?: Record<string, number> | null; pool?: unknown } = {}) =>
+    swapHistorySent = true,
+}: {
+    challenge?: FixtureChallenge;
+    bankroll?: Record<string, number> | null;
+    pool?: unknown;
+    swapHistorySent?: boolean;
+} = {}) =>
     invalid<FixtureCtx>({
         challenge,
         token: 'tok',
         now: NOW,
+        swapHistorySent,
         currency: {
             strategy: {
                 getBankroll: jest.fn().mockResolvedValue(bankroll),
@@ -186,9 +203,9 @@ describe('shared gates', () => {
         ['fill', runAutoExposureFill, 'currencyReserveFills', 'fills'],
     ])('%s: never spends below the global reserve', async (_, run, reserveKey, field) => {
         set({ [reserveKey]: 3 });
-        expect(await run(makeCtx({ bankroll: { [field]: 3 } }), null)).toBe(false);
+        expect(await run(makeCtx({ bankroll: { [field]: 3 } }), spentPool())).toBe(false);
         set({ [reserveKey]: 2 });
-        expect(await run(makeCtx({ bankroll: { [field]: 3 } }), null)).toBe(true);
+        expect(await run(makeCtx({ bankroll: { [field]: 3 } }), spentPool())).toBe(true);
     });
 
     test('an unreadable balance refuses', async () => {
@@ -276,7 +293,7 @@ describe('runAutoSwap', () => {
     });
 
     test('a missing swap ledger and swap history are tolerated', async () => {
-        const ctx = makeCtx();
+        const ctx = makeCtx({ swapHistorySent: false });
         ctx.currency.swapLedger = undefined;
         delete ctx.challenge.member.ranking.swaps;
         expect(await runAutoSwap(ctx)).toBe(true);
@@ -362,50 +379,6 @@ describe('runAutoSwap', () => {
         const challenge = makeChallenge();
         challenge.member.ranking.entries = invalid(undefined);
         expect(await runAutoSwap(makeCtx({ challenge }))).toBe(false);
-    });
-
-    describe('the missing swap-history warning', () => {
-        test('warns once per challenge when the history is absent, and still swaps', async () => {
-            const ctx = makeCtx({ challenge: makeChallenge({ id: 777 }) });
-            delete ctx.challenge.member.ranking.swaps;
-            expect(await runAutoSwap(ctx)).toBe(true);
-            expect(
-                warningLines().filter((line) =>
-                    line.includes("swap cap uses the server's swap history, which is missing"),
-                ),
-            ).toHaveLength(1);
-            // The same challenge again: still swaps, never warns twice.
-            const again = makeCtx({ challenge: makeChallenge({ id: 777 }) });
-            delete again.challenge.member.ranking.swaps;
-            expect(await runAutoSwap(again)).toBe(true);
-            expect(
-                warningLines().filter((line) =>
-                    line.includes("swap cap uses the server's swap history, which is missing"),
-                ),
-            ).toHaveLength(1);
-        });
-
-        test('a challenge whose history is present says nothing', async () => {
-            const ctx = makeCtx({ challenge: makeChallenge({ id: 888 }) });
-            expect(await runAutoSwap(ctx)).toBe(true);
-            expect(
-                warningLines().filter((line) =>
-                    line.includes("swap cap uses the server's swap history, which is missing"),
-                ),
-            ).toHaveLength(0);
-        });
-
-        test('autoSwap off warns nothing', async () => {
-            set({ autoSwap: false });
-            const ctx = makeCtx({ challenge: makeChallenge({ id: 999 }) });
-            delete ctx.challenge.member.ranking.swaps;
-            expect(await runAutoSwap(ctx)).toBe(false);
-            expect(
-                warningLines().filter((line) =>
-                    line.includes("swap cap uses the server's swap history, which is missing"),
-                ),
-            ).toHaveLength(0);
-        });
     });
 
     test('a failed preview or swap spends nothing and changes nothing', async () => {
@@ -520,10 +493,12 @@ describe('runAutoExposureFill', () => {
             voting: { exposure: { exposure_factor: start } },
             images: ratios.map((ratio, i) => ({ id: i, ratio })),
         });
+    // A readable pool with nothing left in it: the one "voting cannot help" case that still fills.
+    const emptyPool = () => pool(0, []);
 
     test('fills when exposure is low and the pool this pass voted from was empty', async () => {
         const ctx = makeCtx();
-        expect(await runAutoExposureFill(ctx, null)).toBe(true);
+        expect(await runAutoExposureFill(ctx, emptyPool())).toBe(true);
         expect(currencyActions.fillExposure).toHaveBeenCalledWith(555, 'tok', expect.any(Object));
         expect(ctx.challenge.member.ranking.exposure.exposure_factor).toBe(100);
         expect(ctx.currency.spendLedger.fills('555')).toBe(1);
@@ -536,6 +511,46 @@ describe('runAutoExposureFill', () => {
 
     test('no fill when voting can reach the threshold — a fill is worth what a vote is', async () => {
         expect(await runAutoExposureFill(makeCtx(), pool(20, [20, 20]))).toBe(false);
+        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+    });
+
+    test('a failed or unreadable pool read is not filled, whatever its shape', async () => {
+        for (const unreadable of [null, invalid<Parameters<typeof runAutoExposureFill>[1]>({ images: 'nope' })]) {
+            expect(await runAutoExposureFill(makeCtx(), unreadable)).toBe(false);
+            expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+        }
+    });
+
+    test('a non-empty pool with an unreadable exposure figure gives no fill', async () => {
+        expect(
+            await runAutoExposureFill(
+                makeCtx(),
+                invalid<Parameters<typeof runAutoExposureFill>[1]>({
+                    images: [{ id: 1, ratio: 30 }],
+                }),
+            ),
+        ).toBe(false);
+        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+    });
+
+    test('the unreadable-pool warning is said once per run of unreadable reads, and a readable pool re-arms it', async () => {
+        // A challenge of its own: the once-per-run set is module state shared by every test here.
+        const challenge556 = () => makeChallenge({ id: 556 });
+        const ctx = makeCtx({ challenge: challenge556() });
+        expect(await runAutoExposureFill(ctx, null)).toBe(false);
+        expect(await runAutoExposureFill(ctx, null)).toBe(false);
+        expect(warningLines().filter((line) => line.includes('the vote pool could not be read'))).toHaveLength(1);
+        // A readable (empty) pool re-arms the warning; a fresh context, so the fill's own
+        // 100% reflect does not stand in the way of the next refusal.
+        expect(await runAutoExposureFill(makeCtx({ challenge: challenge556() }), emptyPool())).toBe(true);
+        expect(await runAutoExposureFill(makeCtx({ challenge: challenge556() }), null)).toBe(false);
+        expect(warningLines().filter((line) => line.includes('the vote pool could not be read'))).toHaveLength(2);
+    });
+
+    test('a pool the fill read itself answers null refuses the fill', async () => {
+        const ctx = makeCtx({ pool: null });
+        expect(await runAutoExposureFill(ctx, undefined)).toBe(false);
+        expect(ctx.currency.strategy.getVoteImages).toHaveBeenCalledWith(ctx.challenge, 'tok');
         expect(currencyActions.fillExposure).not.toHaveBeenCalled();
     });
 
@@ -555,27 +570,27 @@ describe('runAutoExposureFill', () => {
     test('a pool the pass already voted from fills without a URL', async () => {
         const ctx = makeCtx();
         delete ctx.challenge.url;
-        expect(await runAutoExposureFill(ctx, null)).toBe(true);
+        expect(await runAutoExposureFill(ctx, emptyPool())).toBe(true);
         expect(ctx.currency.strategy.getVoteImages).not.toHaveBeenCalled();
     });
 
     test('no fill while exposure is at or above the threshold', async () => {
         set({ autoExposureFillBelow: 20 });
-        expect(await runAutoExposureFill(makeCtx(), null)).toBe(false);
+        expect(await runAutoExposureFill(makeCtx(), emptyPool())).toBe(false);
     });
 
     test('stops at the per-challenge automatic fill cap', async () => {
         const ctx = makeCtx();
         await ctx.currency.spendLedger.reserveFill('555');
-        expect(await runAutoExposureFill(ctx, null)).toBe(false);
+        expect(await runAutoExposureFill(ctx, emptyPool())).toBe(false);
         set({ autoExposureFillMax: 2 });
-        expect(await runAutoExposureFill(ctx, null)).toBe(true);
+        expect(await runAutoExposureFill(ctx, emptyPool())).toBe(true);
     });
 
     test('inert without the spend ledger', async () => {
         const ctx = makeCtx();
         (ctx.currency as CurrencyPassDeps).spendLedger = null;
-        expect(await runAutoExposureFill(ctx, null)).toBe(false);
+        expect(await runAutoExposureFill(ctx, emptyPool())).toBe(false);
     });
 
     test('a fill counted by another context since the cap was looked at is not spent past it', async () => {
@@ -584,7 +599,7 @@ describe('runAutoExposureFill', () => {
         // The look at the cap sees no fill; one is counted before this one is.
         jest.spyOn(ledger, 'fills').mockReturnValueOnce(0);
         await ledger.reserveFill('555');
-        expect(await runAutoExposureFill(ctx, null)).toBe(false);
+        expect(await runAutoExposureFill(ctx, emptyPool())).toBe(false);
         expect(currencyActions.fillExposure).not.toHaveBeenCalled();
         expect(ledger.fills('555')).toBe(1);
     });
@@ -592,21 +607,21 @@ describe('runAutoExposureFill', () => {
     test('a fill whose count could not be written down is not made', async () => {
         const ctx = makeCtx();
         jest.spyOn(ctx.currency.spendLedger, 'reserveFill').mockResolvedValue(false);
-        expect(await runAutoExposureFill(ctx, null)).toBe(false);
+        expect(await runAutoExposureFill(ctx, emptyPool())).toBe(false);
         expect(currencyActions.fillExposure).not.toHaveBeenCalled();
     });
 
     test('a spend that throws after the count was written down stays counted', async () => {
         currencyActions.fillExposure.mockRejectedValue(new Error('boom'));
         const ctx = makeCtx();
-        expect(await runAutoExposureFill(ctx, null)).toBe(false);
+        expect(await runAutoExposureFill(ctx, emptyPool())).toBe(false);
         expect(ctx.currency.spendLedger.fills('555')).toBe(1);
     });
 
     test('with the fills left to the background service the window spends none, the exposure rule or a mission', async () => {
         const ctx = makeCtx();
         (ctx.currency as CurrencyPassDeps).fillsLeftToService = true;
-        expect(await runAutoExposureFill(ctx, null)).toBe(false);
+        expect(await runAutoExposureFill(ctx, emptyPool())).toBe(false);
         expect(await runMissionFill(ctx, fillNeeds())).toBe(false);
         expect(currencyActions.fillExposure).not.toHaveBeenCalled();
         expect(ctx.currency.spendLedger.fills('555')).toBe(0);
@@ -615,7 +630,7 @@ describe('runAutoExposureFill', () => {
     test('a fill that got no answer stays counted: it may have been made', async () => {
         currencyActions.fillExposure.mockResolvedValue({ ok: false, outcome: 'unclear' });
         const ctx = makeCtx();
-        expect(await runAutoExposureFill(ctx, null)).toBe(false);
+        expect(await runAutoExposureFill(ctx, emptyPool())).toBe(false);
         expect(ctx.currency.spendLedger.fills('555')).toBe(1);
     });
 
@@ -623,7 +638,7 @@ describe('runAutoExposureFill', () => {
         let release: ((value?: unknown) => void) | undefined;
         const held = currencyActions.withSpendLock(() => new Promise((resolve) => (release = resolve)));
         const ctx = makeCtx();
-        expect(await runAutoExposureFill(ctx, null)).toBe(false);
+        expect(await runAutoExposureFill(ctx, emptyPool())).toBe(false);
         expect(ctx.currency.spendLedger.fills('555')).toBe(0);
         release!();
         await held;
@@ -632,7 +647,7 @@ describe('runAutoExposureFill', () => {
     test('a refused fill is not counted', async () => {
         currencyActions.fillExposure.mockResolvedValue({ ok: false, outcome: 'api-failed' });
         const ctx = makeCtx();
-        expect(await runAutoExposureFill(ctx, null)).toBe(false);
+        expect(await runAutoExposureFill(ctx, emptyPool())).toBe(false);
         expect(ctx.currency.spendLedger.fills('555')).toBe(0);
     });
 });

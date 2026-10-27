@@ -173,7 +173,7 @@ beforeEach(() => {
             getVoteImages: jest.fn<
                 ReturnType<VotingPassApi['getVoteImages']>,
                 Parameters<VotingPassApi['getVoteImages']>
-            >(async () => invalid({ images: [] })),
+            >(async () => invalid({ images: [{ id: 'i1' }] })),
             submitVotes: jest.fn<ReturnType<VotingPassApi['submitVotes']>, Parameters<VotingPassApi['submitVotes']>>(
                 async () => ({ success: true }),
             ),
@@ -1288,8 +1288,16 @@ describe('actions', () => {
         test('vote votes to the target exposure', async () => {
             setup(single([{ type: 'vote', toExposure: 80 }]));
             await run();
-            expect(pass.api.submitVotes).toHaveBeenCalledWith({ images: [] }, 'tok', 80);
+            expect(pass.api.submitVotes).toHaveBeenCalledWith({ images: [{ id: 'i1' }] }, 'tok', 80);
             expect(state().fired.r1).toBeDefined();
+        });
+
+        test('an empty pool is no more votable than a failed read', async () => {
+            pass.api.getVoteImages.mockResolvedValueOnce(invalid({ images: [] }));
+            setup(single([{ type: 'vote', toExposure: 80 }]));
+            await run();
+            expect(pass.api.submitVotes).not.toHaveBeenCalled();
+            expect(state().lastError!.message).toContain('vote images could not be loaded');
         });
 
         test.each<[string, 'getVoteImages' | 'submitVotes', null | undefined, string]>([

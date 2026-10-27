@@ -24,6 +24,8 @@ export interface VoteImagesResponse {
     challenge: VoteChallenge;
     voting: { exposure: RankingExposure & { exposure_factor: number } };
     images: VoteImage[];
+    /** The server's own success flag; false marks a body that carries no usable pool. */
+    success?: boolean;
 }
 
 /** get_challenge_turbo. */

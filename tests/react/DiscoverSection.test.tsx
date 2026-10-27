@@ -1591,7 +1591,7 @@ describe('capacity and join safety on a row', () => {
         const row = screen.getByText('Mystery').closest('li')!;
         expect(screen.getByText('Price unknown')).toBeTruthy();
         expect(row.textContent).toContain(
-            'GuruShots did not send it, so the app cannot ask you to confirm a spend. Refresh the list, or join the challenge on gurushots.com.',
+            'could not be read as a usable price, so the app cannot ask you to confirm a spend. Refresh the list, or join the challenge on gurushots.com.',
         );
         const join = screen.getByRole<HTMLButtonElement>('button', { name: 'Join Mystery — its price is unknown' });
         expect(join.disabled).toBe(false);

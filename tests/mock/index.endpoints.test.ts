@@ -824,4 +824,11 @@ describe('getVoteImages — session cache', () => {
         expect(second).toBe(first);
         expect(cat.debug).toHaveBeenCalledWith('Using cached vote images for Cached', null);
     });
+
+    test('the mock contract matches the real one: a readable read is the body, with an images array', async () => {
+        const challenge = invalid<Challenge>({ id: 10, title: 'Contract', url: 'street-photography-2024' });
+        const body = await settle(mockApiClient.getVoteImages(challenge, 'tok'));
+        expect(body).not.toBeNull();
+        expect(Array.isArray((body as { images?: unknown } | null)?.images)).toBe(true);
+    });
 });

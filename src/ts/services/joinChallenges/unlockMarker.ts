@@ -5,6 +5,7 @@
  */
 
 import { isPlainObject } from '../../plainObject';
+import { isValidId } from '../../ids';
 import { acquireWithin } from '../../lockWait';
 import type { RawJsonStore } from '../../types/stores';
 import { errorMessage } from '../../errorMessage';
@@ -305,6 +306,11 @@ const forgetClaim = async (deps: JoinDeps, id: string | number): Promise<ForgetR
     return done === 'done' ? result : 'unreadable';
 };
 
+// Whether the last read open list carried a row a usable id could not be read from: the skip is said once per
+// run of consecutive such reads, and a clean list re-arms it, so a list that always carries a bad row does not
+// stop pruning silently.
+let pruneSkipSaid = false;
+
 /**
  * Drops claims that have outlived their use, so joinState.json does not grow for ever:
  *   - any claim older than CLAIM_MAX_AGE_MS whose challenge is not in the list just read: no challenge lives that
@@ -316,6 +322,8 @@ const forgetClaim = async (deps: JoinDeps, id: string | number): Promise<ForgetR
  *     and one list read that misses its challenge must not end it.
  * A claim's age counts from its join once it has joined. A claim younger than CLAIM_PRUNE_MIN_AGE_MS is kept whatever
  * the list says: it may belong to a join under way that the list, read a moment earlier, could not have known of.
+ * A list holding a row that is not a plain object with a valid id proves nothing about which challenges are closed
+ * (its ids cannot be read), so nothing is pruned from it.
  *
  * @param open - the open list the join code just read successfully
  */
@@ -324,8 +332,23 @@ const pruneClosedClaims = async (
     deps: JoinDeps,
 ): Promise<void> => {
     const store = deps.joinStateStore;
-    const openIds = new Set(open.flatMap((c) => (c?.id == null ? [] : [String(c.id)])));
-    if (!store || openIds.size === 0) return;
+    if (!store) return;
+    // One pass: a row that is not a plain object with a valid id ends the read (nothing can be
+    // pruned on it), a clean one contributes its id. Every row here carries a usable id, so the
+    // membership set below never needs the null row handling the raw list could have.
+    const openIds = new Set<string>();
+    for (const row of open) {
+        if (!isPlainObject(row) || !isValidId(row.id)) {
+            if (!pruneSkipSaid) {
+                pruneSkipSaid = true;
+                cat().warningT('mf81a3e6c47b', [], null);
+            }
+            return;
+        }
+        openIds.add(String(row.id));
+    }
+    pruneSkipSaid = false;
+    if (openIds.size === 0) return;
     if (Object.keys(readUnlocked(store)).length === 0) return;
     const now = Date.now();
     const age = (claim: unknown) => {
