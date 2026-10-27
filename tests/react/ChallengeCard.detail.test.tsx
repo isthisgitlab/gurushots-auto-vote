@@ -384,7 +384,7 @@ describe('progress', () => {
             }),
         );
         expect(screen.getByText('Keep going')).toBeTruthy();
-        expect(screen.getByText(/SKILLED \(380/)).toBeTruthy();
+        expect(screen.getByText('app.next: SKILLED (app.votesNeeded)')).toBeTruthy();
         expect(screen.getByText('POPULAR 1').className).toContain(LEVEL_BADGE_CLASS.popular);
     });
 
@@ -420,7 +420,7 @@ describe('progress', () => {
 
     test('levels past the named table fall back to LEVEL n', () => {
         renderCard(withTotal({ votes: 5, rank: 1, level: 6, level_name: 'X', percent: 1, next_message: '' }));
-        expect(screen.getByText(/LEVEL 7 \(8995/)).toBeTruthy();
+        expect(screen.getByText('app.next: LEVEL 7 (app.votesNeeded)')).toBeTruthy();
     });
 
     test('no next-level line when the next level is unknown or undefined', () => {
@@ -462,6 +462,47 @@ describe('progress', () => {
         );
         expect(screen.getByText('app.yourProgress')).toBeTruthy();
         expect(screen.queryByText(/app\.next/)).toBeNull();
+    });
+});
+
+describe('the next-level line plurals its vote gap', () => {
+    const english: Translate = realEnglish;
+    const latvian: Translate = (() => {
+        const translator = createTranslator();
+        return (key, vars) => translator.t(key, vars, 'lv');
+    })();
+    const withGap = (needed: number) =>
+        makeChallenge({
+            ranking_levels: { level_2: 500 },
+            member: {
+                ranking: {
+                    total: {
+                        votes: 500 - needed,
+                        rank: 1,
+                        level: 1,
+                        level_name: 'POPULAR',
+                        percent: 40,
+                        next_message: '',
+                    },
+                },
+            },
+        });
+
+    beforeEach(() => mockTranslator.t.mockImplementation(english));
+    afterEach(() => mockTranslator.t.mockImplementation((key) => key));
+
+    test.each([
+        ['English', english, 1, '1 vote needed'],
+        ['English', english, 2, '2 votes needed'],
+        ['Latvian', latvian, 1, '1 balss nepieciešama'],
+        ['Latvian', latvian, 2, '2 balsis nepieciešamas'],
+        ['Latvian', latvian, 21, '21 balss nepieciešama'],
+        ['Latvian', latvian, 31, '31 balss nepieciešama'],
+        ['Latvian', latvian, 111, '111 balsis nepieciešamas'],
+    ] as Array<[string, Translate, number, string]>)('%s plural form, case %#', (_language, t, needed, text) => {
+        mockTranslator.t.mockImplementation(t);
+        renderCard(withGap(needed));
+        expect(screen.getByText(`${t('app.next')}: SKILLED (${text})`)).toBeTruthy();
     });
 });
 

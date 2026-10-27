@@ -210,7 +210,8 @@ function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; 
             )}
             {nextLevelInfo && (
                 <div className="text-xs text-base-content/70 mt-1">
-                    {t('app.next')}: {nextLevelInfo.levelName} ({nextLevelInfo.votesNeeded} {t('app.votesNeeded')})
+                    {t('app.next')}: {nextLevelInfo.levelName} (
+                    {t('app.votesNeeded', { count: nextLevelInfo.votesNeeded })})
                 </div>
             )}
         </div>
