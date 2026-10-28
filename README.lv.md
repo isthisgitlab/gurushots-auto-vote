@@ -56,17 +56,17 @@ Grafiskajai lietotnei to nodrošina pati darbvirsmas lietotne: ja palaižat to o
 
 ### Jaunākie būvējumi
 
-**Jaunākā versija: v1.13.2**
+**Jaunākā versija: v1.14.0-beta.7**
 
 #### 🖥️ Grafiskā lietotne (ieteicama lielākajai daļai lietotāju)
 
-| Platforma         | Lejupielāde                                                                                                                                                            | Izmērs  | Tips                    |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ----------------------- |
-| **Windows**       | [📥 GuruShotsAutoVote-v1.13.2-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.2-x64.exe)                 | ~270 MB | Portatīvs izpildfails   |
-| **macOS (DMG)**   | [📥 GuruShotsAutoVote-v1.13.2-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.2-arm64.dmg)             | ~310 MB | DMG instalētājs         |
-| **macOS (APP)**   | [📥 GuruShotsAutoVote-v1.13.2-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.2-arm64.app.zip)     | ~335 MB | Lietotnes pakotne (ZIP) |
-| **Linux (x64)**   | [📥 GuruShotsAutoVote-v1.13.2-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.2-x86_64.AppImage) | ~270 MB | AppImage                |
-| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v1.13.2-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.2-arm64.AppImage)   | ~255 MB | AppImage                |
+| Platforma         | Lejupielāde                                                                                                                                                                          | Izmērs  | Tips                    |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- | ----------------------- |
+| **Windows**       | [📥 GuruShotsAutoVote-v1.14.0-beta.7-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.0-beta.7-x64.exe)                 | ~270 MB | Portatīvs izpildfails   |
+| **macOS (DMG)**   | [📥 GuruShotsAutoVote-v1.14.0-beta.7-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.0-beta.7-arm64.dmg)             | ~310 MB | DMG instalētājs         |
+| **macOS (APP)**   | [📥 GuruShotsAutoVote-v1.14.0-beta.7-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.0-beta.7-arm64.app.zip)     | ~335 MB | Lietotnes pakotne (ZIP) |
+| **Linux (x64)**   | [📥 GuruShotsAutoVote-v1.14.0-beta.7-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.0-beta.7-x86_64.AppImage) | ~270 MB | AppImage                |
+| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v1.14.0-beta.7-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.0-beta.7-arm64.AppImage)   | ~255 MB | AppImage                |
 
 > **macOS:** tikai Apple Silicon (arm64) — Intel (x86_64) būvējuma nav. Vienkāršāk instalēt no **DMG**; **APP** zip ir alternatīva, ja lietotnes pakotni vēlaties ievietot paši.
 
@@ -74,19 +74,19 @@ Grafiskajai lietotnei to nodrošina pati darbvirsmas lietotne: ja palaižat to o
 
 #### 📱 Mobilā lietotne (Android APK — bez Play Store)
 
-| Platforma                            | Lejupielāde                                                                                                                                    | Izmērs  | Tips           |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------- | -------------- |
-| **Android (8.0+, ārpus Play Store)** | [📥 GuruShotsAutoVote-v1.13.2.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.2.apk) | ~160 MB | Parakstīts APK |
+| Platforma                            | Lejupielāde                                                                                                                                                  | Izmērs  | Tips           |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- | -------------- |
+| **Android (8.0+, ārpus Play Store)** | [📥 GuruShotsAutoVote-v1.14.0-beta.7.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.0-beta.7.apk) | ~160 MB | Parakstīts APK |
 
 Android versija ir Capacitor apvalks ap to pašu React saskarni, un tai ir Kotlin spraudnis, kas balsošanas ciklus izpilda fonā tieši Android vidē, izmantojot `AlarmManager` un priekšplāna pakalpojumu. Balsošana turpinās arī tad, kad telefons ir bloķēts un lietotne aizvērta neseno lietotņu sarakstā.
 
 #### 💻 Komandrinda (pieredzējušiem lietotājiem / automatizācijai)
 
-| Platforma             | Lejupielāde                                                                                                                            | Izmērs  | Tips                  |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------- | --------------------- |
-| **macOS CLI**         | [📥 gurucli-v1.13.2-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.13.2-mac)             | ~375 MB | Termināļa izpildfails |
-| **Linux CLI (x64)**   | [📥 gurucli-v1.13.2-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.13.2-linux)         | ~355 MB | Termināļa izpildfails |
-| **Linux CLI (ARM64)** | [📥 gurucli-v1.13.2-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.13.2-linux-arm) | ~350 MB | Termināļa izpildfails |
+| Platforma             | Lejupielāde                                                                                                                                          | Izmērs  | Tips                  |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --------------------- |
+| **macOS CLI**         | [📥 gurucli-v1.14.0-beta.7-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.14.0-beta.7-mac)             | ~375 MB | Termināļa izpildfails |
+| **Linux CLI (x64)**   | [📥 gurucli-v1.14.0-beta.7-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.14.0-beta.7-linux)         | ~355 MB | Termināļa izpildfails |
+| **Linux CLI (ARM64)** | [📥 gurucli-v1.14.0-beta.7-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.14.0-beta.7-linux-arm) | ~350 MB | Termināļa izpildfails |
 
 > Windows CLI būvējuma nav — operētājsistēmā Windows izmantojiet augstāk minēto grafisko lietotni.
 
@@ -94,17 +94,17 @@ Android versija ir Capacitor apvalks ap to pašu React saskarni, un tai ir Kotli
 
 Katra augstāk minētā lejupielāde pieejama arī kā **vieglais** (lite) būvējums bez attēlu atpazīšanas modeļa un tā izpildvides: macOS DMG izmērs samazinās no ~310 MB līdz ~130 MB, bet macOS CLI — no ~375 MB līdz ~140 MB. Viss pārējais darbojas tāpat — automātiskā iesniegšana izlaiž [vizuālo pārbaudi](docs/usage.lv.md#trūkstošo-foto-automātiskā-iesniegšana) un ranžē foto bez tās. Vieglajai grafiskajai lietotnei un vieglajai Android lietotnei tiek piedāvāti tikai vieglie atjauninājumi (vieglā darbvirsmas lietotne pirmsizlaiduma versijas izlaiž).
 
-| Platforma                            | Lejupielāde                                                                                                                                                                      |
-| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Windows**                          | [📥 GuruShotsAutoVote-v1.13.2-x64-lite.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.2-x64-lite.exe)                 |
-| **macOS (DMG)**                      | [📥 GuruShotsAutoVote-v1.13.2-arm64-lite.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.2-arm64-lite.dmg)             |
-| **macOS (APP)**                      | [📥 GuruShotsAutoVote-v1.13.2-arm64-lite.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.2-arm64-lite.app.zip)     |
-| **Linux (x64)**                      | [📥 GuruShotsAutoVote-v1.13.2-x86_64-lite.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.2-x86_64-lite.AppImage) |
-| **Linux (ARM64)**                    | [📥 GuruShotsAutoVote-v1.13.2-arm64-lite.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.2-arm64-lite.AppImage)   |
-| **Android (8.0+, ārpus Play Store)** | [📥 GuruShotsAutoVote-v1.13.2-lite.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.13.2-lite.apk)                         |
-| **macOS CLI**                        | [📥 gurucli-v1.13.2-mac-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.13.2-mac-lite)                                             |
-| **Linux CLI (x64)**                  | [📥 gurucli-v1.13.2-linux-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.13.2-linux-lite)                                         |
-| **Linux CLI (ARM64)**                | [📥 gurucli-v1.13.2-linux-arm-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.13.2-linux-arm-lite)                                 |
+| Platforma                            | Lejupielāde                                                                                                                                                                                    |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Windows**                          | [📥 GuruShotsAutoVote-v1.14.0-beta.7-x64-lite.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.0-beta.7-x64-lite.exe)                 |
+| **macOS (DMG)**                      | [📥 GuruShotsAutoVote-v1.14.0-beta.7-arm64-lite.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.0-beta.7-arm64-lite.dmg)             |
+| **macOS (APP)**                      | [📥 GuruShotsAutoVote-v1.14.0-beta.7-arm64-lite.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.0-beta.7-arm64-lite.app.zip)     |
+| **Linux (x64)**                      | [📥 GuruShotsAutoVote-v1.14.0-beta.7-x86_64-lite.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.0-beta.7-x86_64-lite.AppImage) |
+| **Linux (ARM64)**                    | [📥 GuruShotsAutoVote-v1.14.0-beta.7-arm64-lite.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.0-beta.7-arm64-lite.AppImage)   |
+| **Android (8.0+, ārpus Play Store)** | [📥 GuruShotsAutoVote-v1.14.0-beta.7-lite.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.0-beta.7-lite.apk)                         |
+| **macOS CLI**                        | [📥 gurucli-v1.14.0-beta.7-mac-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.14.0-beta.7-mac-lite)                                             |
+| **Linux CLI (x64)**                  | [📥 gurucli-v1.14.0-beta.7-linux-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.14.0-beta.7-linux-lite)                                         |
+| **Linux CLI (ARM64)**                | [📥 gurucli-v1.14.0-beta.7-linux-arm-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.14.0-beta.7-linux-arm-lite)                                 |
 
 Nepieciešama konkrēta versija? Apskatiet **[visus izlaidumus](https://github.com/isthisgitlab/gurushots-auto-vote/releases)** vai **[jaunākā izlaiduma piezīmes](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest)**.
 
@@ -131,11 +131,11 @@ Nepieciešama konkrēta versija? Apskatiet **[visus izlaidumus](https://github.c
 
 **CLI operētājsistēmā macOS:**
 
-1. Lejupielādējiet `gurucli-v1.13.2-mac`.
+1. Lejupielādējiet `gurucli-v1.14.0-beta.7-mac`.
 2. `cd ~/Downloads`
-3. Padariet failu izpildāmu: `chmod +x gurucli-v1.13.2-mac`
-4. Noņemiet karantīnas atzīmi (tikai pārlūkā lejupielādētam failam): `xattr -d com.apple.quarantine ./gurucli-v1.13.2-mac`
-5. Palaidiet: `./gurucli-v1.13.2-mac help`
+3. Padariet failu izpildāmu: `chmod +x gurucli-v1.14.0-beta.7-mac`
+4. Noņemiet karantīnas atzīmi (tikai pārlūkā lejupielādētam failam): `xattr -d com.apple.quarantine ./gurucli-v1.14.0-beta.7-mac`
+5. Palaidiet: `./gurucli-v1.14.0-beta.7-mac help`
 
 Kad CLI pirmo reizi iesniedz foto, tas izpako iekļauto attēlu atpazīšanas modeli un izpildvidi (~560 MB) mapē `~/Library/Application Support/gurushots-auto-vote/vision/`. Tas notiek vienreiz katrai versijai; pēc izpakošanas jaunā versija izdzēš vecākās kopijas, kas pēdējā stundā nav izmantotas.
 
@@ -144,15 +144,15 @@ Kad CLI pirmo reizi iesniedz foto, tas izpako iekļauto attēlu atpazīšanas mo
 **Grafiskā lietotne (AppImage):**
 
 1. Lejupielādējiet savai procesora arhitektūrai atbilstošo AppImage failu.
-2. Padariet to izpildāmu: `chmod +x GuruShotsAutoVote-v1.13.2-*.AppImage` (vai failu pārvaldniekā: Properties → Permissions).
-3. Palaidiet: `./GuruShotsAutoVote-v1.13.2-*.AppImage`
+2. Padariet to izpildāmu: `chmod +x GuruShotsAutoVote-v1.14.0-beta.7-*.AppImage` (vai failu pārvaldniekā: Properties → Permissions).
+3. Palaidiet: `./GuruShotsAutoVote-v1.14.0-beta.7-*.AppImage`
 
 **CLI:**
 
-1. Lejupielādējiet `gurucli-v1.13.2-linux` (vai `-linux-arm`).
+1. Lejupielādējiet `gurucli-v1.14.0-beta.7-linux` (vai `-linux-arm`).
 2. `cd ~/Downloads`
-3. `chmod +x gurucli-v1.13.2-linux`
-4. `./gurucli-v1.13.2-linux help`
+3. `chmod +x gurucli-v1.14.0-beta.7-linux`
+4. `./gurucli-v1.14.0-beta.7-linux help`
 
 Kad CLI pirmo reizi iesniedz foto, tas izpako iekļauto attēlu atpazīšanas modeli un izpildvidi (~550 MB) mapē `~/.config/gurushots-auto-vote/vision/`. Tas notiek vienreiz katrai versijai; pēc izpakošanas jaunā versija izdzēš vecākās kopijas, kas pēdējā stundā nav izmantotas.
 
@@ -160,7 +160,7 @@ Kad CLI pirmo reizi iesniedz foto, tas izpako iekļauto attēlu atpazīšanas mo
 
 Android versija **nav pieejama Google Play** — to instalē, tieši lejupielādējot APK failu.
 
-1. Telefonā atveriet [jaunākā izlaiduma lapu](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest) un pieskarieties `GuruShotsAutoVote-v1.13.2.apk`.
+1. Telefonā atveriet [jaunākā izlaiduma lapu](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest) un pieskarieties `GuruShotsAutoVote-v1.14.0-beta.7.apk`.
 2. Pirms APK lejupielādes pārlūks rāda brīdinājumu — pieskarieties **Tomēr lejupielādēt**.
 3. Paziņojumu panelī pieskarieties lejupielādētajam failam.
 4. Android prasīs atļauju **Instalēt nezināmas lietotnes** — piešķiriet to lietotnei, ar kuru lejupielādējāt failu (Chrome, Files u. c.), un pieskarieties **Instalēt**.
@@ -184,9 +184,9 @@ Android versija **nav pieejama Google Play** — to instalē, tieši lejupielād
 ### Komandrinda
 
 ```bash
-./gurucli-v1.13.2-[platforma] login    # piesakieties vienreiz (saglabā tokenu)
-./gurucli-v1.13.2-[platforma] run      # viens pilns automātiskās stratēģijas cikls (Boost, Turbo, automātiskā iesniegšana, balsošana pēc sliekšņa)
-./gurucli-v1.13.2-[platforma] start    # nepārtraukta balsošana (Ctrl+C, lai apturētu)
+./gurucli-v1.14.0-beta.7-[platforma] login    # piesakieties vienreiz (saglabā tokenu)
+./gurucli-v1.14.0-beta.7-[platforma] run      # viens pilns automātiskās stratēģijas cikls (Boost, Turbo, automātiskā iesniegšana, balsošana pēc sliekšņa)
+./gurucli-v1.14.0-beta.7-[platforma] start    # nepārtraukta balsošana (Ctrl+C, lai apturētu)
 ```
 
 > Aizstājiet `[platforma]` ar `mac`, `linux` vai `linux-arm`. Palaidiet `help`, lai redzētu visas komandas.
@@ -211,12 +211,12 @@ Norādījumus par grafisko lietotni un CLI, balsošanas noteikumus, uzstādījum
 - Akreditācijas dati žurnālos netiek rādīti — pirms jebkura ieraksta žurnālā jutīgo lauku vērtības tiek maskētas.
 - Lietotne jūsu tokenu glabā lokāli uzstādījumu failā (darbvirsmā un CLI — failā, ko var lasīt tikai tā īpašnieks; Android — lietotnes privātajā krātuvē) un sūta to tikai uz GuruShots; uzstādījumi un konfigurācija nekad nepamet jūsu ierīci.
 - **Kas atstāj jūsu ierīci:** pieprasījumi uz GuruShots (balsošana un konta dati, foto miniatūras) un pieprasījumi uz GitHub (`api.github.com` un GitHub izlaidumu lejupielādes), lai pārbaudītu un lejupielādētu atjauninājumus. Citām adresēm lietotne nesazinās, un foto analīze notiek ierīcē.
-- Izrakstoties tiek noņemts tikai pieteikšanās tokens. **Dzēst visus vietējos datus** (Uzstādījumi → Par lietotni un datiem; CLI `reset-data --yes`) izdzēš visu, ko lietotne glabā ierīcē; skatiet [kur tiek glabāti jūsu dati](docs/usage.lv.md#️-kur-tiek-glabāti-jūsu-dati--kā-tos-dzēst).
+- Izrakstoties tiek noņemts tikai pieteikšanās tokens. **Dzēst visus vietējos datus** (Uzstādījumi → Lietotnes uzstādījumi → Par lietotni un datiem; CLI `reset-data --yes`) izdzēš visu, ko lietotne glabā ierīcē; skatiet [kur tiek glabāti jūsu dati](docs/usage.lv.md#️-kur-tiek-glabāti-jūsu-dati--kā-tos-dzēst).
 - Kļūdu ziņojumos nav jutīgas informācijas.
 - Tīmekļa saskarne (`pnpm web`) ir pieejama tikai šajā datorā (localhost), noraida pieprasījumus no citām vietnēm un tai nav savas paroles — tā vietā katrā palaišanas reizē tiek izveidots nejaušs tokens, kas jānorāda katram pieprasījumam. Atveriet precīzu adresi, ko komanda izvada (tā beidzas ar `#t=<tokens>`); cilne tokenu glabā, kamēr ir atvērta, tāpēc pārlādēšana darbojas, bet adrese bez tokena, atvērta jaunā cilnē, tiek noraidīta, tāpat kā iepriekšējā palaišanas reizē atstāta lapa (palaidiet `pnpm web` vēlreiz un atveriet tā jauno adresi). Nekad nepadariet tās portu pieejamu tīklā.
 - Automātiskās iesniegšanas vizuālā pārbaude darbojas lokāli ar iebūvētu modeli; tā no GuruShots lejupielādē tikai jūsu pašu foto sīktēlus un neko nesūta citiem pakalpojumiem.
 - Darbvirsmas būvējumus neparaksta izdevējs, tāpēc atjauninājumiem uzticas, pamatojoties uz projekta GitHub izlaidumiem. Skatiet [pieņemtos ierobežojumus](docs/architecture.md#10-security-renderer--main--state-the-limits-dont-over-promise) (angliski).
-- Trešo pušu programmatūra un dati, ko lietotne iekļauj, ar to licencēm: Uzstādījumi → Par lietotni un datiem vai CLI komanda `licenses`.
+- Trešo pušu programmatūra un dati, ko lietotne iekļauj, ar to licencēm: Uzstādījumi → Lietotnes uzstādījumi → Par lietotni un datiem vai CLI komanda `licenses`.
 
 ## 📄 Licence un atbalsts
 
@@ -226,11 +226,9 @@ Ja nepieciešama palīdzība, vispirms skatiet sadaļu [Problēmu risināšana](
 
 Ja šis rīks jums noder, varat atbalstīt tā izstrādi:
 
-[![Bitcoin](https://img.shields.io/badge/Bitcoin-000000?style=for-the-badge&logo=bitcoin&logoColor=white)](bitcoin:3JSKTwYk1sfqsFyXisFsxvdD5yb7L81vBD)
-[![Ethereum](https://img.shields.io/badge/Ethereum-3C3C3D?style=for-the-badge&logo=Ethereum&logoColor=white)](ethereum:0xe065D3F01e8826Ecbd128abfB8F0B98069B98Ad6)
+**Ziedot**: [donatr.ee/isthisgitlab](https://donatr.ee/isthisgitlab/)
 
-**Bitcoin**: `3JSKTwYk1sfqsFyXisFsxvdD5yb7L81vBD`
-**Ethereum**: `0xe065D3F01e8826Ecbd128abfB8F0B98069B98Ad6`
+![QR kods: https://donatr.ee/isthisgitlab/](docs/donate-qr.svg)
 
 ---
 

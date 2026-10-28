@@ -9,7 +9,6 @@
  * eligible-photo list, with `permission.allowed`, to be submitted.
  */
 
-import { resolveMemberId } from './memberIdentity';
 import { getEntries } from './challengeState';
 
 import type { Challenge } from '../../types/gurushots';
@@ -19,7 +18,7 @@ import { errorMessage } from '../../errorMessage';
 import { oneLine } from '../../format/logSafe';
 
 /** The settings the Chosen Photos feature reads. */
-type ChosenKey = 'chosenPhotos' | 'chosenPhotosOnly' | 'chosenPhotosInOrder' | 'chosenPhotosMemberId';
+type ChosenKey = 'chosenPhotos' | 'chosenPhotosOnly' | 'chosenPhotosInOrder';
 
 /** What the Chosen Photos settings resolve to for one challenge. */
 interface ChosenSettings {
@@ -33,57 +32,20 @@ interface ChosenSettings {
 
 const NO_CHOSEN: ChosenSettings = { ids: [], only: false, inOrder: false };
 
-// Logged once per (saved account, current account): a per-challenge line would
-// repeat on every cycle for every challenge the list applies to.
-const warnedMismatch: Set<string> = new Set();
-
 /**
- * Resolve the Chosen Photos settings for one challenge.
- *
- * A list saved while another account was signed in is ignored (both settings),
- * because photo ids belong to one account: acting on another account's ids
- * would at best match nothing. The account is only looked up when a list is
- * set AND a saving account was recorded; an unrecorded or unknown account
- * counts as "cannot tell", which applies the list.
+ * Resolve the Chosen Photos settings for one challenge. The list applies as
+ * saved: it belongs to whoever is signed in, and its ids only ever filter the
+ * candidates the server returned, so an id that matches nothing can at worst
+ * leave the pick to the other candidates.
  *
  * @param read - reads one setting for this challenge (the caller owns how a
  *   per-challenge value resolves: by cached id for a joined challenge, by rule
  *   and per-id override for an un-joined one)
  */
-const resolveChosenPhotos = async ({
-    read,
-    token,
-    getCurrentMemberProfile,
-    logger,
-    label,
-}: {
-    read: (key: ChosenKey) => unknown;
-    token: string;
-    getCurrentMemberProfile: RankDeps['getCurrentMemberProfile'];
-    logger: FillLogger;
-    label: string;
-}): Promise<ChosenSettings> => {
+const resolveChosenPhotos = ({ read }: { read: (key: ChosenKey) => unknown }): ChosenSettings => {
     const list = read('chosenPhotos');
     const ids = Array.isArray(list) ? list.map(String) : [];
     if (ids.length === 0) return NO_CHOSEN;
-
-    const savedBy = read('chosenPhotosMemberId');
-    if (typeof savedBy === 'string' && savedBy !== '' && getCurrentMemberProfile) {
-        const current = await resolveMemberId(token, getCurrentMemberProfile, logger, label);
-        if (current !== null && current !== savedBy) {
-            const pair = `${savedBy}>${current}`;
-            if (!warnedMismatch.has(pair)) {
-                warnedMismatch.add(pair);
-                logger
-                    .withCategory(label === 'join' ? 'join' : 'autoSubmit')
-                    .warning(
-                        `${label}: your Chosen Photos were saved while another account was logged in, so they are ignored — remove them (chooser → Remove those lists, or clear-chosen-photos), then choose photos for this account`,
-                        null,
-                    );
-            }
-            return NO_CHOSEN;
-        }
-    }
     return { ids, only: read('chosenPhotosOnly') === true, inOrder: read('chosenPhotosInOrder') === true };
 };
 
@@ -375,35 +337,40 @@ type ChosenSkipReason = 'none-usable' | 'all-entered';
 const loggedSkips: Map<string, string> = new Map();
 const MAX_LOGGED_SKIPS = 64;
 
+/**
+ * The one wording for the Submit Only Chosen Photos skip lines — the log catalog's
+ * English templates match against exactly this text, so the two drift together.
+ */
+const formatChosenSkipMessage = (
+    label: string,
+    tag: string,
+    reason: ChosenSkipReason,
+    missingFromLibrary: boolean,
+): string => {
+    if (reason === 'all-entered') {
+        return `${label}: skipped ${tag} — every chosen photo is already entered there, and Submit Only Chosen Photos is on. Choose other photos or turn it off (Emergency Submit ignores it near the deadline)`;
+    }
+    return missingFromLibrary
+        ? `${label}: skipped ${tag} — none of your chosen photos can go in there (not offered, used elsewhere, or tag-filtered), and Submit Only Chosen Photos is on (Emergency Submit still fills a slot near the deadline). Some left your library — remove them from the list`
+        : `${label}: skipped ${tag} — none of your chosen photos can be submitted there (not offered, used elsewhere, or filtered by your tags), and Submit Only Chosen Photos is on (Emergency Submit still fills a slot near the deadline). Choose other photos or turn it off`;
+};
+
 const logChosenSkipOnce = (logger: FillLogger, challenge: Challenge, label: string, reason: ChosenSkipReason): void => {
     const key = String(challenge.id);
     // Submit-only, like the skip it explains: the swap's memo (`memoKey(challenge, 'swap')`) never reaches it.
     // A walk that found chosen photos missing from the library adds a hint to the line: logged again once it shows.
-    const foreign = [...(walkMemos.get(memoKey(challenge, 'submit'))?.outcomes.values() ?? [])].some(
+    const missingFromLibrary = [...(walkMemos.get(memoKey(challenge, 'submit'))?.outcomes.values() ?? [])].some(
         (outcome) => outcome.state === 'not-found',
     );
-    const logged = foreign && reason === 'none-usable' ? `${reason}+foreign` : reason;
+    const logged = missingFromLibrary && reason === 'none-usable' ? `${reason}+missing` : reason;
     if (loggedSkips.get(key) === logged) return;
     if (!loggedSkips.has(key) && loggedSkips.size >= MAX_LOGGED_SKIPS) evictOldest(loggedSkips);
     loggedSkips.set(key, logged);
     const log = logger.withCategory(label === 'join' ? 'join' : 'autoSubmit');
     const tag = logger.challengeTag(challenge);
-    // what happened -> why -> what next. Emergency Submit ignores the setting
-    // near the deadline, so the way to keep a slot empty is to turn that off too.
-    if (reason === 'all-entered') {
-        log.warning(
-            `${label}: skipped ${tag} — every chosen photo is already entered there, and Submit Only Chosen Photos is on. Choose other photos or turn that setting off; Emergency Submit ignores it near the deadline, so turn Emergency Submit off for this challenge to keep the slot empty`,
-            null,
-        );
-        return;
-    }
-    const hint = foreign
-        ? '. Some of them are not in your library — the list may hold photos of another account: remove them (chooser → Remove those lists, or clear-chosen-photos)'
-        : '';
-    log.warning(
-        `${label}: skipped ${tag} — none of your chosen photos can be submitted there (not offered for this challenge, already used in another one, or filtered out by your tag settings), and Submit Only Chosen Photos is on. Choose other photos or turn that setting off; Emergency Submit ignores it near the deadline, so turn Emergency Submit off for this challenge to keep the slot empty${hint}`,
-        null,
-    );
+    // what happened -> why -> what next. Every wording points out that
+    // Emergency Submit still fills the slot near the deadline.
+    log.warning(formatChosenSkipMessage(label, tag, reason, missingFromLibrary), null);
 };
 
 /** The challenge is no longer being skipped: forget the line so a later skip is explained again. */
@@ -412,13 +379,11 @@ const clearChosenSkip = (challenge: Challenge): void => {
 };
 
 /**
- * Drop everything remembered about an account's lists: the walk memos, the explained skips and
- * the owner-mismatch warnings. A logout calls it, so the next account is neither skipped on the
- * strength of a walk made for the last one nor denied a skip line the last one already got
- * (tests also start clean with it).
+ * Drop everything remembered about the lists as they were: the walk memos and the explained skips.
+ * A logout calls it, so the next sign-in is neither skipped on the strength of a walk made for the
+ * last account nor denied a skip line it already got (tests also start clean with it).
  */
 const forgetChosenPhotosMemory = (): void => {
-    warnedMismatch.clear();
     walkMemos.clear();
     loggedSkips.clear();
 };
@@ -428,6 +393,7 @@ export {
     enteredIds,
     resolveMissingChosen,
     refuseRememberedChosen,
+    formatChosenSkipMessage,
     logChosenSkipOnce,
     clearChosenSkip,
     forgetChosenPhotosMemory,

@@ -15,8 +15,9 @@ import { errorMessage } from '../errorMessage';
  * Handles creation and management of the native application menu
  */
 
-// Translated text in the main process's current language.
-const t = (key: string) => translationManager.t(key);
+// Translated text in the main process's current language. The core uses
+// closures, no `this`, so the method passes unbound.
+const t = translationManager.t;
 
 // The platform-conditional menu parts are functions with their own return type,
 // spread in by the template; windowMenu's inline conditional spread is cast to

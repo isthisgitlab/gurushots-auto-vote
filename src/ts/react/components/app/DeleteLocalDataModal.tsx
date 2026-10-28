@@ -116,13 +116,18 @@ export function DeleteLocalDataModal({ isOpen, onClose }: { isOpen: boolean; onC
                 )}
             </div>
             <ModalActions>
-                <button type="button" className="btn btn-outline btn-sm" onClick={handleClose} disabled={deleting}>
+                <button
+                    type="button"
+                    className="btn btn-outline btn-sm max-sm:min-h-10"
+                    onClick={handleClose}
+                    disabled={deleting}
+                >
                     {outcome === 'idle' ? t('app.cancel') : t('app.close')}
                 </button>
                 {!done && (
                     <button
                         type="button"
-                        className="btn btn-error btn-sm"
+                        className="btn btn-error btn-sm max-sm:min-h-10"
                         onClick={() => void handleDelete()}
                         disabled={deleting}
                         aria-busy={deleting}

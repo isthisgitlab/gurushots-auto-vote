@@ -2,7 +2,6 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { costOf } from '@/utils/discoverCost';
-import { interp } from '@/utils/interp';
 
 import type { Bankroll, OpenChallenge } from '../../../types/gurushots';
 
@@ -39,9 +38,9 @@ export function JoinConfirmModal({
                     <>
                         <div className="space-y-2 text-sm">
                             <p>
-                                {interp(t('app.discoverConfirmBody'), {
+                                {t('app.discoverConfirmBody', {
                                     title: confirm.title || confirm.url,
-                                    coins: cCost,
+                                    count: cCost,
                                 })}
                             </p>
                             {confirm.chosenEffectiveCount > 0 && (
@@ -49,12 +48,12 @@ export function JoinConfirmModal({
                             )}
                             {insufficient ? (
                                 <ToneNote tone="error">
-                                    {interp(t('app.discoverConfirmInsufficient'), { current: coins, cost: cCost })}
+                                    {t('app.discoverConfirmInsufficient', { current: coins, cost: cCost })}
                                 </ToneNote>
                             ) : (
                                 <p className="text-base-content/70">
                                     {known
-                                        ? interp(t('app.discoverConfirmBalance'), {
+                                        ? t('app.discoverConfirmBalance', {
                                               current: coins,
                                               cost: cCost,
                                               resulting: coins - cCost,
@@ -64,15 +63,15 @@ export function JoinConfirmModal({
                             )}
                         </div>
                         <ModalActions>
-                            <button className="btn btn-outline btn-sm" onClick={dismiss}>
+                            <button className="btn btn-outline btn-sm max-sm:min-h-10" onClick={dismiss}>
                                 {t('app.cancel')}
                             </button>
                             <button
-                                className="btn btn-latvian btn-sm"
+                                className="btn btn-latvian btn-sm max-sm:min-h-10"
                                 onClick={() => void onConfirm()}
                                 disabled={insufficient}
                             >
-                                {interp(t('app.discoverConfirmSpend'), { coins: cCost })}
+                                {t('app.discoverConfirmSpend', { count: cCost })}
                             </button>
                         </ModalActions>
                     </>

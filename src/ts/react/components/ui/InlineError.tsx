@@ -29,7 +29,7 @@ export function InlineError({
             {onDismiss && (
                 <button
                     type="button"
-                    className="btn btn-ghost btn-sm btn-square ml-1 align-middle"
+                    className="btn btn-ghost btn-sm btn-square ml-1 align-middle max-sm:min-h-10 max-sm:min-w-10"
                     aria-label={t('errors.dismiss')}
                     title={t('errors.dismiss')}
                     onClick={onDismiss}

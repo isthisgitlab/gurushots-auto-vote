@@ -1,7 +1,7 @@
 import { invalid } from '../helpers/invalid';
+import { fillTemplate } from './helpers/setup';
 import type * as formattersModule from '../../src/ts/react/utils/formatters';
 import type * as wallClockModule from '../../src/ts/scheduling/wallClock';
-import type * as interpModule from '../../src/ts/react/utils/interp';
 import type * as rendererModule from '../../src/ts/translations/renderer';
 import type * as levelBadgeModule from '../../src/ts/react/utils/levelBadge';
 const {
@@ -17,7 +17,6 @@ const {
     dateLocale,
 } = require('../../src/ts/react/utils/formatters') as typeof formattersModule;
 const { timeOfDayIn } = require('../../src/ts/scheduling/wallClock') as typeof wallClockModule;
-const { interp } = require('../../src/ts/react/utils/interp') as typeof interpModule;
 const { rendererTranslator } = require('../../src/ts/translations/renderer') as typeof rendererModule;
 const { LEVEL_BADGE_CLASS, LEVEL_PROGRESS_CLASS } =
     require('../../src/ts/react/utils/levelBadge') as typeof levelBadgeModule;
@@ -198,6 +197,9 @@ describe('getBoostStatus', () => {
 
 describe('statusText', () => {
     const keyT = (key: string) => key;
+    // A one-template translator: fills the placeholder like the real t does.
+    const templateT = (text: string) => (_key: string, vars?: Record<string, string | number | null | undefined>) =>
+        fillTemplate(text, vars);
 
     test('words each code through its translation key; minutes fill the placeholder', () => {
         const words = (status: Parameters<typeof statusText>[0]) => statusText(status, keyT);
@@ -210,10 +212,10 @@ describe('statusText', () => {
         expect(words({ code: 'timer', colorClass: '' })).toBe('app.stateTimer');
         expect(words({ code: 'inProgress', colorClass: '' })).toBe('app.stateInProgress');
         expect(words({ code: 'won', colorClass: '' })).toBe('app.stateWon');
-        expect(statusText({ code: 'availableMinutes', colorClass: '', minutes: 446 }, () => 'Left: {time}')).toBe(
+        expect(statusText({ code: 'availableMinutes', colorClass: '', minutes: 446 }, templateT('Left: {time}'))).toBe(
             'Left: 7h 26m',
         );
-        expect(statusText({ code: 'availableMinutes', colorClass: '' }, () => '{time} left')).toBe('<1m left');
+        expect(statusText({ code: 'availableMinutes', colorClass: '' }, templateT('{time} left'))).toBe('<1m left');
     });
 
     test("an 'other' state is the API's own text, untranslated", () => {
@@ -264,12 +266,37 @@ describe('getEntryStatus', () => {
             getEntryStatus(invalid(entry)),
         );
         expect(states.map((state) => state.icon)).toEqual(['🚀', '⚡', '⭐', '📷']);
-        for (const state of states) expect(Object.keys(state).sort()).toEqual(['icon', 'isBoosted', 'isTurboed']);
+        for (const state of states) {
+            expect(Object.keys(state).sort()).toEqual(['icon', 'isBoosted', 'isGuruPick', 'isTurboed']);
+        }
     });
 
     test('guru pick and plain entries', () => {
         expect(getEntryStatus(invalid({ guru_pick: true })).icon).toBe('⭐');
-        expect(getEntryStatus(undefined)).toMatchObject({ isBoosted: false, isTurboed: false, icon: '📷' });
+        expect(getEntryStatus(undefined)).toMatchObject({
+            isBoosted: false,
+            isTurboed: false,
+            isGuruPick: false,
+            icon: '📷',
+        });
+    });
+
+    test('isGuruPick rides on a boosted or turboed entry, whose icon stays theirs', () => {
+        expect(getEntryStatus(invalid({ boosted: true, guru_pick: true }))).toMatchObject({
+            isBoosted: true,
+            isGuruPick: true,
+            icon: '🚀',
+        });
+        expect(getEntryStatus(invalid({ turbo: true, guru_pick: true }))).toMatchObject({
+            isTurboed: true,
+            isGuruPick: true,
+            icon: '⚡',
+        });
+    });
+
+    test('a truthy non-boolean guru_pick is no pick', () => {
+        expect(getEntryStatus(invalid({ guru_pick: 1 })).isGuruPick).toBe(false);
+        expect(getEntryStatus(invalid({ guru_pick: 'yes' })).icon).toBe('📷');
     });
 });
 
@@ -289,15 +316,5 @@ describe('re-exports from the shared core', () => {
             (require('../../src/ts/voting/boostWindow') as typeof import('../../src/ts/voting/boostWindow'))
                 .isBoostWindowOpen,
         );
-    });
-});
-
-describe('interp', () => {
-    test('fills placeholders and blanks missing / null values', () => {
-        expect(interp('{a}-{b}-{c}', { a: 1, b: null })).toBe('1--');
-    });
-
-    test('works without a vars object', () => {
-        expect(interp('x {a} y')).toBe('x  y');
     });
 });

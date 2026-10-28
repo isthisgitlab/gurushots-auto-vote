@@ -1,7 +1,8 @@
+import { useId } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { TagsField } from './SettingInput';
+import { HoursMinutesDraftField } from './HoursMinutesFields';
 import { useScenarios } from '@/api/useScenarios';
-import { interp } from '@/utils/interp';
 
 import type { LooseRecord, TitleRule } from '../../../types/settings';
 
@@ -59,6 +60,36 @@ export function RuleNumberField({
                 />
                 <span className="text-xs text-base-content/70">{t(unitKey)}</span>
             </div>
+        </div>
+    );
+}
+
+/**
+ * The join-window override as an hours + minutes pair (the stored value stays
+ * fractional hours). Like RuleNumberField, a cleared pair emits '' — inherit,
+ * which the settings sanitizer drops — and an explicit 0 stays the off value.
+ */
+export function RuleHoursMinutesField({
+    rule,
+    settingKey,
+    labelKey,
+    placeholderKey,
+    onPatch,
+}: RuleFieldProps & { placeholderKey: string }) {
+    const { t } = useTranslation();
+    const labelId = useId();
+    return (
+        <div className="flex flex-col gap-1">
+            <span id={labelId} className="text-sm">
+                {t(labelKey)}
+            </span>
+            <HoursMinutesDraftField
+                label={t(labelKey)}
+                labelId={labelId}
+                placeholder={t(placeholderKey)}
+                value={rule[settingKey] as number | '' | null | undefined}
+                onChange={(next) => onPatch({ [settingKey]: next })}
+            />
         </div>
     );
 }
@@ -124,7 +155,7 @@ export function RuleScenarioSelect({ rule, onPatch }: { rule: TitleRule; onPatch
                     </option>
                 ))}
                 {current !== '' && !names.includes(current) && (
-                    <option value={current}>{interp(t('app.scenarioMissingOption'), { name: current })}</option>
+                    <option value={current}>{t('app.scenarioMissingOption', { name: current })}</option>
                 )}
             </select>
         </div>

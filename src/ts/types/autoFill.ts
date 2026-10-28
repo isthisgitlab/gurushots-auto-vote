@@ -123,6 +123,8 @@ export type FillAttemptResult =
     | { status: 'no-chosen' }
     | { status: 'no-pick'; detail: string | null }
     | { status: 'gone' }
+    /** The pre-submit re-read cannot be trusted (a prune-unsafe read dropped elements): no submit on it. */
+    | { status: 'invalid' }
     | { status: 'refresh-stand-down' }
     | { status: 'submitted'; picked: string[] }
     | { status: 'submit-rejected'; reason: string }

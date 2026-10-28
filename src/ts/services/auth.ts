@@ -14,7 +14,6 @@ import * as logger from '../logger';
 import { clearOpenChallenges } from './openChallengeCache';
 import { clearUpcomingCache } from './discoverChallenges';
 import { clearLibraryCache } from './libraryCache';
-import { bumpAccountGeneration } from './accountScope';
 import { forgetChosenPhotosMemory } from './autoFill/chosenPhotos';
 
 import type { ConfigV2 } from '../types/config';
@@ -92,11 +91,9 @@ const extractAuthResult = (
  * What the process remembered about the account that left must not carry over to the next: its
  * listed challenges and the cached upcoming list, its photo-library listings, the open- and
  * upcoming-id lists cleanup spares chosen lists for, and the chosen-photo walk memos and explained
- * skips. The account generation moves once, so every read that began under the account that left
- * writes nothing.
+ * skips.
  */
 const forgetAccountMemory = (): void => {
-    bumpAccountGeneration();
     clearOpenChallenges();
     clearUpcomingCache();
     clearLibraryCache();
@@ -121,23 +118,53 @@ class LogoutNotSavedError extends Error {
  * leave the old token persisted and silently restore the session on next
  * launch. On Electron/CLI the write is synchronous and the flush no-ops.
  *
- * Shell-specific behavior (window teardown, mock reset, event emission,
- * logging wording) stays with each caller.
+ * Shell-specific behavior (window teardown, event emission, logging
+ * wording) stays with each caller.
  *
+ * @param resetMode - true only for the explicit-logout wrapper (`logout`): a held
+ *   save then also queues the mode's return to the environment default.
  * @returns true when a token was actually cleared.
  * @throws when the sign-out could not be saved (the settings refuse the write): a logout that did not hold is reported,
- *   never taken for one. (A sign-out made while a restore of the settings is on its way is saved: it holds when the
- *   restored settings come through.)
+ *   never taken for one. (One made while the stored settings have not been read yet is refused like any save then, and
+ *   reported the same way.)
  */
-const clearAuthToken = async (): Promise<boolean> => {
+const clearAuthTokenCore = async ({ resetMode }: { resetMode: boolean }): Promise<boolean> => {
     const hadToken = !!settings.getSetting('token');
     const saved = settings.setSetting('token', '');
     // A refused sign-out leaves the user logged in: what is remembered about the account stays.
-    if (saved) forgetAccountMemory();
+    if (saved) {
+        forgetAccountMemory();
+        if (resetMode) {
+            // Order is load-bearing: the mock reset must be QUEUED BEFORE the flush —
+            // on Capacitor the flush is the only thing that makes a write-behind write
+            // durable, so a reset placed after it would never survive an OS kill.
+            // The reset's own false return is ignored on purpose: the token clear already held, and that is what matters.
+            settings.setSetting('mock', settings.getEnvironmentInfo().defaultMock);
+        }
+    }
     await settings.flushPendingWrites();
     if (!saved) throw new LogoutNotSavedError();
     return hadToken;
 };
+
+/**
+ * Clear the token — and nothing else. For paths that are not an explicit logout
+ * (the stay-logged-in quit path, any auth-failure cleanup): the mode is left
+ * exactly as it is. The explicit-logout wrapper (`logout`) adds the mode reset.
+ *
+ * @returns true when a token was actually cleared.
+ */
+const clearAuthToken = (): Promise<boolean> => clearAuthTokenCore({ resetMode: false });
+
+/**
+ * An explicit logout: everything `clearAuthToken` does, plus the mode's return
+ * to the environment default. The reset is queued in the same durable write as
+ * the cleared token — the one flush covers both — and only when the save held,
+ * so a refused logout leaves everything as it is.
+ *
+ * @returns true when a token was actually cleared.
+ */
+const logout = (): Promise<boolean> => clearAuthTokenCore({ resetMode: true });
 
 /**
  * Store the token a login just obtained. When it differs from the one stored, the account may have
@@ -155,14 +182,11 @@ const switchAccountToken = (token: string): boolean => {
 };
 
 /**
- * Apply the `stayLoggedIn` preference at shutdown: with it off, the token must not survive
- * the process exiting.
- *
- * Lives here rather than in windows/lifecycle.ts because it is not an Electron rule — it was
- * only ever implemented there, so the CLI and Android kept a token on disk indefinitely even
- * with the setting off, quietly contradicting what the setting promises. The Electron path
- * keeps its own single-instance gate around this (a second instance quitting must not clear
- * the running one's token); that gate is genuinely Electron-specific and stays there.
+ * Apply the `stayLoggedIn` preference when a run's token would otherwise outlive it: with the
+ * preference off, the token must not survive the process. Callers: the CLI's continuous-vote
+ * exit, and the shell clears — the web shell at startup and server close, Android at launch.
+ * The desktop app keeps its own two sites (quit and startup) because their single-instance and
+ * beside-the-window gating is genuinely Electron-specific.
  *
  * @returns true when a token was actually cleared.
  */
@@ -176,6 +200,7 @@ export {
     requireAuthToken,
     extractAuthResult,
     clearAuthToken,
+    logout,
     switchAccountToken,
     clearTokenUnlessStayingLoggedIn,
     LogoutNotSavedError,

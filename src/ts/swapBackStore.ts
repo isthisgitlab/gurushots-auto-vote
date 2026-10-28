@@ -1,19 +1,20 @@
 /**
  * Swap-back ledger: which entry slots currently hold a replacement for a photo
- * that was swapped out while boosted or turbo'd.
+ * that was swapped out while boosted, turbo'd or guru-picked.
  *
- * A boost/turbo belongs to the PHOTO, not the slot: swapping a boosted photo
- * out leaves the replacement without it (and the boost can't be used again in
- * that challenge), while swapping the original back in restores it. The API's
- * swap history (member.ranking.swaps) carries no boost/turbo flag, so the app
- * records it itself at swap time — which also means only swaps made through
- * this app are known here.
+ * A boost/turbo/Guru's pick belongs to the PHOTO, not the slot: swapping such a
+ * photo out leaves the replacement without it (and the boost can't be used
+ * again in that challenge), while swapping the original back in restores it.
+ * The MOBILE read's swap history (member.ranking.swaps) carries no boost/turbo/
+ * guru-pick flag (the web read's does carry guru_pick, which the app does not
+ * read), so the app records the kind itself at swap time — which also means
+ * only swaps made through this app are known here.
  *
  * Shape, keyed by challenge id:
  *   { "<challengeId>": [{ currentId, previousId, previousMemberId, kind, at }] }
  *   currentId  - the photo now in the slot (moves along if it is swapped again)
- *   previousId - the boosted/turbo'd original to swap back in
- *   kind       - 'boost' | 'turbo'
+ *   previousId - the boosted, turbo'd or guru-picked original to swap back in
+ *   kind       - 'boost' | 'turbo' | 'guruPick' (boost > turbo > guruPick)
  *
  * Uses the same platform-aware transport as joinState/metadata, so on
  * Capacitor its cache MUST be hydrated at boot (initializeSwapBackAsync, wired
@@ -22,10 +23,11 @@
  */
 
 import type { RawJsonStore, SwapBackRecord } from './types/stores';
-import * as logger from './logger';
 import { createJsonStore } from './settings/storage';
+import { isGuruPicked } from './voting/currencyAuto';
 import { isPlainObject } from './plainObject';
 import { errorMessage } from './errorMessage';
+import { createMemoryRawJsonStore, parseUntrustedJsonObject } from './parseUntrustedJson';
 
 const swapBackStore = createJsonStore({ fileName: 'swapBacks.json', prefKey: 'gs_swap_backs' });
 
@@ -39,7 +41,7 @@ const isRecord = (r: unknown): r is SwapBackRecord =>
     isPlainObject(r) &&
     typeof r.currentId === 'string' &&
     typeof r.previousId === 'string' &&
-    (r.kind === 'boost' || r.kind === 'turbo');
+    (r.kind === 'boost' || r.kind === 'turbo' || r.kind === 'guruPick');
 
 /**
  * Ledger over a raw-JSON store ({readRaw, writeRaw}). An unreadable or corrupt
@@ -47,17 +49,12 @@ const isRecord = (r: unknown): r is SwapBackRecord =>
  * still be swapped back on gurushots.com.
  */
 const createLedger = (store: RawJsonStore) => {
-    const read = (): Record<string, unknown> => {
-        try {
-            const parsed: unknown = JSON.parse(store.readRaw() || '{}');
-            return isPlainObject(parsed) ? parsed : {};
-        } catch (error) {
-            logger
-                .withCategory('currency')
-                .warning(`swap-back ledger unreadable: ${errorMessage(error) ?? String(error)}`, null);
-            return {};
-        }
-    };
+    const read = (): Record<string, unknown> =>
+        parseUntrustedJsonObject(
+            () => store.readRaw(),
+            'currency',
+            (error) => `swap-back ledger unreadable: ${errorMessage(error) ?? String(error)}`,
+        );
 
     /** @param state */
     const write = (state: Record<string, unknown>) => {
@@ -86,11 +83,22 @@ const createLedger = (store: RawJsonStore) => {
         /**
          * Update the ledger after `oldEntry` was swapped for `newId`: a record
          * pointing at the old photo follows the slot to the new one, and a
-         * boosted/turbo'd old photo starts a new record.
+         * boosted, turbo'd or guru-picked old photo starts a new record (a
+         * photo carrying several records its boost/turbo, which names the
+         * costliest thing to lose).
          */
         onSwapped: (
             challengeId: string | number,
-            oldEntry: { id?: unknown; member_id?: unknown; boosted?: unknown; turbo?: unknown } | null | undefined,
+            oldEntry:
+                | {
+                      id?: unknown;
+                      member_id?: unknown;
+                      boosted?: unknown;
+                      turbo?: unknown;
+                      guru_pick?: unknown;
+                  }
+                | null
+                | undefined,
             newId: string | number,
         ) => {
             const state = read();
@@ -101,7 +109,13 @@ const createLedger = (store: RawJsonStore) => {
                 // A plain swap put the original back in its slot: nothing left to swap back.
                 .filter((r) => r.currentId !== r.previousId);
             const kind: SwapBackRecord['kind'] | null =
-                oldEntry?.boosted === true ? 'boost' : oldEntry?.turbo ? 'turbo' : null;
+                oldEntry?.boosted === true
+                    ? 'boost'
+                    : oldEntry?.turbo
+                      ? 'turbo'
+                      : isGuruPicked(oldEntry)
+                        ? 'guruPick'
+                        : null;
             if (kind) {
                 records.push({
                     currentId: String(newId),
@@ -128,15 +142,7 @@ const createLedger = (store: RawJsonStore) => {
 };
 
 /** Ledger over an in-memory store — mock mode, tests. */
-const createMemoryLedger = () => {
-    let raw: string | null = null;
-    return createLedger({
-        readRaw: () => raw,
-        writeRaw: (data) => {
-            raw = data;
-        },
-    });
-};
+const createMemoryLedger = () => createLedger(createMemoryRawJsonStore());
 
 const swapBackLedger = createLedger(swapBackStore);
 

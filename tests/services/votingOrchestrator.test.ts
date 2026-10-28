@@ -15,6 +15,7 @@
 jest.mock('../../src/ts/settings', () => ({
     getEffectiveSetting: jest.fn(() => false),
     getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
+    consumeChosenPhotos: jest.fn(() => false),
 }));
 
 jest.mock('../../src/ts/services/VotingLogic', () => ({
@@ -203,7 +204,7 @@ describe('metadata cleanup injection', () => {
         const api = makeApi(list);
         const cleanup = jest.fn(() => true);
         await runVotingPass('tok', 2, deps(api, { cleanupStaleMetadata: cleanup }));
-        expect(cleanup).toHaveBeenCalledWith(['1', '2']);
+        expect(cleanup).toHaveBeenCalledWith(['1', '2'], false);
     });
 
     test('mock mode (null) never touches metadata cleanup', async () => {
@@ -1552,5 +1553,109 @@ describe('per-challenge clock', () => {
         expect(observed[1]).toBeGreaterThan(observed[0]);
 
         spy.mockRestore();
+    });
+});
+
+describe('chosen-photos lazy net', () => {
+    test('a consume failure is swallowed: the challenge is still fully processed', async () => {
+        settingsMock.consumeChosenPhotos.mockImplementationOnce(() => {
+            throw new Error('store down');
+        });
+        const api = makeApi([makeChallenge()]);
+
+        const result = await runVotingPass('tok', null, deps(api));
+
+        expect(result.success).toBe(true);
+        expect(settingsMock.consumeChosenPhotos).toHaveBeenCalledWith(101, []);
+        expect(votingLogic.evaluateVotingDecision).toHaveBeenCalledTimes(1);
+        const warnings = jest
+            .mocked(logger.withCategory)
+            .mock.results.flatMap((r) =>
+                jest.mocked(r.value as CategoryLogger).warning.mock.calls.map((call) => String(call[0])),
+            );
+        expect(warnings).toEqual(['[Challenge 101: Orchestrated] chosen photos not consumed (Error)']);
+    });
+
+    test("a Manual Only challenge's entries are consumed before the skip", async () => {
+        settingsMock.getEffectiveSetting.mockImplementation((key) => key === 'manualPhotosOnly');
+        const challenge = makeChallenge({ member: { ranking: { entries: [{ id: 'p1' }] } } });
+        const api = makeApi([challenge]);
+
+        const result = await runVotingPass('tok', null, deps(api));
+
+        expect(result.success).toBe(true);
+        expect(settingsMock.consumeChosenPhotos).toHaveBeenCalledWith(101, ['p1']);
+        // The skip held: nothing below the lazy net ran on the challenge.
+        expect(votingLogic.evaluateVotingDecision).not.toHaveBeenCalled();
+    });
+});
+
+describe('marked challenges (challengeIntegrity dataIssues)', () => {
+    const markedChallenge = (id: number) => makeChallenge({ id, dataIssues: ['entries'] });
+
+    beforeEach(() => {
+        // The Manual Only suite above leaves its switch flipped on (clearAllMocks keeps implementations);
+        // these tests need the default, all-off read.
+        settingsMock.getEffectiveSetting.mockImplementation(() => false);
+    });
+
+    const markedSkipCalls = () =>
+        jest
+            .mocked(logger.withCategory)
+            .mock.results.flatMap((r) => jest.mocked(r.value as CategoryLogger).warningT.mock.calls)
+            .filter(([key]) => key === 'm704cb4f5be48');
+
+    test('the pass skips a marked challenge whole with one log line, and processes the rest', async () => {
+        const api = makeApi([markedChallenge(1), makeChallenge({ id: 2 })]);
+
+        const result = await runVotingPass('tok', null, deps(api));
+
+        expect(result.success).toBe(true);
+        // The skip is the very top of the per-challenge work: not even the chosen-photos net ran on it.
+        expect(settingsMock.consumeChosenPhotos).not.toHaveBeenCalledWith(1, expect.anything());
+        const decided = votingLogic.evaluateVotingDecision.mock.calls.map(([challenge]) => challenge.id);
+        expect(decided).toEqual([2]);
+        expect(markedSkipCalls()).toHaveLength(1);
+        const [, params, data] = markedSkipCalls()[0];
+        expect(params).toEqual(['[Challenge 1: Orchestrated]']);
+        expect(data).toEqual({ codes: ['entries'] });
+    });
+
+    test('a per-card Run on a marked challenge refuses with challenge-data-incomplete', async () => {
+        const list = [markedChallenge(1), makeChallenge({ id: 2 })];
+        const api = makeApi(list);
+
+        const result = await runVotingPass('tok', 1, deps(api));
+
+        expect(result).toEqual({ success: false, error: 'challenge-data-incomplete', challenges: list });
+        // Nothing ran on it, and the skip is logged all the same.
+        expect(settingsMock.consumeChosenPhotos).not.toHaveBeenCalled();
+        expect(markedSkipCalls()).toHaveLength(1);
+    });
+
+    test('planMissionVotes leaves marked challenges out of the candidates', async () => {
+        // An eligible vote-mission candidate: started, open, below 100% exposure.
+        const votable = {
+            start_time: NOW - 3600,
+            member: { ranking: { entries: [], exposure: { exposure_factor: 50 } } },
+        };
+        const api = makeApi([markedChallenge(1), makeChallenge({ id: 2, ...votable })]);
+
+        await runVotingPass('tok', null, deps(api, { missions: { join: 0, fill: 0, turbo: 0, boost: 0, vote: 5 } }));
+
+        // The quota probe and the pass itself both see the clean challenge only.
+        const probed = votingLogic.evaluateVotingDecision.mock.calls.map(([challenge]) => challenge.id);
+        expect(probed).toEqual([2, 2]);
+    });
+
+    test('a prune-unsafe read makes the pass skip the metadata prune', async () => {
+        const api = makeApi([makeChallenge()]);
+        // The pass's dep type names only `challenges`; `pruneUnsafe` rides on the real response shape.
+        api.getActiveChallenges.mockResolvedValue(invalid({ challenges: [makeChallenge()], pruneUnsafe: true }));
+        const cleanup = jest.fn(() => true);
+
+        await runVotingPass('tok', null, deps(api, { cleanupStaleMetadata: cleanup }));
+
+        expect(cleanup).toHaveBeenCalledWith(['101'], true);
     });
 });

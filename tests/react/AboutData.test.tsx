@@ -1,12 +1,14 @@
 /**
- * The settings modal's About and data section: the third-party licenses dialog (text read on open into a focusable,
+ * The Application panel's About and data block: the third-party licenses dialog (text read on open into a focusable,
  * named, scrollable region) and "Delete all local data" (a confirm that lists what is lost, starts on Cancel and words
  * every outcome).
  */
 
 import { act, fireEvent, render, screen, waitFor, within } from './helpers/test-utils';
 import { AboutDataSection } from '@/components/app/AboutDataSection';
-import { mockTranslator, defaultTranslate } from './helpers/setup';
+import { useImportReport } from '@/api/useImportReport';
+import { SettingsNavProvider } from '@/contexts/SettingsNavContext';
+import { mockTranslator, defaultTranslate, fillTemplate } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
 import { IMPORT_REF_ENGLISH } from '../../src/ts/settings/importRefs';
 import type { ImportRefText } from '../../src/ts/settings/importRefs';
@@ -14,8 +16,44 @@ import { about as englishAbout } from '../../src/ts/translations/english';
 import { about as latvianAbout } from '../../src/ts/translations/latvian';
 import type { RendererGlobals } from '../../src/ts/types/capacitor';
 
+import type { ReactNode } from 'react';
+import type { ImportReport } from '@/api/useImportReport';
+import type { SettingsNav } from '@/contexts/SettingsNavContext';
+
 const open = (name: string) => fireEvent.click(screen.getByRole('button', { name }));
 const dialog = () => screen.getByRole('dialog');
+
+// The block renders inside the Application panel; give it a navigation that shows it.
+const shownNav = (query = '', namesOnly = false): SettingsNav => ({
+    query,
+    namesOnly,
+    isShown: () => true,
+    active: 'application',
+    selectionSeq: 0,
+    select: () => undefined,
+    setQuery: () => undefined,
+    reveal: () => undefined,
+    reset: () => undefined,
+});
+const renderSection = (query = '', namesOnly = false, report: ImportReport | null = null) =>
+    render(
+        <SettingsNavProvider value={shownNav(query, namesOnly)}>
+            <AboutDataSection report={report} />
+        </SettingsNavProvider>,
+    );
+
+// The import-report tests keep reading the report the way the modal does — over useImportReport —
+// and pass it in: the section takes it as a prop.
+function ReportBridge({ children }: { children: (report: ImportReport | null) => ReactNode }) {
+    const { data: report } = useImportReport();
+    return <>{children(report)}</>;
+}
+const renderWithReport = () =>
+    render(
+        <SettingsNavProvider value={shownNav()}>
+            <ReportBridge>{(report) => <AboutDataSection report={report} />}</ReportBridge>
+        </SettingsNavProvider>,
+    );
 
 afterEach(() => {
     delete (globalThis as RendererGlobals).Capacitor;
@@ -25,7 +63,7 @@ afterEach(() => {
 describe('third-party licenses', () => {
     test('opens a dialog that reads the notices, shown in a named, focusable, scrollable region', async () => {
         jest.mocked(window.api.getThirdPartyNotices).mockResolvedValue({ success: true, text: 'MIT License\n…' });
-        render(<AboutDataSection />);
+        renderSection();
         expect(window.api.getThirdPartyNotices).not.toHaveBeenCalled();
 
         open('about.licensesButton');
@@ -39,7 +77,7 @@ describe('third-party licenses', () => {
 
     test('closing the dialog removes it', async () => {
         jest.mocked(window.api.getThirdPartyNotices).mockResolvedValue({ success: true, text: 'text' });
-        render(<AboutDataSection />);
+        renderSection();
         open('about.licensesButton');
         await screen.findByRole('region', { name: 'about.licensesTextLabel' });
         fireEvent.click(screen.getByRole('button', { name: 'common.closeModal' }));
@@ -52,7 +90,7 @@ describe('third-party licenses', () => {
     ])('%s shows a translated, announced error and Try again reads once more', async (_name, answer) => {
         jest.mocked(window.api.getThirdPartyNotices).mockResolvedValueOnce(invalid(answer));
         jest.mocked(window.api.getThirdPartyNotices).mockResolvedValueOnce({ success: true, text: 'second try' });
-        render(<AboutDataSection />);
+        renderSection();
         open('about.licensesButton');
 
         const alert = await screen.findByRole('alert');
@@ -66,7 +104,7 @@ describe('third-party licenses', () => {
 
     test('a read that throws is an error too, with its message logged', async () => {
         jest.mocked(window.api.getThirdPartyNotices).mockRejectedValue(new Error('bridge down'));
-        render(<AboutDataSection />);
+        renderSection();
         open('about.licensesButton');
         await screen.findByRole('alert');
         expect(window.api.logWarning).toHaveBeenCalledWith('Third-party notices unavailable: bridge down');
@@ -74,7 +112,7 @@ describe('third-party licenses', () => {
 
     test('a read that throws something without a message is logged as it came', async () => {
         jest.mocked(window.api.getThirdPartyNotices).mockRejectedValue(invalid(null));
-        render(<AboutDataSection />);
+        renderSection();
         open('about.licensesButton');
         await screen.findByRole('alert');
         expect(window.api.logWarning).toHaveBeenCalledWith('Third-party notices unavailable: null');
@@ -87,7 +125,7 @@ describe('third-party licenses', () => {
                 reject = fail;
             }),
         );
-        render(<AboutDataSection />);
+        renderSection();
         open('about.licensesButton');
         fireEvent.click(screen.getByRole('button', { name: 'common.closeModal' }));
         await act(async () => reject(new Error('late failure')));
@@ -101,7 +139,7 @@ describe('third-party licenses', () => {
                 resolve = done;
             }),
         );
-        render(<AboutDataSection />);
+        renderSection();
         open('about.licensesButton');
         fireEvent.click(screen.getByRole('button', { name: 'common.closeModal' }));
         await act(async () => resolve({ success: true, text: 'late' }));
@@ -109,9 +147,39 @@ describe('third-party licenses', () => {
     });
 });
 
+describe('the donate button', () => {
+    test('is an outline button whose click opens the donation page', () => {
+        renderSection();
+        const button = screen.getByRole('button', { name: 'about.donateButton' });
+        expect(button.className).toContain('btn-outline');
+        open('about.donateButton');
+        expect(window.api.openExternalUrl).toHaveBeenCalledWith('https://donatr.ee/isthisgitlab/');
+        expect(window.api.openExternalUrl).toHaveBeenCalledTimes(1);
+    });
+
+    test.each([
+        [
+            'is refused',
+            () =>
+                jest
+                    .mocked(window.api.openExternalUrl)
+                    .mockResolvedValue({ success: false, error: 'Only https:// URLs can be opened' }),
+        ],
+        ['throws', () => jest.mocked(window.api.openExternalUrl).mockRejectedValue(new Error('bridge down'))],
+    ])('a click whose answer %s leaves the block shown and stays silent', async (_name, stub) => {
+        stub();
+        renderSection();
+        open('about.donateButton');
+        await act(async () => undefined);
+        expect(screen.getByRole('heading', { level: 5, name: 'about.title' })).toBeTruthy();
+        expect(window.api.logError).not.toHaveBeenCalled();
+        expect(window.api.logWarning).not.toHaveBeenCalled();
+    });
+});
+
 describe('Delete all local data', () => {
     test('the delete button is a filled destructive one', () => {
-        render(<AboutDataSection />);
+        renderSection();
         const button = screen.getByRole('button', { name: 'about.deleteButton' });
         expect(button.className).toContain('btn-error');
         expect(button.className).not.toContain('btn-outline');
@@ -121,7 +189,7 @@ describe('Delete all local data', () => {
     const confirm = () => fireEvent.click(within(dialog()).getByRole('button', { name: 'about.deleteConfirm' }));
 
     test('lists what is lost, has no close button, and Cancel is the first control and takes focus', () => {
-        render(<AboutDataSection />);
+        renderSection();
         openDelete();
         const modal = within(dialog());
         for (const key of ['Login', 'Settings', 'Profiles', 'Scenarios', 'Stats', 'Logs']) {
@@ -138,13 +206,13 @@ describe('Delete all local data', () => {
 
     test('on Android the background service state is listed too', () => {
         (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
-        render(<AboutDataSection />);
+        renderSection();
         openDelete();
         expect(within(dialog()).getByText('about.deleteBackground')).toBeTruthy();
     });
 
     test('Cancel closes without deleting', () => {
-        render(<AboutDataSection />);
+        renderSection();
         openDelete();
         fireEvent.click(within(dialog()).getByRole('button', { name: 'app.cancel' }));
         expect(screen.queryByRole('dialog')).toBeNull();
@@ -158,7 +226,7 @@ describe('Delete all local data', () => {
                 finish = done;
             }),
         );
-        render(<AboutDataSection />);
+        renderSection();
         openDelete();
         confirm();
 
@@ -184,7 +252,7 @@ describe('Delete all local data', () => {
     test('in the web shell the delete text says the server stops and must be started again', async () => {
         (globalThis as { webShell?: true }).webShell = true;
         jest.mocked(window.api.wipeLocalData).mockResolvedValue({ success: true });
-        render(<AboutDataSection />);
+        renderSection();
         openDelete();
         expect(within(dialog()).getByText('about.deleteAfterWeb')).toBeTruthy();
         expect(within(dialog()).queryByText('about.deleteAfter')).toBeNull();
@@ -199,7 +267,7 @@ describe('Delete all local data', () => {
         ['busy-web', 'about.deleteBusyWeb'],
     ])('a refusal with %s says what is in the way and the step that clears it', async (code, key) => {
         jest.mocked(window.api.wipeLocalData).mockResolvedValue({ success: false, error: code });
-        render(<AboutDataSection />);
+        renderSection();
         openDelete();
         confirm();
         const alert = await within(dialog()).findByRole('alert');
@@ -213,7 +281,7 @@ describe('Delete all local data', () => {
 
     test('a code that is not a refusal this build knows (even an object key) is the generic failure', async () => {
         jest.mocked(window.api.wipeLocalData).mockResolvedValue({ success: false, error: 'constructor' });
-        render(<AboutDataSection />);
+        renderSection();
         openDelete();
         confirm();
         expect((await within(dialog()).findByRole('alert')).textContent).toBe('about.deleteFailed');
@@ -224,7 +292,7 @@ describe('Delete all local data', () => {
         ['no answer', undefined],
     ])('%s is worded for the user and the detail is logged', async (_name, answer) => {
         jest.mocked(window.api.wipeLocalData).mockResolvedValue(invalid(answer));
-        render(<AboutDataSection />);
+        renderSection();
         openDelete();
         confirm();
         const alert = await within(dialog()).findByRole('alert');
@@ -235,7 +303,7 @@ describe('Delete all local data', () => {
     test('a call that throws reads the same, with its message logged, and a later attempt clears the error', async () => {
         jest.mocked(window.api.wipeLocalData).mockRejectedValueOnce(new Error('ipc closed'));
         jest.mocked(window.api.wipeLocalData).mockResolvedValueOnce({ success: true });
-        render(<AboutDataSection />);
+        renderSection();
         openDelete();
         confirm();
         expect((await within(dialog()).findByRole('alert')).textContent).toBe('about.deleteFailed');
@@ -248,7 +316,7 @@ describe('Delete all local data', () => {
 
     test('a throw without a message is logged as it came', async () => {
         jest.mocked(window.api.wipeLocalData).mockRejectedValue(invalid(undefined));
-        render(<AboutDataSection />);
+        renderSection();
         openDelete();
         confirm();
         await within(dialog()).findByRole('alert');
@@ -261,7 +329,7 @@ describe('Delete all local data', () => {
             error: 'the background service data',
             reload: true,
         });
-        render(<AboutDataSection />);
+        renderSection();
         openDelete();
         confirm();
 
@@ -279,7 +347,7 @@ describe('Delete all local data', () => {
         jest.mocked(window.api.wipeLocalData).mockResolvedValueOnce({ success: false, error: 'EBUSY' });
         jest.mocked(window.api.wipeLocalData).mockResolvedValueOnce({ success: false, error: 'x', reload: true });
         jest.mocked(window.api.wipeLocalData).mockResolvedValueOnce({ success: true });
-        render(<AboutDataSection />);
+        renderSection();
         openDelete();
         confirm();
         await within(dialog()).findByRole('alert');
@@ -299,7 +367,7 @@ describe('Delete all local data', () => {
     test('a failure that emptied the caches still reloads on Close after a retry that was refused as busy', async () => {
         jest.mocked(window.api.wipeLocalData).mockResolvedValueOnce({ success: false, error: 'x', reload: true });
         jest.mocked(window.api.wipeLocalData).mockResolvedValueOnce({ success: false, error: 'busy-pass' });
-        render(<AboutDataSection />);
+        renderSection();
         openDelete();
         confirm();
         await within(dialog()).findByRole('alert');
@@ -315,7 +383,7 @@ describe('Delete all local data', () => {
     test('a native failure on Android (the window will reload) says what Closing does', async () => {
         jest.mocked(window.api.wipeLocalData).mockResolvedValue({ success: false, error: 'x', reload: true });
         (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
-        render(<AboutDataSection />);
+        renderSection();
         openDelete();
         confirm();
         const alert = await within(dialog()).findByRole('alert');
@@ -327,7 +395,7 @@ describe('Delete all local data', () => {
         jest.mocked(window.api.wipeLocalData).mockResolvedValueOnce({ success: false, error: 'preferences failed' });
         jest.mocked(window.api.wipeLocalData).mockRejectedValueOnce(new Error('ipc closed'));
         (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
-        render(<AboutDataSection />);
+        renderSection();
         openDelete();
         confirm();
         expect((await within(dialog()).findByRole('alert')).textContent).toBe('about.deleteFailedAndroid');
@@ -341,7 +409,7 @@ describe('Delete all local data', () => {
     test('a call that throws after an attempt that emptied the caches still says the window restarts', async () => {
         jest.mocked(window.api.wipeLocalData).mockResolvedValueOnce({ success: false, error: 'x', reload: true });
         jest.mocked(window.api.wipeLocalData).mockRejectedValueOnce(new Error('ipc closed'));
-        render(<AboutDataSection />);
+        renderSection();
         openDelete();
         confirm();
         await within(dialog()).findByRole('alert');
@@ -358,7 +426,7 @@ describe('Delete all local data', () => {
 
     test('closing after an error clears it for the next time', async () => {
         jest.mocked(window.api.wipeLocalData).mockResolvedValue({ success: false, error: 'busy-pass' });
-        render(<AboutDataSection />);
+        renderSection();
         openDelete();
         confirm();
         await within(dialog()).findByRole('alert');
@@ -446,7 +514,7 @@ describe('the import report in About and data', () => {
                 acknowledged: true,
             },
         });
-        render(<AboutDataSection />);
+        renderWithReport();
 
         await screen.findByRole('heading', { name: 'about.importTitle' });
         expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
@@ -465,7 +533,7 @@ describe('the import report in About and data', () => {
                 acknowledged: true,
             },
         });
-        render(<AboutDataSection />);
+        renderWithReport();
 
         expect(await screen.findByRole('heading', { name: 'about.importTitle' })).toBeTruthy();
         expect(screen.getByText('about.importSome')).toBeTruthy();
@@ -488,7 +556,7 @@ describe('the import report in About and data', () => {
                 acknowledged: true,
             },
         });
-        render(<AboutDataSection />);
+        renderWithReport();
 
         await screen.findByRole('heading', { name: 'about.importTitle' });
 
@@ -500,7 +568,7 @@ describe('the import report in About and data', () => {
     test('on Android the date line does not name a settings.json the user never sees', async () => {
         (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
         answer({ success: true, report: { at: '2026-10-16T12:00:00.000Z', refsBlocked: [], acknowledged: true } });
-        render(<AboutDataSection />);
+        renderWithReport();
 
         expect(await screen.findByText('about.importAtAndroid')).toBeTruthy();
         expect(screen.queryByText('about.importAt')).toBeNull();
@@ -508,18 +576,22 @@ describe('the import report in About and data', () => {
     });
 
     test('says when it ran, in the date format of the page language', async () => {
-        mockTranslator.t.mockImplementation((text) => (text === 'about.importAt' ? 'On {date}' : text));
+        mockTranslator.t.mockImplementation((key, vars) =>
+            fillTemplate(key === 'about.importAt' ? 'On {date}' : key, vars),
+        );
         answer({ success: true, report: { at: '2026-10-16T12:00:00.000Z', refsBlocked: [], acknowledged: true } });
-        render(<AboutDataSection />);
+        renderWithReport();
 
         expect(await screen.findByText('On 16/10/2026')).toBeTruthy();
         mockTranslator.t.mockImplementation(defaultTranslate);
     });
 
     test('a date that cannot be read is shown as stored', async () => {
-        mockTranslator.t.mockImplementation((text) => (text === 'about.importAt' ? 'On {date}' : text));
+        mockTranslator.t.mockImplementation((key, vars) =>
+            fillTemplate(key === 'about.importAt' ? 'On {date}' : key, vars),
+        );
         answer({ success: true, report: { at: 'sometime', refsBlocked: [], acknowledged: true } });
-        render(<AboutDataSection />);
+        renderWithReport();
 
         expect(await screen.findByText('On sometime')).toBeTruthy();
         mockTranslator.t.mockImplementation(defaultTranslate);
@@ -527,7 +599,7 @@ describe('the import report in About and data', () => {
 
     test('says nothing needed attention when the list is empty', async () => {
         answer({ success: true, report: { at: '2026-10-16T09:00:00.000Z', refsBlocked: [], acknowledged: false } });
-        render(<AboutDataSection />);
+        renderWithReport();
 
         expect(await screen.findByText('about.importNone')).toBeTruthy();
         expect(screen.queryByText('about.importSome')).toBeNull();
@@ -540,7 +612,7 @@ describe('the import report in About and data', () => {
         ['no answer', undefined],
     ])('%s shows no block', async (_name, result) => {
         answer(result);
-        render(<AboutDataSection />);
+        renderWithReport();
 
         await waitFor(() => expect(window.api.getImportReport).toHaveBeenCalledTimes(1));
         expect(screen.queryByText('about.importTitle')).toBeNull();
@@ -558,4 +630,106 @@ describe('the import report texts', () => {
         expect(englishAbout.importAt).toContain('{date}');
         expect(latvianAbout.importAt).toContain('{date}');
     });
+});
+
+describe('the block in the Application panel', () => {
+    // Under the real English words the h5's accessible name is englishAbout.title; under the
+    // default identity translator it is the key.
+    const aboutBlock = (headingName = 'about.title') =>
+        screen.getByRole('heading', { level: 5, name: headingName }).parentElement as HTMLElement;
+    // The filter sees what a user sees: translate the about keys into their words in `words`.
+    const translateAboutIn =
+        (words: typeof englishAbout | typeof latvianAbout) =>
+        (key: string): string => {
+            const name = key.slice('about.'.length);
+            return words[name as keyof typeof words] ?? key;
+        };
+    const ENGLISH_BLOCK_HEADING = englishAbout.title;
+    const withEnglishWords = (run: () => void) => {
+        mockTranslator.t.mockImplementation(translateAboutIn(englishAbout));
+        run();
+    };
+
+    afterEach(() => {
+        mockTranslator.t.mockImplementation(defaultTranslate);
+    });
+
+    test('a query that matches none of its texts hides the block', () => {
+        renderSection('zzz');
+        expect(aboutBlock().classList.contains('hidden')).toBe(true);
+    });
+
+    test.each(['licenses', 'delete', 'danger'])('a name word, %s, keeps the block visible', (query) => {
+        withEnglishWords(() => {
+            renderSection(query);
+            expect(aboutBlock(ENGLISH_BLOCK_HEADING).classList.contains('hidden')).toBe(false);
+        });
+    });
+
+    test('with descriptions searched, a word only in a description keeps the block visible', () => {
+        withEnglishWords(() => {
+            renderSection('open-source', false);
+            expect(aboutBlock(ENGLISH_BLOCK_HEADING).classList.contains('hidden')).toBe(false);
+        });
+    });
+
+    test('with names only, a word only in a description hides the block', () => {
+        withEnglishWords(() => {
+            const namesOnly = renderSection('cannot be undone', true);
+            expect(aboutBlock(ENGLISH_BLOCK_HEADING).classList.contains('hidden')).toBe(true);
+            namesOnly.unmount();
+
+            renderSection('cannot be undone', false);
+            expect(aboutBlock(ENGLISH_BLOCK_HEADING).classList.contains('hidden')).toBe(false);
+        });
+    });
+
+    test('the import heading keeps the block visible only when a report is passed', () => {
+        withEnglishWords(() => {
+            const withoutReport = renderSection(englishAbout.importTitle, false, null);
+            expect(aboutBlock(ENGLISH_BLOCK_HEADING).classList.contains('hidden')).toBe(true);
+            withoutReport.unmount();
+
+            renderSection(englishAbout.importTitle, false, {
+                at: '2026-10-16T09:00:00.000Z',
+                refsBlocked: [],
+                acknowledged: true,
+            });
+            expect(aboutBlock(ENGLISH_BLOCK_HEADING).classList.contains('hidden')).toBe(false);
+        });
+    });
+
+    test('the block heading is an h5 over the import-report and danger h6s', () => {
+        renderSection('', false, { at: '2026-10-16T09:00:00.000Z', refsBlocked: [], acknowledged: true });
+
+        expect(screen.getAllByRole('heading', { level: 5 }).map((heading) => heading.textContent)).toEqual([
+            'about.title',
+        ]);
+        expect(screen.getAllByRole('heading', { level: 6 }).map((heading) => heading.textContent)).toEqual([
+            'about.importTitle',
+            'about.dangerTitle',
+        ]);
+    });
+
+    test.each([
+        ['English', englishAbout, 'support', 'donat'],
+        ['Latvian', latvianAbout, 'atbalst', 'ziedo'],
+    ])(
+        'the donation row answers %s filter words: the button as a name, the description only when descriptions are searched',
+        (_lang, words, nameWord, descWord) => {
+            mockTranslator.t.mockImplementation(translateAboutIn(words));
+            const heading = words.title;
+
+            const byName = renderSection(nameWord, true);
+            expect(aboutBlock(heading).classList.contains('hidden')).toBe(false);
+            byName.unmount();
+
+            const descWhileNamesOnly = renderSection(descWord, true);
+            expect(aboutBlock(heading).classList.contains('hidden')).toBe(true);
+            descWhileNamesOnly.unmount();
+
+            renderSection(descWord, false);
+            expect(aboutBlock(heading).classList.contains('hidden')).toBe(false);
+        },
+    );
 });

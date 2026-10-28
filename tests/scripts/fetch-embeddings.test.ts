@@ -118,6 +118,17 @@ describe('fetch-embeddings', () => {
             expect(config.MAX_ENTRY_BYTES).toBe(1073741824);
             expect(config.MAX_REDIRECTS).toBe(5);
         });
+
+        test('compound selection pins: regex shape and the 150000 line-rank cap', () => {
+            expect(config.COMPOUND_TOKEN_RE.test('close-up')).toBe(true);
+            expect(config.COMPOUND_TOKEN_RE.test('black-and-white')).toBe(true);
+            expect(config.COMPOUND_TOKEN_RE.test('cat')).toBe(false); // no hyphen
+            expect(config.COMPOUND_TOKEN_RE.test('x-ray')).toBe(false); // single-letter part
+            expect(config.COMPOUND_TOKEN_RE.test('a-b-c-d')).toBe(false); // more than three parts
+            expect(config.COMPOUND_TOKEN_RE.test('close-Ups')).toBe(false); // uppercase
+            expect(config.COMPOUND_TOKEN_RE.test('close-ups-')).toBe(false); // trailing hyphen
+            expect(config.COMPOUND_TOP_N).toBe(150000);
+        });
     });
 
     describe('download', () => {
@@ -473,6 +484,121 @@ describe('fetch-embeddings', () => {
             await main(opts);
             expect(parseJsonAs(fs.readFileSync(opts.outPath, 'utf8'), isWrittenIntermediate).packed).toEqual({});
             expect(logs()).toContain('0 stems stored');
+        });
+
+        describe('compound tokens', () => {
+            // Six generic rows (topN 6: the/close/up/ups/way/out), then the
+            // compounds. close-ups shares close-up's stem but sits at a later
+            // rank; cold-shoulder's parts are never kept as rows; "hot-spring
+            // 1 2" is compound-shaped but malformed (2 dims).
+            const COMPOUND_LINES = [
+                gloveLine('the', 1),
+                gloveLine('close', 2),
+                gloveLine('up', 3),
+                gloveLine('ups', 4),
+                gloveLine('way', 5),
+                gloveLine('out', 6),
+                gloveLine('close-up', 7),
+                gloveLine('close-ups', 7), // same lemma direction: a benign merge
+                gloveLine('cold-shoulder', 8),
+                gloveLine('way-out', 10),
+                'hot-spring 1 2',
+            ];
+            const GENERIC_KEYS = ['close', 'out', 'the', 'up', 'ups', 'way'];
+
+            const readOut = () => parseJsonAs(fs.readFileSync(opts.outPath, 'utf8'), isWrittenIntermediate);
+            const decode = (b64: string) => {
+                const buf = Buffer.from(b64, 'base64');
+                return Array.from(new Int8Array(buf.buffer, buf.byteOffset, buf.length));
+            };
+            const cosine = (a: number[], b: number[]) => {
+                let dot = 0;
+                let na = 0;
+                let nb = 0;
+                for (let i = 0; i < DIMS; i++) {
+                    dot += a[i] * b[i];
+                    na += a[i] * a[i];
+                    nb += b[i] * b[i];
+                }
+                return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1);
+            };
+
+            test('parses buffered compounds only after the entry hash check passes', async () => {
+                setup({ concepts: { concepts: [] }, lines: COMPOUND_LINES, expectedEntrySha256: '0'.repeat(64) });
+                await expect(main({ ...opts, topN: 6, compoundTopN: 11 })).rejects.toThrow('exit 1');
+                expect(errors()).toContain(`SHA-256 mismatch for ${ENTRY_NAME}`);
+                expect(fs.existsSync(opts.outPath)).toBe(false);
+            });
+
+            test('keeps rank-ordered compounds whose parts are kept rows and drops the rest', async () => {
+                setup({ concepts: { concepts: [] }, lines: COMPOUND_LINES });
+                await main({ ...opts, topN: 6, compoundTopN: 11 });
+                const out = readOut();
+                // The 6 generic keys plus close-up (rank 7) and way-out (rank
+                // 10). hot-spring is malformed; cold-shoulder's parts are absent.
+                expect(Object.keys(out.packed!).sort()).toEqual([...GENERIC_KEYS, 'close-up', 'way-out'].sort());
+                // close-up won the shared stem from the LATER close-ups by rank:
+                // a close-ups win would read { "close-up": "close-ups" } here.
+                expect(out.surfaces).toEqual({});
+            });
+
+            test('drops a compound past the compoundTopN rank cap', async () => {
+                setup({ concepts: { concepts: [] }, lines: COMPOUND_LINES });
+                await main({ ...opts, topN: 6, compoundTopN: 9 });
+                const out = readOut();
+                // way-out sits at line rank 10, one past the cap; close-up at
+                // rank 7 is still within it.
+                expect(Object.keys(out.packed!).sort()).toEqual([...GENERIC_KEYS, 'close-up'].sort());
+            });
+
+            test('leaves the generic row count and the centering set unchanged by compounds', async () => {
+                setup({ concepts: { concepts: [] }, lines: COMPOUND_LINES });
+                await main({ ...opts, topN: 6, compoundTopN: 0 }); // cap 0 buffers nothing
+                const off = readOut();
+                await main({ ...opts, topN: 6, compoundTopN: 11 });
+                const on = readOut();
+                // 6 generic keys, the same fixture count as with compounds off.
+                expect(Object.keys(off.packed!).sort()).toEqual(GENERIC_KEYS);
+                const genericKeys = Object.keys(on.packed!).filter((k) => !k.includes('-'));
+                expect(genericKeys.sort()).toEqual(GENERIC_KEYS);
+                // Byte-equal generic vectors would be a stronger pin, but the
+                // quantization scale is table-wide and a compound row may move
+                // it. The decoded directions must still match: a compound that
+                // joined the centering baseline would shift the mean — and with
+                // it every generic direction — measurably.
+                for (const key of genericKeys) {
+                    expect(cosine(decode(on.packed![key]), decode(off.packed![key]))).toBeGreaterThan(0.99);
+                }
+            });
+
+            test('counts compound stem merges in the bad-collision rate over the grown denominator', async () => {
+                setup({ concepts: { concepts: [] }, lines: COMPOUND_LINES });
+                await main({ ...opts, topN: 6, compoundTopN: 11 });
+                // 8 stored stems — the compounds join stems.size, the rate's
+                // denominator — and exactly one merge, close-ups into
+                // close-up's key, benign with the shared lemma direction.
+                expect(logs()).toContain(
+                    '🔗 8 stems stored; 1 stem merges, of which 0 look bad (cosine < 0.4; 0.00% of stored vocab)',
+                );
+            });
+
+            test('keeps an authored compound-shaped word as authored instead of buffering it', async () => {
+                setup({
+                    concepts: { concepts: [{ id: 'known', parent: 'known', words: ['well-known'] }] },
+                    lines: [
+                        gloveLine('the', 1),
+                        gloveLine('well-known', 2),
+                        gloveLine('well', 3),
+                        gloveLine('known', 4),
+                    ],
+                });
+                await main({ ...opts, topN: 3, compoundTopN: 10 });
+                const out = readOut();
+                // Buffering it would skip the authored claim and fail main()
+                // with "authored word(s) have no GloVe vector". known is rank 4
+                // and still kept: authored rows do not consume topN.
+                expect(Object.keys(out.packed!).sort()).toEqual(['known', 'the', 'well', 'well-known']);
+            });
         });
     });
 

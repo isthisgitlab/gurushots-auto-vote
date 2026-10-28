@@ -28,13 +28,23 @@ type Listing = {
     readAtMs: number;
     allowedKnown: boolean;
     wonCount: number;
+    truncated: boolean;
+    nextStart: number;
     photos: Array<{ id: string; allowed: boolean; message: string | null }>;
 };
 
-const library = (challengeId: string | null, mode?: 'cached' | 'fresh') =>
-    invalid<(event: object, challenge: string | null, search: undefined, mode?: string) => Promise<Listing>>(
-        buildHandlers()['get-library-photos'],
-    )({}, challengeId, undefined, mode);
+const library = (challengeId: string | null, mode?: 'cached' | 'fresh', start?: number, keep?: number) =>
+    invalid<
+        (
+            event: object,
+            challenge: string | null,
+            search: undefined,
+            mode?: string,
+            usage?: undefined,
+            start?: number,
+            keep?: number,
+        ) => Promise<Listing>
+    >(buildHandlers()['get-library-photos'])({}, challengeId, undefined, mode, undefined, start, keep);
 
 beforeEach(() => {
     installHeadlessStore();
@@ -46,6 +56,28 @@ beforeEach(() => {
 
 afterEach(() => {
     removeHeadlessStore();
+});
+
+test('a Refresh re-read of the on-screen extent replaces the kept listing with the newer one', async () => {
+    const { challenges } = await getApiStrategy().getActiveChallenges('smoke-token');
+    const [first] = challenges.map((challenge) => String(challenge.id));
+
+    // The first opening walks the whole library and keeps it (12 rows, the mock's won photo left out).
+    const walked = await library(first, 'cached');
+    expect(walked).toMatchObject({ success: true, preview: false, truncated: false, nextStart: 12 });
+
+    // Refresh asks for a 4-photo extent: under the mock's votes order the won
+    // photo rides in page one (skipped, so only three were kept there) and the
+    // page that crosses the extent is kept whole — two pages, 7 photos, a
+    // SMALLER listing than the full walk above.
+    const extent = await library(first, 'fresh', 0, 4);
+    expect(extent.photos).toHaveLength(7);
+    expect(extent).toMatchObject({ success: true, preview: false, truncated: true, nextStart: 8 });
+
+    // …and the next cached opening answers the NEWER, smaller extent listing,
+    // not the older full walk.
+    const again = await library(first, 'cached');
+    expect(again).toEqual(extent);
 });
 
 test('the story of a chooser opened again, for another challenge, after a submit and after a logout', async () => {
@@ -78,6 +110,8 @@ test('the story of a chooser opened again, for another challenge, after a submit
     await library(first, 'fresh');
     expect(await library(first, 'cached')).toMatchObject({ preview: false });
     await clearAuthToken();
+    // The logout core returned the mode to the environment default; the story continues in mock mode.
+    settings.setSetting('mock', true);
     settings.setSetting('token', 'smoke-token');
     const afterLogout = await library(first, 'cached');
     expect(afterLogout).toMatchObject({ preview: false });

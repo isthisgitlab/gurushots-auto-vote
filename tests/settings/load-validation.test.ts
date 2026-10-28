@@ -6,7 +6,7 @@
  */
 
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
-import { parseJson } from '../helpers/parseJson';
+import { parseJson, parseJsonObject } from '../helpers/parseJson';
 import settings = require('../../src/ts/settings');
 import type * as defaultsModule from '../../src/ts/settings/defaults';
 import type { MemoryStore } from '../helpers/headlessStore';
@@ -98,17 +98,16 @@ describe('loadSettings validation', () => {
     });
 
     describe('the sign-in state is strict', () => {
-        test('the token and the account strings must be strings, the API headers an object of strings', () => {
+        test('the token and the user name must be strings, the API headers an object of strings', () => {
             seed({
                 auth: {
                     token: 7,
                     apiHeaders: { 'x-a': 'b', 'x-c': 4 },
                     lastUsername: null,
-                    chosenPhotosMemberId: 'm1',
                 },
             });
             const { auth } = settings.loadSettings();
-            expect(auth).toEqual({ token: '', apiHeaders: {}, lastUsername: '', chosenPhotosMemberId: 'm1' });
+            expect(auth).toEqual({ token: '', apiHeaders: {}, lastUsername: '' });
             expect(warnings()).toEqual([`${INVALID}auth.token, auth.apiHeaders, auth.lastUsername`]);
         });
 
@@ -124,14 +123,30 @@ describe('loadSettings validation', () => {
         });
 
         test('a valid auth block loads as stored', () => {
-            seed({ auth: { token: 't', apiHeaders: { a: 'b' }, lastUsername: 'u', chosenPhotosMemberId: 'm' } });
+            seed({ auth: { token: 't', apiHeaders: { a: 'b' }, lastUsername: 'u' } });
             expect(settings.loadSettings().auth).toEqual({
                 token: 't',
                 apiHeaders: { a: 'b' },
                 lastUsername: 'u',
-                chosenPhotosMemberId: 'm',
             });
             expect(warnings()).toEqual([]);
+        });
+
+        test('a stored field the shape no longer holds loads without a notice and is gone from the next write', () => {
+            // A config.json written by a build that still kept the chosen-photos account and the
+            // cleared-at stamp: loading it says nothing and the fields do not come back.
+            seed({
+                auth: { token: 't', apiHeaders: {}, lastUsername: 'u', chosenPhotosMemberId: 'm' },
+                app: { chosenPhotosClearedAt: '2026-01-01T00:00:00.000Z' },
+            });
+            const loaded = settings.loadSettings();
+            expect(loaded.auth).toEqual({ token: 't', apiHeaders: {}, lastUsername: 'u' });
+            expect(loaded.app).not.toHaveProperty('chosenPhotosClearedAt');
+            expect(warnings()).toEqual([]);
+            expect(settings.setSetting('theme', 'dark')).toBe(true);
+            const storedNow = parseJsonObject(store.value ?? '{}');
+            expect(storedNow.auth).toEqual({ token: 't', apiHeaders: {}, lastUsername: 'u' });
+            expect(storedNow.app).not.toHaveProperty('chosenPhotosClearedAt');
         });
     });
 

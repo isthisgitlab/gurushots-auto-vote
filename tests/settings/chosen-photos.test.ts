@@ -9,8 +9,6 @@ import settings = require('../../src/ts/settings');
 import { invalid } from '../helpers/invalid';
 import logger = require('../../src/ts/logger');
 import type * as openChallengesModule from '../../src/ts/settings/openChallenges';
-import type * as clearModule from '../../src/ts/settings/chosenPhotosClear';
-import type * as cliClearModule from '../../src/ts/cli/commands/settings/chosenPhotos';
 import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
 import { isConfig } from '../helpers/storedShapes';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
@@ -31,6 +29,16 @@ jest.mock('../../src/ts/logger', () => {
         isDevMode: jest.fn(() => false),
         isSourceCode: jest.fn(() => true),
         getAppName: jest.fn(() => 'gurushots-auto-vote-dev'),
+        // The same shape the real tag renders; tests assert on its text.
+        challengeTag: jest.fn((challengeOrId: { id?: unknown; title?: unknown } | string | number, title?: string) => {
+            const id =
+                challengeOrId && typeof challengeOrId === 'object' ? (challengeOrId.id ?? 'unknown') : challengeOrId;
+            const t =
+                challengeOrId && typeof challengeOrId === 'object'
+                    ? (challengeOrId.title ?? 'unknown')
+                    : (title ?? 'unknown');
+            return `[Challenge ${String(id)}: ${String(t)}]`;
+        }),
         withCategory: jest.fn(() => category),
     };
 });
@@ -85,7 +93,7 @@ describe('Chosen Photos settings', () => {
             expect(logged).not.toContain('private_');
         });
 
-        test('the cap is small, and the member record is an internal string', () => {
+        test('the cap is small', () => {
             expect(
                 settings.setGlobalDefault(
                     'chosenPhotos',
@@ -98,7 +106,6 @@ describe('Chosen Photos settings', () => {
                     Array.from({ length: 21 }, (_, i) => `p${i}`),
                 ),
             ).toBe(false);
-            expect(settings.SETTINGS_SCHEMA.chosenPhotosMemberId.perChallenge).toBe(false);
             expect(settings.SETTINGS_SCHEMA.chosenPhotos.type).toBe('photos');
         });
     });
@@ -132,6 +139,162 @@ describe('Chosen Photos settings', () => {
             scenarioStateLedger.set(7, initialState('Plan', 'main', 1000));
             expect(settings.getEffectiveSetting('chosenPhotos', '7')).toEqual(['phase']);
             expect(settings.getEffectiveSetting('chosenPhotosOnly', '7')).toBe(true);
+        });
+    });
+
+    describe('consuming entered chosen photos', () => {
+        const category = logger.withCategory('settings');
+        const infoLines = () => jest.mocked(category.info).mock.calls.map((call) => String(call[0]));
+
+        test('an entered id leaves the stored list, and the shorter list is stored', () => {
+            settings.rememberChallengeTitles([{ id: 7, title: 'Big show' }]);
+            settings.setChallengeOverride('chosenPhotos', '7', ['a', 'b', 'c']);
+            jest.mocked(category.info).mockClear();
+
+            expect(settings.consumeChosenPhotos('7', ['b'])).toBe(true);
+
+            expect(settings.getChallengeOverrides('7')).toEqual({ chosenPhotos: ['a', 'c'] });
+            expect(infoLines()).toEqual(['[Challenge 7: Big show]: chosen photos entered — removed from the list: b']);
+        });
+
+        test('an emptied list deletes the key and the challenge record, never stores []', () => {
+            settings.rememberChallengeTitles([{ id: 7, title: 'Big show' }]);
+            settings.setChallengeOverride('chosenPhotos', '7', ['a']);
+            jest.mocked(category.info).mockClear();
+
+            expect(settings.consumeChosenPhotos('7', ['a'])).toBe(true);
+
+            expect(settings.getChallengeOverrides('7')).toEqual({});
+            expect(blob().challenges['7']).toBeUndefined();
+            expect(infoLines()).toEqual([
+                '[Challenge 7: Big show]: chosen photos entered — removed from the list: a; the override was removed',
+            ]);
+        });
+
+        test('a challenge with no stored list of its own is left alone', () => {
+            settings.rememberChallengeTitles([{ id: 7, title: 'Big show' }]);
+            expect(settings.consumeChosenPhotos('7', ['a'])).toBe(false);
+            expect(store.value).toBeNull();
+        });
+
+        test('a record without a chosen list is no consumption either', () => {
+            settings.rememberChallengeTitles([{ id: 7, title: 'Big show' }]);
+            settings.setChallengeOverride('exposure', '7', 50);
+            expect(settings.consumeChosenPhotos('7', ['a'])).toBe(false);
+            expect(settings.getChallengeOverrides('7')).toEqual({ exposure: 50 });
+        });
+
+        test('the log tag falls back to unknown when the cache holds the id without a title', () => {
+            settings.rememberChallengeTitles([{ id: 55 }]);
+            settings.setChallengeOverride('chosenPhotos', '55', ['a', 'b']);
+            jest.mocked(category.info).mockClear();
+
+            expect(settings.consumeChosenPhotos('55', ['a'])).toBe(true);
+
+            expect(infoLines()).toEqual(['[Challenge 55: unknown]: chosen photos entered — removed from the list: a']);
+        });
+
+        test('nothing removed is no write', () => {
+            settings.rememberChallengeTitles([{ id: 7, title: 'Big show' }]);
+            settings.setChallengeOverride('chosenPhotos', '7', ['a']);
+            expect(settings.consumeChosenPhotos('7', ['x'])).toBe(false);
+            expect(settings.getChallengeOverrides('7')).toEqual({ chosenPhotos: ['a'] });
+        });
+
+        test('Submit Only effectively on holds the list: no write, nothing logged', () => {
+            settings.rememberChallengeTitles([{ id: 7, title: 'Big show' }]);
+            settings.setChallengeOverride('chosenPhotos', '7', ['a']);
+            settings.setChallengeOverride('chosenPhotosOnly', '7', true);
+            jest.mocked(category.info).mockClear();
+
+            expect(settings.consumeChosenPhotos('7', ['a'])).toBe(false);
+
+            expect(settings.getChallengeOverrides('7')).toEqual({ chosenPhotos: ['a'], chosenPhotosOnly: true });
+            expect(infoLines()).toEqual([]);
+        });
+
+        test('a scenario-phase Only holds the same', () => {
+            settings.rememberChallengeTitles([{ id: 7, title: 'Big show' }]);
+            settings.setChallengeOverride('chosenPhotos', '7', ['a']);
+            settings.saveScenario({
+                name: 'Plan',
+                version: 1,
+                start: 'main',
+                phases: { main: { settings: { chosenPhotosOnly: true } } },
+            });
+            settings.setChallengeOverride('scenario', '7', 'Plan');
+            scenarioStateLedger.set(7, initialState('Plan', 'main', 1000));
+
+            expect(settings.consumeChosenPhotos('7', ['a'])).toBe(false);
+
+            expect(settings.getChallengeOverrides('7')).toEqual({ chosenPhotos: ['a'], scenario: 'Plan' });
+        });
+
+        test('a scenario phase that sets Only false wins over a rule-layer Only', () => {
+            settings.rememberChallengeTitles([{ id: 7, title: 'Big show' }]);
+            settings.setTitleRules([{ title: 'Big show', chosenPhotosOnly: true }]);
+            settings.setChallengeOverride('chosenPhotos', '7', ['a']);
+            settings.saveScenario({
+                name: 'Plan',
+                version: 1,
+                start: 'main',
+                phases: { main: { settings: { chosenPhotosOnly: false } } },
+            });
+            settings.setChallengeOverride('scenario', '7', 'Plan');
+            scenarioStateLedger.set(7, initialState('Plan', 'main', 1000));
+
+            // The phase sits above every layer: its explicit false is the
+            // effective Only, so the consumed list leaves.
+            expect(settings.consumeChosenPhotos('7', ['a'])).toBe(true);
+            expect(settings.getChallengeOverrides('7')).toEqual({ scenario: 'Plan' });
+        });
+
+        test('an id the facts cache has not seen active holds, even with a rule-layer Only planted beside it', () => {
+            // Not seeded: at the join-time site the id is minutes old and rules
+            // resolve through the cache, so a rule-layer Only is invisible there.
+            settings.setTitleRules([{ title: 'Later show', chosenPhotosOnly: true }]);
+            settings.setChallengeOverride('chosenPhotos', '999', ['a']);
+
+            expect(settings.consumeChosenPhotos('999', ['a'])).toBe(false);
+
+            expect(settings.getChallengeOverrides('999')).toEqual({ chosenPhotos: ['a'] });
+        });
+
+        test('a known id holds through the rule-layer Only itself', () => {
+            settings.rememberChallengeTitles([{ id: 888, title: 'Ruled show' }]);
+            settings.setTitleRules([{ title: 'Ruled show', chosenPhotosOnly: true }]);
+            settings.setChallengeOverride('chosenPhotos', '888', ['a']);
+
+            expect(settings.consumeChosenPhotos('888', ['a'])).toBe(false);
+
+            expect(settings.getChallengeOverrides('888')).toEqual({ chosenPhotos: ['a'] });
+        });
+
+        test('a remainder equal to the inherited value auto-clears the override early', () => {
+            settings.rememberChallengeTitles([{ id: 7, title: 'Big show' }]);
+            settings.setGlobalDefault('chosenPhotos', ['keep']);
+            settings.setChallengeOverride('chosenPhotos', '7', ['drop', 'keep']);
+            jest.mocked(category.info).mockClear();
+
+            expect(settings.consumeChosenPhotos('7', ['drop'])).toBe(true);
+
+            expect(settings.getChallengeOverrides('7')).toEqual({});
+            expect(infoLines()).toEqual([
+                '[Challenge 7: Big show]: chosen photos entered — removed from the list: drop; the override was removed',
+            ]);
+        });
+
+        test('an unsafe id no-ops', () => {
+            expect(settings.consumeChosenPhotos('__proto__', ['a'])).toBe(false);
+            expect(store.value).toBeNull();
+        });
+
+        test('a refused save answers false and throws nothing', () => {
+            settings.rememberChallengeTitles([{ id: 7, title: 'Big show' }]);
+            settings.setChallengeOverride('chosenPhotos', '7', ['a', 'b']);
+            store.write.mockReturnValue(false);
+
+            expect(settings.consumeChosenPhotos('7', ['a'])).toBe(false);
         });
     });
 
@@ -550,143 +713,6 @@ describe('Chosen Photos settings', () => {
             settings.rememberOpenChallengeIds([100]);
             settings.cleanupStaleChallengeSetting([]);
             expect(blob().challenges['100']).toMatchObject({ suppressRuleProfile: true });
-        });
-    });
-
-    describe('clearing every list (clearChosenPhotos)', () => {
-        const seedEverywhere = () => {
-            settings.setGlobalDefault('chosenPhotos', ['g']);
-            settings.setGlobalDefault('chosenPhotosOnly', true);
-            settings.setChallengeOverride('chosenPhotos', '1', ['c']);
-            settings.setChallengeOverride('chosenPhotosOnly', '1', true);
-            settings.setChallengeOverride('exposure', '1', 40);
-            settings.setChallengeOverride('chosenPhotos', '2', ['d']); // nothing else on this challenge
-            settings.setChallengeOverride('chosenPhotos', '3', []); // an explicit empty list
-            settings.saveChallengeProfile('Mine', { chosenPhotos: ['p'], chosenPhotosOnly: true, exposure: 50 });
-            settings.setTitleRules([
-                { title: 'Only list', chosenPhotos: ['r'] },
-                { title: 'Keeps tags', chosenPhotos: ['r'], mustIncludeTags: ['Pink'] },
-                { title: 'Only flag', chosenPhotosOnly: true },
-            ]);
-            settings.saveScenario({
-                name: 'Plan',
-                version: 1,
-                start: 'main',
-                phases: {
-                    main: {
-                        settings: { chosenPhotos: ['s'], chosenPhotosOnly: true, exposure: 40, exposureTarget: 50 },
-                    },
-                    plain: {},
-                },
-            });
-            settings.setSetting('chosenPhotosMemberId', 'member-A');
-        };
-
-        test('removes every list in every layer and forgets the owner; the Only flags stay', () => {
-            seedEverywhere();
-            expect(settings.clearChosenPhotos()).toBe(7);
-            const config = blob();
-            expect(config.defaults).toEqual(expect.not.objectContaining({ chosenPhotos: expect.anything() }));
-            expect(config.defaults.chosenPhotosOnly).toBe(true);
-            // A challenge that held only a list has nothing left; the rest keep what they had.
-            expect(perChallenge()).toEqual({ '1': { chosenPhotosOnly: true, exposure: 40 } });
-            expect(config.profiles.Mine).toEqual({ chosenPhotosOnly: true, exposure: 50 });
-            // A rule keeps its row while it still says something, and goes when the list was all it had.
-            expect(config.rules).toEqual([
-                expect.objectContaining({ title: 'Keeps tags', mustIncludeTags: ['Pink'] }),
-                expect.objectContaining({ title: 'Only flag', chosenPhotosOnly: true }),
-            ]);
-            expect(config.rules.some((rule) => 'chosenPhotos' in rule)).toBe(false);
-            expect(settings.getScenario('Plan')!.phases.main.settings).toEqual({
-                chosenPhotosOnly: true,
-                exposure: 40,
-                exposureTarget: 50,
-            });
-            expect(config.auth.chosenPhotosMemberId).toBe('');
-        });
-
-        test('a challenge whose override map held only a list keeps its pin', () => {
-            settings.setChallengeOverride('chosenPhotos', '5', ['c']);
-            settings.setEntryPin('boost', '5', 'img_a');
-            expect(settings.clearChosenPhotos()).toBe(1);
-            expect(blob().challenges['5']).toEqual({ pins: { boost: 'img_a' } });
-        });
-
-        test('a challenge that holds only a pin keeps it', () => {
-            settings.setEntryPin('boost', '4', 'img_a');
-            expect(settings.clearChosenPhotos()).toBe(0);
-            expect(settings.getEntryPins('4')).toEqual({ boost: 'img_a', turbo: null });
-        });
-
-        test('stamps when the lists were removed, for editors opened before it', () => {
-            seedEverywhere();
-            expect(blob().app.chosenPhotosClearedAt).toBeUndefined();
-            const before = Date.now();
-            settings.clearChosenPhotos();
-            const stamp = blob().app.chosenPhotosClearedAt as string;
-            expect(Date.parse(stamp)).toBeGreaterThanOrEqual(before);
-            expect(new Date(stamp).toISOString()).toBe(stamp);
-        });
-
-        test('a hand-edited blob with malformed scenarios, rules and profiles is walked without error', () => {
-            seedEverywhere();
-            const raw = blob();
-            raw.scenarios = {
-                ...raw.scenarios,
-                NotADocument: 'x',
-                NoPhases: { phases: 'nope' },
-                NullPhase: { phases: { main: null, other: { settings: 'nope' } } },
-            };
-            raw.profiles = { ...raw.profiles, Broken: invalid(null) };
-            store.value = JSON.stringify(raw);
-            expect(settings.clearChosenPhotos()).toBe(7);
-            expect(settings.getScenario('Plan')!.phases.main.settings).not.toHaveProperty('chosenPhotos');
-        });
-
-        test('the CLI command and the settings layer together log the removal once', () => {
-            seedEverywhere();
-            const category = logger.withCategory('settings');
-            const lines = ['info', 'success', 'warning'] as const;
-            lines.forEach((level) => jest.mocked(category[level]).mockClear());
-            const { clearChosenPhotos: clearFromCli } =
-                require('../../src/ts/cli/commands/settings/chosenPhotos') as typeof cliClearModule;
-            expect(clearFromCli()).toBe(true);
-            const removedLines = lines
-                .flatMap((level) => jest.mocked(category[level]).mock.calls.map(([message]) => String(message)))
-                .filter((message) => message.startsWith('Removed '));
-            expect(removedLines).toEqual([
-                'Removed 7 chosen-photo list(s) from settings, rules, profiles and scenarios',
-            ]);
-        });
-
-        test('with nothing saved it removes nothing and still clears the owner record', () => {
-            settings.setSetting('chosenPhotosMemberId', 'member-A');
-            expect(settings.clearChosenPhotos()).toBe(0);
-            expect(blob().auth.chosenPhotosMemberId).toBe('');
-        });
-
-        test('logs the count of removed lists and never a photo id', () => {
-            seedEverywhere();
-            const info = jest.mocked(logger.withCategory('settings').info);
-            info.mockClear();
-            settings.clearChosenPhotos();
-            const printed = JSON.stringify(info.mock.calls);
-            expect(printed).toContain('Removed 7 chosen-photo list(s)');
-            expect(printed).not.toMatch(/"[gcdprs]"/);
-        });
-
-        test('is null when the settings cannot be saved', () => {
-            jest.isolateModules(() => {
-                jest.doMock('../../src/ts/settings/persistence', () => {
-                    const actual = jest.requireActual<typeof import('../../src/ts/settings/persistence')>(
-                        '../../src/ts/settings/persistence',
-                    );
-                    return { ...actual, saveSettings: () => false };
-                });
-                const isolated = require('../../src/ts/settings/chosenPhotosClear') as typeof clearModule;
-                expect(isolated.clearChosenPhotos()).toBeNull();
-            });
-            jest.dontMock('../../src/ts/settings/persistence');
         });
     });
 

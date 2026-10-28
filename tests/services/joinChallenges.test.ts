@@ -6,8 +6,18 @@
 
 jest.mock('../../src/ts/logger', () => {
     const level = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
+    // The T-methods render through the real catalog and land on the same level
+    // fn, so assertions written against the plain methods keep passing.
+    const { renderLogTemplate } = require('../helpers/logTemplate') as typeof import('../helpers/logTemplate');
+    const t = (line: LogMock) => (key: string, params: unknown[], data?: unknown) =>
+        line(renderLogTemplate(key, params), data);
     return {
-        withCategory: jest.fn(() => level),
+        withCategory: jest.fn(() => ({
+            ...level,
+            infoT: jest.fn(t(level.info)),
+            warningT: jest.fn(t(level.warning)),
+            errorT: jest.fn(t(level.error)),
+        })),
         challengeTag: (c: { id?: string | number } | null) => `challenge ${c?.id}`,
     };
 });
@@ -72,7 +82,6 @@ const photoPicker = jest.mocked(photoPickerModule);
 import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
 import type * as joinChallengesModule from '../../src/ts/services/joinChallenges';
-import type * as memberIdentityModule from '../../src/ts/services/autoFill/memberIdentity';
 import type * as autoFillModule from '../../src/ts/services/autoFill';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import type { RawJsonStore } from '../../src/ts/types/stores';
@@ -85,8 +94,8 @@ import {
     findClaim,
     markJoined,
     claimUnlock,
-    paidByThisAccount,
     pruneClosedClaims,
+    readUnlockedState,
 } from '../../src/ts/services/joinChallenges/unlockMarker';
 import type { JoinDeps } from '../../src/ts/services/joinChallenges';
 import type { acquireUnlockLock as AcquireUnlockLock } from '../../src/ts/joinStateStore';
@@ -196,21 +205,23 @@ describe('performJoin — ordering & idempotency', () => {
     test('a join drops the photo chooser’s cached listing of the challenge; one that fails leaves it', async () => {
         const cache =
             require('../../src/ts/services/libraryCache') as typeof import('../../src/ts/services/libraryCache');
-        cache.writeListing('tok', 1, {
+        cache.writeListing(1, {
             photos: [],
             memberId: null,
             wonIds: [],
             wonCount: 0,
             truncated: false,
+            nextStart: 0,
             allowedKnown: true,
             readAtMs: Date.now(),
         });
-        cache.writeListing('tok', 2, {
+        cache.writeListing(2, {
             photos: [],
             memberId: null,
             wonIds: [],
             wonCount: 0,
             truncated: false,
+            nextStart: 0,
             allowedKnown: true,
             readAtMs: Date.now(),
         });
@@ -218,10 +229,10 @@ describe('performJoin — ordering & idempotency', () => {
             submitToChallenge: double<'submitToChallenge'>(async () => ({ ok: false, raw: null })),
         });
         await performJoin(invalid({ id: 1 }), 'tok', failing, 0);
-        expect(cache.readFresh('tok', 1)).not.toBeNull();
+        expect(cache.readFresh(1)).not.toBeNull();
         await performJoin(invalid({ id: 1 }), 'tok', makeDeps(), 0);
-        expect(cache.readFresh('tok', 1)).toBeNull();
-        expect(cache.readFresh('tok', 2)).not.toBeNull();
+        expect(cache.readFresh(1)).toBeNull();
+        expect(cache.readFresh(2)).not.toBeNull();
         cache.clearLibraryCache();
     });
 
@@ -531,6 +542,18 @@ describe('a paid join the pass decided: the price is read again right before the
         expect(warned()).toHaveBeenCalledWith(expect.stringContaining('could not be read again'), null);
     });
 
+    test.each([
+        ['full', [{ id: 7, join_coins: 100, players: 100, max_players: 100 }]],
+        ['price-unknown', [{ id: 7, join_coins: 0, member: { submit_state: 'join_unlock' } }]],
+    ])('a live read that says the challenge is %s refuses the spend before coins_unlock', async (_label, rows) => {
+        const deps = makeDeps({ getMemberChallenges: openList(rows) });
+        const res = await performJoin(invalid({ id: 7 }), 'tok', deps, 100, { priceCeiling: 100 });
+        expect(res).toEqual({ status: 'failed-no-charge', charged: 0 });
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+        expect(warned()).toHaveBeenCalledWith(expect.stringContaining('not spending coins'), null);
+    });
+
     test('a list that cannot be read at all spends nothing', async () => {
         const deps = makeDeps({ getMemberChallenges: double<'getMemberChallenges'>(async () => null) });
         const res = await performJoin(invalid({ id: 7 }), 'tok', deps, 100, { priceCeiling: 100 });
@@ -769,12 +792,8 @@ describe('runJoinPass', () => {
         expect(statuses).toContain('skipped:over-cycle-budget');
     });
 
-    describe('a paid challenge this account already paid for (an unlock marker): the pass only submits it', () => {
-        const A = 'a'.repeat(32);
-        const B = 'b'.repeat(32);
-        const memberIdentity = require('../../src/ts/services/autoFill/memberIdentity') as typeof memberIdentityModule;
+    describe('a paid challenge already paid for (an unlock claim on file): the pass only submits it', () => {
         beforeEach(() => {
-            memberIdentity.__resetMemberIdCache();
             settings.getEffectiveSetting.mockImplementation((k) => {
                 const map: Record<string, unknown> = {
                     autoJoin: true,
@@ -786,29 +805,22 @@ describe('runJoinPass', () => {
                 return map[k];
             });
         });
-        const passDeps = (
-            member: string | null,
-            store: ReturnType<typeof fileWith>,
-            coins: number,
-            over: Partial<JoinDeps> = {},
-        ) =>
+        const passDeps = (store: ReturnType<typeof fileWith>, coins: number, over: Partial<JoinDeps> = {}) =>
             makeDeps({
                 getMemberChallenges: openList([{ id: 2, join_coins: 100, type: 'flash' }]),
                 getBankroll: balance({ coins }),
-                getCurrentMemberProfile:
-                    member === null ? undefined : jest.fn(async () => ({ id: member, userName: 'u' })),
                 joinStateStore: store,
                 ...over,
             });
 
         test('with a balance now below the cost (the charge lowered it) it is still submitted, and nothing is charged', async () => {
-            const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT } });
-            const deps = passDeps(A, store, 3);
+            const store = fileWith({ '2': { unlockedAt: RECENT } });
+            const deps = passDeps(store, 3);
             const res = await runJoinPass('tok', Date.now(), deps);
             expect(res.results).toEqual([{ id: 2, status: 'joined' }]);
             expect(deps.coinsUnlock).not.toHaveBeenCalled();
             expect(deps.submitToChallenge).toHaveBeenCalledTimes(1);
-            expect(store.read()).toEqual({ [`${A}:2`]: JOINED });
+            expect(store.read()).toEqual({ '2': JOINED });
         });
 
         test('the cost, the per-challenge cap and the cycle budget have no say', async () => {
@@ -816,15 +828,15 @@ describe('runJoinPass', () => {
                 (k) => ({ autoJoin: true, autoJoinMaxCoins: 0, autoJoinCycleCoinBudget: 0 })[k as string],
             );
             const store = fileWith({ '2': { unlockedAt: RECENT } });
-            const deps = passDeps(A, store, 0);
+            const deps = passDeps(store, 0);
             expect((await runJoinPass('tok', Date.now(), deps)).results).toEqual([{ id: 2, status: 'joined' }]);
         });
 
-        test('the same challenge for an account that has no marker keeps the refusal it always had', async () => {
-            const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT } });
-            const deps = passDeps(B, store, 3);
+        test('claims that cannot be read again are not read as already paid: the join refuses the spend', async () => {
+            const store = fileWith({ '2': { unlockedAt: RECENT } });
+            const deps = passDeps(store, 500, { refreshJoinState: jest.fn(async () => false) });
             const res = await runJoinPass('tok', Date.now(), deps);
-            expect(res.results[0].status).toMatch(/^skipped:/);
+            expect(res.results).toEqual([{ id: 2, status: 'failed-no-charge' }]);
             expect(deps.coinsUnlock).not.toHaveBeenCalled();
             expect(deps.submitToChallenge).not.toHaveBeenCalled();
         });
@@ -832,38 +844,18 @@ describe('runJoinPass', () => {
         test("a marker that vanishes between the pass's read and the join's own never turns into a charge", async () => {
             const readRaw = jest
                 .fn<string | null, []>()
-                .mockReturnValueOnce(JSON.stringify({ [`${A}:2`]: { unlockedAt: RECENT } }))
+                .mockReturnValueOnce(JSON.stringify({ '2': { unlockedAt: RECENT } }))
                 .mockReturnValue(null);
-            const deps = passDeps(A, invalid<ReturnType<typeof fileWith>>({ readRaw, writeRaw: jest.fn() }), 500);
+            const deps = passDeps(invalid<ReturnType<typeof fileWith>>({ readRaw, writeRaw: jest.fn() }), 500);
             const res = await runJoinPass('tok', Date.now(), deps);
             expect(res.results).toEqual([{ id: 2, status: 'failed-no-charge' }]);
             expect(deps.coinsUnlock).not.toHaveBeenCalled();
             expect(deps.submitToChallenge).not.toHaveBeenCalled();
         });
 
-        test('an account that cannot be identified is not trusted with a marker: the pass reports it, nothing paid or submitted', async () => {
-            const store = fileWith({ '2': { unlockedAt: RECENT } });
-            // Short of coins, so the cost check turns it away before the join is reached.
-            const poor = passDeps(null, store, 3, { getCurrentMemberProfile: jest.fn(async () => null) });
-            expect((await runJoinPass('tok', Date.now(), poor)).results).toEqual([
-                { id: 2, status: 'skipped:insufficient-coins' },
-            ]);
-            // Enough coins: the join's own guard is what stops it.
-            memberIdentity.__resetMemberIdCache();
-            const rich = passDeps(null, store, 500, { getCurrentMemberProfile: jest.fn(async () => null) });
-            expect((await runJoinPass('tok', Date.now(), rich)).results).toEqual([
-                { id: 2, status: 'failed-no-charge' },
-            ]);
-            for (const deps of [poor, rich]) {
-                expect(deps.coinsUnlock).not.toHaveBeenCalled();
-                expect(deps.submitToChallenge).not.toHaveBeenCalled();
-            }
-            expect(store.writeRaw).not.toHaveBeenCalled();
-        });
-
         test('a free candidate is not looked up at all', async () => {
             const readRaw = jest.fn(() => '{}');
-            const deps = passDeps(A, invalid<ReturnType<typeof fileWith>>({ readRaw, writeRaw: jest.fn() }), 500, {
+            const deps = passDeps(invalid<ReturnType<typeof fileWith>>({ readRaw, writeRaw: jest.fn() }), 500, {
                 getMemberChallenges: openList([{ id: 2, join_coins: 0, type: 'flash' }]),
             });
             await runJoinPass('tok', Date.now(), deps);
@@ -1048,14 +1040,161 @@ describe('runJoinPass — join window', () => {
             invalid<LoggerMock>(require('../../src/ts/logger'))
                 .withCategory()
                 .info.mock.calls.map(([msg]) => msg)
-                .filter((msg) => msg.includes('early for the active missions'));
+                .filter((msg) => msg.includes('early for the active mission'));
+        // The one-per-pass not-completable line of the join-mission dry run.
+        const notCompletableNotices = () =>
+            invalid<LoggerMock>(require('../../src/ts/logger'))
+                .withCategory()
+                .info.mock.calls.map(([msg]) => msg)
+                .filter((msg) => msg.includes('join mission needs'));
 
-        test('a join mission lifts the window until it is met, and each join counts it down', async () => {
+        test('a join mission joins early when the open list can complete it', async () => {
             withJoinEarly(true);
             const missions = { join: 2, fill: 0, turbo: 0, boost: 0, vote: 0 };
             const res = await runJoinPass('tok', NOW_MS, farDeps(), missions);
             expect(statuses(res)).toEqual(['joined', 'joined', 'skipped:too-early']);
             expect(missions.join).toBe(0);
+            expect(earlyNotices()).toEqual(['joining up to 2 challenge(s) early for the active missions']);
+            expect(notCompletableNotices()).toEqual([]);
+        });
+
+        test('a join mission waits for the window when the open list cannot complete it', async () => {
+            withJoinEarly(true);
+            const missions = { join: 4, fill: 0, turbo: 0, boost: 0, vote: 0 };
+            const res = await runJoinPass('tok', NOW_MS, farDeps(), missions);
+            expect(statuses(res)).toEqual(['skipped:too-early', 'skipped:too-early', 'skipped:too-early']);
+            expect(missions.join).toBe(4);
+            expect(earlyNotices()).toEqual([]);
+            expect(notCompletableNotices()).toEqual([
+                'join mission needs 4 but only 3 of the open challenges would join — waiting for the auto-join timing',
+            ]);
+        });
+
+        test('a type-excluded candidate does not count toward the join mission, in open-list order', async () => {
+            settings.getEffectiveSetting.mockImplementation((k) => {
+                const map: Record<string, unknown> = {
+                    ...DEFAULT_SETTINGS,
+                    autoJoinExcludeTypes: ' Flash , Exhibition ',
+                    autoJoinWithinHoursOfEnd: 24,
+                    missionJoinEarly: true,
+                };
+                return map[k];
+            });
+            const deps = makeDeps({
+                getMemberChallenges: openList([
+                    { id: 1, join_coins: 0, type: 'flash', close_time: NOW_SEC + 48 * HOUR },
+                    { id: 2, join_coins: 0, type: 'contest', close_time: NOW_SEC + 48 * HOUR },
+                ]),
+            });
+            const missions = { join: 2, fill: 0, turbo: 0, boost: 0, vote: 0 };
+            const res = await runJoinPass('tok', NOW_MS, deps, missions);
+            // The scope refusal comes before the timing window, so the excluded one is not a too-early.
+            expect(statuses(res)).toEqual(['skipped:excluded-type', 'skipped:too-early']);
+            expect(missions.join).toBe(2);
+            expect(earlyNotices()).toEqual([]);
+            expect(notCompletableNotices()).toEqual([
+                'join mission needs 2 but only 1 of the open challenges would join — waiting for the auto-join timing',
+            ]);
+        });
+
+        test('a join mission joins early exactly at the boundary: two qualifying for a need of two', async () => {
+            withJoinEarly(true);
+            const deps = makeDeps({ getMemberChallenges: openList([far(1), far(2)]) });
+            const missions = { join: 2, fill: 0, turbo: 0, boost: 0, vote: 0 };
+            const res = await runJoinPass('tok', NOW_MS, deps, missions);
+            expect(statuses(res)).toEqual(['joined', 'joined']);
+            expect(missions.join).toBe(0);
+            expect(earlyNotices()).toEqual(['joining up to 2 challenge(s) early for the active missions']);
+            expect(notCompletableNotices()).toEqual([]);
+        });
+
+        test('the join-mission dry run counts cumulative affordability but spends nothing', async () => {
+            withJoinEarly(true);
+            settings.getEffectiveSetting.mockImplementation((k) => {
+                const map: Record<string, unknown> = {
+                    ...DEFAULT_SETTINGS,
+                    autoJoinCycleCoinBudget: 200, // funds two of the three 100-coin joins
+                    autoJoinWithinHoursOfEnd: 24,
+                    missionJoinEarly: true,
+                };
+                return map[k];
+            });
+            const bankrollRow = { coins: 1000 };
+            const deps = makeDeps({
+                getMemberChallenges: openList([far(1), far(2), far(3)].map((c) => ({ ...c, join_coins: 100 }))),
+                getBankroll: double<'getBankroll'>(async () => bankrollRow),
+            });
+            const bankrollBefore = { ...bankrollRow };
+            const budgetBefore = settings.getEffectiveSetting('autoJoinCycleCoinBudget', null);
+            const res = await runJoinPass('tok', NOW_MS, deps, { join: 3, fill: 0, turbo: 0, boost: 0, vote: 0 });
+            // Two affordable of three: not completable, no lift, everything defers.
+            expect(statuses(res)).toEqual(['skipped:too-early', 'skipped:too-early', 'skipped:too-early']);
+            expect(earlyNotices()).toEqual([]);
+            expect(notCompletableNotices()).toEqual([
+                'join mission needs 3 but only 2 of the open challenges would join — waiting for the auto-join timing',
+            ]);
+            // The dry run worked on copies: the real pass's balance and budget are untouched by it.
+            expect(bankrollRow).toEqual(bankrollBefore);
+            expect(settings.getEffectiveSetting('autoJoinCycleCoinBudget', null)).toBe(budgetBefore);
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        });
+
+        test('a candidate auto-join is off for does not count toward the join mission either', async () => {
+            withJoinEarly(true);
+            rulesGive((target) => (titleOf(target) === 'Off' ? { autoJoin: false } : {}));
+            const deps = makeDeps({
+                getMemberChallenges: openList([
+                    { id: 1, join_coins: 0, type: 'flash', title: 'Off', close_time: NOW_SEC + 48 * HOUR },
+                    { id: 2, join_coins: 0, type: 'flash', title: 'Far', close_time: NOW_SEC + 48 * HOUR },
+                ]),
+            });
+            const res = await runJoinPass('tok', NOW_MS, deps, { join: 2, fill: 0, turbo: 0, boost: 0, vote: 0 });
+            expect(statuses(res)).toEqual(['skipped:autojoin-off', 'skipped:too-early']);
+            expect(notCompletableNotices()).toEqual([
+                'join mission needs 2 but only 1 of the open challenges would join — waiting for the auto-join timing',
+            ]);
+        });
+
+        test('a manual-photos-only candidate does not count toward the join mission either', async () => {
+            withJoinEarly(true);
+            rulesGive((target) => (titleOf(target) === 'Manual' ? { manualPhotosOnly: true } : {}));
+            const deps = makeDeps({
+                getMemberChallenges: openList([
+                    { id: 1, join_coins: 0, type: 'flash', title: 'Manual', close_time: NOW_SEC + 48 * HOUR },
+                    { id: 2, join_coins: 0, type: 'flash', title: 'Far', close_time: NOW_SEC + 48 * HOUR },
+                ]),
+            });
+            const res = await runJoinPass('tok', NOW_MS, deps, { join: 2, fill: 0, turbo: 0, boost: 0, vote: 0 });
+            expect(statuses(res)).toEqual(['skipped:manual-photos-only', 'skipped:too-early']);
+            expect(notCompletableNotices()).toEqual([
+                'join mission needs 2 but only 1 of the open challenges would join — waiting for the auto-join timing',
+            ]);
+        });
+
+        test('an unreadable balance counts no paid candidate toward the join mission', async () => {
+            withJoinEarly(true);
+            const deps = makeDeps({
+                getMemberChallenges: openList([far(1), far(2)].map((c) => ({ ...c, join_coins: 100 }))),
+                getBankroll: double<'getBankroll'>(async () => null),
+            });
+            const res = await runJoinPass('tok', NOW_MS, deps, { join: 2, fill: 0, turbo: 0, boost: 0, vote: 0 });
+            expect(statuses(res)).toEqual(['skipped:too-early', 'skipped:too-early']);
+            expect(notCompletableNotices()).toEqual([
+                'join mission needs 2 but only 0 of the open challenges would join — waiting for the auto-join timing',
+            ]);
+        });
+
+        test('a join mission short of its need stays quiet while a turbo lift is active', async () => {
+            withJoinEarly(true);
+            const missions = { join: 4, fill: 0, turbo: 3, boost: 0, vote: 0 };
+            const res = await runJoinPass('tok', NOW_MS, farDeps(), missions);
+            // The turbo shortfall lifts the window for 3 joins; they land, but the join need of 4 stays unmet —
+            // the not-completable line stays silent, since an early lift is active all the same.
+            expect(statuses(res)).toEqual(['joined', 'joined', 'joined']);
+            expect(missions.join).toBe(1);
+            expect(missions.turbo).toBe(3);
+            expect(earlyNotices()).toEqual(['joining up to 3 challenge(s) early for the active missions']);
+            expect(notCompletableNotices()).toEqual([]);
         });
 
         test('a turbo mission joins early only for the turbos it is short of', async () => {
@@ -1069,6 +1208,7 @@ describe('runJoinPass — join window', () => {
             expect(missions.turbo).toBe(3);
             expect(deps.getActiveChallenges).toHaveBeenCalledWith('tok');
             expect(earlyNotices()).toEqual(['joining up to 2 challenge(s) early for the active missions']);
+            expect(notCompletableNotices()).toEqual([]);
         });
 
         test('a turbo mission joins the earliest closing challenge before later ones', async () => {
@@ -1312,6 +1452,48 @@ describe('runJoinPass — join window', () => {
             expect(deps.submitToChallenge).toHaveBeenCalledTimes(1);
         });
 
+        test('a marked challenge counts as a pending turbo, so it alone does not drive the early join', async () => {
+            withJoinEarly(true);
+            const deps = makeDeps({
+                getMemberChallenges: openList([far(1)]),
+                getActiveChallenges: double<'getActiveChallenges'>(async () => ({
+                    challenges: [
+                        // Without the mark this TIMER-without-open-time would hold no turbo (joins: 1).
+                        { id: 100, dataIssues: ['close_time'], member: { turbo: { state: 'TIMER', mode: 'classic' } } },
+                    ],
+                })),
+            });
+            const res = await runJoinPass('tok', NOW_MS, deps, {
+                join: 0,
+                fill: 0,
+                turbo: 1,
+                boost: 0,
+                vote: 0,
+                turboRequirements: [{ remaining: 1, expiresAtSec: NOW_SEC + 3 * HOUR }],
+            });
+            expect(res.joined).toBe(0);
+        });
+
+        test('a read that dropped elements joins nothing early: the pending count could be short', async () => {
+            withJoinEarly(true);
+            const deps = makeDeps({
+                getMemberChallenges: openList([far(1)]),
+                getActiveChallenges: double<'getActiveChallenges'>(async () => ({
+                    challenges: [],
+                    pruneUnsafe: true,
+                })),
+            });
+            const res = await runJoinPass('tok', NOW_MS, deps, {
+                join: 0,
+                fill: 0,
+                turbo: 1,
+                boost: 0,
+                vote: 0,
+                turboRequirements: [{ remaining: 1, expiresAtSec: NOW_SEC + 3 * HOUR }],
+            });
+            expect(res.joined).toBe(0);
+        });
+
         test('a challenge joined for a turbo mission stops the next cycle joining another for it', async () => {
             withJoinEarly(true);
             const missions = { join: 0, fill: 0, turbo: 1, boost: 0, vote: 0 };
@@ -1347,22 +1529,24 @@ describe('runJoinPass — join window', () => {
             }
         });
 
-        test('with both missions active, the larger need sets how many join early', async () => {
+        test("a turbo mission's shortfall sets how many join early", async () => {
             withJoinEarly(true);
-            const res = await runJoinPass('tok', NOW_MS, farDeps(), { join: 1, fill: 0, turbo: 2, boost: 0, vote: 0 });
+            const res = await runJoinPass('tok', NOW_MS, farDeps(), { join: 0, fill: 0, turbo: 2, boost: 0, vote: 0 });
             expect(statuses(res)).toEqual(['joined', 'joined', 'skipped:too-early']);
         });
 
-        test('keeps the window while the setting is off, even with missions needing joins', async () => {
+        test('keeps the window while the setting is off, even with a turbo mission needing joins', async () => {
             withJoinEarly(false);
-            const res = await runJoinPass('tok', NOW_MS, farDeps(), { join: 2, fill: 0, turbo: 2, boost: 0, vote: 0 });
+            const res = await runJoinPass('tok', NOW_MS, farDeps(), { join: 0, fill: 0, turbo: 2, boost: 0, vote: 0 });
             expect(statuses(res)).toEqual(['skipped:too-early', 'skipped:too-early', 'skipped:too-early']);
+            expect(notCompletableNotices()).toEqual([]);
         });
 
         test('without a mission read (none followed or unreadable) the window stays', async () => {
             withJoinEarly(true);
             const res = await runJoinPass('tok', NOW_MS, farDeps());
             expect(statuses(res)).toEqual(['skipped:too-early', 'skipped:too-early', 'skipped:too-early']);
+            expect(notCompletableNotices()).toEqual([]);
         });
 
         test('a met mission leaves the window in place', async () => {
@@ -1913,87 +2097,142 @@ describe('joinChallengeSingle — manual', () => {
 });
 
 /**
- * Unlock markers belong to an account: one account's leftover marker must not turn another account's
- * join of the same challenge into a submit-only retry (that join would fail forever, unpaid).
+ * Unlock claims are keyed by challenge id. Records written by 1.13.x were keyed
+ * `<member id>:<challenge id>`; their key is read as its challenge id, so they
+ * keep protecting the challenge they were paid on until the next change of the
+ * claims file writes them under the id alone.
  */
-describe('unlock markers are kept per account', () => {
+describe('unlock claims', () => {
     const A = 'a'.repeat(32);
     const B = 'b'.repeat(32);
-    const memberIdentity = require('../../src/ts/services/autoFill/memberIdentity') as typeof memberIdentityModule;
 
-    const joiningAs = (
-        member: string | null,
-        store: ReturnType<typeof fileWith>,
-        over: NonNullable<Parameters<typeof makeDeps>[0]> = {},
-    ) =>
+    const joiningAs = (store: ReturnType<typeof fileWith>, over: NonNullable<Parameters<typeof makeDeps>[0]> = {}) =>
         makeDeps({
             getMemberChallenges: openList([{ id: 2, join_coins: 100, type: 'flash' }]),
             getBankroll: balance({ coins: 500 }),
-            getCurrentMemberProfile: member === null ? undefined : jest.fn(async () => ({ id: member, userName: 'u' })),
             joinStateStore: store,
             ...over,
         });
 
-    beforeEach(() => memberIdentity.__resetMemberIdCache());
-
-    test("another account's marker does not make this account's join a submit-only retry: it pays, and keeps its own marker apart", async () => {
+    test('a claims file with <member id>:<challenge id> keys still blocks a second unlock', async () => {
         const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT } });
-        const deps = joiningAs(B, store, {
-            submitToChallenge: double<'submitToChallenge'>(async () => ({ ok: false, raw: null })),
-        });
-        const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true, expectedCost: 100 });
-        // B is asked and charged as any first-time join; the submit failed, so B's own marker is left.
-        expect(deps.coinsUnlock).toHaveBeenCalledTimes(1);
-        expect(res.status).toBe('charged-pending-submit');
-        expect(Object.keys(store.read()).sort()).toEqual([`${A}:2`, `${B}:2`]);
-    });
-
-    test("a join that succeeds marks its own account's marker joined and leaves the other account's as it is", async () => {
-        const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT } });
-        const deps = joiningAs(B, store);
-        expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe('joined');
-        expect(store.read()).toEqual({ [`${A}:2`]: { unlockedAt: RECENT }, [`${B}:2`]: JOINED });
-    });
-
-    test('the same account retries submit-only, as before', async () => {
-        const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT } });
-        const deps = joiningAs(A, store);
-        const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true, expectedCost: 40 });
-        expect(res.status).toBe('joined');
+        const deps = joiningAs(store, { getBankroll: balance({ coins: 3 }) });
+        expect((await runJoinPass('tok', Date.now(), deps)).results).toEqual([{ id: 2, status: 'joined' }]);
         expect(deps.coinsUnlock).not.toHaveBeenCalled();
-        expect(deps.getBankroll).not.toHaveBeenCalled();
-        expect(store.read()).toEqual({ [`${A}:2`]: JOINED });
+        expect(deps.submitToChallenge).toHaveBeenCalledTimes(1);
+        // The join settled the claim it used: it is the normalized one now.
+        expect(store.read()).toEqual({ '2': JOINED });
     });
 
-    test("a marker from before accounts were told apart still protects whoever is joining, and a submit that succeeds makes it that account's own joined one", async () => {
-        for (const member of [A, B]) {
-            memberIdentity.__resetMemberIdCache();
-            const store = fileWith({ '2': { unlockedAt: RECENT } });
-            const deps = joiningAs(member, store);
-            expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe('joined');
-            expect(deps.coinsUnlock).not.toHaveBeenCalled();
-            // The submit succeeding proves this account held the unlock: the bare record becomes its own.
-            expect(store.read()).toEqual({ [`${member}:2`]: JOINED });
-        }
+    test('a join of such a claim marks it joined under the normalized key', async () => {
+        const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT } });
+        const deps = joiningAs(store);
+        expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe('joined');
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(store.read()).toEqual({ '2': JOINED });
     });
 
-    test('a bare marker is never cleared by a submit that fails, and is worded as an earlier payment record, not as no answer', async () => {
-        const store = fileWith({ '2': { unlockedAt: RECENT } });
-        const deps = joiningAs(A, store, {
-            submitToChallenge: double<'submitToChallenge'>(async () => ({ ok: false, raw: null })),
+    test('clearUnlocked removes a stored keyed record by its normalized key', async () => {
+        const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT } });
+        expect(await clearUnlocked(joiningAs(store), '2')).toBe('done');
+        expect(store.read()).toEqual({});
+    });
+
+    test('markJoined on a claim stored under a 1.13.x key writes the normalized one', async () => {
+        const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT } });
+        await markJoined(joiningAs(store), '2');
+        expect(store.read()).toEqual({ '2': JOINED });
+    });
+
+    test('two keyed records for one id round-trip through a change of the claims without duplicating', async () => {
+        const store = fileWith({
+            [`${A}:2`]: { unlockedAt: RECENT },
+            [`${B}:2`]: { unlockedAt: RECENT, unconfirmed: true, coinsBefore: 5 },
         });
-        const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true });
-        expect(res).toMatchObject({ status: 'charged-pending-submit', reason: 'earlier-payment' });
+        await markJoined(joiningAs(store), '2');
+        // The protective record was carried over, and one record stands for the challenge.
         expect(Object.keys(store.read())).toEqual(['2']);
+        expect(store.read()['2']).toEqual(JOINED);
+    });
+
+    // The claims as a parse reads them, without writing anything.
+    const parsedOf = (stored: Record<string, unknown>) =>
+        readUnlockedState({ readRaw: () => JSON.stringify(stored), writeRaw: () => {} }).state;
+
+    test('a claim stored under a prototype key changes nothing and does not reach the normalized map', () => {
+        const parsed = readUnlockedState({
+            readRaw: () => '{"__proto__":{"unlockedAt":1},"constructor":{"unlockedAt":2},"2":{"unlockedAt":3}}',
+            writeRaw: () => {},
+        });
+        expect(parsed).toEqual({ ok: true, state: { '2': { unlockedAt: 3 } } });
+        // A null-prototype map: an assignment of a stored "__proto__" key can never set its prototype.
+        expect(Object.getPrototypeOf(parsed.state)).toBe(null);
+    });
+
+    test('records that collapse onto one id keep the most protective of themselves', () => {
+        const unconfirmed = { unlockedAt: 1, unconfirmed: true, coinsBefore: 5 };
+        const unjoined = { unlockedAt: 2 };
+        const joined = { unlockedAt: 3, joinedAt: 4 };
+        expect(parsedOf({ [`${A}:2`]: joined, [`${B}:2`]: unjoined, '2': unconfirmed })).toEqual({ '2': unconfirmed });
+        expect(parsedOf({ [`${A}:2`]: joined, [`${B}:2`]: unjoined })).toEqual({ '2': unjoined });
+        expect(parsedOf({ [`${A}:2`]: joined, [`${B}:3`]: unjoined })).toEqual({ '2': joined, '3': unjoined });
+        // Equally protective records keep the first the file holds.
+        expect(parsedOf({ [`${A}:2`]: { unlockedAt: 2 }, [`${B}:2`]: { unlockedAt: 9 } })).toEqual({
+            '2': { unlockedAt: 2 },
+        });
+        // A record that is no object is as protective as a paid, unjoined one: over a joined record, under an
+        // unconfirmed one.
+        expect(parsedOf({ [`${A}:2`]: joined, [`${B}:2`]: 'garbage' })).toEqual({ '2': 'garbage' });
+        expect(parsedOf({ [`${A}:2`]: unconfirmed, [`${B}:2`]: 'garbage' })).toEqual({ '2': unconfirmed });
+    });
+
+    test('forgetting an unconfirmed one removes it, and the file is written back without the keyed key', async () => {
+        const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT, unconfirmed: true } });
+        expect(await forgetUnconfirmedPayment(2, 'tok', joiningAs(store))).toEqual({
+            status: 'forgotten',
+            challengeId: 2,
+        });
+        expect(store.read()).toEqual({});
+        // The keyed key is gone with the record: the next parse finds nothing, so the next join asks the price.
+        expect(findClaim(store.read(), 2)).toBeNull();
+        expect(await joinChallengeSingle(2, 'tok', joiningAs(store))).toEqual({
+            status: 'needs-confirm',
+            challengeId: 2,
+            cost: 100,
+        });
+    });
+
+    test('an id with a colon in it names no record: nothing is forgotten', async () => {
+        const store = fileWith({
+            [`${A}:123`]: { unlockedAt: RECENT },
+            '2': { unlockedAt: RECENT, unconfirmed: true },
+        });
+        for (const crafted of ['555:123', `${A}:123`]) {
+            expect((await forgetUnconfirmedPayment(crafted, 'tok', joiningAs(store))).status).toBe('nothing-to-forget');
+        }
+        expect(store.writeRaw).not.toHaveBeenCalled();
+    });
+
+    test("a key merely ending in the challenge id is not that challenge's", async () => {
+        const store = fileWith({
+            [`${A}:12`]: { unlockedAt: RECENT },
+            [`${A}:22`]: { unlockedAt: RECENT },
+            '12': { unlockedAt: RECENT },
+        });
+        const deps = joiningAs(store);
+        expect(await joinChallengeSingle(2, 'tok', deps, { spendCoins: true, expectedCost: 40 })).toMatchObject({
+            status: 'needs-confirm',
+        });
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
     });
 
     describe('an unconfirmed payment is never settled by itself: it stands until a submit succeeds or the user forgets it', () => {
-        const unconfirmed = () => ({ [`${A}:2`]: { unlockedAt: RECENT, unconfirmed: true } });
+        const unconfirmed = () => ({ '2': { unlockedAt: RECENT, unconfirmed: true } });
         const asking = (
             store: ReturnType<typeof fileWith>,
             coins: number | null,
             over: NonNullable<Parameters<typeof makeDeps>[0]> = {},
-        ) => joiningAs(A, store, { getBankroll: balance(coins === null ? null : { coins }), ...over });
+        ) => joiningAs(store, { getBankroll: balance(coins === null ? null : { coins }), ...over });
         const failingSubmit = double<'submitToChallenge'>(async () => ({ ok: false, raw: null }));
 
         test.each([500, 450, 400, null])(
@@ -2014,7 +2253,7 @@ describe('unlock markers are kept per account', () => {
             const deps = asking(store, 500);
             expect((await joinChallengeSingle(2, 'tok', deps)).status).toBe('joined');
             expect(deps.coinsUnlock).not.toHaveBeenCalled();
-            expect(store.read()).toEqual({ [`${A}:2`]: JOINED });
+            expect(store.read()).toEqual({ '2': JOINED });
         });
 
         test('with no photo to finish with, the unconfirmed payment is what the user is told, not "no photo"', async () => {
@@ -2032,7 +2271,7 @@ describe('unlock markers are kept per account', () => {
             expect((await runJoinPass('tok', Date.now(), deps)).results).toEqual([{ id: 2, status: 'joined' }]);
             expect(deps.coinsUnlock).not.toHaveBeenCalled();
             expect(deps.getBankroll).toHaveBeenCalledTimes(1); // the pass's own read, not a settling one
-            expect(store.read()).toEqual({ [`${A}:2`]: JOINED });
+            expect(store.read()).toEqual({ '2': JOINED });
         });
 
         test('the automatic pass counts an unlock that got no answer against its budget and balance, without reporting it charged', async () => {
@@ -2091,102 +2330,92 @@ describe('unlock markers are kept per account', () => {
             [`${A}:97`]: 'not even an object', // nothing to judge by either
             [`${A}:96`]: UNJOINED, // closed on the list, but its join never landed: paid, so it stays
             [`${A}:95`]: UNCONFIRMED, // the same for a payment that got no answer
-            [`${B}:9`]: OLD, // another account's: this account's list says nothing about it
-            '8': OLD, // a bare one from before accounts were told apart: may be another account's
         });
 
-        test("the automatic pass drops this account's own old closed claims from a successful list, and only those", async () => {
+        test('the automatic pass drops old joined claims of closed challenges from a successful list, and only those', async () => {
             const store = fileWith(claims());
-            const deps = joiningAs(A, store, { getMemberChallenges: freeOpen(5, 12) });
+            const deps = joiningAs(store, { getMemberChallenges: freeOpen(5, 12) });
             await runJoinPass('tok', Date.now(), deps);
-            expect(Object.keys(store.read()).sort()).toEqual(
-                [`${A}:12`, `${A}:95`, `${A}:96`, `${A}:97`, `${A}:98`, `${A}:99`, `${B}:9`, '8'].sort(),
-            );
+            // The write carries the records it kept over under their normalized keys.
+            expect(Object.keys(store.read()).sort()).toEqual(['12', '95', '96', '97', '98', '99'].sort());
+        });
+
+        test('an unconfirmed claim survives pruning', async () => {
+            const claim = { unlockedAt: RECENT - 7 * 60 * 60 * 1000, unconfirmed: true, coinsBefore: 500 };
+            const store = fileWith({ '2': claim });
+            const deps = joiningAs(store, { getMemberChallenges: freeOpen(5) });
+            await runJoinPass('tok', Date.now(), deps);
+            expect(store.read()).toEqual({ '2': claim });
+            expect(store.writeRaw).not.toHaveBeenCalled();
+        });
+
+        test('an unjoined claim older than the prune age, missing from one listing, still blocks a second coins_unlock', async () => {
+            const claim = { unlockedAt: RECENT - 7 * 60 * 60 * 1000 };
+            const store = fileWith({ '2': claim });
+            // The listing read now does not hold the challenge: pruning must not take the claim at its word.
+            const first = joiningAs(store, { getMemberChallenges: freeOpen(5) });
+            await runJoinPass('tok', Date.now(), first);
+            expect(store.read()).toEqual({ '2': claim });
+            // The next listing has the challenge again: the claim is found, only the submit runs.
+            const second = joiningAs(store, {
+                getMemberChallenges: openList([{ id: 2, join_coins: 100, type: 'flash' }]),
+                getBankroll: balance({ coins: 3 }),
+            });
+            expect((await runJoinPass('tok', Date.now(), second)).results).toEqual([{ id: 2, status: 'joined' }]);
+            expect(second.coinsUnlock).not.toHaveBeenCalled();
+            expect(store.read()).toEqual({ '2': JOINED });
         });
 
         test('a manual join reads the same list and drops the same claims', async () => {
             const store = fileWith(claims());
-            const deps = joiningAs(A, store, { getMemberChallenges: freeOpen(5, 12) });
+            const deps = joiningAs(store, { getMemberChallenges: freeOpen(5, 12) });
             expect((await joinChallengeSingle(5, 'tok', deps)).status).toBe('joined');
-            expect(Object.keys(store.read())).not.toContain(`${A}:7`);
-            expect(Object.keys(store.read())).toContain(`${A}:12`);
+            expect(Object.keys(store.read())).not.toContain('7');
+            expect(Object.keys(store.read())).toContain('12');
         });
 
-        test('an empty list, a failed one and an account that cannot be told prune nothing', async () => {
-            for (const [list, member] of [
-                [openList([]), A],
-                [double<'getMemberChallenges'>(async () => null), A],
-                [freeOpen(5), null],
-            ] as const) {
-                memberIdentity.__resetMemberIdCache();
+        test('an empty list and a failed one prune nothing', async () => {
+            for (const list of [openList([]), double<'getMemberChallenges'>(async () => null)]) {
                 const store = fileWith(claims());
-                const deps = joiningAs(member, store, {
-                    getMemberChallenges: list,
-                    ...(member === null ? { getCurrentMemberProfile: jest.fn(async () => null) } : {}),
-                });
+                const deps = joiningAs(store, { getMemberChallenges: list });
                 await runJoinPass('tok', Date.now(), deps);
                 expect(store.writeRaw).not.toHaveBeenCalled();
             }
         });
 
-        test("with no accounts told apart (no profile read wired in) the bare claims are this one's", async () => {
-            const store = fileWith({ '7': OLD, '12': OLD });
-            const deps = joiningAs(null, store, { getMemberChallenges: freeOpen(5, 12) });
-            await runJoinPass('tok', Date.now(), deps);
-            expect(Object.keys(store.read())).toEqual(['12']);
-        });
-
-        describe("a claim older than 30 days goes, whoever's it is and whatever the list says", () => {
+        describe('a claim older than 30 days goes when its challenge is no longer open; one still open stays', () => {
             const DAY = 24 * 60 * 60 * 1000;
             const aged = (days: number) => ({ unlockedAt: RECENT - days * DAY });
 
-            test("bare ones, other accounts' and its own, of a challenge no longer open (its own of an open one stays), younger ones stay", async () => {
+            test('aged claims of a challenge no longer open go, of an open one stay, younger ones stay', async () => {
                 const store = fileWith({
                     '8': aged(31),
-                    [`${B}:9`]: aged(31),
                     [`${A}:12`]: aged(31),
                     [`${B}:13`]: aged(29),
                     '14': aged(29),
                     [`${A}:15`]: { note: 'no age to judge by' },
                 });
-                const deps = joiningAs(A, store, { getMemberChallenges: freeOpen(5, 12) });
+                const deps = joiningAs(store, { getMemberChallenges: freeOpen(5, 12) });
                 await runJoinPass('tok', Date.now(), deps);
-                // Its own claim of a challenge that is still open stays: age alone never removes it.
-                expect(Object.keys(store.read()).sort()).toEqual([`${A}:12`, `${A}:15`, `${B}:13`, '14'].sort());
-            });
-
-            test('a bare claim is not kept by the list, with no accounts told apart either: whose it is cannot be told from it', async () => {
-                const store = fileWith({ '12': aged(31), '13': aged(31), '14': aged(29) });
-                const deps = joiningAs(null, store, { getMemberChallenges: freeOpen(5, 12, 14) });
-                await runJoinPass('tok', Date.now(), deps);
-                expect(Object.keys(store.read())).toEqual(['14']);
+                // The claim of a challenge that is still open stays: age alone never removes it.
+                expect(Object.keys(store.read()).sort()).toEqual(['12', '13', '14', '15'].sort());
             });
 
             test('a joined claim is as old as its join', async () => {
                 const store = fileWith({
-                    [`${A}:7`]: { unlockedAt: OLD.unlockedAt, joinedAt: RECENT - 60_000 },
-                    [`${A}:8`]: { unlockedAt: OLD.unlockedAt, joinedAt: OLD.unlockedAt },
+                    '7': { unlockedAt: RECENT - 7 * 60 * 60 * 1000, joinedAt: RECENT - 60_000 },
+                    '8': { unlockedAt: RECENT - 7 * 60 * 60 * 1000, joinedAt: RECENT - 7 * 60 * 60 * 1000 },
                 });
-                const deps = joiningAs(A, store, { getMemberChallenges: freeOpen(5) });
+                const deps = joiningAs(store, { getMemberChallenges: freeOpen(5) });
                 await runJoinPass('tok', Date.now(), deps);
                 // Its challenge has left the list, but a process holding an older list may still be about to act on it.
-                expect(Object.keys(store.read())).toEqual([`${A}:7`]);
-            });
-
-            test('an account that cannot be told prunes by age alone', async () => {
-                const store = fileWith({ '8': aged(31), [`${B}:9`]: aged(31), [`${B}:13`]: OLD });
-                const deps = joiningAs(A, store, {
-                    getMemberChallenges: freeOpen(5),
-                    getCurrentMemberProfile: jest.fn(async () => null),
-                });
-                await runJoinPass('tok', Date.now(), deps);
-                expect(Object.keys(store.read())).toEqual([`${B}:13`]);
+                expect(Object.keys(store.read())).toEqual(['7']);
             });
         });
 
         test('an empty open list prunes nothing, through a manual join too', async () => {
             const store = fileWith(claims());
-            const deps = joiningAs(A, store, { getMemberChallenges: openList([]) });
+            const deps = joiningAs(store, { getMemberChallenges: openList([]) });
             expect((await joinChallengeSingle(7, 'tok', deps)).status).toBe('unavailable');
             expect(store.writeRaw).not.toHaveBeenCalled();
         });
@@ -2195,7 +2424,6 @@ describe('unlock markers are kept per account', () => {
             const reads = [JSON.stringify(claims())];
             const writeRaw = jest.fn<void, [string]>();
             const deps = joiningAs(
-                A,
                 invalid<ReturnType<typeof fileWith>>({
                     readRaw: () => (reads.length > 0 ? reads.shift()! : 'not json{{'),
                     writeRaw,
@@ -2209,7 +2437,7 @@ describe('unlock markers are kept per account', () => {
 
         test('nothing stored, nothing written', async () => {
             const store = fileWith({});
-            const deps = joiningAs(A, store, { getMemberChallenges: freeOpen(5) });
+            const deps = joiningAs(store, { getMemberChallenges: freeOpen(5) });
             await runJoinPass('tok', Date.now(), deps);
             expect(store.writeRaw).not.toHaveBeenCalled();
         });
@@ -2221,7 +2449,6 @@ describe('unlock markers are kept per account', () => {
                 logged.withCategory().warning.mockClear();
                 const stored = JSON.stringify(claims());
                 const deps = joiningAs(
-                    A,
                     invalid<ReturnType<typeof fileWith>>({
                         readRaw: () => stored,
                         writeRaw: () => {
@@ -2248,18 +2475,18 @@ describe('unlock markers are kept per account', () => {
 
         test('a manual join records the balance its own affordability read gave: no read of its own, and it is shown back', async () => {
             const store = fileWith({});
-            const deps = joiningAs(A, store, { coinsUnlock: noAnswer });
+            const deps = joiningAs(store, { coinsUnlock: noAnswer });
             const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true });
             expect(res).toMatchObject({ status: 'charged-pending-submit', reason: 'unconfirmed', coinsBefore: 500 });
             expect(deps.getBankroll).toHaveBeenCalledTimes(1);
             expect(store.read()).toEqual({
-                [`${A}:2`]: { unlockedAt: expect.any(Number), coinsBefore: 500, unconfirmed: true },
+                '2': { unlockedAt: expect.any(Number), coinsBefore: 500, unconfirmed: true },
             });
         });
 
         test('the next attempt shows the recorded balance again, and reads none', async () => {
-            const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT, unconfirmed: true, coinsBefore: 500 } });
-            const deps = joiningAs(A, store, { submitToChallenge: failingSubmit, getBankroll: balance({ coins: 3 }) });
+            const store = fileWith({ '2': { unlockedAt: RECENT, unconfirmed: true, coinsBefore: 500 } });
+            const deps = joiningAs(store, { submitToChallenge: failingSubmit, getBankroll: balance({ coins: 3 }) });
             const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true });
             expect(res).toMatchObject({ status: 'charged-pending-submit', reason: 'unconfirmed', coinsBefore: 500 });
             expect(deps.getBankroll).not.toHaveBeenCalled();
@@ -2268,30 +2495,30 @@ describe('unlock markers are kept per account', () => {
 
         test('the automatic pass records the balance it already holds', async () => {
             const store = fileWith({});
-            const deps = joiningAs(A, store, { coinsUnlock: noAnswer });
+            const deps = joiningAs(store, { coinsUnlock: noAnswer });
             await runJoinPass('tok', Date.now(), deps);
             expect(store.read()).toEqual({
-                [`${A}:2`]: { unlockedAt: expect.any(Number), coinsBefore: 500, unconfirmed: true },
+                '2': { unlockedAt: expect.any(Number), coinsBefore: 500, unconfirmed: true },
             });
             expect(deps.getBankroll).toHaveBeenCalledTimes(1);
         });
 
         test('a payment that was answered keeps the number too, but is worded as charged: it is no unconfirmed payment', async () => {
             const store = fileWith({});
-            const deps = joiningAs(A, store, { submitToChallenge: failingSubmit });
+            const deps = joiningAs(store, { submitToChallenge: failingSubmit });
             const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true });
             expect(res).toMatchObject({ status: 'charged-pending-submit', reason: undefined, coinsBefore: undefined });
-            expect(store.read()[`${A}:2`]).toEqual({ unlockedAt: expect.any(Number), coinsBefore: 500 });
+            expect(store.read()['2']).toEqual({ unlockedAt: expect.any(Number), coinsBefore: 500 });
         });
 
         test('a balance that was not known is not invented, and a claim from before this has none', async () => {
             const store = fileWith({});
-            const deps = joiningAs(A, store, { coinsUnlock: noAnswer });
+            const deps = joiningAs(store, { coinsUnlock: noAnswer });
             const direct = await performJoin(invalid({ id: 2, join_coins: 100 }), 'tok', deps, 100);
             expect(direct.coinsBefore).toBeUndefined();
-            expect(store.read()[`${A}:2`]).toEqual({ unlockedAt: expect.any(Number), unconfirmed: true });
-            const old = fileWith({ [`${A}:2`]: { unlockedAt: RECENT, unconfirmed: true } });
-            const res = await joinChallengeSingle(2, 'tok', joiningAs(A, old, { submitToChallenge: failingSubmit }), {
+            expect(store.read()['2']).toEqual({ unlockedAt: expect.any(Number), unconfirmed: true });
+            const old = fileWith({ '2': { unlockedAt: RECENT, unconfirmed: true } });
+            const res = await joinChallengeSingle(2, 'tok', joiningAs(old, { submitToChallenge: failingSubmit }), {
                 spendCoins: true,
             });
             expect(res.coinsBefore).toBeUndefined();
@@ -2318,22 +2545,22 @@ describe('unlock markers are kept per account', () => {
         });
 
         test('a lock another process holds submits nothing: busy', async () => {
-            const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT } });
-            const deps = joiningAs(A, store, { acquireUnlockLock: lockOf([false]) });
+            const store = fileWith({ '2': { unlockedAt: RECENT } });
+            const deps = joiningAs(store, { acquireUnlockLock: lockOf([false]) });
             expect(await joinChallengeSingle(2, 'tok', deps)).toMatchObject({ status: 'busy' });
             expect(deps.submitToChallenge).not.toHaveBeenCalled();
-            expect(store.read()).toEqual({ [`${A}:2`]: { unlockedAt: RECENT } });
+            expect(store.read()).toEqual({ '2': { unlockedAt: RECENT } });
         });
 
         test('the claim is read again under the lock: gone by then (another process forgot it), nothing is submitted', async () => {
-            const claim = JSON.stringify({ [`${A}:2`]: { unlockedAt: RECENT } });
+            const claim = JSON.stringify({ '2': { unlockedAt: RECENT } });
             let reads = 0;
             const store = invalid<ReturnType<typeof fileWith>>({
                 // The caller's and the join's own read see it; the one under the lock does not.
                 readRaw: () => (++reads <= 2 ? claim : '{}'),
                 writeRaw: jest.fn(),
             });
-            const deps = joiningAs(A, store, { acquireUnlockLock: lockOf([]) });
+            const deps = joiningAs(store, { acquireUnlockLock: lockOf([]) });
             expect(await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).toMatchObject({
                 status: 'failed-no-charge',
             });
@@ -2352,7 +2579,7 @@ describe('unlock markers are kept per account', () => {
             test('no coins are spent without a claim recorded, and the log says why, not "locked by another process"', async () => {
                 const logged: LoggerMock = invalid(require('../../src/ts/logger'));
                 const store = fileWith({});
-                const deps = joiningAs(A, store, { acquireUnlockLock: unavailableState() });
+                const deps = joiningAs(store, { acquireUnlockLock: unavailableState() });
                 expect(await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).toMatchObject({
                     status: 'failed-no-charge',
                 });
@@ -2366,20 +2593,20 @@ describe('unlock markers are kept per account', () => {
             });
 
             test('forgetting a payment says the same, to the dialog and the CLI', async () => {
-                const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT, unconfirmed: true } });
-                const deps = joiningAs(A, store, { acquireUnlockLock: unavailableState() });
+                const store = fileWith({ '2': { unlockedAt: RECENT, unconfirmed: true } });
+                const deps = joiningAs(store, { acquireUnlockLock: unavailableState() });
                 expect(await forgetUnconfirmedPayment(2, 'tok', deps)).toEqual({
                     status: 'locks-unavailable',
                     challengeId: 2,
                 });
-                expect(store.read()).toEqual({ [`${A}:2`]: { unlockedAt: RECENT, unconfirmed: true } });
+                expect(store.read()).toEqual({ '2': { unlockedAt: RECENT, unconfirmed: true } });
             });
         });
 
         test('the claims file’s lock is one of the app’s own, a challenge’s is not: they are asked for apart', async () => {
-            const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT } });
+            const store = fileWith({ '2': { unlockedAt: RECENT } });
             const acquire = lockOf([]);
-            const deps = joiningAs(A, store, { acquireUnlockLock: acquire });
+            const deps = joiningAs(store, { acquireUnlockLock: acquire });
             await joinChallengeSingle(2, 'tok', deps);
             const asked = acquire.mock.calls;
             const claimsFile = asked.filter(([id]) => id === 'joinstate');
@@ -2391,46 +2618,45 @@ describe('unlock markers are kept per account', () => {
         });
 
         test('submitting and marking the claim joined happen under one lock, which is let go', async () => {
-            const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT } });
+            const store = fileWith({ '2': { unlockedAt: RECENT } });
             const acquire = lockOf([]);
-            const deps = joiningAs(A, store, { acquireUnlockLock: acquire });
+            const deps = joiningAs(store, { acquireUnlockLock: acquire });
             expect((await joinChallengeSingle(2, 'tok', deps)).status).toBe('joined');
             expect(challengeLocks(acquire)).toHaveLength(1);
             expect(release).toHaveBeenCalledTimes(1);
             expect(stateRelease).toHaveBeenCalled();
-            expect(store.read()).toEqual({ [`${A}:2`]: JOINED });
+            expect(store.read()).toEqual({ '2': JOINED });
         });
 
         test('after a fresh unlock the claim is marked joined under the lock again; a lock held then leaves it as it is', async () => {
             const free = fileWith({});
             expect(
                 (
-                    await joinChallengeSingle(2, 'tok', joiningAs(A, free, { acquireUnlockLock: lockOf([]) }), {
+                    await joinChallengeSingle(2, 'tok', joiningAs(free, { acquireUnlockLock: lockOf([]) }), {
                         spendCoins: true,
                     })
                 ).status,
             ).toBe('joined');
-            expect(free.read()).toEqual({ [`${A}:2`]: JOINED });
-            memberIdentity.__resetMemberIdCache();
+            expect(free.read()).toEqual({ '2': JOINED });
             const held = fileWith({});
             // The unlock section gets its lock, the clearing after the submit does not.
-            const deps = joiningAs(A, held, { acquireUnlockLock: lockOf([true, false]) });
+            const deps = joiningAs(held, { acquireUnlockLock: lockOf([true, false]) });
             expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe('joined');
-            expect(held.read()).toEqual({ [`${A}:2`]: expect.not.objectContaining({ joinedAt: expect.anything() }) });
+            expect(held.read()).toEqual({ '2': expect.not.objectContaining({ joinedAt: expect.anything() }) });
         });
 
         test('pruning leaves a challenge whose lock another process holds, and says nothing of what it did not drop', async () => {
             const logged: LoggerMock = invalid(require('../../src/ts/logger'));
             logged.withCategory().debug.mockClear();
-            const store = fileWith({ [`${A}:7`]: OLD_JOINED, [`${A}:8`]: OLD_JOINED });
+            const store = fileWith({ '7': OLD_JOINED, '8': OLD_JOINED });
             const acquire = jest.fn((id: string | number) => ({ ok: String(id) !== '7', release }));
-            const deps = joiningAs(A, store, {
+            const deps = joiningAs(store, {
                 getMemberChallenges: openList([{ id: 5, join_coins: 0, type: 'flash' }]),
                 acquireUnlockLock: acquire,
             });
             await runJoinPass('tok', Date.now(), deps);
-            expect(Object.keys(store.read())).toContain(`${A}:7`);
-            expect(Object.keys(store.read())).not.toContain(`${A}:8`);
+            expect(Object.keys(store.read())).toContain('7');
+            expect(Object.keys(store.read())).not.toContain('8');
             expect(logged.withCategory().debug).toHaveBeenCalledWith(
                 'dropped 1 unlock claim(s) that are no longer needed',
                 null,
@@ -2440,9 +2666,8 @@ describe('unlock markers are kept per account', () => {
         test('a prune whose write fails does not claim to have dropped anything', async () => {
             const logged: LoggerMock = invalid(require('../../src/ts/logger'));
             logged.withCategory().debug.mockClear();
-            const stored = JSON.stringify({ [`${A}:7`]: OLD_JOINED });
+            const stored = JSON.stringify({ '7': OLD_JOINED });
             const deps = joiningAs(
-                A,
                 invalid<ReturnType<typeof fileWith>>({
                     readRaw: () => stored,
                     writeRaw: () => {
@@ -2492,14 +2717,14 @@ describe('unlock markers are kept per account', () => {
 
         test('a lock held a moment is waited for, and the claim is then recorded', async () => {
             const store = fileWith({});
-            const deps = joiningAs(A, store, { acquireUnlockLock: lockedFor(3) });
+            const deps = joiningAs(store, { acquireUnlockLock: lockedFor(3) });
             expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe('joined');
             expect(Atomics.wait).toHaveBeenCalledTimes(3);
         });
 
         test('a lock that stays held for longer than the wait: the claim cannot be written, so no coins are spent', async () => {
             const store = fileWith({});
-            const deps = joiningAs(A, store, { acquireUnlockLock: lockedFor(Number.POSITIVE_INFINITY) });
+            const deps = joiningAs(store, { acquireUnlockLock: lockedFor(Number.POSITIVE_INFINITY) });
             expect(await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).toMatchObject({
                 status: 'failed-no-charge',
             });
@@ -2513,11 +2738,11 @@ describe('unlock markers are kept per account', () => {
 
         test('what it could not change it says, and a claim it could not clear stays', async () => {
             const logged: LoggerMock = invalid(require('../../src/ts/logger'));
-            const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT } });
+            const store = fileWith({ '2': { unlockedAt: RECENT } });
             // The claims file is locked from the start: the submit goes on the claim, but its removal cannot.
-            const deps = joiningAs(A, store, { acquireUnlockLock: lockedFor(Number.POSITIVE_INFINITY) });
+            const deps = joiningAs(store, { acquireUnlockLock: lockedFor(Number.POSITIVE_INFINITY) });
             expect((await joinChallengeSingle(2, 'tok', deps)).status).toBe('joined');
-            expect(Object.keys(store.read())).toEqual([`${A}:2`]);
+            expect(Object.keys(store.read())).toEqual(['2']);
             expect(logged.withCategory().warning).toHaveBeenCalledWith(
                 'could not mark the unlock marker for 2 as joined: join-state is locked by another process — nothing written',
                 null,
@@ -2538,8 +2763,8 @@ describe('unlock markers are kept per account', () => {
         test('two writers contend for the file: the one that waits does not write over the other, and both claims end up kept', async () => {
             const locks = sharedLocks();
             const state = fileWith({});
-            const first = joiningAs(A, state, { acquireUnlockLock: locks });
-            const second = joiningAs(A, state, { acquireUnlockLock: locks });
+            const first = joiningAs(state, { acquireUnlockLock: locks });
+            const second = joiningAs(state, { acquireUnlockLock: locks });
             let secondTried: Promise<boolean> | null = null;
             const read = state.readRaw;
             // The second process comes in while the first is between its read and its write.
@@ -2548,21 +2773,21 @@ describe('unlock markers are kept per account', () => {
                 const raw = read();
                 if (once) {
                     once = false;
-                    secondTried = recorded(second, 8, A, null);
+                    secondTried = recorded(second, 8, null);
                 }
                 return raw;
             };
-            expect(await recorded(first, 7, A, null)).toBe(true);
+            expect(await recorded(first, 7, null)).toBe(true);
             // The lock held the second out for its whole wait: it records nothing (and so spends nothing).
             expect(await secondTried).toBe(false);
-            expect(Object.keys(state.read())).toEqual([`${A}:7`]);
+            expect(Object.keys(state.read())).toEqual(['7']);
             // Its retry, once the file is free, keeps what the first wrote.
-            expect(await recorded(second, 8, A, null)).toBe(true);
-            expect(Object.keys(state.read()).sort()).toEqual([`${A}:7`, `${A}:8`]);
+            expect(await recorded(second, 8, null)).toBe(true);
+            expect(Object.keys(state.read()).sort()).toEqual(['7', '8']);
         });
 
         test('a claim another holder recorded since the join looked is never overwritten, and nothing is paid for it', async () => {
-            const claim = JSON.stringify({ [`${A}:2`]: { unlockedAt: RECENT, unconfirmed: true } });
+            const claim = JSON.stringify({ '2': { unlockedAt: RECENT, unconfirmed: true } });
             // The caller's, the join's own and the unlock section's reads see none; the write's read sees the other's.
             let reads = 0;
             const writeRaw = jest.fn();
@@ -2570,7 +2795,7 @@ describe('unlock markers are kept per account', () => {
                 readRaw: () => (++reads <= 3 ? '{}' : claim),
                 writeRaw,
             });
-            const deps = joiningAs(A, store);
+            const deps = joiningAs(store);
             // The other is unlocking this challenge now, and its unlock may still be refused: nothing is said of a
             // payment, the claim is left as it is, and the next pass finds it and only submits.
             expect(await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).toMatchObject({
@@ -2581,13 +2806,11 @@ describe('unlock markers are kept per account', () => {
             expect(writeRaw).not.toHaveBeenCalled();
         });
 
-        test('a second record for the same challenge is refused, own or bare, whoever holds the lock', async () => {
-            const own = fileWith({ [`${A}:2`]: { unlockedAt: RECENT } });
-            expect(await recorded(joiningAs(A, own), 2, A, null)).toBe(false);
-            const bare = fileWith({ '2': { unlockedAt: RECENT } });
-            expect(await recorded(joiningAs(A, bare), 2, A, null)).toBe(false);
-            const other = fileWith({ [`${B}:2`]: { unlockedAt: RECENT } });
-            expect(await recorded(joiningAs(A, other), 2, A, null)).toBe(true);
+        test('a second record for the same challenge is refused, whoever holds the lock — a stored keyed one too', async () => {
+            const stored = fileWith({ '2': { unlockedAt: RECENT } });
+            expect(await recorded(joiningAs(stored), 2, null)).toBe(false);
+            const keyed = fileWith({ [`${A}:2`]: { unlockedAt: RECENT } });
+            expect(await recorded(joiningAs(keyed), 2, null)).toBe(false);
         });
 
         describe('a refused unlock whose claim cannot be removed does not leave it looking confirmed', () => {
@@ -2596,7 +2819,7 @@ describe('unlock markers are kept per account', () => {
                 const store = fileWith({});
                 const waitsSoFar = () => jest.mocked(Atomics.wait).mock.calls.length;
                 let armed = false;
-                const deps = joiningAs(A, store, {
+                const deps = joiningAs(store, {
                     // The claims file is held by someone else from the moment the unlock is refused, for a while.
                     acquireUnlockLock: jest.fn((id: string | number) => ({
                         ok: id !== 'joinstate' || !armed || waitsSoFar() >= busyForWaits,
@@ -2627,7 +2850,7 @@ describe('unlock markers are kept per account', () => {
                 let armed = false;
                 const read = store.readRaw;
                 store.readRaw = () => (armed ? '{not json' : read());
-                const deps = joiningAs(A, store, {
+                const deps = joiningAs(store, {
                     acquireUnlockLock: acquire,
                     coinsUnlock: double<'coinsUnlock'>(async () => {
                         armed = true;
@@ -2652,7 +2875,7 @@ describe('unlock markers are kept per account', () => {
                 expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe(
                     'failed-no-charge',
                 );
-                expect(store.read()).toEqual({ [`${A}:2`]: expect.objectContaining({ unconfirmed: true }) });
+                expect(store.read()).toEqual({ '2': expect.objectContaining({ unconfirmed: true }) });
                 expect(logged.withCategory().error).toHaveBeenCalledWith(
                     expect.stringContaining('it is flagged as unconfirmed, so it can be forgotten'),
                     null,
@@ -2665,7 +2888,7 @@ describe('unlock markers are kept per account', () => {
                 expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe(
                     'failed-no-charge',
                 );
-                expect(Object.keys(store.read())).toEqual([`${A}:2`]);
+                expect(Object.keys(store.read())).toEqual(['2']);
                 expect(logged.withCategory().error).toHaveBeenCalledWith(
                     expect.stringContaining('it could not be flagged either'),
                     null,
@@ -2674,8 +2897,8 @@ describe('unlock markers are kept per account', () => {
         });
 
         test('a claims file that is locked when the user forgets is "busy", not "unreadable"', async () => {
-            const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT, unconfirmed: true } });
-            const deps = joiningAs(A, store, { acquireUnlockLock: lockedFor(Number.POSITIVE_INFINITY) });
+            const store = fileWith({ '2': { unlockedAt: RECENT, unconfirmed: true } });
+            const deps = joiningAs(store, { acquireUnlockLock: lockedFor(Number.POSITIVE_INFINITY) });
             expect(await forgetUnconfirmedPayment(2, 'tok', deps)).toEqual({ status: 'busy', challengeId: 2 });
             expect(store.writeRaw).not.toHaveBeenCalled();
         });
@@ -2687,7 +2910,7 @@ describe('unlock markers are kept per account', () => {
                     throw new Error('read-only');
                 },
             });
-            const deps = joiningAs(A, store, { acquireUnlockLock: lockedFor(0) });
+            const deps = joiningAs(store, { acquireUnlockLock: lockedFor(0) });
             await joinChallengeSingle(2, 'tok', deps, { spendCoins: true });
             expect(unlock).toHaveBeenCalled();
             expect(jest.mocked(deps.acquireUnlockLock!).mock.calls.length).toBe(unlock.mock.calls.length);
@@ -2695,17 +2918,13 @@ describe('unlock markers are kept per account', () => {
     });
 
     describe('the user forgetting an unconfirmed payment', () => {
-        const forgetting = (member: string | null, store: ReturnType<typeof fileWith>, over: Partial<JoinDeps> = {}) =>
-            joiningAs(member, store, over);
+        const forgetting = (store: ReturnType<typeof fileWith>, over: Partial<JoinDeps> = {}) => joiningAs(store, over);
 
-        test("this account's unconfirmed claim goes, and the next join asks for its price", async () => {
-            const store = fileWith({
-                [`${A}:2`]: { unlockedAt: RECENT, unconfirmed: true },
-                [`${B}:2`]: { unlockedAt: RECENT, unconfirmed: true },
-            });
-            const deps = forgetting(A, store);
+        test('an unconfirmed claim goes, and the next join asks for its price', async () => {
+            const store = fileWith({ '2': { unlockedAt: RECENT, unconfirmed: true } });
+            const deps = forgetting(store);
             expect(await forgetUnconfirmedPayment(2, 'tok', deps)).toEqual({ status: 'forgotten', challengeId: 2 });
-            expect(Object.keys(store.read())).toEqual([`${B}:2`]);
+            expect(Object.keys(store.read())).toEqual([]);
             expect(await joinChallengeSingle(2, 'tok', deps)).toEqual({
                 status: 'needs-confirm',
                 challengeId: 2,
@@ -2713,107 +2932,62 @@ describe('unlock markers are kept per account', () => {
             });
         });
 
-        test("a bare claim from before accounts were told apart is never forgotten: it may be another account's", async () => {
-            // However alone it stands in the store, nothing on this device can tell whose it is.
-            const alone = fileWith({ '2': { unlockedAt: RECENT } });
-            expect(await forgetUnconfirmedPayment(2, 'tok', forgetting(A, alone))).toEqual({
-                status: 'legacy-record',
-                challengeId: 2,
-            });
-            expect(alone.writeRaw).not.toHaveBeenCalled();
-            memberIdentity.__resetMemberIdCache();
-            const crowded = fileWith({ '2': { unlockedAt: RECENT }, [`${B}:5`]: { unlockedAt: RECENT } });
-            expect((await forgetUnconfirmedPayment(2, 'tok', forgetting(A, crowded))).status).toBe('legacy-record');
-            expect(crowded.writeRaw).not.toHaveBeenCalled();
-        });
-
-        test("never a claim known to have been charged, and never a bare one behind the account's own confirmed claim", async () => {
-            const own = fileWith({ [`${A}:2`]: { unlockedAt: RECENT }, '2': { unlockedAt: RECENT } });
-            expect((await forgetUnconfirmedPayment(2, 'tok', forgetting(A, own))).status).toBe('nothing-to-forget');
+        test('never a claim known to have been charged', async () => {
+            const own = fileWith({ '2': { unlockedAt: RECENT } });
+            expect((await forgetUnconfirmedPayment(2, 'tok', forgetting(own))).status).toBe('nothing-to-forget');
             expect(own.writeRaw).not.toHaveBeenCalled();
             const empty = fileWith({});
-            expect((await forgetUnconfirmedPayment(2, 'tok', forgetting(A, empty))).status).toBe('nothing-to-forget');
+            expect((await forgetUnconfirmedPayment(2, 'tok', forgetting(empty))).status).toBe('nothing-to-forget');
         });
 
-        test('an account that cannot be told, no token, and an unreadable file change nothing', async () => {
-            const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT, unconfirmed: true } });
-            const unknown = forgetting(null, store, { getCurrentMemberProfile: jest.fn(async () => null) });
-            expect((await forgetUnconfirmedPayment(2, 'tok', unknown)).status).toBe('account-unknown');
-            expect((await forgetUnconfirmedPayment(2, '', forgetting(A, store))).status).toBe('not-authenticated');
-            memberIdentity.__resetMemberIdCache();
+        test('no token and an unreadable file change nothing', async () => {
+            const store = fileWith({ '2': { unlockedAt: RECENT, unconfirmed: true } });
+            expect((await forgetUnconfirmedPayment(2, '', forgetting(store))).status).toBe('not-authenticated');
             const corrupt = { readRaw: () => 'not json{{', writeRaw: jest.fn<void, [string]>() };
-            const deps = forgetting(A, invalid<ReturnType<typeof fileWith>>(corrupt));
+            const deps = forgetting(invalid<ReturnType<typeof fileWith>>(corrupt));
             expect((await forgetUnconfirmedPayment(2, 'tok', deps)).status).toBe('unreadable');
             expect(corrupt.writeRaw).not.toHaveBeenCalled();
             expect(store.writeRaw).not.toHaveBeenCalled();
         });
 
         test('under the unlock lock: a held lock or a join under way is busy, and the lock is let go afterwards', async () => {
-            const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT, unconfirmed: true } });
+            const store = fileWith({ '2': { unlockedAt: RECENT, unconfirmed: true } });
             const release = jest.fn();
-            const held = forgetting(A, store, { acquireUnlockLock: () => ({ ok: false, release }) });
+            const held = forgetting(store, { acquireUnlockLock: () => ({ ok: false, release }) });
             expect((await forgetUnconfirmedPayment(2, 'tok', held)).status).toBe('busy');
             inFlight.add('2');
-            expect((await forgetUnconfirmedPayment(2, 'tok', forgetting(A, store))).status).toBe('busy');
+            expect((await forgetUnconfirmedPayment(2, 'tok', forgetting(store))).status).toBe('busy');
             inFlight.delete('2');
-            const free = forgetting(A, store, { acquireUnlockLock: () => ({ ok: true, release }) });
+            const free = forgetting(store, { acquireUnlockLock: () => ({ ok: true, release }) });
             expect((await forgetUnconfirmedPayment(2, 'tok', free)).status).toBe('forgotten');
             // The challenge's lock, and the claims file's under it.
             expect(release).toHaveBeenCalledTimes(2);
         });
 
         test('with no store (mock mode) there is nothing to forget', async () => {
-            const deps = forgetting(A, fileWith({}), { joinStateStore: null });
+            const deps = forgetting(fileWith({}), { joinStateStore: null });
             expect((await forgetUnconfirmedPayment(2, 'tok', deps)).status).toBe('nothing-to-forget');
         });
 
-        test('an id with a colon in it cannot name another record: it forgets nothing, and a confirmed claim stays', async () => {
-            const store = fileWith({
-                [`${A}:123`]: { unlockedAt: RECENT },
-                [`${A}:2`]: { unlockedAt: RECENT, unconfirmed: true },
-            });
-            for (const crafted of [`${A}:123`, '555:123', '2:2']) {
-                expect((await forgetUnconfirmedPayment(crafted, 'tok', forgetting(A, store))).status).toBe(
-                    'nothing-to-forget',
-                );
-            }
-            expect(store.writeRaw).not.toHaveBeenCalled();
-            // The bare-key fallback never reads a key with a colon as a bare claim either.
-            expect(findClaim({ '555:123': { unlockedAt: RECENT } }, '555:123', A)).toBeNull();
-        });
-
-        test('a claim whose record is no object still reads as a claim: confirmed, with no balance', async () => {
-            expect(findClaim({ [`${A}:2`]: 'not an object' }, 2, A)).toEqual({
-                key: `${A}:2`,
+        test('a claim whose record is no object still reads as a claim: confirmed, with no balance', () => {
+            expect(findClaim({ '2': 'not an object' }, 2)).toEqual({
+                key: '2',
                 unconfirmed: false,
-                legacy: false,
                 joined: false,
                 coinsBefore: null,
             });
         });
 
-        test('an unconfirmed claim of the account is forgotten even with other accounts around: it is its own', async () => {
-            const store = fileWith({
-                [`${A}:2`]: { unlockedAt: RECENT, unconfirmed: true },
-                [`${B}:5`]: { unlockedAt: RECENT },
-            });
-            expect((await forgetUnconfirmedPayment(2, 'tok', forgetting(A, store))).status).toBe('forgotten');
-            expect(Object.keys(store.read())).toEqual([`${B}:5`]);
-        });
-
-        test('its own unconfirmed claim and a bare one for the same challenge: only its own goes, then the bare one stands alone', async () => {
-            const store = fileWith({
-                [`${A}:2`]: { unlockedAt: RECENT, unconfirmed: true },
-                '2': { unlockedAt: RECENT },
-            });
-            expect((await forgetUnconfirmedPayment(2, 'tok', forgetting(A, store))).status).toBe('forgotten');
-            expect(Object.keys(store.read())).toEqual(['2']);
-            expect(findClaim(store.read(), 2, A)).toMatchObject({ legacy: true });
-        });
-
         test('what it logs about the challenge has no line break to forge a log line with', async () => {
             const logged: LoggerMock = invalid(require('../../src/ts/logger'));
-            const deps = forgetting(A, fileWith({}), { getCurrentMemberProfile: jest.fn(async () => null) });
+            const deps = forgetting(
+                invalid<ReturnType<typeof fileWith>>({
+                    readRaw: () => JSON.stringify({ '7\nforged line': { unlockedAt: RECENT, unconfirmed: true } }),
+                    writeRaw: () => {
+                        throw new Error('read-only');
+                    },
+                }),
+            );
             await forgetUnconfirmedPayment('7\nforged line', 'tok', deps);
             const lines = logged.withCategory().warning.mock.calls.map(([msg]) => String(msg));
             expect(lines.some((line) => line.includes('7 forged line'))).toBe(true);
@@ -2821,63 +2995,23 @@ describe('unlock markers are kept per account', () => {
         });
     });
 
-    test('a new claim is written under the account that makes it', async () => {
-        const store = fileWith({});
-        const deps = joiningAs(A, store, {
-            submitToChallenge: double<'submitToChallenge'>(async () => ({ ok: false, raw: null })),
-        });
-        await joinChallengeSingle(2, 'tok', deps, { spendCoins: true });
-        expect(Object.keys(store.read())).toEqual([`${A}:2`]);
-    });
-
-    test('a failed unlock gives the claim back, and only its own', async () => {
-        const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT } });
-        const deps = joiningAs(B, store, {
-            coinsUnlock: double<'coinsUnlock'>(async () => ({ ok: false, raw: { success: false } })),
-        });
-        expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe('failed-no-charge');
-        expect(Object.keys(store.read())).toEqual([`${A}:2`]);
-    });
-
-    describe('a free join leaves markers alone, a paid one clears only its own', () => {
+    describe('a free join leaves every claim as it is', () => {
         const free = (store: ReturnType<typeof fileWith>) =>
             makeDeps({
                 getMemberChallenges: openList([{ id: 2, join_coins: 0, type: 'flash' }]),
-                getCurrentMemberProfile: jest.fn(async () => ({ id: B, userName: 'u' })),
                 joinStateStore: store,
             });
 
-        test("another account's bare marker survives a free join of the same challenge", async () => {
-            // Left before accounts were told apart, by an account that paid and has its submit still to do.
-            const store = fileWith({ '2': { unlockedAt: RECENT } });
+        test('whatever key it is stored under', async () => {
+            const store = fileWith({ '2': { unlockedAt: RECENT }, [`${A}:9`]: { unlockedAt: RECENT } });
             expect((await joinChallengeSingle(2, 'tok', free(store), { spendCoins: false })).status).toBe('joined');
-            expect(Object.keys(store.read())).toEqual(['2']);
+            expect(store.read()).toEqual({ '2': { unlockedAt: RECENT }, [`${A}:9`]: { unlockedAt: RECENT } });
             expect(store.writeRaw).not.toHaveBeenCalled();
-        });
-
-        test('and a keyed one too', async () => {
-            const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT } });
-            await joinChallengeSingle(2, 'tok', free(store), { spendCoins: false });
-            expect(Object.keys(store.read())).toEqual([`${A}:2`]);
-        });
-
-        test("a paid join that finished with coins it found spent marks the account's own marker joined, never a bare one", async () => {
-            const own = fileWith({ [`${B}:2`]: { unlockedAt: RECENT }, '2': { unlockedAt: RECENT } });
-            const deps = joiningAs(B, own);
-            expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe('joined');
-            expect(own.read()).toEqual({ [`${B}:2`]: JOINED, '2': { unlockedAt: RECENT } });
-        });
-
-        test('a paid join with no account to key by (no profile read wired in) marks the bare marker it knows joined', async () => {
-            const bare = fileWith({ '2': { unlockedAt: RECENT } });
-            const deps = joiningAs(null, bare);
-            expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe('joined');
-            expect(bare.read()).toEqual({ '2': JOINED });
         });
     });
 
     describe('a claim stays after its join, marked joined: the proof for a process that read the open list before', () => {
-        const joined = { [`${A}:2`]: { unlockedAt: RECENT, joinedAt: RECENT } };
+        const joined = { '2': { unlockedAt: RECENT, joinedAt: RECENT } };
         const nothingDone = (deps: ReturnType<typeof joiningAs>) => {
             expect(deps.coinsUnlock).not.toHaveBeenCalled();
             expect(deps.submitToChallenge).not.toHaveBeenCalled();
@@ -2894,7 +3028,7 @@ describe('unlock markers are kept per account', () => {
             ],
         ])('%s of a challenge whose claim says joined unlocks nothing and submits nothing', async (_name, join) => {
             const store = fileWith(joined);
-            const deps = joiningAs(A, store);
+            const deps = joiningAs(store);
             expect(await join(deps)).toMatchObject({ status: 'failed-no-charge', reason: 'already-joined' });
             nothingDone(deps);
             // Refused before a photo is even chosen.
@@ -2904,7 +3038,7 @@ describe('unlock markers are kept per account', () => {
 
         test('so does the automatic pass, and its answer is not the "charged, retry the submit" one', async () => {
             const store = fileWith(joined);
-            const deps = joiningAs(A, store);
+            const deps = joiningAs(store);
             const res = await runJoinPass('tok', Date.now(), deps);
             expect(res.results).toEqual([{ id: 2, status: 'failed-no-charge' }]);
             nothingDone(deps);
@@ -2913,14 +3047,13 @@ describe('unlock markers are kept per account', () => {
         test('two processes: one joins while the other, whose list was read before, is still choosing a photo', async () => {
             const store = fileWith({});
             // The first process joins: it unlocks, submits, and leaves its claim marked joined.
-            const first = joiningAs(A, store);
+            const first = joiningAs(store);
             expect((await joinChallengeSingle(2, 'tok', first, { spendCoins: true })).status).toBe('joined');
-            expect(store.read()).toEqual({ [`${A}:2`]: JOINED });
+            expect(store.read()).toEqual({ '2': JOINED });
             // The second looked before that: its early reads see no claim; the one under the lock sees the first's.
             let early = 2;
             const acquire = jest.fn((_id: string | number) => ({ ok: true, release: jest.fn() }));
             const second = joiningAs(
-                A,
                 invalid<ReturnType<typeof fileWith>>({
                     readRaw: () => (early-- > 0 ? '{}' : JSON.stringify(store.read())),
                     writeRaw: store.writeRaw,
@@ -2934,18 +3067,18 @@ describe('unlock markers are kept per account', () => {
             // Refused in the unlock section itself: no second lock is taken to submit on the claim.
             expect(acquire.mock.calls.filter(([id]) => id !== 'joinstate')).toHaveLength(1);
             expect(first.coinsUnlock).toHaveBeenCalledTimes(1);
-            expect(store.read()).toEqual({ [`${A}:2`]: JOINED });
+            expect(store.read()).toEqual({ '2': JOINED });
         });
 
         test('a claim that has joined by the time the submit takes the lock is not submitted on either', async () => {
-            const unjoined = JSON.stringify({ [`${A}:2`]: { unlockedAt: RECENT } });
+            const unjoined = JSON.stringify({ '2': { unlockedAt: RECENT } });
             let reads = 0;
             const store = invalid<ReturnType<typeof fileWith>>({
                 // The caller's and the join's own read see an ordinary claim; the one under the lock, a joined one.
                 readRaw: () => (++reads <= 2 ? unjoined : JSON.stringify(joined)),
                 writeRaw: jest.fn(),
             });
-            const deps = joiningAs(A, store, { acquireUnlockLock: jest.fn(() => ({ ok: true, release: jest.fn() })) });
+            const deps = joiningAs(store, { acquireUnlockLock: jest.fn(() => ({ ok: true, release: jest.fn() })) });
             expect(await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).toMatchObject({
                 status: 'failed-no-charge',
             });
@@ -2953,30 +3086,16 @@ describe('unlock markers are kept per account', () => {
         });
 
         test('the join of an unconfirmed claim keeps it, marked joined and no longer in doubt', async () => {
-            const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT, unconfirmed: true, coinsBefore: 500 } });
-            expect((await joinChallengeSingle(2, 'tok', joiningAs(A, store))).status).toBe('joined');
-            const kept = store.read()[`${A}:2`];
+            const store = fileWith({ '2': { unlockedAt: RECENT, unconfirmed: true, coinsBefore: 500 } });
+            expect((await joinChallengeSingle(2, 'tok', joiningAs(store))).status).toBe('joined');
+            const kept = store.read()['2'];
             expect(kept).toEqual({ unlockedAt: RECENT, joinedAt: expect.any(Number) });
-            expect(findClaim(store.read(), 2, A)).toMatchObject({ unconfirmed: false, joined: true });
-        });
-
-        test("a bare claim used by the join becomes this account's own joined claim, so no other account is held back", async () => {
-            const store = fileWith({ '2': { unlockedAt: RECENT, coinsBefore: 500 } });
-            expect((await joinChallengeSingle(2, 'tok', joiningAs(A, store), { spendCoins: true })).status).toBe(
-                'joined',
-            );
-            expect(store.read()).toEqual({ [`${A}:2`]: { unlockedAt: RECENT, joinedAt: expect.any(Number) } });
-            // The other account is not told it has joined: it asks for the price and pays as any first join.
-            memberIdentity.__resetMemberIdCache();
-            const other = joiningAs(B, store);
-            expect((await joinChallengeSingle(2, 'tok', other, { spendCoins: true })).status).toBe('joined');
-            expect(other.coinsUnlock).toHaveBeenCalledTimes(1);
-            expect(Object.keys(store.read()).sort()).toEqual([`${A}:2`, `${B}:2`]);
+            expect(findClaim(store.read(), 2)).toMatchObject({ unconfirmed: false, joined: true });
         });
 
         test('it is never forgettable', async () => {
             const store = fileWith(joined);
-            expect(await forgetUnconfirmedPayment(2, 'tok', joiningAs(A, store))).toEqual({
+            expect(await forgetUnconfirmedPayment(2, 'tok', joiningAs(store))).toEqual({
                 status: 'nothing-to-forget',
                 challengeId: 2,
             });
@@ -2984,98 +3103,9 @@ describe('unlock markers are kept per account', () => {
         });
 
         test('a claim whose record is no object is not marked: there is nothing to mark', () => {
-            const store = fileWith({ [`${A}:2`]: 'not an object' });
-            markJoined(joiningAs(A, store), `${A}:2`, `${A}:2`);
+            const store = fileWith({ '2': 'not an object' });
+            markJoined(joiningAs(store), '2');
             expect(store.writeRaw).not.toHaveBeenCalled();
-        });
-
-        test('a free join leaves every claim as it is', async () => {
-            const store = fileWith({ '2': { unlockedAt: RECENT } });
-            const deps = joiningAs(A, store, {
-                getMemberChallenges: openList([{ id: 2, join_coins: 0, type: 'flash' }]),
-            });
-            expect((await joinChallengeSingle(2, 'tok', deps)).status).toBe('joined');
-            expect(store.read()).toEqual({ '2': { unlockedAt: RECENT } });
-        });
-    });
-
-    describe('a paid join whose account cannot be identified does nothing paid', () => {
-        const unidentified = (kind: 'null' | 'throws', store: ReturnType<typeof fileWith>) =>
-            joiningAs(null, store, {
-                getCurrentMemberProfile:
-                    kind === 'null'
-                        ? jest.fn(async () => null)
-                        : jest.fn(async () => {
-                              throw new Error('down');
-                          }),
-            });
-
-        test.each([['null' as const], ['throws' as const]])(
-            'the profile read answering with %s: no unlock, no submit, no marker written or relied on, and "no coins were charged" is true',
-            async (kind) => {
-                for (const marker of [{}, { [`${A}:2`]: { unlockedAt: RECENT } }, { '2': { unlockedAt: RECENT } }]) {
-                    memberIdentity.__resetMemberIdCache();
-                    const store = fileWith(marker);
-                    const deps = unidentified(kind, store);
-                    const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true, expectedCost: 100 });
-                    expect(res).toMatchObject({ status: 'failed-no-charge', cost: 100, reason: 'account-unknown' });
-                    expect(deps.coinsUnlock).not.toHaveBeenCalled();
-                    expect(deps.submitToChallenge).not.toHaveBeenCalled();
-                    expect(deps.getBankroll).not.toHaveBeenCalled();
-                    expect(store.writeRaw).not.toHaveBeenCalled();
-                }
-            },
-        );
-
-        test('the join itself (the auto pass reaches it directly) refuses the same way', async () => {
-            const store = fileWith({});
-            const deps = unidentified('null', store);
-            expect(await performJoin(invalid({ id: 2 }), 'tok', deps, 100)).toEqual({
-                status: 'failed-no-charge',
-                charged: 0,
-                reason: 'account-unknown',
-            });
-            expect(deps.coinsUnlock).not.toHaveBeenCalled();
-            expect(store.writeRaw).not.toHaveBeenCalled();
-        });
-
-        test('a free join does not need to know the account', async () => {
-            const store = fileWith({});
-            const deps = unidentified('null', store);
-            deps.getMemberChallenges = openList([{ id: 2, join_coins: 0, type: 'flash' }]);
-            expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: false })).status).toBe('joined');
-        });
-
-        test('with no profile read wired in (the mock, a bare double) the account is not asked for: markers are bare', async () => {
-            const store = fileWith({});
-            const deps = joiningAs(null, store, {
-                submitToChallenge: double<'submitToChallenge'>(async () => ({ ok: false })),
-            });
-            const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true });
-            expect(res.status).toBe('charged-pending-submit');
-            expect(Object.keys(store.read())).toEqual(['2']);
-        });
-
-        test('with no marker store (mock mode) a paid join works whoever it is', async () => {
-            const deps = joiningAs(null, fileWith({}), {
-                joinStateStore: null,
-                getCurrentMemberProfile: jest.fn(async () => null),
-            });
-            expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe('joined');
-            expect(deps.coinsUnlock).toHaveBeenCalledTimes(1);
-        });
-
-        test("markers that merely end in the challenge id are not that challenge's", async () => {
-            const store = fileWith({
-                [`${A}:12`]: { unlockedAt: RECENT },
-                [`${A}:22`]: { unlockedAt: RECENT },
-                '12': { unlockedAt: RECENT },
-            });
-            const deps = joiningAs(A, store);
-            expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true, expectedCost: 40 })).status).toBe(
-                'needs-confirm',
-            );
-            expect(deps.coinsUnlock).not.toHaveBeenCalled();
         });
     });
 });
@@ -3332,26 +3362,6 @@ describe('joinChallenges — edge paths', () => {
             expect(warnings()).toContain(
                 'could not mark the unlock marker for 4 as joined: join-state is unreadable — nothing written',
             );
-        });
-
-        test('a claim of an account is logged by its challenge id only, never by the member id in its key', async () => {
-            const member = 'c'.repeat(32);
-            (
-                require('../../src/ts/services/autoFill/memberIdentity') as typeof memberIdentityModule
-            ).__resetMemberIdCache();
-            const store = {
-                readRaw: () => JSON.stringify({ [`${member}:4`]: { unlockedAt: RECENT } }),
-                writeRaw: jest.fn(() => {
-                    throw new Error('read-only');
-                }),
-            };
-            const deps = makeDeps({
-                joinStateStore: store,
-                getCurrentMemberProfile: jest.fn(async () => ({ id: member, userName: 'u' })),
-            });
-            await performJoin(invalid({ id: 4 }), 'tok', deps, 100);
-            expect(warnings()).toContain('could not mark the unlock marker for 4 as joined: read-only');
-            expect(warnings().some((line) => String(line).includes(member))).toBe(false);
         });
 
         test('a failure to clear the marker after a successful join is logged, the join still succeeds', async () => {
@@ -3822,12 +3832,12 @@ describe('on the background service, whose claims go through the native bridge',
         const native = nativeClaims();
         const compareAndWriteKey = bridge(native);
         const first = makeDeps({ joinStateStore: session() });
-        expect(await recorded(first, 7, null, 50)).toBe(true);
+        expect(await recorded(first, 7, 50)).toBe(true);
         expect(compareAndWriteKey).toHaveBeenCalledWith('gs_join_state', '', expect.stringContaining('unlockedAt'));
         const second = session();
-        expect(findClaim(parseJsonObject(second.readRaw() ?? '{}'), 7, null)).not.toBeNull();
+        expect(findClaim(parseJsonObject(second.readRaw() ?? '{}'), 7)).not.toBeNull();
         // The restarted service pays for nothing it already paid for: the claim is found, not written again.
-        expect(await recorded(makeDeps({ joinStateStore: second }), 7, null, 50)).toBe(false);
+        expect(await recorded(makeDeps({ joinStateStore: second }), 7, 50)).toBe(false);
         expect(native.state.saves).toBe(1);
     });
 
@@ -4030,7 +4040,10 @@ describe('on the app window, where the background service writes the same claims
             mirror(native)();
             return window.deps({ getMemberChallenges: openList([{ id: 3, join_coins: 100 }]) });
         };
-        expect(await paidByThisAccount({ id: 3, join_coins: 100 }, 'tok', await withServiceClaim())).toBe(true);
+        // The pass's own claim read sees the service's claim and only submits.
+        const pass = await withServiceClaim();
+        expect((await runJoinPass('tok', Date.now(), pass)).results).toEqual([{ id: 3, status: 'joined' }]);
+        expect(pass.coinsUnlock).not.toHaveBeenCalled();
         const manual = await withServiceClaim();
         expect((await joinChallengeSingle(3, 'tok', manual, { spendCoins: false })).status).toBe('joined');
         expect(manual.coinsUnlock).not.toHaveBeenCalled();
@@ -4044,7 +4057,6 @@ describe('on the app window, where the background service writes the same claims
         const { deps } = await appWindow(native);
         failingPrefReads.add('gs_join_state');
         const d = deps({ getMemberChallenges: openList([{ id: 3, join_coins: 100 }]) });
-        expect(await paidByThisAccount({ id: 3, join_coins: 100 }, 'tok', d)).toBe(false);
         expect(await performJoin(paidChallenge(), 'tok', d, 100)).toEqual({ status: 'failed-no-charge', charged: 0 });
         expect(await joinChallengeSingle(3, 'tok', d, { spendCoins: true })).toMatchObject({
             status: 'busy',
@@ -4141,7 +4153,7 @@ describe('on the app window, where the background service writes the same claims
             };
         });
         const deps = makeDeps({ joinStateStore: store, acquireUnlockLock });
-        await pruneClosedClaims([{ id: 1 }], 'tok', deps);
+        await pruneClosedClaims([{ id: 1 }], deps);
         // The second try could take the lock again (the first was let go), and every lock taken is let go once.
         expect(acquired).toEqual(['old', 'old']);
         expect(released).toEqual(['old', 'old']);
@@ -4159,14 +4171,12 @@ describe('on the app window, where the background service writes the same claims
         native.state.beforeAnswer.push(() => {
             native.claimLikeTheOtherContext('10');
         });
-        await pruneClosedClaims([{ id: 1 }], 'tok', deps());
+        await pruneClosedClaims([{ id: 1 }], deps());
         expect(native.keys()).toEqual(['10', '9']);
     });
 });
 
 describe('runJoinPass — Manual Only', () => {
-    const A = 'a'.repeat(32);
-    const memberIdentity = require('../../src/ts/services/autoFill/memberIdentity') as typeof memberIdentityModule;
     const switchOn = () =>
         settings.getEffectiveSetting.mockImplementation((k) => ({ ...DEFAULT_SETTINGS, manualPhotosOnly: true })[k]);
     const paidNotEntered = () =>
@@ -4174,12 +4184,9 @@ describe('runJoinPass — Manual Only', () => {
     const paidPass = (id: number) =>
         makeDeps({
             getMemberChallenges: openList([{ id, join_coins: 100, type: 'flash' }]),
-            getCurrentMemberProfile: jest.fn(async () => ({ id: A, userName: 'u' })),
-            joinStateStore: fileWith({ [`${A}:${id}`]: { unlockedAt: RECENT } }),
+            joinStateStore: fileWith({ [String(id)]: { unlockedAt: RECENT } }),
         });
     const warned = () => invalid<LoggerMock>(require('../../src/ts/logger')).withCategory().warning;
-
-    beforeEach(() => memberIdentity.__resetMemberIdCache());
 
     test('off: the candidate joins as ever, and no warning is written', async () => {
         const deps = makeDeps({ getMemberChallenges: openList([{ id: 21, join_coins: 0, type: 'flash' }]) });
@@ -4256,28 +4263,10 @@ describe('runJoinPass — Manual Only', () => {
         expect(paidNotEntered()).toHaveLength(2);
     });
 
-    test('two accounts holding a claim on the same challenge each get the warning once', async () => {
-        switchOn();
-        const B = 'b'.repeat(32);
-        const passAs = (member: string) =>
-            makeDeps({
-                getMemberChallenges: openList([{ id: 44, join_coins: 100, type: 'flash' }]),
-                getCurrentMemberProfile: jest.fn(async () => ({ id: member, userName: 'u' })),
-                joinStateStore: fileWith({ [`${member}:44`]: { unlockedAt: RECENT } }),
-            });
-        for (const member of [A, B, A, B]) {
-            memberIdentity.__resetMemberIdCache();
-            const res = await runJoinPass('tok', Date.now(), passAs(member));
-            expect(res.results).toEqual([{ id: 44, status: 'skipped:manual-photos-only' }]);
-        }
-        expect(paidNotEntered()).toHaveLength(2);
-    });
-
-    test('a paid candidate this account holds no claim for is skipped without a warning', async () => {
+    test('a paid candidate no claim on file is skipped without a warning', async () => {
         switchOn();
         const deps = makeDeps({
             getMemberChallenges: openList([{ id: 29, join_coins: 100, type: 'flash' }]),
-            getCurrentMemberProfile: jest.fn(async () => ({ id: A, userName: 'u' })),
         });
         const res = await runJoinPass('tok', Date.now(), deps);
         expect(res.results).toEqual([{ id: 29, status: 'skipped:manual-photos-only' }]);
@@ -4295,5 +4284,296 @@ describe('runJoinPass — Manual Only', () => {
         });
         const res = await runJoinPass('tok', Date.now(), deps);
         expect(res.results).toEqual([{ id: 30, status: 'skipped:autojoin-off' }]);
+    });
+});
+
+describe('join safety — a challenge that is full, or whose unlock price cannot be read, is never joined fresh', () => {
+    const FULL = { players: 100, max_players: 100 };
+    const fullList = openList([{ id: 1, join_coins: 0, ...FULL }]);
+    const priceUnknownList = openList([{ id: 2, join_coins: 0, member: { submit_state: 'join_unlock' } }]);
+    const level = () => invalid<LoggerMock>(require('../../src/ts/logger')).withCategory();
+
+    test('the auto pass skips a full challenge as skipped:full, never spending', async () => {
+        const deps = makeDeps({ getMemberChallenges: fullList });
+        expect((await runJoinPass('tok', Date.now(), deps)).results).toEqual([{ id: 1, status: 'skipped:full' }]);
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('the auto pass skips an unreadable price as skipped:price-unknown, never spending', async () => {
+        const deps = makeDeps({ getMemberChallenges: priceUnknownList });
+        expect((await runJoinPass('tok', Date.now(), deps)).results).toEqual([
+            { id: 2, status: 'skipped:price-unknown' },
+        ]);
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('the skip is INFO when a title profile opted the challenge in, DEBUG for the general sweep', async () => {
+        await runJoinPass('tok', Date.now(), makeDeps({ getMemberChallenges: fullList }));
+        expect(level().debug).toHaveBeenCalledWith(expect.stringContaining('it is full'), null);
+        expect(level().info).not.toHaveBeenCalledWith(expect.stringContaining('it is full'), null);
+
+        settings.hasRuleJoinOptIn.mockReturnValue(true);
+        await runJoinPass('tok', Date.now(), makeDeps({ getMemberChallenges: fullList }));
+        expect(level().info).toHaveBeenCalledWith(expect.stringContaining('it is full'), null);
+    });
+
+    test('a non-empty Chosen Photos list for the challenge opts the skip in at INFO too', async () => {
+        settings.getChallengeOverride.mockImplementation((key: string) => (key === 'chosenPhotos' ? ['imgA'] : null));
+        await runJoinPass('tok', Date.now(), makeDeps({ getMemberChallenges: fullList }));
+        expect(level().info).toHaveBeenCalledWith(expect.stringContaining('it is full'), null);
+        expect(level().debug).not.toHaveBeenCalledWith(expect.stringContaining('it is full'), null);
+    });
+
+    test('a challenge already paid for is still submitted when it is full', async () => {
+        const store = fileWith({ '1': { unlockedAt: RECENT } });
+        const deps = makeDeps({
+            getMemberChallenges: openList([{ id: 1, join_coins: 100, ...FULL }]),
+            getBankroll: balance({ coins: 0 }),
+            joinStateStore: store,
+        });
+        const res = await runJoinPass('tok', Date.now(), deps);
+        expect(res.results).toEqual([{ id: 1, status: 'joined' }]);
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(deps.submitToChallenge).toHaveBeenCalledWith(1, ['imgA'], 'tok');
+    });
+
+    test('the manual join refuses a full challenge with failed-no-charge/full', async () => {
+        const deps = makeDeps({ getMemberChallenges: fullList });
+        expect(await joinChallengeSingle(1, 'tok', deps)).toEqual({
+            status: 'failed-no-charge',
+            challengeId: 1,
+            cost: 0,
+            reason: 'full',
+        });
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('the manual join refuses an unreadable price with failed-no-charge/price-unknown', async () => {
+        const deps = makeDeps({ getMemberChallenges: priceUnknownList });
+        expect(await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).toEqual({
+            status: 'failed-no-charge',
+            challengeId: 2,
+            cost: 0,
+            reason: 'price-unknown',
+        });
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test("the manual retry of an already-paid join (Discover's Retry submit) still submits a full challenge", async () => {
+        const store = fileWith({ 4: { unlockedAt: RECENT } });
+        const deps = makeDeps({
+            getMemberChallenges: openList([{ id: 4, join_coins: 100, ...FULL }]),
+            joinStateStore: store,
+        });
+        const res = await joinChallengeSingle(4, 'tok', deps, { spendCoins: true });
+        expect(res).toMatchObject({ status: 'joined', challengeId: 4 });
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(deps.submitToChallenge).toHaveBeenCalledWith(4, ['imgA'], 'tok');
+    });
+
+    // The exemption holds whatever the listing price says now: a claim on file beats the guard even
+    // once join_coins reads 0 (or is gone) — the coins were paid when the price was positive.
+    describe('a claim on file beats the guard even at a price of 0 or none', () => {
+        test('the auto pass still submits a full challenge whose price has dropped to 0, and logs no skip', async () => {
+            const store = fileWith({ '1': { unlockedAt: RECENT } });
+            const deps = makeDeps({
+                getMemberChallenges: openList([{ id: 1, join_coins: 0, ...FULL }]),
+                joinStateStore: store,
+            });
+            const res = await runJoinPass('tok', Date.now(), deps);
+            expect(res.results).toEqual([{ id: 1, status: 'joined' }]);
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            expect(deps.submitToChallenge).toHaveBeenCalledWith(1, ['imgA'], 'tok');
+            expect(level().debug).not.toHaveBeenCalledWith(expect.stringContaining('it is full'), null);
+        });
+
+        test('the auto pass still submits a candidate that owes an unlock whose price is unreadable', async () => {
+            const store = fileWith({ '2': { unlockedAt: RECENT } });
+            const deps = makeDeps({
+                getMemberChallenges: openList([{ id: 2, join_coins: 0, member: { submit_state: 'join_unlock' } }]),
+                joinStateStore: store,
+            });
+            const res = await runJoinPass('tok', Date.now(), deps);
+            expect(res.results).toEqual([{ id: 2, status: 'joined' }]);
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            expect(deps.submitToChallenge).toHaveBeenCalledWith(2, ['imgA'], 'tok');
+        });
+
+        test('the manual join still submits a full challenge whose price has dropped to 0, with no balance read and the claim left', async () => {
+            const store = fileWith({ '1': { unlockedAt: RECENT } });
+            const deps = makeDeps({
+                getMemberChallenges: openList([{ id: 1, join_coins: 0, ...FULL }]),
+                joinStateStore: store,
+            });
+            const res = await joinChallengeSingle(1, 'tok', deps, { spendCoins: true });
+            expect(res).toMatchObject({ status: 'joined', challengeId: 1, cost: 0 });
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            expect(deps.getBankroll).not.toHaveBeenCalled();
+            expect(deps.submitToChallenge).toHaveBeenCalledWith(1, ['imgA'], 'tok');
+            // The submit went through, but the claim is not this join's to settle at a 0 price: it stays.
+            expect(store.read()).toEqual({ '1': { unlockedAt: RECENT } });
+        });
+
+        test('the manual join still submits a challenge that owes an unlock whose price is gone', async () => {
+            const store = fileWith({ '5': { unlockedAt: RECENT } });
+            const deps = makeDeps({
+                getMemberChallenges: openList([{ id: 5, member: { submit_state: 'join_unlock' } }]),
+                joinStateStore: store,
+            });
+            const res = await joinChallengeSingle(5, 'tok', deps, { spendCoins: true });
+            expect(res).toMatchObject({ status: 'joined', challengeId: 5, cost: 0 });
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            expect(deps.submitToChallenge).toHaveBeenCalledWith(5, ['imgA'], 'tok');
+        });
+
+        test.each([
+            ['an id-less candidate', openList([{ title: 'NoId', join_coins: 0, ...FULL }])],
+            ['a candidate with no claims store', openList([{ id: 6, join_coins: 0, ...FULL }])],
+        ])('%s is still refused — there is no claim to beat the guard with', async (_label, list) => {
+            const deps = makeDeps({ getMemberChallenges: list, joinStateStore: null });
+            const res = await runJoinPass('tok', Date.now(), deps);
+            expect(res.results[0].status).toBe('skipped:full');
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            expect(deps.submitToChallenge).not.toHaveBeenCalled();
+        });
+
+        test('claims that cannot be read again are not read as a claim: the refusal stands', async () => {
+            const store = fileWith({ '1': { unlockedAt: RECENT } });
+            const deps = makeDeps({
+                getMemberChallenges: openList([{ id: 1, join_coins: 0, ...FULL }]),
+                joinStateStore: store,
+                refreshJoinState: jest.fn(async () => false),
+            });
+            const res = await runJoinPass('tok', Date.now(), deps);
+            expect(res.results).toEqual([{ id: 1, status: 'skipped:full' }]);
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            expect(deps.submitToChallenge).not.toHaveBeenCalled();
+        });
+
+        test('a positive-price candidate whose claims cannot be read again is not read as paid: the join refuses fresh', async () => {
+            const store = fileWith({ '1': { unlockedAt: RECENT } });
+            const deps = makeDeps({
+                getMemberChallenges: openList([{ id: 1, join_coins: 100, type: 'flash' }]),
+                getBankroll: balance({ coins: 500 }),
+                joinStateStore: store,
+                refreshJoinState: jest.fn(async () => false),
+            });
+            const res = await runJoinPass('tok', Date.now(), deps);
+            expect(res.results).toEqual([{ id: 1, status: 'failed-no-charge' }]);
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            expect(deps.submitToChallenge).not.toHaveBeenCalled();
+        });
+    });
+});
+
+describe("the join's photo pick under a failing suggested-photos read", () => {
+    test.each([
+        ['an Error', new Error('down'), 'down'],
+        ['a bare value', 'plain', 'plain'],
+    ])(
+        'a suggested-photos read that rejects with %s is debug-logged and the pick still succeeds',
+        async (_label, thrown, said) => {
+            const deps = makeDeps({
+                getSuggestedPhotoIds: jest.fn(async () => {
+                    throw thrown;
+                }),
+            });
+            const res = await performJoin(invalid({ id: 18 }), 'tok', deps, 0);
+            expect(res).toEqual({ status: 'joined', charged: 0, imageId: 'imgA' });
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            expect(invalid<LoggerMock>(require('../../src/ts/logger')).withCategory().debug).toHaveBeenCalledWith(
+                expect.stringContaining(`could not read the suggested photos for 18: ${said}`),
+                null,
+            );
+        },
+    );
+});
+
+describe('the spend-path guards on the join list', () => {
+    const warned = () => invalid<LoggerMock>(require('../../src/ts/logger')).withCategory().warning;
+    // A claim whose join went through, old enough for the list to end it.
+    const joinedOld = { unlockedAt: RECENT - 7 * 60 * 60 * 1000, joinedAt: RECENT - 7 * 60 * 60 * 1000 };
+
+    test('a clean list still prunes', async () => {
+        const store = fileWith({ '7': joinedOld, '12': joinedOld });
+        const deps = makeDeps({ getMemberChallenges: openList([{ id: 5 }, { id: 12 }]), joinStateStore: store });
+        await pruneClosedClaims([{ id: 5 }, { id: 12 }], deps);
+        expect(Object.keys(store.read())).toEqual(['12']);
+    });
+
+    test('a list with a row that has no usable id prunes nothing, and says so once per run of such reads', async () => {
+        const store = fileWith({ '7': joinedOld });
+        const deps = makeDeps({ getMemberChallenges: openList([{ id: 5 }, null]), joinStateStore: store });
+        // A clean read that keeps the claim first, so the once-per-run notice is armed for this test.
+        await pruneClosedClaims([{ id: 5 }, { id: 7 }], deps);
+        warned().mockClear();
+        const bad = [{ id: 5 }, null];
+        await pruneClosedClaims(bad, deps);
+        expect(store.writeRaw).not.toHaveBeenCalled();
+        expect(store.read()).toEqual({ '7': joinedOld });
+        expect(warned()).toHaveBeenCalledTimes(1);
+        expect(warned()).toHaveBeenCalledWith(expect.stringContaining('no usable id'), null);
+        // The next consecutive read of a list that cannot prove closure says nothing more.
+        await pruneClosedClaims(bad, deps);
+        expect(warned()).toHaveBeenCalledTimes(1);
+    });
+
+    test('a readable list after a bad one re-arms the skip notice', async () => {
+        const store = fileWith({ '7': joinedOld });
+        const deps = makeDeps({ getMemberChallenges: openList([{ id: 5 }, null]), joinStateStore: store });
+        await pruneClosedClaims([{ id: 5 }], deps);
+        await pruneClosedClaims([{ id: 5 }, null], deps);
+        await pruneClosedClaims([{ id: 5 }], deps);
+        await pruneClosedClaims([{ id: 5 }, null], deps);
+        expect(warned()).toHaveBeenCalledTimes(2);
+    });
+
+    test('an open-list row with no usable id is not joined and writes no claim', async () => {
+        const store = fileWith({});
+        const deps = makeDeps({
+            getMemberChallenges: openList([{ id: 'undefined', title: 'Broken', join_coins: 0, type: 'flash' }]),
+            joinStateStore: store,
+        });
+        const res = await runJoinPass('tok', Date.now(), deps);
+        expect(res.results).toEqual([{ id: 'undefined', status: 'failed-no-charge' }]);
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(store.writeRaw).not.toHaveBeenCalled();
+        expect(warned()).toHaveBeenCalledWith(expect.stringContaining('no usable id'), null);
+    });
+
+    test.each([
+        ['null row', null],
+        ['no id', { title: 'No id' }],
+        ['zero id', { id: 0 }],
+        ['negative id', { id: -4 }],
+    ])('performJoin refuses a %s before any lock, claim or request', async (_label, row) => {
+        const store = fileWith({});
+        const deps = makeDeps({ joinStateStore: store });
+        const res = await performJoin(invalid(row), 'tok', deps, 0);
+        expect(res).toEqual({ status: 'failed-no-charge', charged: 0 });
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(store.writeRaw).not.toHaveBeenCalled();
+    });
+
+    test('a claimed paid retry with a fractional join_coins still takes the paid-retry path and submits', async () => {
+        // The fresh-guard now refuses a fractional price, but a claim on file beats it: the coins
+        // were paid when the price was whole, and only the submit is left.
+        const store = fileWith({ '3': { unlockedAt: RECENT } });
+        const deps = makeDeps({
+            getMemberChallenges: openList([{ id: 3, join_coins: 1.5, type: 'flash' }]),
+            getBankroll: balance({ coins: 500 }),
+            joinStateStore: store,
+        });
+        const res = await joinChallengeSingle(3, 'tok', deps);
+        expect(res).toMatchObject({ status: 'joined', challengeId: 3 });
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(deps.submitToChallenge).toHaveBeenCalledTimes(1);
+        expect(store.read()).toEqual({ '3': expect.objectContaining({ joinedAt: expect.any(Number) }) });
     });
 });

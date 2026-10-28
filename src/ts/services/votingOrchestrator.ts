@@ -60,6 +60,10 @@ import { runScenarioStep } from './scenarioRunner';
 import * as cancellation from '../voting/cancellation';
 import { beginVotingPass, isVotingPassRunning } from '../voting/passActivity';
 import { failureText } from '../format/logSafe';
+import { errorKind } from '../errorMessage';
+import { consumeChosenPhotos } from '../settings';
+import { isMarkedChallenge } from '../challengeMarks';
+import { getEntries } from './autoFill/challengeState';
 import { buildFillDeps, cancelPass } from './votingOrchestrator/context';
 import { runDeadlineActions } from './votingOrchestrator/actionRunners';
 import { playAutoTurbo } from './votingOrchestrator/turbo';
@@ -91,18 +95,35 @@ const abortPass = (msg: string, allChallenges: Challenge[], level: 'error' | 'wa
     return { success: false, error: msg, challenges: allChallenges };
 };
 
+// The error a scoped Run on a marked challenge answers with (the shared IPC refusal code).
+const DATA_INCOMPLETE_ERROR = 'challenge-data-incomplete';
+// The log-catalog key of the marked-challenge skip line ('{0}: challenge data cannot be read — skipped this pass').
+const MARKED_SKIP_KEY = 'm704cb4f5be48';
+
+/**
+ * The pass's skip of a challenge the boundary marked (`dataIssues`): one line, challengeTag + codes only —
+ * the boundary's convention.
+ */
+const logMarkedSkip = (challenge: Challenge) =>
+    logger
+        .withCategory('voting')
+        .warningT(MARKED_SKIP_KEY, [logger.challengeTag(challenge)], { codes: challenge.dataIssues });
+
 /**
  * Cleanup stale metadata against the full active list — must run before any
  * per-challenge filter so we don't drop metadata for challenges the user is
- * simply not running this pass.
+ * simply not running this pass. A prune-unsafe read (it dropped elements that
+ * could not carry an identity) skips the cleanup entirely: an id the read
+ * dropped would purge live metadata.
  */
 const pruneStaleMetadata = (
-    cleanupStaleMetadata: (activeChallengeIds: string[]) => boolean,
+    cleanupStaleMetadata: (activeChallengeIds: string[], pruneUnsafe?: boolean) => boolean,
     allChallenges: Challenge[],
+    pruneUnsafe: boolean,
 ) => {
     try {
         const activeChallengeIds = allChallenges.map((challenge) => challenge.id.toString());
-        const cleanupSuccess = cleanupStaleMetadata(activeChallengeIds);
+        const cleanupSuccess = cleanupStaleMetadata(activeChallengeIds, pruneUnsafe);
         if (cleanupSuccess) {
             logger.withCategory('api').debug('Successfully cleaned up stale metadata', null);
         } else {
@@ -156,9 +177,37 @@ const processChallenge = async (
         return cancelPass(pass.allChallenges);
     }
 
+    // A challenge the boundary marked (present but malformed fields) is skipped whole: nothing below it — the
+    // chosen photos, the scenario step, turbo, boost, the key/swap/fill spends, the entry-age observe or the
+    // new-entry baseline — may act on data that failed the check. The rest of the pass goes on without it.
+    if (isMarkedChallenge(challenge)) {
+        logMarkedSkip(challenge);
+        return null;
+    }
+
     logger
         .withCategory('voting')
         .progress(`Processing challenge ${position}/${total}: ${challenge.title}`, position, total);
+
+    // Lazy net for Chosen Photos: entries made outside the app's chosen-photo
+    // paths (the GuruShots site, an unclear submit that landed later, a
+    // join-time list the facts cache did not know yet) leave the stored list
+    // here, on the first pass whose fetch knows the challenge — rule-layer
+    // Submit Only resolves correctly, because the pass's active fetch has
+    // refreshed the cache. Contained like the other bookkeeping: a failure
+    // logs one line and the challenge's cycle continues untouched. Above the
+    // Manual Only skip on purpose, so a Manual Only challenge's external
+    // entries are consumed too.
+    try {
+        consumeChosenPhotos(
+            challenge.id,
+            getEntries(challenge).map((entry) => String(entry?.id)),
+        );
+    } catch (error) {
+        logger
+            .withCategory('voting')
+            .warning(`${logger.challengeTag(challenge)} chosen photos not consumed (${errorKind(error)})`, null);
+    }
 
     // Manual Only: nothing below runs on this challenge. Checked live, after the cancellation
     // check, so a switch turned on mid-pass takes effect from the next challenge.
@@ -167,6 +216,11 @@ const processChallenge = async (
     // The challenge's scenario runs first: its actions (and a phase change)
     // land before the built-in steps, which then read the new phase's
     // settings overlay through getEffectiveSetting.
+    // Whether GuruShots sent a swap history is recorded before the step on
+    // purpose: the scenario swap (and the auto swap's own reflect) write a
+    // swaps array onto this object, so the auto-swap cap branch is decided on
+    // the history as sent, never on the object at call time.
+    const swapHistorySent = Array.isArray(challenge.member?.ranking?.swaps);
     await runScenarioStep(challenge, now, pass);
 
     await playAutoTurbo(challenge, now, pass);
@@ -175,7 +229,7 @@ const processChallenge = async (
     // run ahead of the deadline actions on purpose: an unlocked boost is then
     // available to the boost runner this same pass, and a swap happens before a
     // boost/turbo lands, so neither spends on the photo about to be replaced.
-    const currencyCtx = { challenge, token: pass.token, now, currency: pass.currency };
+    const currencyCtx = { challenge, token: pass.token, now, currency: pass.currency, swapHistorySent };
     await currencyAuto.runAutoKey(currencyCtx);
     await currencyAuto.runAutoSwap(currencyCtx);
 
@@ -261,7 +315,10 @@ const runVotingPass = async (
         // Get all active challenges
         logger.withCategory('challenges').info('🔄 Loading active challenges', null);
         const turboSnapshot = turboRunSnapshot();
-        const { challenges: allChallenges, fetchFailed } = await api.getActiveChallenges(token);
+        const response = await api.getActiveChallenges(token);
+        const { challenges: allChallenges, fetchFailed } = response;
+        // A read that dropped elements it could not identify: stale-metadata cleanup must not run on it.
+        const pruneUnsafe = response.pruneUnsafe === true;
 
         // A failed fetch is not an empty account. makePostRequest resolves null once retries
         // are exhausted, which would otherwise arrive here as an empty list and be reported
@@ -279,11 +336,18 @@ const runVotingPass = async (
             return { success: true, message: 'No active challenges found', challenges: allChallenges };
         }
 
-        if (cleanupStaleMetadata) pruneStaleMetadata(cleanupStaleMetadata, allChallenges);
+        if (cleanupStaleMetadata) pruneStaleMetadata(cleanupStaleMetadata, allChallenges, pruneUnsafe);
 
         const scope = selectPassChallenges(allChallenges, challengeIdFilter);
         if (scope.result) return scope.result;
         const { challenges } = scope;
+
+        // A per-card Run on a marked challenge is refused, never "completed successfully": nothing ran on it.
+        if (challengeIdFilter != null && isMarkedChallenge(challenges[0])) {
+            logMarkedSkip(challenges[0]);
+            logger.withCategory('voting').endOperation('voting-process', null, 'the challenge data cannot be read');
+            return { success: false, error: DATA_INCOMPLETE_ERROR, challenges: allChallenges };
+        }
 
         const scopedState = challengeIdFilter != null ? manualOnlyState(challenges[0]) : 'off';
         // Fail closed, but say what happened: an unreadable switch is a failed Run, not a Manual Only one.
@@ -313,7 +377,9 @@ const runVotingPass = async (
             missionVoteQuota: planMissionVotes(
                 missions,
                 challengeIdFilter,
-                allChallenges.filter((challenge) => !isManualOnlyFailClosed(challenge)),
+                allChallenges.filter(
+                    (challenge) => !isManualOnlyFailClosed(challenge) && !isMarkedChallenge(challenge),
+                ),
             ),
             allChallenges,
             turboSnapshot,

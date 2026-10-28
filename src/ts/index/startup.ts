@@ -1,6 +1,11 @@
 import { app, BrowserWindow, powerMonitor } from 'electron';
 import * as settings from '../settings';
-import { holdDesktopAppLock, isCliSessionActive, refreshDesktopAppLock } from '../settings/cliSessionLock';
+import {
+    holdDesktopAppLock,
+    isCliSessionActive,
+    isWebServerActive,
+    refreshDesktopAppLock,
+} from '../settings/cliSessionLock';
 import { initializeHeaders } from '../api/randomizer';
 import * as logger from '../logger';
 import { AutoUpdater } from '../services/AutoUpdater';
@@ -15,20 +20,24 @@ import { installPermissionHandlers } from './permissions';
 
 /**
  * A login a run left behind (a crash or a kill skips the quit-time clear) is cleared at the next start unless "Stay
- * Logged In" is on. Only the desktop app does this, and only in the instance that holds the single-instance lock
- * (onReady runs for no other): a CLI session that is running may be using the login, so it is left alone then. Looking
- * for a CLI session can wait a few seconds on an old marker, so this runs beside the first window rather than before
- * it; the login window needs no token, and a login made meanwhile is never cleared (the token is read again first).
+ * Logged In" is on — the desktop app does it here, the web server shell before it starts listening. This clear runs
+ * only in the instance that holds the single-instance lock (onReady runs for no other): a CLI session or a web
+ * server that is running may be using the login, so it is left alone then. Looking for a sibling can wait a few
+ * seconds on an old marker, so this runs beside the first window rather than before it; the login window needs no
+ * token, and a login made meanwhile is never cleared (the token is read again first).
  */
 const clearLeftoverToken = async () => {
     try {
         const userSettings = settings.loadSettings();
         const leftover = userSettings.auth.token;
         if (userSettings.app.stayLoggedIn || !leftover) return;
-        if (await isCliSessionActive()) {
+        if ((await isCliSessionActive()) || (await isWebServerActive())) {
             logger
                 .withCategory('authentication')
-                .info('Kept the saved login token because a CLI session is running and may be using it', null);
+                .info(
+                    'Kept the saved login token because another session is running and may be using it (CLI, desktop app, or web server)',
+                    null,
+                );
             return;
         }
         const now = settings.loadSettings();

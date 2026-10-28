@@ -346,23 +346,15 @@ describe('watchSettingsFile change detection', () => {
             expect(loggedText()).not.toContain('p-ch');
         });
 
-        test('a username change and a new chooser owner are masked on both sides', async () => {
-            settings.loadSettings.mockReturnValue(
-                loaded({}, { lastUsername: 'old@example.com', chosenPhotosMemberId: 'member-old' }),
-            );
+        test('a username change is masked on both sides', async () => {
+            settings.loadSettings.mockReturnValue(loaded({}, { lastUsername: 'old@example.com' }));
             watchSettingsFile(deps());
 
-            settings.loadSettings.mockReturnValue(
-                loaded({}, { lastUsername: 'new@example.com', chosenPhotosMemberId: 'member-new' }),
-            );
+            settings.loadSettings.mockReturnValue(loaded({}, { lastUsername: 'new@example.com' }));
             await emitChange();
 
-            expect(infoLines()).toEqual([
-                '🔄 Settings changed:',
-                '  • auth.lastUsername: [REDACTED] → [REDACTED]',
-                '  • auth.chosenPhotosMemberId: [REDACTED] → [REDACTED]',
-            ]);
-            expect(loggedText()).not.toMatch(/example\.com|member-/);
+            expect(infoLines()).toEqual(['🔄 Settings changed:', '  • auth.lastUsername: [REDACTED] → [REDACTED]']);
+            expect(loggedText()).not.toMatch(/example\.com/);
         });
     });
 

@@ -39,6 +39,8 @@ type StorageCtx = {
         warning: jest.Mock<void, Parameters<loggerModule.CategoryLogger['warning']>>;
     };
     runtime: typeof runtimeModule;
+    /** The `electron` module factory of this registry; the no-Electron test asserts it is never called. */
+    electronFactory: jest.MockedFunction<() => unknown>;
 };
 
 const mockPrefSet = jest.fn<Promise<void>, [SetOptions]>(() => Promise.resolve());
@@ -64,7 +66,9 @@ const USER_DATA = '/home/u/.config/gurushots-auto-vote-dev';
 
 /**
  * Load a fresh storage module. `electronApp` (or null) becomes the module's
- * captured electron handle; `sourceCode` drives logger.isSourceCode.
+ * captured electron handle (runtime.isElectron is mocked to match);
+ * `sourceCode` drives logger.isSourceCode. `noElectron` makes the electron
+ * mock throw; the no-Electron test asserts the factory is never invoked.
  */
 const loadStorage = ({
     electronApp = null,
@@ -73,10 +77,11 @@ const loadStorage = ({
 }: { electronApp?: ElectronAppDouble | null; sourceCode?: boolean; noElectron?: boolean } = {}): StorageCtx => {
     let ctx: StorageCtx | undefined;
     jest.isolateModules(() => {
-        jest.doMock('electron', () => {
-            if (noElectron) throw new Error('Cannot find module electron');
+        const electronFactory = jest.fn((): unknown => {
+            if (noElectron) throw new Error('electron must not be loaded outside Electron');
             return electronApp ? { app: electronApp } : {};
         });
+        jest.doMock('electron', electronFactory);
         const fs = jest.mocked(require('node:fs') as typeof node_fsModule);
         const path = jest.mocked(require('node:path') as typeof node_pathModule);
         const actualPath = jest.requireActual<typeof node_pathModule>('node:path');
@@ -88,8 +93,9 @@ const loadStorage = ({
         logger.isSourceCode.mockReturnValue(sourceCode);
         const runtime = require('../../src/ts/runtime') as typeof runtimeModule;
         jest.spyOn(runtime, 'getAppUserDataPath').mockReturnValue(USER_DATA);
+        jest.spyOn(runtime, 'isElectron').mockReturnValue(electronApp !== null);
         const mod = require('../../src/ts/settings/storage') as typeof storageModule;
-        ctx = { mod, fs, categoryLogger, runtime };
+        ctx = { mod, fs, categoryLogger, runtime, electronFactory };
     });
     return ctx!;
 };
@@ -108,12 +114,12 @@ describe('settings storage — edge cases', () => {
         jest.dontMock('electron');
     });
 
-    test('falls back to the CLI userData path when electron cannot be loaded', () => {
-        const { categoryLogger } = loadStorage({ noElectron: true });
-        expect(categoryLogger.info).toHaveBeenCalledWith(
-            'Running in CLI context - using fallback userData path:',
-            'Cannot find module electron',
-        );
+    test('outside Electron the electron package is never loaded (its npm package downloads the binary)', () => {
+        // The factory-never-called assertion catches a regression that puts
+        // back an unconditional require wrapped in a swallowing try/catch.
+        const { mod, electronFactory } = loadStorage({ noElectron: true });
+        expect(electronFactory).not.toHaveBeenCalled();
+        expect(mod.electronApp).toBeNull();
     });
 
     describe('initializeAsync (settings store)', () => {

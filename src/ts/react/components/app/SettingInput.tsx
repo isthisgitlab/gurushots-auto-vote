@@ -3,10 +3,10 @@ import { ToneNote } from '@/components/ui/ToneNote';
 import { SAVE_ERROR_ID } from '@/components/ui/ModalActionRow';
 import { useListDraft, LIST_FINGERPRINT_SEP } from '@/hooks/useListDraft';
 import { SettingResetButton } from './SettingResetButton';
+import { HoursMinutesDraftField } from './HoursMinutesFields';
 import { TimeField, ScheduleField, TimeOfDayListField, TimeListField } from './TimeSettingFields';
 import { PhotosField } from './ChosenPhotosField';
 import { useScenarios } from '@/api/useScenarios';
-import { interp } from '@/utils/interp';
 
 export { SCHEDULED_FILL_MAX_ENTRIES } from './TimeSettingFields';
 
@@ -27,18 +27,23 @@ const GROUP_TYPES: Set<string | undefined> = new Set(['time', 'schedule', 'timeO
 /**
  * Caption for a setting control, shared by the global and per-challenge
  * settings modals. A single-control setting gets a real <label> tied to the
- * control by `inputId`; a multi-control one (`group`, derived from the schema
- * `type` for SettingInput) gets a caption whose id `${inputId}-label` names the
- * control group.
+ * control by `inputId`; a multi-control one gets a caption whose id
+ * `${inputId}-label` names the control group. Multi-control means a schema
+ * `type` in GROUP_TYPES — or a number setting carrying the display-only
+ * `minutes` flag, which renders as an hours + minutes pair (the one decision
+ * point is the `group` default below; both SettingLabel call sites feed the
+ * entry's config in).
  */
 export function SettingLabel({
     inputId,
     type,
-    group = GROUP_TYPES.has(type),
+    config,
+    group = GROUP_TYPES.has(type) || config?.minutes === true,
     children,
 }: {
     inputId: string;
     type?: string;
+    config?: SerializableSchemaEntry | null;
     group?: boolean;
     children?: ComponentChildren;
 }) {
@@ -199,9 +204,9 @@ function isNumberInvalid(value: unknown, { min, max }: Pick<SerializableSchemaEn
 export function numberRangeMessage({ min, max }: Pick<SerializableSchemaEntry, 'min' | 'max'>, t: Translate): string {
     const hasMin = typeof min === 'number';
     if (hasMin && typeof max === 'number') {
-        return t('app.validationOutOfRange').replace('{min}', String(min)).replace('{max}', String(max));
+        return t('app.validationOutOfRange', { min, max });
     }
-    return hasMin ? t('app.validationAtLeast').replace('{min}', String(min)) : t('app.validationInvalidValue');
+    return hasMin ? t('app.validationAtLeast', { min }) : t('app.validationInvalidValue');
 }
 
 /**
@@ -223,20 +228,40 @@ function NumberField({ id, settingKey, config, value, onChange, onReset, disable
     return (
         <div className="flex flex-col gap-1">
             <ControlRow settingKey={settingKey} labelKey={config.label} onReset={onReset}>
-                <input
-                    id={id}
-                    type="number"
-                    className={`input input-sm w-24 ${invalid ? 'input-error' : ''}`}
-                    aria-invalid={invalid || rejected || undefined}
-                    aria-describedby={invalid ? errorId : undefined}
-                    min={config.min}
-                    max={config.max}
-                    // A number or '' (SettingInput's normalisation); the DOM coerces either.
-                    value={value as number | string}
-                    onChange={(e) => onChange(settingKey, parseNumberInput(e.currentTarget.value))}
-                    disabled={disabled}
-                />
-                {config.unit && <span className="text-sm">{t(config.unit)}</span>}
+                {config.minutes === true ? (
+                    // An hours + minutes pair over the fractional-hours value; the
+                    // field carries its own hours/minutes unit text, so no
+                    // app.unitHours span here. The blank '' the pair emits when both
+                    // inputs are cleared is out of range like any other blank.
+                    <HoursMinutesDraftField
+                        id={id}
+                        label={t(config.label)}
+                        labelId={`${id}-label`}
+                        invalid={invalid}
+                        describedBy={errorId}
+                        rejected={rejected}
+                        disabled={disabled}
+                        value={value as number | '' | null | undefined}
+                        onChange={(next) => onChange(settingKey, next)}
+                    />
+                ) : (
+                    <>
+                        <input
+                            id={id}
+                            type="number"
+                            className={`input input-sm w-24 ${invalid ? 'input-error' : ''}`}
+                            aria-invalid={invalid || rejected || undefined}
+                            aria-describedby={invalid ? errorId : undefined}
+                            min={config.min}
+                            max={config.max}
+                            // A number or '' (SettingInput's normalisation); the DOM coerces either.
+                            value={value as number | string}
+                            onChange={(e) => onChange(settingKey, parseNumberInput(e.currentTarget.value))}
+                            disabled={disabled}
+                        />
+                        {config.unit && <span className="text-sm">{t(config.unit)}</span>}
+                    </>
+                )}
             </ControlRow>
             {invalid && (
                 <ToneNote tone="error" as="span" id={errorId} className="text-xs">
@@ -292,9 +317,7 @@ function ScenarioField({ id, settingKey, config, value, onChange, onReset, disab
                         {name}
                     </option>
                 ))}
-                {missing && (
-                    <option value={current}>{interp(t('app.scenarioMissingOption'), { name: current })}</option>
-                )}
+                {missing && <option value={current}>{t('app.scenarioMissingOption', { name: current })}</option>}
             </select>
         </ControlRow>
     );

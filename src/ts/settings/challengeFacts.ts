@@ -7,6 +7,7 @@
 
 import { MAX_TITLE_RULES, MAX_TITLE_LENGTH } from './titleRuleSanitize';
 import { pinnedTitleFor } from './titlePins';
+import { isMarkedChallenge } from '../challengeMarks';
 
 import type { ChallengeFacts, RuleMatchChallenge } from '../types/settings';
 import type { Challenge } from '../types/gurushots';
@@ -60,21 +61,47 @@ const _observedFacts = (challenge: Partial<Challenge>): ChallengeFacts => {
  * Remember the titles AND match facts from the latest successful
  * active-challenge response. The input is API-owned/untrusted, so only bounded
  * scalar ids/titles/tags/numbers enter the cache and the first row for a
- * duplicate id wins.
+ * duplicate id wins. A marked challenge (its fields failed the boundary read)
+ * keeps its id and carries over its previous facts — nothing new is observed
+ * from it.
+ *
+ * With `pruneUnsafe` the read dropped elements that could not carry an
+ * identity, so absence from this list is not "gone": the previous id set is
+ * merged in rather than replaced, and a dropped id stays visible to
+ * isActiveChallengeId, consumeChosenPhotos and the settings-prune backstop.
  *
  * Facts live here rather than in the persisted title pins on purpose: a
  * pin exists to defeat a server-side RENAME mid-challenge, while facts are only
  * needed to resolve a rule for a challenge in the current list. An in-memory
  * map costs no file growth and cannot go stale across restarts.
  */
-const rememberChallengeTitles = (challenges: ReadonlyArray<Partial<Challenge>> | null | undefined): boolean => {
+const rememberChallengeTitles = (
+    challenges: ReadonlyArray<Partial<Challenge>> | null | undefined,
+    pruneUnsafe = false,
+): boolean => {
     if (!Array.isArray(challenges)) return false;
-    const next: Map<string, string | null> = new Map();
-    const nextFacts: Map<string, ChallengeFacts> = new Map();
+    const next: Map<string, string | null> = pruneUnsafe
+        ? new Map(activeChallengeTitles)
+        : new Map<string, string | null>();
+    const nextFacts: Map<string, ChallengeFacts> = pruneUnsafe
+        ? new Map(activeChallengeFacts)
+        : new Map<string, ChallengeFacts>();
+    // Duplicates within THIS batch: the first row wins. Compared against what
+    // this call has seen, never against `next` — a seeded pruneUnsafe copy
+    // already holds every previously-known id, so `next.has` would skip each
+    // of them and their titles/facts would never refresh while reads stay
+    // prune-unsafe.
+    const seen = new Set<string>();
     for (const challenge of challenges.slice(0, MAX_TITLE_RULES)) {
         if (challenge?.id === null || challenge?.id === undefined) continue;
         const id = String(challenge.id);
-        if (!id || next.has(id)) continue;
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        if (isMarkedChallenge(challenge)) {
+            next.set(id, activeChallengeTitles.get(id) ?? null);
+            nextFacts.set(id, activeChallengeFacts.get(id) ?? { tags: [] });
+            continue;
+        }
         next.set(id, _observedTitle(challenge));
         nextFacts.set(id, _observedFacts(challenge));
     }

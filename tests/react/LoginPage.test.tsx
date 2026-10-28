@@ -246,7 +246,10 @@ describe('Login page', () => {
 
     test('dismissing the outcome of a recovery on the login page moves focus to the heading of the page, not to the body or an empty element', async () => {
         jest.mocked(window.api.getSettingsRecovery).mockResolvedValue(
-            invalid({ success: true, recovery: { code: 'settings-import-failed', path: '/data/settings.json' } }),
+            invalid({
+                success: true,
+                recovery: { code: 'settings-import-failed', path: '/data/settings.json', blocking: true },
+            }),
         );
         jest.mocked(window.api.retrySettingsImport).mockResolvedValue({ success: true });
         await renderReady();

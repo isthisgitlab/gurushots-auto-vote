@@ -160,7 +160,11 @@ export function ChallengesSection({
                 </div>
                 {error && isLoggedIn && (
                     <div className="text-center">
-                        <button type="button" className="btn btn-outline btn-sm" onClick={handleRefresh}>
+                        <button
+                            type="button"
+                            className="btn btn-outline btn-sm max-sm:min-h-10"
+                            onClick={handleRefresh}
+                        >
                             {t('common.refresh')}
                         </button>
                     </div>
@@ -179,7 +183,7 @@ export function ChallengesSection({
                 {!autovoteRunning && (
                     <>
                         <IconActionButton
-                            className="btn btn-neutral btn-sm"
+                            className="btn btn-neutral btn-sm max-sm:min-h-10"
                             action={() => ipc.voteAllChallengesManual()}
                             onSuccess={refetchAfterAction}
                             onError={setActionError}
@@ -190,7 +194,7 @@ export function ChallengesSection({
                             label={t('app.voteAll')}
                         />
                         <IconActionButton
-                            className="btn btn-neutral btn-sm"
+                            className="btn btn-neutral btn-sm max-sm:min-h-10"
                             action={() => ipc.runVotingCycle()}
                             onSuccess={refetchAfterAction}
                             onError={setActionError}
@@ -200,7 +204,11 @@ export function ChallengesSection({
                             icon={ICON_PATHS.run}
                             label={t('app.run')}
                         />
-                        <button className="btn btn-outline btn-sm" onClick={handleRefresh} disabled={loading}>
+                        <button
+                            className="btn btn-outline btn-sm max-sm:min-h-10"
+                            onClick={handleRefresh}
+                            disabled={loading}
+                        >
                             {loading ? <LoadingSpinner size="xs" decorative /> : <ResetIcon />}
                             {t('app.refresh')}
                         </button>
@@ -215,7 +223,10 @@ export function ChallengesSection({
                     ("click to get details"), matching the per-card toggle in
                     ChallengeCard. The icon follows the same rule: it depicts
                     the view you are about to switch TO. */}
-                <button className="btn btn-outline btn-sm sm:ml-auto" onClick={() => void toggleGlobalCompact()}>
+                <button
+                    className="btn btn-outline btn-sm sm:ml-auto max-sm:min-h-10"
+                    onClick={() => void toggleGlobalCompact()}
+                >
                     <StrokeIcon
                         d={globalCompact ? ICON_PATHS.listCompact : ICON_PATHS.listDetailed}
                         className="w-4 h-4 mr-1"

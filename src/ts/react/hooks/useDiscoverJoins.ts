@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import * as ipc from '@/api/ipc';
 import { useLatestRef } from './useLatestRef';
 import { useRepricedRows } from './useRepricedRows';
@@ -22,17 +22,13 @@ const changesRows = (res: JoinOutcome) =>
  * Every Join (and "Retry submit") first ASKS, without spending: a paid challenge whose coins were
  * already spent is submitted by the server at once, one still to be paid answers with its cost, and
  * only then is the price confirmed (`confirm`) and a real, consented join sent (`onConfirm`).
- *
- * @param isLoggedIn - a different account (a logout and login) sees none of the previous one's state
  */
 export function useDiscoverJoins({
     items,
-    isLoggedIn,
     refetch,
     onJoined,
 }: {
     items: OpenChallenge[];
-    isLoggedIn: boolean;
     refetch: () => Promise<void>;
     onJoined: () => void;
 }) {
@@ -42,15 +38,6 @@ export function useDiscoverJoins({
     const { noteAnswer, withAnswerCost } = useRepricedRows(items);
     const confirmOpen = useLatestRef(confirm);
     const resultsNow = useLatestRef(results);
-    // Counts the sessions (a logout and login): an answer to a join begun in an earlier one is dropped.
-    const session = useRef(0);
-
-    useEffect(() => {
-        session.current += 1;
-        setResults({});
-        setConfirm(null);
-        setBusy(new Map());
-    }, [isLoggedIn]);
 
     const join = useCallback(
         async (challenge: OpenChallenge, spendCoins: boolean) => {
@@ -58,15 +45,12 @@ export function useDiscoverJoins({
             // A row whose coins are already spent is being submitted, not asked about.
             const submitting = resultsNow.current[String(id)]?.status === 'charged-pending-submit';
             const phase: JoinPhase = spendCoins || submitting || costOf(challenge) <= 0 ? 'joining' : 'asking';
-            const started = session.current;
             setBusy((prev) => new Map(prev).set(id, phase));
             try {
                 // A paid join names the cost the user was shown: a price that rose since then is not consented to.
                 const res: JoinOutcome = spendCoins
                     ? await ipc.joinChallenge(id, true, costOf(challenge))
                     : await ipc.joinChallenge(id, false);
-                // The account changed meanwhile: this answer is not the new account's to see.
-                if (session.current !== started) return;
                 const toConfirm = rowToConfirm(challenge, spendCoins, res);
                 if (toConfirm) {
                     // A confirmation already open stays as it is: another row's answer must not swap what it asks
@@ -90,17 +74,13 @@ export function useDiscoverJoins({
                 if (changesRows(res)) void refetch();
                 if (res.success || res.status === 'charged-pending-submit') onJoined();
             } catch (err) {
-                if (session.current !== started) return;
                 setResults((prev) => ({ ...prev, [id]: { status: 'failed-no-charge', error: errorMessage(err) } }));
             } finally {
-                // (A session that ended already reset the busy rows; the new one's joins are not this one's to clear.)
-                if (session.current === started) {
-                    setBusy((prev) => {
-                        const next = new Map(prev);
-                        next.delete(id);
-                        return next;
-                    });
-                }
+                setBusy((prev) => {
+                    const next = new Map(prev);
+                    next.delete(id);
+                    return next;
+                });
             }
         },
         [refetch, onJoined, noteAnswer, confirmOpen, resultsNow],

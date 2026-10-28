@@ -20,6 +20,8 @@ jest.mock('../../src/ts/services/semantic/assets', () => ({
 
 import lexicon = require('../../src/ts/services/semantic/lexicon');
 import type * as photoPickerModule from '../../src/ts/services/photoPicker';
+import type * as semanticModule from '../../src/ts/services/semantic';
+import type { PickerPhoto } from '../../src/ts/types/photoPicker';
 import type { RawLexicon } from '../../src/ts/types/semantic';
 import { invalid } from '../helpers/invalid';
 const {
@@ -28,8 +30,22 @@ const {
     buildThemeKeywords,
     buildThemeAlternatives,
     buildChallengeKeywords,
+    descriptionExclusions,
     visualSubjectWords,
+    readChallengeTheme,
+    pickPhotosForChallenge,
+    SEMANTIC_MATCH_FLOOR,
 } = require('../../src/ts/services/photoPicker') as typeof photoPickerModule;
+// The facade, so the assets mock above covers the lexicon load it triggers.
+const { getSemanticScores } = require('../../src/ts/services/semantic') as typeof semanticModule;
+
+const allowed = (id: string, labels: string[], uploadDate: number, extras: Partial<PickerPhoto> = {}) => ({
+    id,
+    labels,
+    upload_date: uploadDate,
+    permission: { allowed: true, message: null },
+    ...extras,
+});
 
 describe('abstractTitleWords', () => {
     const scores: Record<string, number> = { balloon: 0.37, fun: -0.16, nature: -0.3, built: 0.11, cold: 0 };
@@ -54,12 +70,52 @@ describe('abstractTitleWords', () => {
         expect(demote(['fun'])).toEqual([]);
         expect(demote(invalid(null))).toEqual([]);
     });
+
+    test('a stopword-head compound anchors the demotion, bounded at 0.05', () => {
+        // "still-life" reads concrete (0.330) and its head "life" stems to a
+        // stopword, so it anchors the qualifier branch without itself being a
+        // candidate: the word before it demotes only at or under
+        // PHRASE_QUALIFIER_MAX, and an unknown score there stays.
+        const withPhrase = (score: number | null) => [
+            ...abstractTitleWords(['x', 'still-life'], (w) => (w === 'x' ? score : 0.33)),
+        ];
+        expect(withPhrase(0.05)).toEqual(['x']);
+        expect(withPhrase(0.06)).toEqual([]);
+        expect(withPhrase(null)).toEqual([]);
+    });
+
+    test('a compound is never demoted and never anchors the normal path', () => {
+        // "close-up" has no stopword head ("up" is not in STOPWORDS), so the
+        // qualifier branch does not fire; and a concrete compound must not
+        // demote "nature" (−0.30) through the normal concrete-anchor path.
+        expect([...abstractTitleWords(['close-up', 'nature'], (w) => (w === 'close-up' ? 0.2 : -0.3))]).toEqual([]);
+    });
 });
 
 describe('title readers with the real lexicon', () => {
     const balloonFun = { title: 'Balloon Fun', url: 'balloon-fun', welcome_message: 'Have fun with balloons!' };
 
+    // GuruShots' public challenge copy (136550), quoted word for word as test
+    // input: its quoted "Still Life" and "no living ... objects" wording are
+    // what the theme reader sees.
+    const STILL_LIFE = {
+        title: 'Beauty of Still Life',
+        url: 'beauty-of-still-life',
+        welcome_message:
+            'Share your outstanding "Still Life" images, depicting inanimate subject matter. ' +
+            'Capture images that are so real, you feel that you could reach out and touch. At the same time, ' +
+            'the lighting should be such that it looks like a painting. Try to use objects and items that do ' +
+            'not relate to each other. Remember: no living or moving objects, so people and animals will be ' +
+            'considered off-topic for this challenge. Join our challenge and earn rewards! * Participation ' +
+            'reward: 10 coins * Elite Level reward: 20 coins * ALLSTAR Level reward: 50 coins Good luck!',
+    };
+
     beforeEach(() => lexicon.__resetForTests());
+    afterEach(() => lexicon.__resetForTests());
+
+    test('the fixture description rules out people and animals', () => {
+        expect(descriptionExclusions(STILL_LIFE)).toEqual(['people', 'animals']);
+    });
 
     test('fall back to word order until the lexicon is loaded', () => {
         expect(buildSearchTerms(balloonFun)).toEqual(['fun', 'balloon']);
@@ -96,6 +152,206 @@ describe('title readers with the real lexicon', () => {
             const title = { title: 'Built Among Nature' };
             expect(buildSearchTerms(title)).toEqual(['nature', 'among', 'built']);
             expect(buildThemeKeywords(title)).toEqual(['built', 'among', 'nature']);
+        });
+
+        test('a stopword-head compound anchors the title: "beauty" is demoted, a real qualifier is not', () => {
+            expect([...abstractTitleWords(['beauty', 'still-life'])]).toEqual(['beauty']);
+            expect([...abstractTitleWords(['fruit', 'still-life'])]).toEqual([]);
+        });
+
+        test('real qualifiers survive next to the compound, including the 0.05–0.15 band', () => {
+            expect(buildChallengeKeywords({ title: 'Fruit Still Life' })).toEqual(
+                expect.arrayContaining(['fruit', 'still-life']),
+            );
+            expect(buildThemeKeywords({ title: 'Fruit Still Life' })).toEqual(['fruit', 'still-life']);
+            // "food" (0.116) sits between PHRASE_QUALIFIER_MAX and
+            // CONCRETE_SUBJECT_MIN — exactly the band the compound anchor exists
+            // to bridge without dropping real qualifiers.
+            expect(buildChallengeKeywords({ title: 'Food Still Life' })).toEqual(
+                expect.arrayContaining(['food', 'still-life']),
+            );
+            expect(buildThemeKeywords({ title: 'Food Still Life' })).toEqual(['food', 'still-life']);
+        });
+
+        test('the 136550 fixture reads "still life" as its one subject', () => {
+            expect(readChallengeTheme(STILL_LIFE)).toEqual({ kind: 'subject', subjects: ['still-life'] });
+            expect(buildThemeKeywords(STILL_LIFE)).toEqual(['still-life']);
+            // Demoted to last, but still searched (the existing design).
+            expect(buildSearchTerms(STILL_LIFE)).toEqual(['still-life', 'beauty']);
+            // The vision prompt keeps every word readable — visualSubjectWords
+            // deliberately skips abstractTitleWords.
+            expect(visualSubjectWords(STILL_LIFE)).toEqual(['beauty', 'still-life']);
+        });
+
+        test('the fixture keywords lose "beauty" and the bare "still"', () => {
+            const keywords = buildChallengeKeywords(STILL_LIFE);
+            expect(keywords).toContain('still-life');
+            expect(keywords).not.toContain('beauty');
+            expect(keywords).not.toContain('still');
+        });
+
+        test('the still-life photo wins on the semantic tier, and a "still life" must-tag keeps only it', async () => {
+            const photos = [
+                allowed('fish', ['Fish', 'Still water', 'Underwater'], 5000, { votes: 500 }),
+                allowed('portrait', ['Beauty', 'Woman', 'Fashion'], 3000, { votes: 300 }),
+                allowed('still-life', ['Still life', 'Fruit', 'Vase'], 1000, { votes: 5 }),
+            ];
+            // The theme pools to "still-life", which the shipped lexicon carries
+            // as one vector, so the tier is ON: the still-life photo scores a
+            // full 1.0 on its own label while the fish and portrait photos sit
+            // far below the floor.
+            const scores = await getSemanticScores(STILL_LIFE, photos);
+            expect(scores!.get('still-life')).toEqual({ score: 1, support: 2 });
+            expect(scores!.get('fish')!.score).toBeLessThan(SEMANTIC_MATCH_FLOOR / 100);
+            expect(scores!.get('portrait')!.score).toBeLessThan(SEMANTIC_MATCH_FLOOR / 100);
+            expect(pickPhotosForChallenge(STILL_LIFE, photos, 1, { semanticScores: scores })).toEqual(['still-life']);
+            expect(pickPhotosForChallenge(STILL_LIFE, photos, 1, { mustIncludeTags: ['still life'] })).toEqual([
+                'still-life',
+            ]);
+        });
+
+        test('a compound with a stopword head reads concrete only when the model says so', () => {
+            // "real-life" measures 0.103, below CONCRETE_SUBJECT_MIN, so the
+            // qualifier branch does not fire for it: the concrete follower
+            // "portrait" stays on both sides of the compound.
+            expect(buildThemeKeywords({ title: 'Real Life Portraits' })).toEqual(['real-life', 'portrait']);
+            expect(buildThemeKeywords({ title: 'Portraits of Real Life' })).toEqual(['portrait', 'real-life']);
+            // The same reading puts "fun" (−0.158) after the concrete
+            // "still-life" (0.330), whose stopword head fires the branch.
+            expect(buildThemeKeywords({ title: 'Still Life Fun' })).toEqual(['still-life']);
+        });
+
+        test('compounds never demote a second subject', () => {
+            // A concrete compound is never an anchor of the normal path, so the
+            // abstract-reading followers survive ("nature" −0.30, "people" −0.38).
+            expect(buildThemeKeywords({ title: 'Close Up Nature' })).toEqual(['close-up', 'nature']);
+            expect(buildThemeKeywords({ title: 'Black and White People' })).toEqual(['black-and-white', 'people']);
+        });
+
+        describe('description exclusions in the pick', () => {
+            // The full library the fixture's description judges: the fish dish
+            // carries the food exemption, the unlabelled photo cannot be judged.
+            const library = () => [
+                allowed('still-life', ['Still life', 'Vase'], 1000),
+                allowed('fish', ['Fish', 'Underwater'], 5000, { votes: 500 }),
+                allowed('portrait', ['Woman', 'Portrait'], 4000, { votes: 400 }),
+                allowed('dog', ['Dog', 'Vertebrate'], 3000, { votes: 300 }),
+                allowed('fish-dish', ['Fish', 'Seafood', 'Dish'], 2000, { votes: 200 }),
+                allowed('bare', [], 1500),
+            ];
+
+            test('photos showing people or animals drop, the food-exempt and unlabelled ones stay', () => {
+                expect(pickPhotosForChallenge(STILL_LIFE, library(), 6)).toEqual(['still-life', 'fish-dish', 'bare']);
+            });
+
+            test('labels that name an object rather than an animal stay', () => {
+                const photos = [
+                    allowed('teddy', ['Teddy bear'], 3000),
+                    allowed('duck', ['Rubber duck'], 2000),
+                    allowed('feather', ['Feather'], 1000),
+                ];
+                expect(pickPhotosForChallenge(STILL_LIFE, photos, 3)).toEqual(['teddy', 'duck', 'feather']);
+            });
+
+            test('word-level label costs still drop their photos', () => {
+                const photos = [
+                    allowed('clock', ['Clock face'], 3000),
+                    allowed('rod', ['Fishing rod'], 2000),
+                    allowed('birdseye', ["Bird's-eye view"], 1000),
+                ];
+                expect(pickPhotosForChallenge(STILL_LIFE, photos, 3, { submitWithoutTagMatch: false })).toEqual([]);
+            });
+
+            test('when every photo shows the excluded concepts it falls back and names them', () => {
+                const photos = [
+                    allowed('portrait', ['Woman', 'Portrait'], 3000),
+                    allowed('dog', ['Dog', 'Vertebrate'], 2000),
+                ];
+                const onFallback = jest.fn();
+                expect(pickPhotosForChallenge(STILL_LIFE, photos, 1, { onFallback })).toEqual(['portrait']);
+                expect(onFallback).toHaveBeenCalledWith({
+                    letterPrefix: null,
+                    mustStems: [],
+                    excludedStems: ['people', 'animal'],
+                });
+                expect(pickPhotosForChallenge(STILL_LIFE, photos, 1, { submitWithoutTagMatch: false })).toEqual([]);
+            });
+
+            test('the food exemption keeps an "Animal" + "Food" photo under the description-only exclusion', () => {
+                const plate = allowed('plate', ['Animal', 'Food'], 2000);
+                expect(pickPhotosForChallenge(STILL_LIFE, [plate], 1)).toEqual(['plate']);
+            });
+
+            test('a generic taxonomy label alone does not make a person an animal', () => {
+                // Some vision labellers put "Mammal" on photos of people; it is
+                // not an animal label here. submitWithoutTagMatch:false so a
+                // wrongly excluded photo cannot come back through the fallback.
+                const person = allowed('person', ['Person', 'Mammal'], 2000);
+                const noAnimals = { title: 'City Night', welcome_message: 'Pets are not allowed' };
+                expect(pickPhotosForChallenge(noAnimals, [person], 1, { submitWithoutTagMatch: false })).toEqual([
+                    'person',
+                ]);
+            });
+
+            test('a "Pet food" label counts as food', () => {
+                const kibble = allowed('kibble', ['Dog', 'Pet food'], 2000);
+                expect(pickPhotosForChallenge(STILL_LIFE, [kibble], 1)).toEqual(['kibble']);
+            });
+
+            test('title "No Animals" and "No Pets" now carry the whole animal concept', () => {
+                const dog = allowed('dog', ['Dog', 'Vertebrate'], 2000);
+                const vase = allowed('still-life', ['Vase'], 1000);
+                expect(pickPhotosForChallenge({ title: 'No Animals' }, [dog, vase], 2)).toEqual(['still-life']);
+                expect(pickPhotosForChallenge({ title: 'No Pets' }, [dog, vase], 2)).toEqual(['still-life']);
+            });
+
+            test('a specific-animal title stays stems-only, so the named subject stays', () => {
+                const cat = allowed('cat', ['Cat', 'Pet', 'Mammal'], 2000);
+                const dog = allowed('dog', ['Dog'], 3000);
+                expect(pickPhotosForChallenge({ title: 'Cats: No Dogs' }, [cat, dog], 2)).toEqual(['cat']);
+            });
+
+            test('a people title keeps its exact behaviour', () => {
+                const woman = allowed('woman', ['Woman', 'Portrait'], 2000);
+                expect(
+                    pickPhotosForChallenge({ title: 'Faces in Things: No People' }, [woman], 1, {
+                        submitWithoutTagMatch: false,
+                    }),
+                ).toEqual([]);
+            });
+
+            test('a title-only "No Humans" still reports its own stem', () => {
+                const onFallback = jest.fn();
+                pickPhotosForChallenge({ title: 'No Humans' }, [allowed('portrait', ['Portrait'], 3000)], 1, {
+                    onFallback,
+                });
+                expect(onFallback).toHaveBeenCalledWith({
+                    letterPrefix: null,
+                    mustStems: [],
+                    excludedStems: ['human'],
+                });
+            });
+
+            test('a concept named by both title and description reports both names once', () => {
+                const onFallback = jest.fn();
+                pickPhotosForChallenge(
+                    { title: 'No Humans', welcome_message: 'no people' },
+                    [allowed('portrait', ['Portrait'], 3000)],
+                    1,
+                    { onFallback },
+                );
+                expect(onFallback).toHaveBeenCalledWith({
+                    letterPrefix: null,
+                    mustStems: [],
+                    excludedStems: ['human', 'people'],
+                });
+            });
+
+            test('the fixture description words stop being keywords', () => {
+                const keywords = buildChallengeKeywords(STILL_LIFE);
+                expect(keywords).not.toContain('people');
+                expect(keywords).not.toContain('animal');
+            });
         });
     });
 });

@@ -244,7 +244,10 @@ describe('App page', () => {
 
     test("dismissing the outcome of a settings recovery, which took the notice away, moves focus to the page's main element", async () => {
         jest.mocked(window.api.getSettingsRecovery).mockResolvedValue(
-            invalid({ success: true, recovery: { code: 'settings-import-failed', path: '/data/settings.json' } }),
+            invalid({
+                success: true,
+                recovery: { code: 'settings-import-failed', path: '/data/settings.json', blocking: true },
+            }),
         );
         jest.mocked(window.api.retrySettingsImport).mockResolvedValue({ success: true });
         await renderReady();

@@ -1,15 +1,17 @@
-import type { ComponentChildren } from 'preact';
-import type { Bankroll } from '../../../types/gurushots';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal, ModalActions } from '@/components/ui/Modal';
-import { interp } from '@/utils/interp';
 import { BusyContent } from '@/components/ui/LoadingSpinner';
+
+import type { ComponentChildren } from 'preact';
+import type { Bankroll } from '../../../types/gurushots';
+import type { Translate } from '../../../translations/translator';
 
 // Outcome code (voting/currencyActions CURRENCY_OUTCOME) → translated message.
 // Anything unmapped (auth failure, unexpected string) reads as a generic
 // rejection — never a raw code or status in front of the user.
 const OUTCOME_KEY: Partial<Record<string, string>> = {
     'not-available': 'app.currencyOutcomeNotAvailable',
+    'data-incomplete': 'app.currencyOutcomeDataIncomplete',
     'no-balance': 'app.currencyOutcomeNoBalance',
     'balance-unknown': 'app.currencyOutcomeBalanceUnknown',
     'no-alternative': 'app.currencyOutcomeNoAlternative',
@@ -23,7 +25,7 @@ const OUTCOME_KEY: Partial<Record<string, string>> = {
  * @param t - translation function
  * @param outcome - the failed action's outcome code
  */
-export const currencyOutcomeText = (t: (key: string) => string, outcome: string): string =>
+export const currencyOutcomeText = (t: Translate, outcome: string): string =>
     t(OUTCOME_KEY[outcome] || 'app.currencyOutcomeFailed');
 
 // Bankroll field → [plural label (header pill), singular unit] translation keys.
@@ -79,24 +81,24 @@ export function CurrencyConfirmModal({
         <Modal isOpen={isOpen} onClose={spending ? undefined : onClose} title={title} showCloseButton={!spending}>
             <div className="space-y-2 text-sm">
                 {children}
-                <p>{interp(t('app.currencyCost'), { unit })}</p>
+                <p>{t('app.currencyCost', { unit })}</p>
                 <p className="text-base-content/70">
                     {known
-                        ? interp(t('app.currencyBalance'), { current, currency, resulting: Math.max(current - 1, 0) })
-                        : interp(t('app.currencyBalanceUnknown'), { currency })}
+                        ? t('app.currencyBalance', { current, currency, resulting: Math.max(current - 1, 0) })
+                        : t('app.currencyBalanceUnknown', { currency })}
                 </p>
             </div>
             <ModalActions>
-                <button className="btn btn-outline btn-sm" onClick={onClose} disabled={spending}>
+                <button className="btn btn-outline btn-sm max-sm:min-h-10" onClick={onClose} disabled={spending}>
                     {t('app.cancel')}
                 </button>
                 <button
-                    className="btn btn-latvian btn-sm"
+                    className="btn btn-latvian btn-sm max-sm:min-h-10"
                     onClick={() => void onConfirm()}
                     disabled={spending || spendHeld}
                     aria-busy={spending}
                 >
-                    <BusyContent busy={spending} label={interp(t('app.currencySpend'), { unit })} />
+                    <BusyContent busy={spending} label={t('app.currencySpend', { unit })} />
                 </button>
             </ModalActions>
         </Modal>

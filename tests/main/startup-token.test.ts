@@ -18,6 +18,7 @@ jest.mock('../../src/ts/settings', () => ({
 }));
 jest.mock('../../src/ts/settings/cliSessionLock', () => ({
     isCliSessionActive: jest.fn(() => Promise.resolve(false)),
+    isWebServerActive: jest.fn(() => Promise.resolve(false)),
     holdDesktopAppLock: jest.fn(() => mockReleaseAppLock),
     refreshDesktopAppLock: jest.fn(),
 }));
@@ -87,6 +88,7 @@ describe('desktop startup clears a leftover login', () => {
         jest.useFakeTimers();
         jest.clearAllMocks();
         lock.isCliSessionActive.mockResolvedValue(false);
+        lock.isWebServerActive.mockResolvedValue(false);
         settings.setSetting.mockReturnValue(true);
     });
 
@@ -152,7 +154,17 @@ describe('desktop startup clears a leftover login', () => {
         await onReady();
 
         expect(settings.setSetting).not.toHaveBeenCalled();
-        expect(cat.info).toHaveBeenCalledWith(expect.stringContaining('a CLI session is running'), null);
+        expect(cat.info).toHaveBeenCalledWith(expect.stringContaining('another session is running'), null);
+    });
+
+    test('with a web server holding its marker it is kept', async () => {
+        stored({ token: 'web-uses-this', stayLoggedIn: false });
+        lock.isWebServerActive.mockResolvedValue(true);
+
+        await onReady();
+
+        expect(settings.setSetting).not.toHaveBeenCalled();
+        expect(cat.info).toHaveBeenCalledWith(expect.stringContaining('another session is running'), null);
     });
 
     test('every message it logs survives the log redactor unchanged', async () => {

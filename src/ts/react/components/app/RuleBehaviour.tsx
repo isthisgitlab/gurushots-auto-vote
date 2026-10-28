@@ -3,7 +3,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { ChosenPhotosControl, photoIdsOf } from './ChosenPhotosField';
 import { SettingHintList, chosenPhotosOnlyReachHint, manualPhotosOnlyHint } from './SettingHints';
 import { isDroppedOffValue } from '../../../settings/ruleBehaviour';
-import { RuleNumberField } from './RuleFields';
+import { RuleHoursMinutesField, RuleNumberField } from './RuleFields';
 
 import type { LooseRecord, TitleRule } from '../../../types/settings';
 import type { RuleFieldProps, RulePatchHandler } from './RuleFields';
@@ -116,9 +116,15 @@ export function RuleBehaviour({ rule, onPatch }: { rule: TitleRule; onPatch: Rul
                         }
                     />
                 ))}
-                {JOIN_TIMING_FIELDS.map((field) => (
-                    <RuleNumberField key={field.settingKey} {...field} rule={rule} onPatch={onPatch} />
-                ))}
+                {/* The hours window edits as an hours + minutes pair (stored value
+                    stays fractional hours); the percent anchor stays a number field. */}
+                {JOIN_TIMING_FIELDS.map((field) =>
+                    field.settingKey === 'autoJoinWithinHoursOfEnd' ? (
+                        <RuleHoursMinutesField key={field.settingKey} {...field} rule={rule} onPatch={onPatch} />
+                    ) : (
+                        <RuleNumberField key={field.settingKey} {...field} rule={rule} onPatch={onPatch} />
+                    ),
+                )}
             </div>
             <RulePhotosField rule={rule} onPatch={onPatch} />
             {rule.chosenPhotosOnly === true && <SettingHintList hints={[chosenPhotosOnlyReachHint(t)]} />}

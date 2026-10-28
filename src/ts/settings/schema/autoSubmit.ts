@@ -144,8 +144,7 @@ export const autoSubmitSettings = {
     // The photos auto-join and auto-fill try first. They only FILTER the server's
     // own eligible list (a chosen id is never sent to the API) and are ranked by
     // the same scorer as every other candidate, so they must still fit the tag
-    // settings. An empty list = no preference. Belongs to one member: see
-    // chosenPhotosMemberId.
+    // settings. An empty list = no preference.
     chosenPhotos: {
         type: 'photos',
         default: [],

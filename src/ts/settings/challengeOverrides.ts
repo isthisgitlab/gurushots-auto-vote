@@ -14,7 +14,7 @@ import { valuesEqual, globalChallengeValues, challengeValueSetIsValid } from './
 import { ruleValuesForChallengeId, isTitleProfileSuppressed } from './ruleResolution';
 import { scenarioPhaseSettings } from './scenarioOverlay';
 import { JOIN_KEPT_KEYS } from './staleChallengeCleanup';
-import { isActiveChallengeId } from './challengeFacts';
+import { isActiveChallengeId, challengeTargetForId } from './challengeFacts';
 import { loggableSettingValue } from './logValue';
 import { isUnsafeChallengeKey } from '../metadata/validation';
 
@@ -402,6 +402,92 @@ const _resolveEffectiveSetting = (settings: ConfigV2, settingKey: string, challe
         : entry.default;
 };
 
+// The one wording for the chosen-photos consume lines — the log catalog's
+// English templates match against exactly this text, so the two drift together.
+const formatChosenConsumedMessage = (tag: string, removed: string[], overrideRemoved: boolean): string =>
+    overrideRemoved
+        ? `${tag}: chosen photos entered — removed from the list: ${removed.join(', ')}; the override was removed`
+        : `${tag}: chosen photos entered — removed from the list: ${removed.join(', ')}`;
+
+/**
+ * Consumes a challenge's own chosen photos once they are entered in it: every
+ * entered id leaves the stored list, a non-empty remainder is stored through
+ * the normal override write (so a remainder equal to the inherited value
+ * auto-clears the override early), and an emptied list deletes the key —
+ * never stores `[]`.
+ *
+ * Nothing is consumed in two cases. (a) Submit Only Chosen Photos effectively
+ * on, resolved over the full layer stack (an active scenario phase above the
+ * override, then rules, then the global default): the Submit Only skip needs
+ * the ids stored — an emptied list reads as "no preference" and would resume
+ * general filling. (b) The facts cache has not seen the challenge as active:
+ * at the join-time call site the id is minutes old and rules resolve through
+ * the title/facts cache, so a rule-layer Only would be invisible there — an
+ * unknown id must hold, and the voting pass's lazy net consumes on the first
+ * pass after the cache knows the challenge.
+ *
+ * Only the challenge's own key is ever consumed: an inherited rule or global
+ * list keeps feeding its challenges, and Only set at any layer keeps holding.
+ * The Only gate and the list read/write resolve over ONE settings snapshot —
+ * a cross-process Only flip between two loads could otherwise consume under a
+ * now-on Only, irreversibly. The record is only reached through
+ * `ownChallengeValues`' `Object.hasOwn` gate; nothing is created and
+ * `_ensureChallengeContainer` is never routed through.
+ *
+ * @returns whether anything was removed (and saved)
+ */
+const consumeChosenPhotos = (challengeId: string | number, enteredIds: readonly string[]): boolean => {
+    if (isUnsafeId(challengeId)) return false;
+    const settings = loadSettings();
+    if (!isActiveChallengeId(challengeId)) return false;
+
+    // Submit Only Chosen Photos over the same layer stack getEffectiveSetting
+    // reads, resolved over this snapshot.
+    const phaseSettings = scenarioPhaseSettings(
+        settings,
+        String(challengeId),
+        () => _resolveEffectiveSetting(settings, 'scenario', challengeId) as string,
+    );
+    if (phaseSettings && Object.prototype.hasOwnProperty.call(phaseSettings, 'chosenPhotosOnly')) {
+        if (phaseSettings.chosenPhotosOnly) return false;
+    } else if (_resolveEffectiveSetting(settings, 'chosenPhotosOnly', challengeId)) {
+        return false;
+    }
+
+    const record = ownChallengeValues(settings, challengeId);
+    const stored = record?.chosenPhotos;
+    if (!record || !Array.isArray(stored)) return false;
+    const entered = new Set(enteredIds.map(String));
+    const remainder = stored.filter((id) => !entered.has(String(id)));
+    if (remainder.length === stored.length) return false;
+
+    let overrideRemoved: boolean;
+    if (remainder.length === 0) {
+        // Delete-only: the emptied list never stores [].
+        delete record.chosenPhotos;
+        overrideRemoved = true;
+    } else {
+        const outcome = _applyChallengeOverride(settings, 'chosenPhotos', challengeId, remainder);
+        // The remainder re-validates like any stored list (its ids passed the
+        // schema's CHOSEN_PHOTO_ID_RE at load), so this write cannot come back
+        // 'invalid' under Jest.
+        /* istanbul ignore if */
+        if (outcome === 'invalid') return false;
+        // A remainder equal to the inherited rule/global value cleared the
+        // override early, so the badge can drop before the list empties.
+        overrideRemoved = outcome === 'cleared';
+    }
+    dropEmptyChallengeRecord(settings, challengeId);
+    if (!saveSettings(settings)) return false;
+    const removed = stored.filter((id) => entered.has(String(id))).map(String);
+    // The id is API-derived: it reaches the line only through the tag, with the
+    // title the facts cache holds (settings-layer callers carry no challenge).
+    const knownTitle = challengeTargetForId(challengeId).title;
+    const tag = logger.challengeTag(challengeId, typeof knownTitle === 'string' && knownTitle ? knownTitle : null);
+    logger.withCategory('settings').info(formatChosenConsumedMessage(tag, removed, overrideRemoved), null);
+    return true;
+};
+
 export {
     getGlobalDefault,
     setGlobalDefault,
@@ -409,6 +495,7 @@ export {
     setChallengeOverride,
     setChallengeOverrides,
     removeChallengeOverride,
+    consumeChosenPhotos,
     getChallengeOverrides,
     replaceChallengeOverrides,
     replaceChallengeOverridesInSettings,

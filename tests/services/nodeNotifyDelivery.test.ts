@@ -127,8 +127,13 @@ describe('createNodeDeadlineNotifier (default wiring)', () => {
         const [cmd, args] = invalid<ExecFileCall>(execFile.mock.calls[0]);
         expect(cmd).toBe('notify-send');
         expect(args[0]).toBe('--');
-        // The translated (English) body mentions the challenge title.
+        // The default nodeTranslate runs the real translator core: the English
+        // templates arrive with the {action}/{title}/{minutes} vars filled in,
+        // no literal token left.
+        expect(args[1]).not.toContain('{');
+        expect(args[2]).not.toContain('{');
         expect(args[2]).toContain('Sunset');
+        expect(args[2]).toContain('~2 min');
     });
 
     test('tolerates a non-array challenge list, missing describe results and non-array actions', async () => {

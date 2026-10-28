@@ -45,4 +45,13 @@ describe('Navbar', () => {
             expect(screen.getByRole('button', { name })).toBeTruthy();
         }
     });
+
+    test('the donate button is a primary button whose click opens the donation page', () => {
+        render(<Navbar isMock={false} onLogsClick={() => {}} onSettingsClick={() => {}} onLogout={() => {}} />);
+        const donate = screen.getByRole('button', { name: 'app.donate' });
+        expect(donate.className).toContain('btn-primary');
+        fireEvent.click(donate);
+        expect(window.api.openExternalUrl).toHaveBeenCalledWith('https://donatr.ee/isthisgitlab/');
+        expect(window.api.openExternalUrl).toHaveBeenCalledTimes(1);
+    });
 });

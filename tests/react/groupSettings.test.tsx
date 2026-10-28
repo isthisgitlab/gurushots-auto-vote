@@ -2,9 +2,9 @@
  * Unit tests for groupSchemaEntries — the pure helper that buckets settings
  * schema entries into ordered UI sections for both settings modals.
  */
-import { groupSchemaEntries, tierSchemaEntries } from '@/utils/groupSettings';
+import { bandTabs, groupSchemaEntries, tierSchemaEntries } from '@/utils/groupSettings';
 import { SETTINGS_SCHEMA, SETTINGS_GROUPS } from '../../src/ts/settings/schema';
-import type { SettingsBand, SettingsSection } from '@/utils/groupSettings';
+import type { SettingsBand, SettingsSection, SettingsTab, SettingsTabId } from '@/utils/groupSettings';
 import type { RendererSchema } from '../../src/ts/types/settingsEditor';
 import { invalid } from '../helpers/invalid';
 
@@ -178,5 +178,43 @@ describe('tierSchemaEntries', () => {
     test('returns [] when schema or groups is missing', () => {
         expect(tierSchemaEntries(null, groups, tiers)).toEqual([]);
         expect(tierSchemaEntries(schema, null, tiers)).toEqual([]);
+    });
+});
+
+describe('bandTabs', () => {
+    const band = (id: string | null, label: string | null): SettingsBand => ({ id, label, groups: [] });
+
+    test('maps each band to tier-<tierId> with its label key', () => {
+        const tabs = bandTabs([band('core', 'app.tierCore'), band('overrides', 'app.tierOverrides')]);
+        const ids: SettingsTabId[] = tabs.map((tab) => tab.id);
+        expect(ids).toEqual(['tier-core', 'tier-overrides']);
+        expect(tabs.map((tab) => tab.label)).toEqual(['app.tierCore', 'app.tierOverrides']);
+        expect(tabs as SettingsTab[]).toEqual([
+            { id: 'tier-core', label: 'app.tierCore' },
+            { id: 'tier-overrides', label: 'app.tierOverrides' },
+        ]);
+    });
+
+    test('the unlabelled fallback band becomes the fixed otherTier tab', () => {
+        const tabs = bandTabs([band('core', 'app.tierCore'), band(null, null)]);
+        expect(tabs.at(-1)).toEqual({ id: 'otherTier', label: 'app.tierOther' });
+    });
+
+    // A real tier id "other" keeps its tier- prefix, so it can never collide
+    // with the fixed fallback id.
+    test('a real tier called "other" gets tier-other, distinct from otherTier', () => {
+        const tabs = bandTabs([band('other', 'app.tierOther'), band(null, null)]);
+        expect(tabs.map((tab) => tab.id)).toEqual(['tier-other', 'otherTier']);
+        expect(new Set(tabs.map((tab) => tab.id)).size).toBe(tabs.length);
+    });
+
+    test('ids stay unique across bands', () => {
+        const tabs = bandTabs([band('core', 'app.tierCore'), band('entries', 'app.tierEntries'), band(null, null)]);
+        expect(new Set(tabs.map((tab) => tab.id)).size).toBe(tabs.length);
+    });
+
+    test('missing bands map to no tabs', () => {
+        expect(bandTabs(null)).toEqual([]);
+        expect(bandTabs(undefined)).toEqual([]);
     });
 });

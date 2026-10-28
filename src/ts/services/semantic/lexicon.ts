@@ -15,7 +15,7 @@
  */
 
 import { loadLexiconAsset } from './assets';
-import { stem } from '../photoPicker/stemming';
+import { stem } from '../photoPicker/stem';
 
 import type { LexiconTable, RawLexicon } from '../../types/semantic';
 
@@ -109,30 +109,8 @@ const isAvailable = async () => (await init()) != null;
 
 const stemToken = (t: string): string => stem(t.toLowerCase());
 
-/**
- * Vector for one token, tolerating the one known spelling divergence between
- * the current stemmer and the shipped table's keys.
- *
- * The table is keyed by stems produced when the intermediate was generated, and
- * the stemmer that generated it stripped '-es' unconditionally. stem() only
- * does so after a sibilant, correctly leaving the '-e' elsewhere — so a few
- * stems spell differently than their key: "buses" keys as `bus` but
- * stems to `buse`, "clothes" keys as `cloth` but stems to `clothe`. Those
- * lookups would silently return no vector, i.e. the semantic tier would go dark
- * for exactly those themes.
- *
- * Retrying without a trailing 'e' is the precise shape of that divergence and
- * costs one extra Map hit on a path that already missed. It only ever runs
- * AFTER a miss, so it cannot shadow a correct key ("rose", "tree", "house" all
- * hit first). Regenerating the 1.2 MB asset would need a network fetch of the
- * source vectors; this is the offline-safe equivalent.
- */
-const vectorFor = (tbl: Pick<LexiconTable, 'words'>, tok: string): Float32Array | undefined => {
-    const key = stemToken(tok);
-    const hit = tbl.words.get(key);
-    if (hit) return hit;
-    return key.length > 3 && key.endsWith('e') ? tbl.words.get(key.slice(0, -1)) : undefined;
-};
+const vectorFor = (tbl: Pick<LexiconTable, 'words'>, tok: string): Float32Array | undefined =>
+    tbl.words.get(stemToken(tok));
 
 /**
  * Mean-pool the vectors of the in-vocabulary stems among `tokens`, then
@@ -167,6 +145,13 @@ const embedIn = (
 
 const embed = (tokens: Array<string>): Float64Array | null => embedIn(table, tokens);
 const hasVector = (token: string) => Boolean(table && vectorFor(table, token));
+/**
+ * Whether the table holds the hyphen-joined `words` as one compound: the merge
+ * (stemming.ts mergeCompounds) consults this per candidate window, and embed()
+ * resolves the merged token through the same vectorFor lookup, so a merge and
+ * its vector cannot disagree. False when the table is not loaded.
+ */
+const compoundOf = (words: readonly string[]): boolean => hasVector(words.join('-'));
 
 const MAX_RELATED_SEARCH_TERMS = 6;
 const GENERIC_SEARCH_FLOOR = 0.76;
@@ -294,6 +279,7 @@ export {
     embed,
     embedIn,
     hasVector,
+    compoundOf,
     relatedSearchTerms,
     cosine,
     concreteness,

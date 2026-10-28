@@ -5,13 +5,22 @@
  */
 
 import { stem, stripTags, tokenise, matches, tokeniseTagList } from './photoPicker/stemming';
-import { abstractTitleWords, detectLetterPrefix, parseNegation, readChallengeTheme } from './photoPicker/title';
+import {
+    abstractTitleWords,
+    detectLetterPrefix,
+    descriptionExclusions,
+    parseNegation,
+    readChallengeTheme,
+    withoutLetterPhrases,
+} from './photoPicker/title';
 import {
     buildChallengeKeywords,
     buildThemeKeywords,
     buildThemeAlternatives,
     visualSubjectWords,
     buildSearchTerms,
+    compoundSpellings,
+    letterTitleLeftovers,
 } from './photoPicker/keywords';
 import { wholeLabelStems, labelWordStems, labelStemGroups, scorePhoto } from './photoPicker/labels';
 import {
@@ -23,12 +32,18 @@ import {
     splitByChosen,
     finalizePick,
 } from './photoPicker/tiers';
-import { pickPhotosForChallenge, buildScoredCandidates, buildChosenCandidates } from './photoPicker/candidates';
+import {
+    pickPhotosForChallenge,
+    buildScoredCandidates,
+    buildChosenCandidates,
+    startsWithLetter,
+} from './photoPicker/candidates';
 
 export {
     pickPhotosForChallenge,
     buildScoredCandidates,
     buildChosenCandidates,
+    startsWithLetter,
     selectEnrichmentSet,
     selectBlockEnrichmentSet,
     splitByChosen,
@@ -36,7 +51,9 @@ export {
     hasThemeMatch,
     buildSearchTerms,
     detectLetterPrefix,
+    withoutLetterPhrases,
     parseNegation,
+    descriptionExclusions,
     readChallengeTheme,
     stripTags,
     labelWordStems,
@@ -55,4 +72,6 @@ export {
     scorePhoto,
     tokeniseTagList,
     wholeLabelStems,
+    compoundSpellings,
+    letterTitleLeftovers,
 };

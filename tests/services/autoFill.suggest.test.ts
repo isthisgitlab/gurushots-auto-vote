@@ -69,13 +69,13 @@ const photo = (id: string, labels: string[] = ['Pink'], extra: Partial<PickerPho
 const library = (): PickerPhoto[] =>
     Array.from({ length: 8 }, (_, i) => photo(`p${i}`, ['Pink'], { upload_date: 9000 - i, views: 100 - i }));
 
-const makeChallenge = (entries: unknown[] = [{ id: 'existing' }]) =>
+const makeChallenge = (entries: unknown[] = [{ id: 'existing' }], swaps?: unknown[]) =>
     buildChallenge({
         id: 'c1',
         title: 'Pink In Nature',
         url: 'pink-in-nature23',
         max_photo_submits: 4,
-        member: { ranking: { entries } },
+        member: { ranking: { entries, swaps } },
     });
 
 const makeLog = () => {
@@ -166,7 +166,11 @@ const makeDeps = ({
         settings: settings === null ? null : makeSettings(settings),
         logger,
         getEligiblePhotos: makeLibrary(photos),
-        getEligiblePhotosWalk: jest.fn(async () => ({ items: walkItems, truncated: false })),
+        getEligiblePhotosWalk: jest.fn(async () => ({
+            items: walkItems,
+            truncated: false,
+            nextStart: walkItems.length,
+        })),
         getImageData,
         getSemanticScores: jest.fn(async () => null),
         rankVisually,
@@ -221,6 +225,35 @@ describe('suggestFillPhotos', () => {
         expect(lines.warning.join('\n')).toContain('suggest: failed to fetch eligible photos for [Challenge c1]');
     });
 
+    describe('the swap history', () => {
+        // `swapped` is the newest upload, so without the swap history it ranks first.
+        const swappedOut = () => makeChallenge([{ id: 'existing' }], [{ id: 'swapped' }]);
+        const photos = () => [photo('swapped', ['Pink'], { upload_date: 9500 }), ...library()];
+
+        test('a swapped-out photo is hidden for submit usage', async () => {
+            const ids = suggestedIds(
+                await suggestFillPhotos(swappedOut(), 'tok', makeDeps({ photos: photos() })),
+            ) as string[];
+            expect(ids).not.toContain('swapped');
+            expect(ids).toHaveLength(SUGGEST_COUNT);
+        });
+
+        test('the swap picker (usage swap) still shows it, best first', async () => {
+            const ids = suggestedIds(
+                await suggestFillPhotos(swappedOut(), 'tok', makeDeps({ photos: photos() }), SUGGEST_COUNT, {
+                    usage: 'swap',
+                }),
+            ) as string[];
+            expect(ids[0]).toBe('swapped');
+        });
+
+        test('a swapped-out photo the user chose is shown', async () => {
+            const deps = makeDeps({ photos: photos(), settings: { chosen: ['swapped'] } });
+            const ids = suggestedIds(await suggestFillPhotos(swappedOut(), 'tok', deps)) as string[];
+            expect(ids[0]).toBe('swapped');
+        });
+    });
+
     test('drops an id the visual check answers that is not among the candidates', async () => {
         const deps = makeDeps();
         deps.rankVisually.mockImplementation(async (_c, ids, _e, want) => ['stranger', ...ids.slice(0, want - 1)]);
@@ -261,6 +294,21 @@ describe('suggestFillPhotos', () => {
             const deps = makeDeps({ logger, settings: { chosen: ['p7'], only: true } });
             const ids = suggestedIds(
                 await suggestFillPhotos(makeChallenge(), 'tok', deps, undefined, { usage: 'swap' }),
+            ) as string[];
+            expect(ids[0]).toBe('p7');
+            expect(ids).toHaveLength(SUGGEST_COUNT);
+            expect(lines.info.filter((line) => line.includes('Submit Only is on'))).toEqual([]);
+        });
+
+        test('an ignoreOnly ranking (a Discover row) never enforces it: with every chosen photo entered it still suggests, and the chosen photos still rank first', async () => {
+            const { logger, lines } = makeLog();
+            const entered = makeDeps({ logger, settings: { chosen: ['p1', 'p2'], only: true } });
+            const challenge = makeChallenge([{ id: 'p1' }, { id: 'p2' }]);
+            const result = await suggestFillPhotos(challenge, 'tok', entered, undefined, { ignoreOnly: true });
+            expect(result.status).toBe('suggested');
+            const chosenFirst = makeDeps({ logger, settings: { chosen: ['p7'], only: true } });
+            const ids = suggestedIds(
+                await suggestFillPhotos(makeChallenge(), 'tok', chosenFirst, undefined, { ignoreOnly: true }),
             ) as string[];
             expect(ids[0]).toBe('p7');
             expect(ids).toHaveLength(SUGGEST_COUNT);

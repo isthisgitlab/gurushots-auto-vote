@@ -109,7 +109,7 @@ describe('imminentBoostChallenges with the real describeDeadlineActions', () => 
         quitGuard.rememberChallenges([blocked], false);
         expect(selectedIds()).toEqual([]);
 
-        jest.mocked(logger.withCategory).mockImplementation(() => invalid({ info: jest.fn() }));
+        jest.mocked(logger.withCategory).mockImplementation(() => invalid({ info: jest.fn(), infoT: jest.fn() }));
         const api = { applyBoost: jest.fn(), applyBoostToEntry: jest.fn() };
         const outcome = await runSuspendBoost({
             challenge: blocked,
@@ -146,7 +146,7 @@ describe('imminentBoostChallenges with the real describeDeadlineActions', () => 
         ).toEqual([NOW + 1500]);
 
         jest.mocked(logger.withCategory).mockImplementation(() =>
-            invalid({ info: jest.fn(), startOperation: jest.fn(), endOperation: jest.fn() }),
+            invalid({ info: jest.fn(), infoT: jest.fn(), startOperation: jest.fn(), endOperation: jest.fn() }),
         );
         const api = { applyBoost: jest.fn(), applyBoostToEntry: jest.fn(async () => ({ success: true })) };
         const outcome = await runSuspendBoost({
@@ -206,7 +206,13 @@ describe('imminentBoostChallenges with the real describeDeadlineActions', () => 
         expect(selectedIds()).toEqual([1]);
 
         const info = jest.fn<void, unknown[]>();
-        jest.mocked(logger.withCategory).mockImplementation(() => invalid({ info }));
+        // infoT renders through the real catalog onto the same fn, so the
+        // assertion below keeps reading today's rendered line.
+        const infoT = jest.fn((key: string, params: unknown[], data: unknown) => {
+            const { renderLogTemplate } = require('../helpers/logTemplate') as typeof import('../helpers/logTemplate');
+            info(renderLogTemplate(key, params), data);
+        });
+        jest.mocked(logger.withCategory).mockImplementation(() => invalid({ info, infoT }));
         const api = { applyBoost: jest.fn(), applyBoostToEntry: jest.fn() };
         const outcome = await runSuspendBoost({
             challenge: conflicted,

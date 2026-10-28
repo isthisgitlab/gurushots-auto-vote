@@ -1,7 +1,7 @@
 import { isPlainObject } from '../../src/ts/plainObject';
 import type { PhotoStatsFile } from '../../src/ts/services/photoStats';
 import type { ConfigV2 } from '../../src/ts/types/config';
-import { isNumber, isRecordOf, isShape, isString } from './parseJson';
+import { isNumber, isRecordOf, isShape, isString, optional } from './parseJson';
 import type { Guard } from './parseJson';
 
 /** A persisted photo-stats cache file. */
@@ -13,6 +13,8 @@ const isPhotoStatsFile: Guard<PhotoStatsFile> = isShape<PhotoStatsFile>({
             views: isNumber,
             achievementCount: isNumber,
             fetchedAt: isNumber,
+            likes: optional(isNumber),
+            guruPicks: optional(isNumber),
         }),
     ),
 });

@@ -34,13 +34,20 @@
  *   4. Tag-match score — how many of the photo's label word-stems overlap the
  *      challenge keywords (URL slug + title + welcome_message, light-stemmed,
  *      stopword-filtered).
- *   5. Stats known       \
- *   6. Votes              \  popularity — ONLY orders photos that tied at 0
- *   7. Achievements count /  across tiers 1-4, i.e. nothing matched the theme.
- *   8. Views             /
- *   9. Upload date      /
+ *   5. GuruShots suggestion — the site suggested this library photo for the
+ *      challenge (join picks only: suggestions exist for challenges the member
+ *      has NOT joined). A WEAK tiebreak that sits strictly BELOW the theme
+ *      tiers and ABOVE the popularity tiers: among photos that tied on theme,
+ *      a suggested one outranks a non-suggested one — but a suggestion is
+ *      never itself a theme match, so it can never lift a photo above a theme
+ *      match.
+ *   6. Stats known       \
+ *   7. Votes              \  popularity — ONLY orders photos that tied at 0
+ *   8. Achievements count /  across tiers 1-5, i.e. nothing matched the theme
+ *   9. Views             /   and nothing was suggested.
+ *  10. Upload date      /
  *
- * NOTE on tier 5: get_photos_private returns votes=0 and no achievements for
+ * NOTE on tier 6: get_photos_private returns votes=0 and no achievements for
  * every library photo, so the real values are fetched per photo from
  * get_image_data by services/photoStats.ts, which marks each candidate
  * `statsKnown`. That fetch is budgeted, so a candidate set can be partially
@@ -165,8 +172,8 @@ const achievementCountOf = (photo: PickerPhoto): number => {
     return Array.isArray(photo.achievements) ? photo.achievements.length : 0;
 };
 
-// Tier 5. True only when photoStats.ts actually resolved this photo's real
-// numbers; see the "NOTE on tier 5" in the file header for why unknown must not
+// Tier 6. True only when photoStats.ts actually resolved this photo's real
+// numbers; see the "NOTE on tier 6" in the file header for why unknown must not
 // collapse into votes:0.
 const statsKnownOf = (photo: PickerPhoto): boolean => photo.statsKnown === true;
 
@@ -248,6 +255,11 @@ const rankByTiers = (scored: ScoredCandidate[]): ScoredCandidate[] =>
     scored.slice().sort((a, b) => {
         const theme = compareTheme(a, b);
         if (theme !== 0) return theme;
+        // GuruShots' suggestion, DIRECTLY AFTER the theme tiers (tier 5): a
+        // suggested photo outranks a non-suggested one only among photos that
+        // tied on theme — it never lifts a photo above a theme match, and the
+        // popularity tiers below now only order photos that also tied here.
+        if (a.suggested !== b.suggested) return a.suggested ? -1 : 1;
         // Known-stat photos outrank unknown-stat ones: an unenriched photo still
         // carries get_photos_private's flat votes:0, which is missing data, not
         // a measurement of zero.

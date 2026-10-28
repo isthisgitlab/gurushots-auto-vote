@@ -11,7 +11,7 @@
 #
 #   scripts/android-verification-metadata.sh
 #
-# Needs: JDK 21 (JAVA_HOME or on PATH), the Android SDK (android/local.properties or ANDROID_HOME), Docker, a network,
+# Needs: JDK 21 or newer — CI builds on 27 (JAVA_HOME or on PATH), the Android SDK (android/local.properties or ANDROID_HOME), Docker, a network,
 # and the web build + `cap sync android` already done (`pnpm build:prep && pnpm exec cap sync android`), as for any
 # local Android build.
 #

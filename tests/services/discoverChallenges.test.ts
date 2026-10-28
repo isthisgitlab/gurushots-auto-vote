@@ -1,6 +1,6 @@
 /**
  * What Discover lists: the merge of the open and upcoming lists against an injected clock, and the
- * per-account cache of the upcoming list.
+ * one-slot cache of the upcoming list.
  */
 
 import { invalid } from '../helpers/invalid';
@@ -140,15 +140,14 @@ describe('fetchUpcoming', () => {
         expect(fetchList).toHaveBeenCalledTimes(2);
     });
 
-    test('each account has its own, and clearing forgets them all', async () => {
+    test('clearing forgets the cached one', async () => {
         const fetchList = jest.fn(async (_token: string, _filter: 'upcoming') => list);
         await fetchUpcoming('tok-a', fetchList, now);
-        await fetchUpcoming('tok-b', fetchList, now);
         await fetchUpcoming('tok-a', fetchList, now);
-        expect(fetchList.mock.calls.map(([token]) => token)).toEqual(['tok-a', 'tok-b']);
+        expect(fetchList).toHaveBeenCalledTimes(1);
         clearUpcomingCache();
         await fetchUpcoming('tok-a', fetchList, now);
-        expect(fetchList).toHaveBeenCalledTimes(3);
+        expect(fetchList).toHaveBeenCalledTimes(2);
     });
 
     test('a failed fetch (null) is not kept: the next call asks again', async () => {
@@ -194,12 +193,15 @@ describe('fetchUpcoming', () => {
         expect(fetchList).toHaveBeenCalledTimes(1);
     });
 
-    test('keys the cache by a digest of the token, not the token (two tokens never share, one always does)', async () => {
-        const fetchList = jest.fn(async () => list);
-        const tokens = Array.from({ length: 200 }, (_, i) => `token-${i}-${'x'.repeat(i % 7)}`);
-        for (const token of tokens) await fetchUpcoming(token, fetchList, now);
-        expect(fetchList).toHaveBeenCalledTimes(tokens.length);
-        for (const token of tokens) await fetchUpcoming(token, fetchList, now);
-        expect(fetchList).toHaveBeenCalledTimes(tokens.length);
+    test('a fetch that an account switch superseded never deletes a newer entry', async () => {
+        // The old fetch fails after the account switch cleared the cache and a new fetch stored its
+        // entry: the failure-cleanup matches the entry it belongs to, not the slot.
+        const first = jest.fn<Promise<Challenge[] | null>, []>().mockRejectedValue(new Error('down'));
+        await expect(fetchUpcoming('tok-a', first, now)).rejects.toThrow('down');
+        clearUpcomingCache();
+        const second = jest.fn(async () => list);
+        await fetchUpcoming('tok-b', second, now);
+        await fetchUpcoming('tok-b', second, now);
+        expect(second).toHaveBeenCalledTimes(1);
     });
 });

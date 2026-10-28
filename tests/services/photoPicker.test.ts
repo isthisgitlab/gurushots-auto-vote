@@ -2,9 +2,29 @@
  * Tests for photoPicker.ts
  */
 
+// tests/setup.ts mocks fs globally, so the asset loader is mocked to hand back
+// the committed JSON read through requireActual (as photoPicker.subject.test.ts).
+// The lexicon only loads where a describe says so (lexicon.init()); the rest of
+// this file runs with the table unloaded, where nothing merges.
+const realFs = jest.requireActual<typeof import('fs')>('fs');
+const realPath = jest.requireActual<typeof import('path')>('path');
+const mockLexicon = JSON.parse(
+    realFs.readFileSync(realPath.join(__dirname, '..', '..', 'src', 'assets', 'semantic-vectors.json'), 'utf8'),
+) as RawLexicon;
+
+jest.mock('../../src/ts/services/semantic/assets', () => ({
+    loadLexiconAsset: async () => mockLexicon,
+    ASSET_NAME: 'semantic-vectors.json',
+    __resetForTests: () => {},
+}));
+
 import type * as photoPickerModule from '../../src/ts/services/photoPicker';
+import type * as lexiconModule from '../../src/ts/services/semantic/lexicon';
 import type { ChallengeText, PickerPhoto, PickOptions, SemanticScore } from '../../src/ts/types/photoPicker';
+import type { RawLexicon } from '../../src/ts/types/semantic';
 import { invalid } from '../helpers/invalid';
+
+const lexicon = require('../../src/ts/services/semantic/lexicon') as typeof lexiconModule;
 
 const {
     pickPhotosForChallenge,
@@ -14,6 +34,7 @@ const {
     buildSearchTerms,
     detectLetterPrefix,
     parseNegation,
+    descriptionExclusions,
     tokenise,
     stem,
     matches,
@@ -24,8 +45,10 @@ const {
     tokeniseTagList,
     labelWordStems,
     wholeLabelStems,
+    visualSubjectWords,
     SEMANTIC_MATCH_FLOOR,
     SEMANTIC_SUPPORT_CAP,
+    hasThemeMatch,
 } = require('../../src/ts/services/photoPicker') as typeof photoPickerModule;
 
 const allowed = (id: string, labels: string[], uploadDate = 1000, extras: Partial<PickerPhoto> = {}) => ({
@@ -138,6 +161,158 @@ describe('photoPicker', () => {
         });
     });
 
+    // The compound merge keeps adjacent words the model knows as one term. The
+    // merge is decided by the lexicon's compound table, so every describe here
+    // states whether the table is loaded.
+    describe('compounds with the lexicon loaded', () => {
+        beforeEach(() => lexicon.init());
+        afterEach(() => lexicon.__resetForTests());
+
+        test('title, slug, quoted text and plurals all give the compound', () => {
+            expect(tokenise('Close Up', { compounds: 'replace' })).toEqual(['close-up']);
+            expect(tokenise('Close-Up', { compounds: 'replace' })).toEqual(['close-up']);
+            expect(tokenise('Close Ups', { compounds: 'replace' })).toEqual(['close-up']);
+            expect(tokenise('Beauty of Still Life', { compounds: 'replace' })).toEqual(['beauty', 'still-life']);
+            expect(tokenise('beauty-of-still-life', { compounds: 'replace' })).toEqual(['beauty', 'still-life']);
+            expect(tokenise('"Still Life"', { compounds: 'replace' })).toEqual(['still-life']);
+            expect(tokenise('Still Lifes', { compounds: 'replace' })).toEqual(['still-life']);
+        });
+
+        test('accepted spelling misses merge nothing', () => {
+            // "stilllife" is not a GloVe token; "still lives" stems to
+            // "still-live", which misses the table, so "lives" is dropped as the
+            // stopword it is; "up-close" sits past the fetch cap, so "Up Close"
+            // stays split; a single-letter part keeps "x-ray" out; the "&"
+            // breaks the window for "Black & White".
+            expect(tokenise('stilllife', { compounds: 'replace' })).toEqual(['stilllife']);
+            expect(tokenise('still lives', { compounds: 'replace' })).toEqual(['still']);
+            expect(tokenise('Up Close', { compounds: 'replace' })).toEqual(['up', 'close']);
+            expect(tokenise('x-ray', { compounds: 'replace' })).toEqual(['ray']);
+            expect(tokenise('Black & White', { compounds: 'replace' })).toEqual(['black', 'white']);
+            expect(tokenise('Best of Black & White', { compounds: 'replace' })).toEqual(['black', 'white']);
+        });
+
+        test('the "life" strip stays as it is for every other title', () => {
+            expect(tokenise('The Farm Life', { compounds: 'replace' })).toEqual(['farm']);
+            expect(tokenise('still water', { compounds: 'replace' })).toEqual(['still', 'water']);
+            expect(tokenise('hold it still', { compounds: 'replace' })).toEqual(['hold', 'still']);
+        });
+
+        test('a window joins only across whitespace or a single hyphen', () => {
+            // "Blue & Green" and the sentence break both stay unmerged: any
+            // other punctuation breaks the window.
+            expect(tokenise('Blue & Green', { compounds: 'replace' })).toEqual(['blue', 'green']);
+            expect(tokenise('hold it still. Life is good', { compounds: 'replace' })).toEqual(['hold', 'still']);
+        });
+
+        test('a single-word ignore keeps the window unmerged — the ignored word wins', () => {
+            expect(tokenise('Close Up', { ignoreWords: ['close'], compounds: 'replace' })).toEqual(['up']);
+            expect(tokenise('Beauty of Still Life', { ignoreWords: ['still'], compounds: 'replace' })).toEqual([
+                'beauty',
+            ]);
+            expect(tokenise('Beauty of Still Life', { ignoreWords: ['life'], compounds: 'replace' })).toEqual([
+                'beauty',
+                'still',
+            ]);
+        });
+
+        test('a phrase-form ignore word drops the whole merged window', () => {
+            // The window is only dropped for a compound the model knows, and the
+            // phrase must be spelled the way the merge joins it — the surface
+            // words "Close" and "Ups" never match an ignore word.
+            expect(tokenise('Close Up', { ignoreWords: ['close up'], compounds: 'replace' })).toEqual([]);
+            expect(tokenise('Close-Ups', { ignoreWords: ['close-up'], compounds: 'replace' })).toEqual(['close-up']);
+        });
+
+        test('neither "close" nor "up" appears in the keywords or search terms of an ignored compound', () => {
+            expect(buildChallengeKeywords({ title: 'Close Up', url: 'close-up' }, ['close up'])).toEqual([]);
+            expect(buildThemeKeywords({ title: 'Close Up', url: 'close-up' }, ['close up'])).toEqual([]);
+            expect(buildSearchTerms({ title: 'Close Up', url: 'close-up' }, { ignoreWords: ['close up'] })).toEqual([]);
+        });
+
+        test('a 3-word window wins at its leftmost position', () => {
+            // "son-in-law" and "in-law" are both compounds: the merge tries the
+            // 3-word window first at position 0, consuming all three words, so
+            // "son in law" cannot degrade to ["son", "in-law"].
+            expect(tokenise('son in law', { compounds: 'replace' })).toEqual(['son-in-law']);
+            expect(tokenise('in law', { compounds: 'replace' })).toEqual(['in-law']);
+        });
+
+        test('keywords and search terms carry the compound', () => {
+            expect(buildChallengeKeywords({ title: 'Close Up', url: 'close-up' })).toEqual(['close-up']);
+            expect(buildThemeKeywords({ title: 'Close Up', url: 'close-up' })).toEqual(['close-up']);
+            expect(buildSearchTerms({ title: 'Close Up', url: 'close-up' })).toEqual(['close-up']);
+            // Both subjects survive, within the caps.
+            expect(buildChallengeKeywords({ title: 'Close Up Flowers', url: 'close-up-flowers' })).toEqual([
+                'close-up',
+                'flower',
+            ]);
+            expect(buildSearchTerms({ title: 'Close Up Flowers', url: 'close-up-flowers' })).toEqual([
+                'flower',
+                'close-up',
+            ]);
+        });
+
+        test('a BARE hyphen is still not a series separator - compounds survive whole', () => {
+            // The spacing is the whole distinction: a compound joins its parts
+            // with no spaces, so splitting on a bare "-" would silently discard
+            // a real subject.
+            expect(buildThemeKeywords({ title: 'Black-and-White Portraits' })).toEqual(['black-and-white', 'portrait']);
+            expect(buildThemeKeywords({ title: 'Close-Up Macro' })).toEqual(['close-up', 'macro']);
+        });
+
+        test('a negated compound stays out of the keywords and the vision prompt', () => {
+            const challenge = { title: 'Flowers: No Close-Ups', url: 'flowers-no-close-ups' };
+            expect(buildChallengeKeywords(challenge)).toEqual(['flower']);
+            expect(visualSubjectWords(challenge)).toEqual(['flowers']);
+            expect(buildSearchTerms(challenge)).toEqual(['flower']);
+        });
+
+        test('compound labels keep the compound and its parts, compound first', () => {
+            // 'add' mode emits the compound ahead of its parts, so a label cut
+            // at MAX_WORDS_PER_LABEL cannot lose the compound and keep only
+            // pieces of it.
+            expect(labelWordStems({ labels: ['Self-portrait'] })).toEqual(['self-portrait', 'self', 'portrait']);
+            expect(labelStemGroups({ labels: ['Close-up'] })).toEqual([['close-up']]);
+            expect(labelWordStems({ labels: ['Close up'] })).toEqual(['close-up', 'close', 'up']);
+        });
+
+        test("'add' mode keeps the compound when MAX_WORDS_PER_LABEL cuts the parts", () => {
+            const prefix = Array.from({ length: 11 }, (_, i) => `word${'abcdefghijk'[i]}`).join(' ');
+            const stems = labelWordStems({ labels: [`${prefix} close up`] });
+            expect(stems).toHaveLength(12);
+            expect(stems[11]).toBe('close-up');
+        });
+
+        test('a must-tag matches one part of a compound label', () => {
+            const photo = { labels: ['Self-portrait'] };
+            expect(scorePhoto(photo, ['portrait'])).toBe(1);
+        });
+
+        test('a "Close" label does not match the keyword "close-up", a "Closeup" label does', () => {
+            // A compound stem matches only by equality with the hyphens
+            // stripped — the prefix rule would let "close" match "closeup".
+            expect(matches('close', 'close-up')).toBe(false);
+            expect(matches('closeup', 'close-up')).toBe(true);
+            expect(scorePhoto({ labels: ['Close'] }, ['close-up'])).toBe(0);
+            expect(scorePhoto({ labels: ['Closeup'] }, ['close-up'])).toBe(1);
+        });
+    });
+
+    describe('compounds with the lexicon NOT loaded — words stay split', () => {
+        test('the merge needs the table, so the phrase ignore does not apply either', () => {
+            expect(tokenise('Close Up')).toEqual(['close', 'up']);
+            expect(tokenise('Beauty of Still Life')).toEqual(['beauty', 'still']);
+            // The ignore set holds "still life", but no window merged, so the
+            // parts flow through (and "life" is stripped as the stopword it is).
+            expect(tokenise('Beauty of Still Life', { ignoreWords: ['still life'] })).toEqual(['beauty', 'still']);
+        });
+
+        test('compoundOf is false before init()', () => {
+            expect(lexicon.compoundOf(['close', 'up'])).toBe(false);
+        });
+    });
+
     describe('labelStemGroups', () => {
         test('keeps each label separate and collapses duplicates', () => {
             expect(labelStemGroups({ labels: ['Sea Life', 'Staircase', 'Staircase'] })).toEqual([
@@ -196,10 +371,12 @@ describe('photoPicker', () => {
             ]);
         });
 
-        test('a BARE hyphen is still not a separator - compounds survive whole', () => {
+        test('a BARE hyphen is still not a separator - the compound keeps its parts split here', () => {
             // The spacing is the whole distinction: a compound joins its parts
-            // with no spaces, so splitting on a bare "-" would silently discard
-            // a real subject.
+            // with no spaces, so a bare "-" is never series structure. The
+            // compound-aware reading of these titles is pinned in the
+            // compounds-with-lexicon-loaded describe above; this file's body
+            // runs with the table unloaded.
             expect(buildThemeKeywords({ title: 'Black-and-White Portraits' })).toEqual(['black', 'white', 'portrait']);
             expect(buildThemeKeywords({ title: 'Close-Up Macro' })).toEqual(['close', 'up', 'macro']);
         });
@@ -468,6 +645,30 @@ describe('photoPicker', () => {
             expect(detectLetterPrefix('Begins With Love')).toBeNull();
             expect(detectLetterPrefix('Begins With LA')).toBeNull();
             expect(detectLetterPrefix('Begins With L-A')).toBeNull();
+            expect(detectLetterPrefix('Starts With an Apple')).toBeNull(); // "an" is an article, the letter is not lone
+        });
+        test('a quoted letter after begins/starts-with parses, as the descriptions ship it', () => {
+            expect(detectLetterPrefix('Begins With "L"')).toBe('l');
+            expect(detectLetterPrefix("Starts With 'S'")).toBe('s');
+        });
+        test('the "an" article before the letter parses; a bare "a" is the letter only when no word follows', () => {
+            expect(detectLetterPrefix('Begins With an S')).toBe('s');
+            // A bare "a" is the letter at the end of the text or before a
+            // separator — never an article before another word; a quoted 'a'
+            // always counts.
+            expect(detectLetterPrefix('Begins With A')).toBe('a');
+            expect(detectLetterPrefix('Begins With A ')).toBe('a'); // trailing spaces still end the text
+            expect(detectLetterPrefix('Begins With A\t')).toBe('a'); // any whitespace ends the text
+            expect(detectLetterPrefix('Begins With A\n')).toBe('a');
+            expect(detectLetterPrefix('Begins With A: Apples')).toBe('a');
+            expect(detectLetterPrefix('Begins With A - Apples')).toBe('a'); // hyphen only after spaces
+            expect(detectLetterPrefix('Begins With A-V')).toBeNull(); // a bare hyphen is not a separator
+            expect(detectLetterPrefix('Begins With A…')).toBe('a'); // an ellipsis is a separator
+            expect(detectLetterPrefix('Share shots that start with A\nExamples: apples')).toBe('a'); // a newline is a separator
+            expect(detectLetterPrefix("Starts With 'A'")).toBe('a');
+            expect(detectLetterPrefix('Starts With a Smile')).toBeNull();
+            expect(detectLetterPrefix('Begins With a Bang')).toBeNull();
+            expect(detectLetterPrefix('Begins With L')).toBe('l');
         });
         test('out-of-scope title forms return null', () => {
             expect(detectLetterPrefix('L Words')).toBeNull();
@@ -704,6 +905,16 @@ describe('photoPicker', () => {
             // but an explicit user tag must be honored.
             expect(tokeniseTagList(['shot'])).toEqual(['shot']);
             expect(tokeniseTagList(['winner'])).toEqual(['winner']);
+        });
+        test('each tag is tokenised on its own, with compound merging off', () => {
+            // Joining the tags first would merge "still" + "life" into the
+            // compound; and a saved must-tag means its literal words, so even
+            // one tag spelled "still life" stays two stems — a must-tag "black
+            // and white" keeps its words (stopword included) the same way.
+            expect(tokeniseTagList(['still', 'life'])).toEqual(['still', 'life']);
+            expect(tokeniseTagList(['still life'])).toEqual(['still', 'life']);
+            expect(tokeniseTagList(['black and white'])).toEqual(['black', 'and', 'white']);
+            expect(tokeniseTagList(['Still', 'still'])).toEqual(['still']);
         });
     });
 
@@ -1089,6 +1300,49 @@ describe('photoPicker', () => {
                 throw new Error('boom');
             });
             expect(pickPhotosForChallenge(challenge, photos, 5, { onFallback })).toEqual(['dog']);
+        });
+    });
+
+    describe('letter challenge "The Letter S" — the 136581 incident', () => {
+        // Challenge 136581's description, quoted word for word as the API
+        // returned it on 2026-10-22. The visual check scored the "Symbol" photo
+        // at −4.99 against the leftover title word "letter" and it replaced the
+        // tag pick; with the letter phrases stripped, the description's own
+        // example words decide inside the letter-filtered set.
+        const DESC =
+            'Share your shots that start with S! From snakes to snacks and shampoo to shopping carts, ' +
+            "get stylistic and share those stunning shots that start with 'S' (in English). Join our " +
+            'challenge and earn rewards! * Participation reward: 10 coins * Elite Level reward: 20 coins ' +
+            '* ALLSTAR Level reward: 50 coins Scores of success and splendid shooting!';
+        const challenge = { title: 'The Letter "S"', url: 'the-letter-s', welcome_message: DESC };
+
+        test('a description word picks the matching S photo over a higher-voted same-letter one', () => {
+            const snake = allowed('snake', ['Snake'], 1000, { votes: 5 });
+            const symbol = allowed('symbol', ['Symbol'], 9000, { votes: 500 });
+            expect(pickPhotosForChallenge(challenge, [symbol, snake], 1)).toEqual(['snake']);
+        });
+
+        test('a description that matches no label leaves the decision to votes alone', () => {
+            const plain = {
+                title: 'The Letter "S"',
+                url: 'the-letter-s',
+                welcome_message:
+                    "Share your shots that start with 'S' (in English). Join our challenge and earn rewards!",
+            };
+            const sunset = allowed('sunset', ['Sunset'], 1000, { votes: 500 });
+            const symbol = allowed('symbol', ['Symbol'], 9000, { votes: 5 });
+            expect(pickPhotosForChallenge(plain, [symbol, sunset], 1)).toEqual(['sunset']);
+        });
+
+        test('visualSubjectWords is empty in both cases: the title has no visual subject', () => {
+            expect(visualSubjectWords(challenge)).toEqual([]);
+            expect(
+                visualSubjectWords({
+                    title: 'The Letter "S"',
+                    welcome_message:
+                        "Share your shots that start with 'S' (in English). Join our challenge and earn rewards!",
+                }),
+            ).toEqual([]);
         });
     });
 
@@ -1717,9 +1971,256 @@ describe('photoPicker', () => {
             );
         });
 
+        test('a description word the title negates stays a keyword when the description excludes nothing', () => {
+            // Title negation keeps dropNegated as its only keyword path: a body
+            // naming "faces" is evidence, not an exclusion, so it stays.
+            const challenge = { title: 'No Humans', url: 'no-humans', welcome_message: 'Faces tell the story.' };
+            expect(buildChallengeKeywords(challenge)).toContain('face');
+        });
+
         test('an unlabelled photo cannot be judged and is kept', () => {
             const photos = [allowed('portrait', ['Person'], 3000), allowed('bare', [], 1000)];
             expect(pickPhotosForChallenge({ title: 'No Humans' }, photos, 2)).toEqual(['bare']);
+        });
+    });
+
+    describe('description exclusions ("no people" in the description)', () => {
+        const excludes = (welcome_message: string, ignoreWords: Iterable<string> | null = null) =>
+            descriptionExclusions({ title: 'Color Hunt: Green', welcome_message }, ignoreWords);
+
+        test.each([
+            ['No people please.', ['people']],
+            ['Please avoid people in your photos', ['people']],
+            ['Without any humans or animals.', ['people', 'animals']],
+            ['no people, pets or animals', ['people', 'animals']],
+            ['Pets are not allowed', ['animals']],
+            ['Images of persons will be disqualified', ['people']],
+            // A sentence-initial "No X, or … disqualified" is a penalty on
+            // photos lacking X, so the exclusion still counts.
+            ['No people, or your photo will be disqualified.', ['people']],
+            ['No people or the entry will be disqualified.', ['people']],
+            ['No animals, otherwise the photo is disqualified.', ['animals']],
+            ['Please no people in the frame, photos breaking this rule will be disqualified.', ['people']],
+            ['No people allowed, entries that break this are excluded.', ['people']],
+            ['No people - any photo with a face is off-topic', ['people']],
+            // A photo-noun post-modifier without a verdict is an exclusion.
+            ['Share photos without people in them', ['people']],
+            ['Show a city with no people or cars.', ['people']],
+        ])('"%s" excludes %j', (text, expected) => {
+            expect(excludes(text)).toEqual(expected);
+        });
+
+        test.each([
+            'Share photos of people and animals',
+            'Not only people but also animals',
+            'No matter what people think',
+            'people are the main subject',
+            'Street scenes, with or without people',
+            'places where people are not allowed to enter',
+            'No animals were harmed',
+            'No humans or animals were harmed',
+            'No animals or people were harmed',
+            'No animals will be harmed in the making',
+            'no animals are harmed',
+            'Street scenes with and without people',
+            'Street scenes with/without people',
+            'Please, no animal cruelty',
+            'no human-made objects',
+            'No personal edits',
+            'no petals',
+            'carpets are not allowed',
+            'Photos without people in them will be disqualified.',
+            'Photos without pets in the frame are off-topic.',
+            'Entries with no animals, will be disqualified.',
+        ])('"%s" excludes nothing', (text) => {
+            expect(excludes(text)).toEqual([]);
+        });
+
+        // A negator before the noun list ("without pets") makes the noun the
+        // object of the negation, not the subject a verdict is pronounced on.
+        // The titles name no concept, so the regex alone decides.
+        test.each([
+            ['Best Friends', 'Photos without pets will be considered off-topic.'],
+            ['Street Life', 'Images with no people are disqualified.'],
+            ['City Night', 'Shots that do not include people will be considered off-topic.'],
+            ['Furry Friends', 'Photos without animals are not allowed.'],
+            ['Best Friends', 'Images with no animals will be disqualified.'],
+            ['Best Friends', 'Photos without pets or people are disqualified.'],
+            ['Best Friends', 'Images with no people, pets or animals will be disqualified.'],
+        ])('"%s" ignores a negated verdict: "%s" excludes nothing', (title, text) => {
+            expect(descriptionExclusions({ title, welcome_message: text })).toEqual([]);
+        });
+
+        test('"no other ..." grants an exception instead of excluding', () => {
+            expect(
+                descriptionExclusions({
+                    title: 'Solo',
+                    welcome_message: 'one person only, no other people in the frame',
+                }),
+            ).toEqual([]);
+            expect(descriptionExclusions({ title: 'My Best Friend', welcome_message: 'no other animals' })).toEqual([]);
+        });
+
+        test('an empty or missing description excludes nothing', () => {
+            expect(excludes('')).toEqual([]);
+            expect(descriptionExclusions({ title: 'Color Hunt: Green' })).toEqual([]);
+            expect(descriptionExclusions(undefined)).toEqual([]);
+        });
+
+        test.each([
+            // Pinned known limits: the follower check is strict (" are" is not a
+            // follower, so the comma-joined list is rejected whole), "should" is
+            // a follower, a "/" after a noun is a separator rather than a
+            // follower (so only the second lead match counts), and the greedy
+            // list ends at the last noun ("animal"), so a phrase after it
+            // (" lovers") is not a follower and the challenge FOR animal lovers
+            // reads as excluding nothing.
+            ['No people, animals are welcome', []],
+            ['without people around', []],
+            ['no pet photos', []],
+            ['no animals should be harmed', ['animals']],
+            ['no pets/no people', ['people']],
+            ['no people or animal lovers', []],
+        ])('known limit: "%s" → %j', (text, expected) => {
+            expect(excludes(text)).toEqual(expected);
+        });
+
+        // Known limit: a requirement sentence whose lead keyword has no listed
+        // photo word right before it ("photos", "entries", …) is still read as
+        // an exclusion — only those words open the requirement reading.
+        test.each([
+            ['Photos that have no people in them will be disqualified.', ['people']],
+            ['Landscapes without people in them are disqualified.', ['people']],
+            ['Scenes with no animals in the frame will be disqualified.', ['animals']],
+            ['Photos with absolutely no people in them will be disqualified.', ['people']],
+            ['Shots taken without people in the frame are off-topic.', ['people']],
+            ['Your photo, without people in it, will be disqualified.', ['people']],
+        ])('known limit: "%s" → %j', (text, expected) => {
+            expect(excludes(text)).toEqual(expected);
+        });
+
+        test('the requirement reading starts exactly at the listed photo noun', () => {
+            // "Entries with no animals, …" is the requirement reading; the
+            // sentence-initial penalty reading one line down still excludes.
+            expect(excludes('Entries with no animals, will be disqualified.')).toEqual([]);
+            expect(excludes('No animals, or the photo will be disqualified.')).toEqual(['animals']);
+        });
+
+        test.each([
+            ['no people in the frame', ['people']],
+            ['no people allowed', ['people']],
+            ['No people should be visible', ['people']],
+            ['No humans.', ['people']],
+            ['No people - animals only', ['people']],
+            ['no people (or animals)', ['people']],
+            ['No people/animals', ['people', 'animals']],
+        ])('what may follow the noun list: "%s" → %j', (text, expected) => {
+            expect(excludes(text)).toEqual(expected);
+        });
+
+        test('two matches for one concept are reported once', () => {
+            expect(excludes('no people in the frame, no humans in the shot')).toEqual(['people']);
+            expect(excludes('Pets are not allowed, and no animals in the frame.')).toEqual(['animals']);
+        });
+
+        test('the guard drops a concept the positive title asks for', () => {
+            expect(descriptionExclusions({ title: 'Pets and Their People', welcome_message: 'no animals' })).toEqual(
+                [],
+            );
+            expect(descriptionExclusions({ title: 'Dogs', welcome_message: 'no people' })).toEqual(['people']);
+            expect(descriptionExclusions({ title: 'No Pets', welcome_message: 'animals are not allowed' })).toEqual([
+                'animals',
+            ]);
+            expect(descriptionExclusions({ title: 'Dogs', welcome_message: 'no animals' }, ['dogs'])).toEqual([
+                'animals',
+            ]);
+            // The guard's animal set keeps the taxonomy words the label set
+            // dropped, and a participle does not hide the real animal noun
+            // beside it.
+            expect(descriptionExclusions({ title: 'Wild Mammals', welcome_message: 'No pets please.' })).toEqual([]);
+            expect(descriptionExclusions({ title: 'Dog Walking', welcome_message: 'No animals' })).toEqual([]);
+        });
+
+        test('a photo-type title word and a participle do not cancel a concept', () => {
+            // "Portrait" names how a photo is framed, not that a person is in it;
+            // "Fishing" is an activity, not the fish its stem lands on.
+            expect(
+                descriptionExclusions({ title: 'Pet Portraits', welcome_message: 'Show us your pet. No people.' }),
+            ).toEqual(['people']);
+            expect(descriptionExclusions({ title: 'Fishing Boats', welcome_message: 'No people or animals.' })).toEqual(
+                ['people', 'animals'],
+            );
+        });
+
+        test('an ignored title word does not cancel a description exclusion', () => {
+            expect(
+                descriptionExclusions({ title: 'Street', welcome_message: 'No people please.' }, ['people']),
+            ).toEqual(['people']);
+        });
+
+        test('adversarial descriptions finish in bounded time', () => {
+            // A space run collapses to one space, and the verdict form's
+            // quadratic restarts stay bounded at the MAX_TOKENISE_CHARS cap.
+            const spaces = `no people${' '.repeat(4000)}zzz`;
+            const list = 'people and '.repeat(341);
+            const started = Date.now();
+            expect(excludes(spaces)).toEqual([]);
+            expect(excludes(list)).toEqual([]);
+            expect(Date.now() - started).toBeLessThan(200);
+        });
+    });
+
+    describe('suggested tier (opts.suggestedIds)', () => {
+        // Same fixture shape as the semantic tier describes: title keywords
+        // (pink/nature) match nothing below, so the tiers under test decide.
+        const challenge = { title: 'Pink In Nature', url: '', welcome_message: '' };
+
+        test('a suggested photo beats a popular non-suggested one that tied with it on theme', () => {
+            const pA = allowed('a', ['Random'], 1000, { votes: 1 });
+            const pB = allowed('b', ['Random'], 1000, { votes: 5 });
+            expect(pickPhotosForChallenge(challenge, [pA, pB], 1)).toEqual(['b']);
+            expect(pickPhotosForChallenge(challenge, [pA, pB], 1, { suggestedIds: new Set(['a']) })).toEqual(['a']);
+        });
+
+        test('a suggestion never beats a theme match', () => {
+            const pA = allowed('a', ['Random'], 1000, { votes: 99 });
+            const pB = allowed('b', ['Random'], 1000, { votes: 1 });
+            const semanticScores = new Map([
+                ['a', 0.1],
+                ['b', 0.9],
+            ]);
+            expect(
+                pickPhotosForChallenge(challenge, [pA, pB], 1, { suggestedIds: new Set(['a']), semanticScores }),
+            ).toEqual(['b']);
+        });
+
+        test('a suggested-only photo is still no theme match', () => {
+            const [scored] = buildScoredCandidates(challenge, [allowed('a', ['Random'])], {
+                suggestedIds: new Set(['a']),
+            });
+            expect(scored.suggested).toBe(true);
+            expect(hasThemeMatch(scored)).toBe(false);
+        });
+
+        test('buildScoredCandidates marks the suggested photos, and only them', () => {
+            const scored = buildScoredCandidates(challenge, [allowed('a', ['Random']), allowed('b', ['Random'])], {
+                suggestedIds: new Set(['b']),
+            });
+            expect(scored.map((entry) => entry.suggested)).toEqual([false, true]);
+            expect(buildScoredCandidates(challenge, [allowed('a', ['Random'])], {}).map((e) => e.suggested)).toEqual([
+                false,
+            ]);
+        });
+
+        test('chosen orderedIds are never overridden by the suggestion tier', () => {
+            const pA = allowed('a', ['Random'], 1000);
+            const pB = allowed('b', ['Random'], 1000);
+            expect(
+                pickPhotosForChallenge(challenge, [pA, pB], 2, {
+                    suggestedIds: new Set(['b']),
+                    chosen: { ids: ['a', 'b'], only: false, inOrder: true },
+                }),
+            ).toEqual(['a', 'b']);
         });
     });
 });

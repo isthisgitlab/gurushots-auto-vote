@@ -194,6 +194,25 @@ describe('semantic lexicon backend', () => {
     });
 });
 
+describe('compoundOf — the compound table the tokeniser merge consults', () => {
+    afterEach(() => lexicon.__resetForTests());
+
+    test('is false before init()', () => {
+        expect(lexicon.compoundOf(['close', 'up'])).toBe(false);
+    });
+
+    test('is true exactly for the compounds the shipped asset carries', async () => {
+        await lexicon.init();
+        expect(lexicon.compoundOf(['close', 'up'])).toBe(true);
+        expect(lexicon.compoundOf(['still', 'life'])).toBe(true);
+        expect(lexicon.compoundOf(['black', 'and', 'white'])).toBe(true);
+        // "still-live" (the stem of "still lives") is not a key, so that
+        // spelling never merges.
+        expect(lexicon.compoundOf(['still', 'live'])).toBe(false);
+        expect(lexicon.compoundOf(['blue', 'sky'])).toBe(false);
+    });
+});
+
 describe('buildTable — v2 packed asset decode', () => {
     // A known 4-dim vector with negative components, quantized at scale 0.01.
     const DIMS = 4;
@@ -260,39 +279,5 @@ describe('buildTable — v2 packed asset decode', () => {
         } finally {
             global.Buffer = originalBuffer;
         }
-    });
-});
-
-describe('stem-spelling fallback', () => {
-    // The shipped table's keys strip '-es' unconditionally (the intermediate was
-    // generated with a stem() that did), while stem() strips it only after a
-    // sibilant, correctly keeping the '-e' elsewhere, so a few stems spell
-    // differently than the key that holds their vector.
-    beforeEach(async () => {
-        lexicon.__resetForTests();
-        await lexicon.isAvailable();
-    });
-
-    test('resolves a stem whose key predates the sibilant rule', () => {
-        // "buses" keys as `bus` but now stems to `buse`; "clothes" keys as
-        // `cloth` but stems to `clothe`. Without the retry the semantic tier
-        // goes dark for exactly those themes.
-        expect(lexicon.embed(['buse'])).not.toBeNull();
-        expect(lexicon.embed(['clothe'])).not.toBeNull();
-    });
-
-    test('does not invent a vector for a word that is simply absent', () => {
-        expect(lexicon.embed(['zzzqqq'])).toBeNull();
-        expect(lexicon.embed(['xqzzle'])).toBeNull();
-    });
-
-    test('never shadows a key that exists in its own right', () => {
-        // The retry only runs AFTER a miss, so "rose" must resolve to the rose
-        // vector rather than being rewritten to "ros".
-        const rose = lexicon.embed(['rose']);
-        const ros = lexicon.embed(['ros']);
-        expect(rose).not.toBeNull();
-        expect(ros).not.toBeNull();
-        expect(lexicon.cosine(rose, ros)).toBeLessThan(0.99);
     });
 });

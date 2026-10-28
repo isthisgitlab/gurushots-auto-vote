@@ -39,7 +39,7 @@ export function useSwapPhoto() {
 }
 
 /**
- * Spend a SWAP to put the recorded boosted/turbo'd original back into the slot
+ * Spend a SWAP to put the recorded boosted, turbo'd or guru-picked original back into the slot
  * now holding `currentImageId`. Same shape as useKeyUnlock.
  */
 export const useSwapBack = () =>

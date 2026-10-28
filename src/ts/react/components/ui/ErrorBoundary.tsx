@@ -8,7 +8,7 @@ import type { ComponentChildren, ErrorInfo } from 'preact';
  * ErrorBoundary is a class (no hooks) and, more importantly, an error boundary
  * must not depend on React context that may itself be part of what broke.
  */
-const tr = (key: string) => rendererTranslator.t(key);
+const tr = rendererTranslator.t;
 
 export type ErrorBoundaryProps = { children?: ComponentChildren };
 export type ErrorBoundaryState = { error: Partial<Error> | null };
@@ -84,10 +84,18 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                     <p className="text-sm">{tr('errors.boundaryBody')}</p>
                 </div>
                 <div className="flex gap-2 shrink-0">
-                    <button type="button" className="btn btn-outline btn-sm" onClick={this.handleDismiss}>
+                    <button
+                        type="button"
+                        className="btn btn-outline btn-sm max-sm:min-h-10"
+                        onClick={this.handleDismiss}
+                    >
                         {tr('errors.dismiss')}
                     </button>
-                    <button type="button" className="btn btn-sm btn-neutral" onClick={this.handleReload}>
+                    <button
+                        type="button"
+                        className="btn btn-sm btn-neutral max-sm:min-h-10"
+                        onClick={this.handleReload}
+                    >
                         {tr('errors.reload')}
                     </button>
                 </div>

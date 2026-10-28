@@ -6,6 +6,23 @@
  * fatal path stops exactly where the real process would.
  */
 
+// The real-asset describe below needs the loader to read the committed file
+// through the real fs (tests/setup.ts mocks it), exactly as
+// tests/services/tagResolver.test.ts does.
+jest.mock('../../src/ts/services/semantic/assets', () => {
+    const realFs = jest.requireActual<typeof import('node:fs')>('node:fs');
+    const realPath = jest.requireActual<typeof import('node:path')>('node:path');
+    const assetPath = realPath.join(__dirname, '..', '..', 'src', 'assets', 'semantic-vectors.json');
+    let cached: unknown;
+    return {
+        ASSET_NAME: 'semantic-vectors.json',
+        loadLexiconAsset: async () => {
+            if (cached === undefined) cached = JSON.parse(realFs.readFileSync(assetPath, 'utf8'));
+            return cached;
+        },
+        __resetForTests: () => {},
+    };
+});
 jest.mock('../../src/ts/services/semantic/lexicon', () => ({
     __esModule: true,
     ...jest.requireActual<typeof import('../../src/ts/services/semantic/lexicon')>(
@@ -15,6 +32,8 @@ jest.mock('../../src/ts/services/semantic/lexicon', () => ({
 import lexiconModule = require('../../src/ts/services/semantic/lexicon');
 const lexicon = jest.mocked(lexiconModule);
 import type * as validate_lexiconModule from '../../scripts/validate-lexicon';
+import type * as stopwordsModule from '../../src/ts/services/photoPicker/stopwords';
+import type * as stemModule from '../../src/ts/services/photoPicker/stem';
 import type { ConceptsConfig } from '../../scripts/build-lexicon';
 import { invalid } from '../helpers/invalid';
 const { main, checkSubjectCases } = require('../../scripts/validate-lexicon') as typeof validate_lexiconModule;
@@ -191,5 +210,42 @@ describe('validate-lexicon checkSubjectCases', () => {
             fakeLex,
         );
         expect(failures).toEqual(['"Balloon Fun" demotes [fun], expected []', '"Fun Zzz" demotes [], expected [fun]']);
+    });
+});
+
+describe('checkSubjectCases against the real shipped lexicon', () => {
+    const realFs = jest.requireActual<typeof import('node:fs')>('node:fs');
+    const realPath = jest.requireActual<typeof import('node:path')>('node:path');
+    const readJson = (segments: string[]) =>
+        JSON.parse(realFs.readFileSync(realPath.join(__dirname, '..', '..', ...segments), 'utf8')) as unknown;
+    type SubjectCase = { title: string; abstract: string[] };
+    const cases = (readJson(['scripts', 'lexicon-concepts.json']) as { concreteness: { cases: SubjectCase[] } })
+        .concreteness.cases;
+
+    afterEach(() => lexicon.__resetForTests());
+
+    test('every shipped concreteness.cases title reads correctly under the gate', async () => {
+        // The gate must run the matcher's own code: the title tokenised in
+        // compound 'replace' mode against the loaded table, so a compound title
+        // ("Beauty of Still Life") is judged the way the app reads it and the
+        // compound path is covered under Jest and not only by pnpm
+        // verify:lexicon.
+        expect(await lexicon.isAvailable()).toBe(true);
+        expect(cases).toHaveLength(24);
+        expect(checkSubjectCases(cases, lexicon)).toEqual([]);
+    });
+
+    test('pins the shipped compound counts', () => {
+        // A rebuild that changes either number changes which titles can fire
+        // the compound branch and its qualifier demotion — re-run the merge
+        // report before accepting such a change.
+        const asset = readJson(['src', 'assets', 'semantic-vectors.json']) as { packed: Record<string, string> };
+        const compounds = Object.keys(asset.packed).filter((key) => key.includes('-'));
+        expect(compounds).toHaveLength(3319);
+        const { STOPWORDS } = require('../../src/ts/services/photoPicker/stopwords') as typeof stopwordsModule;
+        const { stem } = require('../../src/ts/services/photoPicker/stem') as typeof stemModule;
+        const stopwordStems = new Set([...STOPWORDS].map(stem));
+        const stopwordHeads = compounds.filter((key) => stopwordStems.has(stem(key.slice(key.lastIndexOf('-') + 1))));
+        expect(stopwordHeads).toHaveLength(229);
     });
 });

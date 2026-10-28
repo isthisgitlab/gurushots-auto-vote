@@ -16,6 +16,14 @@ const getEntries = (challenge: Partial<Challenge> | null | undefined): RankingEn
     return Array.isArray(entries) ? entries : [];
 };
 
+// Every photo swapped out of the challenge so far (the API's swap history).
+const swappedOutIds = (challenge: Partial<Challenge> | null | undefined): Set<string> =>
+    new Set(
+        (Array.isArray(challenge?.member?.ranking?.swaps) ? challenge.member.ranking.swaps : []).map((s) =>
+            String(s?.id),
+        ),
+    );
+
 const getSlotsRemaining = (challenge: Partial<Challenge> | null | undefined): number => {
     const max = finiteOr(challenge?.max_photo_submits, 0);
     return Math.max(0, max - getEntries(challenge).length);
@@ -108,31 +116,37 @@ const mergeLocalEntries = (prevEntries: RankingEntry[], freshEntries: RankingEnt
 };
 
 /**
- * Id → raised boost/turbo flags for every id-bearing entry that has either set.
+ * Id → raised boost/turbo/guru-pick flags for every id-bearing entry that has
+ * any of them set.
  */
-const collectRaisedEntryFlags = (entries: RankingEntry[]): Map<string, { turbo: boolean; boosted: boolean }> => {
-    const flags: Map<string, { turbo: boolean; boosted: boolean }> = new Map();
+const collectRaisedEntryFlags = (
+    entries: RankingEntry[],
+): Map<string, { turbo: boolean; boosted: boolean; guruPick: boolean }> => {
+    const flags: Map<string, { turbo: boolean; boosted: boolean; guruPick: boolean }> = new Map();
     for (const entry of entries) {
         if (!entry || entry.id == null) continue;
-        if (entry.turbo || entry.boosted) {
-            flags.set(String(entry.id), { turbo: !!entry.turbo, boosted: !!entry.boosted });
+        if (entry.turbo || entry.boosted || entry.guru_pick === true) {
+            flags.set(String(entry.id), {
+                turbo: !!entry.turbo,
+                boosted: !!entry.boosted,
+                guruPick: entry.guru_pick === true,
+            });
         }
     }
     return flags;
 };
 
 /**
- * Carry locally-raised boost/turbo flags across the member swap.
+ * Carry locally-raised boost/turbo/guru-pick flags across the member swap.
  *
  * Replacing `member` wholesale means an entry that IS in the fresh payload comes back
  * with the server's flags — and the server has not registered an apply from seconds ago,
- * so it reports turbo/boosted false. That would silently undo reflectEntryFlag: with the
- * default action order (turbo, then autoSubmit, then boost) a turbo applied earlier in the
- * pass would have its flag wiped by the refresh, and boost would then pick the very entry
- * turbo had just consumed. Only ever raise a flag, never clear one — if either side says an
- * entry is taken, treat it as taken. That errs toward using a different entry, which is the
- * safe direction: boost and turbo may both be spent, but never on the same entry. Mutates
- * `freshEntries`.
+ * so it reports turbo/boosted false (and a Guru's pick the web read carried may be missing,
+ * for instance when the web read failed this time). That would silently undo
+ * reflectEntryFlag and drop a guru pick the app already showed. Only ever raise a flag,
+ * never clear one — if either side says an entry is taken, treat it as taken. That errs
+ * toward using a different entry, which is the safe direction: boost and turbo may both
+ * be spent, but never on the same entry. Mutates `freshEntries`.
  */
 const carryLocalEntryFlags = (prevEntries: RankingEntry[], freshEntries: RankingEntry[]) => {
     const localFlags = collectRaisedEntryFlags(prevEntries);
@@ -142,6 +156,7 @@ const carryLocalEntryFlags = (prevEntries: RankingEntry[], freshEntries: Ranking
         if (!flags) continue;
         if (flags.turbo) entry.turbo = true;
         if (flags.boosted) entry.boosted = true;
+        if (flags.guruPick) entry.guru_pick = true;
     }
 };
 
@@ -156,6 +171,11 @@ const carryLocalEntryFlags = (prevEntries: RankingEntry[], freshEntries: Ranking
  *   'refreshed'   – fresh member state merged into `challenge` (in place)
  *   'gone'        – fetch succeeded with a non-empty list that does not
  *                   contain this challenge → caller must skip the submit
+ *   'invalid'     – the read itself cannot be trusted: a prune-unsafe read
+ *                   (it dropped elements) that does not contain this
+ *                   challenge → caller must skip the submit; the challenge
+ *                   may be the element that was dropped, which cannot be
+ *                   told from "gone"
  *   'unavailable' – dep not wired, fetch threw, payload malformed, or the
  *                   challenges list came back empty → caller proceeds with
  *                   the pass-start data (stale-over-skip policy)
@@ -173,7 +193,7 @@ const refreshChallengeState = async (
     token: string,
     { getActiveChallenges, logger }: Pick<RankDeps, 'getActiveChallenges'> & { logger: FillLogger },
     label: string,
-): Promise<'refreshed' | 'gone' | 'unavailable'> => {
+): Promise<'refreshed' | 'gone' | 'invalid' | 'unavailable'> => {
     if (typeof getActiveChallenges !== 'function') return 'unavailable';
     const log = logger.withCategory('autoSubmit');
     // Collapse CR/LF in the cause before interpolation (same forgery guard
@@ -197,6 +217,9 @@ const refreshChallengeState = async (
     }
     const fresh = response.challenges.find((c) => String(c?.id) === String(challenge.id));
     if (!fresh) {
+        // Absence on a prune-unsafe read is not "gone": the dropped element may be this very challenge, so no
+        // caller may act on the data at hand either — the read says nothing usable about it.
+        if (response.pruneUnsafe === true) return 'invalid';
         log.info(
             `${label}: ${logger.challengeTag(challenge)} is no longer in the active challenge list — not submitting a new photo to it`,
             null,
@@ -217,4 +240,4 @@ const refreshChallengeState = async (
     return 'refreshed';
 };
 
-export { getEntries, getSlotsRemaining, reflectNewEntry, reflectEntryFlag, refreshChallengeState };
+export { getEntries, getSlotsRemaining, swappedOutIds, reflectNewEntry, reflectEntryFlag, refreshChallengeState };

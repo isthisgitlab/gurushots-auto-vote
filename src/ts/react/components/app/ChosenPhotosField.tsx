@@ -2,9 +2,8 @@ import { useId, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettingsChallengeId } from '@/contexts/SettingsChallengeContext';
 import { useImageLoads } from '@/hooks/useImageLoads';
-import { useChosenListAccount } from '@/api/useChosenPhotosOwner';
+import { useCurrentMember } from '@/hooks/currentMember';
 import { buildPhotoUrl } from '@/utils/formatters';
-import { interp } from '@/utils/interp';
 import { SAVE_ERROR_ID } from '@/components/ui/ModalActionRow';
 import { SettingResetButton } from './SettingResetButton';
 import { PhotoChooserModal } from './PhotoChooserModal';
@@ -19,25 +18,26 @@ const photoIdsOf = (value: unknown): string[] =>
     Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [];
 
 /**
- * One chosen photo: its thumbnail when the owner's member id is trusted and the
- * image loads, else its id's start as text.
+ * One chosen photo: its thumbnail once a library listing has named the member
+ * and the image loads, else its id's start as text.
  */
 function ChosenPhotoChip({ id, position, memberId }: { id: string; position: number; memberId: string | null }) {
     const { t } = useTranslation();
     const url = memberId ? buildPhotoUrl(memberId, id, { size: THUMB_PX }) : null;
     const [showImage, imageRef] = useImageLoads(url);
+    const showThumb = showImage && url !== null;
     const short = id.slice(0, 8);
     return (
         <li className="inline-flex items-center gap-0.5">
             {/* The saved order. The image says it in its alt text; a text chip reads it as it is. */}
-            <span aria-hidden={showImage} className="badge badge-neutral badge-xs">
+            <span aria-hidden={showThumb} className="badge badge-neutral badge-xs">
                 {position}
             </span>
-            {showImage ? (
+            {showThumb ? (
                 <img
                     ref={imageRef}
-                    src={url as string}
-                    alt={interp(t('app.chosenPhotoThumbAlt'), { n: position, id: short })}
+                    src={url}
+                    alt={t('app.chosenPhotoThumbAlt', { n: position, id: short })}
                     loading="lazy"
                     referrerPolicy="no-referrer"
                     className="h-8 w-8 rounded object-cover"
@@ -50,11 +50,10 @@ function ChosenPhotoChip({ id, position, memberId }: { id: string; position: num
 }
 
 /**
- * The chosen-photos control shared by every editor: the chosen photos as small
- * thumbnails, a button opening the chooser, and Clear. `value` null = nothing
+ * The chosen-photos control shared by every editor: the chosen photos as chips, a button opening the
+ * chooser, and Clear. `value` null = nothing
  * set at this layer (a rule row inheriting); `onClear` decides what Clear
- * writes, `clearLabel` what it is called, and `clearHint` (when given) says in words what it does. A list
- * saved under another account is only counted, never shown.
+ * writes, `clearLabel` what it is called, and `clearHint` (when given) says in words what it does.
  */
 export function ChosenPhotosControl({
     id,
@@ -79,7 +78,7 @@ export function ChosenPhotosControl({
     challengeId?: string | number | null;
 }) {
     const { t } = useTranslation();
-    const { thumbMember: memberId, otherAccount } = useChosenListAccount();
+    const memberId = useCurrentMember();
     const [open, setOpen] = useState(false);
     const hintId = useId();
     const ids = value ?? [];
@@ -89,11 +88,6 @@ export function ChosenPhotosControl({
                 <span className="text-base-content/70 text-sm">{t('app.titleRuleInherit')}</span>
             ) : ids.length === 0 ? (
                 <span className="text-base-content/70 text-sm">{t('app.none')}</span>
-            ) : otherAccount ? (
-                // Another account's photos are neither shown nor named, only counted.
-                <span className="text-base-content/70 text-sm">
-                    {interp(t('app.chosenPhotosOtherAccountCount'), { count: ids.length })}
-                </span>
             ) : (
                 <ul className="flex flex-wrap items-center gap-1" aria-label={t('app.chosenPhotos')}>
                     {ids.map((photoId, index) => (

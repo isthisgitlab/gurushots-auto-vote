@@ -29,10 +29,8 @@ const REASON_OUTCOME: Record<string, Partial<Record<JoinReason, OutcomeMeta>>> =
     'charged-pending-submit': {
         'no-photo': { key: 'app.discoverPendingNoPhoto', variant: 'error' },
         unconfirmed: { key: 'app.discoverUnconfirmed', variant: 'error' },
-        'earlier-payment': { key: 'app.discoverEarlierPayment', variant: 'error' },
     },
     'failed-no-charge': {
-        'account-unknown': { key: 'app.discoverAccountUnknown', variant: 'error' },
         'already-joined': { key: 'app.discoverAlreadyJoined', variant: 'neutral' },
     },
 };
@@ -40,8 +38,7 @@ const REASON_OUTCOME: Record<string, Partial<Record<JoinReason, OutcomeMeta>>> =
 /**
  * What a join left behind for its row: the line to show (`key` null: the result carries its own error text),
  * and whether the row's button resumes the submit ("Retry submit", which spends nothing) — any charged join,
- * one that is waiting for a photo included — and "I wasn't charged", which only an unconfirmed payment offers (an
- * older version's record cannot be forgotten).
+ * one that is waiting for a photo included — and "I wasn't charged", which only an unconfirmed payment offers.
  */
 const outcomeMeta = (outcome: {
     status?: string;

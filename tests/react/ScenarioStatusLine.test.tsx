@@ -6,7 +6,7 @@
 import { cleanup, fireEvent, render, screen } from './helpers/test-utils';
 import { ScenarioStatusLine } from '@/components/app/ScenarioStatusLine';
 import type { ScenarioSummary } from '@/api/useScenarioStatus';
-import { mockTranslator } from './helpers/setup';
+import { mockTranslator, fillTemplate } from './helpers/setup';
 
 const NOW = Math.floor(Date.now() / 1000);
 
@@ -119,7 +119,7 @@ const WORDS: Record<string, string> = {
 };
 
 describe('with the card’s words', () => {
-    beforeEach(() => mockTranslator.t.mockImplementation((k) => WORDS[k] ?? k));
+    beforeEach(() => mockTranslator.t.mockImplementation((k, vars) => fillTemplate(WORDS[k] ?? k, vars)));
     afterEach(() => mockTranslator.t.mockImplementation((k) => k));
 
     test("a spend that got no answer is worded as that, with the action's own label, not as a skipped step", () => {
@@ -292,14 +292,17 @@ describe('the reset button', () => {
     });
 
     test('an unreadable-progress notice names the reset control by its own label, not a fixed word', () => {
-        mockTranslator.t.mockImplementation((key) =>
-            key === 'app.scenarioReset'
-                ? 'Clear'
-                : key === 'app.scenarioResetAll'
-                  ? 'Clear all'
-                  : key === 'app.scenarioStatusCorruptShort' || key === 'app.scenarioStatusCorruptRecordShort'
-                    ? 'Press “{reset}”.'
-                    : key,
+        mockTranslator.t.mockImplementation((key, vars) =>
+            fillTemplate(
+                key === 'app.scenarioReset'
+                    ? 'Clear'
+                    : key === 'app.scenarioResetAll'
+                      ? 'Clear all'
+                      : key === 'app.scenarioStatusCorruptShort' || key === 'app.scenarioStatusCorruptRecordShort'
+                        ? 'Press “{reset}”.'
+                        : key,
+                vars,
+            ),
         );
         try {
             render(<ScenarioStatusLine status={{ name: 'Plan', corrupt: 'file' }} compact />);
@@ -313,12 +316,15 @@ describe('the reset button', () => {
     });
 
     test('a short notice names the control that opens the card, by its own label', () => {
-        mockTranslator.t.mockImplementation((key) =>
-            key === 'app.details'
-                ? 'Details'
-                : key === 'app.scenarioStatusSpendStoppedShort'
-                  ? 'Press “{details}” for more.'
-                  : key,
+        mockTranslator.t.mockImplementation((key, vars) =>
+            fillTemplate(
+                key === 'app.details'
+                    ? 'Details'
+                    : key === 'app.scenarioStatusSpendStoppedShort'
+                      ? 'Press “{details}” for more.'
+                      : key,
+                vars,
+            ),
         );
         try {
             render(<ScenarioStatusLine status={stoppedStatus()} compact />);

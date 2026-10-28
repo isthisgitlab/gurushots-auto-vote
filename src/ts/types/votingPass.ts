@@ -67,8 +67,11 @@ export interface ScenarioDeps {
 /** runVotingPass's injected, strategy-specific behavior. */
 export interface VotingPassDeps {
     api: VotingPassApi;
-    /** Real mode prunes stale per-challenge metadata; mock passes null. */
-    cleanupStaleMetadata: ((activeChallengeIds: string[]) => boolean) | null;
+    /**
+     * Real mode prunes stale per-challenge metadata; mock passes null. `pruneUnsafe` (the read dropped elements
+     * that could not carry an identity) makes the cleanup skip whole: absence from that list is not "gone".
+     */
+    cleanupStaleMetadata: ((activeChallengeIds: string[], pruneUnsafe?: boolean) => boolean) | null;
     /** ms to wait between challenges. */
     interChallengeDelay: () => number;
     entryTracker?: EntryTracker | null;

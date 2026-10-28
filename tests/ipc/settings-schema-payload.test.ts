@@ -51,6 +51,7 @@ describe('get-settings-schema payload', () => {
                 group: 'general',
                 label: 'app.exposure',
                 description: 'app.exposureDesc',
+                minutes: true,
             },
         });
         settings.SETTINGS_GROUPS = GROUPS;
@@ -88,6 +89,7 @@ describe('get-settings-schema payload', () => {
             group: 'general',
             label: 'app.exposure',
             description: 'app.exposureDesc',
+            minutes: true,
         });
         expect(payload.defaults.exposure).toBe(100);
     });

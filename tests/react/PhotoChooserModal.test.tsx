@@ -1,22 +1,43 @@
 /**
- * PhotoChooserModal: the Chosen Photos chooser. Selection is a set capped at
- * MAX_CHOSEN_PHOTOS, listed picks keep their place in the library's order, a chosen id the listing
- * lacks gets its own tile, eligibility shows as text, search runs on submit and
- * late responses are dropped. Translations are the real English strings so the
- * tiles are told apart by their accessible names.
+ * PhotoChooserModal: the Chosen Photos chooser on the shared Pick… picker. Nothing is read on open:
+ * the saved picks show once the member check says they are this account's, Load all and Search read
+ * the library, Auto (with a challenge) ranks and fills without a read. Selection is a numbered list
+ * capped at MAX_CHOSEN_PHOTOS, listed picks keep their place in the library's order, a chosen id the
+ * listing lacks gets its own tile, eligibility shows as text, search runs on submit and late
+ * responses are dropped. With a challenge, every selected tile carries a Boost / Turbo pin pair over
+ * the challenge's stored pins, and Save writes the changed pins after the host's save. Translations
+ * are the real English strings so the tiles are told apart by their accessible names.
  */
 
-import { act, fireEvent, render, screen, waitFor, within } from './helpers/test-utils';
+import { act, fireEvent, pickOption, render, screen, waitFor, within } from './helpers/test-utils';
 import { PhotoChooserModal } from '@/components/app/PhotoChooserModal';
 import { PhotoGrid } from '@/components/app/PhotoGrid';
 import { useImageLoads } from '@/hooks/useImageLoads';
 import { Modal } from '@/components/ui/Modal';
-import { rememberCurrentMember } from '@/api/useChosenPhotosOwner';
-import { fireSettingsChanged, mockTranslator } from './helpers/setup';
-import { app } from '../../src/ts/translations/english';
+import { mockTranslator } from './helpers/setup';
+import { rememberCurrentMember } from '../../src/ts/react/hooks/currentMember';
+import { createTranslator } from '../../src/ts/translations/translator';
 import { MAX_CHOSEN_PHOTOS } from '../../src/ts/settings/limits';
 import { invalid } from '../helpers/invalid';
+import type { usePhotoPicker } from '@/hooks/usePhotoPicker';
+import type { TileStats } from '@/hooks/usePhotoStatsLoader';
+import type { EntryPinKind } from '../../src/ts/types/settings';
 import type { WindowApi } from '../../src/ts/types/ipc';
+import type { Translate } from '../../src/ts/translations/translator';
+
+// The live picker instances, so a test can press loadMore: the saved-list read keys on the listing the
+// appended batch leaves (the same one on screen), and one case presses it directly.
+const pickers: ReturnType<typeof usePhotoPicker>[] = [];
+jest.mock('@/hooks/usePhotoPicker', () => ({
+    __esModule: true,
+    usePhotoPicker: (props: Parameters<typeof usePhotoPicker>[0]) => {
+        const picker = jest
+            .requireActual<typeof import('@/hooks/usePhotoPicker')>('@/hooks/usePhotoPicker')
+            .usePhotoPicker(props);
+        pickers.push(picker);
+        return picker;
+    },
+}));
 
 // Counts renders of the tiles: each PhotoTile render calls the hook once.
 jest.mock('@/hooks/useImageLoads', () => {
@@ -46,6 +67,7 @@ const listing = (photos: LibraryPhoto[], over: Partial<Listing> = {}): Listing =
     photos,
     memberId: MEMBER,
     truncated: false,
+    nextStart: 0,
     wonIds: [],
     wonCount: 0,
     preview: false,
@@ -54,8 +76,9 @@ const listing = (photos: LibraryPhoto[], over: Partial<Listing> = {}): Listing =
     ...over,
 });
 
-const english = (key: string) =>
-    key.startsWith('app.') ? ((app as Record<string, string>)[key.slice(4)] ?? key) : key;
+// The real English strings (plural groups included), placeholders filled like the real t fills them.
+const translator = createTranslator();
+const english: Translate = (key, vars) => translator.t(key, vars, 'en');
 
 const deferred = <T,>() => {
     let resolve!: (value: T) => void;
@@ -65,13 +88,215 @@ const deferred = <T,>() => {
     return { promise, resolve };
 };
 
+const getLibrary = () => jest.mocked(window.api.getLibraryPhotos);
+
+// The count line is the first live region; the footer's hold/confirmation status is the last.
+const countLine = () => screen.getAllByRole('status')[0];
+
+// Passive effects run after the next frame (preact schedules them with requestAnimationFrame, then a
+// timeout): wait for exactly that, not for an arbitrary time, before judging what they did.
+const effectsFlushed = () =>
+    act(
+        () =>
+            new Promise<void>((resolve) => {
+                requestAnimationFrame(() => setTimeout(resolve, 0));
+            }),
+    );
+
+const tile = (n: number) => screen.getByRole('button', { name: new RegExp(`^Photo ${shortOf(n)}:`) });
+// A saved pick while nothing is read: a stub, named as one.
+const stubTile = (n: number) => screen.getByRole('button', { name: new RegExp(`^Chosen photo ${shortOf(n)}:`) });
+const loadPhotos = () => fireEvent.click(screen.getByRole('button', { name: 'Load photos' }));
+const opened = async () => {
+    loadPhotos();
+    await screen.findByRole('button', { name: /^Photo 00000001:/ });
+};
+
+type Props = Parameters<typeof PhotoChooserModal>[0];
+const setup = (
+    over: Partial<{
+        value: string[];
+        challengeId: string | number | null;
+        recommendedIds: string[];
+        onSave: jest.MockedFunction<(ids: string[]) => boolean | Promise<boolean>>;
+        onClose: jest.MockedFunction<() => void>;
+    }> = {},
+) => {
+    const props: Props = {
+        isOpen: true,
+        onClose: jest.fn(),
+        value: [] as string[],
+        challengeId: 7 as string | number | null,
+        onSave: jest.fn().mockResolvedValue(true),
+        ...over,
+    };
+    return { ...props, ...render(<PhotoChooserModal {...props} />) };
+};
+
+beforeEach(() => {
+    mockTranslator.t.mockImplementation(english);
+    // The remembered member outlives a test (a module-level store): each starts before any listing named one.
+    rememberCurrentMember(null);
+    pickers.length = 0;
+    // mockReset, so a once-queued answer a failed test never consumed cannot leak into the next one.
+    getLibrary()
+        .mockReset()
+        .mockResolvedValue(listing([photo(1), photo(2), photo(3)]));
+});
+
+afterEach(() => {
+    mockTranslator.t.mockImplementation((key) => key);
+});
+
+describe('opening', () => {
+    test('renders nothing while closed', () => {
+        render(<PhotoChooserModal isOpen={false} onClose={jest.fn()} value={[]} onSave={jest.fn()} />);
+        // The dialog is portalled to the body, so that is where it would show up.
+        expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+        expect(getLibrary()).not.toHaveBeenCalled();
+    });
+
+    test('reads nothing on open: an idle line, Load all, Search and no Auto without a challenge', () => {
+        setup({ challengeId: null });
+        expect(getLibrary()).not.toHaveBeenCalled();
+        const idle = screen.getByText(/^Your photos are not loaded yet\./);
+        expect(idle.getAttribute('role')).toBe('status');
+        expect(idle.textContent).toBe('Your photos are not loaded yet. Load photos or search.');
+        expect(screen.getByRole('button', { name: 'Load photos' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Search' })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Auto' })).toBeNull();
+        // The help names no Auto and no challenge where there is none.
+        expect(screen.getByText(/^Used first, but they must still pass/).textContent).not.toMatch(
+            /press Auto|challenge's own settings/,
+        );
+    });
+
+    test('with a challenge Auto is offered and the idle line names it', () => {
+        setup();
+        expect(screen.getByRole('button', { name: 'Auto' })).toBeTruthy();
+        expect(screen.getByText(/^Your photos are not loaded yet\./).textContent).toBe(
+            'Your photos are not loaded yet. Load photos, search, or press Auto.',
+        );
+        expect(screen.getByText(/^Auto ranks your photos/).textContent).toContain('Nothing is saved');
+    });
+
+    test('with no challenge no Auto is offered, and nothing ranks', () => {
+        setup({ challengeId: null });
+        expect(screen.queryByRole('button', { name: 'Auto' })).toBeNull();
+        expect(jest.mocked(window.api.suggestPhotos)).not.toHaveBeenCalled();
+        expect(screen.getByText(/^Your photos are not loaded yet\./).textContent).toBe(
+            'Your photos are not loaded yet. Load photos or search.',
+        );
+    });
+
+    test('Load all reads the library through the challenge it was opened for', async () => {
+        setup({ challengeId: 42 });
+        await opened();
+        expect(getLibrary()).toHaveBeenCalledWith(42, undefined, 'cached', 'submit', 0, 100);
+    });
+
+    test('the saved picks show as numbered stubs straight away, and Save is not held', async () => {
+        // A listing named the member earlier in the page's life: the store keeps it, so the stubs get
+        // their thumbnails without any read.
+        rememberCurrentMember(MEMBER);
+        setup({ value: [idOf(1), idOf(3)] });
+        expect(await screen.findByRole('button', { name: /^Chosen photo 00000003:/ })).toBeTruthy();
+        expect(stubTile(1).getAttribute('aria-pressed')).toBe('true');
+        expect(stubTile(3).getAttribute('aria-pressed')).toBe('true');
+        // Numbered as the list's order, in badge and name.
+        expect(within(stubTile(1)).getByText('1')).toBeTruthy();
+        expect(within(stubTile(3)).getByText('2')).toBeTruthy();
+        expect(stubTile(1).getAttribute('aria-label')).toMatch(/Number 1 in your list\.$/);
+        expect(stubTile(1).querySelector('img')?.getAttribute('src')).toContain(MEMBER);
+        // No library read happened.
+        expect(getLibrary()).not.toHaveBeenCalled();
+        expect(screen.getByRole('button', { name: 'Use these photos' }).getAttribute('aria-disabled')).toBeNull();
+        const picks = screen.getByText(/^Your chosen photos stay picked\./);
+        expect(picks.getAttribute('role')).toBe('status');
+    });
+
+    test('a stub claims nothing about the photo itself: no tags, only that it is not loaded', async () => {
+        setup({ value: [idOf(1)] });
+        const stub = await screen.findByRole('button', { name: /^Chosen photo 00000001:/ });
+        expect(stub.getAttribute('aria-label')).toBe(
+            `Chosen photo ${shortOf(1)}: Not loaded yet. Number 1 in your list.`,
+        );
+        expect(stub.textContent).toContain('Not loaded yet');
+        expect(stub.textContent).not.toContain('No tags');
+    });
+
+    test('a stub gains its thumbnail once Auto has named the member, and stays text-only before that', async () => {
+        jest.mocked(window.api.suggestPhotos).mockResolvedValueOnce({
+            success: true,
+            memberId: MEMBER,
+            photos: [photo(5)],
+            statsLimited: false,
+        });
+        setup({ value: [idOf(1)] });
+        const stub = await screen.findByRole('button', { name: /^Chosen photo 00000001:/ });
+        expect(stub.querySelector('img')).toBeNull();
+        expect(stub.textContent).toContain(shortOf(1));
+        // Auto names the signed-in member: the stub's thumbnail can be built from it.
+        fireEvent.click(screen.getByRole('button', { name: 'Auto' }));
+        await screen.findByRole('region', { name: 'Suggestions' });
+        expect(stubTile(1).querySelector('img')?.getAttribute('src')).toContain(MEMBER);
+        expect(getLibrary()).not.toHaveBeenCalled();
+    });
+
+    test('stubs are togglable and keep their place unpicked, offered again while there is room', async () => {
+        setup({ value: [idOf(1)] });
+        await screen.findByRole('button', { name: /^Chosen photo 00000001:/ });
+        const stub = stubTile(1);
+        fireEvent.click(stub);
+        expect(stub.getAttribute('aria-pressed')).toBe('false');
+        expect(countLine().textContent).toBe(`0 of ${MAX_CHOSEN_PHOTOS} chosen`);
+        fireEvent.click(stub);
+        expect(stub.getAttribute('aria-pressed')).toBe('true');
+        expect(within(stubTile(1)).getByText('1')).toBeTruthy();
+    });
+
+    test('with no list, Auto and Add still fill, and the line names the picks', async () => {
+        jest.mocked(window.api.suggestPhotos).mockResolvedValueOnce({
+            success: true,
+            memberId: MEMBER,
+            photos: [photo(5)],
+            statsLimited: false,
+        });
+        setup({ value: [] });
+        // Nothing waits: the plain idle line.
+        expect(screen.getByText(/^Your photos are not loaded yet\./).textContent).toBe(
+            'Your photos are not loaded yet. Load photos, search, or press Auto.',
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Auto' }));
+        const strip = await screen.findByRole('region', { name: 'Suggestions' });
+        fireEvent.click(within(strip).getByRole('button', { name: 'Add suggestions' }));
+        const inGrid = screen.getAllByRole('button', { name: /^Photo 00000005:/ }).find((el) => !strip.contains(el))!;
+        expect(inGrid.getAttribute('aria-pressed')).toBe('true');
+        // The line follows the picks, not the gate.
+        expect(screen.getByText(/^Your chosen photos stay picked\./).getAttribute('role')).toBe('status');
+        expect(screen.queryByText(/^Your photos are not loaded yet\./)).toBeNull();
+        expect(getLibrary()).not.toHaveBeenCalled();
+    });
+
+    test('the numbering survives the switch from idle stubs to the read library', async () => {
+        setup({ value: [idOf(3), idOf(1)] });
+        await screen.findByRole('button', { name: /^Chosen photo 00000001:/ });
+        expect(within(stubTile(3)).getByText('1')).toBeTruthy();
+        expect(within(stubTile(1)).getByText('2')).toBeTruthy();
+        await opened();
+        // The same order, now as tiles of the listing.
+        expect(tile(3).getAttribute('aria-label')).toMatch(/Number 1 in your list\.$/);
+        expect(tile(1).getAttribute('aria-label')).toMatch(/Number 2 in your list\.$/);
+        expect(screen.queryByRole('button', { name: /^Chosen photo / })).toBeNull();
+    });
+});
 describe('closing with unsaved picks', () => {
     const backdrop = () => document.querySelector<HTMLElement>('.modal-backdrop')!;
     const discardTitle = 'Discard your changes?';
 
     test('Escape and the backdrop close at once while the selection is the saved one', async () => {
         const { onClose } = setup({ value: [idOf(1)] });
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await screen.findByRole('button', { name: /^Chosen photo 00000001:/ });
         fireEvent.keyDown(document, { key: 'Escape' });
         expect(onClose).toHaveBeenCalledTimes(1);
         fireEvent.click(backdrop());
@@ -81,7 +306,7 @@ describe('closing with unsaved picks', () => {
 
     test('Escape, the backdrop and the close button ask before discarding a changed selection', async () => {
         const { onClose, onSave } = setup({ value: [idOf(1)] });
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await opened();
         fireEvent.click(tile(2));
 
         fireEvent.keyDown(document, { key: 'Escape' });
@@ -101,7 +326,7 @@ describe('closing with unsaved picks', () => {
         );
         expect(screen.queryByText(discardTitle)).toBeNull();
 
-        fireEvent.click(screen.getByRole('button', { name: 'common.closeModal' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Close modal' }));
         fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }));
         expect(onClose).toHaveBeenCalledTimes(1);
         expect(onSave).not.toHaveBeenCalled();
@@ -109,7 +334,7 @@ describe('closing with unsaved picks', () => {
 
     test('putting the selection back to the saved one closes without asking; the same photos in another order is a change', async () => {
         const { onClose } = setup({ value: [idOf(1), idOf(2)] });
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await opened();
         fireEvent.click(tile(2));
         fireEvent.click(tile(2));
         fireEvent.keyDown(document, { key: 'Escape' });
@@ -124,7 +349,7 @@ describe('closing with unsaved picks', () => {
 
     test('a modal the parent keeps mounted does not reopen on the discard question', async () => {
         const { rerender, onClose, onSave } = setup({ value: [idOf(1)] });
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await opened();
         fireEvent.click(tile(2));
         fireEvent.keyDown(document, { key: 'Escape' });
         fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }));
@@ -132,83 +357,26 @@ describe('closing with unsaved picks', () => {
         // The parent closes it, and opens it again later.
         rerender(<PhotoChooserModal isOpen={false} onClose={onClose} value={[idOf(1)]} onSave={onSave} />);
         rerender(<PhotoChooserModal isOpen onClose={onClose} value={[idOf(1)]} onSave={onSave} />);
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await screen.findByRole('button', { name: /^Chosen photo 00000001:/ });
         expect(screen.queryByText(discardTitle)).toBeNull();
 
         // A question left open when the parent closes the chooser is gone too.
+        loadPhotos();
+        await screen.findByRole('button', { name: /^Photo 00000002:/ });
         fireEvent.click(tile(2));
         fireEvent.keyDown(document, { key: 'Escape' });
         expect(screen.getByText(discardTitle)).toBeTruthy();
         rerender(<PhotoChooserModal isOpen={false} onClose={onClose} value={[idOf(1)]} onSave={onSave} />);
         rerender(<PhotoChooserModal isOpen onClose={onClose} value={[idOf(1)]} onSave={onSave} />);
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await screen.findByRole('button', { name: /^Chosen photo 00000001:/ });
         expect(screen.queryByText(discardTitle)).toBeNull();
     });
-
-    test('a saved list read late is the list to compare with, not a change', async () => {
-        const reloadSaved = jest.fn().mockResolvedValue([idOf(1)]);
-        jest.mocked(window.api.getSetting).mockResolvedValue(MEMBER);
-        const { onClose } = setup({ value: [], savedCount: 1, reloadSaved });
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        await waitFor(() => expect(tile(1).getAttribute('aria-pressed')).toBe('true'));
-        fireEvent.keyDown(document, { key: 'Escape' });
-        expect(onClose).toHaveBeenCalledTimes(1);
-    });
-});
-
-const getLibrary = () => jest.mocked(window.api.getLibraryPhotos);
-
-// The count line is the first live region; the footer's hold/confirmation status is the last.
-const countLine = () => screen.getAllByRole('status')[0];
-
-// Passive effects run after the next frame (preact schedules them with requestAnimationFrame, then a
-// timeout): wait for exactly that, not for an arbitrary time, before judging what they did.
-const effectsFlushed = () =>
-    act(
-        () =>
-            new Promise<void>((resolve) => {
-                requestAnimationFrame(() => setTimeout(resolve, 0));
-            }),
-    );
-
-const tile = (n: number) => screen.getByRole('button', { name: new RegExp(`^Photo ${shortOf(n)}:`) });
-
-const setup = (
-    over: Partial<{
-        value: string[];
-        challengeId: string | number | null;
-        savedCount: number;
-        reloadSaved: jest.MockedFunction<() => Promise<string[] | null>>;
-        onSave: jest.MockedFunction<(ids: string[]) => boolean | Promise<boolean>>;
-        onClose: jest.MockedFunction<() => void>;
-    }> = {},
-) => {
-    const props = {
-        isOpen: true,
-        onClose: jest.fn(),
-        value: [] as string[],
-        challengeId: 7 as string | number | null,
-        onSave: jest.fn().mockResolvedValue(true),
-        ...over,
-    };
-    return { ...props, ...render(<PhotoChooserModal {...props} />) };
-};
-
-beforeEach(() => {
-    mockTranslator.t.mockImplementation(english);
-    rememberCurrentMember(null);
-    jest.mocked(window.api.getSetting).mockResolvedValue('');
-    jest.mocked(window.api.getLibraryPhotos).mockResolvedValue(listing([photo(1), photo(2), photo(3)]));
-});
-
-afterEach(() => {
-    mockTranslator.t.mockImplementation((key) => key);
 });
 
 describe('listing and tiles', () => {
     test('picking one photo re-renders only that tile', async () => {
         setup();
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await opened();
         const rendered = jest.mocked(useImageLoads);
         rendered.mockClear();
         fireEvent.click(tile(1));
@@ -218,7 +386,7 @@ describe('listing and tiles', () => {
 
     test('a selected tile has a base-content border and ring, no background change; an unselected one keeps the quiet border', async () => {
         setup({ value: [idOf(1)] });
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await opened();
         const selected = tile(1).classList;
         const unselected = tile(2).classList;
         expect(selected.contains('border-base-content')).toBe(true);
@@ -232,7 +400,7 @@ describe('listing and tiles', () => {
 
     test('every tile carries an offset focus outline that clears the selection ring', async () => {
         setup({ value: [idOf(1)] });
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await opened();
         const outline = [
             'focus-visible:outline-2',
             'focus-visible:outline-offset-4',
@@ -244,17 +412,11 @@ describe('listing and tiles', () => {
         }
     });
 
-    test('renders nothing while closed', () => {
-        render(<PhotoChooserModal isOpen={false} onClose={jest.fn()} value={[]} onSave={jest.fn()} />);
-        // The dialog is portalled to the body, so that is where it would show up.
-        expect(document.body.querySelector('[role="dialog"]')).toBeNull();
-        expect(getLibrary()).not.toHaveBeenCalled();
-    });
-
     test('shows the loader, then a tile per photo with a lazy, referrer-less CDN thumbnail', async () => {
         const pending = deferred<Listing>();
         getLibrary().mockReturnValueOnce(invalid(pending.promise));
         setup();
+        loadPhotos();
         expect(screen.getByText('Loading your photos…')).toBeTruthy();
         await act(async () => pending.resolve(listing([photo(1)])));
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
@@ -266,17 +428,12 @@ describe('listing and tiles', () => {
         expect(screen.getByText('tag1')).toBeTruthy();
     });
 
-    test('reads the library through the challenge it was opened for', async () => {
-        setup({ challengeId: 42 });
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        expect(getLibrary()).toHaveBeenCalledWith(42, undefined, 'cached', 'submit');
-    });
-
     test('a photo with no usable URL becomes a text tile with its tags and short id', async () => {
         getLibrary().mockResolvedValue(
             listing([photo(1, { labels: ['red', 'sea'] }), photo(2, { labels: [] })], { memberId: null }),
         );
         setup();
+        loadPhotos();
         const first = await screen.findByRole('button', { name: /^Photo 00000001:/ });
         expect(first.querySelector('img')).toBeNull();
         expect(first.textContent).toContain('red, sea');
@@ -286,7 +443,7 @@ describe('listing and tiles', () => {
 
     test('a thumbnail that fails to load falls back to the text tile', async () => {
         setup();
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await opened();
         act(() => {
             tile(1).querySelector('img')!.dispatchEvent(new Event('error'));
         });
@@ -300,7 +457,9 @@ describe('listing and tiles', () => {
         getLibrary().mockResolvedValue(
             listing([photo(1, { labels: ['<img src=x onerror=alert(1)>'], allowed: false, message: '<b>no</b>' })]),
         );
-        setup();
+        // The refused photo is picked, so its tile — and the server's reason with it — stays on screen.
+        setup({ value: [idOf(1)] });
+        loadPhotos();
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         expect(document.querySelector('[role="dialog"] b')).toBeNull();
         expect(document.querySelector('img[src="x"]')).toBeNull();
@@ -310,40 +469,41 @@ describe('listing and tiles', () => {
     test('shows the empty state when the library has no photos', async () => {
         getLibrary().mockResolvedValue(listing([]));
         setup();
+        loadPhotos();
         expect(await screen.findByText(/No photos found/)).toBeTruthy();
     });
 
-    test('says when the listing was cut off', async () => {
-        getLibrary().mockResolvedValue(listing([photo(1), photo(2)], { truncated: true }));
+    test('a cut-off listing says what is shown and offers Load more; a complete one offers nothing', async () => {
+        getLibrary().mockResolvedValue(listing([photo(1), photo(2)], { truncated: true, nextStart: 2 }));
         setup();
-        expect(await screen.findByText('Showing the first 2 photos. Search by tag to find others.')).toBeTruthy();
-    });
-
-    test('no truncation note for a complete listing', async () => {
-        setup();
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        expect(screen.queryByText(/Showing the first/)).toBeNull();
+        loadPhotos();
+        expect(await screen.findByText('Showing 2 photos.')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Load more photos' })).toBeTruthy();
+        getLibrary().mockResolvedValue(listing([photo(1), photo(2)]));
+        fireEvent.click(screen.getByRole('button', { name: 'Load more photos' }));
+        await waitFor(() => expect(screen.queryByRole('button', { name: 'Load more photos' })).toBeNull());
+        expect(screen.getByText('Showing 2 photos.')).toBeTruthy();
+        // Nothing new came back, and that is not a failure.
+        expect(screen.queryByRole('alert')).toBeNull();
     });
 });
-
 describe('selection', () => {
     test('Save sits in a footer pinned to the bottom of the modal box, which keeps focus above it', async () => {
         setup();
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await opened();
         const footer = screen.getByRole('button', { name: 'Use these photos' }).closest('.sticky')!;
         expect(footer.parentElement!.lastElementChild).toBe(footer);
         const box = document.querySelector('.modal-box')!;
         expect(box.lastElementChild).toBe(footer.parentElement);
         const boxClasses = box.classList;
-        expect(boxClasses.contains('scroll-pb-[min(24rem,50dvh)]')).toBe(true);
-        expect(boxClasses.contains('md:scroll-pb-[min(12rem,50dvh)]')).toBe(true);
+        expect(boxClasses.contains('scroll-pb-[min(12rem,50dvh)]')).toBe(true);
         expect(boxClasses.contains('scroll-pb-60')).toBe(false);
         expect(boxClasses.contains('md:scroll-pb-32')).toBe(false);
     });
 
     test('toggles a photo on and off (aria-pressed) and saves the chosen ids', async () => {
         const { onSave, onClose } = setup();
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await opened();
         expect(tile(2).getAttribute('aria-pressed')).toBe('false');
         fireEvent.click(tile(2));
         fireEvent.click(tile(3));
@@ -360,7 +520,7 @@ describe('selection', () => {
 
         test('selected tiles are numbered 1, 2, 3 in the order picked, in a visible badge and in the name; the rest are not', async () => {
             setup();
-            await screen.findByRole('button', { name: /^Photo 00000001:/ });
+            await opened();
             fireEvent.click(tile(3));
             fireEvent.click(tile(1));
             fireEvent.click(tile(2));
@@ -378,14 +538,14 @@ describe('selection', () => {
 
         test('an unselected tile has no number and its name is unchanged', async () => {
             setup();
-            await screen.findByRole('button', { name: /^Photo 00000001:/ });
+            await opened();
             expect(badge(1)).toBeNull();
             expect(tile(1).getAttribute('aria-label')).toBe('Photo 00000001: tag1. Can be entered');
         });
 
         test('deselecting moves the later ones up, and selecting again puts the photo last', async () => {
             setup({ value: [idOf(1), idOf(2), idOf(3)] });
-            await screen.findByRole('button', { name: /^Photo 00000001:/ });
+            await opened();
             expect([badge(1), badge(2), badge(3)]).toEqual(['1', '2', '3']);
             fireEvent.click(tile(1));
             expect([badge(2), badge(3)]).toEqual(['1', '2']);
@@ -396,6 +556,7 @@ describe('selection', () => {
 
         test('a saved photo the listing lacks keeps its place in the numbering, with no gap before the next', async () => {
             setup({ value: [idOf(1), idOf(9), idOf(2)] });
+            loadPhotos();
             const missing = await screen.findByRole('button', { name: new RegExp(`^Chosen photo ${shortOf(9)}:`) });
             expect(within(missing).getByText('2')).toBeTruthy();
             expect(missing.getAttribute('aria-label')).toMatch(/Number 2 in your list\.$/);
@@ -404,7 +565,7 @@ describe('selection', () => {
 
         test('the numbers go to the saved list as its order', async () => {
             const { onSave } = setup();
-            await screen.findByRole('button', { name: /^Photo 00000001:/ });
+            await opened();
             fireEvent.click(tile(2));
             fireEvent.click(tile(3));
             fireEvent.click(tile(1));
@@ -413,183 +574,16 @@ describe('selection', () => {
         });
     });
 
-    describe('numbering when a selected photo is left out of the grid', () => {
-        // Selected [1, 9, 2], where 9 is not in the listing: with another account's list it is not shown.
-        const grid = (hideUnlisted: boolean) => {
-            const photos = [photo(1), photo(2), photo(3)];
-            return render(
-                <PhotoGrid
-                    state={{ status: 'ready', listing: listing(photos) }}
-                    known={new Map(photos.map((p) => [p.id, p]))}
-                    selected={[idOf(1), idOf(9), idOf(2)]}
-                    hideUnlisted={hideUnlisted}
-                    locked={false}
-                    hasChallenge
-                    revalidating={false}
-                    recheckFailed={false}
-                    onToggle={jest.fn()}
-                    onRetry={jest.fn()}
-                    onRefresh={jest.fn()}
-                />,
-            );
-        };
-        const numberOf = (n: number) => within(tile(n)).queryByText(/^\d+$/)?.textContent ?? null;
-
-        test('the visible tiles are numbered 1 and 2, with no gap where the hidden one was, in badge and name', () => {
-            grid(true);
-            expect([numberOf(1), numberOf(2)]).toEqual(['1', '2']);
-            expect(tile(1).getAttribute('aria-label')).toMatch(/Number 1 in your list\.$/);
-            expect(tile(2).getAttribute('aria-label')).toMatch(/Number 2 in your list\.$/);
-            expect(screen.queryByRole('button', { name: new RegExp(`^Chosen photo ${shortOf(9)}:`) })).toBeNull();
-            // The unselected tile has none.
-            expect(numberOf(3)).toBeNull();
-        });
-
-        test('shown (this account), the unlisted photo holds its place and the next one is 3', () => {
-            grid(false);
-            const missing = screen.getByRole('button', { name: new RegExp(`^Chosen photo ${shortOf(9)}:`) });
-            expect(missing.getAttribute('aria-label')).toMatch(/Number 2 in your list\.$/);
-            expect([numberOf(1), numberOf(2)]).toEqual(['1', '3']);
-            expect(tile(2).getAttribute('aria-label')).toMatch(/Number 3 in your list\.$/);
-        });
-    });
-
-    describe('PhotoGrid as a plain set (max, fullKey, numbered)', () => {
-        const photos = [photo(1), photo(2), photo(3)];
-        const grid = (props: Partial<Parameters<typeof PhotoGrid>[0]> = {}) =>
-            render(
-                <PhotoGrid
-                    state={{ status: 'ready', listing: listing(photos) }}
-                    known={new Map(photos.map((p) => [p.id, p]))}
-                    selected={[idOf(1), idOf(9)]}
-                    hideUnlisted={false}
-                    locked={false}
-                    hasChallenge
-                    revalidating={false}
-                    recheckFailed={false}
-                    onToggle={jest.fn()}
-                    onRetry={jest.fn()}
-                    onRefresh={jest.fn()}
-                    {...props}
-                />,
-            );
-
-        test('unnumbered: no badge and no position in any selected tile, the missing one included', () => {
-            grid({ numbered: false });
-            expect(tile(1).querySelector('.badge')).toBeNull();
-            expect(tile(1).getAttribute('aria-label')).not.toMatch(/Number/);
-            const missing = screen.getByRole('button', { name: new RegExp(`^Chosen photo ${shortOf(9)}:`) });
-            expect(missing.querySelector('.badge')).toBeNull();
-            expect(missing.getAttribute('aria-label')).not.toMatch(/Number/);
-        });
-
-        test('an unnumbered selected tile has no badge, so it is marked by the border and ring', () => {
-            grid({ numbered: false });
-            expect(tile(1).className).toContain('border-base-content');
-            expect(tile(1).className).toContain('ring-base-content');
-            expect(tile(1).className).not.toMatch(/\bbg-/);
-            expect(tile(2).className).not.toContain('ring-base-content');
-        });
-
-        test('by default selected tiles are numbered', () => {
-            grid();
-            expect(tile(1).getAttribute('aria-label')).toMatch(/Number 1 in your list\.$/);
-        });
-
-        test('a smaller max stops offering tiles once reached, with the given full text', () => {
-            grid({ max: 2, fullKey: 'app.pickFull' });
-            expect(tile(2).getAttribute('aria-disabled')).toBe('true');
-            expect(tile(2).textContent).toContain('All open slots picked');
-            expect(tile(2).textContent).not.toContain('List full');
-        });
-
-        test('by default the cap is the Chosen Photos one and the text is "List full"', () => {
-            grid({ selected: Array.from({ length: MAX_CHOSEN_PHOTOS }, (_, i) => idOf(i + 10)) });
-            expect(tile(1).getAttribute('aria-disabled')).toBe('true');
-            expect(tile(1).textContent).toContain('List full');
-        });
-    });
-
-    describe('PhotoGrid before any listing is read (idle)', () => {
-        const extra = new Map([photo(1), photo(2)].map((p) => [p.id, p]));
-        const grid = (props: Partial<Parameters<typeof PhotoGrid>[0]> = {}) =>
-            render(
-                <PhotoGrid
-                    state={{ status: 'idle' }}
-                    known={new Map()}
-                    selected={[]}
-                    hideUnlisted={false}
-                    locked={false}
-                    hasChallenge
-                    revalidating={false}
-                    recheckFailed={false}
-                    numbered={false}
-                    onToggle={jest.fn()}
-                    onRetry={jest.fn()}
-                    onRefresh={jest.fn()}
-                    {...props}
-                />,
-            );
-        const idleLine = () => screen.getByText(/^Photos are not loaded yet/);
-
-        test('with no picks it says nothing is loaded and shows no tile', () => {
-            grid({ extraPhotos: extra });
-            expect(idleLine().getAttribute('role')).toBe('status');
-            expect(idleLine().textContent).toBe('Photos are not loaded yet. Load them all, search, or press Auto.');
-            expect(screen.queryByRole('button')).toBeNull();
-        });
-
-        test('a pick found in extraPhotos shows as a pressed, unnumbered tile with the idle member’s thumbnail and toggles', () => {
-            const onToggle = jest.fn();
-            grid({ selected: [idOf(2)], extraPhotos: extra, idleMemberId: MEMBER, onToggle });
-            expect(screen.getByText(/^Your picks can be submitted as they are/).getAttribute('role')).toBe('status');
-            expect(screen.queryByText(/^Photos are not loaded yet/)).toBeNull();
-            expect(screen.getAllByRole('button')).toHaveLength(1);
-            expect(tile(2).getAttribute('aria-pressed')).toBe('true');
-            expect(tile(2).querySelector('.badge')).toBeNull();
-            expect(tile(2).textContent).not.toContain('Can be entered');
-            expect(tile(2).querySelector('img')?.getAttribute('src')).toContain(MEMBER);
-            fireEvent.click(tile(2));
-            expect(onToggle).toHaveBeenCalledWith(idOf(2));
-        });
-
-        test('idleIds keeps an unpicked tile in place, offered again while there is room and held at the cap', () => {
-            const onToggle = jest.fn();
-            const props = { selected: [idOf(2)], idleIds: [idOf(1), idOf(2)], extraPhotos: extra, onToggle };
-            const { unmount } = grid({ ...props, max: 3 });
-            expect(screen.getAllByRole('button')).toHaveLength(2);
-            expect(tile(1).getAttribute('aria-pressed')).toBe('false');
-            expect(tile(1).getAttribute('aria-disabled')).toBe('false');
-            fireEvent.click(tile(1));
-            expect(onToggle).toHaveBeenCalledWith(idOf(1));
-            unmount();
-            grid({ ...props, max: 1 });
-            expect(tile(1).getAttribute('aria-disabled')).toBe('true');
-            expect(tile(2).getAttribute('aria-disabled')).toBe('false');
-        });
-
-        test('a pick missing from extraPhotos renders nothing', () => {
-            grid({ selected: [idOf(9)], extraPhotos: extra });
-            expect(screen.queryByRole('button')).toBeNull();
-        });
-
-        test('without extraPhotos a pick renders nothing', () => {
-            grid({ selected: [idOf(1)] });
-            expect(screen.getByText(/^Your picks can be submitted as they are/)).toBeTruthy();
-            expect(screen.queryByRole('button')).toBeNull();
-        });
-    });
-
     test('starts from the saved value', async () => {
         setup({ value: [idOf(1)] });
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await opened();
         expect(tile(1).getAttribute('aria-pressed')).toBe('true');
     });
 
     test('listed picks keep their place in the library order, and toggling one does not move any tile', async () => {
         getLibrary().mockResolvedValue(listing([photo(1), photo(2), photo(3)]));
         setup({ value: [idOf(3)] });
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await opened();
         const order = () =>
             screen
                 .getAllByRole('button', { name: /^Photo / })
@@ -604,6 +598,7 @@ describe('selection', () => {
     test('picks the listing does not return stay pinned first, numbered in pick order with the listed ones', async () => {
         getLibrary().mockResolvedValue(listing([photo(1), photo(2), photo(3)]));
         setup({ value: [idOf(3), idOf(9), idOf(1)] });
+        loadPhotos();
         const missing = await missingTile();
         expect(missing.getAttribute('aria-label')).toMatch(/Number 2 in your list\.$/);
         const order = screen.getAllByRole('button', { name: /^(Photo|Chosen photo) / }).map((button) =>
@@ -623,8 +618,9 @@ describe('selection', () => {
     test('a chosen photo the listing lacks gets a not-available tile that can still be removed', async () => {
         getLibrary().mockResolvedValue(listing([photo(1), photo(2)]));
         setup({ value: [idOf(9)] });
+        loadPhotos();
         const missing = await missingTile();
-        // A complete listing: no "beyond the first N photos" clause.
+        // A complete listing: no "beyond the photos loaded" clause.
         expect(missing.textContent).toContain('Not available for this challenge (in another challenge, or deleted)');
         expect(missing.getAttribute('aria-label')).toBe(
             `Chosen photo ${shortOf(9)}: Not available for this challenge (in another challenge, or deleted). Number 1 in your list.`,
@@ -636,52 +632,58 @@ describe('selection', () => {
 
     test.each([
         [
-            'a challenge and a cut-off listing',
-            { truncated: true },
-            7,
-            'Not available for this challenge (in another challenge, deleted, or beyond the first 2 photos)',
-        ],
-        [
             'no challenge and a complete listing',
             { allowedKnown: false },
             null,
             'Not found in your library (it may have been deleted)',
         ],
-        [
-            'no challenge and a cut-off listing',
-            { allowedKnown: false, truncated: true },
-            null,
-            'Not found in the photos listed (it may have been deleted, or be beyond the first 2 photos)',
-        ],
     ])('the not-available text for %s', async (_name, over, challengeId, text) => {
         getLibrary().mockResolvedValue(listing([photo(1), photo(2)], over));
         setup({ value: [idOf(9)], challengeId });
+        loadPhotos();
         expect((await missingTile()).textContent).toContain(text);
     });
+
+    test.each([
+        ['a challenge and a cut-off listing', { truncated: true, nextStart: 2 }, 7],
+        ['no challenge and a cut-off listing', { allowedKnown: false, truncated: true, nextStart: 2 }, null],
+    ])(
+        'a cut-off listing shows an unreached pick as a stub that points at Load more: %s',
+        async (_name, over, challengeId) => {
+            getLibrary().mockResolvedValue(listing([photo(1), photo(2)], over));
+            setup({ value: [idOf(9)], challengeId });
+            loadPhotos();
+            const stub = await missingTile();
+            expect(stub.textContent).toContain('Not in the photos loaded yet; press Load more photos to look for it.');
+            expect(stub.textContent).not.toContain('Not available for this challenge');
+            expect(stub.textContent).not.toContain('Not found in your library');
+        },
+    );
 
     test('says how many winning photos the listing left out, and only when it left some out', async () => {
         getLibrary().mockResolvedValue(listing([photo(1)], { wonIds: [idOf(7), idOf(8)], wonCount: 2 }));
         setup();
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await opened();
         expect(
-            screen.getByText("Hidden: 2 photo(s) that have won a challenge. A winning photo can't be entered again."),
+            screen.getByText("Hidden: 2 photos that have won a challenge. A winning photo can't be entered again."),
         ).toBeTruthy();
     });
 
     test('the hidden count is the listing’s own count, not the length of its capped id list', async () => {
         getLibrary().mockResolvedValue(listing([photo(1)], { wonIds: [idOf(7)], wonCount: 1500 }));
         setup();
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        expect(screen.getByText(/^Hidden: 1500 photo\(s\)/)).toBeTruthy();
+        await opened();
+        // The count reads through t, so the reader language's thousands grouping applies.
+        expect(screen.getByText(/^Hidden: 1,500 photos/)).toBeTruthy();
     });
 
     test('a cut-off listing says at least that many were hidden', async () => {
         getLibrary().mockResolvedValue(listing([photo(1)], { wonIds: [idOf(7)], wonCount: 1, truncated: true }));
         setup();
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await opened();
         expect(
             screen.getByText(
-                "Hidden: at least 1 photo(s) that have won a challenge. A winning photo can't be entered again.",
+                "Hidden: at least 1 photo that has won a challenge. A winning photo can't be entered again. Press Load more photos to look for more.",
             ),
         ).toBeTruthy();
     });
@@ -689,13 +691,14 @@ describe('selection', () => {
     test('shows no winning-photo line when none were left out', async () => {
         getLibrary().mockResolvedValue(listing([photo(1)]));
         setup();
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await opened();
         expect(screen.queryByText(/have won a challenge/)).toBeNull();
     });
 
     test('a listing with every match hidden says so instead of "No photos found"', async () => {
         getLibrary().mockResolvedValue(listing([], { wonIds: [idOf(7)], wonCount: 1 }));
         setup();
+        loadPhotos();
         expect(
             await screen.findByText(
                 'No photos you can enter were found: every match has won a challenge. Try another tag, or upload new photos to your GuruShots library and press Refresh.',
@@ -707,6 +710,7 @@ describe('selection', () => {
     test('a cut-off listing with nothing kept does not claim every match has won: eligible photos may lie beyond what was read', async () => {
         getLibrary().mockResolvedValue(listing([], { wonIds: [idOf(7)], wonCount: 1, truncated: true }));
         setup();
+        loadPhotos();
         expect(await screen.findByText(/^No photos found\./)).toBeTruthy();
         expect(screen.queryByText(/every match has won/)).toBeNull();
         expect(screen.getByText(/^Hidden: at least 1 photo/)).toBeTruthy();
@@ -715,6 +719,7 @@ describe('selection', () => {
     test('a chosen photo that has won gets its own tile text, with the next step, and can still be removed', async () => {
         getLibrary().mockResolvedValue(listing([photo(1)], { wonIds: [idOf(9)], wonCount: 1 }));
         setup({ value: [idOf(9)] });
+        loadPhotos();
         const won = await missingTile();
         expect(won.textContent).toContain(
             "Has won a challenge, so it can't be entered again. Click it to remove it from your list.",
@@ -730,6 +735,7 @@ describe('selection', () => {
             .mockResolvedValueOnce(listing([photo(1)], { wonIds: [idOf(9)], wonCount: 1 }))
             .mockResolvedValueOnce(listing([photo(2)]));
         setup({ value: [idOf(9)] });
+        loadPhotos();
         expect((await missingTile()).textContent).toContain("Has won a challenge, so it can't be entered again.");
         fireEvent.change(screen.getByLabelText('Search your photos by tag'), { target: { value: 'x' } });
         fireEvent.submit(screen.getByLabelText('Search your photos by tag').closest('form')!);
@@ -745,6 +751,7 @@ describe('selection', () => {
         const many = Array.from({ length: MAX_CHOSEN_PHOTOS + 1 }, (_, n) => photo(n + 1));
         getLibrary().mockResolvedValue(listing(many));
         setup({ value: many.slice(0, MAX_CHOSEN_PHOTOS).map((p) => p.id) });
+        loadPhotos();
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         expect(countLine().textContent).toContain('Limit reached — remove one to add another');
         const extra = tile(MAX_CHOSEN_PHOTOS + 1);
@@ -773,22 +780,20 @@ describe('selection', () => {
 
     test('the footer buttons read Clear apart on the left, then Cancel, then the primary rightmost', async () => {
         setup();
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await opened();
         const footer = screen.getByRole('button', { name: 'Clear' }).parentElement!.parentElement!;
         expect(Array.from(footer.querySelectorAll('button')).map((button) => button.textContent)).toEqual([
             'Clear',
             'Cancel',
             'Use these photos',
         ]);
-        // Apart on the left; below sm it takes the first row so Cancel and Save wrap together onto the second.
-        expect(screen.getByRole('button', { name: 'Clear' }).parentElement!.className).toBe(
-            'mr-auto max-sm:basis-full',
-        );
+        // Below sm Clear takes the first row so Cancel and Save wrap together onto the second.
+        expect(screen.getByRole('button', { name: 'Clear' }).className).toContain('max-sm:basis-full');
     });
 
     test('Clear empties the selection and Cancel closes without saving', async () => {
         const { onSave, onClose } = setup({ value: [idOf(1)] });
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await opened();
         const clear = screen.getByRole('button', { name: 'Clear' });
         expect(clear.className).toContain('btn-error');
         expect(clear.className).not.toContain('btn-outline');
@@ -799,39 +804,314 @@ describe('selection', () => {
         expect(onSave).not.toHaveBeenCalled();
     });
 });
+// A picker fixture for the direct PhotoGrid renders below: the fields the grid reads. The rest of
+// the hook's return is only for the toolbar and the modals, which these blocks do not render.
+const gridPicker = (over: Partial<ReturnType<typeof usePhotoPicker>> = {}): ReturnType<typeof usePhotoPicker> =>
+    invalid<ReturnType<typeof usePhotoPicker>>({
+        state: { status: 'idle' },
+        known: new Map<string, LibraryPhoto>(),
+        revalidating: false,
+        recheckFailed: false,
+        loadMore: jest.fn<Promise<void>, []>(),
+        loadingMore: false,
+        loadMoreFailed: null,
+        isSearch: false,
+        retry: jest.fn<number, []>(() => 1),
+        suggestedKnown: new Map<string, LibraryPhoto>(),
+        suggestedMemberId: null,
+        idleShown: [],
+        stats: new Map<string, TileStats>(),
+        sortStats: new Map<string, TileStats>(),
+        sortBy: 'library',
+        showStats: false,
+        setTileIds: jest.fn<void, [readonly string[]]>(),
+        ...over,
+    });
+
+describe('PhotoGrid numbering when a selected photo is left out of the grid', () => {
+    // Selected [1, 9, 2], where 9 is not in the listing: it keeps its place and its number.
+    const grid = () => {
+        const photos = [photo(1), photo(2), photo(3)];
+        return render(
+            <PhotoGrid
+                picker={gridPicker({
+                    state: { status: 'ready', listing: listing(photos), order: 'votes' },
+                    known: new Map(photos.map((p) => [p.id, p])),
+                })}
+                selected={[idOf(1), idOf(9), idOf(2)]}
+                locked={false}
+                hasChallenge
+                onToggle={jest.fn()}
+                onRefresh={jest.fn()}
+            />,
+        );
+    };
+    const numberOf = (n: number) => within(tile(n)).queryByText(/^\d+$/)?.textContent ?? null;
+
+    test('the unlisted pick holds its place: the next one is numbered 3', () => {
+        grid();
+        const missing = screen.getByRole('button', { name: new RegExp(`^Chosen photo ${shortOf(9)}:`) });
+        expect(missing.getAttribute('aria-label')).toMatch(/Number 2 in your list\.$/);
+        expect([numberOf(1), numberOf(2)]).toEqual(['1', '3']);
+        expect(tile(2).getAttribute('aria-label')).toMatch(/Number 3 in your list\.$/);
+        // The unselected tile has none.
+        expect(numberOf(3)).toBeNull();
+    });
+});
+
+describe('PhotoGrid as a plain set (max, fullKey, numbered)', () => {
+    const photos = [photo(1), photo(2), photo(3)];
+    const grid = (props: Partial<Parameters<typeof PhotoGrid>[0]> = {}) =>
+        render(
+            <PhotoGrid
+                picker={gridPicker({
+                    state: { status: 'ready', listing: listing(photos), order: 'votes' },
+                    known: new Map(photos.map((p) => [p.id, p])),
+                })}
+                selected={[idOf(1), idOf(9)]}
+                locked={false}
+                hasChallenge
+                onToggle={jest.fn()}
+                onRefresh={jest.fn()}
+                {...props}
+            />,
+        );
+
+    test('unnumbered: no badge and no position in any selected tile, the missing one included', () => {
+        grid({ numbered: false });
+        expect(tile(1).querySelector('.badge')).toBeNull();
+        expect(tile(1).getAttribute('aria-label')).not.toMatch(/Number/);
+        const missing = screen.getByRole('button', { name: new RegExp(`^Chosen photo ${shortOf(9)}:`) });
+        expect(missing.querySelector('.badge')).toBeNull();
+        expect(missing.getAttribute('aria-label')).not.toMatch(/Number/);
+    });
+
+    test('an unnumbered selected tile has no badge, so it is marked by the border and ring', () => {
+        grid({ numbered: false });
+        expect(tile(1).className).toContain('border-base-content');
+        expect(tile(1).className).toContain('ring-base-content');
+        expect(tile(1).className).not.toMatch(/\bbg-/);
+        expect(tile(2).className).not.toContain('ring-base-content');
+    });
+
+    test('by default selected tiles are numbered', () => {
+        grid();
+        expect(tile(1).getAttribute('aria-label')).toMatch(/Number 1 in your list\.$/);
+    });
+
+    test('a smaller max stops offering tiles once reached, with the given full text', () => {
+        grid({ max: 2, fullKey: 'app.pickFull' });
+        expect(tile(2).getAttribute('aria-disabled')).toBe('true');
+        expect(tile(2).textContent).toContain('All open slots picked');
+        expect(tile(2).textContent).not.toContain('List full');
+    });
+
+    test('by default the cap is the Chosen Photos one and the text is "List full"', () => {
+        grid({ selected: Array.from({ length: MAX_CHOSEN_PHOTOS }, (_, i) => idOf(i + 10)) });
+        expect(tile(1).getAttribute('aria-disabled')).toBe('true');
+        expect(tile(1).textContent).toContain('List full');
+    });
+});
+
+describe('PhotoGrid before any listing is read (idle)', () => {
+    const extra = new Map([photo(1), photo(2)].map((p) => [p.id, p]));
+    const grid = (props: Partial<Parameters<typeof PhotoGrid>[0]> = {}) =>
+        render(
+            <PhotoGrid
+                picker={gridPicker()}
+                selected={[]}
+                locked={false}
+                hasChallenge
+                numbered={false}
+                onToggle={jest.fn()}
+                onRefresh={jest.fn()}
+                {...props}
+            />,
+        );
+    const idleLine = () => screen.getByText(/^Photos are not loaded yet/);
+
+    test('with no picks it says nothing is loaded and shows no tile', () => {
+        grid({ picker: gridPicker({ suggestedKnown: extra }) });
+        expect(idleLine().getAttribute('role')).toBe('status');
+        expect(idleLine().textContent).toBe('Photos are not loaded yet. Load photos, search, or press Auto.');
+        expect(screen.queryByRole('button')).toBeNull();
+    });
+
+    test('the idle line is the caller’s key, so a chooser without Auto can name its own', () => {
+        grid({ picker: gridPicker({ suggestedKnown: extra }), idleKey: 'app.photoChooserIdle' });
+        expect(screen.getByText(/^Your photos are not loaded yet\./).textContent).toBe(
+            'Your photos are not loaded yet. Load photos or search.',
+        );
+    });
+
+    test('a pick found in extraPhotos shows as a pressed, unnumbered tile with the idle member’s thumbnail and toggles', () => {
+        const onToggle = jest.fn();
+        grid({
+            picker: gridPicker({ idleShown: [idOf(2)], suggestedKnown: extra, suggestedMemberId: MEMBER }),
+            selected: [idOf(2)],
+            onToggle,
+        });
+        expect(screen.getByText(/^Your picks can be submitted as they are/).getAttribute('role')).toBe('status');
+        expect(screen.queryByText(/^Photos are not loaded yet/)).toBeNull();
+        expect(screen.getAllByRole('button')).toHaveLength(1);
+        expect(tile(2).getAttribute('aria-pressed')).toBe('true');
+        expect(tile(2).querySelector('.badge')).toBeNull();
+        expect(tile(2).textContent).not.toContain('Can be entered');
+        expect(tile(2).querySelector('img')?.getAttribute('src')).toContain(MEMBER);
+        fireEvent.click(tile(2));
+        expect(onToggle).toHaveBeenCalledWith(idOf(2));
+    });
+
+    test('idleIds keeps an unpicked tile in place, offered again while there is room and held at the cap', () => {
+        const onToggle = jest.fn();
+        const props = {
+            picker: gridPicker({ idleShown: [idOf(1), idOf(2)], suggestedKnown: extra }),
+            selected: [idOf(2)],
+            onToggle,
+        };
+        const { unmount } = grid({ ...props, max: 3 });
+        expect(screen.getAllByRole('button')).toHaveLength(2);
+        expect(tile(1).getAttribute('aria-pressed')).toBe('false');
+        expect(tile(1).getAttribute('aria-disabled')).toBe('false');
+        fireEvent.click(tile(1));
+        expect(onToggle).toHaveBeenCalledWith(idOf(1));
+        unmount();
+        grid({ ...props, max: 1 });
+        expect(tile(1).getAttribute('aria-disabled')).toBe('true');
+        expect(tile(2).getAttribute('aria-disabled')).toBe('false');
+    });
+
+    test('a pick missing from extraPhotos renders nothing while no saved picks are allowed', () => {
+        grid({ picker: gridPicker({ suggestedKnown: extra }), selected: [idOf(9)] });
+        expect(screen.queryByRole('button')).toBeNull();
+    });
+
+    test('without extraPhotos a pick renders nothing', () => {
+        grid({ selected: [idOf(1)] });
+        expect(screen.getByText(/^Your picks can be submitted as they are/)).toBeTruthy();
+        expect(screen.queryByRole('button')).toBeNull();
+    });
+
+    test('a saved pick without a record shows as a stub with the member it is allowed, numbered when the grid is', () => {
+        const onToggle = jest.fn();
+        grid({
+            picker: gridPicker({ idleShown: [idOf(9), idOf(1)], suggestedKnown: extra }),
+            selected: [idOf(9), idOf(1)],
+            savedPicks: { memberId: MEMBER },
+            numbered: true,
+            onToggle,
+        });
+        // The record (an Auto pick, say) is a real tile; the bare id is a stub after it.
+        expect(screen.getAllByRole('button')).toHaveLength(2);
+        const stub = stubTile(9);
+        expect(stub.getAttribute('aria-pressed')).toBe('true');
+        expect(within(stub).getByText('1')).toBeTruthy();
+        expect(stub.getAttribute('aria-label')).toBe(
+            `Chosen photo ${shortOf(9)}: Not loaded yet. Number 1 in your list.`,
+        );
+        expect(within(tile(1)).getByText('2')).toBeTruthy();
+        expect(stub.querySelector('img')?.getAttribute('src')).toContain(MEMBER);
+        fireEvent.click(stub);
+        expect(onToggle).toHaveBeenCalledWith(idOf(9));
+    });
+
+    test('a stub with no member is text-only, and a locked one says the locked key and is inert', () => {
+        grid({
+            picker: gridPicker({ idleShown: [idOf(9)] }),
+            selected: [idOf(9)],
+            savedPicks: { memberId: null },
+            locked: true,
+            lockedKey: 'app.photoChooserTileLocked',
+        });
+        const stub = screen.getByRole('button', {
+            name: new RegExp(`^Chosen photo ${shortOf(9)}: Locked until your saved list is read`),
+        });
+        expect(stub.querySelector('img')).toBeNull();
+        expect(stub.getAttribute('aria-disabled')).toBe('true');
+    });
+
+    test('an unpicked stub at the cap says the list is full in its name too, and is inert; a picked one stays removable', () => {
+        const onToggle = jest.fn();
+        grid({
+            picker: gridPicker({ idleShown: [idOf(1), idOf(9)] }),
+            selected: [idOf(1)],
+            savedPicks: { memberId: MEMBER },
+            max: 1,
+            onToggle,
+        });
+        const held = screen.getByRole('button', { name: new RegExp(`^Chosen photo ${shortOf(9)}: List full`) });
+        expect(held.getAttribute('aria-pressed')).toBe('false');
+        expect(held.getAttribute('aria-disabled')).toBe('true');
+        fireEvent.click(held);
+        expect(onToggle).not.toHaveBeenCalled();
+        expect(stubTile(1).getAttribute('aria-disabled')).toBe('false');
+    });
+
+    test('a stub that leaves the page hands the focus to the grid’s status line, as a read tile does', () => {
+        const { rerender } = render(
+            <PhotoGrid
+                picker={gridPicker({ idleShown: [idOf(9)] })}
+                selected={[idOf(9)]}
+                locked={false}
+                hasChallenge
+                savedPicks={{ memberId: MEMBER }}
+                onToggle={jest.fn()}
+                onRefresh={jest.fn()}
+            />,
+        );
+        const stub = stubTile(9);
+        stub.focus();
+        expect(document.activeElement).toBe(stub);
+        rerender(
+            <PhotoGrid
+                picker={gridPicker({ idleShown: [idOf(9)] })}
+                selected={[idOf(9)]}
+                locked={false}
+                hasChallenge
+                savedPicks={null}
+                onToggle={jest.fn()}
+                onRefresh={jest.fn()}
+            />,
+        );
+        expect(screen.queryByRole('button')).toBeNull();
+        expect(document.activeElement).toBe(screen.getAllByRole('status')[0]);
+    });
+});
 
 describe('eligibility', () => {
-    test('a refused photo is greyed out with its reason as visible text and cannot be added', async () => {
+    test('a refused photo the saved list names keeps its dimmed tile with its reason, and stays removable', async () => {
         getLibrary().mockResolvedValue(
             listing([photo(1, { allowed: false, message: 'Already in another challenge' }), photo(2)]),
         );
-        setup();
+        setup({ value: [idOf(1)] });
+        loadPhotos();
         const blocked = await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        // Reachable by Tab (aria-disabled, never disabled) but not addable.
-        expect(blocked.getAttribute('aria-disabled')).toBe('true');
-        expect(blocked.hasAttribute('disabled')).toBe(false);
-        // The picture is dimmed, the reason is not.
-        expect(blocked.querySelector('.opacity-50')).not.toBeNull();
-        expect(within(blocked).getByText('Already in another challenge').closest('.opacity-50')).toBeNull();
-        fireEvent.click(blocked);
-        expect(blocked.getAttribute('aria-pressed')).toBe('false');
-        expect(screen.getByText('Already in another challenge')).toBeTruthy();
+        // A pick is shown whatever its mark, never dimmed (it stays removable), wearing its reason.
+        expect(blocked.getAttribute('aria-disabled')).toBe('false');
+        expect(blocked.querySelector('.opacity-50')).toBeNull();
+        expect(within(blocked).getByText('Already in another challenge')).toBeTruthy();
         expect(screen.getByText('Can be entered')).toBeTruthy();
+        fireEvent.click(blocked);
+        expect(screen.queryByRole('button', { name: /^Photo 00000001:/ })).toBeNull();
     });
 
-    test('the Chosen Photos chooser keeps every refused photo on screen: none is hidden or counted', async () => {
-        getLibrary().mockResolvedValue(listing([photo(1, { allowed: false }), photo(2, { allowed: false })]));
+    test('a refused photo that is not picked is hidden and counted', async () => {
+        getLibrary().mockResolvedValue(listing([photo(1, { allowed: false }), photo(2), photo(3, { allowed: false })]));
         setup();
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        expect(screen.getByRole('button', { name: /^Photo 00000002:/ })).toBeTruthy();
-        expect(screen.queryByText(/^Hidden: /)).toBeNull();
-        expect(screen.queryByText(/won't take any of the listed photos/)).toBeNull();
+        loadPhotos();
+        expect(await screen.findByRole('button', { name: /^Photo 00000002:/ })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: /^Photo 00000001:/ })).toBeNull();
+        expect(screen.queryByRole('button', { name: /^Photo 00000003:/ })).toBeNull();
+        expect(screen.getByText("Hidden: 2 photos GuruShots won't take in this challenge.")).toBeTruthy();
     });
 
     test('a refused photo without a message gets a generic reason, and stays removable once chosen', async () => {
         getLibrary().mockResolvedValue(listing([photo(1, { allowed: false })]));
         setup({ value: [idOf(1)] });
-        const blocked = await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        const blocked = await (async () => {
+            loadPhotos();
+            return screen.findByRole('button', { name: /^Photo 00000001:/ });
+        })();
         expect(screen.getByText('Not eligible for this challenge')).toBeTruthy();
         expect(blocked.getAttribute('aria-disabled')).toBe('false');
     });
@@ -839,34 +1119,34 @@ describe('eligibility', () => {
     test('without a challenge the listing says eligibility is only checked at submit time', async () => {
         getLibrary().mockResolvedValue(listing([photo(1, { allowed: false })], { allowedKnown: false }));
         setup({ challengeId: null });
+        loadPhotos();
         const only = await screen.findByRole('button', { name: /^Photo 00000001:/ });
         expect(screen.getByText(/Eligibility is not checked here/)).toBeTruthy();
         expect(only.getAttribute('aria-disabled')).toBe('false');
         expect(screen.queryByText('Not eligible for this challenge')).toBeNull();
         expect(screen.queryByText('Can be entered')).toBeNull();
-        expect(getLibrary()).toHaveBeenCalledWith(null, undefined, 'cached', 'submit');
+        expect(getLibrary()).toHaveBeenCalledWith(null, undefined, 'cached', 'submit', 0, 100);
     });
 });
-
 describe('search', () => {
     test('the search box is a named text search with no autofill and a search key on the keyboard', async () => {
         setup();
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await opened();
         const box = screen.getByLabelText('Search your photos by tag');
         expect(box.getAttribute('name')).toBe('photo-search');
         expect(box.getAttribute('autocomplete')).toBe('off');
         expect(box.getAttribute('enterkeyhint')).toBe('search');
     });
 
-    test('searches on submit, not while typing', async () => {
+    test('searches on submit, not while typing, from idle too', async () => {
         setup();
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
         const box = screen.getByLabelText('Search your photos by tag');
         fireEvent.change(box, { target: { value: '  cat ' } });
-        expect(getLibrary()).toHaveBeenCalledTimes(1);
+        expect(getLibrary()).not.toHaveBeenCalled();
         fireEvent.submit(box.closest('form')!);
-        await waitFor(() => expect(getLibrary()).toHaveBeenCalledTimes(2));
-        expect(getLibrary()).toHaveBeenLastCalledWith(7, 'cat', 'fresh', 'submit');
+        await waitFor(() => expect(getLibrary()).toHaveBeenCalledTimes(1));
+        expect(getLibrary()).toHaveBeenLastCalledWith(7, 'cat', 'fresh', 'submit', 0, 100);
+        expect(await screen.findByRole('button', { name: /^Photo 00000001:/ })).toBeTruthy();
     });
 
     test('a selected photo a narrower search no longer lists keeps its tile', async () => {
@@ -874,6 +1154,7 @@ describe('search', () => {
             .mockResolvedValueOnce(listing([photo(1), photo(2)]))
             .mockResolvedValueOnce(listing([photo(3)]));
         setup({ value: [idOf(1)] });
+        loadPhotos();
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         fireEvent.change(screen.getByLabelText('Search your photos by tag'), { target: { value: 'x' } });
         fireEvent.submit(screen.getByLabelText('Search your photos by tag').closest('form')!);
@@ -890,6 +1171,7 @@ describe('search', () => {
         setup();
         const box = screen.getByLabelText('Search your photos by tag');
         fireEvent.change(box, { target: { value: 'b' } });
+        fireEvent.submit(box.closest('form')!);
         fireEvent.submit(box.closest('form')!);
         await act(async () => second.resolve(listing([photo(2)])));
         await screen.findByRole('button', { name: /^Photo 00000002:/ });
@@ -912,6 +1194,7 @@ describe('search', () => {
             .mockResolvedValueOnce({ success: false, error: 'superseded' })
             .mockResolvedValueOnce(listing([photo(1)]));
         setup();
+        loadPhotos();
         const alert = await screen.findByRole('alert');
         expect(screen.queryByText('Loading your photos…')).toBeNull();
         // The code is not shown as a detail.
@@ -929,6 +1212,7 @@ describe('search', () => {
         const box = screen.getByLabelText('Search your photos by tag');
         fireEvent.change(box, { target: { value: 'b' } });
         fireEvent.submit(box.closest('form')!);
+        fireEvent.submit(box.closest('form')!);
         await screen.findByRole('button', { name: /^Photo 00000002:/ });
         await act(async () => first.resolve({ success: false, error: 'superseded' }));
         expect(screen.queryByRole('alert')).toBeNull();
@@ -942,18 +1226,20 @@ describe('failures', () => {
             .mockResolvedValueOnce(invalid(null))
             .mockResolvedValueOnce(listing([photo(1)]));
         setup();
+        loadPhotos();
         const alert = await screen.findByRole('alert');
         // Nothing came back to show as a detail: a generic why and next step, not "details below".
         expect(alert.textContent).toContain("Your photos couldn't be loaded — the request was interrupted. Try again.");
         expect(alert.textContent).not.toContain('details below');
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        expect(getLibrary()).toHaveBeenLastCalledWith(7, undefined, 'fresh', 'submit');
+        expect(getLibrary()).toHaveBeenLastCalledWith(7, undefined, 'fresh', 'submit', 0, 100);
     });
 
     test('an error is shown as a translated detail, never as raw handler text; invalid-args has its own', async () => {
         getLibrary().mockResolvedValueOnce({ success: false, error: 'Failed to read your photo library' });
         const view = setup();
+        loadPhotos();
         const alert = await screen.findByRole('alert');
         // With a detail to point at, "details below" is accurate and no cause is claimed.
         expect(alert.textContent).toContain("Your photos couldn't be loaded (details below). Try again.");
@@ -967,6 +1253,7 @@ describe('failures', () => {
         );
         getLibrary().mockResolvedValueOnce({ success: false, error: 'invalid-args' });
         setup();
+        loadPhotos();
         expect((await screen.findByRole('alert')).textContent).toContain('Bad request');
     });
 
@@ -975,25 +1262,27 @@ describe('failures', () => {
             .mockResolvedValueOnce(listing([photo(1)]))
             .mockResolvedValueOnce(invalid(null));
         setup();
+        loadPhotos();
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         const box = screen.getByLabelText('Search your photos by tag');
         fireEvent.change(box, { target: { value: 'dog' } });
         fireEvent.submit(box.closest('form')!);
         await screen.findByRole('alert');
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-        await waitFor(() => expect(getLibrary()).toHaveBeenLastCalledWith(7, 'dog', 'fresh', 'submit'));
+        await waitFor(() => expect(getLibrary()).toHaveBeenLastCalledWith(7, 'dog', 'fresh', 'submit', 0, 100));
     });
 
     test('with no challenge to read the library through it explains what is needed', async () => {
         getLibrary().mockResolvedValue({ success: false, error: 'no-challenge-context' });
         setup({ challengeId: null });
+        loadPhotos();
         expect((await screen.findByRole('alert')).textContent).toContain('no active or joinable challenge');
     });
 
     test('a save the caller refuses keeps the modal open on an error', async () => {
         const onSave = jest.fn().mockResolvedValue(false);
         const { onClose } = setup({ onSave });
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await opened();
         fireEvent.click(screen.getByRole('button', { name: 'Use these photos' }));
         expect((await screen.findByRole('alert')).textContent).toContain("weren't saved");
         expect(onClose).not.toHaveBeenCalled();
@@ -1005,7 +1294,7 @@ describe('failures', () => {
 
     test('a save that throws is treated as refused', async () => {
         const { onClose } = setup({ onSave: jest.fn().mockRejectedValue(new Error('boom')) });
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await opened();
         fireEvent.click(screen.getByRole('button', { name: 'Use these photos' }));
         expect((await screen.findByRole('alert')).textContent).toContain("weren't saved");
         expect(onClose).not.toHaveBeenCalled();
@@ -1014,7 +1303,7 @@ describe('failures', () => {
     test('Save is disabled while saving', async () => {
         const saving = deferred<boolean>();
         const { onClose } = setup({ onSave: jest.fn<Promise<boolean>, [string[]]>(() => saving.promise) });
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await opened();
         fireEvent.click(screen.getByRole('button', { name: 'Use these photos' }));
         await waitFor(() =>
             expect((screen.getByRole('button', { name: 'Use these photos' }) as HTMLButtonElement).disabled).toBe(true),
@@ -1025,779 +1314,117 @@ describe('failures', () => {
 
     test('a synchronous save callback works too', async () => {
         const { onClose, onSave } = setup({ onSave: jest.fn().mockReturnValue(true) });
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await opened();
         fireEvent.click(screen.getByRole('button', { name: 'Use these photos' }));
         await waitFor(() => expect(onClose).toHaveBeenCalled());
         expect(onSave).toHaveBeenCalledWith([]);
     });
 });
-
-describe('account scope', () => {
-    const OTHER = 'd'.repeat(32);
-    const notice = () => screen.findByText(/saved under another account, so the app ignores them/);
+describe('Auto suggestions', () => {
+    type Suggestion = Awaited<ReturnType<WindowApi['suggestPhotos']>>;
+    type SuggestionOk = Extract<Suggestion, { success: true }>;
+    const suggestion = (photos: LibraryPhoto[], over: Partial<SuggestionOk> = {}): SuggestionOk => ({
+        success: true,
+        memberId: MEMBER,
+        photos,
+        statsLimited: false,
+        ...over,
+    });
+    const suggestPhotos = () => jest.mocked(window.api.suggestPhotos);
+    const autoButton = () => screen.getByRole('button', { name: /^(Auto|Next suggestions)$/ });
+    const strip = () => screen.getByRole('region', { name: 'Suggestions' });
+    const stripTile = (n: number) => within(strip()).getByRole('button', { name: new RegExp(`^Photo ${shortOf(n)}:`) });
+    const addButton = () => within(strip()).getByRole('button', { name: /^(Add suggestions|No free slots)$/ });
 
     beforeEach(() => {
-        jest.mocked(window.api.clearChosenPhotos).mockResolvedValue({ success: true, removed: 2 });
+        suggestPhotos().mockResolvedValue(suggestion([photo(1)]));
     });
 
-    test("warns that saving here makes the other account's lists apply too, and never shows their ids", async () => {
-        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
-        setup({ value: [idOf(1), idOf(9)] });
-        expect((await notice()).textContent).toContain('Saving a list here makes them apply to this account too');
-        // Counted, not shown: no tile, short id or thumbnail for the other account's photos.
-        expect(screen.getByText('2 photo(s) saved under another account')).toBeTruthy();
-        expect(screen.queryByRole('button', { name: new RegExp(`${shortOf(9)}`) })).toBeNull();
-        expect(document.body.textContent).not.toContain(shortOf(9));
-        // The selection starts empty: those photos are not this account's to build on.
-        expect(countLine().textContent).toBe(`0 of ${MAX_CHOSEN_PHOTOS} chosen`);
-        expect(tile(1).getAttribute('aria-pressed')).toBe('false');
-    });
-
-    test('the notice judges the list the modal opened with, so it stays after clearing and choosing again', async () => {
-        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
-        setup({ value: [idOf(1)] });
-        await notice();
-        fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
-        expect(screen.queryByText(/saved under another account, so the app ignores them/)).not.toBeNull();
-        fireEvent.click(tile(2));
-        expect(screen.queryByText(/saved under another account, so the app ignores them/)).not.toBeNull();
-        expect(countLine().textContent).toBe(`1 of ${MAX_CHOSEN_PHOTOS} chosen`);
-    });
-
-    test('the notice and the withheld photos stay while a search is loading or fails', async () => {
-        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
-        setup({ value: [idOf(1), idOf(2)] });
-        await notice();
-        const box = screen.getByLabelText('Search your photos by tag');
-        const pending = deferred<Listing>();
-        getLibrary().mockReturnValueOnce(invalid(pending.promise));
-        fireEvent.change(box, { target: { value: 'x' } });
-        fireEvent.submit(box.closest('form')!);
-        // Loading: the listing says nothing about the account, yet the notice is still there.
-        expect(screen.getByText('Loading your photos…')).toBeTruthy();
-        expect(screen.queryByText(/saved under another account, so the app ignores them/)).not.toBeNull();
-        expect(screen.getByText('2 photo(s) saved under another account')).toBeTruthy();
-        await act(async () => pending.resolve(invalid({ success: false, error: 'down' })));
-        // Failed: still there.
-        await screen.findByRole('button', { name: 'Retry' });
-        expect(screen.queryByText(/saved under another account, so the app ignores them/)).not.toBeNull();
-        expect(screen.queryByRole('button', { name: new RegExp(`${shortOf(1)}`) })).toBeNull();
-    });
-
-    test('a count passed in for a withheld list is shown with the notice, though no ids are', async () => {
-        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
-        render(
-            <PhotoChooserModal
-                isOpen
-                onClose={jest.fn()}
-                value={[]}
-                savedCount={3}
-                challengeId={7}
-                onSave={jest.fn()}
-            />,
-        );
-        await notice();
-        expect(screen.getByText('3 photo(s) saved under another account')).toBeTruthy();
-    });
-
-    test('saving still saves what was chosen here', async () => {
-        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
-        const { onSave } = setup({ value: [idOf(1)] });
-        await notice();
-        fireEvent.click(tile(2));
-        fireEvent.click(screen.getByRole('button', { name: 'Use these photos' }));
-        await waitFor(() => expect(onSave).toHaveBeenCalledWith([idOf(2)]));
-    });
-
-    test('removing the lists asks first, then removes them and drops the notice', async () => {
-        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
-        setup({ value: [idOf(1)] });
-        await notice();
-        fireEvent.click(screen.getByRole('button', { name: 'Remove those lists' }));
-        expect(
-            await screen.findByText(
-                "Remove the chosen-photo lists saved under the other account, in every setting, profile, rule and scenario? This can't be undone. Submit Only Chosen Photos is kept.",
-            ),
-        ).toBeTruthy();
-        expect(window.api.clearChosenPhotos).not.toHaveBeenCalled();
-        // The confirm button carries the same name as the notice's, so take the one in the confirm dialog.
-        const confirm = screen.getAllByRole('button', { name: 'Remove those lists' }).at(-1)!;
-        fireEvent.click(confirm);
-        await waitFor(() => expect(window.api.clearChosenPhotos).toHaveBeenCalledTimes(1));
-        await waitFor(() =>
-            expect(screen.queryByText(/saved under another account, so the app ignores them/)).toBeNull(),
-        );
-        expect(screen.queryByText('2 photo(s) saved under another account')).toBeNull();
-    });
-
-    test('cancelling the confirmation removes nothing', async () => {
-        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
-        setup({ value: [idOf(1)] });
-        await notice();
-        fireEvent.click(screen.getByRole('button', { name: 'Remove those lists' }));
-        await screen.findByText(/Remove the chosen-photo lists saved under the other account/);
-        fireEvent.click(screen.getAllByRole('button', { name: 'Cancel' }).at(-1)!);
-        await waitFor(() =>
-            expect(screen.queryByText(/Remove the chosen-photo lists saved under the other account/)).toBeNull(),
-        );
-        expect(window.api.clearChosenPhotos).not.toHaveBeenCalled();
-        expect(screen.queryByText(/saved under another account, so the app ignores them/)).not.toBeNull();
-    });
-
-    test('Escape closes the confirmation only, and removes nothing', async () => {
-        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
-        const { onClose } = setup({ value: [idOf(1)] });
-        await notice();
-        fireEvent.click(screen.getByRole('button', { name: 'Remove those lists' }));
-        await screen.findByText(/Remove the chosen-photo lists saved under the other account/);
-        fireEvent.keyDown(document, { key: 'Escape' });
-        await waitFor(() =>
-            expect(screen.queryByText(/Remove the chosen-photo lists saved under the other account/)).toBeNull(),
-        );
-        expect(onClose).not.toHaveBeenCalled();
-        expect(window.api.clearChosenPhotos).not.toHaveBeenCalled();
-    });
-
-    test.each([
-        ['a refused removal', jest.fn().mockResolvedValue({ success: false, error: 'disk' })],
-        ['a removal the bridge rejects', jest.fn().mockRejectedValue(new Error('down'))],
-    ])('%s keeps the notice and says the lists were not removed', async (_name, clear) => {
-        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
-        window.api.clearChosenPhotos = clear;
-        setup({ value: [idOf(1)] });
-        await notice();
-        fireEvent.click(screen.getByRole('button', { name: 'Remove those lists' }));
-        await screen.findByText(/Remove the chosen-photo lists saved under the other account/);
-        fireEvent.click(screen.getAllByRole('button', { name: 'Remove those lists' }).at(-1)!);
-        expect(await screen.findByText(/The lists weren't removed/)).toBeTruthy();
-        expect(screen.queryByText(/saved under another account, so the app ignores them/)).not.toBeNull();
-    });
-
-    test('no warning when the list belongs to the signed-in account', async () => {
-        jest.mocked(window.api.getSetting).mockResolvedValue(MEMBER);
-        setup({ value: [idOf(1)] });
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        expect(screen.queryByText(/saved under another account/)).toBeNull();
-        expect(tile(1).getAttribute('aria-pressed')).toBe('true');
-    });
-
-    test('no warning when no owner was recorded, or the member is unknown', async () => {
-        setup({ value: [idOf(1)] });
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        expect(screen.queryByText(/saved under another account/)).toBeNull();
-    });
-
-    test('no warning for an empty list', async () => {
-        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
+    test('Auto from idle ranks under the auto-submit rules, with the chooser’s own words', async () => {
+        suggestPhotos().mockResolvedValueOnce(suggestion([photo(3), photo(1)]));
         setup();
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        expect(screen.queryByText(/saved under another account/)).toBeNull();
-    });
-});
-
-describe('Save while the account is unknown', () => {
-    const OTHER = 'd'.repeat(32);
-    const use = () => screen.getByRole('button', { name: 'Use these photos' });
-    const hint = 'Saving waits until your photos have loaded, so the app can check which account the list belongs to.';
-
-    const errorHint =
-        'Saving is held until your photos load, so the app can check which account the list belongs to. Press Retry above.';
-    const noContextHint =
-        "Saving is blocked: without an active or open challenge the app can't check which account this list belongs to. Clear the list to save, or join a challenge first.";
-
-    const expectHeldBack = (text = hint) => {
-        // aria-disabled, not disabled: the button stays focusable, and the hint is linked to it.
-        expect(use().getAttribute('aria-disabled')).toBe('true');
-        expect(use().hasAttribute('disabled')).toBe(false);
-        const hintElement = screen.getByText(text);
-        expect(use().getAttribute('aria-describedby')).toBe(hintElement.id);
-    };
-
-    test('is held back while the listing loads or has failed, once an owner is on record and a list is chosen', async () => {
-        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
-        const pending = deferred<Listing>();
-        getLibrary().mockReturnValueOnce(invalid(pending.promise));
-        const { onSave } = setup({ value: [idOf(1)] });
-        await waitFor(() => expect(window.api.getSetting).toHaveBeenCalled());
-        await act(async () => undefined);
-        expectHeldBack();
-        fireEvent.click(use());
-        expect(onSave).not.toHaveBeenCalled();
-        await act(async () => pending.resolve(invalid({ success: false, error: 'down' })));
-        await screen.findByRole('button', { name: 'Retry' });
-        // The hint names the way out of this state: Retry, not a wait that will not end by itself.
-        expectHeldBack(errorHint);
-        expect(screen.queryByText(hint)).toBeNull();
-        // Once a listing shows who is signed in, Save is available again, and the hint is gone.
-        getLibrary().mockResolvedValueOnce(listing([photo(1)]));
-        fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        expect(use().getAttribute('aria-disabled')).toBe('false');
-        expect(use().hasAttribute('aria-describedby')).toBe(false);
-        expect(screen.queryByText(hint)).toBeNull();
+        fireEvent.click(autoButton());
+        expect(await screen.findByText('Ranking your photos… this can take a minute. Nothing is saved.')).toBeTruthy();
+        await screen.findByRole('region', { name: 'Suggestions' });
+        expect(suggestPhotos()).toHaveBeenCalledWith(7, 'submit', []);
+        expect(getLibrary()).not.toHaveBeenCalled();
+        expect(stripTile(3).querySelector('img')?.getAttribute('src')).toContain(MEMBER);
     });
 
-    test('is held back with no challenge to read the library through, and the hint does not promise a load', async () => {
-        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
-        getLibrary().mockResolvedValue({ success: false, error: 'no-challenge-context' });
-        setup({ value: [idOf(1)], challengeId: null });
-        await screen.findByRole('alert');
-        expectHeldBack(noContextHint);
-        // Nothing will load, so "saving waits until your photos have loaded" would be a false promise.
-        expect(screen.queryByText(hint)).toBeNull();
-    });
-
-    test('clearing the list lifts the no-challenge hold, so the way out the hint names works', async () => {
-        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
-        getLibrary().mockResolvedValue({ success: false, error: 'no-challenge-context' });
-        const { onSave } = setup({ value: [idOf(1)], challengeId: null });
-        await screen.findByRole('alert');
-        fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
-        expect(screen.queryByText(noContextHint)).toBeNull();
-        fireEvent.click(use());
-        await waitFor(() => expect(onSave).toHaveBeenCalledWith([]));
-    });
-
-    test('saving nothing is never held back: it writes no list', async () => {
-        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
-        const pending = deferred<Listing>();
-        getLibrary().mockReturnValueOnce(invalid(pending.promise));
-        const { onSave } = setup({ value: [] });
-        await waitFor(() => expect(window.api.getSetting).toHaveBeenCalled());
-        await act(async () => undefined);
-        expect(use().getAttribute('aria-disabled')).toBe('false');
-        expect(screen.queryByText(hint)).toBeNull();
-        fireEvent.click(use());
-        await waitFor(() => expect(onSave).toHaveBeenCalledWith([]));
-    });
-
-    test('is not held back when no owner is on record', async () => {
-        const pending = deferred<Listing>();
-        getLibrary().mockReturnValueOnce(invalid(pending.promise));
-        setup({ value: [idOf(1)] });
-        await act(async () => undefined);
-        expect(use().getAttribute('aria-disabled')).toBe('false');
-    });
-});
-
-describe('a saved list that came without its ids', () => {
-    const OWNER = MEMBER;
-    const use = () => screen.getByRole('button', { name: 'Use these photos' });
-    const hint = 'Saving waits until your photos have loaded, so the app can check which account the list belongs to.';
-    const readFailedHint =
-        "Couldn't read your saved list for this challenge, so saving is held to protect it. Press Retry.";
-    const readFailedAgainHint =
-        'Reading your saved list failed again, so saving stays held to protect it. Press Retry again shortly.';
-    const notLoggedInHint =
-        "You're signed out, so the account can't be checked. Log in again, then reopen the chooser.";
-    const noContextHeldHint =
-        "Saving is held: without an active or open challenge the app can't check which account this list belongs to. Close the chooser and join a challenge first.";
-    const confirmedText = 'Account confirmed — your saved list is loaded.';
-    const lockedText = 'Locked until your saved list is read';
-    const checkingHint = 'Checking which account this list belongs to…';
-    const checkFailedHint =
-        'The account check failed, so saving is held to protect your list. Press Retry again shortly.';
-    const unconfirmedHint =
-        "Couldn't confirm which account this list belongs to, so saving is held to protect it. Press Retry, or close and reopen the chooser.";
-    // A re-read mock: what it answers on its successive calls.
-    const rereads = (...answers: Array<string[] | null | Error>) => {
-        const reloadSaved = jest.fn<Promise<string[] | null>, []>();
-        for (const answer of answers) {
-            if (answer instanceof Error) reloadSaved.mockRejectedValueOnce(answer);
-            else reloadSaved.mockResolvedValueOnce(answer);
-        }
-        return reloadSaved;
-    };
-    const pressed = (n: number) => tile(n).getAttribute('aria-pressed');
-
-    beforeEach(() => {
-        jest.mocked(window.api.getSetting).mockResolvedValue(OWNER);
-    });
-
-    test('Save, an empty one too, is held until the list has been read again and seeds the selection', async () => {
-        const pending = deferred<Listing>();
-        getLibrary().mockReturnValueOnce(invalid(pending.promise));
-        const reloadSaved = rereads([idOf(1), idOf(2)]);
-        const { onSave } = setup({ value: [], savedCount: 2, reloadSaved });
-        await act(async () => undefined);
-        // Nothing to save yet: the selection is empty only because the ids were withheld.
-        expect(use().getAttribute('aria-disabled')).toBe('true');
-        fireEvent.click(use());
-        expect(onSave).not.toHaveBeenCalled();
-        expect(reloadSaved).not.toHaveBeenCalled();
-
-        await act(async () => pending.resolve(listing([photo(1), photo(2), photo(3)])));
-        await waitFor(() => expect(pressed(1)).toBe('true'));
-        expect(pressed(2)).toBe('true');
-        expect(reloadSaved).toHaveBeenCalledTimes(1);
-        await waitFor(() => expect(use().getAttribute('aria-disabled')).toBe('false'));
-        expect(screen.queryByText(hint)).toBeNull();
-        fireEvent.click(use());
-        await waitFor(() => expect(onSave).toHaveBeenCalledWith([idOf(1), idOf(2)]));
-    });
-
-    test('an empty save goes through only once the user has really cleared the list', async () => {
-        const { onSave } = setup({ value: [], savedCount: 1, reloadSaved: rereads([idOf(1)]) });
-        await waitFor(() => expect(pressed(1)).toBe('true'));
-        await waitFor(() => expect(use().getAttribute('aria-disabled')).toBe('false'));
-        fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
-        fireEvent.click(use());
-        await waitFor(() => expect(onSave).toHaveBeenCalledWith([]));
-    });
-
-    test('the tiles are inert while the list is unread, so the late read cannot overwrite a pick', async () => {
-        const read = deferred<string[] | null>();
-        const reloadSaved = jest.fn<Promise<string[] | null>, []>().mockReturnValue(read.promise);
-        setup({ value: [], savedCount: 1, reloadSaved });
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        await waitFor(() => expect(reloadSaved).toHaveBeenCalledTimes(1));
-        // Read in flight: every tile says it cannot be changed, and a click does nothing.
-        expect(tile(3).getAttribute('aria-disabled')).toBe('true');
-        fireEvent.click(tile(3));
-        expect(pressed(3)).toBe('false');
-        // The photos have loaded, so the hint names what is awaited instead of "waits until loaded".
-        expect(screen.getByText(checkingHint)).toBeTruthy();
-        expect(screen.queryByText(hint)).toBeNull();
-
-        await act(async () => read.resolve([idOf(1)]));
-        await waitFor(() => expect(pressed(1)).toBe('true'));
-        expect(pressed(3)).toBe('false');
-        expect(tile(3).getAttribute('aria-disabled')).toBe('false');
-        fireEvent.click(tile(3));
-        expect(pressed(3)).toBe('true');
-    });
-
-    describe('ready, but the list cannot be confirmed', () => {
-        const expectUnconfirmed = async (message = unconfirmedHint) => {
-            await screen.findByText(message);
-            expect(screen.queryByText(hint)).toBeNull();
-            expect(use().getAttribute('aria-disabled')).toBe('true');
-            // The tiles are inert here too: nothing may be picked over a list that is unread.
-            expect(tile(2).getAttribute('aria-disabled')).toBe('true');
-            fireEvent.click(tile(2));
-            expect(pressed(2)).toBe('false');
-        };
-
-        const confirmWith = (...answers: Array<string | null>) => {
-            const confirm = jest.mocked(window.api.confirmAccount);
-            for (const memberId of answers) {
-                confirm.mockResolvedValueOnce(
-                    memberId === null ? { success: false, error: 'account-check-failed' } : { success: true, memberId },
-                );
-            }
-            return confirm;
-        };
-        const retryButton = () => screen.getByRole('button', { name: 'Retry' });
-
-        test('a listing that cannot say who is signed in: Retry checks the account only, never the library again, and seeds the list', async () => {
-            getLibrary().mockResolvedValueOnce(listing([photo(1), photo(2)], { memberId: null }));
-            const confirm = confirmWith(OWNER);
-            const reloadSaved = rereads([idOf(1)]);
-            const { onSave } = setup({ value: [], savedCount: 1, reloadSaved });
-            await expectUnconfirmed();
-            expect(reloadSaved).not.toHaveBeenCalled();
-            fireEvent.click(use());
-            expect(onSave).not.toHaveBeenCalled();
-
-            fireEvent.click(retryButton());
-            await waitFor(() => expect(pressed(1)).toBe('true'));
-            await waitFor(() => expect(use().getAttribute('aria-disabled')).toBe('false'));
-            expect(screen.queryByText(unconfirmedHint)).toBeNull();
-            expect(confirm).toHaveBeenCalledTimes(1);
-            // The listing on screen was reused: no second library walk.
-            expect(getLibrary()).toHaveBeenCalledTimes(1);
-            fireEvent.click(use());
-            await waitFor(() => expect(onSave).toHaveBeenCalledWith([idOf(1)]));
-        });
-
-        test('the check fails again: the hint says so and Retry stays; a later press can succeed', async () => {
-            getLibrary().mockResolvedValue(listing([photo(1), photo(2)], { memberId: null }));
-            confirmWith(null, OWNER);
-            const { onSave } = setup({ value: [], savedCount: 1, reloadSaved: rereads([idOf(1)]) });
-            await screen.findByText(unconfirmedHint);
-            fireEvent.click(retryButton());
-            await screen.findByText(checkFailedHint);
-            expect(screen.queryByText(unconfirmedHint)).toBeNull();
-            expect(use().getAttribute('aria-disabled')).toBe('true');
-            expect(getLibrary()).toHaveBeenCalledTimes(1);
-
-            fireEvent.click(retryButton());
-            await waitFor(() => expect(pressed(1)).toBe('true'));
-            fireEvent.click(use());
-            await waitFor(() => expect(onSave).toHaveBeenCalledWith([idOf(1)]));
-        });
-
-        test('a check that rejects counts as a failed check', async () => {
-            getLibrary().mockResolvedValue(listing([photo(1)], { memberId: null }));
-            jest.mocked(window.api.confirmAccount).mockRejectedValueOnce(new Error('ipc down'));
-            setup({ value: [], savedCount: 1, reloadSaved: rereads() });
-            await screen.findByText(unconfirmedHint);
-            fireEvent.click(retryButton());
-            await screen.findByText(checkFailedHint);
-        });
-
-        test("the check names another account: the notice shows, the ids stay withheld and Save is the user's choice", async () => {
-            getLibrary().mockResolvedValue(listing([photo(1), photo(2)], { memberId: null }));
-            confirmWith('d'.repeat(32));
-            const reloadSaved = rereads();
-            const { onSave } = setup({ value: [], savedCount: 2, reloadSaved });
-            await screen.findByText(unconfirmedHint);
-            fireEvent.click(retryButton());
-            expect(await screen.findByText(/saved under another account, so the app ignores them/)).toBeTruthy();
-            expect(reloadSaved).not.toHaveBeenCalled();
-            await waitFor(() => expect(use().getAttribute('aria-disabled')).toBe('false'));
-            fireEvent.click(tile(2));
-            fireEvent.click(use());
-            await waitFor(() => expect(onSave).toHaveBeenCalledWith([idOf(2)]));
-        });
-
-        test('Retry stays mounted, focused, aria-busy and inert while the check runs; the hint is a live region apart from it', async () => {
-            getLibrary().mockResolvedValue(listing([photo(1)], { memberId: null }));
-            const answer = deferred<{ success: true; memberId: string }>();
-            jest.mocked(window.api.confirmAccount).mockReturnValueOnce(invalid(answer.promise));
-            setup({ value: [], savedCount: 1, reloadSaved: rereads([idOf(1)]) });
-            await screen.findByText(unconfirmedHint);
-
-            // Save is described by the status paragraph, which holds the text only: Retry is outside it.
-            const status = document.getElementById(use().getAttribute('aria-describedby')!)!;
-            expect(status.getAttribute('role')).toBe('status');
-            expect(status.querySelector('button')).toBeNull();
-            expect(retryButton().closest('[role="status"]')).toBeNull();
-
-            const retry = retryButton();
-            retry.focus();
-            fireEvent.click(retry);
-            await screen.findByText(checkingHint);
-            expect(retryButton()).toBe(retry);
-            expect(document.activeElement).toBe(retry);
-            expect(retry.getAttribute('aria-busy')).toBe('true');
-            expect(retry.getAttribute('aria-disabled')).toBe('true');
-            // A second press while it runs asks nothing more.
-            fireEvent.click(retry);
-            expect(window.api.confirmAccount).toHaveBeenCalledTimes(1);
-
-            // Busy looks busy: a spinner and the disabled style, DaisyUI only.
-            expect(retry.className).toContain('btn-disabled');
-            expect(retry.querySelector('.loading.loading-spinner')).not.toBeNull();
-
-            await act(async () => answer.resolve({ success: true, memberId: OWNER }));
-            await waitFor(() => expect(pressed(1)).toBe('true'));
-            expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
-        });
-
-        test('Retry stays mounted and focused through the read after the check, then focus moves to Save and success is announced', async () => {
-            getLibrary().mockResolvedValue(listing([photo(1)], { memberId: null }));
-            confirmWith(OWNER);
-            const read = deferred<string[] | null>();
-            const reloadSaved = jest.fn<Promise<string[] | null>, []>().mockReturnValue(read.promise);
-            setup({ value: [], savedCount: 1, reloadSaved });
-            await screen.findByText(unconfirmedHint);
-            expect(screen.queryByText(confirmedText)).toBeNull();
-
-            const retry = retryButton();
-            retry.focus();
-            fireEvent.click(retry);
-            // The account answers; the list read that follows is held deferred. Retry is still the same
-            // focused, busy button, and the hint says what is awaited.
-            await waitFor(() => expect(reloadSaved).toHaveBeenCalledTimes(1));
-            await screen.findByText(checkingHint);
-            expect(retryButton()).toBe(retry);
-            expect(document.activeElement).toBe(retry);
-            expect(retry.getAttribute('aria-busy')).toBe('true');
-            expect(retry.getAttribute('aria-disabled')).toBe('true');
-
-            await act(async () => read.resolve([idOf(1)]));
-            await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull());
-            await waitFor(() => expect(document.activeElement).toBe(use()));
-            // The success is in a live region that was mounted all along.
-            const announced = screen.getByText(confirmedText);
-            expect(announced.getAttribute('role')).toBe('status');
-        });
-
-        test('focus goes to the status line when Retry ends signed out (Save is still held), so it is never dropped', async () => {
-            getLibrary().mockResolvedValue(listing([photo(1)], { memberId: null }));
-            const answer = deferred<{ success: false; error: 'not-logged-in' }>();
-            jest.mocked(window.api.confirmAccount).mockReturnValueOnce(invalid(answer.promise));
-            setup({ value: [], savedCount: 1, reloadSaved: rereads() });
-            await screen.findByText(unconfirmedHint);
-            const retry = retryButton();
-            retry.focus();
-            fireEvent.click(retry);
-            await act(async () => answer.resolve({ success: false, error: 'not-logged-in' }));
-            await screen.findByText(notLoggedInHint);
-            expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
-            const status = screen.getByText(notLoggedInHint);
-            await waitFor(() => expect(document.activeElement).toBe(status));
-            expect(status.getAttribute('role')).toBe('status');
-        });
-
-        test('focus goes to Save when Retry finds another account (Save is free then)', async () => {
-            getLibrary().mockResolvedValue(listing([photo(1)], { memberId: null }));
-            const answer = deferred<{ success: true; memberId: string }>();
-            jest.mocked(window.api.confirmAccount).mockReturnValueOnce(invalid(answer.promise));
-            setup({ value: [], savedCount: 1, reloadSaved: rereads() });
-            await screen.findByText(unconfirmedHint);
-            const retry = retryButton();
-            retry.focus();
-            fireEvent.click(retry);
-            await act(async () => answer.resolve({ success: true, memberId: 'd'.repeat(32) }));
-            await screen.findByText(/saved under another account, so the app ignores them/);
-            await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull());
-            expect(use().getAttribute('aria-disabled')).toBe('false');
-            await waitFor(() => expect(document.activeElement).toBe(use()));
-        });
-
-        test('focus the user has put elsewhere is never taken when the hold lifts', async () => {
-            getLibrary().mockResolvedValue(listing([photo(1)], { memberId: null }));
-            const answer = deferred<{ success: true; memberId: string }>();
-            jest.mocked(window.api.confirmAccount).mockReturnValueOnce(invalid(answer.promise));
-            setup({ value: [], savedCount: 1, reloadSaved: rereads([idOf(1)]) });
-            await screen.findByText(unconfirmedHint);
-            fireEvent.click(retryButton());
-            // While the check runs the user moves to Cancel; the lifted hold must not pull focus away.
-            const cancel = screen.getByRole('button', { name: 'Cancel' });
-            cancel.focus();
-            await act(async () => answer.resolve({ success: true, memberId: OWNER }));
-            // The hold has lifted and the confirmation is on screen: the footer has committed what its
-            // focus effects react to. Only then is where focus is worth judging.
-            await screen.findByText(confirmedText);
-            await waitFor(() => expect(use().getAttribute('aria-disabled')).toBe('false'));
-            await effectsFlushed();
-            expect(document.activeElement).toBe(cancel);
-        });
-
-        test('an earlier failed Retry, then a search, then a successful automatic read: focus stays in the search box and nothing is announced', async () => {
-            const reloadSaved = rereads(null, null, [idOf(1)]);
-            setup({ value: [], savedCount: 1, reloadSaved });
-            await screen.findByText(readFailedHint);
-            fireEvent.click(retryButton());
-            await screen.findByText(readFailedAgainHint);
-
-            const search = screen.getByRole('searchbox');
-            search.focus();
-            fireEvent.submit(search.closest('form')!);
-            await waitFor(() => expect(pressed(1)).toBe('true'));
-            await waitFor(() => expect(use().getAttribute('aria-disabled')).toBe('false'));
-            expect(document.activeElement).toBe(search);
-            expect(screen.queryByText(confirmedText)).toBeNull();
-        });
-
-        test('a successful Retry is announced once: a later search does not announce it again', async () => {
-            const { onSave } = setup({ value: [], savedCount: 1, reloadSaved: rereads(null, [idOf(1)]) });
-            await screen.findByText(readFailedHint);
-            fireEvent.click(retryButton());
-            await screen.findByText(confirmedText);
-            expect(onSave).not.toHaveBeenCalled();
-            const search = screen.getByRole('searchbox');
-            fireEvent.submit(search.closest('form')!);
-            await waitFor(() => expect(getLibrary()).toHaveBeenCalledTimes(2));
-            // The reload has settled (Save is free again, the list already read) before judging the text.
-            await waitFor(() => expect(use().getAttribute('aria-disabled')).toBe('false'));
-            await waitFor(() => expect(tile(1).getAttribute('aria-disabled')).toBe('false'));
-            expect(screen.queryByText(confirmedText)).toBeNull();
-        });
-
-        test('Retry that reloads the listing (the owner not yet known) keeps focus, then a good read announces and focuses Save', async () => {
-            // The listing names the member, but the owner record is not there yet: Retry reloads the listing.
-            jest.mocked(window.api.getSetting).mockResolvedValue('');
-            const reloadSaved = rereads([idOf(1)]);
-            setup({ value: [], savedCount: 1, reloadSaved });
-            await screen.findByText(unconfirmedHint);
-            expect(reloadSaved).not.toHaveBeenCalled();
-
-            const retry = retryButton();
-            retry.focus();
-            const reload = deferred<Listing>();
-            getLibrary().mockReturnValueOnce(invalid(reload.promise));
-            fireEvent.click(retry);
-            // While the listing loads Retry goes away; focus must not fall to the page.
-            await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull());
-            await waitFor(() => expect(document.activeElement).not.toBe(document.body));
-            expect(document.activeElement?.getAttribute('role')).toBe('status');
-
-            // The owner is on record now; the reloaded listing names the same member, so the list is read.
-            jest.mocked(window.api.getSetting).mockResolvedValue(OWNER);
-            await act(async () => {
-                fireSettingsChanged({});
-                reload.resolve(listing([photo(1)]));
-            });
-            await screen.findByText(confirmedText);
-            await waitFor(() => expect(pressed(1)).toBe('true'));
-            expect(screen.getByText(confirmedText).getAttribute('role')).toBe('status');
-            await waitFor(() => expect(document.activeElement).toBe(use()));
-        });
-
-        test('a hold nobody pressed Retry for lifts without moving focus or announcing success', async () => {
-            const read = deferred<string[] | null>();
-            setup({
-                value: [],
-                savedCount: 1,
-                reloadSaved: jest.fn<Promise<string[] | null>, []>().mockReturnValue(read.promise),
-            });
-            await screen.findByRole('button', { name: /^Photo 00000001:/ });
-            // No Retry is offered for the automatic read, busy or not.
-            expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
-            await act(async () => read.resolve([idOf(1)]));
-            await waitFor(() => expect(use().getAttribute('aria-disabled')).toBe('false'));
-            // Let the footer's focus effects run before judging where focus is.
-            await effectsFlushed();
-            expect(document.activeElement).not.toBe(use());
-            expect(screen.queryByText(confirmedText)).toBeNull();
-        });
-
-        test.each([
-            ['gives nothing', null],
-            ['rejects', new Error('ipc down')],
-        ])('a read that %s: its own hint and Retry, and a good Retry releases Save', async (_name, failure) => {
-            const reloadSaved = rereads(failure, [idOf(1), idOf(2)]);
-            const { onSave } = setup({ value: [], savedCount: 2, reloadSaved });
-            // The account is known, so the words are about the read, not about the account.
-            await expectUnconfirmed(readFailedHint);
-            expect(screen.queryByText(unconfirmedHint)).toBeNull();
-            expect(reloadSaved).toHaveBeenCalledTimes(1);
-            fireEvent.click(use());
-            expect(onSave).not.toHaveBeenCalled();
-
-            fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-            await waitFor(() => expect(reloadSaved).toHaveBeenCalledTimes(2));
-            await waitFor(() => expect(pressed(2)).toBe('true'));
-            await waitFor(() => expect(use().getAttribute('aria-disabled')).toBe('false'));
-            // The listing was not asked again: only the read was.
-            expect(getLibrary()).toHaveBeenCalledTimes(1);
-            fireEvent.click(use());
-            await waitFor(() => expect(onSave).toHaveBeenCalledWith([idOf(1), idOf(2)]));
-        });
-
-        test('a read that fails again says so with its own repeat text, and a second Retry still works', async () => {
-            const reloadSaved = rereads(null, null, [idOf(1)]);
-            setup({ value: [], savedCount: 1, reloadSaved });
-            await screen.findByText(readFailedHint);
-            fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-            await waitFor(() => expect(reloadSaved).toHaveBeenCalledTimes(2));
-            await screen.findByText(readFailedAgainHint);
-            expect(screen.queryByText(readFailedHint)).toBeNull();
-            fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-            await waitFor(() => expect(pressed(1)).toBe('true'));
-            expect(screen.queryByText(readFailedAgainHint)).toBeNull();
-        });
-
-        test('signed out is not a failed check: it says to log in again and offers no Retry', async () => {
-            getLibrary().mockResolvedValue(listing([photo(1)], { memberId: null }));
-            jest.mocked(window.api.confirmAccount).mockResolvedValueOnce({ success: false, error: 'not-logged-in' });
-            setup({ value: [], savedCount: 1, reloadSaved: rereads() });
-            await screen.findByText(unconfirmedHint);
-            fireEvent.click(retryButton());
-            await screen.findByText(notLoggedInHint);
-            expect(screen.queryByText(checkFailedHint)).toBeNull();
-            expect(screen.queryByText(/Press Retry again shortly/)).toBeNull();
-            expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
-            expect(use().getAttribute('aria-disabled')).toBe('true');
-        });
-    });
-
-    test('locked tiles say they are locked, in every locked state, not that they can be entered, and the tile name says it too', async () => {
-        const read = deferred<string[] | null>();
-        setup({
-            value: [],
-            savedCount: 1,
-            reloadSaved: jest.fn<Promise<string[] | null>, []>().mockReturnValue(read.promise),
-        });
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        expect(tile(1).textContent).toContain(lockedText);
-        expect(tile(1).textContent).not.toContain('Can be entered');
-        expect(tile(1).getAttribute('aria-label')).toBe(`Photo 00000001: tag1. ${lockedText}`);
-        await act(async () => read.resolve([]));
-        await waitFor(() => expect(tile(1).textContent).toContain('Can be entered'));
-        expect(tile(1).textContent).not.toContain(lockedText);
-    });
-
-    test('Clear is held while the list is unread: a press changes nothing, and it says why', async () => {
-        const read = deferred<string[] | null>();
-        setup({
-            // A partial selection is visible while the saved list (two photos) is still unread.
-            value: [idOf(2)],
-            savedCount: 2,
-            reloadSaved: jest.fn<Promise<string[] | null>, []>().mockReturnValue(read.promise),
-        });
-        await screen.findByRole('button', { name: /^Photo 00000002:/ });
-        expect(pressed(2)).toBe('true');
+    test('a pick from the strip shows as an idle tile from the answer’s record, numbered, and no library is read', async () => {
+        suggestPhotos().mockResolvedValueOnce(suggestion([photo(9, { labels: ['sunset'] })]));
+        setup();
+        fireEvent.click(autoButton());
+        await screen.findByRole('region', { name: 'Suggestions' });
+        fireEvent.click(stripTile(9));
+        const inGrid = screen.getAllByRole('button', { name: /^Photo 00000009:/ }).find((el) => !strip().contains(el))!;
+        expect(inGrid).toBeDefined();
+        expect(inGrid.getAttribute('aria-pressed')).toBe('true');
+        expect(within(inGrid).getByText('1')).toBeTruthy();
+        expect(inGrid.querySelector('img')?.getAttribute('src')).toContain(MEMBER);
+        expect(getLibrary()).not.toHaveBeenCalled();
         expect(countLine().textContent).toBe(`1 of ${MAX_CHOSEN_PHOTOS} chosen`);
-
-        const clear = screen.getByRole('button', { name: 'Clear' });
-        expect(clear.getAttribute('aria-disabled')).toBe('true');
-        // Its own description says why Clear is held (not the Save hint).
-        const why = document.getElementById(clear.getAttribute('aria-describedby')!)!;
-        expect(why.textContent).toBe(
-            "Clear is unavailable until your saved list has been read, so a late read can't undo it.",
-        );
-        expect(clear.getAttribute('aria-describedby')).not.toBe(use().getAttribute('aria-describedby'));
-
-        // The press is ignored while the read is still out: the selection is untouched.
-        fireEvent.click(clear);
-        expect(pressed(2)).toBe('true');
-        expect(countLine().textContent).toBe(`1 of ${MAX_CHOSEN_PHOTOS} chosen`);
-
-        await act(async () => read.resolve([idOf(1), idOf(2)]));
-        await waitFor(() => expect(pressed(1)).toBe('true'));
-        expect(pressed(2)).toBe('true');
-        const free = screen.getByRole('button', { name: 'Clear' });
-        expect(free.getAttribute('aria-disabled')).toBe('false');
-        expect(free.hasAttribute('aria-describedby')).toBe(false);
-        expect(screen.queryByText(/Clear is unavailable/)).toBeNull();
     });
 
-    test('no challenge to read through while the list is unread: the hint names only the ways out that exist', async () => {
-        getLibrary().mockResolvedValue({ success: false, error: 'no-challenge-context' });
-        setup({ value: [], savedCount: 1, challengeId: null, reloadSaved: rereads() });
-        await screen.findByText(noContextHeldHint);
-        // Clear is held, so the hint must not send the user to it; there is nothing to retry either.
-        expect(noContextHeldHint).not.toMatch(/clear/i);
-        expect(screen.queryByText(/Clear the list to save/)).toBeNull();
-        expect(screen.getByRole('button', { name: 'Clear' }).getAttribute('aria-disabled')).toBe('true');
-        expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
-        expect(use().getAttribute('aria-disabled')).toBe('true');
+    test('Add suggestions appends the best ones not picked, in rank order, never removing a saved pick', async () => {
+        suggestPhotos().mockResolvedValueOnce(suggestion([photo(3), photo(1), photo(2)]));
+        const many = Array.from({ length: MAX_CHOSEN_PHOTOS - 3 }, (_, n) => photo(n + 10));
+        const manyIds = many.map((p) => p.id);
+        const { onSave } = setup({ value: [...manyIds, idOf(4)] });
+        await screen.findByRole('button', { name: new RegExp(`^Chosen photo ${shortOf(4)}:`) });
+        fireEvent.click(autoButton());
+        await screen.findByRole('region', { name: 'Suggestions' });
+        expect(addButton().hasAttribute('disabled')).toBe(false);
+        fireEvent.click(addButton());
+        // Two free slots: #1 and #2 of the suggestions, after the saved picks.
+        expect(countLine().textContent).toContain(`${MAX_CHOSEN_PHOTOS} of ${MAX_CHOSEN_PHOTOS} chosen`);
+        expect(stripTile(3).getAttribute('aria-pressed')).toBe('true');
+        expect(stripTile(1).getAttribute('aria-pressed')).toBe('true');
+        expect(stripTile(2).getAttribute('aria-pressed')).toBe('false');
+        expect(addButton().textContent).toBe('No free slots');
+        expect(addButton().hasAttribute('disabled')).toBe(true);
+        fireEvent.click(screen.getByRole('button', { name: 'Use these photos' }));
+        await waitFor(() => expect(onSave).toHaveBeenCalledWith([...manyIds, idOf(4), idOf(3), idOf(1)]));
     });
 
-    test('after a failed read, a new ready listing reads as pending at once: the failure hint does not flash', async () => {
-        const reloadSaved = rereads(null);
-        const second = deferred<string[] | null>();
-        reloadSaved.mockReturnValueOnce(second.promise);
-        setup({ value: [], savedCount: 1, reloadSaved });
-        await screen.findByText(readFailedHint);
-
-        // A new search: loading, then a ready listing again. The read for it is pending, not failed.
-        const next = deferred<Listing>();
-        getLibrary().mockReturnValueOnce(invalid(next.promise));
-        fireEvent.submit(screen.getByRole('searchbox').closest('form')!);
-        await act(async () => next.resolve(listing([photo(1)])));
-        expect(screen.queryByText(readFailedHint)).toBeNull();
-        expect(screen.queryByText(unconfirmedHint)).toBeNull();
-        expect(await screen.findByText(checkingHint)).toBeTruthy();
-        await act(async () => second.resolve([idOf(1)]));
-        await waitFor(() => expect(pressed(1)).toBe('true'));
+    test('Add suggestions is disabled once every suggestion is picked', async () => {
+        suggestPhotos().mockResolvedValueOnce(suggestion([photo(1), photo(2)]));
+        setup();
+        fireEvent.click(autoButton());
+        await screen.findByRole('region', { name: 'Suggestions' });
+        expect(addButton().hasAttribute('disabled')).toBe(false);
+        fireEvent.click(addButton());
+        expect(addButton().hasAttribute('disabled')).toBe(true);
     });
 
-    test("another account: the ids stay withheld, the notice shows, nothing is re-read and Save is the user's choice", async () => {
-        jest.mocked(window.api.getSetting).mockResolvedValue('d'.repeat(32));
-        const reloadSaved = rereads();
-        const { onSave } = setup({ value: [], savedCount: 2, reloadSaved });
-        expect(await screen.findByText(/saved under another account, so the app ignores them/)).toBeTruthy();
-        expect(screen.getByText('2 photo(s) saved under another account')).toBeTruthy();
-        expect(reloadSaved).not.toHaveBeenCalled();
-        expect(pressed(1)).toBe('false');
-        await waitFor(() => expect(use().getAttribute('aria-disabled')).toBe('false'));
-        fireEvent.click(tile(2));
-        fireEvent.click(use());
-        await waitFor(() => expect(onSave).toHaveBeenCalledWith([idOf(2)]));
-    });
-
-    test('a list that arrived with its ids is not held back at all, and its tiles work', async () => {
-        const reloadSaved = rereads();
-        setup({ value: [idOf(1)], savedCount: 1, reloadSaved });
+    test('a Refresh clears the strip, and a read that lands keeps the picks as real tiles', async () => {
+        suggestPhotos().mockResolvedValueOnce(suggestion([photo(9)]));
+        setup();
+        fireEvent.click(autoButton());
+        await screen.findByRole('region', { name: 'Suggestions' });
+        fireEvent.click(stripTile(9));
+        loadPhotos();
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        expect(use().getAttribute('aria-disabled')).toBe('false');
-        expect(tile(2).getAttribute('aria-disabled')).toBe('false');
-        expect(reloadSaved).not.toHaveBeenCalled();
+        // The strip survives a Load all; a Refresh is what drops it.
+        expect(screen.queryByRole('region', { name: 'Suggestions' })).not.toBeNull();
+        getLibrary().mockResolvedValueOnce(listing([photo(1), photo(9)]));
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh photos' }));
+        await waitFor(() => expect(screen.queryByRole('region', { name: 'Suggestions' })).toBeNull());
+        // The pick is now a tile of the listing, not a missing one.
+        expect(tile(9).getAttribute('aria-pressed')).toBe('true');
+        expect(tile(9).textContent).not.toContain('Not available');
+    });
+
+    test('paging asks for the ids already shown, as in the submit picker', async () => {
+        const set = (from: number, count = 5) => Array.from({ length: count }, (_, i) => photo(from + i));
+        suggestPhotos().mockResolvedValueOnce(suggestion(set(1)));
+        setup();
+        fireEvent.click(autoButton());
+        await screen.findByRole('img', { name: 'Suggestion #1' });
+        suggestPhotos().mockResolvedValueOnce(suggestion(set(6)));
+        fireEvent.click(screen.getByRole('button', { name: 'Next suggestions' }));
+        await screen.findByRole('img', { name: 'Suggestion #6' });
+        expect(suggestPhotos()).toHaveBeenLastCalledWith(7, 'submit', [1, 2, 3, 4, 5].map(idOf));
     });
 });
 
@@ -1805,24 +1432,23 @@ describe('a row that inherits', () => {
     test('says that saving nothing makes it use the list from the settings or rules again', async () => {
         render(<PhotoChooserModal isOpen onClose={jest.fn()} value={[]} clearMeansInherit onSave={jest.fn()} />);
         expect(screen.getByText(/Saving with nothing chosen removes this challenge's own list/)).toBeTruthy();
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await opened();
     });
 
     test('says nothing of the kind elsewhere', async () => {
         setup();
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await opened();
         expect(screen.queryByText(/removes this challenge's own list/)).toBeNull();
     });
 });
 
 test('explains how chosen photos are used: ranked, or in the picked order when that setting is on, and where it lives', async () => {
     setup();
-    const help = screen.getByText(/The app uses these first/).textContent!;
+    const help = screen.getByText(/^Used first, but they must still pass/).textContent!;
     expect(help).toContain('must still pass your tag filters');
-    expect(help).toContain('ranks them the way it ranks its own picks');
-    expect(help).toContain('Use Chosen Photos in the order I picked them');
-    expect(help).toContain('Auto-Submit settings: the global defaults, a challenge rule, or the challenge');
-    await screen.findByRole('button', { name: /^Photo 00000001:/ });
+    expect(help).toContain("Ranked like the app's own picks");
+    expect(help).toContain('in your pick order if that setting is on');
+    expect(help).toContain('No photos are read until you load, search or press Auto');
 });
 
 test('Escape closes only the chooser when it is open inside another modal', async () => {
@@ -1836,7 +1462,7 @@ test('Escape closes only the chooser when it is open inside another modal', asyn
     const { rerender } = render(tree(false));
     // The chooser opens after the settings modal it sits in.
     rerender(tree(true));
-    await screen.findByRole('button', { name: /^Photo 00000001:/ });
+    await screen.findByRole('button', { name: 'Load photos' });
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(innerClose).toHaveBeenCalledTimes(1);
     expect(outerClose).not.toHaveBeenCalled();
@@ -1863,6 +1489,7 @@ describe('the cached listing, its preview and Refresh', () => {
     test('says when the photos were read: the time when it was today, the date as well when it was not', async () => {
         getLibrary().mockResolvedValue(listing([photo(1)], { readAtMs: Date.now() }));
         const { unmount } = setup();
+        loadPhotos();
         const today = await screen.findByText(/^Photos as of \d{2}:\d{2}$/);
         // Its own live region, apart from the count of what is picked.
         expect(today.getAttribute('role')).toBe('status');
@@ -1870,12 +1497,13 @@ describe('the cached listing, its preview and Refresh', () => {
         unmount();
         getLibrary().mockResolvedValue(listing([photo(1)], { readAtMs: 1_700_000_000_000 }));
         setup();
+        loadPhotos();
         expect(await screen.findByText(/^Photos as of \d{2}\/\d{2}\/\d{4}, \d{2}:\d{2}$/)).toBeTruthy();
     });
 
     test('Refresh is named for what it does, reads again at once with the listing still on screen, and shows the new one', async () => {
         setup();
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await opened();
         const button = refreshButton();
         expect(button.textContent).toBe('Refresh');
         expect(button.getAttribute('aria-busy')).toBe('false');
@@ -1883,7 +1511,7 @@ describe('the cached listing, its preview and Refresh', () => {
         const reread = deferred<Listing>();
         getLibrary().mockReturnValueOnce(reread.promise);
         fireEvent.click(button);
-        expect(getLibrary()).toHaveBeenLastCalledWith(7, undefined, 'fresh', 'submit');
+        expect(getLibrary()).toHaveBeenLastCalledWith(7, undefined, 'fresh', 'submit', 0, 3);
         await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('true'));
         expect(button.hasAttribute('disabled')).toBe(true);
         // The photos stay while it reads.
@@ -1896,86 +1524,139 @@ describe('the cached listing, its preview and Refresh', () => {
 
     test('Refresh reads the search that is on screen again', async () => {
         setup();
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await opened();
         fireEvent.change(screen.getByLabelText('Search your photos by tag'), { target: { value: 'cat' } });
         fireEvent.submit(screen.getByLabelText('Search your photos by tag').closest('form')!);
-        await waitFor(() => expect(getLibrary()).toHaveBeenLastCalledWith(7, 'cat', 'fresh', 'submit'));
+        await waitFor(() => expect(getLibrary()).toHaveBeenLastCalledWith(7, 'cat', 'fresh', 'submit', 0, 100));
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         fireEvent.click(refreshButton());
-        expect(getLibrary()).toHaveBeenLastCalledWith(7, 'cat', 'fresh', 'submit');
+        expect(getLibrary()).toHaveBeenLastCalledWith(7, 'cat', 'fresh', 'submit', 0, 3);
     });
 
     test('a listing read for this challenge in the last minutes opens as it is: no status line, no second read', async () => {
         getLibrary().mockResolvedValue(listing([photo(1, { allowed: false, message: 'Already used' })]));
-        setup();
+        // Photo 1 is picked, so the refused photo keeps its tile and its reason.
+        setup({ value: [idOf(1)] });
+        loadPhotos();
         expect(await screen.findByText('Already used')).toBeTruthy();
         await effectsFlushed();
         expect(getLibrary()).toHaveBeenCalledTimes(1);
         expect(screen.queryByText(/as last loaded/)).toBeNull();
     });
 
-    test.each([
-        [7, 'Showing your photos as last loaded while the app checks which ones this challenge accepts…'],
-        [null, 'Showing your photos as last loaded while the app checks for anything new…'],
-    ])(
-        'a preview for challenge %p says the app is checking, shows the photos without marks and is replaced by the fresh listing',
-        async (challengeId, line) => {
-            const fresh = deferred<Listing>();
-            getLibrary()
-                .mockResolvedValueOnce(previewOf([photo(1), photo(2)]))
-                .mockReturnValueOnce(fresh.promise);
-            setup({ challengeId });
-            await screen.findByRole('button', { name: /^Photo 00000001:/ });
-            expect(screen.getByText(line).getAttribute('role')).toBe('status');
-            // Whatever the other challenge said is withheld: no "can be entered", no reason.
-            expect(screen.queryByText('Can be entered')).toBeNull();
-            expect(screen.queryByText('Not eligible for this challenge')).toBeNull();
-            expect(refreshButton().getAttribute('aria-busy')).toBe('true');
-            expect(getLibrary().mock.calls.map((call) => call[2])).toEqual(['cached', 'fresh']);
-            await act(async () =>
-                fresh.resolve(
-                    listing([photo(1, { allowed: false, message: 'Already used' }), photo(2)], {
-                        allowedKnown: challengeId !== null,
-                    }),
-                ),
-            );
-            await waitFor(() => expect(screen.queryByText(line)).toBeNull());
-            // With a challenge its marks are in now; without one the photos still carry none.
-            if (challengeId === null) expect(screen.queryByText('Already used')).toBeNull();
-            else expect(screen.getByText('Already used')).toBeTruthy();
-            expect(refreshButton().getAttribute('aria-busy')).toBe('false');
-        },
-    );
+    test('a preview for the challenge is never on screen: the loader holds its place until the fresh listing lands', async () => {
+        const fresh = deferred<Listing>();
+        getLibrary()
+            .mockResolvedValueOnce(previewOf([photo(1), photo(2)]))
+            .mockReturnValueOnce(fresh.promise);
+        setup({ challengeId: 7, value: [idOf(1)] });
+        loadPhotos();
+        expect(await screen.findByText('Loading your photos…')).toBeTruthy();
+        expect(screen.queryByRole('button', { name: /^Photo / })).toBeNull();
+        expect(screen.queryByText(/as last loaded/)).toBeNull();
+        await act(async () =>
+            fresh.resolve(listing([photo(1, { allowed: false, message: 'Already used' }), photo(2)])),
+        );
+        await screen.findByRole('button', { name: /^Photo 00000002:/ });
+        // The fresh listing carries this challenge's marks: the picked photo wears its refusal.
+        expect(screen.getByText('Already used')).toBeTruthy();
+        expect(screen.queryByText('Loading your photos…')).toBeNull();
+    });
+
+    test('a no-challenge preview shows the photos without marks and is replaced by the fresh listing', async () => {
+        const fresh = deferred<Listing>();
+        getLibrary()
+            .mockResolvedValueOnce(previewOf([photo(1), photo(2)]))
+            .mockReturnValueOnce(fresh.promise);
+        setup({ challengeId: null });
+        loadPhotos();
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        expect(
+            screen
+                .getByText('Showing your photos as last loaded while the app checks for anything new…')
+                .getAttribute('role'),
+        ).toBe('status');
+        // Whatever the other challenge said is withheld: no "can be entered", no reason.
+        expect(screen.queryByText('Can be entered')).toBeNull();
+        expect(screen.queryByText('Not eligible for this challenge')).toBeNull();
+        expect(refreshButton().getAttribute('aria-busy')).toBe('true');
+        expect(getLibrary().mock.calls.map((call) => call[2])).toEqual(['cached', 'fresh']);
+        await act(async () =>
+            fresh.resolve(
+                listing([photo(1, { allowed: false, message: 'Already used' }), photo(2)], { allowedKnown: false }),
+            ),
+        );
+        await waitFor(() => expect(screen.queryByText(/as last loaded/)).toBeNull());
+        // Without a challenge the photos still carry no marks.
+        expect(screen.queryByText('Already used')).toBeNull();
+        expect(refreshButton().getAttribute('aria-busy')).toBe('false');
+    });
 
     test('eligibility is only said to be unchecked for a chooser with no challenge, preview or not', async () => {
         getLibrary().mockResolvedValue(previewOf([photo(1)]));
         const { unmount } = setup({ challengeId: 7 });
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        loadPhotos();
+        // The challenge-bound preview holds the grid behind the loader: no tiles, and no eligibility line either.
+        expect(await screen.findByText('Loading your photos…')).toBeTruthy();
         expect(screen.queryByText(/Eligibility is not checked here/)).toBeNull();
         unmount();
         setup({ challengeId: null });
+        loadPhotos();
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         expect(screen.getByText(/Eligibility is not checked here/)).toBeTruthy();
     });
 
-    test.each([
-        [
-            7,
-            "Couldn't check which of these photos this challenge accepts, so they're shown as last loaded. Press Refresh.",
-        ],
-        [null, "Couldn't check your photos for changes, so they're shown as last loaded. Press Refresh."],
-    ])('a re-check that failed for challenge %p says so and keeps the photos', async (challengeId, line) => {
+    test('a failed re-check for the challenge lands in the error state with Retry', async () => {
         getLibrary()
             .mockResolvedValueOnce(previewOf([photo(1)]))
             .mockResolvedValueOnce(failure);
-        setup({ challengeId });
-        expect(await screen.findByText(line)).toBeTruthy();
+        setup({ challengeId: 7 });
+        loadPhotos();
+        await screen.findByRole('alert');
+        expect(screen.queryByText(/as last loaded/)).toBeNull();
+        expect(screen.queryByRole('button', { name: /^Photo / })).toBeNull();
+        // Retry reads again, and a listing that arrives clears the alert.
+        getLibrary().mockResolvedValueOnce(listing([photo(1)]));
+        fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+    });
+
+    test('a re-check that failed without a challenge says so and keeps the photos', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(previewOf([photo(1)]))
+            .mockResolvedValueOnce(failure);
+        setup({ challengeId: null });
+        loadPhotos();
+        expect(
+            await screen.findByText(
+                "Couldn't check your photos for changes, so they're shown as last loaded. Press Refresh.",
+            ),
+        ).toBeTruthy();
         expect(tile(1)).toBeTruthy();
         expect(screen.queryByText(/while the app checks/)).toBeNull();
         // Refresh tries again, and a listing that arrives clears the line.
         getLibrary().mockResolvedValueOnce(listing([photo(1)]));
         fireEvent.click(refreshButton());
-        await waitFor(() => expect(screen.queryByText(line)).toBeNull());
+        await waitFor(() => expect(screen.queryByText(/Couldn't check your photos/)).toBeNull());
+    });
+
+    test("a failed Refresh on a real listing says the challenge's photos are as last loaded", async () => {
+        getLibrary()
+            .mockResolvedValueOnce(listing([photo(1)]))
+            .mockResolvedValueOnce(failure);
+        setup({ challengeId: 7 });
+        loadPhotos();
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        fireEvent.click(refreshButton());
+        expect(
+            await screen.findByText(
+                "Couldn't check which of these photos this challenge accepts, so they're shown as last loaded. Press Refresh.",
+            ),
+        ).toBeTruthy();
+        expect(tile(1)).toBeTruthy();
+        getLibrary().mockResolvedValueOnce(listing([photo(1)]));
+        fireEvent.click(refreshButton());
+        await waitFor(() => expect(screen.queryByText(/Couldn't check which/)).toBeNull());
     });
 
     test('a selected photo the preview lists is a normal tile with no marks, and picking works on a preview', async () => {
@@ -1983,49 +1664,48 @@ describe('the cached listing, its preview and Refresh', () => {
         getLibrary()
             .mockResolvedValueOnce(previewOf([photo(1), photo(2)]))
             .mockReturnValueOnce(fresh.promise);
-        setup({ value: [idOf(1)] });
+        setup({ value: [idOf(1)], challengeId: null });
+        loadPhotos();
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         expect(tile(1).getAttribute('aria-pressed')).toBe('true');
         expect(tile(1).getAttribute('aria-label')).toMatch(/Number 1 in your list\.$/);
         fireEvent.click(tile(2));
         expect(tile(2).getAttribute('aria-pressed')).toBe('true');
         expect(countLine().textContent).toContain('2 of');
-        await act(async () => fresh.resolve(listing([photo(1), photo(2)])));
+        await act(async () => fresh.resolve(listing([photo(1), photo(2)], { allowedKnown: false })));
     });
 
-    test.each([
-        [7, 'Not available for this challenge (in another challenge, or deleted)'],
-        [null, 'Not found in your library (it may have been deleted)'],
-    ])(
-        'a selected photo the preview lacks waits as a tile that cannot be removed, then follows the usual missing rules (challenge %p)',
-        async (challengeId, missing) => {
-            const fresh = deferred<Listing>();
-            getLibrary()
-                .mockResolvedValueOnce(previewOf([photo(1)]))
-                .mockReturnValueOnce(fresh.promise);
-            setup({ value: [idOf(9)], challengeId });
-            await screen.findByRole('button', { name: /^Photo 00000001:/ });
-            const waiting = pendingTile(9);
-            expect(waiting.textContent).toContain('Not among your photos as last loaded. Checking again…');
-            expect(waiting.getAttribute('aria-pressed')).toBe('true');
-            expect(waiting.getAttribute('aria-disabled')).toBe('true');
-            expect(waiting.getAttribute('aria-label')).toMatch(/Number 1 in your list\.$/);
-            fireEvent.click(waiting);
-            expect(pendingTile(9).getAttribute('aria-pressed')).toBe('true');
-            expect(countLine().textContent).toContain('1 of');
-            await act(async () => fresh.resolve(listing([photo(1)], { allowedKnown: challengeId !== null })));
-            await waitFor(() => expect(pendingTile(9).textContent).toContain(missing));
-            // Now it is the usual missing tile: removable.
-            fireEvent.click(pendingTile(9));
-            expect(screen.queryByRole('button', { name: new RegExp(`^Chosen photo ${shortOf(9)}:`) })).toBeNull();
-        },
-    );
+    test('a selected photo the no-challenge preview lacks waits as a tile that cannot be removed, then follows the usual missing rules', async () => {
+        const fresh = deferred<Listing>();
+        getLibrary()
+            .mockResolvedValueOnce(previewOf([photo(1)]))
+            .mockReturnValueOnce(fresh.promise);
+        setup({ value: [idOf(9)], challengeId: null });
+        loadPhotos();
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        const waiting = pendingTile(9);
+        expect(waiting.textContent).toContain('Not among your photos as last loaded. Checking again…');
+        expect(waiting.getAttribute('aria-pressed')).toBe('true');
+        expect(waiting.getAttribute('aria-disabled')).toBe('true');
+        expect(waiting.getAttribute('aria-label')).toMatch(/Number 1 in your list\.$/);
+        fireEvent.click(waiting);
+        expect(pendingTile(9).getAttribute('aria-pressed')).toBe('true');
+        expect(countLine().textContent).toContain('1 of');
+        await act(async () => fresh.resolve(listing([photo(1)], { allowedKnown: false })));
+        await waitFor(() =>
+            expect(pendingTile(9).textContent).toContain('Not found in your library (it may have been deleted)'),
+        );
+        // Now it is the usual missing tile: removable.
+        fireEvent.click(pendingTile(9));
+        expect(screen.queryByRole('button', { name: new RegExp(`^Chosen photo ${shortOf(9)}:`) })).toBeNull();
+    });
 
     test('once the re-check has failed the waiting tile says to press Refresh and can be removed', async () => {
         getLibrary()
             .mockResolvedValueOnce(previewOf([photo(1)]))
             .mockResolvedValueOnce(failure);
-        setup({ value: [idOf(9)] });
+        setup({ value: [idOf(9)], challengeId: null });
+        loadPhotos();
         await waitFor(() =>
             expect(pendingTile(9).textContent).toContain(
                 'Not among your photos as last loaded. Press Refresh to check again.',
@@ -2042,13 +1722,16 @@ describe('the cached listing, its preview and Refresh', () => {
         getLibrary()
             .mockResolvedValueOnce(previewOf([photo(1)], { wonIds: [idOf(9)], wonCount: 1 }))
             .mockReturnValueOnce(fresh.promise);
-        setup({ value: [idOf(9)] });
+        setup({ value: [idOf(9)], challengeId: null });
+        loadPhotos();
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         expect(pendingTile(9).textContent).toContain("Has won a challenge, so it can't be entered again.");
         expect(pendingTile(9).textContent).not.toContain('as last loaded');
         // The ordinary missing tile: it is a toggle that can be removed.
         expect(pendingTile(9).hasAttribute('aria-disabled')).toBe(false);
-        await act(async () => fresh.resolve(listing([photo(1)], { wonIds: [idOf(9)], wonCount: 1 })));
+        await act(async () =>
+            fresh.resolve(listing([photo(1)], { wonIds: [idOf(9)], wonCount: 1, allowedKnown: false })),
+        );
     });
 
     test.each([
@@ -2059,6 +1742,7 @@ describe('the cached listing, its preview and Refresh', () => {
         jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: { timezone } }));
         getLibrary().mockResolvedValue(listing([photo(1)], { readAtMs: 1_700_000_000_000 }));
         setup();
+        loadPhotos();
         expect(await screen.findByText(line)).toBeTruthy();
     });
 
@@ -2093,10 +1777,12 @@ describe('the cached listing, its preview and Refresh', () => {
             getLibrary().mockResolvedValue(listing([photo(1)], { readAtMs: 1_700_000_000_000 }));
             jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: { timezone: 'Not/AZone' } }));
             const { unmount } = setup();
+            loadPhotos();
             expect(await screen.findByText(/^Photos as of 14\/11\/2023, 22:13$/)).toBeTruthy();
             unmount();
             jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: {} }));
             setup();
+            loadPhotos();
             expect(await screen.findByText(/^Photos as of 15\/11\/2023, 00:13$/)).toBeTruthy();
         });
 
@@ -2105,6 +1791,7 @@ describe('the cached listing, its preview and Refresh', () => {
             getLibrary().mockResolvedValue(listing([photo(1)], { readAtMs: 1_700_000_000_000 }));
             jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: { timezone: 'local' } }));
             setup();
+            loadPhotos();
             expect(await screen.findByText('Photos as of 05:37')).toBeTruthy();
         });
     });
@@ -2123,6 +1810,594 @@ describe('the cached listing, its preview and Refresh', () => {
     ])('%s ends by pointing at Refresh', async (_name, empty, text) => {
         getLibrary().mockResolvedValue(empty);
         setup();
+        loadPhotos();
         expect(await screen.findByText(text)).toBeTruthy();
+    });
+});
+
+describe('Load more', () => {
+    test('Load photos reads one batch and Load more reads the next from nextStart, appending it', async () => {
+        getLibrary()
+            .mockResolvedValueOnce(listing([photo(1), photo(2)], { truncated: true, nextStart: 2 }))
+            .mockResolvedValueOnce(listing([photo(3)], { truncated: false, nextStart: 3 }));
+        setup();
+        loadPhotos();
+        expect(await screen.findByRole('button', { name: /^Photo 00000001:/ })).toBeTruthy();
+        expect(getLibrary().mock.calls[0]).toEqual([7, undefined, 'cached', 'submit', 0, 100]);
+        expect(screen.getByText('Showing 2 photos.')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Load more photos' }));
+        expect(await screen.findByRole('button', { name: /^Photo 00000003:/ })).toBeTruthy();
+        expect(getLibrary().mock.calls[1]).toEqual([7, undefined, 'fresh', 'submit', 2, 100]);
+        // The last batch says the listing is complete: the button is gone and nothing failed.
+        expect(screen.queryByRole('button', { name: 'Load more photos' })).toBeNull();
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(screen.getByText('Showing 3 photos.')).toBeTruthy();
+    });
+
+    test('while the batch read is in flight, Load more, the toolbar Load photos and Refresh are held', async () => {
+        getLibrary().mockResolvedValueOnce(listing([photo(1), photo(2)], { truncated: true, nextStart: 2 }));
+        setup();
+        loadPhotos();
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        const batch = deferred<Listing>();
+        getLibrary().mockReturnValueOnce(invalid(batch.promise));
+        fireEvent.click(screen.getByRole('button', { name: 'Load more photos' }));
+        const more = screen.getByRole('button', { name: 'Load more photos' });
+        expect(more.getAttribute('aria-disabled')).toBe('true');
+        expect(more.getAttribute('aria-busy')).toBe('true');
+        expect(screen.getByRole('button', { name: 'Load photos' }).getAttribute('aria-disabled')).toBe('true');
+        expect(screen.getByRole('button', { name: 'Refresh photos' }).hasAttribute('disabled')).toBe(true);
+        await act(async () => batch.resolve(listing([photo(3)], { truncated: false, nextStart: 3 })));
+        await screen.findByRole('button', { name: /^Photo 00000003:/ });
+        expect(screen.getByRole('button', { name: 'Load photos' }).getAttribute('aria-disabled')).toBe('false');
+    });
+
+    test('a failed batch keeps the listing, says what happened and the button retries', async () => {
+        getLibrary().mockResolvedValueOnce(listing([photo(1), photo(2)], { truncated: true, nextStart: 2 }));
+        setup();
+        loadPhotos();
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        getLibrary().mockResolvedValueOnce({ success: false, error: 'library-read-failed' });
+        fireEvent.click(screen.getByRole('button', { name: 'Load more photos' }));
+        const alert = await screen.findByRole('alert');
+        expect(
+            within(alert).getByText(
+                "Couldn't load more photos. The read was interrupted. Press Load more photos to try again.",
+            ),
+        ).toBeTruthy();
+        expect(screen.getByRole('button', { name: /^Photo 00000001:/ })).toBeTruthy();
+        // The button retries: a good batch clears the failure.
+        getLibrary().mockResolvedValueOnce(listing([photo(3)], { truncated: true, nextStart: 3 }));
+        fireEvent.click(screen.getByRole('button', { name: 'Load more photos' }));
+        await screen.findByRole('button', { name: /^Photo 00000003:/ });
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(screen.getByText('Showing 3 photos.')).toBeTruthy();
+    });
+
+    test('a failure the app has no wording for falls back to the load-more text', async () => {
+        getLibrary().mockResolvedValueOnce(listing([photo(1)], { truncated: true, nextStart: 1 }));
+        setup();
+        loadPhotos();
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        getLibrary().mockResolvedValueOnce({ success: false, error: 'fetch-failed' });
+        fireEvent.click(screen.getByRole('button', { name: 'Load more photos' }));
+        expect(
+            await screen.findByText(
+                "Couldn't load more photos. The read was interrupted. Press Load more photos to try again.",
+            ),
+        ).toBeTruthy();
+    });
+
+    test('Search reads a batch of its results and Load more continues the same search', async () => {
+        getLibrary().mockResolvedValueOnce(listing([photo(1)], { truncated: true, nextStart: 1 }));
+        setup();
+        fireEvent.change(screen.getByLabelText('Search your photos by tag'), { target: { value: 'sunset' } });
+        fireEvent.submit(screen.getByLabelText('Search your photos by tag').closest('form')!);
+        expect(await screen.findByRole('button', { name: /^Photo 00000001:/ })).toBeTruthy();
+        expect(getLibrary().mock.calls[0]).toEqual([7, 'sunset', 'fresh', 'submit', 0, 100]);
+        getLibrary().mockResolvedValueOnce(listing([photo(2)], { truncated: false, nextStart: 2 }));
+        fireEvent.click(screen.getByRole('button', { name: 'Load more photos' }));
+        await screen.findByRole('button', { name: /^Photo 00000002:/ });
+        expect(getLibrary().mock.calls[1]).toEqual([7, 'sunset', 'fresh', 'submit', 1, 100]);
+        expect(screen.queryByRole('button', { name: 'Load more photos' })).toBeNull();
+    });
+
+    test('Refresh re-reads the loaded extent: the keep it sends covers the photos on screen', async () => {
+        const batch = Array.from({ length: 120 }, (_, n) => photo(n + 1));
+        getLibrary()
+            .mockResolvedValueOnce(listing(batch, { truncated: true, nextStart: 120 }))
+            .mockResolvedValueOnce(listing(batch, { truncated: true, nextStart: 120 }));
+        setup();
+        loadPhotos();
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh photos' }));
+        await waitFor(() => expect(getLibrary().mock.calls[1]).toEqual([7, undefined, 'fresh', 'submit', 0, 120]));
+    });
+});
+
+describe('recommended marks', () => {
+    // A marked tile's accessible name starts with the mark (WCAG 2.5.3), so it is found by that name.
+    const markedTile = (n: number) =>
+        screen.getByRole('button', { name: new RegExp(`^Recommended photo\\. Photo ${shortOf(n)}:`) });
+
+    test('the ids the Discover row handed in carry the mark, visible and in the name, and only they', async () => {
+        setup({ recommendedIds: [idOf(2)] });
+        await opened();
+
+        expect(within(markedTile(2)).getByText('Recommended photo')).toBeTruthy();
+        expect(markedTile(2).getAttribute('aria-label')).toMatch(
+            new RegExp(`^Recommended photo\\. Photo ${shortOf(2)}:`),
+        );
+        expect(within(tile(1)).queryByText('Recommended photo')).toBeNull();
+        expect(tile(1).getAttribute('aria-label')).not.toMatch(/^Recommended photo/);
+        expect(within(tile(3)).queryByText('Recommended photo')).toBeNull();
+    });
+
+    test('without the prop no tile is marked', async () => {
+        setup();
+        await opened();
+
+        for (const n of [1, 2, 3]) expect(within(tile(n)).queryByText('Recommended photo')).toBeNull();
+    });
+});
+
+describe('pins', () => {
+    const getPins = () => jest.mocked(window.api.getEntryPins);
+    const setPins = () => jest.mocked(window.api.setEntryPin);
+    const boostToggle = () => screen.getByRole('button', { name: 'Pin for Boost' });
+    const boostPressed = () => screen.getByRole('button', { name: 'Pinned for Boost' });
+    const turboToggle = () => screen.getByRole('button', { name: 'Pin for Turbo' });
+    const save = () => screen.getByRole('button', { name: 'Use these photos' });
+    const groupOf = (n: number) => screen.getByRole('group', { name: `Pins for chosen photo ${n}` });
+
+    beforeEach(() => {
+        // The suite's shared mocks: this describe overrides them per case, so each starts from none.
+        getPins().mockReset().mockResolvedValue({ boost: null, turbo: null });
+        setPins().mockReset().mockResolvedValue({ success: true });
+    });
+
+    test('no pin controls and no read without a challenge id, as the global settings and rules pass none', async () => {
+        const onSave = jest.fn().mockResolvedValue(true);
+        render(<PhotoChooserModal isOpen onClose={jest.fn()} value={[idOf(1)]} onSave={onSave} />);
+        expect(await screen.findByRole('button', { name: /^Chosen photo 00000001:/ })).toBeTruthy();
+        expect(getPins()).not.toHaveBeenCalled();
+        expect(screen.queryByText(/^Pin a chosen photo/)).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Pin for Boost' })).toBeNull();
+        // A save here has no pin stage: the host's save alone runs.
+        fireEvent.click(save());
+        await waitFor(() => expect(onSave).toHaveBeenCalled());
+        expect(setPins()).not.toHaveBeenCalled();
+    });
+
+    test('selected tiles carry the pair, disabled until the read settles, which names the stored pin', async () => {
+        const pending = deferred<Awaited<ReturnType<WindowApi['getEntryPins']>>>();
+        getPins().mockReturnValueOnce(invalid(pending.promise));
+        setup({ value: [idOf(1)] });
+        expect(await screen.findByRole('button', { name: /^Chosen photo 00000001:/ })).toBeTruthy();
+        const help = screen.getByText(/^Pin a chosen photo/);
+        expect(help.getAttribute('role')).toBeNull();
+        const boost = boostToggle();
+        // Both toggles name the one help line.
+        expect(boost.getAttribute('aria-describedby')).toBe(help.id);
+        expect(turboToggle().getAttribute('aria-describedby')).toBe(help.id);
+        expect(boost.getAttribute('aria-disabled')).toBe('true');
+        // A press before the read settles does nothing.
+        fireEvent.click(boost);
+        expect(boostPressed).toThrow();
+        await act(async () => pending.resolve({ boost: idOf(1), turbo: null }));
+        const pressed = await screen.findByRole('button', { name: 'Pinned for Boost' });
+        expect(pressed.getAttribute('aria-disabled')).toBe('false');
+    });
+
+    test('a failed read shows a note instead of the controls, not "no pins"', async () => {
+        getPins().mockResolvedValueOnce(null);
+        setup({ value: [idOf(1)] });
+        const note = await screen.findByRole('alert');
+        expect(note.textContent).toBe(
+            "Pins couldn't be read, so they can't be changed here. Close and reopen to try again.",
+        );
+        expect(screen.queryByRole('button', { name: 'Pin for Boost' })).toBeNull();
+        expect(screen.queryByText(/^Pin a chosen photo/)).toBeNull();
+    });
+
+    test('a Boost/Turbo swap sends one write: the moved Turbo null is the backend’s to clear', async () => {
+        getPins().mockResolvedValue({ boost: null, turbo: idOf(1) });
+        const { onSave, onClose } = setup({ value: [idOf(1)] });
+        await screen.findByRole('button', { name: 'Pinned for Turbo' });
+        fireEvent.click(boostToggle());
+        fireEvent.click(save());
+        await waitFor(() => expect(onSave).toHaveBeenCalledWith([idOf(1)]));
+        await waitFor(() => expect(setPins()).toHaveBeenCalledTimes(1));
+        expect(setPins()).toHaveBeenCalledWith('boost', 7, idOf(1));
+        await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    });
+
+    test('a save writes only the kinds the draft changed — none, when the selection alone moved', async () => {
+        getPins().mockResolvedValue({ boost: idOf(1), turbo: null });
+        const { onSave } = setup({ value: [idOf(1)] });
+        expect(await screen.findByRole('button', { name: 'Pinned for Boost' })).toBeTruthy();
+        await opened();
+        fireEvent.click(tile(2));
+        fireEvent.click(save());
+        await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+        expect(setPins()).not.toHaveBeenCalled();
+    });
+
+    test('the pin writes wait for the host save to succeed', async () => {
+        const hostSave = deferred<boolean>();
+        const onSave = jest.fn<Promise<boolean>, [string[]]>(() => hostSave.promise);
+        setup({ value: [idOf(1)], onSave });
+        await opened();
+        fireEvent.click(boostToggle());
+        fireEvent.click(save());
+        await waitFor(() => expect(onSave).toHaveBeenCalledWith([idOf(1)]));
+        expect(setPins()).not.toHaveBeenCalled();
+        await act(async () => hostSave.resolve(true));
+        await waitFor(() => expect(setPins()).toHaveBeenCalledTimes(1));
+        expect(setPins()).toHaveBeenCalledWith('boost', 7, idOf(1));
+    });
+
+    test('a host save that fails writes no pins and keeps the generic alert', async () => {
+        getPins().mockResolvedValue({ boost: null, turbo: idOf(1) });
+        const onSave = jest.fn().mockResolvedValue(false);
+        const { onClose } = setup({ value: [idOf(1)], onSave });
+        await screen.findByRole('button', { name: 'Pinned for Turbo' });
+        fireEvent.click(boostToggle());
+        fireEvent.click(save());
+        expect((await screen.findByRole('alert')).textContent).toContain("weren't saved");
+        expect(setPins()).not.toHaveBeenCalled();
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    test('deselecting a photo with a stored pin keeps it: no write, and the elsewhere line names it', async () => {
+        getPins().mockResolvedValue({ boost: idOf(1), turbo: idOf(9) });
+        const { onSave } = setup({ value: [idOf(1)] });
+        expect(await screen.findByRole('button', { name: 'Pinned for Boost' })).toBeTruthy();
+        await opened();
+        fireEvent.click(tile(1));
+        // The stored pin is untouched: the line above the grid now names it, with its Clear pin button.
+        expect(screen.getByText("Boost is pinned to a photo that isn't in this list.")).toBeTruthy();
+        expect(screen.getByText("Turbo is pinned to a photo that isn't in this list.")).toBeTruthy();
+        fireEvent.click(save());
+        await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+        expect(setPins()).not.toHaveBeenCalled();
+    });
+
+    test('deselecting a photo drops only the draft pin set on it in this session', async () => {
+        const { onSave } = setup({ value: [idOf(1)] });
+        await opened();
+        fireEvent.click(boostToggle());
+        expect(boostPressed()).toBeTruthy();
+        fireEvent.click(tile(1));
+        expect(screen.queryByRole('button', { name: /^Pin/ })).toBeNull();
+        fireEvent.click(save());
+        await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+        expect(setPins()).not.toHaveBeenCalled();
+    });
+
+    test('pinning a chosen photo for a kind replaces the elsewhere pin at save', async () => {
+        getPins().mockResolvedValue({ boost: idOf(9), turbo: null });
+        const { onSave } = setup({ value: [idOf(1)] });
+        expect(await screen.findByText("Boost is pinned to a photo that isn't in this list.")).toBeTruthy();
+        fireEvent.click(boostToggle());
+        expect(screen.queryByText(/isn't in this list/)).toBeNull();
+        fireEvent.click(save());
+        await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+        expect(setPins()).toHaveBeenCalledTimes(1);
+        expect(setPins()).toHaveBeenCalledWith('boost', 7, idOf(1));
+    });
+
+    test("the elsewhere line's Clear pin saves the clear of the stored pin", async () => {
+        getPins().mockResolvedValue({ boost: idOf(9), turbo: null });
+        const { onSave } = setup({ value: [idOf(1)] });
+        const line = await screen.findByText("Boost is pinned to a photo that isn't in this list.");
+        fireEvent.click(within(line.closest('p') as HTMLElement).getByRole('button', { name: 'Clear pin' }));
+        expect(screen.queryByText(/isn't in this list/)).toBeNull();
+        fireEvent.click(save());
+        await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+        expect(setPins()).toHaveBeenCalledTimes(1);
+        expect(setPins()).toHaveBeenCalledWith('boost', 7, null);
+    });
+
+    test('a pin-only change asks before discarding, and a toggle taken back is no change', async () => {
+        getPins().mockResolvedValue({ boost: idOf(1), turbo: null });
+        const { onClose } = setup({ value: [idOf(1)] });
+        expect(await screen.findByRole('button', { name: 'Pinned for Boost' })).toBeTruthy();
+        fireEvent.click(boostPressed());
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(screen.getByText('Discard your changes?')).toBeTruthy();
+        expect(onClose).not.toHaveBeenCalled();
+        // The question closes only itself; pinning the photo again leaves the draft as it started.
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(screen.queryByText('Discard your changes?')).toBeNull();
+        fireEvent.click(boostToggle());
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    test("a failed pin write keeps the modal open on the pin's own alert, not the generic one", async () => {
+        const { onSave, onClose } = setup({ value: [idOf(1)] });
+        await opened();
+        fireEvent.click(boostToggle());
+        setPins().mockResolvedValueOnce({ success: false, error: 'pin-cap-reached' });
+        fireEvent.click(save());
+        await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toBe(
+            `Your chosen photos are kept, but the Boost pin wasn't saved: ${english('errors.pinCapReached')} Press Use these photos to try again.`,
+        );
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    test('a retried Save repeats the host save and the same pin writes', async () => {
+        const { onSave, onClose } = setup({ value: [idOf(1)] });
+        await opened();
+        fireEvent.click(boostToggle());
+        setPins().mockResolvedValueOnce({ success: false, error: 'pin-write-failed' });
+        fireEvent.click(save());
+        await waitFor(() => expect(setPins()).toHaveBeenCalledTimes(1));
+        expect((await screen.findByRole('alert')).textContent).toContain("the Boost pin wasn't saved");
+        fireEvent.click(save());
+        await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+        expect(onSave).toHaveBeenCalledTimes(2);
+        expect(setPins()).toHaveBeenCalledTimes(2);
+        expect(setPins()).toHaveBeenNthCalledWith(1, 'boost', 7, idOf(1));
+        expect(setPins()).toHaveBeenNthCalledWith(2, 'boost', 7, idOf(1));
+    });
+
+    test('Clear empties the selection and the pin draft with it, so nothing pin-named is saved', async () => {
+        getPins().mockResolvedValue({ boost: idOf(9), turbo: null });
+        const { onSave } = setup({ value: [idOf(1)] });
+        expect(await screen.findByText("Boost is pinned to a photo that isn't in this list.")).toBeTruthy();
+        fireEvent.click(boostToggle());
+        fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+        expect(screen.getByText("Boost is pinned to a photo that isn't in this list.")).toBeTruthy();
+        fireEvent.click(save());
+        await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+        expect(setPins()).not.toHaveBeenCalled();
+    });
+
+    test('a save where both pin writes fail attempts both and shows the both-pins message', async () => {
+        getPins().mockResolvedValue({ boost: null, turbo: null });
+        const { onClose } = setup({ value: [idOf(1), idOf(2)] });
+        await opened();
+        fireEvent.click(within(groupOf(1)).getByRole('button', { name: 'Pin for Boost' }));
+        fireEvent.click(within(groupOf(2)).getByRole('button', { name: 'Pin for Turbo' }));
+        setPins().mockResolvedValue({ success: false, error: 'pin-write-failed' });
+        fireEvent.click(save());
+        await waitFor(() => expect(setPins()).toHaveBeenCalledTimes(2));
+        expect(setPins()).toHaveBeenNthCalledWith(1, 'boost', 7, idOf(1));
+        expect(setPins()).toHaveBeenNthCalledWith(2, 'turbo', 7, idOf(2));
+        expect((await screen.findByRole('alert')).textContent).toBe(
+            `Your chosen photos are kept, but the Boost and Turbo pins weren't saved: ${english('errors.pinFailed')} Press Use these photos to try again.`,
+        );
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    test('a save where one pin write fails still attempts the other and names the failed kind', async () => {
+        getPins().mockResolvedValue({ boost: null, turbo: null });
+        const { onClose } = setup({ value: [idOf(1), idOf(2)] });
+        await opened();
+        fireEvent.click(within(groupOf(1)).getByRole('button', { name: 'Pin for Boost' }));
+        fireEvent.click(within(groupOf(2)).getByRole('button', { name: 'Pin for Turbo' }));
+        setPins().mockImplementation(async (kind: EntryPinKind) =>
+            kind === 'boost' ? { success: false, error: 'pin-write-failed' } : { success: true },
+        );
+        fireEvent.click(save());
+        await waitFor(() => expect(setPins()).toHaveBeenCalledTimes(2));
+        expect(setPins()).toHaveBeenNthCalledWith(1, 'boost', 7, idOf(1));
+        expect(setPins()).toHaveBeenNthCalledWith(2, 'turbo', 7, idOf(2));
+        expect((await screen.findByRole('alert')).textContent).toBe(
+            `Your chosen photos are kept, but the Boost pin wasn't saved: ${english('errors.pinFailed')} Press Use these photos to try again.`,
+        );
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    test("each tile's pin pair is a group named with the photo's position in the list", async () => {
+        setup({ value: [idOf(2), idOf(1)] });
+        await opened();
+        // Photo 2 was picked first, so its pair is group 1; the group sits with its tile in the cell.
+        expect(groupOf(1).previousElementSibling!.getAttribute('aria-label')).toMatch(/^Photo 00000002:/);
+        expect(groupOf(2).previousElementSibling!.getAttribute('aria-label')).toMatch(/^Photo 00000001:/);
+    });
+});
+
+describe('the toolbar: order, loaded-photo sort and Show stats', () => {
+    const getStats = () => jest.mocked(window.api.getPhotoStats);
+    const orderSelect = () => screen.getByLabelText('Order (applies to your whole library)') as HTMLSelectElement;
+    const sortSelect = () => screen.getByLabelText('Then sort loaded photos by') as HTMLSelectElement;
+    const showStatsBox = () => screen.getByRole('checkbox', { name: 'Show stats' }) as HTMLInputElement;
+    const statOf = (id: string) => ({ id, votes: 121, views: 50, likes: 1, guruPicks: 0 });
+    const statsAnswer = async (asked: unknown) => ({
+        success: true as const,
+        stats: (asked as string[]).map((id) => statOf(id)),
+        missing: [] as string[],
+    });
+    const tileOrder = () =>
+        screen
+            .getAllByRole('button')
+            .map((button) => button.getAttribute('aria-label') ?? '')
+            .filter((label) => label.startsWith('Photo '))
+            .map((label) => label.slice('Photo '.length, 'Photo '.length + 8));
+
+    beforeEach(() => {
+        getStats().mockReset().mockImplementation(statsAnswer);
+    });
+
+    test('both selects and Show stats are there, labeled; the Show-stats help is always shown, the sort help is not', () => {
+        setup();
+        expect(orderSelect().value).toBe('votes');
+        expect(sortSelect().value).toBe('library');
+        expect(screen.getByRole('option', { name: 'Votes' })).toBeTruthy();
+        expect(screen.getByRole('option', { name: 'Newest' })).toBeTruthy();
+        expect(screen.getByRole('option', { name: 'Oldest' })).toBeTruthy();
+        expect(screen.getByRole('option', { name: 'Library order' })).toBeTruthy();
+        expect(screen.getByRole('option', { name: 'Ratio (votes per view)' })).toBeTruthy();
+        expect(screen.getByRole('option', { name: 'Likes' })).toBeTruthy();
+        expect(screen.getByRole('option', { name: 'Guru picks' })).toBeTruthy();
+        expect(showStatsBox().checked).toBe(false);
+        expect(screen.getByText(/^Reads each photo's votes, views, likes and Guru picks/)).toBeTruthy();
+        expect(screen.queryByText(/reorder only the/)).toBeNull();
+    });
+
+    test('a select change whose value is not one of the named ones changes nothing', async () => {
+        setup();
+        await opened();
+        // A guarded value reads nothing and runs nothing: no order re-read, no stats run.
+        fireEvent.change(orderSelect(), { target: { value: 'toString' } });
+        fireEvent.change(sortSelect(), { target: { value: '__proto__' } });
+        expect(getLibrary()).toHaveBeenCalledTimes(1);
+        expect(getStats()).not.toHaveBeenCalled();
+    });
+
+    test('an order change re-reads the listing in that order', async () => {
+        setup();
+        await opened();
+        getLibrary().mockResolvedValueOnce(listing([photo(5)]));
+        pickOption(orderSelect(), 'newest');
+        // The re-read keeps the extent on screen: 3 photos shown, not one batch.
+        await waitFor(() =>
+            expect(getLibrary()).toHaveBeenLastCalledWith(7, undefined, 'fresh', 'submit', 0, 3, 'newest'),
+        );
+        expect(await screen.findByRole('button', { name: /^Photo 00000005:/ })).toBeTruthy();
+    });
+
+    test('the help line names the shown count and the order on screen', async () => {
+        setup();
+        await opened();
+        pickOption(sortSelect(), 'ratio');
+        await effectsFlushed();
+        expect(
+            screen.getByText(
+                'Ratio, likes and Guru picks reorder only the photos shown (3). Load more adds more, in Votes order.',
+            ),
+        ).toBeTruthy();
+        pickOption(orderSelect(), 'oldest');
+        // The re-read keeps the extent on screen: 3 photos shown, not one batch.
+        await waitFor(() =>
+            expect(getLibrary()).toHaveBeenLastCalledWith(7, undefined, 'fresh', 'submit', 0, 3, 'oldest'),
+        );
+        await screen.findByText(/in Oldest order\.$/);
+    });
+
+    test('the help line counts the tiles the grid shows: every photo hidden reports none, not the loaded count', async () => {
+        getLibrary().mockResolvedValue(
+            listing([photo(1, { allowed: false }), photo(2, { allowed: false }), photo(3, { allowed: false })]),
+        );
+        setup();
+        loadPhotos();
+        pickOption(sortSelect(), 'ratio');
+        await effectsFlushed();
+        expect(
+            screen.getByText(
+                'Ratio, likes and Guru picks reorder only the photos shown (0). Load more adds more, in Votes order.',
+            ),
+        ).toBeTruthy();
+    });
+
+    test('Show stats on under Votes reads the tiles without reordering, and ends with "Stats read."', async () => {
+        setup();
+        await opened();
+        fireEvent.click(showStatsBox());
+        expect(screen.getByText('Reading stats: 0 of 3')).toBeTruthy();
+        await screen.findByText('Stats read.');
+        expect(getStats().mock.calls[0][0]).toEqual([idOf(1), idOf(2), idOf(3)]);
+        expect(tileOrder()).toEqual([shortOf(1), shortOf(2), shortOf(3)]);
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    test('a loaded-photo sort turns Show stats on and locks it with the reason; back on Library order it can be cleared', async () => {
+        setup();
+        await opened();
+        pickOption(sortSelect(), 'guruPicks');
+        await effectsFlushed();
+        expect(showStatsBox().checked).toBe(true);
+        expect(showStatsBox().getAttribute('aria-disabled')).toBe('true');
+        const describedBy = showStatsBox().getAttribute('aria-describedby');
+        expect(describedBy).toBeTruthy();
+        expect(document.getElementById(describedBy!)?.textContent).toBe(
+            'Needed for the Ratio, Likes and Guru picks sorts.',
+        );
+        fireEvent.click(showStatsBox());
+        expect(showStatsBox().checked).toBe(true);
+        // Back on Library order the box unlocks and can be cleared.
+        pickOption(sortSelect(), 'library');
+        await effectsFlushed();
+        expect(showStatsBox().getAttribute('aria-disabled')).toBe('false');
+        expect(showStatsBox().getAttribute('aria-describedby')).toBeNull();
+        fireEvent.click(showStatsBox());
+        expect(showStatsBox().checked).toBe(false);
+    });
+
+    test('a run that comes back missing shows the warning with Retry, and Retry restarts with one call', async () => {
+        getStats()
+            .mockReset()
+            .mockResolvedValue({ success: true, stats: [], missing: [idOf(1), idOf(2), idOf(3)] });
+        setup();
+        await opened();
+        fireEvent.click(showStatsBox());
+        await screen.findByText(
+            "Stats couldn't be read for 3 of these photos. GuruShots didn't send them, or reading is paused for a minute after errors. Try again in a minute.",
+        );
+        expect(getStats()).toHaveBeenCalledTimes(1);
+        // Retry during the cool-down: the status counts again, the warning returns, and the restart
+        // sent its one call — nothing beside it.
+        fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+        expect(screen.getByText('Reading stats: 0 of 3')).toBeTruthy();
+        await screen.findByText(
+            "Stats couldn't be read for 3 of these photos. GuruShots didn't send them, or reading is paused for a minute after errors. Try again in a minute.",
+        );
+        expect(getStats()).toHaveBeenCalledTimes(2);
+    });
+
+    test('under a loaded-photo sort the warning says the unread photos are listed last, and the status names the reorder', async () => {
+        getStats()
+            .mockReset()
+            .mockResolvedValue({ success: true, stats: [], missing: [idOf(1), idOf(2)] });
+        setup();
+        await opened();
+        pickOption(sortSelect(), 'ratio');
+        expect(
+            await screen.findByText(
+                "Stats couldn't be read for 2 of these photos. GuruShots didn't send them, or reading is paused for a minute after errors. They're listed last. Try again in a minute.",
+            ),
+        ).toBeTruthy();
+        expect(screen.getByText('Stats read. Photos reordered.')).toBeTruthy();
+    });
+
+    test('a failed call (not a missing one) leaves the status empty and the warning carries the failure', async () => {
+        getStats().mockReset().mockRejectedValue(new Error('down'));
+        // Without Auto, so the toolbar's status region is the only aria-live one on the page.
+        setup({ challengeId: null });
+        await opened();
+        fireEvent.click(showStatsBox());
+        await screen.findByText(
+            "Stats couldn't be read for 3 of these photos. GuruShots didn't send them, or reading is paused for a minute after errors. Try again in a minute.",
+        );
+        // The region the run would report in holds nothing: the run did not get its answers.
+        expect(document.querySelector('p[aria-live="polite"]')?.textContent).toBe('');
+        expect(getStats()).toHaveBeenCalledTimes(1);
+    });
+
+    test('the stats status region is mounted where Auto is not (no challenge)', async () => {
+        setup({ challengeId: null });
+        await opened();
+        expect(screen.queryByRole('button', { name: 'Auto' })).toBeNull();
+        fireEvent.click(showStatsBox());
+        await screen.findByText('Stats read.');
+    });
+
+    test('both selects and Show stats reset when the chooser reopens', async () => {
+        const first = setup();
+        await opened();
+        pickOption(orderSelect(), 'newest');
+        pickOption(sortSelect(), 'ratio');
+        await effectsFlushed();
+        expect(showStatsBox().checked).toBe(true);
+        first.rerender(<PhotoChooserModal {...first} isOpen={false} />);
+        first.rerender(<PhotoChooserModal {...first} isOpen />);
+        expect(orderSelect().value).toBe('votes');
+        expect(sortSelect().value).toBe('library');
+        expect(showStatsBox().checked).toBe(false);
     });
 });

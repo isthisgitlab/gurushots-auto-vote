@@ -1,4 +1,4 @@
-import { matchesSettingFilter } from '../../src/ts/react/utils/matchesSettingFilter';
+import { matchesFilterTexts, matchesSettingFilter } from '../../src/ts/react/utils/matchesSettingFilter';
 
 describe('matchesSettingFilter', () => {
     test('a blank query matches everything', () => {
@@ -23,5 +23,24 @@ describe('matchesSettingFilter', () => {
         expect(matchesSettingFilter(['Retry (max)'], '(max')).toBe(true);
         expect(matchesSettingFilter(['Retry max'], '.*')).toBe(false);
         expect(matchesSettingFilter(['Retry max'], '(')).toBe(false);
+    });
+});
+
+describe('matchesFilterTexts', () => {
+    const texts = { names: ['Ekspozīcija'], descriptions: ['How much of the challenge to vote on'] };
+
+    test('matches a name in both modes', () => {
+        expect(matchesFilterTexts(texts, 'ekspoz', true)).toBe(true);
+        expect(matchesFilterTexts(texts, 'EKSPOZ', false)).toBe(true);
+    });
+
+    test('matches a description only when namesOnly is false', () => {
+        expect(matchesFilterTexts(texts, 'much of the challenge', true)).toBe(false);
+        expect(matchesFilterTexts(texts, 'much of the challenge', false)).toBe(true);
+    });
+
+    test('a blank query matches in both modes', () => {
+        expect(matchesFilterTexts(texts, '', true)).toBe(true);
+        expect(matchesFilterTexts({ names: [], descriptions: [] }, '   ', false)).toBe(true);
     });
 });

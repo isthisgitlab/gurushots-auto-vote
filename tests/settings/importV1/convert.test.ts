@@ -22,14 +22,13 @@ const convert = (challengeSettings: Values = {}, top: Values = {}, mockStored = 
 const refs = (challengeSettings: Values = {}, top: Values = {}) => convert(challengeSettings, top).report.refsBlocked;
 
 describe('the sign-in state and the app preferences', () => {
-    test('the four auth keys become auth, and nothing else does', () => {
+    test('the three auth keys become auth, and nothing else does', () => {
         const { config } = convert(
             {},
             {
                 token: 'tok',
                 apiHeaders: { 'x-a': 'b' },
                 lastUsername: 'me',
-                chosenPhotosMemberId: 'm-1',
                 theme: 'dark',
             },
         );
@@ -37,11 +36,30 @@ describe('the sign-in state and the app preferences', () => {
             token: 'tok',
             apiHeaders: { 'x-a': 'b' },
             lastUsername: 'me',
-            chosenPhotosMemberId: 'm-1',
         });
-        for (const key of ['token', 'apiHeaders', 'lastUsername', 'chosenPhotosMemberId']) {
+        for (const key of ['token', 'apiHeaders', 'lastUsername']) {
             expect(config.app).not.toHaveProperty(key);
         }
+    });
+
+    test('the keys this build dropped convert to nothing, wherever the 1.13.x file held them', () => {
+        // A settings.json written by 1.13.x holds both keys at the top level; a copy may sit among
+        // the global defaults (1.x never read it there, but the frozen schema knew the name).
+        const { config } = convert(
+            {
+                globalDefaults: {
+                    ...getV1Defaults().challengeSettings.globalDefaults,
+                    chosenPhotosMemberId: 'm-1',
+                    chosenPhotosClearedAt: '2026-01-01',
+                },
+            },
+            { chosenPhotosMemberId: 'm-1', chosenPhotosClearedAt: '2026-01-01', theme: 'dark' },
+        );
+        expect(config.auth).toEqual({ token: '', apiHeaders: {}, lastUsername: '' });
+        expect(config.app).not.toHaveProperty('chosenPhotosMemberId');
+        expect(config.app).not.toHaveProperty('chosenPhotosClearedAt');
+        expect(config.defaults).not.toHaveProperty('chosenPhotosMemberId');
+        expect(config.defaults).not.toHaveProperty('chosenPhotosClearedAt');
     });
 
     test('app is every other top-level key but challengeSettings and the migrations one-time flags', () => {
@@ -84,8 +102,6 @@ describe('the sign-in state and the app preferences', () => {
         expect([...TOP_LEVEL_ONLY_KEYS].sort()).toEqual([
             'autovoteRunning',
             'autovoteStartedLaunch',
-            'chosenPhotosClearedAt',
-            'chosenPhotosMemberId',
             'noticeAcknowledgedVersion',
             'skipUpdateVersion',
         ]);
@@ -101,7 +117,7 @@ describe('the sign-in state and the app preferences', () => {
         );
         for (const key of TOP_LEVEL_ONLY_KEYS) expect(config.defaults).not.toHaveProperty(key);
         expect(config.defaults).toMatchObject({ exposure: 80 });
-        // The top-level values themselves are the app's (and `chosenPhotosMemberId` the account's).
+        // The top-level values themselves are the app's.
         expect(config.app).toMatchObject({
             autovoteRunning: true,
             skipUpdateVersion: '2.0',
@@ -121,7 +137,7 @@ describe('the sign-in state and the app preferences', () => {
 
     test('auth values of the wrong kind become empty ones, and header values must be strings', () => {
         const { config } = convert({}, { token: 4, apiHeaders: { a: 'x', b: 5, c: null }, lastUsername: null });
-        expect(config.auth).toEqual({ token: '', apiHeaders: { a: 'x' }, lastUsername: '', chosenPhotosMemberId: '' });
+        expect(config.auth).toEqual({ token: '', apiHeaders: { a: 'x' }, lastUsername: '' });
         expect(convert({}, { apiHeaders: ['x'] }).config.auth.apiHeaders).toEqual({});
     });
 });

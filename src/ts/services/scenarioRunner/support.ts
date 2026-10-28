@@ -70,6 +70,7 @@ const limitOf = (actionType: SpendAction): SpendKind => SPEND[actionType].limit;
 const done = (effects: ActionEffects = {}): DoneOutcome => ({ status: 'done', ...effects });
 const skipped = (message: string): NotDoneOutcome => ({ status: 'skipped', message });
 const failed = (message: string): NotDoneOutcome => ({ status: 'failed', message });
+const deferred = (message: string): NotDoneOutcome => ({ status: 'deferred', message });
 
 /**
  * The end of a rule whose spend got no answer and cannot be shown to have taken effect: it is not spent again, and
@@ -103,17 +104,37 @@ const usesBalance = (scenario: ScenarioDocument) => {
 };
 
 /**
- * Re-read the challenge live (merged into the pass object in place). Returns
- * false only when the challenge left the active list; an unavailable fetch
- * proceeds on the data at hand, as the fill paths do.
+ * Re-read the challenge live (merged into the pass object in place).
+ *
+ * @returns null when the live state is good to act on; otherwise the outcome the step returns: the challenge left
+ * the active list (skipped), or the read cannot be trusted — a marked challenge, or a prune-unsafe read that may
+ * have dropped it (deferred: the step stops its rule and is retried on the next pass, never on data the boundary
+ * could not vouch for).
  */
-const refreshLive = async (ctx: RunnerContext) =>
-    (await refreshChallengeState(
+const refreshLive = async (ctx: RunnerContext): Promise<NotDoneOutcome | null> => {
+    const refresh = await refreshChallengeState(
         ctx.challenge,
         ctx.pass.token,
         { getActiveChallenges: ctx.pass.api.getActiveChallenges, logger },
         LABEL,
-    )) !== 'gone';
+    );
+    if (refresh === 'gone') return skipped('the challenge is no longer active');
+    if (refresh === 'invalid') return deferred('challenge data cannot be read');
+    return null;
+};
+
+/**
+ * The outcome of a spend that got no answer, and of a settle whose re-read cannot be trusted: the spend may have
+ * gone through, so it is checked again next cycle, never spent again, and counted against the scenario's limit as
+ * if it had.
+ */
+const noAnswer = (actionType: SpendAction, spent: boolean): NotDoneOutcome => ({
+    ...failed(
+        `the ${SPEND[actionType].label} may have gone through (GuruShots gave no answer); it will be checked again next cycle, not spent again`,
+    ),
+    unclear: actionType,
+    ...(spent ? { spent: SPEND[actionType].limit } : {}),
+});
 
 /**
  * Shared gate for the currency spends: the scenario's own limit, then the
@@ -139,11 +160,14 @@ const spendAllowed = async (
 
 /**
  * Spend outcomes worth retrying; every other refusal (no balance, no alternative photo, the entry moved on) is a skip.
+ * `data-incomplete` (the live check refused a marked challenge, or the read that would list it dropped elements)
+ * retries too: a committed rule must never pass over a spend whose precondition could not be read.
  */
 const TRANSIENT_OUTCOMES: ReadonlySet<string> = new Set([
     CURRENCY_OUTCOME.apiFailed,
     CURRENCY_OUTCOME.balanceUnknown,
     CURRENCY_OUTCOME.busy,
+    CURRENCY_OUTCOME.dataIncomplete,
 ]);
 
 /**
@@ -178,15 +202,7 @@ const lockedCurrencySpend = async (
     }
     // No answer: the spend may have gone through, so the step is retried (the live re-read guards the repeat) and
     // counted against the scenario's limit as if it had.
-    if (result.outcome === CURRENCY_OUTCOME.unclear) {
-        return {
-            ...failed(
-                `the ${SPEND[actionType].label} may have gone through (GuruShots gave no answer); it will be checked again next cycle, not spent again`,
-            ),
-            spent: SPEND[actionType].limit,
-            unclear: actionType,
-        };
-    }
+    if (result.outcome === CURRENCY_OUTCOME.unclear) return noAnswer(actionType, true);
     const message = `${actionType} was refused (${result.outcome ?? 'no response'})`;
     return result.outcome === undefined || TRANSIENT_OUTCOMES.has(result.outcome) ? failed(message) : skipped(message);
 };
@@ -214,10 +230,12 @@ export {
     done,
     skipped,
     failed,
+    deferred,
     usesBalance,
     refreshLive,
     spendAllowed,
     lockedCurrencySpend,
+    noAnswer,
     unclearHalted,
     currencyDeps,
     selectContext,

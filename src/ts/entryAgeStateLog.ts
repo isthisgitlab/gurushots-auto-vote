@@ -27,6 +27,7 @@ import * as logger from './logger';
 import { throughStore } from './settings/storeTransport';
 import { isPlainObject } from './plainObject';
 import { errorKind } from './errorMessage';
+import { parseUntrustedJsonObject } from './parseUntrustedJson';
 import { finiteOr } from './numbers';
 
 // How many entry ids (and exact / uncertain ids) one record keeps.
@@ -61,32 +62,73 @@ const idList = (value: unknown): string[] => (Array.isArray(value) ? value.slice
 /**
  * The ledger's state from its text. An unreadable or corrupt file reads as empty — every entry's
  * age is then unknown, which only means a boost is not held; it never blocks one. A record from a
- * file written before the exact times gets the fields it lacks, and a pending id that is not a non-empty string reads
- * as none.
+ * file written before the exact times gets the fields it lacks, a pending id that is not a non-empty string reads
+ * as none, and a field the shape no longer holds (a file written by an older build) is dropped, so the next write
+ * stores the record without it.
  */
 const parseState = (raw: string | null): State => {
-    try {
-        const parsed: unknown = JSON.parse(raw || '{}');
-        if (!isPlainObject(parsed)) return {};
-        const state: State = {};
-        for (const [id, record] of Object.entries(parsed)) {
-            if (isRecord(record)) {
-                state[id] = {
-                    ...record,
-                    pending: isString(record.pending) && record.pending !== '' ? record.pending : null,
-                    uncertain: idList(record.uncertain),
-                    exact: idList(record.exact),
-                    memberId: typeof record.memberId === 'string' ? record.memberId : null,
-                    observed: record.observed !== false,
-                    firstSeen: Math.max(finiteOr(record.firstSeen, 0), 0),
-                };
-            }
+    const parsed = parseUntrustedJsonObject(
+        () => raw,
+        'boost',
+        () => 'entry-age ledger unreadable (not JSON)',
+    );
+    const state: State = {};
+    for (const [id, stored] of Object.entries(parsed)) {
+        if (isRecord(stored)) {
+            const record: LegacyEntryAgeRecord = { ...stored };
+            // A field the record type no longer holds rides in the spread otherwise.
+            delete (record as Record<string, unknown>).memberId;
+            state[id] = {
+                ...record,
+                pending: isString(record.pending) && record.pending !== '' ? record.pending : null,
+                uncertain: idList(record.uncertain),
+                exact: idList(record.exact),
+                observed: record.observed !== false,
+                firstSeen: Math.max(finiteOr(record.firstSeen, 0), 0),
+            };
         }
-        return state;
-    } catch {
-        logger.withCategory('boost').warning('entry-age ledger unreadable (not JSON)', null);
-        return {};
     }
+    return state;
+};
+
+/** The change a write logs: `edit` made of the parsed stored state and stringified back, bookkeeping starting clean. */
+const makeChange = (kind: ChangeKind, edit: Edit): Change => ({
+    apply: (current) => {
+        const next = edit(parseState(current));
+        return next ? JSON.stringify(next) : null;
+    },
+    failed: false,
+    settled: false,
+    kind,
+    edit,
+});
+
+/** The changes applied, in order, over the stored text; one that throws is skipped with a note, not fatal. */
+const applyChanges = (raw: string | null, changes: Change[]): string | null => {
+    for (const change of changes) {
+        try {
+            raw = change.apply(raw) ?? raw;
+        } catch (error) {
+            logger.withCategory('boost').warning(`entry-age change not applied (${errorKind(error)})`, null);
+        }
+    }
+    return raw;
+};
+
+/**
+ * At a refresh that succeeded: from the first failed mark on, the marks are made again on the fresh value in their
+ * order (a photo may still be missing from a lagging listing, and a forgotten pending photo would have the boost
+ * submit a second one), those still in flight too: left in the log, one would land before the replay and be undone
+ * by it. An observation is not made again: the next fetch observes anew. What is kept is what sits before that mark
+ * and is still in flight — failed observations are dropped, and a landed mark is only kept behind a failed one, so
+ * none is here.
+ */
+const refreshReplay = (changes: Change[]): { keep: Change[]; replay: Change[] } => {
+    const first = changes.findIndex((c) => c.kind === 'mark' && c.failed);
+    return {
+        keep: (first === -1 ? changes : changes.slice(0, first)).filter((change) => !change.failed),
+        replay: first === -1 ? [] : changes.slice(first).filter((c) => c.kind === 'mark'),
+    };
 };
 
 /**
@@ -109,16 +151,7 @@ export const createStateLog = (store: RawJsonStore, refreshStore?: () => Promise
 
     // Makes `edit` of the stored state (answering null to change nothing); the caller never sees a failure.
     const write = (kind: ChangeKind, edit: Edit) => {
-        const change: Change = {
-            apply: (current) => {
-                const next = edit(parseState(current));
-                return next ? JSON.stringify(next) : null;
-            },
-            failed: false,
-            settled: false,
-            kind,
-            edit,
-        };
+        const change = makeChange(kind, edit);
         const immediate = store.updateNow?.(change.apply) ?? null;
         if (immediate !== null) {
             if (immediate === 'failed') change.failed = true;
@@ -145,17 +178,7 @@ export const createStateLog = (store: RawJsonStore, refreshStore?: () => Promise
     return {
         read: (): State => {
             try {
-                let raw = store.readRaw();
-                for (const change of changes) {
-                    try {
-                        raw = change.apply(raw) ?? raw;
-                    } catch (error) {
-                        logger
-                            .withCategory('boost')
-                            .warning(`entry-age change not applied (${errorKind(error)})`, null);
-                    }
-                }
-                return parseState(raw);
+                return parseState(applyChanges(store.readRaw(), changes));
             } catch (error) {
                 logger
                     .withCategory('boost')
@@ -171,16 +194,8 @@ export const createStateLog = (store: RawJsonStore, refreshStore?: () => Promise
             let failure = 'the read failed';
             try {
                 if (await refreshStore()) {
-                    // From the first failed mark on, the marks are made again on the fresh value in their order (a photo
-                    // may still be missing from a lagging listing, and a forgotten pending photo would have the boost
-                    // submit a second one), those still in flight too: left in the log, one would land before the
-                    // replay and be undone by it. An observation is not made again: the next fetch observes anew.
-                    const first = changes.findIndex((c) => c.kind === 'mark' && c.failed);
-                    const replay = first === -1 ? [] : changes.slice(first).filter((c) => c.kind === 'mark');
-                    const before = first === -1 ? changes : changes.slice(0, first);
-                    // What is before the first failed mark: changes still in flight, and failed observations (dropped).
-                    // A landed mark is only kept behind a failed one, so none is here.
-                    changes = before.filter((change) => !change.failed);
+                    const { keep, replay } = refreshReplay(changes);
+                    changes = keep;
                     for (const change of replay) write(change.kind, change.edit);
                     return;
                 }

@@ -218,6 +218,21 @@ describe('cleanupStaleMetadata', () => {
         // is still active, so nothing is stale.
         expect(writes).toHaveLength(0);
     });
+
+    test('a prune-unsafe read cleans up nothing and reads nothing', () => {
+        setStoredMetadata({
+            updateCheck: { lastCheck: null, skipVersion: null },
+            'old-and-missing': { lastVoteTime: '2020-01-01T00:00:00Z', exposureBump: 50 },
+        });
+        fs.readFileSync.mockClear();
+        const writes = captureWrites();
+
+        // The read dropped id-less rows, so 'old-and-missing' being absent
+        // from the id list proves nothing — the whole cleanup is skipped.
+        expect(metadata.cleanupStaleMetadata(['still-here'], true)).toBe(true);
+        expect(writes).toHaveLength(0);
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+    });
 });
 
 describe('challenge metadata mutators', () => {

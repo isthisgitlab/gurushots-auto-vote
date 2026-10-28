@@ -13,10 +13,11 @@
 import * as logger from '../../logger';
 import { ensureAuthenticated, INVALID_ID_TEXT } from '../guards';
 import { getMiddleware } from '../../apiFactory';
-import { findActiveChallenge } from '../../services/findActiveChallenge';
+import { findActionableChallenge } from '../../services/findActiveChallenge';
 import { CHOSEN_PHOTO_ID_RE } from '../../settings/limits';
 
 import type { Challenge } from '../../types/gurushots';
+import type { SwapBackRecord } from '../../types/stores';
 import type { NullEventHandlers } from '../../types/cli';
 import type * as actions_handlersModule from '../../ipc/actions.handlers';
 import type * as currency_handlersModule from '../../ipc/currency.handlers';
@@ -42,7 +43,7 @@ const currencyHandlers = (): CurrencyHandlers =>
 /**
  * Shared auth guard + challenge lookup. Returns the live challenge object,
  * or null after logging a user-facing reason (not authenticated / not found
- * / fetch failure) so callers can simply bail on null.
+ * / data cannot be read / fetch failure) so callers can simply bail on null.
  *
  * Note: the turbo/fill handlers re-fetch and re-validate the live challenge
  * themselves, so this lookup is the friendly auth gate + early "not found"
@@ -55,12 +56,18 @@ const resolveChallenge = async (challengeId: string): Promise<Challenge | null> 
     }
     try {
         const resp = await getMiddleware().getActiveChallenges();
-        const challenge = findActiveChallenge(resp?.challenges as Challenge[] | undefined, challengeId);
-        if (!challenge) {
-            logger.withCategory('challenges').error(`Challenge ${challengeId} not found among active challenges`);
+        const found = findActionableChallenge(resp, challengeId);
+        if ('refused' in found) {
+            // The handlers re-read below refuse the same way, so bailing here
+            // only spares the round trip; the wording is the user-facing part.
+            if (found.refused === 'data-incomplete') {
+                logger.withCategory('challenges').error(`Challenge ${challengeId}: challenge data cannot be read`);
+            } else {
+                logger.withCategory('challenges').error(`Challenge ${challengeId} not found among active challenges`);
+            }
             return null;
         }
-        return challenge;
+        return found.challenge;
     } catch (err) {
         logger.withCategory('challenges').error(`Failed to fetch challenges: ${errorMessage(err) || err}`);
         return null;
@@ -157,8 +164,13 @@ const fillChallenge = async (challengeId: string, { all = false }: { all?: boole
 // same gate main-side (confirmed === true), so --yes is the only way to spend.
 
 // CLI wording for each outcome code the spend handlers return.
+// The refusal for a challenge whose data cannot be read (the boundary's mark),
+// shared by the outcome table and the error mapping.
+const CHALLENGE_DATA_INCOMPLETE_TEXT = "The challenge's data cannot be read, so the action was refused.";
+
 const OUTCOME_TEXT: Record<string, string> = {
     'not-available': 'That action is not available on this challenge right now (it may already be done).',
+    'data-incomplete': CHALLENGE_DATA_INCOMPLETE_TEXT,
     'no-balance': 'You have none of that currency left.',
     'balance-unknown': 'Could not read your balance, so nothing was spent. Try again shortly.',
     'no-alternative': 'No different photo is available to swap in.',
@@ -176,9 +188,15 @@ const describeOutcome = (result: { outcome?: string | null; error?: string | nul
     OUTCOME_TEXT[result?.outcome ?? ''] || result?.error || 'Action failed';
 
 // The line for a failed boost / turbo / fill reply: the handlers' 'invalid-args'
-// code becomes its wording, any other error is already a message.
+// code becomes its wording, a 'challenge-data-incomplete' refusal (the handlers
+// re-read the challenge themselves) becomes its wording, and any other error is
+// already a message.
 const actionError = (result: { error?: string | null } | null | undefined, fallback: string): string =>
-    result?.error === 'invalid-args' ? INVALID_ID_TEXT : result?.error || fallback;
+    result?.error === 'invalid-args'
+        ? INVALID_ID_TEXT
+        : result?.error === 'challenge-data-incomplete'
+          ? CHALLENGE_DATA_INCOMPLETE_TEXT
+          : result?.error || fallback;
 
 const CURRENCY_LABEL = { keys: 'key', swaps: 'swap', fills: 'fill' };
 
@@ -334,9 +352,20 @@ const swapCmd = async (
 };
 
 /**
- * Spend a SWAP to put a photo swapped out while boosted/turbo'd back into the
- * slot now holding `imageId` — it gets its boost/turbo back. Only swaps made
- * through this app are known (the API history has no boost flag).
+ * What each stored swap-back kind reads as in the CLI lines: a fixed map, never
+ * a key built from the stored value.
+ */
+const SWAP_BACK_KINDS: Record<SwapBackRecord['kind'], string> = {
+    boost: 'boost',
+    turbo: 'turbo',
+    guruPick: "Guru's pick",
+};
+
+/**
+ * Spend a SWAP to put a photo swapped out while boosted, turbo'd or guru-picked
+ * back into the slot now holding `imageId` — it gets its boost/turbo/Guru's
+ * pick back. Only swaps made through this app are known (the mobile swap
+ * history has no such flag; the web one's the app does not read).
  * Returns false on a usage error (no --image).
  */
 const swapBackCmd = async (
@@ -361,7 +390,7 @@ const swapBackCmd = async (
             logger
                 .withCategory('currency')
                 .info(
-                    `Swap back in "${challenge.title}": ${imageId} → ${record.previousId} (gets its ${record.kind} back)`,
+                    `Swap back in "${challenge.title}": ${imageId} → ${record.previousId} (gets its ${SWAP_BACK_KINDS[record.kind]} back)`,
                 );
             await printCost('swaps');
             logger
@@ -372,7 +401,7 @@ const swapBackCmd = async (
         const result = await currencyHandlers()['swap-back-entry-photo'](null, challengeId, imageId, true);
         reportSpend(
             result,
-            `Swapped ${record.previousId} back into "${challenge.title}" — its ${record.kind} is back.`,
+            `Swapped ${record.previousId} back into "${challenge.title}" — its ${SWAP_BACK_KINDS[record.kind]} is back.`,
         );
     } catch (err) {
         logger.withCategory('currency').error(`Failed to swap back: ${errorMessage(err) || err}`);

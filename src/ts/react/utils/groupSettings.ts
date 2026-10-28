@@ -1,6 +1,8 @@
-import { matchesSettingFilter } from './matchesSettingFilter';
+import { matchesFilterTexts, matchesSettingFilter } from './matchesSettingFilter';
 
 import type { SerializableSchemaEntry } from '../../ipc/settings.handlers';
+import type { SettingFilterTexts } from './matchesSettingFilter';
+import type { Translate } from '../../translations/translator';
 
 /**
  * One settings group as the modals receive it (SETTINGS_GROUPS entry).
@@ -26,6 +28,19 @@ export type SettingsSection = {
  * A rendered tier band; `id`/`label` are null for the trailing untitled band.
  */
 export type SettingsBand = { id: string | null; label: string | null; groups: SettingsSection[] };
+
+/**
+ * A settings modal's tab id. The `tier-` prefix puts tier tabs outside the
+ * fixed id space, so a tier id can never collide with `application`,
+ * `titleRules`, `profiles`, `scenarios` or the fallback band's `otherTier`.
+ */
+export type SettingsTabId = 'application' | 'titleRules' | 'profiles' | 'scenarios' | 'otherTier' | `tier-${string}`;
+
+/**
+ * One settings modal tab as bandTabs emits it: the id and the band's label as
+ * a translation key (callers apply t()).
+ */
+export type SettingsTab = { id: SettingsTabId; label: string };
 
 /**
  * Responsive grid for a settings section. One column on phones (Capacitor)
@@ -126,24 +141,56 @@ export function tierSchemaEntries(
 }
 
 /**
- * The texts a settings filter searches in one schema setting: its label and its description.
+ * Map tier bands to the settings modals' tab descriptors: one tab per band,
+ * `tier-<tierId>`, carrying the band's label key. The fallback band
+ * (`id: null` — groups whose tier is unknown, or every group when the main
+ * process sent no tiers) becomes the fixed `otherTier` tab, labelled
+ * `app.tierOther`; that mapping lives only here.
  */
-export const schemaEntryTexts = (t: (key: string) => string, config: SerializableSchemaEntry): string[] => [
-    t(config.label),
-    t(config.description),
+export function bandTabs(bands: readonly SettingsBand[] | null | undefined): SettingsTab[] {
+    return (bands ?? []).map((band) =>
+        band.id === null || band.label === null
+            ? { id: 'otherTier', label: 'app.tierOther' }
+            : { id: `tier-${band.id}`, label: band.label },
+    );
+}
+
+/**
+ * The texts a settings filter searches in one schema setting: its label (a name) and its description.
+ */
+export const schemaEntryTexts = (t: Translate, config: SerializableSchemaEntry): SettingFilterTexts => ({
+    names: [t(config.label)],
+    descriptions: [t(config.description)],
+});
+
+/**
+ * The texts a settings filter searches in one group: its heading (a name-only text) and each entry.
+ */
+export const groupFilterTexts = (t: Translate, group: SettingsSection): SettingFilterTexts[] => [
+    { names: [t(group.label)], descriptions: [] },
+    ...group.entries.map(([, config]) => schemaEntryTexts(t, config)),
 ];
 
 /**
  * Whether a schema setting matches the settings filter `query`.
  */
 export const entryMatchesFilter = (
-    t: (key: string) => string,
+    t: Translate,
     config: SerializableSchemaEntry,
     query: string,
-): boolean => matchesSettingFilter(schemaEntryTexts(t, config), query);
+    namesOnly: boolean,
+): boolean => matchesFilterTexts(schemaEntryTexts(t, config), query, namesOnly);
 
 /**
- * Whether any setting of a group matches the settings filter `query`.
+ * Whether a group's label or any of its settings matches the settings filter `query`.
  */
-export const groupMatchesFilter = (t: (key: string) => string, group: SettingsSection, query: string): boolean =>
-    group.entries.some(([, config]) => entryMatchesFilter(t, config, query));
+export const groupMatchesFilter = (t: Translate, group: SettingsSection, query: string, namesOnly: boolean): boolean =>
+    groupLabelMatchesFilter(t, group, query) ||
+    group.entries.some(([, config]) => entryMatchesFilter(t, config, query, namesOnly));
+
+/**
+ * Whether a group's heading alone matches the settings filter `query`: the whole-group case, where
+ * every entry shows, whatever the entries themselves match.
+ */
+export const groupLabelMatchesFilter = (t: Translate, group: SettingsSection, query: string): boolean =>
+    matchesSettingFilter([t(group.label)], query);

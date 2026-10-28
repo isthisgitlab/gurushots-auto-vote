@@ -108,4 +108,28 @@ describe('useActiveChallenges', () => {
         expect(result.current.error).toBeNull();
         expect(result.current.data).toEqual([{ id: 2 }]);
     });
+
+    test('a prune-unsafe result prunes nothing — the read dropped id-less rows', async () => {
+        mockApi.cleanupStaleChallengeSetting.mockClear();
+        mockApi.cleanupStaleMetadata.mockClear();
+        mockApi.getActiveChallenges.mockResolvedValueOnce(invalid({ challenges: [{ id: 1 }], pruneUnsafe: true }));
+
+        const { result } = renderHook(() => useActiveChallenges());
+        await waitFor(() => expect(result.current.loading).toBe(false));
+
+        expect(mockApi.cleanupStaleChallengeSetting).not.toHaveBeenCalled();
+        expect(mockApi.cleanupStaleMetadata).not.toHaveBeenCalled();
+    });
+
+    test('a safe result prunes as usual', async () => {
+        mockApi.cleanupStaleChallengeSetting.mockClear();
+        mockApi.cleanupStaleMetadata.mockClear();
+        mockApi.getActiveChallenges.mockResolvedValueOnce(invalid({ challenges: [{ id: 1 }] }));
+
+        const { result } = renderHook(() => useActiveChallenges());
+        await waitFor(() => expect(result.current.loading).toBe(false));
+
+        expect(mockApi.cleanupStaleChallengeSetting).toHaveBeenCalledWith(['1']);
+        expect(mockApi.cleanupStaleMetadata).toHaveBeenCalledWith(['1']);
+    });
 });

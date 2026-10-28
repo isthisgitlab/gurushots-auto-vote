@@ -82,8 +82,9 @@ const notifyFallback = (opts: PickOptions, info: PickFallbackInfo) => {
  *   onFallback({letterPrefix, mustStems, excludedStems}) when a hard filter
  *   eliminated every photo and the picker relaxed to the unfiltered set (i.e. an
  *   off-theme photo is about to be picked). `excludedStems` is non-empty when
- *   the relaxed filter was a negated title ("No Humans": every candidate's
- *   labels showed the negated subject). Injected
+ *   the relaxed filter was a negated title or an excluded-subject description
+ *   ("No Humans": every candidate's labels showed the excluded subject).
+ *   Injected
  *   side-channel so this function stays pure — callers use it to log the
  *   fallback where a user can see it. Exceptions it throws are swallowed;
  *   omitting it changes nothing. Not called when submitWithoutTagMatch is false
@@ -106,6 +107,16 @@ const pickPhotosForChallenge = (
 };
 
 /**
+ * Does one of the photo's WHOLE-label stems begin with the challenge's letter?
+ * The MIN_USER_TAG_STEM_LENGTH floor stops generic 2-char vision labels ("in",
+ * "at", "on") from spuriously satisfying an I/A/O challenge. Extracted from
+ * applyHardFilters because the uncertain-submission record (autoFill pipeline)
+ * reads the same predicate as letter-label evidence.
+ */
+const startsWithLetter = (wholeStems: string[], letter: string): boolean =>
+    wholeStems.some((s) => s.length >= MIN_USER_TAG_STEM_LENGTH && s[0] === letter);
+
+/**
  * Apply the hard filters (must-include tags, letter prefix) to stemmed photos.
  *
  * When they eliminate everything, relax to the unfiltered set so the slot still
@@ -125,9 +136,7 @@ const applyHardFilters = (
         filtered = filtered.filter(({ wordStems }) => photoMatchesAllStems(wordStems, mustStems));
     }
     if (letterPrefix) {
-        filtered = filtered.filter(({ wholeStems }) =>
-            wholeStems.some((s) => s.length >= MIN_USER_TAG_STEM_LENGTH && s[0] === letterPrefix),
-        );
+        filtered = filtered.filter(({ wholeStems }) => startsWithLetter(wholeStems, letterPrefix));
     }
     if (filtered.length > 0) return filtered;
     const hadHardFilter = mustStems.length > 0 || Boolean(letterPrefix);
@@ -137,9 +146,10 @@ const applyHardFilters = (
 };
 
 /**
- * A negated title ("No Humans") excludes photos whose labels show the negated
- * subject. Same all-or-nothing fallback as the hard filters: only when EVERY
- * remaining photo shows it does the picker relax (or return null under
+ * A negated title ("No Humans") or an excluded-subject description ("no
+ * people") drops photos whose labels show the excluded subject. Same
+ * all-or-nothing fallback as the hard filters: only when EVERY remaining photo
+ * shows it does the picker relax (or return null under
  * submitWithoutTagMatch:false). A photo with no labels cannot be judged and is kept.
  *
  * @returns the surviving stemmed photos, or null for "pick nothing"
@@ -154,7 +164,12 @@ const applyExcludedSubjectFilter = (
     const kept = filtered.filter(({ wordStems }) => !photoShowsExcluded(wordStems, excluded));
     if (kept.length > 0) return kept;
     if (opts.submitWithoutTagMatch === false) return null;
-    notifyFallback(opts, { letterPrefix: null, mustStems: [], excludedStems: excluded.stems });
+    // The names the fallback log shows: the title's own negated stems plus the
+    // nouns of the concepts the description supplied, deduped.
+    const excludedStems = Array.from(
+        new Set([...excluded.stems, ...excluded.concepts.flatMap((c) => (c.noun === null ? [] : [c.noun]))]),
+    );
+    notifyFallback(opts, { letterPrefix: null, mustStems: [], excludedStems });
     return filtered;
 };
 
@@ -214,6 +229,10 @@ const buildScoredCandidates = (
     const semanticScores = opts.semanticScores instanceof Map ? opts.semanticScores : null;
 
     const keywords = buildChallengeKeywords(challenge, opts.ignoreWords || null);
+    // GuruShots' suggested library photos for this challenge — tier 5 in
+    // rankByTiers, a weak tiebreak below every theme tier. It only marks
+    // photos already in this pool; no extra fetch happens for the ids.
+    const suggestedIds = opts.suggestedIds;
     return filtered.map(({ photo, wordStems }) => {
         const { semantic, semanticSupport } = semanticTiersOf(semanticScores, photo.id);
         return {
@@ -223,6 +242,7 @@ const buildScoredCandidates = (
             semantic,
             semanticSupport,
             score: scorePhoto(photo, keywords, wordStems),
+            suggested: suggestedIds?.has(String(photo.id)) ?? false,
             statsKnown: statsKnownOf(photo),
             achievementCount: achievementCountOf(photo),
             votes: votesOf(photo),
@@ -274,4 +294,4 @@ const buildChosenCandidates = (
     return { scored, chosenIds: orderedIds.length > 0 ? new Set(orderedIds) : null, orderedIds };
 };
 
-export { pickPhotosForChallenge, buildScoredCandidates, buildChosenCandidates };
+export { pickPhotosForChallenge, buildScoredCandidates, buildChosenCandidates, startsWithLetter };

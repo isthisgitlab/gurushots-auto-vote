@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useKeyUnlock, useFillExposure } from '@/api/useCurrencyActions';
-import { interp } from '@/utils/interp';
 import { spentOrStale } from '@/utils/spentOrStale';
 import { ActionButton } from '@/components/ui/ActionButton';
 import { InlineError } from '@/components/ui/InlineError';
@@ -149,7 +148,7 @@ export function CurrencyCellButton({
             field={config.field}
             bankroll={bankroll}
             title={t(config.title)}
-            body={interp(t(config.body), { title: challenge.title })}
+            body={t(config.body, { title: challenge.title })}
             action={action}
             challengeId={challenge.id}
             onSpent={onSpent}

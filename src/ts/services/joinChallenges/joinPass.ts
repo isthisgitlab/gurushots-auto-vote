@@ -6,7 +6,7 @@
 import * as logger from '../../logger';
 import * as settings from '../../settings';
 import * as cancellation from '../../voting/cancellation';
-import { shouldJoinChallenge } from '../VotingLogic';
+import { joinFreshRefusalWhy } from '../VotingLogic';
 import { isKnownTurboMode } from '../../voting/turboMode';
 import { consumeMission } from '../missions';
 import type { Bankroll, Challenge } from '../../types/gurushots';
@@ -14,6 +14,8 @@ import type { MissionNeeds } from '../missions';
 import { errorMessage } from '../../errorMessage';
 import { cat } from './shared';
 import type { JoinDeps } from './shared';
+import { decideCandidateJoin, joinCandidateGateRefusal, joinMissionLift } from './joinMissionLift';
+import type { JoinPassState } from './joinMissionLift';
 import {
     anyTitleRuleEnablesAutoJoin,
     resolveCandidateConfig,
@@ -21,21 +23,8 @@ import {
     warnMissingCloseTime,
 } from './settingsResolution';
 import { performJoin } from './performJoin';
-import { markerKey, markerOwner, paidByThisAccount, pruneClosedClaims } from './unlockMarker';
-
-/**
- * Mutable per-pass join state: the balance and budget kept locally accurate as
- * the pass spends, the clock the join window is measured against, and whether
- * the one-per-pass missing-timing diagnostic has fired.
- */
-type JoinPassState = {
-    bankroll: Bankroll | null;
-    remainingBudget: number;
-    nowSec: number;
-    missingCloseTimeLogged: boolean;
-    /** Joins still to make without the timing window, for the active missions. */
-    earlyJoins: number;
-};
+import { claimOf, pruneClosedClaims, refreshClaims } from './unlockMarker';
+import { isMarkedChallenge } from '../../challengeMarks';
 
 /**
  * One balance read for the whole pass. A throw here (or a null return) means
@@ -58,7 +47,8 @@ const PENDING_TURBO_STATES = new Set(['FREE', 'IN_PROGRESS', 'TIMER']);
  * How many joins a "Win Turbo" mission still needs: its remaining wins minus
  * the turbos in joined challenges that can be won before the mission expires.
  * A join with a timely turbo stops another early join on the next cycle.
- * An unreadable active list yields 0 — never join early blind.
+ * An unreadable active list yields 0 — never join early blind. So does a read
+ * that dropped elements: the pending count could be short of the truth.
  */
 const turboJoinsNeeded = async (
     token: string,
@@ -68,12 +58,15 @@ const turboJoinsNeeded = async (
 ): Promise<number> => {
     const turboNeed = missions?.turbo ?? 0;
     if (turboNeed <= 0 || !deps.getActiveChallenges) return 0;
-    const { challenges, fetchFailed } = await deps.getActiveChallenges(token);
-    if (fetchFailed) return 0;
+    const { challenges, fetchFailed, pruneUnsafe } = await deps.getActiveChallenges(token);
+    if (fetchFailed || pruneUnsafe) return 0;
     const requirements = missions?.turboRequirements ?? [{ remaining: turboNeed, expiresAtSec: null }];
     let joinsNeeded = 0;
     for (const { remaining, expiresAtSec: deadline } of requirements) {
         const pending = challenges.filter((c) => {
+            // A marked challenge's turbo state cannot be read: it still counts
+            // as a pending turbo, so it alone never drives an early join.
+            if (isMarkedChallenge(c)) return true;
             const state = c?.member?.turbo?.state ?? '';
             // A turbo without a known mode is never played, so it earns nothing toward the mission.
             if (!PENDING_TURBO_STATES.has(state) || !isKnownTurboMode(c?.member?.turbo)) return false;
@@ -90,8 +83,8 @@ const turboJoinsNeeded = async (
 };
 
 /**
- * Joins still to make without the timing window (Join Early for Missions): as
- * many as a join mission needs, or as a turbo mission is short of turbos.
+ * Joins still to make without the timing window (Join Early for Missions):
+ * as many as a turbo mission is short of turbos.
  */
 const earlyJoinsFor = async (
     token: string,
@@ -100,7 +93,7 @@ const earlyJoinsFor = async (
     nowSec: number,
 ): Promise<number> => {
     if (settings.getEffectiveSetting('missionJoinEarly', null) !== true) return 0;
-    return Math.max(missions?.join ?? 0, await turboJoinsNeeded(token, deps, missions, nowSec));
+    return turboJoinsNeeded(token, deps, missions, nowSec);
 };
 
 /**
@@ -109,35 +102,6 @@ const earlyJoinsFor = async (
  * computing a window against 0, which would fail every candidate closed.
  */
 const toPassNowSec = (now: number): number => Math.floor((Number.isFinite(now) && now > 0 ? now : Date.now()) / 1000);
-
-const decideCandidateJoin = (challenge: Challenge, pass: JoinPassState, alreadyPaid: boolean) => {
-    const cfg = resolveCandidateConfig(challenge);
-    // Join Early for Missions lifts the timing window while a mission wants
-    // joins: these would join later anyway, the mission wants them now.
-    const joinEarly = pass.earlyJoins > 0;
-    if (joinEarly) {
-        const closeTime = Number(challenge?.close_time);
-        if (!Number.isFinite(closeTime) || closeTime <= 0) {
-            return { join: false, needsCoins: 0, reason: 'close-time-unknown' };
-        }
-        if (closeTime <= pass.nowSec) return { join: false, needsCoins: 0, reason: 'already-closed' };
-    }
-    return shouldJoinChallenge({
-        challenge,
-        bankroll: pass.bankroll,
-        remainingBudget: pass.remainingBudget,
-        includeTypes: cfg.includeTypes,
-        excludeTypes: cfg.excludeTypes,
-        maxCoins: cfg.maxCoins,
-        hasProfileMatch: cfg.hasProfileMatch,
-        includeTags: cfg.includeTags,
-        excludeTags: cfg.excludeTags,
-        joinWithinSec: joinEarly ? 0 : cfg.joinWithinSec,
-        joinAfterPercentElapsed: joinEarly ? 0 : cfg.joinAfterPercentElapsed,
-        nowSec: pass.nowSec,
-        alreadyPaid,
-    });
-};
 
 /**
  * Both timing fields get the same one-per-pass diagnostic: each means the window
@@ -151,7 +115,25 @@ const noteTimingRefusal = (challenge: Challenge, reason: string, pass: JoinPassS
     warnMissingCloseTime(challenge, reason);
 };
 
-// Account + challenge pairs already warned about a paid-but-not-entered join: once per pair per process.
+/**
+ * A full or price-unreadable candidate is never joined, so say why it was
+ * skipped — at INFO when the user pointed the pass at this challenge
+ * themselves (a title-profile opt-in, or a non-empty Chosen Photos list
+ * resolved for it: they should know why nothing happened), at DEBUG for the
+ * pass's general sweep. `chosenPhotos` resolves by rule and override here,
+ * which is the list's settings-layer resolution (the member scoping of
+ * resolveJoinChosen only filters it).
+ */
+const noteJoinSafetySkip = (challenge: Challenge, reason: 'full' | 'price-unknown', hasProfileMatch: boolean) => {
+    const chosen = resolveJoinSetting('chosenPhotos', challenge);
+    const optedIn = hasProfileMatch || (Array.isArray(chosen) && chosen.length > 0);
+    const why = joinFreshRefusalWhy(reason);
+    const message = `skipped ${logger.challengeTag(challenge)}: ${why} — nothing was joined`;
+    if (optedIn) cat().info(message, null);
+    else cat().debug(message, null);
+};
+
+// Challenges already warned about a paid-but-not-entered join: once per challenge per process.
 const warnedPaidNotEntered = new Set<string>();
 
 /**
@@ -160,14 +142,38 @@ const warnedPaidNotEntered = new Set<string>();
  * the user enters it from Discover: choose the photo for that challenge (Chosen Photos), then press Join, which
  * tries those photos first.
  */
-const noteUnenteredPaidJoin = async (challenge: Challenge, token: string, deps: JoinDeps): Promise<void> => {
-    const key = markerKey(String(challenge?.id), await markerOwner(token, deps));
-    if (warnedPaidNotEntered.has(key) || !(await paidByThisAccount(challenge, token, deps))) return;
+const noteUnenteredPaidJoin = async (challenge: Challenge, deps: JoinDeps): Promise<void> => {
+    const key = String(challenge?.id);
+    if (warnedPaidNotEntered.has(key) || !(await paidAlready(challenge, deps))) return;
     warnedPaidNotEntered.add(key);
     cat().warning(
         `Manual Only is on for ${logger.challengeTag(challenge)}: the join was already paid for, but no photo is entered automatically — enter one from Discover: choose the photo for this challenge (Chosen Photos), then press Join`,
         null,
     );
+};
+
+/**
+ * Whether the challenge holds an unlock claim, at a positive listing price: a free candidate is not looked up at
+ * all. A claim that could not be looked for again is not known to be there: not read as "already paid".
+ */
+const paidAlready = async (
+    challenge: { id?: string | number; join_coins?: number },
+    deps: JoinDeps,
+): Promise<boolean> => {
+    const cost = Number(challenge?.join_coins);
+    if (challenge?.id == null || !(cost > 0) || !deps.joinStateStore) return false;
+    if (!(await refreshClaims(deps))) return false;
+    return claimOf(deps.joinStateStore, challenge.id) !== null;
+};
+
+/**
+ * The same claim whatever the listing now costs: a claim beats the full/price guard even once the price reads 0
+ * or is gone — the coins were paid when the price was positive.
+ */
+const claimWhateverCost = async (challenge: { id?: string | number }, deps: JoinDeps): Promise<boolean> => {
+    if (challenge?.id == null || !deps.joinStateStore) return false;
+    if (!(await refreshClaims(deps))) return false;
+    return claimOf(deps.joinStateStore, challenge.id) !== null;
 };
 
 /**
@@ -182,21 +188,29 @@ const joinCandidate = async (
     deps: JoinDeps,
     pass: JoinPassState,
 ): Promise<string> => {
-    // Per-candidate enable (master → profile): skip titles auto-join is off
-    // for, BEFORE resolving the rest of the config (avoid redundant work).
-    if (resolveJoinSetting('autoJoin', challenge) !== true) {
-        return 'skipped:autojoin-off';
+    const gateRefusal = joinCandidateGateRefusal(challenge);
+    if (gateRefusal === 'skipped:manual-photos-only') {
+        await noteUnenteredPaidJoin(challenge, deps);
     }
-    // Manual Only: the join would enter a photo by itself, so it is left to the user.
-    if (resolveJoinSetting('manualPhotosOnly', challenge) === true) {
-        await noteUnenteredPaidJoin(challenge, token, deps);
-        return 'skipped:manual-photos-only';
-    }
-    const alreadyPaid = await paidByThisAccount(challenge, token, deps);
-    const decision = decideCandidateJoin(challenge, pass, alreadyPaid);
+    if (gateRefusal !== null) return gateRefusal;
+    const alreadyPaid = await paidAlready(challenge, deps);
+    const cfg = resolveCandidateConfig(challenge);
+    const decision = decideCandidateJoin(challenge, cfg, pass, alreadyPaid);
+    let submitOnly = alreadyPaid;
     if (!decision.join) {
         noteTimingRefusal(challenge, decision.reason, pass);
-        return `skipped:${decision.reason}`;
+        if (decision.reason === 'full' || decision.reason === 'price-unknown') {
+            // The guard refuses a FRESH join; a claim on file beats it whatever the listing now costs —
+            // the price may have dropped to 0 since the unlock was paid, and only the submit is left.
+            // With a claim the join goes ahead as the paid retry does: submit only, never an unlock.
+            if (!(await claimWhateverCost(challenge, deps))) {
+                noteJoinSafetySkip(challenge, decision.reason, cfg.hasProfileMatch);
+                return `skipped:${decision.reason}`;
+            }
+            submitOnly = true;
+        } else {
+            return `skipped:${decision.reason}`;
+        }
     }
     // Guard each candidate: one bad candidate (unexpected throw) must not
     // abort the rest of the pass — mirrors the per-challenge voting loop.
@@ -205,7 +219,7 @@ const joinCandidate = async (
         // The balance the pass already holds goes into the claim, for the user to compare with GuruShots.
         const coins = Number(pass.bankroll?.coins);
         outcome = await performJoin(challenge, token, deps, decision.needsCoins, {
-            submitOnly: alreadyPaid,
+            submitOnly,
             coinsBefore: Number.isFinite(coins) ? coins : null,
             priceCeiling: decision.needsCoins,
         });
@@ -252,10 +266,10 @@ const rememberOpenList = (candidates: Array<Challenge | null>): void => {
  *   (converted to seconds to match `close_time`); defaults to Date.now()
  * @param missions what the active missions still need
  *   (services/missions.ts). With missionJoinEarly on, the timing window is
- *   lifted for as many joins as a "Join N challenges" mission needs, or as a
- *   "Win Turbo" mission is short of turbos — a turbo is only winnable in a
- *   joined challenge, so each join brings one (earlyJoinsFor). Each join counts
- *   the join mission down.
+ *   lifted while a mission wants joins: a join mission only while the open
+ *   list can complete it, a turbo mission for the turbos it is short of — a
+ *   turbo is only winnable in a joined challenge, so each join brings one
+ *   (earlyJoinsFor).
  */
 const runJoinPass = async (
     token: string,
@@ -307,6 +321,21 @@ const runJoinPass = async (
         missingCloseTimeLogged: false,
         earlyJoins: await earlyJoinsFor(token, deps, missions, nowSec),
     };
+    // A join mission lifts the window only while the currently open challenges
+    // are enough to complete it.
+    const joinNeed = missions?.join ?? 0;
+    if (settings.getEffectiveSetting('missionJoinEarly', null) === true && joinNeed > 0) {
+        const result = joinMissionLift(candidates, joinNeed, bankroll, pass.remainingBudget, nowSec);
+        pass.earlyJoins = Math.max(pass.earlyJoins, result.lift);
+        if (result.wouldJoin < joinNeed && pass.earlyJoins === 0) {
+            // One per pass, beside the early-join notice: the mission cannot
+            // be completed by what is open now, so nothing joins early.
+            cat().info(
+                `join mission needs ${joinNeed} but only ${result.wouldJoin} of the open challenges would join — waiting for the auto-join timing`,
+                null,
+            );
+        }
+    }
     // Explain up front why joins may land outside the configured timing.
     if (pass.earlyJoins > 0) {
         cat().info(`joining up to ${pass.earlyJoins} challenge(s) early for the active missions`, null);
@@ -314,8 +343,9 @@ const runJoinPass = async (
 
     const results: Array<{ id: string | number | undefined; status: string }> = [];
     let joined = 0;
-    // A mission may need fewer joins than there are open challenges. Spend
-    // those joins on the ones ending soonest, so their turbos can be won first.
+    // A turbo mission, or a join mission whose open list can complete it, may
+    // want fewer joins than there are open challenges. Spend those joins on
+    // the ones ending soonest, so their turbos can be won first.
     const orderedCandidates =
         pass.earlyJoins > 0
             ? [...candidates].sort((a, b) => (a?.close_time ?? Infinity) - (b?.close_time ?? Infinity))
@@ -329,13 +359,14 @@ const runJoinPass = async (
         if (status === 'joined') {
             joined += 1;
             pass.earlyJoins -= 1;
+            // Any landed join serves the mission — early or in-window — so it consumes the need in both cases.
             consumeMission(missions, 'join');
         }
         results.push({ id: challenge?.id, status });
     }
 
     // After the joins, so each one's own reads of the claims come first.
-    await pruneClosedClaims(candidates, token, deps);
+    await pruneClosedClaims(candidates, deps);
     if (joined > 0) {
         cat().info(`join pass complete: joined ${joined} of ${candidates.length} open challenge(s)`, null);
     }

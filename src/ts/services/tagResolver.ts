@@ -32,6 +32,7 @@
  */
 
 import { buildThemeKeywords, matches, stem, tokenise, SEMANTIC_MATCH_FLOOR } from './photoPicker';
+import { MIN_AUTOCOMPLETE_CHARS } from '../settings/limits';
 import * as lexicon from './semantic/lexicon';
 
 import type { ChallengeText, IgnoreWords } from '../types/photoPicker';
@@ -42,11 +43,6 @@ import type { FillLogger } from '../types/autoFill';
 // word and a tag ("stairs"->"stair", "lighthouses"->"lighthouse") without
 // walking a long word down to a meaningless prefix.
 const MAX_BACKOFF_STEPS = 2;
-// Must match MIN_AUTOCOMPLETE_CHARS in api/tags.ts — both encode the same server
-// behavior (nothing is returned below three characters). Kept local rather than
-// imported because business logic does not reach into src/ts/api/*; if one
-// moves, move the other.
-const MIN_TERM_LENGTH = 3;
 
 // Resolution is a narrowing step, not a broadening one: more terms means more
 // single-page searches on a path that can run close to a deadline, and the
@@ -60,12 +56,21 @@ const MAX_RESOLVED_TAGS = 3;
  * tag "face" (or "faces") is the trivially correct answer, and requiring the
  * lexicon to confirm it would reject perfectly good tags whenever a word is
  * out of vocabulary.
+ *
+ * A compound term ("close-up") is additionally matched by its joined stems:
+ * the tag's stems joined must equal the term stem joined ("closeup"), which
+ * accepts the spellings "close up", "close-up" and "closeup" — with the
+ * lexicon unloaded too, where the compound merge cannot run. The tags "close"
+ * and "closes" are rejected.
  */
 const isLexicalMatch = (tag: string, term: string): boolean => {
     const termStem = stem(term);
     // keepStopwords: a tag is the member's own vocabulary, not challenge
     // boilerplate — "body part" must keep both words.
-    return tokenise(tag, { keepStopwords: true }).some((tagStem) => matches(tagStem, termStem));
+    const tagStems = tokenise(tag, { keepStopwords: true, compounds: 'replace' });
+    if (tagStems.some((tagStem) => matches(tagStem, termStem))) return true;
+    if (!termStem.includes('-')) return false;
+    return tagStems.join('') === termStem.replace(/-/g, '');
 };
 
 /**
@@ -88,7 +93,9 @@ const isLexicalMatch = (tag: string, term: string): boolean => {
  */
 const themeBucketOf = (challengeVec: Float64Array | null, tag: string): number | null => {
     if (!challengeVec) return null;
-    const tokens = tokenise(tag, { keepStopwords: true });
+    // Compound mode: a "Close-up" tag embeds as the close-up vector, not the
+    // pooled close+up mean.
+    const tokens = tokenise(tag, { keepStopwords: true, compounds: 'replace' });
     if (tokens.length === 0) return null;
     const tagVec = lexicon.embed(tokens);
     if (!tagVec) return null;
@@ -134,7 +141,7 @@ const resolveTermsToTags = async (
         // Lexicon problems must never break a fill; lexical matching still works.
     }
 
-    const usable = terms.filter((term) => typeof term === 'string' && term.length >= MIN_TERM_LENGTH);
+    const usable = terms.filter((term) => typeof term === 'string' && term.length >= MIN_AUTOCOMPLETE_CHARS);
     if (usable.length === 0) return [];
 
     // One backoff CHAIN per term, chains run concurrently.
@@ -151,7 +158,7 @@ const resolveTermsToTags = async (
         usable.map(async (term) => {
             for (let step = 0; step <= MAX_BACKOFF_STEPS; step++) {
                 const probe = term.slice(0, term.length - step);
-                if (probe.length < MIN_TERM_LENGTH) break;
+                if (probe.length < MIN_AUTOCOMPLETE_CHARS) break;
 
                 let items: unknown;
                 try {

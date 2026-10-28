@@ -12,12 +12,11 @@
  * `V2_SEEDS=7,100-140 pnpm jest tests/settings/v2/equivalence`. A failure names the seed.
  */
 
-import { isPlainObject } from '../../../src/ts/plainObject';
 import { TOP_LEVEL_ONLY_KEYS } from '../../../src/ts/settings/importV1/convert';
 import { V1_SETTINGS_SCHEMA } from '../../../src/ts/settings/importV1/schema';
 import { createV1Oracle } from '../../helpers/v1Oracle';
 import { FIXTURES } from './fixtures';
-import { liveFromV1Raw, liveKey, mirrorOfRaw, releaseLive } from './liveAdapter';
+import { liveFromV1Raw, liveKey, releaseLive } from './liveAdapter';
 import { parseSeeds, randomCase } from './random';
 import { diffTrees, OWN_NAMES, snapshot, variantsFor } from './snapshot';
 import { CANDIDATES, CHALLENGES, NOW } from './fixtures/types';
@@ -92,53 +91,6 @@ const equivalence = (c: Case) => {
         throw new Error(`${c.name} differs from the oracle:\n${lines.join('\n')}\nfile: ${c.raw.slice(0, 600)}`);
     }
 };
-
-/**
- * The file without its rules that carry a close-time condition: the mirror leaves those out (an older build ignores the
- * condition, so it would match them more widely than they mean), and what an older build reads is everything else.
- */
-const withoutCloseTimeRules = (raw: string): string => {
-    const file: unknown = JSON.parse(raw);
-    if (!isPlainObject(file) || !isPlainObject(file.challengeSettings)) return raw;
-    const { titleRules } = file.challengeSettings;
-    if (!Array.isArray(titleRules)) return raw;
-    const kept = titleRules.filter(
-        (rule: unknown) => !isPlainObject(rule) || (rule.closesAt === undefined && rule.closesAtTimes === undefined),
-    );
-    return JSON.stringify({ ...file, challengeSettings: { ...file.challengeSettings, titleRules: kept } });
-};
-
-/**
- * What an older build reads once the live app has imported the file and saved: the frozen oracle reading the mirror
- * the app wrote answers every question as it answers for the file the user had, but for the rules with a close-time
- * condition, which the mirror leaves out. The mirror carries the app's own key names (the renames are undone) and every
- * migration marked done, so the old pipeline migrates nothing.
- */
-const mirrorEquivalence = (c: Case) => {
-    const env = environment(c);
-    const original = createV1Oracle(withoutCloseTimeRules(c.raw), env);
-    const variants = variantsFor(original, c.challenges);
-    const expected = snapshot(original, c, env, variants, OWN_NAMES, { calls: 0 });
-    const olderEnv = environment(c);
-    const older = createV1Oracle(mirrorOfRaw(c.raw), olderEnv);
-    const { mismatches } = diffTrees(
-        withoutAppState(expected),
-        withoutAppState(snapshot(older, c, olderEnv, variants, OWN_NAMES, { calls: 0 })),
-    );
-    if (mismatches.length > 0) {
-        const lines = mismatches.map(
-            ({ path, oracle: want, live }) =>
-                `  ${path}\n    file   ${JSON.stringify(want)}\n    mirror ${JSON.stringify(live)}`,
-        );
-        throw new Error(`${c.name}: an older build reads the mirror differently from the file:\n${lines.join('\n')}`);
-    }
-};
-
-describe('an older build reading the mirror against the file the user had', () => {
-    test.each([...fixtureCases, ...randomCases].map((c) => [c.name, c] as const))('%s', (_name, c) => {
-        mirrorEquivalence(c);
-    });
-});
 
 describe('the live resolver against the frozen oracle', () => {
     afterAll(() => {

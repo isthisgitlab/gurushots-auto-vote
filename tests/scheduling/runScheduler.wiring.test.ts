@@ -11,6 +11,7 @@ jest.mock('../../src/ts/settings', () => ({
     loadSettings: jest.fn(() => ({ app: { checkFrequencyMin: 3, checkFrequencyMax: 3 } })),
     getSetting: jest.fn(() => 3),
     getEffectiveSetting: jest.fn(() => 5),
+    consumeChosenPhotos: jest.fn(() => false),
 }));
 
 jest.mock('../../src/ts/services/notify/nodeNotify', () => ({

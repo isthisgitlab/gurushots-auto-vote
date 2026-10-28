@@ -12,6 +12,7 @@ import * as logger from '../logger';
 import { oneLine } from '../format/logSafe';
 import { isUnsafeChallengeKey } from '../metadata/validation';
 import { isPlainObject } from '../plainObject';
+import { applyPinToRecord } from '../voting/entryPins';
 import { loadSettings, saveSettings } from './persistence';
 
 import type { ConfigV2 } from '../types/config';
@@ -132,13 +133,7 @@ const setEntryPin = (kind: EntryPinKind, challengeId: string | number, imageId: 
     // Clearing a pin that was never set changes nothing: no write, no broadcast.
     if (imageId === null && (!known || pins[key][kind] === undefined)) return 'ok';
     const next: EntryPinRecord = { ...(known ? pins[key] : {}) };
-    if (imageId === null) {
-        delete next[kind];
-    } else {
-        next[kind] = imageId;
-        const other = kind === 'boost' ? 'turbo' : 'boost';
-        if (next[other] === imageId) delete next[other];
-    }
+    applyPinToRecord(next, kind, imageId);
 
     if (Object.keys(next).length === 0) {
         delete pins[key];

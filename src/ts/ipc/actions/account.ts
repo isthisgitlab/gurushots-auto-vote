@@ -5,19 +5,25 @@ import * as logger from '../../logger';
 import * as apiFactory from '../../apiFactory';
 import * as auth from '../../services/auth';
 import { isAutoJoinActive } from '../../services/joinChallenges';
-import { forgetFailedMemberId, resolveMemberId } from '../../services/autoFill';
 import { chosenAnnotator, annotateOpenIds, MAX_ANNOTATED_IDS } from './chosenAnnotations';
 import { rememberOpenChallenges } from '../../services/openChallengeCache';
 import { fetchUpcoming, mergeDiscoverLists } from '../../services/discoverChallenges';
-import { accountGeneration } from '../../services/accountScope';
 import { dropContext } from '../../services/libraryCache';
 import { getAutoClaimStatus } from '../../services/autoClaim';
 import { rememberChallenges } from '../../windows/quitGuard';
 import { sanitizeForLog, refuseInvalidArgs } from './shared';
+import { isPlainObject } from '../../plainObject';
 
 import type { IpcReplyFn } from '../registerHandlers';
 import type { joinChallengeSingle } from '../../services/joinChallenges';
-import type { ActiveChallengesResponse, Bankroll, Challenge, OpenChallenge } from '../../types/gurushots';
+import type {
+    ActiveChallengesResponse,
+    Bankroll,
+    Challenge,
+    ChosenAnnotation,
+    DiscoverChallenge,
+    OpenChallenge,
+} from '../../types/gurushots';
 
 const handleGetAutoClaimStatus = (async () => {
     try {
@@ -56,6 +62,13 @@ const handleGetActiveChallenges = (async (): Promise<ActiveChallengesResponse> =
 }) satisfies IpcReplyFn;
 
 const handleAuthenticate = (async (event: unknown, username: string, password: string, isMock: boolean) => {
+    // IPC boundary: the renderer (or any caller) can send anything, so the typed signature is checked before any use.
+    if (!(typeof username === 'string' && typeof password === 'string')) {
+        logger
+            .withCategory(logger.CATEGORIES.AUTHENTICATION)
+            .warning('authenticate refused non-string credentials locally; GuruShots was not contacted', null);
+        return { success: false as const, error: 'Invalid credentials' };
+    }
     logger
         .withCategory(logger.CATEGORIES.AUTHENTICATION)
         .info(`🔐 Authentication request received - Mock: ${isMock}`, null);
@@ -80,7 +93,7 @@ const handleAuthenticate = (async (event: unknown, username: string, password: s
             // The login form pre-fills the name while "Stay logged in" is on.
             const nameSaved = settings.setSetting(
                 'lastUsername',
-                settings.getSetting('stayLoggedIn') === true ? String(username) : '',
+                settings.getSetting('stayLoggedIn') === true ? username : '',
             );
             if (!nameSaved) {
                 logger
@@ -139,6 +152,56 @@ const idsOf = (items: ReadonlyArray<Challenge | null>): Array<string | number> =
     items.flatMap((c) => (c?.id == null ? [] : [c.id]));
 
 /**
+ * The challenge's suggested photo ids from the strategy's in-memory cache — an enrichment, never a
+ * fetch: any failure (the cache being cold, a challenge without an id) resolves empty, and the
+ * listing always lands.
+ */
+const suggestedIds = async (
+    token: string,
+    strategy: apiFactory.ApiStrategy,
+    id: Challenge['id'] | null | undefined,
+): Promise<string[]> => {
+    if (id === null || id === undefined) return [];
+    try {
+        return await strategy.getSuggestedPhotoIds(token, String(id));
+    } catch {
+        return [];
+    }
+};
+
+/**
+ * What a Discover row (and the CLI's `discover`, and the join paths) reads off a listing item: an
+ * explicit pick, so no other field GuruShots carries — `guru_info`, ranking payloads, anything
+ * server-side — ever crosses IPC with the list. `member` is narrowed to the one field the join's
+ * fresh-join guard reads (`submit_state`). `suggestedPhotoIds` rides along only when there are any:
+ * the field stays absent, not empty, on a challenge GuruShots suggests nothing for.
+ */
+const pickDiscoverItem = (item: DiscoverChallenge, chosen: ChosenAnnotation, suggested: string[]): OpenChallenge => ({
+    id: item.id,
+    title: item.title,
+    url: item.url,
+    type: item.type,
+    badge: item.badge,
+    tags: item.tags,
+    status: item.status,
+    start_time: item.start_time,
+    close_time: item.close_time,
+    entries: item.entries,
+    players: item.players,
+    max_players: item.max_players,
+    votes: item.votes,
+    join_coins: item.join_coins,
+    max_photo_submits: item.max_photo_submits,
+    // The renderer reads the prize line with .map, so only an array of objects crosses IPC —
+    // anything else (GuruShots has sent a bare object) drops the field.
+    first_prizes:
+        Array.isArray(item.first_prizes) && item.first_prizes.every(isPlainObject) ? item.first_prizes : undefined,
+    member: item.member && { submit_state: item.member.submit_state },
+    ...(suggested.length > 0 ? { suggestedPhotoIds: suggested } : {}),
+    ...chosen,
+});
+
+/**
  * The upcoming list, or null when it could not be had: a failure never costs the open list its
  * place. The log line carries the filter and the kind of failure only — no token, no member.
  */
@@ -164,37 +227,40 @@ const handleGetMemberChallenges = (async () => {
         const guard = auth.requireAuthToken('member challenges');
         if (!guard.ok) return guard.response;
         const strategy = apiFactory.getApiStrategy();
-        const generation = accountGeneration();
         const [open, upcoming] = await Promise.all([
             strategy.getMemberChallenges(guard.token, 'open'),
             // Fetched whatever the window: every upcoming id is what keeps its chosen photos from cleanup.
             fetchUpcomingOrNull(guard.token, strategy),
         ]);
-        // The account logged out (or changed) while the lists were on their way: they are not this
-        // account's to remember.
-        if (generation !== accountGeneration()) {
-            return { success: false as const, error: 'The account changed while listing challenges', items: [] };
-        }
         if (open === null) return { success: false as const, error: 'Could not list challenges', items: [] };
-        // These lists keep a chosen-photos entry alive for a challenge that is not joined yet (see
-        // cleanupStaleChallengeSetting); the upcoming one is written only from a successful fetch.
-        settings.rememberOpenChallengeIds(idsOf(open));
-        if (upcoming !== null) settings.rememberUpcomingChallenges(upcoming);
         const merged = mergeDiscoverLists({
             open,
             upcoming: upcoming ?? [],
             hours: settings.getEffectiveSetting('discoverUpcomingHours', null),
             nowSec: Date.now() / 1000,
         });
-        // A challenge the upcoming feed dropped but the open one does not list yet stays in the
-        // cache, so its rules (by title or tags) still resolve while it is "starting now".
-        const fetched = new Set(idsOf(upcoming ?? []).map(String));
-        const lingering = Array.from(settings.getUpcomingChallengeIds() ?? []).filter((id) => !fetched.has(id));
-        rememberOpenChallenges(merged, lingering);
-        const annotate = await chosenAnnotator(guard.token);
+        // The lists belong to the token they were read under: a login that replaced it while they
+        // were on their way is still answered, but nothing is remembered for the account it replaced
+        // (a request still in flight must not refill what a logout or account switch emptied).
+        if (guard.token === settings.getSetting('token')) {
+            // These lists keep a chosen-photos entry alive for a challenge that is not joined yet (see
+            // cleanupStaleChallengeSetting); the upcoming one is written only from a successful fetch.
+            settings.rememberOpenChallengeIds(idsOf(open));
+            if (upcoming !== null) settings.rememberUpcomingChallenges(upcoming);
+            // A challenge the upcoming feed dropped but the open one does not list yet stays in the
+            // cache, so its rules (by title or tags) still resolve while it is "starting now".
+            const fetched = new Set(idsOf(upcoming ?? []).map(String));
+            const lingering = Array.from(settings.getUpcomingChallengeIds() ?? []).filter((id) => !fetched.has(id));
+            rememberOpenChallenges(merged, lingering);
+        }
+        const annotate = chosenAnnotator();
         return {
             success: true as const,
-            items: merged.map((item): OpenChallenge => ({ ...item, ...annotate(item) })),
+            items: await Promise.all(
+                merged.map(async (item) =>
+                    pickDiscoverItem(item, annotate(item), await suggestedIds(guard.token, strategy, item.id)),
+                ),
+            ),
         };
     } catch (error) {
         logger.withCategory('api').error('Error handling get-member-challenges request:', error);
@@ -203,9 +269,7 @@ const handleGetMemberChallenges = (async () => {
 }) satisfies IpcReplyFn;
 
 // The Chosen Photos annotations of open challenges, read from the settings: what the Discover
-// rows re-read when a setting changes, without fetching the challenge list again. The only request
-// it can make is the signed-in member's identity lookup, cached per token (retried at most every
-// 60 s after a failure) and skipped when already resolved.
+// rows re-read when a setting changes, without fetching the challenge list again.
 /**
  * @param ids - the open challenges' ids
  */
@@ -214,40 +278,10 @@ const handleGetOpenChosenAnnotations = (async (event: unknown, ids: Array<string
         return refuseInvalidArgs('join', 'get-open-chosen-annotations');
     }
     try {
-        const { token } = settings.loadSettings().auth;
-        return { success: true as const, annotations: await annotateOpenIds(ids, token) };
+        return { success: true as const, annotations: await annotateOpenIds(ids) };
     } catch (error) {
         logger.withCategory('join').error('Error handling get-open-chosen-annotations request:', error);
         return { ...errorResult(error, 'Failed to read the chosen photos'), annotations: {} };
-    }
-}) satisfies IpcReplyFn;
-
-// The user's explicit "check the account again" (the chooser's Retry when it could not tell whose
-// account the saved list belongs to). It evicts the cached failed identity lookup for this token and
-// resolves the member only: no library walk, so a retry costs one profile request and repeats
-// nothing the listing on screen already read. `memberId` is the signed-in account, or the check
-// failed (`account-check-failed`) and may be tried again shortly, or there is no session
-// (`not-logged-in`). The eviction is rate-limited in memberIdentity: the first eviction always gets
-// through; later ones are spaced from the last eviction (presses inside the gap are answered from
-// the cache), so it never costs more than one request per gap.
-const handleConfirmAccount = (async () => {
-    try {
-        const guard = auth.requireAuthToken('account check');
-        // Signed out is not a failed check: Retry cannot help, so the renderer says to log in again.
-        if (!guard.ok) return { success: false as const, error: 'not-logged-in' as const };
-        forgetFailedMemberId(guard.token);
-        const memberId = await resolveMemberId(
-            guard.token,
-            apiFactory.getApiStrategy().getCurrentMemberProfile,
-            logger,
-            'join',
-        );
-        return memberId === null
-            ? { success: false as const, error: 'account-check-failed' as const }
-            : { success: true as const, memberId };
-    } catch (error) {
-        logger.withCategory('join').error('Error handling confirm-account request:', error);
-        return errorResult(error, 'Failed to check the account');
     }
 }) satisfies IpcReplyFn;
 
@@ -291,7 +325,7 @@ const handleJoinChallenge = (async (
             ...(expectedCost === undefined ? [] : [expectedCost]),
         );
         // Joining enters photos, so which ones the challenge now accepts has changed.
-        if (outcome?.status === 'joined') dropContext(guard.token, challengeId);
+        if (outcome?.status === 'joined') dropContext(challengeId);
         return {
             success: outcome?.status === 'joined',
             status: outcome?.status,
@@ -313,8 +347,7 @@ const handleJoinChallenge = (async (
  * challenge asks for its price. Never touches a claim known to be charged.
  */
 const handleForgetUnconfirmedPayment = (async (event: unknown, challengeId: string | number) => {
-    // A plain challenge id only: a claim is keyed `<member id>:<challenge id>`, and an id with a colon in it must
-    // never be able to name another record.
+    // A plain challenge id only: claims are keyed by their challenge id, so an id with a colon in it names no record.
     if (!isIdArg(challengeId) || !/^\d+$/.test(String(challengeId))) {
         return refuseInvalidArgs('join', 'forget-unconfirmed-payment');
     }
@@ -343,6 +376,5 @@ export {
     handleGetAutoJoinActive,
     handleGetMemberChallenges,
     handleGetOpenChosenAnnotations,
-    handleConfirmAccount,
     handleJoinChallenge,
 };

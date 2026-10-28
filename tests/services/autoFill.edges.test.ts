@@ -24,7 +24,6 @@ jest.mock('../../src/ts/settings/storage', () => ({
 const {
     resolveIgnoreWords,
     resolveMemberId,
-    peekMemberId,
     __resetMemberIdCache,
     refreshChallengeState,
     rankCandidatesForChallenge,
@@ -132,22 +131,6 @@ describe('resolveMemberId', () => {
         expect(lines.debug).toEqual(['fillNew: identity lookup failed: 401']);
     });
 
-    test('peekMemberId only reads what an earlier lookup already resolved', async () => {
-        expect(peekMemberId('tok-peek')).toBeNull();
-        const getProfile = jest.fn().mockResolvedValue({ id: 'member-7' });
-        const pending = resolveMemberId('tok-peek', getProfile);
-        // The lookup is in flight: peeking neither waits for it nor starts one.
-        expect(peekMemberId('tok-peek')).toBeNull();
-        await pending;
-        await Promise.resolve();
-        expect(peekMemberId('tok-peek')).toBe('member-7');
-        expect(getProfile).toHaveBeenCalledTimes(1);
-        // A lookup that found nobody leaves nothing to peek at.
-        await resolveMemberId('tok-nobody', jest.fn().mockResolvedValue({ id: '' }));
-        await Promise.resolve();
-        expect(peekMemberId('tok-nobody')).toBeNull();
-    });
-
     test('a failure without a logger still resolves to null', async () => {
         const getProfile = jest.fn().mockRejectedValue(new Error('x'));
         await expect(resolveMemberId('tok-c', getProfile, null)).resolves.toBeNull();
@@ -226,6 +209,36 @@ describe('refreshChallengeState — warnings and flag carry-over', () => {
         expect(entries[0]).toEqual({ votes: 3 });
         expect(entries.find((e) => e.id === 'e1')).toEqual({ id: 'e1', turbo: true });
         expect(entries.find((e) => e.id === 'e2')).toEqual({ id: 'e2', boosted: true });
+    });
+
+    test('carries a local guru pick across the refresh; a fresh pick of its own stays', async () => {
+        const { logger } = makeCapturingLogger();
+        // The fresh read answers a numeric id where the previous read had a string one.
+        const challenge = makeChallenge({
+            entries: [
+                { id: '777', guru_pick: true },
+                // A truthy non-boolean is not a pick (exactly true), so nothing is carried.
+                { id: 'not-bool', guru_pick: invalid<boolean>('yes') },
+                { id: 'e9' },
+            ],
+        });
+        const response = freshList('c1', [
+            { id: 777, guru_pick: false },
+            { id: 'not-bool' },
+            { id: 'e9', guru_pick: true },
+        ]);
+        const result = await refreshChallengeState(
+            challenge,
+            'tok',
+            { getActiveChallenges: jest.fn().mockResolvedValue(response), logger },
+            'fillNew',
+        );
+        expect(result).toBe('refreshed');
+        const entries = challenge.member!.ranking!.entries!;
+        expect(entries.find((e) => String(e.id) === '777')?.guru_pick).toBe(true);
+        expect(entries.find((e) => e.id === 'not-bool')?.guru_pick).toBeUndefined();
+        // A fresh flag the server itself reports is never cleared.
+        expect(entries.find((e) => e.id === 'e9')?.guru_pick).toBe(true);
     });
 });
 
@@ -347,7 +360,7 @@ describe('negated-title fallback warning', () => {
             submitToChallenge,
         });
         expect(result.success).toBe(true);
-        const warning = lines.warning.find((m) => m.includes('every eligible photo shows what the title excludes'));
+        const warning = lines.warning.find((m) => m.includes('every eligible photo shows what the challenge excludes'));
         expect(warning).toBeDefined();
         expect(warning).toContain('falling back to the full library');
     });

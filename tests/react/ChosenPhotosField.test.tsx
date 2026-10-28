@@ -1,7 +1,7 @@
 /**
  * The `photos` setting input and the chosen-photos control it is built on:
- * chosen photos as thumbnails (only once the listing has shown their owner is
- * the signed-in account), a Choose button that opens the chooser, Clear, the
+ * chosen photos as text chips (their ids are not sent anywhere on their own, so
+ * they read as themselves), a Choose button that opens the chooser, Clear, the
  * rule-row "Inherit" variant, and the challenge context the chooser reads
  * eligibility through.
  */
@@ -9,8 +9,9 @@
 import { act, fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { SettingInput } from '@/components/app/SettingInput';
 import { ChosenPhotosControl } from '@/components/app/ChosenPhotosField';
+import { rememberCurrentMember } from '@/hooks/currentMember';
+import { buildPhotoUrl } from '@/utils/formatters';
 import { SettingsChallengeProvider } from '@/contexts/SettingsChallengeContext';
-import { rememberCurrentMember } from '@/api/useChosenPhotosOwner';
 import type { SerializableSchemaEntry } from '../../src/ts/ipc/settings.handlers';
 import { invalid } from '../helpers/invalid';
 
@@ -37,8 +38,6 @@ const renderInput = (value: unknown, over: Record<string, unknown> = {}) => {
 };
 
 beforeEach(() => {
-    rememberCurrentMember(null);
-    window.api.getSetting = jest.fn().mockResolvedValue('');
     window.api.getLibraryPhotos = jest.fn().mockResolvedValue(libraryOf(1, 2));
 });
 
@@ -62,96 +61,20 @@ describe('the photos setting input', () => {
         expect(screen.getAllByRole('listitem')).toHaveLength(1);
     });
 
-    test('chips show the id start as text until the owner is known to be the signed-in account', async () => {
-        window.api.getSetting = jest.fn().mockResolvedValue(MEMBER);
-        renderInput([idOf(1)]);
-        await waitFor(() => expect(window.api.getSetting).toHaveBeenCalledWith('chosenPhotosMemberId'));
-        expect(screen.getByText('00000001')).toBeTruthy();
-        expect(document.querySelector('img')).toBeNull();
-    });
-
-    test('chips are numbered in the saved order, in the badge and (for an image) in its alt text', async () => {
-        window.api.getSetting = jest.fn().mockResolvedValue(MEMBER);
+    test('chips are numbered in the saved order, each reading its number and id start', () => {
         renderInput([idOf(3), idOf(1), idOf(2)]);
-        await waitFor(() => expect(window.api.getSetting).toHaveBeenCalledWith('chosenPhotosMemberId'));
-        // Text chips read as their number and id start.
         const chips = screen.getAllByRole('listitem').map((item) => item.textContent);
         expect(chips).toEqual(['100000003', '200000001', '300000002']);
-        rememberCurrentMember(MEMBER);
-        await waitFor(() => expect(document.querySelectorAll('img')).toHaveLength(3));
-        // With images the alt text carries the number (the visible badge is then hidden from readers).
-        expect(Array.from(document.querySelectorAll('img')).map((img) => img.getAttribute('alt'))).toEqual([
-            'app.chosenPhotoThumbAlt',
-            'app.chosenPhotoThumbAlt',
-            'app.chosenPhotoThumbAlt',
-        ]);
-        const badges = Array.from(document.querySelectorAll('li .badge'));
-        expect(badges.map((badge) => badge.textContent)).toEqual(['1', '2', '3']);
-        expect(badges.every((badge) => badge.getAttribute('aria-hidden') === 'true')).toBe(true);
-    });
-
-    test('a list owned by the account the listing reported shows thumbnails', async () => {
-        window.api.getSetting = jest.fn().mockResolvedValue(MEMBER);
-        rememberCurrentMember(MEMBER);
-        renderInput([idOf(1)]);
-        const img = await waitFor(() => {
-            const found = document.querySelector('img');
-            expect(found).not.toBeNull();
-            return found!;
-        });
-        expect(img.getAttribute('src')).toBe(`https://photos.gurushots.com/unsafe/64x64/${MEMBER}/3_${idOf(1)}.jpg`);
-        expect(img.getAttribute('referrerpolicy')).toBe('no-referrer');
-        expect(img.getAttribute('loading')).toBe('lazy');
-    });
-
-    test('a thumbnail that fails to load falls back to the id start, and only for that chip', async () => {
-        window.api.getSetting = jest.fn().mockResolvedValue(MEMBER);
-        rememberCurrentMember(MEMBER);
-        renderInput([idOf(1), idOf(2)]);
-        await waitFor(() => expect(document.querySelectorAll('img')).toHaveLength(2));
-        act(() => {
-            document.querySelector('img')!.dispatchEvent(new Event('error'));
-        });
-        expect(document.querySelectorAll('img')).toHaveLength(1);
-        expect(screen.getByText('00000001')).toBeTruthy();
-    });
-
-    test('a list owned by another account is only counted: no thumbnail, no id, no short id', async () => {
-        window.api.getSetting = jest.fn().mockResolvedValue('d'.repeat(32));
-        rememberCurrentMember(MEMBER);
-        renderInput([idOf(1), idOf(2)]);
-        await waitFor(() => expect(window.api.getSetting).toHaveBeenCalled());
-        expect(await screen.findByText('app.chosenPhotosOtherAccountCount')).toBeTruthy();
-        expect(document.querySelector('img')).toBeNull();
-        expect(screen.queryAllByRole('listitem')).toHaveLength(0);
-        expect(document.body.textContent).not.toContain('00000001');
-    });
-
-    test('the count appears as soon as a listing shows whose account is signed in', async () => {
-        window.api.getSetting = jest.fn().mockResolvedValue('d'.repeat(32));
-        renderInput([idOf(1)]);
-        await waitFor(() => expect(window.api.getSetting).toHaveBeenCalled());
-        // Not known yet: the chips are what they were.
-        expect(screen.getByText('00000001')).toBeTruthy();
-        act(() => rememberCurrentMember(MEMBER));
-        expect(await screen.findByText('app.chosenPhotosOtherAccountCount')).toBeTruthy();
-        expect(screen.queryByText('00000001')).toBeNull();
-        // The same member reported again changes nothing.
-        act(() => rememberCurrentMember(MEMBER));
-        expect(screen.getByText('app.chosenPhotosOtherAccountCount')).toBeTruthy();
-    });
-
-    test('a failed read of the owner leaves chips as text', async () => {
-        window.api.getSetting = jest.fn().mockResolvedValue(42);
-        rememberCurrentMember(MEMBER);
-        renderInput([idOf(1)]);
-        await waitFor(() => expect(window.api.getSetting).toHaveBeenCalled());
         expect(document.querySelector('img')).toBeNull();
     });
 
-    test('Choose photos opens the chooser; using the selection reports the new list', async () => {
+    test('Choose photos opens the chooser idle, and using the selection reports the new list', async () => {
         const { onChange } = renderInput([]);
         fireEvent.click(screen.getByRole('button', { name: 'app.choosePhotos' }));
+        // Nothing is read on open: the library is asked for only by Load all.
+        await screen.findByRole('dialog');
+        expect(window.api.getLibraryPhotos).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadPhotos' }));
         // Translations echo their key here, so every tile has the same name; the second is photo 2.
         await screen.findAllByRole('button', { name: 'app.photoChooserTileLabel' });
         fireEvent.click(screen.getAllByRole('button', { name: 'app.photoChooserTileLabel' })[1]);
@@ -183,15 +106,18 @@ describe('the photos setting input', () => {
 });
 
 describe('challenge context', () => {
-    test('inside a per-challenge editor the chooser reads the library through that challenge', async () => {
+    test('inside a per-challenge editor the chooser reads the library through that challenge, on demand', async () => {
         render(
             <SettingsChallengeProvider value={77}>
                 <SettingInput settingKey="chosenPhotos" config={config} value={[]} onChange={jest.fn()} />
             </SettingsChallengeProvider>,
         );
         fireEvent.click(screen.getByRole('button', { name: 'app.choosePhotos' }));
+        await screen.findByRole('dialog');
+        expect(window.api.getLibraryPhotos).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadPhotos' }));
         await waitFor(() =>
-            expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(77, undefined, 'cached', 'submit'),
+            expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(77, undefined, 'cached', 'submit', 0, 100),
         );
     });
 
@@ -216,11 +142,14 @@ describe('challenge context', () => {
         expect(screen.queryByText('app.photosUseNoneHint')).toBeNull();
     });
 
-    test('outside one it asks with no challenge', async () => {
+    test('outside one it asks with no challenge, again only on demand', async () => {
         renderInput([]);
         fireEvent.click(screen.getByRole('button', { name: 'app.choosePhotos' }));
+        await screen.findByRole('dialog');
+        expect(window.api.getLibraryPhotos).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadPhotos' }));
         await waitFor(() =>
-            expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(null, undefined, 'cached', 'submit'),
+            expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(null, undefined, 'cached', 'submit', 0, 100),
         );
     });
 });
@@ -253,5 +182,41 @@ describe('ChosenPhotosControl as a rule row', () => {
         fireEvent.click(screen.getByRole('button', { name: 'app.titleRuleInherit' }));
         expect(onClear).toHaveBeenCalledTimes(1);
         await act(async () => undefined);
+    });
+});
+
+describe('thumbnails', () => {
+    test('a chip shows the photo once a listing has named the member', () => {
+        rememberCurrentMember(MEMBER);
+        renderInput([idOf(1)]);
+        const img = document.querySelector('img');
+        expect(img).not.toBeNull();
+        expect(img!.getAttribute('src')).toBe(buildPhotoUrl(MEMBER, idOf(1), { size: 64 }));
+        expect(img!.getAttribute('alt')).toBe('app.chosenPhotoThumbAlt');
+        expect(img!.getAttribute('loading')).toBe('lazy');
+        expect(img!.getAttribute('referrerpolicy')).toBe('no-referrer');
+        expect(img!.className).toBe('h-8 w-8 rounded object-cover');
+        expect(document.querySelector('span[aria-hidden="true"]')!.textContent).toBe('1');
+    });
+
+    test('a repeat report of the same member changes nothing', () => {
+        rememberCurrentMember(MEMBER);
+        renderInput([idOf(1), idOf(2)]);
+        expect(document.querySelectorAll('img')).toHaveLength(2);
+    });
+
+    test('with no known member a chip stays text', () => {
+        rememberCurrentMember(null);
+        renderInput([idOf(1)]);
+        expect(document.querySelector('img')).toBeNull();
+        expect(screen.getAllByRole('listitem')[0].textContent).toBe(`1${idOf(1).slice(0, 8)}`);
+    });
+
+    test('a member a later report brings updates the chips', () => {
+        rememberCurrentMember(null);
+        renderInput([idOf(1)]);
+        expect(document.querySelector('img')).toBeNull();
+        act(() => rememberCurrentMember(MEMBER));
+        expect(document.querySelectorAll('img')).toHaveLength(1);
     });
 });

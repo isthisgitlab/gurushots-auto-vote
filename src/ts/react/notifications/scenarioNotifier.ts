@@ -11,6 +11,7 @@ import { createScenarioNotifier } from '../../services/scenarioNotifications';
 
 import type { OutboxItem } from '../../services/scenarioNotifications';
 import type { Challenge } from '../../types/gurushots';
+import type { Translate } from '../../translations/translator';
 
 /**
  * @param deps.getSetting - the getGlobalDefault IPC
@@ -28,7 +29,7 @@ export function createRendererScenarioNotifier({
     getScenarioStatus: (
         challengeId: Challenge['id'],
     ) => Promise<{ success: boolean; state?: { outbox?: OutboxItem[] } | null } | null | undefined>;
-    translate: (key: string) => string;
+    translate: Translate;
     deliver: (n: { title: string; body: string }) => void;
     log?: (message: string) => void;
 }): (challenges: readonly Challenge[]) => Promise<void> {

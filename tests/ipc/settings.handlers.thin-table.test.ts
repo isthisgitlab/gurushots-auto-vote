@@ -200,6 +200,7 @@ describe('settings.handlers challenge id arguments', () => {
                 ['an object', {}],
                 ['an empty string', ''],
                 ['a blank string', '   '],
+                ['an untrimmed id', ' 123 '],
                 ['an over-long string', '9'.repeat(65)],
                 ['NaN', Number.NaN],
                 ['a list', ['1']],
@@ -222,7 +223,7 @@ describe('settings.handlers challenge id arguments', () => {
             const handlers = invalid<HandlerTable>(buildHandlers());
 
             await expect(handlers[channel]({}, ...argsWithId(index, 123))).resolves.toBe('delegate-result');
-            await expect(handlers[channel]({}, ...argsWithId(index, ' 123 '))).resolves.toBe('delegate-result');
+            await expect(handlers[channel]({}, ...argsWithId(index, '123'))).resolves.toBe('delegate-result');
 
             expect(invalid<MockTable>(settings)[method]).toHaveBeenCalledTimes(2);
         },

@@ -33,6 +33,7 @@
 
 import { makePostRequest } from './api-client';
 import { ENDPOINTS, createWebHeaders, makeRequireValue } from './constants';
+import { MIN_AUTOCOMPLETE_CHARS } from '../settings/limits';
 
 import type { CurrentMemberProfileResponse, MemberIdentity, SearchAutocompleteResponse } from '../types/gurushots';
 
@@ -62,11 +63,6 @@ const getCurrentMemberProfile = async (token: string): Promise<MemberIdentity | 
     if (typeof id !== 'string' || id === '') return null;
     return { id, userName: typeof profile.user_name === 'string' ? profile.user_name : '' };
 };
-
-// The endpoint returns nothing at all below three characters ("st" -> []), so
-// a shorter probe is a guaranteed wasted round-trip. The resolver's backoff
-// stops here for the same reason.
-const MIN_AUTOCOMPLETE_CHARS = 3;
 
 // Bounds on the RESPONSE. The payload is untrusted the same way challenge text
 // and photo labels are, and each returned tag goes on to be embedded, matched,
@@ -113,4 +109,4 @@ const searchTagAutocomplete = async (token: string, term: string, memberId: stri
         .filter((item) => item !== '' && item.length <= MAX_TAG_LENGTH);
 };
 
-export { getCurrentMemberProfile, searchTagAutocomplete, MIN_AUTOCOMPLETE_CHARS };
+export { getCurrentMemberProfile, searchTagAutocomplete };

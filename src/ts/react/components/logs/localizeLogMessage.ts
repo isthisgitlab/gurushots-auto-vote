@@ -1,6 +1,8 @@
 import { logMessages as englishLogMessages } from '../../../translations/logEnglish';
 import { logMessages as latvianLogMessages } from '../../../translations/logLatvian';
-import { sentenceCaseLogMessage } from '../../../format/logSafe';
+import { sentenceCaseLogMessage, splitIcon } from '../../../format/logSafe';
+
+import type { GuiLogEntry } from '../../../logger';
 
 const placeholders = /\{(\d+)\}/g;
 const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -67,6 +69,37 @@ for (const [key, source] of Object.entries(englishLogMessages)) {
 
 patterns.sort((a, b) => b.length - a.length);
 
+// The keys whose English template hands its first slot to localizeValue as a
+// fill label ('{0}: …' — join, autoSubmit, …), the same ones the matcher's
+// `label` flag covers.
+const lineBreaks = /[\r\n\v\f\u0085\u2028\u2029]+/g;
+const leadingLabelKeys = new Set(
+    Object.entries(englishLogMessages)
+        .filter(([, source]) => source.replace(lineBreaks, ' ').startsWith('{0}:'))
+        .map(([key]) => key),
+);
+
+/**
+ * Forward path: an entry carrying its catalog key + params localizes by
+ * substituting them into the Latvian template, applying the same value
+ * rewrites the matcher applies to its captures. Returns null when the key has
+ * no Latvian entry — the caller falls back to the reverse matcher.
+ */
+function localizeFromTemplate(message: string, template: NonNullable<GuiLogEntry['template']>): string | null {
+    const latvian = latvianLogMessages[template.key as keyof typeof latvianLogMessages];
+    if (latvian === undefined) return null;
+    const body = latvian.replace(placeholders, (_, index: string) =>
+        localizeValue(String(template.params[Number(index)]), index === '0' && leadingLabelKeys.has(template.key)),
+    );
+    // An icon the template itself leads with is already in the body; any other
+    // icon in front of the message is the level icon the logger prepended.
+    // The key is in the English catalog whenever it is in the Latvian one —
+    // the catalogs' key parity is test-enforced.
+    if (splitIcon(englishLogMessages[template.key as keyof typeof englishLogMessages]).icon !== '') return body;
+    const { icon } = splitIcon(message);
+    return icon !== '' ? `${icon} ${body}` : body;
+}
+
 function translateBody(message: string): string | null {
     const key = exact.get(message);
     if (key) return latvianLogMessages[key as keyof typeof latvianLogMessages];
@@ -95,7 +128,11 @@ function translateBody(message: string): string | null {
     return null;
 }
 
-export function localizeLogMessage(message: string): string {
+export function localizeLogMessage(message: string, template?: GuiLogEntry['template']): string {
+    if (template) {
+        const forwarded = localizeFromTemplate(message, template);
+        if (forwarded !== null) return forwarded;
+    }
     if (exact.has(message)) return translateBody(message)!;
 
     for (const icon of ['🔍 ', 'ℹ️ ', '⚠️ ', '❌ ', '✅ ']) {

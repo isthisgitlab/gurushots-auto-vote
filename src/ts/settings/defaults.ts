@@ -32,9 +32,9 @@ const getDefaultSettings = (): ConfigV2 => ({
             main: { x: undefined, y: undefined, width: 800, height: 960 },
         },
     },
-    // The sign-in state: the token, the API headers for randomization (random per user installation) and the account
-    // the saved lists and the login form belong to.
-    auth: { token: '', apiHeaders: {}, lastUsername: '', chosenPhotosMemberId: '' },
+    // The sign-in state: the token, the API headers for randomization (random per user installation) and the
+    // account name the login form is prefilled with.
+    auth: { token: '', apiHeaders: {}, lastUsername: '' },
     // Global defaults of the schema-based challenge settings; a key left out is the schema default.
     defaults: {},
     profiles: {},
@@ -46,8 +46,7 @@ const getDefaultSettings = (): ConfigV2 => ({
     // profile, override a few join settings inline, and add must/should-include tags; all of it is an inherited
     // baseline below any id-keyed manual override.
     rules: [],
-    // Challenge id -> its own values, whether a manually applied profile replaces the rule's profile, and the entries
-    // pinned for Boost and Turbo.
+    // Per challenge: its own values, a manual profile override and its pinned Boost and Turbo entries.
     challenges: {},
 });
 

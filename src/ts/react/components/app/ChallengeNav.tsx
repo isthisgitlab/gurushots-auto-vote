@@ -6,7 +6,7 @@ import type { CustomizationKind } from '@/hooks/useCustomizedChallengeIds';
 import { ChipListPanel, ChallengeChip, ChipTitle } from './ChallengeChips';
 import { PulseDot } from '../ui/PulseDot';
 import { isBoostWindowOpen } from '../../../voting/boostWindow';
-import { isLowExposure } from '@/utils/challengeAlerts';
+import { isLowExposure, isMinimalCardChallenge } from '@/utils/challengeAlerts';
 import { chipToneOf } from '@/utils/customizationTone';
 
 /** What a customization kind means for a chip: manual overrides, an automatic profile, rule values alone. */
@@ -26,7 +26,7 @@ function ChipDot({ ringed, children }: { ringed: boolean; children: ComponentChi
     return <span className="inline-flex rounded-selector ring-2 ring-base-100">{children}</span>;
 }
 
-/** One challenge's chip: its title, the status dots and the marker of what customizes it. */
+/** One challenge's chip: its title, the status dots, a "T" badge on a team match and the marker of what customizes it. */
 function NavChip({
     challenge: c,
     kind,
@@ -39,14 +39,18 @@ function NavChip({
     const { t } = useTranslation();
     const { manual, automatic, byRule } = customizationOf(kind);
     const hint = [
+        c?.teamMatch && t('app.teamChallenge'),
         manual && t('app.customSettingsHint'),
         automatic && t('app.titleRuleProfile'),
         byRule && t('app.ruleSettingsHint'),
     ]
         .filter(Boolean)
         .join(' · ');
-    const boostOpen = isBoostWindowOpen(c?.member?.boost, nowSec);
-    const lowExposure = isLowExposure(c, nowSec);
+    // A minimal-card challenge carries no status dots: its fields cannot be
+    // read safely, so neither window nor exposure may be claimed from them.
+    const minimal = isMinimalCardChallenge(c);
+    const boostOpen = !minimal && isBoostWindowOpen(c?.member?.boost, nowSec);
+    const lowExposure = !minimal && isLowExposure(c, nowSec);
     const tone = chipToneOf(kind);
     return (
         <ChallengeChip challengeId={c?.id} className={tone}>
@@ -59,6 +63,11 @@ function NavChip({
                 <ChipDot ringed={tone !== ''}>
                     <PulseDot variant="error" pulse={false} size="status-sm" />
                 </ChipDot>
+            )}
+            {c?.teamMatch && (
+                <span aria-hidden="true" className="badge badge-xs badge-primary mr-1">
+                    T
+                </span>
             )}
             {manual && <span aria-hidden="true">⚙️ </span>}
             {automatic && <span aria-hidden="true">🔄 </span>}
@@ -82,6 +91,9 @@ function NavChip({
  * (a challenge with both shows both icons on the info fill). Values a rule sets directly
  * that matter after the join (and nothing else) get a secondary fill and 📏. The icons and
  * tooltip identify the source without relying on colour alone (utils/customizationTone).
+ *
+ * A team-match challenge (challenge.teamMatch, the same field behind ChallengeBadgeRow's
+ * 👥 badges) carries a small "T" badge before the title.
  *
  * Each chip also leads with a status dot — pulsing blue for an open boost
  * window, red for low exposure (utils/challengeAlerts) — so the whole

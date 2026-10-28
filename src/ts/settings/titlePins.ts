@@ -91,27 +91,6 @@ const _readPins = (): Record<string, string> => _validPins(_readStored());
  */
 const getTitlePins = (): Record<string, string> => _readPins();
 
-// The pins of a stored map that are strings, as stored.
-const _stringPins = (stored: unknown): Record<string, string> =>
-    isPlainObject(stored)
-        ? Object.fromEntries(
-              Object.entries(stored).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
-          )
-        : {};
-
-/**
- * Every pin the store holds as a string, as stored (no pin is judged here: the readers do, each by its own rule), for the
- * mirror of the configuration to carry whole.
- */
-const storedTitlePins = (): Record<string, string> => _stringPins(_readStored());
-
-/**
- * `storedTitlePins` for the Android app window, whose cache may be behind what the background service pinned since:
- * read from Preferences.
- */
-const storedTitlePinsNow = async (): Promise<Record<string, string>> =>
-    _stringPins(_parse(await titlePinStore.peekStored()));
-
 /**
  * The title pinned for one challenge id, or '' when there is none. A pin is a string below the title cap, as the
  * title lookup of a rule match has always read it (a whitespace-only one is a title that matches nothing).
@@ -159,21 +138,12 @@ const _addPins = (pins: Record<string, string>, addEntries: Array<[string, strin
     }
 };
 
-// Told after every write of the pins (the mirror of the configuration holds them: see persistence.ts).
-let onWritten: (() => void) | null = null;
-
-/** Sets the one listener that hears of every write of the pins. */
-const onTitlePinsChange = (listener: (() => void) | null): void => {
-    onWritten = listener;
-};
-
-// What a change of the pins came to: told to the mirror once it is stored; a failure is logged.
-const _landed = (result: ThroughResult, notify: boolean): boolean => {
+// What a change of the pins came to: a failure is logged.
+const _landed = (result: ThroughResult): boolean => {
     if (result === 'failed') {
         logger.withCategory('settings').error('Could not save the title pins', null);
         return false;
     }
-    if (notify) onWritten?.();
     return true;
 };
 
@@ -185,14 +155,14 @@ const _landed = (result: ThroughResult, notify: boolean): boolean => {
  * @returns false when the store could not be written; where the write is only queued (the Android app window) true
  *   once it is queued, and a write that does not land is logged
  */
-const _change = (change: (stored: Record<string, unknown>) => Record<string, unknown>, notify: boolean): boolean => {
+const _change = (change: (stored: Record<string, unknown>) => Record<string, unknown>): boolean => {
     const update = (current: string | null): string => {
         const parsed = _parse(current);
         return JSON.stringify(change(isPlainObject(parsed) ? parsed : {}), null, 2);
     };
     const now = titlePinStore.updateNow(update);
-    if (now !== null) return _landed(now, notify);
-    void titlePinStore.updateThrough(update).then((result) => _landed(result, notify));
+    if (now !== null) return _landed(now);
+    void titlePinStore.updateThrough(update).then((result) => _landed(result));
     return true;
 };
 
@@ -218,36 +188,23 @@ const mergeTitlePins = (adds: Record<string, string>, removeIds?: readonly strin
             titlePinCapWarned = false;
         }
         return pins;
-    }, true);
+    });
 };
 
 /**
  * Put the pins an import found into the cache, as it found them (every read validates what it takes): a pin the cache
  * holds for the same challenge gives way to the one `settings.json` held, which was seen first.
  *
- * It tells the mirror nothing: the configuration the pins belong to is not stored yet, and the mirror is made once it is.
- *
  * @returns false when the store could not be written
  */
 const importTitlePins = (imported: Record<string, string>): boolean =>
-    _change((stored) => ({ ...stored, ...imported }), false);
+    _change((stored) => ({ ...stored, ...imported }));
 
 /**
  * Forget every pin (a reset of the settings does, as it always has).
  *
  * @returns false when the store could not be written
  */
-const clearTitlePins = (): boolean => _change(() => ({}), true);
+const clearTitlePins = (): boolean => _change(() => ({}));
 
-export {
-    clearTitlePins,
-    getTitlePins,
-    importTitlePins,
-    mergeTitlePins,
-    onTitlePinsChange,
-    pinnedTitleFor,
-    storedTitlePins,
-    storedTitlePinsNow,
-    titlePinStore,
-    MAX_TITLE_PINS,
-};
+export { clearTitlePins, getTitlePins, importTitlePins, mergeTitlePins, pinnedTitleFor, titlePinStore, MAX_TITLE_PINS };

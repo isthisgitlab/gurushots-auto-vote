@@ -1,5 +1,6 @@
 import * as logger from '../../logger';
 import * as settings from '../../settings';
+import { pickEndpoints } from '../../pickEndpoints';
 
 import type { Challenge } from '../../types/gurushots';
 import type { VotingPassApi, VotingPassResult, ScenarioDeps } from '../../types/votingPass';
@@ -26,22 +27,48 @@ export type ActionContext = {
 };
 
 /**
+ * The endpoint names runVotingPass reads off `deps.api`; both strategies
+ * project that bundle from this one list (pickEndpoints).
+ */
+export const VOTING_PASS_ENDPOINTS = [
+    'getActiveChallenges',
+    'getVoteImages',
+    'submitVotes',
+    'applyBoost',
+    'applyBoostToEntry',
+    'applyTurbo',
+    'getEligiblePhotos',
+    'getEligiblePhotosWalk',
+    'getImageData',
+    'submitToChallenge',
+    'runTurboGame',
+    'searchTagAutocomplete',
+    'getCurrentMemberProfile',
+] as const;
+
+/**
  * Shared dependency bundle for every auto-fill entry point this pass
  * (fill-new on boost/turbo, staggered auto-fill, emergency fill).
+ *
+ * FILL_ENDPOINT_NAMES names the fill pipeline's own interface — a narrowing
+ * of the pass `api` by name, not a re-statement of it — so both strategies
+ * hand the pipeline the same endpoints.
  */
+const FILL_ENDPOINT_NAMES = [
+    'getEligiblePhotos',
+    'getEligiblePhotosWalk',
+    'getImageData',
+    'submitToChallenge',
+    'getActiveChallenges',
+    'searchTagAutocomplete',
+    'getCurrentMemberProfile',
+] as const;
+
 export const buildFillDeps = (api: VotingPassApi, entryAges: EntryAgeLedger | null) => ({
     settings,
     logger,
-    getEligiblePhotos: api.getEligiblePhotos,
-    getEligiblePhotosWalk: api.getEligiblePhotosWalk,
-    getImageData: api.getImageData,
-    submitToChallenge: api.submitToChallenge,
     entryAges,
-    getActiveChallenges: api.getActiveChallenges,
-    // Enables tag resolution on the themed-search miss path; without the
-    // pair the themed search skips tag resolution.
-    searchTagAutocomplete: api.searchTagAutocomplete,
-    getCurrentMemberProfile: api.getCurrentMemberProfile,
+    ...pickEndpoints(api, FILL_ENDPOINT_NAMES),
 });
 
 /**

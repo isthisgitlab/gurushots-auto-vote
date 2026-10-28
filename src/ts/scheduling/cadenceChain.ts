@@ -23,7 +23,7 @@
  */
 
 export { createCadenceChain } from './cadenceChain/chain';
-export { DECISION_ERROR_MESSAGE } from './cadenceChain/decision';
+export { DECISION_ERROR_MESSAGE, createMarkedReadCap, __resetMarkedReadCapForTests } from './cadenceChain/decision';
 export {
     formatOversleptMessage,
     oversleptBy,

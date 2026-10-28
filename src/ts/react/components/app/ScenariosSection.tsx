@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { SETTINGS_SECTION_TITLES } from '@/contexts/SettingsNavContext';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { useScenarios } from '@/api/useScenarios';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
-import { interp } from '@/utils/interp';
 import * as ipc from '@/api/ipc';
 import { ScenarioError, issuesOf } from './ScenarioError';
 import { ScenarioBuilder } from './scenarioBuilder/ScenarioBuilder';
@@ -33,20 +33,20 @@ function ImportPreview({ preview }: { preview: ImportPreviewResult['preview'] })
     return (
         <div className="text-xs bg-base-200 rounded p-2 space-y-1">
             <div className="font-medium">
-                {preview.name} — {interp(t('app.scenarioStartsIn'), { phase: preview.start })}
+                {preview.name} — {t('app.scenarioStartsIn', { phase: preview.start })}
             </div>
             {preview.description && <p className="text-base-content/70">{preview.description}</p>}
             <ul className="list-disc ml-4">
                 {preview.phases.map((phase) => (
                     <li key={phase.name}>
-                        {interp(t('app.scenarioPhaseSummary'), { phase: phase.name, rules: phase.rules })}
+                        {t('app.scenarioPhaseSummary', { phase: phase.name, count: phase.rules })}
                         {phase.settings.length > 0 && ` (${phase.settings.map((key) => t(`app.${key}`)).join(', ')})`}
                     </li>
                 ))}
             </ul>
             <div>
                 {preview.spending.length > 0
-                    ? interp(t('app.scenarioSpends'), {
+                    ? t('app.scenarioSpends', {
                           actions: preview.spending
                               .map((spend) => `${t(`app.sbAct_${spend.action}`)} (${spend.rule})`)
                               .join(', '),
@@ -55,11 +55,11 @@ function ImportPreview({ preview }: { preview: ImportPreviewResult['preview'] })
             </div>
             {preview.flagged.length > 0 && (
                 <ToneNote tone="warning" as="div">
-                    {interp(t('app.scenarioFlagged'), {
+                    {t('app.scenarioFlagged', {
                         settings: preview.flagged
                             .map(
                                 (item) =>
-                                    `${t(`app.${item.key}`)} (${interp(t('app.scenarioStatusPhase'), { phase: item.phase })})`,
+                                    `${t(`app.${item.key}`)} (${t('app.scenarioStatusPhase', { phase: item.phase })})`,
                             )
                             .join(', '),
                     })}
@@ -67,7 +67,7 @@ function ImportPreview({ preview }: { preview: ImportPreviewResult['preview'] })
             )}
             <div>
                 {limits.length > 0
-                    ? interp(t('app.scenarioLimits'), {
+                    ? t('app.scenarioLimits', {
                           limits: limits.map(([key, n]) => `${n} ${t(`app.sbCurrency_${key}`)}`).join(', '),
                       })
                     : t('app.scenarioNoLimits')}
@@ -137,7 +137,7 @@ function ImportPanel({ onDone, onCancel }: { onDone: () => void; onCancel: () =>
                         checked={overwrite}
                         onChange={(e) => setOverwrite(e.currentTarget.checked)}
                     />
-                    {interp(t('app.scenarioOverwrite'), { name: preview.preview.name })}
+                    {t('app.scenarioOverwrite', { name: preview.preview.name })}
                 </label>
             )}
             <div className="flex gap-2">
@@ -175,7 +175,7 @@ function ExportedScenario({ name, exported, onHide }: { name: string; exported: 
             <p className="text-xs text-base-content/70">{t('app.scenarioExportHint')}</p>
             {exported.omitted.length > 0 && (
                 <ToneNote tone="warning" className="text-xs">
-                    {interp(t('app.scenarioExportOmitted'), {
+                    {t('app.scenarioExportOmitted', {
                         settings: exported.omitted.map((key) => t(`app.${key}`)).join(', '),
                     })}
                 </ToneNote>
@@ -186,7 +186,7 @@ function ExportedScenario({ name, exported, onHide }: { name: string; exported: 
                 spellcheck={false}
                 autoCapitalize="off"
                 readOnly
-                aria-label={interp(t('app.scenarioExportLabel'), { name })}
+                aria-label={t('app.scenarioExportLabel', { name })}
                 value={exported.json}
                 onFocus={(e) => e.currentTarget.select()}
             />
@@ -218,7 +218,7 @@ function ScenarioRow({
     const [renaming, setRenaming] = useState<string | null>(null);
     const [armed, setArmed] = useState(false);
     // Each row repeats the same four buttons: the scenario's name makes each one's accessible name unique.
-    const rowLabel = (actionKey: string) => interp(t('app.actionOnItem'), { action: t(actionKey), item: name });
+    const rowLabel = (actionKey: string) => t('app.actionOnItem', { action: t(actionKey), item: name });
 
     useEffect(() => {
         if (!armed) return undefined;
@@ -263,7 +263,7 @@ function ScenarioRow({
                     {name}
                 </span>
                 <span className="text-xs text-base-content/70">
-                    {interp(t('app.scenarioPhaseCount'), { count: Object.keys(scenario.phases).length })}
+                    {t('app.scenarioPhaseCount', { count: Object.keys(scenario.phases).length })}
                 </span>
                 <button type="button" className="btn btn-sm" aria-label={rowLabel('app.sbEdit')} onClick={onEdit}>
                     {t('app.sbEdit')}
@@ -371,7 +371,7 @@ export function ScenariosSection({
 
     const names = Object.keys(scenarios);
     return (
-        <SettingsSectionPanel id="scenarios">
+        <SettingsSectionPanel id="scenarios" title={t(SETTINGS_SECTION_TITLES.scenarios)}>
             <p className="text-xs text-base-content/70 mb-3">{t('app.scenariosDesc')}</p>
             {loading ? (
                 <InlineLoader text={t('common.loading')} />

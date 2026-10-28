@@ -1,17 +1,33 @@
 import { useTranslation } from '@/contexts/TranslationContext';
+import { exposureText } from '@/utils/challengeCardView';
 import { StatusBadge } from '../ui/StatusBadge';
 import { PulseDot } from '../ui/PulseDot';
 import { ChallengeKindBadges } from './ChallengeKindBadges';
 import { challengeKind, challengePhotoCount } from '../../../format/challengeListing';
 
-import type { Challenge, TeamMatch } from '../../../types/gurushots';
+import type { Challenge, TeamMatch, TeamStanding } from '../../../types/gurushots';
 import type { ChallengeCardView } from './ChallengeCard';
+
+/**
+ * Our standing among the match's scoring slots, worded as the lineup the GuruShots team screen names:
+ * where we sit among the active players, how far we are over the best standby player (0 stays visible —
+ * a one-vote lead still is one), or how many votes we miss to leave the standbys.
+ */
+function TeamStandingBadge({ standing }: { standing: TeamStanding }) {
+    const { t } = useTranslation();
+    const label =
+        standing.kind === 'active'
+            ? t('app.teamStandingActive', { position: standing.position.toLocaleString() }) +
+              (standing.cushion === null ? '' : ` · ${t('app.teamStandingOverStandby', { count: standing.cushion })}`)
+            : t('app.teamStandingStandby', { count: standing.votesToActive });
+    return <StatusBadge variant="ghost">{label}</StatusBadge>;
+}
 
 /**
  * The team-match marker, both teams' vote totals and our lead (green +N) or deficit (red −N), all as visible
  * text so touch and keyboard users see them. The opponent is another user's text: only ever a React text child.
  * The marker wraps instead of truncating (`badge` is fixed-height, hence `h-auto`; `wrap-anywhere` also breaks
- * one long unbroken word).
+ * one long unbroken word). A match that is no longer running says so in place of the standing badge.
  */
 function TeamMatchBadges({ teamMatch }: { teamMatch: TeamMatch }) {
     const { t } = useTranslation();
@@ -29,17 +45,24 @@ function TeamMatchBadges({ teamMatch }: { teamMatch: TeamMatch }) {
     return (
         <>
             <StatusBadge variant="ghost" className="h-auto py-0.5 wrap-anywhere">
-                👥 {t('app.teamMatchVs').replace('{opponent}', () => teamMatch.them.name)}
+                <span aria-hidden="true">👥 </span>
+                {t('app.teamMatchVs', { opponent: teamMatch.them.name })}
             </StatusBadge>
             <StatusBadge variant="ghost">
-                {t('app.teamMatchVotes')
-                    .replace('{us}', teamMatch.us.votes.toLocaleString())
-                    .replace('{them}', teamMatch.them.votes.toLocaleString())}
+                {t('app.teamMatchVotes', {
+                    us: teamMatch.us.votes.toLocaleString(),
+                    them: teamMatch.them.votes.toLocaleString(),
+                })}
             </StatusBadge>
             <StatusBadge variant={variant} className="font-semibold">
                 {sign}
                 <span className="sr-only"> {word}</span>
             </StatusBadge>
+            {teamMatch.running === false ? (
+                <StatusBadge variant="ghost">{t('app.teamMatchNotRunning')}</StatusBadge>
+            ) : (
+                teamMatch.me && <TeamStandingBadge standing={teamMatch.me} />
+            )}
         </>
     );
 }
@@ -106,7 +129,7 @@ export function ChallengeBadgeRow({
             {lowExposure && (
                 <StatusBadge variant="error" className="gap-1 font-semibold">
                     <PulseDot variant="error" pulse={exposureFactor === 0} size="status-sm" onBadge />
-                    👁 {t('app.exposure')} {exposureFactor}%
+                    👁 {t('app.exposure')} {exposureText(exposureFactor)}
                 </StatusBadge>
             )}
             <ChallengeKindBadges challenge={challenge} showPhotoCount={showPhotoCount} />

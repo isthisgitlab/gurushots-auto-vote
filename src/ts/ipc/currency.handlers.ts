@@ -78,7 +78,7 @@ const droppingListing = async <T>(token: string, challengeId: string | number, s
     try {
         return await spend();
     } finally {
-        dropContext(token, challengeId);
+        dropContext(challengeId);
     }
 };
 
@@ -206,7 +206,7 @@ const buildHandlers = () =>
         },
 
         // Slots in this challenge that hold a replacement for a photo swapped out
-        // while boosted/turbo'd — each can be swapped back to restore it. Reads
+        // while boosted, turbo'd or guru-picked — each can be swapped back to restore it. Reads
         // only the local ledger; spends nothing.
         'get-swap-backs': async (event: unknown, challengeId: string | number) => {
             if (!isIdArg(challengeId)) return currencyFailure(CURRENCY_OUTCOME.invalidArgs);
@@ -226,7 +226,7 @@ const buildHandlers = () =>
             }
         },
 
-        // Spend a SWAP to put the recorded boosted/turbo'd original back into the
+        // Spend a SWAP to put the recorded boosted, turbo'd or guru-picked original back into the
         // slot now holding `currentImageId`. The original comes from the ledger.
         'swap-back-entry-photo': async (
             event: unknown,

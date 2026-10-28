@@ -1,15 +1,16 @@
 /**
  * Photo picker — what a challenge title says about its subject: title words
- * that are abstract rather than the subject, the series subject segment,
- * negated subjects ("No Humans") and the exclusion filter they become, and
+ * that are abstract rather than the subject, the series subject segment, and
  * letter challenges ("Begins With L").
  */
 
-import { MAX_TOKENISE_CHARS, stem, rawTokenise, tokenise, matches } from './stemming';
+import { MAX_TOKENISE_CHARS, stem, tokenise, matches } from './stemming';
+import { STOPWORDS } from './stopwords';
+import { SERIES_SEPARATOR_RE, parseNegation } from './titleNegation';
 import * as lexicon from '../semantic/lexicon';
 import { finiteOr } from '../../numbers';
 
-import type { ChallengeText, ChallengeTheme, ExcludedSubject, IgnoreWords, Negation } from '../../types/photoPicker';
+import type { ChallengeText, ChallengeTheme, IgnoreWords } from '../../types/photoPicker';
 
 // Bounds for abstractTitleWords, on the lexicon's concreteness cosine. Pinned by
 // the `concreteness.cases` gate in scripts/validate-lexicon.ts (real titles, run
@@ -20,6 +21,24 @@ import type { ChallengeText, ChallengeTheme, ExcludedSubject, IgnoreWords, Negat
 // ("balloon" 0.37) — "Built Among Nature" stays exactly as it was.
 const CONCRETE_SUBJECT_MIN = 0.15;
 const ABSTRACT_WORD_MAX = -0.1;
+// With a fixed phrase ("still life") in the title, the phrase is the anchor —
+// by NAME, since the lexicon has no vector for it and it cannot anchor by
+// concreteness, and a real qualifier next to it ("beauty" 0.0065) falls
+// between ABSTRACT_WORD_MAX and CONCRETE_SUBJECT_MIN, where neither bound
+// above would act. Next to the phrase, every word the lexicon scores at or
+// under this ceiling is a qualifier of the phrase, not a second subject.
+// Pinned by the real-lexicon cases in tests/services/photoPicker.subject.test.ts
+// the same way the bounds above are pinned by the `concreteness.cases` gate:
+// real qualifiers sit above it ("food" 0.116, "black" 0.119, "fruit" 0.29),
+// mood words at or below it ("beauty" 0.0065, "art" 0.015, "minimalist"
+// 0.009).
+const PHRASE_QUALIFIER_MAX = 0.05;
+
+// The stopword list stemmed once, so the compound-head check in
+// abstractTitleWords agrees with both surface and stemmed callers: "life" and
+// "lives" both stem into the set, so the compounds "still-life" and
+// "still-lives" qualify alike.
+const STOPWORD_STEMS: ReadonlySet<string> = new Set([...STOPWORDS].map(stem));
 
 const lexiconConcreteness = (word: string) => lexicon.concreteness(word);
 
@@ -33,10 +52,20 @@ const lexiconConcreteness = (word: string) => lexicon.concreteness(word);
  * word, including ones nobody has seen in a title before.
  *
  * Returns the words to demote: those reading as abstract, but ONLY when another
- * word in the same title is clearly a thing. A title with no concrete anchor
- * ("Creative Focus", "People and Architecture") returns nothing, so every
- * caller keeps its existing behavior there — as it does whenever the lexicon is
- * not loaded or a word is out of vocabulary (null concreteness = no opinion).
+ * word in the same title is clearly a thing. A compound ("still-life", the
+ * merge of an adjacent-word phrase the model knows) is never demoted and never
+ * anchors the normal path — a concrete compound must not demote "nature" in
+ * "Close Up Nature" or "people" in "Black and White People". A compound whose
+ * HEAD (its last part) stems to a stopword anchors the qualifier branch
+ * instead, and only when the compound itself reads concrete: every word BEFORE
+ * it scoring at or under PHRASE_QUALIFIER_MAX is a qualifier of the phrase
+ * ("beauty" in "Beauty of Still Life"), every word AFTER it at or under
+ * ABSTRACT_WORD_MAX is abstract ("fun" in "Still Life Fun") while a concrete
+ * follower stays ("portrait" in "Real Life Portraits"). A title with no
+ * concrete anchor ("Creative Focus", "People and Architecture") returns
+ * nothing, so every caller keeps its existing behavior there — as it does
+ * whenever the lexicon is not loaded (every score null, nothing demoted) or a
+ * word is out of vocabulary (null concreteness = no opinion).
  *
  * @param words - title words (surface or stemmed, as the caller has them)
  * @returns a subset of `words`; never all of them
@@ -48,11 +77,39 @@ const abstractTitleWords = (
     const abstract: Set<string> = new Set();
     if (!Array.isArray(words) || words.length < 2) return abstract;
     const scores = words.map((word) => finiteOr(concretenessOf(word), null));
-    const known = scores.filter((score) => score !== null);
+    // Compounds carry their hyphen through stemming, so the hyphen is the
+    // structural mark in both surface and stemmed input.
+    const isCompound = (word: string) => word.includes('-');
+    // The stopword-head compound anchors by shape and model data, so this
+    // branch runs BEFORE the concrete-anchor early return below, which would
+    // otherwise exit first for "beauty still life" (no word there is remotely
+    // CONCRETE_SUBJECT_MIN). The LAST qualifying compound in the title is the
+    // anchor — English puts the head noun last.
+    let anchor = -1;
+    for (let i = words.length - 1; i >= 0; i--) {
+        const word = words[i];
+        const score = scores[i];
+        if (!isCompound(word) || score === null || score < CONCRETE_SUBJECT_MIN) continue;
+        const head = word.slice(word.lastIndexOf('-') + 1);
+        if (STOPWORD_STEMS.has(stem(head))) {
+            anchor = i;
+            break;
+        }
+    }
+    if (anchor >= 0) {
+        words.forEach((word, i) => {
+            const score = scores[i];
+            if (isCompound(word) || score === null) return;
+            const ceiling = i < anchor ? PHRASE_QUALIFIER_MAX : ABSTRACT_WORD_MAX;
+            if (score <= ceiling) abstract.add(word);
+        });
+        return abstract;
+    }
+    const known = scores.filter((score, i): score is number => score !== null && !isCompound(words[i]));
     if (!(Math.max(...known) >= CONCRETE_SUBJECT_MIN)) return abstract;
     words.forEach((word, i) => {
         const score = scores[i];
-        if (score !== null && score <= ABSTRACT_WORD_MAX) abstract.add(word);
+        if (score !== null && !isCompound(word) && score <= ABSTRACT_WORD_MAX) abstract.add(word);
     });
     return abstract;
 };
@@ -68,24 +125,8 @@ const withoutAbstract = (stems: string[]): string[] => {
 // "Screen Stars: Mountains", "Guru Picks: Portraits". Everything before the
 // separator is the series, so the subject is what follows it.
 //
-// Colon, the two long dashes, and a SPACE-DELIMITED hyphen. A BARE hyphen is
-// still not a separator — it shows up inside ordinary titles and compound words
-// ("Black-and-White", "Close-Up") far too often to treat as structure, and
-// getting that wrong would silently discard a real subject. The spacing is what
-// separates the two cases: a compound joins its parts with no spaces, so " - "
-// is structural punctuation while "-" is orthography.
-//
-// That distinction is load-bearing, not cosmetic. The live series actually
-// ships "Screen Stars - Tropic Paradise" with a plain hyphen — the example
-// above was written with a colon the real titles do not use. Without this
-// branch the whole title became the theme, "stars" entered the pooled theme
-// vector, and the semantic tier ranked a Milky Way photo (0.657) over a genuine
-// tropical one (0.598) — pre-empting the lexical tier, where the tropical photo
-// actually won 2-1.
-//
 // Falls back to the whole title when the tail carries no usable word, so
 // "Mountains: A Tribute" keeps "mountains" instead of collapsing to nothing.
-const SERIES_SEPARATOR_RE = /[:\u2013\u2014]|\s-\s/;
 const titleSubject = (title: string | null | undefined, ignoreWords?: IgnoreWords): string => {
     if (typeof title !== 'string') return '';
     const match = SERIES_SEPARATOR_RE.exec(title);
@@ -98,125 +139,6 @@ const titleSubject = (title: string | null | undefined, ignoreWords?: IgnoreWord
     return tokenise(tail, { ignoreWords }).length > 0 ? tail : title;
 };
 
-// Negated titles name what must NOT be in the photo: "No Humans", "Without
-// People", "People-Free". 'no'/'not' are stopwords, so without this "No
-// Humans" would tokenise to ["human"] and every tier — theme vector, lexical
-// keywords, server search — would actively rank photos OF people first, the exact
-// inverse of the brief. A negated subject is therefore stripped from every
-// positive keyword source and turned into an exclusion filter instead (see
-// buildScoredCandidates).
-//
-// Only a segment that STARTS with the negation counts ("No Humans", "Color
-// Hunt: No Red"), plus the hyphenated "X-free" compound. A bare "free" is not
-// matched ("Wild and Free", "Born Free" are subjects, not absences).
-const NEGATION_LEAD_RE = /^\s*(?:no|without|non|zero)(?:\s+|-)(.+)$/i;
-const FREE_SUFFIX_RE = /\b([a-z]+)-free\b/gi;
-// The marker words themselves are not stopwords (only no/not are), so once a
-// negation is recognised they must also leave the keyword sources — otherwise
-// the url slug "without-people" would hand the theme the word "without".
-const NEGATION_MARKER_STEMS = new Set(['no', 'not', 'without', 'non', 'zero', 'free']);
-// Stock phrases that open with "no" but are not an absence: "No Place Like
-// Home", "No Limits", "No Fear". Such a segment is left as an ordinary subject.
-const NEGATION_IDIOM_WORDS = new Set(['like', 'matter', 'limit', 'limits', 'doubt', 'way', 'end', 'fear', 'regret']);
-const SERIES_SPLIT_RE = new RegExp(SERIES_SEPARATOR_RE.source, 'g');
-
-const NO_NEGATION = Object.freeze({ positiveTitle: '', stems: Object.freeze([]), active: false });
-
-/**
- * Split a title into its positive text and the stems it says to leave out.
- */
-const parseNegation = (title: string | null | undefined, ignoreWords: IgnoreWords = null): Negation => {
-    if (typeof title !== 'string' || title === '') return NO_NEGATION;
-    const stems: Set<string> = new Set();
-    const addWords = (text: string) => {
-        const words = rawTokenise(text, { ignoreWords });
-        for (const word of words) stems.add(stem(word));
-        return words.length > 0;
-    };
-    const bounded = title.slice(0, MAX_TOKENISE_CHARS);
-    // Rejoined with ': ' so titleSubject still sees the series structure of
-    // whatever survives.
-    const segments = bounded.split(SERIES_SPLIT_RE).map((segment) => {
-        const match = NEGATION_LEAD_RE.exec(segment);
-        if (!match) return segment;
-        if (rawTokenise(match[1], { keepStopwords: true }).some((w) => NEGATION_IDIOM_WORDS.has(w))) return segment;
-        return addWords(match[1]) ? '' : segment;
-    });
-    const positiveTitle = segments
-        .join(': ')
-        .replace(FREE_SUFFIX_RE, (whole: string, word: string) => (addWords(word) ? ' ' : whole));
-    if (stems.size === 0) return { positiveTitle: title, stems: [], active: false };
-    return { positiveTitle, stems: Array.from(stems), active: true };
-};
-
-// Remove negated subjects and the negation markers from a keyword list.
-const dropNegated = (keywords: string[], negation: Negation): string[] => {
-    if (!negation.active) return keywords;
-    const negated = new Set(negation.stems);
-    return keywords.filter((k) => !negated.has(k) && !NEGATION_MARKER_STEMS.has(k));
-};
-
-// "No People" / "No Humans" is by far the commonest negated brief, and the
-// vision labels on a photo of a person rarely say "human": they say "Man",
-// "Girl", "Portrait", "Crowd". The word-vector lexicon cannot stand in here —
-// measured against "humans" it rates "Animal" (0.54) and "Nature" (0.50) above
-// the match floor while "Man" (0.44), "Woman" (0.41) and "Crowd" (0.10) fall
-// under it — so the people concept is spelled out. Compared by EXACT stem, not
-// matches(): the prefix branch would let "man" catch "mango"/"mane".
-const PEOPLE_LABEL_STEMS = new Set(
-    [
-        'human',
-        'person',
-        'people',
-        'man',
-        'men',
-        'woman',
-        'women',
-        'child',
-        'children',
-        'kid',
-        'boy',
-        'girl',
-        'baby',
-        'toddler',
-        'teen',
-        'teenager',
-        'adult',
-        'face',
-        'portrait',
-        'selfie',
-        'crowd',
-        'bride',
-        'groom',
-        'family',
-        'couple',
-        'lady',
-        'gentleman',
-        'pedestrian',
-        'tourist',
-    ].map((w) => stem(w)),
-);
-
-/**
- * What the challenge title says to leave out, in the shape the exclusion filter
- * reads, or null when the title negates nothing.
- */
-const excludedSubjectOf = (
-    challenge: ChallengeText | null | undefined,
-    ignoreWords: IgnoreWords,
-): ExcludedSubject | null => {
-    const { stems, active } = parseNegation(challenge?.title, ignoreWords);
-    if (!active) return null;
-    return { stems, concept: stems.some((s) => PEOPLE_LABEL_STEMS.has(s)) ? PEOPLE_LABEL_STEMS : null };
-};
-
-const photoShowsExcluded = (labelStems: string[], excluded: ExcludedSubject): boolean =>
-    labelStems.some(
-        (labelStem) =>
-            (excluded.concept !== null && excluded.concept.has(labelStem)) ||
-            excluded.stems.some((s) => matches(labelStem, s)),
-    );
-
 // Detect a "letter challenge" title — "Begins With L", "Starts with the letter A",
 // "Things That Start With B" (interior "Start With" matches via the leading \b),
 // plus the "X is for" family below ("C is for…", "A is for Apple").
@@ -226,17 +148,29 @@ const photoShowsExcluded = (labelStems: string[], excluded: ExcludedSubject): bo
 // handled. A bare "L Words" intentionally returns null and is treated as an
 // ordinary title.
 //
-// SECURITY: `title` is an untrusted string from the GuruShots API. We cap its
-// length before matching (ReDoS defense-in-depth, though neither pattern has
-// nested quantifiers) and the captured value is a single [a-z] char used ONLY in
-// a first-character equality check downstream — never interpolated into a query,
+// SECURITY: `title` is an untrusted string from the GuruShots API. Detection caps
+// its length at 200 chars before matching, and withoutLetterPhrases runs the same
+// patterns as a global `replace` over up to MAX_TOKENISE_CHARS (4096) chars of
+// description text — ReDoS defense-in-depth either way: no pattern has nested
+// quantifiers, every alternation is anchored on a \b (or ^/start-of-text) plus a
+// literal word, and each whitespace run is crossed a bounded number of times, so
+// a scan is linear in the input. The captured value is a single [a-z] char used
+// only in a first-character equality check downstream and, uppercased, inside a
+// log line, still as one [a-z] character — never interpolated into a query,
 // template, or eval.
 //
 // The trailing (?![\w-]) (instead of \b) forces the captured letter to be a
 // standalone token: "Begins With Love" → null (next char is a word char) and
 // "Begins With L-A" → null (next char is '-'); "Begins With L" / "...L." → 'l'.
+// The letter may also be quoted ("start with 'S'", `start with the letter "S"`,
+// "Begins With \"L\"") and the article may be "an" ("begins with an S") — the
+// phrasings GuruShots descriptions ship. A bare "a" is the letter only when no
+// word follows it: at the end of the text (trailing spaces included) or before
+// a separator, possibly after spaces — a newline or an ellipsis counts as a
+// separator. A hyphen counts only in the spaced " - " form, so "Begins With
+// A-V" is null. A quoted 'a' always counts.
 const LETTER_CHALLENGE_RE =
-    /\b(?:begin(?:s|ning)?|start(?:s|ing)?)\s+with\s+(?:the\s+)?(?:letter\s+)?([a-z])(?![\w-])/i;
+    /\b(?:begin(?:s|ning)?|start(?:s|ing)?)\s+with\s+(?:the\s+|an\s+)?(?:letter\s+)?(?:([b-z])(?![\w-])|(a)(?=\s*$|\s*[–—:;,.!?|)…\n]|\s+-)|['"‘“]\s*([a-z])\s*['"’”](?![\w-]))/i;
 // "C is for…", "A is for Apple". The (?:^|\s) guard forces the letter to be a
 // standalone leading token: "What is for dinner" / "This is for you" → null
 // (the single letter before "is" is the tail of a word), and "Q&A is for
@@ -261,17 +195,51 @@ const LETTER_IS_FOR_RE = /(?:^|\s)([a-z])\s+is\s+for\b/i;
 // Quote pairs are matched by open-class/close-class rather than a backreference
 // because the curly pairs differ on each side (U+2018/U+2019, U+201C/U+201D);
 // a mismatched pair is accepted since this parses messy titles, not validates.
-const LETTER_NAMED_RE = /\bletters?\s*:?\s*(?:['"‘“]\s*([a-z])\s*['"’”]|([a-z])(?=\s*(?:[-–—:;,.!?|]|$)))/i;
+// The colon rides inside the whitespace run as an optional group (`\s*(?::\s*)?`)
+// rather than a second `\s*` beside it: a second `\s*` would make a failed match
+// cross the run twice — quadratic time on a long run.
+const LETTER_NAMED_RE = /\bletters?\s*(?::\s*)?(?:['"‘“]\s*([a-z])\s*['"’”]|([a-z])(?=\s*(?:[-–—:;,.!?|]|$)))/i;
+// The three letter-phrase matchers in detection order. detectLetterPrefix and
+// withoutLetterPhrases both read this list, so what a title is DETECTED by is
+// exactly what a text is STRIPPED by — the two cannot drift.
+const LETTER_PATTERNS: readonly RegExp[] = [LETTER_CHALLENGE_RE, LETTER_IS_FOR_RE, LETTER_NAMED_RE];
+// The same list with /g, built once, for String.prototype.replace ONLY. A /g
+// regex carries `lastIndex` across .test/.exec calls, so reusing one of these
+// for a match test would corrupt the next call.
+const LETTER_PATTERNS_GLOBAL: readonly RegExp[] = LETTER_PATTERNS.map((re) => new RegExp(re.source, re.flags + 'g'));
 const detectLetterPrefix = (title: string | null | undefined): string | null => {
     if (typeof title !== 'string' || title.length > 200) return null;
-    const m = title.match(LETTER_CHALLENGE_RE) || title.match(LETTER_IS_FOR_RE) || title.match(LETTER_NAMED_RE);
+    let m: RegExpMatchArray | null = null;
+    for (const re of LETTER_PATTERNS) {
+        m = title.match(re);
+        if (m) break;
+    }
     if (!m) return null;
-    // Each pattern captures the letter in a different group (LETTER_NAMED_RE has
-    // one per quoted/bare branch, only one of which participates), so read the
-    // first group that actually matched rather than hard-coding an index. Every
-    // match has exactly one participating `([a-z])` group, so this always finds it.
+    // Each pattern captures the letter in a different group (LETTER_CHALLENGE_RE
+    // and LETTER_NAMED_RE have one per bare/quoted branch, only one of which
+    // participates), so read the first group that actually matched rather than
+    // hard-coding an index. Every match has exactly one participating `([a-z])`
+    // group, so this always finds it.
     const letter = m.slice(1).find((g) => typeof g === 'string' && g.length === 1) as string;
     return letter.toLowerCase();
+};
+
+/**
+ * `text` with every letter phrase ("The Letter S", "starts with 'S'", "C is
+ * for") replaced by a space — a letter phrase names a challenge's RULE, never
+ * its subject, in a title or in a description. Callers apply it only when
+ * `detectLetterPrefix(challenge?.title)` is non-null, so a title over 200 chars
+ * (detect returns null) is never stripped, and detect and strip agree at the cap.
+ * The input is cut to MAX_TOKENISE_CHARS, the cut `tokenise` already applies; a
+ * non-string returns ''. The replacement must stay ' ': LETTER_IS_FOR_RE
+ * consumes its leading whitespace, so '' would glue the neighbouring words
+ * together.
+ */
+const withoutLetterPhrases = (text: string | null | undefined): string => {
+    if (typeof text !== 'string') return '';
+    let out = text.slice(0, MAX_TOKENISE_CHARS);
+    for (const re of LETTER_PATTERNS_GLOBAL) out = out.replace(re, ' ');
+    return out;
 };
 
 // Title words that name a challenge's FORMAT, never its subject: its length
@@ -334,18 +302,18 @@ const readChallengeTheme = (
             : '';
     if (OPEN_THEME_RE.test(title) || OPEN_THEME_RE.test(description)) return OPEN;
     const subject = titleSubject(title, ignoreWords);
-    const fromTitle = tokenise(subject, { ignoreWords });
+    const fromTitle = tokenise(subject, { ignoreWords, compounds: 'replace' });
     // A title of pure boilerplate ("Best of the Best") can still carry its
     // subject in the slug ("macro-insects4"), which buildThemeKeywords falls
     // back to — so the slug has to be empty too before the theme reads as open.
-    const words = fromTitle.length > 0 ? fromTitle : tokenise(challenge?.url, { ignoreWords });
+    const words = fromTitle.length > 0 ? fromTitle : tokenise(challenge?.url, { ignoreWords, compounds: 'replace' });
     if (words.every((word) => FORMAT_STEMS.has(word))) return OPEN;
     // Descriptions often quote the title back ("the 'Travel Wonders'
     // challenge"), which would confirm every one of its words for free. Only a
     // QUOTED copy is dropped: "Share your photos of people in action" restates
     // the subject in its own words and must still confirm it.
     const prose = [title, subject].reduce((text, quoted) => text.replace(quotedPhraseRe(quoted), ' '), description);
-    const described = tokenise(prose, { ignoreWords });
+    const described = tokenise(prose, { ignoreWords, compounds: 'replace' });
     const subjects = words.filter((word) => described.some((d) => matches(d, word)));
     return subjects.length > 0 ? { kind: 'subject', subjects: Array.from(new Set(subjects)) } : UNCONFIRMED;
 };
@@ -354,11 +322,11 @@ export {
     abstractTitleWords,
     withoutAbstract,
     titleSubject,
-    NEGATION_MARKER_STEMS,
-    parseNegation,
-    dropNegated,
-    excludedSubjectOf,
-    photoShowsExcluded,
     detectLetterPrefix,
+    withoutLetterPhrases,
     readChallengeTheme,
 };
+
+export { NEGATION_MARKER_STEMS, parseNegation, dropNegated } from './titleNegation';
+export { PEOPLE_LABEL_STEMS, ANIMAL_LABEL_STEMS } from './titleLabelStems';
+export { isParticiple, descriptionExclusions, excludedSubjectOf, photoShowsExcluded } from './titleExclusions';

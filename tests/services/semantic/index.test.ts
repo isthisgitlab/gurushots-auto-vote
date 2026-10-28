@@ -204,10 +204,21 @@ Baseball Cap`.split('\n'),
         expect(await getSemanticScores({}, [{ id: 'cat', labels: ['cat'] }])).toBeNull();
     });
 
+    test('a letter challenge whose title names nothing but the letter has no theme', async () => {
+        // The letter phrases are stripped and the slug ("the-letter-s") is not
+        // consulted, so the semantic tier goes inert instead of ranking against
+        // the noun "letter".
+        expect(
+            await getSemanticScores({ title: 'The Letter "S"', url: 'the-letter-s' }, [{ id: 'cat', labels: ['cat'] }]),
+        ).toBeNull();
+    });
+
     test('multi-word labels reach the lexicon', async () => {
-        // The lexicon has no multi-word keys, so a raw label like "Sea Life" looked
-        // up as one token always misses — every multi-word vision label would be
-        // invisible to the semantic tier. Labels are word-stemmed first.
+        // The lexicon keys are stemmed single tokens (plus the shipped
+        // compounds), so a raw multi-word label looked up as one string only
+        // hits when the merge knows the compound. Labels are word-stemmed
+        // first either way, which is what lets the max be taken over labels
+        // rather than words.
         const scores = await getSemanticScores({ title: 'Underwater' }, [{ id: 'seaLife', labels: ['Sea Life'] }]);
         expect(scores).not.toBeNull();
         expect(scores!.get('seaLife')!.score).toBeGreaterThan(0);
@@ -237,6 +248,26 @@ Baseball Cap`.split('\n'),
         ]);
         expect(scores!.get('sunflower')!.score).toBeGreaterThan(SEMANTIC_MATCH_FLOOR / 100);
         expect(scores!.get('car')!.score).toBeLessThan(SEMANTIC_MATCH_FLOOR / 100);
+    });
+
+    test('a "Close Up" theme scores a compound label above its mere prefixes', async () => {
+        // The label "Close-up" embeds as the close-up vector — the same term
+        // the theme pools — and the word-vector neighbour "Macro photography"
+        // also clears the floor. The surface prefixes "closed" and "door" sit
+        // far below both, so a photo labelled "Closed" cannot ride the theme.
+        const scores = await getSemanticScores({ title: 'Close Up', url: 'close-up' }, [
+            { id: 'closeup', labels: ['Close-up'] },
+            { id: 'macro', labels: ['Macro photography'] },
+            { id: 'closed', labels: ['Closed'] },
+            { id: 'door', labels: ['Door'] },
+        ]);
+        expect(scores!.get('closeup')!.score).toBeGreaterThan(SEMANTIC_MATCH_FLOOR / 100);
+        expect(scores!.get('macro')!.score).toBeGreaterThan(SEMANTIC_MATCH_FLOOR / 100);
+        expect(scores!.get('closeup')!.score).toBeGreaterThan(scores!.get('macro')!.score);
+        expect(scores!.get('macro')!.score).toBeGreaterThan(scores!.get('closed')!.score);
+        expect(scores!.get('closed')!.score).toBeGreaterThan(scores!.get('door')!.score);
+        expect(scores!.get('closed')!.score).toBeLessThan(SEMANTIC_MATCH_FLOOR / 100);
+        expect(scores!.get('door')!.score).toBeLessThan(SEMANTIC_MATCH_FLOOR / 100);
     });
 
     describe("support — the photo's OTHER labels", () => {

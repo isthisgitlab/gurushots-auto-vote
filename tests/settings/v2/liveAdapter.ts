@@ -208,24 +208,4 @@ const openLive = (text: string, env: OracleEnv): V1Oracle => {
 /** The live app upgrading from `raw`, a format-1 `settings.json`, and reading what it made of it. */
 const liveFromV1Raw = (raw: string, env: OracleEnv): V1Oracle => openLive(raw, env);
 
-/**
- * The `settings.json` the live app leaves for `raw` once it has imported it and saved: the mirror an older build reads.
- */
-const mirrorOfRaw = (raw: string): string => {
-    const { settings } = loadModules();
-    const store = memoryBridge(raw);
-    headless.__GS_HEADLESS__ = true;
-    headless.AndroidHeadlessStore = store;
-    try {
-        settings.loadSettings();
-        // A save of what is there: the configuration is written and the mirror made from it.
-        settings.saveAppSettings({});
-        const recovery = settings.getSettingsRecovery();
-        if (recovery) throw new Error(`the import of the fixture did not complete: ${JSON.stringify(recovery)}`);
-        return store.readKey?.('gurushots-settings') ?? '';
-    } finally {
-        releaseLive();
-    }
-};
-
-export { liveFromV1Raw, liveKey, mirrorOfRaw, releaseLive };
+export { liveFromV1Raw, liveKey, releaseLive };

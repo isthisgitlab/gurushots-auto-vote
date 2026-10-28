@@ -6,10 +6,10 @@
 
 import type * as currencyAutoModule from '../../src/ts/voting/currencyAuto';
 import type * as entrySlotModule from '../../src/ts/voting/entrySlot';
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type { Challenge, RankingEntry } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
-const { ruleOpensAt, isRuleOpen, isProtectedEntry, pickSwapTarget, votePoolReach, fillBeatsVoting } =
+const { ruleOpensAt, isRuleOpen, isProtectedEntry, isGuruPicked, pickSwapTarget, votePoolReach, fillBeatsVoting } =
     require('../../src/ts/voting/currencyAuto') as typeof currencyAutoModule;
 const { resolveEntryIndex } = require('../../src/ts/voting/entrySlot') as typeof entrySlotModule;
 
@@ -101,6 +101,23 @@ describe('isProtectedEntry', () => {
     });
 });
 
+describe('isGuruPicked', () => {
+    test.each([
+        [{ guru_pick: true }, true],
+        [{ guru_pick: false }, false],
+        [{}, false],
+        [null, false],
+        [undefined, false],
+    ])('%p → %p', (entry, expected) => {
+        expect(isGuruPicked(entry)).toBe(expected);
+    });
+
+    test('a truthy non-boolean is not a pick (exactly true)', () => {
+        expect(isGuruPicked({ guru_pick: 1 })).toBe(false);
+        expect(isGuruPicked({ guru_pick: 'yes' })).toBe(false);
+    });
+});
+
 describe('pickSwapTarget', () => {
     const a = { id: 'a', votes: 30 };
     const b = { id: 'b', votes: 10 };
@@ -134,6 +151,16 @@ describe('pickSwapTarget', () => {
         expect(pickSwapTarget([boosted], { allowProtected: true })).toBe(boosted);
     });
 
+    test('a guru-picked entry is skipped unless protected entries are allowed', () => {
+        const picked = { id: 'g', votes: 1, guru_pick: true };
+        expect(pickSwapTarget([a, picked], {})).toBe(a);
+        expect(pickSwapTarget([a, picked], { imageIndex: 0 })).toBe(a);
+        expect(pickSwapTarget([picked], {})).toBeNull();
+        expect(pickSwapTarget([picked], { allowProtected: true })).toBe(picked);
+        expect(pickSwapTarget([a, picked], { lowestVotes: true })).toBe(a);
+        expect(pickSwapTarget([a, picked], { lowestVotes: true, allowProtected: true })).toBe(picked);
+    });
+
     test('a protected id is never picked unless protected entries are allowed', () => {
         expect(pickSwapTarget([a, b, c], { imageIndex: 0, protectedIds: ['c'] })).toBe(b);
         expect(pickSwapTarget([a, b, c], { lowestVotes: true, protectedIds: ['b'] })).toBe(c);
@@ -156,9 +183,23 @@ describe('pickSwapTarget', () => {
         expect(pickSwapTarget([lowTurbo], { lowestVotes: true })).toBeNull();
     });
 
-    test('missing votes count as 0', () => {
+    test('a non-finite vote count is never picked by the lowest-votes compare', () => {
         const noVotes = { id: 'n' };
-        expect(pickSwapTarget([a, noVotes], { lowestVotes: true })).toBe(noVotes);
+        const badVotes = invalid<RankingEntry>({ id: 'x', votes: Number.NaN });
+        const infinite = invalid<RankingEntry>({ id: 'inf', votes: Number.POSITIVE_INFINITY });
+        // It used to read as 0 votes and win; now the readable entries win instead.
+        expect(pickSwapTarget([a, noVotes], { lowestVotes: true })).toBe(a);
+        expect(pickSwapTarget([a, badVotes], { lowestVotes: true })).toBe(a);
+        expect(pickSwapTarget([a, infinite], { lowestVotes: true })).toBe(a);
+        expect(pickSwapTarget([noVotes, badVotes], { lowestVotes: true })).toBeNull();
+    });
+
+    test('under a vote ceiling a non-finite count is never picked; with no ceiling slot mode still picks it', () => {
+        const noVotes = { id: 'n' };
+        expect(pickSwapTarget([a, noVotes], { imageIndex: 0, maxVotes: 10 })).toBeNull();
+        expect(pickSwapTarget([invalid({ id: 'x', votes: Number.NaN })], { maxVotes: 1 })).toBeNull();
+        expect(pickSwapTarget([a, noVotes], { imageIndex: 0 })).toBe(noVotes);
+        expect(pickSwapTarget([a, noVotes], { imageIndex: 0, maxVotes: 0 })).toBe(noVotes);
     });
 
     test('maxVotes: the target must have fewer votes than the ceiling', () => {

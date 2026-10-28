@@ -188,13 +188,18 @@ const getHeadlessHttpAdapter = (): AxiosAdapter => {
     return headlessAdapter;
 };
 
-// Endpoints whose response bodies carry account data (the login token and the member profile) or other
-// members' rosters (the team reads): the api log records the status and timing of these calls, never the body.
+// Endpoints whose response bodies carry account data (the login token and the member profile), other
+// members' rosters (the team reads), or other members' profile data (the web active-challenge read
+// — which also carries guru/cover-photo owner names — and get_member_challenges, the un-joined
+// listing): the api log records the status and timing of these calls, never the body. Their callers
+// log only counts and flags.
 const BODY_UNLOGGED_URLS = new Set<string>([
     ENDPOINTS.signup,
     ENDPOINTS.currentMemberProfile,
     ENDPOINTS.getTeams,
     ENDPOINTS.getMatch,
+    ENDPOINTS.webActiveChallenges,
+    ENDPOINTS.getMemberChallenges,
 ]);
 
 // Upper bound on how long a single request will block while retrying.

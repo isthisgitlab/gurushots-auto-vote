@@ -122,13 +122,17 @@ describe('the local-data registry', () => {
         },
     );
 
-    test('the registry holds nothing the source does not create', () => {
+    test('the registry holds nothing the source does not create, but the legacy files existing installs have', () => {
         const created = callSites.map((site) => `${site.fileName}|${site.prefKey}`);
         const listed = LOCAL_DATA_STORES.map((store) => `${store.fileName}|${store.prefKey}`);
-        expect(listed.filter((entry) => !created.includes(entry))).toEqual([]);
+        // `settings.json.original` is the copy older builds kept of the settings.json blob: nothing creates it any
+        // more, and "Delete all local data" still removes it.
+        expect(listed.filter((entry) => !created.includes(entry))).toEqual([
+            'settings.json.original|gurushots-settings_original',
+        ]);
     });
 
-    test('the configuration, settings.json and the copy kept of it, the import marker and the title pins are in it', () => {
+    test('the configuration, settings.json, the copy of it older builds kept, the import marker and the title pins are in it', () => {
         expect(LOCAL_DATA_STORES).toEqual(
             expect.arrayContaining([
                 { fileName: 'config.json', prefKey: 'gurushots-config' },
@@ -345,7 +349,7 @@ describe('wipeLocalData', () => {
             });
         });
 
-        test('the files the settings are restored from go before config.json, and a busy file is retried', async () => {
+        test('the legacy settings files go before config.json, and a busy file is retried', async () => {
             load();
             fillUserData();
             const realRm = fs.rmSync;
@@ -357,10 +361,10 @@ describe('wipeLocalData', () => {
 
             await ctx.localData.wipeLocalData({ clearSession: async () => {} });
 
-            const restoreSources = ['settings.json', 'settings.json.original', 'v2-import.json'];
-            expect(order.slice(0, 3)).toEqual(restoreSources);
+            const legacySettingsFiles = ['settings.json', 'settings.json.original', 'v2-import.json'];
+            expect(order.slice(0, 3)).toEqual(legacySettingsFiles);
             expect(order.indexOf('config.json')).toBeGreaterThan(
-                Math.max(...restoreSources.map((f) => order.indexOf(f))),
+                Math.max(...legacySettingsFiles.map((f) => order.indexOf(f))),
             );
             expect(order.at(-1)).toBe('config.json');
             expect(rm).toHaveBeenCalledWith(

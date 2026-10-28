@@ -1,3 +1,5 @@
+import type { Translate } from '../../translations/translator';
+
 /**
  * The translation key for each failure a handler (or the login path behind it) reports, by the exact text or
  * machine code it answers with. Handler wording is English and written for the log, so nothing reaches a user
@@ -20,6 +22,10 @@ const KNOWN_ERRORS: Record<string, string> = {
     'Snap question could not be answered': 'errors.snapUnanswerable',
     'Snap was interrupted; try again later': 'errors.snapInterrupted',
     'Challenge no longer active': 'errors.challengeNoLongerActive',
+    // A marked challenge (dataIssues): the actions answer the fixed code, the single-challenge vote answers
+    // with manualVote's log wording.
+    'challenge-data-incomplete': 'errors.challengeDataIncomplete',
+    'challenge data cannot be read': 'errors.challengeDataIncomplete',
     'not-enough-slots': 'errors.pickNotEnoughSlots',
     'already-entered': 'errors.pickAlreadyEntered',
     'submit-rejected': 'errors.pickRejected',
@@ -27,13 +33,12 @@ const KNOWN_ERRORS: Record<string, string> = {
     'submit-busy': 'errors.pickBusy',
     'pin-cap-reached': 'errors.pinCapReached',
     'pin-write-failed': 'errors.pinFailed',
+    'library-read-failed': 'errors.libraryReadFailed',
+    superseded: 'errors.superseded',
     'Failed to apply boost': 'errors.boostFailed',
     'Failed to fetch challenges': 'errors.fetchChallengesFailed',
     'Could not list challenges': 'errors.fetchChallengesFailed',
     'Could not read your balance right now': 'errors.fetchChallengesFailed',
-    'The account changed while listing challenges': 'errors.accountChanged',
-    'account-changed': 'errors.accountChanged',
-    'account-check-failed': 'errors.accountCheckFailed',
     'token-not-saved': 'errors.tokenNotSaved',
     'web-shell-token': 'errors.webShellToken',
 };
@@ -49,9 +54,25 @@ const KNOWN_ERRORS: Record<string, string> = {
  */
 export const ipcErrorText = <E extends string | null | undefined>(
     error: E,
-    t: (key: string) => string,
+    t: Translate,
     fallbackKey = 'errors.actionFailed',
 ) => (error ? t(Object.hasOwn(KNOWN_ERRORS, error) ? KNOWN_ERRORS[error] : fallbackKey) : error);
+
+/** The translation key for each reason a refused fresh join answers with (`failed-no-charge` + `reason`). */
+const JOIN_REFUSALS: Record<string, string> = {
+    full: 'errors.joinRefusedFull',
+    'price-unknown': 'errors.joinRefusedPriceUnknown',
+};
+
+/**
+ * Display text for a join the live list refused: the refusal's what → why → what next text, kept out of
+ * `KNOWN_ERRORS` so a bare "full" from any other handler never gets join wording. A missing or unmapped
+ * reason stays missing (the caller falls back to the status's own text).
+ *
+ * @param t - the translation function (useTranslation().t)
+ */
+export const joinRefusalText = (reason: string | null | undefined, t: Translate): string | null =>
+    reason && Object.hasOwn(JOIN_REFUSALS, reason) ? t(JOIN_REFUSALS[reason]) : null;
 
 /** The translation key for each code the photo suggestions (Pick… > Auto) answer with. */
 const SUGGEST_ERRORS: Record<string, string> = {
@@ -61,7 +82,6 @@ const SUGGEST_ERRORS: Record<string, string> = {
     'no-eligible': 'errors.suggestNoEligible',
     'no-more-suggestions': 'errors.suggestNoMore',
     'suggest-busy': 'errors.suggestBusy',
-    'account-changed': 'errors.suggestAccountChanged',
     'challenge-ended': 'errors.suggestChallengeEnded',
 };
 
@@ -70,7 +90,7 @@ const SUGGEST_ERRORS: Record<string, string> = {
  * have (not logged in, invalid arguments) its usual text, and anything else (`fetch-failed`, `suggest-failed`)
  * says the ranking failed. A missing error stays missing.
  */
-export const suggestErrorText = <E extends string | null | undefined>(error: E, t: (key: string) => string) =>
+export const suggestErrorText = <E extends string | null | undefined>(error: E, t: Translate) =>
     error && Object.hasOwn(SUGGEST_ERRORS, error)
         ? t(SUGGEST_ERRORS[error])
         : ipcErrorText(error, t, 'errors.suggestFailed');

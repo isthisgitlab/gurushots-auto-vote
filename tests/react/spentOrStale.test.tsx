@@ -9,8 +9,13 @@ describe('spentOrStale', () => {
         expect(spentOrStale({ success: false, outcome: 'not-available' })).toBe(true);
     });
 
+    test('a data-incomplete refusal refreshes like not-available (the card is stale)', () => {
+        expect(spentOrStale({ success: false, outcome: 'data-incomplete' })).toBe(true);
+    });
+
     test('any other failure does not refresh', () => {
         expect(spentOrStale({ success: false, outcome: 'insufficient' })).toBe(false);
+        expect(spentOrStale({ success: false, outcome: 'ok' })).toBe(false);
     });
 
     test('a missing result does not refresh', () => {

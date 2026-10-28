@@ -140,6 +140,8 @@ describe('challengePrompts', () => {
             [],
         );
         expect(challengePrompts({ title: 'No Humans' })).toEqual([]);
+        // A letter challenge's letter phrase is a rule, not a subject.
+        expect(challengePrompts({ title: 'The Letter "S"' })).toEqual([]);
         expect(challengePrompts(undefined)).toEqual([]);
     });
 });
@@ -253,6 +255,7 @@ describe('rankVisually', () => {
     test.each([
         ['a title with no visual subject', { title: 'Photo of the Day' }, ids],
         ['an empty ranking', LEAVES, []],
+        ['a letter challenge (the letter phrase is not a subject)', { title: 'The Letter "S"' }, ids],
     ])('%s keeps the tag order without loading the model', async (_name, challenge, ranked) => {
         expect(await rankVisually(challenge, ranked, eligible, 1, { logger: makeLogger() })).toEqual(
             ranked.slice(0, 1),

@@ -38,9 +38,15 @@ const at = (sec: number | null | undefined) => {
 
 /**
  * Print a failed result — its issues when validation failed — and yield exit code 1.
+ * A challenge whose data cannot be read (the handlers' `challenge-data-incomplete`
+ * refusal) reads as the reason, never the raw code.
  */
 const reportFailure = (result: { success?: boolean; error?: unknown; issues?: ScenarioIssue[] }, what: string) => {
-    ui().error(`${what}: ${result.error}`);
+    const reason =
+        result.error === 'challenge-data-incomplete'
+            ? "The challenge's data cannot be read, so the scenario cannot be checked."
+            : result.error;
+    ui().error(`${what}: ${reason}`);
     for (const issue of result.issues ?? []) ui().error(`  ${issue.path || '(document)'}: ${issue.message}`);
     return 1;
 };

@@ -151,8 +151,6 @@ const BY_KEY: Record<string, Generator> = {
     autoJoinChallengeTags: csv(CHALLENGE_TAGS.map((tag) => tag.toLowerCase())),
     autoJoinExcludeChallengeTags: csv(CHALLENGE_TAGS.map((tag) => tag.toLowerCase())),
     skipUpdateVersion: (rng) => rng.pick(['', '1.2.3']),
-    chosenPhotosMemberId: (rng) => rng.pick(['', 'member-1']),
-    chosenPhotosClearedAt: (rng) => rng.pick(['', '2026-01-01']),
 };
 
 const SCHEMA_KEYS = Object.keys(V1_SETTINGS_SCHEMA);

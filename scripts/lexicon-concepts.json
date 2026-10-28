@@ -97,7 +97,13 @@
             { "title": "Cold as Ice", "abstract": [] },
             { "title": "Epic Lighthouses", "abstract": [] },
             { "title": "Street Style", "abstract": [] },
-            { "title": "Smoke-Filled Scenes", "abstract": [] }
+            { "title": "Smoke-Filled Scenes", "abstract": [] },
+            { "title": "Beauty of Still Life", "abstract": ["beauty"] },
+            { "title": "Close Up Nature", "abstract": [] },
+            { "title": "Black and White People", "abstract": [] },
+            { "title": "Real Life Portraits", "abstract": [] },
+            { "title": "Portraits of Real Life", "abstract": [] },
+            { "title": "Still Life Fun", "abstract": ["fun"] }
         ]
     },
     "concepts": [

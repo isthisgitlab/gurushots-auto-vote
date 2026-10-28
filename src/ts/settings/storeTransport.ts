@@ -138,7 +138,7 @@ const MAX_ATTEMPTS = 5;
 
 /**
  * A save that the other writer (the Android app window and its background service) beat on every attempt. Its `code`
- * is the cause a given-up save is reported with (see settings/storage.ts).
+ * is the cause a given-up save is reported with (see settings/saveDropped.ts).
  */
 export class SaveConflictError extends Error {
     readonly code = 'conflict';

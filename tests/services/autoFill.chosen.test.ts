@@ -62,17 +62,24 @@ const photo = (id: string, labels: string[] = ['Pink'], extra: Partial<PickerPho
 // A due fill: one entry, a 4-slot challenge ten minutes from closing.
 const makeChallenge = ({
     entries = [{ id: 'existing' }],
+    swaps,
     maxSubmits = 4,
     closeIn = 600,
     title = 'Pink In Nature',
-}: { entries?: unknown[]; maxSubmits?: number; closeIn?: number; title?: string } = {}) =>
+}: {
+    entries?: unknown[];
+    swaps?: unknown[];
+    maxSubmits?: number;
+    closeIn?: number;
+    title?: string;
+} = {}) =>
     buildChallenge({
         id: 'c1',
         title,
         url: 'pink-in-nature23',
         max_photo_submits: maxSubmits,
         close_time: NOW + closeIn,
-        member: { ranking: { entries } },
+        member: { ranking: { entries, swaps } },
     });
 
 const makeLog = () => {
@@ -103,7 +110,6 @@ type SettingsSpec = {
     chosen?: unknown;
     only?: boolean;
     inOrder?: boolean;
-    savedBy?: unknown;
     must?: string[];
     submitWithoutTagMatch?: boolean;
     emergencySubmit?: number;
@@ -114,7 +120,6 @@ const makeSettings = ({
     chosen = [],
     only = false,
     inOrder = false,
-    savedBy = '',
     must = [],
     submitWithoutTagMatch = true,
     emergencySubmit = 300,
@@ -144,7 +149,6 @@ const makeSettings = ({
                     return null;
             }
         }),
-        getSetting: jest.fn((key: string) => (key === 'chosenPhotosMemberId' ? savedBy : undefined)),
         getEffectiveTagSetting: jest.fn((key: string) => (key === 'mustIncludeTags' ? must : [])),
         getEffectiveIgnoreTitleWords: jest.fn(() => null),
     });
@@ -182,7 +186,11 @@ const makeDeps = ({
     extra = {},
 }: DepsSpec = {}) => {
     const submitToChallenge = submitOk();
-    const getEligiblePhotosWalk = jest.fn(async () => ({ items: walkItems, truncated: walkTruncated }));
+    const getEligiblePhotosWalk = jest.fn(async () => ({
+        items: walkItems,
+        truncated: walkTruncated,
+        nextStart: walkItems.length,
+    }));
     const rankVisually = jest.fn(
         async (
             _c: unknown,
@@ -243,6 +251,7 @@ describe('chosen photos rank first', () => {
         deps.getEligiblePhotosWalk.mockResolvedValue({
             items: [photo('theme-a'), photo('theme-b'), photo('car', ['Car'])],
             truncated: false,
+            nextStart: 3,
         });
         expect(await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps)).toBe('submitted');
         expect(submittedIds(deps)).toEqual([['car']]);
@@ -256,6 +265,26 @@ describe('chosen photos rank first', () => {
         expect(await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps)).toBe('submitted');
         expect(submittedIds(deps)).toEqual([['theme-b']]);
         expect(deps.getEligiblePhotosWalk).not.toHaveBeenCalled();
+    });
+
+    test('a photo the challenge swapped out is filled again when the user chose it', async () => {
+        // Newest upload wins a tie, so the swapped-out photo would rank best on its own.
+        const library = [
+            photo('theme-a', ['Pink'], { upload_date: 9200 }),
+            photo('swapped', ['Pink'], { upload_date: 9500 }),
+        ];
+        const plain = makeDeps({ library });
+        expect(await maybeAutoFillChallenge(makeChallenge({ swaps: [{ id: 'swapped' }] }), 'tok', NOW, plain)).toBe(
+            'submitted',
+        );
+        expect(submittedIds(plain)).toEqual([['theme-a']]);
+
+        // The same photo in the chosen list is allowed back in.
+        const chosen = makeDeps({ library, settings: { chosen: ['swapped'] } });
+        expect(await maybeAutoFillChallenge(makeChallenge({ swaps: [{ id: 'swapped' }] }), 'tok', NOW, chosen)).toBe(
+            'submitted',
+        );
+        expect(submittedIds(chosen)).toEqual([['swapped']]);
     });
 
     test('the visual re-rank only chooses between chosen photos, and a block it cannot reorder is left alone', async () => {
@@ -347,7 +376,9 @@ describe('chosen photos rank first', () => {
         const verified = await verifyFillPick(challenge, scored, [], picked, null, deps, chosenIds);
         expect(rankVisually).toHaveBeenCalledTimes(2);
         expect(verified.visualEvidence).toBeNull();
-        recordUncertainSubmission({
+        // The theme read inside awaits the lexicon, so the record call must be
+        // awaited before the ledger can be judged.
+        await recordUncertainSubmission({
             challenge,
             label: 'autoSubmit',
             scored,
@@ -477,7 +508,11 @@ describe('chosen photos rank first', () => {
             wantCount: 1,
             allowWalk: true,
             deps: {
-                getEligiblePhotosWalk: jest.fn(async () => ({ items: [photo('car', ['Car'])], truncated: false })),
+                getEligiblePhotosWalk: jest.fn(async () => ({
+                    items: [photo('car', ['Car'])],
+                    truncated: false,
+                    nextStart: 1,
+                })),
                 logger,
             },
             label: 'autoSubmit',
@@ -633,6 +668,98 @@ describe('chosen photos rank first', () => {
     });
 });
 
+describe('the uncertain-submission record on a letter challenge', () => {
+    const entry = (labels: string[]) =>
+        invalid<ScoredCandidate>({ id: 'p1', photo: photo('p1', labels), semantic: 0, semanticSupport: 0, score: 0 });
+    const run = async (title: string, labels: string[], visualEvidence: Set<string> | null = null) => {
+        const ledger = createMemoryEntryAgeLedger();
+        const challenge = makeChallenge({ title });
+        await recordUncertainSubmission({
+            challenge,
+            label: 'autoSubmit',
+            scored: [entry(labels)],
+            picked: ['p1'],
+            visualEvidence,
+            ignoreWords: null,
+            chosenIds: null,
+            deps: invalid<RankDeps & FillDeps>({ logger: makeLog().logger, entryAges: ledger }),
+        });
+        return ledger.isUncertain(challenge.id, 'p1');
+    };
+
+    test('when the letter is the title only subject, a matching label is evidence', async () => {
+        expect(await run('The Letter "S"', ['Sun'])).toBe(false);
+        expect(await run('Letter S', ['Sun'])).toBe(false);
+        expect(await run('Begins With L', ['Lion'])).toBe(false);
+        // The negation is read first, so the positive title is "Letter S: " alone.
+        expect(await run('Letter S: No People', ['Sun'])).toBe(false);
+    });
+
+    test('a title that still names a subject keeps the old evidence rules', async () => {
+        // "A is for Apple": an A-label with no apple evidence stays marked,
+        // whether the visual check rejected the photo or abstained.
+        expect(await run('A is for Apple', ['Apricot'])).toBe(true);
+        expect(await run('A is for Apple', ['Apricot'], new Set())).toBe(true);
+        // A fallback pick without a letter label is still marked.
+        expect(await run('The Letter "S"', ['Dog'])).toBe(true);
+        // So is an S-label on a letter title with another subject word: the
+        // whole-title gate keeps these picks conservative.
+        expect(await run('Snakes: Starting With S', ['Sun'])).toBe(true);
+        expect(await run('Color Hunt: The Letter S', ['Sun'])).toBe(true);
+    });
+
+    test('the whole-title gate, pinned title by title', async () => {
+        // The gate reads the whole stripped title, not the subject tail:
+        // "challenge" is boilerplate (a stopword), so 'Letter S - Challenge' is
+        // exempt, while "hours" and the Color Hunt words still name something.
+        // Format words such as "hours" count as leftover words on purpose, so
+        // the spend gate stays conservative.
+        expect(await run('The Letter "S"', ['Sun'])).toBe(false);
+        expect(await run('Letter S - Challenge', ['Sun'])).toBe(false);
+        expect(await run('Letter S - 10 Hours', ['Sun'])).toBe(true);
+    });
+
+    test('a fallback pick on a letter-only title keeps the plain reason', async () => {
+        const ledger = createMemoryEntryAgeLedger();
+        const { logger, lines } = makeLog();
+        const challenge = makeChallenge({ title: 'The Letter "S"' });
+        await recordUncertainSubmission({
+            challenge,
+            label: 'autoSubmit',
+            scored: [entry(['Dog'])],
+            picked: ['p1'],
+            visualEvidence: null,
+            ignoreWords: null,
+            chosenIds: null,
+            deps: invalid<RankDeps & FillDeps>({ logger, entryAges: ledger }),
+        });
+        expect(ledger.isUncertain(challenge.id, 'p1')).toBe(true);
+        const warning = lines.warning[0];
+        expect(warning).toContain('no subject match');
+        expect(warning).not.toContain('the title also names');
+    });
+
+    test('a letter title with leftover words names them in the warning reason', async () => {
+        const ledger = createMemoryEntryAgeLedger();
+        const { logger, lines } = makeLog();
+        const challenge = makeChallenge({ title: 'Color Hunt: The Letter S' });
+        await recordUncertainSubmission({
+            challenge,
+            label: 'autoSubmit',
+            scored: [entry(['Sun'])],
+            picked: ['p1'],
+            visualEvidence: null,
+            ignoreWords: null,
+            chosenIds: null,
+            deps: invalid<RankDeps & FillDeps>({ logger, entryAges: ledger }),
+        });
+        expect(ledger.isUncertain(challenge.id, 'p1')).toBe(true);
+        expect(lines.warning).toEqual([
+            expect.stringContaining('no subject match (the title also names "color", "hunt")'),
+        ]);
+    });
+});
+
 describe('looking for a chosen photo the themed fetch missed', () => {
     const car = photo('car', ['Car']);
 
@@ -678,7 +805,7 @@ describe('looking for a chosen photo the themed fetch missed', () => {
         expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(1);
         clock.mockReturnValue(5_000_000 + 6 * 60_000);
         // The photo turns up once the walk reaches it.
-        deps.getEligiblePhotosWalk.mockResolvedValue({ items: [photo('theme-a'), car], truncated: true });
+        deps.getEligiblePhotosWalk.mockResolvedValue({ items: [photo('theme-a'), car], truncated: true, nextStart: 2 });
         expect(await maybeAutoFillChallenge(challenge, 'tok', NOW, deps)).toBe('submitted');
         expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(2);
         expect(submittedIds(deps)).toEqual([['car']]);
@@ -734,7 +861,7 @@ describe('looking for a chosen photo the themed fetch missed', () => {
                     submitWithoutTagMatch: true,
                 })[key] ?? (key === 'autoSubmitSchedule' ? [{ count: 4, seconds: 600 }] : null),
         );
-        deps.getEligiblePhotosWalk.mockResolvedValue({ items: [photo('theme-a'), dog], truncated: true });
+        deps.getEligiblePhotosWalk.mockResolvedValue({ items: [photo('theme-a'), dog], truncated: true, nextStart: 2 });
         clock.mockReturnValue(5_000_001);
         expect(await maybeAutoFillChallenge(challenge, 'tok', NOW, deps)).toBe('submitted');
         expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(2);
@@ -776,7 +903,7 @@ describe('looking for a chosen photo the themed fetch missed', () => {
         const challenge = makeChallenge();
         await maybeAutoFillChallenge(challenge, 'tok', NOW, deps);
         clock.mockReturnValue(5_000_000 + 5 * 60_000);
-        deps.getEligiblePhotosWalk.mockResolvedValue({ items: [photo('theme-a')], truncated: false });
+        deps.getEligiblePhotosWalk.mockResolvedValue({ items: [photo('theme-a')], truncated: false, nextStart: 1 });
         await maybeAutoFillChallenge(challenge, 'tok', NOW, deps);
         expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(2);
         // Complete: the id is "not found" and stays so, however much later within the memo.
@@ -786,7 +913,7 @@ describe('looking for a chosen photo the themed fetch missed', () => {
     });
 
     test('a changed entry count drops only the negative outcomes, a found photo stays', async () => {
-        const walk = jest.fn(async () => ({ items: [car], truncated: false }));
+        const walk = jest.fn(async () => ({ items: [car], truncated: false, nextStart: 1 }));
         const { logger } = makeLog();
         const challenge = makeChallenge();
         const lookup = async () =>
@@ -856,7 +983,7 @@ describe('looking for a chosen photo the themed fetch missed', () => {
     test('the memo and the skip log are bounded', async () => {
         const { logger } = makeLog();
         const walkDeps = {
-            getEligiblePhotosWalk: jest.fn(async () => ({ items: [], truncated: false })),
+            getEligiblePhotosWalk: jest.fn(async () => ({ items: [], truncated: false, nextStart: 0 })),
             logger,
         };
         // More challenges than the memo holds: the oldest answers are dropped, never an error.
@@ -894,7 +1021,7 @@ describe('looking for a chosen photo the themed fetch missed', () => {
     test('the memo drops its oldest challenge at the cap, and the others keep what they know', async () => {
         const { logger } = makeLog();
         const walkDeps = {
-            getEligiblePhotosWalk: jest.fn(async () => ({ items: [], truncated: false })),
+            getEligiblePhotosWalk: jest.fn(async () => ({ items: [], truncated: false, nextStart: 0 })),
             logger,
         };
         const look = (id: string) =>
@@ -917,15 +1044,14 @@ describe('looking for a chosen photo the themed fetch missed', () => {
         expect(walkDeps.getEligiblePhotosWalk).toHaveBeenCalledTimes(66);
     });
 
-    test('a skip that follows a walk finding chosen photos missing from the library points at another account’s list', async () => {
+    test('a skip that follows a walk finding chosen photos missing from the library says so', async () => {
         const { logger, lines } = makeLog();
         // The list names a photo this library does not hold.
         const deps = makeDeps({ logger, library: [photo('theme-a')], settings: { chosen: ['car'], only: true } });
         await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps);
         const skips = lines.warning.filter((m) => m.includes('skipped [Challenge c1]'));
         expect(skips).toHaveLength(1);
-        expect(skips[0]).toContain('Some of them are not in your library');
-        expect(skips[0]).toContain('clear-chosen-photos');
+        expect(skips[0]).toContain('Some left your library');
     });
 
     test('a skip for a photo that is in the library but not allowed there has no such hint', async () => {
@@ -940,7 +1066,7 @@ describe('looking for a chosen photo the themed fetch missed', () => {
         await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps);
         const skips = lines.warning.filter((m) => m.includes('skipped [Challenge c1]'));
         expect(skips).toHaveLength(1);
-        expect(skips[0]).not.toContain('clear-chosen-photos');
+        expect(skips[0]).not.toContain('no longer in your library');
     });
 
     test('a skip with no walk behind it has no hint, and one that gains it is explained again', async () => {
@@ -949,7 +1075,7 @@ describe('looking for a chosen photo the themed fetch missed', () => {
         logChosenSkipOnce(logger, challenge, 'autoSubmit', 'none-usable');
         logChosenSkipOnce(logger, challenge, 'autoSubmit', 'none-usable');
         expect(lines.warning).toHaveLength(1);
-        expect(lines.warning[0]).not.toContain('clear-chosen-photos');
+        expect(lines.warning[0]).not.toContain('left your library');
         // A walk then finds the chosen photo missing from the library.
         await resolveMissingChosen({
             challenge,
@@ -958,13 +1084,16 @@ describe('looking for a chosen photo the themed fetch missed', () => {
             eligible: [],
             wantCount: 1,
             allowWalk: true,
-            deps: { getEligiblePhotosWalk: jest.fn(async () => ({ items: [], truncated: false })), logger },
+            deps: {
+                getEligiblePhotosWalk: jest.fn(async () => ({ items: [], truncated: false, nextStart: 0 })),
+                logger,
+            },
             label: 'autoSubmit',
         });
         logChosenSkipOnce(logger, challenge, 'autoSubmit', 'none-usable');
         logChosenSkipOnce(logger, challenge, 'autoSubmit', 'none-usable');
         expect(lines.warning).toHaveLength(2);
-        expect(lines.warning[1]).toContain('clear-chosen-photos');
+        expect(lines.warning[1]).toContain('left your library');
     });
 
     test('scores for a found photo are merged into scores that already exist, or stand alone', async () => {
@@ -1001,7 +1130,7 @@ describe('looking for a chosen photo the themed fetch missed', () => {
     test('in list order a missing photo is looked up while fewer usable ones stand before it than slots are wanted', async () => {
         const lookup = async (ids: string[], wantCount: number, inOrder: boolean) => {
             forgetChosenPhotosMemory();
-            const getEligiblePhotosWalk = jest.fn(async () => ({ items: [car], truncated: false }));
+            const getEligiblePhotosWalk = jest.fn(async () => ({ items: [car], truncated: false, nextStart: 1 }));
             const found = await resolveMissingChosen({
                 challenge: makeChallenge(),
                 token: 'tok',
@@ -1035,7 +1164,14 @@ describe('looking for a chosen photo the themed fetch missed', () => {
             eligible: [photo('theme-a')],
             wantCount: 2,
             allowWalk: true,
-            deps: { getEligiblePhotosWalk: jest.fn(async () => ({ items: walked, truncated: false })), logger },
+            deps: {
+                getEligiblePhotosWalk: jest.fn(async () => ({
+                    items: walked,
+                    truncated: false,
+                    nextStart: walked.length,
+                })),
+                logger,
+            },
             label: 'join',
         });
         expect(found.map((p) => p.id)).toEqual(['car']);
@@ -1248,8 +1384,8 @@ describe('Submit Only Chosen Photos', () => {
         expect(deps.submitToChallenge).not.toHaveBeenCalled();
         const skips = lines.warning.filter((m) => m.includes('skipped [Challenge c1]'));
         expect(skips).toHaveLength(1);
-        expect(skips[0]).toContain('none of your chosen photos can be submitted there');
-        expect(skips[0]).toContain('turn Emergency Submit off for this challenge to keep the slot empty');
+        expect(skips[0]).toContain('none of your chosen photos can go in there');
+        expect(skips[0]).toContain('Some left your library — remove them from the list');
 
         // A usable chosen photo appears: submitted, and the skip state is cleared...
         deps.settings.getEffectiveSetting.mockImplementation(
@@ -1404,7 +1540,10 @@ describe('emergency fill', () => {
                 eligible: [],
                 wantCount: 1,
                 allowWalk: true,
-                deps: { getEligiblePhotosWalk: jest.fn(async () => ({ items: [car], truncated: false })), logger },
+                deps: {
+                    getEligiblePhotosWalk: jest.fn(async () => ({ items: [car], truncated: false, nextStart: 1 })),
+                    logger,
+                },
                 label: 'autoSubmit',
             });
             const standsDown = makeDeps({ settings: { autoSubmit: true, chosen: ['car'], only: true } });
@@ -1419,7 +1558,10 @@ describe('emergency fill', () => {
                 eligible: [],
                 wantCount: 1,
                 allowWalk: true,
-                deps: { getEligiblePhotosWalk: jest.fn(async () => ({ items: [], truncated: false })), logger },
+                deps: {
+                    getEligiblePhotosWalk: jest.fn(async () => ({ items: [], truncated: false, nextStart: 0 })),
+                    logger,
+                },
                 label: 'autoSubmit',
             });
             const steps = makeDeps({ settings: { autoSubmit: true, chosen: ['car'], only: true } });
@@ -1447,38 +1589,7 @@ describe('emergency fill', () => {
     });
 });
 
-describe('the list belongs to the account that saved it', () => {
-    test('another account ignores it, with one line however many fills', async () => {
-        const { logger, lines } = makeLog();
-        const deps = makeDeps({
-            logger,
-            member: 'member-2',
-            settings: { chosen: ['theme-b'], savedBy: 'member-1', only: true },
-        });
-        // Ignored, so Only has nothing to enforce and the automatic pick is made.
-        expect(await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps)).toBe('submitted');
-        expect(await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps)).toBe('submitted');
-        expect(submittedIds(deps)[0]).toEqual(['theme-a']);
-        expect(lines.warning.filter((m) => m.includes('saved while another account was logged in'))).toHaveLength(1);
-    });
-
-    test.each([
-        ['the same account', 'member-1', 'member-1'],
-        ['no recorded account', 'member-1', ''],
-        ['an account that cannot be told', null, 'member-9'],
-    ])('applies for %s', async (_name, member, savedBy) => {
-        const deps = makeDeps({ member, settings: { chosen: ['theme-b'], savedBy } });
-        expect(await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps)).toBe('submitted');
-        expect(submittedIds(deps)).toEqual([['theme-b']]);
-    });
-
-    test('an identity lookup that finds nobody leaves the list in force', async () => {
-        const deps = makeDeps({ settings: { chosen: ['theme-b'], savedBy: 'member-1' } });
-        deps.getCurrentMemberProfile = invalid(jest.fn(async () => null));
-        expect(await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps)).toBe('submitted');
-        expect(submittedIds(deps)).toEqual([['theme-b']]);
-    });
-
+describe('the list applies as it is saved', () => {
     test('settings that cannot be read leave no list', async () => {
         const deps = makeDeps();
         deps.settings = invalid(undefined);
@@ -1488,7 +1599,7 @@ describe('the list belongs to the account that saved it', () => {
 });
 
 describe('forgetChosenPhotosMemory (a logout)', () => {
-    test('the walk memo is dropped: the next account looks the photo up again', async () => {
+    test('the walk memo is dropped: the photo is looked up again', async () => {
         const deps = makeDeps({ library: [photo('theme-a')], settings: { chosen: ['car'], only: true } });
         const challenge = makeChallenge();
         await maybeAutoFillChallenge(challenge, 'tok', NOW, deps);
@@ -1500,7 +1611,7 @@ describe('forgetChosenPhotosMemory (a logout)', () => {
         expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(2);
     });
 
-    test('the explained skip and the owner-mismatch warning are given again to the next account', async () => {
+    test('the explained skip is given again', async () => {
         const skipLog = makeLog();
         const deps = makeDeps({
             logger: skipLog.logger,
@@ -1513,19 +1624,6 @@ describe('forgetChosenPhotosMemory (a logout)', () => {
         forgetChosenPhotosMemory();
         await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps);
         expect(skipLog.lines.warning.filter((m) => m.includes('skipped'))).toHaveLength(2);
-
-        const mismatchLog = makeLog();
-        const other = makeDeps({
-            logger: mismatchLog.logger,
-            member: 'member-2',
-            settings: { chosen: ['theme-b'], savedBy: 'member-1', only: true },
-        });
-        await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, other);
-        forgetChosenPhotosMemory();
-        await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, other);
-        expect(
-            mismatchLog.lines.warning.filter((m) => m.includes('saved while another account was logged in')),
-        ).toHaveLength(2);
     });
 });
 
@@ -1589,7 +1687,11 @@ describe('the lookup memo is kept per usage', () => {
             })
         ).map((found) => found.id);
     const walkOf = (...items: PickerPhoto[]): WalkFn =>
-        jest.fn<ReturnType<WalkImpl>, Parameters<WalkImpl>>(async () => ({ items, truncated: false }));
+        jest.fn<ReturnType<WalkImpl>, Parameters<WalkImpl>>(async () => ({
+            items,
+            truncated: false,
+            nextStart: items.length,
+        }));
 
     test('the walk asks for the usage, submit by default', async () => {
         const walk = walkOf(car);

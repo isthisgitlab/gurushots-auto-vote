@@ -1,4 +1,7 @@
-import { deriveChallengeCardView, needsSecondTick, nextBoundaryFlip } from '@/utils/challengeCardView';
+import { useLayoutEffect, useRef } from 'react';
+import { deriveChallengeCardView, minimalCardView, needsSecondTick, nextBoundaryFlip } from '@/utils/challengeCardView';
+import { isMinimalCardChallenge } from '@/utils/challengeAlerts';
+import { isMarkedChallenge } from '../../../challengeMarks';
 import { useDeadlineActions } from '@/api/useDeadlineActions';
 import { useSwapBacks } from '@/api/useSwapBacks';
 import { useEntryPins } from '@/api/useEntryPins';
@@ -7,14 +10,16 @@ import { useChallengeSettings } from '@/hooks/useChallengeSettings';
 import { useTick, useRerenderAt } from '@/hooks/useTick';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { formatEndTime } from '@/utils/formatters';
-import { interp } from '@/utils/interp';
+import { ToneNote } from '@/components/ui/ToneNote';
 import { ChallengeCardCompact } from './ChallengeCardCompact';
 import { ChallengeCardDetail } from './ChallengeCardDetail';
+import { Countdown } from './Countdown';
 import type { TimeRemaining } from './Countdown';
 import { useChallengeCardActions, buildCompactActionRow } from './ChallengeCardActions';
 
 import type { Bankroll, Challenge } from '../../../types/gurushots';
 import type { DeadlineActionsState } from '@/api/useDeadlineActions';
+import type { Translate } from '../../../translations/translator';
 
 /**
  * Everything the card derives from its challenge at one tick (see
@@ -32,7 +37,7 @@ export type ChallengeCardView = ReturnType<typeof deriveChallengeCardView>;
  * @param releaseAt - when the pin gives way (Unix seconds), or null
  */
 const conflictWarning = (
-    t: (key: string) => string,
+    t: Translate,
     timezone: string,
     kind: 'boost' | 'turbo',
     blockedBy: DeadlineActionsState['boostBlockedBy'],
@@ -45,7 +50,7 @@ const conflictWarning = (
             : releaseAt === null
               ? 'app.conflictPinNever'
               : 'app.conflictPinReleases';
-    return interp(t(key), {
+    return t(key, {
         kind: t(kind === 'boost' ? 'app.boost' : 'app.turbo'),
         other: t(kind === 'boost' ? 'app.turbo' : 'app.boost'),
         time: releaseAt === null ? '' : formatEndTime(releaseAt, timezone),
@@ -53,11 +58,22 @@ const conflictWarning = (
 };
 
 /**
+ * Focus is nowhere: on nothing, on the page itself, or on an element that has
+ * just been removed.
+ */
+const focusIsLost = (): boolean => {
+    const active = document.activeElement;
+    return active === null || active === document.body || !active.isConnected;
+};
+
+/**
  * Challenge card. Renders either the full detailed card (every stat and every
  * action) or, when compactCards is on for this challenge, the
  * ChallengeCardCompact tile. `compactActions` (the global compactCardActions
  * setting) gives that tile a row of the challenge-level actions; per-entry
- * actions stay in the detailed card. The root element is the grid item in
+ * actions stay in the detailed card. A minimal-card challenge (marked by the
+ * boundary, or without its member standing — see utils/challengeAlerts) renders
+ * the minimal card instead of both. The root element is the grid item in
  * ChallengesSection's #challenges-container: a detailed card spans the full
  * row, compact tiles share one.
  *
@@ -114,13 +130,27 @@ export function ChallengeCard({
     useTick(1000, needsSecondTick(challenge, now));
     useRerenderAt(nextBoundaryFlip(challenge, now));
 
-    const view = deriveChallengeCardView(challenge, {
-        now,
-        bankroll,
-        autovoteRunning,
-        autoSubmitEnabled,
-        manualPhotosOnly,
-    });
+    // Marked-or-minimal is a render decision, so every hook above stays
+    // unconditional and only the JSX below branches. The full-card derivation
+    // reads the member standing unguarded, so a minimal card never runs it —
+    // the action hooks, which cannot branch, run on a neutral view instead
+    // (utils/challengeCardView).
+    const marked = isMarkedChallenge(challenge);
+    const minimal = isMinimalCardChallenge(challenge);
+    // End time and countdown only for a close time the card can read as a
+    // number; the boundary converts numeric strings, so what survives is never
+    // a usable time.
+    const closeTime =
+        typeof challenge.close_time === 'number' && Number.isFinite(challenge.close_time) ? challenge.close_time : null;
+    const view = minimal
+        ? minimalCardView()
+        : deriveChallengeCardView(challenge, {
+              now,
+              bankroll,
+              autovoteRunning,
+              autoSubmitEnabled,
+              manualPhotosOnly,
+          });
     const actions = useChallengeCardActions({
         challenge,
         view,
@@ -128,6 +158,21 @@ export function ChallengeCard({
         onVoteComplete,
         onSettingsClick,
         onCurrencySpent,
+    });
+
+    // When a modal the full card owned (Pick…, the swap confirm) closes because
+    // the card turned minimal, its trigger unmounted with the full body, so
+    // Modal's own focus return lands nowhere; focus then moves to the minimal
+    // card's heading. The previous render's focus tells that case apart: an
+    // element inside a dialog that has since left the page.
+    const headingRef = useRef<HTMLHeadingElement | null>(null);
+    const lastFocusRef = useRef<Element | null>(null);
+    useLayoutEffect(() => {
+        const last = lastFocusRef.current;
+        const active = document.activeElement;
+        lastFocusRef.current = active;
+        if (!minimal || !last || last.isConnected || last.closest('[role="dialog"]') === null) return;
+        if (focusIsLost()) headingRef.current?.focus({ preventScroll: true });
     });
 
     // id + scroll-mt make the card a smooth-scroll target for the anchor chips
@@ -150,7 +195,29 @@ export function ChallengeCard({
 
     // The Pick… and swap-picker modals sit beside the card, in the same place whichever layout shows, so
     // switching layouts (or a refresh that hides the buttons) never unmounts them.
-    const card = isCompact ? (
+    const card = minimal ? (
+        // The minimal card: title, the end time and countdown when the close
+        // time is readable, the notice, and the settings button alone — no
+        // stats and no actions off a challenge whose fields cannot be used
+        // safely. Full row, like the detailed card: the notice is sentences.
+        <div id={cardId} className={`${cardClass} col-span-full`} tabIndex={-1}>
+            <div className="space-y-2">
+                <h3 ref={headingRef} tabIndex={-1} className="font-bold text-base wrap-anywhere">
+                    {challenge.title}
+                </h3>
+                {closeTime !== null && (
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <Countdown source={timeRemaining} closeTime={closeTime} />
+                        <span className="font-semibold tabular-nums">{formatEndTime(closeTime, timezone)}</span>
+                    </div>
+                )}
+                <ToneNote as="div" tone={marked ? 'warning' : 'info'} role="status" className="text-sm">
+                    {t(marked ? 'app.challengeDataUnreadable' : 'app.rankingDataPending')}
+                </ToneNote>
+                {actions.settingsButton && <div className="flex flex-wrap gap-1">{actions.settingsButton}</div>}
+            </div>
+        </div>
+    ) : isCompact ? (
         <div id={cardId} className={cardClass} tabIndex={-1}>
             <ChallengeCardCompact
                 challenge={challenge}
@@ -200,8 +267,11 @@ export function ChallengeCard({
     return (
         <>
             {card}
-            {actions.pickModal}
-            {actions.swapPickModal}
+            {/* A minimal card owns no modals: one open while the card turns
+                minimal closes with the full body, and focus moves to the
+                heading (the layout effect above). */}
+            {!minimal && actions.pickModal}
+            {!minimal && actions.swapPickModal}
         </>
     );
 }

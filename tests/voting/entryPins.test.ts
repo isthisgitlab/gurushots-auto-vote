@@ -1,19 +1,37 @@
 /**
- * The pure pin reading shared by the Node-side picks and the renderer's pin controls: how a stored pin
- * matches the live entries, whether a feature can still fire, and which feature an entry is live-pinned for.
+ * The pure pin logic shared by the Node-side picks, the renderer's pin controls and the chooser's
+ * draft: how a stored pin matches the live entries, whether a feature can still fire, which feature
+ * an entry is live-pinned for, and the pin-write rule (a photo pinned for at most one of Boost/Turbo).
  */
 
 import type * as entryPinsModule from '../../src/ts/voting/entryPins';
 import type { Challenge, RankingEntry } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
-const { findPinnedEntry, canStillFire, featureNeverFires, unusablePins, livePinKindOf } =
+const { applyPinToRecord, findPinnedEntry, canStillFire, featureNeverFires, unusablePins, livePinKindOf } =
     require('../../src/ts/voting/entryPins') as typeof entryPinsModule;
 
 const build = (
     entries: RankingEntry[],
     member: { boost?: Record<string, unknown>; turbo?: Record<string, unknown> } = {},
 ) => invalid<Challenge>({ id: 1, member: { ranking: { entries }, ...member } });
+
+describe('applyPinToRecord', () => {
+    test('pins the image for the kind, keeping the other kind’s pin', () => {
+        expect(applyPinToRecord({}, 'boost', 'img_a')).toEqual({ boost: 'img_a' });
+        expect(applyPinToRecord({ boost: 'img_a' }, 'turbo', 'img_b')).toEqual({ boost: 'img_a', turbo: 'img_b' });
+    });
+
+    test('a photo pinned for one kind takes the other kind’s pin on it away', () => {
+        expect(applyPinToRecord({ turbo: 'img_a' }, 'boost', 'img_a')).toEqual({ boost: 'img_a' });
+        expect(applyPinToRecord({ boost: 'img_a' }, 'turbo', 'img_a')).toEqual({ turbo: 'img_a' });
+    });
+
+    test('a null image clears the kind and leaves the other', () => {
+        expect(applyPinToRecord({ boost: 'img_a', turbo: 'img_b' }, 'boost', null)).toEqual({ turbo: 'img_b' });
+        expect(applyPinToRecord({ turbo: 'img_b' }, 'boost', null)).toEqual({ turbo: 'img_b' });
+    });
+});
 
 describe('findPinnedEntry', () => {
     test('none without a pin', () => {

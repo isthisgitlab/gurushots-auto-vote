@@ -70,8 +70,6 @@ jest.mock('../../src/ts/mock/voting', () => ({
 jest.mock('../../src/ts/mock/boost', () => ({
     __esModule: true,
     mockBoostSuccess: { success: true, boost_applied: true },
-    mockBoostFailure: { error: 'Boost failed' },
-    mockBoostAlreadyUsed: { error: 'Boost already used' },
 }));
 
 // Mock console methods
@@ -112,17 +110,31 @@ jest.mock('../../src/ts/logger', () => {
         __mockApiFn: mockApiFn,
     };
 
-    mock.withCategory = jest.fn(() => ({
-        info: mockInfoFn,
-        error: mockErrorFn,
-        debug: mockDebugFn,
-        success: mockSuccessFn,
-        warning: jest.fn(),
-        api: mockApiFn,
-        progress: jest.fn(),
-        startOperation: jest.fn(),
-        endOperation: jest.fn(),
-    }));
+    mock.withCategory = jest.fn(() => {
+        const { renderLogTemplate } = require('../helpers/logTemplate') as typeof import('../helpers/logTemplate');
+        const mockWarningFn = jest.fn();
+        return {
+            info: mockInfoFn,
+            error: mockErrorFn,
+            debug: mockDebugFn,
+            success: mockSuccessFn,
+            warning: mockWarningFn,
+            api: mockApiFn,
+            progress: jest.fn(),
+            startOperation: jest.fn(),
+            endOperation: jest.fn(),
+            // Rendered onto the shared fns, so the assertions below keep reading today's lines.
+            infoT: jest.fn((key: string, params: unknown[], data: unknown) => {
+                mockInfoFn(renderLogTemplate(key, params), data);
+            }),
+            warningT: jest.fn((key: string, params: unknown[], data: unknown) => {
+                mockWarningFn(renderLogTemplate(key, params), data);
+            }),
+            errorT: jest.fn((key: string, params: unknown[], data: unknown) => {
+                mockErrorFn(renderLogTemplate(key, params), data);
+            }),
+        };
+    });
 
     return mock;
 });
@@ -275,12 +287,16 @@ describe('mock/index', () => {
                 mockIndex.clearSessionCache();
                 challenges.generateMockChallenges.mockReturnValueOnce(
                     invalid({
-                        challenges: [{ id: '2', title: 'Generated Challenge' }],
+                        challenges: [{ id: '2', title: 'Generated Challenge', start_time: 1, close_time: 2 }],
                     }),
                 );
                 const result = await mockIndex.mockApiClient.getActiveChallenges('any-token');
 
-                expect(result).toEqual({ challenges: [{ id: '2', title: 'Generated Challenge' }] });
+                expect(result).toEqual({
+                    challenges: [{ id: '2', title: 'Generated Challenge', start_time: 1, close_time: 2 }],
+                    fetchFailed: false,
+                    pruneUnsafe: false,
+                });
                 expect(logger.__mockApiFn).toHaveBeenCalledWith('Mock getActiveChallenges', null);
             });
 
@@ -294,6 +310,8 @@ describe('mock/index', () => {
                             {
                                 id: 'fresh',
                                 title: 'Fresh Challenge',
+                                start_time: 1,
+                                close_time: 2,
                             },
                         ],
                     }),
@@ -302,7 +320,11 @@ describe('mock/index', () => {
                 const result = await mockIndex.mockApiClient.getActiveChallenges('test-token');
 
                 expect(challenges.generateMockChallenges).toHaveBeenCalled();
-                expect(result).toEqual({ challenges: [{ id: 'fresh', title: 'Fresh Challenge' }] });
+                expect(result).toEqual({
+                    challenges: [{ id: 'fresh', title: 'Fresh Challenge', start_time: 1, close_time: 2 }],
+                    fetchFailed: false,
+                    pruneUnsafe: false,
+                });
             });
 
             test('should resolve an empty challenge list for missing token (real-API parity)', async () => {
@@ -423,26 +445,26 @@ describe('mock/index', () => {
                 );
             });
 
-            test('should return error when boost already used', async () => {
+            test('should resolve null when boost already used (transport failure contract)', async () => {
                 const challenge = invalid<Challenge>({
                     title: 'Test Challenge',
-                    member: { boost: { state: 'USED' } },
+                    // A pickable entry: the pick runs in the real applyBoost this mock
+                    // delegates to, so the fake transport (where the state reads) is reached.
+                    member: { boost: { state: 'USED' }, ranking: { entries: [{ id: 'e1' }] } },
                 });
 
-                await expect(mockIndex.mockApiClient.applyBoost(challenge, 'test-token')).rejects.toEqual(
-                    boost.mockBoostAlreadyUsed,
-                );
+                await expect(mockIndex.mockApiClient.applyBoost(challenge, 'test-token')).resolves.toBeNull();
+                expect(logger.__mockInfoFn).toHaveBeenCalledWith('Boost already used', null);
             });
 
-            test('should return error when boost not available', async () => {
+            test('should resolve null when boost not available (transport failure contract)', async () => {
                 const challenge = invalid<Challenge>({
                     title: 'Test Challenge',
-                    member: { boost: { state: 'NOT_AVAILABLE' } },
+                    member: { boost: { state: 'NOT_AVAILABLE' }, ranking: { entries: [{ id: 'e1' }] } },
                 });
 
-                await expect(mockIndex.mockApiClient.applyBoost(challenge, 'test-token')).rejects.toEqual(
-                    boost.mockBoostFailure,
-                );
+                await expect(mockIndex.mockApiClient.applyBoost(challenge, 'test-token')).resolves.toBeNull();
+                expect(logger.__mockInfoFn).toHaveBeenCalledWith('Boost not available', null);
             });
         });
 
@@ -618,6 +640,9 @@ describe('mock/index', () => {
                     id: '1',
                     title: 'Fillable',
                     url: 'no-vote-images-url',
+                    // The boundary (challengeIntegrity) marks a challenge without one, and the pass
+                    // skips marked challenges whole — the fill-new options would never fire.
+                    start_time: now - 60,
                     close_time: now + 600,
                     max_photo_submits: 4,
                     member: {
@@ -709,6 +734,8 @@ describe('mock/index', () => {
                             id: '1',
                             title: 'OneSlot',
                             url: 'no-vote-images-url',
+                            // The boundary marks a challenge without one, and the pass skips marked challenges.
+                            start_time: now - 60,
                             close_time: now + 600,
                             max_photo_submits: 2, // 1 entry below → exactly one free slot
                             member: {

@@ -11,6 +11,13 @@ export type LogEntry = {
     timestamp: string;
     message: string;
     data: unknown;
+    /**
+     * The catalog entry the message was rendered from: `key` is the log
+     * catalogs' `m…` key, `params` the `{n}` slot values in order. Only the
+     * T-methods set it; entries without one localize through the reverse
+     * matcher.
+     */
+    template?: { key: string; params: unknown[] };
 };
 
 /**

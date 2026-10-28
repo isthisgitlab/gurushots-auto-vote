@@ -11,8 +11,11 @@
  * mocked at module top with controllable state objects.
  */
 
-import { act, fireEvent, pickOption, render, screen, waitFor } from './helpers/test-utils';
+import { act, fireEvent, pickOption, render, screen, waitFor, within } from './helpers/test-utils';
 import { SettingsModal } from '@/components/app/SettingsModal';
+import { TALL_MODAL_BOX_HEIGHT } from '@/components/ui/Modal';
+import { fireSettingsChanged } from './helpers/setup';
+import { selectTab } from '../helpers/selectTab';
 import type { TitleRule } from '../../src/ts/types/settings';
 import type { UiResetHandler } from '../../src/ts/types/settingsEditor';
 import type { useSettingsForm } from '@/hooks/useSettingsForm';
@@ -131,6 +134,15 @@ const findTimezoneAddButton = () => {
 beforeEach(() => {
     resetHookState();
     document.documentElement.removeAttribute('data-theme');
+});
+
+// Tests that save rules set persistent mock answers; hand the setup defaults
+// back so no implementation leaks into another test (the global beforeEach's
+// clearAllMocks keeps implementations).
+afterEach(() => {
+    jest.mocked(window.api.getTitleRules).mockReset().mockResolvedValue([]);
+    jest.mocked(window.api.getChallengeProfiles).mockReset().mockResolvedValue({});
+    jest.mocked(window.api.saveChallengeProfile).mockReset().mockResolvedValue(true);
 });
 
 describe('SettingsModal — timezone "+" inline-add', () => {
@@ -449,55 +461,10 @@ describe('SettingsModal — title-tag-rules save', () => {
         await screen.findByText('app.titleTagRulesSaveError');
         expect(window.api.setTitleRules).toHaveBeenCalledWith([rule]);
         expect(onClose).not.toHaveBeenCalled();
-        // Focus moves to the section that failed.
+        // Focus moves to the section that failed: its tab button.
         await waitFor(() =>
-            expect(document.activeElement).toBe(screen.getByRole('heading', { level: 4, name: 'app.titleTagRules' })),
+            expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'app.titleTagRules' })),
         );
-    });
-
-    test("removing every list from a rule's chooser, then saving, does not write the lists back", async () => {
-        const PHOTO = `00000001${'a'.repeat(24)}`;
-        const rule = { title: 'Hats', mustIncludeTags: ['hat'], shouldIncludeTags: [], chosenPhotos: [PHOTO] };
-        // A rule whose only content was its list goes with it, as it does where the lists are removed.
-        const lonely = { title: 'Lonely', mustIncludeTags: [], shouldIncludeTags: [], chosenPhotos: [PHOTO] };
-        jest.mocked(window.api.getTitleRules).mockResolvedValueOnce([rule, lonely]);
-        // A list saved under another account: the chooser's notice offers to remove every list.
-        jest.mocked(window.api.getSetting).mockResolvedValue('d'.repeat(32));
-        jest.mocked(window.api.getLibraryPhotos).mockResolvedValue(
-            invalid({
-                success: true,
-                photos: [{ id: PHOTO, labels: [], allowed: true, message: null, uploadDate: 1 }],
-                memberId: 'c'.repeat(32),
-                truncated: false,
-                wonIds: [],
-                wonCount: 0,
-                preview: false,
-                readAtMs: 1_700_000_000_000,
-                allowedKnown: true,
-            }),
-        );
-        jest.mocked(window.api.clearChosenPhotos).mockResolvedValue({ success: true, removed: 1 });
-        const onClose = jest.fn();
-
-        render(<SettingsModal isOpen={true} onClose={onClose} />);
-        await screen.findByDisplayValue('Hats');
-        fireEvent.click(screen.getAllByRole('button', { name: 'app.choosePhotos' })[0]);
-        fireEvent.click(await screen.findByRole('button', { name: 'app.photoChooserOtherAccountClear' }));
-        const confirm = (await screen.findAllByRole('button', { name: 'app.photoChooserOtherAccountClear' })).at(-1)!;
-        fireEvent.click(confirm);
-        await waitFor(() => expect(window.api.clearChosenPhotos).toHaveBeenCalledTimes(1));
-        // Leave the chooser without choosing: its Cancel is the last one in the page.
-        fireEvent.click((await screen.findAllByRole('button', { name: 'app.cancel' })).at(-1)!);
-        await waitFor(() => expect(screen.queryByRole('button', { name: 'app.photoChooserUse' })).toBeNull());
-
-        clickSave();
-
-        await waitFor(() => expect(onClose).toHaveBeenCalled());
-        // The rule is saved without its list: the removal stands.
-        expect(window.api.setTitleRules).toHaveBeenCalledWith([
-            { title: 'Hats', mustIncludeTags: ['hat'], shouldIncludeTags: [] },
-        ]);
-        expect(screen.queryByDisplayValue('Lonely')).toBeNull();
     });
 
     test('a successful save persists the rules and closes the modal', async () => {
@@ -514,8 +481,27 @@ describe('SettingsModal — title-tag-rules save', () => {
         expect(window.api.setTitleRules).toHaveBeenCalledWith([rule]);
     });
 
+    test('a landed rule save closes even when its trailing refresh fails', async () => {
+        jest.mocked(window.api.getTitleRules)
+            .mockResolvedValueOnce([{ title: 'Hats', mustIncludeTags: [], shouldIncludeTags: [] }])
+            .mockRejectedValueOnce(new Error('disk')); // the refresh after the landed write
+        const onClose = jest.fn();
+
+        render(<SettingsModal isOpen={true} onClose={onClose} />);
+        await screen.findByDisplayValue('Hats');
+
+        clickSave();
+
+        await waitFor(() => expect(onClose).toHaveBeenCalled());
+        expect(screen.queryByText('app.titleTagRulesSaveError')).toBeNull();
+        // The trailing refresh is fire-and-forget: wait for its logged failure.
+        await waitFor(() => expect(window.api.logError).toHaveBeenCalledWith('Error refreshing title rules: disk'));
+    });
+
     test('loads saved profiles into each title rule profile selector', async () => {
-        jest.mocked(window.api.getChallengeProfiles).mockResolvedValueOnce({ 'Portrait Tactic': { exposure: 80 } });
+        // Not a Once: the Profiles tab's own loader reads the same channel on
+        // open, and both consumers get the same stored map.
+        jest.mocked(window.api.getChallengeProfiles).mockResolvedValue({ 'Portrait Tactic': { exposure: 80 } });
         jest.mocked(window.api.getTitleRules).mockResolvedValueOnce([
             {
                 title: 'Portraits',
@@ -534,14 +520,12 @@ describe('SettingsModal — title-tag-rules save', () => {
 });
 
 /**
- * Tier bands in the GLOBAL modal. The default mockSchemaState carries an empty
- * schema so the SettingInput-driven section renders nothing, which left this
- * whole path uncovered — SettingsModal renders bands at a different heading
- * depth than ChallengeSettingsModal (h5 band over h6 group, because it nests
- * under its own h4 "Challenge Defaults" section), so the per-challenge modal's
- * test does not stand in for it.
+ * Tier tabs in the GLOBAL modal. The default mockSchemaState carries an empty
+ * schema so the SettingInput-driven panels render nothing, which left this
+ * whole path uncovered — SettingsModal renders each band as its own tab, so
+ * the per-challenge modal's test does not stand in for it.
  */
-describe('SettingsModal tier bands', () => {
+describe('SettingsModal tier tabs', () => {
     const schemaFixture = {
         exposure: {
             type: 'number',
@@ -582,38 +566,96 @@ describe('SettingsModal tier bands', () => {
         Object.assign(mockSchemaState, { schema: {}, defaults: {}, groups: undefined, tiers: undefined });
     });
 
-    test('renders each band heading above its group, at the right depth', async () => {
+    test('one tab per band, and the outline modal h3 over the panel h4 over the group h5', async () => {
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        await waitFor(() => expect(document.getElementById('setting-exposure')).not.toBeNull());
 
-        // Bands are h5 here (under the h4 "Challenge Defaults" section);
-        // group headings drop to h6.
-        const bands = await screen.findAllByRole('heading', { level: 5 });
-        // (The last h5 is the About section's danger zone.)
-        expect(bands.map((h) => h.textContent)).toEqual(['app.tierCore', 'app.tierOverrides', 'about.dangerTitle']);
+        // The tabs, Application first and the fixed tabs last, one per non-app band.
+        expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+            'app.applicationSettings',
+            'app.tierCore',
+            'app.tierOverrides',
+            'app.titleTagRules',
+            'app.challengeProfiles',
+            'app.scenarios',
+        ]);
+        // The outline: the modal titles itself h3, each panel opens with an sr-only h4 naming
+        // it, and a group directly under a panel is an h5.
+        expect(screen.getByRole('heading', { level: 3, name: 'app.globalSettings' })).toBeTruthy();
+        selectTab('app.tierCore');
+        expect(screen.getByRole('heading', { level: 4, name: 'app.tierCore' })).toBeTruthy();
+        const corePanel = screen.getByRole('tabpanel', { name: 'app.tierCore' });
+        expect(corePanel.querySelector('h4')!.classList.contains('sr-only')).toBe(true);
+        expect(Array.from(corePanel.querySelectorAll('h5')).map((h) => h.textContent)).toEqual(['app.groupGeneral']);
 
-        const groups = screen.getAllByRole('heading', { level: 6 });
-        expect(groups.map((h) => h.textContent)).toEqual(['app.groupGeneral', 'app.groupLastMinute']);
+        selectTab('app.tierOverrides');
+        const overridesPanel = screen.getByRole('tabpanel', { name: 'app.tierOverrides' });
+        expect(Array.from(overridesPanel.querySelectorAll('h5')).map((h) => h.textContent)).toEqual([
+            'app.groupLastMinute',
+        ]);
+        // Every tier tab carries the defaults note (the challenge modal never does).
+        expect(screen.getAllByText('app.tierDefaultsNote')).toHaveLength(2);
     });
 
     test('shows the off-by-default sub-line on the overrides band only', async () => {
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        await waitFor(() => expect(document.getElementById('setting-voteOnlyInLastMinute')).not.toBeNull());
 
-        await screen.findByRole('heading', { level: 5, name: 'app.tierOverrides' });
-        // Keyed off the tier id in SettingsTierHeading, so a renamed tier id
+        selectTab('app.tierOverrides');
+        // Keyed off the tier id in SettingsTierIntro, so a renamed tier id
         // would silently drop this line without this assertion.
         expect(screen.getAllByText('app.tierOverridesDesc')).toHaveLength(1);
     });
 
     // Version skew: a main process predating the `tiers` IPC field. Every
-    // section must still render, just without band headings.
+    // group must still render, just under the fallback Other tab.
     test('renders every group unbanded when the main process sends no tiers', async () => {
         Object.assign(mockSchemaState, { tiers: undefined });
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        await waitFor(() => expect(document.getElementById('setting-exposure')).not.toBeNull());
 
-        const groups = await screen.findAllByRole('heading', { level: 6 });
-        expect(groups.map((h) => h.textContent)).toEqual(['app.groupGeneral', 'app.groupLastMinute']);
-        expect(screen.queryByRole('heading', { level: 5, name: 'app.tierCore' })).toBeNull();
+        selectTab('app.tierOther');
+        const panel = screen.getByRole('tabpanel', { name: 'app.tierOther' });
+        expect(Array.from(panel.querySelectorAll('h5')).map((h) => h.textContent)).toEqual([
+            'app.groupGeneral',
+            'app.groupLastMinute',
+        ]);
+        expect(screen.queryByRole('tab', { name: 'app.tierCore' })).toBeNull();
         expect(screen.queryByText('app.tierOverridesDesc')).toBeNull();
+    });
+
+    // Version skew the other way round: the `tiers` field is there but does not
+    // name every group's tier. Only the orphan joins the fallback Other tab,
+    // and the tab still carries the defaults note like every tier tab.
+    test('a group whose tier no band names joins the Other tab, with the defaults note', async () => {
+        Object.assign(mockSchemaState, {
+            schema: {
+                ...schemaFixture,
+                oddity: {
+                    type: 'boolean',
+                    default: false,
+                    perChallenge: true,
+                    group: 'odd',
+                    label: 'app.oddity',
+                    description: 'app.oddityDesc',
+                },
+            },
+            groups: [
+                { id: 'general', label: 'app.groupGeneral', tier: 'core' },
+                { id: 'lastMinute', label: 'app.groupLastMinute', tier: 'overrides' },
+                { id: 'odd', label: 'app.groupOdd', tier: 'mystery' },
+            ],
+        });
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        await waitFor(() => expect(document.getElementById('setting-oddity')).not.toBeNull());
+
+        // The named bands keep their tabs; the unknown `mystery` tier falls back to Other.
+        selectTab('app.tierOther');
+        const panel = screen.getByRole('tabpanel', { name: 'app.tierOther' });
+        expect(Array.from(panel.querySelectorAll('h5')).map((h) => h.textContent)).toEqual(['app.groupOdd']);
+        expect(panel.textContent).toContain('app.tierDefaultsNote');
+        // Core, overrides and Other: the note is on every tier tab, Other included.
+        expect(screen.getAllByText('app.tierDefaultsNote')).toHaveLength(3);
     });
 });
 
@@ -650,19 +692,18 @@ describe('SettingsModal — app-wide settings', () => {
         Object.assign(mockSchemaState, { schema: {}, defaults: {}, groups: undefined, tiers: undefined });
     });
 
-    test('app-tier groups render with the Application Settings, not as challenge defaults', async () => {
+    test('app-tier groups render in the Application tab, not as a tier band', async () => {
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
-        // h5: directly under the h4 section heading, with no tier band between.
+        // h5: directly under the panel's sr-only h4, with no tier band between.
         await screen.findByRole('heading', { level: 5, name: 'app.groupMissions' });
-        const sections = screen.getAllByRole('heading', { level: 4 }).map((h) => h.parentElement!);
-        const [appSection, defaultsSection] = [
-            sections.find((el) => el.textContent.startsWith('app.applicationSettings')),
-            sections.find((el) => el.textContent.startsWith('app.challengeDefaults')),
-        ];
-        expect(appSection!.textContent).toContain('app.missionSaveTurbos');
-        expect(defaultsSection!.textContent).not.toContain('app.missionSaveTurbos');
-        expect(defaultsSection!.textContent).toContain('app.autoTurbo');
-        expect(screen.queryByRole('heading', { level: 5, name: 'app.tierApp' })).toBeNull();
+        expect(screen.queryByRole('tab', { name: 'app.tierApp' })).toBeNull();
+        const appPanel = screen.getByRole('tabpanel', { name: 'app.applicationSettings' });
+        expect(appPanel.textContent).toContain('app.missionSaveTurbos');
+
+        selectTab('app.tierCore');
+        const corePanel = screen.getByRole('tabpanel', { name: 'app.tierCore' });
+        expect(corePanel.textContent).toContain('app.autoTurbo');
+        expect(corePanel.textContent).not.toContain('app.missionSaveTurbos');
     });
 
     test('only settings a challenge can override carry the global-default badge', async () => {
@@ -696,6 +737,11 @@ describe('SettingsModal — loading state', () => {
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
         expect(screen.getByRole('status').textContent).toBe('common.loading');
         expect(screen.queryByRole('heading', { level: 4, name: 'app.applicationSettings' })).toBeNull();
+        // The spinner keeps the plain box: the fixed height is the tabbed form's, not its.
+        const box = document.querySelector('.modal-box')!;
+        expect(box.classList.contains(TALL_MODAL_BOX_HEIGHT)).toBe(false);
+        expect(box.classList.contains('flex')).toBe(false);
+        expect(box.classList.contains('flex-col')).toBe(false);
     });
 
     test('keeps the form on screen during a background schema refetch', async () => {
@@ -994,6 +1040,9 @@ describe('SettingsModal — rule loading', () => {
         mockSchemaState.defaults = {};
         mockSchemaState.groups = undefined;
         mockSchemaState.tiers = undefined;
+        // The malformed-payload test below parks a null here for both profile
+        // consumers; hand the later describes an empty store back.
+        jest.mocked(window.api.getChallengeProfiles).mockResolvedValue({});
     });
 
     test('the rule editor waits behind a loader until the rules have loaded', async () => {
@@ -1013,7 +1062,9 @@ describe('SettingsModal — rule loading', () => {
 
     test('malformed payloads fall back to empty lists', async () => {
         jest.mocked(window.api.getTitleRules).mockResolvedValueOnce(invalid({ not: 'an array' }));
-        jest.mocked(window.api.getChallengeProfiles).mockResolvedValueOnce(null);
+        // Not a Once: the Profiles tab's own loader fires first (a child's
+        // layout effect runs before the modal's own hooks) and would eat it.
+        jest.mocked(window.api.getChallengeProfiles).mockResolvedValue(invalid(null));
 
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
 
@@ -1096,7 +1147,11 @@ describe('SettingsModal — save outcomes', () => {
     });
 
     test('editing a title rule after a rejected save clears the title error', async () => {
-        jest.mocked(window.api.getTitleRules).mockResolvedValueOnce([
+        // Not a Once: persist()'s fire-and-forget trailing refresh reads the
+        // disk after the rejection — with the default answer it would empty
+        // the editor before the assertions. The write was refused, so the
+        // disk is the unchanged rules.
+        jest.mocked(window.api.getTitleRules).mockResolvedValue([
             { title: 'Hats', mustIncludeTags: [], shouldIncludeTags: [] },
         ]);
         jest.mocked(window.api.setTitleRules).mockResolvedValueOnce(false);
@@ -1131,11 +1186,9 @@ describe('SettingsModal — save outcomes', () => {
 
         await screen.findByText('app.settingsSaveError');
         expect(onClose).not.toHaveBeenCalled();
-        // The language has no key to mark, so focus goes to its section's heading.
+        // The language has no key to mark, so focus goes to its section's tab button.
         await waitFor(() =>
-            expect(document.activeElement).toBe(
-                screen.getByRole('heading', { level: 4, name: 'app.applicationSettings' }),
-            ),
+            expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'app.applicationSettings' })),
         );
     });
 
@@ -1266,5 +1319,40 @@ describe('SettingsModal — editing rules without a pending error', () => {
         expect(screen.getByDisplayValue('speed')).toBeTruthy();
         expect(screen.getByDisplayValue('Caps')).toBeTruthy();
         expect(document.querySelector('[role="alert"]')).toBeNull();
+    });
+});
+
+describe('SettingsModal — the Rules tab follows a profile saved in the Profiles tab', () => {
+    test('a save-as in the Profiles tab lists the new name in the Rules tab without reopening', async () => {
+        jest.mocked(window.api.getTitleRules).mockResolvedValue([
+            { title: 'Portraits', profile: 'tactic', mustIncludeTags: [], shouldIncludeTags: [] },
+        ]);
+        jest.mocked(window.api.getChallengeProfiles).mockResolvedValue({ tactic: { exposure: 80 } });
+        // The shells' timing: the write's own broadcast fires inside the call,
+        // and the fresh store is what every later read answers.
+        jest.mocked(window.api.saveChallengeProfile).mockImplementation(async () => {
+            jest.mocked(window.api.getChallengeProfiles).mockResolvedValue({
+                tactic: { exposure: 80 },
+                brand: { exposure: 90 },
+            });
+            fireSettingsChanged();
+            return true;
+        });
+
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+
+        selectTab('app.challengeProfiles');
+        const picker = await screen.findByRole<HTMLSelectElement>('combobox', { name: 'app.challengeProfiles' });
+        act(() => {
+            pickOption(picker, 'tactic');
+        });
+        fireEvent.change(screen.getByLabelText('app.saveAsNewLabel'), { target: { value: 'brand' } });
+        fireEvent.click(screen.getByRole('button', { name: 'app.saveAsNewProfile' }));
+        await waitFor(() => expect(window.api.saveChallengeProfile).toHaveBeenCalledWith('brand', { exposure: 80 }));
+
+        selectTab('app.titleTagRules');
+        const profileSelect = screen.getByLabelText<HTMLSelectElement>('app.titleRuleProfile');
+        await waitFor(() => expect(within(profileSelect).getByRole('option', { name: 'brand' })).toBeTruthy());
+        expect(profileSelect.value).toBe('tactic');
     });
 });

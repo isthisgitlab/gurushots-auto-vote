@@ -20,6 +20,7 @@ import { buildChallenge } from '../helpers/challengeFixtures';
 import type { useTurbo } from '@/api/useTurbo';
 import type { useFillChallenge } from '@/api/useFillChallenge';
 import { invalid } from '../helpers/invalid';
+import type { Challenge } from '../../src/ts/types/gurushots';
 
 const mockChallengeSettings = {
     hasCustomSettings: false,
@@ -269,11 +270,50 @@ describe('compact ChallengeCard tile', () => {
         expect(text).toContain('📷 #300');
     });
 
+    test('a guru-picked entry carries the sr-only label and the rank stays visible', () => {
+        const challenge = makeChallenge();
+        challenge.member!.ranking!.entries![2].guru_pick = true; // the plain '📷' entry becomes ⭐
+        const { container } = renderCard(challenge);
+        const text = container.textContent;
+        expect(text).toContain('app.entryGuruPicked');
+        expect(text).toContain('#300');
+        // The ⭐ glyph comes before the label and the rank, and is never doubled.
+        expect(text).toContain('⭐');
+        expect(text.indexOf('⭐')).toBeLessThan(text.indexOf('#300'));
+        expect(text).not.toContain('⭐⭐');
+    });
+
+    test('a boosted entry that also carries a pick appends exactly one aria-hidden ⭐', () => {
+        const challenge = makeChallenge();
+        challenge.member!.ranking!.entries![0].guru_pick = true; // the boosted 🚀 entry
+        const { container } = renderCard(challenge);
+        const text = container.textContent;
+        // 🚀 with the appended ⭐ right behind it, then the sr-only label and the rank.
+        expect(text).toContain('🚀⭐app.entryGuruPicked #12');
+        expect(text).not.toContain('⭐⭐⭐');
+        expect(text).not.toContain('🚀🚀');
+    });
+
     test('is not full-width, so tiles share a grid row', () => {
         const { container } = renderCard();
         const card = container.querySelector('#challenge-202')!;
         expect(card).not.toBeNull();
         expect(card.classList.contains('col-span-full')).toBe(false);
+    });
+
+    test('display fields the read left unreadable show an em dash, never a bare figure or fraction', () => {
+        const { container } = renderCard(
+            makeChallenge({
+                players: invalid<Challenge['players']>(null),
+                max_photo_submits: invalid<Challenge['max_photo_submits']>(null),
+                member: { ranking: { exposure: { exposure_factor: invalid<number>(null) } } },
+            }),
+        );
+        const text = container.textContent ?? '';
+        expect(text).toContain('—');
+        expect(text).not.toContain('55%');
+        expect(text).not.toContain('3/4');
+        expect(text).not.toContain(`17 / ${(1234).toLocaleString()}`);
     });
 });
 
@@ -325,9 +365,9 @@ describe('compact ChallengeCard tile with compactActions', () => {
         expect(await screen.findByText('app.pickTitle')).toBeTruthy();
         // Opening reads nothing; Load all does.
         expect(window.api.getLibraryPhotos).not.toHaveBeenCalled();
-        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadAll' }));
+        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadPhotos' }));
         await waitFor(() =>
-            expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(202, undefined, 'cached', 'submit'),
+            expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(202, undefined, 'cached', 'submit', 0, 100),
         );
     });
 
@@ -349,6 +389,7 @@ describe('compact ChallengeCard tile with compactActions', () => {
             photos: [{ id: 'a'.repeat(32), labels: ['harbour'], allowed: true, message: null, uploadDate: 1 }],
             memberId: 'm',
             truncated: false,
+            nextStart: 0,
             wonIds: [],
             wonCount: 0,
             preview: false,
@@ -358,7 +399,7 @@ describe('compact ChallengeCard tile with compactActions', () => {
         const { rerender } = render(<ChallengeCard {...props} />);
         fireEvent.click(screen.getByRole('button', { name: 'app.fillPick' }));
         await screen.findByText('app.pickTitle');
-        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadAll' }));
+        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadPhotos' }));
         await waitFor(() => expect(window.api.getLibraryPhotos).toHaveBeenCalledTimes(2));
         const dialog = screen.getByRole('dialog');
         mockChallengeSettings.isCompact = false;
@@ -483,6 +524,14 @@ describe('getEntryStatus', () => {
         expect(getEntryStatus(invalid({ turbo: true })).icon).toBe('⚡');
         expect(getEntryStatus(invalid({ guru_pick: true })).icon).toBe('⭐');
         expect(getEntryStatus(invalid({})).icon).toBe('📷');
+    });
+
+    test('a pick riding on boost or turbo is reported beside their icon', () => {
+        expect(getEntryStatus(invalid({ boosted: true, guru_pick: true }))).toMatchObject({
+            icon: '🚀',
+            isGuruPick: true,
+        });
+        expect(getEntryStatus(invalid({ guru_pick: true }))).toMatchObject({ icon: '⭐', isGuruPick: true });
     });
 
     test('entry.boost (eligibility) does not count as boosted', () => {

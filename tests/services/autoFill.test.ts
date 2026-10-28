@@ -13,6 +13,7 @@ import type { CategoryLogger } from '../../src/ts/logger';
 import type { FillDeps, FillLogger, FillSettings } from '../../src/ts/types/autoFill';
 import type { FillSchedule } from '../../src/ts/services/scheduleRemap';
 import type { ActionResult, Challenge, ImageRecord } from '../../src/ts/types/gurushots';
+import { isPlainObject } from '../../src/ts/plainObject';
 import { invalid } from '../helpers/invalid';
 
 jest.mock('../../src/ts/services/semantic/lexicon', () => ({
@@ -67,6 +68,7 @@ const makeChallenge = ({
     closeIn = 600,
     maxSubmits = 4,
     entries = [],
+    swaps,
     title = 'Pink In Nature',
     url = 'pink-in-nature23',
 }: {
@@ -74,6 +76,7 @@ const makeChallenge = ({
     closeIn?: number;
     maxSubmits?: number;
     entries?: unknown[];
+    swaps?: unknown[];
     title?: string;
     url?: string;
 } = {}) =>
@@ -83,7 +86,7 @@ const makeChallenge = ({
         url,
         max_photo_submits: maxSubmits,
         close_time: 1_000_000 + closeIn,
-        member: { ranking: { entries } },
+        member: { ranking: { entries, swaps } },
     });
 
 const NOW = 1_000_000;
@@ -638,6 +641,37 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
             settings: makeSettings({ autoSubmit: true }),
             logger: makeLogger(),
             getEligiblePhotos,
+            submitToChallenge,
+        });
+        expect(result).toBe('no-eligible-photos');
+        expect(submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('a photo swapped out of the challenge is not picked again; the next one is', async () => {
+        // Newest upload wins a tie, so the swapped-out photo ranks best without the swap history.
+        const challenge = makeChallenge({ entries: [{ id: 'e1' }], swaps: [{ id: 'swapped' }] });
+        const submitToChallenge = jest
+            .fn<ReturnType<SubmitToChallenge>, Parameters<SubmitToChallenge>>()
+            .mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoSubmit: true }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest
+                .fn()
+                .mockResolvedValue([allowedPhoto('swapped', ['Pink'], 9500), allowedPhoto('fresh', ['Pink'], 9000)]),
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+        expect(submitToChallenge.mock.calls[0][1]).toEqual(['fresh']);
+    });
+
+    test('the only eligible photo being swapped out leaves the fill with no pick', async () => {
+        const challenge = makeChallenge({ entries: [{ id: 'e1' }], swaps: [{ id: 'only' }] });
+        const submitToChallenge = jest.fn();
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoSubmit: true }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('only')]),
             submitToChallenge,
         });
         expect(result).toBe('no-eligible-photos');
@@ -2065,27 +2099,29 @@ describe('reflectNewEntry — same-cycle slot accounting', () => {
         const cache =
             require('../../src/ts/services/libraryCache') as typeof import('../../src/ts/services/libraryCache');
         const challenge: Partial<Challenge> = { id: 'c1', max_photo_submits: 4, member: { ranking: { entries: [] } } };
-        cache.writeListing('tok', 'c1', {
+        cache.writeListing('c1', {
             photos: [],
             memberId: null,
             wonIds: [],
             wonCount: 0,
             truncated: false,
+            nextStart: 0,
             allowedKnown: true,
             readAtMs: Date.now(),
         });
-        cache.writeListing('tok', 'c2', {
+        cache.writeListing('c2', {
             photos: [],
             memberId: null,
             wonIds: [],
             wonCount: 0,
             truncated: false,
+            nextStart: 0,
             allowedKnown: true,
             readAtMs: Date.now(),
         });
         reflectNewEntry(challenge, 'new-1');
-        expect(cache.readFresh('tok', 'c1')).toBeNull();
-        expect(cache.readFresh('tok', 'c2')).not.toBeNull();
+        expect(cache.readFresh('c1')).toBeNull();
+        expect(cache.readFresh('c2')).not.toBeNull();
         cache.clearLibraryCache();
     });
 
@@ -2376,7 +2412,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
                 { getEligiblePhotos: emptySearch(), logger },
             );
             expect(category.warning).toHaveBeenCalledWith(
-                expect.stringContaining('nothing found by tag search for [Challenge c1]'),
+                expect.stringContaining('tag search found nothing for [Challenge c1]'),
                 null,
             );
             expect(category.warning).toHaveBeenCalledWith(expect.stringContaining('Review the selected photo'), null);
@@ -3011,6 +3047,37 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
         expect(deps.submitToChallenge).not.toHaveBeenCalled();
     });
 
+    test('challenge absent from a PRUNE-UNSAFE fresh list → invalid (it may be the dropped element) → skipped', async () => {
+        const challenge = dueChallenge();
+        const deps = dueDeps({
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [{ id: 'other-challenge' }],
+                pruneUnsafe: true,
+            }),
+        });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, deps);
+        expect(result).toBe('skipped');
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('refreshChallengeState: absent on a prune-unsafe read → invalid, not gone', async () => {
+        const challenge = dueChallenge();
+        const deps = {
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [{ id: 'other' }], pruneUnsafe: true }),
+            logger: makeLogger(),
+        };
+        expect(await refreshChallengeState(challenge, 'tok', deps, 'autoSubmit')).toBe('invalid');
+    });
+
+    test('refreshChallengeState: the challenge present on a prune-unsafe read still refreshes', async () => {
+        // The flag alone does not invalidate the read — only an absence it could have caused does.
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }] });
+        const response = { ...freshList('c1', [{ id: 'e1' }]), pruneUnsafe: true };
+        const deps = { getActiveChallenges: jest.fn().mockResolvedValue(response), logger: makeLogger() };
+        expect(await refreshChallengeState(challenge, 'tok', deps, 'autoSubmit')).toBe('refreshed');
+        expect(challenge.member!.ranking!.entries!.map((e) => e.id)).toEqual(['e1']);
+    });
+
     test('success log "(N slots remain)" reflects the refreshed count, not the stale one', async () => {
         // 4-slot challenge, target 4 at T-9m, 1 stale entry (3 slots free).
         // Fresh state shows a manual entry → 2 entries, 2 slots free; after
@@ -3193,6 +3260,23 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
         expect(deps.submitToChallenge).not.toHaveBeenCalled();
     });
 
+    test('emergencySubmit: a prune-unsafe re-read without the challenge → skipped, no submit', async () => {
+        const challenge = makeChallenge({ maxSubmits: 2, entries: [], closeIn: 200 });
+        const deps = {
+            settings: makeSettings({ autoSubmit: false, emergencySubmit: 300 }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            submitToChallenge: jest.fn(),
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [{ id: 'some-other-id' }],
+                pruneUnsafe: true,
+            }),
+        };
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, deps);
+        expect(result).toBe('skipped');
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
     test('emergencySubmit: refresh rejects → batch proceeds on pass-start data', async () => {
         const challenge = makeChallenge({ maxSubmits: 2, entries: [], closeIn: 200 });
         const deps = {
@@ -3268,6 +3352,23 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
         };
         const result = await submitNewEntryForAction(challenge, 'tok', deps);
         expect(result).toEqual({ ok: false, imageId: null, reason: 'challenge-gone' });
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('fillNew: a prune-unsafe re-read without the challenge → data-incomplete, no submit', async () => {
+        const challenge = makeChallenge({ maxSubmits: 1, entries: [] });
+        const deps = {
+            settings: makeSettings(),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            submitToChallenge: jest.fn(),
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [{ id: 'some-other-id' }],
+                pruneUnsafe: true,
+            }),
+        };
+        const result = await submitNewEntryForAction(challenge, 'tok', deps);
+        expect(result).toEqual({ ok: false, imageId: null, reason: 'data-incomplete' });
         expect(deps.submitToChallenge).not.toHaveBeenCalled();
     });
 });
@@ -3431,7 +3532,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         // coverage. enrichCandidates returns COPIES, so counting statsKnown on
         // the objects selectEnrichmentSet handed out reports 0 every time —
         // coverage has to be read off the patched scored entries.
-        expect(explanation).toContain('out of 2 equally off-theme candidates');
+        expect(explanation).toContain('of 2 equally off-theme candidates');
         expect(explanation).not.toContain('looked up for 0 of');
     });
 
@@ -3465,7 +3566,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
             submitToChallenge,
         });
 
-        // Warning "nothing matched the challenge theme" here and telling the user
+        // Warning "nothing matched the theme" here and telling the user
         // to add a Per-Title Tag Rule would be advice to repair a fill that
         // worked. That claim must not appear at any level.
         const allMessages = [
@@ -3473,7 +3574,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
             ...logger.__level.info.mock.calls,
             ...logger.__level.success.mock.calls,
         ].map(([msg]) => msg);
-        expect(allMessages.some((m) => m.includes('matched the challenge theme'))).toBe(false);
+        expect(allMessages.some((m) => m.includes('matched the theme, so'))).toBe(false);
         expect(allMessages.some((m) => m.includes('equally off-theme'))).toBe(false);
         expect(allMessages.some((m) => m.includes('Per-Title Tag Rule'))).toBe(false);
 
@@ -3541,7 +3642,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
             ...logger.__level.info.mock.calls,
             ...logger.__level.success.mock.calls,
         ].map(([msg]) => msg);
-        expect(allMessages.some((m) => m.includes('matched the challenge theme'))).toBe(false);
+        expect(allMessages.some((m) => m.includes('matched the theme, so'))).toBe(false);
         expect(allMessages.some((m) => m.includes('Per-Title Tag Rule'))).toBe(false);
         const explanation = logger.__level.info.mock.calls
             .map(([msg]) => msg)
@@ -3734,5 +3835,79 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         expect(getImageData).toHaveBeenCalledWith('tiedB', 'tok');
         expect(getImageData).not.toHaveBeenCalledWith('pink', 'tok');
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['pink', 'tiedB'], 'tok');
+    });
+
+    test('a mock-mode fill measures stats but never persists them', async () => {
+        // Mock photo ids pass cacheKeyFor, so without the persist guard every
+        // mock fill would write mock numbers into the real photo-stats.json —
+        // the same leak the get-photo-stats handler already guards.
+        const getEligiblePhotos = jest
+            .fn()
+            .mockResolvedValue([libraryPhoto('soccer', 1203, 9000), libraryPhoto('portfolio', 400, 1000)]);
+        const getImageData = jest.fn(async () => ({ votes: 500, views: 10, achievements: [] }));
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+
+        const result = await maybeAutoFillChallenge(abstractChallenge(), 'tok', NOW, {
+            settings: invalid<jest.MockedObject<FillSettings>>({
+                ...makeSettings({ autoSubmit: true }),
+                getSetting: jest.fn((key: string) => key === 'mock'),
+            }),
+            logger: makeLogger(),
+            getEligiblePhotos,
+            getImageData,
+            submitToChallenge,
+        });
+
+        expect(result).toBe('submitted');
+        expect(getImageData).toHaveBeenCalled(); // ranking still read the mock stats
+        expect(statsStoreData).toBeNull(); // none of them reached the shared cache file
+    });
+
+    test('a real-mode fill still persists stat lookups', async () => {
+        const getEligiblePhotos = jest
+            .fn()
+            .mockResolvedValue([libraryPhoto('soccer', 1203, 9000), libraryPhoto('portfolio', 400, 1000)]);
+        const getImageData = jest.fn(async () => ({ votes: 500, views: 10, achievements: [] }));
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+
+        const result = await maybeAutoFillChallenge(abstractChallenge(), 'tok', NOW, {
+            settings: invalid<jest.MockedObject<FillSettings>>({
+                ...makeSettings({ autoSubmit: true }),
+                getSetting: jest.fn((key: string) => (key === 'mock' ? false : null)),
+            }),
+            logger: makeLogger(),
+            getEligiblePhotos,
+            getImageData,
+            submitToChallenge,
+        });
+
+        expect(result).toBe('submitted');
+        const raw = statsStoreData;
+        if (typeof raw !== 'string') throw new Error('the stats cache file was not written');
+        const parsed: unknown = JSON.parse(raw);
+        const photos = isPlainObject(parsed) && isPlainObject(parsed.photos) ? parsed.photos : {};
+        expect(Object.keys(photos).sort()).toEqual(['portfolio', 'soccer']);
+    });
+
+    test('a fill with no settings module at all still persists stat lookups', async () => {
+        // fillChallengeNow runs without settings; absence must read as real
+        // mode, not as "never persist".
+        const getImageData = jest.fn(async () => ({ votes: 500, views: 10, achievements: [] }));
+        const result = await fillChallengeNow(abstractChallenge({ maxSubmits: 2 }), 'tok', 'all', {
+            logger: makeLogger(),
+            getEligiblePhotos: jest
+                .fn()
+                .mockResolvedValue([libraryPhoto('soccer', 1203, 9000), libraryPhoto('portfolio', 400, 1000)]),
+            getImageData,
+            submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
+        });
+
+        expect(result.success).toBe(true);
+        expect(getImageData).toHaveBeenCalled();
+        const raw = statsStoreData;
+        if (typeof raw !== 'string') throw new Error('the stats cache file was not written');
+        const parsed: unknown = JSON.parse(raw);
+        const photos = isPlainObject(parsed) && isPlainObject(parsed.photos) ? parsed.photos : {};
+        expect(Object.keys(photos).sort()).toEqual(['portfolio', 'soccer']);
     });
 });

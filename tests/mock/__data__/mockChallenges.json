@@ -2,347 +2,107 @@
     "challenges": [
         {
             "id": 120436,
-            "title": "Ultimate Exposure",
-            "welcome_message": "Play this challenge for the Ultimate Exposure! This is the ultimate prize - a massive online exposure bundle for your photos!",
-            "url": "ultimate-exposure82",
-            "start_time": 1768392000,
-            "close_time": 1768564800,
+            "title": "8 Hours",
+            "welcome_message": "Mock challenge: give us your best shot from the last eight hours.",
+            "url": "8-hours",
+            "start_time": 1768466019,
+            "close_time": 1768494819,
             "status": "active",
-            "entries": 1536,
-            "players": 831,
-            "votes": 259120,
-            "max_photo_submits": 4,
-            "badge": "speed",
-            "type": "flash",
-            "tags": ["special 4 pic", "Comm", "Exposure", "Turbo"],
-            "vote_minimum_players": 200,
-            "prizes_worth": 3500,
+            "entries": 3976,
+            "players": 1583,
+            "votes": 1376430,
+            "max_photo_submits": 3,
+            "join_coins": 0,
+            "max_players": 0,
+            "badge": "fourphoto",
+            "type": "default",
+            "tags": ["Quick", "Comm", "3 photos", "Turbo"],
+            "image": {
+                "id": "photo_cover_8hours_001",
+                "member_id": "mock_user_001"
+            },
+            "prizes_worth": 240,
             "ranking_levels": {
                 "level_0": 0,
                 "level_1": 50,
                 "level_2": 250,
-                "level_3": 900,
-                "level_4": 1900,
-                "level_5": 3900
+                "level_3": 750,
+                "level_4": 1700,
+                "level_5": 2700
             },
             "boost_enable": true,
             "turbo_enable": true,
             "fill_enable": true,
             "swap_enable": true,
             "top_photo_enable": true,
+            "fill_locked": false,
+            "swap_locked": false,
+            "guru_pick_enable": true,
+            "top_photographer_enable": true,
+            "levels_rank_enable": true,
+            "new_ranking_enable": true,
             "time_left": {
-                "days": 1,
-                "hours": 12,
-                "minutes": 30,
-                "seconds": 45
+                "days": 0,
+                "hours": 4,
+                "minutes": 33,
+                "seconds": 39
             },
             "member": {
-                "time_joined": 1768392000,
+                "time_joined": 1768466019,
                 "boost": {
-                    "state": "LOCKED",
-                    "timeout": null
+                    "state": "AVAILABLE",
+                    "timeout": 1768479000
                 },
                 "turbo": {
                     "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
-                    "mode": "classic",
                     "required_selections": 6,
-                    "state": "TIMER",
-                    "time_to_open": 1768480200
+                    "state": "FREE",
+                    "mode": "classic",
+                    "time_to_open": null
                 },
                 "ranking": {
                     "total": {
-                        "votes": 232,
-                        "rank": 264,
-                        "level": 1,
-                        "level_name": "POPULAR",
-                        "level_rank": 17,
-                        "next": 18,
-                        "percent": 93.17,
-                        "exposure": 85,
-                        "points": 30,
+                        "votes": 481,
+                        "rank": 1075,
+                        "level": 2,
+                        "level_name": "SKILLED",
+                        "level_rank": 247,
+                        "next": 269,
+                        "percent": 8.59,
+                        "exposure": 81,
+                        "points": 70,
                         "guru_picks": 0,
-                        "next_message": "18 votes to next level"
+                        "next_message": "269 votes to next level",
+                        "benchmark": [
+                            {
+                                "benchmark": "1",
+                                "score": "2788"
+                            },
+                            {
+                                "benchmark": "10",
+                                "score": "2365"
+                            },
+                            {
+                                "benchmark": "100",
+                                "score": "1702"
+                            }
+                        ]
                     },
                     "exposure": {
-                        "exposure_factor": 85,
-                        "vote_exposure_factor": 40,
-                        "vote_ratio": 2.22
+                        "exposure_factor": 98,
+                        "vote_exposure_factor": 33,
+                        "vote_ratio": 1.43
                     },
                     "entries": [
                         {
                             "id": "entry_001",
-                            "votes": 156,
-                            "rank": 94,
+                            "votes": 359,
+                            "rank": 458,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060092,
                             "guru_pick": false,
                             "boost": -1,
-                            "turbo": false,
-                            "boosting": false,
-                            "boosted": false
-                        },
-                        {
-                            "id": "entry_002",
-                            "votes": 76,
-                            "rank": 156,
-                            "member_id": "mock_user_001",
-                            "adult": false,
-                            "event_id": 4000918060092,
-                            "guru_pick": false,
-                            "boost": 0,
-                            "turbo": true,
-                            "boosting": false,
-                            "boosted": false
-                        }
-                    ]
-                }
-            }
-        },
-        {
-            "id": 120437,
-            "title": "Wood & Metal Combinations",
-            "welcome_message": "Creative combinations of wood and metal in photography",
-            "url": "wood-metal-combinations",
-            "start_time": 1768305600,
-            "close_time": 1768651200,
-            "status": "active",
-            "entries": 2847,
-            "players": 2156,
-            "votes": 1847560,
-            "max_photo_submits": 1,
-            "badge": "",
-            "type": "default",
-            "tags": ["1 photo", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
-            "prizes_worth": 180,
-            "ranking_levels": {
-                "level_0": 0,
-                "level_1": 100,
-                "level_2": 500,
-                "level_3": 1500,
-                "level_4": 3000,
-                "level_5": 6000
-            },
-            "boost_enable": true,
-            "turbo_enable": true,
-            "fill_enable": true,
-            "swap_enable": true,
-            "top_photo_enable": true,
-            "time_left": {
-                "days": 2,
-                "hours": 8,
-                "minutes": 15,
-                "seconds": 30
-            },
-            "member": {
-                "time_joined": 1768305600,
-                "boost": {
-                    "state": "USED",
-                    "timeout": 0
-                },
-                "turbo": {
-                    "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
-                    "turbo_unlock_amount": 250,
-                    "mode": "snap",
-                    "required_selections": 6,
-                    "state": "FREE",
-                    "time_to_open": null
-                },
-                "ranking": {
-                    "total": {
-                        "votes": 445,
-                        "rank": 89,
-                        "level": 2,
-                        "level_name": "ELITE",
-                        "level_rank": 12,
-                        "next": 13,
-                        "percent": 87.45,
-                        "exposure": 100,
-                        "points": 65,
-                        "guru_picks": 1,
-                        "next_message": "12 votes to next level"
-                    },
-                    "exposure": {
-                        "exposure_factor": 92,
-                        "vote_exposure_factor": 100,
-                        "vote_ratio": 1.85
-                    },
-                    "entries": [
-                        {
-                            "id": "entry_003",
-                            "votes": 445,
-                            "rank": 89,
-                            "member_id": "mock_user_001",
-                            "adult": false,
-                            "event_id": 4000918060093,
-                            "guru_pick": true,
-                            "boost": 1,
-                            "turbo": false,
-                            "boosting": false,
-                            "boosted": true
-                        }
-                    ]
-                }
-            }
-        },
-        {
-            "id": 120438,
-            "title": "Landscape Photography",
-            "welcome_message": "Breathtaking landscapes from around the world",
-            "url": "landscape-photography-2024",
-            "start_time": 1768482000,
-            "close_time": 1769083200,
-            "status": "upcoming",
-            "entries": 0,
-            "players": 0,
-            "votes": 0,
-            "max_photo_submits": 2,
-            "badge": "",
-            "type": "default",
-            "tags": ["2 photos", "No comm"],
-            "vote_minimum_players": 200,
-            "prizes_worth": 200,
-            "ranking_levels": {
-                "level_0": 0,
-                "level_1": 75,
-                "level_2": 300,
-                "level_3": 1200,
-                "level_4": 2500,
-                "level_5": 5000
-            },
-            "boost_enable": true,
-            "turbo_enable": true,
-            "fill_enable": true,
-            "swap_enable": true,
-            "top_photo_enable": true,
-            "time_left": {
-                "days": 7,
-                "hours": 0,
-                "minutes": 0,
-                "seconds": 0
-            },
-            "member": {
-                "time_joined": 0,
-                "boost": {
-                    "state": "UNAVAILABLE",
-                    "timeout": 0
-                },
-                "turbo": {
-                    "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
-                    "turbo_unlock_amount": 250,
-                    "mode": "classic",
-                    "required_selections": 6,
-                    "state": "LOCKED",
-                    "time_to_open": null
-                },
-                "ranking": {
-                    "total": {
-                        "votes": 0,
-                        "rank": 0,
-                        "level": 0,
-                        "level_name": "NONE",
-                        "level_rank": 0,
-                        "next": 1,
-                        "percent": 0,
-                        "exposure": 0,
-                        "points": 0,
-                        "guru_picks": 0,
-                        "next_message": "Challenge not started"
-                    },
-                    "exposure": {
-                        "exposure_factor": 0,
-                        "vote_exposure_factor": 0,
-                        "vote_ratio": 0
-                    },
-                    "entries": []
-                }
-            }
-        },
-        {
-            "id": 120439,
-            "title": "Macro Photography",
-            "welcome_message": "Discover the beauty in small details",
-            "url": "macro-photography-2024",
-            "start_time": 1768435200,
-            "close_time": 1768521600,
-            "status": "active",
-            "entries": 892,
-            "players": 654,
-            "votes": 156780,
-            "max_photo_submits": 1,
-            "badge": "speed",
-            "type": "speed",
-            "tags": ["1 photo", "Speed", "No comm"],
-            "vote_minimum_players": 200,
-            "prizes_worth": 140,
-            "ranking_levels": {
-                "level_0": 0,
-                "level_1": 25,
-                "level_2": 150,
-                "level_3": 600,
-                "level_4": 1200,
-                "level_5": 2500
-            },
-            "boost_enable": true,
-            "turbo_enable": true,
-            "fill_enable": true,
-            "swap_enable": true,
-            "top_photo_enable": true,
-            "time_left": {
-                "days": 0,
-                "hours": 12,
-                "minutes": 0,
-                "seconds": 0
-            },
-            "member": {
-                "time_joined": 1768435200,
-                "boost": {
-                    "state": "AVAILABLE",
-                    "timeout": 1768480200
-                },
-                "turbo": {
-                    "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
-                    "turbo_unlock_amount": 250,
-                    "mode": "classic",
-                    "required_selections": 6,
-                    "state": "FREE",
-                    "time_to_open": null
-                },
-                "ranking": {
-                    "total": {
-                        "votes": 78,
-                        "rank": 156,
-                        "level": 1,
-                        "level_name": "POPULAR",
-                        "level_rank": 8,
-                        "next": 9,
-                        "percent": 45.23,
-                        "exposure": 60,
-                        "points": 15,
-                        "guru_picks": 0,
-                        "next_message": "8 votes to next level"
-                    },
-                    "exposure": {
-                        "exposure_factor": 30,
-                        "vote_exposure_factor": 25,
-                        "vote_ratio": 1.45
-                    },
-                    "entries": [
-                        {
-                            "id": "entry_004",
-                            "votes": 78,
-                            "rank": 156,
-                            "member_id": "mock_user_001",
-                            "adult": false,
-                            "event_id": 4000918060094,
-                            "guru_pick": false,
-                            "boost": 0,
                             "turbo": false,
                             "boosting": false,
                             "boosted": false
@@ -358,177 +118,119 @@
                 "them": {
                     "name": "Fictional Aperture Wanderers Of Supercalifragilisticexpialidocious Valley",
                     "votes": 8258
+                },
+                "me": {
+                    "kind": "active",
+                    "position": 2,
+                    "votes": 481,
+                    "activeSlots": 5,
+                    "cushion": 12
                 }
             }
         },
         {
-            "id": 120440,
-            "title": "Wildlife Photography",
-            "welcome_message": "Capture nature in its purest form",
-            "url": "wildlife-photography-2024",
-            "start_time": 1768456800,
-            "close_time": 1768478940,
+            "id": 120437,
+            "title": "Joyous Laughter",
+            "welcome_message": "Mock challenge: show us laughter.",
+            "url": "joyous-laughter",
+            "start_time": 1768465719,
+            "close_time": 1768638519,
             "status": "active",
-            "entries": 567,
-            "players": 423,
-            "votes": 89234,
-            "max_photo_submits": 4,
-            "badge": "",
-            "type": "default",
-            "tags": ["4 photos", "No comm"],
-            "vote_minimum_players": 200,
-            "prizes_worth": 120,
-            "ranking_levels": {
-                "level_0": 0,
-                "level_1": 30,
-                "level_2": 200,
-                "level_3": 800,
-                "level_4": 1600,
-                "level_5": 3200
-            },
-            "boost_enable": true,
-            "turbo_enable": true,
-            "fill_enable": true,
-            "swap_enable": true,
-            "top_photo_enable": true,
-            "time_left": {
-                "days": 0,
-                "hours": 6,
-                "minutes": 0,
-                "seconds": 0
-            },
-            "member": {
-                "time_joined": 1768456800,
-                "boost": {
-                    "state": "AVAILABLE_KEY",
-                    "timeout": null
-                },
-                "turbo": {
-                    "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
-                    "turbo_unlock_amount": 250,
-                    "mode": "classic",
-                    "required_selections": 6,
-                    "state": "FREE",
-                    "time_to_open": null
-                },
-                "ranking": {
-                    "total": {
-                        "votes": 34,
-                        "rank": 234,
-                        "level": 1,
-                        "level_name": "POPULAR",
-                        "level_rank": 3,
-                        "next": 4,
-                        "percent": 23.45,
-                        "exposure": 40,
-                        "points": 8,
-                        "guru_picks": 0,
-                        "next_message": "3 votes to next level"
-                    },
-                    "exposure": {
-                        "exposure_factor": 29,
-                        "vote_exposure_factor": 15,
-                        "vote_ratio": 1.12
-                    },
-                    "entries": [
-                        {
-                            "id": "entry_005",
-                            "votes": 34,
-                            "rank": 234,
-                            "member_id": "mock_user_001",
-                            "adult": false,
-                            "event_id": 4000918060095,
-                            "guru_pick": false,
-                            "boost": 0,
-                            "turbo": true,
-                            "boosting": false,
-                            "boosted": false
-                        }
-                    ]
-                }
-            }
-        },
-        {
-            "id": 120441,
-            "title": "Architecture Photography",
-            "welcome_message": "Modern and classical architectural marvels",
-            "url": "architecture-photography-2024",
-            "start_time": 1768471200,
-            "close_time": 1768485600,
-            "status": "active",
-            "entries": 234,
-            "players": 189,
-            "votes": 45678,
-            "max_photo_submits": 1,
+            "entries": 1166,
+            "players": 679,
+            "votes": 185673,
+            "max_photo_submits": 2,
+            "join_coins": 0,
+            "max_players": 0,
             "badge": "speed",
-            "type": "speed",
-            "tags": ["1 photo", "Speed", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
-            "prizes_worth": 120,
+            "type": "default",
+            "tags": ["2 photos", "No comm", "Turbo"],
+            "image": {
+                "id": "photo_cover_joyouslaughter_001",
+                "member_id": "mock_user_001"
+            },
+            "prizes_worth": 180,
             "ranking_levels": {
                 "level_0": 0,
-                "level_1": 20,
-                "level_2": 100,
-                "level_3": 400,
-                "level_4": 800,
-                "level_5": 1600
+                "level_1": 50,
+                "level_2": 250,
+                "level_3": 900,
+                "level_4": 1900,
+                "level_5": 3800
             },
             "boost_enable": true,
             "turbo_enable": true,
             "fill_enable": true,
             "swap_enable": true,
             "top_photo_enable": true,
+            "fill_locked": false,
+            "swap_locked": false,
+            "guru_pick_enable": true,
+            "top_photographer_enable": true,
+            "levels_rank_enable": true,
+            "new_ranking_enable": false,
             "time_left": {
-                "days": 0,
-                "hours": 2,
-                "minutes": 0,
-                "seconds": 0
+                "days": 1,
+                "hours": 20,
+                "minutes": 28,
+                "seconds": 39
             },
             "member": {
-                "time_joined": 1768471200,
+                "time_joined": 1768465719,
                 "boost": {
                     "state": "AVAILABLE",
-                    "timeout": 1768479000
+                    "timeout": 1768479300
                 },
                 "turbo": {
                     "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
-                    "mode": "classic",
                     "required_selections": 6,
-                    "state": "IN_PROGRESS",
+                    "state": "FREE",
+                    "mode": "classic",
                     "time_to_open": null
                 },
                 "ranking": {
                     "total": {
-                        "votes": 12,
-                        "rank": 456,
+                        "votes": 218,
+                        "rank": 242,
                         "level": 1,
                         "level_name": "POPULAR",
-                        "level_rank": 1,
-                        "next": 2,
-                        "percent": 12.34,
-                        "exposure": 25,
-                        "points": 3,
+                        "level_rank": 45,
+                        "next": 32,
+                        "percent": 33.29,
+                        "exposure": 77,
+                        "points": 26,
                         "guru_picks": 0,
-                        "next_message": "1 vote to next level"
+                        "next_message": "32 votes to next level",
+                        "benchmark": [
+                            {
+                                "benchmark": "1",
+                                "score": "690"
+                            },
+                            {
+                                "benchmark": "10",
+                                "score": "514"
+                            },
+                            {
+                                "benchmark": "100",
+                                "score": "362"
+                            }
+                        ]
                     },
                     "exposure": {
-                        "exposure_factor": 22,
-                        "vote_exposure_factor": 8,
-                        "vote_ratio": 0.85
+                        "exposure_factor": 46,
+                        "vote_exposure_factor": 24,
+                        "vote_ratio": 2.22
                     },
                     "entries": [
                         {
-                            "id": "entry_006",
-                            "votes": 12,
-                            "rank": 456,
+                            "id": "entry_002",
+                            "votes": 179,
+                            "rank": 110,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060096,
                             "guru_pick": false,
-                            "boost": 0,
+                            "boost": -1,
                             "turbo": false,
                             "boosting": false,
                             "boosted": false
@@ -538,96 +240,567 @@
             }
         },
         {
-            "id": 120442,
-            "title": "Urban Wildlife",
-            "welcome_message": "Wildlife found in urban environments",
-            "url": "urban-wildlife-2024",
-            "start_time": 1768464000,
-            "close_time": 1768479120,
+            "id": 120438,
+            "title": "Action Shots",
+            "welcome_message": "Mock challenge: freeze the action mid-move.",
+            "url": "action-shots",
+            "start_time": 1768450119,
+            "close_time": 1768536519,
             "status": "active",
-            "entries": 892,
-            "players": 654,
-            "votes": 156780,
-            "max_photo_submits": 2,
-            "badge": "",
+            "entries": 4527,
+            "players": 1579,
+            "votes": 1056579,
+            "max_photo_submits": 4,
+            "join_coins": 0,
+            "max_players": 0,
+            "badge": "speed",
             "type": "default",
-            "tags": ["2 photos", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
-            "prizes_worth": 140,
+            "tags": ["Strong", "No comm", "1 day", "Turbo", "test35"],
+            "image": {
+                "id": "photo_cover_actionshots_001",
+                "member_id": "mock_user_001"
+            },
+            "prizes_worth": 600,
             "ranking_levels": {
                 "level_0": 0,
-                "level_1": 25,
-                "level_2": 150,
-                "level_3": 600,
-                "level_4": 1200,
-                "level_5": 2500
+                "level_1": 50,
+                "level_2": 200,
+                "level_3": 750,
+                "level_4": 2000,
+                "level_5": 3200
             },
             "boost_enable": true,
             "turbo_enable": true,
             "fill_enable": true,
             "swap_enable": true,
             "top_photo_enable": true,
+            "fill_locked": false,
+            "swap_locked": false,
+            "guru_pick_enable": true,
+            "top_photographer_enable": true,
+            "levels_rank_enable": true,
+            "new_ranking_enable": false,
             "time_left": {
                 "days": 0,
-                "hours": 4,
-                "minutes": 0,
-                "seconds": 0
+                "hours": 16,
+                "minutes": 8,
+                "seconds": 39
             },
             "member": {
-                "time_joined": 1768464000,
+                "time_joined": 1768450119,
                 "boost": {
-                    "state": "AVAILABLE_KEY",
+                    "state": "LOCKED",
                     "timeout": null
                 },
                 "turbo": {
                     "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
-                    "mode": "classic",
                     "required_selections": 6,
-                    "state": "WON",
+                    "state": "TIMER",
+                    "mode": "classic",
+                    "time_to_open": 1768480200
+                },
+                "ranking": {
+                    "total": {
+                        "votes": 171,
+                        "rank": 894,
+                        "level": 1,
+                        "level_name": "POPULAR",
+                        "level_rank": 15,
+                        "next": 29,
+                        "percent": 84.11,
+                        "exposure": 79,
+                        "points": 36,
+                        "guru_picks": 0,
+                        "next_message": "29 votes to next level",
+                        "benchmark": [
+                            {
+                                "benchmark": "1",
+                                "score": "2200"
+                            },
+                            {
+                                "benchmark": "10",
+                                "score": "1944"
+                            },
+                            {
+                                "benchmark": "100",
+                                "score": "1406"
+                            }
+                        ]
+                    },
+                    "exposure": {
+                        "exposure_factor": 62,
+                        "vote_exposure_factor": 39,
+                        "vote_ratio": 1.43
+                    },
+                    "entries": [
+                        {
+                            "id": "entry_003",
+                            "votes": 132,
+                            "rank": 463,
+                            "member_id": "mock_user_001",
+                            "adult": false,
+                            "guru_pick": false,
+                            "boost": -1,
+                            "turbo": false,
+                            "boosting": false,
+                            "boosted": false
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "id": 120439,
+            "title": "Captivating Fireworks",
+            "welcome_message": "Mock challenge: light up the night.",
+            "url": "captivating-fireworks",
+            "start_time": 1768442319,
+            "close_time": 1768615119,
+            "status": "active",
+            "entries": 1092,
+            "players": 972,
+            "votes": 477606,
+            "max_photo_submits": 1,
+            "join_coins": 0,
+            "max_players": 0,
+            "badge": "",
+            "type": "speed",
+            "tags": ["Medium", "No comm", "Turbo"],
+            "image": {
+                "id": "photo_cover_captivatingfireworks_001",
+                "member_id": "mock_user_001"
+            },
+            "prizes_worth": 200,
+            "ranking_levels": {
+                "level_0": 0,
+                "level_1": 50,
+                "level_2": 250,
+                "level_3": 900,
+                "level_4": 2200,
+                "level_5": 3400
+            },
+            "boost_enable": false,
+            "turbo_enable": true,
+            "fill_enable": true,
+            "swap_enable": true,
+            "top_photo_enable": true,
+            "fill_locked": true,
+            "swap_locked": false,
+            "guru_pick_enable": true,
+            "top_photographer_enable": false,
+            "levels_rank_enable": true,
+            "new_ranking_enable": false,
+            "time_left": {
+                "days": 1,
+                "hours": 13,
+                "minutes": 58,
+                "seconds": 39
+            },
+            "member": {
+                "time_joined": 1768442319,
+                "boost": {
+                    "state": "LOCKED",
+                    "timeout": null
+                },
+                "turbo": {
+                    "max_selections": 10,
+                    "turbo_unlock_amount": 250,
+                    "required_selections": 6,
+                    "state": "LOCKED",
+                    "mode": "classic",
                     "time_to_open": null
                 },
                 "ranking": {
                     "total": {
-                        "votes": 78,
-                        "rank": 156,
-                        "level": 1,
-                        "level_name": "POPULAR",
-                        "level_rank": 8,
-                        "next": 9,
-                        "percent": 45.23,
-                        "exposure": 60,
-                        "points": 15,
-                        "guru_picks": 0,
-                        "next_message": "8 votes to next level"
+                        "votes": 685,
+                        "rank": 108,
+                        "level": 2,
+                        "level_name": "SKILLED",
+                        "level_rank": 39,
+                        "next": 215,
+                        "percent": 46.33,
+                        "exposure": 72,
+                        "points": 41,
+                        "guru_picks": 1,
+                        "next_message": "215 votes to next level",
+                        "benchmark": [
+                            {
+                                "benchmark": "1",
+                                "score": "1415"
+                            },
+                            {
+                                "benchmark": "10",
+                                "score": "1253"
+                            },
+                            {
+                                "benchmark": "100",
+                                "score": "662"
+                            }
+                        ]
                     },
                     "exposure": {
-                        "exposure_factor": 44,
-                        "vote_exposure_factor": 25,
-                        "vote_ratio": 1.45
+                        "exposure_factor": 100,
+                        "vote_exposure_factor": 33,
+                        "vote_ratio": 2.22
+                    },
+                    "entries": [
+                        {
+                            "id": "entry_004",
+                            "votes": 607,
+                            "rank": 72,
+                            "member_id": "mock_user_001",
+                            "adult": false,
+                            "guru_pick": true,
+                            "boost": -1,
+                            "turbo": false,
+                            "boosting": false,
+                            "boosted": false
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "id": 120440,
+            "title": "City Backdrop",
+            "welcome_message": "Mock challenge: let the city set the scene.",
+            "url": "city-backdrop",
+            "start_time": 1768424319,
+            "close_time": 1768597119,
+            "status": "active",
+            "entries": 3164,
+            "players": 1799,
+            "votes": 961916,
+            "max_photo_submits": 2,
+            "join_coins": 0,
+            "max_players": 0,
+            "badge": "speed",
+            "type": "default",
+            "tags": ["2 photos", "No comm", "Turbo"],
+            "image": {
+                "id": "photo_cover_citybackdrop_001",
+                "member_id": "mock_user_001"
+            },
+            "prizes_worth": 180,
+            "ranking_levels": {
+                "level_0": 0,
+                "level_1": 50,
+                "level_2": 250,
+                "level_3": 900,
+                "level_4": 1900,
+                "level_5": 3800
+            },
+            "boost_enable": true,
+            "turbo_enable": true,
+            "fill_enable": true,
+            "swap_enable": true,
+            "top_photo_enable": true,
+            "fill_locked": false,
+            "swap_locked": false,
+            "guru_pick_enable": true,
+            "top_photographer_enable": true,
+            "levels_rank_enable": true,
+            "new_ranking_enable": false,
+            "time_left": {
+                "days": 1,
+                "hours": 8,
+                "minutes": 58,
+                "seconds": 39
+            },
+            "member": {
+                "time_joined": 1768424319,
+                "boost": {
+                    "state": "USED",
+                    "timeout": 0
+                },
+                "turbo": {
+                    "max_selections": 10,
+                    "turbo_unlock_amount": 250,
+                    "required_selections": 6,
+                    "state": "FREE",
+                    "mode": "classic",
+                    "time_to_open": null
+                },
+                "ranking": {
+                    "total": {
+                        "votes": 862,
+                        "rank": 258,
+                        "level": 2,
+                        "level_name": "SKILLED",
+                        "level_rank": 13,
+                        "next": 38,
+                        "percent": 54.59,
+                        "exposure": 49,
+                        "points": 62,
+                        "guru_picks": 0,
+                        "next_message": "38 votes to next level",
+                        "benchmark": [
+                            {
+                                "benchmark": "1",
+                                "score": "1918"
+                            },
+                            {
+                                "benchmark": "10",
+                                "score": "1589"
+                            },
+                            {
+                                "benchmark": "100",
+                                "score": "1163"
+                            }
+                        ]
+                    },
+                    "exposure": {
+                        "exposure_factor": 52,
+                        "vote_exposure_factor": 32,
+                        "vote_ratio": 2.22
+                    },
+                    "entries": [
+                        {
+                            "id": "entry_005",
+                            "votes": 1077,
+                            "rank": 139,
+                            "member_id": "mock_user_001",
+                            "adult": false,
+                            "guru_pick": false,
+                            "boost": 1,
+                            "turbo": false,
+                            "boosting": false,
+                            "boosted": true
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "id": 120441,
+            "title": "Perfect Mistakes",
+            "welcome_message": "Mock challenge: celebrate the beautifully flawed.",
+            "url": "perfect-mistakes",
+            "start_time": 1768406319,
+            "close_time": 1768579119,
+            "status": "active",
+            "entries": 2555,
+            "players": 1455,
+            "votes": 1255789,
+            "max_photo_submits": 2,
+            "join_coins": 0,
+            "max_players": 0,
+            "badge": "speed",
+            "type": "default",
+            "tags": ["2 photos", "No comm", "Turbo"],
+            "image": {
+                "id": "photo_cover_perfectmistakes_001",
+                "member_id": "mock_user_001"
+            },
+            "prizes_worth": 180,
+            "ranking_levels": {
+                "level_0": 0,
+                "level_1": 50,
+                "level_2": 250,
+                "level_3": 900,
+                "level_4": 1900,
+                "level_5": 3800
+            },
+            "boost_enable": true,
+            "turbo_enable": true,
+            "fill_enable": true,
+            "swap_enable": true,
+            "top_photo_enable": true,
+            "fill_locked": false,
+            "swap_locked": false,
+            "guru_pick_enable": true,
+            "top_photographer_enable": true,
+            "levels_rank_enable": true,
+            "new_ranking_enable": false,
+            "time_left": {
+                "days": 1,
+                "hours": 3,
+                "minutes": 58,
+                "seconds": 39
+            },
+            "member": {
+                "time_joined": 1768406319,
+                "boost": {
+                    "state": "AVAILABLE",
+                    "timeout": 1768478700
+                },
+                "turbo": {
+                    "max_selections": 10,
+                    "turbo_unlock_amount": 250,
+                    "required_selections": 6,
+                    "state": "TIMER",
+                    "mode": "classic",
+                    "time_to_open": 1768479300
+                },
+                "ranking": {
+                    "total": {
+                        "votes": 676,
+                        "rank": 796,
+                        "level": 2,
+                        "level_name": "SKILLED",
+                        "level_rank": 221,
+                        "next": 224,
+                        "percent": 19.77,
+                        "exposure": 86,
+                        "points": 42,
+                        "guru_picks": 0,
+                        "next_message": "224 votes to next level",
+                        "benchmark": [
+                            {
+                                "benchmark": "1",
+                                "score": "2221"
+                            },
+                            {
+                                "benchmark": "10",
+                                "score": "1999"
+                            },
+                            {
+                                "benchmark": "100",
+                                "score": "1537"
+                            }
+                        ]
+                    },
+                    "exposure": {
+                        "exposure_factor": 99,
+                        "vote_exposure_factor": 32,
+                        "vote_ratio": 2.22
+                    },
+                    "entries": [
+                        {
+                            "id": "entry_006",
+                            "votes": 555,
+                            "rank": 597,
+                            "member_id": "mock_user_001",
+                            "adult": false,
+                            "guru_pick": false,
+                            "boost": -1,
+                            "turbo": false,
+                            "boosting": false,
+                            "boosted": false
+                        }
+                    ]
+                }
+            },
+            "teamMatch": {
+                "us": {
+                    "name": "Mock Shutter Society",
+                    "votes": 9120
+                },
+                "them": {
+                    "name": "Mock Aperture Guild",
+                    "votes": 8455
+                },
+                "me": {
+                    "kind": "standby",
+                    "position": 7,
+                    "votes": 676,
+                    "activeSlots": 5,
+                    "votesToActive": 3
+                }
+            }
+        },
+        {
+            "id": 120442,
+            "title": "Pink In Nature",
+            "welcome_message": "Mock challenge: find the pink out there.",
+            "url": "pink-in-nature",
+            "start_time": 1768417719,
+            "close_time": 1768504119,
+            "status": "active",
+            "entries": 5775,
+            "players": 1767,
+            "votes": 2158770,
+            "max_photo_submits": 4,
+            "join_coins": 0,
+            "max_players": 0,
+            "badge": "speed",
+            "type": "default",
+            "tags": ["Strong", "No comm", "1 day", "Turbo"],
+            "image": {
+                "id": "photo_cover_pinkinnature_001",
+                "member_id": "mock_user_001"
+            },
+            "prizes_worth": 600,
+            "ranking_levels": {
+                "level_0": 0,
+                "level_1": 50,
+                "level_2": 200,
+                "level_3": 750,
+                "level_4": 2000,
+                "level_5": 3200
+            },
+            "boost_enable": true,
+            "turbo_enable": true,
+            "fill_enable": true,
+            "swap_enable": true,
+            "top_photo_enable": true,
+            "fill_locked": false,
+            "swap_locked": false,
+            "guru_pick_enable": true,
+            "top_photographer_enable": true,
+            "levels_rank_enable": true,
+            "new_ranking_enable": false,
+            "time_left": {
+                "days": 0,
+                "hours": 7,
+                "minutes": 8,
+                "seconds": 39
+            },
+            "member": {
+                "time_joined": 1768417719,
+                "boost": {
+                    "state": "AVAILABLE",
+                    "timeout": 1768480200
+                },
+                "turbo": {
+                    "max_selections": 10,
+                    "turbo_unlock_amount": 250,
+                    "required_selections": 6,
+                    "state": "FREE",
+                    "mode": "classic",
+                    "time_to_open": null
+                },
+                "ranking": {
+                    "total": {
+                        "votes": 212,
+                        "rank": 996,
+                        "level": 2,
+                        "level_name": "SKILLED",
+                        "level_rank": 183,
+                        "next": 538,
+                        "percent": 69.77,
+                        "exposure": 71,
+                        "points": 41,
+                        "guru_picks": 0,
+                        "next_message": "538 votes to next level",
+                        "benchmark": [
+                            {
+                                "benchmark": "1",
+                                "score": "3028"
+                            },
+                            {
+                                "benchmark": "10",
+                                "score": "2758"
+                            },
+                            {
+                                "benchmark": "100",
+                                "score": "2187"
+                            }
+                        ]
+                    },
+                    "exposure": {
+                        "exposure_factor": 90,
+                        "vote_exposure_factor": 40,
+                        "vote_ratio": 1.43
                     },
                     "entries": [
                         {
                             "id": "entry_007",
-                            "votes": 48,
-                            "rank": 201,
+                            "votes": 371,
+                            "rank": 473,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060097,
-                            "guru_pick": false,
-                            "boost": 1,
-                            "turbo": true,
-                            "boosting": false,
-                            "boosted": true
-                        },
-                        {
-                            "id": "entry_008",
-                            "votes": 30,
-                            "rank": 267,
-                            "member_id": "mock_user_001",
-                            "adult": false,
-                            "event_id": 4000918060098,
                             "guru_pick": false,
                             "boost": -1,
                             "turbo": false,
@@ -640,175 +813,223 @@
         },
         {
             "id": 120443,
-            "title": "Street Art & Graffiti",
-            "welcome_message": "Urban art expressions on city walls",
-            "url": "street-art-graffiti-2024",
-            "start_time": 1768449600,
-            "close_time": 1768507200,
+            "title": "Powerful Composition",
+            "welcome_message": "Mock challenge: compose with weight.",
+            "url": "powerful-composition",
+            "start_time": 1767071679,
+            "close_time": 1768931919,
             "status": "active",
-            "entries": 1245,
-            "players": 987,
-            "votes": 234567,
-            "max_photo_submits": 1,
-            "badge": "",
-            "type": "default",
-            "tags": ["1 photo", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
-            "prizes_worth": 160,
+            "entries": 29556,
+            "players": 7746,
+            "votes": 27130707,
+            "max_photo_submits": 4,
+            "join_coins": 0,
+            "max_players": 0,
+            "badge": "exhibition",
+            "type": "exhibition",
+            "tags": ["Exhibition", "Comm", "test35"],
+            "image": {
+                "id": "photo_cover_powerfulcomposition_001",
+                "member_id": "mock_user_001"
+            },
+            "prizes_worth": 3000,
             "ranking_levels": {
                 "level_0": 0,
-                "level_1": 40,
-                "level_2": 200,
-                "level_3": 800,
-                "level_4": 1600,
-                "level_5": 3200
+                "level_1": 50,
+                "level_2": 250,
+                "level_3": 900,
+                "level_4": 1900,
+                "level_5": 5000
             },
             "boost_enable": true,
-            "turbo_enable": true,
+            "turbo_enable": false,
             "fill_enable": true,
             "swap_enable": true,
             "top_photo_enable": true,
+            "fill_locked": false,
+            "swap_locked": false,
+            "guru_pick_enable": true,
+            "top_photographer_enable": true,
+            "levels_rank_enable": true,
+            "new_ranking_enable": false,
             "time_left": {
-                "days": 0,
-                "hours": 8,
-                "minutes": 0,
-                "seconds": 0
+                "days": 5,
+                "hours": 5,
+                "minutes": 58,
+                "seconds": 39
             },
             "member": {
-                "time_joined": 1768449600,
+                "time_joined": 1767071679,
                 "boost": {
                     "state": "LOCKED",
                     "timeout": null
                 },
-                "turbo": {
-                    "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
-                    "turbo_unlock_amount": 250,
-                    "mode": "classic",
-                    "required_selections": 6,
-                    "state": "USED",
-                    "time_to_open": null
-                },
                 "ranking": {
                     "total": {
-                        "votes": 89,
-                        "rank": 134,
-                        "level": 2,
-                        "level_name": "ELITE",
-                        "level_rank": 12,
-                        "next": 13,
-                        "percent": 67.34,
-                        "exposure": 75,
-                        "points": 25,
+                        "votes": 917,
+                        "rank": 2528,
+                        "level": 3,
+                        "level_name": "PREMIER",
+                        "level_rank": 297,
+                        "next": 983,
+                        "percent": 97.94,
+                        "exposure": 100,
+                        "points": 64,
                         "guru_picks": 0,
-                        "next_message": "12 votes to next level"
+                        "next_message": "983 votes to next level",
+                        "benchmark": [
+                            {
+                                "benchmark": "1",
+                                "score": "6596"
+                            },
+                            {
+                                "benchmark": "10",
+                                "score": "6140"
+                            },
+                            {
+                                "benchmark": "100",
+                                "score": "5661"
+                            }
+                        ]
                     },
                     "exposure": {
-                        "exposure_factor": 54,
-                        "vote_exposure_factor": 45,
-                        "vote_ratio": 1.85
+                        "exposure_factor": 76,
+                        "vote_exposure_factor": 30,
+                        "vote_ratio": 2.22
                     },
                     "entries": [
                         {
-                            "id": "entry_009",
-                            "votes": 89,
-                            "rank": 134,
+                            "id": "entry_008",
+                            "votes": 1438,
+                            "rank": 698,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060099,
                             "guru_pick": false,
-                            "boost": 1,
-                            "turbo": true,
+                            "boost": -1,
+                            "turbo": false,
                             "boosting": false,
-                            "boosted": true
+                            "boosted": false
                         }
                     ]
+                }
+            },
+            "teamMatch": {
+                "us": {
+                    "name": "Mock F-Stop Collective",
+                    "votes": 5230
+                },
+                "them": {
+                    "name": "Mock Bokeh Brigade",
+                    "votes": 4875
                 }
             }
         },
         {
             "id": 120444,
-            "title": "Black & White Portraits",
-            "welcome_message": "Timeless monochrome portraits",
-            "url": "black-white-portraits-2024",
-            "start_time": 1768456800,
-            "close_time": 1768500000,
+            "title": "Show me your World",
+            "welcome_message": "Mock challenge: show us your world.",
+            "url": "show-me-your-world",
+            "start_time": 1768400919,
+            "close_time": 1768478940,
             "status": "active",
-            "entries": 567,
-            "players": 423,
-            "votes": 89234,
-            "max_photo_submits": 1,
-            "badge": "",
+            "entries": 7939,
+            "players": 2160,
+            "votes": 3691034,
+            "max_photo_submits": 4,
+            "join_coins": 0,
+            "max_players": 0,
+            "badge": "speed",
             "type": "default",
-            "tags": ["1 photo", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
-            "prizes_worth": 140,
+            "tags": ["MV", "No comm", "Turbo"],
+            "image": {
+                "id": "photo_cover_showmeyourworld_001",
+                "member_id": "mock_user_001"
+            },
+            "prizes_worth": 300,
             "ranking_levels": {
                 "level_0": 0,
-                "level_1": 30,
-                "level_2": 200,
-                "level_3": 800,
-                "level_4": 1600,
-                "level_5": 3200
+                "level_1": 100,
+                "level_2": 250,
+                "level_3": 750,
+                "level_4": 2600,
+                "level_5": 3600
             },
             "boost_enable": true,
             "turbo_enable": true,
             "fill_enable": true,
             "swap_enable": true,
             "top_photo_enable": true,
+            "fill_locked": false,
+            "swap_locked": false,
+            "guru_pick_enable": true,
+            "top_photographer_enable": true,
+            "levels_rank_enable": true,
+            "new_ranking_enable": false,
             "time_left": {
                 "days": 0,
-                "hours": 6,
-                "minutes": 0,
+                "hours": 0,
+                "minutes": 9,
                 "seconds": 0
             },
             "member": {
-                "time_joined": 1768456800,
+                "time_joined": 1768400919,
                 "boost": {
-                    "state": "AVAILABLE",
-                    "timeout": 1768479300
+                    "state": "AVAILABLE_KEY",
+                    "timeout": null
                 },
                 "turbo": {
                     "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
-                    "mode": "classic",
                     "required_selections": 6,
-                    "state": "LOCKED",
+                    "state": "WON",
+                    "mode": "classic",
                     "time_to_open": null
                 },
                 "ranking": {
                     "total": {
-                        "votes": 34,
-                        "rank": 234,
-                        "level": 1,
-                        "level_name": "POPULAR",
-                        "level_rank": 3,
-                        "next": 4,
-                        "percent": 23.45,
-                        "exposure": 40,
-                        "points": 8,
+                        "votes": 1090,
+                        "rank": 1623,
+                        "level": 3,
+                        "level_name": "PREMIER",
+                        "level_rank": 1124,
+                        "next": 1510,
+                        "percent": 22.2,
+                        "exposure": 72,
+                        "points": 114,
                         "guru_picks": 0,
-                        "next_message": "3 votes to next level"
+                        "next_message": "1510 votes to next level",
+                        "benchmark": [
+                            {
+                                "benchmark": "1",
+                                "score": "3596"
+                            },
+                            {
+                                "benchmark": "10",
+                                "score": "3400"
+                            },
+                            {
+                                "benchmark": "100",
+                                "score": "2930"
+                            }
+                        ]
                     },
                     "exposure": {
-                        "exposure_factor": 19,
-                        "vote_exposure_factor": 15,
-                        "vote_ratio": 1.12
+                        "exposure_factor": 60,
+                        "vote_exposure_factor": 25,
+                        "vote_ratio": 1.43
                     },
                     "entries": [
                         {
-                            "id": "entry_010",
-                            "votes": 34,
-                            "rank": 234,
+                            "id": "entry_009",
+                            "votes": 681,
+                            "rank": 425,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060100,
                             "guru_pick": false,
-                            "boost": 0,
-                            "turbo": false,
+                            "boost": 1,
+                            "turbo": true,
                             "boosting": false,
-                            "boosted": false
+                            "boosted": true
                         }
                     ]
                 }
@@ -816,98 +1037,108 @@
         },
         {
             "id": 120445,
-            "title": "Golden Hour Magic",
-            "welcome_message": "Photography during the magical golden hour",
-            "url": "golden-hour-magic-2024",
-            "start_time": 1768428000,
-            "close_time": 1768528800,
+            "title": "Charming Eyes",
+            "welcome_message": "Mock challenge: those eyes deserve a frame.",
+            "url": "charming-eyes",
+            "start_time": 1768397319,
+            "close_time": 1768656519,
             "status": "active",
-            "entries": 1823,
-            "players": 1456,
-            "votes": 456789,
-            "max_photo_submits": 2,
-            "badge": "",
+            "entries": 3974,
+            "players": 1683,
+            "votes": 1402526,
+            "max_photo_submits": 3,
+            "join_coins": 0,
+            "max_players": 0,
+            "badge": "speed",
             "type": "default",
-            "tags": ["2 photos", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
-            "prizes_worth": 200,
+            "tags": ["3 photos", "No comm", "Turbo"],
+            "image": {
+                "id": "photo_cover_charmingeyes_001",
+                "member_id": "mock_user_001"
+            },
+            "prizes_worth": 240,
             "ranking_levels": {
                 "level_0": 0,
-                "level_1": 60,
-                "level_2": 300,
-                "level_3": 1200,
-                "level_4": 2400,
-                "level_5": 4800
+                "level_1": 50,
+                "level_2": 250,
+                "level_3": 900,
+                "level_4": 1900,
+                "level_5": 4300
             },
             "boost_enable": true,
             "turbo_enable": true,
             "fill_enable": true,
             "swap_enable": true,
             "top_photo_enable": true,
+            "fill_locked": false,
+            "swap_locked": false,
+            "guru_pick_enable": true,
+            "top_photographer_enable": true,
+            "levels_rank_enable": true,
+            "new_ranking_enable": false,
             "time_left": {
-                "days": 0,
-                "hours": 14,
-                "minutes": 0,
-                "seconds": 0
+                "days": 2,
+                "hours": 1,
+                "minutes": 28,
+                "seconds": 39
             },
             "member": {
-                "time_joined": 1768428000,
+                "time_joined": 1768397319,
                 "boost": {
-                    "state": "USED",
-                    "timeout": 0
+                    "state": "LOCKED",
+                    "timeout": null
                 },
                 "turbo": {
                     "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
-                    "mode": "classic",
                     "required_selections": 6,
-                    "state": "FREE",
+                    "state": "IN_PROGRESS",
+                    "mode": "classic",
                     "time_to_open": null
                 },
                 "ranking": {
                     "total": {
-                        "votes": 178,
-                        "rank": 89,
+                        "votes": 356,
+                        "rank": 992,
                         "level": 2,
-                        "level_name": "ELITE",
-                        "level_rank": 23,
-                        "next": 24,
-                        "percent": 78.9,
-                        "exposure": 85,
-                        "points": 45,
-                        "guru_picks": 1,
-                        "next_message": "23 votes to next level"
+                        "level_name": "SKILLED",
+                        "level_rank": 277,
+                        "next": 544,
+                        "percent": 76.2,
+                        "exposure": 67,
+                        "points": 71,
+                        "guru_picks": 0,
+                        "next_message": "544 votes to next level",
+                        "benchmark": [
+                            {
+                                "benchmark": "1",
+                                "score": "2314"
+                            },
+                            {
+                                "benchmark": "10",
+                                "score": "2139"
+                            },
+                            {
+                                "benchmark": "100",
+                                "score": "1651"
+                            }
+                        ]
                     },
                     "exposure": {
-                        "exposure_factor": 68,
-                        "vote_exposure_factor": 65,
-                        "vote_ratio": 2.1
+                        "exposure_factor": 66,
+                        "vote_exposure_factor": 37,
+                        "vote_ratio": 2.22
                     },
                     "entries": [
                         {
-                            "id": "entry_011",
-                            "votes": 98,
-                            "rank": 125,
+                            "id": "entry_010",
+                            "votes": 468,
+                            "rank": 621,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060101,
-                            "guru_pick": true,
-                            "boost": 1,
-                            "turbo": false,
-                            "boosting": false,
-                            "boosted": true
-                        },
-                        {
-                            "id": "entry_012",
-                            "votes": 80,
-                            "rank": 156,
-                            "member_id": "mock_user_001",
-                            "adult": false,
-                            "event_id": 4000918060102,
                             "guru_pick": false,
-                            "boost": 0,
-                            "turbo": true,
+                            "boost": -1,
+                            "turbo": false,
                             "boosting": false,
                             "boosted": false
                         }
@@ -917,84 +1148,107 @@
         },
         {
             "id": 120446,
-            "title": "Minimalist Composition",
-            "welcome_message": "Less is more - powerful minimal compositions",
-            "url": "minimalist-composition-2024",
-            "start_time": 1768474800,
-            "close_time": 1768482000,
+            "title": "Color Hunt: Pink",
+            "welcome_message": "Mock challenge: hunt every shade of pink.",
+            "url": "color-hunt-pink",
+            "start_time": 1768393899,
+            "close_time": 1769002119,
             "status": "active",
-            "entries": 345,
-            "players": 267,
-            "votes": 67890,
-            "max_photo_submits": 1,
-            "badge": "speed",
-            "type": "speed",
-            "tags": ["1 photo", "Speed", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
-            "prizes_worth": 110,
+            "entries": 5933,
+            "players": 1967,
+            "votes": 1357639,
+            "max_photo_submits": 4,
+            "join_coins": 0,
+            "max_players": 0,
+            "badge": "fourphoto",
+            "type": "flash",
+            "tags": ["special 4 pic", "Comm", "Exposure", "Turbo"],
+            "image": {
+                "id": "photo_cover_colorhuntpink_001",
+                "member_id": "mock_user_001"
+            },
+            "prizes_worth": 1000,
             "ranking_levels": {
                 "level_0": 0,
-                "level_1": 15,
-                "level_2": 75,
-                "level_3": 300,
-                "level_4": 600,
-                "level_5": 1200
+                "level_1": 50,
+                "level_2": 250,
+                "level_3": 900,
+                "level_4": 1900,
+                "level_5": 3600
             },
             "boost_enable": true,
             "turbo_enable": true,
             "fill_enable": true,
             "swap_enable": true,
             "top_photo_enable": true,
+            "fill_locked": false,
+            "swap_locked": false,
+            "guru_pick_enable": true,
+            "top_photographer_enable": true,
+            "levels_rank_enable": true,
+            "new_ranking_enable": false,
             "time_left": {
-                "days": 0,
+                "days": 6,
                 "hours": 1,
-                "minutes": 0,
-                "seconds": 0
+                "minutes": 28,
+                "seconds": 39
             },
             "member": {
-                "time_joined": 1768474800,
+                "time_joined": 1768393899,
                 "boost": {
-                    "state": "AVAILABLE",
-                    "timeout": 1768478700
+                    "state": "LOCKED",
+                    "timeout": null
                 },
                 "turbo": {
                     "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
                     "turbo_unlock_amount": 250,
-                    "mode": "classic",
                     "required_selections": 6,
-                    "state": "TIMER",
-                    "time_to_open": 1768479300
+                    "state": "FREE",
+                    "mode": "snap",
+                    "time_to_open": null
                 },
                 "ranking": {
                     "total": {
-                        "votes": 23,
-                        "rank": 89,
-                        "level": 1,
-                        "level_name": "POPULAR",
-                        "level_rank": 5,
-                        "next": 6,
-                        "percent": 34.5,
-                        "exposure": 45,
-                        "points": 12,
+                        "votes": 261,
+                        "rank": 963,
+                        "level": 2,
+                        "level_name": "SKILLED",
+                        "level_rank": 566,
+                        "next": 639,
+                        "percent": 52.06,
+                        "exposure": 51,
+                        "points": 78,
                         "guru_picks": 0,
-                        "next_message": "5 votes to next level"
+                        "next_message": "639 votes to next level",
+                        "benchmark": [
+                            {
+                                "benchmark": "1",
+                                "score": "1988"
+                            },
+                            {
+                                "benchmark": "10",
+                                "score": "1727"
+                            },
+                            {
+                                "benchmark": "100",
+                                "score": "1371"
+                            }
+                        ]
                     },
                     "exposure": {
-                        "exposure_factor": 44,
-                        "vote_exposure_factor": 20,
-                        "vote_ratio": 1.3
+                        "exposure_factor": 100,
+                        "vote_exposure_factor": 30,
+                        "vote_ratio": 2.22
                     },
                     "entries": [
                         {
-                            "id": "entry_013",
-                            "votes": 23,
-                            "rank": 89,
+                            "id": "entry_011",
+                            "votes": 224,
+                            "rank": 395,
                             "member_id": "mock_user_001",
                             "adult": false,
-                            "event_id": 4000918060103,
                             "guru_pick": false,
-                            "boost": 0,
+                            "boost": -1,
                             "turbo": false,
                             "boosting": false,
                             "boosted": false
@@ -1005,37 +1259,1385 @@
         },
         {
             "id": 120447,
-            "title": "Abstract Patterns",
-            "welcome_message": "Creative abstract patterns in everyday life",
-            "url": "abstract-patterns-2024",
-            "start_time": 1768482000,
-            "close_time": 1769083200,
-            "status": "upcoming",
-            "entries": 0,
-            "players": 0,
-            "votes": 0,
+            "title": "Gurus Only!",
+            "welcome_message": "Mock challenge: one for the gurus.",
+            "url": "gurus-only",
+            "start_time": 1768393719,
+            "close_time": 1768657719,
+            "status": "active",
+            "entries": 3461,
+            "players": 2011,
+            "votes": 1662794,
             "max_photo_submits": 2,
-            "badge": "",
+            "join_coins": 0,
+            "max_players": 0,
+            "badge": "fourphoto",
             "type": "default",
-            "tags": ["2 photos", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
-            "prizes_worth": 170,
+            "tags": ["Comm", "2 photos", "Turbo"],
+            "image": {
+                "id": "photo_cover_gurusonly_001",
+                "member_id": "mock_user_001"
+            },
+            "prizes_worth": 360,
             "ranking_levels": {
                 "level_0": 0,
-                "level_1": 40,
-                "level_2": 200,
-                "level_3": 800,
-                "level_4": 1600,
-                "level_5": 3200
+                "level_1": 700,
+                "level_2": 1700,
+                "level_3": 2000,
+                "level_4": 2600,
+                "level_5": 3700
             },
             "boost_enable": true,
             "turbo_enable": true,
             "fill_enable": true,
             "swap_enable": true,
             "top_photo_enable": true,
+            "fill_locked": false,
+            "swap_locked": false,
+            "guru_pick_enable": true,
+            "top_photographer_enable": true,
+            "levels_rank_enable": true,
+            "new_ranking_enable": false,
             "time_left": {
-                "days": 7,
+                "days": 2,
+                "hours": 1,
+                "minutes": 48,
+                "seconds": 39
+            },
+            "member": {
+                "time_joined": 1768393719,
+                "boost": {
+                    "state": "AVAILABLE",
+                    "timeout": 1768508619
+                },
+                "turbo": {
+                    "max_selections": 10,
+                    "turbo_unlock_amount": 250,
+                    "required_selections": 6,
+                    "state": "FREE",
+                    "mode": "classic",
+                    "time_to_open": null
+                },
+                "ranking": {
+                    "total": {
+                        "votes": 463,
+                        "rank": 999,
+                        "level": 0,
+                        "level_name": "NOT RANKED",
+                        "level_rank": 143,
+                        "next": 237,
+                        "percent": 62.64,
+                        "exposure": 84,
+                        "points": 0,
+                        "guru_picks": 0,
+                        "next_message": "237 votes to next level",
+                        "benchmark": [
+                            {
+                                "benchmark": "1",
+                                "score": "2170"
+                            },
+                            {
+                                "benchmark": "10",
+                                "score": "2067"
+                            },
+                            {
+                                "benchmark": "100",
+                                "score": "1602"
+                            }
+                        ]
+                    },
+                    "exposure": {
+                        "exposure_factor": 54,
+                        "vote_exposure_factor": 30,
+                        "vote_ratio": 2.22
+                    },
+                    "entries": [
+                        {
+                            "id": "entry_012",
+                            "votes": 330,
+                            "rank": 799,
+                            "member_id": "mock_user_001",
+                            "adult": false,
+                            "guru_pick": false,
+                            "boost": -1,
+                            "turbo": false,
+                            "boosting": false,
+                            "boosted": false
+                        }
+                    ],
+                    "swaps": [
+                        {
+                            "id": "swap_001"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "id": 120448,
+            "title": "Succulents & Cactus",
+            "welcome_message": "Mock challenge: prickles welcome.",
+            "url": "succulents-cactus",
+            "start_time": 1768337919,
+            "close_time": 1768510719,
+            "status": "active",
+            "entries": 3472,
+            "players": 1803,
+            "votes": 3208629,
+            "max_photo_submits": 2,
+            "join_coins": 0,
+            "max_players": 0,
+            "badge": "speed",
+            "type": "default",
+            "tags": ["2 photos", "No comm", "Turbo"],
+            "image": {
+                "id": "photo_cover_succulentscactus_001",
+                "member_id": "mock_user_001"
+            },
+            "prizes_worth": 180,
+            "ranking_levels": {
+                "level_0": 0,
+                "level_1": 50,
+                "level_2": 250,
+                "level_3": 900,
+                "level_4": 1900,
+                "level_5": 3800
+            },
+            "boost_enable": true,
+            "turbo_enable": true,
+            "fill_enable": true,
+            "swap_enable": true,
+            "top_photo_enable": true,
+            "fill_locked": false,
+            "swap_locked": false,
+            "guru_pick_enable": true,
+            "top_photographer_enable": true,
+            "levels_rank_enable": true,
+            "new_ranking_enable": false,
+            "time_left": {
+                "days": 0,
+                "hours": 8,
+                "minutes": 58,
+                "seconds": 39
+            },
+            "member": {
+                "time_joined": 1768337919,
+                "boost": {
+                    "state": "USED",
+                    "timeout": 0
+                },
+                "turbo": {
+                    "max_selections": 10,
+                    "turbo_unlock_amount": 250,
+                    "required_selections": 6,
+                    "state": "USED",
+                    "mode": "classic",
+                    "time_to_open": null
+                },
+                "ranking": {
+                    "total": {
+                        "votes": 1848,
+                        "rank": 601,
+                        "level": 3,
+                        "level_name": "PREMIER",
+                        "level_rank": 67,
+                        "next": 52,
+                        "percent": 78.25,
+                        "exposure": 69,
+                        "points": 128,
+                        "guru_picks": 0,
+                        "next_message": "52 votes to next level",
+                        "benchmark": [
+                            {
+                                "benchmark": "1",
+                                "score": "3852"
+                            },
+                            {
+                                "benchmark": "10",
+                                "score": "3580"
+                            },
+                            {
+                                "benchmark": "100",
+                                "score": "3009"
+                            }
+                        ]
+                    },
+                    "exposure": {
+                        "exposure_factor": 70,
+                        "vote_exposure_factor": 28,
+                        "vote_ratio": 1.43
+                    },
+                    "entries": [
+                        {
+                            "id": "entry_013",
+                            "votes": 1078,
+                            "rank": 90,
+                            "member_id": "mock_user_001",
+                            "adult": false,
+                            "guru_pick": false,
+                            "boost": 1,
+                            "turbo": true,
+                            "boosting": false,
+                            "boosted": true
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "id": 120449,
+            "title": "Mega Prize - Tiny Animals",
+            "welcome_message": "Mock challenge: small animals, mega prize.",
+            "url": "mega-prize-tiny-animals",
+            "start_time": 1768281219,
+            "close_time": 1768926819,
+            "status": "active",
+            "entries": 3091,
+            "players": 905,
+            "votes": 1234638,
+            "max_photo_submits": 4,
+            "join_coins": 100,
+            "max_players": 0,
+            "badge": "fourphoto",
+            "type": "default",
+            "tags": ["special 4 pic", "Comm", "Mega Prize", "Turbo"],
+            "image": {
+                "id": "photo_cover_megaprizetinyanimals_001",
+                "member_id": "mock_user_001"
+            },
+            "prizes_worth": 1500,
+            "ranking_levels": {
+                "level_0": 0,
+                "level_1": 50,
+                "level_2": 250,
+                "level_3": 900,
+                "level_4": 2100,
+                "level_5": 4200
+            },
+            "boost_enable": true,
+            "turbo_enable": true,
+            "fill_enable": true,
+            "swap_enable": true,
+            "top_photo_enable": true,
+            "fill_locked": false,
+            "swap_locked": false,
+            "guru_pick_enable": true,
+            "top_photographer_enable": true,
+            "levels_rank_enable": true,
+            "new_ranking_enable": false,
+            "time_left": {
+                "days": 5,
+                "hours": 4,
+                "minutes": 33,
+                "seconds": 39
+            },
+            "member": {
+                "time_joined": 1768281219,
+                "boost": {
+                    "state": "LOCKED",
+                    "timeout": null
+                },
+                "turbo": {
+                    "max_selections": 10,
+                    "turbo_unlock_amount": 250,
+                    "required_selections": 6,
+                    "state": "FREE",
+                    "mode": "snap",
+                    "time_to_open": null
+                },
+                "ranking": {
+                    "total": {
+                        "votes": 507,
+                        "rank": 694,
+                        "level": 2,
+                        "level_name": "SKILLED",
+                        "level_rank": 91,
+                        "next": 393,
+                        "percent": 67.18,
+                        "exposure": 84,
+                        "points": 82,
+                        "guru_picks": 0,
+                        "next_message": "393 votes to next level",
+                        "benchmark": [
+                            {
+                                "benchmark": "1",
+                                "score": "2899"
+                            },
+                            {
+                                "benchmark": "10",
+                                "score": "2544"
+                            },
+                            {
+                                "benchmark": "100",
+                                "score": "1993"
+                            }
+                        ]
+                    },
+                    "exposure": {
+                        "exposure_factor": 76,
+                        "vote_exposure_factor": 30,
+                        "vote_ratio": 2.22
+                    },
+                    "entries": [
+                        {
+                            "id": "entry_014",
+                            "votes": 382,
+                            "rank": 394,
+                            "member_id": "mock_user_001",
+                            "adult": false,
+                            "guru_pick": false,
+                            "boost": -1,
+                            "turbo": false,
+                            "boosting": false,
+                            "boosted": false
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "id": 120450,
+            "title": "Art On Walls",
+            "welcome_message": "Mock challenge: the wall is the canvas.",
+            "url": "art-on-walls",
+            "start_time": 1768319919,
+            "close_time": 1768492719,
+            "status": "active",
+            "entries": 4523,
+            "players": 2274,
+            "votes": 5353287,
+            "max_photo_submits": 2,
+            "join_coins": 0,
+            "max_players": 0,
+            "badge": "speed",
+            "type": "default",
+            "tags": ["2 photos", "No comm", "Turbo"],
+            "image": {
+                "id": "photo_cover_artonwalls_001",
+                "member_id": "mock_user_001"
+            },
+            "prizes_worth": 180,
+            "ranking_levels": {
+                "level_0": 0,
+                "level_1": 50,
+                "level_2": 250,
+                "level_3": 900,
+                "level_4": 1900,
+                "level_5": 3800
+            },
+            "boost_enable": true,
+            "turbo_enable": true,
+            "fill_enable": true,
+            "swap_enable": true,
+            "top_photo_enable": true,
+            "fill_locked": false,
+            "swap_locked": false,
+            "guru_pick_enable": true,
+            "top_photographer_enable": true,
+            "levels_rank_enable": true,
+            "new_ranking_enable": false,
+            "time_left": {
+                "days": 0,
+                "hours": 3,
+                "minutes": 58,
+                "seconds": 39
+            },
+            "member": {
+                "time_joined": 1768319919,
+                "boost": {
+                    "state": "USED",
+                    "timeout": 0
+                },
+                "turbo": {
+                    "max_selections": 10,
+                    "turbo_unlock_amount": 250,
+                    "required_selections": 6,
+                    "state": "WON",
+                    "mode": "classic",
+                    "time_to_open": null
+                },
+                "ranking": {
+                    "total": {
+                        "votes": 1106,
+                        "rank": 824,
+                        "level": 3,
+                        "level_name": "PREMIER",
+                        "level_rank": 151,
+                        "next": 794,
+                        "percent": 55.59,
+                        "exposure": 90,
+                        "points": 113,
+                        "guru_picks": 0,
+                        "next_message": "794 votes to next level",
+                        "benchmark": [
+                            {
+                                "benchmark": "1",
+                                "score": "4377"
+                            },
+                            {
+                                "benchmark": "10",
+                                "score": "4214"
+                            },
+                            {
+                                "benchmark": "100",
+                                "score": "3780"
+                            }
+                        ]
+                    },
+                    "exposure": {
+                        "exposure_factor": 89,
+                        "vote_exposure_factor": 32,
+                        "vote_ratio": 1.43
+                    },
+                    "entries": [
+                        {
+                            "id": "entry_015",
+                            "votes": 1794,
+                            "rank": 414,
+                            "member_id": "mock_user_001",
+                            "adult": false,
+                            "guru_pick": false,
+                            "boost": -1,
+                            "turbo": true,
+                            "boosting": false,
+                            "boosted": false
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "id": 120451,
+            "title": "Walking",
+            "welcome_message": "Mock challenge: one foot in front of the other.",
+            "url": "walking",
+            "start_time": 1768310919,
+            "close_time": 1768479120,
+            "status": "active",
+            "entries": 6777,
+            "players": 2623,
+            "votes": 4093101,
+            "max_photo_submits": 3,
+            "join_coins": 0,
+            "max_players": 0,
+            "badge": "speed",
+            "type": "default",
+            "tags": ["3 photos", "No comm", "Turbo"],
+            "image": {
+                "id": "photo_cover_walking_001",
+                "member_id": "mock_user_001"
+            },
+            "prizes_worth": 240,
+            "ranking_levels": {
+                "level_0": 0,
+                "level_1": 50,
+                "level_2": 250,
+                "level_3": 900,
+                "level_4": 1900,
+                "level_5": 4300
+            },
+            "boost_enable": true,
+            "turbo_enable": true,
+            "fill_enable": true,
+            "swap_enable": true,
+            "top_photo_enable": true,
+            "fill_locked": false,
+            "swap_locked": false,
+            "guru_pick_enable": true,
+            "top_photographer_enable": true,
+            "levels_rank_enable": true,
+            "new_ranking_enable": false,
+            "time_left": {
+                "days": 0,
                 "hours": 0,
+                "minutes": 12,
+                "seconds": 0
+            },
+            "member": {
+                "time_joined": 1768310919,
+                "boost": {
+                    "state": "AVAILABLE_KEY",
+                    "timeout": null
+                },
+                "turbo": {
+                    "max_selections": 10,
+                    "turbo_unlock_amount": 250,
+                    "required_selections": 6,
+                    "state": "FREE",
+                    "mode": "snap",
+                    "time_to_open": null
+                },
+                "ranking": {
+                    "total": {
+                        "votes": 1335,
+                        "rank": 861,
+                        "level": 3,
+                        "level_name": "PREMIER",
+                        "level_rank": 710,
+                        "next": 565,
+                        "percent": 98.81,
+                        "exposure": 100,
+                        "points": 137,
+                        "guru_picks": 0,
+                        "next_message": "565 votes to next level",
+                        "benchmark": [
+                            {
+                                "benchmark": "1",
+                                "score": "3460"
+                            },
+                            {
+                                "benchmark": "10",
+                                "score": "3232"
+                            },
+                            {
+                                "benchmark": "100",
+                                "score": "2778"
+                            }
+                        ]
+                    },
+                    "exposure": {
+                        "exposure_factor": 63,
+                        "vote_exposure_factor": 37,
+                        "vote_ratio": 1.43
+                    },
+                    "entries": [
+                        {
+                            "id": "entry_016",
+                            "votes": 924,
+                            "rank": 223,
+                            "member_id": "mock_user_001",
+                            "adult": false,
+                            "guru_pick": false,
+                            "boost": 1,
+                            "turbo": false,
+                            "boosting": false,
+                            "boosted": true
+                        }
+                    ]
+                }
+            },
+            "teamMatch": {
+                "us": {
+                    "name": "Mock Grain Collective",
+                    "votes": 6310
+                },
+                "them": {
+                    "name": "Mock Darkroom League",
+                    "votes": 6105
+                },
+                "running": false,
+                "me": {
+                    "kind": "active",
+                    "position": 1,
+                    "votes": 1335,
+                    "activeSlots": 4,
+                    "cushion": null
+                }
+            }
+        },
+        {
+            "id": 120452,
+            "title": "Stunning Architecture",
+            "welcome_message": "Mock challenge: frame the built world.",
+            "url": "stunning-architecture",
+            "start_time": 1767590079,
+            "close_time": 1768845519,
+            "status": "active",
+            "entries": 18580,
+            "players": 5034,
+            "votes": 15033326,
+            "max_photo_submits": 4,
+            "join_coins": 0,
+            "max_players": 0,
+            "badge": "magazine",
+            "type": "exhibition",
+            "tags": ["Magazine", "Comm", "test35"],
+            "image": {
+                "id": "photo_cover_stunningarchitecture_001",
+                "member_id": "mock_user_001"
+            },
+            "prizes_worth": 900,
+            "ranking_levels": {
+                "level_0": 0,
+                "level_1": 50,
+                "level_2": 250,
+                "level_3": 900,
+                "level_4": 1900,
+                "level_5": 5000
+            },
+            "boost_enable": true,
+            "turbo_enable": false,
+            "fill_enable": true,
+            "swap_enable": true,
+            "top_photo_enable": true,
+            "fill_locked": false,
+            "swap_locked": false,
+            "guru_pick_enable": true,
+            "top_photographer_enable": true,
+            "levels_rank_enable": false,
+            "new_ranking_enable": true,
+            "first_prizes": [
+                {
+                    "type": "KEY",
+                    "amount": 1
+                },
+                {
+                    "type": "COINS",
+                    "amount": 500
+                }
+            ],
+            "achievements_and_prizes": [
+                {
+                    "title": "Top 10 photographers",
+                    "rank": {
+                        "min_rank": 1,
+                        "max_rank": 10,
+                        "type": "MEMBER"
+                    },
+                    "prizes": [
+                        {
+                            "type": "EXPOSURE_AUTOFILL",
+                            "amount": 250
+                        }
+                    ]
+                },
+                {
+                    "title": "Top 10 photos",
+                    "rank": {
+                        "min_rank": 1,
+                        "max_rank": 10,
+                        "type": "IMAGE"
+                    },
+                    "prizes": [
+                        {
+                            "type": "PHOTO_SWAP",
+                            "amount": 1
+                        }
+                    ]
+                },
+                {
+                    "title": "Every entrant",
+                    "rank": null,
+                    "prizes": [
+                        {
+                            "type": "FREE_ENTRY",
+                            "amount": 1
+                        }
+                    ]
+                },
+                {
+                    "title": "First place",
+                    "rank": {
+                        "min_rank": 1,
+                        "max_rank": 1,
+                        "type": "MEMBER"
+                    }
+                }
+            ],
+            "time_left": {
+                "days": 4,
+                "hours": 5,
+                "minutes": 58,
+                "seconds": 39
+            },
+            "member": {
+                "time_joined": 1767590079,
+                "boost": {
+                    "state": "LOCKED",
+                    "timeout": null
+                },
+                "ranking": {
+                    "total": {
+                        "votes": 1011,
+                        "rank": 3150,
+                        "level": 3,
+                        "level_name": "PREMIER",
+                        "level_rank": 370,
+                        "next": 889,
+                        "percent": 42.91,
+                        "exposure": 95,
+                        "points": 98,
+                        "guru_picks": 0,
+                        "next_message": "889 votes to next level",
+                        "benchmark": [
+                            {
+                                "benchmark": "10",
+                                "score": ""
+                            }
+                        ]
+                    },
+                    "exposure": {
+                        "exposure_factor": 74,
+                        "vote_exposure_factor": 30,
+                        "vote_ratio": 2.22
+                    },
+                    "entries": [
+                        {
+                            "id": "entry_017",
+                            "votes": 1489,
+                            "rank": 405,
+                            "member_id": "mock_user_001",
+                            "adult": false,
+                            "guru_pick": false,
+                            "boost": -1,
+                            "turbo": false,
+                            "boosting": false,
+                            "boosted": false
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "id": 120453,
+            "title": "Photo of the Week!",
+            "welcome_message": "Mock challenge: one photo to rule the week.",
+            "url": "photo-of-the-week",
+            "start_time": 1768220619,
+            "close_time": 1768827519,
+            "status": "active",
+            "entries": 2697,
+            "players": 2499,
+            "votes": 3959217,
+            "max_photo_submits": 1,
+            "join_coins": 0,
+            "max_players": 0,
+            "badge": "",
+            "type": "speed",
+            "tags": ["special 1 pic", "No comm", "Turbo"],
+            "image": {
+                "id": "photo_cover_photooftheweek_001",
+                "member_id": "mock_user_001"
+            },
+            "prizes_worth": 160,
+            "ranking_levels": {
+                "level_0": 0,
+                "level_1": 50,
+                "level_2": 250,
+                "level_3": 900,
+                "level_4": 1900,
+                "level_5": 5000
+            },
+            "boost_enable": false,
+            "turbo_enable": true,
+            "fill_enable": true,
+            "swap_enable": true,
+            "top_photo_enable": true,
+            "fill_locked": false,
+            "swap_locked": true,
+            "guru_pick_enable": true,
+            "top_photographer_enable": false,
+            "levels_rank_enable": true,
+            "new_ranking_enable": false,
+            "time_left": {
+                "days": 4,
+                "hours": 0,
+                "minutes": 58,
+                "seconds": 39
+            },
+            "member": {
+                "time_joined": 1768220619,
+                "boost": {
+                    "state": "LOCKED",
+                    "timeout": null
+                },
+                "turbo": {
+                    "max_selections": 10,
+                    "turbo_unlock_amount": 250,
+                    "required_selections": 6,
+                    "state": "FREE",
+                    "mode": "classic",
+                    "time_to_open": null
+                },
+                "ranking": {
+                    "total": {
+                        "votes": 1844,
+                        "rank": 628,
+                        "level": 3,
+                        "level_name": "PREMIER",
+                        "level_rank": 232,
+                        "next": 56,
+                        "percent": 56.8,
+                        "exposure": 75,
+                        "points": 110,
+                        "guru_picks": 0,
+                        "next_message": "56 votes to next level",
+                        "benchmark": [
+                            {
+                                "benchmark": "1",
+                                "score": "3150"
+                            },
+                            {
+                                "benchmark": "10",
+                                "score": "2806"
+                            },
+                            {
+                                "benchmark": "100",
+                                "score": "2379"
+                            }
+                        ]
+                    },
+                    "exposure": {
+                        "exposure_factor": 68,
+                        "vote_exposure_factor": 30,
+                        "vote_ratio": 2.22
+                    },
+                    "entries": [
+                        {
+                            "id": "entry_018",
+                            "votes": 2095,
+                            "rank": 478,
+                            "member_id": "mock_user_001",
+                            "adult": false,
+                            "guru_pick": false,
+                            "boost": -1,
+                            "turbo": false,
+                            "boosting": false,
+                            "boosted": false
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "id": 120454,
+            "title": "Joined Together",
+            "welcome_message": "Mock challenge: better together.",
+            "url": "joined-together",
+            "start_time": 1768224519,
+            "close_time": 1768483719,
+            "status": "active",
+            "entries": 6930,
+            "players": 2298,
+            "votes": 7206576,
+            "max_photo_submits": 3,
+            "join_coins": 0,
+            "max_players": 0,
+            "badge": "speed",
+            "type": "default",
+            "tags": ["3 photos", "No comm", "Turbo"],
+            "image": {
+                "id": "photo_cover_joinedtogether_001",
+                "member_id": "mock_user_001"
+            },
+            "prizes_worth": 240,
+            "ranking_levels": {
+                "level_0": 0,
+                "level_1": 50,
+                "level_2": 250,
+                "level_3": 900,
+                "level_4": 1900,
+                "level_5": 4300
+            },
+            "boost_enable": true,
+            "turbo_enable": true,
+            "fill_enable": true,
+            "swap_enable": true,
+            "top_photo_enable": true,
+            "fill_locked": false,
+            "swap_locked": false,
+            "guru_pick_enable": true,
+            "top_photographer_enable": true,
+            "levels_rank_enable": true,
+            "new_ranking_enable": false,
+            "time_left": {
+                "days": 0,
+                "hours": 1,
+                "minutes": 28,
+                "seconds": 39
+            },
+            "member": {
+                "time_joined": 1768224519,
+                "boost": {
+                    "state": "USED",
+                    "timeout": 0
+                },
+                "turbo": {
+                    "max_selections": 10,
+                    "turbo_unlock_amount": 250,
+                    "required_selections": 6,
+                    "state": "WON",
+                    "mode": "classic",
+                    "time_to_open": null
+                },
+                "ranking": {
+                    "total": {
+                        "votes": 1860,
+                        "rank": 1880,
+                        "level": 3,
+                        "level_name": "PREMIER",
+                        "level_rank": 39,
+                        "next": 40,
+                        "percent": 25.27,
+                        "exposure": 100,
+                        "points": 123,
+                        "guru_picks": 0,
+                        "next_message": "40 votes to next level",
+                        "benchmark": [
+                            {
+                                "benchmark": "1",
+                                "score": "5349"
+                            },
+                            {
+                                "benchmark": "10",
+                                "score": "5101"
+                            },
+                            {
+                                "benchmark": "100",
+                                "score": "4586"
+                            }
+                        ]
+                    },
+                    "exposure": {
+                        "exposure_factor": 77,
+                        "vote_exposure_factor": 37,
+                        "vote_ratio": 1.43
+                    },
+                    "entries": [
+                        {
+                            "id": "entry_019",
+                            "votes": 1479,
+                            "rank": 310,
+                            "member_id": "mock_user_001",
+                            "adult": false,
+                            "guru_pick": false,
+                            "boost": 1,
+                            "turbo": false,
+                            "boosting": false,
+                            "boosted": true
+                        },
+                        {
+                            "id": "entry_020",
+                            "votes": 191,
+                            "rank": 1737,
+                            "member_id": "mock_user_001",
+                            "adult": false,
+                            "guru_pick": false,
+                            "boost": -1,
+                            "turbo": false,
+                            "boosting": false,
+                            "boosted": false
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "id": 120455,
+            "title": "My Favorite Exhibition Shot",
+            "welcome_message": "Mock challenge: your favorite exhibition shot.",
+            "url": "my-favorite-exhibition-shot",
+            "start_time": 1766639679,
+            "close_time": 1768496319,
+            "status": "active",
+            "entries": 33148,
+            "players": 8200,
+            "votes": 39023177,
+            "max_photo_submits": 4,
+            "join_coins": 0,
+            "max_players": 0,
+            "badge": "exhibition",
+            "type": "exhibition",
+            "tags": ["Exhibition", "Comm", "test35"],
+            "image": {
+                "id": "photo_cover_myfavoriteexhibitionshot_001",
+                "member_id": "mock_user_001"
+            },
+            "prizes_worth": 3000,
+            "ranking_levels": {
+                "level_0": 0,
+                "level_1": 50,
+                "level_2": 250,
+                "level_3": 900,
+                "level_4": 1900,
+                "level_5": 5000
+            },
+            "boost_enable": true,
+            "turbo_enable": false,
+            "fill_enable": true,
+            "swap_enable": true,
+            "top_photo_enable": true,
+            "fill_locked": false,
+            "swap_locked": false,
+            "guru_pick_enable": true,
+            "top_photographer_enable": true,
+            "levels_rank_enable": true,
+            "new_ranking_enable": false,
+            "time_left": {
+                "days": 0,
+                "hours": 4,
+                "minutes": 58,
+                "seconds": 39
+            },
+            "member": {
+                "time_joined": 1766639679,
+                "boost": {
+                    "state": "LOCKED",
+                    "timeout": null
+                },
+                "ranking": {
+                    "total": {
+                        "votes": 3456,
+                        "rank": 1320,
+                        "level": 4,
+                        "level_name": "ELITE",
+                        "level_rank": 125,
+                        "next": 1544,
+                        "percent": 9.5,
+                        "exposure": 80,
+                        "points": 214,
+                        "guru_picks": 0,
+                        "next_message": "1544 votes to next level",
+                        "benchmark": [
+                            {
+                                "benchmark": "1",
+                                "score": "9187"
+                            },
+                            {
+                                "benchmark": "10",
+                                "score": "8287"
+                            },
+                            {
+                                "benchmark": "100",
+                                "score": "7371"
+                            }
+                        ]
+                    },
+                    "exposure": {
+                        "exposure_factor": 71,
+                        "vote_exposure_factor": 30,
+                        "vote_ratio": 2.22
+                    },
+                    "entries": [
+                        {
+                            "id": "entry_021",
+                            "votes": 2325,
+                            "rank": 421,
+                            "member_id": "mock_user_001",
+                            "adult": false,
+                            "guru_pick": false,
+                            "boost": -1,
+                            "turbo": false,
+                            "boosting": false,
+                            "boosted": false
+                        },
+                        {
+                            "id": "entry_022",
+                            "votes": 2118,
+                            "rank": 553,
+                            "member_id": "mock_user_001",
+                            "adult": false,
+                            "guru_pick": false,
+                            "boost": -1,
+                            "turbo": false,
+                            "boosting": false,
+                            "boosted": false
+                        },
+                        {
+                            "id": "entry_023",
+                            "votes": 1492,
+                            "rank": 615,
+                            "member_id": "mock_user_001",
+                            "adult": false,
+                            "guru_pick": false,
+                            "boost": -1,
+                            "turbo": false,
+                            "boosting": false,
+                            "boosted": false
+                        }
+                    ]
+                }
+            },
+            "teamMatch": {
+                "us": {
+                    "name": "Mock Tripod Union",
+                    "votes": 7777
+                },
+                "them": {
+                    "name": "Mock Long-Exposure Club",
+                    "votes": 7654
+                },
+                "me": null
+            }
+        },
+        {
+            "id": 120456,
+            "title": "Guru of The Week",
+            "welcome_message": "Mock challenge: one week, one guru pick.",
+            "url": "guru-of-the-week",
+            "start_time": 1768049019,
+            "close_time": 1768653819,
+            "status": "active",
+            "entries": 5650,
+            "players": 1693,
+            "votes": 5903702,
+            "max_photo_submits": 4,
+            "join_coins": 0,
+            "max_players": 0,
+            "badge": "fourphoto",
+            "type": "default",
+            "tags": ["Comm", "2 photos", "Turbo"],
+            "image": {
+                "id": "photo_cover_guruoftheweek_001",
+                "member_id": "mock_user_001"
+            },
+            "prizes_worth": 360,
+            "ranking_levels": {
+                "level_0": 0,
+                "level_1": 150,
+                "level_2": 400,
+                "level_3": 1000,
+                "level_4": 3500,
+                "level_5": 6800
+            },
+            "boost_enable": true,
+            "turbo_enable": true,
+            "fill_enable": true,
+            "swap_enable": true,
+            "top_photo_enable": true,
+            "fill_locked": false,
+            "swap_locked": false,
+            "guru_pick_enable": true,
+            "top_photographer_enable": true,
+            "levels_rank_enable": true,
+            "new_ranking_enable": false,
+            "time_left": {
+                "days": 2,
+                "hours": 0,
+                "minutes": 43,
+                "seconds": 39
+            },
+            "member": {
+                "time_joined": 1768049019,
+                "boost": {
+                    "state": "USED",
+                    "timeout": 0
+                },
+                "turbo": {
+                    "max_selections": 10,
+                    "turbo_unlock_amount": 250,
+                    "required_selections": 6,
+                    "state": "WON",
+                    "mode": "classic",
+                    "time_to_open": null
+                },
+                "ranking": {
+                    "total": {
+                        "votes": 2359,
+                        "rank": 1281,
+                        "level": 3,
+                        "level_name": "PREMIER",
+                        "level_rank": 314,
+                        "next": 1141,
+                        "percent": 7.94,
+                        "exposure": 74,
+                        "points": 93,
+                        "guru_picks": 1,
+                        "next_message": "1141 votes to next level",
+                        "benchmark": [
+                            {
+                                "benchmark": "1",
+                                "score": "6447"
+                            },
+                            {
+                                "benchmark": "10",
+                                "score": "5987"
+                            },
+                            {
+                                "benchmark": "100",
+                                "score": "5299"
+                            }
+                        ]
+                    },
+                    "exposure": {
+                        "exposure_factor": 75,
+                        "vote_exposure_factor": 30,
+                        "vote_ratio": 2.22
+                    },
+                    "entries": [
+                        {
+                            "id": "entry_024",
+                            "votes": 2047,
+                            "rank": 153,
+                            "member_id": "mock_user_001",
+                            "adult": false,
+                            "guru_pick": true,
+                            "boost": 1,
+                            "turbo": false,
+                            "boosting": false,
+                            "boosted": true
+                        },
+                        {
+                            "id": "entry_025",
+                            "votes": 779,
+                            "rank": 1608,
+                            "member_id": "mock_user_001",
+                            "adult": false,
+                            "guru_pick": false,
+                            "boost": -1,
+                            "turbo": false,
+                            "boosting": false,
+                            "boosted": false
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "id": 120457,
+            "title": "Photographer of the Week",
+            "welcome_message": "Mock challenge: the photographer of the week wants you.",
+            "url": "photographer-of-the-week",
+            "start_time": 1767961419,
+            "close_time": 1768564719,
+            "status": "active",
+            "entries": 9585,
+            "players": 2656,
+            "votes": 8711809,
+            "max_photo_submits": 4,
+            "join_coins": 0,
+            "max_players": 0,
+            "badge": "fourphoto",
+            "type": "default",
+            "tags": ["special 4 pic", "No comm", "Turbo"],
+            "image": {
+                "id": "photo_cover_photographeroftheweek_001",
+                "member_id": "mock_user_001"
+            },
+            "prizes_worth": 240,
+            "ranking_levels": {
+                "level_0": 0,
+                "level_1": 150,
+                "level_2": 350,
+                "level_3": 1000,
+                "level_4": 2800,
+                "level_5": 5500
+            },
+            "boost_enable": true,
+            "turbo_enable": true,
+            "fill_enable": true,
+            "swap_enable": true,
+            "top_photo_enable": true,
+            "fill_locked": false,
+            "swap_locked": false,
+            "guru_pick_enable": true,
+            "top_photographer_enable": true,
+            "levels_rank_enable": true,
+            "new_ranking_enable": false,
+            "time_left": {
+                "days": 0,
+                "hours": 23,
+                "minutes": 58,
+                "seconds": 39
+            },
+            "member": {
+                "time_joined": 1767961419,
+                "boost": {
+                    "state": "USED",
+                    "timeout": 0
+                },
+                "turbo": {
+                    "max_selections": 10,
+                    "turbo_unlock_amount": 250,
+                    "required_selections": 6,
+                    "state": "FREE",
+                    "mode": "snap",
+                    "time_to_open": null
+                },
+                "ranking": {
+                    "total": {
+                        "votes": 2428,
+                        "rank": 1174,
+                        "level": 3,
+                        "level_name": "PREMIER",
+                        "level_rank": 108,
+                        "next": 372,
+                        "percent": 52.46,
+                        "exposure": 74,
+                        "points": 128,
+                        "guru_picks": 0,
+                        "next_message": "372 votes to next level",
+                        "benchmark": [
+                            {
+                                "benchmark": "1",
+                                "score": "7500"
+                            },
+                            {
+                                "benchmark": "10",
+                                "score": "5911"
+                            },
+                            {
+                                "benchmark": "100",
+                                "score": "5107"
+                            }
+                        ]
+                    },
+                    "exposure": {
+                        "exposure_factor": 39,
+                        "vote_exposure_factor": 30,
+                        "vote_ratio": 1.43
+                    },
+                    "entries": [
+                        {
+                            "id": "entry_026",
+                            "votes": 1447,
+                            "rank": 234,
+                            "member_id": "mock_user_001",
+                            "adult": false,
+                            "guru_pick": false,
+                            "boost": 1,
+                            "turbo": false,
+                            "boosting": false,
+                            "boosted": true
+                        },
+                        {
+                            "id": "entry_027",
+                            "votes": 1253,
+                            "rank": 940,
+                            "member_id": "mock_user_001",
+                            "adult": false,
+                            "guru_pick": false,
+                            "boost": -1,
+                            "turbo": false,
+                            "boosting": false,
+                            "boosted": false
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "id": 120458,
+            "title": "Simplicity",
+            "welcome_message": "Mock challenge: keep it simple.",
+            "url": "simplicity",
+            "start_time": 1768485600,
+            "close_time": 1769004000,
+            "status": "upcoming",
+            "entries": 0,
+            "players": 0,
+            "votes": 0,
+            "max_photo_submits": 4,
+            "badge": "speed",
+            "type": "default",
+            "tags": ["Strong", "No comm", "1 day", "Turbo"],
+            "prizes_worth": 600,
+            "ranking_levels": {
+                "level_0": 0,
+                "level_1": 50,
+                "level_2": 200,
+                "level_3": 750,
+                "level_4": 2000,
+                "level_5": 3200
+            },
+            "boost_enable": true,
+            "turbo_enable": false,
+            "fill_enable": true,
+            "swap_enable": true,
+            "top_photo_enable": true,
+            "time_left": {
+                "days": 6,
+                "hours": 2,
                 "minutes": 0,
                 "seconds": 0
             },
@@ -1044,15 +2646,6 @@
                 "boost": {
                     "state": "UNAVAILABLE",
                     "timeout": 0
-                },
-                "turbo": {
-                    "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
-                    "turbo_unlock_amount": 250,
-                    "mode": "classic",
-                    "required_selections": 6,
-                    "state": "LOCKED",
-                    "time_to_open": null
                 },
                 "ranking": {
                     "total": {
@@ -1078,504 +2671,37 @@
             }
         },
         {
-            "id": 120448,
-            "title": "Night Photography",
-            "welcome_message": "Capture the beauty of the night",
-            "url": "night-photography-2024",
-            "start_time": 1768442400,
-            "close_time": 1768514400,
-            "status": "active",
-            "entries": 1156,
-            "players": 834,
-            "votes": 298765,
-            "max_photo_submits": 1,
-            "badge": "",
-            "type": "default",
-            "tags": ["1 photo", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
-            "prizes_worth": 190,
-            "ranking_levels": {
-                "level_0": 0,
-                "level_1": 50,
-                "level_2": 250,
-                "level_3": 1000,
-                "level_4": 2000,
-                "level_5": 4000
-            },
-            "boost_enable": true,
-            "turbo_enable": true,
-            "fill_enable": true,
-            "swap_enable": true,
-            "top_photo_enable": true,
-            "time_left": {
-                "days": 0,
-                "hours": 10,
-                "minutes": 0,
-                "seconds": 0
-            },
-            "member": {
-                "time_joined": 1768442400,
-                "boost": {
-                    "state": "USED",
-                    "timeout": 0
-                },
-                "turbo": {
-                    "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
-                    "turbo_unlock_amount": 250,
-                    "mode": "classic",
-                    "required_selections": 6,
-                    "state": "IN_PROGRESS",
-                    "time_to_open": null
-                },
-                "ranking": {
-                    "total": {
-                        "votes": 145,
-                        "rank": 67,
-                        "level": 2,
-                        "level_name": "ELITE",
-                        "level_rank": 18,
-                        "next": 19,
-                        "percent": 89.2,
-                        "exposure": 95,
-                        "points": 55,
-                        "guru_picks": 0,
-                        "next_message": "18 votes to next level"
-                    },
-                    "exposure": {
-                        "exposure_factor": 94,
-                        "vote_exposure_factor": 85,
-                        "vote_ratio": 2.3
-                    },
-                    "entries": [
-                        {
-                            "id": "entry_014",
-                            "votes": 145,
-                            "rank": 67,
-                            "member_id": "mock_user_001",
-                            "adult": false,
-                            "event_id": 4000918060104,
-                            "guru_pick": false,
-                            "boost": 1,
-                            "turbo": true,
-                            "boosting": false,
-                            "boosted": true
-                        }
-                    ]
-                }
-            }
-        },
-        {
-            "id": 120449,
-            "title": "Food Photography",
-            "welcome_message": "Delicious food presentations",
-            "url": "food-photography-2024",
-            "start_time": 1768370400,
-            "close_time": 1768586400,
-            "status": "active",
-            "entries": 2456,
-            "players": 1923,
-            "votes": 567890,
-            "max_photo_submits": 2,
-            "badge": "",
-            "type": "default",
-            "tags": ["2 photos", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
-            "prizes_worth": 160,
-            "ranking_levels": {
-                "level_0": 0,
-                "level_1": 80,
-                "level_2": 400,
-                "level_3": 1600,
-                "level_4": 3200,
-                "level_5": 6400
-            },
-            "boost_enable": false,
-            "turbo_enable": true,
-            "fill_enable": true,
-            "swap_enable": true,
-            "top_photo_enable": true,
-            "time_left": {
-                "days": 1,
-                "hours": 6,
-                "minutes": 0,
-                "seconds": 0
-            },
-            "member": {
-                "time_joined": 1768370400,
-                "boost": {
-                    "state": "UNAVAILABLE",
-                    "timeout": 0
-                },
-                "turbo": {
-                    "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
-                    "turbo_unlock_amount": 250,
-                    "mode": "classic",
-                    "required_selections": 6,
-                    "state": "WON",
-                    "time_to_open": null
-                },
-                "ranking": {
-                    "total": {
-                        "votes": 267,
-                        "rank": 34,
-                        "level": 3,
-                        "level_name": "ALL STAR",
-                        "level_rank": 8,
-                        "next": 9,
-                        "percent": 95.6,
-                        "exposure": 98,
-                        "points": 85,
-                        "guru_picks": 2,
-                        "next_message": "8 votes to next level"
-                    },
-                    "exposure": {
-                        "exposure_factor": 97,
-                        "vote_exposure_factor": 95,
-                        "vote_ratio": 2.8
-                    },
-                    "entries": [
-                        {
-                            "id": "entry_015",
-                            "votes": 145,
-                            "rank": 45,
-                            "member_id": "mock_user_001",
-                            "adult": false,
-                            "event_id": 4000918060105,
-                            "guru_pick": true,
-                            "boost": -1,
-                            "turbo": true,
-                            "boosting": false,
-                            "boosted": false
-                        },
-                        {
-                            "id": "entry_016",
-                            "votes": 122,
-                            "rank": 67,
-                            "member_id": "mock_user_001",
-                            "adult": false,
-                            "event_id": 4000918060106,
-                            "guru_pick": true,
-                            "boost": -1,
-                            "turbo": false,
-                            "boosting": false,
-                            "boosted": false
-                        }
-                    ]
-                }
-            }
-        },
-        {
-            "id": 120450,
-            "title": "Symmetry & Reflections",
-            "welcome_message": "Perfect symmetry and beautiful reflections",
-            "url": "symmetry-reflections-2024",
-            "start_time": 1768460400,
-            "close_time": 1768496400,
-            "status": "active",
-            "entries": 678,
-            "players": 512,
-            "votes": 145632,
-            "max_photo_submits": 1,
-            "badge": "",
-            "type": "default",
-            "tags": ["1 photo", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
-            "prizes_worth": 130,
-            "ranking_levels": {
-                "level_0": 0,
-                "level_1": 35,
-                "level_2": 175,
-                "level_3": 700,
-                "level_4": 1400,
-                "level_5": 2800
-            },
-            "boost_enable": true,
-            "turbo_enable": true,
-            "fill_enable": true,
-            "swap_enable": true,
-            "top_photo_enable": true,
-            "time_left": {
-                "days": 0,
-                "hours": 5,
-                "minutes": 0,
-                "seconds": 0
-            },
-            "member": {
-                "time_joined": 1768460400,
-                "boost": {
-                    "state": "LOCKED",
-                    "timeout": null
-                },
-                "turbo": {
-                    "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
-                    "turbo_unlock_amount": 250,
-                    "mode": "classic",
-                    "required_selections": 6,
-                    "state": "FREE",
-                    "time_to_open": null
-                },
-                "ranking": {
-                    "total": {
-                        "votes": 67,
-                        "rank": 178,
-                        "level": 1,
-                        "level_name": "POPULAR",
-                        "level_rank": 12,
-                        "next": 13,
-                        "percent": 56.7,
-                        "exposure": 65,
-                        "points": 18,
-                        "guru_picks": 0,
-                        "next_message": "12 votes to next level"
-                    },
-                    "exposure": {
-                        "exposure_factor": 50,
-                        "vote_exposure_factor": 35,
-                        "vote_ratio": 1.65
-                    },
-                    "entries": [
-                        {
-                            "id": "entry_017",
-                            "votes": 67,
-                            "rank": 178,
-                            "member_id": "mock_user_001",
-                            "adult": false,
-                            "event_id": 4000918060107,
-                            "guru_pick": false,
-                            "boost": -1,
-                            "turbo": true,
-                            "boosting": false,
-                            "boosted": false
-                        }
-                    ]
-                }
-            }
-        },
-        {
-            "id": 120451,
-            "title": "Motion & Movement",
-            "welcome_message": "Capturing dynamic motion in photography",
-            "url": "motion-movement-2024",
-            "start_time": 1768420800,
-            "close_time": 1768536000,
-            "status": "active",
-            "entries": 1634,
-            "players": 1289,
-            "votes": 387654,
-            "max_photo_submits": 2,
-            "badge": "",
-            "type": "default",
-            "tags": ["2 photos", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
-            "prizes_worth": 210,
-            "ranking_levels": {
-                "level_0": 0,
-                "level_1": 70,
-                "level_2": 350,
-                "level_3": 1400,
-                "level_4": 2800,
-                "level_5": 5600
-            },
-            "boost_enable": true,
-            "turbo_enable": true,
-            "fill_enable": true,
-            "swap_enable": true,
-            "top_photo_enable": true,
-            "time_left": {
-                "days": 0,
-                "hours": 16,
-                "minutes": 0,
-                "seconds": 0
-            },
-            "member": {
-                "time_joined": 1768420800,
-                "boost": {
-                    "state": "USED",
-                    "timeout": 0
-                },
-                "turbo": {
-                    "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
-                    "turbo_unlock_amount": 250,
-                    "mode": "classic",
-                    "required_selections": 6,
-                    "state": "USED",
-                    "time_to_open": null
-                },
-                "ranking": {
-                    "total": {
-                        "votes": 198,
-                        "rank": 78,
-                        "level": 2,
-                        "level_name": "ELITE",
-                        "level_rank": 34,
-                        "next": 35,
-                        "percent": 82.3,
-                        "exposure": 89,
-                        "points": 58,
-                        "guru_picks": 1,
-                        "next_message": "34 votes to next level"
-                    },
-                    "exposure": {
-                        "exposure_factor": 87,
-                        "vote_exposure_factor": 78,
-                        "vote_ratio": 2.45
-                    },
-                    "entries": [
-                        {
-                            "id": "entry_018",
-                            "votes": 112,
-                            "rank": 89,
-                            "member_id": "mock_user_001",
-                            "adult": false,
-                            "event_id": 4000918060108,
-                            "guru_pick": false,
-                            "boost": 0,
-                            "turbo": true,
-                            "boosting": false,
-                            "boosted": false
-                        },
-                        {
-                            "id": "entry_019",
-                            "votes": 86,
-                            "rank": 134,
-                            "member_id": "mock_user_001",
-                            "adult": false,
-                            "event_id": 4000918060109,
-                            "guru_pick": true,
-                            "boost": 1,
-                            "turbo": false,
-                            "boosting": false,
-                            "boosted": true
-                        }
-                    ]
-                }
-            }
-        },
-        {
-            "id": 120452,
-            "title": "Vintage Style",
-            "welcome_message": "Classic vintage photography aesthetics",
-            "url": "vintage-style-2024",
-            "start_time": 1768402800,
-            "close_time": 1768554000,
-            "status": "active",
-            "entries": 1987,
-            "players": 1654,
-            "votes": 456123,
-            "max_photo_submits": 1,
-            "badge": "",
-            "type": "default",
-            "tags": ["1 photo", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
-            "prizes_worth": 180,
-            "ranking_levels": {
-                "level_0": 0,
-                "level_1": 65,
-                "level_2": 325,
-                "level_3": 1300,
-                "level_4": 2600,
-                "level_5": 5200
-            },
-            "boost_enable": true,
-            "turbo_enable": true,
-            "fill_enable": true,
-            "swap_enable": true,
-            "top_photo_enable": true,
-            "time_left": {
-                "days": 0,
-                "hours": 21,
-                "minutes": 0,
-                "seconds": 0
-            },
-            "member": {
-                "time_joined": 1768402800,
-                "boost": {
-                    "state": "USED",
-                    "timeout": 0
-                },
-                "turbo": {
-                    "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
-                    "turbo_unlock_amount": 250,
-                    "mode": "classic",
-                    "required_selections": 6,
-                    "state": "LOCKED",
-                    "time_to_open": null
-                },
-                "ranking": {
-                    "total": {
-                        "votes": 234,
-                        "rank": 45,
-                        "level": 3,
-                        "level_name": "ALL STAR",
-                        "level_rank": 12,
-                        "next": 13,
-                        "percent": 91.8,
-                        "exposure": 96,
-                        "points": 78,
-                        "guru_picks": 1,
-                        "next_message": "12 votes to next level"
-                    },
-                    "exposure": {
-                        "exposure_factor": 92,
-                        "vote_exposure_factor": 92,
-                        "vote_ratio": 2.67
-                    },
-                    "entries": [
-                        {
-                            "id": "entry_020",
-                            "votes": 234,
-                            "rank": 45,
-                            "member_id": "mock_user_001",
-                            "adult": false,
-                            "event_id": 4000918060110,
-                            "guru_pick": true,
-                            "boost": 1,
-                            "turbo": false,
-                            "boosting": false,
-                            "boosted": true
-                        }
-                    ]
-                }
-            }
-        },
-        {
-            "id": 120453,
-            "title": "Urban Landscapes",
-            "welcome_message": "Cityscape and urban environment photography",
-            "url": "urban-landscapes-2024",
-            "start_time": 1768485600,
-            "close_time": 1769004000,
+            "id": 120459,
+            "title": "The 7 Sins",
+            "welcome_message": "Mock challenge: seven sins, one lens.",
+            "url": "the-7-sins",
+            "start_time": 1768482000,
+            "close_time": 1769000400,
             "status": "upcoming",
             "entries": 0,
             "players": 0,
             "votes": 0,
             "max_photo_submits": 2,
-            "badge": "",
+            "badge": "speed",
             "type": "default",
             "tags": ["2 photos", "No comm", "Turbo"],
-            "vote_minimum_players": 200,
-            "prizes_worth": 195,
+            "prizes_worth": 180,
             "ranking_levels": {
                 "level_0": 0,
-                "level_1": 55,
-                "level_2": 275,
-                "level_3": 1100,
-                "level_4": 2200,
-                "level_5": 4400
+                "level_1": 50,
+                "level_2": 250,
+                "level_3": 900,
+                "level_4": 1900,
+                "level_5": 3800
             },
             "boost_enable": true,
-            "turbo_enable": true,
+            "turbo_enable": false,
             "fill_enable": true,
             "swap_enable": true,
             "top_photo_enable": true,
             "time_left": {
                 "days": 6,
-                "hours": 0,
+                "hours": 1,
                 "minutes": 0,
                 "seconds": 0
             },
@@ -1584,15 +2710,6 @@
                 "boost": {
                     "state": "UNAVAILABLE",
                     "timeout": 0
-                },
-                "turbo": {
-                    "max_selections": 10,
-                    "turbo_unlock_type": "COINS",
-                    "turbo_unlock_amount": 250,
-                    "mode": "classic",
-                    "required_selections": 6,
-                    "state": "LOCKED",
-                    "time_to_open": null
                 },
                 "ranking": {
                     "total": {

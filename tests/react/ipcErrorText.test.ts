@@ -1,4 +1,4 @@
-import { ipcErrorText, suggestErrorText } from '@/api/ipcErrorText';
+import { ipcErrorText, joinRefusalText, suggestErrorText } from '@/api/ipcErrorText';
 
 const t = (key: string) => `[${key}]`;
 
@@ -22,16 +22,18 @@ describe('ipcErrorText', () => {
         ['Snap question could not be answered', 'errors.snapUnanswerable'],
         ['Snap was interrupted; try again later', 'errors.snapInterrupted'],
         ['Challenge no longer active', 'errors.challengeNoLongerActive'],
+        ['challenge-data-incomplete', 'errors.challengeDataIncomplete'],
+        ['challenge data cannot be read', 'errors.challengeDataIncomplete'],
         ['pin-cap-reached', 'errors.pinCapReached'],
         ['pin-write-failed', 'errors.pinFailed'],
+        ['library-read-failed', 'errors.libraryReadFailed'],
         ['Failed to apply boost', 'errors.boostFailed'],
         ['Failed to fetch challenges', 'errors.fetchChallengesFailed'],
         ['Could not list challenges', 'errors.fetchChallengesFailed'],
         ['Could not read your balance right now', 'errors.fetchChallengesFailed'],
-        ['The account changed while listing challenges', 'errors.accountChanged'],
-        ['account-check-failed', 'errors.accountCheckFailed'],
         ['token-not-saved', 'errors.tokenNotSaved'],
         ['web-shell-token', 'errors.webShellToken'],
+        ['superseded', 'errors.superseded'],
     ])('words the known failure %j as %s', (error, key) => {
         expect(ipcErrorText(error, t)).toBe(`[${key}]`);
     });
@@ -62,6 +64,28 @@ describe('ipcErrorText', () => {
     });
 });
 
+describe('joinRefusalText', () => {
+    test.each([
+        ['full', 'errors.joinRefusedFull'],
+        ['price-unknown', 'errors.joinRefusedPriceUnknown'],
+    ])('words the %j refusal as %s', (reason, key) => {
+        expect(joinRefusalText(reason, t)).toBe(`[${key}]`);
+    });
+
+    test('any other reason, and a missing one, stays missing: the status has its own text', () => {
+        for (const reason of ['no-photo', 'unconfirmed', 'already-joined']) {
+            expect(joinRefusalText(reason, t)).toBeNull();
+        }
+        expect(joinRefusalText(undefined, t)).toBeNull();
+        expect(joinRefusalText('', t)).toBeNull();
+    });
+
+    test('the refusal reasons are not error wording: ipcErrorText stays generic on them', () => {
+        expect(ipcErrorText('full', t)).toBe('[errors.actionFailed]');
+        expect(ipcErrorText('price-unknown', t)).toBe('[errors.actionFailed]');
+    });
+});
+
 describe('suggestErrorText', () => {
     test.each([
         ['no-chosen-entered', 'errors.suggestNoChosenEntered'],
@@ -69,7 +93,6 @@ describe('suggestErrorText', () => {
         ['no-match', 'errors.suggestNoMatch'],
         ['no-eligible', 'errors.suggestNoEligible'],
         ['suggest-busy', 'errors.suggestBusy'],
-        ['account-changed', 'errors.suggestAccountChanged'],
         ['challenge-ended', 'errors.suggestChallengeEnded'],
         ['invalid-args', 'errors.actionInvalidArgs'],
         ['not-logged-in', 'errors.notLoggedIn'],

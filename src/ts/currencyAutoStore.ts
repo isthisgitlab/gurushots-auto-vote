@@ -6,9 +6,11 @@
  *
  * Fills need their own record: exposure decays again after a fill, so without a
  * count the rule would re-fire every time exposure dropped and the pool ran dry,
- * draining the whole balance on one challenge. Swaps don't need one — the API's
- * own swap history (member.ranking.swaps) is the authoritative count — and a key
- * unlock is one-shot by nature (the boost is no longer LOCKED afterwards).
+ * draining the whole balance on one challenge. Swaps count in it too (under
+ * `swap:<id>`), but only while the API's own swap history (member.ranking.swaps)
+ * is missing — when GuruShots sends it, it stays the authoritative count and the
+ * ledger is not read or written. A key unlock is one-shot by nature (the boost
+ * is no longer LOCKED afterwards).
  *
  * Shape, keyed by challenge id: { "<challengeId>": { fills, at } }; a mission's record also holds `progress`, the
  * mission's server progress when its latest fill was counted, and `before`, the progress the record held when that
@@ -25,6 +27,7 @@ import { createJsonStore } from './settings/storage';
 import { isPlainObject } from './plainObject';
 import { fileErrorMessage } from './errorMessage';
 import { storeLoaded, throughStore } from './settings/storeTransport';
+import { createMemoryRawJsonStore } from './parseUntrustedJson';
 import * as runtime from './runtime';
 
 // `strict`: a write the service's native bridge did not persist is a failed write: the cap is only as good as the count.
@@ -45,7 +48,7 @@ const autoSpendStore = createJsonStore({
 const recoveryStep = (): string =>
     runtime.isCapacitor() || runtime.isHeadlessService()
         ? 'tries again next cycle'
-        : `delete ${autoSpendStore.getFilePath()} to start the fill count over`;
+        : `delete ${autoSpendStore.getFilePath()} to start the fill and swap counts over`;
 
 // Challenges run for days, not months; anything older is a finished challenge.
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -126,7 +129,10 @@ const createAutoSpendLedger = (
             said = true;
             logger
                 .withCategory('currency')
-                .warning(`auto-spend ledger ${reason} — no automatic fills until it can be read (${recovery()})`, null);
+                .warning(
+                    `auto-spend ledger ${reason} — no automatic fills, and no automatic swaps on challenges without a swap history, until it can be read (${recovery()})`,
+                    null,
+                );
         }
         return trusted ? records : null;
     };
@@ -238,15 +244,7 @@ const createAutoSpendLedger = (
 };
 
 /** Ledger over an in-memory store — mock mode, tests. */
-const createMemoryAutoSpendLedger = () => {
-    let raw: string | null = null;
-    return createAutoSpendLedger({
-        readRaw: () => raw,
-        writeRaw: (data) => {
-            raw = data;
-        },
-    });
-};
+const createMemoryAutoSpendLedger = () => createAutoSpendLedger(createMemoryRawJsonStore());
 
 const autoSpendLedger = createAutoSpendLedger(autoSpendStore, () => storeLoaded(AUTO_SPEND_KEY), recoveryStep);
 

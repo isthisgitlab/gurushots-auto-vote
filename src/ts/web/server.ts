@@ -35,11 +35,12 @@ import * as scenariosHandlers from '../ipc/scenarios.handlers';
 import { buildReleaseUpdateHandlers } from '../ipc/releaseUpdates';
 import { invokeHandler } from '../ipc/registerHandlers';
 import * as updateChecker from '../services/UpdateChecker';
-import { clearAuthToken, LogoutNotSavedError } from '../services/auth';
+import { logout as sharedLogout, LogoutNotSavedError } from '../services/auth';
 import { LOGOUT_NOT_SAVED } from '../ipc/logoutCode';
 import { initializeHeaders } from '../api/randomizer';
 import * as settings from '../settings';
 import { holdWebServerLock } from '../settings/cliSessionLock';
+import { clearLeftoverToken, clearTokenBeforeExit } from './loginClears';
 import * as logger from '../logger';
 import { errorMessage } from '../errorMessage';
 import { isPlainObject } from '../plainObject';
@@ -190,9 +191,17 @@ const decodeArgs = (body: unknown): unknown[] | null => {
     return decoded;
 };
 
+// The dist/ file a URL path serves: the root is the web document, and the
+// favicon browsers ask for by convention (no token travels with it) is the
+// app icon staged next to it by scripts/build-react.ts.
+const staticFileFor = (pathname: string) => {
+    if (pathname === '/') return 'web.html';
+    if (pathname === '/favicon.ico') return 'favicon.png';
+    return decodeURIComponent(pathname).replace(/^\/+/, '');
+};
+
 const serveStatic = (distDir: string, pathname: string, res: ServerResponse) => {
-    const relative = pathname === '/' ? 'web.html' : decodeURIComponent(pathname).replace(/^\/+/, '');
-    const file = path.resolve(distDir, relative);
+    const file = path.resolve(distDir, staticFileFor(pathname));
     if (!file.startsWith(distDir + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
         fail(res, 404, 'Not found');
         return;
@@ -214,20 +223,19 @@ const openEventStream = (res: ServerResponse, clients: Set<ServerResponse>) => {
     res.on('close', () => clients.delete(res));
 };
 
-// Same as Electron's logout: always drop the token, and put the mock flag back
-// to the environment default.
+// The shared logout core always drops the token and puts the mock flag back
+// to the environment default; this shell only answers JSON.
 const logout = async (res: ServerResponse) => {
     try {
-        await clearAuthToken();
+        await sharedLogout();
     } catch (err) {
         logger.withCategory('authentication').error('Logout failed to clear token', err);
-        // A logout the settings refused did not log anyone out: say so, and leave the mock flag as it is.
+        // A logout the settings refused did not log anyone out: say so.
         if (err instanceof LogoutNotSavedError) {
             sendJson(res, 200, { result: { success: false, error: LOGOUT_NOT_SAVED } });
             return;
         }
     }
-    settings.setSetting('mock', settings.getEnvironmentInfo().defaultMock);
     sendJson(res, 200, { result: { success: true } });
 };
 
@@ -315,13 +323,20 @@ const createWebServer = ({ distDir, token = newShellToken(), onLocalDataWiped }:
         },
     });
 
+    // Ends every connected browser's event stream (a wipe stop and the launcher's stop both do).
+    const endClients = () => {
+        for (const client of clients) client.end();
+    };
+
     // Runs when a reply has been sent: after a wipe, ends the event streams and stops listening, once however many
-    // replies finish after it.
+    // replies finish after it. The idle keep-alive sockets go too, so close() is not held open by them.
     const stopIfWiped = () => {
         if (!wiped || stopped) return;
         stopped = true;
-        for (const client of clients) client.end();
-        server.close();
+        endClients();
+        server.closeIdleConnections();
+        // The callback takes the already-closed error, so a stop() that raced ahead leaves no stray 'error' event.
+        server.close(() => undefined);
         onLocalDataWiped?.();
     };
 
@@ -346,7 +361,7 @@ const createWebServer = ({ distDir, token = newShellToken(), onLocalDataWiped }:
             fail(res, 500, 'Internal error');
         });
     });
-    return { server, emit, token };
+    return { server, emit, token, wasWiped: () => wiped, endClients };
 };
 
 interface StartOptions extends WebServerOptions {
@@ -358,7 +373,9 @@ interface StartOptions extends WebServerOptions {
  * loopback interface.
  * @returns the listening server, the token its pages need, and the URL that
  *   opens the UI: it carries the token in its fragment, so print it to stdout
- *   only and keep it out of the logs
+ *   only and keep it out of the logs. `stop` stops listening and waits out the
+ *   close chain; `whenClosed` is that chain's promise, for the paths that close
+ *   the server themselves (a local-data wipe)
  */
 const startWebServer = async ({ port, distDir }: StartOptions) => {
     initializeHeaders();
@@ -367,7 +384,9 @@ const startWebServer = async ({ port, distDir }: StartOptions) => {
     } catch (err) {
         logger.withCategory('settings').warning('Intent profile seeding failed (non-fatal):', err);
     }
-    const { server, emit, token } = createWebServer({
+    // Before the server exists to answer a page: nothing can observe a pre-clear token.
+    await clearLeftoverToken();
+    const { server, emit, token, wasWiped, endClients } = createWebServer({
         distDir,
         onLocalDataWiped: () =>
             logger.printLine('Local data was deleted. The web shell has stopped: start it again to continue.'),
@@ -382,11 +401,43 @@ const startWebServer = async ({ port, distDir }: StartOptions) => {
     });
     // The marker a local-data wipe from the desktop app or the CLI looks for: this server writes the app's data until it
     // stops (every wipe stops it). A server killed by a signal leaves one that goes stale.
-    server.once('close', holdWebServerLock());
+    const releaseWebServerMarker = holdWebServerLock();
+    // The close chain: the marker is released (synchronously), then the stay-logged-in clear runs — the launcher's
+    // exit and stop() wait for it to settle, so a signal cannot win the race against the clear.
+    let settleCloseChain!: () => void;
+    const closeChainSettled = new Promise<void>((resolve) => {
+        settleCloseChain = resolve;
+    });
+    let closeHandled = false;
+    server.once('close', () => {
+        closeHandled = true;
+        releaseWebServerMarker();
+        void clearTokenBeforeExit(wasWiped).finally(settleCloseChain);
+    });
+    /** Resolves once the server is closed and its close chain has settled. */
+    const whenClosed = async (): Promise<void> => {
+        if (!closeHandled)
+            await new Promise<void>((resolve) => {
+                server.once('close', () => resolve());
+            });
+        await closeChainSettled;
+    };
+    /**
+     * Stops listening: ends the event streams, drops the idle keep-alive sockets that would hold
+     * close() open, and waits out the close chain. Calling it again resolves the same way.
+     */
+    const stop = async (): Promise<void> => {
+        endClients();
+        server.closeIdleConnections();
+        // A second stop finds the server already closed: the callback takes the error, so no
+        // 'error' event fires for the leftover listener of the listen promise to trip over.
+        server.close(() => undefined);
+        await whenClosed();
+    };
     const address = server.address() as { port: number };
     const origin = `http://localhost:${address.port}/`;
     logger.withCategory('ui').info(`Web UI listening on ${origin}`, { userData: settings.getUserDataPath() });
-    return { server, token, url: `${origin}#t=${token}` };
+    return { server, token, url: `${origin}#t=${token}`, stop, whenClosed };
 };
 
 export { createWebServer, startWebServer, buildWebHandlers };

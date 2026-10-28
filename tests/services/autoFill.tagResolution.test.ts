@@ -172,7 +172,7 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
             },
         );
         expect(result).toEqual(LIBRARY);
-        expect(category.warning).toHaveBeenCalledWith(expect.stringContaining('nothing found by tag search'), null);
+        expect(category.warning).toHaveBeenCalledWith(expect.stringContaining('tag search found nothing'), null);
     });
 
     test('logs how the theme was read, with the description it was read from', async () => {
@@ -205,6 +205,40 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
         expect(category.info).toHaveBeenCalledWith(
             expect.stringContaining(
                 'has no subject its description confirms, so its title is searched head-noun first. Description: ""',
+            ),
+            null,
+        );
+    });
+
+    test('a letter challenge logs its letter rule, not the head-noun search', async () => {
+        const { logger, category } = makeLogger();
+        await fetchCandidatesForChallenge(
+            invalid({ id: 'c-letter', title: 'Begins With L' }),
+            'tok',
+            {},
+            { getEligiblePhotos: makeGetEligiblePhotos(), logger },
+        );
+        expect(category.info).toHaveBeenCalledWith(
+            expect.stringContaining(
+                'is a letter challenge ("L"), so only photos with a label starting with "L" are considered ' +
+                    '(the whole library if none has one)',
+            ),
+            null,
+        );
+    });
+
+    test('a letter challenge that still names a subject says so in its theme line', async () => {
+        const { logger, category } = makeLogger();
+        await fetchCandidatesForChallenge(
+            invalid({ id: 'c-apple', title: 'A is for Apple' }),
+            'tok',
+            {},
+            { getEligiblePhotos: makeGetEligiblePhotos(), logger },
+        );
+        expect(category.info).toHaveBeenCalledWith(
+            expect.stringContaining(
+                'is a letter challenge ("A"), so only photos with a label starting with "A" are considered ' +
+                    '(the whole library if none has one); its subject is "apple"',
             ),
             null,
         );
@@ -247,6 +281,28 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
         expect(line!.length).toBeLessThan(5000);
     });
 
+    test('a description exclusion is named in the theme line', async () => {
+        // 136550's wording: the concepts come from the fixed word lists, and the
+        // line never quotes matched description text.
+        const { logger, category } = makeLogger();
+        await fetchCandidatesForChallenge(
+            invalid({
+                id: 'c-still',
+                title: 'Beauty of Still Life',
+                welcome_message:
+                    'Remember: no living or moving objects, so people and animals will be considered ' +
+                    'off-topic for this challenge.',
+            }),
+            'tok',
+            {},
+            { getEligiblePhotos: makeGetEligiblePhotos(), logger },
+        );
+        expect(category.info).toHaveBeenCalledWith(
+            expect.stringContaining('its description rules out people, animals'),
+            null,
+        );
+    });
+
     test('a contest-cadence title reads as an open theme and says so', async () => {
         // "week" is a stopword, so "Guru of The Week" yields no search term at
         // all — a different case from a theme that was searched and missed, and
@@ -270,6 +326,32 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
         expect(category.warning).not.toHaveBeenCalled();
         // Nothing to resolve means no lookup is attempted at all.
         expect(searchTagAutocomplete).not.toHaveBeenCalled();
+    });
+
+    test('a compound search term is also searched under its two derived spellings', async () => {
+        // "close-up" rides with "close up" and "closeup" on the raw-terms
+        // search, so a library that spells the subject differently is still
+        // found; the exact-match stub answers only the hyphenless forms.
+        const searched: string[] = [];
+        const getEligiblePhotos = jest.fn(
+            async (_id: string | number, _token: string, options: EligibleOptions = {}) => {
+                if (options.search) {
+                    searched.push(options.search);
+                    return options.search === 'closeup' || options.search === 'close up'
+                        ? [allowed('closeup_1', ['Closeup'])]
+                        : [];
+                }
+                return [allowed('misc_1', ['Misc'])];
+            },
+        );
+        const result = await fetchCandidatesForChallenge(
+            invalid({ id: 'c-closeup', title: 'Close Up', url: 'close-up' }),
+            'tok',
+            {},
+            { getEligiblePhotos, logger: makeLogger().logger },
+        );
+        expect(searched).toEqual(expect.arrayContaining(['close-up', 'close up', 'closeup']));
+        expect(result.map((p) => p.id)).toContain('closeup_1');
     });
 
     test('a negated title never searches its subject and explains the full-library fetch', async () => {

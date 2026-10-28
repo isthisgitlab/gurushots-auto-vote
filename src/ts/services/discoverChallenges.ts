@@ -4,12 +4,9 @@
  *
  * The upcoming list is fetched whenever Discover loads — whatever the window, because the ids of
  * every upcoming challenge are what keeps their saved chosen photos from being pruned (see
- * settings/openChallenges.ts) — and cached for a minute per account, so a burst of calls costs one
- * request. The cache is keyed by a hash of the token, never the token, and is emptied at logout.
+ * settings/openChallenges.ts) — and cached for a minute, so a burst of calls costs one request.
  * Nothing here decides who may join: that stays with the live open lookup in services/joinChallenges.
  */
-
-import { tokenKey } from './accountScope';
 
 import type { Challenge, DiscoverChallenge } from '../types/gurushots';
 
@@ -23,33 +20,33 @@ const MAX_UPCOMING_ROWS = 100;
 
 type CachedList = { at: number; list: Promise<Challenge[] | null> };
 
-let cache: Map<string, CachedList> = new Map();
+let cache: CachedList | null = null;
 
 /**
- * The account's upcoming list: the cached one while it is under a minute old, else a fresh fetch
- * (a burst of callers shares one request). A failed fetch (null) is not kept, so the next call asks again.
+ * The upcoming list: the cached one while it is under a minute old, else a fresh fetch (a burst of
+ * callers shares one request). A failed fetch (null) is not kept, so the next call asks again. A
+ * failure of a request an account switch superseded never deletes the newer request's cache entry:
+ * the cleanup matches the entry it belongs to, not the key.
  */
 const fetchUpcoming = (
     token: string,
     fetchList: ListFetcher,
     now: () => number = Date.now,
 ): Promise<Challenge[] | null> => {
-    const key = tokenKey(token);
-    const hit = cache.get(key);
-    if (hit && now() - hit.at < UPCOMING_CACHE_MS) return hit.list;
+    if (cache && now() - cache.at < UPCOMING_CACHE_MS) return cache.list;
     const list = fetchList(token, 'upcoming');
     const entry: CachedList = { at: now(), list };
-    cache.set(key, entry);
+    cache = entry;
     const forgetFailed = () => {
-        if (cache.get(key) === entry) cache.delete(key);
+        if (cache === entry) cache = null;
     };
     void list.then((items) => (items === null ? forgetFailed() : undefined), forgetFailed);
     return list;
 };
 
-/** Forget every cached upcoming list (an account left, and tests start clean). */
+/** Forget the cached upcoming list (an account left, and tests start clean). */
 const clearUpcomingCache = (): void => {
-    cache = new Map();
+    cache = null;
 };
 
 const idOf = (c: Challenge | null): string | null => (c?.id == null ? null : String(c.id));

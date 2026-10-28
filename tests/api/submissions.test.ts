@@ -5,6 +5,7 @@
 import type * as submissionsModule from '../../src/ts/api/submissions';
 import type * as api_clientModule from '../../src/ts/api/api-client';
 import type { CategoryLogger } from '../../src/ts/logger';
+import { LIBRARY_BATCH_PHOTOS, MAX_LIBRARY_KEEP_PHOTOS } from '../../src/ts/settings/limits';
 import { invalid } from '../helpers/invalid';
 
 const { getEligiblePhotos, getEligiblePhotosWalk, getImageData, submitToChallenge, MAX_LIBRARY_PAGES } =
@@ -241,6 +242,7 @@ describe('submissions', () => {
             await expect(getEligiblePhotosWalk('c1', token, { limit: 2 })).resolves.toEqual({
                 items: [],
                 truncated: false,
+                nextStart: 2,
             });
         });
 
@@ -254,10 +256,15 @@ describe('submissions', () => {
             expect(await getEligiblePhotosWalk('c1', token, { limit: 2 })).toEqual({
                 items: [{ id: 'p1' }, { id: 'p2' }],
                 truncated: true,
+                nextStart: 2,
             });
             makePostRequest.mockReset();
             makePostRequest.mockResolvedValueOnce(null);
-            expect(await getEligiblePhotosWalk('c1', token, { limit: 2 })).toEqual({ items: [], truncated: true });
+            expect(await getEligiblePhotosWalk('c1', token, { limit: 2 })).toEqual({
+                items: [],
+                truncated: true,
+                nextStart: 0,
+            });
             // A later unreadable page.
             makePostRequest.mockReset();
             makePostRequest.mockResolvedValueOnce(page('p1', 'p2')).mockResolvedValueOnce({ nope: true });
@@ -275,6 +282,8 @@ describe('submissions', () => {
                 });
                 const walk = await getEligiblePhotosWalk('c1', token, { limit: 2, budgetMs: 12_000 });
                 expect(walk.truncated).toBe(true);
+                // Three pages fully read; the budget break re-reads from page 4's offset.
+                expect(walk.nextStart).toBe(6);
                 expect(makePostRequest).toHaveBeenCalledTimes(3);
             } finally {
                 Date.now = realNow;
@@ -327,6 +336,8 @@ describe('submissions', () => {
                 expect(walk.truncated).toBe(true);
                 expect(walk.skipped).toEqual([]);
                 expect(makePostRequest).toHaveBeenCalledTimes(MAX_LIBRARY_PAGES);
+                // The in-loop cap return sees the just-merged page.
+                expect(walk.nextStart).toBe(MAX_LIBRARY_PAGES * 2);
                 expect(warnings()).toContainEqual(
                     expect.stringContaining(`stopped reading your photo library at ${MAX_LIBRARY_PAGES * 2} photo(s)`),
                 );
@@ -361,7 +372,12 @@ describe('submissions', () => {
                         skip: isWinner,
                     });
                     expect(makePostRequest).toHaveBeenCalledTimes(3);
-                    expect(walk).toEqual({ items: [{ id: 'pa' }], truncated: true, skipped: ['wa'] });
+                    expect(walk).toEqual({
+                        items: [{ id: 'pa' }],
+                        truncated: true,
+                        skipped: ['wa'],
+                        nextStart: 6,
+                    });
                 } finally {
                     Date.now = realNow;
                 }
@@ -422,6 +438,106 @@ describe('submissions', () => {
                 expect(walk).not.toHaveProperty('skipped');
                 expect(makePostRequest).toHaveBeenCalledTimes(MAX_LIBRARY_PAGES);
                 expect(warnings()).toContainEqual(expect.stringContaining(`${MAX_LIBRARY_PAGES}-page limit`));
+            });
+        });
+
+        describe('with maxKept and counts (batched walks)', () => {
+            const warnings = () => {
+                const { __level: log }: { __level: { warning: jest.Mock<void, [string, unknown]> } } = invalid(
+                    require('../../src/ts/logger'),
+                );
+                return log.warning.mock.calls.map((call) => call[0]);
+            };
+
+            test('stops at the counted target; the page that crosses it is kept whole, with no warning', async () => {
+                // One full page of 2 reaches maxKept: 2 — a single request.
+                makePostRequest.mockResolvedValueOnce(page('p1', 'p2')).mockResolvedValueOnce(page('p3', 'p4'));
+                const walk = await getEligiblePhotosWalk('c1', token, { limit: 2, maxKept: 2 });
+                expect(makePostRequest).toHaveBeenCalledTimes(1);
+                expect(ids(walk)).toEqual(['p1', 'p2']);
+                expect(walk.truncated).toBe(true);
+                expect(walk).not.toHaveProperty('skipped');
+                expect(walk.nextStart).toBe(2);
+                expect(warnings()).toEqual([]);
+                // maxKept: 3 keeps the crossing second page whole.
+                makePostRequest.mockReset();
+                makePostRequest.mockResolvedValueOnce(page('p1', 'p2')).mockResolvedValueOnce(page('p3', 'p4'));
+                const crossed = await getEligiblePhotosWalk('c1', token, { limit: 2, maxKept: 3 });
+                expect(ids(crossed)).toEqual(['p1', 'p2', 'p3', 'p4']);
+                expect(crossed.nextStart).toBe(4);
+                expect(warnings()).toEqual([]);
+            });
+
+            test('maxKept is independent of skip: skipped photos do not count and the walk keeps paging', async () => {
+                makePostRequest
+                    .mockResolvedValueOnce(page('w1', 'p1'))
+                    .mockResolvedValueOnce(page('w2', 'p2'))
+                    .mockResolvedValueOnce(page('w3', 'p3'));
+                const walk = await getEligiblePhotosWalk('c1', token, {
+                    limit: 2,
+                    maxKept: 3,
+                    skip: (photo: { id: string }) => photo.id.startsWith('w'),
+                });
+                expect(makePostRequest).toHaveBeenCalledTimes(3);
+                expect(ids(walk)).toEqual(['p1', 'p2', 'p3']);
+                expect(walk.skipped).toEqual(['w1', 'w2', 'w3']);
+                expect(walk.truncated).toBe(true);
+                expect(walk.nextStart).toBe(6);
+                expect(warnings()).toEqual([]);
+            });
+
+            test('counts narrows which kept photos count toward maxKept; uncounted ones stay in items', async () => {
+                // The walk stops after the crossing page, so only two pages are queued.
+                makePostRequest.mockResolvedValueOnce(page('a1', 'a2')).mockResolvedValueOnce(page('a3', 'x1'));
+                const walk = await getEligiblePhotosWalk('c1', token, {
+                    limit: 2,
+                    maxKept: 3,
+                    counts: (photo: { id: string }) => !photo.id.startsWith('x'),
+                });
+                expect(makePostRequest).toHaveBeenCalledTimes(2);
+                // x1 is kept but not counted: a1..a3 reached the target.
+                expect(ids(walk)).toEqual(['a1', 'a2', 'a3', 'x1']);
+                expect(walk.truncated).toBe(true);
+                expect(walk.nextStart).toBe(4);
+            });
+
+            test('counts alone does not stop a walk', async () => {
+                makePostRequest.mockResolvedValueOnce(page('p1', 'p2')).mockResolvedValueOnce(page('p3'));
+                const walk = await getEligiblePhotosWalk('c1', token, { limit: 2, counts: () => false });
+                expect(ids(walk)).toEqual(['p1', 'p2', 'p3']);
+                expect(walk.truncated).toBe(false);
+            });
+
+            test('nextStart reports where each kind of exit left off', async () => {
+                // Short page: start + (page + 1) * limit — past the one full page.
+                makePostRequest.mockResolvedValueOnce(page('p1', 'p2')).mockResolvedValueOnce(page('p3'));
+                expect((await getEligiblePhotosWalk('c1', token, { limit: 2 })).nextStart).toBe(4);
+                // A failed page: start + page * limit — the page is re-read.
+                makePostRequest.mockReset();
+                makePostRequest.mockResolvedValueOnce(page('p1', 'p2')).mockRejectedValueOnce(new Error('down'));
+                expect((await getEligiblePhotosWalk('c1', token, { limit: 2 })).nextStart).toBe(2);
+                // An unreadable page: same.
+                makePostRequest.mockReset();
+                makePostRequest.mockResolvedValueOnce(page('p1', 'p2')).mockResolvedValueOnce({ nope: true });
+                expect((await getEligiblePhotosWalk('c1', token, { limit: 2 })).nextStart).toBe(2);
+                // An unreadable FIRST page: start itself.
+                makePostRequest.mockReset();
+                makePostRequest.mockResolvedValueOnce(null);
+                expect((await getEligiblePhotosWalk('c1', token, { limit: 2 })).nextStart).toBe(0);
+                // The page cap: start + maxPages * limit.
+                makePostRequest.mockReset();
+                makePostRequest.mockResolvedValue(page('a', 'b'));
+                expect((await getEligiblePhotosWalk('c1', token, { limit: 2 })).nextStart).toBe(MAX_LIBRARY_PAGES * 2);
+                // With a skip the page ceiling is doubled.
+                makePostRequest.mockReset();
+                makePostRequest.mockResolvedValue(page('a', 'b'));
+                expect((await getEligiblePhotosWalk('c1', token, { limit: 2, skip: () => true })).nextStart).toBe(
+                    2 * MAX_LIBRARY_PAGES * 2,
+                );
+                // And a non-zero start is where the arithmetic begins.
+                makePostRequest.mockReset();
+                makePostRequest.mockResolvedValueOnce(page('p1', 'p2')).mockResolvedValueOnce(page('p3'));
+                expect((await getEligiblePhotosWalk('c1', token, { limit: 2, start: 4 })).nextStart).toBe(8);
             });
         });
 
@@ -556,6 +672,38 @@ describe('getEligiblePhotos usage option', () => {
     });
 });
 
+describe('getEligiblePhotos order mapping (librarySort)', () => {
+    const token = 'tok-123';
+    const { makePostRequest } = jest.mocked(require('../../src/ts/api/api-client') as typeof api_clientModule);
+
+    beforeEach(() => jest.clearAllMocks());
+
+    test.each([
+        ['votes', 'order=votes&sort=desc'],
+        ['newest', 'order=date&sort=desc'],
+        ['oldest', 'order=date&sort=asc'],
+    ])('%s is mapped to the fixed literals %s', async (order, wire) => {
+        makePostRequest.mockResolvedValueOnce({ items: [] });
+        await getEligiblePhotos('1', token, { order: invalid(order) });
+        expect(makePostRequest.mock.calls[0][2]).toBe(`c_id=1&limit=100&${wire}&start=0&usage=submit`);
+    });
+
+    test('a paginated walk carries its order on every page, continuations included', async () => {
+        const page = (start: number) => ({ items: Array.from({ length: 2 }, (_, i) => ({ id: `p${start + i}` })) });
+        makePostRequest
+            .mockResolvedValueOnce(page(0))
+            .mockResolvedValueOnce(page(2))
+            .mockResolvedValueOnce({ items: [] });
+        await getEligiblePhotos('1', token, { order: 'oldest', paginate: true, limit: 2 });
+        expect(makePostRequest).toHaveBeenCalledTimes(3);
+        for (const [, , body] of makePostRequest.mock.calls) {
+            expect(body).toContain('order=date&sort=asc');
+        }
+        // The walk's cross-page id dedupe is unchanged by the order.
+        expect(makePostRequest.mock.calls[1][2]).toContain('start=2');
+    });
+});
+
 describe('getEligiblePhotos readState: a failed first page is told apart from an empty library', () => {
     const token = 'tok-123';
     const { makePostRequest } = jest.mocked(require('../../src/ts/api/api-client') as typeof api_clientModule);
@@ -608,5 +756,11 @@ describe('getEligiblePhotos readState: a failed first page is told apart from an
         expect(await getEligiblePhotos('1', token)).toEqual([]);
         makePostRequest.mockResolvedValueOnce(null);
         expect(await getEligiblePhotos('1', token, { paginate: true })).toEqual([]);
+    });
+});
+
+describe('library limits', () => {
+    test('the keep cap is the walk page cap times the default page, so the two cannot drift', () => {
+        expect(MAX_LIBRARY_KEEP_PHOTOS).toBe(MAX_LIBRARY_PAGES * LIBRARY_BATCH_PHOTOS);
     });
 });

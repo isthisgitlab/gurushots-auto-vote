@@ -2,7 +2,18 @@
  * Fill pipeline, pick checks: the visual re-rank and the uncertain-subject record.
  */
 
-import { finalizePick, readChallengeTheme, buildThemeKeywords, scorePhoto, splitByChosen } from '../../photoPicker';
+import {
+    finalizePick,
+    readChallengeTheme,
+    buildThemeKeywords,
+    scorePhoto,
+    splitByChosen,
+    detectLetterPrefix,
+    letterTitleLeftovers,
+    wholeLabelStems,
+    startsWithLetter,
+} from '../../photoPicker';
+import * as lexicon from '../../semantic/lexicon';
 import { rankVisually } from '../../visionVerifier';
 import type { Challenge } from '../../../types/gurushots';
 import type { IgnoreWords, PickerPhoto, ScoredCandidate } from '../../../types/photoPicker';
@@ -97,7 +108,7 @@ const verifyFillPick = async (
  * A photo the user chose is never marked: they picked it on purpose, so
  * automatic Boost/Turbo must not skip it as a doubtful theme match.
  */
-const recordUncertainSubmission = ({
+const recordUncertainSubmission = async ({
     challenge,
     label,
     scored,
@@ -113,8 +124,27 @@ const recordUncertainSubmission = ({
     ignoreWords: IgnoreWords;
     chosenIds: ReadonlySet<string> | null;
 }) => {
-    if (label === 'manualFill' || !deps.entryAges || readChallengeTheme(challenge, ignoreWords).kind === 'open') return;
+    if (label === 'manualFill' || !deps.entryAges) return;
+    // The theme read tokenises the title in compound mode, which reads the
+    // lexicon's table — load it before reading the title. Never rejects.
+    await lexicon.isAvailable();
+    if (readChallengeTheme(challenge, ignoreWords).kind === 'open') return;
     const subjectWords = visualEvidence ? [] : buildThemeKeywords(challenge, ignoreWords);
+    // On a letter challenge the challenge's OWN rule ("label starts with S") is
+    // in force, so a matching letter label is evidence — but only when the
+    // letter is the title's ONLY subject: the whole negation-adjusted title,
+    // its letter phrases stripped, must tokenise to nothing (letterTitleLeftovers
+    // in the photoPicker module, read for every title). The whole-title gate,
+    // pinned title by title in tests/services/autoFill.chosen.test.ts: 'The
+    // Letter "S"' and 'Letter S - Challenge' are exempt — "challenge" is
+    // boilerplate, so the stripped title tokenises to nothing — while 'Letter
+    // S - 10 Hours' ("hours") and 'Color Hunt: The Letter S' ("color", "hunt")
+    // still name words, and a non-letter title keeps today's evidence rules.
+    const letter = detectLetterPrefix(challenge?.title);
+    const leftovers = letterTitleLeftovers(challenge, ignoreWords);
+    // leftovers is null exactly when letter is — both read the same title — so
+    // the guard above is what settles the non-null case for the check below.
+    const onlySubject = letter !== null && leftovers!.length === 0;
     for (const id of picked) {
         const entry = scored.find((candidate) => String(candidate.id) === String(id));
         // Should Include Tags are a user preference, not evidence that the
@@ -124,10 +154,16 @@ const recordUncertainSubmission = ({
             chosenIds?.has(String(id)) ||
             (visualEvidence
                 ? visualEvidence.has(id)
-                : entry.semantic !== 0 || scorePhoto(entry.photo, subjectWords) !== 0)
+                : entry.semantic !== 0 ||
+                  scorePhoto(entry.photo, subjectWords) !== 0 ||
+                  (onlySubject && startsWithLetter(wholeLabelStems(entry.photo), letter)))
         )
             continue;
-        const reason = visualEvidence ? 'visual check did not confirm the subject' : 'no subject match';
+        const reason = visualEvidence
+            ? 'visual check did not confirm the subject'
+            : leftovers !== null && leftovers.length > 0
+              ? `no subject match (the title also names ${leftovers.map((s) => `"${s}"`).join(', ')})`
+              : 'no subject match';
         try {
             deps.entryAges.markUncertain(challenge, id, Math.floor(Date.now() / 1000));
             deps.logger

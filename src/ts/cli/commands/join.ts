@@ -1,6 +1,7 @@
 /**
  * CLI join commands: `discover` lists un-joined challenges (the open ones, and the upcoming ones
- * starting within `discoverUpcomingHours`), and
+ * starting within `discoverUpcomingHours` — a capped one shows `players/max` (· Full when it is
+ * full), and a join-unlock price GuruShots did not send readably shows as `price unknown`), and
  * `join <id> [--yes]` joins one. Paid joins (join_coins > 0) print the coin
  * cost and require an explicit `--yes` — `join <id>` alone never spends coins.
  * Reuses the shared IPC handlers so the join safety model lives in one place.
@@ -14,6 +15,7 @@ import { challengeKind, challengePhotoCount, listedTags } from '../../format/cha
 import { endTimeOf, formatEndTimeIn } from '../../format/endTime';
 import * as settings from '../../settings';
 import { effectiveTimezone } from '../../settings/uiDefaults';
+import { joinFreshRefusal } from '../../services/VotingLogic';
 
 import type { NullEventHandlers } from '../../types/cli';
 import type { ForgetStatus } from '../../types/join';
@@ -39,13 +41,19 @@ type DiscoverItem = Pick<
     | 'join_coins'
     | 'start_time'
     | 'close_time'
+    | 'players'
+    | 'max_players'
+    | 'member'
 >;
 
 /** One row of the listing. Everything that came from the server is stripped of terminal control. */
 const discoverLine = (c: DiscoverItem, nowSec: number, timezone: string): string => {
+    // The join-safety read the auto-joiner also makes: what would stop this challenge from joining.
+    const refusal = joinFreshRefusal(c);
     // A number, whatever the server sent: it is printed as text.
     const coins = Number(c?.join_coins);
-    const cost = coins > 0 ? `${coins} coins` : 'free';
+    // A price GuruShots did not send readably is not implied to be free.
+    const cost = refusal === 'price-unknown' ? 'price unknown' : coins > 0 ? `${coins} coins` : 'free';
     const name = stripTerminalControl(c?.title || c?.url || 'untitled');
     const type = stripTerminalControl(challengeKind(c)?.label || '?');
     const photoCount = challengePhotoCount(c);
@@ -59,7 +67,14 @@ const discoverLine = (c: DiscoverItem, nowSec: number, timezone: string): string
     // The end time, as the challenge card shows it: in the app's timezone setting, not the device clock.
     const close = endTimeOf(c?.close_time);
     const ends = close === null ? '' : ` — ends ${formatEndTimeIn(close, timezone, 'en-GB')}`;
-    return `  • [${stripTerminalControl(String(c?.id))}] ${name} (${type})${photos} — ${cost}${tagList}${timing}${ends}`;
+    // Capacity, only when both sides of the fraction are readable: `players/max`, and · Full when nothing more can join.
+    const maxPlayers = Number(c?.max_players);
+    const players = Number(c?.players);
+    const capacity =
+        Number.isFinite(maxPlayers) && maxPlayers > 0 && Number.isFinite(players)
+            ? ` — ${players}/${maxPlayers}${refusal === 'full' ? ' · Full' : ''}`
+            : '';
+    return `  • [${stripTerminalControl(String(c?.id))}] ${name} (${type})${photos} — ${cost}${capacity}${tagList}${timing}${ends}`;
 };
 
 const showDiscover = async () => {
@@ -120,15 +135,8 @@ const balanceHint = (before: number | undefined, now: number | null): string => 
 
 // The line for a join that cannot tell whether its payment was taken: what is not known, why it is safe to retry,
 // and the way out when GuruShots shows the coins were not taken.
-const unconfirmedText = (
-    reason: 'unconfirmed' | 'earlier-payment',
-    challengeId: string | number,
-    balances: { before?: number; now: number | null },
-) => {
+const unconfirmedText = (challengeId: string | number, balances: { before?: number; now: number | null }) => {
     const rerun = `Re-run "join ${challengeId}": it only submits your photo, so you are never charged twice.`;
-    if (reason === 'earlier-payment') {
-        return `Challenge ${challengeId} has a payment record from an older version of the app, from before accounts were told apart, so it is not known whether the coins were taken, or by which GuruShots account used on this device. The join did not finish. ${rerun} The record cannot be forgotten here, because it may belong to another account: it stops applying to other accounts once the account that paid joins the challenge through this app, and otherwise clears by itself, at the next check after 30 days. If this is not the account that paid, you can join the challenge on the GuruShots website meanwhile.`;
-    }
     return `The payment for ${challengeId} got no answer, so it may or may not have gone through, and the join did not finish.${balanceHint(balances.before, balances.now)} ${rerun} If the GuruShots website shows the coins were not taken, run "forget-payment ${challengeId}" and join again.`;
 };
 
@@ -138,6 +146,9 @@ type SpendCap = { coins: number; named: boolean };
 const capText = (cap: SpendCap | undefined): string =>
     cap && !cap.named ? `the ${cap.coins} coins shown` : '--max-coins allows';
 
+// The shape every error outcome shares; the info-level lines stay inline.
+const error = (text: string): { level: 'error'; text: string } => ({ level: 'error', text });
+
 // Map a join outcome status to a user-facing line; null for an unknown status.
 const joinLine = (
     result: JoinOutcome | null | undefined,
@@ -145,53 +156,48 @@ const joinLine = (
     coinsNow: number | null,
     cap?: SpendCap,
 ): { level: 'info' | 'error'; text: string } | null => {
-    if (result?.error === 'invalid-args') return { level: 'error', text: INVALID_ID_TEXT };
+    if (result?.error === 'invalid-args') return error(INVALID_ID_TEXT);
     switch (result?.status) {
         case 'joined':
             return { level: 'info', text: `✅ Joined challenge ${challengeId}.` };
         case 'skipped-unaffordable':
-            return {
-                level: 'error',
-                text: `Not enough coins to join ${challengeId} (needs ${result?.cost}, you have ${result?.coins ?? '?'}).`,
-            };
+            return error(
+                `Not enough coins to join ${challengeId} (needs ${result?.cost}, you have ${result?.coins ?? '?'}).`,
+            );
         case 'balance-unknown':
-            return { level: 'error', text: `Could not read your coin balance — not joining ${challengeId}.` };
+            return error(`Could not read your coin balance — not joining ${challengeId}.`);
         case 'charged-pending-submit':
             if (result?.reason === 'no-photo') {
-                return {
-                    level: 'error',
-                    text: `Coins were already spent on ${challengeId}, but no photo qualifies for this challenge. Add an eligible photo, then re-run "join ${challengeId}" — you will NOT be charged again. If you use Must Include Tags, or have turned off Submit Even Without a Tag Match, those can also be what blocks the pick.`,
-                };
+                return error(
+                    `Coins were already spent on ${challengeId}, but no photo qualifies for this challenge. Add an eligible photo, then re-run "join ${challengeId}" — you will NOT be charged again. If you use Must Include Tags, or have turned off Submit Even Without a Tag Match, those can also be what blocks the pick.`,
+                );
             }
-            if (result?.reason === 'unconfirmed' || result?.reason === 'earlier-payment') {
-                return {
-                    level: 'error',
-                    text: unconfirmedText(result.reason, challengeId, { before: result.coinsBefore, now: coinsNow }),
-                };
+            if (result?.reason === 'unconfirmed') {
+                return error(unconfirmedText(challengeId, { before: result.coinsBefore, now: coinsNow }));
             }
-            return {
-                level: 'error',
-                text: `Coins were charged for ${challengeId} but the join did not complete. Re-run "join ${challengeId}" to retry the submit — you will NOT be charged again.`,
-            };
+            return error(
+                `Coins were charged for ${challengeId} but the join did not complete. Re-run "join ${challengeId}" to retry the submit — you will NOT be charged again.`,
+            );
         case 'failed-no-charge':
-            if (result?.reason === 'account-unknown') {
-                return {
-                    level: 'error',
-                    text: `Could not confirm which account is logged in, so this attempt to join ${challengeId} spent no coins. Try again shortly, or run "login" again.`,
-                };
-            }
             if (result?.reason === 'already-joined') {
                 return {
                     level: 'info',
                     text: `This account has already joined ${challengeId}; nothing was spent.`,
                 };
             }
-            return { level: 'error', text: `Could not join ${challengeId}. No coins were charged.` };
+            if (result?.reason === 'full') {
+                return error(
+                    `Challenge ${challengeId} is full, so this attempt to join it spent no coins. Join another one, or check it on gurushots.com.`,
+                );
+            }
+            if (result?.reason === 'price-unknown') {
+                return error(
+                    `The price for ${challengeId} could not be read as a usable price, so it is not known what joining costs — no coins were charged. Run "discover" again to refresh it, or join the challenge on gurushots.com.`,
+                );
+            }
+            return error(`Could not join ${challengeId}. No coins were charged.`);
         case 'skipped-no-photo':
-            return {
-                level: 'error',
-                text: `No eligible photo to submit for ${challengeId}. No coins were charged.`,
-            };
+            return error(`No eligible photo to submit for ${challengeId}. No coins were charged.`);
         case 'unavailable':
             return {
                 level: 'info',
@@ -203,19 +209,15 @@ const joinLine = (
                 text: `Challenge ${challengeId} has not started yet, so it can't be joined. Choose its photos now — list-photos --challenge=${challengeId}, then set-setting chosenPhotos '["<photo id>"]' --challenge=${challengeId} — and join once it starts.`,
             };
         case 'needs-confirm':
-            return {
-                level: 'error',
-                text: `Challenge ${challengeId} costs ${Number(result?.cost)} coins, more than ${capText(cap)}. Nothing was spent — to pay this cost, re-run: join ${challengeId} --yes --max-coins=${Number(result?.cost)}`,
-            };
+            return error(
+                `Challenge ${challengeId} costs ${Number(result?.cost)} coins, more than ${capText(cap)}. Nothing was spent — to pay this cost, re-run: join ${challengeId} --yes --max-coins=${Number(result?.cost)}`,
+            );
         case 'busy':
             return { level: 'info', text: `A join is already in progress for ${challengeId}. Try again in a moment.` };
         case 'not-authenticated':
-            return { level: 'error', text: `Not logged in — run "login" first, then join ${challengeId}.` };
+            return error(`Not logged in — run "login" first, then join ${challengeId}.`);
         case 'fetch-failed':
-            return {
-                level: 'error',
-                text: `Could not reach GuruShots to join ${challengeId}. Check your connection and try again.`,
-            };
+            return error(`Could not reach GuruShots to join ${challengeId}. Check your connection and try again.`);
         default:
             return null;
     }
@@ -303,20 +305,10 @@ const FORGET_LINES: Record<ForgetStatus, ForgetLine> = {
         text: (id) =>
             `Nothing to forget for ${id}: no unconfirmed payment is recorded for it (a payment known to have been taken cannot be forgotten).`,
     },
-    'legacy-record': {
-        level: 'error',
-        text: (id) =>
-            `The payment record for ${id} is from an older version of the app and may belong to another GuruShots account used on this device, so it cannot be forgotten here. It stops applying to other accounts once the account that paid joins the challenge through this app, and otherwise clears by itself, at the next check after 30 days. Nothing was changed.`,
-    },
     busy: {
         level: 'error',
         text: (id) =>
             `A join of ${id} is in progress, or another process is using the saved payment records. Nothing was changed. Try again in a moment.`,
-    },
-    'account-unknown': {
-        level: 'error',
-        text: () =>
-            'Could not confirm which account is logged in, so nothing was changed. Try again shortly, or run "login" again.',
     },
     'locks-unavailable': {
         level: 'error',

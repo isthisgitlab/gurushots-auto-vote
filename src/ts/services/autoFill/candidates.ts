@@ -4,11 +4,21 @@
  * ignore-words lookup, and the semantic scores the picker ranks with.
  */
 
-import { buildSearchTerms, detectLetterPrefix, parseNegation, readChallengeTheme, stripTags } from '../photoPicker';
+import {
+    buildSearchTerms,
+    buildThemeKeywords,
+    compoundSpellings,
+    detectLetterPrefix,
+    descriptionExclusions,
+    parseNegation,
+    readChallengeTheme,
+    stripTags,
+} from '../photoPicker';
 import { getSemanticScores } from '../semantic';
 import * as lexicon from '../semantic/lexicon';
 import { resolveTermsToTags } from '../tagResolver';
 import { resolveMemberId } from './memberIdentity';
+import { hasEligible, readUnfilteredLibrary } from './unfilteredLibrary';
 
 import type { Challenge } from '../../types/gurushots';
 import type { ChallengeTheme, IgnoreWords, PickerPhoto, SemanticScore, TagOptions } from '../../types/photoPicker';
@@ -37,6 +47,16 @@ const resolveSemanticScores = async (
         return null;
     }
 };
+
+/**
+ * The one wording for the tag-search-missed warning — the log catalog's English
+ * template matches against exactly this text, so the two drift together. The
+ * terms are the STEMMED forms ("stair" for a challenge titled "Stairs").
+ */
+const formatTagSearchFallbackMessage = (label: string, tag: string, terms: string[], next: string): string =>
+    `${label}: tag search found nothing for ${tag} — ` +
+    `${terms.map((t) => `"${t}"`).join(' or ')} (as word stems) and related tags ` +
+    `returned no eligible photo, so the whole library is ranked semantically; popularity breaks ties. ${next}`;
 
 /**
  * The user's ignore-words list for this challenge, or null.
@@ -120,56 +140,31 @@ const THEMED_SEARCH_MIN_BUDGET_MS = 1500;
  * read from. The app keeps no copy of challenge descriptions, so these lines
  * are what a misread theme can be checked (and the rule measured) against.
  */
-const describeTheme = (theme: ChallengeTheme, challenge: Challenge): string => {
+const describeTheme = (theme: ChallengeTheme, challenge: Challenge, ignoreWords: IgnoreWords): string => {
+    const letter = detectLetterPrefix(challenge?.title);
+    const upper = letter === null ? null : letter.toUpperCase();
+    // A letter challenge that still names a subject ("A is for Apple") says so.
+    const keptSubject = upper === null ? [] : buildThemeKeywords(challenge, ignoreWords);
+    const subjectNote = keptSubject.length > 0 ? `; its subject is ${keptSubject.map((s) => `"${s}"`).join(', ')}` : '';
+    const letterVerdict =
+        upper === null
+            ? null
+            : `is a letter challenge ("${upper}"), so only photos with a label starting with "${upper}" are ` +
+              `considered (the whole library if none has one)${subjectNote}`;
     const verdict =
         theme.kind === 'open'
             ? 'reads as an open theme, so its title and description are not matched against your photos'
             : theme.kind === 'subject'
               ? `has the subject ${theme.subjects.map((s) => `"${s}"`).join(', ')} (its description repeats it)`
-              : 'has no subject its description confirms, so its title is searched head-noun first';
+              : (letterVerdict ?? 'has no subject its description confirms, so its title is searched head-noun first');
+    // A description can rule a subject off-topic on its own. Only the
+    // fixed concept names go in the line, never matched description text.
+    const ruled = descriptionExclusions(challenge, ignoreWords);
+    const exclusion = ruled.length > 0 ? `; its description rules out ${ruled.join(', ')}` : '';
     const description = stripTags(String(challenge.welcome_message ?? ''))
         .replace(/\s+/g, ' ')
         .trim();
-    return `${verdict}. Description: "${description}"`;
-};
-
-/** Whether a candidate list holds a photo the challenge allows. */
-const hasEligible = (list: PickerPhoto[]) =>
-    list.some((p) => p && p.permission && p.permission.allowed === true && p.id);
-
-/**
- * The unfiltered library read: the vote-ordered walk, then the API's default order when that holds nothing
- * eligible. A caller that started `trace.readFailed` at false is told when both reads failed on their first page.
- */
-const readUnfilteredLibrary = async (
-    challengeId: string | number,
-    token: string,
-    getEligiblePhotos: RankDeps['getEligiblePhotos'],
-    {
-        logLabel,
-        usageOpt,
-        trace,
-    }: { logLabel: string; usageOpt: { usage?: string }; trace?: { walkedUnfiltered: boolean; readFailed?: boolean } },
-): Promise<PickerPhoto[]> => {
-    // Only a caller that asked (by starting `readFailed` at false) gets the read tracked.
-    const byVotesRead = { firstPageFailed: false };
-    const defaultRead = { firstPageFailed: false };
-    const tracked = (readState: typeof byVotesRead) => (trace?.readFailed === undefined ? {} : { readState });
-    const byVotes = await getEligiblePhotos(challengeId, token, {
-        paginate: true,
-        logLabel,
-        ...tracked(byVotesRead),
-        ...usageOpt,
-    });
-    if (hasEligible(byVotes)) return byVotes;
-    const byDefault = await getEligiblePhotos(challengeId, token, {
-        order: 'default',
-        logLabel,
-        ...tracked(defaultRead),
-        ...usageOpt,
-    });
-    if (trace && byVotesRead.firstPageFailed && defaultRead.firstPageFailed) trace.readFailed = true;
-    return byDefault;
+    return `${verdict}${exclusion}. Description: "${description}"`;
 };
 
 /**
@@ -269,7 +264,7 @@ const fetchCandidatesForChallenge = async (
     const theme = readChallengeTheme(challenge, ignoreWords);
     logger
         .withCategory(logLabel)
-        .info(`${logLabel}: ${logger.challengeTag(challenge)} ${describeTheme(theme, challenge)}`, null);
+        .info(`${logLabel}: ${logger.challengeTag(challenge)} ${describeTheme(theme, challenge, ignoreWords)}`, null);
     // Shared deadline for the whole themed phase, so raw and related searches
     // and the tag-resolver retry that may follow them split ONE budget instead of
     // each taking a full one (see THEMED_SEARCH_BUDGET_MS). Floored rather than
@@ -340,7 +335,14 @@ const fetchCandidatesForChallenge = async (
     };
     if (terms.length > 0) {
         const fromUserTags = buildSearchTerms(null, tagOpts).length > 0;
-        const union = await searchUnion(terms);
+        // A compound term ("close-up") is also searched under its two derived
+        // spellings ("close up", "closeup"), so a library that spells the
+        // subject differently is still found. The spellings ride ONLY on this
+        // raw-terms search — the related-terms and resolved-tag searches below
+        // keep the canonical terms — costing at most two extra walks per
+        // compound title term inside the shared themed budget.
+        const spellings = Array.from(new Set(terms.flatMap((term) => compoundSpellings(term))));
+        const union = await searchUnion([...terms, ...spellings]);
         const relatedUnion = await searchUnion(fromUserTags ? [] : lexicon.relatedSearchTerms(terms));
         if (hasEligible(union) || hasEligible(relatedUnion)) {
             return [...new Map([...union, ...relatedUnion].map((photo) => [photo.id, photo])).values()];
@@ -398,12 +400,7 @@ const fetchCandidatesForChallenge = async (
             : 'Review the selected photo; the existing labels did not identify a themed match.';
         logger
             .withCategory(logLabel)
-            .warning(
-                `${logLabel}: nothing found by tag search for ${logger.challengeTag(challenge)} — searches for ` +
-                    `${terms.map((t) => `"${t}"`).join(' or ')} (matched as word stems) and related tags ` +
-                    `returned no eligible photo, so the whole library will be ranked semantically; popularity breaks ties when nothing matches. ${next}`,
-                null,
-            );
+            .warning(formatTagSearchFallbackMessage(logLabel, logger.challengeTag(challenge), terms, next), null);
     }
     // paginate: a single page is the 100 most recently uploaded eligible photos,
     // which would silently exclude a user's older, strongest work from ever being
@@ -417,4 +414,4 @@ const fetchCandidatesForChallenge = async (
     return readUnfilteredLibrary(challengeId, token, getEligiblePhotos, { logLabel, usageOpt, trace });
 };
 
-export { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge };
+export { resolveSemanticScores, resolveIgnoreWords, formatTagSearchFallbackMessage, fetchCandidatesForChallenge };

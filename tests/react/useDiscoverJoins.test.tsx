@@ -9,7 +9,7 @@ import { mockApi } from './helpers/setup';
 test('confirming with nothing pending spends nothing: no join is sent, and nothing is left busy or answered', async () => {
     const refetch = jest.fn<Promise<void>, []>().mockResolvedValue(undefined);
     const onJoined = jest.fn<void, []>();
-    const { result } = renderHook(() => useDiscoverJoins({ items: [], isLoggedIn: true, refetch, onJoined }));
+    const { result } = renderHook(() => useDiscoverJoins({ items: [], refetch, onJoined }));
     expect(result.current.confirm).toBeNull();
 
     await act(() => result.current.onConfirm());

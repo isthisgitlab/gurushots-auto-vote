@@ -2,7 +2,6 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
 import { getGroupApplicability } from '@/utils/challengeApplicability';
 import { formatSettingDefault } from '@/utils/formatters';
-import { interp } from '@/utils/interp';
 import { sourceBadgeTone } from '@/utils/customizationTone';
 import type { CustomizationSource } from '@/utils/customizationTone';
 import { getScheduleShift } from '../../../services/scheduleRemap';
@@ -21,12 +20,17 @@ import type { HintsFor } from '../../../types/settingsEditor';
 
 /**
  * What every cell of a per-challenge settings group reads: the challenge, the
- * global defaults, useChallengeOverrides' state and the modal's hint resolver.
+ * global defaults, the form state (the sparse override map and its per-key
+ * edits — useChallengeOverrides' or useProfileEditor's), and the modal's hint
+ * resolver.
  */
 export interface ChallengeGroupContext {
     challenge: Challenge | null | undefined;
     defaults: Record<string, unknown> | null | undefined;
-    form: ReturnType<typeof useChallengeOverrides>;
+    form: Pick<
+        ReturnType<typeof useChallengeOverrides>,
+        'overrides' | 'profileValues' | 'inheritedOf' | 'ruleSourceOf' | 'changeOverride' | 'clearOverride'
+    >;
     hintsFor: HintsFor;
 }
 
@@ -50,30 +54,33 @@ function SourceBadge({
 
 /**
  * Where a setting's shown value comes from: override, a rule that sets it directly (named), the
- * rule's profile, or the global default.
+ * rule's profile, or the global default. The override badge's wording follows the modal: a
+ * challenge's own edit is "Overridden", the Profiles tab's is "Set in profile".
  */
 function ValueSourceBadge({
     hasOverride,
     ruleSource,
     hasProfileValue,
+    overriddenLabelKey = 'app.overridden',
 }: {
     hasOverride: boolean;
     ruleSource: RuleSource | undefined;
     hasProfileValue: boolean;
+    overriddenLabelKey?: string;
 }) {
     const { t } = useTranslation();
     if (hasOverride)
         return (
             <SourceBadge source="manual" icon="⚙️">
-                {t('app.overridden')}
+                {t(overriddenLabelKey)}
             </SourceBadge>
         );
     if (ruleSource !== undefined) {
         // A rule without a title is named by its place in the list, in the UI's language.
-        const title = ruleSource.title ?? interp(t('app.ruleNumber'), { n: ruleSource.index });
+        const title = ruleSource.title ?? t('app.ruleNumber', { n: ruleSource.index });
         return (
             <SourceBadge source="rule" icon="📏">
-                {interp(t('app.fromRule'), { title })}
+                {t('app.fromRule', { title })}
             </SourceBadge>
         );
     }
@@ -117,7 +124,13 @@ function ChallengeSettingCell({
     defaults,
     form,
     hintsFor,
-}: ChallengeGroupContext & { settingKey: string; config: SerializableSchemaEntry; applicable: boolean }) {
+    overriddenLabelKey,
+}: ChallengeGroupContext & {
+    settingKey: string;
+    config: SerializableSchemaEntry;
+    applicable: boolean;
+    overriddenLabelKey?: string;
+}) {
     const { t } = useTranslation();
     const hasOverride = key in form.overrides;
     const hasProfileValue = Object.prototype.hasOwnProperty.call(form.profileValues, key);
@@ -130,13 +143,14 @@ function ChallengeSettingCell({
 
     return (
         <div className={SETTING_CELL_CLASS}>
-            <SettingLabel inputId={inputId} type={config.type}>
+            <SettingLabel inputId={inputId} type={config.type} config={config}>
                 <span className="font-medium">{t(config.label)}</span>
                 <span className="flex gap-1">
                     <ValueSourceBadge
                         hasOverride={hasOverride}
                         ruleSource={form.ruleSourceOf(key)}
                         hasProfileValue={hasProfileValue}
+                        overriddenLabelKey={overriddenLabelKey}
                     />
                 </span>
             </SettingLabel>
@@ -153,9 +167,10 @@ function ChallengeSettingCell({
             />
             {scheduleShift > 0 && (
                 <ToneNote tone="info" className="text-xs mt-1">
-                    {t('app.autoSubmitScheduleShiftHint')
-                        .replace('{0}', String(shiftedChallenge.max_photo_submits))
-                        .replace('{1}', String(shiftedChallenge.max_photo_submits + scheduleShift))}
+                    {t('app.autoSubmitScheduleShiftHint', {
+                        count: shiftedChallenge.max_photo_submits,
+                        '1': String(shiftedChallenge.max_photo_submits + scheduleShift),
+                    })}
                 </ToneNote>
             )}
             <SettingHintList hints={hintsFor(key)} />
@@ -183,7 +198,14 @@ export function ChallengeSettingsGroup({
     defaults,
     form,
     hintsFor,
-}: ChallengeGroupContext & { id: string; label: string; entries: Array<[string, SerializableSchemaEntry]> }) {
+    overriddenLabelKey,
+}: ChallengeGroupContext & {
+    id: string;
+    label: string;
+    entries: Array<[string, SerializableSchemaEntry]>;
+    /** The override badge's wording; "Overridden" unless the modal renames it (the Profiles tab). */
+    overriddenLabelKey?: string;
+}) {
     const { t } = useTranslation();
     const { applicable, reasonKey } = getGroupApplicability(id, challenge);
     // When a group can't apply, tie its heading + reason note to the section
@@ -230,6 +252,7 @@ export function ChallengeSettingsGroup({
                         defaults={defaults}
                         form={form}
                         hintsFor={hintsFor}
+                        overriddenLabelKey={overriddenLabelKey}
                     />
                 ))}
             </div>

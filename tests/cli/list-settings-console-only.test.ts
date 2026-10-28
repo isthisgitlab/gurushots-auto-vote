@@ -38,13 +38,11 @@ const { listSettings, listGlobalDefaults } =
 beforeEach(() => {
     consoleLines.length = 0;
     persisted.length = 0;
-    settings.getDefaultSettings.mockReturnValue(
-        invalid({ app: {}, auth: { token: '', lastUsername: '', chosenPhotosMemberId: '' } }),
-    );
+    settings.getDefaultSettings.mockReturnValue(invalid({ app: {}, auth: { token: '', lastUsername: '' } }));
     settings.loadSettings.mockReturnValue(
         invalid({
             app: { note: 'password: hunter2' },
-            auth: { token: 'tok-secret', lastUsername: 'me@example.com', chosenPhotosMemberId: 'member-secret' },
+            auth: { token: 'tok-secret', lastUsername: 'me@example.com' },
             defaults: { chosenPhotos: ['photo-secret'] },
             challenges: { '7': { values: { chosenPhotos: ['photo-secret-2'] } } },
         }),
@@ -55,7 +53,7 @@ test('list-settings prints to the console only, with the account masked', () => 
     listSettings();
     expect(persisted.filter((line) => line.level !== 'error')).toEqual([]);
     const printed = consoleLines.join('\n');
-    for (const secret of ['tok-secret', 'me@example.com', 'member-secret', 'photo-secret', 'hunter2']) {
+    for (const secret of ['tok-secret', 'me@example.com', 'photo-secret', 'hunter2']) {
         expect(printed).not.toContain(secret);
     }
     // The keys keep their case (a log entry would have capitalised them).
@@ -78,14 +76,11 @@ test('list-global-defaults prints to the console only, photo lists as counts', (
 });
 
 test('an empty private setting reads "(not set)" rather than "[REDACTED]"', () => {
-    settings.loadSettings.mockReturnValue(
-        invalid({ auth: { lastUsername: '', chosenPhotosMemberId: 'member-secret' } }),
-    );
+    settings.loadSettings.mockReturnValue(invalid({ auth: { lastUsername: '' } }));
     listSettings();
     const lines = (key: string) =>
         consoleLines.slice(consoleLines.indexOf(`${key}:`) + 1, consoleLines.indexOf(`${key}:`) + 4);
     expect(lines('lastUsername')).toEqual(['  Current: (not set)', '  Default: (not set)', '  Status:  Default ✅']);
-    expect(lines('chosenPhotosMemberId')[0]).toBe('  Current: [REDACTED]');
 });
 
 test('control and format characters in a stored key or value never reach the terminal', () => {

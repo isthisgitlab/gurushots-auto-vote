@@ -49,7 +49,7 @@ export function LicensesModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
             {state.status === 'error' && (
                 <div role="alert" className="alert alert-error py-2 text-sm">
                     <span className="flex-1">{t('about.licensesLoadError')}</span>
-                    <button type="button" className="btn btn-sm" onClick={retry}>
+                    <button type="button" className="btn btn-sm max-sm:min-h-10" onClick={retry}>
                         {t('about.licensesRetry')}
                     </button>
                 </div>

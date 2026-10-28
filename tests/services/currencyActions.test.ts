@@ -146,6 +146,59 @@ describe('live re-check (shared by every spend)', () => {
     });
 });
 
+describe('marked and prune-unsafe reads refuse the spend', () => {
+    test('a marked challenge → data-incomplete, nothing spent', async () => {
+        const strategy = stubStrategy({ challenge: makeChallenge({ dataIssues: ['start_time'] }) });
+        expect(await unlockBoostWithKey(555, 'tok', { strategy, logger })).toEqual({
+            ok: false,
+            outcome: 'data-incomplete',
+        });
+        expect(strategy.keyUnlock).not.toHaveBeenCalled();
+    });
+
+    test('a swap refuses a marked challenge before its entry checks', async () => {
+        const strategy = stubStrategy({ challenge: makeChallenge({ dataIssues: ['ranking.entries'] }) });
+        expect((await swapEntry(555, 'entered', 'fresh', 'tok', { strategy, logger })).outcome).toBe('data-incomplete');
+        expect(strategy.swapPhoto).not.toHaveBeenCalled();
+    });
+
+    test('a challenge missing from a prune-unsafe read is data-incomplete, not not-available', async () => {
+        const strategy = stubStrategy();
+        strategy.getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [], pruneUnsafe: true });
+        expect(await unlockBoostWithKey(555, 'tok', { strategy, logger })).toEqual({
+            ok: false,
+            outcome: 'data-incomplete',
+        });
+        expect(strategy.keyUnlock).not.toHaveBeenCalled();
+    });
+
+    test('a challenge sent without an entries key is not marked, so the spend proceeds', async () => {
+        // entries is documented optional: its absence never marks (it reads as
+        // no entries), so the spend goes ahead instead of refusing.
+        const challenge = makeChallenge();
+        delete (challenge.member.ranking as { entries?: unknown }).entries;
+        const strategy = stubStrategy({ challenge });
+        expect(await unlockBoostWithKey(555, 'tok', { strategy, logger })).toEqual({ ok: true, outcome: 'ok' });
+        expect(strategy.keyUnlock).toHaveBeenCalledTimes(1);
+    });
+
+    test('an unanswered swap whose settling re-read is marked stays unclear', async () => {
+        // The spend sees a clean challenge; between the spend and the settle the mark lands.
+        const strategy = stubStrategy();
+        strategy.swapPhoto = jest.fn().mockResolvedValue({ ok: false, raw: null, unclear: true });
+        strategy.getActiveChallenges = jest
+            .fn()
+            .mockResolvedValueOnce({ challenges: [makeChallenge()] })
+            .mockResolvedValueOnce({ challenges: [makeChallenge({ dataIssues: ['close_time'] })] });
+        expect(await swapEntry(555, 'entered', 'fresh', 'tok', { strategy, logger })).toEqual({
+            ok: false,
+            outcome: 'unclear',
+        });
+        // The spend was sent exactly once — never retried, never read as failed.
+        expect(strategy.swapPhoto).toHaveBeenCalledTimes(1);
+    });
+});
+
 describe('fillExposure', () => {
     test('sends the profile member id', async () => {
         const strategy = stubStrategy();
@@ -282,40 +335,55 @@ describe('swapEntry', () => {
         expect(strategy.swapPhoto).toHaveBeenCalledWith(555, 'old', 'fresh', 'tok');
     });
 
-    test('drops the photo chooser’s cached listing of the challenge, for every account', async () => {
+    test('without a guard a guru-picked live entry is swapped out anyway (manual swaps pass none)', async () => {
+        const challenge = makeChallenge();
+        challenge.member.ranking.entries![1].guru_pick = true; // 'old' is guru-picked
+        const strategy = stubStrategy({ challenge });
+        expect(await swapEntry(555, 'old', 'fresh', 'tok', { strategy, logger })).toEqual({
+            ok: true,
+            outcome: 'ok',
+        });
+        expect(strategy.swapPhoto).toHaveBeenCalledWith(555, 'old', 'fresh', 'tok');
+    });
+
+    test('a guard refusing the live entry spends nothing', async () => {
+        const strategy = stubStrategy();
+        const guard = jest.fn((entry: { id?: unknown } | undefined) => entry?.id !== 'old');
+        expect(await swapEntry(555, 'old', 'fresh', 'tok', { strategy, logger, guard })).toEqual({
+            ok: false,
+            outcome: 'not-available',
+        });
+        expect(guard).toHaveBeenCalledWith(expect.objectContaining({ id: 'old' }));
+        expect(strategy.swapPhoto).not.toHaveBeenCalled();
+    });
+
+    test('a guard that allows the live entry lets the swap through', async () => {
+        const strategy = stubStrategy();
+        expect(await swapEntry(555, 'old', 'fresh', 'tok', { strategy, logger, guard: () => true })).toEqual({
+            ok: true,
+            outcome: 'ok',
+        });
+        expect(strategy.swapPhoto).toHaveBeenCalledWith(555, 'old', 'fresh', 'tok');
+    });
+
+    test('drops the photo chooser’s cached listing of the challenge', async () => {
         const cache =
             require('../../src/ts/services/libraryCache') as typeof import('../../src/ts/services/libraryCache');
-        cache.writeListing('tok', 555, {
+        const listing = () => ({
             photos: [],
             memberId: null,
             wonIds: [],
             wonCount: 0,
             truncated: false,
+            nextStart: 0,
             allowedKnown: true,
             readAtMs: Date.now(),
         });
-        cache.writeListing('other', 555, {
-            photos: [],
-            memberId: null,
-            wonIds: [],
-            wonCount: 0,
-            truncated: false,
-            allowedKnown: true,
-            readAtMs: Date.now(),
-        });
-        cache.writeListing('tok', 556, {
-            photos: [],
-            memberId: null,
-            wonIds: [],
-            wonCount: 0,
-            truncated: false,
-            allowedKnown: true,
-            readAtMs: Date.now(),
-        });
+        cache.writeListing(555, listing());
+        cache.writeListing(556, listing());
         await swapEntry(555, 'old', 'fresh', 'tok', { strategy: stubStrategy(), logger });
-        expect(cache.readFresh('tok', 555)).toBeNull();
-        expect(cache.readFresh('other', 555)).toBeNull();
-        expect(cache.readFresh('tok', 556)).not.toBeNull();
+        expect(cache.readFresh(555)).toBeNull();
+        expect(cache.readFresh(556)).not.toBeNull();
         cache.clearLibraryCache();
     });
 
@@ -439,17 +507,18 @@ describe('swap back', () => {
         const strategy = stubStrategy({ challenge: swappedChallenge() });
         const ledger = createMemoryLedger();
         ledger.onSwapped(555, { id: 'orig', member_id: 'mem1', boosted: true }, 'repl');
-        cache.writeListing('tok', 555, {
+        cache.writeListing(555, {
             photos: [],
             memberId: null,
             wonIds: [],
             wonCount: 0,
             truncated: false,
+            nextStart: 0,
             allowedKnown: true,
             readAtMs: Date.now(),
         });
         await swapBack(555, 'repl', 'tok', { strategy, logger, ledger });
-        expect(cache.readFresh('tok', 555)).toBeNull();
+        expect(cache.readFresh(555)).toBeNull();
         cache.clearLibraryCache();
     });
 

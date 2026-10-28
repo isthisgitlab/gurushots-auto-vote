@@ -37,6 +37,8 @@ type MissionKind = 'join' | 'fill' | 'turbo' | 'boost' | 'vote';
 export type FillMission = { id: string; required: number; current: number; remaining: number; spentThisPass: number };
 
 /** How many actions active missions still need, with each Turbo need paired to its deadline.
+ * `join` is what a join mission still needs, joined early only while the open
+ * list can complete it (see runJoinPass).
  */
 export type MissionNeeds = Record<MissionKind, number> & {
     turboRequirements?: Array<{ remaining: number; expiresAtSec: number | null }>;
@@ -61,7 +63,8 @@ const ALL_STAR = /all.?star/i;
 const FLASH = /\bflash/i;
 
 // The settings that follow each mission kind. Joining early serves a turbo
-// mission too: a turbo is only winnable in a joined challenge.
+// mission — a turbo is only winnable in a joined challenge — and a join
+// mission while the open list can complete it.
 const MISSION_SETTINGS: Readonly<
     Record<
         MissionKind,

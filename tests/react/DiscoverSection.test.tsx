@@ -7,19 +7,28 @@
 
 import { act, render, screen, fireEvent, waitFor, within } from './helpers/test-utils';
 import { DiscoverSection } from '@/components/app/DiscoverSection';
-import { fireSettingsChanged, mockApi, mockTranslator } from './helpers/setup';
+import { fillTemplate, fireSettingsChanged, mockApi, mockTranslator } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
-import { app } from '../../src/ts/translations/english';
+import { app, errors } from '../../src/ts/translations/english';
+import { createTranslator } from '../../src/ts/translations/translator';
 import type { OpenChallenge } from '../../src/ts/types/gurushots';
 import type { WindowApi } from '../../src/ts/types/ipc';
 import type { RendererGlobals } from '../../src/ts/types/capacitor';
 import type { JoinOutcome } from '@/components/app/DiscoverSection';
+import type { Translate } from '../../src/ts/translations/translator';
 
 type JoinApi = WindowApi['joinChallenge'];
 type ListApi = WindowApi['getMemberChallenges'];
 // Typed mocks of the two calls this file drives; what they answer is a partial fixture, so it goes through invalid().
 const joinMock = () => jest.fn<ReturnType<JoinApi>, Parameters<JoinApi>>();
 const listMock = () => jest.fn<ReturnType<ListApi>, Parameters<ListApi>>();
+
+// The components hand the placeholder values to t as a second argument now; fill
+// them like the real t does, so an assertion on composed text keeps reading.
+const withVars =
+    (impl: (key: string) => string) =>
+    (key: string, vars?: Record<string, string | number | null | undefined>): string =>
+        fillTemplate(impl(key), vars);
 
 const items = invalid<OpenChallenge[]>([
     {
@@ -71,7 +80,9 @@ test('renders collapsed by default with an open-count badge', async () => {
 });
 
 test('the count badge is an image named with its count, not a bare number', async () => {
-    mockTranslator.t.mockImplementation((key) => (key === 'app.discoverCountLabel' ? '{count} open challenges' : key));
+    mockTranslator.t.mockImplementation(
+        withVars((key) => (key === 'app.discoverCountLabel' ? '{count} open challenges' : key)),
+    );
     try {
         render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
         await screen.findByText('Free One');
@@ -143,7 +154,9 @@ test('a price that rose after it was shown spends nothing: the row says so, and 
     window.api.joinChallenge = joinMock().mockImplementation(async (_id, spendCoins) =>
         invalid(priceAsk(spendCoins ? 150 : 100)),
     );
-    mockTranslator.t.mockImplementation((key) => (key === 'app.discoverPriceChanged' ? 'Now {coins} coins' : key));
+    mockTranslator.t.mockImplementation(
+        withVars((key) => (key === 'app.discoverPriceChanged' ? 'Now {count} coins' : key)),
+    );
     try {
         render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
         await screen.findByText('Paid One');
@@ -200,9 +213,9 @@ describe('what a join answered is announced', () => {
 describe('a price that rose', () => {
     const confirmTexts = (key: string) =>
         key === 'app.discoverConfirmBody'
-            ? 'Costs {coins}'
+            ? 'Costs {count}'
             : key === 'app.discoverConfirmSpend'
-              ? 'Spend {coins}'
+              ? 'Spend {count}'
               : key;
 
     test('the next confirmation, before the list is read again, shows and names the new cost', async () => {
@@ -215,7 +228,7 @@ describe('a price that rose', () => {
             // Asked at 100, confirmed at 100 but now 150 (so repriced), asked again: 150.
             invalid(spendCoins ? priceAsk(150) : priceAsk(asked++ === 0 ? 100 : 150)),
         );
-        mockTranslator.t.mockImplementation(confirmTexts);
+        mockTranslator.t.mockImplementation(withVars(confirmTexts));
         try {
             render(
                 <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
@@ -248,7 +261,7 @@ describe('a price that rose', () => {
         window.api.joinChallenge = joinMock().mockImplementation(async (_id, spendCoins) =>
             invalid(spendCoins ? priceAsk(150) : priceAsk(asked++ === 0 ? 100 : 120)),
         );
-        mockTranslator.t.mockImplementation(confirmTexts);
+        mockTranslator.t.mockImplementation(withVars(confirmTexts));
         try {
             render(
                 <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
@@ -279,7 +292,9 @@ test.each([
         window.api.joinChallenge = joinMock()
             .mockResolvedValueOnce(invalid(answer))
             .mockResolvedValue(invalid({ success: true, status: 'joined' }));
-        mockTranslator.t.mockImplementation((key) => (key === 'app.discoverConfirmSpend' ? 'Spend {coins}' : key));
+        mockTranslator.t.mockImplementation(
+            withVars((key) => (key === 'app.discoverConfirmSpend' ? 'Spend {count}' : key)),
+        );
         try {
             render(
                 <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
@@ -324,12 +339,14 @@ describe('a paid row that was already charged', () => {
         window.api.joinChallenge = joinMock().mockImplementation(async (_id, spendCoins) =>
             invalid(spendCoins ? { success: true, status: 'joined' } : priceAsk(120)),
         );
-        mockTranslator.t.mockImplementation((key) =>
-            key === 'app.discoverConfirmBody'
-                ? 'Costs {coins}'
-                : key === 'app.discoverConfirmSpend'
-                  ? 'Spend {coins}'
-                  : key,
+        mockTranslator.t.mockImplementation(
+            withVars((key) =>
+                key === 'app.discoverConfirmBody'
+                    ? 'Costs {count}'
+                    : key === 'app.discoverConfirmSpend'
+                      ? 'Spend {count}'
+                      : key,
+            ),
         );
         try {
             render(
@@ -388,12 +405,14 @@ describe('a paid row that was already charged', () => {
                           release[Number(id)] = () => resolve(invalid(priceAsk(id === 11 ? 100 : 200)));
                       }),
             );
-            mockTranslator.t.mockImplementation((key) =>
-                key === 'app.discoverConfirmBody'
-                    ? 'Join {title} for {coins}'
-                    : key === 'app.discoverConfirmSpend'
-                      ? 'Spend {coins}'
-                      : key,
+            mockTranslator.t.mockImplementation(
+                withVars((key) =>
+                    key === 'app.discoverConfirmBody'
+                        ? 'Join {title} for {count}'
+                        : key === 'app.discoverConfirmSpend'
+                          ? 'Spend {count}'
+                          : key,
+                ),
             );
             try {
                 render(
@@ -424,71 +443,6 @@ describe('a paid row that was already charged', () => {
                 mockTranslator.t.mockImplementation((key) => key);
             }
         });
-    });
-
-    test("a different account sees none of the previous one's outcomes or dialogs", async () => {
-        window.api.joinChallenge = joinMock().mockResolvedValue(
-            invalid({ success: false, status: 'charged-pending-submit' }),
-        );
-        const view = render(
-            <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
-        );
-        await screen.findByText('Paid One');
-        fireEvent.click(screen.getByText('app.discoverJoinPaid'));
-        await screen.findByText('app.discoverChargedPending');
-        // Logged out, and in again as someone else.
-        view.rerender(<DiscoverSection isLoggedIn={false} bankroll={null} onJoined={jest.fn()} timezone="UTC" />);
-        view.rerender(
-            <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
-        );
-        await screen.findByText('Paid One');
-        expect(screen.queryByText('app.discoverChargedPending')).toBeNull();
-        expect(screen.queryByText('app.discoverRetrySubmit')).toBeNull();
-    });
-
-    test('an answer from before the account changed is dropped: no dialog, no outcome line, no refetch, no onJoined', async () => {
-        let release!: (answer: Awaited<ReturnType<WindowApi['joinChallenge']>>) => void;
-        window.api.joinChallenge = joinMock().mockImplementation(() => new Promise((resolve) => (release = resolve)));
-        const onJoined = jest.fn();
-        const view = render(
-            <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={onJoined} timezone="UTC" />,
-        );
-        await screen.findByText('Paid One');
-        fireEvent.click(screen.getByText('app.discoverJoinPaid'));
-        await waitFor(() => expect(window.api.joinChallenge).toHaveBeenCalledTimes(1));
-        view.rerender(<DiscoverSection isLoggedIn={false} bankroll={null} onJoined={onJoined} timezone="UTC" />);
-        view.rerender(
-            <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={onJoined} timezone="UTC" />,
-        );
-        await screen.findByText('Paid One');
-        const reads = jest.mocked(window.api.getMemberChallenges).mock.calls.length;
-        // The previous account's join comes back saying coins were charged.
-        await act(async () => release(invalid({ success: false, status: 'charged-pending-submit', cost: 100 })));
-        expect(screen.queryByText('app.discoverChargedPending')).toBeNull();
-        expect(screen.queryByText('app.discoverRetrySubmit')).toBeNull();
-        expect(screen.queryByText('app.discoverConfirmTitle')).toBeNull();
-        expect(jest.mocked(window.api.getMemberChallenges).mock.calls).toHaveLength(reads);
-        expect(onJoined).not.toHaveBeenCalled();
-        // The new session's row is not left busy by the old one either.
-        expect(screen.getByText('app.discoverJoinPaid')).toBeTruthy();
-    });
-
-    test('an answer from before the account changed that asks for a price opens no dialog for the new account', async () => {
-        let release!: (answer: Awaited<ReturnType<WindowApi['joinChallenge']>>) => void;
-        window.api.joinChallenge = joinMock().mockImplementation(() => new Promise((resolve) => (release = resolve)));
-        const view = render(
-            <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
-        );
-        await screen.findByText('Paid One');
-        fireEvent.click(screen.getByText('app.discoverJoinPaid'));
-        await waitFor(() => expect(window.api.joinChallenge).toHaveBeenCalledTimes(1));
-        view.rerender(<DiscoverSection isLoggedIn={false} bankroll={null} onJoined={jest.fn()} timezone="UTC" />);
-        view.rerender(
-            <DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />,
-        );
-        await screen.findByText('Paid One');
-        await act(async () => release(invalid(priceAsk(100))));
-        expect(screen.queryByText('app.discoverConfirmTitle')).toBeNull();
     });
 
     test('a failed join that the old session threw is dropped too', async () => {
@@ -522,22 +476,6 @@ describe('a paid row that was already charged', () => {
         expect(screen.queryByText('app.discoverChecking')).toBeNull();
     });
 
-    test('an account that could not be identified says so, and the row can be tried again', async () => {
-        window.api.joinChallenge = joinMock().mockResolvedValue(
-            invalid({ success: false, status: 'failed-no-charge', reason: 'account-unknown', cost: 100 }),
-        );
-        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
-        await screen.findByText('Paid One');
-        fireEvent.click(screen.getByText('app.discoverJoinPaid'));
-        const note = await screen.findByText('app.discoverAccountUnknown');
-        expect(note.getAttribute('role')).toBe('alert');
-        expect(screen.queryByText('app.discoverJoinFailed')).toBeNull();
-        const again = screen.getByText<HTMLButtonElement>('app.discoverJoinPaid');
-        expect(again.disabled).toBe(false);
-        fireEvent.click(again);
-        await waitFor(() => expect(window.api.joinChallenge).toHaveBeenCalledTimes(2));
-    });
-
     test('an answer that arrives while a dialog is open, quoting another price, reprices nothing and tells its row to wait', async () => {
         const paid = (id: number, title: string, join_coins: number) => ({ ...items[1], id, title, join_coins });
         window.api.getMemberChallenges = listMock().mockResolvedValue(
@@ -551,8 +489,8 @@ describe('a paid row that was already charged', () => {
             if (betaAsks++ === 0) return Promise.resolve(invalid({ success: false, status: 'charged-pending-submit' }));
             return new Promise((resolve) => (release = () => resolve(invalid(priceAsk(250)))));
         });
-        mockTranslator.t.mockImplementation((key) =>
-            key === 'app.discoverConfirmBody' ? 'Join {title} for {coins}' : key,
+        mockTranslator.t.mockImplementation(
+            withVars((key) => (key === 'app.discoverConfirmBody' ? 'Join {title} for {count}' : key)),
         );
         try {
             render(
@@ -602,8 +540,10 @@ describe('two joins at once', () => {
                     release[Number(id)] = () => resolve(invalid({ success: false, status: 'busy' }));
                 }),
         );
-        mockTranslator.t.mockImplementation((key) =>
-            key === 'app.discoverJoinLabel' ? 'Join {title}' : key === 'app.discoverJoining' ? 'Joining…' : key,
+        mockTranslator.t.mockImplementation(
+            withVars((key) =>
+                key === 'app.discoverJoinLabel' ? 'Join {title}' : key === 'app.discoverJoining' ? 'Joining…' : key,
+            ),
         );
         try {
             render(
@@ -734,12 +674,14 @@ describe('edge paths', () => {
     });
 
     test('each Join button is named by its challenge, free or paid, and the busy one by its own text', async () => {
-        mockTranslator.t.mockImplementation((key) =>
-            key === 'app.discoverJoinLabel'
-                ? 'Join {title}'
-                : key === 'app.discoverJoinPaidLabel'
-                  ? 'Join (paid) {title}, {coins} coins'
-                  : key,
+        mockTranslator.t.mockImplementation(
+            withVars((key) =>
+                key === 'app.discoverJoinLabel'
+                    ? 'Join {title}'
+                    : key === 'app.discoverJoinPaidLabel'
+                      ? 'Join (paid) {title}, {count} coins'
+                      : key,
+            ),
         );
         try {
             renderSection();
@@ -846,7 +788,7 @@ describe('edge paths', () => {
         expect(onJoined).toHaveBeenCalledTimes(2);
     });
 
-    test('retry submit with no marker behind it (another account, a lookup that blipped) opens the price dialog, spending nothing', async () => {
+    test('retry submit with no marker behind it (a lookup that blipped) opens the price dialog, spending nothing', async () => {
         window.api.joinChallenge = spendLater({ status: 'charged-pending-submit', cost: 100 });
         renderSection();
         await screen.findByText('Paid One');
@@ -881,18 +823,20 @@ describe('edge paths', () => {
         expect(screen.queryByText('app.discoverJoinPaid')).toBeNull();
     });
 
-    test.each([undefined, 'unconfirmed', 'earlier-payment'])(
+    test.each([undefined, 'unconfirmed'])(
         'a charged row (reason %s) has one button, Retry submit, named without a cost and not in the warning colour; it spends nothing',
         async (reason) => {
             window.api.joinChallenge = joinMock().mockResolvedValue(
                 invalid({ success: false, status: 'charged-pending-submit', ...(reason ? { reason } : {}) }),
             );
-            mockTranslator.t.mockImplementation((key) =>
-                key === 'app.discoverRetrySubmitLabel'
-                    ? 'Retry submit for {title}'
-                    : key === 'app.discoverJoinPaidLabel'
-                      ? 'Join (paid) {title}, {coins} coins'
-                      : key,
+            mockTranslator.t.mockImplementation(
+                withVars((key) =>
+                    key === 'app.discoverRetrySubmitLabel'
+                        ? 'Retry submit for {title}'
+                        : key === 'app.discoverJoinPaidLabel'
+                          ? 'Join (paid) {title}, {count} coins'
+                          : key,
+                ),
             );
             try {
                 renderSection();
@@ -959,7 +903,7 @@ describe('edge paths', () => {
             expect(screen.getByText('app.discoverRetrySubmit')).toBeTruthy();
         });
 
-        test.each([undefined, 'no-photo', 'earlier-payment'])(
+        test.each([undefined, 'no-photo'])(
             'a payment known to have been taken (reason %s) does not',
             async (reason) => {
                 window.api.joinChallenge = pendingWith(reason);
@@ -972,8 +916,8 @@ describe('edge paths', () => {
         );
 
         test('the button is named by its challenge', async () => {
-            mockTranslator.t.mockImplementation((key) =>
-                key === 'app.discoverForgetPaymentLabel' ? 'Not charged for {title}' : key,
+            mockTranslator.t.mockImplementation(
+                withVars((key) => (key === 'app.discoverForgetPaymentLabel' ? 'Not charged for {title}' : key)),
             );
             try {
                 window.api.joinChallenge = pendingWith('unconfirmed');
@@ -990,7 +934,9 @@ describe('edge paths', () => {
             window.api.getMemberChallenges = listMock().mockResolvedValue(
                 invalid({ success: true, items: [{ ...items[1], title: '', url: 'paid-challenge-url' }] }),
             );
-            mockTranslator.t.mockImplementation((key) => (key === 'app.discoverForgetBody' ? 'Forget {title}?' : key));
+            mockTranslator.t.mockImplementation(
+                withVars((key) => (key === 'app.discoverForgetBody' ? 'Forget {title}?' : key)),
+            );
             try {
                 window.api.joinChallenge = pendingWith('unconfirmed');
                 renderSection();
@@ -1084,8 +1030,6 @@ describe('edge paths', () => {
 
         test.each([
             ['nothing-to-forget', 'app.discoverForgetNothing'],
-            ['account-unknown', 'app.discoverForgetAccountUnknown'],
-            ['legacy-record', 'app.discoverForgetLegacyRecord'],
             ['busy', 'app.discoverForgetBusy'],
             ['unreadable', 'app.discoverForgetUnreadable'],
             ['locks-unavailable', 'app.locksUnavailable'],
@@ -1140,12 +1084,14 @@ describe('edge paths', () => {
                 await screen.findByText('app.discoverForgetTitle');
             };
             const withText = () =>
-                mockTranslator.t.mockImplementation((key) =>
-                    key === 'app.discoverForgetBalances'
-                        ? 'Before {before}, now {now}'
-                        : key === 'app.discoverForgetBalanceBefore'
-                          ? 'Before {before}'
-                          : key,
+                mockTranslator.t.mockImplementation(
+                    withVars((key) =>
+                        key === 'app.discoverForgetBalances'
+                            ? 'Before {before}, now {now}'
+                            : key === 'app.discoverForgetBalanceBefore'
+                              ? 'Before {before}'
+                              : key,
+                    ),
                 );
 
             test('it is set beside the balance GuruShots reports now, read when the dialog opens', async () => {
@@ -1247,8 +1193,8 @@ describe('edge paths', () => {
 
     test('the Retry submit button is named by its challenge', async () => {
         window.api.joinChallenge = spendLater({ status: 'charged-pending-submit', cost: 100 });
-        mockTranslator.t.mockImplementation((key) =>
-            key === 'app.discoverRetrySubmitLabel' ? 'Retry submit for {title}' : key,
+        mockTranslator.t.mockImplementation(
+            withVars((key) => (key === 'app.discoverRetrySubmitLabel' ? 'Retry submit for {title}' : key)),
         );
         try {
             renderSection();
@@ -1295,8 +1241,8 @@ describe('edge paths', () => {
                 ],
             }),
         );
-        mockTranslator.t.mockImplementation((key) =>
-            key === 'app.discoverConfirmBody' ? 'join {title} for {coins}' : key,
+        mockTranslator.t.mockImplementation(
+            withVars((key) => (key === 'app.discoverConfirmBody' ? 'join {title} for {count}' : key)),
         );
         window.api.joinChallenge = spendLater({ success: true, status: 'joined' }, 10);
         try {
@@ -1344,9 +1290,6 @@ describe('chosen photos', () => {
         window.api = invalid({
             // The settings-only read subscribes to settings changes, as in the app.
             onSettingsChanged: mockApi.onSettingsChanged,
-            getSetting: jest
-                .fn<ReturnType<WindowApi['getSetting']>, Parameters<WindowApi['getSetting']>>()
-                .mockResolvedValue(invalid('')),
             // The list is read once; the rows then follow the settings through the settings-only read.
             getMemberChallenges: listMock().mockResolvedValue(invalid({ success: true, items })),
             getOpenChosenAnnotations: jest.fn<
@@ -1362,6 +1305,10 @@ describe('chosen photos', () => {
                 ),
             })),
             joinChallenge: spendLater({ success: true, status: 'joined' }),
+            // The row chooser reads the row's pins; none are stored, so its pin controls stay idle.
+            getEntryPins: jest
+                .fn<ReturnType<WindowApi['getEntryPins']>, Parameters<WindowApi['getEntryPins']>>()
+                .mockResolvedValue({ boost: null, turbo: null }),
             setChallengeOverride: jest.fn(async (_key: string, id: string, value: string[]) => {
                 own[id] = value;
                 return true;
@@ -1377,6 +1324,7 @@ describe('chosen photos', () => {
                     photos: [{ id: PHOTO, labels: ['sea'], allowed: true, message: null, uploadDate: 1 }],
                     memberId: 'c'.repeat(32),
                     truncated: false,
+                    nextStart: 0,
                     wonIds: [],
                     wonCount: 0,
                     preview: false,
@@ -1396,12 +1344,17 @@ describe('chosen photos', () => {
         expect(screen.getAllByText('app.choosePhotos')).toHaveLength(2);
     });
 
-    test('Choose photos opens the chooser for that challenge and saves its own list', async () => {
+    test('Choose photos opens the chooser idle (Auto available on a row), and saving its own list works', async () => {
         renderSection();
         await screen.findByText('Free One');
         fireEvent.click(screen.getAllByText('app.choosePhotos')[0]);
+        // Nothing is read on open, and the row's chooser offers Auto.
+        await screen.findByRole('dialog');
+        expect(window.api.getLibraryPhotos).not.toHaveBeenCalled();
+        expect(screen.getByRole('button', { name: 'app.pickAuto' })).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadPhotos' }));
         await waitFor(() =>
-            expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(900001, undefined, 'cached', 'submit'),
+            expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(900001, undefined, 'cached', 'submit', 0, 100),
         );
         fireEvent.click(await screen.findByRole('button', { name: /^app\.photoChooserTileLabel/ }));
         fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
@@ -1420,180 +1373,24 @@ describe('chosen photos', () => {
         own['900001'] = [PHOTO];
         renderSection();
         fireEvent.click(await screen.findByText('app.discoverChosenChip'));
-        const tile = await screen.findByRole('button', { name: /^app\.photoChooserTileLabel/ });
-        expect(tile.getAttribute('aria-pressed')).toBe('true');
-        fireEvent.click(tile);
+        const stub = await screen.findByRole('button', { name: /^app\.photoChooserSavedTileLabel/ });
+        expect(stub.getAttribute('aria-pressed')).toBe('true');
+        fireEvent.click(stub);
         fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
         await waitFor(() => expect(window.api.removeChallengeOverride).toHaveBeenCalledWith('chosenPhotos', '900001'));
         await waitFor(() => expect(screen.queryByText('app.discoverChosenChip')).toBeNull());
     });
 
-    describe("the user's own list, withheld on a fresh launch", () => {
-        const OWNER = 'c'.repeat(32);
-        let memberKnown: boolean;
-        let release: () => void;
-
-        // The listing becomes ready, and the chooser then asks again for its own list: wait for that ask.
-        const releaseAndWaitForReread = async () => {
-            jest.mocked(window.api.getOpenChosenAnnotations).mockClear();
-            release();
-            await waitFor(() => expect(window.api.getOpenChosenAnnotations).toHaveBeenCalledWith(['900001']));
-        };
-
-        const open = async () => {
-            own['900001'] = [PHOTO];
-            memberKnown = false;
-            const gate = new Promise<void>((resolve) => (release = resolve));
-            jest.mocked(window.api.getSetting).mockResolvedValue(OWNER);
-            // The main process withholds the ids until the listing has resolved the member.
-            jest.mocked(window.api.getOpenChosenAnnotations).mockImplementation(async () => ({
-                success: true,
-                annotations: Object.fromEntries(
-                    annotated().map(({ id, chosenOwn, chosenOwnCount, chosenEffectiveCount }) => [
-                        String(id),
-                        { chosenOwn: memberKnown ? chosenOwn : [], chosenOwnCount, chosenEffectiveCount },
-                    ]),
-                ),
-            }));
-            jest.mocked(window.api.getLibraryPhotos).mockImplementation(async () => {
-                await gate;
-                memberKnown = true;
-                return {
-                    success: true as const,
-                    photos: [{ id: PHOTO, labels: ['sea'], allowed: true, message: null, uploadDate: 1 }],
-                    memberId: OWNER,
-                    truncated: false,
-                    wonIds: [],
-                    wonCount: 0,
-                    preview: false,
-                    readAtMs: 1_700_000_000_000,
-                    allowedKnown: true,
-                };
-            });
-            renderSection();
-            fireEvent.click(await screen.findByText('app.discoverChosenChip'));
-            return screen.findByRole('button', { name: 'app.photoChooserUse' });
-        };
-
-        test('Save is held, an empty one included, until the list has been read again; then it saves that list', async () => {
-            const use = await open();
-            expect(use.getAttribute('aria-disabled')).toBe('true');
-            fireEvent.click(use);
-            expect(window.api.removeChallengeOverride).not.toHaveBeenCalled();
-            expect(window.api.setChallengeOverride).not.toHaveBeenCalled();
-
-            release();
-            await waitFor(() =>
-                expect(
-                    screen.getByRole('button', { name: /^app\.photoChooserTileLabel/ }).getAttribute('aria-pressed'),
-                ).toBe('true'),
-            );
-            await waitFor(() => expect(use.getAttribute('aria-disabled')).toBe('false'));
-            fireEvent.click(use);
-            await waitFor(() =>
-                expect(window.api.setChallengeOverride).toHaveBeenCalledWith('chosenPhotos', '900001', [PHOTO]),
-            );
-            expect(window.api.removeChallengeOverride).not.toHaveBeenCalled();
-        });
-
-        test('a failed first read is not repeated by the section re-rendering: only Retry asks again', async () => {
-            const use = await open();
-            // The chooser's own read (one id) fails, so the ids stay withheld; the rows' read still
-            // answers, with different data each time, so every settings broadcast really re-renders.
-            const rowsRead = jest.mocked(window.api.getOpenChosenAnnotations).getMockImplementation()!;
-            let rowReads = 0;
-            jest.mocked(window.api.getOpenChosenAnnotations).mockImplementation(async (ids) => {
-                if (ids.length === 1) return { success: false, error: 'down', annotations: {} };
-                rowReads += 1;
-                const answer = await rowsRead(ids);
-                return answer.success
-                    ? {
-                          ...answer,
-                          annotations: Object.fromEntries(
-                              Object.entries(answer.annotations).map(([id, row]) => [
-                                  id,
-                                  { ...row, chosenEffectiveCount: row.chosenEffectiveCount + (rowReads % 2) },
-                              ]),
-                          ),
-                      }
-                    : answer;
-            });
-            await releaseAndWaitForReread();
-            await screen.findByText('app.photoChooserSaveReadFailed');
-            const ownReads = () =>
-                jest.mocked(window.api.getOpenChosenAnnotations).mock.calls.filter(([ids]) => ids.length === 1);
-            expect(ownReads()).toHaveLength(1);
-
-            // Settings broadcasts re-render the section; the chooser's read is not asked again.
-            const before = rowReads;
-            act(() => fireSettingsChanged({ theme: 'dark' }));
-            await waitFor(() => expect(rowReads).toBe(before + 1));
-            act(() => fireSettingsChanged({ theme: 'light' }));
-            await waitFor(() => expect(rowReads).toBe(before + 2));
-            await act(async () => undefined);
-            expect(ownReads()).toHaveLength(1);
-            expect(screen.getByText('app.photoChooserSaveReadFailed')).toBeTruthy();
-            expect(use.getAttribute('aria-disabled')).toBe('true');
-        });
-
-        test('the list is removed only when the user really clears it', async () => {
-            const use = await open();
-            release();
-            await waitFor(() => expect(use.getAttribute('aria-disabled')).toBe('false'));
-            fireEvent.click(screen.getByRole('button', { name: 'app.photosClear' }));
-            fireEvent.click(use);
-            await waitFor(() =>
-                expect(window.api.removeChallengeOverride).toHaveBeenCalledWith('chosenPhotos', '900001'),
-            );
-        });
-
-        test.each([
-            ['an answer that does not hold the row', {}],
-            [
-                'an answer that still withholds the ids',
-                { '900001': { chosenOwn: [], chosenOwnCount: 1, chosenEffectiveCount: 1 } },
-            ],
-        ])('%s keeps Save held', async (_name, annotations) => {
-            const use = await open();
-            jest.mocked(window.api.getOpenChosenAnnotations).mockResolvedValue(invalid({ success: true, annotations }));
-            await releaseAndWaitForReread();
-            await screen.findByRole('button', { name: /^app\.photoChooserTileLabel/ });
-            expect(use.getAttribute('aria-disabled')).toBe('true');
-            fireEvent.click(use);
-            expect(window.api.removeChallengeOverride).not.toHaveBeenCalled();
-        });
-
-        test('a read that throws keeps Save held', async () => {
-            const use = await open();
-            jest.mocked(window.api.getOpenChosenAnnotations).mockRejectedValue(new Error('gone'));
-            await releaseAndWaitForReread();
-            await screen.findByRole('button', { name: /^app\.photoChooserTileLabel/ });
-            expect(use.getAttribute('aria-disabled')).toBe('true');
-        });
-
-        test('a read that fails keeps Save held', async () => {
-            const use = await open();
-            jest.mocked(window.api.getOpenChosenAnnotations).mockResolvedValue({
-                success: false,
-                error: 'down',
-                annotations: {},
-            });
-            await releaseAndWaitForReread();
-            await screen.findByRole('button', { name: /^app\.photoChooserTileLabel/ });
-            expect(use.getAttribute('aria-disabled')).toBe('true');
-            fireEvent.click(use);
-            expect(window.api.removeChallengeOverride).not.toHaveBeenCalled();
-        });
-    });
-
     test('the Choose photos button and the Chosen chip are named by their challenge', async () => {
         own['900001'] = [PHOTO];
-        mockTranslator.t.mockImplementation((key) =>
-            key === 'app.discoverChoosePhotosLabel'
-                ? 'Choose photos for {title}'
-                : key === 'app.discoverChosenChipLabel'
-                  ? 'Chosen photos for {title}'
-                  : key,
+        mockTranslator.t.mockImplementation(
+            withVars((key) =>
+                key === 'app.discoverChoosePhotosLabel'
+                    ? 'Choose photos for {title}'
+                    : key === 'app.discoverChosenChipLabel'
+                      ? 'Chosen photos for {title}'
+                      : key,
+            ),
         );
         try {
             renderSection();
@@ -1612,6 +1409,7 @@ describe('chosen photos', () => {
         renderSection();
         await screen.findByText('Free One');
         fireEvent.click(screen.getAllByText('app.choosePhotos')[0]);
+        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadPhotos' }));
         fireEvent.click(await screen.findByRole('button', { name: /^app\.photoChooserTileLabel/ }));
         fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
         expect((await screen.findByRole('alert')).textContent).toContain('app.photoChooserSaveError');
@@ -1623,6 +1421,7 @@ describe('chosen photos', () => {
         renderSection();
         await screen.findByText('Free One');
         fireEvent.click(screen.getAllByText('app.choosePhotos')[0]);
+        fireEvent.click(screen.getByRole('button', { name: 'app.pickLoadPhotos' }));
         fireEvent.click(await screen.findByRole('button', { name: /^app\.photoChooserTileLabel/ }));
         fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
         expect((await screen.findByRole('alert')).textContent).toContain('app.photoChooserSaveError');
@@ -1664,63 +1463,6 @@ describe('chosen photos', () => {
         await screen.findByText('Free One');
         fireEvent.click(screen.getAllByText('app.choosePhotos')[0]);
         expect(await screen.findByText('app.photoChooserInheritNote')).toBeTruthy();
-    });
-
-    test("another account's list is only counted: remove, cancel, reopen, and its ids never appear", async () => {
-        // The main process withholds a foreign list's ids and counts them; the owner is on record.
-        let foreign = true;
-        own['900001'] = [PHOTO];
-        jest.mocked(window.api.getSetting).mockResolvedValue('d'.repeat(32));
-        jest.mocked(window.api.getOpenChosenAnnotations).mockImplementation(async () => ({
-            success: true,
-            annotations: Object.fromEntries(
-                annotated().map((row) => [
-                    String(row.id),
-                    {
-                        chosenOwn: foreign ? [] : row.chosenOwn,
-                        chosenOwnCount: row.chosenOwnCount,
-                        chosenEffectiveCount: foreign ? 0 : row.chosenEffectiveCount,
-                    },
-                ]),
-            ),
-        }));
-        window.api.clearChosenPhotos = jest.fn(async () => {
-            own = {};
-            foreign = false;
-            return { success: true as const, removed: 1 };
-        });
-        mockTranslator.t.mockImplementation((key) =>
-            key.startsWith('app.') ? ((app as Record<string, string>)[key.slice(4)] ?? key) : key,
-        );
-        renderSection();
-        // The row counts another account's list instead of calling it chosen photos.
-        const chip = await screen.findByText('Other account: 1 photo(s)');
-        expect(screen.queryByText('app.discoverChosenChip')).toBeNull();
-        // A short chip text (the long sentence is its accessible name), so it stays one line in a narrow row.
-        expect(chip.textContent!.length).toBeLessThan(chip.getAttribute('aria-label')!.length / 2);
-        // Its own translated name and tooltip, not a string built in code.
-        expect(chip.getAttribute('aria-label')).toBe('Other account: 1 photo(s) for Free One, review them');
-        // WCAG 2.5.3: the accessible name starts with the text that is shown.
-        expect(chip.getAttribute('aria-label')!.startsWith(chip.textContent!)).toBe(true);
-        expect(chip.getAttribute('title')).toBe(app.discoverChosenForeignHint);
-        mockTranslator.t.mockImplementation((key) => key);
-        fireEvent.click(chip);
-        // The chooser opens empty, with the notice and a count — never the other account's id.
-        expect(await screen.findByText('app.photoChooserOtherAccount')).toBeTruthy();
-        expect(screen.getByText('app.chosenPhotosOtherAccountCount')).toBeTruthy();
-        expect(document.body.textContent).not.toContain(PHOTO.slice(0, 8));
-        fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserOtherAccountClear' }));
-        const confirm = (await screen.findAllByRole('button', { name: 'app.photoChooserOtherAccountClear' })).at(-1)!;
-        fireEvent.click(confirm);
-        await waitFor(() => expect(window.api.clearChosenPhotos).toHaveBeenCalledTimes(1));
-        fireEvent.click((await screen.findAllByRole('button', { name: 'app.cancel' })).at(-1)!);
-        await waitFor(() => expect(screen.queryByRole('button', { name: 'app.photoChooserUse' })).toBeNull());
-        // The row no longer carries the chip, and reopening shows a clean chooser.
-        await waitFor(() => expect(screen.queryByText('app.discoverChosenChip')).toBeNull());
-        fireEvent.click(screen.getAllByText('app.choosePhotos')[0]);
-        await screen.findByRole('button', { name: 'app.photoChooserUse' });
-        expect(screen.queryByText('app.photoChooserOtherAccount')).toBeNull();
-        expect(document.body.textContent).not.toContain(PHOTO.slice(0, 8));
     });
 
     test('a settings change updates the rows without asking GuruShots again', async () => {
@@ -1771,5 +1513,149 @@ describe('chosen photos', () => {
         await screen.findByText('Paid One');
         expect(screen.queryByText('app.discoverChosenChip')).toBeNull();
         expect(screen.queryByText('app.discoverChosenInherited')).toBeNull();
+    });
+});
+
+describe('capacity and join safety on a row', () => {
+    // The real English strings (plural groups included), placeholders filled like the real t fills them.
+    const translator = createTranslator();
+    const english: Translate = (key, vars) => translator.t(key, vars, 'en');
+    // The full challenge: its head count has reached the cap the listing names.
+    const fullOne = invalid<OpenChallenge>({
+        ...items[0],
+        id: 900003,
+        title: 'Full One',
+        players: 150,
+        max_players: 150,
+        member: { submit_state: 'FULL' },
+    });
+    const rows = (...extra: OpenChallenge[]) =>
+        listMock().mockResolvedValue(invalid({ success: true, items: [...items, ...extra] }));
+
+    beforeEach(() => mockTranslator.t.mockImplementation(english));
+    afterEach(() => mockTranslator.t.mockImplementation((key) => key));
+
+    test('a capped row shows the head count and Full, and its Join stays pressable: the live list decides', async () => {
+        window.api.getMemberChallenges = rows(fullOne);
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
+        await screen.findByText('Full One');
+
+        const row = screen.getByText('Full One').closest('li')!;
+        // The head count names its unit for assistive technology; the emoji is decorative.
+        expect(row.textContent).toContain(`Players: ${(150).toLocaleString()}/${(150).toLocaleString()} · Full`);
+        expect(row.querySelector('.sr-only')?.textContent).toBe('Players: ');
+        const emoji = [...row.querySelectorAll('[aria-hidden="true"]')].find((el) => el.textContent?.includes('👥'));
+        expect(emoji).toBeTruthy();
+        // The listing can lag the live list (or a claim from an earlier session only needs its
+        // submit retried): the button stays enabled and the server answers with its reason.
+        const join = screen.getByRole<HTMLButtonElement>('button', { name: 'Join Full One — the challenge is full' });
+        expect(join.disabled).toBe(false);
+        expect(join.textContent).toBe('Join');
+        fireEvent.click(join);
+        await waitFor(() => expect(window.api.joinChallenge).toHaveBeenCalledWith(900003, false));
+    });
+
+    test('a head count the listing left unreadable shows no capacity fraction', async () => {
+        const uncounted = invalid<OpenChallenge>({ ...fullOne, id: 900007, title: 'Uncounted', players: 'many' });
+        window.api.getMemberChallenges = rows(uncounted);
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
+        await screen.findByText('Uncounted');
+
+        const row = screen.getByText('Uncounted').closest('li')!;
+        expect(row.textContent).not.toContain('NaN');
+        expect(row.textContent).not.toContain('/150');
+        expect(row.querySelector('.sr-only')).toBeNull();
+    });
+
+    test('an uncapped row says nothing about capacity', async () => {
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
+        await screen.findByText('Free One');
+
+        const row = screen.getByText('Free One').closest('li')!;
+        expect(row.textContent).not.toContain('150/150');
+        expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Join Free One' }).disabled).toBe(false);
+    });
+
+    test('a price GuruShots did not send: the row says so, hints at the next step, and the Join stays pressable', async () => {
+        const mystery = invalid<OpenChallenge>({
+            ...items[0],
+            id: 900004,
+            title: 'Mystery',
+            join_coins: undefined,
+            member: { submit_state: 'join_unlock' },
+        });
+        window.api.getMemberChallenges = rows(mystery);
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
+        await screen.findByText('Mystery');
+
+        const row = screen.getByText('Mystery').closest('li')!;
+        expect(screen.getByText('Price unknown')).toBeTruthy();
+        expect(row.textContent).toContain(
+            'could not be read as a usable price, so the app cannot ask you to confirm a spend. Refresh the list, or join the challenge on gurushots.com.',
+        );
+        const join = screen.getByRole<HTMLButtonElement>('button', { name: 'Join Mystery — its price is unknown' });
+        expect(join.disabled).toBe(false);
+        expect(join.textContent).toBe('Join');
+        fireEvent.click(join);
+        await waitFor(() => expect(window.api.joinChallenge).toHaveBeenCalledWith(900004, false));
+    });
+
+    test('the first prizes read as one line of translated type × amount', async () => {
+        const prized = invalid<OpenChallenge>({
+            ...items[0],
+            id: 900005,
+            title: 'Prized',
+            first_prizes: [
+                { type: 'KEY', amount: 1 },
+                { type: 'COINS', amount: 250 },
+            ],
+        });
+        window.api.getMemberChallenges = rows(prized);
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
+        await screen.findByText('Prized');
+
+        const row = screen.getByText('Prized').closest('li')!;
+        expect(row.textContent).toContain(`Prize: Key × 1, Coins × ${(250).toLocaleString()}`);
+    });
+
+    test('a first-prizes payload that is not an array is dropped: no prize line, no crash', async () => {
+        const unprized = invalid<OpenChallenge>({ ...items[0], id: 900008, title: 'Unprized', first_prizes: {} });
+        window.api.getMemberChallenges = rows(unprized);
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
+        await screen.findByText('Unprized');
+
+        const row = screen.getByText('Unprized').closest('li')!;
+        expect(row.textContent).not.toContain('Prize:');
+    });
+
+    test('a row with suggested photos is marked as recommended by GuruShots', async () => {
+        const suggested = invalid<OpenChallenge>({
+            ...items[0],
+            id: 900006,
+            title: 'Suggested',
+            suggestedPhotoIds: [`${'a'.repeat(32)}`],
+        });
+        window.api.getMemberChallenges = rows(suggested);
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
+        await screen.findByText('Suggested');
+
+        expect(screen.getByText('Recommended by GuruShots')).toBeTruthy();
+        expect(screen.getByText('Recommended by GuruShots').closest('li')!.textContent).toContain('Suggested');
+    });
+
+    test.each([
+        ['full', errors.joinRefusedFull],
+        ['price-unknown', errors.joinRefusedPriceUnknown],
+    ])('a join the live list refused as %s gets the refusal text, not the generic one', async (reason, text) => {
+        window.api.joinChallenge = joinMock().mockResolvedValue(
+            invalid({ success: false, status: 'failed-no-charge', reason }),
+        );
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} timezone="UTC" />);
+        await screen.findByText('Free One');
+        fireEvent.click(screen.getByRole('button', { name: 'Join Free One' }));
+
+        const line = await screen.findByText(text);
+        expect(line.closest('[role="alert"]')).not.toBeNull();
+        expect(screen.queryByText(app.discoverFailedNoCharge)).toBeNull();
     });
 });

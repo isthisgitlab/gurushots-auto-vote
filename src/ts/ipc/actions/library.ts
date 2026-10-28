@@ -1,6 +1,10 @@
 /**
- * IPC handler behind the Chosen Photos chooser and the CLI `list-photos`: a
- * read-only listing of the signed-in member's photo library.
+ * The get-library-photos IPC handler behind the Chosen Photos chooser and the
+ * CLI `list-photos`: a read-only listing of the signed-in member's photo
+ * library. Its sibling get-photo-stats (actions/photoStats.ts) serves the
+ * picker's per-photo display stats. The search-photo-tags handler below it
+ * serves the picker's search box the library's tags that contain a partial
+ * term, as one-click exact searches.
  *
  * The listing is the server's own eligible-photo walk (get_photos_private),
  * which is paginated and slow, so reads are throttled to one walk at a time per
@@ -16,17 +20,26 @@ import * as logger from '../../logger';
 import * as apiFactory from '../../apiFactory';
 import * as auth from '../../services/auth';
 import { resolveMemberId } from '../../services/autoFill';
-import { CHOSEN_PHOTO_ID_RE, MAX_TAG_LENGTH } from '../../settings/limits';
+import { isLibraryOrder } from '../../librarySort';
+import {
+    CHOSEN_PHOTO_ID_RE,
+    LIBRARY_BATCH_PHOTOS,
+    MAX_LIBRARY_KEEP_PHOTOS,
+    MAX_TAG_LENGTH,
+    MAX_WON_IDS,
+    MIN_AUTOCOMPLETE_CHARS,
+} from '../../settings/limits';
 import { htmlToText } from '../../format/htmlToText';
 import { asPreview } from '../../libraryPreview';
-import { accountGeneration } from '../../services/accountScope';
 import { dropEpoch, readFresh, readLatest, writeListing } from '../../services/libraryCache';
 import { errorResult } from '../errorResult';
 import { isIdArg } from '../isIdArg';
 import { isUsageArg, refuseInvalidArgs } from './shared';
+import { SUPERSEDED, createThrottle } from './throttle';
 
 import type { IpcReplyFn } from '../registerHandlers';
 import type { LibraryPhoto } from '../../types/gurushots';
+import type { LibraryOrder } from '../../librarySort';
 import type { LibraryUsage } from '../../types/photoPicker';
 
 // Shortest gap between the end of one walk and the start of the next. The chooser
@@ -41,56 +54,14 @@ const MAX_LABEL_LENGTH = 80;
 const MAX_MESSAGE_LENGTH = 200;
 // How much of the raw HTML message is converted: markup makes the raw text longer than what it shows.
 const MAX_RAW_MESSAGE_LENGTH = 4 * MAX_MESSAGE_LENGTH;
-// How many ids of photos left out of the listing (they have won a challenge) are reported with it.
-const MAX_WON_IDS = 1000;
 
-/** What a throttled request resolves to when a newer request took its place in the queue. */
-const SUPERSEDED = Symbol('superseded');
+const walkThrottle = createThrottle(MIN_WALK_INTERVAL_MS);
 
-// `run` settles the caller's promise itself and never rejects.
-type Pending = { run: () => Promise<void>; drop: () => void };
+// Shortest gap between two tag-autocomplete reads, so the CLI, the web shell or a script
+// cannot outrun the renderer's 300 ms debounce the way it could an unguarded endpoint.
+const TAG_THROTTLE_MS = 300;
 
-// One walk in flight in this process, at most one waiting behind it.
-let pending: Pending | null = null;
-let running = false;
-let lastEndedAt = 0;
-let timer: ReturnType<typeof setTimeout> | undefined;
-
-const pump = (): void => {
-    if (running || !pending || timer !== undefined) return;
-    const delay = lastEndedAt + MIN_WALK_INTERVAL_MS - Date.now();
-    if (delay > 0) {
-        timer = setTimeout(() => {
-            timer = undefined;
-            pump();
-        }, delay);
-        return;
-    }
-    const next = pending;
-    pending = null;
-    running = true;
-    void next.run().finally(() => {
-        running = false;
-        lastEndedAt = Date.now();
-        pump();
-    });
-};
-
-/**
- * Run `job` as the only walk in flight: it starts at once when none is running
- * and the minimum gap has passed, otherwise it waits — and a request that
- * arrives while another is already waiting replaces it (the older caller gets
- * SUPERSEDED), because only the newest search is still wanted.
- */
-const throttled = <T>(job: () => Promise<T>): Promise<T | typeof SUPERSEDED> =>
-    new Promise((resolve, reject) => {
-        pending?.drop();
-        pending = {
-            run: () => job().then(resolve, reject),
-            drop: () => resolve(SUPERSEDED),
-        };
-        pump();
-    });
+const tagThrottle = createThrottle(TAG_THROTTLE_MS);
 
 /**
  * The search term as sent to the server: control characters stripped, trimmed,
@@ -148,10 +119,10 @@ const borrowChallengeId = async (strategy: apiFactory.ApiStrategy, token: string
  * fresh, else the newest one read for any challenge or usage as a preview (its marks withheld). Null when
  * nothing is cached.
  */
-const answerFromCache = (token: string, contextId: string | number | null, usage: LibraryUsage) => {
-    const fresh = readFresh(token, contextId, usage);
+const answerFromCache = (contextId: string | number | null, usage: LibraryUsage) => {
+    const fresh = readFresh(contextId, usage);
     if (fresh) return { success: true as const, ...fresh, preview: false };
-    const latest = readLatest(token);
+    const latest = readLatest();
     return latest ? { success: true as const, ...asPreview(latest), preview: true } : null;
 };
 
@@ -165,6 +136,15 @@ const answerFromCache = (token: string, contextId: string | number | null, usage
  *   always walks, and a no-search walk is kept for the next `'cached'` request.
  * @param usage - what the `allowed` flags are read for, as the server filters them per usage: `'submit'` (the
  *   default) is entering the challenge, `'swap'` is replacing an entry's photo. Listings are cached per usage.
+ * @param start - read one batch from this offset into the library instead of walking it all; 0 reads from the top.
+ *   A batch from 0 (or an omitted start) is kept for the next `'cached'` request like a full walk, whatever its
+ *   batch size (a wider re-read replaces the older entry); a continuation (`start > 0`) never is, and `'cached'`
+ *   refuses one.
+ * @param keep - how many photos a `start` batch counts before it stops (default 100); given only with `start`.
+ * @param order - a whole-library server sort (`librarySort.ts`): `'votes'` is the default the app always sent;
+ *   `'newest'`/`'oldest'` sort on date entered. Any other value is refused. A non-votes order is always read
+ *   fresh — the cache holds vote-ordered listings only — so a `'cached'` request with one walks as `'fresh'`,
+ *   answers `preview: false`, and is neither written to nor answered from the cache.
  */
 const handleGetLibraryPhotos = (async (
     event: unknown,
@@ -172,14 +152,30 @@ const handleGetLibraryPhotos = (async (
     search?: string | null,
     mode?: 'cached' | 'fresh',
     usage?: LibraryUsage,
+    start?: number | null,
+    keep?: number | null,
+    order?: LibraryOrder,
 ) => {
     const hasChallenge = challengeId !== undefined && challengeId !== null;
     const hasSearch = search !== undefined && search !== null;
+    const hasStart = start !== undefined && start !== null;
+    const hasKeep = keep !== undefined && keep !== null;
+    // A non-votes order always reads fresh: the listing cache holds vote-ordered reads only, so an
+    // ordered read must not be answered from it, kept in it, or held back by a `'cached'` mode.
+    const orderedFresh = order !== undefined && order !== 'votes';
     if (
         (hasChallenge && !isIdArg(challengeId)) ||
         (hasSearch && typeof search !== 'string') ||
         (mode !== undefined && mode !== 'cached' && mode !== 'fresh') ||
-        (usage !== undefined && !isUsageArg(usage))
+        (usage !== undefined && !isUsageArg(usage)) ||
+        (order !== undefined && !isLibraryOrder(order)) ||
+        // A batch read starts at a non-negative offset and keeps at most one full walk's worth of photos.
+        (hasStart && !(Number.isSafeInteger(start) && start >= 0)) ||
+        (hasKeep && !(Number.isSafeInteger(keep) && keep >= 1 && keep <= MAX_LIBRARY_KEEP_PHOTOS)) ||
+        // A batch size without an offset says nothing to read from.
+        (hasKeep && !hasStart) ||
+        // The cache only holds reads from offset 0, so a cached answer could not say where a continuation begins.
+        (mode === 'cached' && typeof start === 'number' && start > 0)
     ) {
         return refuseInvalidArgs('autoSubmit', 'get-library-photos');
     }
@@ -191,35 +187,59 @@ const handleGetLibraryPhotos = (async (
         // The cache keys the challenge asked for: the settings and rules choosers ask for none, whatever one is borrowed.
         const contextId = challengeId ?? null;
         const readUsage = usage ?? 'submit';
-        if (mode === 'cached' && term === undefined) {
-            const cached = answerFromCache(token, contextId, readUsage);
+        if (mode === 'cached' && term === undefined && !orderedFresh) {
+            const cached = answerFromCache(contextId, readUsage);
             if (cached) return cached;
         }
-        // Compared after the walk: an account that left, or an entry dropped by an action of this window, meanwhile.
-        const generation = accountGeneration();
+        // Compared after the walk: an entry dropped by an action of this window meanwhile.
         const epoch = dropEpoch();
         const strategy = apiFactory.getApiStrategy();
 
         // The borrowing lookup is a request of its own, so it runs inside the
         // throttled job like the walk it serves.
-        const outcome = await throttled(async () => {
+        const readState = { firstPageFailed: false };
+        const outcome = await walkThrottle.run(async () => {
             const readAtMs = Date.now();
             const readThrough = challengeId ?? (await borrowChallengeId(strategy, token));
             // Nothing to read the library through: no active challenge and no open one seen yet.
             if (readThrough === null) return null;
-            const walk = await strategy.getEligiblePhotosWalk(readThrough, token, {
+            const walkOptions = {
                 search: term,
                 logLabel: 'library',
                 usage: readUsage,
                 skip: hasWonChallenge,
-            });
+                // An explicit votes order reads the same wire as no order, so it is not
+                // named; a date order reaches fetchPhotoPage and every continuation of it.
+                ...(orderedFresh ? { order } : {}),
+            };
+            const walk = await strategy.getEligiblePhotosWalk(
+                readThrough,
+                token,
+                hasStart
+                    ? {
+                          ...walkOptions,
+                          start,
+                          maxKept: keep ?? LIBRARY_BATCH_PHOTOS,
+                          // Marks, for the return below, that page 0 of THIS walk failed: a continuation whose
+                          // first page comes back empty answers nothing rather than an empty batch.
+                          readState,
+                          // A named challenge's batch counts only photos it may enter; a borrowed read counts
+                          // every kept photo, since no challenge's flags are the point.
+                          ...(hasChallenge && {
+                              counts: (photo: LibraryPhoto) => photo.permission?.allowed === true,
+                          }),
+                      }
+                    : walkOptions,
+            );
             const memberId = await resolveMemberId(token, strategy.getCurrentMemberProfile, logger, 'library');
             return { walk, memberId, readAtMs };
         });
         if (outcome === SUPERSEDED) return { success: false as const, error: 'superseded' as const };
         if (outcome === null) return { success: false as const, error: 'no-challenge-context' as const };
-        // The account left while the walk ran: what it read is not the signed-in account's to be shown.
-        if (generation !== accountGeneration()) return { success: false as const, error: 'account-changed' as const };
+        // A batch whose first page failed has nothing to continue from; a full read keeps today's behavior
+        // (the empty listing the walk returned, marked truncated).
+        if (hasStart && readState.firstPageFailed)
+            return { success: false as const, error: 'library-read-failed' as const };
         const skipped = outcome.walk.skipped ?? [];
         const listing = {
             // An id that is not a safe token could never be stored in a list, so it is not offered.
@@ -230,13 +250,26 @@ const handleGetLibraryPhotos = (async (
             wonCount: skipped.length,
             wonIds: skipped.filter((id) => CHOSEN_PHOTO_ID_RE.test(id)).slice(0, MAX_WON_IDS),
             truncated: outcome.walk.truncated,
+            // Where the read stopped: the offset a continuation read starts from.
+            nextStart: outcome.walk.nextStart,
             allowedKnown: hasChallenge,
             readAtMs: outcome.readAtMs,
         };
         // Only the no-search listing is kept, and not a read that kept nothing and was cut short (it may be a
-        // failed read), nor one an action of this window outdated while it ran.
-        const keep = term === undefined && (listing.photos.length > 0 || listing.wonCount > 0 || !listing.truncated);
-        if (keep && epoch === dropEpoch()) writeListing(token, contextId, listing, readUsage);
+        // failed read), nor one an action of this window outdated while it ran — and never a continuation,
+        // which the cache cannot answer for (it only holds reads from offset 0). Every read from offset 0 is
+        // kept, whatever its batch size: it is a valid listing from the top with its own nextStart, and it
+        // replaces the older entry, so a later `'cached'` answer never shows an older, smaller listing. A read
+        // whose token the stored sign-in no longer is (a login replaced it while the walk ran) writes nothing:
+        // a request still in flight must not refill what a logout or account switch emptied.
+        const keepCached =
+            !orderedFresh &&
+            term === undefined &&
+            (listing.photos.length > 0 || listing.wonCount > 0 || !listing.truncated) &&
+            (!hasStart || start === 0);
+        if (keepCached && epoch === dropEpoch() && token === settings.getSetting('token')) {
+            writeListing(contextId, listing, readUsage);
+        }
         return { success: true as const, ...listing, preview: false };
     } catch (error) {
         logger.withCategory('autoSubmit').error('Error handling get-library-photos request:', error);
@@ -246,11 +279,74 @@ const handleGetLibraryPhotos = (async (
 
 // Test-only: forget the throttle state between cases.
 const __resetLibraryThrottle = (): void => {
-    clearTimeout(timer);
-    timer = undefined;
-    pending = null;
-    running = false;
-    lastEndedAt = 0;
+    walkThrottle.reset();
+    tagThrottle.reset();
 };
 
-export { handleGetLibraryPhotos, mapPhoto, hasWonChallenge, __resetLibraryThrottle, MIN_WALK_INTERVAL_MS };
+// A tag bound for the search box goes on to an exact server match, so a tag carrying a
+// format or control character (\p{Cf}, \p{Cc}) is dropped whole rather than stripped:
+// a stripped tag no longer exact-matches the photos it came from, and stripping can
+// create duplicates. This also drops emoji ZWJ tags — an accepted cost, since the user
+// can still type such a tag into the box.
+const TAG_WITH_INVISIBLES = /[\p{Cc}\p{Cf}]/u;
+
+/**
+ * The autocomplete tags offered as one-click searches: duplicates removed, invisibles and
+ * tags longer than MAX_TAG_LENGTH dropped. The length guard is against the strategy's
+ * contract — the real API caps a tag at 120 and the mock can return anything — because
+ * cleanSearch cuts a search to MAX_TAG_LENGTH, so a click on a longer tag would search a
+ * cut tag and miss.
+ */
+const usableTags = (tags: Array<string>): Array<string> => {
+    const kept: Array<string> = [];
+    const seen: Set<string> = new Set();
+    for (const tag of tags) {
+        if (seen.has(tag)) continue;
+        if (tag.length > MAX_TAG_LENGTH || TAG_WITH_INVISIBLES.test(tag)) continue;
+        seen.add(tag);
+        kept.push(tag);
+    }
+    return kept;
+};
+
+/**
+ * The search-photo-tags IPC handler behind the picker's search box: the tags of the
+ * signed-in member's library that CONTAIN the term (search_autocomplete), offered as
+ * one-click exact searches. Unlike get-library-photos this is one cheap request, not a
+ * library walk; it is still throttled to one read at a time with a newer term replacing
+ * one that waits, answered `{success:false, error:'superseded'}`.
+ *
+ * Known limit: searchTagAutocomplete answers [] for a failed request, so a network
+ * failure is indistinguishable from "no matches" here — both show no suggestions.
+ */
+const handleSearchPhotoTags = (async (event: unknown, term?: string) => {
+    if (typeof term !== 'string') return refuseInvalidArgs('autoSubmit', 'search-photo-tags');
+    try {
+        const clean = cleanSearch(term);
+        // Under the server's own minimum the endpoint answers nothing at all, so a request
+        // would be a guaranteed wasted round-trip.
+        if (clean === undefined || clean.length < MIN_AUTOCOMPLETE_CHARS) return { success: true as const, tags: [] };
+        const guard = auth.requireAuthToken('tag suggestions');
+        if (!guard.ok) return guard.response;
+        const { token } = guard;
+        const strategy = apiFactory.getApiStrategy();
+        const memberId = await resolveMemberId(token, strategy.getCurrentMemberProfile, logger, 'library');
+        if (memberId === null) return { success: true as const, tags: [] };
+        const items = await tagThrottle.run(() => strategy.searchTagAutocomplete(token, clean, memberId));
+        if (items === SUPERSEDED) return { success: false as const, error: 'superseded' as const };
+        return { success: true as const, tags: usableTags(items) };
+    } catch (error) {
+        logger.withCategory('autoSubmit').error('Error handling search-photo-tags request:', error);
+        return errorResult(error, 'Failed to look up matching tags');
+    }
+}) satisfies IpcReplyFn;
+
+export {
+    handleGetLibraryPhotos,
+    handleSearchPhotoTags,
+    mapPhoto,
+    hasWonChallenge,
+    __resetLibraryThrottle,
+    MIN_WALK_INTERVAL_MS,
+    TAG_THROTTLE_MS,
+};

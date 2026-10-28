@@ -6,7 +6,7 @@
  */
 import { act, fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal';
-import { mockApi, mockTranslator } from './helpers/setup';
+import { mockApi, mockTranslator, fillTemplate } from './helpers/setup';
 import { titleRuleInfo } from './helpers/titleRules';
 import type { useSettingsSchema } from '@/api/useSettingsSchema';
 import type { Challenge } from '../../src/ts/types/gurushots';
@@ -83,7 +83,7 @@ const HHMM = /\d\d:\d\d/.source;
 beforeEach(() => {
     window.api = invalid(mockApi);
     resetSchema();
-    mockTranslator.t.mockImplementation((key) => TEMPLATES[key] ?? key);
+    mockTranslator.t.mockImplementation((key, vars) => fillTemplate(TEMPLATES[key] ?? key, vars));
     mockApi.getTitleProfile.mockReset().mockResolvedValue(null);
     mockApi.getChallengeOverrides.mockReset().mockResolvedValue({});
     mockApi.getSettings.mockReset().mockResolvedValue(invalid({ app: { timezone: 'UTC', checkFrequencyMax: 30 } }));
@@ -266,14 +266,19 @@ describe('editing and saving', () => {
             expect(box.contains('scroll-pt-16')).toBe(true);
             expect(box.contains('md:scroll-pt-12')).toBe(true);
             expect(box.contains('scroll-pb-60')).toBe(true);
+            // The scroll padding follows Manual Only alone: the banner holds the sticky slot,
+            // so the tab row's padding is gone.
+            expect(box.contains('scroll-pt-12')).toBe(false);
         });
 
-        test('off: neither the alert nor the label shows, and the box keeps only its footer padding', async () => {
+        test('off: neither the alert nor the label shows, and the box pads for the tab row and the footer', async () => {
             await withSwitch(false);
             expect(screen.queryByText('app.manualOnlyAlert')).toBeNull();
             expect(screen.queryByText(/app\.manualOnlyLabel/)).toBeNull();
             const box = document.querySelector('.modal-box')!.classList;
             expect(box.contains('scroll-pt-16')).toBe(false);
+            // The tab row holds the sticky slot when Manual Only is off.
+            expect(box.contains('scroll-pt-12')).toBe(true);
             expect(box.contains('scroll-pb-60')).toBe(true);
         });
     });

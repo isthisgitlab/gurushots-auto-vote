@@ -32,7 +32,6 @@ jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(),
     loadSettings: jest.fn(() => ({ mock: false })),
     setSetting: jest.fn(),
-    isSignOutOwed: jest.fn(() => false),
 }));
 
 jest.mock('../../src/ts/apiFactory', () => {
@@ -40,7 +39,7 @@ jest.mock('../../src/ts/apiFactory', () => {
     return { __mw: middleware, getMiddleware: jest.fn(() => middleware), refreshApi: jest.fn() };
 });
 
-jest.mock('../../src/ts/services/auth', () => ({ clearAuthToken: jest.fn() }));
+jest.mock('../../src/ts/services/auth', () => ({ logout: jest.fn() }));
 
 jest.mock('../../src/ts/cli/prompts', () => ({
     createReadlineInterface: jest.fn(),
@@ -89,7 +88,7 @@ const apiFactory = jest.mocked(
         }
     >(apiFactoryModule),
 );
-const { clearAuthToken } = jest.mocked(require('../../src/ts/services/auth') as typeof authModule);
+const { logout } = jest.mocked(require('../../src/ts/services/auth') as typeof authModule);
 import promptsModule = require('../../src/ts/cli/prompts');
 const prompts = jest.mocked(promptsModule);
 // The handler-module mocks expose their jest.fn table for the assertions.
@@ -132,7 +131,7 @@ beforeEach(() => {
         prompts.askYesNo,
         apiFactory.__mw.cliLogin,
         updateChecker.checkForUpdates,
-        clearAuthToken,
+        logout,
     ].forEach((m) => m.mockReset());
     apiFactory.__mw.isAuthenticated.mockReturnValue(true);
     exitSpy = jest.spyOn(process, 'exit').mockImplementation((code) => {
@@ -226,30 +225,19 @@ describe('auth: login', () => {
 
 describe('auth: logout', () => {
     test('reports a cleared token', async () => {
-        clearAuthToken.mockResolvedValue(true);
+        logout.mockResolvedValue(true);
         await handleLogout();
         expect(msgs('success')).toEqual(['Logged out — token cleared']);
     });
 
     test('reports already logged out', async () => {
-        clearAuthToken.mockResolvedValue(false);
+        logout.mockResolvedValue(false);
         await handleLogout();
         expect(msgs('info')).toEqual(['Already logged out — no token was set']);
     });
 
-    test('a logout recorded for settings that cannot be loaded just now says so, and not that the token was cleared', async () => {
-        clearAuthToken.mockResolvedValue(false);
-        settings.isSignOutOwed.mockReturnValueOnce(true);
-
-        await expect(handleLogout()).resolves.toBe(true);
-
-        expect(msgs('warning')).toEqual([expect.stringContaining('Logout recorded')]);
-        expect(msgs('success')).toEqual([]);
-        expect(msgs('info')).toEqual([]);
-    });
-
     test('a logout the saved settings refused says so in words, not by its code', async () => {
-        clearAuthToken.mockRejectedValue(new Error('logout-not-saved'));
+        logout.mockRejectedValue(new Error('logout-not-saved'));
 
         await expect(handleLogout()).resolves.toBe(false);
 
@@ -257,7 +245,7 @@ describe('auth: logout', () => {
     });
 
     test('a logout refused for a reason that carries no message is still told', async () => {
-        clearAuthToken.mockRejectedValue('weird');
+        logout.mockRejectedValue('weird');
 
         await expect(handleLogout()).resolves.toBe(false);
 
@@ -265,7 +253,7 @@ describe('auth: logout', () => {
     });
 
     test('a logout the settings refused is an error, not a success: the user is told they are still logged in', async () => {
-        clearAuthToken.mockRejectedValue(new Error('The sign-out could not be saved'));
+        logout.mockRejectedValue(new Error('The sign-out could not be saved'));
 
         await expect(handleLogout()).resolves.toBe(false);
 
@@ -393,6 +381,48 @@ describe('discover', () => {
         expect(info).toContain('  • [5] E (default) — free — tags: Kept');
         expect(all()).not.toContain(esc);
         expect(all()).not.toContain('\r');
+    });
+
+    test('a capped challenge shows players/max — · Full when full — and an unreadable side of the fraction is left out', async () => {
+        handlers['get-member-challenges'].mockResolvedValue(
+            invalid({
+                success: true,
+                items: [
+                    { id: 1, title: 'Full', join_coins: 0, players: 120, max_players: 120 },
+                    { id: 2, title: 'Room', join_coins: 0, players: 119, max_players: 120 },
+                    { id: 3, title: 'Uncapped', join_coins: 0 },
+                    { id: 4, title: 'ZeroCap', join_coins: 0, players: 5, max_players: 0 },
+                    { id: 5, title: 'NoCount', join_coins: 0, max_players: 120 },
+                ],
+            }),
+        );
+        await showDiscover();
+        const info = msgs('info');
+        expect(info).toContain('  • [1] Full (?) — free — 120/120 · Full');
+        expect(info).toContain('  • [2] Room (?) — free — 119/120');
+        expect(info).toContain('  • [3] Uncapped (?) — free');
+        expect(info).toContain('  • [4] ZeroCap (?) — free');
+        expect(info).toContain('  • [5] NoCount (?) — free');
+    });
+
+    test('a join-unlock price GuruShots did not send readably shows as "price unknown", not "free"', async () => {
+        handlers['get-member-challenges'].mockResolvedValue(
+            invalid({
+                success: true,
+                items: [
+                    { id: 1, title: 'Zero', join_coins: 0, member: { submit_state: 'join_unlock' } },
+                    { id: 2, title: 'Absent', member: { submit_state: 'join_unlock' } },
+                    { id: 3, title: 'Priced', join_coins: 40, member: { submit_state: 'join_unlock' } },
+                    { id: 4, title: 'Plain', join_coins: 0 },
+                ],
+            }),
+        );
+        await showDiscover();
+        const info = msgs('info');
+        expect(info).toContain('  • [1] Zero (?) — price unknown');
+        expect(info).toContain('  • [2] Absent (?) — price unknown');
+        expect(info).toContain('  • [3] Priced (?) — 40 coins');
+        expect(info).toContain('  • [4] Plain (?) — free');
     });
 
     test('an upcoming challenge shows its tags before the start', async () => {
@@ -644,6 +674,25 @@ describe('join', () => {
         expect(msgs(level).some((m) => m.includes(text))).toBe(true);
     });
 
+    // The error lines word-for-word: each outcome prints exactly this one error, at the error level.
+    test.each([
+        [{ status: 'skipped-unaffordable', cost: 10, coins: 3 }, 'Not enough coins to join 7 (needs 10, you have 3).'],
+        [{ status: 'skipped-unaffordable', cost: 10 }, 'Not enough coins to join 7 (needs 10, you have ?).'],
+        [{ status: 'balance-unknown' }, 'Could not read your coin balance — not joining 7.'],
+        [
+            { status: 'charged-pending-submit' },
+            'Coins were charged for 7 but the join did not complete. Re-run "join 7" to retry the submit — you will NOT be charged again.',
+        ],
+        [{ status: 'failed-no-charge' }, 'Could not join 7. No coins were charged.'],
+        [{ status: 'skipped-no-photo' }, 'No eligible photo to submit for 7. No coins were charged.'],
+        [{ status: 'not-authenticated' }, 'Not logged in — run "login" first, then join 7.'],
+        [{ status: 'fetch-failed' }, 'Could not reach GuruShots to join 7. Check your connection and try again.'],
+    ])('error outcome %p prints exactly its line', async (result, text) => {
+        handlers['join-challenge'].mockResolvedValue(invalid(result));
+        await joinChallengeCmd('7');
+        expect(msgs('error')).toEqual([text]);
+    });
+
     test('coins spent but no photo qualifies: the line says what is missing, not just to re-run', async () => {
         handlers['join-challenge'].mockResolvedValue(
             invalid({ status: 'charged-pending-submit', reason: 'no-photo', cost: 100 }),
@@ -694,28 +743,6 @@ describe('join', () => {
         expect(msgs('error')[0]).not.toContain('reports');
     });
 
-    test("an earlier payment record is worded as an older version's, possibly another account's, and shows no balances", async () => {
-        handlers['join-challenge'].mockResolvedValue(
-            invalid({ status: 'charged-pending-submit', reason: 'earlier-payment', cost: 100, coinsBefore: 500 }),
-        );
-        await joinChallengeCmd('7');
-        expect(msgs('error')).toEqual([
-            `Challenge 7 has a payment record from an older version of the app, from before accounts were told apart, so it is not known whether the coins were taken, or by which GuruShots account used on this device. The join did not finish. ${RERUN} The record cannot be forgotten here, because it may belong to another account: it stops applying to other accounts once the account that paid joins the challenge through this app, and otherwise clears by itself, at the next check after 30 days. If this is not the account that paid, you can join the challenge on the GuruShots website meanwhile.`,
-        ]);
-        expect(msgs('error')[0]).not.toContain('forget-payment');
-        expect(handlers['get-bankroll']).not.toHaveBeenCalled();
-    });
-
-    test('an account that could not be identified says so, instead of "no coins were charged"', async () => {
-        handlers['join-challenge'].mockResolvedValue(
-            invalid({ status: 'failed-no-charge', reason: 'account-unknown', cost: 100 }),
-        );
-        await joinChallengeCmd('7');
-        expect(msgs('error')).toEqual([
-            'Could not confirm which account is logged in, so this attempt to join 7 spent no coins. Try again shortly, or run "login" again.',
-        ]);
-    });
-
     test('a challenge this account has already joined says so and spent nothing, and is not a success of this call', async () => {
         handlers['join-challenge'].mockResolvedValue(
             invalid({ status: 'failed-no-charge', reason: 'already-joined', cost: 100 }),
@@ -723,6 +750,22 @@ describe('join', () => {
         expect(await joinChallengeCmd('7')).toBe(1);
         expect(msgs('info')).toEqual(['This account has already joined 7; nothing was spent.']);
         expect(msgs('error')).toEqual([]);
+    });
+
+    test('a full challenge says so, and where to go instead', async () => {
+        handlers['join-challenge'].mockResolvedValue(invalid({ status: 'failed-no-charge', reason: 'full' }));
+        await joinChallengeCmd('7');
+        expect(msgs('error')).toEqual([
+            'Challenge 7 is full, so this attempt to join it spent no coins. Join another one, or check it on gurushots.com.',
+        ]);
+    });
+
+    test('a price GuruShots did not send says so, and how to refresh it', async () => {
+        handlers['join-challenge'].mockResolvedValue(invalid({ status: 'failed-no-charge', reason: 'price-unknown' }));
+        await joinChallengeCmd('7');
+        expect(msgs('error')).toEqual([
+            'The price for 7 could not be read as a usable price, so it is not known what joining costs — no coins were charged. Run "discover" again to refresh it, or join the challenge on gurushots.com.',
+        ]);
     });
 
     test('an invalid-args refusal prints the invalid-id text, not the retry fallback', async () => {
@@ -848,18 +891,12 @@ describe('forget-payment', () => {
             'info',
             'Forgot the unconfirmed payment for 7. If the coins were in fact taken, joining it again charges you a second time, and auto-join may join it again within its coin budget. Run "join 7"',
         ],
-        [
-            'legacy-record',
-            'error',
-            'is from an older version of the app and may belong to another GuruShots account used on this device, so it cannot be forgotten here. It stops applying to other accounts once the account that paid joins the challenge through this app, and otherwise clears by itself, at the next check after 30 days.',
-        ],
         ['nothing-to-forget', 'error', 'Nothing to forget for 7'],
         [
             'busy',
             'error',
             'A join of 7 is in progress, or another process is using the saved payment records. Nothing was changed.',
         ],
-        ['account-unknown', 'error', 'Could not confirm which account is logged in, so nothing was changed'],
         ['locks-unavailable', 'error', 'The app cannot create its lock files in its data folder'],
         ['not-authenticated', 'error', 'Not logged in'],
         [

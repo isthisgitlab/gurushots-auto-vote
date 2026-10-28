@@ -1,10 +1,10 @@
 {
-    "app": 184179,
-    "login": 78428,
-    "logs": 104432,
-    "capacitor": 533062,
-    "web": 187419,
-    "headless": 341823,
-    "preload": 1209,
+    "app": 182407,
+    "login": 73645,
+    "logs": 94010,
+    "capacitor": 537964,
+    "web": 185630,
+    "headless": 360668,
+    "preload": 1200,
     "preloadLogs": 553
 }

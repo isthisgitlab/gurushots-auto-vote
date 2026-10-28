@@ -10,13 +10,25 @@ import { invalid } from '../helpers/invalid';
 const { createNoticeTracker, formatScenarioNotification, createScenarioNotifier } =
     require('../../src/ts/services/scenarioNotifications') as typeof scenarioNotificationsModule;
 
-const T = (key: string) =>
-    (
-        ({
-            'app.scenarioNotifyTitle': 'Scenario — {title}',
-            'app.scenarioNotifyGroupTitle': '{count} updates',
-        }) as Record<string, string>
-    )[key];
+/** Fill `{name}` tokens the way the translator core does: a missing var renders as an empty string. */
+const fill = (text: string, vars?: Record<string, string | number | null | undefined>): string =>
+    vars === undefined
+        ? text
+        : text.replace(/\{(\w+)\}/g, (_match, name: string) => {
+              const value = vars[name];
+              return value === null || value === undefined ? '' : String(value);
+          });
+
+const T = (key: string, vars?: Record<string, string | number | null | undefined>): string =>
+    fill(
+        (
+            {
+                'app.scenarioNotifyTitle': 'Scenario — {title}',
+                'app.scenarioNotifyGroupTitle': '{count} updates',
+            } as Record<string, string>
+        )[key],
+        vars,
+    );
 const START = 1000;
 
 describe('createNoticeTracker', () => {
@@ -97,6 +109,27 @@ describe('createScenarioNotifier', () => {
             invalid([{ id: 1 }]),
         );
         expect(readOutbox).not.toHaveBeenCalled();
+    });
+
+    test('a marked challenge is skipped: its data cannot be read, so its notices wait', async () => {
+        const readOutbox = jest.fn(() => outbox);
+        const deliver = jest.fn();
+        const notify = createScenarioNotifier({
+            isEnabled: () => true,
+            readOutbox,
+            translate: T,
+            deliver,
+            startedAt: START,
+        });
+        await notify(
+            invalid([
+                { id: 1, title: 'Marked', dataIssues: ['close_time'] },
+                { id: 2, title: 'Show' },
+            ]),
+        );
+        expect(readOutbox).toHaveBeenCalledTimes(1);
+        expect(readOutbox).toHaveBeenCalledWith(expect.objectContaining({ id: 2 }));
+        expect(deliver).toHaveBeenCalledWith({ title: 'Scenario — Show', body: 'hello' });
     });
 
     test('a failure is logged, a failing log is swallowed, and runs never overlap', async () => {

@@ -72,7 +72,7 @@ describe('auto-spend ledger', () => {
         await ledger.reserveFill(1);
         expect(warning).toHaveBeenCalledTimes(1);
         expect(warning).toHaveBeenCalledWith(
-            'auto-spend ledger is not valid JSON (SyntaxError) — no automatic fills until it can be read (tries again next cycle)',
+            'auto-spend ledger is not valid JSON (SyntaxError) — no automatic fills, and no automatic swaps on challenges without a swap history, until it can be read (tries again next cycle)',
             null,
         );
         store.set('{}');
@@ -81,7 +81,7 @@ describe('auto-spend ledger', () => {
         ledger.fills(1);
         expect(warning).toHaveBeenCalledTimes(2);
         expect(warning).toHaveBeenLastCalledWith(
-            'auto-spend ledger is not a JSON object — no automatic fills until it can be read (tries again next cycle)',
+            'auto-spend ledger is not a JSON object — no automatic fills, and no automatic swaps on challenges without a swap history, until it can be read (tries again next cycle)',
             null,
         );
     });
@@ -475,7 +475,7 @@ describe('whether the ledger of the real store can be trusted', () => {
         jest.mocked(fsModule.readFileSync).mockReturnValue('{cut short');
         jest.mocked(logger.withCategory).mockReturnValue(invalid({ warning, error: jest.fn() }));
         load().fills(1);
-        expect(said()).toMatch(/delete .*autoSpends\.json to start the fill count over\)$/);
+        expect(said()).toMatch(/delete .*autoSpends\.json to start the fill and swap counts over\)$/);
         g.Capacitor = { isNativePlatform: () => true };
         load().fills(1);
         expect(said()).toMatch(/\(tries again next cycle\)$/);

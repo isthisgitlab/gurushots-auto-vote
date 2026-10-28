@@ -46,10 +46,10 @@ import votingLogicModule = require('../../src/ts/services/VotingLogic');
 const votingLogic = jest.mocked(votingLogicModule);
 import autoFillModule = require('../../src/ts/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
+import type { CategoryLogger } from '../../src/ts/logger';
 import type * as quitGuardModule from '../../src/ts/windows/quitGuard';
 import type * as logCategoriesModule from '../helpers/logCategories';
 import type * as actions_handlersModule from '../../src/ts/ipc/actions.handlers';
-import type * as accountScopeModule from '../../src/ts/services/accountScope';
 import type * as libraryCacheModule from '../../src/ts/services/libraryCache';
 import type * as discoverChallengesModule from '../../src/ts/services/discoverChallenges';
 import type * as autoClaimModule from '../../src/ts/services/autoClaim';
@@ -71,6 +71,9 @@ const setToken = (token: string | null) => {
 const stubStrategy = <O extends object = {}>(overrides: O = invalid<O>({})) => {
     const strategy = {
         getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [] }),
+        // The suggest handler's discover fallback reads this on every active-list miss; a default
+        // null keeps that miss answering challenge-ended instead of crashing into the catch.
+        getMemberChallenges: jest.fn().mockResolvedValue(null),
         applyTurbo: jest.fn(),
         applyBoostToEntry: jest.fn(),
         getEligiblePhotos: jest.fn(),
@@ -94,27 +97,21 @@ const stubAuthGuardFail = () => {
 };
 
 // What the Chosen Photos settings resolve to, as the join resolves them: the challenge's own
-// list first, then a matching rule, then the global default; plus who saved it and who is signed in.
+// list first, then a matching rule, then the global default.
 const mockChosenSettings = ({
     own = {},
     inherited = [],
     rule = null,
-    savedBy = '',
-    current = 'member-1',
 }: {
     own?: Record<string, string[]>;
     inherited?: string[];
     rule?: { value: string[] } | null;
-    savedBy?: string;
-    current?: string | null;
 }) => {
     jest.mocked(settings.getChallengeOverride).mockImplementation(
         invalid((key: string, id: string) => (key === 'chosenPhotos' ? (own[id] ?? null) : null)),
     );
     jest.mocked(settings.resolveRuleSetting).mockReturnValue(invalid(rule));
     jest.mocked(settings.getEffectiveSetting).mockReturnValue(invalid(inherited));
-    jest.mocked(settings.getSetting).mockReturnValue(invalid(savedBy));
-    jest.mocked(autoFill.peekMemberId).mockReturnValue(current);
 };
 
 // Note on module-scoped state: turboRunLock keeps its set at module scope.
@@ -124,7 +121,6 @@ const mockChosenSettings = ({
 // jest.mock() bindings anyway by giving the handler fresh mock instances).
 const { buildHandlers } = require('../../src/ts/ipc/actions.handlers') as typeof actions_handlersModule;
 const { clearUpcomingCache } = require('../../src/ts/services/discoverChallenges') as typeof discoverChallengesModule;
-const { bumpAccountGeneration } = require('../../src/ts/services/accountScope') as typeof accountScopeModule;
 const { writeListing, readFresh, clearLibraryCache } =
     require('../../src/ts/services/libraryCache') as typeof libraryCacheModule;
 
@@ -138,9 +134,16 @@ const listChallenges = () =>
 
 beforeEach(() => {
     jest.clearAllMocks();
-    // The upcoming list is cached for a minute per account; every test starts without it.
+    // Implementations and property replacements some tests make must not leak into the next one.
+    jest.mocked(settings.getEffectiveSetting).mockReset();
+    jest.mocked(settings.getChallengeOverride).mockReset();
+    jest.mocked(settings.resolveRuleSetting).mockReset();
+    // The upcoming list is cached for a minute; every test starts without it.
     clearUpcomingCache();
     clearLibraryCache();
+    // What the member-challenges writes compare against: the token a request was read under.
+    jest.mocked(settings.getSetting).mockReset();
+    jest.mocked(settings.getSetting).mockReturnValue('tok');
 });
 
 describe('get-active-challenges', () => {
@@ -287,6 +290,44 @@ describe('authenticate', () => {
         const result = await handlers.authenticate({}, 'u', 'p', false);
         expect(result).toEqual({ success: false, error: 'ECONNREFUSED' });
     });
+
+    // Every argument every logger call received, collected from the withCategory results (each call
+    // returns a fresh category logger of jest.fn methods).
+    const loggedArgs = (): string =>
+        JSON.stringify(
+            logger.withCategory.mock.results.flatMap((call) =>
+                Object.values(invalid<CategoryLogger>(call.value)).flatMap(
+                    (fn) => invalid<jest.MockedFunction<(...args: unknown[]) => void>>(fn).mock.calls,
+                ),
+            ),
+        );
+
+    test.each([
+        ['username', invalid<string>(12345), 'pw'],
+        ['password', 'user@example.com', invalid<string>({ user: 'h4x' })],
+    ])(
+        'refuses a non-string %s locally: no strategy, no save, no value in any log',
+        async (_bad, username, password) => {
+            const handlers = buildHandlers();
+            const result = await handlers.authenticate({}, username, password, false);
+
+            expect(result).toEqual({ success: false, error: 'Invalid credentials' });
+            expect(apiFactory.getApiStrategy).not.toHaveBeenCalled();
+            expect(mockSurface.authenticate).not.toHaveBeenCalled();
+            expect(realSurface.authenticate).not.toHaveBeenCalled();
+            expect(settings.setSetting).not.toHaveBeenCalled();
+            expect(loggedArgs()).not.toContain('12345');
+            expect(loggedArgs()).not.toContain('h4x');
+            // One fixed warning on the authentication category, telling a local refusal from a GuruShots one.
+            expect(logger.withCategory).toHaveBeenCalledTimes(1);
+            expect(logger.withCategory).toHaveBeenCalledWith('authentication');
+            const warning = invalid<jest.MockedFunction<(message: string, data?: unknown) => void>>(
+                invalid<CategoryLogger>(logger.withCategory.mock.results[0].value).warning,
+            );
+            expect(warning).toHaveBeenCalledTimes(1);
+            expect(warning.mock.calls[0][0]).toContain('non-string credentials');
+        },
+    );
 });
 
 describe('play-auto-turbo', () => {
@@ -509,9 +550,14 @@ describe('id-taking action handlers — invalid args', () => {
         ['an empty string', ''],
         ['a blank string', '   '],
         ['a string over the id length cap', 'x'.repeat(65)],
+        ['zero', 0],
+        ['a negative id', -1],
+        ['a fraction', 1.5],
+        ['the string zero', '0'],
+        ['an untrimmed id', ' 12 '],
+        ['a reserved word', 'null'],
     ];
     const VALID_IDS: Array<[string, string | number]> = [
-        ['zero', 0],
         ['a numeric id', 123],
         ['a string at the id length cap', 'x'.repeat(64)],
     ];
@@ -715,6 +761,89 @@ describe('fill-challenge-now', () => {
         // an empty stub instead of the real module would break tag-rule
         // resolution and silently degrade.
         expect(depsArg.settings).toBe(settings);
+    });
+});
+
+describe('a live lookup that refuses (marked / prune-unsafe)', () => {
+    const markedChallenge = { id: 123, title: 'C', dataIssues: ['close_time'] };
+
+    test('fill-challenge-now answers challenge-data-incomplete for a marked challenge', async () => {
+        stubAuthGuardOk();
+        stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [markedChallenge] }) });
+        const result = await buildHandlers()['fill-challenge-now']({}, '123', 'one');
+        expect(result).toEqual({ success: false, error: 'challenge-data-incomplete' });
+        expect(autoFill.fillChallengeNow).not.toHaveBeenCalled();
+    });
+
+    test('fill-challenge-now answers challenge-data-incomplete when a prune-unsafe read lost the challenge', async () => {
+        stubAuthGuardOk();
+        stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [], pruneUnsafe: true }) });
+        await expect(buildHandlers()['fill-challenge-now']({}, '123', 'one')).resolves.toEqual({
+            success: false,
+            error: 'challenge-data-incomplete',
+        });
+    });
+
+    test('submit-picked-photos answers challenge-data-incomplete for a marked challenge', async () => {
+        stubAuthGuardOk();
+        autoFill.submitPickedPhotos.mockReset();
+        stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [markedChallenge] }) });
+        const result = await buildHandlers()['submit-picked-photos']({}, '123', ['a']);
+        expect(result).toEqual({ success: false, error: 'challenge-data-incomplete' });
+        expect(autoFill.submitPickedPhotos).not.toHaveBeenCalled();
+    });
+
+    test('suggest-photos answers challenge-data-incomplete and never falls through to the open list', async () => {
+        stubAuthGuardOk();
+        autoFill.suggestFillPhotos
+            .mockReset()
+            .mockResolvedValue({ status: 'suggested' as const, photos: [], statsLimited: false });
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [markedChallenge] }),
+            getMemberChallenges: jest.fn(),
+        });
+        const result = await buildHandlers()['suggest-photos']({}, '123');
+        expect(result).toEqual({ success: false, error: 'challenge-data-incomplete' });
+        expect(strategy.getMemberChallenges).not.toHaveBeenCalled();
+        expect(autoFill.suggestFillPhotos).not.toHaveBeenCalled();
+    });
+
+    test('suggest-photos falls through to the open list when the id is only missing from a prune-unsafe read', async () => {
+        // A Discover row is un-joined, so it was never in the active list: the
+        // prune-unsafe mark of that read is not a refusal for it.
+        stubAuthGuardOk();
+        autoFill.suggestFillPhotos.mockReset().mockResolvedValue({
+            status: 'suggested',
+            photos: [{ id: 'a1', labels: ['Pink'], permission: { allowed: true } }],
+            statsLimited: false,
+        });
+        autoFill.resolveMemberId.mockReset().mockResolvedValue('member-9');
+        const openChallenge = { id: 'open-1', title: 'Open' };
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [], pruneUnsafe: true }),
+            getMemberChallenges: jest.fn().mockResolvedValue([openChallenge]),
+        });
+        const result = await buildHandlers()['suggest-photos']({}, 'open-1');
+        expect(strategy.getMemberChallenges).toHaveBeenCalledWith('tok', 'open');
+        expect(autoFill.suggestFillPhotos).toHaveBeenCalledWith(
+            openChallenge,
+            'tok',
+            expect.anything(),
+            undefined,
+            expect.objectContaining({ ignoreOnly: true }),
+        );
+        expect(result).toMatchObject({ success: true, memberId: 'member-9' });
+    });
+
+    test('play-auto-turbo answers challenge-data-incomplete before the turbo read', async () => {
+        setToken('tok');
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [markedChallenge] }),
+        });
+        votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(true);
+        const result = await buildHandlers()['play-auto-turbo']({}, '123', 'Title');
+        expect(result).toEqual({ success: false, error: 'challenge-data-incomplete' });
+        expect(strategy.runTurboGame).not.toHaveBeenCalled();
     });
 });
 
@@ -934,9 +1063,64 @@ describe('suggest-photos', () => {
     });
 
     test('answers challenge-ended when the live challenge is gone or could not be read', async () => {
-        stubLive([{ id: 999 }]);
+        stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [{ id: 999 }] }),
+            getMemberChallenges: jest.fn().mockResolvedValue(null),
+        });
         await expect(suggest()).resolves.toEqual({ success: false, error: 'challenge-ended' });
         expect(autoFill.suggestFillPhotos).not.toHaveBeenCalled();
+    });
+
+    test('a joined challenge ranks from the active list without ignoreOnly, reading no discover list', async () => {
+        const strategy = stubLive();
+        await expect(suggest()).resolves.toEqual({
+            success: true,
+            memberId: 'member-9',
+            photos: [mapped('a1'), mapped('b2')],
+            statsLimited: false,
+        });
+        const [, , , , opts] = autoFill.suggestFillPhotos.mock.calls[0];
+        expect(opts).toEqual({ usage: undefined, exclude: new Set(), ignoreOnly: false });
+        // The default stub would answer a discover read instead of throwing, so say it outright.
+        expect(strategy.getMemberChallenges).not.toHaveBeenCalled();
+    });
+
+    test('an open-list hit ranks the Discover-row challenge with ignoreOnly', async () => {
+        const openChallenge = { id: 555, title: 'O' };
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [] }),
+            getMemberChallenges: jest.fn().mockResolvedValue([openChallenge]),
+        });
+        await expect(suggest('555')).resolves.toMatchObject({ success: true });
+        expect(strategy.getMemberChallenges).toHaveBeenCalledTimes(1);
+        expect(strategy.getMemberChallenges).toHaveBeenCalledWith('tok', 'open');
+        const [challenge, , , , opts] = autoFill.suggestFillPhotos.mock.calls[0];
+        expect(challenge).toBe(openChallenge);
+        expect(opts).toEqual({ usage: undefined, exclude: new Set(), ignoreOnly: true });
+    });
+
+    test('an upcoming-list hit ranks the Discover-row challenge with ignoreOnly after the open list misses', async () => {
+        const upcomingChallenge = { id: 777, title: 'U' };
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [] }),
+            getMemberChallenges: jest.fn().mockResolvedValueOnce(null).mockResolvedValueOnce([upcomingChallenge]),
+        });
+        await expect(suggest('777')).resolves.toMatchObject({ success: true });
+        expect(strategy.getMemberChallenges).toHaveBeenNthCalledWith(1, 'tok', 'open');
+        expect(strategy.getMemberChallenges).toHaveBeenNthCalledWith(2, 'tok', 'upcoming');
+        const [challenge, , , , opts] = autoFill.suggestFillPhotos.mock.calls[0];
+        expect(challenge).toBe(upcomingChallenge);
+        expect(opts).toEqual({ usage: undefined, exclude: new Set(), ignoreOnly: true });
+    });
+
+    test('answers challenge-ended when the active list and both discover lists miss (a failed read is a miss)', async () => {
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue(null),
+            getMemberChallenges: jest.fn().mockResolvedValue(null),
+        });
+        await expect(suggest('999')).resolves.toEqual({ success: false, error: 'challenge-ended' });
+        expect(autoFill.suggestFillPhotos).not.toHaveBeenCalled();
+        expect(strategy.getMemberChallenges).toHaveBeenCalledTimes(2);
     });
 
     test('ranks the live challenge with settings and the strategy, no submitter, and answers the mapped photos with the member id', async () => {
@@ -969,7 +1153,7 @@ describe('suggest-photos', () => {
             await buildHandlers()['suggest-photos']({}, '123', usage);
             const [, , , count, opts] = autoFill.suggestFillPhotos.mock.calls[0];
             expect(count).toBeUndefined();
-            expect(opts).toEqual({ usage, exclude: new Set() });
+            expect(opts).toEqual({ usage, exclude: new Set(), ignoreOnly: false });
         },
     );
 
@@ -985,7 +1169,7 @@ describe('suggest-photos', () => {
     test('passes the exclude ids on to the ranking as a set, and logs their count, not the ids', async () => {
         await buildHandlers()['suggest-photos']({}, '123', 'submit', ['a1', 'b2', 'a1']);
         const [, , , , opts] = autoFill.suggestFillPhotos.mock.calls[0];
-        expect(opts).toEqual({ usage: 'submit', exclude: new Set(['a1', 'b2']) });
+        expect(opts).toEqual({ usage: 'submit', exclude: new Set(['a1', 'b2']), ignoreOnly: false });
         expect(logCategories('info', '📝 Photo suggestions request: Challenge=123, Excluded=3', null)).toEqual([
             'autoSubmit',
         ]);
@@ -1073,7 +1257,12 @@ describe('suggest-photos', () => {
         finish(suggested());
         await expect(first).resolves.toMatchObject({ success: true });
         expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(1);
-        // The flag was released: this one reaches the live-challenge read, which no longer has 124.
+        // The flag was released: this one reaches the challenge resolution, which no longer has 124
+        // (the discover lists miss too).
+        stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }),
+            getMemberChallenges: jest.fn().mockResolvedValue(null),
+        });
         await expect(suggest('124')).resolves.toEqual({ success: false, error: 'challenge-ended' });
     });
 
@@ -1098,18 +1287,6 @@ describe('suggest-photos', () => {
         expect(logCategories('info', '📝 Photo suggestions request: Challenge=123, Excluded=0', null)).toEqual([
             'autoSubmit',
         ]);
-    });
-
-    describe('when the account changes meanwhile', () => {
-        test('answers account-changed for a ranking that began under the old account, and ranks again next time', async () => {
-            autoFill.suggestFillPhotos.mockImplementationOnce(async () => {
-                bumpAccountGeneration();
-                return suggested();
-            });
-            await expect(suggest()).resolves.toEqual({ success: false, error: 'account-changed' });
-            await expect(suggest()).resolves.toMatchObject({ success: true });
-            expect(autoFill.suggestFillPhotos).toHaveBeenCalledTimes(2);
-        });
     });
 });
 
@@ -1224,91 +1401,27 @@ describe('get-member-challenges', () => {
             expect((await open())[1]).toEqual({ chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 0 });
         });
 
-        test('a list saved under another account is counted but its ids are never sent, and nothing applies', async () => {
-            mockChosenSettings({ own: { '7': ['secret-a', 'secret-b'] }, inherited: ['g1'], savedBy: 'member-0' });
-            const [row] = await open();
-            expect(row).toEqual(expect.objectContaining({ chosenOwn: [], chosenOwnCount: 2, chosenEffectiveCount: 0 }));
-            expect(JSON.stringify(await open())).not.toContain('secret');
-        });
-
-        test('the same account, or no owner on record, gets its ids', async () => {
-            mockChosenSettings({ own: { '7': ['secret-a'] }, savedBy: 'member-1' });
-            expect((await open())[0]).toEqual(expect.objectContaining({ chosenOwn: ['secret-a'] }));
-            mockChosenSettings({ own: { '7': ['secret-a'] }, savedBy: '' });
+        test('the saved list is answered with its ids, as saved', async () => {
+            mockChosenSettings({ own: { '7': ['secret-a'] } });
             expect((await open())[0]).toEqual(expect.objectContaining({ chosenOwn: ['secret-a'] }));
         });
 
-        test('with an owner on record and the signed-in member not known yet, the ids are withheld but the list still applies', async () => {
-            mockChosenSettings({ own: { '7': ['secret-a', 'secret-b'] }, savedBy: 'member-0', current: null });
-            const [row] = await open();
-            expect(row).toEqual(expect.objectContaining({ chosenOwn: [], chosenOwnCount: 2, chosenEffectiveCount: 2 }));
-            expect(JSON.stringify(row)).not.toContain('secret');
-        });
-
-        describe('on a fresh launch the signed-in member is resolved before the ids are withheld', () => {
-            afterEach(() => {
-                jest.mocked(autoFill.resolveMemberId).mockReset();
-                jest.mocked(autoFill.peekMemberId).mockReset();
-            });
-
-            test('a member a lookup already resolved costs no lookup of its own', async () => {
-                mockChosenSettings({ own: { '7': ['a', 'b'] }, savedBy: 'member-0', current: 'member-0' });
-                const [row] = await open();
-                expect(row).toEqual(expect.objectContaining({ chosenOwn: ['a', 'b'] }));
-                expect(autoFill.resolveMemberId).not.toHaveBeenCalled();
-            });
-
-            // peekMemberId knows nobody until the lookup has run, as in a fresh process; the lookup then answers.
-            const unknownUntilResolved = (resolvesTo: string | null) => {
-                jest.mocked(autoFill.peekMemberId).mockReturnValue(null);
-                jest.mocked(autoFill.resolveMemberId).mockResolvedValue(resolvesTo);
-            };
-
-            test('the owner is the signed-in member: its own ids are sent', async () => {
-                mockChosenSettings({ own: { '7': ['a', 'b'] }, savedBy: 'member-0' });
-                unknownUntilResolved('member-0');
-                const [row] = await open();
-                expect(row).toEqual(expect.objectContaining({ chosenOwn: ['a', 'b'], chosenOwnCount: 2 }));
-                expect(autoFill.resolveMemberId).toHaveBeenCalledTimes(1);
-                expect(autoFill.resolveMemberId).toHaveBeenCalledWith(
-                    'tok',
-                    // The strategy's own lookup, as the fill path hands it over.
-                    expect.any(Function),
-                    expect.anything(),
-                    'join',
-                );
-            });
-
-            test('another account: the ids stay withheld and nothing applies', async () => {
-                mockChosenSettings({ own: { '7': ['secret-a'] }, savedBy: 'member-0' });
-                unknownUntilResolved('member-9');
-                const [row] = await open();
-                expect(row).toEqual(
-                    expect.objectContaining({ chosenOwn: [], chosenOwnCount: 1, chosenEffectiveCount: 0 }),
-                );
-                expect(JSON.stringify(row)).not.toContain('secret');
-            });
-
-            test('a lookup that fails keeps withholding, and the list still applies', async () => {
-                mockChosenSettings({ own: { '7': ['secret-a'] }, savedBy: 'member-0' });
-                unknownUntilResolved(null);
-                const [row] = await open();
-                expect(row).toEqual(
-                    expect.objectContaining({ chosenOwn: [], chosenOwnCount: 1, chosenEffectiveCount: 1 }),
-                );
-            });
-        });
-
-        test('the owner and the signed-in member are looked up once per request, not once per challenge', async () => {
+        test('the annotations read the settings only: no identity lookup, no extra challenge fetch', async () => {
+            const getMemberChallenges = jest
+                .fn<Promise<unknown[]>, [string, string]>()
+                .mockResolvedValue([{ id: 7, title: 'Pink' }, {}, { id: 8 }]);
+            const strategy = stubStrategy({ getMemberChallenges });
             mockChosenSettings({ own: { '7': ['a'], '8': ['b'] } });
-            await open();
-            expect(settings.getSetting).toHaveBeenCalledTimes(1);
-            expect(autoFill.peekMemberId).toHaveBeenCalledTimes(1);
+            const result = await listChallenges();
+            expect(result.success).toBe(true);
+            expect(autoFill.resolveMemberId).not.toHaveBeenCalled();
+            expect(strategy.getCurrentMemberProfile).not.toHaveBeenCalled();
+            expect(getMemberChallenges.mock.calls.map((call) => String(call.at(1)))).toEqual(['open', 'upcoming']);
         });
     });
 });
 
-describe('get-open-chosen-annotations — read from the settings, with one cached identity lookup', () => {
+describe('get-open-chosen-annotations — read from the settings', () => {
     const ask = (ids: unknown) =>
         invalid<(event: unknown, ids: unknown) => Promise<unknown>>(buildHandlers()['get-open-chosen-annotations'])(
             {},
@@ -1319,63 +1432,6 @@ describe('get-open-chosen-annotations — read from the settings, with one cache
         clearOpenChallenges();
         jest.mocked(settings.loadSettings).mockReturnValue(invalid({ auth: { token: 'tok' } }));
         mockChosenSettings({ own: { '7': ['a', 'b'] }, inherited: ['g'] });
-        jest.mocked(autoFill.resolveMemberId).mockReset().mockResolvedValue(null);
-    });
-
-    describe("the signed-in member is resolved when no lookup has, so a fresh launch does not withhold the user's own list", () => {
-        afterEach(() => {
-            jest.mocked(autoFill.resolveMemberId).mockReset();
-            jest.mocked(autoFill.peekMemberId).mockReset();
-        });
-
-        test('a member a lookup already resolved costs no lookup of its own', async () => {
-            stubStrategy();
-            mockChosenSettings({ own: { '7': ['a', 'b'] }, savedBy: 'member-0', current: 'member-0' });
-            await expect(ask([7])).resolves.toEqual({
-                success: true,
-                annotations: { '7': { chosenOwn: ['a', 'b'], chosenOwnCount: 2, chosenEffectiveCount: 2 } },
-            });
-            expect(autoFill.resolveMemberId).not.toHaveBeenCalled();
-        });
-
-        const unknownUntilResolved = (resolvesTo: string | null) => {
-            jest.mocked(autoFill.peekMemberId).mockReturnValue(null);
-            jest.mocked(autoFill.resolveMemberId).mockResolvedValue(resolvesTo);
-        };
-
-        test('the member resolves to the owner: the ids are sent', async () => {
-            stubStrategy();
-            mockChosenSettings({ own: { '7': ['a', 'b'] }, savedBy: 'member-0' });
-            unknownUntilResolved('member-0');
-            await expect(ask([7])).resolves.toEqual({
-                success: true,
-                annotations: { '7': { chosenOwn: ['a', 'b'], chosenOwnCount: 2, chosenEffectiveCount: 2 } },
-            });
-            expect(autoFill.resolveMemberId).toHaveBeenCalledTimes(1);
-        });
-
-        test('the member resolves to another account: the ids stay withheld', async () => {
-            stubStrategy();
-            mockChosenSettings({ own: { '7': ['secret-a'] }, savedBy: 'member-0' });
-            unknownUntilResolved('member-9');
-            const result = await ask([7]);
-            expect(result).toEqual({
-                success: true,
-                annotations: { '7': { chosenOwn: [], chosenOwnCount: 1, chosenEffectiveCount: 0 } },
-            });
-            expect(JSON.stringify(result)).not.toContain('secret');
-        });
-
-        test('a failed lookup keeps withholding; with no token there is no lookup at all', async () => {
-            stubStrategy();
-            mockChosenSettings({ own: { '7': ['secret-a'] }, savedBy: 'member-0' });
-            unknownUntilResolved(null);
-            expect(JSON.stringify(await ask([7]))).not.toContain('secret');
-            jest.mocked(autoFill.resolveMemberId).mockClear();
-            jest.mocked(settings.loadSettings).mockReturnValue(invalid({ auth: { token: '' } }));
-            await ask([7]);
-            expect(autoFill.resolveMemberId).not.toHaveBeenCalled();
-        });
     });
 
     test('answers from the settings, without fetching the challenge list or touching an entry', async () => {
@@ -1415,24 +1471,6 @@ describe('get-open-chosen-annotations — read from the settings, with one cache
         expect(settings.resolveRuleSetting).toHaveBeenLastCalledWith('chosenPhotos', { id: 9 });
     });
 
-    test("under another account's list the ids are never sent", async () => {
-        mockChosenSettings({ own: { '7': ['a', 'b'] }, savedBy: 'member-0' });
-        const result = await ask([7]);
-        expect(result).toEqual({
-            success: true,
-            annotations: { '7': { chosenOwn: [], chosenOwnCount: 2, chosenEffectiveCount: 0 } },
-        });
-        expect(JSON.stringify(result)).not.toContain('"a"');
-    });
-
-    test('with an owner on record and the member not known yet, the ids are withheld but the list applies', async () => {
-        mockChosenSettings({ own: { '7': ['a', 'b'] }, savedBy: 'member-0', current: null });
-        await expect(ask([7])).resolves.toEqual({
-            success: true,
-            annotations: { '7': { chosenOwn: [], chosenOwnCount: 2, chosenEffectiveCount: 2 } },
-        });
-    });
-
     test.each([
         ['not an array', '7'],
         ['an item that is not an id', [7, {}]],
@@ -1457,11 +1495,11 @@ describe('get-open-chosen-annotations — read from the settings, with one cache
     });
 
     test('a failing settings read is an error result, never a throw', async () => {
-        jest.mocked(settings.loadSettings).mockImplementation(() => {
+        jest.mocked(settings.getChallengeOverride).mockImplementation(() => {
             throw new Error('read failed');
         });
         await expect(ask([7])).resolves.toEqual({ success: false, error: 'read failed', annotations: {} });
-        jest.mocked(settings.loadSettings).mockImplementation(() => {
+        jest.mocked(settings.getChallengeOverride).mockImplementation(() => {
             throw new Error('');
         });
         await expect(ask([7])).resolves.toEqual({
@@ -1485,29 +1523,24 @@ describe('forget-unconfirmed-payment', () => {
         expect(result).toEqual({ success: true, status: 'forgotten' });
     });
 
-    test.each([
-        'nothing-to-forget',
-        'legacy-record',
-        'busy',
-        'account-unknown',
-        'unreadable',
-        'locks-unavailable',
-        'not-authenticated',
-    ] as const)('a %s answer is a failure that names it, and never throws', async (status) => {
-        stubAuthGuardOk();
-        stubStrategy({
-            forgetUnconfirmedPayment: jest
-                .fn<Promise<ForgetOutcome>, [string | number, string]>()
-                .mockResolvedValue({ status, challengeId: 5 }),
-        });
-        expect(await buildHandlers()['forget-unconfirmed-payment']({}, 5)).toEqual({
-            success: false,
-            error: status,
-            status,
-        });
-    });
+    test.each(['nothing-to-forget', 'busy', 'unreadable', 'locks-unavailable', 'not-authenticated'] as const)(
+        'a %s answer is a failure that names it, and never throws',
+        async (status) => {
+            stubAuthGuardOk();
+            stubStrategy({
+                forgetUnconfirmedPayment: jest
+                    .fn<Promise<ForgetOutcome>, [string | number, string]>()
+                    .mockResolvedValue({ status, challengeId: 5 }),
+            });
+            expect(await buildHandlers()['forget-unconfirmed-payment']({}, 5)).toEqual({
+                success: false,
+                error: status,
+                status,
+            });
+        },
+    );
 
-    // A claim is keyed `<member id>:<challenge id>`: an id with a colon in it could name another account's record.
+    // A claim is keyed by its challenge id: an id with a colon in it is not one.
     test.each([['555:123'], ['abc'], ['1.5'], ['-1'], [' 5'], ['5\n'], ['0x10'], [1.5], [-1]])(
         'the id %p is not a plain challenge id: refused, and nothing is forgotten',
         async (id) => {
@@ -2386,9 +2419,11 @@ describe('get-member-challenges — upcoming challenges', () => {
         expect(flaky.getMemberChallenges.mock.calls.filter(([, filter]) => filter === 'upcoming')).toHaveLength(2);
     });
 
-    test('accounts do not share the cache', async () => {
+    test('a login that replaced the token empties the upcoming cache', async () => {
         const strategy = stubStrategy({ getMemberChallenges: lists([], [up(2, HOUR)]) });
         await shown();
+        // What a login that replaces the token does (forgetAccountMemory).
+        clearUpcomingCache();
         auth.requireAuthToken = jest.fn().mockReturnValue({ ok: true, token: 'other', settings: {} });
         await shown();
         expect(strategy.getMemberChallenges.mock.calls.filter(([, filter]) => filter === 'upcoming')).toEqual([
@@ -2438,7 +2473,7 @@ describe('get-member-challenges — upcoming challenges', () => {
         expect(settings.resolveRuleSetting).toHaveBeenLastCalledWith('chosenPhotos', { id: 2 });
     });
 
-    describe('a request still in flight when the account is forgotten (logout, account switch)', () => {
+    describe('a request still in flight when a login replaced the token', () => {
         const inFlight = () => {
             let release: (value: unknown) => void = () => undefined;
             const gate = new Promise((resolve) => (release = resolve));
@@ -2450,28 +2485,23 @@ describe('get-member-challenges — upcoming challenges', () => {
             return { release: () => release(undefined) };
         };
 
-        test('writes nothing: no id lists, no cached challenges, and says so', async () => {
+        test('the lists are answered but nothing is remembered for the account they were not read under', async () => {
+            stubAuthGuardOk();
             const { release } = inFlight();
             const pending = listChallenges();
-            bumpAccountGeneration(); // what logout / an account switch does (forgetAccountMemory)
+            // What a login that replaces the token does (switchAccountToken, forgetAccountMemory):
+            // the stored token the next write compares against is no longer the request's.
+            jest.mocked(settings.getSetting).mockReturnValueOnce('tok-2');
             release();
-            expect(await pending).toEqual({
-                success: false,
-                error: 'The account changed while listing challenges',
-                items: [],
-            });
+            const answer = await pending;
+            expect(answer).toMatchObject({ success: true });
             expect(settings.rememberOpenChallengeIds).not.toHaveBeenCalled();
             expect(settings.rememberUpcomingChallenges).not.toHaveBeenCalled();
-            // The cache holds nothing of it: the id resolves as a bare id.
-            mockChosenSettings({ rule: { value: ['r1'] } });
-            setToken('tok');
-            await invalid<(event: object, ids: unknown) => Promise<unknown>>(
-                buildHandlers()['get-open-chosen-annotations'],
-            )({}, [2]);
-            expect(settings.resolveRuleSetting).toHaveBeenLastCalledWith('chosenPhotos', { id: 2 });
         });
 
-        test('the account being the same, the same request writes as usual', async () => {
+        test('the token being unchanged, the same request writes as usual', async () => {
+            stubAuthGuardOk();
+            jest.mocked(settings.getSetting).mockReturnValue('tok');
             const { release } = inFlight();
             const pending = listChallenges();
             release();
@@ -2602,14 +2632,15 @@ describe('the library listing an action of this window outdates', () => {
             wonIds: [],
             wonCount: 0,
             truncated: false,
+            nextStart: 0,
             allowedKnown: true,
             readAtMs: Date.now(),
         };
-        writeListing('tok', '123', listing);
-        writeListing('tok', '124', listing);
-        writeListing('tok', null, listing);
+        writeListing('123', listing);
+        writeListing('124', listing);
+        writeListing(null, listing);
     };
-    const kept = (id: string | null) => readFresh('tok', id) !== null;
+    const kept = (id: string | null) => readFresh(id) !== null;
     const expectDropped = () => {
         expect(kept('123')).toBe(false);
         // Only that challenge's: another's, and the no-challenge one, stay.

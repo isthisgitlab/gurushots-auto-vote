@@ -1,8 +1,7 @@
 /**
- * The changes of the import marker that could not be made (another process held the settings lock for the whole wait, or
- * the write was refused), against a real temp directory: they are made again with the next save or start while the app
- * runs, each only while the condition it served still stands, once said in the log, and a change that is refused to its
- * caller is never made later.
+ * The import marker, against a real temp directory: when it says the import is done (including one that cannot be
+ * read), and the changes of it that could not be made (another process held the settings lock for the whole wait, or
+ * the write was refused) — they are made again with the next save while the app runs, once said in the log.
  */
 
 jest.mock('node:fs', () => {
@@ -38,7 +37,7 @@ import { parseJsonObject } from '../helpers/parseJson';
 
 type CatDouble = jest.Mocked<Pick<CategoryLogger, 'warning'>>;
 
-describe('the pending changes of the import marker (real fs)', () => {
+describe('the import marker (real fs)', () => {
     let root: string;
     let markerFile: string;
     let marker: typeof importMarkerModule;
@@ -65,8 +64,7 @@ describe('the pending changes of the import marker (real fs)', () => {
         });
     };
     const stored = () => parseJsonObject(fs.readFileSync(markerFile, 'utf8'));
-    const write = (fields: Record<string, unknown>) =>
-        fs.writeFileSync(markerFile, JSON.stringify({ importedAt: '2026-10-01T00:00:00.000Z', ...fields }));
+    const write = (fields: Record<string, unknown>) => fs.writeFileSync(markerFile, JSON.stringify(fields));
 
     beforeEach(() => {
         root = fs.mkdtempSync(path.join(os.tmpdir(), 'gs-marker-'));
@@ -82,161 +80,142 @@ describe('the pending changes of the import marker (real fs)', () => {
         fs.rmSync(root, { recursive: true, force: true });
     });
 
-    test('a marker that cannot be read counts as missing for every question, is said once, and does not stand for a lost import', () => {
-        // A directory where the file should be: reading it throws.
-        fs.mkdirSync(markerFile);
-        load();
+    describe('when it says the import is done', () => {
+        test.each([
+            ['holds importedAt', '{"importedAt":"2026-10-01T00:00:00.000Z"}', true],
+            ['holds mirrorStartedAt', '{"mirrorStartedAt":"2026-10-01T00:00:00.000Z"}', true],
+            [
+                'holds both',
+                '{"importedAt":"2026-10-01T00:00:00.000Z","mirrorStartedAt":"2026-10-01T00:00:01.000Z"}',
+                true,
+            ],
+            ['holds a field an older build wrote', '{"signOutScrubPending":"a-sign-out"}', false],
+            ['is not a JSON object', '{garbage', true],
+            ['is a JSON array', '[]', true],
+            ['is empty', '{}', false],
+        ])('%s', (_name, raw, done) => {
+            fs.writeFileSync(markerFile, raw);
+            load();
 
-        expect(marker.isMirrorStarted()).toBe(false);
-        expect(marker.configSource()).toBeNull();
-        expect(marker.mirroredSignIns()).toEqual([]);
-        // It is no proof that the import never ran: settings.json is not imported over it.
-        expect(marker.isImportMarked()).toBe(true);
-        expect(cat.warning).toHaveBeenCalledTimes(1);
-        expect(cat.warning).toHaveBeenCalledWith(expect.stringContaining('could not be read'));
-
-        // Once it reads again, a later failure is said again.
-        fs.rmSync(markerFile, { recursive: true });
-        expect(marker.isMirrorStarted()).toBe(false);
-        expect(marker.isImportMarked()).toBe(false);
-        fs.mkdirSync(markerFile);
-        expect(marker.isMirrorStarted()).toBe(false);
-        expect(cat.warning).toHaveBeenCalledTimes(2);
-    });
-
-    test('a marker that cannot be read is said without the path the error names, which holds the user name', () => {
-        write({});
-        load();
-        jest.spyOn(fs, 'readFileSync').mockImplementation(() => {
-            throw new Error("EACCES: permission denied, open '/Users/someone/data/v2-import.json'");
+            expect(marker.isImportMarked()).toBe(done);
         });
 
-        expect(marker.isMirrorStarted()).toBe(false);
+        test('a marker that cannot be read counts as done, is said once, and said again after it reads and fails once more', () => {
+            // A directory where the file should be: reading it throws.
+            fs.mkdirSync(markerFile);
+            load();
 
-        expect(cat.warning).toHaveBeenCalledWith(expect.stringContaining("open 'v2-import.json'"));
-        expect(JSON.stringify(cat.warning.mock.calls)).not.toContain('someone');
-    });
+            expect(marker.isImportMarked()).toBe(true);
+            expect(cat.warning).toHaveBeenCalledTimes(1);
+            expect(cat.warning).toHaveBeenCalledWith(expect.stringContaining('could not be read'));
 
-    test('a marker whose read throws a value that carries no message is said without one', () => {
-        write({});
-        load();
-        jest.spyOn(fs, 'readFileSync').mockImplementation(() => {
-            throw 'weird';
+            // Once it reads again, a later failure is said again.
+            fs.rmSync(markerFile, { recursive: true });
+            expect(marker.isImportMarked()).toBe(false);
+            fs.mkdirSync(markerFile);
+            expect(marker.isImportMarked()).toBe(true);
+            expect(cat.warning).toHaveBeenCalledTimes(2);
+            // A failure that follows without a read in between is not said again.
+            expect(marker.isImportMarked()).toBe(true);
+            expect(cat.warning).toHaveBeenCalledTimes(2);
         });
 
-        expect(marker.isMirrorStarted()).toBe(false);
+        test('a marker that cannot be read is said without the path the error names, which holds the user name', () => {
+            write({ importedAt: '2026-10-01T00:00:00.000Z' });
+            load();
+            jest.spyOn(fs, 'readFileSync').mockImplementation(() => {
+                throw new Error("EACCES: permission denied, open '/Users/someone/data/v2-import.json'");
+            });
 
-        expect(cat.warning).toHaveBeenCalledWith(
-            expect.stringContaining('could not be read, so it counts as missing: unknown error'),
-        );
+            marker.isImportMarked();
+
+            expect(cat.warning).toHaveBeenCalledWith(expect.stringContaining("open 'v2-import.json'"));
+            expect(JSON.stringify(cat.warning.mock.calls)).not.toContain('someone');
+        });
+
+        test('a marker whose read throws a value that carries no message is said without one', () => {
+            write({ importedAt: '2026-10-01T00:00:00.000Z' });
+            load();
+            jest.spyOn(fs, 'readFileSync').mockImplementation(() => {
+                throw 'weird';
+            });
+
+            marker.isImportMarked();
+
+            expect(cat.warning).toHaveBeenCalledWith(
+                expect.stringContaining('could not be read, so it counts as done: unknown error'),
+            );
+        });
     });
 
-    test('forgetting a copy that is replayed after another was recorded leaves the newer one', () => {
-        write({ unimportableCopy: 'settings.json.unimportable-1' });
-        load();
-        lock.busy = true;
-        marker.forgetUnimportableCopy();
-        expect(stored().unimportableCopy).toBe('settings.json.unimportable-1');
+    describe('markImportDone', () => {
+        test('writes the one fact, dropping what an older build kept there', () => {
+            write({ signOutScrubPending: 'a-sign-out', signInPending: 'a-fingerprint' });
+            load();
 
-        lock.busy = false;
-        marker.rememberUnimportableCopy('settings.json.unimportable-2');
-        marker.flushPendingMarkerChanges();
+            marker.markImportDone();
 
-        expect(stored().unimportableCopy).toBe('settings.json.unimportable-2');
+            expect(stored()).toEqual({ importedAt: expect.any(String) });
+        });
+
+        test('a marker that already says so is left as it is', () => {
+            write({ importedAt: '2026-01-01T00:00:00.000Z' });
+            load();
+
+            marker.markImportDone();
+
+            expect(stored()).toEqual({ importedAt: '2026-01-01T00:00:00.000Z' });
+        });
     });
 
-    test('forgetting a copy is made when the replay finds it still recorded', () => {
-        write({ unimportableCopy: 'settings.json.unimportable-1' });
-        load();
-        lock.busy = true;
-        marker.forgetUnimportableCopy();
+    describe('a change that could not be made yet', () => {
+        test('is said once, not at every replay, and made when the lock is free again', () => {
+            write({});
+            load();
+            lock.busy = true;
+            marker.markImportDone();
+            expect(cat.warning).toHaveBeenCalledTimes(1);
 
-        lock.busy = false;
-        marker.flushPendingMarkerChanges();
+            marker.flushPendingMarkerChanges();
+            marker.flushPendingMarkerChanges();
 
-        expect(stored()).not.toHaveProperty('unimportableCopy');
-    });
+            expect(cat.warning).toHaveBeenCalledTimes(1);
+            expect(cat.warning).toHaveBeenCalledWith(expect.stringContaining('while the app runs'));
 
-    test('the set-aside a Start fresh owed is forgotten by the replay only while it is the same record', () => {
-        write({ legacyAsideOwed: 'one' });
-        load();
-        lock.busy = true;
-        marker.clearLegacyAsideOwed('one');
-        lock.busy = false;
-        marker.flushPendingMarkerChanges();
-        expect(stored()).not.toHaveProperty('legacyAsideOwed');
+            lock.busy = false;
+            marker.flushPendingMarkerChanges();
 
-        write({ legacyAsideOwed: 'one' });
-        lock.busy = true;
-        marker.clearLegacyAsideOwed('one');
-        lock.busy = false;
-        // Another Start fresh recorded a set-aside of its own meanwhile.
-        write({ legacyAsideOwed: 'two' });
-        marker.flushPendingMarkerChanges();
+            expect(stored()).toEqual({ importedAt: expect.any(String) });
+        });
 
-        expect(stored().legacyAsideOwed).toBe('two');
-    });
+        test('a replay whose condition has gone writes nothing: what is done stays done', () => {
+            write({ importedAt: '2026-01-01T00:00:00.000Z' });
+            load();
+            lock.busy = true;
+            marker.markImportDone();
+            lock.busy = false;
 
-    test('a change that could not be made is said once, not at every replay', () => {
-        write({});
-        load();
-        lock.busy = true;
-        marker.rememberUnimportableCopy('/data/settings.json.unimportable-2026-10-10T10-00-00-000Z');
-        expect(cat.warning).toHaveBeenCalledTimes(1);
+            marker.flushPendingMarkerChanges();
 
-        marker.flushPendingMarkerChanges();
-        marker.flushPendingMarkerChanges();
+            expect(stored()).toEqual({ importedAt: '2026-01-01T00:00:00.000Z' });
+        });
 
-        expect(cat.warning).toHaveBeenCalledTimes(1);
-        expect(cat.warning).toHaveBeenCalledWith(expect.stringContaining('while the app runs'));
-    });
+        test('a queued write that fails later is kept and made with the next flush', async () => {
+            write({});
+            load();
+            const now = jest.spyOn(marker.importMarkerStore, 'updateNow').mockReturnValue(null);
+            const through = jest.spyOn(marker.importMarkerStore, 'updateThrough').mockResolvedValue('failed');
+            marker.markImportDone();
+            await new Promise((resolve) => setTimeout(resolve, 0));
 
-    test('a sign-out owed that could not be recorded is refused, and not recorded later', () => {
-        write({});
-        load();
-        lock.busy = true;
-        expect(marker.markSignOutOwed(['a.b.c.d'])).toBeNull();
+            expect(stored()).toEqual({});
 
-        lock.busy = false;
-        marker.flushPendingMarkerChanges();
+            // The next flush (the next save or start) makes it.
+            now.mockRestore();
+            through.mockRestore();
+            marker.flushPendingMarkerChanges();
 
-        expect(stored()).not.toHaveProperty('signOutOwed');
-    });
-
-    test('removing an owed sign-out that could not be removed is not replayed: the record stays, harmless', () => {
-        write({});
-        load();
-        const record = marker.markSignOutOwed(['a.b.c.d']);
-        if (record === null) throw new Error('expected a record');
-        lock.busy = true;
-        marker.clearSignOutOwed(record.id);
-
-        lock.busy = false;
-        marker.flushPendingMarkerChanges();
-
-        expect(stored().signOutOwed).toMatchObject({ id: record.id, fingerprints: ['a.b.c.d'] });
-        expect(marker.signOutOwedStored()).toEqual(record);
-    });
-
-    test('an owed sign-out is removed by its own id and no other', () => {
-        write({});
-        load();
-        const first = marker.markSignOutOwed(['a.b.c.d']);
-        const second = marker.markSignOutOwed(['e.f.g.h']);
-        if (first === null || second === null) throw new Error('expected records');
-
-        marker.clearSignOutOwed(first.id);
-
-        expect(marker.signOutOwedStored()).toEqual(second);
-        marker.clearSignOutOwed(second.id);
-        expect(stored()).not.toHaveProperty('signOutOwed');
-    });
-
-    test('a record that is not a well-formed owed sign-out is none', () => {
-        write({ signOutOwed: { id: 'x', at: 'now', fingerprints: [1] } });
-        load();
-        expect(marker.signOutOwedStored()).toBeNull();
-        write({ signOutOwed: 'old' });
-        expect(marker.signOutOwedStored()).toBeNull();
+            expect(stored()).toEqual({ importedAt: expect.any(String) });
+        });
     });
 });

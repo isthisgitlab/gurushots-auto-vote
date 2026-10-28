@@ -91,6 +91,9 @@ test('the upcoming mock challenges reach Discover: those inside the 24 h window,
         ['900003', undefined],
         ['900004', undefined],
         ['900005', undefined],
+        ['900006', undefined],
+        ['900007', undefined],
+        ['900008', undefined],
         [UPCOMING_FREE, 'upcoming'],
         [UPCOMING_PAID, 'upcoming'],
     ]);
@@ -107,17 +110,17 @@ test('the CLI lists them as "starts in …" and says how to choose their photos'
     await showDiscover();
     const lines = printed();
     expect(lines).toContain('=== Open and upcoming challenges ===');
-    expect(
-        lines.some(
-            (l) => l.startsWith(`  • [${UPCOMING_FREE}] Mock Upcoming Free Challenge`) && l.includes('starts in'),
-        ),
-    ).toBe(true);
+    expect(lines.some((l) => l.startsWith(`  • [${UPCOMING_FREE}] Halloween Time`) && l.includes('starts in'))).toBe(
+        true,
+    );
     expect(
         lines.some((l) => l.startsWith(`  • [${UPCOMING_PAID}]`) && l.includes('150 coins') && l.includes('starts in')),
     ).toBe(true);
     expect(lines.some((l) => l.includes(UPCOMING_LATER))).toBe(false);
     expect(lines).toContain('  list-photos --challenge=<id>');
-    expect(lines.some((l) => l.startsWith('  • [900001] Mock Free Challenge') && !l.includes('starts in'))).toBe(true);
+    expect(lines.some((l) => l.startsWith('  • [900001] Best of Black & White') && !l.includes('starts in'))).toBe(
+        true,
+    );
 });
 
 test('chosen photos are saved for an upcoming id and survive a join pass and cleanup — with the window at 0 too', async () => {
@@ -167,7 +170,16 @@ test('with the first upcoming fetch failing, nothing is recorded and cleanup sti
         settings.setChallengeOverride('chosenPhotos', UPCOMING_FREE, [FIRST]);
         const result = await listChallenges();
         // The open list still shows, without the upcoming rows.
-        expect(result.items.map((c) => String(c.id))).toEqual(['900001', '900002', '900003', '900004', '900005']);
+        expect(result.items.map((c) => String(c.id))).toEqual([
+            '900001',
+            '900002',
+            '900003',
+            '900004',
+            '900005',
+            '900006',
+            '900007',
+            '900008',
+        ]);
         expect(settings.getUpcomingChallengeIds()).toBeNull();
         settings.setSetting('autoJoin', true);
         await joinPass();
@@ -191,7 +203,7 @@ test('an upcoming challenge cannot be joined yet, nothing is spent, and the open
     expect(await join({}, 900001, false)).toEqual(expect.objectContaining({ success: true, status: 'joined' }));
 });
 
-test('a fill with the pick-order setting on submits the chosen photos in list order', async () => {
+test('a fill consumes the chosen photos it enters: the emptied list reads as no preference until re-planted', async () => {
     const strategy = getApiStrategy();
     const challenge = invalid<Challenge>({
         id: Number(UPCOMING_FREE),
@@ -201,9 +213,12 @@ test('a fill with the pick-order setting on submits the chosen photos in list or
         close_time: Math.floor(Date.now() / 1000) + 3600,
         member: { ranking: { entries: [] } },
     });
+    // The consumption holds for ids the facts cache has not seen active — the
+    // join-time hold — so the challenge is seeded before the fills.
+    settings.rememberChallengeTitles([{ id: Number(UPCOMING_FREE), title: 'Pink Flowers' }]);
     settings.setChallengeOverride('chosenPhotos', UPCOMING_FREE, [FIRST, SECOND]);
-    const submit = async (inOrder: boolean) => {
-        settings.setChallengeOverride('chosenPhotosInOrder', UPCOMING_FREE, inOrder);
+    settings.setChallengeOverride('chosenPhotosInOrder', UPCOMING_FREE, true);
+    const submit = async () => {
         const submitToChallenge = jest.fn(strategy.submitToChallenge);
         await fillChallengeNow(challenge, 'smoke-token', 'all', {
             settings,
@@ -217,10 +232,24 @@ test('a fill with the pick-order setting on submits the chosen photos in list or
         });
         return submitToChallenge.mock.calls.map(([, ids]) => ids);
     };
-    // In order: the list's first photo goes first, though the scorer prefers the pink flower.
-    const [ordered] = await submit(true);
-    expect(ordered.slice(0, 2)).toEqual([FIRST, SECOND]);
-    // Off: the scorer orders the chosen photos, and the pink one is first.
-    const [ranked] = await submit(false);
-    expect(ranked[0]).toBe(SECOND);
+
+    // In order: the list's first photos go first, though the scorer prefers the pink flower.
+    const [first] = await submit();
+    expect(first).toEqual([FIRST, SECOND, 'photo_pink_petal_005']);
+
+    // The entered photos are used up: the list emptied and the key went away
+    // (the pick-order flag stays), so the challenge reads as no preference.
+    expect(settings.getChallengeOverrides(UPCOMING_FREE)).toEqual({ chosenPhotosInOrder: true });
+
+    // Without re-planting, the next fill has no chosen block: the stated
+    // general-pool ranking of the remaining eligible photos fills the slots
+    // (the themed search returns the two pink photos; photo_old_008 reached
+    // the first pick only through the list's own library walk).
+    const [general] = await submit();
+    expect(general).toEqual(['photo_pink_flower_001', 'photo_pink_petal_005']);
+
+    // Re-planting the list brings the chosen block back, positions intact.
+    settings.setChallengeOverride('chosenPhotos', UPCOMING_FREE, [FIRST, SECOND]);
+    const [replanted] = await submit();
+    expect(replanted.slice(0, 2)).toEqual([FIRST, SECOND]);
 });

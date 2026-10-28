@@ -101,11 +101,6 @@ describe('pin', () => {
         expect(apiFactory.__getActiveChallenges).not.toHaveBeenCalled();
     });
 
-    test('the challenge id is printed as plain text', async () => {
-        expect(await pinCmd('7\nforged\u001b[2J')).toBe(true);
-        expect(msgsAt('info')[0]).toBe('Pins on challenge 7 forged:');
-    });
-
     test('a failed read of the pins is an error, not an empty list', async () => {
         handlers['get-entry-pins'].mockResolvedValue(null);
         expect(await pinCmd('111')).toBe(false);
@@ -121,6 +116,7 @@ describe('pin', () => {
     test.each([
         ['an over-long', '7'.repeat(65)],
         ['a blank', '   '],
+        ['a control-character', '7\nforged\u001b[2J'],
     ])('%s challenge id is refused up front, before any handler or lookup', async (_name, id) => {
         expect(await pinCmd(id)).toBe(false);
         expect(await pinCmd(id, { boost: 'imgA' })).toBe(false);

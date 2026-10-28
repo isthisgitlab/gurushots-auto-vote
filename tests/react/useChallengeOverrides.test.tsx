@@ -7,7 +7,6 @@
 import { renderHook, act, waitFor } from '@testing-library/preact';
 import { useChallengeOverrides } from '@/hooks/useChallengeOverrides';
 import { mockApi } from './helpers/setup';
-import { announceChosenPhotosCleared } from '@/api/chosenPhotosCleared';
 import { invalid } from '../helpers/invalid';
 import { titleRuleInfo } from './helpers/titleRules';
 import type { RendererSchema } from '../../src/ts/types/settingsEditor';
@@ -104,37 +103,6 @@ test("applyProfile(): a profile that sets Manual Only wins over the challenge's 
     // An own `true` stays when the profile has no value for the key.
     act(() => result.current.applyProfile({ exposure: 60 }));
     expect(result.current.overrides).toEqual({ exposure: 60, manualPhotosOnly: true });
-});
-
-test('every list removed while the form is open leaves the overrides and the matched profile without it', async () => {
-    mockApi.getChallengeOverrides.mockReset().mockResolvedValue({ exposure: 50, chosenPhotos: ['a'] });
-    mockApi.getTitleProfile.mockReset().mockResolvedValue(
-        titleRuleInfo({
-            profile: { name: 'Mine', values: { exposure: 60, chosenPhotos: ['b'] } },
-            inlineValues: { chosenPhotos: ['c'], scenario: 'Plan' },
-        }),
-    );
-    const p = {
-        ...props(),
-        schema: invalid<RendererSchema>({
-            exposure: { type: 'number', default: 100, perChallenge: true },
-            chosenPhotos: { type: 'photos', default: [], perChallenge: true },
-        }),
-    };
-    const { result } = renderHook(() => useChallengeOverrides(p));
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.overrides).toEqual({ exposure: 50, chosenPhotos: ['a'] });
-
-    act(() => announceChosenPhotosCleared());
-    expect(result.current.overrides).toEqual({ exposure: 50 });
-    // The matched profile and both rule layers lose the list too; everything else stays.
-    expect(result.current.profileValues).toEqual({ exposure: 60 });
-    expect(result.current.titleRules?.ruleValues).toEqual({ exposure: 60, scenario: 'Plan' });
-    expect(result.current.titleRules?.inlineValues).toEqual({ scenario: 'Plan' });
-    expect(result.current.inheritedOf('chosenPhotos')).toEqual([]);
-
-    await act(() => result.current.save());
-    expect(mockApi.replaceChallengeOverrides).toHaveBeenCalledWith('1', { exposure: 50 }, false);
 });
 
 describe("what the challenge's rules contribute", () => {
@@ -452,9 +420,6 @@ describe('isDirty', () => {
         mockApi.getChallengeOverrides.mockReset().mockReturnValue(new Promise(() => {}));
         const { result } = renderHook(() => useChallengeOverrides(props()));
         expect(result.current.isDirty()).toBe(false);
-        // A list removed before the load lands has no baseline to move.
-        act(() => announceChosenPhotosCleared());
-        expect(result.current.isDirty()).toBe(false);
     });
 
     test('an edit is dirty, putting it back is not, and a refetch of the same data is not', async () => {
@@ -491,13 +456,6 @@ describe('isDirty', () => {
         act(() => result.current.clearAll());
         expect(result.current.isDirty()).toBe(true);
         act(() => result.current.changeOverride('exposure', 50));
-        expect(result.current.isDirty()).toBe(false);
-    });
-
-    test('a chosen-photos clear is not an unsaved edit', async () => {
-        const { result } = await open({ exposure: 50, chosenPhotos: ['a'] });
-        act(() => announceChosenPhotosCleared());
-        expect(result.current.overrides).toEqual({ exposure: 50 });
         expect(result.current.isDirty()).toBe(false);
     });
 

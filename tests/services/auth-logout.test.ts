@@ -12,7 +12,6 @@
 import { invalid } from '../helpers/invalid';
 import type { Challenge, DiscoverChallenge } from '../../src/ts/types/gurushots';
 import type * as discoverChallengesModule from '../../src/ts/services/discoverChallenges';
-import type * as accountScopeModule from '../../src/ts/services/accountScope';
 import type * as libraryCacheModule from '../../src/ts/services/libraryCache';
 
 // The simulated write-behind store the settings mock exposes as __state.
@@ -33,6 +32,8 @@ jest.mock('../../src/ts/settings', () => {
             return true;
         }),
         forgetOpenChallengeIds: jest.fn(),
+        // The mocked environment boots in mock mode: a logout must land back on this default.
+        getEnvironmentInfo: jest.fn(() => ({ defaultMock: true })),
         flushPendingWrites: jest.fn(async () => {
             // The async flush is what actually persists.
             state.flushCalls++;
@@ -46,7 +47,7 @@ const settings = jest.mocked(settingsModule as typeof settingsModule & { __state
 import type * as authModule from '../../src/ts/services/auth';
 import type * as openChallengeCacheModule from '../../src/ts/services/openChallengeCache';
 import type * as chosenPhotosModule from '../../src/ts/services/autoFill/chosenPhotos';
-const { clearAuthToken, switchAccountToken } = require('../../src/ts/services/auth') as typeof authModule;
+const { clearAuthToken, logout, switchAccountToken } = require('../../src/ts/services/auth') as typeof authModule;
 
 describe('clearAuthToken', () => {
     beforeEach(() => {
@@ -73,20 +74,6 @@ describe('clearAuthToken', () => {
         expect(settings.forgetOpenChallengeIds).toHaveBeenCalledTimes(1);
     });
 
-    it('moves the account generation once, so a request begun before the logout writes nothing', async () => {
-        const { accountGeneration } = require('../../src/ts/services/accountScope') as typeof accountScopeModule;
-        const before = accountGeneration();
-        await clearAuthToken();
-        expect(accountGeneration()).toBe(before + 1);
-        const afterLogout = accountGeneration();
-        switchAccountToken('another-token');
-        expect(accountGeneration()).toBe(afterLogout + 1);
-        // The same token again is the same account.
-        const same = accountGeneration();
-        switchAccountToken('another-token');
-        expect(accountGeneration()).toBe(same);
-    });
-
     it('forgets the photo-library listings, so the next account is never shown the previous one’s', async () => {
         const { writeListing, readFresh, readLatest } =
             require('../../src/ts/services/libraryCache') as typeof libraryCacheModule;
@@ -96,21 +83,20 @@ describe('clearAuthToken', () => {
             wonIds: [],
             wonCount: 0,
             truncated: false,
+            nextStart: 0,
             allowedKnown: false,
             readAtMs: Date.now(),
         };
-        writeListing('old-token', null, listing);
-        expect(readFresh('old-token', null)).not.toBeNull();
+        writeListing(null, listing);
+        expect(readFresh(null)).not.toBeNull();
         await clearAuthToken();
-        expect(readFresh('old-token', null)).toBeNull();
-        expect(readLatest('old-token')).toBeNull();
-        switchAccountToken('old-token');
-        writeListing('old-token', null, listing);
-        switchAccountToken('old-token');
-        // The same token again is the same account: its listings stay.
-        expect(readFresh('old-token', null)).not.toBeNull();
+        expect(readFresh(null)).toBeNull();
+        expect(readLatest()).toBeNull();
+        switchAccountToken('another-token');
+        // A login that replaces a different token forgets it too.
+        writeListing(null, listing);
         switchAccountToken('a-third-token');
-        expect(readFresh('old-token', null)).toBeNull();
+        expect(readFresh(null)).toBeNull();
     });
 
     it("forgets the cached upcoming list, so the next account is never shown the previous one's", async () => {
@@ -152,33 +138,23 @@ describe('clearAuthToken', () => {
         expect(settings.flushPendingWrites).toHaveBeenCalledTimes(1);
     });
 
-    it('flushes after the clear write, never before', async () => {
-        const order: string[] = [];
-        settings.setSetting.mockImplementation(
-            invalid<typeof settingsModule.setSetting>((key: string, value: unknown) => {
-                order.push('set');
-                settings.__state.cached[key] = value;
-                return true;
-            }),
-        );
-        settings.flushPendingWrites.mockImplementation(async () => {
-            order.push('flush');
-            settings.__state.persisted = { ...settings.__state.cached };
-        });
+    it('does not touch the mock flag — the mode reset belongs to the explicit logout', async () => {
+        settings.__state.cached.mock = false;
 
         await clearAuthToken();
 
-        expect(order).toEqual(['set', 'flush']);
+        // The quit path clears the token only: no reset write, and the environment was never asked for its default.
+        expect(settings.setSetting).toHaveBeenCalledTimes(1);
+        expect(settings.setSetting).toHaveBeenCalledWith('token', '');
+        expect(settings.getEnvironmentInfo).not.toHaveBeenCalled();
+        expect(settings.__state.cached.mock).toBe(false);
     });
 
     it('reports a logout the settings refused, never takes it for one, and keeps what is remembered of the account that is still logged in', async () => {
         settings.setSetting.mockReturnValueOnce(false);
-        const { accountGeneration } = require('../../src/ts/services/accountScope') as typeof accountScopeModule;
-        const before = accountGeneration();
 
         await expect(clearAuthToken()).rejects.toThrow('logout-not-saved');
 
-        expect(accountGeneration()).toBe(before);
         expect(settings.forgetOpenChallengeIds).not.toHaveBeenCalled();
         expect(settings.flushPendingWrites).toHaveBeenCalledTimes(1);
     });
@@ -190,11 +166,74 @@ describe('clearAuthToken', () => {
 });
 
 /**
+ * The explicit-logout wrapper: everything clearAuthToken does, plus the mode's
+ * return to the environment default. A quit with stay-logged-in off must never
+ * reset the mode — only an explicit logout does — so the reset lives behind
+ * this wrapper, not in the shared core.
+ */
+describe('logout', () => {
+    beforeEach(() => {
+        settings.__state.cached = { token: 'old-token' };
+        settings.__state.persisted = { token: 'old-token' };
+        settings.__state.flushCalls = 0;
+        jest.clearAllMocks();
+    });
+
+    it('returns the mode to the environment default when the sign-out holds', async () => {
+        settings.__state.cached.mock = false;
+
+        await logout();
+
+        expect(settings.setSetting).toHaveBeenCalledWith('mock', true);
+        expect(settings.__state.cached.mock).toBe(true);
+        expect(settings.__state.persisted.mock).toBe(true);
+    });
+
+    it('leaves the mock flag as it is when the settings refuse the sign-out', async () => {
+        settings.__state.cached.mock = false;
+        settings.setSetting.mockReturnValueOnce(false);
+
+        await expect(logout()).rejects.toThrow('logout-not-saved');
+
+        // Only the refused token write was attempted — no reset rode along.
+        expect(settings.setSetting).toHaveBeenCalledTimes(1);
+        expect(settings.__state.cached.mock).toBe(false);
+    });
+
+    it('queues the mock reset before the flush, so the one durable write covers both', async () => {
+        const order: string[] = [];
+        let mockPendingAtFlush: unknown;
+        settings.setSetting.mockImplementation(
+            invalid<typeof settingsModule.setSetting>((key: string, value: unknown) => {
+                order.push(key);
+                settings.__state.cached[key] = value;
+                return true;
+            }),
+        );
+        settings.flushPendingWrites.mockImplementation(async () => {
+            mockPendingAtFlush = settings.__state.cached.mock;
+            order.push('flush');
+            settings.__state.persisted = { ...settings.__state.cached };
+        });
+
+        await logout();
+
+        // A Capacitor OS kill between the writes still loses the session: the reset
+        // must already be queued when the flush — the only durability point — runs.
+        expect(order).toEqual(['token', 'mock', 'flush']);
+        expect(mockPendingAtFlush).toBe(true);
+    });
+});
+
+/**
  * stayLoggedIn off must drop the token on every shell, CLI and Android included — otherwise
- * the token stays on disk indefinitely, the opposite of what the setting promises. The rule
- * lives with the rest of the auth core so every shell can apply it; the Electron
- * single-instance gate stays in windows/lifecycle.ts because that part really is
- * Electron-specific.
+ * the token stays on disk indefinitely, the opposite of what the setting promises. The one
+ * exception is armed Android: the launch clear (wired in tests/react/CapacitorEntry.test.tsx;
+ * the web shell's are in tests/web/server.test.ts, the CLI's in the voting-command tests)
+ * skips while background auto-vote is armed, because the armed service is the token's
+ * designed consumer. The rule lives with the rest of the auth core so every shell can apply
+ * it; the Electron single-instance gate stays in windows/lifecycle.ts because that part
+ * really is Electron-specific.
  */
 describe('clearTokenUnlessStayingLoggedIn', () => {
     const { clearTokenUnlessStayingLoggedIn } = require('../../src/ts/services/auth') as typeof authModule;

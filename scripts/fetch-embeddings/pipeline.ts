@@ -18,6 +18,8 @@ import {
     TOP_N,
     CENTER_TOP_N,
     GENERIC_TOKEN_RE,
+    COMPOUND_TOKEN_RE,
+    COMPOUND_TOP_N,
     BAD_COLLISION_COSINE,
     MAX_BAD_COLLISION_RATE,
     MEAN_CENTER,
@@ -48,6 +50,7 @@ export interface MainOptions {
     expectedEntrySha256?: string;
     maxDownloadBytes?: number;
     topN?: number;
+    compoundTopN?: number;
     meanCenter?: boolean;
 }
 
@@ -66,6 +69,7 @@ export const main = async ({
     expectedEntrySha256 = ENTRY_SHA256,
     maxDownloadBytes = MAX_DOWNLOAD_BYTES,
     topN = TOP_N,
+    compoundTopN = COMPOUND_TOP_N,
     meanCenter = MEAN_CENTER,
 }: MainOptions = {}): Promise<void> => {
     const parsedConcepts: unknown = JSON.parse(fs.readFileSync(conceptsPath, 'utf8'));
@@ -96,6 +100,10 @@ export const main = async ({
     // frequency order), which assignStems' precedence relies on.
     const rows: Array<ScanRow> = [];
     const authoredFound = new Set<string>();
+    // Compound-token lines within the cap, buffered RAW in rank order. They are
+    // not parsed here — the entry's bytes are only hash-verified once the scan
+    // completes, and nothing is kept from them before that check passes.
+    const compoundCandidates: Array<string> = [];
     let genericKept = 0;
     let parsed = 0;
     const onLine = (line: string) => {
@@ -104,6 +112,10 @@ export const main = async ({
         if (firstSpace <= 0) return;
         const token = line.slice(0, firstSpace);
         const isAuthored = authored.has(token);
+        if (!isAuthored && parsed <= compoundTopN && COMPOUND_TOKEN_RE.test(token)) {
+            compoundCandidates.push(line);
+            return;
+        }
         if (!isAuthored && (genericKept >= topN || !GENERIC_TOKEN_RE.test(token))) return;
         const row = parseGloveLine(line, DIMS);
         if (!row) return;
@@ -140,6 +152,20 @@ export const main = async ({
             missing.join(', '),
             'Fix or drop them in scripts/lexicon-concepts.json — the vocab guarantee is enforced, not assumed.',
         ]);
+    }
+
+    // Now that the entry bytes are hash-verified, parse the buffered compounds.
+    // A compound ships only when EVERY hyphen-split part is a kept surface
+    // (generic top-N or authored). It never counts against genericKept/TOP_N
+    // and never joins the centering baseline; appending in rank order lets
+    // assignStems' first-wins precedence keep the more frequent surface's key.
+    if (compoundCandidates.length) {
+        const keptSurfaces = new Set(rows.map((row) => row.token));
+        for (const line of compoundCandidates) {
+            const row = parseGloveLine(line, DIMS);
+            if (!row || !row.token.split('-').every((part) => keptSurfaces.has(part))) continue;
+            rows.push({ ...row, isAuthored: false, centerBaseline: false });
+        }
     }
 
     if (meanCenter) {

@@ -14,7 +14,7 @@ describe('LogEntry', () => {
     test('shows an existing log message in the selected Latvian language', async () => {
         mockApi.getSetting.mockResolvedValue('lv');
         const translator = createTranslator();
-        mockTranslator.t.mockImplementation((key) => translator.t(key, 'lv'));
+        mockTranslator.t.mockImplementation((key) => translator.t(key, undefined, 'lv'));
         try {
             const { container } = render(
                 <LogEntry
@@ -29,6 +29,28 @@ describe('LogEntry', () => {
             );
             await waitFor(() => expect(container.textContent).toContain('Norādīts nederīgs laika zīmogs'));
             expect(container.textContent).toContain('[T1] ℹ️ Informācija MAIN Balsošana');
+        } finally {
+            mockApi.getSetting.mockResolvedValue(null);
+            mockTranslator.t.mockImplementation((key) => key);
+        }
+    });
+
+    test.each([
+        ['Error refreshing title rules: disk', 'Kļūda, atsvaidzinot izaicinājumu noteikumus: disk'],
+        // The ❌ a message leads with is the level's own icon: the entry renders it once, on the badge.
+        ['❌ Error refreshing title rules: disk', 'Kļūda, atsvaidzinot izaicinājumu noteikumus: disk'],
+        ['Error loading title rules: disk', 'Kļūda, ielādējot izaicinājumu noteikumus: disk'],
+    ])('localizes the title-rules failure lines in Latvian (%s)', async (message, latvian) => {
+        mockApi.getSetting.mockResolvedValue('lv');
+        const translator = createTranslator();
+        mockTranslator.t.mockImplementation((key) => translator.t(key, undefined, 'lv'));
+        try {
+            const { container } = render(
+                <LogEntry
+                    entry={{ timestamp: 'T1', level: 'ERROR', context: 'MAIN', category: 'settings', message }}
+                />,
+            );
+            await waitFor(() => expect(container.textContent).toContain(latvian));
         } finally {
             mockApi.getSetting.mockResolvedValue(null);
             mockTranslator.t.mockImplementation((key) => key);

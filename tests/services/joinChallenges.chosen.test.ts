@@ -21,9 +21,16 @@ jest.mock('../../src/ts/logger', () => {
         success: (m: string) => lines.success.push(m),
         warning: (m: string) => lines.warning.push(m),
     };
+    // The T-methods render through the real catalog onto the same sink arrays.
+    const { renderLogTemplate } = require('../helpers/logTemplate') as typeof import('../helpers/logTemplate');
+    const tMethods = {
+        infoT: (key: string, params: unknown[]) => lines.info.push(renderLogTemplate(key, params)),
+        warningT: (key: string, params: unknown[]) => lines.warning.push(renderLogTemplate(key, params)),
+        errorT: (key: string, params: unknown[]) => lines.error.push(renderLogTemplate(key, params)),
+    };
     return {
         __lines: lines,
-        withCategory: jest.fn(() => level),
+        withCategory: jest.fn(() => ({ ...level, ...tMethods })),
         challengeTag: (c: { id?: string | number } | null) => `challenge ${c?.id}`,
     };
 });
@@ -115,7 +122,7 @@ const makeDeps = (library: PickerPhoto[] = [...eleven, CAR], over: Record<string
         coinsUnlock: jest.fn(async () => ({ ok: true })),
         submitToChallenge: jest.fn(async () => ({ ok: true })),
         getEligiblePhotos: makeLibrary(library.filter((p) => p.id !== 'car')),
-        getEligiblePhotosWalk: jest.fn(async () => ({ items: library, truncated: false })),
+        getEligiblePhotosWalk: jest.fn(async () => ({ items: library, truncated: false, nextStart: library.length })),
         getCurrentMemberProfile: jest.fn(async () => ({ id: 'member-1', userName: 'u' })),
         joinStateStore: makeStore(),
         ...over,
@@ -168,7 +175,7 @@ describe('the chosen photo is the join photo', () => {
     test('a chosen photo that cannot be entered leaves the ordinary pick', async () => {
         withSettings({ chosenPhotos: ['car'], submitWithoutTagMatch: true });
         const deps = makeDeps(eleven, {
-            getEligiblePhotosWalk: jest.fn(async () => ({ items: eleven, truncated: false })),
+            getEligiblePhotosWalk: jest.fn(async () => ({ items: eleven, truncated: false, nextStart: eleven.length })),
         });
         const res = await performJoin(challenge(), 'tok', deps, 0);
         expect(res.status).toBe('joined');
@@ -188,7 +195,7 @@ describe('the chosen photo is the join photo', () => {
     test('an unreadable photo list is a no-photo skip', async () => {
         withSettings({ chosenPhotos: ['car'] });
         const deps = makeDeps(undefined, { getEligiblePhotos: jest.fn(async () => []) });
-        deps.getEligiblePhotosWalk = invalid(jest.fn(async () => ({ items: [], truncated: false })));
+        deps.getEligiblePhotosWalk = invalid(jest.fn(async () => ({ items: [], truncated: false, nextStart: 0 })));
         const res = await performJoin(challenge(), 'tok', deps, 0);
         expect(res).toEqual({ status: 'skipped-no-photo', charged: 0 });
     });
@@ -244,7 +251,7 @@ describe('Submit Only Chosen Photos on a join', () => {
     test('nothing usable: skipped before any coin is spent, and explained once', async () => {
         withSettings({ chosenPhotos: ['gone'], chosenPhotosOnly: true });
         const deps = makeDeps(eleven, {
-            getEligiblePhotosWalk: jest.fn(async () => ({ items: eleven, truncated: false })),
+            getEligiblePhotosWalk: jest.fn(async () => ({ items: eleven, truncated: false, nextStart: eleven.length })),
         });
         const first = await performJoin(challenge(), 'tok', deps, 50);
         const second = await performJoin(challenge(), 'tok', deps, 50);
@@ -271,7 +278,7 @@ describe('Submit Only Chosen Photos on a join', () => {
     test('a join that already unlocked submits an automatic pick — no second coinsUnlock', async () => {
         withSettings({ chosenPhotos: ['gone'], chosenPhotosOnly: true });
         const deps = makeDeps(eleven, {
-            getEligiblePhotosWalk: jest.fn(async () => ({ items: eleven, truncated: false })),
+            getEligiblePhotosWalk: jest.fn(async () => ({ items: eleven, truncated: false, nextStart: eleven.length })),
             joinStateStore: makeStore(JSON.stringify({ '1': { unlockedAt: Date.now() } })),
         });
         const res = await performJoin(challenge(), 'tok', deps, 50);
@@ -283,7 +290,7 @@ describe('Submit Only Chosen Photos on a join', () => {
     test('a free join is not a paid one: a stray marker does not lift Submit Only Chosen Photos for it', async () => {
         withSettings({ chosenPhotos: ['gone'], chosenPhotosOnly: true });
         const deps = makeDeps(eleven, {
-            getEligiblePhotosWalk: jest.fn(async () => ({ items: eleven, truncated: false })),
+            getEligiblePhotosWalk: jest.fn(async () => ({ items: eleven, truncated: false, nextStart: eleven.length })),
             joinStateStore: makeStore(JSON.stringify({ '1': { unlockedAt: Date.now() } })),
         });
         expect(await performJoin(challenge(), 'tok', deps, 0)).toEqual({ status: 'skipped-no-chosen', charged: 0 });
@@ -293,7 +300,7 @@ describe('Submit Only Chosen Photos on a join', () => {
     test('a manual join auto-picks', async () => {
         withSettings({ chosenPhotos: ['gone'], chosenPhotosOnly: true });
         const deps = makeDeps(eleven, {
-            getEligiblePhotosWalk: jest.fn(async () => ({ items: eleven, truncated: false })),
+            getEligiblePhotosWalk: jest.fn(async () => ({ items: eleven, truncated: false, nextStart: eleven.length })),
             getMemberChallenges: jest.fn(async () => [{ id: 1, join_coins: 0 }]),
         });
         const res = await joinChallengeSingle(1, 'tok', deps);
@@ -304,7 +311,7 @@ describe('Submit Only Chosen Photos on a join', () => {
     test('the automatic pass reports the skip as its own status', async () => {
         withSettings({ autoJoin: true, chosenPhotos: ['gone'], chosenPhotosOnly: true, autoJoinMaxCoins: 0 });
         const deps = makeDeps(eleven, {
-            getEligiblePhotosWalk: jest.fn(async () => ({ items: eleven, truncated: false })),
+            getEligiblePhotosWalk: jest.fn(async () => ({ items: eleven, truncated: false, nextStart: eleven.length })),
             getMemberChallenges: jest.fn(async () => [{ id: 1, join_coins: 0 }]),
         });
         const pass = await runJoinPass('tok', Date.now(), deps);
@@ -316,7 +323,7 @@ describe('Submit Only Chosen Photos on a join', () => {
     test('only candidates that have an id are remembered as open', async () => {
         withSettings({ autoJoin: true, chosenPhotos: ['gone'], chosenPhotosOnly: true });
         const deps = makeDeps(eleven, {
-            getEligiblePhotosWalk: jest.fn(async () => ({ items: eleven, truncated: false })),
+            getEligiblePhotosWalk: jest.fn(async () => ({ items: eleven, truncated: false, nextStart: eleven.length })),
             getMemberChallenges: jest.fn(async () => [{ id: 1, join_coins: 0 }, { title: 'no id' }, null]),
         });
         await runJoinPass('tok', Date.now(), deps);
@@ -379,19 +386,6 @@ describe('a photo library that cannot be read is not an empty one (the real read
     });
 });
 
-describe('the list belongs to one account', () => {
-    test('another account ignores it on a join, with one line', async () => {
-        withSettings({ chosenPhotos: ['car'], chosenPhotosOnly: true });
-        settings.getSetting.mockReturnValue(invalid('member-2'));
-        const deps = makeDeps();
-        const res = await performJoin(challenge(), 'tok', deps, 0);
-        // Ignored, so Only has nothing to enforce.
-        expect(res.status).toBe('joined');
-        expect(res.imageId).not.toBe('car');
-        expect(lines.warning.filter((m) => m.includes('saved while another account was logged in'))).toHaveLength(1);
-    });
-});
-
 describe("resolveJoinSetting reads the candidate's own override for the chosen keys only", () => {
     test('a per-id override wins, including an explicit empty list and an off flag', () => {
         settings.getChallengeOverride.mockImplementation((key: string) =>
@@ -422,5 +416,33 @@ describe("resolveJoinSetting reads the candidate's own override for the chosen k
         withSettings({ chosenPhotos: ['from-rule'] });
         expect(resolveJoinSetting('chosenPhotos', invalid({ title: 'x' }))).toEqual(['from-rule']);
         expect(settings.getChallengeOverride).not.toHaveBeenCalled();
+    });
+});
+
+describe("GuruShots' suggested photos as a join-pick tiebreak", () => {
+    test('a suggested photo is picked above equally theme-matched ones', async () => {
+        const getSuggestedPhotoIds = jest.fn(async (_token: string, challengeId: string | number) =>
+            String(challengeId) === '1' ? ['auto-7'] : [],
+        );
+        const deps = makeDeps([...eleven, CAR], { getSuggestedPhotoIds });
+        const res = await performJoin(challenge(), 'tok', deps, 0);
+        expect(res).toEqual({ status: 'joined', charged: 0, imageId: 'auto-7' });
+        expect(getSuggestedPhotoIds).toHaveBeenCalledWith('tok', 1);
+    });
+
+    test('without the dep the pick is what it always was', async () => {
+        const deps = makeDeps();
+        const res = await performJoin(challenge(), 'tok', deps, 0);
+        expect(res).toEqual({ status: 'joined', charged: 0, imageId: 'auto-0' });
+    });
+
+    test('a failed read of the suggestions is logged and the join picks as usual', async () => {
+        const deps = makeDeps(eleven, {
+            getSuggestedPhotoIds: jest.fn(async () => Promise.reject(new Error('down'))),
+        });
+        const res = await performJoin(challenge(), 'tok', deps, 0);
+        expect(res.status).toBe('joined');
+        expect(res.imageId).toMatch(/^auto-/);
+        expect(lines.debug.some((m) => m.includes('could not read the suggested photos for 1: down'))).toBe(true);
     });
 });

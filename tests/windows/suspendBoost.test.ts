@@ -18,7 +18,22 @@ type Describe = NonNullable<
 >;
 
 jest.mock('../../src/ts/logger', () => {
-    const cat = { info: jest.fn(), warning: jest.fn(), error: jest.fn() };
+    const { renderLogTemplate } = require('../helpers/logTemplate') as typeof import('../helpers/logTemplate');
+    // The T-methods render through the real catalog onto the same level fn, so
+    // the assertions below keep reading today's rendered lines.
+    const info = jest.fn();
+    const warning = jest.fn();
+    const error = jest.fn();
+    const tInto = (line: (message: string, data: unknown) => void) => (key: string, params: unknown[], data: unknown) =>
+        line(renderLogTemplate(key, params), data);
+    const cat = {
+        info,
+        warning,
+        error,
+        infoT: jest.fn(tInto(info)),
+        warningT: jest.fn(tInto(warning)),
+        errorT: jest.fn(tInto(error)),
+    };
     return {
         withCategory: jest.fn(() => cat),
         challengeTag: (c: { id: number; title: string }) => `[Challenge ${c.id}: ${c.title}]`,
@@ -30,6 +45,7 @@ jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(),
     getEffectiveSetting: jest.fn(),
     getEnvironmentInfo: jest.fn(),
+    consumeChosenPhotos: jest.fn(() => false),
 }));
 jest.mock('../../src/ts/apiFactory', () => ({ getApiStrategy: jest.fn() }));
 jest.mock('../../src/ts/services/VotingLogic', () => ({ describeDeadlineActions: jest.fn() }));

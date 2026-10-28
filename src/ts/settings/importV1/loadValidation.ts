@@ -135,8 +135,9 @@ const dropInvalidV1Values = (settings: V1Blob): string[] => {
  * Delete the legacy top-level boostConfig key and every globalDefaults / perChallenge key the frozen schema does not
  * define, then any per-challenge map left empty. Mutates `settings`; true when anything was removed.
  *
- * @param keptKey - a key the frozen schema does not define that is kept all the same: the live settings schema's own,
- *   for the import of the settings.json the app itself writes (see settings/formatOneMirror.ts)
+ * @param keptKey - a key the frozen schema does not define that is kept all the same: the live settings schema's own.
+ *   The `settings.json` beside the configuration holds what this app wrote, whose keys the live schema defines; a file
+ *   an older build wrote holds none of them, and the predicate then matches nothing.
  */
 const pruneV1Obsolete = (settings: V1Blob, keptKey: (key: string) => boolean = () => false): boolean => {
     let hasChanges = false;

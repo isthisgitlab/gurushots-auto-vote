@@ -1,9 +1,7 @@
 /**
  * The import on Android: in the app window (Preferences behind a cache, which must have been hydrated before the
  * import can read anything) and in the background service (the native store; the compare-and-write of the
- * configuration decides which context imports first); and the mirror that keeps settings.json current in both: written
- * only once the configuration it is made from has landed, as a compare-and-overwrite that is made again from the stored
- * configuration when settings.json changed under it, and given up quietly after a few tries.
+ * configuration decides which context imports first).
  */
 
 // No test here may touch the real user-data folder: the path is a made-up one that does not exist.
@@ -117,17 +115,127 @@ describe('the import in the Android app window', () => {
         expect(settings.getSettingsRecovery()).toBeNull();
         await settings.flushPendingWrites();
         await settle();
-        // settings.json is brought up to date by the first read of what is stored, not of the import still on its way.
-        settings.loadSettings();
-        await settings.flushPendingWrites();
-        await settle();
         // The pins are saved against what is stored, so the cache shows them once they are.
         expect(settings.getTitlePins()).toEqual({ '7': 'Macro' });
         expect(saved('gurushots-config')).toMatchObject({ version: 2 });
         expect(prefs.has('gs_v2_import')).toBe(true);
-        // settings.json is the mirror now, sign-in state kept; the file the user had is kept beside it.
-        expect(saved('gurushots-settings')).toMatchObject({ theme: 'dark', token: 'tok-secret' });
-        expect(prefs.get('gurushots-settings_original')).toBe(ONE_X);
+        // settings.json is left as the user had it: nothing is written back to it.
+        expect(prefs.get('gurushots-settings')).toBe(ONE_X);
+        expect(savedKeys()).not.toContain('gurushots-settings');
+    });
+});
+
+describe('a damaged configuration in the Android app window', () => {
+    beforeEach(() => {
+        g.Capacitor = { isNativePlatform: () => true };
+    });
+
+    test('is set aside by a queued copy; when the store refuses it, saves are refused until a read tries again', async () => {
+        prefs.set('gurushots-config', '{broken');
+        const settings = loadSettingsModule();
+        await settings.initializeAsync();
+        const realSet = mockPreferences.set.getMockImplementation();
+        mockPreferences.set.mockImplementation(({ key, value }) => {
+            if (key.startsWith('gurushots-config_corrupt')) return Promise.reject(new Error('disk full'));
+            prefs.set(key, value);
+            return Promise.resolve();
+        });
+        const told: string[] = [];
+        settings.onSettingsRecoveryChange(() => {
+            told.push(settings.getSettingsRecovery()?.code ?? 'none');
+        });
+
+        expect(settings.loadSettings()).toEqual(settings.getDefaultSettings());
+        await settings.flushPendingWrites();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        // The copy was refused: the damaged text is still what is stored, and saving is refused.
+        expect(settings.getSettingsRecovery()).toEqual({
+            code: 'settings-unreadable',
+            path: 'gurushots-config',
+            blocking: true,
+        });
+        expect(told).toEqual(['settings-unreadable']);
+        expect(settings.setSetting('theme', 'light')).toBe(false);
+        expect(prefs.get('gurushots-config')).toBe('{broken');
+
+        // The store takes the copy again: the next read sets it aside, and the notice says where it went.
+        mockPreferences.set.mockImplementation(realSet);
+        settings.loadSettings();
+        await settings.flushPendingWrites();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(settings.getSettingsRecovery()).toEqual({
+            code: 'settings-corrupt',
+            path: expect.stringContaining('gurushots-config_corrupt-'),
+            blocking: false,
+        });
+        expect(prefs.get('gurushots-config')).toBeUndefined();
+        expect(settings.setSetting('theme', 'light')).toBe(true);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(told).toEqual(['settings-unreadable', 'settings-corrupt']);
+    });
+
+    test('a copy the store refuses is said in the log when no window listens', async () => {
+        prefs.set('gurushots-config', '{broken');
+        const settings = loadSettingsModule();
+        await settings.initializeAsync();
+        mockPreferences.set.mockImplementation(({ key, value }) => {
+            if (key.startsWith('gurushots-config_corrupt')) return Promise.reject(new Error('disk full'));
+            prefs.set(key, value);
+            return Promise.resolve();
+        });
+
+        settings.loadSettings();
+        await settings.flushPendingWrites();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(settings.getSettingsRecovery()?.code).toBe('settings-unreadable');
+    });
+
+    test('an import that cannot pass stores the defaults and the marker once the queued write lands', async () => {
+        prefs.set('gurushots-settings', '{broken');
+        const settings = loadSettingsModule();
+        await settings.initializeAsync();
+
+        settings.loadSettings();
+        await settings.flushPendingWrites();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(parseJsonObject(prefs.get('gurushots-config') ?? 'null')).toMatchObject({
+            imported: { failure: { reason: 'corrupt' } },
+        });
+        expect(parseJsonObject(prefs.get('gs_v2_import') ?? 'null')).toEqual({ importedAt: expect.any(String) });
+        expect(settings.getSettingsRecovery()).toEqual({
+            code: 'settings-import-failed',
+            path: 'gurushots-settings',
+            blocking: false,
+            detail: 'corrupt',
+        });
+    });
+
+    test('an import that cannot pass stores the defaults; when their write is refused, the marker is not written and the next start tries the import again', async () => {
+        prefs.set('gurushots-settings', '{broken');
+        const settings = loadSettingsModule();
+        await settings.initializeAsync();
+        mockPreferences.set.mockImplementation(({ key, value }) => {
+            if (key === 'gurushots-config') return Promise.reject(new Error('disk full'));
+            prefs.set(key, value);
+            return Promise.resolve();
+        });
+
+        settings.loadSettings();
+        await settings.flushPendingWrites();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        // Nothing says the import is done, so the next start tries it again; this process answers the settled
+        // notice and lets saves through (the next successful write stores the settings).
+        expect(prefs.has('gs_v2_import')).toBe(false);
+        expect(settings.getSettingsRecovery()).toEqual({
+            code: 'settings-import-failed',
+            path: 'gurushots-settings',
+            blocking: false,
+            detail: 'corrupt',
+        });
     });
 });
 
@@ -178,15 +286,19 @@ describe('the import in the Android app window is done only once its configurati
             return Promise.resolve();
         });
 
+        const told: string[] = [];
+        settings.onSettingsRecoveryChange(() => {
+            told.push(settings.getSettingsRecovery()?.code ?? 'none');
+        });
         // The cache shows the import at once...
         expect(settings.loadSettings().app.theme).toBe('dark');
         await settings.flushPendingWrites();
 
         // ... and when the store turns it down, nothing says it is done, and nothing is saved over what is left.
         expect(savedKeys()).not.toContain('gs_v2_import');
-        expect(savedKeys()).not.toContain('gurushots-settings');
+        expect(told).toEqual(['settings-import-failed']);
         expect(settings.getSettingsRecovery()).toEqual({
-            code: 'settings-import-retrying',
+            code: 'settings-import-failed',
             path: 'gurushots-settings',
             blocking: true,
         });
@@ -197,12 +309,16 @@ describe('the import in the Android app window is done only once its configurati
         useMemoryPreferences();
         expect(settings.retryImport()).toBe(true);
         await settings.flushPendingWrites();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        // The late failure of the first attempt, which this one has replaced, says nothing of the state now.
+        await settings.flushPendingWrites();
+        await new Promise((resolve) => setTimeout(resolve, 0));
 
         expect(settings.getSettingsRecovery()).toBeNull();
         expect(settings.loadSettings().app.theme).toBe('dark');
         await settings.flushPendingWrites();
         expect(savedKeys()).toContain('gs_v2_import');
-        expect(saved('gurushots-settings')).toMatchObject({ theme: 'dark', token: 'tok-secret' });
+        expect(prefs.get('gurushots-settings')).toBe(ONE_X);
     });
 
     test('a blob past the size the native store takes fails the import the same way', async () => {
@@ -216,7 +332,7 @@ describe('the import in the Android app window is done only once its configurati
         settings.loadSettings();
         await settings.flushPendingWrites();
 
-        expect(settings.getSettingsRecovery()?.code).toBe('settings-import-retrying');
+        expect(settings.getSettingsRecovery()?.code).toBe('settings-import-failed');
         expect(savedKeys()).not.toContain('gs_v2_import');
     });
 
@@ -243,18 +359,19 @@ describe('the import in the Android app window is done only once its configurati
     });
 });
 
-describe('importing again in the Android app window before it has read the stored settings', () => {
-    test('has nothing to import yet and changes nothing', () => {
+describe('retrying the import in the Android app window before it has read the stored settings', () => {
+    test('has nothing to read yet and changes nothing', () => {
         g.Capacitor = { isNativePlatform: () => true };
+        prefs.set('gurushots-settings', ONE_X);
         const settings = loadSettingsModule();
 
-        expect(settings.reimportFromV1()).toBe(false);
+        expect(settings.retryImport()).toBe(false);
         expect(mockPreferences.set).not.toHaveBeenCalled();
     });
 });
 
 describe('the import in the Android background service', () => {
-    test('imports into the native store: the configuration, the pins and the marker; settings.json becomes the mirror', () => {
+    test('imports into the native store: the configuration, the pins and the marker; settings.json is left as it is', () => {
         const store = installHeadlessStore({ legacy: ONE_X });
         const settings = loadSettingsModule();
 
@@ -263,12 +380,11 @@ describe('the import in the Android background service', () => {
         expect(parseJsonObject(store.value ?? 'null')).toMatchObject({ version: 2, auth: { token: 'tok-secret' } });
         expect(store.keys.get('gs_title_pins')).toBe('{\n  "7": "Macro"\n}');
         expect(store.keys.has('gs_v2_import')).toBe(true);
-        expect(parseJsonObject(store.legacy ?? 'null')).toMatchObject({ theme: 'dark', token: 'tok-secret' });
-        expect(store.keys.get('gurushots-settings_original')).toBe(ONE_X);
-        expect(parseJsonObject(store.keys.get('gs_v2_import') ?? 'null')).toHaveProperty('mirrorStartedAt');
+        expect(store.legacy).toBe(ONE_X);
+        expect(parseJsonObject(store.keys.get('gs_v2_import') ?? 'null')).toHaveProperty('importedAt');
     });
 
-    test('adopts the configuration the app window saved first, and mirrors it over settings.json, keeping the file first', () => {
+    test('adopts the configuration the app window saved first, and writes nothing over settings.json', () => {
         const store = installHeadlessStore({ legacy: ONE_X });
         const settings = loadSettingsModule();
         // The window's import lands between this context's read of the configuration and its write.
@@ -282,11 +398,7 @@ describe('the import in the Android background service', () => {
 
         expect(settings.getSettingsRecovery()).toBeNull();
         expect(store.keys.has('gs_v2_import')).toBe(false);
-        expect(parseJsonObject(store.legacy ?? 'null')).toMatchObject({ theme: 'light' });
-        // The file is kept as it was: a configuration that merely holds no login is no sign-out.
-        expect(parseJsonObject(store.keys.get('gurushots-settings_original') ?? 'null')).toEqual(
-            parseJsonObject(ONE_X),
-        );
+        expect(store.legacy).toBe(ONE_X);
     });
 });
 
@@ -306,12 +418,12 @@ describe('an import the Android native store does not take', () => {
         settings.loadSettings();
 
         expect(settings.getSettingsRecovery()).toEqual({
-            code: 'settings-import-retrying',
+            code: 'settings-import-failed',
             path: 'gurushots-settings',
             blocking: true,
         });
         expect(store.keys.has('gs_v2_import')).toBe(false);
-        expect(parseJsonObject(store.legacy ?? 'null')).toMatchObject({ token: 'tok-secret' });
+        expect(store.legacy).toBe(ONE_X);
     });
 
     test('starting fresh fails the same way', () => {
@@ -322,21 +434,30 @@ describe('an import the Android native store does not take', () => {
         expect(settings.startFresh()).toBe(false);
     });
 
-    test('starting fresh on a store that takes it writes the defaults and the marker', () => {
+    test('starting fresh on a store that takes it writes the defaults and the marker, and leaves the blob as it is', () => {
         const store = installHeadlessStore({ legacy: '{broken' });
         const settings = loadSettingsModule();
+        // The blob cannot be imported: the defaults were stored with the failure, and the import is not tried again.
         settings.loadSettings();
-        expect(settings.getSettingsRecovery()?.code).toBe('settings-import-failed');
+        expect(settings.getSettingsRecovery()).toEqual({
+            code: 'settings-import-failed',
+            path: 'gurushots-settings',
+            blocking: false,
+            detail: 'corrupt',
+        });
+        expect(parseJsonObject(store.value ?? 'null')).toMatchObject({
+            version: 2,
+            imported: { failure: { reason: 'corrupt' } },
+        });
+        expect(parseJsonObject(store.keys.get('gs_v2_import') ?? 'null')).toEqual({
+            importedAt: expect.any(String),
+        });
 
+        // Start fresh finds the defaults in place and resets nothing.
         expect(settings.startFresh()).toBe(true);
-
-        expect(parseJsonObject(store.value ?? 'null')).toMatchObject({ version: 2 });
-        expect(store.keys.has('gs_v2_import')).toBe(true);
-        expect(store.legacy).toBe('{broken');
-        // The unimportable file is set aside before the first mirror writes over it.
         expect(settings.setSetting('theme', 'light')).toBe(true);
-        expect(store.keys.get('gurushots-settings_original')).toBe('{broken');
-        expect(parseJsonObject(store.legacy ?? 'null')).toMatchObject({ theme: 'light' });
+        // The blob was never written over.
+        expect(store.legacy).toBe('{broken');
     });
 });
 
@@ -355,20 +476,6 @@ describe('starting fresh in the Android background service', () => {
         expect(settings.startFresh()).toBe(true);
 
         expect(store.keys.has('gs_v2_import')).toBe(true);
-        expect(settings.loadSettings().app.theme).toBe('light');
-    });
-});
-
-describe('importing again in the Android background service', () => {
-    test('cannot set the configuration in use aside, so it changes nothing', () => {
-        const config = JSON.stringify({ app: { theme: 'light' } });
-        const store = installHeadlessStore({ config, legacy: ONE_X });
-        const settings = loadSettingsModule();
-        settings.loadSettings();
-
-        expect(settings.reimportFromV1()).toBe(false);
-
-        expect(store.value).toBe(config);
         expect(settings.loadSettings().app.theme).toBe('light');
     });
 });

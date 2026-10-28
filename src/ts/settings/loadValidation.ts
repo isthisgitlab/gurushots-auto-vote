@@ -14,13 +14,26 @@ import type { ConfigV2, ImportedV2 } from '../types/config';
 import type { AuthKey } from '../types/settings';
 
 /** The keys of `auth`: the sign-in state, addressed by name through getSetting / setSetting. */
-const AUTH_KEYS: readonly AuthKey[] = ['token', 'apiHeaders', 'lastUsername', 'chosenPhotosMemberId'];
+const AUTH_KEYS: readonly AuthKey[] = ['token', 'apiHeaders', 'lastUsername'];
 
 const isAuthKey = (key: string): key is AuthKey => (AUTH_KEYS as readonly string[]).includes(key);
 
 /**
+ * The stored fields this build removed from the shape: a `config.json` still holding one loads
+ * without it — no value falls back, so this is not a dropped value and says nothing — and the next
+ * write stores the configuration without it.
+ */
+const dropRemovedStoredKeys = (config: ConfigV2): void => {
+    if (isPlainObject(config.auth)) delete config.auth.chosenPhotosMemberId;
+    if (isPlainObject(config.app)) delete config.app.chosenPhotosClearedAt;
+};
+
+/**
  * Fill a parsed configuration over the defaults so every container and every `app` key exists, and resolve the
  * environment-aware mock default. A container of the wrong kind is left for dropInvalidValues to replace.
+ * The fields the stored shape no longer hold are dropped here, so every configuration built from stored
+ * data — a load, the merge that rebases a save, or an import's report — holds none and the next write
+ * stores none.
  *
  * @param stored - the parsed persisted configuration
  */
@@ -31,6 +44,7 @@ const mergeWithDefaults = (stored: unknown): ConfigV2 => {
     const merged: ConfigV2 = { ...defaults, ...(stored as Partial<ConfigV2>), version: 2 };
     if (isPlainObject(merged.app)) merged.app = { ...defaults.app, ...merged.app };
     if (isPlainObject(merged.auth)) merged.auth = { ...defaults.auth, ...merged.auth };
+    dropRemovedStoredKeys(merged);
     return merged;
 };
 
@@ -77,8 +91,8 @@ const appValueAllowed = (key: string, value: unknown): boolean =>
     withinNumericBounds(key, value) && validateSetting(key, value);
 
 /**
- * Whether a value is one an `auth` key holds: the token, the last user name and the chosen-photos account are
- * strings, the API headers an object of strings.
+ * Whether a value is one an `auth` key holds: the token and the last user name are strings, the API
+ * headers an object of strings.
  */
 const authValueAllowed = (key: AuthKey, value: unknown): boolean =>
     key === 'apiHeaders'
@@ -172,7 +186,8 @@ const isImportRef = (value: unknown): boolean =>
         (value.invalid === undefined || value.invalid === true));
 
 /**
- * Whether a stored `imported` record has the shape the importer writes.
+ * Whether a stored `imported` record has the shape the importer writes. A `failure` the record may hold is typed
+ * like the one a failed import writes; a record with a malformed one is not a record.
  */
 const isImportedRecord = (value: unknown): value is ImportedV2 =>
     isPlainObject(value) &&
@@ -180,7 +195,11 @@ const isImportedRecord = (value: unknown): value is ImportedV2 =>
     typeof value.acknowledged === 'boolean' &&
     isPlainObject(value.report) &&
     Array.isArray(value.report.refsBlocked) &&
-    value.report.refsBlocked.every(isImportRef);
+    value.report.refsBlocked.every(isImportRef) &&
+    (value.failure === undefined ||
+        (isPlainObject(value.failure) &&
+            typeof value.failure.reason === 'string' &&
+            typeof value.failure.detail === 'string'));
 
 const dropInvalidContainers = (config: ConfigV2, dropped: string[]) => {
     const defaults = getDefaultSettings();

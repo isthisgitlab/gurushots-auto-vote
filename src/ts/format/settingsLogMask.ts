@@ -1,14 +1,14 @@
 /**
  * Masking of settings values before they are printed or logged. A settings value can be a
  * whole nested object (the per-challenge map, a rule, a scenario), so the masking is
- * deep: the `auth` block as a whole, credentials (and the request headers, which carry them) are redacted, the account the settings name is hidden, and chosen
- * photo lists — whose ids belong to one account — are reduced to a count.
+ * deep: the `auth` block as a whole, credentials (and the request headers, which carry them) and
+ * settings that name the account are redacted, and chosen photo lists are reduced to a count.
  */
 
 import { SENSITIVE_KEY_RE, REDACTED } from '../logger/sanitize';
 
 /** Settings that name the account: never printed or logged, even to the console. */
-const PRIVATE_SETTING_KEYS: ReadonlySet<string> = new Set(['lastUsername', 'chosenPhotosMemberId']);
+const PRIVATE_SETTING_KEYS: ReadonlySet<string> = new Set(['lastUsername']);
 
 // Deeper than any settings structure (the scenario phase settings are the deepest, at 7
 // from the settings root); beyond it nothing is shown rather than risk showing a list.

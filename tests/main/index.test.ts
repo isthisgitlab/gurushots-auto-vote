@@ -231,7 +231,7 @@ jest.mock('../../src/ts/services/AutoUpdater', () => ({
 }));
 jest.mock('../../src/ts/services/auth', () => {
     class LogoutNotSavedError extends Error {}
-    return { clearAuthToken: jest.fn(() => Promise.resolve()), LogoutNotSavedError };
+    return { logout: jest.fn(() => Promise.resolve()), LogoutNotSavedError };
 });
 for (const mod of ['log', 'update', 'misc', 'settings', 'voting', 'actions', 'computations', 'currency', 'scenarios']) {
     jest.mock(`../../src/ts/ipc/${mod}.handlers`, () => ({ register: jest.fn() }));
@@ -268,7 +268,14 @@ jest.mock('../../src/ts/index/session', () => ({
 }));
 jest.mock('../../src/ts/index/permissions', () => ({ installPermissionHandlers: jest.fn() }));
 jest.mock('../../src/ts/translations/index', () => ({
-    translationManager: { t: (k: string) => k, getCurrentLanguage: () => 'lv' },
+    translationManager: {
+        // Vars-aware echo: a template var shows in the output, so the seam test
+        // can see a wrapper that drops the `vars` argument.
+        t: jest.fn((key: string, vars?: Record<string, string | number>) =>
+            vars === undefined ? key : `${key} ${JSON.stringify(vars)}`,
+        ),
+        getCurrentLanguage: () => 'lv',
+    },
 }));
 
 const originalPlatform = process.platform;
@@ -601,6 +608,9 @@ describe('quit guard wiring', () => {
         expect(heldEvent).toBe(event);
         expect(deps).toMatchObject({ autovoteRunning: true, dialog: m.electron.dialog, parent: mainWin() });
         expect(deps.t('quitGuard.title')).toBe('quitGuard.title');
+        // The translator method itself is handed over, not a key-only wrapper:
+        // a template var survives the seam.
+        expect(deps.t('quitGuard.dueIn', { time: '9m' })).toBe('quitGuard.dueIn {"time":"9m"}');
         // The dialog's times are written in the UI language.
         expect(deps.locale).toBe('lv');
         expect(m.lifecycle.clearTokenOnQuit).not.toHaveBeenCalled();
@@ -938,7 +948,7 @@ describe('logout IPC', () => {
         m.registerHandlers.isTrustedSender.mockReturnValue(false);
         m.ipcMain.handlers.logout({});
         expect(m.cat.warning).toHaveBeenCalledWith("Refused IPC 'logout' from untrusted frame", null);
-        expect(m.auth.clearAuthToken).not.toHaveBeenCalled();
+        expect(m.auth.logout).not.toHaveBeenCalled();
     });
 
     it('refuses the Logs window', () => {
@@ -947,15 +957,15 @@ describe('logout IPC', () => {
         m.ipcMain.handlers.logout(event);
         expect(m.registerHandlers.isChannelAllowedForSender).toHaveBeenCalledWith(event, 'logout');
         expect(m.cat.warning).toHaveBeenCalledWith("Refused IPC 'logout' from the Logs window", null);
-        expect(m.auth.clearAuthToken).not.toHaveBeenCalled();
+        expect(m.auth.logout).not.toHaveBeenCalled();
     });
 
     it('does nothing without a main window', () => {
         m.ipcMain.handlers.logout({});
-        expect(m.auth.clearAuthToken).not.toHaveBeenCalled();
+        expect(m.auth.logout).not.toHaveBeenCalled();
     });
 
-    it('clears the token, resets mock, then swaps to the existing login window after the main window closes', async () => {
+    it('clears the token, then swaps to the existing login window after the main window closes', async () => {
         m.ipcMain.handlers['login-success']({});
         const main = mainWin()!;
         const login = loginWin()!;
@@ -963,8 +973,7 @@ describe('logout IPC', () => {
         m.ipcMain.handlers.logout({});
         await flush();
 
-        expect(m.auth.clearAuthToken).toHaveBeenCalled();
-        expect(m.settings.setSetting).toHaveBeenCalledWith('mock', true);
+        expect(m.auth.logout).toHaveBeenCalled();
         // Logging out is its own confirmation — no boost prompt on the way out.
         expect(m.quitGuard.bypassQuitGuard).toHaveBeenCalled();
         expect(main.close).toHaveBeenCalled();
@@ -978,7 +987,7 @@ describe('logout IPC', () => {
         m.ipcMain.handlers['login-success']({});
         loginWin()!.handlers.closed();
         const err = new Error('flush failed');
-        m.auth.clearAuthToken.mockRejectedValue(err);
+        m.auth.logout.mockRejectedValue(err);
         const loginsBefore = m.BrowserWindow.instances.filter((w) => w.file.endsWith('login.html')).length;
 
         m.ipcMain.handlers.logout({});
@@ -993,7 +1002,7 @@ describe('logout IPC', () => {
         m.ipcMain.handlers['login-success']({});
         loginWin()!.handlers.closed();
         const main = mainWin()!;
-        m.auth.clearAuthToken.mockRejectedValue(new m.auth.LogoutNotSavedError());
+        m.auth.logout.mockRejectedValue(new m.auth.LogoutNotSavedError());
         const loginsBefore = m.BrowserWindow.instances.filter((w) => w.file.endsWith('login.html')).length;
 
         m.ipcMain.handlers.logout({});
@@ -1010,7 +1019,7 @@ describe('logout IPC', () => {
     it('a logout refused after the main window went away is still told, and the main window is opened again (the user is still logged in)', async () => {
         m.ipcMain.handlers['login-success']({});
         const main = mainWin()!;
-        m.auth.clearAuthToken.mockImplementation(() => {
+        m.auth.logout.mockImplementation(() => {
             main.destroyed = true;
             return Promise.reject(new m.auth.LogoutNotSavedError());
         });
@@ -1034,7 +1043,7 @@ describe('logout IPC', () => {
     it('a logout refused when the main window is gone and cannot be opened again is still told, in a dialog of its own', async () => {
         m.ipcMain.handlers['login-success']({});
         const main = mainWin()!;
-        m.auth.clearAuthToken.mockImplementation(() => {
+        m.auth.logout.mockImplementation(() => {
             main.destroyed = true;
             main.handlers.closed();
             m.BrowserWindow.nextConstructError = new Error('no window');
@@ -1054,7 +1063,7 @@ describe('logout IPC', () => {
     it('a logout refused with a main window that was destroyed and could not be opened again is told without a parent', async () => {
         m.ipcMain.handlers['login-success']({});
         const main = mainWin()!;
-        m.auth.clearAuthToken.mockImplementation(() => {
+        m.auth.logout.mockImplementation(() => {
             main.destroyed = true;
             m.BrowserWindow.nextConstructError = new Error('no window');
             return Promise.reject(new m.auth.LogoutNotSavedError());
@@ -1072,7 +1081,7 @@ describe('logout IPC', () => {
             key === 'autovoteStartedLaunch' ? 7 : key === 'autovoteRunning',
         );
         m.settings.getEnvironmentInfo.mockReturnValue(invalid({ launchedAt: 7 }));
-        m.auth.clearAuthToken.mockRejectedValue(new m.auth.LogoutNotSavedError());
+        m.auth.logout.mockRejectedValue(new m.auth.LogoutNotSavedError());
 
         m.ipcMain.handlers.logout({});
         await flush();
@@ -1085,7 +1094,7 @@ describe('logout IPC', () => {
 
     it('the dialog says the sign-in was not changed, and that auto-vote is stopped when no session is live', async () => {
         m.ipcMain.handlers['login-success']({});
-        m.auth.clearAuthToken.mockRejectedValue(new m.auth.LogoutNotSavedError());
+        m.auth.logout.mockRejectedValue(new m.auth.LogoutNotSavedError());
 
         m.ipcMain.handlers.logout({});
         await flush();
@@ -1113,9 +1122,9 @@ describe('logout IPC', () => {
     it('if the main window closed mid-logout with no login window, opens a new login window', async () => {
         m.ipcMain.handlers['login-success']({});
         loginWin()!.handlers.closed();
-        // Released with no value (not the boolean clearAuthToken declares): index.ts never reads it.
+        // Released with no value (not the boolean logout declares): index.ts never reads it.
         let release!: () => void;
-        m.auth.clearAuthToken.mockImplementation(
+        m.auth.logout.mockImplementation(
             () =>
                 new Promise((r) => {
                     release = invalid(r);

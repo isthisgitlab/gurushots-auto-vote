@@ -12,6 +12,7 @@
  */
 
 import * as logger from '../logger';
+import { RESERVED_PROFILE_NAMES, normalizeProfileName } from './limits';
 import { schemaEntry, validateSetting } from './schema';
 import { challengeValueSetIsValid } from './defaults';
 import { loggableSettingValue } from './logValue';
@@ -21,16 +22,6 @@ import type { ChallengeValues } from '../types/settings';
 
 const MAX_CHALLENGE_PROFILES = 50;
 const MAX_PROFILE_NAME_LENGTH = 60;
-
-// A bare `profiles['__proto__'] = …` assignment reassigns the map's prototype
-// instead of storing data (silent data loss + corrupted lookups), so these
-// names are rejected on write and skipped on read — same guard family as
-// getTitlePins' own-property iteration.
-const RESERVED_PROFILE_NAMES = new Set(['__proto__', 'constructor', 'prototype']);
-
-// Identity key for a profile name: trimmed + lowercased (the normalizeTitle
-// contract) so "Portrait" and "portrait" are one profile, latest casing wins.
-const normalizeProfileName = (name: unknown): string => (typeof name === 'string' ? name.trim().toLowerCase() : '');
 
 // Bound a user-supplied profile name before it reaches a log line
 // (log-injection guard, same treatment as setTitleRules' forLog).

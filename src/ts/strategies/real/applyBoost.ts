@@ -9,6 +9,8 @@ import { pickBoostEntry } from '../../services/VotingLogic';
 
 import type { Challenge, SuccessResponse } from '../../types/gurushots';
 
+export type BoostImagePost = typeof boostImage;
+
 /**
  * Applies a boost to a photo in a challenge.
  *
@@ -20,31 +22,30 @@ import type { Challenge, SuccessResponse } from '../../types/gurushots';
  * @param token - Authentication token
  * @returns API response or null if boost failed
  */
-const applyBoost = async (challenge: Challenge, token: string): Promise<SuccessResponse | null> => {
+const applyBoost = async (
+    challenge: Challenge,
+    token: string,
+    post: BoostImagePost = boostImage,
+): Promise<SuccessResponse | null> => {
     const { id, member } = challenge;
     const challengeId = id?.toString?.() || '';
     const entries = member?.ranking?.entries;
     if (!Array.isArray(entries) || entries.length === 0) {
-        logger.withCategory('voting').error('No entries available for boosting', { challengeId });
+        logger.withCategory('voting').errorT('ma3387d8a60e8', [], { challengeId });
         return null;
     }
     const picked = pickBoostEntry(challenge, challengeId, Math.floor(Date.now() / 1000));
     if (!picked) {
-        logger
-            .withCategory('voting')
-            .error(
-                "Couldn't apply Boost — every entry has Turbo or is pinned for Turbo (Boost and Turbo can't share an entry). Add another entry or unpin the photo",
-                { challengeId },
-            );
+        logger.withCategory('voting').errorT('m243099e8f79d', [], { challengeId });
         return null;
     }
     const boostImageId = picked.id;
     if (!boostImageId) {
-        logger.withCategory('voting').error('Selected boost entry has no id', { challengeId });
+        logger.withCategory('voting').errorT('m01a2b02c3145', [], { challengeId });
         return null;
     }
 
-    const response = await boostImage(challengeId, boostImageId, token);
+    const response = await post(challengeId, boostImageId, token);
     if (!response) return null;
 
     // Raise the conflict flag on the local challenge object now that the boost landed.

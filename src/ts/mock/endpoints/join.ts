@@ -1,116 +1,55 @@
 /**
  * Mock counterpart to api/join.ts: open and upcoming (un-joined) challenges,
- * the bankroll, and the coin unlock.
+ * their suggested photos, the bankroll, and the coin unlock.
  */
 
 import * as logger from '../../logger';
 import { simulateApiResponse, mockMethod } from '../simulate';
-import { HOUR, DAY } from '../time';
+import { copyPrizes } from '../challenges/build';
+import { SUGGESTED_PHOTO_IDS, hexPhotoId } from '../photoLibrary';
+import { LIBRARY_ID_RE, MAX_PER_CHALLENGE } from '../../strategies/real/suggestedPhotos';
+import { OPEN_CHALLENGE_ROWS, UPCOMING_CHALLENGE_ROWS } from './openChallengeRows';
 import type * as joinModule from '../../api/join';
+import type { OpenChallengeRow, TierTable } from './openChallengeRows';
+import type { PrizeTier } from '../../types/gurushots';
 
-type OpenChallengeRow = [
-    id: number,
-    type: string,
-    join_coins: number,
-    title: string,
-    url: string,
-    startedAgo: number,
-    closesIn: number,
-    entries: number,
-    players: number,
-    extras?: ListingExtras,
-];
-
-/** What a listing shows besides the title: the challenge's own tags and badge, and how many photos it takes. */
-type ListingExtras = { tags: string[]; badge?: string; max_photo_submits: number };
+const copyPrizeTiers = (tiers: TierTable): PrizeTier[] =>
+    tiers.map((tier) => ({ ...tier, prizes: copyPrizes(tier.prizes) }));
 
 /** An open challenge whose start and close are offsets (seconds) from `nowSec`. */
 const openChallenge = (nowSec: number, row: OpenChallengeRow) => {
-    const [id, type, join_coins, title, url, startedAgo, closesIn, entries, players, extras] = row;
+    const { id, type, join_coins, title, url, startedAgo, closesIn, entries, players, extras } = row;
+    // Real items carry the member's submit state, not the raw unlock flag: 'join_unlock' on an
+    // unlock-gated one, 'join' otherwise.
+    const { join_unlock, achievements_and_prizes: tiers, ...listing } = extras ?? {};
+    // One-level copy per row: no emitted row may share an array with another
+    // row or with the constants the tier tables are built from.
+    const firstPrizes = tiers?.[0]?.prizes;
     return {
         id,
         type,
-        join_coins,
+        ...(join_coins === undefined ? {} : { join_coins }),
         title,
         url,
         start_time: nowSec - startedAgo,
         close_time: nowSec + closesIn,
         entries,
         players,
-        ...extras,
+        ...listing,
+        ...(firstPrizes ? { first_prizes: copyPrizes(firstPrizes) } : {}),
+        ...(tiers ? { achievements_and_prizes: copyPrizeTiers(tiers) } : {}),
+        member: { submit_state: join_unlock === true ? 'join_unlock' : 'join' },
     };
 };
 
-const OPEN_CHALLENGE_ROWS: OpenChallengeRow[] = [
-    [
-        900001,
-        'default',
-        0,
-        'Mock Free Challenge',
-        'mock-free',
-        5 * DAY,
-        3 * HOUR,
-        40,
-        25,
-        { tags: ['Exhibition'], max_photo_submits: 1 },
-    ],
-    [
-        900002,
-        'flash',
-        100,
-        'Mock Flash Challenge',
-        'mock-flash',
-        DAY,
-        2 * DAY,
-        80,
-        50,
-        { tags: ['No comm', '3 photos'], max_photo_submits: 3 },
-    ],
-    [900003, 'default', 250, 'Mock Paid Challenge', 'mock-paid', 2 * DAY, 5 * DAY, 120, 75],
-    [900004, 'flash', 100, 'Mock Unlock-Fails Challenge', 'mock-fail', 3 * DAY, 3 * DAY, 160, 100],
-    // 900005: unlock succeeds but submit fails → exercises the
-    // "coins charged but not joined" (charged-pending-submit) UI/CLI path.
-    [900005, 'flash', 100, 'Mock Submit-Fails Challenge', 'mock-submitfail', 4 * DAY, 4 * DAY, 200, 125],
-];
-
-// Not started yet: `startedAgo` is negative, so start_time lies ahead. The ids stay clear of the
-// open fixtures (the join path must never mistake one for the other). 900103 starts after the
-// default 24 h look-ahead, so the window is exercisable too.
-const UPCOMING_CHALLENGE_ROWS: OpenChallengeRow[] = [
-    [
-        900101,
-        'default',
-        0,
-        'Mock Upcoming Free Challenge',
-        'mock-upcoming-free',
-        -2 * HOUR,
-        3 * DAY,
-        0,
-        0,
-        { tags: ['Exhibition', 'Default'], max_photo_submits: 2 },
-    ],
-    // No type: the listing shows the badge instead.
-    [
-        900102,
-        '',
-        150,
-        'Mock Upcoming Paid Challenge',
-        'mock-upcoming-paid',
-        -20 * HOUR,
-        4 * DAY,
-        0,
-        0,
-        { tags: ['Comm'], badge: 'Team match', max_photo_submits: 4 },
-    ],
-    [900103, 'flash', 100, 'Mock Upcoming Later Challenge', 'mock-upcoming-later', -3 * DAY, 5 * DAY, 0, 0],
-];
-
 /**
  * Simulate /rest/get_member_challenges: the un-joined "open" challenges, or the "upcoming" ones
- * (not started yet, `status: 'upcoming'`, a future start_time). Open fixtures cover a free join, paid flash, paid normal, and a designated
- * paid id (900004) whose coinsUnlock fails — so the "coins charged but
- * submit failed" / "unlock failed" paths are exercisable without a real
- * account. Id 900005 unlocks but its submit fails (see submitToChallenge).
+ * (not started yet, `status: 'upcoming'`, a future start_time). Open fixtures cover a free
+ * exhibition and four paid flash challenges — on 900004 coinsUnlock fails, so the "unlock failed"
+ * path is exercisable without a real account, and on 900005 the unlock succeeds but the submit
+ * fails (see submitToChallenge; the "coins charged but not joined" path) — while the gating trio
+ * rides on 900006-900008: full (players at max_players), unlock-priced, and unlock-priced with no
+ * usable join_coins (price-unknown).
  */
 const getMemberChallenges: typeof joinModule.getMemberChallenges = mockMethod(
     {
@@ -133,8 +72,45 @@ const getMemberChallenges: typeof joinModule.getMemberChallenges = mockMethod(
         // alongside type/title/join_coins/tags/entries/players. Spread
         // across the join window so `autoJoinWithinHoursOfEnd` is
         // exercisable in mock mode: 900001 ends in 3h (inside any window),
-        // the rest end in 2-5 days (outside a 24h one).
+        // the rest end in 2-8 days (outside a 24h one).
         return OPEN_CHALLENGE_ROWS.map((row) => openChallenge(nowSec, row));
+    },
+);
+
+/**
+ * The one open challenge the suggestion fixture hangs off (900001, the free
+ * one), and its pool. The first three ids are library photos in the server's
+ * 32-hex shape, so a picker join can actually match them; `photo_pink_flower_001`
+ * exists in the library too but is not 32-hex, so the shape filter must drop it;
+ * the hex padding pushes the pool past the 20-per-challenge cap so the cap is
+ * exercisable (only the first three are matchable, which is all the picker needs).
+ */
+const SUGGESTED_IDS_BY_CHALLENGE: Record<string, string[]> = {
+    '900001': [
+        ...SUGGESTED_PHOTO_IDS,
+        'photo_pink_flower_001',
+        ...Array.from({ length: 18 }, (_, i) => hexPhotoId(i + 10)),
+    ],
+};
+
+/** The mock counterpart's signature, mirroring the real getSuggestedPhotoIds. */
+type GetSuggestedPhotoIds = (token: string, challengeId: string | number) => Promise<string[]>;
+
+/**
+ * Simulate the challenge's suggested-photo read: the pool for that challenge,
+ * through the same shape filter and per-challenge cap the real ids answer to.
+ * No token, or a challenge without suggestions, resolves an empty list.
+ */
+const getSuggestedPhotoIds: GetSuggestedPhotoIds = mockMethod(
+    {
+        name: 'getSuggestedPhotoIds',
+        tokenArg: 0,
+        onNoToken: () => [],
+    },
+    async (_token, challengeId) => {
+        await simulateApiResponse({}, 150);
+        const pool = SUGGESTED_IDS_BY_CHALLENGE[String(challengeId)] ?? [];
+        return pool.filter((id) => LIBRARY_ID_RE.test(id)).slice(0, MAX_PER_CHALLENGE);
     },
 );
 
@@ -176,4 +152,4 @@ const coinsUnlock: typeof joinModule.coinsUnlock = mockMethod(
     },
 );
 
-export { getMemberChallenges, getBankroll, coinsUnlock };
+export { getMemberChallenges, getSuggestedPhotoIds, getBankroll, coinsUnlock };

@@ -38,6 +38,7 @@ export function ActionButton({
         'btn-sm',
         'h-auto',
         'min-h-8',
+        'max-sm:min-h-10',
         'py-1',
         'leading-tight',
         error ? 'btn-error' : VARIANT_CLASSES[variant],

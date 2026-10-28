@@ -114,7 +114,7 @@ describe('voting', () => {
             );
         });
 
-        test('should return null when no images', async () => {
+        test('an empty pool is a real answer: it comes back as the body', async () => {
             const mockChallenge = { title: 'Test Challenge', url: 'test-url' };
             const mockToken = 'test-token';
             const mockResponse = { images: [] };
@@ -122,6 +122,19 @@ describe('voting', () => {
             makePostRequest.mockResolvedValueOnce(mockResponse);
 
             const result = await getVoteImages(invalid(mockChallenge), mockToken);
+
+            expect(result).toEqual(mockResponse);
+        });
+
+        test.each([
+            ['a failed request', null],
+            ['a body that says success: false', { success: false, images: [{ id: 'img1' }] }],
+            ['a body without images', { challenge: { id: 1, title: 'T' }, voting: {} }],
+            ['a body whose images is not an array', { images: 'nope' }],
+        ])('%s gives null, not an empty pool', async (_label, body) => {
+            makePostRequest.mockResolvedValueOnce(invalid(body));
+
+            const result = await getVoteImages(invalid({ id: 1, title: 'T', url: 'test-url' }), 'test-token');
 
             expect(result).toBeNull();
         });

@@ -8,6 +8,7 @@ import type { Challenge } from '../../types/gurushots';
 
 import * as settings from '../../settings';
 import { _runVotingRules } from './ruleEngine';
+import type { RuleLabel } from './ruleEngine';
 
 export interface AutoVoteDecision {
     shouldVote: boolean;
@@ -77,7 +78,7 @@ const evaluateVotingDecision = (
     // the log to understand. Any of the labels can be forced, so this branch
     // covers all of them before the map is consulted.
     if (r.forcedByNewEntry) {
-        const forcedLabels: Record<string, string> = {
+        const forcedLabels: Record<RuleLabel, string> = {
             flash: 'flash type',
             lastminute: `lastminute threshold (${effectiveLastMinuteThreshold}m)`,
             'pre-boost': 'pre-boost fill',
@@ -102,7 +103,7 @@ const evaluateVotingDecision = (
     }
     const targetSuffix = (trigger: number, target: number): string =>
         target !== trigger ? ` (vote up to ${target}%)` : '';
-    const reasons: Record<string, string> = {
+    const reasons: Record<RuleLabel, string> = {
         flash: r.atTarget ? 'flash type: exposure already at 100%' : `flash type: exposure ${currentExposure}% < 100%`,
         lastminute: r.atTarget
             ? `lastminute threshold (${effectiveLastMinuteThreshold}m): exposure already at 100%`
@@ -153,9 +154,11 @@ const evaluateManualVotingDecision = (
 
     if (r.atTarget) {
         const { effectiveLastMinuteThreshold, effectiveThreshold, effectiveFinalWindowExposure } = r.thresholdInfo;
-        const messages: Record<string, string> = {
+        const messages: Record<RuleLabel, string> = {
             flash: `Challenge "${challengeTitle}" already has 100% exposure (flash type)`,
             lastminute: `Challenge "${challengeTitle}" already has 100% exposure (lastminute threshold: ${effectiveLastMinuteThreshold}m)`,
+            // unreachable today — pre-boost is auto-only and this map serves the manual path; carried so the map stays exhaustive over RuleLabel.
+            'pre-boost': `Challenge "${challengeTitle}" already has 100% exposure (pre-boost fill)`,
             scheduled: `Challenge "${challengeTitle}" already has 100% exposure (scheduled fill window)`,
             'pre-final-window': `Challenge "${challengeTitle}" already has ${effectiveThreshold}% exposure (pre-final-window top-up)`,
             'final-window': `Challenge "${challengeTitle}" already has ${effectiveFinalWindowExposure}% exposure (final window threshold)`,

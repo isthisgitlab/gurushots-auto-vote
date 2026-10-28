@@ -25,6 +25,7 @@ import * as apiFactory from '../apiFactory';
 import * as logger from '../logger';
 import { getRandomCheckFrequencyMs, MIN_CYCLE_GAP_MS, OFFLINE_RETRY_MS } from '../scheduling/randomDelay';
 import { computeNextCycleDelayMs } from '../scheduling/thresholdWindow';
+import { createMarkedReadCap } from '../scheduling/cadenceChain/decision';
 import {
     resolveThreshold,
     resolveScheduledFill,
@@ -40,6 +41,18 @@ import type { HeadlessGlobals } from '../types/capacitor';
 import { errorMessage } from '../errorMessage';
 
 const log = (msg: string, data?: unknown) => logger.withCategory('voting').info(`[headless] ${msg}`, data);
+
+// The previous tick's marked-id set (challengeIntegrity's dataIssues), the
+// headless loop's own tracker from the same factory the cadence chain uses —
+// the loop schedules its own AlarmManager ticks, so its memory is its own. A
+// new non-empty marked set caps the next delay once to OFFLINE_RETRY_MS, so a
+// fresh degraded read is quickly re-read; the same set does not cap again.
+let capForNewMarks = createMarkedReadCap();
+
+/** Test-only: clear the headless loop's in-memory previous marked-id set. */
+const __resetMarkedReadCapForTests = (): void => {
+    capForNewMarks = createMarkedReadCap();
+};
 
 /**
  * Mirror the scheduler's cadence decision for a single tick via the shared
@@ -85,6 +98,12 @@ const computeNextDelayMs = async (token: string, prefetched: Challenge[] | null 
             resolveCurrencyAuto,
             resolveScenarioWake,
         });
+        // A new degraded read (a marked-id set that differs from the previous
+        // tick's) caps the wait once to a short retry, whatever mode decided
+        // it — the same quick re-read the cadence chain gives one. A failed
+        // read skips the tracker entirely: its empty list must not reset the
+        // previous set.
+        const capMs = fetchFailedNow ? null : capForNewMarks(list);
         // API still down (this tick's own fetch failed): cap the wait to a short
         // retry so recovery tracks reconnection, not the full normal cadence.
         // Only reachable in normal mode — a failed fetch yields an empty list,
@@ -92,7 +111,7 @@ const computeNextDelayMs = async (token: string, prefetched: Challenge[] | null 
         if (fetchFailedNow && mode === 'normal') {
             return Math.min(delayMs, OFFLINE_RETRY_MS);
         }
-        return delayMs;
+        return capMs === null ? delayMs : Math.min(delayMs, capMs);
     } catch (err) {
         log('next-delay computation failed; using normal cadence', errorMessage(err) ?? String(err));
         return getRandomCheckFrequencyMs(userSettings);
@@ -144,4 +163,4 @@ const runOneCycle = async () => {
 (globalThis as HeadlessGlobals).GS = { runOneCycle };
 log('headless bundle loaded');
 
-export { runOneCycle, computeNextDelayMs };
+export { runOneCycle, computeNextDelayMs, __resetMarkedReadCapForTests };

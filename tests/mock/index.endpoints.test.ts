@@ -23,16 +23,28 @@ jest.mock('../../src/ts/services/missions', () => ({
         needs ? jest.fn() : null,
     ),
 }));
+// Partial mock: the real module spread, so rememberChallengeTitles can be
+// spied on (swc's real-module exports are non-configurable getters).
+jest.mock('../../src/ts/settings', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/settings')>('../../src/ts/settings'),
+}));
 
 import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(loggerModule);
 import metadataModule = require('../../src/ts/metadata');
 const metadata = jest.mocked(metadataModule);
+import settingsModule = require('../../src/ts/settings');
 import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
 import type * as joinChallengesModule from '../../src/ts/services/joinChallenges';
 import type * as missionsModule from '../../src/ts/services/missions';
 import type * as indexModule from '../../src/ts/mock/index';
+import type * as photoLibraryModule from '../../src/ts/mock/photoLibrary';
+import type * as sessionCacheModule from '../../src/ts/mock/sessionCache';
+import type * as challengeIntegrityModule from '../../src/ts/challengeIntegrity';
+import type * as plainObjectModule from '../../src/ts/plainObject';
 import type { Challenge } from '../../src/ts/types/gurushots';
+import { LIBRARY_BATCH_PHOTOS } from '../../src/ts/settings/limits';
 import { invalid } from '../helpers/invalid';
 
 /** The mock autocomplete called without a member id, as the no-token / term tests do. */
@@ -47,6 +59,12 @@ const { loadMissionNeeds, registerMissionNeeds } = jest.mocked(
     require('../../src/ts/services/missions') as typeof missionsModule,
 );
 const { mockApiClient, clearSessionCache } = require('../../src/ts/mock/index') as typeof indexModule;
+const { getSessionCache } = require('../../src/ts/mock/sessionCache') as typeof sessionCacheModule;
+const { __resetForTests: resetBoundaryLogState } =
+    require('../../src/ts/challengeIntegrity') as typeof challengeIntegrityModule;
+const { isPlainObject } = require('../../src/ts/plainObject') as typeof plainObjectModule;
+const { buildLibraryPhotos, SUGGESTED_PHOTO_IDS } =
+    require('../../src/ts/mock/photoLibrary') as typeof photoLibraryModule;
 
 /** Resolve a promise that is gated on simulated latency. */
 const settle = async <T>(promise: Promise<T>): Promise<T> => {
@@ -63,9 +81,16 @@ const settle = async <T>(promise: Promise<T>): Promise<T> => {
 };
 
 let cat: {
-    [K in 'api' | 'debug' | 'info' | 'success' | 'warning' | 'error']: jest.MockedFunction<
-        loggerModule.CategoryLogger[K]
-    >;
+    [K in
+        | 'api'
+        | 'debug'
+        | 'info'
+        | 'success'
+        | 'warning'
+        | 'error'
+        | 'warningT'
+        | 'infoT'
+        | 'errorT']: jest.MockedFunction<loggerModule.CategoryLogger[K]>;
 };
 beforeEach(() => {
     jest.useFakeTimers();
@@ -76,6 +101,9 @@ beforeEach(() => {
         success: jest.fn(),
         warning: jest.fn(),
         error: jest.fn(),
+        warningT: jest.fn(),
+        infoT: jest.fn(),
+        errorT: jest.fn(),
     };
     logger.withCategory.mockReturnValue(invalid(cat));
     clearSessionCache();
@@ -94,7 +122,7 @@ describe('no-token contract for every endpoint not covered elsewhere', () => {
         [
             'getEligiblePhotosWalk',
             () => mockApiClient.getEligiblePhotosWalk(1, invalid(null)),
-            { items: [], truncated: true },
+            { items: [], truncated: true, nextStart: 0 },
         ],
         ['getImageData', () => mockApiClient.getImageData('photo_old_008', invalid(null)), null],
         ['submitToChallenge', () => mockApiClient.submitToChallenge(1, ['a'], invalid(null)), { ok: false, raw: null }],
@@ -117,9 +145,112 @@ describe('no-token contract for every endpoint not covered elsewhere', () => {
             () => mockApiClient.forgetUnconfirmedPayment(1, invalid(null)),
             { status: 'not-authenticated', challengeId: 1 },
         ],
+        ['getSuggestedPhotoIds', () => mockApiClient.getSuggestedPhotoIds(invalid(null), 900001), []],
     ])('%s resolves its failure shape and logs the auth error', async (_name, call, expected) => {
         await expect(call()).resolves.toEqual(expected);
         expect(cat.error).toHaveBeenCalledWith(expect.stringMatching(/^No token provided/), null);
+    });
+});
+
+describe('the active-challenge boundary on the mock read', () => {
+    const getChallenges = () => settle(mockApiClient.getActiveChallenges('tok'));
+
+    beforeEach(() => {
+        // Fresh log-dedup state per test: the generated ids can repeat across
+        // sessions (a random base id), and the same codes must log again.
+        resetBoundaryLogState();
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
+    test('the facts are remembered from the normalized list, marks included', async () => {
+        // Capture the mark AT CALL TIME: the boundary mutates the same object
+        // in place, so comparing arguments after the fact could not tell
+        // whether the facts saw the list before or after normalize ran.
+        const original = settingsModule.rememberChallengeTitles;
+        let seenIssues: Array<string[] | undefined> = [];
+        const rememberSpy = jest
+            .spyOn(settingsModule, 'rememberChallengeTitles')
+            .mockImplementation((challenges, pruneUnsafe) => {
+                seenIssues = (challenges ?? []).map((challenge) => challenge.dataIssues);
+                return original(challenges, pruneUnsafe);
+            });
+        const bad: {
+            id: number;
+            title: string;
+            url: string;
+            start_time: number;
+            close_time: number;
+            dataIssues?: string[];
+        } = { id: 9002, title: 'Bad close', url: 'bad-close', start_time: 1_800_000_000, close_time: 1e11 };
+        const cache = getSessionCache();
+        cache.challenges = invalid<NonNullable<typeof cache.challenges>>({ challenges: [bad] });
+
+        await getChallenges();
+
+        // normalize marked it BEFORE the facts memory ran: the mark was already
+        // on the list at call time, and the prune-unsafe flag came along.
+        expect(seenIssues).toEqual([['close_time']]);
+        expect(rememberSpy).toHaveBeenCalledWith([bad], false);
+    });
+
+    test('the generated mock challenges produce no marks', async () => {
+        const result = await getChallenges();
+
+        expect(result.challenges.length).toBeGreaterThan(0);
+        expect(result.fetchFailed).toBe(false);
+        expect(result.pruneUnsafe).toBe(false);
+        for (const challenge of result.challenges) expect(challenge.dataIssues).toBeUndefined();
+        // No marks and no incident shape: every mock total carries level, level_name and percent.
+        expect(cat.warningT).not.toHaveBeenCalled();
+    });
+
+    test('most mock challenges carry no swaps, and that warning logs at debug level only', async () => {
+        const result = await getChallenges();
+        const swapLess = result.challenges.filter((challenge) => !Array.isArray(challenge.member?.ranking?.swaps));
+        expect(swapLess.length).toBeGreaterThan(0);
+
+        const swapLessWarnings = cat.debug.mock.calls.filter(
+            ([_message, data]) =>
+                isPlainObject(data) &&
+                Array.isArray(data.codes) &&
+                (data.codes as unknown[]).includes('ranking.swaps_absent'),
+        );
+        // One debug line per swap-less challenge, carrying the codes only.
+        expect(swapLessWarnings).toHaveLength(swapLess.length);
+        expect(cat.warning).not.toHaveBeenCalled();
+        expect(cat.warningT).not.toHaveBeenCalled();
+    });
+
+    test('boostHoldUntil survives a re-read in the middle of a pass', async () => {
+        const first = await getChallenges();
+        first.challenges[0].boostHoldUntil = 1_800_000_000;
+
+        const second = await getChallenges();
+
+        // Stripping is off on the mock read: the pass-set field survives.
+        expect(second.challenges[0].boostHoldUntil).toBe(1_800_000_000);
+    });
+
+    test('a fixed mock object loses its mark on the next read', async () => {
+        const fixed: { id: number; title: string; url: string; start_time: number; close_time: number | string } = {
+            id: 9001,
+            title: 'Fixed',
+            url: 'fixed',
+            start_time: 1_800_000_000,
+            close_time: 'nonsense',
+        };
+        const cache = getSessionCache();
+        cache.challenges = invalid<NonNullable<typeof cache.challenges>>({ challenges: [fixed] });
+
+        const marked = await getChallenges();
+        expect(marked.challenges[0].dataIssues).toEqual(['close_time']);
+
+        fixed.close_time = 1_800_086_400;
+        const clean = await getChallenges();
+        expect(clean.challenges[0].dataIssues).toBeUndefined();
     });
 });
 
@@ -161,28 +292,51 @@ describe('turbo', () => {
 describe('getEligiblePhotos', () => {
     test('with no options returns the whole library', async () => {
         const items = await settle(mockApiClient.getEligiblePhotos(1, 'tok'));
-        expect(items).toHaveLength(9);
+        expect(items).toHaveLength(12);
     });
 
     test('a search is an EXACT tag match, like the live endpoint', async () => {
         const exact = await settle(mockApiClient.getEligiblePhotos(1, 'tok', { search: ' Flower ' }));
-        expect(exact.map((p) => p.id)).toEqual(['photo_pink_flower_001', 'photo_blocked_007']);
+        expect(exact.map((p) => p.id)).toEqual(['photo_blocked_007', 'photo_pink_flower_001']);
         const partial = await settle(mockApiClient.getEligiblePhotos(1, 'tok', { search: 'flow' }));
         expect(partial).toEqual([]);
     });
 
     test('a non-string search is ignored', async () => {
-        expect(await settle(mockApiClient.getEligiblePhotos(1, 'tok', invalid({ search: 42 })))).toHaveLength(9);
+        expect(await settle(mockApiClient.getEligiblePhotos(1, 'tok', invalid({ search: 42 })))).toHaveLength(12);
+    });
+
+    test.each([
+        ['votes', ['photo_blocked_007', 'photo_won_009', 'photo_pink_petal_005']],
+        ['newest', ['photo_recent_004', 'photo_blocked_007', 'photo_pink_flower_001']],
+        ['oldest', ['photo_old_008', 'photo_won_009', 'photo_animal_006']],
+    ] as const)('%s orders the whole library (%s first)', async (order, expected) => {
+        const items = await settle(mockApiClient.getEligiblePhotos(1, 'tok', { order }));
+        expect(items.map((p) => p.id).slice(0, 3)).toEqual(expected);
+    });
+
+    test('an absent order sorts votes desc like the server default; "default" keeps the fixture order', async () => {
+        const built = buildLibraryPhotos(0);
+        const votesDesc = built
+            .slice()
+            .sort((a, b) => b.votes - a.votes)
+            .map((p) => p.id);
+        const absent = await settle(mockApiClient.getEligiblePhotos(1, 'tok'));
+        expect(absent.map((p) => p.id)).toEqual(votesDesc);
+        const def = await settle(mockApiClient.getEligiblePhotos(1, 'tok', { order: 'default' }));
+        expect(def.map((p) => p.id)).toEqual(built.map((p) => p.id));
     });
 });
 
 describe('getEligiblePhotosWalk', () => {
     test('reads the whole mock library in one complete walk', async () => {
         const walk = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok'));
-        expect(walk.items).toHaveLength(9);
+        expect(walk.items).toHaveLength(12);
         expect(walk.truncated).toBe(false);
         // Without a `skip` nothing is reported as left out.
         expect(walk).not.toHaveProperty('skipped');
+        // All there was: a continuation from here re-reads nothing.
+        expect(walk.nextStart).toBe(12);
     });
 
     test('with a skip the photos it names are left out of the items and reported by id', async () => {
@@ -193,29 +347,197 @@ describe('getEligiblePhotosWalk', () => {
             }),
         );
         expect(walk.items.map((p) => p.id)).not.toContain('photo_won_009');
-        expect(walk.items).toHaveLength(8);
+        expect(walk.items).toHaveLength(11);
         expect(walk.skipped).toEqual(['photo_won_009']);
         expect(walk.truncated).toBe(false);
+        // nextStart counts the rows read (12), not the kept ones (11): a full
+        // read consumed every row.
+        expect(walk.nextStart).toBe(12);
         const searched = await settle(
             mockApiClient.getEligiblePhotosWalk(1, 'tok', { search: 'Trophy', skip: () => true }),
         );
-        expect(searched).toEqual({ items: [], truncated: false, skipped: ['photo_won_009'] });
+        expect(searched).toEqual({ items: [], truncated: false, skipped: ['photo_won_009'], nextStart: 1 });
     });
 
     test('a search is the same exact tag match as the paged read; a non-string search is ignored', async () => {
         const exact = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok', { search: ' Flower ' }));
-        expect(exact.items.map((p) => p.id)).toEqual(['photo_pink_flower_001', 'photo_blocked_007']);
+        expect(exact.items.map((p) => p.id)).toEqual(['photo_blocked_007', 'photo_pink_flower_001']);
         const ignored = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok', invalid({ search: 42 })));
-        expect(ignored.items).toHaveLength(9);
+        expect(ignored.items).toHaveLength(12);
+    });
+
+    const skipWon = (photo: { permission?: { allowed?: boolean; message?: string | null } }) =>
+        photo.permission?.allowed === false && /won a challenge/.test(String(photo.permission.message));
+
+    test('a maxKept extent keeps whole pages of four until the kept count reaches it', async () => {
+        const first = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: 4, skip: skipWon }));
+        // The default votes order: page one holds the won photo (skipped, so
+        // only three were kept), and the extent is reached inside page two,
+        // which is kept whole.
+        expect(first.items.map((p) => p.id)).toEqual([
+            'photo_blocked_007',
+            'photo_pink_petal_005',
+            'photo_pink_flower_001',
+            SUGGESTED_PHOTO_IDS[0],
+            'photo_nature_landscape_002',
+            SUGGESTED_PHOTO_IDS[1],
+            'photo_animal_006',
+        ]);
+        expect(first.skipped).toEqual(['photo_won_009']);
+        expect(first.truncated).toBe(true);
+        expect(first.nextStart).toBe(8);
+        const second = await settle(
+            mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: 4, skip: skipWon, start: first.nextStart }),
+        );
+        expect(second.items.map((p) => p.id)).toEqual([
+            SUGGESTED_PHOTO_IDS[2],
+            'photo_urban_003',
+            'photo_recent_004',
+            'photo_old_008',
+        ]);
+        expect(second.truncated).toBe(true);
+        expect(second.nextStart).toBe(12);
+        // The rows have run out: a continuation reads nothing and ends untruncated.
+        const third = await settle(
+            mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: 4, skip: skipWon, start: second.nextStart }),
+        );
+        expect(third.items).toEqual([]);
+        expect(third.skipped).toEqual([]);
+        expect(third.truncated).toBe(false);
+        expect(third.nextStart).toBe(12);
+    });
+
+    test('the default batch (LIBRARY_BATCH_PHOTOS) is one page of four rows', async () => {
+        const walk = await settle(
+            mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: LIBRARY_BATCH_PHOTOS, skip: skipWon }),
+        );
+        // The votes-ordered page one: the won photo is skipped out of it while
+        // its pagemates are kept.
+        expect(walk.items.map((p) => p.id)).toEqual([
+            'photo_blocked_007',
+            'photo_pink_petal_005',
+            'photo_pink_flower_001',
+        ]);
+        expect(walk.skipped).toEqual(['photo_won_009']);
+        expect(walk.truncated).toBe(true);
+        expect(walk.nextStart).toBe(4);
+        // Without a skip the page is kept whole and no skipped list is reported.
+        const plain = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: LIBRARY_BATCH_PHOTOS }));
+        expect(plain.items).toHaveLength(4);
+        expect(plain).not.toHaveProperty('skipped');
+        expect(plain.truncated).toBe(true);
+        expect(plain.nextStart).toBe(4);
+        // The last default batch: the rows run out on it, so the walk ends
+        // untruncated.
+        const last = await settle(
+            mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: LIBRARY_BATCH_PHOTOS, start: 8 }),
+        );
+        expect(last.items.map((p) => p.id)).toEqual([
+            SUGGESTED_PHOTO_IDS[2],
+            'photo_urban_003',
+            'photo_recent_004',
+            'photo_old_008',
+        ]);
+        expect(last.truncated).toBe(false);
+        expect(last.nextStart).toBe(12);
+    });
+
+    test('a Refresh extent (keep 8) reads three pages, and only photos on read pages are skipped', async () => {
+        const walk = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: 8, skip: skipWon }));
+        // Seven were kept after two pages, so the extent needed a third.
+        expect(walk.items).toHaveLength(11);
+        expect(walk.skipped).toEqual(['photo_won_009']);
+        expect(walk.truncated).toBe(true);
+        expect(walk.nextStart).toBe(12);
+    });
+
+    test('an extent beyond the library reads every page; the short last page ends it untruncated', async () => {
+        const walk = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: 15, skip: skipWon }));
+        expect(walk.items).toHaveLength(11);
+        expect(walk.skipped).toEqual(['photo_won_009']);
+        expect(walk.truncated).toBe(false);
+        expect(walk.nextStart).toBe(12);
+        // A continuation past the end reads nothing and stays untruncated.
+        const over = await settle(
+            mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: 15, skip: skipWon, start: walk.nextStart }),
+        );
+        expect(over).toEqual({ items: [], skipped: [], truncated: false, nextStart: 12 });
+    });
+
+    test('a short page wins over the extent, like the real walk', async () => {
+        // The last three rows: the extent (3 kept) is reached on the very page
+        // that runs out, and the rows having run out decides.
+        const walk = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: 3, start: 9 }));
+        expect(walk.items.map((p) => p.id)).toEqual(['photo_urban_003', 'photo_recent_004', 'photo_old_008']);
+        expect(walk.truncated).toBe(false);
+        expect(walk.nextStart).toBe(13);
+    });
+
+    test('a maxKept batch without a skip keeps the whole page and reports no skipped list', async () => {
+        const walk = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: 4 }));
+        expect(walk.items).toHaveLength(4);
+        expect(walk).not.toHaveProperty('skipped');
+        expect(walk.truncated).toBe(true);
+        expect(walk.nextStart).toBe(4);
+    });
+
+    test('a maxKept page is sliced from the search-filtered library', async () => {
+        const walk = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: 4, search: ' Pink ' }));
+        expect(walk.items.map((p) => p.id)).toEqual([
+            'photo_blocked_007',
+            'photo_pink_petal_005',
+            'photo_pink_flower_001',
+        ]);
+        // Three filtered rows are a short page: the batch is over.
+        expect(walk.truncated).toBe(false);
+        expect(walk.nextStart).toBe(4);
+    });
+
+    test('the walk honours the order in its page slicing, like the paged read', async () => {
+        // The page that reaches the extent is kept whole: two kept photos from a page of four.
+        const first = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: 2, order: 'votes' }));
+        expect(first.items.map((p) => p.id)).toEqual([
+            'photo_blocked_007',
+            'photo_won_009',
+            'photo_pink_petal_005',
+            'photo_pink_flower_001',
+        ]);
+        const continuation = await settle(
+            mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: 2, order: 'votes', start: first.nextStart }),
+        );
+        expect(continuation.items.map((p) => p.id)).toEqual([
+            SUGGESTED_PHOTO_IDS[0],
+            'photo_nature_landscape_002',
+            SUGGESTED_PHOTO_IDS[1],
+            'photo_animal_006',
+        ]);
+    });
+
+    test('without a token nextStart is the normalized start: nothing was read', async () => {
+        await expect(mockApiClient.getEligiblePhotosWalk(1, invalid(null), { start: 12 })).resolves.toEqual({
+            items: [],
+            truncated: true,
+            nextStart: 12,
+        });
+        await expect(mockApiClient.getEligiblePhotosWalk(1, invalid(null), { start: -5 })).resolves.toEqual({
+            items: [],
+            truncated: true,
+            nextStart: 0,
+        });
+        await expect(
+            mockApiClient.getEligiblePhotosWalk(1, invalid(null), invalid({ start: 'later' })),
+        ).resolves.toEqual({ items: [], truncated: true, nextStart: 0 });
     });
 });
 
 describe('getImageData', () => {
-    test('returns the per-photo record for a known photo', async () => {
+    test('returns the per-photo record for a known photo, display counts included', async () => {
         await expect(settle(mockApiClient.getImageData('photo_old_008', 'tok'))).resolves.toEqual({
             id: 'photo_old_008',
             votes: 12400,
             views: 70,
+            likes: 24,
+            guru_picks: 1,
             achievements: ['elite', 'top_30', 'top_50', 'top_100'],
         });
     });
@@ -256,15 +578,32 @@ describe('submitToChallenge', () => {
 });
 
 describe('join endpoints', () => {
-    test('getMemberChallenges returns the five fixtures with epoch-second timing', async () => {
+    test('getMemberChallenges returns the eight fixtures with epoch-second timing', async () => {
         const list = (await settle(mockApiClient.getMemberChallenges('tok', 'open'))) ?? [];
-        expect(list.map((c) => c.id)).toEqual([900001, 900002, 900003, 900004, 900005]);
+        expect(list.map((c) => c.id)).toEqual([900001, 900002, 900003, 900004, 900005, 900006, 900007, 900008]);
         const nowSec = Math.floor(Date.now() / 1000);
         list.forEach((c) => {
             expect(c.close_time).toBeGreaterThan(nowSec);
             expect(c.start_time).toBeLessThan(nowSec);
         });
         expect(cat.debug).toHaveBeenCalledWith('Filter: open', null);
+    });
+
+    test('the open rows cover the full, unlock-priced and price-unknown gating trio', async () => {
+        const list = (await settle(mockApiClient.getMemberChallenges('tok', 'open'))) ?? [];
+        // Full: players has reached max_players, and the submit state is the plain join one.
+        const full = list.find((c) => c.id === 900006);
+        expect(full?.max_players).toBeGreaterThan(0);
+        expect(full?.players).toBeGreaterThanOrEqual(full?.max_players ?? 0);
+        expect(full?.member?.submit_state).toBe('join');
+        // Unlock-priced: the unlock submit state with a price the listing can show.
+        const priced = list.find((c) => c.id === 900007);
+        expect(priced?.member?.submit_state).toBe('join_unlock');
+        expect(priced?.join_coins).toBeGreaterThan(0);
+        // Price-unknown: the unlock submit state with no usable join_coins on the item.
+        const unknown = list.find((c) => c.id === 900008);
+        expect(unknown?.member?.submit_state).toBe('join_unlock');
+        expect(unknown && 'join_coins' in unknown).toBe(false);
     });
 
     test('getMemberChallenges branches on the filter: upcoming has its own fixtures, not started yet', async () => {
@@ -352,6 +691,30 @@ describe('join endpoints', () => {
     test('joinChallenge treats anything but a literal true as "do not spend"', async () => {
         await mockApiClient.joinChallenge(900002, invalid('yes'), 'tok');
         expect(joinChallengeSingle).toHaveBeenCalledWith(900002, 'tok', expect.any(Object), { spendCoins: false });
+    });
+});
+
+describe('getSuggestedPhotoIds', () => {
+    test('answers the pool for the one open challenge, shape-filtered and capped', async () => {
+        const ids = await settle(mockApiClient.getSuggestedPhotoIds('tok', 900001));
+        // The pool holds 21 shape-valid ids; the cap keeps the first twenty.
+        expect(ids).toHaveLength(20);
+        // Every id the picker could match is one of the hex-shaped library photos.
+        expect(ids).toEqual(expect.arrayContaining(SUGGESTED_PHOTO_IDS));
+        // The library id that is not 32-hex is dropped, library membership notwithstanding.
+        expect(ids).not.toContain('photo_pink_flower_001');
+        expect(ids.every((id) => /^[0-9a-f]{32}$/.test(id))).toBe(true);
+    });
+
+    test('the matchable ids are all in the mock photo library', async () => {
+        const ids = await settle(mockApiClient.getSuggestedPhotoIds('tok', '900001'));
+        const libraryIds = buildLibraryPhotos(Math.floor(Date.now() / 1000)).map((photo) => photo.id);
+        // Of everything the getter answers, exactly the three hex photos exist in the library.
+        expect(ids.filter((id) => libraryIds.includes(id))).toEqual([...SUGGESTED_PHOTO_IDS]);
+    });
+
+    test.each([[900002], ['no-such-challenge']])('a challenge without suggestions (%p) answers none', async (id) => {
+        await expect(settle(mockApiClient.getSuggestedPhotoIds('tok', id))).resolves.toEqual([]);
     });
 });
 
@@ -460,5 +823,12 @@ describe('getVoteImages — session cache', () => {
         const second = await settle(mockApiClient.getVoteImages(challenge, 'tok'));
         expect(second).toBe(first);
         expect(cat.debug).toHaveBeenCalledWith('Using cached vote images for Cached', null);
+    });
+
+    test('the mock contract matches the real one: a readable read is the body, with an images array', async () => {
+        const challenge = invalid<Challenge>({ id: 10, title: 'Contract', url: 'street-photography-2024' });
+        const body = await settle(mockApiClient.getVoteImages(challenge, 'tok'));
+        expect(body).not.toBeNull();
+        expect(Array.isArray((body as { images?: unknown } | null)?.images)).toBe(true);
     });
 });

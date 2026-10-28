@@ -66,7 +66,7 @@ describe('TranslationContext', () => {
         expect(ctx.language).toBe('lv');
         expect(ctx.getCurrentLanguage()).toBe('lv');
         expect(ctx.t('app.title')).toBe('T:app.title');
-        expect(mockTranslator.t).toHaveBeenCalledWith('app.title', 'lv');
+        expect(mockTranslator.t).toHaveBeenCalledWith('app.title', undefined, 'lv');
     });
 
     it('an unset or unknown saved language resolves to English', async () => {

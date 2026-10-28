@@ -8,6 +8,7 @@ import * as cancellation from '../../voting/cancellation';
 import { errorMessage } from '../../errorMessage';
 import type { Challenge } from '../../types/gurushots';
 import { sanitizeLogString } from '../../logger/sanitize';
+import { joinFreshRefusal, joinFreshRefusalWhy } from '../VotingLogic';
 import { cat, lockFor } from './shared';
 import type { Claim, JoinDeps, JoinOutcome, UnlockState } from './shared';
 import {
@@ -15,7 +16,6 @@ import {
     findClaim,
     markUnconfirmed,
     claimUnlock,
-    markerKey,
     readUnlockedState,
     refreshClaims,
 } from './unlockMarker';
@@ -28,7 +28,7 @@ const failedNoCharge = (): JoinOutcome => ({ status: 'failed-no-charge', charged
  */
 const alreadyJoined = (challenge: Challenge, claim: Claim | null): JoinOutcome | null => {
     if (!claim?.joined) return null;
-    cat().debug(`${logger.challengeTag(challenge)}: this account has already joined it — nothing is unlocked`, null);
+    cat().debug(`${logger.challengeTag(challenge)}: already joined it — nothing is unlocked`, null);
     return { ...failedNoCharge(), reason: 'already-joined' };
 };
 
@@ -49,12 +49,11 @@ const claimsStale = async (challenge: Challenge, deps: JoinDeps, doing: string):
 const unclearUnlock = async (
     challenge: Challenge,
     deps: JoinDeps,
-    owner: string | null,
     needsCoins: number,
     coinsBefore: number | null,
 ): Promise<JoinOutcome> => {
     const tag = logger.challengeTag(challenge);
-    const flagged = await markUnconfirmed(deps, challenge?.id, owner);
+    const flagged = await markUnconfirmed(deps, challenge?.id);
     cat().error(
         `${tag}: coins_unlock got no usable answer — the charge may have gone through, keeping the claim`,
         null,
@@ -79,12 +78,12 @@ const CLEAR_RETRY_WAIT_MS = 100;
  * it is flagged unconfirmed instead, so the user can forget it. Only a lock held by another process is worth
  * trying again; a file that cannot be read or written will not be any better a moment later.
  */
-const releaseRefusedClaim = async (deps: JoinDeps, id: string | number, owner: string | null): Promise<void> => {
-    const key = markerKey(id, owner);
+const releaseRefusedClaim = async (deps: JoinDeps, id: string | number): Promise<void> => {
+    const key = String(id);
     let cleared = await clearUnlocked(deps, key);
     if (cleared === 'locked') cleared = await clearUnlocked(deps, key, CLEAR_RETRY_WAIT_MS);
     if (cleared === 'done') return;
-    const flagged = await markUnconfirmed(deps, id, owner);
+    const flagged = await markUnconfirmed(deps, id);
     cat().error(
         `challenge ${sanitizeLogString(id)}: the unlock was refused but its claim could not be removed — ${flagged ? 'it is flagged as unconfirmed, so it can be forgotten' : 'it could not be flagged either'}`,
         null,
@@ -93,7 +92,10 @@ const releaseRefusedClaim = async (deps: JoinDeps, id: string | number, owner: s
 
 /**
  * Whether the price still holds: the open list is read again, and the challenge must still be on it at no more than
- * the price the decision to join used. A price that cannot be read again is not one to spend on. `risenTo` is the
+ * the price the decision to join used. A price that cannot be read again is not one to spend on. The same read
+ * refuses a challenge that has since filled up, or whose unlock price is unreadable (`joinFreshRefusal`) — this is
+ * the last look before `coins_unlock`, so a spend that cannot succeed, or that nothing can consent to, happens
+ * nowhere. `risenTo` is the
  * live price when it is above the ceiling (null: it holds, or could not be read).
  */
 const priceHolds = async (
@@ -114,6 +116,16 @@ const priceHolds = async (
         return { holds: false, risenTo: null };
     }
     const live = open?.find((c) => String(c?.id) === String(challenge?.id));
+    // Only a FRESH unlock reaches here (a claim found earlier retries the submit without this read), so a full or
+    // price-unreadable live item refuses the spend outright — it only ever reduces spending.
+    const freshRefusal = joinFreshRefusal(live);
+    if (freshRefusal) {
+        cat().warning(
+            `${tag}: ${joinFreshRefusalWhy(freshRefusal)} since the join was decided — not spending coins`,
+            null,
+        );
+        return { holds: false, risenTo: null };
+    }
     const cost = Number(live?.join_coins);
     if (!Number.isFinite(cost)) {
         cat().warning(`${tag}: its price could not be read again — not spending coins`, null);
@@ -142,7 +154,6 @@ const claimAndUnlock = async (
     token: string,
     deps: JoinDeps,
     needsCoins: number,
-    owner: string | null,
     coinsBefore: number | null,
     priceCeiling: number | undefined,
 ): Promise<{ outcome: JoinOutcome } | UnlockState> => {
@@ -154,7 +165,7 @@ const claimAndUnlock = async (
         cat().error(`${logger.challengeTag(challenge)}: join-state is unreadable — not spending coins`, null);
         return { outcome: failedNoCharge() };
     }
-    const existing = findClaim(state, id, owner);
+    const existing = findClaim(state, id);
     if (existing) {
         const joined = alreadyJoined(challenge, existing);
         // Another process already paid → retry submit only; unless it has joined, too.
@@ -171,7 +182,7 @@ const claimAndUnlock = async (
     // Persist the claim BEFORE spending, so a crash the instant
     // after the charge can never let a later pass re-unlock. If
     // the claim cannot be recorded, do not spend at all.
-    const marked = await claimUnlock(deps, id, owner, coinsBefore);
+    const marked = await claimUnlock(deps, id, coinsBefore);
     if (marked.status === 'exists') {
         // Recorded by another process between the read above and this change (the background service, say): it is
         // unlocking this challenge now, and its unlock may still be refused, so nothing is said of a payment: busy,
@@ -187,16 +198,16 @@ const claimAndUnlock = async (
         return {
             charged: needsCoins,
             alreadyUnlocked: false,
-            claim: { key: markerKey(id, owner), unconfirmed: false, legacy: false, joined: false, coinsBefore },
+            claim: { key: String(id), unconfirmed: false, joined: false, coinsBefore },
         };
     }
     // No usable answer (a timeout, a reset, a 5xx) is unclear: the charge may have gone through, and the unlock
     // is not known to be idempotent, so the claim stays — flagged — and the next attempt only submits. A refusal
     // (a body that says no, or a 4xx) was not processed: nothing was charged, the claim goes back.
     if (!unlock || unlock.unclear) {
-        return { outcome: await unclearUnlock(challenge, deps, owner, needsCoins, coinsBefore) };
+        return { outcome: await unclearUnlock(challenge, deps, needsCoins, coinsBefore) };
     }
-    await releaseRefusedClaim(deps, id, owner);
+    await releaseRefusedClaim(deps, id);
     cat().warning(`coins_unlock failed for ${logger.challengeTag(challenge)} — no coins charged`, null);
     return { outcome: failedNoCharge() };
 };
@@ -210,7 +221,6 @@ const unlockUnderLock = async (
     token: string,
     deps: JoinDeps,
     needsCoins: number,
-    owner: string | null,
     coinsBefore: number | null,
     priceCeiling: number | undefined,
 ): ReturnType<typeof claimAndUnlock> => {
@@ -220,7 +230,7 @@ const unlockUnderLock = async (
         return { outcome: { status: 'busy', charged: 0 } };
     }
     try {
-        return await claimAndUnlock(challenge, token, deps, needsCoins, owner, coinsBefore, priceCeiling);
+        return await claimAndUnlock(challenge, token, deps, needsCoins, coinsBefore, priceCeiling);
     } finally {
         xlock.release();
     }

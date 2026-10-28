@@ -1,6 +1,4 @@
-import { interp } from './interp';
-
-type Translate = (key: string) => string;
+import type { Translate } from '../../translations/translator';
 
 /**
  * One kind of validator message: the pattern it is recognised by, the translation key of its wording and the
@@ -81,7 +79,7 @@ export const scenarioIssueText = (message: string, t: Translate): { text: string
                 .map((field) => (t(`app.${field}`) === `app.${field}` ? field : t(`app.${field}`)))
                 .join(', ');
         }
-        return { text: interp(t(key), values), known: true };
+        return { text: t(key, values), known: true };
     }
     return { text: t('app.scenarioIssueGeneric'), known: false };
 };
@@ -125,9 +123,9 @@ export const scenarioPathText = (path: string, t: Translate): string => {
         const { name, index } = splitIndex(segment);
         if (name === 'phases' && index === undefined && at + 1 < segments.length) {
             at++;
-            words.push(interp(t('app.scenarioPathPhase'), { name: segments[at] }));
+            words.push(t('app.scenarioPathPhase', { name: segments[at] }));
         } else if (index !== undefined && Object.hasOwn(NUMBERED_SEGMENTS, name)) {
-            words.push(interp(t(NUMBERED_SEGMENTS[name]), { n: Number(index) + 1 }));
+            words.push(t(NUMBERED_SEGMENTS[name], { n: Number(index) + 1 }));
         } else if (index === undefined && Object.hasOwn(NAMED_SEGMENTS, name)) {
             words.push(t(NAMED_SEGMENTS[name]));
         } else {

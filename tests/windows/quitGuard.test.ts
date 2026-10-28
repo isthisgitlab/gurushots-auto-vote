@@ -8,6 +8,7 @@ import type * as quitGuardModule from '../../src/ts/windows/quitGuard';
 import type { BrowserWindow, Dialog } from 'electron';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import type { CategoryLogger } from '../../src/ts/logger';
+import { createTranslator } from '../../src/ts/translations/translator';
 import { invalid } from '../helpers/invalid';
 
 type Deps = Parameters<typeof quitGuardModule.holdQuitForOpenBoosts>[1];
@@ -43,6 +44,12 @@ const describe_ = (c: Challenge) => ({
 });
 
 const t = (key: string) => `<${key}>`;
+/** The real dictionary at a language, so a vars call comes back interpolated like production. */
+const dictionaryT = (language = 'en') => {
+    const translator = createTranslator();
+    translator.setCurrentLanguage(language);
+    return translator.t;
+};
 const flush = () => new Promise((r) => setImmediate(r));
 
 let guard: typeof quitGuardModule;
@@ -202,7 +209,7 @@ describe('holdQuitForOpenBoosts — the dialog', () => {
                 autovoteRunning: true,
                 dialog,
                 parent: null,
-                t: (key) => (key === 'quitGuard.dueIn' ? 'boost due in {time}' : key),
+                t: dictionaryT(),
                 proceed: jest.fn(),
                 now: NOW,
                 describeDeadlineActions: describe_,
@@ -228,7 +235,7 @@ describe('holdQuitForOpenBoosts — the dialog', () => {
                 autovoteRunning: true,
                 dialog,
                 parent: null,
-                t: (key) => (key === 'quitGuard.dueIn' ? 'Boost pēc {time}' : key),
+                t: dictionaryT('lv'),
                 ...(locale === undefined ? {} : { locale }),
                 proceed: jest.fn(),
                 now: NOW,

@@ -11,14 +11,14 @@ test.each([
     const { container, rerender } = render(<ActionButton variant={variant}>Go</ActionButton>);
     const button = container.querySelector('button')!;
 
-    expect(button.className).toBe(`btn btn-sm h-auto min-h-8 py-1 leading-tight ${expected}`);
+    expect(button.className).toBe(`btn btn-sm h-auto min-h-8 max-sm:min-h-10 py-1 leading-tight ${expected}`);
 
     rerender(
         <ActionButton variant={variant} error="Failed">
             Go
         </ActionButton>,
     );
-    expect(button.className).toBe('btn btn-sm h-auto min-h-8 py-1 leading-tight btn-error');
+    expect(button.className).toBe('btn btn-sm h-auto min-h-8 max-sm:min-h-10 py-1 leading-tight btn-error');
 });
 
 test('the plain variant adds no colour class, so the caller can outline it with a base-content label', () => {
@@ -29,7 +29,7 @@ test('the plain variant adds no colour class, so the caller can outline it with 
     );
 
     expect(container.querySelector('button')!.className).toBe(
-        'btn btn-sm h-auto min-h-8 py-1 leading-tight btn-outline',
+        'btn btn-sm h-auto min-h-8 max-sm:min-h-10 py-1 leading-tight btn-outline',
     );
 });
 
@@ -57,7 +57,7 @@ test('preserves extra classes and native button properties', () => {
     );
     const button = container.querySelector('button')!;
 
-    expect(button.className).toBe('btn btn-sm h-auto min-h-8 py-1 leading-tight btn-neutral mt-1');
+    expect(button.className).toBe('btn btn-sm h-auto min-h-8 max-sm:min-h-10 py-1 leading-tight btn-neutral mt-1');
     expect(button.type).toBe('button');
     expect(button.title).toBe('Run');
     fireEvent.click(button);

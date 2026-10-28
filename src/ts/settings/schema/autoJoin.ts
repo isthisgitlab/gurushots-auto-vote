@@ -8,6 +8,7 @@
 
 import { z } from 'zod';
 import { elapsedPercentSetting, zBool, zString } from './validators';
+import { MAX_JOIN_WINDOW_HOURS } from '../limits';
 import type { SettingsSchemaEntry } from './entry';
 
 // Coin caps for the paid auto-join gate. Integer, 0 = off (no paid spend). The
@@ -16,10 +17,7 @@ import type { SettingsSchemaEntry } from './entry';
 const MAX_COIN_AMOUNT = 1_000_000;
 const coinAmount = z.number().int().min(0).max(MAX_COIN_AMOUNT);
 // Auto-join timing window, in hours before a candidate's close_time. 0 = off
-// (join as soon as the candidate is seen). The ceiling is 30 days — longer than
-// any real GuruShots challenge runs, so any value at or above it behaves as
-// "always in window" while still bounding a corrupted settings file.
-const MAX_JOIN_WINDOW_HOURS = 720;
+// (join as soon as the candidate is seen). The ceiling lives in settings/limits.ts.
 const joinWindowHours = z.number().min(0).max(MAX_JOIN_WINDOW_HOURS);
 
 export const autoJoinSettings = {
@@ -112,6 +110,9 @@ export const autoJoinSettings = {
         min: 0,
         max: MAX_JOIN_WINDOW_HOURS,
         unit: 'app.unitHours',
+        // Display-only (see SettingsSchemaEntry.minutes): the GUI edits this
+        // as an hours + minutes pair; the stored value stays fractional hours.
+        minutes: true,
         validationOrder: 1,
         group: 'autoJoin',
         label: 'app.autoJoinWithinHoursOfEnd',

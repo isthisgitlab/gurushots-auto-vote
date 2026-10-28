@@ -5,13 +5,18 @@
  * behind the Pick… "Auto" button. Everything the
  * server sent is stripped of terminal control characters before it is printed,
  * and the per-photo listing goes to the terminal only — the log files get a
- * count and whether the list was cut short, never the photos. `--suggest` prints
+ * count and whether the list was cut short, never the photos. `--search` also
+ * prints the library's tags that contain the term — terminal only, best effort,
+ * like the picker's suggestions — with a hint to rerun the search for one of
+ * them, quoted for the shell. `--suggest` prints
  * the ranked ids to the terminal only too, and its own log lines carry counts (the
  * shared visual check logs its shortlist of photo ids as it does for every fill).
  */
 
 import * as logger from '../../logger';
 import { stripTerminalControl } from '../../format/logSafe';
+import { isLibraryOrder } from '../../librarySort';
+import { suggestedTags } from '../../tagSuggestions';
 import { ensureAuthenticated, INVALID_ID_TEXT } from '../guards';
 
 import type { NullEventHandlers } from '../../types/cli';
@@ -43,7 +48,6 @@ const SUGGEST_REFUSALS: Record<string, string> = {
     'no-match': 'Nothing matches your Must Include tags. Loosen them, or choose photos by hand (list-photos).',
     'no-eligible': 'Your library has no photo this challenge accepts right now. Upload one, then try again.',
     'suggest-busy': 'Another ranking is still running. Wait for it, then run the command again.',
-    'account-changed': 'You switched accounts while it ran. Run the command again.',
     'challenge-ended': "This challenge has ended or couldn't be read. Check it with: status",
     'fetch-failed': 'Ranking failed. Try again in a moment.',
     'suggest-failed': 'Ranking failed. Try again in a moment.',
@@ -60,6 +64,25 @@ const parseSearchFlag = (argv: string[]): string | null => {
     return null;
 };
 
+/**
+ * `--sort=votes|newest|oldest` (or `--sort <name>`) from an argument list.
+ * A bare `--sort` whose next argument is another flag (or the end) has no
+ * value and reads as null, the same way a missing `--search` value does.
+ */
+const parseSortFlag = (argv: string[]): string | null => {
+    for (let i = 0; i < argv.length; i++) {
+        if (argv[i] === '--sort') {
+            const value = argv[i + 1];
+            return typeof value === 'string' && !value.startsWith('--') ? value : null;
+        }
+        if (argv[i].startsWith('--sort=')) return argv[i].slice('--sort='.length);
+    }
+    return null;
+};
+
+/** The text a `--sort` value that is not a library order is refused with. */
+const BAD_SORT_TEXT = 'Use --sort=votes, --sort=newest or --sort=oldest.';
+
 type Listing = Extract<Awaited<ReturnType<ActionHandlers['get-library-photos']>>, { success: true }>;
 
 /** How many photos the listing left out for having won a challenge, and why (a cut-short listing may hide more). */
@@ -72,6 +95,33 @@ const printWonHidden = (listing: Listing): void => {
         const text = wonHiddenText(listing);
         ui().info(`${text.charAt(0).toUpperCase()}${text.slice(1)}.`);
     }
+};
+
+/**
+ * A value as one POSIX shell word: wrapped in single quotes, with each single
+ * quote inside closed and reopened (`'\''`). The rerun hint is pasted into a
+ * shell, so a tag it carries must not split into two arguments or run as code.
+ */
+const shellQuote = (value: string): string => `'${value.replaceAll("'", `'\\''`)}'`;
+
+/**
+ * The picker's tag suggestions, best effort like in the GUI: the library's tags
+ * that CONTAIN the term, minus the term itself, offered for one exact search.
+ * A failed, superseded or empty reply prints nothing, and both lines are
+ * terminal only, like the photo lines. Never changes the exit code.
+ */
+const printTagSuggestions = async (search: string, challengeId: string | null, sort: string | null): Promise<void> => {
+    const reply = await handlers()['search-photo-tags'](null, search);
+    if (!reply?.success) return;
+    const tags = suggestedTags(reply.tags, search);
+    if (tags.length === 0) return;
+    logger.printLine(`Matching tags: ${tags.map((tag) => stripTerminalControl(tag)).join(', ')}`);
+    const rerun = [
+        `--search=${shellQuote(stripTerminalControl(tags[0]))}`,
+        ...(challengeId === null ? [] : [`--challenge=${shellQuote(stripTerminalControl(challengeId))}`]),
+        ...(sort === null ? [] : [`--sort=${shellQuote(stripTerminalControl(sort))}`]),
+    ].join(' ');
+    logger.printLine(`Search one with: list-photos ${rerun}`);
 };
 
 /**
@@ -94,11 +144,30 @@ const printPhotos = (listing: Listing): void => {
  *
  * @param challengeId - read the library as this challenge sees it (the allowed flags then apply to it)
  * @param search - a tag to narrow the listing to
+ * @param sort - a whole-library server order (`votes`|`newest`|`oldest`, checked with isLibraryOrder);
+ *   null reads the default votes order
  * @returns the exit code
  */
-const listPhotosCmd = async (challengeId: string | null, search: string | null): Promise<number> => {
+const listPhotosCmd = async (
+    challengeId: string | null,
+    search: string | null,
+    sort: string | null = null,
+): Promise<number> => {
     if (!ensureAuthenticated()) return 1;
-    const result = await handlers()['get-library-photos'](null, challengeId, search);
+    if (sort !== null && !isLibraryOrder(sort)) {
+        ui().error(`Could not list your photos: "${stripTerminalControl(sort)}" is not a sort. ${BAD_SORT_TEXT}`);
+        return 1;
+    }
+    const result = await handlers()['get-library-photos'](
+        null,
+        challengeId,
+        search,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        sort ?? undefined,
+    );
     if (!result?.success) {
         const code = String(result?.error);
         const reason = Object.hasOwn(REFUSALS, code) ? REFUSALS[code] : stripTerminalControl(code);
@@ -112,6 +181,7 @@ const listPhotosCmd = async (challengeId: string | null, search: string | null):
                 ? `No photos you can enter were found ${where}; ${wonHiddenText(result)}.`
                 : `No photos found ${where}.`,
         );
+        if (search) await printTagSuggestions(search, challengeId, sort);
         return 0;
     }
     ui().info(`=== Your photos (${result.photos.length}${result.truncated ? ', list cut short' : ''}) ===`);
@@ -131,6 +201,7 @@ const listPhotosCmd = async (challengeId: string | null, search: string | null):
             `Choose photos with: set-setting chosenPhotos '["<id>"]' --challenge=${stripTerminalControl(challengeId)}`,
         );
     }
+    if (search) await printTagSuggestions(search, challengeId, sort);
     return 0;
 };
 
@@ -170,4 +241,4 @@ const suggestPhotosCmd = async (challengeId: string): Promise<number> => {
     return 0;
 };
 
-export { listPhotosCmd, suggestPhotosCmd, parseSearchFlag };
+export { listPhotosCmd, suggestPhotosCmd, parseSearchFlag, parseSortFlag, BAD_SORT_TEXT, shellQuote };

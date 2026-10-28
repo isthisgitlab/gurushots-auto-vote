@@ -28,11 +28,11 @@ describe('ModalActionRow', () => {
         expect(buttons).toHaveLength(3);
 
         const [secondary, cancel, save] = buttons;
-        expect(save.className).toBe('btn btn-neutral btn-sm');
+        expect(save.className).toBe('btn btn-neutral btn-sm max-sm:min-h-10');
         expect(save.textContent).toContain('app.save');
-        expect(secondary.className).toBe('btn btn-error btn-sm');
+        expect(secondary.className).toBe('btn btn-error btn-sm max-sm:min-h-10');
         expect(secondary.textContent).toContain('app.resetAll');
-        expect(cancel.className).toBe('btn btn-outline btn-sm');
+        expect(cancel.className).toBe('btn btn-outline btn-sm max-sm:min-h-10');
         expect(cancel.textContent).toContain('app.cancel');
 
         fireEvent.click(save);

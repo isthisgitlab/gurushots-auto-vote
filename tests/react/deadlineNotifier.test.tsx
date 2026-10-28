@@ -3,14 +3,11 @@
  * math is tested in tests/services/deadlineNotifications.test.ts; here we pin
  * the renderer glue: early-exit when the feature is off (no IPC fan-out), the
  * get-deadline-actions {success,actions} unwrap (skip {success:false} without
- * breaking), cross-cycle dedupe, coalescing, and the re-entrancy guard.
+ * breaking), cross-cycle dedupe (which also holds across overlapping cycles),
+ * coalescing, and the platform delivery pick.
  */
 
-import {
-    createDeadlineNotifier,
-    deliverElectronNotification,
-    resolveRendererDelivery,
-} from '@/notifications/deadlineNotifier';
+import { createDeadlineNotifier, deliverElectronNotification } from '@/notifications/deadlineNotifier';
 import type { GetDeadlineActions } from '@/notifications/deadlineNotifier';
 import { invalid } from '../helpers/invalid';
 
@@ -118,14 +115,14 @@ describe('createDeadlineNotifier', () => {
         expect(deliver).toHaveBeenCalledTimes(1);
     });
 
-    test('re-entrancy guard: an overlapping call returns early without re-delivering', async () => {
+    test('overlapping cycles deliver once — the dedupe set holds across the race', async () => {
         const deliver = jest.fn();
         let releaseSettings!: (value?: unknown) => void;
         const gate = new Promise((resolve) => {
             releaseSettings = resolve;
         });
-        // The first cycle blocks inside its first setting read; the second call
-        // arrives while it is still in flight and must no-op.
+        // The first cycle blocks inside its first setting read; the second runs to
+        // completion while it is in flight and claims the pending window first.
         let calls = 0;
         const getSetting = jest.fn(async (key: string) => {
             calls += 1;
@@ -135,12 +132,12 @@ describe('createDeadlineNotifier', () => {
         const notify = makeNotifier({ getSetting, deliver });
 
         const first = notify(invalid([{ id: '1', title: 'A' }]), NOW);
-        const second = notify(invalid([{ id: '1', title: 'A' }]), NOW); // overlaps first
-        await second; // returns immediately (guard)
-        expect(deliver).not.toHaveBeenCalled();
+        await notify(invalid([{ id: '1', title: 'A' }]), NOW); // overlaps the first
+        expect(deliver).toHaveBeenCalledTimes(1);
 
         releaseSettings();
         await first;
+        // The first cycle's window is no longer fresh when it gets there: no second toast.
         expect(deliver).toHaveBeenCalledTimes(1);
     });
 
@@ -151,7 +148,7 @@ describe('createDeadlineNotifier', () => {
         expect(deliver).not.toHaveBeenCalled();
     });
 
-    test('a rejecting setting read is caught, logged, and releases the guard (self-contained)', async () => {
+    test('a rejecting setting read is caught, logged, and resolves quietly (self-contained)', async () => {
         const deliver = jest.fn();
         const log = jest.fn();
         let fail = true;
@@ -166,7 +163,7 @@ describe('createDeadlineNotifier', () => {
         expect(log).toHaveBeenCalledTimes(1);
         expect(deliver).not.toHaveBeenCalled();
 
-        // Guard released → a later healthy cycle still works.
+        // A later healthy cycle still works.
         fail = false;
         await notify(invalid([{ id: '1', title: 'A' }]), NOW);
         expect(deliver).toHaveBeenCalledTimes(1);
@@ -226,15 +223,5 @@ describe('deliverElectronNotification', () => {
         ctor.permission = 'granted';
         globalThis.Notification = invalid(ctor);
         expect(() => deliverElectronNotification({ title: 'x', body: 'y' })).not.toThrow();
-    });
-});
-
-describe('resolveRendererDelivery — platform gate', () => {
-    test('native platform → null (notifier not wired there)', () => {
-        expect(resolveRendererDelivery(true)).toBeNull();
-    });
-
-    test('non-native (Electron) → the Web Notification deliverer', () => {
-        expect(resolveRendererDelivery(false)).toBe(deliverElectronNotification);
     });
 });

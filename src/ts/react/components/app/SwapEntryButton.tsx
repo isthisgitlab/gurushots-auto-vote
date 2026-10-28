@@ -2,7 +2,6 @@ import { useId, useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { useSwapPhoto, useSwapBack } from '@/api/useCurrencyActions';
-import { interp } from '@/utils/interp';
 import { entryPhotoUrl } from '@/utils/formatters';
 import { alreadyEntered, spentOrStale } from '@/utils/spentOrStale';
 import { CURRENCY_OUTCOME } from '../../../voting/currencyActions';
@@ -117,22 +116,24 @@ export function SwapConfirmModal({
 
 /**
  * What swapping an entry out puts at risk: the entry is boosted or turbo'd (its boost/turbo stays with the
- * photo, so the replacement won't get it), and the feature it is live-pinned for (the pin would be left with
- * no photo). Shown in both confirm modals of a swap.
+ * photo, so the replacement won't get it), the feature it is live-pinned for (the pin would be left with
+ * no photo), and it carries a Guru's pick (the pick stays with the photo too). Shown in both confirm
+ * modals of a swap.
  */
-export type SwapWarnings = { actioned: boolean; pinned: EntryPinKind | null };
+export type SwapWarnings = { actioned: boolean; pinned: EntryPinKind | null; guruPick: boolean };
 
 /**
  * The warning lines of a swap's confirm modal.
  */
-export function SwapWarningLines({ actioned, pinned }: SwapWarnings) {
+export function SwapWarningLines({ actioned, pinned, guruPick }: SwapWarnings) {
     const { t } = useTranslation();
     return (
         <>
             {actioned && <ToneNote tone="warning">{t('app.currencySwapBoostedWarning')}</ToneNote>}
+            {guruPick && <ToneNote tone="warning">{t('app.currencySwapGuruPickWarning')}</ToneNote>}
             {pinned && (
                 <ToneNote tone="warning">
-                    {interp(t('app.pinSwapWarning'), { kind: t(pinned === 'boost' ? 'app.boost' : 'app.turbo') })}
+                    {t('app.pinSwapWarning', { kind: t(pinned === 'boost' ? 'app.boost' : 'app.turbo') })}
                 </ToneNote>
             )}
         </>
@@ -162,6 +163,7 @@ export type OpenSwapPick = (
  *
  * @param props.entry - entry record (id, member_id)
  * @param props.warnActioned - the entry is boosted or turbo'd (its boost/turbo stays with the photo, so the replacement won't get it)
+ * @param props.warnGuruPick - the entry carries a Guru's pick (the pick stays with the photo, so the replacement won't have it)
  * @param props.warnPinned - the feature the entry is live-pinned for (the pin would be left with no photo)
  * @param props.onSpent - called after a successful swap
  * @param props.onChoose - opens the card's swap picker for this entry
@@ -171,12 +173,14 @@ export function SwapEntryButton({
     challengeId,
     bankroll,
     warnActioned,
+    warnGuruPick = false,
     warnPinned = null,
     onSpent,
     onChoose,
 }: {
     entry: RankingEntry;
     warnActioned: boolean;
+    warnGuruPick?: boolean;
     warnPinned?: EntryPinKind | null;
     challengeId: Challenge['id'];
     bankroll: Bankroll | null;
@@ -191,7 +195,7 @@ export function SwapEntryButton({
     const pickHintId = useId();
     const error = preview.error || commit.error;
 
-    const warnings = { actioned: warnActioned, pinned: warnPinned };
+    const warnings = { actioned: warnActioned, pinned: warnPinned, guruPick: warnGuruPick };
 
     const dismissError = () => {
         preview.clearError();
@@ -243,7 +247,7 @@ export function SwapEntryButton({
                 <button
                     ref={pickRef}
                     type="button"
-                    className="btn btn-sm btn-outline"
+                    className="btn btn-sm btn-outline max-sm:min-h-10"
                     title={t('app.swapPickLabel')}
                     aria-describedby={pickHintId}
                     disabled={preview.loading || commit.loading}
@@ -270,7 +274,7 @@ export function SwapEntryButton({
                 <SwapWarningLines {...warnings} />
                 <button
                     type="button"
-                    className="btn btn-outline btn-sm"
+                    className="btn btn-outline btn-sm max-sm:min-h-10"
                     disabled={commit.loading}
                     onClick={handleChoose}
                 >
@@ -283,8 +287,9 @@ export function SwapEntryButton({
 
 /**
  * Per-entry "Swap back" button, shown on the photo that replaced one swapped
- * out while boosted/turbo'd: spends a SWAP to put the original back, which
- * restores its boost/turbo. The original comes from the main-side ledger.
+ * out while boosted, turbo'd or guru-picked: spends a SWAP to put the original
+ * back, which restores its boost/turbo/Guru's pick. The original comes from the
+ * main-side ledger.
  *
  * @param props.entry - the entry now in the slot
  */
@@ -296,7 +301,7 @@ export function SwapBackButton({
     onSpent,
 }: {
     entry: RankingEntry;
-    /** The boosted/turbo'd original to put back. */
+    /** The boosted, turbo'd or guru-picked original to put back. */
     swapBack: Pick<SwapBackOffer, 'previousId' | 'previousMemberId' | 'kind'>;
     challengeId: Challenge['id'];
     bankroll: Bankroll | null;
@@ -313,7 +318,17 @@ export function SwapBackButton({
     };
 
     const original = { id: swapBack.previousId, member_id: swapBack.previousMemberId };
-    const kindLabel = t(swapBack.kind === 'turbo' ? 'app.turbo' : 'app.boost');
+    // The body per stored kind — a fixed map over the kind union, never a key assembled from the record.
+    const bodyOf = (kind: SwapBackOffer['kind']): string => {
+        switch (kind) {
+            case 'guruPick':
+                return t('app.currencySwapBackBodyGuruPick');
+            case 'turbo':
+                return t('app.currencySwapBackBody', { kind: t('app.turbo') });
+            case 'boost':
+                return t('app.currencySwapBackBody', { kind: t('app.boost') });
+        }
+    };
 
     return (
         <>
@@ -336,7 +351,7 @@ export function SwapBackButton({
                 other={original}
                 otherCaption={t('app.currencySwapBackOriginal')}
             >
-                <p>{interp(t('app.currencySwapBackBody'), { kind: kindLabel })}</p>
+                <p>{bodyOf(swapBack.kind)}</p>
             </SwapConfirmModal>
         </>
     );

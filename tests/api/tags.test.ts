@@ -6,9 +6,9 @@
 import type * as tagsModule from '../../src/ts/api/tags';
 import type * as api_clientModule from '../../src/ts/api/api-client';
 import { invalid } from '../helpers/invalid';
+import { MIN_AUTOCOMPLETE_CHARS } from '../../src/ts/settings/limits';
 
-const { getCurrentMemberProfile, searchTagAutocomplete, MIN_AUTOCOMPLETE_CHARS } =
-    require('../../src/ts/api/tags') as typeof tagsModule;
+const { getCurrentMemberProfile, searchTagAutocomplete } = require('../../src/ts/api/tags') as typeof tagsModule;
 
 jest.mock('../../src/ts/api/api-client', () => ({
     makePostRequest: jest.fn(),

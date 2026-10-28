@@ -33,7 +33,6 @@ const invokeChannels = [
     'get-settings-recovery',
     'retry-settings-import',
     'start-fresh-settings',
-    'reimport-settings-from-v1',
     'get-import-report',
     'acknowledge-import-report',
     'get-third-party-notices',
@@ -81,7 +80,6 @@ const invokeChannels = [
     'cleanup-stale-metadata',
     'get-settings-schema',
     'get-validation-error',
-    'clear-chosen-photos',
     // Resets
     'reset-setting',
     'reset-global-default',
@@ -101,10 +99,11 @@ const invokeChannels = [
     'get-bankroll',
     'get-member-challenges',
     'get-open-chosen-annotations',
-    'confirm-account',
     'join-challenge',
     'forget-unconfirmed-payment',
     'get-library-photos',
+    'search-photo-tags',
+    'get-photo-stats',
     'get-auto-join-active',
     'get-auto-claim-status',
     // Bankroll-currency spends (key / swap / exposure fill)

@@ -6,15 +6,26 @@
 import logger = require('../../src/ts/logger');
 import type * as entryTimesModule from '../../src/ts/services/entryTimes';
 import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
+import type * as settingsModule from '../../src/ts/settings';
 import type { ActionResult, ActiveChallengesResponse, Challenge } from '../../src/ts/types/gurushots';
 import type { EntryAgeLedger } from '../../src/ts/types/stores';
 import type { ThroughResult } from '../../src/ts/types/stores';
 import { invalid } from '../helpers/invalid';
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import { isNumber, isRecordOf, isShape, isString, nullable, parseJsonAs } from '../helpers/parseJson';
+
+// The facade rides along real (a partial factory: its exports must be
+// replaceable for the consumeChosenPhotos spy), so the wrapped submits drive
+// the real consumption over the store planted below.
+jest.mock('../../src/ts/settings', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/settings')>('../../src/ts/settings'),
+}));
 
 const { annotateEntryTimes, withEntryTimes } = require('../../src/ts/services/entryTimes') as typeof entryTimesModule;
 const { createMemoryEntryAgeLedger, createEntryAgeLedger } =
     require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
+const settings = require('../../src/ts/settings') as typeof settingsModule;
 
 const NOW = 1_800_000_000;
 
@@ -106,6 +117,41 @@ describe('annotateEntryTimes', () => {
         await annotateEntryTimes(response, ledger);
         const at = response.challenges[0].member?.ranking?.entries?.[1]?.appEntered?.at ?? 0;
         expect(at).toBeGreaterThanOrEqual(before);
+    });
+
+    test('a marked challenge is neither observed nor annotated, but its entries still lose a forged appEntered', async () => {
+        const ledger = createMemoryEntryAgeLedger();
+        ledger.observe(challenge(1, ['old']), NOW - 100);
+        ledger.markSubmitted(1, ['mine'], NOW - 50);
+        const marked = invalid<Challenge>({
+            id: 1,
+            close_time: NOW + 3600,
+            dataIssues: ['close_time'],
+            member: {
+                ranking: {
+                    entries: [
+                        { id: 'old', appEntered: { at: 1, exact: true } },
+                        { id: 'mine', appEntered: { at: 2, exact: true } },
+                    ],
+                },
+            },
+        });
+        const sibling = challenge(2, ['x']);
+        const response: ActiveChallengesResponse = { challenges: [marked, sibling] };
+        const observeAll = jest.spyOn(ledger, 'observeAll');
+
+        await annotateEntryTimes(response, ledger, NOW);
+
+        // observeAll saw only the unmarked sibling…
+        expect(observeAll).toHaveBeenCalledTimes(1);
+        expect(observeAll).toHaveBeenCalledWith([sibling], NOW);
+        // …the marked challenge's entries lost the forged field and got nothing
+        // back, and its record is untouched.
+        expect(marked.member?.ranking?.entries?.[0]).not.toHaveProperty('appEntered');
+        expect(marked.member?.ranking?.entries?.[1]).not.toHaveProperty('appEntered');
+        expect(ledger.enteredAt(1, 'mine')).toBe(NOW - 50);
+        // The sibling is annotated as usual.
+        expect(sibling.member?.ranking?.entries?.[0]?.appEntered).toEqual({ at: NOW, exact: false });
     });
 });
 
@@ -238,6 +284,17 @@ describe('annotateEntryTimes and a ledger refresh that does not come back', () =
 
 describe('withEntryTimes', () => {
     const ok: ActionResult = { ok: true, raw: { success: true } };
+    const notOk: ActionResult = { ok: false, raw: null };
+
+    // The ok submits and swaps run the real chosen-photos consumption through
+    // the facade: it reads and writes settings, so every test here sits on the
+    // planted store, never the developer's real config.
+    beforeEach(() => {
+        installHeadlessStore();
+    });
+    afterEach(() => {
+        removeHeadlessStore();
+    });
 
     const wrapped = (submit: ActionResult, swap: ActionResult, ledger: EntryAgeLedger) => {
         const api = {
@@ -298,5 +355,94 @@ describe('withEntryTimes', () => {
         await expect(swapPhoto(7, 'x', 'y', 'tok')).resolves.toBe(ok);
         expect(warnings()).toHaveLength(2);
         expect(warnings()).toEqual(['submit time not recorded (Error)', 'submit time not recorded (Error)']);
+    });
+
+    test("an ok submit consumes the entered chosen photos from the challenge's stored list", async () => {
+        settings.rememberChallengeTitles([{ id: 7, title: 'Show' }]);
+        settings.setChallengeOverride('chosenPhotos', '7', ['a', 'b', 'keep']);
+        const ledger = createMemoryEntryAgeLedger();
+        const { api, submitToChallenge } = wrapped(ok, ok, ledger);
+
+        await expect(submitToChallenge(7, ['a', 'b'], 'tok')).resolves.toBe(ok);
+
+        expect(api.submitToChallenge).toHaveBeenCalledWith(7, ['a', 'b'], 'tok');
+        expect(settings.getChallengeOverrides('7')).toEqual({ chosenPhotos: ['keep'] });
+    });
+
+    test('an ok swap-in consumes the photo swapped in, and an emptied list deletes the key', async () => {
+        settings.rememberChallengeTitles([{ id: 7, title: 'Show' }]);
+        settings.setChallengeOverride('chosenPhotos', '7', ['new']);
+        const ledger = createMemoryEntryAgeLedger();
+        const { swapPhoto } = wrapped(ok, ok, ledger);
+
+        await expect(swapPhoto(7, 'old', 'new', 'tok')).resolves.toBe(ok);
+
+        expect(settings.getChallengeOverrides('7')).toEqual({});
+    });
+
+    test('an unclear or failed submit or swap consumes nothing', async () => {
+        const consume = jest.spyOn(settings, 'consumeChosenPhotos');
+        const ledger = createMemoryEntryAgeLedger();
+        const { submitToChallenge, swapPhoto } = wrapped(notOk, notOk, ledger);
+        await expect(submitToChallenge(7, ['a'], 'tok')).resolves.toBe(notOk);
+        await expect(swapPhoto(7, 'x', 'y', 'tok')).resolves.toBe(notOk);
+        expect(consume).not.toHaveBeenCalled();
+        consume.mockRestore();
+    });
+
+    test('the join-time hold: an id unknown to the facts cache consumes nothing, even with a rule-layer Only planted', async () => {
+        // Not seeded: at this site the id is minutes old and a rule cannot be
+        // resolved for it yet, so the unknown-id hold fires before Only would.
+        settings.setTitleRules([{ title: 'Show', chosenPhotosOnly: true }]);
+        settings.setChallengeOverride('chosenPhotos', '999', ['a']);
+        const consume = jest.spyOn(settings, 'consumeChosenPhotos');
+        const ledger = createMemoryEntryAgeLedger();
+        const { submitToChallenge } = wrapped(ok, ok, ledger);
+
+        await expect(submitToChallenge(999, ['a'], 'tok')).resolves.toBe(ok);
+
+        expect(consume).toHaveBeenCalledWith(999, ['a']);
+        expect(settings.getChallengeOverrides('999')).toEqual({ chosenPhotos: ['a'] });
+        consume.mockRestore();
+    });
+
+    test('a rule-layer Only for an id the cache knows holds too: Only resolves through the rule', async () => {
+        settings.rememberChallengeTitles([{ id: 555, title: 'Ruled show' }]);
+        settings.setTitleRules([{ title: 'Ruled show', chosenPhotosOnly: true }]);
+        settings.setChallengeOverride('chosenPhotos', '555', ['a']);
+        const ledger = createMemoryEntryAgeLedger();
+        const { submitToChallenge } = wrapped(ok, ok, ledger);
+
+        await expect(submitToChallenge(555, ['a'], 'tok')).resolves.toBe(ok);
+
+        expect(settings.getChallengeOverrides('555')).toEqual({ chosenPhotos: ['a'] });
+    });
+
+    test('a consumption failure is logged and the submit result is unchanged', async () => {
+        const consume = jest.spyOn(settings, 'consumeChosenPhotos').mockImplementation(() => {
+            throw new Error('store down');
+        });
+        const ledger = createMemoryEntryAgeLedger();
+        const { submitToChallenge } = wrapped(ok, ok, ledger);
+
+        await expect(submitToChallenge(7, ['a'], 'tok')).resolves.toBe(ok);
+
+        expect(consume).toHaveBeenCalledWith(7, ['a']);
+        expect(warnings()).toEqual(['chosen photos not consumed (Error)']);
+        consume.mockRestore();
+    });
+
+    test('a ledger-mark failure does not skip the consumption: the guards are separate', async () => {
+        settings.rememberChallengeTitles([{ id: 7, title: 'Show' }]);
+        settings.setChallengeOverride('chosenPhotos', '7', ['a', 'keep']);
+        const consume = jest.spyOn(settings, 'consumeChosenPhotos');
+        const { submitToChallenge } = wrapped(ok, ok, brokenLedger());
+
+        await expect(submitToChallenge(7, ['a'], 'tok')).resolves.toBe(ok);
+
+        expect(warnings()).toEqual(['submit time not recorded (Error)']);
+        expect(consume).toHaveBeenCalled();
+        expect(settings.getChallengeOverrides('7')).toEqual({ chosenPhotos: ['keep'] });
+        consume.mockRestore();
     });
 });

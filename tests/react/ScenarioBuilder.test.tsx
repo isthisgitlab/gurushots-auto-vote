@@ -7,7 +7,6 @@ import { act, cleanup, render, screen, waitFor, fireEvent, within } from './help
 import type { ComponentProps } from 'preact';
 import { ScenarioBuilder } from '@/components/app/scenarioBuilder/ScenarioBuilder';
 import type { ScenarioDraft, ScenarioDraftRule } from '../../src/ts/types/scenarioBuilder';
-import { announceChosenPhotosCleared } from '@/api/chosenPhotosCleared';
 import { invalid } from '../helpers/invalid';
 
 /** The saved document as these tests read it: each phase they inspect has rules, and every action a type. */
@@ -384,6 +383,24 @@ describe('simulate', () => {
         expect((await screen.findByRole('alert')).textContent).toContain('app.sbSimulateFailed');
         expect(screen.queryByText('app.sbSimulateNothing')).toBeNull();
     });
+
+    test('a challenge whose data cannot be read refuses with its own next step, not the scenario one', async () => {
+        jest.mocked(window.api.simulateScenario).mockResolvedValueOnce(
+            invalid({ success: false, error: 'challenge-data-incomplete' }),
+        );
+        await renderBuilder();
+        const picker = await screen.findByLabelText<HTMLSelectElement>('app.sbSimulateOn');
+        await waitFor(() => expect(within(picker).getByText('Show')).toBeTruthy());
+        changeSelect(picker, '7');
+        click('app.sbSimulate');
+        // Both keys render in one span, so the assertions read the span's text; the lookahead tells the
+        // default next step apart from the refusal one ("…NextRefresh").
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toContain('app.sbSimulateDataIncomplete');
+        expect(alert.textContent).toContain('app.scenarioErrorNextRefresh');
+        expect(alert.textContent).not.toMatch(/app\.scenarioErrorNext(?!Refresh)/);
+        expect(alert.textContent).not.toContain('app.sbSimulateFailed');
+    });
 });
 
 describe('save', () => {
@@ -476,25 +493,6 @@ describe('save', () => {
     });
 });
 
-test('every list removed while the builder is open is dropped from the draft, so saving cannot restore it', async () => {
-    await renderBuilder({
-        initial: {
-            ...doc(),
-            phases: {
-                main: { settings: { exposure: 10, chosenPhotos: ['p1'] }, rules: [] },
-                later: { rules: [] },
-            },
-        },
-    });
-    await screen.findByText('app.chosenPhotosScenarioHint');
-    act(() => announceChosenPhotosCleared());
-    await waitFor(() => expect(screen.queryByText('app.chosenPhotosScenarioHint')).toBeNull());
-    const draft = await saveDraft();
-    // The other settings stay; a phase without settings is left as it was.
-    expect(draft.phases.main.settings).toEqual({ exposure: 10 });
-    expect(draft.phases.later).toEqual({ rules: [] });
-});
-
 describe('dirty reporting', () => {
     const lastReport = () => onDirtyChange.mock.calls.at(-1)?.[0];
 
@@ -522,25 +520,6 @@ describe('dirty reporting', () => {
         fireEvent.change(screen.getByRole('textbox', { name: 'app.sbTabJson' }), { target: { value: '{nope' } });
         expect(lastReport()).toBe(true);
         fireEvent.click(screen.getByRole('tab', { name: 'app.sbTabBuilder' }));
-        expect(lastReport()).toBe(false);
-    });
-
-    test('every list removed while the builder is open is not an unsaved edit, in the builder or the JSON tab', async () => {
-        await renderBuilder({
-            initial: { ...doc(), phases: { main: { settings: { exposure: 10, chosenPhotos: ['p1'] }, rules: [] } } },
-        });
-        fireEvent.click(screen.getByRole('tab', { name: 'app.sbTabJson' }));
-        expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'app.sbTabJson' }).value).toContain(
-            'chosenPhotos',
-        );
-
-        act(() => announceChosenPhotosCleared());
-
-        await waitFor(() =>
-            expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'app.sbTabJson' }).value).not.toContain(
-                'chosenPhotos',
-            ),
-        );
         expect(lastReport()).toBe(false);
     });
 });

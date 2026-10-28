@@ -95,7 +95,6 @@ export const getEnvironmentInfo = forward('getEnvironmentInfo');
 export const getSettingsRecovery = forward('getSettingsRecovery');
 export const retrySettingsImport = forward('retrySettingsImport');
 export const startFreshSettings = forward('startFreshSettings');
-export const reimportSettingsFromV1 = forward('reimportSettingsFromV1');
 export const getImportReport = forward('getImportReport');
 export const acknowledgeImportReport = forward('acknowledgeImportReport');
 
@@ -118,7 +117,6 @@ export const saveChallengeProfile = forward('saveChallengeProfile');
 export const deleteChallengeProfile = forward('deleteChallengeProfile');
 export const getTitleRules = forward('getTitleRules');
 export const setTitleRules = forward('setTitleRules');
-export const clearChosenPhotos = forward('clearChosenPhotos');
 
 // User-defined scenarios
 export const getScenarios = forward('getScenarios');
@@ -141,8 +139,8 @@ export const getDeadlineActions = forward('getDeadlineActions');
 export const joinChallenge = forward('joinChallenge');
 export const forgetUnconfirmedPayment = forward('forgetUnconfirmedPayment');
 export const getOpenChosenAnnotations = forward('getOpenChosenAnnotations');
-export const confirmAccount = forward('confirmAccount');
 export const getLibraryPhotos = forward('getLibraryPhotos');
+export const getPhotoStats = forward('getPhotoStats');
 export const runVotingCycle = forward('runVotingCycle');
 export const runVotingCycleForChallenge = forward('runVotingCycleForChallenge');
 export const voteOnChallengeManual = forward('voteOnChallengeManual');

@@ -1,270 +1,122 @@
 /**
- * Photo picker — the text normalisation every matcher shares: the photography
- * stopword list, the light stemmer, the bounded tokeniser, stem equivalence
- * (matches) and user-tag normalisation (tokeniseTagList).
+ * Photo picker — the bounded tokeniser, stem equivalence (matches) and
+ * user-tag normalisation (tokeniseTagList). The stemmer itself lives in
+ * stem.ts, which the semantic lexicon imports directly.
  */
 
-const STOPWORDS = new Set([
-    // Articles, prepositions, conjunctions, copulas
-    'in',
-    'of',
-    'the',
-    'a',
-    'an',
-    'and',
-    'or',
-    'vs',
-    'versus',
-    'with',
-    'on',
-    'for',
-    'to',
-    'at',
-    'from',
-    'by',
-    'about',
-    'as',
-    'if',
-    'so',
-    'no',
-    'not',
-    'is',
-    'it',
-    'this',
-    'that',
-    'these',
-    'those',
-    // Pronouns
-    'my',
-    'me',
-    'mine',
-    'we',
-    'us',
-    'our',
-    'ours',
-    'you',
-    'your',
-    'yours',
-    'he',
-    'she',
-    'they',
-    'them',
-    'their',
-    // Auxiliary verbs
-    'are',
-    'was',
-    'were',
-    'be',
-    'been',
-    'being',
-    'have',
-    'has',
-    'had',
-    'do',
-    'does',
-    'did',
-    'will',
-    'would',
-    'should',
-    'could',
-    'can',
-    // Quantifiers
-    'all',
-    'any',
-    'some',
-    'more',
-    'most',
-    'less',
-    'few',
-    'many',
-    'much',
-    // Photography / GuruShots vocabulary that doesn't help match labels
-    'shots',
-    'shot',
-    'photo',
-    'photos',
-    'photography',
-    'photographer',
-    'image',
-    'images',
-    'picture',
-    'pictures',
-    'pic',
-    'pics',
-    'gurushots',
-    'challenge',
-    'challenges',
-    'contest',
-    'contests',
-    // Reward / level copy from welcome messages
-    'reward',
-    'rewards',
-    'prize',
-    'prizes',
-    'win',
-    'wins',
-    'winner',
-    'winners',
-    'level',
-    'levels',
-    'badge',
-    'badges',
-    'point',
-    'points',
-    'coin',
-    'coins',
-    'allstar',
-    'elite',
-    'premier',
-    'popular',
-    'skilled',
-    'guru',
-    'gurus',
-    'earn',
-    'earns',
-    'earned',
-    'earning',
-    'participation',
-    'participate',
-    // Recurring-award / cadence words. "Photographer of the Week", "Guru of The
-    // Week" name a CONTEST PERIOD, never a visual subject, and left in they are
-    // the whole theme — a challenge whose only keyword is "week" scores random
-    // photos at 0.48 purely on vector noise, which then outranks the user's own
-    // best photo on a challenge nothing can legitimately match.
-    'week',
-    'weekly',
-    'month',
-    'monthly',
-    'year',
-    'yearly',
-    'daily',
-    // Welcome-message boilerplate verbs
-    'capture',
-    'captured',
-    'capturing',
-    'submit',
-    'submitted',
-    'submission',
-    'enter',
-    'entered',
-    'entering',
-    'entry',
-    'entries',
-    'join',
-    'joined',
-    'joining',
-    // Title-imperative verbs ("Let's See Hats", "Show us your...",
-    // "Share your best..."). These carry no subject signal and would
-    // otherwise leak into the keyword scorer and the derived search terms.
-    'let',
-    'lets',
-    'see',
-    'seen',
-    'show',
-    'shows',
-    'showing',
-    'shown',
-    'share',
-    'shares',
-    'sharing',
-    'shared',
-    // "Using Reflections" is about reflections; the description repeating
-    // "using" must not confirm it as the subject (see readChallengeTheme).
-    'using',
-    // Welcome-message boilerplate adjectives / fillers
-    'good',
-    'luck',
-    'great',
-    'best',
-    'better',
-    'nice',
-    // Abstract head-nouns. These are real nouns, but they name no visual
-    // subject — in a title the MODIFIER carries all the signal and the head
-    // noun carries none ("The Farm Life" is about farms; "Sea Life" is about
-    // the sea). Left in, "life" would both drive a server-side search that
-    // pulls in sea-life photos for a Farm Life challenge AND score those photos
-    // as a keyword match.
-    //
-    // Only the challenge side strips these (tokenise filters before it stems,
-    // so entries are raw words). A user who TYPES "sea life" as a tag means it
-    // literally, and tokeniseTagList / label tokenisation both pass
-    // keepStopwords:true to honour that.
-    //
-    // NOT included: "mood", "style", "vibe". They are weaker cases than the
-    // above and stripping them would break the legitimate niche challenge
-    // whose entire subject is that word (see the "Mood" case in
-    // tests/services/photoPicker.test.ts).
-    'life',
-    'lives',
-    'living',
-    'world',
-    'worlds',
-    'time',
-    'times',
-    'moment',
-    'moments',
-    'thing',
-    'things',
-    'day',
-    'days',
-    'story',
-    'stories',
-    'tale',
-    'tales',
-]);
+import { STOPWORDS } from './stopwords';
+import { stem } from './stem';
+import { compoundOf } from '../semantic/lexicon';
 
 const isPureDigit = (token: string) => /^\d+$/.test(token);
 
-// Bases that take '-es' rather than a bare '-s'. 'ss' is listed explicitly
-// because a single trailing 's' is ambiguous — 'glass'+es vs 'hous'+e+s — and
-// only the doubled form is reliably a sibilant base ('glasses'→'glass' while
-// 'houses'→'house').
-const SIBILANT_ES_RE = /(?:x|z|ch|sh|ss)$/;
+// keepStopwords skips the photography-noise stopword list. Challenge text
+// is full of boilerplate ("shots", "best", "good luck") that drowns out the
+// real subject, so the keyword path filters it. But a user who explicitly
+// types those words as a tag means them literally — honor the input.
+interface TokeniseOptions {
+    keepStopwords?: boolean;
+    /** Raw words to drop; only a Set or an array is honoured. */
+    ignoreWords?: Iterable<unknown> | null;
+    /**
+     * Adjacent-word compound merging against the lexicon's compound keys:
+     * 'replace' emits the compound for its parts, 'add' the compound and then
+     * its parts, 'off' (the default) the parts only.
+     */
+    compounds?: 'replace' | 'add' | 'off';
+}
+
+const toIgnoreSet = (words: Iterable<unknown> | null | undefined): Set<unknown> | null => {
+    if (words instanceof Set) return words.size > 0 ? words : null;
+    if (!Array.isArray(words) || words.length === 0) return null;
+    const out = new Set();
+    for (const word of words) {
+        if (typeof word !== 'string') continue;
+        const normalised = word.trim().toLowerCase();
+        if (normalised !== '') out.add(normalised);
+    }
+    return out.size > 0 ? out : null;
+};
+
+// Only a single space or a single hyphen joins a compound window. Any other
+// separator — ", ", " & ", a sentence break, a spaced " - " hyphen (a series
+// separator, see SERIES_SEPARATOR_RE) — is punctuation that breaks the window,
+// so "Blue & Green" never merges but "Close-Up" and "Close Up" do.
+const JOINS_WORDS_RE = /^(?:\s|-)$/;
 
 /**
- * Light suffix stemmer covering the common inflected forms that show
- * up in challenge text vs. vision labels: plurals (flowers→flower),
- * gerunds (jumping→jump), past tense (jumped→jump), 'ies' nouns
- * (categories→category). Keeps the algorithm dependency-free; the residue it
- * leaves ('runn' from 'running') is absorbed by the bounded-prefix branch of
- * matches(), which is what the MAX_STEM_PREFIX_DELTA allowance exists for.
+ * How a candidate window resolves: 'merge' emits the hyphen-joined compound,
+ * 'drop' consumes every word of the window and emits nothing, 'pass' leaves
+ * the words to flow through unmerged.
  *
- * SIBILANT RULE (see SIBILANT_ES_RE): '-es' is only a plural SUFFIX after a
- * sibilant — box→boxes, dish→dishes, church→churches, glass→glasses. A word
- * that already ends in '-e' just takes '-s' (face→faces, tree→trees,
- * lighthouse→lighthouses), so stripping a blanket two characters there ate a
- * real letter and produced a non-word: 'faces'→'fac', 'trees'→'tre',
- * 'lighthouses'→'lighthous'. That was not cosmetic. Those stems are what the
- * auto-fill search term and the semantic lexicon key are BOTH derived from, so
- * a "Lighthouses" challenge searched the exact tag 'lighthous' (no such tag —
- * zero candidates, fell back to the whole library) AND missed the lexicon,
- * which has 'lighthouse' but no 'lighthous'. Both failures disappear with the
- * correct stem.
+ * The merge is decided by model data: a window merges only when the lexicon
+ * holds a vector for the stem of its hyphen-joined surface, so with the
+ * lexicon unloaded nothing merges at all. A window whose words are all
+ * stopwords never merges even when the model knows the compound ("best-of"):
+ * the parts are boilerplate, not a subject. A known compound whose
+ * space-joined form ("close up") sits in the ignore set drops every word of
+ * the window, so neither "close" nor "up" leaks — that is not a general
+ * multi-word ignore, it only ever fires for a compound the model knows.
+ *
+ * SECURITY: the text is untrusted API data, and the walk runs on input
+ * already cut to MAX_TOKENISE_CHARS. The model table is only ever probed with
+ * exact lookups (compoundOf is a Map hit against model data), never a regex
+ * built from it.
  */
-const stem = (word: string): string => {
-    if (typeof word !== 'string' || word.length < 4) return word || '';
-    const w = word;
-    if (w.length > 5 && w.endsWith('ing')) return w.slice(0, -3);
-    // length > 4, not > 5: at 5 this rule was skipped entirely and the word fell
-    // through to the '-es' branch, so "skies" stemmed to "ski" (and, once the
-    // sibilant rule landed, "skie") — never "sky". A "Dramatic Skies" challenge
-    // therefore could not match a "Sky" label at all. Every 5-letter '-ies' word
-    // is a y-plural (skies, flies, cries, tries, spies); the '-ie' + s words that
-    // this rule genuinely mis-stems (movies, cookies) are all 6+ and were already
-    // mis-stemmed before, so widening to 5 adds no new failure.
-    if (w.length > 4 && w.endsWith('ies')) return `${w.slice(0, -3)}y`;
-    if (w.length > 4 && w.endsWith('ed')) return w.slice(0, -2);
-    if (w.length > 4 && w.endsWith('es')) {
-        // Drop the whole '-es' only when what precedes it is a sibilant, i.e.
-        // the base could not have taken a bare '-s'. Otherwise the base ends
-        // in '-e' and only the '-s' is inflection. 'buses'→'buse' is the known
-        // residue of not having a dictionary; the bounded-prefix branch of
-        // matches() absorbs it exactly as it absorbs 'runn'.
-        const base = w.slice(0, -2);
-        return SIBILANT_ES_RE.test(base) ? base : w.slice(0, -1);
+const windowAction = (window: readonly string[], ignored: (word: string) => boolean): 'merge' | 'drop' | 'pass' => {
+    if (window.some(ignored)) return 'pass';
+    if (window.every((w) => STOPWORDS.has(w))) return 'pass';
+    if (!compoundOf(window)) return 'pass';
+    return ignored(window.join(' ')) ? 'drop' : 'merge';
+};
+
+/**
+ * The compound merge, run on the raw words before the stopword filter: at each
+ * position a 3-word window is tried, then a 2-word one, leftmost first, and a
+ * window merges only when the model knows it (see windowAction). The merged
+ * window emits its surface form joined by hyphens ("close-ups"), which
+ * tokenise() then stems exactly once — emitting the stored key would stem a
+ * second time and mis-stem.
+ */
+const mergeCompounds = (
+    words: string[],
+    gaps: readonly string[],
+    ignore: Set<unknown> | null,
+    mode: 'replace' | 'add' | 'off',
+): string[] => {
+    if (mode === 'off') return words;
+    const ignored = (word: string) => ignore !== null && ignore.has(word);
+    const joins = (gap: string | undefined) => gap !== undefined && JOINS_WORDS_RE.test(gap);
+    const out: string[] = [];
+    for (let i = 0; i < words.length; i++) {
+        // At most two model lookups per position: the 3-word window, then the
+        // 2-word one.
+        let len = 0;
+        let drop = false;
+        if (joins(gaps[i + 1])) {
+            const wide = joins(gaps[i + 2]) ? windowAction(words.slice(i, i + 3), ignored) : 'pass';
+            const narrow = wide === 'pass' ? windowAction(words.slice(i, i + 2), ignored) : 'pass';
+            const action = wide !== 'pass' ? wide : narrow;
+            if (action !== 'pass') {
+                len = wide !== 'pass' ? 3 : 2;
+                drop = action === 'drop';
+            }
+        }
+        if (len === 0) {
+            out.push(words[i]);
+            continue;
+        }
+        const window = words.slice(i, i + len);
+        if (!drop) {
+            out.push(window.join('-'));
+            // 'add' emits the compound first and then its parts, so a label cut
+            // at MAX_WORDS_PER_LABEL cannot lose the compound and keep only
+            // pieces of it.
+            if (mode === 'add') out.push(...window);
+        }
+        i += len - 1;
     }
-    if (w.length > 3 && w.endsWith('s') && !w.endsWith('ss')) return w.slice(0, -1);
-    return w;
+    return out;
 };
 
 // Every string tokenise() sees is untrusted: challenge title / url /
@@ -282,50 +134,36 @@ const MAX_TOKENISE_CHARS = 4096;
  */
 const stripTags = (text: string): string => text.slice(0, MAX_TOKENISE_CHARS).replace(/<[^<>]*>/g, ' ');
 
-// keepStopwords skips the photography-noise stopword list. Challenge text
-// is full of boilerplate ("shots", "best", "good luck") that drowns out the
-// real subject, so the keyword path filters it. But a user who explicitly
-// types those words as a tag means them literally — honor the input.
-interface TokeniseOptions {
-    keepStopwords?: boolean;
-    /** Raw words to drop; only a Set or an array is honoured. */
-    ignoreWords?: Iterable<unknown> | null;
-}
-
-const toIgnoreSet = (words: Iterable<unknown> | null | undefined): Set<unknown> | null => {
-    if (words instanceof Set) return words.size > 0 ? words : null;
-    if (!Array.isArray(words) || words.length === 0) return null;
-    const out = new Set();
-    for (const word of words) {
-        if (typeof word !== 'string') continue;
-        const normalised = word.trim().toLowerCase();
-        if (normalised !== '') out.add(normalised);
-    }
-    return out.size > 0 ? out : null;
-};
-
 const rawTokenise = (
     text: string | null | undefined,
-    { keepStopwords = false, ignoreWords = null }: TokeniseOptions = {},
+    { keepStopwords = false, ignoreWords = null, compounds = 'off' }: TokeniseOptions = {},
 ): string[] => {
     if (typeof text !== 'string' || text.length === 0) return [];
     // Matched against the RAW word, before stemming — same as STOPWORDS — so a
     // user writing "captivating" catches it without having to know that the
     // stemmer turns it into "captivat".
     const ignore = toIgnoreSet(ignoreWords);
-    return text
+    // Split keeping each separator, so the compound merge can see what joins
+    // two words. The per-word trailing-digit strip ("macro-insects4") still
+    // runs before the merge.
+    const parts = text
         .slice(0, MAX_TOKENISE_CHARS)
         .toLowerCase()
         .replace(/<[^>]*>/g, ' ')
-        .split(/[^a-z0-9]+/)
-        .map((t) => t.replace(/\d+$/, ''))
-        .filter(
-            (t) =>
-                t.length > 1 &&
-                !isPureDigit(t) &&
-                (keepStopwords || !STOPWORDS.has(t)) &&
-                !(ignore !== null && ignore.has(t)),
-        );
+        .split(/([^a-z0-9]+)/);
+    const words: string[] = [];
+    const gaps: string[] = [];
+    for (let i = 0; i < parts.length; i += 2) {
+        words.push(parts[i].replace(/\d+$/, ''));
+        gaps.push(i === 0 ? '' : parts[i - 1]);
+    }
+    return mergeCompounds(words, gaps, ignore, compounds).filter(
+        (t) =>
+            t.length > 1 &&
+            !isPureDigit(t) &&
+            (keepStopwords || !STOPWORDS.has(t)) &&
+            !(ignore !== null && ignore.has(t)),
+    );
 };
 
 // The surface words above, stemmed. Split from rawTokenise because term
@@ -357,6 +195,13 @@ const MAX_STEM_PREFIX_DELTA = 2;
  * "bud"→"buddha", and the keyword "life" matching the label "Sea Life" in a
  * challenge titled "The Farm Life".
  *
+ * A compound stem (one still carrying its hyphen) matches only by equality
+ * once the hyphens are stripped from both sides — the prefix rule never
+ * applies. The delta allowance would otherwise let "close" or "closes" match
+ * "closeup" (the joined spelling of the compound "close-up"), and likewise
+ * make→"makeup" and pick→"pickup". A "Closeup" label matches the keyword
+ * "close-up"; a "Close" label does not.
+ *
  * KNOWN COST, ACCEPTED: prefix-only cannot see head-final compounds, so
  * "flower" does not match "sunflower", nor "fish"/"goldfish" or
  * "bird"/"bluebird". Suffix matching was considered and REJECTED: at any length
@@ -369,6 +214,9 @@ const MAX_STEM_PREFIX_DELTA = 2;
  */
 const matches = (labelStem: string, keywordStem: string): boolean => {
     if (labelStem === keywordStem) return true;
+    if (labelStem.includes('-') || keywordStem.includes('-')) {
+        return labelStem.replace(/-/g, '') === keywordStem.replace(/-/g, '');
+    }
     const [shorter, longer] =
         labelStem.length <= keywordStem.length ? [labelStem, keywordStem] : [keywordStem, labelStem];
     if (shorter.length < MIN_FUZZY_STEM_LENGTH) return false;
@@ -389,12 +237,19 @@ const MIN_USER_TAG_STEM_LENGTH = 3;
  * with like against `photo.labels`. Unlike the keyword path, stopwords are
  * kept (a user typing "shot" means it), but stems shorter than
  * MIN_USER_TAG_STEM_LENGTH are dropped to avoid spurious substring matches.
- * Empty/non-array input → [].
+ *
+ * Each tag is tokenised ON ITS OWN, never joined first: two separate tags
+ * "still" and "life" must stay two stems. Compound merging stays off — a
+ * saved must-tag means its literal words, so "close up" stays ["close","up"].
+ * Per-tag work stays cheap — tags are capped at MAX_TAG_LENGTH
+ * (settings/limits.ts). Empty/non-array input → [].
  */
 const tokeniseTagList = (tags: readonly string[] | null | undefined): string[] => {
     if (!Array.isArray(tags) || tags.length === 0) return [];
-    const joined = tags.filter((t) => typeof t === 'string').join(' ');
-    const stems = tokenise(joined, { keepStopwords: true }).filter((s) => s.length >= MIN_USER_TAG_STEM_LENGTH);
+    const stems = tags
+        .filter((t) => typeof t === 'string')
+        .flatMap((tag) => tokenise(tag, { keepStopwords: true }))
+        .filter((s) => s.length >= MIN_USER_TAG_STEM_LENGTH);
     return Array.from(new Set(stems));
 };
 

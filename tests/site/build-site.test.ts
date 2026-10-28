@@ -157,9 +157,8 @@ describe('rewriteImage', () => {
         expect(rewriteImage('https://img.shields.io/badge/license-ISC-blue.svg', 'License', '')).toBe(
             './badges/license.svg',
         );
-        expect(rewriteImage('https://img.shields.io/badge/Bitcoin-000', 'Bitcoin', '')).toBe('./badges/bitcoin.svg');
         expect(rewriteImage('https://coveralls.io/badge.svg', 'Coverage Status', '')).toBeNull();
-        expect(rewriteImage('//cdn.example.com/x.png', 'Ethereum', '')).toBe('./badges/ethereum.svg');
+        expect(rewriteImage('//cdn.example.com/x.png', 'License', '')).toBe('./badges/license.svg');
         expect(rewriteImage('https://example.com/x.png', 'constructor', '')).toBeNull();
     });
 
@@ -182,10 +181,9 @@ describe('badgeSvg', () => {
         expect(svg).toContain('>Apache-2.0</text>');
     });
 
-    it('draws a single coloured block when there is no label, and escapes the text', () => {
-        const svg = badgeSvg({ message: 'A&B <"x">', color: '#000' });
-        expect(svg).not.toContain('fill="#555"');
-        expect(svg).toContain('aria-label="A&#38;B &#60;&#34;x&#34;&#62;"');
+    it('escapes the label and the message in the accessible name', () => {
+        const svg = badgeSvg({ label: 'a<b', message: 'A&B <"x">', color: '#000' });
+        expect(svg).toContain('aria-label="a&#60;b: A&#38;B &#60;&#34;x&#34;&#62;"');
         expect(svg).not.toContain('<"x">');
     });
 
@@ -305,11 +303,7 @@ describe('main (full render into a temp tree)', () => {
             'usage.html',
             'usage.lv.html',
         ]);
-        expect(fs.readdirSync(nodePath.join(out, 'badges')).sort()).toEqual([
-            'bitcoin.svg',
-            'ethereum.svg',
-            'license.svg',
-        ]);
+        expect(fs.readdirSync(nodePath.join(out, 'badges')).sort()).toEqual(['license.svg']);
         expect(fs.readFileSync(nodePath.join(out, 'badges', 'license.svg'), 'utf8')).toContain(
             'aria-label="license: Apache-2.0"',
         );

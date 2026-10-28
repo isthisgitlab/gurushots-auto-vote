@@ -2,28 +2,30 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useSettings } from '@/api/useSettings';
 import { dateLocale } from '@/utils/formatters';
-import { interp } from '@/utils/interp';
 import { effectiveTimezone } from '../../../settings/uiDefaults';
+
+import type { Translate } from '../../../translations/translator';
 
 /**
  * When the listing was read, as the line above the photos words it: the time, with the date when it is not
  * today, in the timezone the settings name ('local' for the device's).
  */
-const readAtText = (readAtMs: number, timezone: string, t: (key: string) => string): string => {
+const readAtText = (readAtMs: number, timezone: string, t: Translate): string => {
     const at = new Date(readAtMs);
     const locale = dateLocale();
     const inZone = (zone: Intl.DateTimeFormatOptions): string => {
         const time = at.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: false, ...zone });
         const date = at.toLocaleDateString(locale, zone);
-        if (date === new Date().toLocaleDateString(locale, zone)) return interp(t('app.photoChooserAsOf'), { time });
-        return interp(t('app.photoChooserAsOfDate'), { date, time });
+        if (date === new Date().toLocaleDateString(locale, zone)) return t('app.photoChooserAsOf', { time });
+        return t('app.photoChooserAsOfDate', { date, time });
     };
     return inZone(timezone === 'local' ? {} : { timeZone: timezone });
 };
 
 /**
- * What the status line says while the listing is a preview, or after a re-check that failed. The submit
- * modal holds picking in both, which its lines say.
+ * What the status line says while the listing is a preview, or after a re-check that failed. A preview is
+ * only ever on screen without a challenge — a challenge-bound grid holds a loader for one — so it has the
+ * one wording; the submit modal's re-check-failed line says picking is held.
  */
 const statusKey = ({
     recheckFailed,
@@ -34,9 +36,9 @@ const statusKey = ({
     hasChallenge: boolean;
     submit: boolean;
 }): string => {
-    const base = recheckFailed ? 'app.photoChooserRecheckFailed' : 'app.photoChooserPreview';
-    if (submit) return `${base}Submit`;
-    return hasChallenge ? base : `${base}NoChallenge`;
+    if (!recheckFailed) return 'app.photoChooserPreviewNoChallenge';
+    if (submit) return 'app.photoChooserRecheckFailedSubmit';
+    return hasChallenge ? 'app.photoChooserRecheckFailed' : 'app.photoChooserRecheckFailedNoChallenge';
 };
 
 /**
@@ -60,7 +62,7 @@ export function ListingHeader({
     preview: boolean;
     recheckFailed: boolean;
     hasChallenge: boolean;
-    /** The grid is the submit modal's: picking is held while a preview shows, and its lines say so. */
+    /** The grid is the submit modal's: its re-check-failed line says picking is held. */
     submit: boolean;
     onRefresh: () => void;
 }) {

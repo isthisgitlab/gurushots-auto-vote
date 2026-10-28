@@ -2,9 +2,9 @@ name: CodeQL
 
 on:
     push:
-        branches: [master]
+        branches: [master, develop]
     pull_request:
-        branches: [master]
+        branches: [master, develop]
     schedule:
         # Weekly scan to catch advisories in code that hasn't changed.
         - cron: '21 4 * * 1'
@@ -40,14 +40,14 @@ jobs:
                     - language: javascript-typescript
                       # No compilation needed for JS/TS sources.
                       build-mode: none
-                      runner: ubuntu-slim
+                      runner: ubuntu-latest
                     - language: java-kotlin
                       # The Capacitor app ships custom Kotlin/Java in every
                       # signed release APK. Manual build-mode with an explicit
                       # debug assemble (no signing secrets needed) is more
                       # deterministic than autobuild hunting for gradlew under
                       # android/. Needs a CodeQL bundle >= 2.27.1: older
-                      # extractors reject Kotlin 2.4.20 as "too recent".
+                      # extractors reject Kotlin 2.4.21 as "too recent".
                       build-mode: manual
                       runner: ubuntu-latest
                     - language: actions
@@ -66,12 +66,12 @@ jobs:
               if: matrix.language == 'javascript-typescript'
               run: printf '%s\n' '{"type":"module"}' > src/ts/package.json
 
-            - name: Setup Java (JDK 21 — required by Capacitor 8 plugins' kotlin jvmToolchain)
+            - name: Setup Java (JDK 27 — Capacitor 8's Java 21 source/target sets the floor)
               if: matrix.language == 'java-kotlin'
               uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
               with:
                   distribution: 'temurin'
-                  java-version: '21'
+                  java-version: '27'
                   cache: 'gradle'
                   cache-dependency-path: |
                       android/**/*.gradle*
@@ -98,6 +98,11 @@ jobs:
               if: matrix.language == 'java-kotlin'
               run: pnpm exec cap sync android
 
+            # Rejects a tampered gradle-wrapper.jar before ./gradlew runs it.
+            - name: Validate Gradle wrapper
+              if: matrix.language == 'java-kotlin'
+              uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+
             # A failed dependency check (android/gradle/verification-metadata.xml) says how to regenerate it.
             - name: Explain Gradle dependency verification failures
               if: matrix.language == 'java-kotlin'
@@ -112,7 +117,7 @@ jobs:
               run: ./gradlew --no-daemon --no-build-cache assembleDebug
 
             - name: Initialize CodeQL
-              uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+              uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
               with:
                   languages: ${{ matrix.language }}
                   build-mode: ${{ matrix.build-mode }}
@@ -154,6 +159,6 @@ jobs:
                   ./gradlew --no-daemon --no-build-cache :app:assembleDebug
 
             - name: Perform CodeQL analysis
-              uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+              uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
               with:
                   category: '/language:${{ matrix.language }}'

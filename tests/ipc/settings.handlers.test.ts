@@ -16,6 +16,10 @@ jest.mock('electron', () => ({
     BrowserWindow: { getAllWindows: getAllWindowsMock },
     app: { relaunch: relaunchMock, exit: exitMock },
 }));
+jest.mock('../../src/ts/runtime', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/runtime')>('../../src/ts/runtime'),
+}));
 jest.mock('../../src/ts/settings');
 jest.mock('../../src/ts/settings/localData', () => ({ wipeLocalData: jest.fn() }));
 jest.mock('../../src/ts/thirdPartyNotices', () => ({ loadThirdPartyNotices: jest.fn() }));
@@ -40,7 +44,13 @@ const localData = jest.mocked(localDataModule);
 import noticesModule = require('../../src/ts/thirdPartyNotices');
 const notices = jest.mocked(noticesModule);
 import type * as settings_handlersModule from '../../src/ts/ipc/settings.handlers';
+import type * as runtimeModule from '../../src/ts/runtime';
+// settings.handlers captures BrowserWindow/app at load, gated on isElectron —
+// report Electron for that capture; the register() tests below need both.
+const runtime = require('../../src/ts/runtime') as typeof runtimeModule;
+const isElectronSpy = jest.spyOn(runtime, 'isElectron').mockReturnValue(true);
 const { buildHandlers, register } = require('../../src/ts/ipc/settings.handlers') as typeof settings_handlersModule;
+isElectronSpy.mockRestore();
 
 type ChannelImpl = Parameters<IpcMain['handle']>[1];
 
@@ -98,14 +108,11 @@ describe('get-setting', () => {
         expect(settings.getSetting).not.toHaveBeenCalled();
     });
 
-    test.each(['lastUsername', 'chosenPhotosMemberId'])(
-        'answers the account key %s: the renderer reads it',
-        async (key) => {
-            settings.getSetting = jest.fn().mockReturnValue('me');
-            await expect(handlers['get-setting']({}, key)).resolves.toBe('me');
-            expect(settings.getSetting).toHaveBeenCalledWith(key);
-        },
-    );
+    test('answers the account key lastUsername: the renderer reads it', async () => {
+        settings.getSetting = jest.fn().mockReturnValue('me');
+        await expect(handlers['get-setting']({}, 'lastUsername')).resolves.toBe('me');
+        expect(settings.getSetting).toHaveBeenCalledWith('lastUsername');
+    });
 
     test('rejects a non-string key and returns null (no default for it)', async () => {
         settings.getSetting = jest.fn();
@@ -131,7 +138,7 @@ describe('set-setting', () => {
         expect(settings.setSetting).toHaveBeenCalledWith('theme', 'dark');
     });
 
-    test.each(['auth', 'token', 'hasToken', 'apiHeaders', 'lastUsername', 'chosenPhotosMemberId'])(
+    test.each(['auth', 'token', 'hasToken', 'apiHeaders', 'lastUsername'])(
         'refuses to write the %s key and does not broadcast',
         async (key) => {
             const broadcastSettingsChange = jest.fn();
@@ -216,7 +223,6 @@ describe('save-settings', () => {
                 {
                     apiHeaders: { evil: '1' },
                     lastUsername: 'evil',
-                    chosenPhotosMemberId: 'evil',
                     auth: { token: 'evil' },
                     theme: 'dark',
                 },
@@ -325,6 +331,7 @@ describe('get-settings-schema', () => {
                 min: 0,
                 max: 86400,
                 unit: 's',
+                minutes: true,
                 validate: () => true,
             },
         });
@@ -350,6 +357,7 @@ describe('get-settings-schema', () => {
                     min: 0,
                     max: 86400,
                     unit: 's',
+                    minutes: true,
                 },
             },
             defaults: { boostTime: 1800 },
@@ -401,6 +409,7 @@ describe('cleanup-stale-metadata', () => {
         ['missing', undefined],
         ['an item that is not an id', ['1', {}]],
         ['a blank id', ['1', '  ']],
+        ['an untrimmed id', ['1', ' 8 ']],
         ['an over-long id', ['9'.repeat(65)]],
     ])('refuses %s without touching the metadata', async (_name, ids) => {
         await expect(handlers['cleanup-stale-metadata']({}, invalid(ids))).resolves.toEqual({
@@ -428,9 +437,9 @@ describe('cleanup-stale-challenge-setting', () => {
         expect(settings.cleanupStaleChallengeSetting).toHaveBeenCalledWith(['1', '2']);
     });
 
-    test('ids are compared the way perChallenge is keyed: numeric ids become strings, untrimmed ones are trimmed', async () => {
+    test('ids are compared the way perChallenge is keyed: numeric ids become strings', async () => {
         jest.mocked(settings.cleanupStaleChallengeSetting).mockReturnValue(true);
-        await handlers['cleanup-stale-challenge-setting']({}, [7, ' 8 ', '9']);
+        await handlers['cleanup-stale-challenge-setting']({}, [7, '8', '9']);
         expect(settings.cleanupStaleChallengeSetting).toHaveBeenCalledWith(['7', '8', '9']);
     });
 
@@ -440,6 +449,7 @@ describe('cleanup-stale-challenge-setting', () => {
         ['empty, which would prune every challenge', []],
         ['an item that is not an id', ['1', {}]],
         ['a blank id', ['1', '  ']],
+        ['an untrimmed id', ['1', ' 8 ']],
         ['an over-long id', ['9'.repeat(65)]],
     ])('refuses %s without touching the settings', async (_name, ids) => {
         jest.mocked(settings.cleanupStaleChallengeSetting).mockClear();
@@ -475,38 +485,18 @@ describe('cleanup-stale-challenge-setting', () => {
 });
 
 describe('the recovery of the stored settings', () => {
-    // Start fresh and re-import are answered by their detailed forms, which also say what became of settings.json and which
-    // file was read.
     const channels = [
         ['retry-settings-import', 'retryImportDetailed'],
         ['start-fresh-settings', 'startFreshDetailed'],
-        ['reimport-settings-from-v1', 'reimportFromV1Detailed'],
         ['acknowledge-import-report', 'acknowledgeImportReport'],
     ] as const;
     type Method = (typeof channels)[number][1];
     // What each action answers when it worked: a boolean, or the detail the answer carries.
     const worked = (method: Method) =>
-        method === 'startFreshDetailed'
-            ? { ok: true, keptAt: '/data/settings.json.original' }
-            : method === 'reimportFromV1Detailed'
-              ? { ok: true, setAside: null, source: '/data/settings.json.unimportable-1' }
-              : method === 'retryImportDetailed'
-                ? { ok: true }
-                : true;
+        method === 'startFreshDetailed' ? { ok: true } : method === 'retryImportDetailed' ? { ok: true } : true;
     const didNot = (method: Method) =>
-        method === 'startFreshDetailed'
-            ? { ok: false, keptAt: null }
-            : method === 'reimportFromV1Detailed'
-              ? { ok: false, setAside: null, source: '/data/settings.json' }
-              : method === 'retryImportDetailed'
-                ? { ok: false }
-                : false;
-    const answerOf = (channel: (typeof channels)[number][0]) =>
-        channel === 'start-fresh-settings'
-            ? { success: true, kept: { kind: 'path', path: '/data/settings.json.original' } }
-            : channel === 'reimport-settings-from-v1'
-              ? { success: true, setAside: null, source: '/data/settings.json.unimportable-1' }
-              : { success: true };
+        method === 'startFreshDetailed' ? { ok: false } : method === 'retryImportDetailed' ? { ok: false } : false;
+    const answerOf = (): { success: true } => ({ success: true });
 
     test.each(channels)('%s runs %s, then announces the settings to every window', async (channel, method) => {
         const broadcastSettingsChange = jest.fn();
@@ -514,43 +504,16 @@ describe('the recovery of the stored settings', () => {
         settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: 't' }, app: { theme: 'dark' } });
         const h = buildHandlers({ broadcastSettingsChange });
 
-        await expect(h[channel]()).resolves.toEqual(answerOf(channel));
+        await expect(h[channel]()).resolves.toEqual(answerOf());
 
         expect(settings[method]).toHaveBeenCalledTimes(1);
         expect(broadcastSettingsChange).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
     });
 
-    test.each([
-        ['a copy written under a key (the Android window)', Promise.resolve('gurushots-settings_original'), 'stored'],
-        ['a copy that could not be written yet', Promise.resolve(null), 'pending'],
-    ])('start-fresh-settings waits for %s and says %s', async (_name, landed, kind) => {
-        settings.startFreshDetailed = jest.fn().mockReturnValue({ ok: true, keptAt: null, landed });
+    test('start-fresh-settings says nothing was reset when a configuration was in place already', async () => {
+        settings.startFreshDetailed = jest.fn().mockReturnValue({ ok: true, adopted: true });
 
-        await expect(handlers['start-fresh-settings']()).resolves.toEqual({ success: true, kept: { kind } });
-    });
-
-    test('start-fresh-settings says nothing was reset when a configuration was in place already (a restore that came through)', async () => {
-        settings.startFreshDetailed = jest.fn().mockReturnValue({ ok: true, keptAt: null, adopted: true });
-
-        await expect(handlers['start-fresh-settings']()).resolves.toEqual({
-            success: true,
-            kept: { kind: 'adopted' },
-        });
-    });
-
-    test('start-fresh-settings says settings.json could not be read, so it was left as it is', async () => {
-        settings.startFreshDetailed = jest.fn().mockReturnValue({ ok: true, keptAt: null, unreadable: true });
-
-        await expect(handlers['start-fresh-settings']()).resolves.toEqual({
-            success: true,
-            kept: { kind: 'unreadable' },
-        });
-    });
-
-    test('start-fresh-settings says there was nothing to keep', async () => {
-        settings.startFreshDetailed = jest.fn().mockReturnValue({ ok: true, keptAt: null });
-
-        await expect(handlers['start-fresh-settings']()).resolves.toEqual({ success: true, kept: { kind: 'none' } });
+        await expect(handlers['start-fresh-settings']()).resolves.toEqual({ success: true, adopted: true });
     });
 
     test.each(channels)(
@@ -593,18 +556,6 @@ describe('the recovery of the stored settings', () => {
         settings.retryImportDetailed = jest.fn().mockReturnValue({ ok: true, adopted: true });
 
         await expect(handlers['retry-settings-import']()).resolves.toEqual({ success: true, adopted: true });
-    });
-
-    test('reimport-settings-from-v1 says where the settings that were in use went', async () => {
-        settings.reimportFromV1Detailed = jest
-            .fn()
-            .mockReturnValue({ ok: true, setAside: '/data/config.json.corrupt-1', source: '/data/settings.json' });
-
-        await expect(handlers['reimport-settings-from-v1']()).resolves.toEqual({
-            success: true,
-            setAside: '/data/config.json.corrupt-1',
-            source: '/data/settings.json',
-        });
     });
 });
 
@@ -777,41 +728,6 @@ describe('wipe-local-data', () => {
     });
 });
 
-describe('clear-chosen-photos', () => {
-    test('removes the lists, broadcasts the change and reports how many went', async () => {
-        const broadcast = jest.fn();
-        jest.mocked(settings.clearChosenPhotos).mockReturnValue(4);
-        jest.mocked(settings.loadSettings).mockReturnValue(
-            invalid({ auth: { token: 'secret' }, app: { theme: 'dark' } }),
-        );
-        await expect(buildHandlers({ broadcastSettingsChange: broadcast })['clear-chosen-photos']()).resolves.toEqual({
-            success: true,
-            removed: 4,
-        });
-        expect(broadcast).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
-    });
-
-    test('works without a broadcast listener', async () => {
-        jest.mocked(settings.clearChosenPhotos).mockReturnValue(0);
-        await expect(handlers['clear-chosen-photos']()).resolves.toEqual({ success: true, removed: 0 });
-    });
-
-    test('a save that failed is an error result, with no broadcast', async () => {
-        const broadcast = jest.fn();
-        jest.mocked(settings.clearChosenPhotos).mockReturnValue(null);
-        await expect(buildHandlers({ broadcastSettingsChange: broadcast })['clear-chosen-photos']()).resolves.toEqual({
-            success: false,
-            error: 'The settings file could not be saved',
-        });
-        expect(broadcast).not.toHaveBeenCalled();
-    });
-
-    test('never throws across IPC', async () => {
-        settings.clearChosenPhotos = invalid(jest.fn(boom));
-        await expect(handlers['clear-chosen-photos']()).resolves.toEqual({ success: false, error: 'boom' });
-    });
-});
-
 describe('set-entry-pin', () => {
     const pin = (broadcast?: jest.Mock<void, [object]>, ...args: [unknown, unknown, unknown]) =>
         invalid<(event: unknown, ...a: unknown[]) => Promise<unknown>>(
@@ -859,7 +775,7 @@ describe('set-entry-pin', () => {
     ] as const)('%s is its own error code, with no broadcast', async (_name, outcome, error) => {
         const broadcast = jest.fn();
         jest.mocked(settings.setEntryPin).mockReturnValue(outcome);
-        await expect(pin(broadcast, 'boost', 100, 'has space')).resolves.toEqual({ success: false, error });
+        await expect(pin(broadcast, 'boost', 100, 'img_a')).resolves.toEqual({ success: false, error });
         expect(broadcast).not.toHaveBeenCalled();
     });
 
@@ -942,5 +858,30 @@ describe('register (Electron)', () => {
             app: { theme: 'dark' },
             hasToken: false,
         });
+    });
+});
+
+describe('module load outside Electron', () => {
+    test('loads without requiring the electron package', () => {
+        // A fresh module graph whose electron mock throws if required. The
+        // factory-never-called assertion catches a regression that swallows
+        // the throw (try/catch). Kept last — resetModules drops the registry
+        // the top-level requires came from.
+        jest.resetModules();
+        const electronFactory = jest.fn<never, []>(() => {
+            throw new Error('electron must not be loaded outside Electron');
+        });
+        jest.doMock('electron', electronFactory);
+        const fresh = require('../../src/ts/runtime') as typeof runtimeModule;
+        const isElectronSpy = jest.spyOn(fresh, 'isElectron').mockReturnValue(false);
+        try {
+            expect(() => {
+                require('../../src/ts/ipc/settings.handlers');
+            }).not.toThrow();
+            expect(electronFactory).not.toHaveBeenCalled();
+        } finally {
+            jest.dontMock('electron');
+            isElectronSpy.mockRestore();
+        }
     });
 });

@@ -20,16 +20,15 @@ import autoFillModule = require('../../src/ts/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
 import type * as libraryModule from '../../src/ts/ipc/actions/library';
 import type * as libraryCacheModule from '../../src/ts/services/libraryCache';
-import type * as accountScopeModule from '../../src/ts/services/accountScope';
 import type { LibraryPhoto } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 import { logCategories } from '../helpers/logCategories';
+import { LIBRARY_BATCH_PHOTOS } from '../../src/ts/settings/limits';
 
 const { handleGetLibraryPhotos, hasWonChallenge, __resetLibraryThrottle, MIN_WALK_INTERVAL_MS } =
     require('../../src/ts/ipc/actions/library') as typeof libraryModule;
-const { clearLibraryCache, dropContext, LIBRARY_FRESH_MS } =
+const { clearLibraryCache, dropContext, LIBRARY_FRESH_MS, readLatest } =
     require('../../src/ts/services/libraryCache') as typeof libraryCacheModule;
-const { bumpAccountGeneration } = require('../../src/ts/services/accountScope') as typeof accountScopeModule;
 
 // The handler is invoked the way ipcMain does: the event first.
 const call = (...args: unknown[]) =>
@@ -45,8 +44,17 @@ const rawPhoto = {
     member_id: 'm9',
 };
 
-type WalkResult = { items: unknown[]; truncated: boolean; skipped?: string[] };
-type WalkOptions = { search?: string; logLabel?: string; usage?: string; skip?: (photo: LibraryPhoto) => boolean };
+type WalkResult = { items: unknown[]; truncated: boolean; nextStart?: number; skipped?: string[] };
+type WalkOptions = {
+    search?: string;
+    logLabel?: string;
+    usage?: string;
+    skip?: (photo: LibraryPhoto) => boolean;
+    start?: number;
+    maxKept?: number;
+    counts?: (photo: LibraryPhoto) => boolean;
+    readState?: { firstPageFailed: boolean };
+};
 type Walk = jest.Mock<Promise<WalkResult>, [string | number, string, WalkOptions]>;
 const newWalk = (result: WalkResult = { items: [rawPhoto], truncated: false }): Walk =>
     jest.fn<Promise<WalkResult>, [string | number, string, WalkOptions]>(async () => result);
@@ -81,6 +89,7 @@ beforeEach(() => {
     auth.requireAuthToken = jest.fn().mockReturnValue({ ok: true, token: 'tok', settings: {} });
     autoFill.resolveMemberId = jest.fn().mockResolvedValue('member-1');
     settings.getOpenChallengeIds = jest.fn().mockReturnValue(null);
+    settings.getSetting = jest.fn().mockReturnValue('tok');
 });
 
 describe('validation', () => {
@@ -262,6 +271,294 @@ describe('the listing', () => {
         stubStrategy({ getEligiblePhotosWalk: newWalk().mockRejectedValue(new Error('')) });
         __resetLibraryThrottle();
         await expect(call(5)).resolves.toEqual({ success: false, error: 'Failed to read your photo library' });
+    });
+});
+
+describe('paged reads (start and keep)', () => {
+    // A `maxKept` batch end is a routine stop, so it reports truncated: true.
+    const walkBatch = (over: Partial<WalkResult> = {}): WalkResult => ({
+        items: [rawPhoto],
+        truncated: true,
+        nextStart: 100,
+        ...over,
+    });
+    const next = async (...args: unknown[]) => {
+        __resetLibraryThrottle();
+        return call(...args);
+    };
+    // The failure the walk itself reports: its page-0 request came back empty, and the walk says so in readState.
+    const walkWhoseFirstPageFailed = () =>
+        jest.fn<Promise<WalkResult>, [string | number, string, WalkOptions]>(async (_id, _token, options) => {
+            if (options.readState) options.readState.firstPageFailed = true;
+            return { items: [], truncated: true, nextStart: 0 };
+        });
+
+    test.each([
+        ['a negative start', ['5', undefined, 'fresh', 'submit', -1]],
+        ['a fractional start', ['5', undefined, 'fresh', 'submit', 1.5]],
+        ['an unsafe-integer start', ['5', undefined, 'fresh', 'submit', 2 ** 53]],
+        ['a start that is not a number', ['5', undefined, 'fresh', 'submit', invalid<number>('100')]],
+        ['a keep of zero', ['5', undefined, 'fresh', 'submit', 0, 0]],
+        ['a keep past the page cap', ['5', undefined, 'fresh', 'submit', 0, 1001]],
+        ['a fractional keep', ['5', undefined, 'fresh', 'submit', 0, 1.5]],
+        ['a keep that is not a number', ['5', undefined, 'fresh', 'submit', 0, invalid<number>('50')]],
+        ['a keep without a start', ['5', undefined, 'fresh', 'submit', undefined, 50]],
+        ['a cached continuation', ['5', undefined, 'cached', 'submit', 100]],
+    ])('refuses %s before looking up the token', async (_name, args) => {
+        const strategy = stubStrategy();
+        await expect(call(...args)).resolves.toEqual({ success: false, error: 'invalid-args' });
+        expect(auth.requireAuthToken).not.toHaveBeenCalled();
+        expect(strategy.getEligiblePhotosWalk).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ['start 0', ['5', undefined, 'fresh', 'submit', 0]],
+        ['keep 1 with start 0', ['5', undefined, 'fresh', 'submit', 0, 1]],
+        ['keep 1000, the page-cap bound, with start 0', ['5', undefined, 'fresh', 'submit', 0, 1000]],
+        ['a cached request reading from the top', ['5', undefined, 'cached', 'submit', 0]],
+        ['a null start, which is an absent one', ['5', undefined, 'fresh', 'submit', null]],
+    ])('accepts %s', async (_name, args) => {
+        const strategy = stubStrategy({ getEligiblePhotosWalk: newWalk(walkBatch()) });
+        await expect(call(...args)).resolves.toMatchObject({ success: true });
+        expect(strategy.getEligiblePhotosWalk).toHaveBeenCalledTimes(1);
+    });
+
+    test('a paged read walks from start with maxKept and a readState, and counts only what a named challenge may enter', async () => {
+        const strategy = stubStrategy({ getEligiblePhotosWalk: newWalk(walkBatch()) });
+        await call('5', undefined, 'fresh', 'swap', 100, 50);
+        expect(strategy.getEligiblePhotosWalk).toHaveBeenCalledWith('5', 'tok', {
+            search: undefined,
+            logLabel: 'library',
+            usage: 'swap',
+            skip: hasWonChallenge,
+            start: 100,
+            maxKept: 50,
+            counts: expect.any(Function),
+            readState: { firstPageFailed: false },
+        });
+        const counts = (strategy.getEligiblePhotosWalk.mock.calls[0][2] as WalkOptions).counts;
+        expect(counts?.({ id: 'in', permission: { allowed: true } })).toBe(true);
+        expect(counts?.({ id: 'out', permission: { allowed: false } })).toBe(false);
+        expect(counts?.({ id: 'unmarked' })).toBe(false);
+    });
+
+    test('a paged read through a borrowed challenge names no counts (every kept photo counts), and keeps the default batch size', async () => {
+        const strategy = stubStrategy({ getEligiblePhotosWalk: newWalk(walkBatch()) });
+        await call(undefined, null, undefined, 'submit', 100);
+        const options = strategy.getEligiblePhotosWalk.mock.calls[0][2] as WalkOptions;
+        expect('counts' in options).toBe(false);
+        expect(options.start).toBe(100);
+        expect(options.maxKept).toBe(100);
+    });
+
+    test('without a start the walk is exactly today’s full read: no start, maxKept, counts or readState', async () => {
+        const strategy = stubStrategy();
+        await call('5', 'pink');
+        const options = strategy.getEligiblePhotosWalk.mock.calls[0][2] as Record<string, unknown>;
+        expect(Object.keys(options).sort()).toEqual(['logLabel', 'search', 'skip', 'usage']);
+    });
+
+    test('a paged read whose first page failed answers library-read-failed, and keeps nothing', async () => {
+        const walk = walkWhoseFirstPageFailed();
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        await expect(call('5', undefined, 'fresh', 'submit', 0)).resolves.toEqual({
+            success: false,
+            error: 'library-read-failed',
+        });
+        // The failed batch left nothing for the next cached request, which therefore walks.
+        await expect(next('5', undefined, 'cached')).resolves.toMatchObject({ preview: false });
+        expect(walk).toHaveBeenCalledTimes(2);
+    });
+
+    test('a full read whose first page failed keeps today’s behavior: the empty truncated listing it came back with', async () => {
+        stubStrategy({ getEligiblePhotosWalk: walkWhoseFirstPageFailed() });
+        await expect(call('5')).resolves.toMatchObject({ success: true, photos: [], truncated: true });
+    });
+
+    test('the listing carries nextStart, where the read stopped, for a continuation', async () => {
+        stubStrategy({ getEligiblePhotosWalk: newWalk(walkBatch({ nextStart: 300 })) });
+        await expect(call('5', undefined, 'fresh', 'submit', 100)).resolves.toMatchObject({
+            success: true,
+            truncated: true,
+            nextStart: 300,
+        });
+    });
+
+    test('a paged read queues behind a walk like any other, and a newer request supersedes it', async () => {
+        jest.useFakeTimers();
+        const first = deferred<WalkResult>();
+        const walk = newWalk().mockReturnValueOnce(first.promise);
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        const running = call('5', undefined, 'fresh', 'submit', 0);
+        // Two paged reads queue behind it inside the gap; only the newer one survives.
+        const early = call('6', undefined, 'fresh', 'submit', 100);
+        const newer = call('7', undefined, 'fresh', 'submit', 200);
+        await expect(early).resolves.toEqual({ success: false, error: 'superseded' });
+        expect(walk).toHaveBeenCalledTimes(1);
+        first.resolve(walkBatch());
+        await expect(running).resolves.toMatchObject({ success: true });
+        await jest.advanceTimersByTimeAsync(MIN_WALK_INTERVAL_MS);
+        await expect(newer).resolves.toMatchObject({ success: true });
+        expect(walk.mock.calls[1][0]).toBe('7');
+        expect(walk.mock.calls[1][2].start).toBe(200);
+    });
+
+    test('a default-batch read from the top is kept for the next cached request, continuation offset and all', async () => {
+        const walk = newWalk(walkBatch({ nextStart: 100 }));
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        await call('5', undefined, 'fresh', 'submit', 0);
+        await expect(next('5', undefined, 'cached')).resolves.toMatchObject({ preview: false, nextStart: 100 });
+        expect(walk).toHaveBeenCalledTimes(1);
+    });
+
+    test('a read from the top asking for the default batch size is kept too', async () => {
+        const walk = newWalk(walkBatch({ nextStart: 100 }));
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        await call('5', undefined, 'fresh', 'submit', 0, LIBRARY_BATCH_PHOTOS);
+        await expect(next('5', undefined, 'cached')).resolves.toMatchObject({ preview: false, nextStart: 100 });
+        expect(walk).toHaveBeenCalledTimes(1);
+    });
+
+    test('the renderer-computed extent rides through to the walk: start 0, keep 8 asks for a maxKept-8 batch and answers what it read', async () => {
+        const walk = newWalk(walkBatch({ items: [{ id: 'p8' }], nextStart: 8 }));
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        await expect(call('5', undefined, 'fresh', 'submit', 0, 8)).resolves.toMatchObject({
+            success: true,
+            truncated: true,
+            nextStart: 8,
+        });
+        expect(walk).toHaveBeenCalledWith(
+            '5',
+            'tok',
+            expect.objectContaining({
+                start: 0,
+                maxKept: 8,
+                counts: expect.any(Function),
+                readState: { firstPageFailed: false },
+            }),
+        );
+    });
+
+    test.each([
+        ['keep 8, the extent the renderer counts on screen after two Load mores', 8, 8],
+        ['keep 500, a Refresh-All extent', 500, 50],
+    ])('a %s re-read from the top is kept — for its challenge and as latest', async (_name, keep, nextStart) => {
+        const walk = newWalk(walkBatch({ nextStart }));
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        await call('5', undefined, 'fresh', 'submit', 0, keep);
+        // The next cached request for that challenge answers THIS listing, with no walk.
+        await expect(next('5', undefined, 'cached')).resolves.toMatchObject({ preview: false, nextStart });
+        expect(walk).toHaveBeenCalledTimes(1);
+        // Another challenge's cached request previews it as the newest listing instead of walking.
+        await expect(next('9', undefined, 'cached')).resolves.toMatchObject({ preview: true, nextStart });
+        expect(walk).toHaveBeenCalledTimes(1);
+        expect(readLatest()?.nextStart).toBe(nextStart);
+    });
+
+    test('a wider re-read from the top replaces the kept listing: a cached request answers the newer one, not the older', async () => {
+        const walk = newWalk()
+            .mockResolvedValueOnce(walkBatch({ items: [{ id: 'old' }], nextStart: 100 }))
+            .mockResolvedValueOnce(walkBatch({ items: [{ id: 'new' }], nextStart: 50 }));
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        await call('5', undefined, 'fresh', 'submit', 0);
+        await next('5', undefined, 'fresh', 'submit', 0, 500);
+        const cached = (await next('5', undefined, 'cached')) as {
+            photos: Array<{ id: string }>;
+            nextStart: number;
+        };
+        expect(cached.photos.map((photo) => photo.id)).toEqual(['new']);
+        expect(cached.nextStart).toBe(50);
+        expect(walk).toHaveBeenCalledTimes(2);
+    });
+
+    test('a continuation is never kept for its challenge', async () => {
+        const walk = newWalk(walkBatch({ nextStart: 200 }));
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        await call('5', undefined, 'fresh', 'submit', 100);
+        // The cached request finds nothing kept and walks.
+        await expect(next('5', undefined, 'cached')).resolves.toMatchObject({ preview: false });
+        expect(walk).toHaveBeenCalledTimes(2);
+    });
+
+    test('a continuation is never kept as the newest listing either', async () => {
+        const walk = newWalk(walkBatch({ nextStart: 200 }));
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        await call('5', undefined, 'fresh', 'submit', 100);
+        // Another challenge's cached request finds no newest listing and walks instead of previewing.
+        await expect(next('9', undefined, 'cached')).resolves.toMatchObject({ preview: false });
+        expect(walk).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('the order (7th argument)', () => {
+    const walkOf = (...ids: string[]): WalkResult => ({
+        items: ids.map((id) => ({ id, permission: { allowed: true, message: null } })),
+        truncated: false,
+    });
+
+    test.each([
+        ['toString'],
+        ['__proto__'],
+        ['constructor'],
+        ['hasOwnProperty'],
+        ['Votes'],
+        ['stale'],
+        [null],
+        [7],
+        [{}],
+    ])('refuses the order %j before looking up the token', async (order) => {
+        const strategy = stubStrategy();
+        await expect(call('5', undefined, 'fresh', 'submit', undefined, undefined, order)).resolves.toEqual({
+            success: false,
+            error: 'invalid-args',
+        });
+        expect(auth.requireAuthToken).not.toHaveBeenCalled();
+        expect(strategy.getEligiblePhotosWalk).not.toHaveBeenCalled();
+    });
+
+    test('a date order reaches the walk; a votes order reads exactly as before, with no order named', async () => {
+        const walk = newWalk(walkOf('a'));
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        await call('5', undefined, 'fresh', 'submit', undefined, undefined, 'oldest');
+        expect(walk.mock.calls[0][2]).toMatchObject({ order: 'oldest' });
+        __resetLibraryThrottle();
+        await call('5', undefined, 'fresh', 'submit', undefined, undefined, 'votes');
+        expect('order' in (walk.mock.calls[1][2] as object)).toBe(false);
+        __resetLibraryThrottle();
+        await call('5');
+        expect('order' in (walk.mock.calls[2][2] as object)).toBe(false);
+    });
+
+    test("a non-votes order is always read fresh: 'cached' walks, answers preview: false, and keeps nothing", async () => {
+        const walk = newWalk(walkOf('a'));
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        // A cached request with an order walks (the cache holds vote-ordered listings only)...
+        await expect(call('5', undefined, 'cached', 'submit', undefined, undefined, 'newest')).resolves.toMatchObject({
+            success: true,
+            preview: false,
+        });
+        expect(walk).toHaveBeenCalledTimes(1);
+        // ...and the ordered read was not kept: a cached request without an order walks again.
+        __resetLibraryThrottle();
+        await expect(call('5', undefined, 'cached')).resolves.toMatchObject({ preview: false });
+        expect(walk).toHaveBeenCalledTimes(2);
+        __resetLibraryThrottle();
+        // Nor is an ordered cached request answered from an earlier vote-ordered listing.
+        await expect(call('5', undefined, 'cached', 'submit', undefined, undefined, 'oldest')).resolves.toMatchObject({
+            preview: false,
+        });
+        expect(walk).toHaveBeenCalledTimes(3);
+    });
+
+    test('an ordered batch read runs with start and keep like any other', async () => {
+        const walk = newWalk({ items: walkOf('a').items, truncated: true, nextStart: 100 });
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        await expect(call('5', undefined, 'fresh', 'submit', 100, 50, 'newest')).resolves.toMatchObject({
+            success: true,
+            preview: false,
+            nextStart: 100,
+        });
+        expect(walk.mock.calls[0][2]).toMatchObject({ order: 'newest', start: 100, maxKept: 50 });
     });
 });
 
@@ -534,32 +831,19 @@ describe('the library cache', () => {
         expect(second.photos).toEqual([expect.objectContaining({ id: 'a', labels: ['tag-a'] })]);
     });
 
-    test('a walk in flight when the account leaves writes nothing and answers account-changed, never the old photos', async () => {
+    test('a walk whose token the stored sign-in no longer is answers its read but writes nothing', async () => {
         const slow = deferred<WalkResult>();
         const walk = newWalk();
         walk.mockReturnValueOnce(slow.promise);
         stubStrategy({ getEligiblePhotosWalk: walk });
         const running = call('5');
-        bumpAccountGeneration();
-        slow.resolve(listed('old-account-photo'));
-        await expect(running).resolves.toEqual({ success: false, error: 'account-changed' });
-        // The same for a search: no account's photos reach a signed-out view.
+        // A login replaced the token while the walk ran.
+        settings.getSetting = jest.fn().mockReturnValue('tok-2');
+        slow.resolve(listed('old-token-photo'));
+        await expect(running).resolves.toMatchObject({ success: true });
+        // Nothing was kept, so a cached request walks again.
         await expect(next('5', undefined, 'cached')).resolves.toMatchObject({ preview: false });
         expect(walk).toHaveBeenCalledTimes(2);
-    });
-
-    test('a read with no challenge to read through answers no-challenge-context even when the account left meanwhile: the context is judged first', async () => {
-        const challenges = deferred<unknown>();
-        const walk = newWalk();
-        stubStrategy({
-            getEligiblePhotosWalk: walk,
-            getActiveChallenges: jest.fn<Promise<unknown>, [string]>(() => challenges.promise),
-        });
-        const running = call(undefined, null);
-        bumpAccountGeneration();
-        challenges.resolve({ challenges: [] });
-        await expect(running).resolves.toEqual({ success: false, error: 'no-challenge-context' });
-        expect(walk).not.toHaveBeenCalled();
     });
 
     test('any drop during a walk, whichever challenge it names, keeps that walk from writing', async () => {
@@ -568,7 +852,7 @@ describe('the library cache', () => {
         walk.mockReturnValueOnce(slow.promise);
         stubStrategy({ getEligiblePhotosWalk: walk });
         const running = call('5');
-        dropContext('tok', '99');
+        dropContext('99');
         slow.resolve(listed('a'));
         await running;
         await next('5', undefined, 'cached');
@@ -581,7 +865,7 @@ describe('the library cache', () => {
         walk.mockReturnValueOnce(slow.promise);
         stubStrategy({ getEligiblePhotosWalk: walk });
         const running = call('5');
-        dropContext('tok', '5');
+        dropContext('5');
         slow.resolve(listed('a'));
         await expect(running).resolves.toMatchObject({ success: true });
         // Nothing was kept, so a cached request walks again.
@@ -635,10 +919,13 @@ describe('the library cache', () => {
         await expect(call('5', undefined, 'cached')).resolves.toEqual({ success: false, error: 'No token' });
     });
 
-    test('a cached answer differs per account: another token is never shown this one’s listing', async () => {
+    test('a login that replaced the token empties the cache: the next cached answer is a fresh walk', async () => {
         stubStrategy({ getEligiblePhotosWalk: newWalk(listed('a')) });
         await call('5');
+        // A login that replaced the token forgets what the previous one read (forgetAccountMemory).
+        clearLibraryCache();
         auth.requireAuthToken = jest.fn().mockReturnValue({ ok: true, token: 'other', settings: {} });
+        settings.getSetting = jest.fn().mockReturnValue('other');
         const walk = newWalk(listed('b'));
         stubStrategy({ getEligiblePhotosWalk: walk });
         const result = await next('5', undefined, 'cached');

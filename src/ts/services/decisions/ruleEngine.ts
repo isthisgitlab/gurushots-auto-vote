@@ -32,6 +32,18 @@ interface ThresholdInfo {
 }
 
 /**
+ * The label set is the contract the vote-decision message maps key on, so adding a rule means adding a label here.
+ */
+export type RuleLabel =
+    | 'flash'
+    | 'lastminute'
+    | 'pre-boost'
+    | 'scheduled'
+    | 'pre-final-window'
+    | 'final-window'
+    | 'normal';
+
+/**
  * A rule that blocked the vote.
  */
 interface BlockedRuleResult {
@@ -58,7 +70,7 @@ interface DecidedRuleResult {
     atTarget: boolean;
     skipReason: null;
     targetExposure: number;
-    ruleLabel: string;
+    ruleLabel: RuleLabel;
     thresholdInfo: ThresholdInfo;
     /**
      * True only when a detected new entry
@@ -84,7 +96,7 @@ type VotingRuleResult = BlockedRuleResult | DecidedRuleResult;
  *     skipReason:    string | null,   // when eligible=false because a rule blocked
  *     atTarget:      true | false,    // when exposure already meets target
  *     targetExposure:number,
- *     ruleLabel:     string,          // 'flash', 'lastminute', 'scheduled', 'pre-final-window', 'final-window', 'normal'
+ *     ruleLabel:     string,          // 'flash', 'lastminute', 'pre-boost', 'scheduled', 'pre-final-window', 'final-window', 'normal'
  *     thresholdInfo: object }         // small bundle of settings the wrapper formats
  *
  * @param options - `hasNewEntry` is supplied
@@ -166,7 +178,7 @@ const _runVotingRules = (
     // Eligibility uses the trigger ("vote if below"); the loop ceiling uses the target
     // ("vote up to"). For flash and lastminute they are intentionally both 100.
     const decided = (
-        ruleLabel: string,
+        ruleLabel: RuleLabel,
         trigger: number,
         target: number,
         thresholdInfo: Omit<ThresholdInfo, 'currentExposure' | 'trigger'>,

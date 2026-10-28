@@ -20,6 +20,8 @@ export const SAVE_ERROR_ID = 'settings-save-error';
  * @param props.onSecondary - destructive button handler (Reset All / Clear All)
  * @param props.secondaryLabel - already-translated destructive button label
  * @param props.saveError   - shows the save-failed alert above the buttons
+ * @param props.className   - forwarded to the StickyModalFooter root (the global settings
+ *                          modal passes `mt-auto` to pin the row to a short modal's bottom)
  */
 export function ModalActionRow({
     onSave,
@@ -29,6 +31,7 @@ export function ModalActionRow({
     secondaryIcon = 'reset',
     onCancel,
     saveError = false,
+    className = '',
 }: {
     onSave: () => void | Promise<void>;
     saving: boolean;
@@ -37,11 +40,12 @@ export function ModalActionRow({
     secondaryIcon?: 'reset' | 'trash';
     onCancel: () => void;
     saveError?: boolean;
+    className?: string;
 }) {
     const { t } = useTranslation();
 
     return (
-        <StickyModalFooter>
+        <StickyModalFooter className={className}>
             {saveError && (
                 <div id={SAVE_ERROR_ID} className="alert alert-error py-2 text-sm" role="alert">
                     <span>{t('app.settingsSaveError')}</span>
@@ -50,7 +54,7 @@ export function ModalActionRow({
             <div className="flex flex-wrap justify-end gap-2">
                 {/* Below sm the secondary takes the whole first row, so Cancel and Save wrap together onto the second. */}
                 <div className="mr-auto max-sm:basis-full">
-                    <button className="btn btn-error btn-sm" onClick={() => void onSecondary()}>
+                    <button className="btn btn-error btn-sm max-sm:min-h-10" onClick={() => void onSecondary()}>
                         {secondaryIcon === 'trash' ? (
                             <StrokeIcon d={ICON_PATHS.trash} className={ROW_ICON_CLASS} />
                         ) : (
@@ -59,11 +63,11 @@ export function ModalActionRow({
                         {secondaryLabel}
                     </button>
                 </div>
-                <button className="btn btn-outline btn-sm" onClick={onCancel}>
+                <button className="btn btn-outline btn-sm max-sm:min-h-10" onClick={onCancel}>
                     {t('app.cancel')}
                 </button>
                 <button
-                    className="btn btn-neutral btn-sm"
+                    className="btn btn-neutral btn-sm max-sm:min-h-10"
                     onClick={() => void onSave()}
                     disabled={saving}
                     aria-busy={saving}

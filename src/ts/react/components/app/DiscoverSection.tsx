@@ -1,8 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useMemberChallenges } from '@/api/useMemberChallenges';
 import { useOpenChosenAnnotations } from '@/api/useOpenChosenAnnotations';
-import { useOnChosenPhotosCleared } from '@/api/chosenPhotosCleared';
 import { useDiscoverRows } from '@/hooks/useDiscoverRows';
 import { useDiscoverJoins } from '@/hooks/useDiscoverJoins';
 import type { JoinPhase } from '@/hooks/useDiscoverJoins';
@@ -11,13 +10,16 @@ import { outcomeMeta } from '@/utils/discoverOutcome';
 import type { OutcomeVariant } from '@/utils/discoverOutcome';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { ToneNote } from '@/components/ui/ToneNote';
-import { interp } from '@/utils/interp';
 import { formatDuration, formatEndTime } from '@/utils/formatters';
 import * as ipc from '@/api/ipc';
-import { ipcErrorText } from '@/api/ipcErrorText';
+import { ipcErrorText, joinRefusalText } from '@/api/ipcErrorText';
 import { listedTags } from '../../../format/challengeListing';
 import { endTimeOf } from '../../../format/endTime';
+// The pure fresh-join guard the facade re-exports (services/VotingLogic) — imported at its home
+// module, so the renderer bundle does not pull the whole voting-decision barrel in for one function.
+import { joinFreshRefusal } from '../../../services/decisions/joinDecision';
 import { ChallengeKindBadges, ChallengeTagBadges } from './ChallengeKindBadges';
+import { prizeItemsText } from '@/utils/prizeText';
 import { PhotoChooserModal } from './PhotoChooserModal';
 import { ForgetPaymentModal } from './ForgetPaymentModal';
 import { JoinConfirmModal } from './JoinConfirmModal';
@@ -51,60 +53,36 @@ const TEXT_CLASS: Record<Exclude<OutcomeVariant, 'warning' | 'error'>, string> =
 const rowName = (c: Challenge, untitled: string): string => c.title || c.url || untitled;
 
 /**
- * Marks a row that has a list of its own; clicking it reopens the chooser. A list
- * saved under another account (`foreignCount`, which the join does not use) is
- * counted instead of described as chosen photos.
+ * Marks a row that has a list of its own; clicking it reopens the chooser.
  */
-function ChosenChip({
-    name,
-    foreignCount,
-    onClick,
-}: {
-    name: string;
-    foreignCount: number | null;
-    onClick: () => void;
-}) {
+function ChosenChip({ name, onClick }: { name: string; onClick: () => void }) {
     const { t } = useTranslation();
-    const foreign = foreignCount !== null;
-    const text = foreign
-        ? interp(t('app.discoverChosenForeignChip'), { count: foreignCount })
-        : t('app.discoverChosenChip');
     return (
         <button
             type="button"
-            className="badge badge-outline badge-sm mt-0.5 min-h-6"
-            title={t(foreign ? 'app.discoverChosenForeignHint' : 'app.discoverChosenChipHint')}
-            aria-label={interp(t(foreign ? 'app.discoverChosenForeignLabel' : 'app.discoverChosenChipLabel'), {
-                title: name,
-                count: foreignCount ?? 0,
-            })}
+            className="badge badge-warning badge-sm mt-0.5 min-h-6"
+            title={t('app.discoverChosenChipHint')}
+            aria-label={t('app.discoverChosenChipLabel', { title: name })}
             onClick={onClick}
         >
-            {text}
+            {t('app.discoverChosenChip')}
         </button>
     );
 }
 
 /**
- * What a row says about chosen photos: the chip when it has a list of its own (a list
- * saved under another account is counted instead), else a line for one that reaches it
- * through a rule or the global default.
+ * What a row says about chosen photos: the chip when it has a list of its own, else a line for one that
+ * reaches it through a rule or the global default.
  */
 function ChosenMarks({ c, name, onChoose }: { c: OpenChallenge; name: string; onChoose: () => void }) {
     const { t } = useTranslation();
     if (c.chosenOwnCount > 0) {
-        return (
-            <ChosenChip
-                name={name}
-                foreignCount={c.chosenEffectiveCount === 0 ? c.chosenOwnCount : null}
-                onClick={onChoose}
-            />
-        );
+        return <ChosenChip name={name} onClick={onChoose} />;
     }
     if (c.chosenEffectiveCount === 0) return null;
     return (
         <div className="text-xs text-base-content/70 mt-0.5">
-            {interp(t('app.discoverChosenInherited'), { count: c.chosenEffectiveCount })}
+            {t('app.discoverChosenInherited', { count: c.chosenEffectiveCount })}
         </div>
     );
 }
@@ -116,7 +94,10 @@ function ChosenMarks({ c, name, onChoose }: { c: OpenChallenge; name: string; on
  * pressing it spends nothing.
  * A challenge that has not started cannot be joined, and neither can one that has only just started
  * and is not in the open list yet (a join would answer "no longer open"): the button is disabled and
- * its name says why.
+ * its name says why. A join the listing itself refuses (`blocked`: a full challenge, or one whose
+ * unlock price GuruShots did not send) still shows a plain Join — the listing can lag the live list,
+ * and a claim from an earlier session may only need its submit retried — so the button stays enabled,
+ * its name mentions the refusal, and a fresh join is answered `failed-no-charge` with the reason.
  */
 function JoinButton({
     id,
@@ -125,6 +106,7 @@ function JoinButton({
     retry,
     busy,
     waiting,
+    blocked,
     onClick,
 }: {
     id: OpenChallenge['id'];
@@ -133,14 +115,19 @@ function JoinButton({
     retry: boolean;
     busy: JoinPhase | null;
     waiting: 'notStarted' | 'startingNow' | null;
+    blocked: 'full' | 'price-unknown' | null;
     onClick: () => void;
 }) {
     const { t } = useTranslation();
     const paid = cost > 0 && !retry;
-    const label = interp(
-        t(
-            retry
-                ? 'app.discoverRetrySubmitLabel'
+    // Only discoverJoinPaidLabel names the cost; every other label takes the title alone.
+    const label = t(
+        retry
+            ? 'app.discoverRetrySubmitLabel'
+            : blocked === 'full'
+              ? 'app.discoverJoinFullLabel'
+              : blocked === 'price-unknown'
+                ? 'app.discoverJoinPriceUnknownLabel'
                 : waiting === 'notStarted'
                   ? 'app.discoverJoinNotStartedLabel'
                   : waiting === 'startingNow'
@@ -148,12 +135,11 @@ function JoinButton({
                     : paid
                       ? 'app.discoverJoinPaidLabel'
                       : 'app.discoverJoinLabel',
-        ),
-        { title: name, coins: cost },
+        { title: name, count: cost },
     );
     return (
         <button
-            className={`btn btn-sm ${paid ? 'btn-latvian' : 'btn-neutral'}`}
+            className={`btn btn-sm max-sm:min-h-10 ${paid ? 'btn-latvian' : 'btn-neutral'}`}
             id={`discover-join-${id}`}
             aria-label={busy ? undefined : label}
             onClick={onClick}
@@ -183,17 +169,6 @@ function RowPhotoChooser({
     onClose: () => void;
     onSaved: () => Promise<void>;
 }) {
-    // The row may have opened before the main process knew whose account this is, and then it came
-    // without its ids. Once the chooser's listing has said, ask again: the ids come through if the
-    // list is this account's, and not otherwise (null).
-    const challengeId = challenge?.id;
-    // Keyed on the challenge so a re-render does not look like a new function, and a new IPC call.
-    const reloadSaved = useCallback(async (): Promise<string[] | null> => {
-        const id = String(challengeId);
-        const result = await ipc.callOrNull(() => ipc.getOpenChosenAnnotations([id]));
-        const annotation = result?.success ? result.annotations[id] : undefined;
-        return annotation && annotation.chosenOwn.length === annotation.chosenOwnCount ? annotation.chosenOwn : null;
-    }, [challengeId]);
     const save = async (ids: string[]): Promise<boolean> => {
         // Only reachable from the chooser, which renders only while a challenge is being chosen for.
         const id = String((challenge as Challenge).id);
@@ -212,10 +187,10 @@ function RowPhotoChooser({
             isOpen={!!challenge}
             onClose={onClose}
             value={challenge?.chosenOwn ?? []}
-            savedCount={challenge?.chosenOwnCount}
             challengeId={challenge?.id ?? null}
+            // GuruShots' suggested photos for this challenge, from the listing: their tiles say so.
+            recommendedIds={challenge?.suggestedPhotoIds}
             clearMeansInherit
-            reloadSaved={reloadSaved}
             onSave={save}
         />
     );
@@ -237,9 +212,7 @@ function StartLine({ c, nowSec }: { c: OpenChallenge; nowSec: number }) {
     const left = secondsToStart(c, nowSec);
     return (
         <div className="text-xs text-base-content/70 mt-0.5">
-            {left === null
-                ? t('app.discoverStartingNow')
-                : interp(t('app.discoverStartsIn'), { time: formatDuration(left) })}
+            {left === null ? t('app.discoverStartingNow') : t('app.discoverStartsIn', { time: formatDuration(left) })}
         </div>
     );
 }
@@ -247,7 +220,8 @@ function StartLine({ c, nowSec }: { c: OpenChallenge; nowSec: number }) {
 /**
  * What a join left behind for its row, as a translated, coloured line. Any result without a mapped
  * status (auth-expiry, an unexpected handler error) still shows a message rather than failing
- * silently on a money-adjacent action.
+ * silently on a money-adjacent action. A join the live list refused as full or price-unreadable
+ * carries its reason, not an error: it gets the refusal's what → why → next text.
  */
 function RowOutcome({
     outcome,
@@ -265,15 +239,25 @@ function RowOutcome({
     const { t } = useTranslation();
     const meta = outcomeMeta(outcome);
     const { variant } = meta;
+    const refused =
+        outcome.status === 'failed-no-charge' && (outcome.reason === 'full' || outcome.reason === 'price-unknown')
+            ? joinRefusalText(outcome.reason, t)
+            : null;
     const content = (
         <>
-            {meta.key
-                ? interp(t(meta.key), { coins: outcome.cost ?? cost, have: outcome.coins })
-                : ipcErrorText(outcome.error, t) || t('app.discoverGenericError')}
+            {refused ??
+                (meta.key
+                    ? t(meta.key, {
+                          coins: outcome.cost ?? cost,
+                          have: outcome.coins,
+                          // discoverPriceChanged's plural selector.
+                          count: outcome.cost ?? cost,
+                      })
+                    : ipcErrorText(outcome.error, t) || t('app.discoverGenericError'))}
             {meta.forget && (
                 <button
-                    className="btn btn-ghost btn-sm ml-1"
-                    aria-label={interp(t('app.discoverForgetPaymentLabel'), { title: name })}
+                    className="btn btn-ghost btn-sm ml-1 max-sm:min-h-10"
+                    aria-label={t('app.discoverForgetPaymentLabel', { title: name })}
                     onClick={onForget}
                     disabled={busy}
                 >
@@ -297,7 +281,7 @@ function RowOutcome({
     );
 }
 
-/** One challenge in the list: what it is, what it costs, when it starts, its chosen photos and its actions. */
+/** One challenge in the list: what it is, what it costs, its capacity, when it starts, its chosen photos, and its actions. */
 function DiscoverRow({
     c,
     outcome,
@@ -321,10 +305,21 @@ function DiscoverRow({
     const cost = costOf(c);
     // Coins already spent: the row resumes the submit rather than joining (and paying) again.
     const retry = outcome !== undefined && outcomeMeta(outcome).retry;
+    // Why the listing itself refuses a fresh join (a join still asks the live list): a full challenge,
+    // or one whose unlock price GuruShots did not send. Null when the row may go ahead.
+    const blocked = joinFreshRefusal(c);
     const closeTime = endTimeOf(c.close_time);
     const name = rowName(c, t('app.discoverUntitled'));
     // Upcoming rows wait: until the start, then until the open list shows the challenge.
     const waiting = c.status !== 'upcoming' ? null : secondsToStart(c, nowSec) !== null ? 'notStarted' : 'startingNow';
+    // The capacity line, on a challenge whose cap and head count BOTH read: the head count, and
+    // "Full" when it is reached. A count the listing left unreadable shows no fraction (never
+    // "NaN/150") — the join asks the live list, which decides.
+    const maxPlayers = Number(c.max_players);
+    const players = Number(c.players);
+    const capped = Number.isFinite(maxPlayers) && maxPlayers > 0 && Number.isFinite(players);
+    // The wire field is typed as an array but is not guaranteed one: read it only when it is.
+    const prizes = Array.isArray(c.first_prizes) ? prizeItemsText(c.first_prizes, t) : '';
     return (
         <li className="flex flex-wrap items-center justify-between gap-2 rounded border border-base-200 px-2 py-1.5">
             <div className="min-w-0">
@@ -333,15 +328,43 @@ function DiscoverRow({
                     <ChallengeKindBadges challenge={c} />
                     <ChallengeTagBadges tags={listedTags(c)} />
                     <span>
-                        {cost > 0 ? interp(t('app.discoverCostPaid'), { coins: cost }) : t('app.discoverCostFree')}
+                        {cost > 0
+                            ? t('app.discoverCostPaid', { count: cost })
+                            : blocked === 'price-unknown'
+                              ? t('app.discoverPriceUnknown')
+                              : t('app.discoverCostFree')}
                     </span>
+                    {capped && (
+                        <span>
+                            <span aria-hidden="true">· 👥 </span>
+                            <span className="sr-only">{t('app.players')}: </span>
+                            {players.toLocaleString()}/{maxPlayers.toLocaleString()}
+                            {blocked === 'full' && (
+                                <>
+                                    <span aria-hidden="true"> · </span>
+                                    {t('app.discoverFull')}
+                                </>
+                            )}
+                        </span>
+                    )}
                     {closeTime !== null && (
                         <span>
                             <span aria-hidden="true">· </span>
                             {t('app.ends')} {formatEndTime(closeTime, timezone)}
                         </span>
                     )}
+                    {(c.suggestedPhotoIds?.length ?? 0) > 0 && (
+                        <span className="badge badge-outline badge-sm">{t('app.discoverRecommended')}</span>
+                    )}
                 </div>
+                {blocked === 'price-unknown' && (
+                    <div className="text-xs text-base-content/70 mt-0.5">{t('app.discoverPriceUnknownHint')}</div>
+                )}
+                {prizes !== '' && (
+                    <div className="text-xs text-base-content/70 mt-0.5 wrap-anywhere">
+                        {t('app.prize')}: {prizes}
+                    </div>
+                )}
                 <StartLine c={c} nowSec={nowSec} />
                 <ChosenMarks c={c} name={name} onChoose={onChoose} />
                 {waiting !== null && c.chosenEffectiveCount > 0 && (
@@ -353,8 +376,8 @@ function DiscoverRow({
             </div>
             <div className="flex items-center gap-2">
                 <button
-                    className="btn btn-outline btn-sm"
-                    aria-label={interp(t('app.discoverChoosePhotosLabel'), { title: name })}
+                    className="btn btn-outline btn-sm max-sm:min-h-10"
+                    aria-label={t('app.discoverChoosePhotosLabel', { title: name })}
                     onClick={onChoose}
                 >
                     {t('app.choosePhotos')}
@@ -366,6 +389,7 @@ function DiscoverRow({
                     retry={retry}
                     busy={busy}
                     waiting={waiting}
+                    blocked={blocked}
                     onClick={onJoin}
                 />
             </div>
@@ -384,9 +408,7 @@ function CountBadge({ list, nowSec }: { list: OpenChallenge[]; nowSec: number })
     const open = list.filter((c) => c.status !== 'upcoming').length;
     if (open + upcoming === 0) return null;
     const label =
-        upcoming > 0
-            ? interp(t('app.discoverCountSplit'), { open, upcoming })
-            : interp(t('app.discoverCountLabel'), { count: open });
+        upcoming > 0 ? t('app.discoverCountSplit', { open, upcoming }) : t('app.discoverCountLabel', { count: open });
     return (
         <span className="badge badge-neutral badge-sm" role="img" aria-label={label}>
             {upcoming > 0 ? label : open}
@@ -422,12 +444,10 @@ export function DiscoverSection({
     // The rows follow the settings without another trip to GuruShots: what the list carried is
     // only the starting point, the settings-only read replaces it as soon as it answers.
     const chosen = useOpenChosenAnnotations(rows.map((c) => String(c.id)));
-    useOnChosenPhotosCleared(() => void chosen.refetch());
     const [choosing, setChoosing] = useState<OpenChallenge | null>(null); // challenge whose photos are being chosen
     const [forgetting, setForgetting] = useState<OpenChallenge | null>(null); // challenge whose payment is being forgotten
     const { confirm, results, busy, withAnswerCost, ask, onConfirm, dismiss, clearResult } = useDiscoverJoins({
         items,
-        isLoggedIn,
         refetch,
         onJoined,
     });
@@ -464,7 +484,11 @@ export function DiscoverSection({
                 </summary>
                 <div className="collapse-content px-3 pb-3">
                     <div className="flex justify-end mb-2">
-                        <button className="btn btn-outline btn-sm" onClick={() => void refetch()} disabled={loading}>
+                        <button
+                            className="btn btn-outline btn-sm max-sm:min-h-10"
+                            onClick={() => void refetch()}
+                            disabled={loading}
+                        >
                             {t('app.discoverRefresh')}
                         </button>
                     </div>

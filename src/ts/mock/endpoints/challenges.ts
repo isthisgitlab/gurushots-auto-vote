@@ -6,6 +6,7 @@
 import * as challenges from '../challenges';
 import * as settings from '../../settings';
 import * as logger from '../../logger';
+import { normalizeActiveChallenges } from '../../challengeIntegrity';
 import { simulateApiResponse, mockMethod } from '../simulate';
 import { getSessionCache } from '../sessionCache';
 import type * as activeChallengesModule from '../../strategies/real/activeChallenges';
@@ -45,10 +46,16 @@ const getActiveChallenges: typeof activeChallengesModule.getActiveChallenges = m
                 .withCategory('challenges')
                 .info(`Using cached mock challenges: ${sessionMockCache.challenges.challenges.length}`, null);
         }
+        // The same boundary check the real read runs — with app-set stripping
+        // OFF: these are the cached session objects, and stripping would
+        // delete the boostHoldUntil / teamMatch the pass set on them.
+        const normalized = normalizeActiveChallenges(sessionMockCache.challenges);
         // Match the real API's title-profile behavior without persisting
-        // mock challenge ids into the user's real settings.
-        settings.rememberChallengeTitles(sessionMockCache.challenges.challenges);
-        return simulateApiResponse(sessionMockCache.challenges, 800);
+        // mock challenge ids into the user's real settings. The facts are
+        // remembered from the normalized list, marks included — the same
+        // order the real read uses.
+        settings.rememberChallengeTitles(normalized.challenges, normalized.pruneUnsafe === true);
+        return simulateApiResponse(normalized, 800);
     },
 );
 

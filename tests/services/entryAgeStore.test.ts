@@ -30,7 +30,6 @@ const isEntryAgeRecord = isShape<EntryAgeRecord>({
     pending: nullable(isString),
     uncertain: optional(isArrayOf(isString)),
     exact: isArrayOf(isString),
-    memberId: nullable(isString),
     observed: isBoolean,
     firstSeen: isNumber,
 });
@@ -79,6 +78,21 @@ describe('entry-age ledger', () => {
         ledger.observe(challenge(1, ['a']), NOW + 120);
         expect(store.writeRaw).toHaveBeenCalledTimes(2);
         expect(store.peek()['1'].entered).toEqual({ a: 0 });
+    });
+
+    test('a record a fetch stops observing (a marked challenge) expires only by its closeTime', () => {
+        const ledger = createMemoryEntryAgeLedger();
+        ledger.observe(challenge(1, ['a']), NOW); // closes at NOW + 3600
+
+        // Other challenges keep writing (each write sweeps the store); the
+        // unobserved record simply stays.
+        ledger.observe(challenge(2, ['x']), NOW + 1800);
+        expect(ledger.enteredAt(1, 'a')).not.toBeNull();
+
+        // Past its close time, the next write that changes something drops it —
+        // there is no "not observed recently" expiry.
+        ledger.observe(challenge(2, ['x', 'y']), NOW + 3601);
+        expect(ledger.enteredAt(1, 'a')).toBeNull();
     });
 
     test('ignores entries without an id and a challenge without one', () => {
@@ -314,7 +328,7 @@ describe('entry times: exact and approximate', () => {
         const store = rawStore(null);
         const ledger = createEntryAgeLedger(store);
         ledger.markSubmitted(1, ['x'], NOW);
-        expect(store.peek()['1']).toMatchObject({ observed: false, memberId: null, closeTime: NOW + 31 * 86400 });
+        expect(store.peek()['1']).toMatchObject({ observed: false, closeTime: NOW + 31 * 86400 });
         const times = ledger.observeAll([listing(1, ['a', 'b', 'x'], { closeTime: NOW + 3600 })], NOW + 60);
         expect(times).toEqual({
             '1': {
@@ -328,72 +342,28 @@ describe('entry times: exact and approximate', () => {
         expect(ledger.enteredAt(1, 'a')).toBe(0);
     });
 
-    test('a record of another account is a first sighting; a missing account on either side keeps the times', () => {
-        const store = rawStore(null);
-        const ledger = createEntryAgeLedger(store);
-        ledger.observe(listing(1, [{ id: 'a', member_id: 'me' }]), NOW);
-        ledger.observe(
-            listing(1, [
-                { id: 'a', member_id: 'me' },
-                { id: 'b', member_id: 'me' },
-            ]),
-            NOW + 60,
+    test('a stored field the shape no longer holds loads without a notice and is gone from the next write', () => {
+        // A file written by a build that still kept the entries' account: the record reads as it
+        // would have without the field, and the next write stores it without it.
+        const store = rawStore(
+            JSON.stringify({
+                1: {
+                    closeTime: NOW + 3600,
+                    entered: { a: NOW },
+                    pending: null,
+                    exact: [],
+                    memberId: 'me',
+                    observed: true,
+                    firstSeen: NOW,
+                },
+            }),
         );
-        expect(ledger.enteredAt(1, 'b')).toBe(NOW + 60);
-        expect(store.peek()['1'].memberId).toBe('me');
-        // A listing that names no account leaves the record's account, and the times.
-        ledger.observe(listing(1, ['a', 'b', 'c']), NOW + 120);
-        expect(store.peek()['1'].memberId).toBe('me');
-        expect(ledger.enteredAt(1, 'b')).toBe(NOW + 60);
-        expect(ledger.enteredAt(1, 'c')).toBe(NOW + 120);
-        // Another account's listing: nothing is known of when its entries went in.
-        ledger.observe(
-            listing(1, [
-                { id: 'b', member_id: 'other' },
-                { id: 'z', member_id: 'other' },
-            ]),
-            NOW + 180,
-        );
-        expect(store.peek()['1'].memberId).toBe('other');
-        expect(ledger.enteredAt(1, 'b')).toBe(0);
-        expect(ledger.enteredAt(1, 'z')).toBe(0);
-    });
-
-    test('the record of another account is dropped: its pending, exact and uncertain photos are not carried', () => {
-        const store = rawStore(null);
         const ledger = createEntryAgeLedger(store);
-        ledger.observe(listing(1, [{ id: 'a', member_id: 'me' }]), NOW);
-        ledger.markPending(listing(1, [{ id: 'a', member_id: 'me' }]), 'p', NOW + 10);
-        ledger.markSubmitted(1, ['x'], NOW + 10);
-        ledger.markUncertain(listing(1, [{ id: 'a', member_id: 'me' }]), 'u', NOW + 10);
-        expect(store.peek()['1']).toMatchObject({ pending: 'p', exact: ['p', 'x'], uncertain: ['u'] });
-
-        ledger.observe(listing(1, [{ id: 'z', member_id: 'other' }]), NOW + 60);
-
-        expect(store.peek()['1']).toMatchObject({
-            pending: null,
-            exact: [],
-            uncertain: [],
-            memberId: 'other',
-            entered: { z: 0 },
-        });
-        expect(ledger.pending(1)).toBeNull();
-    });
-
-    test('a record without an account takes the listing account and keeps the times', () => {
-        const store = rawStore(null);
-        const ledger = createEntryAgeLedger(store);
-        ledger.observe(listing(1, ['a']), NOW);
-        ledger.observe(listing(1, ['a', 'b']), NOW + 60);
-        ledger.observe(
-            listing(1, [
-                { id: 'a', member_id: 'me' },
-                { id: 'b', member_id: 'me' },
-            ]),
-            NOW + 120,
-        );
-        expect(store.peek()['1'].memberId).toBe('me');
-        expect(ledger.enteredAt(1, 'b')).toBe(NOW + 60);
+        expect(ledger.enteredAt(1, 'a')).toBe(NOW);
+        ledger.markUncertain(listing(1, ['a']), 'u', NOW + 60);
+        const record = store.peek()['1'];
+        expect(record).not.toHaveProperty('memberId');
+        expect(record.uncertain).toEqual(['u']);
     });
 
     test('an exact photo missing from a lagging listing keeps its time and flag for the grace, then goes', () => {
@@ -557,18 +527,6 @@ describe('entry times: exact and approximate', () => {
         expect(store.peek()['1'].firstSeen).toBe(expected);
     });
 
-    test('the record of another account starts again: its entries are shown from the new first sighting', () => {
-        const store = rawStore(null);
-        const ledger = createEntryAgeLedger(store);
-        ledger.observe(listing(1, [{ id: 'a', member_id: 'me' }]), NOW);
-        expect(store.peek()['1'].firstSeen).toBe(NOW);
-        ledger.observe(listing(1, [{ id: 'z', member_id: 'other' }]), NOW + 90);
-        expect(store.peek()['1'].firstSeen).toBe(NOW + 90);
-        expect(ledger.observeAll([listing(1, [{ id: 'z', member_id: 'other' }])], NOW + 100)).toEqual({
-            '1': { z: { at: NOW + 90, exact: false } },
-        });
-    });
-
     test('an entry the record does not hold shows no time: the record is held to 64 entries', () => {
         const ledger = createMemoryEntryAgeLedger();
         const many = Array.from({ length: 70 }, (_, index) => `m${index}`);
@@ -590,7 +548,6 @@ describe('entry times: exact and approximate', () => {
                     entered: Object.fromEntries(ids.map((id) => [id, NOW])),
                     pending: null,
                     exact: [7, ...ids],
-                    memberId: 12,
                     observed: 'yes',
                 },
             }),
@@ -600,7 +557,6 @@ describe('entry times: exact and approximate', () => {
         const record = store.peek()['1'];
         expect(record.exact).toHaveLength(63);
         expect(record.exact.every((id) => id.startsWith('id-'))).toBe(true);
-        expect(record.memberId).toBeNull();
         expect(record.observed).toBe(true);
     });
 

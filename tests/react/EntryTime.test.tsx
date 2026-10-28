@@ -1,14 +1,20 @@
 import { render, screen } from './helpers/test-utils';
 import { mockTranslator } from './helpers/setup';
 import { EntryTime } from '@/components/app/EntryTime';
+import { createTranslator } from '../../src/ts/translations/translator';
 import { app } from '../../src/ts/translations/english';
 import { formatEndTimeIn } from '../../src/ts/format/endTime';
+import type { Translate } from '../../src/ts/translations/translator';
 
 const AT = 1_792_420_000;
 const when = formatEndTimeIn(AT, 'UTC', 'en-GB');
 
+// The real English strings, placeholders filled like the real t fills them.
+const translator = createTranslator();
+const english: Translate = (key, vars) => translator.t(key, vars, 'en');
+
 beforeEach(() => {
-    mockTranslator.t.mockImplementation((key) => app[key.replace(/^app\./, '') as keyof typeof app] ?? key);
+    mockTranslator.t.mockImplementation(english);
 });
 
 describe('EntryTime', () => {

@@ -41,13 +41,13 @@ const until = async (condition: () => boolean, ms = 4000) => {
     while (!condition() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 25));
 };
 
-// A host that cannot watch a directory (a sandbox, or out of watch handles: EMFILE, or ENOSPC on Linux's inotify) cannot run
-// these tests: they are reported as skipped there, never as passed. On CI the runner must be able to watch, so it is an
-// error. The behaviour with the watch mocked is covered by settingsWatcher.test.ts.
+// A host that cannot watch a directory (a sandbox, or out of watch handles: EMFILE, or ENOSPC on Linux's inotify, or a watch that never delivers an
+// event: a wedged macOS fseventsd) cannot run these tests: they are reported as skipped there, never as passed. On CI the runner must be able to
+// watch, so it is an error. The behaviour with the watch mocked is covered by settingsWatcher.test.ts.
 const canWatch = canWatchDirectory();
 if (!canWatch && process.env.CI) {
     throw new Error(
-        'The CI runner must be able to watch a directory (fs.watch failed with EMFILE/ENOSPC or was denied).',
+        'The CI runner must be able to watch a directory (fs.watch failed with EMFILE/ENOSPC, was denied, or never delivered an event).',
     );
 }
 const maybeTest = canWatch ? test : test.skip;

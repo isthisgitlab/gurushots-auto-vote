@@ -42,6 +42,7 @@ const ROOT = realPath.join(__dirname, '..', '..');
 const DIST = realPath.join(ROOT, 'dist');
 const LEXICON = realPath.join(ROOT, 'src', 'assets', 'semantic-vectors.json');
 const NOTICES = realPath.join(ROOT, 'src', 'assets', 'THIRD_PARTY_NOTICES.txt');
+const LOGO = realPath.join(ROOT, 'src', 'assets', 'logo.png');
 const ENTRY_NAMES = ['login', 'app', 'logs', 'capacitor', 'web', 'headless', 'preload', 'preloadLogs'];
 
 const flush = async () => {
@@ -120,6 +121,7 @@ describe('scripts/build-react.ts', () => {
             );
             expect(fs.copyFileSync).toHaveBeenCalledWith(LEXICON, realPath.join(DIST, 'semantic-vectors.json'));
             expect(fs.copyFileSync).toHaveBeenCalledWith(NOTICES, realPath.join(DIST, 'THIRD_PARTY_NOTICES.txt'));
+            expect(fs.copyFileSync).toHaveBeenCalledWith(LOGO, realPath.join(DIST, 'favicon.png'));
 
             expect(esbuild.build).toHaveBeenCalledTimes(ENTRY_NAMES.length);
             const outfiles = esbuild.build.mock.calls.map(([opts]) => realPath.basename(opts.outfile!));
@@ -195,6 +197,8 @@ describe('scripts/build-react.ts', () => {
             expect(fs.mkdirSync).toHaveBeenCalledWith(DIST, { recursive: true });
             expect(fs.copyFileSync).not.toHaveBeenCalledWith(LEXICON, realPath.join(DIST, 'semantic-vectors.json'));
             expect(fs.copyFileSync).not.toHaveBeenCalledWith(NOTICES, realPath.join(DIST, 'THIRD_PARTY_NOTICES.txt'));
+            // The logo is a committed source file, not a generated artifact: copied whether or not the others exist.
+            expect(fs.copyFileSync).toHaveBeenCalledWith(LOGO, realPath.join(DIST, 'favicon.png'));
             expect(esbuild.build).toHaveBeenCalledTimes(ENTRY_NAMES.length - 1);
             const opts = esbuild.build.mock.calls[0][0];
             expect(opts.minify).toBe(false);

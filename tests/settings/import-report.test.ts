@@ -186,7 +186,7 @@ describe('after the import of a settings.json (real fs)', () => {
             expect(settings.acknowledgeImportReport()).toBe(false);
         });
 
-        test('acknowledging with no marker to keep a copy in still records it in the configuration', () => {
+        test('acknowledging with no marker beside the configuration still records it in the configuration', () => {
             fs.writeFileSync(legacyFile, RAW);
             loadFresh();
             settings.loadSettings();
@@ -198,7 +198,7 @@ describe('after the import of a settings.json (real fs)', () => {
             expect(fs.existsSync(path.join(userData, 'v2-import.json'))).toBe(false);
         });
 
-        test('an acknowledgement the configuration refuses is not recorded in the marker either', () => {
+        test('an acknowledgement the configuration refuses changes nothing', () => {
             fs.writeFileSync(legacyFile, RAW);
             loadFresh();
             settings.loadSettings();
@@ -206,7 +206,7 @@ describe('after the import of a settings.json (real fs)', () => {
 
             expect(settings.acknowledgeImportReport()).toBe(false);
 
-            expect(stored(path.join(userData, 'v2-import.json')).importedRecord).toMatchObject({ acknowledged: false });
+            expect(stored(configFile).imported).toMatchObject({ acknowledged: false });
         });
 
         test.each([

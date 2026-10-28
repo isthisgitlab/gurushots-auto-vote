@@ -3,7 +3,6 @@ import { useCoinsNow } from '@/api/useCoinsNow';
 import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { useConfirmedAction } from '@/hooks/useConfirmedAction';
-import { interp } from '@/utils/interp';
 import * as ipc from '@/api/ipc';
 
 import type { OpenChallenge } from '../../../types/gurushots';
@@ -13,11 +12,9 @@ import type { ForgetStatus } from '../../../types/join';
 // the general one.
 const PROBLEM_TEXT: Record<Exclude<ForgetStatus, 'forgotten'>, string> = {
     'nothing-to-forget': 'app.discoverForgetNothing',
-    'legacy-record': 'app.discoverForgetLegacyRecord',
     busy: 'app.discoverForgetBusy',
     unreadable: 'app.discoverForgetUnreadable',
     'locks-unavailable': 'app.locksUnavailable',
-    'account-unknown': 'app.discoverForgetAccountUnknown',
     'not-authenticated': 'app.discoverForgetNotAuthenticated',
 };
 
@@ -40,8 +37,8 @@ function BalanceHint({ before, now }: { before: number; now: number | null }) {
     return (
         <p className="text-base-content/70">
             {now === null
-                ? interp(t('app.discoverForgetBalanceBefore'), { before })
-                : interp(t('app.discoverForgetBalances'), { before, now })}
+                ? t('app.discoverForgetBalanceBefore', { before })
+                : t('app.discoverForgetBalances', { before, now })}
         </p>
     );
 }
@@ -93,7 +90,7 @@ export function ForgetPaymentModal({
         >
             {challenge && (
                 <>
-                    <p>{interp(t('app.discoverForgetBody'), { title: challenge.title || challenge.url })}</p>
+                    <p>{t('app.discoverForgetBody', { title: challenge.title || challenge.url })}</p>
                     {coinsBefore !== undefined && <BalanceHint before={coinsBefore} now={coinsNow} />}
                 </>
             )}

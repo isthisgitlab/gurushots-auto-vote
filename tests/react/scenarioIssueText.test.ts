@@ -1,6 +1,9 @@
 import { scenarioIssueText, scenarioPathText } from '@/utils/scenarioIssueText';
+import { fillTemplate } from './helpers/setup';
 
-const keys = (key: string) => key;
+import type { Translate } from '../../src/ts/translations/translator';
+
+const keys: Translate = (key) => key;
 
 describe('scenarioIssueText', () => {
     test.each([
@@ -49,18 +52,21 @@ describe('scenarioIssueText', () => {
     });
 
     test('fills the placeholders from the message', () => {
-        const t = (key: string) =>
-            ({
-                'app.scenarioIssueTooLarge': 'Larger than {kb} KB',
-                'app.scenarioIssueNoPhase': 'No phase "{name}"',
-                'app.scenarioIssueDuplicateRuleId': 'Id {id}',
-                'app.scenarioIssueConditionDepth': 'Depth {depth}',
-                'app.scenarioIssueMemoryNeverSet': 'Slot {slot}',
-                'app.scenarioIssueNameTooLong': 'Max {max}',
-                'app.scenarioIssueCompareNumber': '{field} is a number',
-                'app.scenarioIssueWindowOnly': 'Only {fields}',
-                'app.scenarioIssueTooManyPhases': 'At most {max}',
-            })[key] ?? key;
+        const t: Translate = (key, vars) =>
+            fillTemplate(
+                {
+                    'app.scenarioIssueTooLarge': 'Larger than {kb} KB',
+                    'app.scenarioIssueNoPhase': 'No phase "{name}"',
+                    'app.scenarioIssueDuplicateRuleId': 'Id {id}',
+                    'app.scenarioIssueConditionDepth': 'Depth {depth}',
+                    'app.scenarioIssueMemoryNeverSet': 'Slot {slot}',
+                    'app.scenarioIssueNameTooLong': 'Max {max}',
+                    'app.scenarioIssueCompareNumber': '{field} is a number',
+                    'app.scenarioIssueWindowOnly': 'Only {fields}',
+                    'app.scenarioIssueTooManyPhases': 'At most {max}',
+                }[key] ?? key,
+                vars,
+            );
         expect(scenarioIssueText('The file is larger than 256 KB', t).text).toBe('Larger than 256 KB');
         expect(scenarioIssueText('No phase named "end"', t).text).toBe('No phase "end"');
         expect(scenarioIssueText('Duplicate rule id "r1"', t).text).toBe('Id r1');
@@ -73,10 +79,13 @@ describe('scenarioIssueText', () => {
     });
 
     test('a list of setting keys is shown by the settings translated names, or the key when it has none', () => {
-        const t = (key: string) =>
-            ({ 'app.exposureTarget': 'Exposure Target', 'app.scenarioIssueSetTogether': 'Set {fields} together' })[
-                key
-            ] ?? key;
+        const t: Translate = (key, vars) =>
+            fillTemplate(
+                { 'app.exposureTarget': 'Exposure Target', 'app.scenarioIssueSetTogether': 'Set {fields} together' }[
+                    key
+                ] ?? key,
+                vars,
+            );
         expect(scenarioIssueText('Set exposureTarget and mysterySetting together', t).text).toBe(
             'Set Exposure Target, mysterySetting together',
         );
@@ -100,7 +109,7 @@ describe('scenarioPathText', () => {
         'app.scenarioPathSettings': 'Settings',
         'app.scenarioPathLimits': 'Limits',
     };
-    const t = (key: string) => words[key] ?? key;
+    const t: Translate = (key, vars) => fillTemplate(words[key] ?? key, vars);
 
     test.each([
         ['phases.main.rules[0].if[0].window', 'Phase main › Rule 1 › Condition 1 › window'],

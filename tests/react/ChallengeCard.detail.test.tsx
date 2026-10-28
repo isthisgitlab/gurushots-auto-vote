@@ -20,6 +20,14 @@ import { invalid } from '../helpers/invalid';
 import { parseJson, parseJsonObject } from '../helpers/parseJson';
 import { mockTranslator } from './helpers/setup';
 import { app, errors } from '../../src/ts/translations/english';
+import { createTranslator } from '../../src/ts/translations/translator';
+import type { Translate } from '../../src/ts/translations/translator';
+
+// The real English strings (plural groups included), placeholders filled like the real t fills them.
+const realEnglish: Translate = (() => {
+    const translator = createTranslator();
+    return (key, vars) => translator.t(key, vars, 'en');
+})();
 
 jest.mock('@/components/app/EntryBadge', () => ({
     EntryBadge: ({
@@ -230,7 +238,8 @@ describe('header', () => {
         expect(screen.getByText((2000).toLocaleString())).toBeTruthy();
         unmount();
         renderCard(makeChallenge({ votes: undefined }));
-        expect(screen.getByText('0')).toBeTruthy();
+        // The votes STAT CELL reads 0 (the member's 0-vote progress panel is not the statistic).
+        expect(screen.getByText('app.votes').nextElementSibling?.textContent).toBe('0');
     });
 
     test('flash challenges have no settings button, no URL row without a url', () => {
@@ -375,7 +384,7 @@ describe('progress', () => {
             }),
         );
         expect(screen.getByText('Keep going')).toBeTruthy();
-        expect(screen.getByText(/SKILLED \(380/)).toBeTruthy();
+        expect(screen.getByText('app.next: SKILLED (app.votesNeeded)')).toBeTruthy();
         expect(screen.getByText('POPULAR 1').className).toContain(LEVEL_BADGE_CLASS.popular);
     });
 
@@ -402,16 +411,16 @@ describe('progress', () => {
         expect(caption.id).not.toBe('');
     });
 
-    test('a ranking total without a percentage shows no percentage text', () => {
+    test('a ranking total without a percentage shows neither bar nor % text', () => {
         const { container } = renderCard(
             withTotal({ votes: 5, rank: 1, level: 5, level_name: 'ALL STAR', next_message: '' }),
         );
-        expect(container.querySelector('progress')!.parentElement!.textContent).toBe('');
+        expect(container.querySelector('progress')).toBeNull();
     });
 
     test('levels past the named table fall back to LEVEL n', () => {
         renderCard(withTotal({ votes: 5, rank: 1, level: 6, level_name: 'X', percent: 1, next_message: '' }));
-        expect(screen.getByText(/LEVEL 7 \(8995/)).toBeTruthy();
+        expect(screen.getByText('app.next: LEVEL 7 (app.votesNeeded)')).toBeTruthy();
     });
 
     test('no next-level line when the next level is unknown or undefined', () => {
@@ -453,6 +462,47 @@ describe('progress', () => {
         );
         expect(screen.getByText('app.yourProgress')).toBeTruthy();
         expect(screen.queryByText(/app\.next/)).toBeNull();
+    });
+});
+
+describe('the next-level line plurals its vote gap', () => {
+    const english: Translate = realEnglish;
+    const latvian: Translate = (() => {
+        const translator = createTranslator();
+        return (key, vars) => translator.t(key, vars, 'lv');
+    })();
+    const withGap = (needed: number) =>
+        makeChallenge({
+            ranking_levels: { level_2: 500 },
+            member: {
+                ranking: {
+                    total: {
+                        votes: 500 - needed,
+                        rank: 1,
+                        level: 1,
+                        level_name: 'POPULAR',
+                        percent: 40,
+                        next_message: '',
+                    },
+                },
+            },
+        });
+
+    beforeEach(() => mockTranslator.t.mockImplementation(english));
+    afterEach(() => mockTranslator.t.mockImplementation((key) => key));
+
+    test.each([
+        ['English', english, 1, '1 vote needed'],
+        ['English', english, 2, '2 votes needed'],
+        ['Latvian', latvian, 1, '1 balss nepieciešama'],
+        ['Latvian', latvian, 2, '2 balsis nepieciešamas'],
+        ['Latvian', latvian, 21, '21 balss nepieciešama'],
+        ['Latvian', latvian, 31, '31 balss nepieciešama'],
+        ['Latvian', latvian, 111, '111 balsis nepieciešamas'],
+    ] as Array<[string, Translate, number, string]>)('%s plural form, case %#', (_language, t, needed, text) => {
+        mockTranslator.t.mockImplementation(t);
+        renderCard(withGap(needed));
+        expect(screen.getByText(`${t('app.next')}: SKILLED (${text})`)).toBeTruthy();
     });
 });
 
@@ -579,7 +629,8 @@ describe('fill', () => {
         unmount();
         renderCard(makeChallenge({ max_photo_submits: undefined, member: { ranking: { entries: undefined } } }));
         expect(screen.queryByText('+1')).toBeNull();
-        expect(screen.getByText('0/')).toBeTruthy();
+        // No fraction off an unreadable max — never "0/undefined".
+        expect(screen.getByText('app.yourEntries').nextElementSibling?.textContent).toBe('—');
     });
 });
 
@@ -597,18 +648,14 @@ describe('pick', () => {
         })),
         memberId: 'c'.repeat(32),
         truncated: false,
+        nextStart: 0,
         wonIds: [],
         wonCount: 0,
         preview: false,
         readAtMs: 1_700_000_000_000,
         allowedKnown: true,
     });
-    const english = (key: string) =>
-        key.startsWith('app.')
-            ? ((app as Record<string, string>)[key.slice(4)] ?? key)
-            : key.startsWith('errors.')
-              ? ((errors as Record<string, string>)[key.slice(7)] ?? key)
-              : key;
+    const english: Translate = realEnglish;
     const tile = (n: number) =>
         screen.getByRole('button', { name: new RegExp(`^Photo ${String(n).padStart(8, '0')}:`) });
     const pickButton = () => screen.getByRole('button', { name: app.fillPick });
@@ -616,7 +663,7 @@ describe('pick', () => {
         fireEvent.click(pickButton());
         // Pick… opens with nothing loaded; Load all shows the library as last loaded with picking held, and the
         // fresh read unlocks it.
-        fireEvent.click(await screen.findByRole('button', { name: app.pickLoadAll }));
+        fireEvent.click(await screen.findByRole('button', { name: app.pickLoadPhotos }));
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         await waitFor(() => expect(tile(1).getAttribute('aria-disabled')).toBe('false'));
         fireEvent.click(tile(n));
@@ -724,7 +771,7 @@ describe('pick', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
         expect(screen.queryByRole('dialog')).toBeNull();
         fireEvent.click(pickButton());
-        await screen.findByRole('button', { name: app.pickLoadAll });
+        await screen.findByRole('button', { name: app.pickLoadPhotos });
         expect(screen.queryByRole('alert')).toBeNull();
     });
 
@@ -858,8 +905,7 @@ describe('entries, tags and alerts', () => {
                 .mockResolvedValue({ success: true, actions: [], ...blocked(blockedBy) });
         };
         const alerts = () => screen.getAllByRole('alert').map((alert) => alert.textContent);
-        const english = (key: string) =>
-            key.startsWith('app.') ? ((app as Record<string, string>)[key.slice(4)] ?? key) : key;
+        const english: Translate = realEnglish;
 
         beforeEach(() => mockTranslator.t.mockImplementation(english));
         afterEach(() => mockTranslator.t.mockImplementation((key) => key));
@@ -1049,5 +1095,396 @@ describe('entries, tags and alerts', () => {
     test('renders the sanitized welcome message', () => {
         renderCard(makeChallenge({ welcome_message: 'Hello <b>world</b>' }));
         expect(screen.getByText('world').tagName).toBe('B');
+    });
+});
+
+describe('benchmark scores and the gap to chase', () => {
+    const english: Translate = realEnglish;
+    const rows = (over: Partial<Record<'one' | 'ten' | 'hundred', string>> = {}) =>
+        (
+            [
+                ['1', over.one ?? '300'],
+                ['10', over.ten ?? '200'],
+                ['100', over.hundred ?? '100'],
+            ] as const
+        ).map(([benchmark, score]) => ({ benchmark, score }));
+    const withBench = (total: RankingTotal, challenge = {}) =>
+        makeChallenge({
+            ...challenge,
+            member: { ranking: { total: { votes: 50, rank: 120, percent: 10, next_message: '', ...total } } },
+        });
+
+    beforeEach(() => mockTranslator.t.mockImplementation(english));
+    afterEach(() => mockTranslator.t.mockImplementation((key) => key));
+
+    test('the three groups with their scores, and past the top 100 the gap to it', () => {
+        renderCard(withBench({ benchmark: rows() }));
+
+        expect(
+            screen.getByText(
+                `Top 1: 300 votes · Top 10: 200 votes · Top 100: 100 votes · +${(51).toLocaleString()} votes to top 100`,
+            ),
+        ).toBeTruthy();
+    });
+
+    test('a score the server left empty or garbled drops out of the line', () => {
+        const { unmount } = renderCard(
+            withBench({
+                // A blank score, a garbled one, a group the card does not read, a "Top N" label the
+                // server never sends, a row without a group, a row without a score, and a row that
+                // is not a row at all.
+                benchmark: invalid<RankingTotal['benchmark']>([
+                    ...rows({ one: '', ten: 'garbage' }),
+                    { benchmark: 'Top 5', score: '9' },
+                    { benchmark: 'Top 10', score: '9' },
+                    { benchmark: '10' },
+                    { score: '7' },
+                    null,
+                ]),
+            }),
+        );
+        expect(screen.getByText(`Top 100: 100 votes · +${(51).toLocaleString()} votes to top 100`)).toBeTruthy();
+        unmount();
+
+        // A benchmark block that is not a list is no benchmark block at all.
+        renderCard(withBench({ benchmark: invalid<RankingTotal['benchmark']>(5) }));
+        expect(screen.queryByText(/Top \d+:/)).toBeNull();
+    });
+
+    test('a rank the panel cannot chase with (missing, or not a positive integer) shows the scores alone; an unreadable vote count hides the block', () => {
+        const noRank = renderCard(withBench({ rank: undefined, benchmark: rows() }));
+        expect(screen.getByText('Top 1: 300 votes · Top 10: 200 votes · Top 100: 100 votes')).toBeTruthy();
+        expect(screen.queryByText(/to top/)).toBeNull();
+        noRank.unmount();
+
+        // A vote count the server left garbled is unreadable: no progress panel, no benchmark block.
+        renderCard(withBench({ votes: 50.5, benchmark: rows() }));
+        expect(screen.queryByText(/Top \d+:/)).toBeNull();
+        expect(screen.queryByText('Your Progress')).toBeNull();
+    });
+
+    test('0 votes is a real count: the gap to the group is the score plus one', () => {
+        renderCard(withBench({ votes: 0, benchmark: rows() }));
+
+        expect(
+            screen.getByText(
+                `Top 1: 300 votes · Top 10: 200 votes · Top 100: 100 votes · +${(101).toLocaleString()} votes to top 100`,
+            ),
+        ).toBeTruthy();
+    });
+
+    test.each([
+        ['inside the top 100 chases the 10 benchmark', 45, `+${(151).toLocaleString()} votes to top 10`],
+        ['inside the top 10 chases the 1 benchmark', 7, `+${(251).toLocaleString()} votes to top 1`],
+    ])('%s', (_name, rank, expected) => {
+        renderCard(withBench({ rank, benchmark: rows() }));
+
+        expect(
+            screen.getByText(`Top 1: 300 votes · Top 10: 200 votes · Top 100: 100 votes · ${expected}`),
+        ).toBeTruthy();
+    });
+
+    test.each([
+        ['already at rank 1', 1, 50],
+        ['the votes past the score', 120, 500],
+    ] as Array<[string, number, number]>)('%s: no gap', (_name, rank, votes) => {
+        renderCard(withBench({ rank, votes, benchmark: rows() }));
+
+        expect(screen.getByText('Top 1: 300 votes · Top 10: 200 votes · Top 100: 100 votes')).toBeTruthy();
+        expect(screen.queryByText(/to top/)).toBeNull();
+    });
+});
+
+describe('prize tiers', () => {
+    const english: Translate = realEnglish;
+
+    beforeEach(() => mockTranslator.t.mockImplementation(english));
+    afterEach(() => mockTranslator.t.mockImplementation((key) => key));
+
+    test('a MEMBER tier names the top photographers and lists its prizes as type × amount', () => {
+        renderCard(
+            makeChallenge({
+                achievements_and_prizes: [
+                    {
+                        title: 'Gold',
+                        rank: { min_rank: 1, max_rank: 10, type: 'MEMBER' },
+                        prizes: [
+                            { type: 'KEY', amount: 1 },
+                            { type: 'COINS', amount: 250 },
+                        ],
+                    },
+                ],
+            }),
+        );
+
+        expect(screen.getByText('Gold')).toBeTruthy();
+        expect(screen.getByText('Top photographer #1–10')).toBeTruthy();
+        expect(screen.getByText(`Key × 1, Coins × ${(250).toLocaleString()}`)).toBeTruthy();
+    });
+
+    test('an IMAGE tier names the top photos; a tier with no rank shows its title alone', () => {
+        renderCard(
+            makeChallenge({
+                achievements_and_prizes: [
+                    {
+                        title: 'Silver',
+                        rank: { min_rank: 11, max_rank: 50, type: 'IMAGE' },
+                        prizes: [
+                            { type: 'PHOTO_SWAP', amount: 2 },
+                            { type: 'EXPOSURE_AUTOFILL', amount: 1 },
+                        ],
+                    },
+                    { title: 'Bronze', rank: null, prizes: [] },
+                    // No title and no prizes at all: nothing of the tier shows.
+                    { rank: null, prizes: [] },
+                    // A tier the server carries without its prize list.
+                    { title: 'Title only', rank: null },
+                ],
+            }),
+        );
+
+        expect(screen.getByText('Top photo #11–50')).toBeTruthy();
+        expect(screen.getByText('Photo swap × 2, Exposure autofill × 1')).toBeTruthy();
+        expect(screen.getByText('Bronze')).toBeTruthy();
+        expect(screen.getByText('Title only')).toBeTruthy();
+    });
+
+    test('a single-rank window names the one rank, never a #n–n range', () => {
+        renderCard(
+            makeChallenge({
+                achievements_and_prizes: [
+                    {
+                        title: 'Champion',
+                        rank: { min_rank: 1, max_rank: 1, type: 'MEMBER' },
+                        prizes: [{ type: 'KEY', amount: 1 }],
+                    },
+                    {
+                        title: 'Shot of the day',
+                        rank: { min_rank: 3, max_rank: 3, type: 'IMAGE' },
+                        prizes: [],
+                    },
+                ],
+            }),
+        );
+
+        expect(screen.getByText('Top photographer #1')).toBeTruthy();
+        expect(screen.getByText('Top photo #3')).toBeTruthy();
+        expect(screen.queryByText(/#\d+–\d+/)).toBeNull();
+    });
+
+    test('a prize type the app does not know is a generic label, never the raw code', () => {
+        renderCard(
+            makeChallenge({
+                achievements_and_prizes: [{ title: 'Gold', rank: null, prizes: [{ type: 'X_CUSTOM', amount: 3 }] }],
+            }),
+        );
+
+        expect(screen.getByText(`Prize × 3`)).toBeTruthy();
+        expect(screen.queryByText(/X_CUSTOM/)).toBeNull();
+    });
+
+    test('a rank window the server left unreadable shows the title alone', () => {
+        renderCard(
+            makeChallenge({
+                achievements_and_prizes: [
+                    { title: 'Gold', rank: { min_rank: 'x', max_rank: 10, type: 'MEMBER' }, prizes: [] },
+                ],
+            }),
+        );
+
+        expect(screen.getByText('Gold')).toBeTruthy();
+        expect(screen.queryByText(/Top photographer #/)).toBeNull();
+    });
+
+    test('a rank window of an unknown type is not named, and a prize without an amount is its name alone', () => {
+        renderCard(
+            makeChallenge({
+                achievements_and_prizes: [
+                    {
+                        title: 'Bronze',
+                        rank: { min_rank: 51, max_rank: 100, type: 'X_OTHER' },
+                        prizes: [{ type: 'COINS' }],
+                    },
+                ],
+            }),
+        );
+
+        expect(screen.getByText('Bronze')).toBeTruthy();
+        expect(screen.queryByText(/Top (photographer|photo) #/)).toBeNull();
+        expect(screen.getByText('Coins')).toBeTruthy();
+    });
+
+    test('a prize list that is not an array is dropped: the tier shows, no prize line, no crash', () => {
+        renderCard(
+            makeChallenge({
+                achievements_and_prizes: invalid<Challenge['achievements_and_prizes']>([
+                    { title: 'Empty', rank: { min_rank: 1, max_rank: 3, type: 'MEMBER' }, prizes: {} },
+                ]),
+            }),
+        );
+
+        expect(screen.getByText('Empty')).toBeTruthy();
+        expect(screen.getByText('Top photographer #1–3')).toBeTruthy();
+        expect(screen.queryByText(/×/)).toBeNull();
+    });
+
+    test('the tiers are a <details> disclosure, closed by default and shown when it opens', () => {
+        const { container } = renderCard(
+            makeChallenge({
+                achievements_and_prizes: [
+                    {
+                        title: 'Gold',
+                        rank: { min_rank: 1, max_rank: 10, type: 'MEMBER' },
+                        prizes: [{ type: 'KEY', amount: 1 }],
+                    },
+                ],
+            }),
+        );
+
+        const details = container.querySelector('details');
+        expect(details).not.toBeNull();
+        expect(details!.hasAttribute('open')).toBe(false);
+        expect(details!.querySelector('summary')!.textContent).toBe('Prize');
+        expect(screen.getByText('Gold')).toBeTruthy();
+
+        fireEvent.click(details!.querySelector('summary')!);
+
+        expect(details!.hasAttribute('open')).toBe(true);
+        expect(screen.getByText('Gold')).toBeTruthy();
+    });
+
+    test('no prize section without tiers', () => {
+        renderCard(makeChallenge({ achievements_and_prizes: [] }));
+
+        // Only the stat cell speaks of a prize.
+        expect(screen.getAllByText('Prize')).toHaveLength(1);
+    });
+});
+
+describe('track badges', () => {
+    const english: Translate = realEnglish;
+
+    beforeEach(() => mockTranslator.t.mockImplementation(english));
+    afterEach(() => mockTranslator.t.mockImplementation((key) => key));
+
+    test('a badge per track the challenge runs, none for the off or absent ones', () => {
+        const all = renderCard(
+            makeChallenge({ tags: [], top_photographer_enable: true, top_photo_enable: true, guru_pick_enable: true }),
+        );
+        // The emoji is decorative (aria-hidden): the badge's text for assistive technology is the name alone.
+        const badgeOf = (text: string) => screen.getByText(text).closest('span.badge')!;
+        expect(badgeOf('Top photographer').textContent).toBe('🏆 Top photographer');
+        expect(badgeOf('Top photographer').querySelector('span[aria-hidden="true"]')?.textContent).toBe('🏆 ');
+        expect(badgeOf('Top photo').textContent).toBe('📷 Top photo');
+        expect(badgeOf("Guru's pick").textContent).toBe("⭐ Guru's pick");
+        all.unmount();
+
+        renderCard(makeChallenge({ tags: [], top_photographer_enable: true, top_photo_enable: false }));
+        expect(screen.getByText('Top photographer')).toBeTruthy();
+        expect(screen.queryByText('Top photo')).toBeNull();
+        expect(screen.queryByText(/Guru's pick/)).toBeNull();
+    });
+});
+
+describe('levels_rank_enable off hides the level lines alone', () => {
+    const english: Translate = realEnglish;
+    const withLevels = (levels_rank_enable: boolean | undefined) =>
+        makeChallenge({
+            ...(levels_rank_enable === undefined ? {} : { levels_rank_enable }),
+            ranking_levels: { level_2: 500 },
+            member: {
+                ranking: {
+                    total: {
+                        votes: 120,
+                        rank: 7,
+                        level: 1,
+                        level_name: 'POPULAR',
+                        percent: 40,
+                        next_message: 'Keep going',
+                    },
+                },
+            },
+        });
+
+    beforeEach(() => mockTranslator.t.mockImplementation(english));
+    afterEach(() => mockTranslator.t.mockImplementation((key) => key));
+
+    test('the level badge and the next message go; rank, votes and the bar stay', () => {
+        const { container } = renderCard(withLevels(false));
+
+        expect(screen.queryByText('POPULAR 1')).toBeNull();
+        expect(screen.queryByText('Keep going')).toBeNull();
+        expect(container.querySelector('progress')).not.toBeNull();
+        expect(screen.getByText('Rank 7 of 50')).toBeTruthy();
+        expect(screen.getByText('120 Votes')).toBeTruthy();
+
+        // With the flag on (or absent) the level lines are back.
+        const { unmount } = renderCard(withLevels(true));
+        expect(screen.getByText('POPULAR 1')).toBeTruthy();
+        expect(screen.getByText('Keep going')).toBeTruthy();
+        unmount();
+        renderCard(withLevels(undefined));
+        expect(screen.getByText('POPULAR 1')).toBeTruthy();
+    });
+});
+
+describe('display fields the read left unreadable', () => {
+    const withTotal = (total: RankingTotal) =>
+        makeChallenge({
+            ranking_levels: { level_2: 500, level_7: 9000 },
+            member: { ranking: { total } },
+        });
+
+    test('counts that are not finite numbers show an em dash in the stats grid', () => {
+        const { unmount } = renderCard(
+            makeChallenge({
+                entries: invalid<Challenge['entries']>(null),
+                players: invalid<Challenge['players']>(null),
+            }),
+        );
+        expect(screen.getByText('app.entries').nextElementSibling?.textContent).toBe('—');
+        expect(screen.getByText('app.players').nextElementSibling?.textContent).toBe('—');
+        unmount();
+        renderCard(makeChallenge({ entries: invalid<Challenge['entries']>(Number.NaN) }));
+        expect(screen.getByText('app.entries').nextElementSibling?.textContent).toBe('—');
+    });
+
+    test('a non-finite exposure shows an em dash and hides the Vote button; a finite one below 100 shows both', () => {
+        const { unmount } = renderCard(
+            makeChallenge({ member: { ranking: { exposure: { exposure_factor: invalid<number>(null) } } } }),
+        );
+        expect(screen.getByText('app.exposure').nextElementSibling?.textContent).toBe('—');
+        expect(screen.queryByText('app.vote')).toBeNull();
+        unmount();
+        renderCard(makeChallenge({ member: { ranking: { exposure: { exposure_factor: 45 } } } }));
+        expect(screen.getByText('app.exposure').nextElementSibling?.textContent).toBe('45%');
+        expect(screen.getByText('app.vote')).toBeTruthy();
+    });
+
+    test('no bar without a readable percentage, and no level badge without level fields', () => {
+        // Level fields present, percentage absent: the badge alone.
+        const noPercent = renderCard(
+            withTotal({ votes: 5, rank: 1, level: 5, level_name: 'ALL STAR', next_message: '' }),
+        );
+        expect(noPercent.container.querySelector('progress')).toBeNull();
+        expect(screen.getByText('ALL STAR 5')).toBeTruthy();
+        noPercent.unmount();
+        // Percentage present, level fields missing: the bar alone.
+        const noLevel = renderCard(withTotal({ votes: 5, rank: 1, percent: 40, next_message: '' }));
+        expect(noLevel.container.querySelector('progress')).not.toBeNull();
+        expect(screen.queryByText(/(POPULAR|ALL STAR) \d/)).toBeNull();
+        noLevel.unmount();
+        // Level fields of the wrong kind: still no badge.
+        renderCard(
+            withTotal({
+                votes: 5,
+                rank: 1,
+                level: invalid<number>(null),
+                level_name: invalid<string>(null),
+                percent: 1,
+                next_message: '',
+            }),
+        );
+        expect(screen.queryByText('null null')).toBeNull();
     });
 });

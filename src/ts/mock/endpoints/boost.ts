@@ -5,11 +5,10 @@
 
 import * as boost from '../boost';
 import * as logger from '../../logger';
-import * as votingLogic from '../../services/VotingLogic';
-import * as autoFill from '../../services/autoFill';
-import { simulateApiResponse, simulateApiError, mockMethod } from '../simulate';
+import { simulateApiResponse, mockMethod } from '../simulate';
 
-import type * as applyBoostModule from '../../strategies/real/applyBoost';
+import * as applyBoostModule from '../../strategies/real/applyBoost';
+
 import type * as boostModule from '../../api/boost';
 
 /**
@@ -28,37 +27,27 @@ const applyBoost: typeof applyBoostModule.applyBoost = mockMethod(
         // Real applyBoost resolves null on failure
         onNoToken: () => null,
     },
-    async (challenge) => {
-        const boostState = challenge.member?.boost?.state;
-        if (boostState === 'AVAILABLE' || boostState === 'AVAILABLE_KEY') {
-            // Mirror the real surface: resolve the same entry via the shared picker, fail
-            // when none can take the boost, and raise its conflict flag, so a turbo later
-            // in this same mock pass avoids it. Without this the "boost and turbo never
-            // share an entry" rule held only on the real surface and mock runs diverged.
-            const picked = votingLogic.pickBoostEntry(
-                challenge,
-                challenge.id?.toString?.() || '',
-                Math.floor(Date.now() / 1000),
-            );
-            if (!picked) {
-                logger
-                    .withCategory('voting')
-                    .error(
-                        "Couldn't apply Boost — every entry has Turbo or is pinned for Turbo (Boost and Turbo can't share an entry). Add another entry or unpin the photo",
-                        { challengeId: challenge.id?.toString?.() || '' },
-                    );
-                return null;
+    async (challenge, token) => {
+        // Fake the server side of the boost post, not the strategy: the entry pick and
+        // its failure handling stay in the real applyBoost this delegates to. The state
+        // is read off the challenge this endpoint has in scope — the wire args carry
+        // only ids. A non-available state resolves null, the transport failure contract
+        // (api-client: body or null) — never a failure-shaped body, which the real
+        // applyBoost would read as success and raise the boosted flag on.
+        const fakeBoostPost: applyBoostModule.BoostImagePost = async (_challengeId, _imageId, _token) => {
+            const boostState = challenge.member?.boost?.state;
+            if (boostState === 'AVAILABLE' || boostState === 'AVAILABLE_KEY') {
+                logger.withCategory('voting').debug('Applying boost successfully', null);
+                return simulateApiResponse(boost.mockBoostSuccess, 1500);
             }
-            logger.withCategory('voting').debug('Applying boost successfully', null);
-            autoFill.reflectEntryFlag(challenge, picked.id, 'boosted');
-            return simulateApiResponse(boost.mockBoostSuccess, 1500);
-        } else if (boostState === 'USED') {
-            logger.withCategory('voting').info('Boost already used', null);
-            return simulateApiError(boost.mockBoostAlreadyUsed, 800);
-        } else {
-            logger.withCategory('voting').info('Boost not available', null);
-            return simulateApiError(boost.mockBoostFailure, 800);
-        }
+            if (boostState === 'USED') {
+                logger.withCategory('voting').infoT('mb8ff0ba416b3', [], null);
+            } else {
+                logger.withCategory('voting').infoT('m00a78f312ea3', [], null);
+            }
+            return simulateApiResponse(null, 800);
+        };
+        return applyBoostModule.applyBoost(challenge, token, fakeBoostPost);
     },
 );
 

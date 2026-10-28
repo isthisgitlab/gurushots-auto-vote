@@ -8,6 +8,7 @@ import type { DeadlineAction } from './DeadlineTimeline';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { statusBadgeClass, toneBadgeClass } from '@/utils/statTone';
+import { countText, exposureText } from '@/utils/challengeCardView';
 import { getEntryStatus, statusText } from '@/utils/formatters';
 import { ChallengeBadgeRow } from './ChallengeBadgeRow';
 import { CardDensityToggle } from './CardDensityToggle';
@@ -16,7 +17,6 @@ import type { TimeRemaining } from './Countdown';
 import { DeadlineTimeline } from './DeadlineTimeline';
 import { ScenarioStatusLine } from './ScenarioStatusLine';
 import { livePinKindOf, unusablePins } from '../../../voting/entryPins';
-import { interp } from '@/utils/interp';
 import type * as useScenarioStatusModule from '@/api/useScenarioStatus';
 
 /**
@@ -117,8 +117,8 @@ export function ChallengeCardCompact({
         const nameVars = { ...names, kind: names[notApplying[0]] };
         const both = notApplying.length > 1;
         notApplyingNote = {
-            short: interp(t(both ? 'app.pinNotApplyingShortBoth' : 'app.pinNotApplyingShort'), nameVars),
-            long: interp(t(both ? 'app.pinNotApplyingBoth' : 'app.pinNotApplying'), nameVars),
+            short: t(both ? 'app.pinNotApplyingShortBoth' : 'app.pinNotApplyingShort', nameVars),
+            long: t(both ? 'app.pinNotApplyingBoth' : 'app.pinNotApplying', nameVars),
         };
     }
 
@@ -144,13 +144,16 @@ export function ChallengeCardCompact({
                     />
                 </Stat>
                 <Stat icon="📊" label={t('app.exposure')}>
-                    <span className={toneBadgeClass(exposureTone, 'sm')}>{exposureFactor}%</span>
+                    <span className={toneBadgeClass(exposureTone, 'sm')}>{exposureText(exposureFactor)}</span>
                 </Stat>
                 <Stat icon="🏆" label={t('app.rank')}>
-                    {hasRank ? `${rank.toLocaleString()} / ${challenge.players.toLocaleString()}` : '—'}
+                    {hasRank ? `${rank.toLocaleString()} / ${countText(challenge.players)}` : '—'}
                 </Stat>
                 <Stat icon="🖼" label={t('app.yourEntries')}>
-                    {entries.length}/{challenge.max_photo_submits}
+                    {/* A max the read left non-finite shows no fraction — never "1/undefined". */}
+                    {Number.isFinite(challenge.max_photo_submits)
+                        ? `${entries.length}/${challenge.max_photo_submits}`
+                        : '—'}
                 </Stat>
                 <Stat icon="🚀" label={t('app.boost')}>
                     <StatusText status={boostStatus} />
@@ -169,14 +172,19 @@ export function ChallengeCardCompact({
                     aria-label={t('app.entryDetails')}
                 >
                     {entries.map((entry) => {
-                        const { icon } = getEntryStatus(entry);
+                        const { icon, isGuruPick } = getEntryStatus(entry);
                         const pinned = livePinKindOf(challenge, entry, pins);
                         return (
                             <span
                                 key={entry.id}
                                 title={`${t('app.rank')} ${entry.rank} (${entry.votes} ${t('app.votes')})`}
                             >
-                                {icon} #{entry.rank}
+                                {/* The icon keeps its own span so the rank never hides with it; a ⭐ icon is
+                                    aria-hidden because the Guru-picked label below names it. */}
+                                <span aria-hidden={icon === '⭐' ? true : undefined}>{icon}</span>
+                                {isGuruPick && icon !== '⭐' && <span aria-hidden="true">⭐</span>}
+                                {isGuruPick && <span className="sr-only">{t('app.entryGuruPicked')}</span>} #
+                                {entry.rank}
                                 {pinned && (
                                     <>
                                         <span aria-hidden="true">{pinned === 'boost' ? '🚀📌' : '⚡📌'}</span>

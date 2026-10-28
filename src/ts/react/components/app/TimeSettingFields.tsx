@@ -5,6 +5,7 @@ import { secondsToHoursMinutes, hoursMinutesToSeconds } from '@/utils/timeFieldU
 import { MAX_SCHEDULED_FILL_ENTRIES } from '../../../settings/limits';
 import { SAVE_ERROR_ID } from '@/components/ui/ModalActionRow';
 import { SettingResetButton } from './SettingResetButton';
+import { NumberUnitInput } from './HoursMinutesFields';
 
 import type { ComponentChildren } from 'preact';
 import type { SettingFieldProps, SettingResetHandler, Translate } from '../../../types/settingsEditor';
@@ -89,37 +90,34 @@ function HoursMinutesInputs({
     describedBy?: string;
     disabled?: boolean;
 }) {
-    const { t } = useTranslation();
     const { hours, minutes } = secondsToHoursMinutes(seconds);
     const className = `input input-sm ${widthClass}${invalid ? ' input-error' : ''}`;
     return (
         <>
-            <input
-                type="number"
-                className={className}
-                min="0"
+            <NumberUnitInput
+                value={String(hours)}
+                onChange={(raw) => onChange(hoursMinutesToSeconds(parseInt(raw, 10), minutes))}
                 max={hoursMax}
-                aria-label={`${labelPrefix} ${t('app.hours')}`}
-                aria-invalid={invalid || rejected || undefined}
-                aria-describedby={describedBy}
-                value={hours}
-                onChange={(e) => onChange(hoursMinutesToSeconds(parseInt(e.currentTarget.value, 10), minutes))}
-                disabled={disabled}
-            />
-            <span className="text-sm">{t('app.hours')}</span>
-            <input
-                type="number"
+                unitKey="app.hours"
+                labelPrefix={labelPrefix}
                 className={className}
-                min="0"
-                max="59"
-                aria-label={`${labelPrefix} ${t('app.minutes')}`}
-                aria-invalid={invalid || rejected || undefined}
-                aria-describedby={describedBy}
-                value={minutes}
-                onChange={(e) => onChange(hoursMinutesToSeconds(hours, parseInt(e.currentTarget.value, 10)))}
+                invalid={invalid}
+                rejected={rejected}
+                describedBy={describedBy}
                 disabled={disabled}
             />
-            <span className="text-sm">{t('app.minutes')}</span>
+            <NumberUnitInput
+                value={String(minutes)}
+                onChange={(raw) => onChange(hoursMinutesToSeconds(hours, parseInt(raw, 10)))}
+                max={59}
+                unitKey="app.minutes"
+                labelPrefix={labelPrefix}
+                className={className}
+                invalid={invalid}
+                rejected={rejected}
+                describedBy={describedBy}
+                disabled={disabled}
+            />
         </>
     );
 }
@@ -294,7 +292,7 @@ function RowListFooter({
             )}
             {atCap && (
                 <ToneNote tone="warning" as="span" role="status" className="text-xs">
-                    {t('app.scheduledFillMaxEntries').replace('{0}', String(SCHEDULED_FILL_MAX_ENTRIES))}
+                    {t('app.scheduledFillMaxEntries', { '0': SCHEDULED_FILL_MAX_ENTRIES })}
                 </ToneNote>
             )}
             <SettingResetButton settingKey={settingKey} labelKey={labelKey} onReset={onReset} />

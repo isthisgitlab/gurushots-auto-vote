@@ -15,6 +15,7 @@ import { appPath } from '../appPaths';
 import { entryPhotoUrl } from '../format/photoUrl';
 import { oneLine } from '../format/logSafe';
 import { stripTags, visualSubjectWords } from './photoPicker';
+import * as lexicon from './semantic/lexicon';
 
 import type { ChallengeText, IgnoreWords, PickerPhoto } from '../types/photoPicker';
 import type { FillLogger } from '../types/autoFill';
@@ -222,6 +223,9 @@ const rankVisually = async (
     }: { logger: FillLogger; ignoreWords?: IgnoreWords; onVisualEvidence?: (acceptedIds: Set<string>) => void },
 ): Promise<string[]> => {
     const original = rankedIds.slice(0, wantCount);
+    // The prompts tokenise the title in compound mode, which reads the
+    // lexicon's table — load it before reading the title. Never rejects.
+    await lexicon.isAvailable();
     const prompts = challengePrompts(challenge, ignoreWords);
     const log = logger.withCategory('autoSubmit');
     const keepOriginal = (reason: string, detail: unknown = null) => {
@@ -313,20 +317,20 @@ const judgeSnapImage = async (caption: string, image: SnapImage): Promise<SnapJu
     if (!prompts) return null;
     const url = entryPhotoUrl({ id: image.imageId, member_id: image.memberId }, { size: 512, fit: true });
     if (!url) return null;
+    const noJudgment = (reason: string): null => {
+        logger.withCategory('turbo').warning(`Snap judgment ${reason}`, null);
+        return null;
+    };
     try {
         if (!(await hasBundledModel())) return null;
         const classifier = await getClassifier();
         const results = await classifier(url, [prompts.yes, prompts.no]);
         const yesLogit = toLogit(results?.find?.((r) => r.label === prompts.yes)?.score);
         const noLogit = toLogit(results?.find?.((r) => r.label === prompts.no)?.score);
-        if (!Number.isFinite(yesLogit) || !Number.isFinite(noLogit)) {
-            logger.withCategory('turbo').warning('Snap judgment found invalid model scores', null);
-            return null;
-        }
+        if (!Number.isFinite(yesLogit) || !Number.isFinite(noLogit)) return noJudgment('found invalid model scores');
         return { answer: yesLogit >= noLogit ? 'yes' : 'no', yesLogit, noLogit };
     } catch (error) {
-        logger.withCategory('turbo').warning(`Snap judgment unavailable: ${errorMessage(error) || error}`, null);
-        return null;
+        return noJudgment(`unavailable: ${errorMessage(error) || error}`);
     }
 };
 

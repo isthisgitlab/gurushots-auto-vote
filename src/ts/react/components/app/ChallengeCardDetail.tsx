@@ -1,9 +1,10 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef } from 'react';
+import { Fragment, useId, useMemo, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { formatEndTime, getLevelStatus, isBoostAvailable, statusText } from '@/utils/formatters';
-import { getNextLevelInfo } from '@/utils/challengeCardView';
+import { countText, exposureText, getNextLevelInfo } from '@/utils/challengeCardView';
 import { sanitizeWelcomeMessage } from '@/utils/sanitizeWelcomeMessage';
 import { statusBadgeClass, toneBadgeClass } from '@/utils/statTone';
+import { prizeItemsText } from '@/utils/prizeText';
 import { Countdown } from './Countdown';
 import type { TimeRemaining } from './Countdown';
 import { DeadlineTimeline } from './DeadlineTimeline';
@@ -12,17 +13,18 @@ import { EntryBadge } from './EntryBadge';
 import { ChallengeBadgeRow } from './ChallengeBadgeRow';
 import { ChallengeTagBadges } from './ChallengeKindBadges';
 import { stringTags } from '../../../format/challengeListing';
+import { benchmarkGap, parseBenchmarkScores } from '../../../format/benchmark';
 import { CardDensityToggle } from './CardDensityToggle';
 import { FillButtons } from './ChallengeCardActions';
 import { InlineError } from '@/components/ui/InlineError';
 import * as ipc from '@/api/ipc';
 import { ipcErrorText } from '@/api/ipcErrorText';
-import { interp } from '@/utils/interp';
+import { useFocusRestore } from '@/hooks/useFocusRestore';
 import { canStillFire, livePinKindOf, unusablePins } from '../../../voting/entryPins';
 import { challengePageUrl } from '@/utils/challengePageUrl';
 
 import type { ComponentChildren } from 'preact';
-import type { Bankroll, Challenge, RankingTotal } from '../../../types/gurushots';
+import type { Bankroll, Challenge, PrizeTier, RankingTotal } from '../../../types/gurushots';
 import type { ChallengeCardView } from './ChallengeCard';
 import type { ChallengeCardActionSet } from './ChallengeCardActions';
 import type { OpenSwapPick } from './SwapEntryButton';
@@ -89,7 +91,8 @@ function DetailHeader({
                 {sanitizedWelcome && (
                     <div
                         className="text-xs text-base-content/70 wrap-anywhere"
-                        dangerouslySetInnerHTML={{ __html: sanitizedWelcome }} /* aislop-ignore-line -- sanitized */
+                        // aislop-ignore-next-line security/dangerously-set-innerhtml -- sanitized by sanitizeWelcomeMessage
+                        dangerouslySetInnerHTML={{ __html: sanitizedWelcome }}
                     />
                 )}
                 <ChallengeBadgeRow {...badgeRowProps} />
@@ -118,8 +121,12 @@ function DetailHeader({
 }
 
 /**
- * User progress — full bar + level + next-level info. Rendered only once the
- * member has votes in the challenge.
+ * User progress — full bar + level + next-level info. Rendered whenever the member's vote count
+ * reads as a whole number (0 votes is a real count); a missing or garbled one shows nothing.
+ * A benchmark challenge also reads the scores
+ * to chase (each "Top n" group labelled on its own) and, when the rank and votes
+ * can name one, the gap to the next group. `levels_rank_enable: false` hides the
+ * level lines alone: the rank, the votes and the bar are not level ranking.
  */
 function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; userProgress: RankingTotal }) {
     const { t } = useTranslation();
@@ -129,6 +136,29 @@ function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; 
         userProgress.level as number,
         userProgress.level_name as string,
     );
+    // The level badge names its fields: a missing or garbled level or name shows none (the
+    // incident shape the boundary warns about), while the bar and the rank can still render.
+    const levelShown = typeof userProgress.level === 'number' && typeof userProgress.level_name === 'string';
+    const showLevels = challenge.levels_rank_enable !== false;
+    const scores = parseBenchmarkScores(userProgress.benchmark);
+    const listed = ([1, 10, 100] as const).flatMap((group) => {
+        const score = scores[group];
+        // Each present group is labelled on its own, so one missing score cannot shift the rest under wrong labels.
+        return score === undefined ? [] : [t('app.benchmarkScore', { target: group, count: score })];
+    });
+    // The gap names a positive integer rank and a readable vote count (0 is a real count):
+    // anything else the server sends drops it.
+    const rank = userProgress.rank;
+    const votes = userProgress.votes;
+    const gap =
+        typeof rank === 'number' &&
+        Number.isInteger(rank) &&
+        rank > 0 &&
+        typeof votes === 'number' &&
+        Number.isInteger(votes) &&
+        votes >= 0
+            ? benchmarkGap(rank, votes, scores)
+            : null;
 
     return (
         <div className="bg-base-200 rounded p-2">
@@ -136,9 +166,11 @@ function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; 
                 <span id={progressLabelId} className="text-xs font-medium">
                     {t('app.yourProgress')}
                 </span>
-                <span className={`badge badge-sm ${colorClass}`}>
-                    {userProgress.level_name} {userProgress.level}
-                </span>
+                {showLevels && levelShown && (
+                    <span className={`badge badge-sm ${colorClass}`}>
+                        {userProgress.level_name} {userProgress.level}
+                    </span>
+                )}
             </div>
             <div className="flex justify-between text-xs mb-1">
                 <span>
@@ -148,26 +180,38 @@ function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; 
                     {userProgress.votes} {t('app.votes')}
                 </span>
             </div>
+            {(listed.length > 0 || gap !== null) && (
+                <div className="text-xs text-base-content/70 mb-1">
+                    {listed.length > 0 && listed.join(' · ')}
+                    {listed.length > 0 && gap !== null && ' · '}
+                    {gap !== null && t('app.benchmarkGap', { count: gap.n, target: gap.target })}
+                </div>
+            )}
             <div className="flex items-center gap-2">
-                <progress
-                    className={`progress ${progressClass} w-full`}
-                    value={userProgress.percent}
-                    max="100"
-                    aria-labelledby={progressLabelId}
-                />
-                {/* The bar alone says it by colour and length; the progress element already announces the value. */}
-                {userProgress.percent !== undefined && (
-                    <span className="text-xs tabular-nums shrink-0" aria-hidden="true">
-                        {Math.round(userProgress.percent)}%
-                    </span>
+                {/* The bar and its % label only for a readable percentage; the incident shape the
+                    boundary warns about (a missing or garbled one) shows neither. */}
+                {typeof userProgress.percent === 'number' && (
+                    <>
+                        <progress
+                            className={`progress ${progressClass} w-full`}
+                            value={userProgress.percent}
+                            max="100"
+                            aria-labelledby={progressLabelId}
+                        />
+                        {/* The bar alone says it by colour and length; the progress element already announces the value. */}
+                        <span className="text-xs tabular-nums shrink-0" aria-hidden="true">
+                            {Math.round(userProgress.percent)}%
+                        </span>
+                    </>
                 )}
             </div>
-            {challenge.type !== 'flash' && (
+            {showLevels && challenge.type !== 'flash' && (
                 <div className="text-xs text-base-content/70 mt-1">{userProgress.next_message}</div>
             )}
             {nextLevelInfo && (
                 <div className="text-xs text-base-content/70 mt-1">
-                    {t('app.next')}: {nextLevelInfo.levelName} ({nextLevelInfo.votesNeeded} {t('app.votesNeeded')})
+                    {t('app.next')}: {nextLevelInfo.levelName} (
+                    {t('app.votesNeeded', { count: nextLevelInfo.votesNeeded })})
                 </div>
             )}
         </div>
@@ -209,7 +253,7 @@ function StatusCells({
             </StatCell>
             <StatCell label={t('app.exposure')}>
                 <div className={STAT_VALUE}>
-                    <span className={toneBadgeClass(view.exposureTone, 'md')}>{view.exposureFactor}%</span>
+                    <span className={toneBadgeClass(view.exposureTone, 'md')}>{exposureText(view.exposureFactor)}</span>
                 </div>
                 {actions.fillExposureButton}
             </StatCell>
@@ -232,7 +276,10 @@ function StatusCells({
             </StatCell>
             <StatCell label={t('app.yourEntries')}>
                 <div className={STAT_VALUE}>
-                    {view.entries.length}/{challenge.max_photo_submits}
+                    {/* A max the read left non-finite shows no fraction — never "1/undefined". */}
+                    {Number.isFinite(challenge.max_photo_submits)
+                        ? `${view.entries.length}/${challenge.max_photo_submits}`
+                        : '—'}
                 </div>
                 {view.canFill && (
                     <div className="flex flex-wrap gap-2 justify-center">
@@ -262,7 +309,7 @@ function DanglingPinNote({
     onClear: (button: HTMLButtonElement) => void | Promise<void>;
 }) {
     const { t } = useTranslation();
-    const text = interp(t(state === 'gone' ? 'app.pinGoneNote' : 'app.pinConflictNote'), {
+    const text = t(state === 'gone' ? 'app.pinGoneNote' : 'app.pinConflictNote', {
         kind: t(kind === 'boost' ? 'app.boost' : 'app.turbo'),
         other: t(kind === 'boost' ? 'app.turbo' : 'app.boost'),
     });
@@ -271,7 +318,7 @@ function DanglingPinNote({
             <span>{text}</span>
             <button
                 type="button"
-                className={`btn btn-sm${busy ? ' btn-disabled' : ''}`}
+                className={`btn btn-sm max-sm:min-h-10${busy ? ' btn-disabled' : ''}`}
                 aria-disabled={busy}
                 aria-busy={busy}
                 onClick={(event) => {
@@ -283,12 +330,6 @@ function DanglingPinNote({
         </div>
     );
 }
-
-/** Focus is nowhere: on the page itself, or on an element that has just been removed. */
-const focusIsLost = (): boolean => {
-    const active = document.activeElement;
-    return active === null || active === document.body || !active.isConnected;
-};
 
 /**
  * Entry details — entry-level boost / turbo badges and actions, the pin toggles and the notes for pins that no
@@ -320,59 +361,12 @@ function EntryDetails({
     const canPin = { boost: canStillFire(challenge, 'boost'), turbo: canStillFire(challenge, 'turbo') };
     const detailsRef = useRef<HTMLDivElement>(null);
     const labelId = useId();
-    const clearedButtonRef = useRef<HTMLButtonElement | null>(null);
+    // A cleared pin's note unmounts with the focused button inside it: focus would drop to <body>, so it moves to
+    // the section instead.
+    const recordClearedTrigger = useFocusRestore(() => detailsRef.current);
 
-    // A cleared pin's note unmounts with the focused button inside it: focus would drop to <body>, so it moves to the
-    // section instead. The note can unmount well after the write resolves (a settings-changed read supersedes the
-    // write's own), hence the check runs after every render rather than after the write. Focus that has landed on
-    // another element since is never moved: a record is forgotten by a focusout from the button after which it no
-    // longer holds focus (while it is still in the page) or by a focusin on any other element, so a failed clear (the
-    // note, and focus, stay where they are) followed by the user moving on never acts later. A focusout from the
-    // button's own removal (some engines fire one) is left to the layout effect, which has already run by the time the
-    // deferred check sees the button gone. The record survives the window losing focus, and focus can move without a
-    // focusout from the button (a dialog focusing its first button while the window is unfocused): the focusin that
-    // follows when the window regains focus forgets the record, and the layout effect moves focus only if it is
-    // actually lost. One ordering can still act: only the two focus moves need to happen while the window is in the
-    // background (a silent move to another element, then focus to <body>); when the window regains focus with <body>
-    // active no element gets a focusin, so a later unmount — even in the foreground, while focus stays on <body> —
-    // moves focus to the section instead of nothing.
-    useEffect(() => {
-        const forgetOnBlur = (event: FocusEvent) => {
-            const button = clearedButtonRef.current;
-            if (!button || event.target !== button) return;
-            queueMicrotask(() => {
-                // Still focused and in the page: the whole window lost focus, not just the button. A newer record
-                // (another button) is not this microtask's to wipe — a race only script can produce (a focus() and a
-                // click() in one task, as tests do): a microtask checkpoint follows every listener the browser
-                // dispatches, so this microtask runs before any later click handler, and only a script-called
-                // focus() keeps the stack busy.
-                if (clearedButtonRef.current === button && button.isConnected && document.activeElement !== button) {
-                    clearedButtonRef.current = null;
-                }
-            });
-        };
-        const forgetOnFocusElsewhere = (event: FocusEvent) => {
-            if (clearedButtonRef.current && event.target !== clearedButtonRef.current) clearedButtonRef.current = null;
-        };
-        document.addEventListener('focusout', forgetOnBlur);
-        document.addEventListener('focusin', forgetOnFocusElsewhere);
-        return () => {
-            document.removeEventListener('focusout', forgetOnBlur);
-            document.removeEventListener('focusin', forgetOnFocusElsewhere);
-        };
-    }, []);
-
-    useLayoutEffect(() => {
-        const button = clearedButtonRef.current;
-        if (!button || button.isConnected) return;
-        clearedButtonRef.current = null;
-        if (focusIsLost()) detailsRef.current?.focus({ preventScroll: true });
-    });
-
-    // Some engines (WebKit, Firefox on macOS) do not focus a button on a mouse click: nothing to restore is
-    // recorded (in WebKit focus is already on the group).
     const clearPin = async (kind: EntryPinKind, button: HTMLButtonElement) => {
-        clearedButtonRef.current = document.activeElement === button ? button : null;
+        recordClearedTrigger(button);
         await setPin(kind, null);
     };
 
@@ -427,6 +421,53 @@ function EntryDetails({
 }
 
 /**
+ * The challenge's achievement tiers: each with its title, the rank window it covers (top photographers or
+ * top photos — a tier with no readable rank window shows its title alone), and its prizes as type × amount.
+ * The parts are separated visually by the flex gap and for assistive technology by an sr-only comma.
+ * Tier titles are the server's text: React text children only.
+ * A native <details> disclosure: collapsed by default, opened on demand.
+ */
+function PrizesPanel({ tiers }: { tiers: PrizeTier[] }) {
+    const { t } = useTranslation();
+    const rankWindowOf = (tier: PrizeTier): string | null => {
+        const { min_rank: min, max_rank: max, type } = tier.rank ?? {};
+        if (typeof min !== 'number' || typeof max !== 'number') return null;
+        // A one-rank window names the rank alone, never a "#n–n" range.
+        if (type === 'MEMBER') {
+            return min === max
+                ? t('app.prizeTierTopPhotographerSingle', { min })
+                : t('app.prizeTierTopPhotographer', { min, max });
+        }
+        if (type === 'IMAGE') {
+            return min === max ? t('app.prizeTierTopPhotoSingle', { min }) : t('app.prizeTierTopPhoto', { min, max });
+        }
+        return null;
+    };
+    return (
+        <details className="text-xs">
+            <summary className="font-medium text-base-content/70 cursor-pointer select-none">{t('app.prize')}</summary>
+            {tiers.map((tier, index) => {
+                const title = typeof tier.title === 'string' ? tier.title.trim() : '';
+                // The wire field is typed as an array but is not guaranteed one: read it only when it is.
+                const prizes = Array.isArray(tier.prizes) ? prizeItemsText(tier.prizes, t) : '';
+                const parts = [title, rankWindowOf(tier), prizes].filter(Boolean);
+                if (parts.length === 0) return null;
+                return (
+                    <div key={index} className="mt-1 flex flex-wrap gap-x-2">
+                        {parts.map((part, partIndex) => (
+                            <Fragment key={partIndex}>
+                                {partIndex > 0 && <span className="sr-only">, </span>}
+                                <span className="wrap-anywhere">{part}</span>
+                            </Fragment>
+                        ))}
+                    </div>
+                );
+            })}
+        </details>
+    );
+}
+
+/**
  * The detailed challenge card body: every stat and every action. All values
  * are derived by the parent ChallengeCard (see utils/challengeCardView) and
  * passed in, so this layout and the compact tile never disagree.
@@ -471,6 +512,11 @@ export function ChallengeCardDetail({
     const { t } = useTranslation();
     const { userProgress } = view;
     const cardTags = stringTags(challenge);
+    const prizeTiers = challenge.achievements_and_prizes ?? [];
+    const trackBadges: Array<[string, string]> = [];
+    if (challenge.top_photographer_enable) trackBadges.push(['🏆', 'app.trackTopPhotographer']);
+    if (challenge.top_photo_enable) trackBadges.push(['📷', 'app.trackTopPhoto']);
+    if (challenge.guru_pick_enable) trackBadges.push(['⭐', 'app.trackGurusPick']);
 
     return (
         <div className="space-y-2">
@@ -485,10 +531,10 @@ export function ChallengeCardDetail({
             {/* Challenge Statistics — stacks 2-up on phones, 4-up on tablets+. */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                 <StatCell label={t('app.entries')}>
-                    <div className={STAT_VALUE}>{challenge.entries.toLocaleString()}</div>
+                    <div className={STAT_VALUE}>{countText(challenge.entries)}</div>
                 </StatCell>
                 <StatCell label={t('app.players')}>
-                    <div className={STAT_VALUE}>{challenge.players.toLocaleString()}</div>
+                    <div className={STAT_VALUE}>{countText(challenge.players)}</div>
                 </StatCell>
                 <StatCell label={t('app.votes')}>
                     <div className={STAT_VALUE}>{(challenge.votes ?? 0).toLocaleString()}</div>
@@ -498,9 +544,12 @@ export function ChallengeCardDetail({
                 </StatCell>
             </div>
 
-            {userProgress && (userProgress.votes ?? 0) > 0 && (
-                <UserProgressPanel challenge={challenge} userProgress={userProgress} />
-            )}
+            {prizeTiers.length > 0 && <PrizesPanel tiers={prizeTiers} />}
+
+            {userProgress &&
+                typeof userProgress.votes === 'number' &&
+                Number.isInteger(userProgress.votes) &&
+                userProgress.votes >= 0 && <UserProgressPanel challenge={challenge} userProgress={userProgress} />}
 
             <StatusCells
                 challenge={challenge}
@@ -510,10 +559,16 @@ export function ChallengeCardDetail({
                 actions={actions}
             />
 
-            {/* Challenge Tags */}
-            {cardTags.length > 0 && (
+            {/* Challenge tags, and what the challenge tracks (top photographer / top photo / Guru's pick). */}
+            {(cardTags.length > 0 || trackBadges.length > 0) && (
                 <div className="flex flex-wrap gap-1">
-                    <ChallengeTagBadges tags={cardTags} />
+                    {cardTags.length > 0 && <ChallengeTagBadges tags={cardTags} />}
+                    {trackBadges.map(([icon, key]) => (
+                        <span key={key} className="badge badge-ghost badge-sm">
+                            <span aria-hidden="true">{icon} </span>
+                            {t(key)}
+                        </span>
+                    ))}
                 </div>
             )}
 

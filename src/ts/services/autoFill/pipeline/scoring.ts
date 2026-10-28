@@ -4,6 +4,7 @@
 
 import { buildChosenCandidates, selectBlockEnrichmentSet } from '../../photoPicker';
 import { enrichCandidates } from '../../photoStats';
+import * as lexicon from '../../semantic/lexicon';
 import { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge } from '../candidates';
 import { makeFallbackLogger } from '../fillLogging';
 import type { Challenge } from '../../../types/gurushots';
@@ -51,7 +52,7 @@ const loadFillCandidates = async ({
           walkedUnfiltered: boolean;
       }
 > => {
-    const { logger, getEligiblePhotos, searchTagAutocomplete, getCurrentMemberProfile } = deps;
+    const { logger } = deps;
     // One lookup for the whole fill — see resolveIgnoreWords for why it is not
     // threaded in from each caller like the tag settings are.
     const ignoreWords = resolveIgnoreWords(deps.settings, challenge);
@@ -63,12 +64,9 @@ const loadFillCandidates = async ({
             challenge,
             token,
             { mustIncludeTags, shouldIncludeTags, ignoreWords },
-            // Forward the tag-resolution pair. This call rebuilds a fresh deps
-            // object rather than spreading `deps`, so anything not named here is
-            // silently dropped — which is how resolution can look wired (the
-            // orchestrator supplies it) while never reaching THIS path, the one
-            // that does ordinary auto-fill, emergency fill and manual fill.
-            { getEligiblePhotos, logger, searchTagAutocomplete, getCurrentMemberProfile, usage, trace },
+            // The whole deps bundle, so a dep added upstream reaches this path
+            // (auto-fill, emergency fill and manual fill alike) unnamed.
+            { ...deps, usage, trace },
         );
     } catch (error) {
         logger
@@ -133,6 +131,10 @@ const scoreFillCandidates = async ({
     orderedIds: readonly string[];
 }> => {
     const { logger } = deps;
+    // The picker tokenises the title in compound mode, which reads the
+    // lexicon's table (see abstractTitleWords) — load it before scoring. Never
+    // rejects, and is cached after the first load.
+    await lexicon.isAvailable();
     const { scored, chosenIds, orderedIds } = buildChosenCandidates(challenge, eligible, {
         mustIncludeTags,
         shouldIncludeTags,
@@ -150,7 +152,13 @@ const scoreFillCandidates = async ({
     const contested = selectBlockEnrichmentSet(scored, wantCount, chosenIds, chosen?.inOrder === true);
     const contestedIds = new Set(contested.map((photo) => String(photo.id)));
     if (contested.length > 0) {
-        const enriched = await enrichCandidates(contested, token, deps);
+        // Mock ids must not land in the real photo-stats cache — same rule as
+        // the get-photo-stats handler's `persist: !mock`. Absent settings read
+        // as real mode, so the default behaviour is unchanged.
+        const enriched = await enrichCandidates(contested, token, {
+            ...deps,
+            persist: deps.settings?.getSetting?.('mock') !== true,
+        });
         const statsById = new Map(enriched.map((photo) => [String(photo.id), photo]));
         for (const entry of scored) {
             const fresh = statsById.get(String(entry.id));

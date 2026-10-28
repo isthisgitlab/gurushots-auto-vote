@@ -9,7 +9,7 @@
  * (`pending`), so the next pass boosts that photo instead of submitting another.
  *
  * Shape, keyed by challenge id:
- *   { "<challengeId>": { closeTime, entered: { "<imageId>": unixSec }, pending, uncertain, exact, memberId, observed, firstSeen } }
+ *   { "<challengeId>": { closeTime, entered: { "<imageId>": unixSec }, pending, uncertain, exact, observed, firstSeen } }
  * An `entered` time of 0 means "already there when the app first saw the
  * challenge" (or its submit time was never recorded) — its age is unknown, so it never holds a boost. An id in `exact`
  * went in through the app (its time is the submit); any other time is the first
@@ -30,6 +30,7 @@ import type { Challenge } from './types/gurushots';
 import { createJsonStore } from './settings/storage';
 import { createStateLog, MAX_IDS } from './entryAgeStateLog';
 import type { State, StoredEntryAgeRecord } from './entryAgeStateLog';
+import { createMemoryRawJsonStore } from './parseUntrustedJson';
 import { finiteOr } from './numbers';
 
 // `shared`: the Android background service records entries too (gs_entry_ages is on its native allow-list), and each
@@ -55,15 +56,6 @@ const entryIdsOf = (challenge: Challenge): string[] =>
         .map((entry) => entry?.id)
         .filter((id) => id !== undefined && id !== null && id !== '')
         .map(String);
-
-/** The account the listing belongs to: the first entry's `member_id`, null when none has one. */
-const memberIdOf = (challenge: Challenge): string | null => {
-    const entries = Array.isArray(challenge?.member?.ranking?.entries) ? challenge.member.ranking.entries : [];
-    for (const entry of entries) {
-        if (typeof entry?.member_id === 'string' && entry.member_id !== '') return entry.member_id;
-    }
-    return null;
-};
 
 /**
  * `state` with `record` set for `challengeId`, every challenge that has closed dropped.
@@ -99,7 +91,6 @@ const sameTimes = (a: Record<string, number>, b: Record<string, number>): boolea
 
 const sameRecord = (a: StoredEntryAgeRecord, b: StoredEntryAgeRecord): boolean =>
     a.closeTime === b.closeTime &&
-    a.memberId === b.memberId &&
     a.observed === b.observed &&
     a.firstSeen === b.firstSeen &&
     a.pending === b.pending &&
@@ -110,10 +101,6 @@ const sameRecord = (a: StoredEntryAgeRecord, b: StoredEntryAgeRecord): boolean =
 /** Whether a time stamped `at` is within the grace a listing that lags a submit is waited for. */
 const withinGrace = (at: number | undefined, now: number): boolean =>
     Number.isFinite(at) && now - Number(at) <= PENDING_GRACE_SEC;
-
-/** Whether `existing` is the record of another account than the listing's (compared only when both are known). */
-const isOtherAccount = (existing: StoredEntryAgeRecord | undefined, listingMember: string | null): boolean =>
-    existing?.memberId != null && listingMember !== null && existing.memberId !== listingMember;
 
 /**
  * The time of each listed entry: what the record holds, or `now` for one new to a record already seen. On a first
@@ -179,8 +166,8 @@ const firstSeenOf = (known: StoredEntryAgeRecord | undefined, now: number): numb
  * stamped `now` (or left unknown, 0, on the challenge's first sighting), an id no longer
  * entered is forgotten. Null when nothing changed from `existing`.
  *
- * The record of another account is not carried: the listing is built as if there were none. A listing with no entries
- * does not replace a record that has some: a challenge the member is in always has an entry, so it is a bad response.
+ * A listing with no entries does not replace a record that has some: a challenge the member is in
+ * always has an entry, so it is a bad response.
  * @param now - Unix seconds
  */
 const observedRecord = (
@@ -189,11 +176,9 @@ const observedRecord = (
     now: number,
 ): StoredEntryAgeRecord | null => {
     const ids = entryIdsOf(challenge);
-    const listingMember = memberIdOf(challenge);
     if (ids.length === 0 && existing && Object.keys(existing.entered).length > 0) return null;
-    const known = isOtherAccount(existing, listingMember) ? undefined : existing;
-    const entered = listedTimes(known, ids, now);
-    const { pending, exact, uncertain } = heldBack(known, entered, now);
+    const entered = listedTimes(existing, ids, now);
+    const { pending, exact, uncertain } = heldBack(existing, entered, now);
     const kept = capped(entered, exact, [...ids, ...(pending ? [pending] : []), ...exact]);
     const record: StoredEntryAgeRecord = {
         closeTime: Number(challenge.close_time),
@@ -201,11 +186,10 @@ const observedRecord = (
         pending,
         uncertain,
         exact: kept.exact,
-        memberId: listingMember ?? known?.memberId ?? null,
         observed: true,
-        firstSeen: firstSeenOf(known, now),
+        firstSeen: firstSeenOf(existing, now),
     };
-    return known && sameRecord(known, record) ? null : record;
+    return existing && sameRecord(existing, record) ? null : record;
 };
 
 /**
@@ -257,7 +241,6 @@ const blankRecord = (closeTime: number): StoredEntryAgeRecord => ({
     pending: null,
     uncertain: [],
     exact: [],
-    memberId: null,
     observed: false,
     firstSeen: 0,
 });
@@ -401,15 +384,7 @@ const createEntryAgeLedger = (store: RawJsonStore, refreshStore?: () => Promise<
 };
 
 /** Ledger over an in-memory store — mock mode, tests. */
-const createMemoryEntryAgeLedger = () => {
-    let raw: string | null = null;
-    return createEntryAgeLedger({
-        readRaw: () => raw,
-        writeRaw: (data) => {
-            raw = data;
-        },
-    });
-};
+const createMemoryEntryAgeLedger = () => createEntryAgeLedger(createMemoryRawJsonStore());
 
 const entryAgeLedger = createEntryAgeLedger(entryAgeStore, entryAgeStore.refreshAsync);
 

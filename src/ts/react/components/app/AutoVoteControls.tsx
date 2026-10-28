@@ -4,7 +4,6 @@ import { ipcErrorText } from '@/api/ipcErrorText';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { formatDuration } from '@/utils/formatters';
-import { interp } from '@/utils/interp';
 import { useTick } from '@/hooks/useTick';
 
 /**
@@ -15,7 +14,7 @@ function ResumeCountdown({ startAt }: { startAt: number }) {
     const { t } = useTranslation();
     const now = useTick(1000);
     const remaining = Math.max(0, Math.ceil(startAt / 1000) - now);
-    return <span>{interp(t('app.resumeHold'), { time: formatDuration(remaining, { includeSeconds: true }) })}</span>;
+    return <span>{t('app.resumeHold', { time: formatDuration(remaining, { includeSeconds: true }) })}</span>;
 }
 
 /**
@@ -53,10 +52,18 @@ function ResumeHold({
                 <ResumeCountdown startAt={startAt} /> <span id={noteId}>{t('app.resumeHoldNote')}</span>
             </div>
             <div className="flex flex-wrap gap-2">
-                <button className="btn btn-sm btn-neutral" aria-describedby={noteId} onClick={() => void onStartNow()}>
+                <button
+                    className="btn btn-sm btn-neutral max-sm:min-h-10"
+                    aria-describedby={noteId}
+                    onClick={() => void onStartNow()}
+                >
                     {t('app.resumeStartNow')}
                 </button>
-                <button className="btn btn-sm" aria-describedby={noteId} onClick={() => void onCancelResume()}>
+                <button
+                    className="btn btn-sm max-sm:min-h-10"
+                    aria-describedby={noteId}
+                    onClick={() => void onCancelResume()}
+                >
                     {t('app.resumeCancel')}
                 </button>
             </div>
@@ -122,7 +129,7 @@ export function AutoVoteControls({
                     {!pending && (
                         <button
                             ref={toggleRef}
-                            className={`btn btn-sm ${running ? 'btn-error' : 'btn-neutral'}`}
+                            className={`btn btn-sm max-sm:min-h-10 ${running ? 'btn-error' : 'btn-neutral'}`}
                             onClick={() => void onToggle()}
                         >
                             {running ? (

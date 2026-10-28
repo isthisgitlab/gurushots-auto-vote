@@ -54,13 +54,16 @@ const wholeLabelStems = (photo: LabelledPhoto): string[] => {
 
 /**
  * Label word-stems: every label split into words, stemmed, deduped across the
- * whole photo ("Sea Life" -> ["sea", "life"]).
+ * whole photo ("Sea Life" -> ["sea", "life"]). A compound the model knows is
+ * emitted ahead of its parts ("Self-portrait" -> ["self-portrait", "self",
+ * "portrait"]), so a label cut at MAX_WORDS_PER_LABEL can never lose the
+ * compound and keep only pieces of it.
  *
  * THIS IS THE MATCHING REPRESENTATION — used by scorePhoto, photoMatchesAllStems
  * and countShouldMatches. It puts labels in the same word-level space that user
- * tags use (tokeniseTagList already splits "golden hour" into
- * ["golden","hour"]); a whole-label representation would let a Farm Life
- * challenge pick a "Sea Life" photo.
+ * tags use (tokeniseTagList splits "golden hour" into ["golden","hour"]); a
+ * whole-label representation would let a Farm Life challenge pick a "Sea Life"
+ * photo.
  *
  * Stopwords are KEPT: a label is not challenge boilerplate, and a user's
  * must-tag "sea life" has to be able to match the label "Sea Life" on both
@@ -72,7 +75,7 @@ const labelWordStems = (photo: LabelledPhoto): string[] => {
     const out: Set<string> = new Set();
     for (const label of photo.labels.slice(0, MAX_LABELS_PER_PHOTO)) {
         if (typeof label !== 'string' && typeof label !== 'number') continue;
-        const words = tokenise(String(label), { keepStopwords: true }).slice(0, MAX_WORDS_PER_LABEL);
+        const words = tokenise(String(label), { keepStopwords: true, compounds: 'add' }).slice(0, MAX_WORDS_PER_LABEL);
         for (const word of words) {
             out.add(word);
             if (out.size >= MAX_STEMS_PER_PHOTO) return Array.from(out);
@@ -105,7 +108,10 @@ const labelStemGroups = (photo: LabelledPhoto): string[][] => {
     let stems = 0;
     for (const label of photo.labels.slice(0, MAX_LABELS_PER_PHOTO)) {
         if (typeof label !== 'string' && typeof label !== 'number') continue;
-        const words = tokenise(String(label), { keepStopwords: true }).slice(0, MAX_WORDS_PER_LABEL);
+        const words = tokenise(String(label), { keepStopwords: true, compounds: 'replace' }).slice(
+            0,
+            MAX_WORDS_PER_LABEL,
+        );
         if (words.length === 0) continue;
         const key = words.join(' ');
         if (seen.has(key)) continue;

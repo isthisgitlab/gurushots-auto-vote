@@ -36,11 +36,30 @@ export interface ChallengeTheme {
     subjects: readonly string[];
 }
 
-/** A negated subject in the shape the exclusion filter reads. */
+/** The two concepts a challenge description can rule out. */
+export type ExcludedConceptName = 'people' | 'animals';
+
+/**
+ * One spelled-out subject concept (people, animals) a challenge rules out. The
+ * exclusion filter drops photos whose labels name it, compared by exact stem.
+ */
+export interface ExcludedConcept {
+    /** Label stems the concept drops. */
+    labels: ReadonlySet<string>;
+    /** Label stems that keep a photo (food exempts the animal concept); null when none. */
+    unless: ReadonlySet<string> | null;
+    /**
+     * The concept's name when the description supplied it, null when only the title did. The singular
+     * stem form ('animal'), so the fallback log lists it beside the title's stems. Fallback-log only,
+     * never matched.
+     */
+    noun: 'people' | 'animal' | null;
+}
+
+/** What a challenge's title and description say to leave out, in the shape the exclusion filter reads. */
 export interface ExcludedSubject {
     stems: readonly string[];
-    /** The spelled-out people concept, when the negated subject is people. */
-    concept: Set<string> | null;
+    concepts: ExcludedConcept[];
 }
 
 /**
@@ -56,6 +75,10 @@ export interface PickerPhoto extends LibraryPhoto {
     achievementCount?: number;
     /** A raw achievements array (mocks, tests, a payload that inlines it). */
     achievements?: unknown[];
+    /** The like count photoStats.ts carries for display; absent until a display read lands it. */
+    likes?: number;
+    /** The Guru-picks count photoStats.ts carries for display; absent until a display read lands it. */
+    guruPicks?: number;
 }
 
 /** One photo's semantic match: best-label similarity (0..1) and on-theme label count. */
@@ -106,6 +129,16 @@ export interface PickOptions extends TagOptions {
     onFallback?: ((info: PickFallbackInfo) => void) | null;
     /** Honoured by pickPhotosForChallenge and buildChosenCandidates; buildScoredCandidates ignores it. */
     chosen?: ChosenPick | null;
+    /**
+     * The library photos GuruShots itself suggests for this challenge (join
+     * picks only — suggestions exist for challenges the member has NOT joined).
+     * HONEST SCOPE: a weak tiebreak. It only orders photos already in the
+     * fetched candidate pool (no extra fetch for the suggested ids), and the
+     * visual re-rank of the shortlist may still reorder it. A suggestion is
+     * never a theme match — the theme tiers still win — and chosen photos that
+     * go by the user's order (`orderedIds`) are never overridden by it.
+     */
+    suggestedIds?: ReadonlySet<string>;
 }
 
 /** The scored pool split into the user's chosen photos and the rest (buildChosenCandidates). */
@@ -125,6 +158,8 @@ export interface ScoredCandidate {
     semantic: number;
     semanticSupport: number;
     score: number;
+    /** GuruShots suggests this photo for the challenge (from opts.suggestedIds); a tier BELOW every theme tier. */
+    suggested: boolean;
     statsKnown: boolean;
     achievementCount: number;
     votes: number;

@@ -5,8 +5,12 @@
 
 import { act, render, screen, waitFor, fireEvent } from './helpers/test-utils';
 import { ScenariosSection } from '@/components/app/ScenariosSection';
-import { mockTranslator, defaultTranslate } from './helpers/setup';
+import { SettingsNavProvider } from '@/contexts/SettingsNavContext';
+import { mockTranslator, defaultTranslate, fillTemplate } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
+
+import type { SettingsNav } from '@/contexts/SettingsNavContext';
+import type { SettingsTabId } from '@/utils/groupSettings';
 
 const plan = { name: 'Plan', start: 'main', description: 'Mine', phases: { main: {}, done: {} } };
 const template = { id: 'evening', scenario: { name: 'Evening', start: 'main', phases: { main: {} } } };
@@ -16,8 +20,25 @@ const withScenarios = (scenarios: Record<string, unknown> = { Plan: plan }) =>
         .mocked(window.api.getScenarios)
         .mockResolvedValue(invalid({ success: true, scenarios, templates: [template] }));
 
+// The section renders inside the modal's tab panel; give it a navigation that shows it.
+const shownNav = (active: SettingsTabId): SettingsNav => ({
+    query: '',
+    namesOnly: false,
+    isShown: () => true,
+    active,
+    selectionSeq: 0,
+    select: () => undefined,
+    setQuery: () => undefined,
+    reveal: () => undefined,
+    reset: () => undefined,
+});
+
 const renderSection = async () => {
-    render(<ScenariosSection isOpen={true} onDirtyChange={jest.fn()} />);
+    render(
+        <SettingsNavProvider value={shownNav('scenarios')}>
+            <ScenariosSection isOpen={true} onDirtyChange={jest.fn()} />
+        </SettingsNavProvider>,
+    );
     await waitFor(() => expect(screen.queryByText('common.loading')).toBeNull());
 };
 
@@ -192,7 +213,11 @@ describe('a scenario row', () => {
         jest.useFakeTimers();
         try {
             jest.mocked(window.api.deleteScenario).mockResolvedValue(invalid({ success: false }));
-            render(<ScenariosSection isOpen={true} onDirtyChange={jest.fn()} />);
+            render(
+                <SettingsNavProvider value={shownNav('scenarios')}>
+                    <ScenariosSection isOpen={true} onDirtyChange={jest.fn()} />
+                </SettingsNavProvider>,
+            );
             await act(async () => {
                 await Promise.resolve();
             });
@@ -297,14 +322,17 @@ describe('import', () => {
     });
 
     test('each flagged setting names its phase as "(phase N)"', async () => {
-        mockTranslator.t.mockImplementation((key) =>
-            key === 'app.scenarioFlagged'
-                ? 'Review: {settings}'
-                : key === 'app.scenarioStatusPhase'
-                  ? 'phase {phase}'
-                  : key === 'app.chosenPhotos'
-                    ? 'Chosen Photos'
-                    : key,
+        mockTranslator.t.mockImplementation((key, vars) =>
+            fillTemplate(
+                key === 'app.scenarioFlagged'
+                    ? 'Review: {settings}'
+                    : key === 'app.scenarioStatusPhase'
+                      ? 'phase {phase}'
+                      : key === 'app.chosenPhotos'
+                        ? 'Chosen Photos'
+                        : key,
+                vars,
+            ),
         );
         try {
             jest.mocked(window.api.previewScenarioImport).mockResolvedValueOnce(

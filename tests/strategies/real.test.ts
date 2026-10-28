@@ -6,7 +6,8 @@
  *   - joinChallenge: the manual single-join wrapper (spendCoins must be `true`
  *     exactly — anything truthy-but-not-true must not spend coins);
  *   - fetchChallengesAndVote: the join and claim pre-step gating and the deps it hands to
- *     the shared runVotingPass (real mode keeps the real cleanupStaleMetadata).
+ *     the shared runVotingPass (real mode keeps the real cleanupStaleMetadata);
+ *   - applyBoostsOnSuspend: the sleep-boost binder over the persisted entry-age ledger.
  *
  * Every collaborator is mocked; sleep resolves immediately so no real timer runs.
  */
@@ -45,6 +46,7 @@ jest.mock('../../src/ts/timing', () => ({
     getRandomDelay: jest.fn(() => 3210),
 }));
 jest.mock('../../src/ts/services/votingOrchestrator', () => ({ runVotingPass: jest.fn() }));
+jest.mock('../../src/ts/services/votingOrchestrator/boost', () => ({ runSuspendBoosts: jest.fn(async () => []) }));
 jest.mock('../../src/ts/services/newEntryTracker', () => ({
     createMetadataEntryTracker: jest.fn(() => ({ kind: 'metadata-tracker' })),
 }));
@@ -53,7 +55,13 @@ jest.mock('../../src/ts/services/joinChallenges', () => ({
     joinChallengeSingle: jest.fn(),
     forgetUnconfirmedPayment: jest.fn(),
 }));
-jest.mock('../../src/ts/services/autoClaim', () => ({ runClaimPass: jest.fn() }));
+// The real module's exports are non-configurable getters, so the CLAIM_ENDPOINTS name list the strategy projects
+// from rides along instead of the factory replacing the module whole.
+jest.mock('../../src/ts/services/autoClaim', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/services/autoClaim')>('../../src/ts/services/autoClaim'),
+    runClaimPass: jest.fn(),
+}));
 jest.mock('../../src/ts/services/missions', () => ({
     loadMissionNeeds: jest.fn(async () => null),
     registerMissionNeeds: jest.fn((_token: string, needs: missionsModule.MissionNeeds | null) =>
@@ -92,6 +100,9 @@ const { joinStateStore, acquireUnlockLock } = jest.mocked(
 const { runVotingPass } = jest.mocked(
     require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule,
 );
+const { runSuspendBoosts } = jest.mocked(
+    require('../../src/ts/services/votingOrchestrator/boost') as typeof boostModule,
+);
 const { runJoinPass, joinChallengeSingle, forgetUnconfirmedPayment } = jest.mocked(
     require('../../src/ts/services/joinChallenges') as typeof joinChallengesModule,
 );
@@ -105,6 +116,7 @@ import main = require('../../src/ts/strategies/real');
 import entryAgeStoreModule = require('../../src/ts/entryAgeStore');
 import type * as joinStateStoreModule from '../../src/ts/joinStateStore';
 import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
+import type * as boostModule from '../../src/ts/services/votingOrchestrator/boost';
 import type * as joinChallengesModule from '../../src/ts/services/joinChallenges';
 import type * as autoClaimModule from '../../src/ts/services/autoClaim';
 import type * as missionsModule from '../../src/ts/services/missions';
@@ -112,6 +124,7 @@ import type * as snapGameModule from '../../src/ts/strategies/real/snapGame';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import type { CategoryLogger } from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
+import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 
 const { runTurboGame, joinChallenge, fetchChallengesAndVote } = main;
 const { runSnapGame } = jest.mocked(require('../../src/ts/strategies/real/snapGame') as typeof snapGameModule);
@@ -157,6 +170,20 @@ describe('module wiring', () => {
                 require('../../src/ts/strategies/real/activeChallenges') as typeof import('../../src/ts/strategies/real/activeChallenges')
             ).getActiveChallenges,
         );
+    });
+});
+
+describe('applyBoostsOnSuspend', () => {
+    test('binds the challenges, token and instant it is given, over the persisted entry-age ledger', async () => {
+        const challenges = [invalid<Challenge>({ id: 1 })];
+
+        await main.applyBoostsOnSuspend(challenges, 'tok', 1_700_000_000);
+
+        const [passed, token, deps, now] = runSuspendBoosts.mock.calls[0];
+        expect(passed).toBe(challenges);
+        expect(token).toBe('tok');
+        expect(now).toBe(1_700_000_000);
+        expect(deps.entryAges).toBe(entryAgeStoreModule.entryAgeLedger);
     });
 });
 
@@ -333,6 +360,18 @@ describe('runTurboGame (dispatch)', () => {
 
 describe('submit and swap record when the photo went in', () => {
     const landed = { ok: true, raw: { success: true } };
+
+    // The landed submit and swap run the real chosen-photos consumption
+    // through the facade: it reads and writes settings, so these tests sit on
+    // the planted store, never the developer's real config. Scoped here — the
+    // headless seam also flips runtime.isHeadlessService(), which the rest of
+    // the file's strategy wiring must not see.
+    beforeEach(() => {
+        installHeadlessStore();
+    });
+    afterEach(() => {
+        removeHeadlessStore();
+    });
 
     test('a submit that landed is recorded exactly, and the endpoint’s result is returned as it came', async () => {
         const mark = jest

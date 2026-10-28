@@ -8,12 +8,13 @@
 import { render, screen, fireEvent, waitFor, within } from './helpers/test-utils';
 import { ChallengeCard } from '@/components/app/ChallengeCard';
 import { buildChallenge } from '../helpers/challengeFixtures';
-import { rememberCurrentMember } from '@/api/useChosenPhotosOwner';
 import { mockTranslator } from './helpers/setup';
 import { app, errors } from '../../src/ts/translations/english';
+import { createTranslator } from '../../src/ts/translations/translator';
 import { invalid } from '../helpers/invalid';
 import type { Bankroll } from '../../src/ts/types/gurushots';
 import type { WindowApi } from '../../src/ts/types/ipc';
+import type { Translate } from '../../src/ts/translations/translator';
 
 const mockChallengeSettings = {
     hasCustomSettings: false,
@@ -51,11 +52,9 @@ const SUGGESTED = { id: 'e'.repeat(32), member_id: MEMBER };
 
 const FULL: Bankroll = { keys: 0, swaps: 2, fills: 0, coins: 0 };
 
-const english = (key: string) => {
-    const [group, name] = key.split('.');
-    const table = (group === 'errors' ? errors : app) as Record<string, string>;
-    return table[name] ?? key;
-};
+// The real English strings (plural groups included), placeholders filled like the real t fills them.
+const translator = createTranslator();
+const english: Translate = (key, vars) => translator.t(key, vars, 'en');
 
 const makeChallenge = () => {
     const nowSec = Math.floor(Date.now() / 1000);
@@ -96,6 +95,7 @@ const library = (): Listing => ({
     ],
     memberId: MEMBER,
     truncated: false,
+    nextStart: 0,
     wonIds: [],
     wonCount: 0,
     preview: false,
@@ -136,12 +136,12 @@ const openPickerIdle = async () => {
     await screen.findByText('Choose the photo to swap in');
 };
 
-const loadAll = () => fireEvent.click(screen.getByRole('button', { name: 'Load all photos' }));
+const loadPhotos = () => fireEvent.click(screen.getByRole('button', { name: 'Load photos' }));
 
 // The picker, asked for the whole library, read and unlocked.
 const openPicker = async () => {
     await openPickerIdle();
-    loadAll();
+    loadPhotos();
     await waitFor(() => expect(tile(PICK_ID).textContent).toContain('Can be entered'));
 };
 
@@ -149,7 +149,6 @@ const useThisPhoto = () => screen.getByRole('button', { name: /^Use this photo/ 
 
 beforeEach(() => {
     mockTranslator.t.mockImplementation(english);
-    rememberCurrentMember(null);
     onCurrencySpent.mockClear();
     window.api.getLibraryPhotos = jest.fn().mockResolvedValue(library());
     window.api.previewSwapPhoto = jest.fn(
@@ -180,10 +179,10 @@ describe('choosing the replacement', () => {
         expect(window.api.previewSwapPhoto).toHaveBeenCalledTimes(1);
         expect(window.api.getLibraryPhotos).not.toHaveBeenCalled();
         expect(screen.getByRole('button', { name: 'Auto' })).toBeTruthy();
-        loadAll();
+        loadPhotos();
         await waitFor(() => expect(tile(PICK_ID).textContent).toContain('Can be entered'));
-        expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(101, undefined, 'cached', 'swap');
-        expect(window.api.getLibraryPhotos).toHaveBeenLastCalledWith(101, undefined, 'fresh', 'swap');
+        expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(101, undefined, 'cached', 'swap', 0, 100);
+        expect(window.api.getLibraryPhotos).toHaveBeenLastCalledWith(101, undefined, 'fresh', 'swap', 0, 3);
         expect(screen.getByText('Picked: 0/1')).toBeTruthy();
         expect(tile(ENTRY_ID).textContent).toContain('Already in this challenge');
         expect(tile(ENTRY_ID).getAttribute('aria-disabled')).toBe('true');
@@ -230,6 +229,27 @@ describe('choosing the replacement', () => {
         fireEvent.click(tile(PICK_ID));
         fireEvent.click(useThisPhoto());
         expect(await screen.findByText(app.currencySwapBoostedWarning)).toBeTruthy();
+    });
+
+    test('the confirm shows the Guru-pick warning for a guru-picked entry', async () => {
+        const picked = makeChallenge();
+        picked.member!.ranking!.entries![0].guru_pick = true;
+        render(
+            <ChallengeCard
+                challenge={picked}
+                timeRemaining="2h"
+                timezone="local"
+                autovoteRunning={false}
+                onVoteComplete={jest.fn()}
+                onSettingsClick={jest.fn()}
+                bankroll={FULL}
+                onCurrencySpent={onCurrencySpent}
+            />,
+        );
+        await openPicker();
+        fireEvent.click(tile(PICK_ID));
+        fireEvent.click(useThisPhoto());
+        expect(await screen.findByText(app.currencySwapGuruPickWarning)).toBeTruthy();
     });
 
     test('no suggestion: the picker opens with the reason, with no error under the button', async () => {
@@ -330,7 +350,7 @@ describe('a refused pick or spend', () => {
         expect(screen.getByText(/^Photos are not loaded yet/)).toBeTruthy();
         expect(screen.queryByRole('button', { name: new RegExp(`^Photo ${PICK_ID.slice(0, 8)}:`) })).toBeNull();
         expect(window.api.getLibraryPhotos).toHaveBeenCalledTimes(readsBefore);
-        loadAll();
+        loadPhotos();
         await waitFor(() => expect(tile(OTHER_ID).textContent).toContain('Can be entered'));
         fireEvent.click(tile(OTHER_ID));
         fireEvent.click(useThisPhoto());
@@ -545,7 +565,7 @@ describe('Auto in the swap picker', () => {
         renderCard();
         fireEvent.click(swapButton());
         await screen.findByText(app.swapPickNoSuggestion);
-        loadAll();
+        loadPhotos();
         await waitFor(() => expect(tile(PICK_ID).textContent).toContain('Can be entered'));
         fireEvent.click(tile(PICK_ID));
         fireEvent.click(useThisPhoto());

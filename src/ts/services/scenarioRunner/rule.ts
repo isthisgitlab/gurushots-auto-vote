@@ -88,13 +88,22 @@ const stoppedAt = (
         // (The state's own marker is this step's: the one before a spend, or the one the step before it left. Its
         // `pending` is this step's own spend, which was made or refused: it is not carried.)
         const prior = state.inFlight;
-        const unclear = [...(prior?.unclear ?? []), ...(result.unclear ? [result.unclear] : [])];
-        // `unclearAt`: when the spend got no answer, for the card to tell a later problem from it.
+        // A type the marker already holds is not appended again: a settle whose re-read cannot be trusted repeats
+        // the same outcome pass after pass.
+        const unclear = [...(prior?.unclear ?? [])];
+        const repeat = result.unclear !== undefined && unclear.includes(result.unclear);
+        if (result.unclear && !repeat) unclear.push(result.unclear);
+        // A `pending`-origin retry keeps its type in `lost` too, so the card tells that origin from one that got
+        // no answer; like `unclear`, never a second copy.
+        const lost = [...(prior?.lost ?? [])];
+        if (result.origin === 'pending' && result.unclear && !lost.includes(result.unclear)) lost.push(result.unclear);
+        // `unclearAt`: when the spend got no answer, for the card to tell a later problem from it — a repeated
+        // outcome keeps the first one.
         const marker = unclear.length
             ? {
                   unclear,
-                  unclearAt: result.unclear ? at : prior?.unclearAt,
-                  ...(prior?.lost?.length ? { lost: prior.lost } : {}),
+                  unclearAt: result.unclear && !repeat ? at : prior?.unclearAt,
+                  ...(lost.length ? { lost } : {}),
               }
             : {};
         next.inFlight = { ruleId: rule.id, actionIndex: index, ...marker };

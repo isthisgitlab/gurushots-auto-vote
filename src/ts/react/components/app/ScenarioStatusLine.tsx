@@ -2,7 +2,6 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { formatDuration } from '@/utils/formatters';
 import { useTick } from '@/hooks/useTick';
-import { interp } from '@/utils/interp';
 import type * as useScenarioStatusModule from '@/api/useScenarioStatus';
 
 const AGAIN_KEY = {
@@ -42,7 +41,7 @@ type Summary = NonNullable<ReturnType<typeof useScenarioStatusModule.useScenario
 function ResetButton({ label, onReset }: { label: string; onReset: () => void }) {
     const { t } = useTranslation();
     return (
-        <button type="button" className="btn btn-error btn-sm" onClick={onReset}>
+        <button type="button" className="btn btn-error btn-sm max-sm:min-h-10" onClick={onReset}>
             {t(label)}
         </button>
     );
@@ -69,7 +68,7 @@ function Unavailable({
     return (
         <div className="text-xs space-y-1">
             <ToneNote tone="warning" as="div" role="status">
-                {interp(t(key), { name: status.name, details: t('app.details'), reset: t(resetLabel) })}
+                {t(key, { name: status.name, details: t('app.details'), reset: t(resetLabel) })}
             </ToneNote>
             {status.corrupt && status.corrupt !== 'unloaded' && onReset && (
                 <ResetButton label={resetLabel} onReset={onReset} />
@@ -86,15 +85,13 @@ function Notice({ status, compact }: { status: Summary; compact: boolean }) {
     // The compact tile clamps its notices, so a stopped rule gets a short one there, whole, with the control to press
     // first; the card has the rest.
     const spend = spendUnclear
-        ? interp(
-              t(
-                  spendUnclear.stopped
-                      ? STOPPED_KEY[compact ? 1 : 0][spendUnclear.origin]
-                      : (status.manualOnly ? CHECKED_MANUAL_KEY : CHECKED_KEY)[spendUnclear.origin],
-              ),
+        ? t(
+              spendUnclear.stopped
+                  ? STOPPED_KEY[compact ? 1 : 0][spendUnclear.origin]
+                  : (status.manualOnly ? CHECKED_MANUAL_KEY : CHECKED_KEY)[spendUnclear.origin],
               {
                   action: t(`app.sbAct_${spendUnclear.action}`),
-                  hint: interp(t('app.scenarioStatusResetHint'), {
+                  hint: t('app.scenarioStatusResetHint', {
                       again: t(AGAIN_KEY[spendUnclear.again]),
                       id: spendUnclear.challengeId,
                   }),
@@ -104,7 +101,7 @@ function Notice({ status, compact }: { status: Summary; compact: boolean }) {
         : null;
     const problem =
         lastError && (!spendUnclear || spendUnclear.newerProblem)
-            ? interp(t('app.scenarioStatusProblem'), { message: lastError })
+            ? t('app.scenarioStatusProblem', { message: lastError })
             : null;
     return (
         <>
@@ -150,8 +147,8 @@ export function ScenarioStatusLine({
 
     // A plan that has not started starts on the next run, except under Manual Only, which runs nothing until it is off.
     const phase = status.started
-        ? interp(t('app.scenarioStatusPhase'), { phase: status.phase })
-        : interp(t(status.manualOnly ? 'app.scenarioStatusNotStartedManual' : 'app.scenarioStatusNotStarted'), {
+        ? t('app.scenarioStatusPhase', { phase: status.phase })
+        : t(status.manualOnly ? 'app.scenarioStatusNotStartedManual' : 'app.scenarioStatusNotStarted', {
               phase: status.phase,
           });
     const remaining = status.nextWakeAt ? status.nextWakeAt - now : null;
@@ -162,7 +159,7 @@ export function ScenarioStatusLine({
             ? t(compact ? 'app.scenarioStatusPausedManualShort' : 'app.scenarioStatusPausedManual')
             : null
         : remaining !== null && remaining > 0
-          ? interp(t('app.scenarioStatusNext'), { time: formatDuration(remaining, { includeSeconds: true }) })
+          ? t('app.scenarioStatusNext', { time: formatDuration(remaining, { includeSeconds: true }) })
           : null;
 
     return (

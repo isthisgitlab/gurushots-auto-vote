@@ -3,8 +3,8 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { getIntentByName, intentValuesMatch } from '../../../settings/intentProfiles';
+import { CONFIRM_TIMEOUT_MS, checkProfileName, profileNameCheckMessage } from '@/utils/profileName';
 import * as ipc from '@/api/ipc';
-import { useOnChosenPhotosCleared, withoutChosenPhotos } from '@/api/chosenPhotosCleared';
 import { SettingHintList, chosenPhotosOnlyReachHint } from './SettingHints';
 import { errorMessage } from '../../../errorMessage';
 
@@ -13,13 +13,6 @@ import { errorMessage } from '../../../errorMessage';
  * either its new values or `deleted`.
  */
 export type ProfileChange = { name: string; values?: Record<string, unknown>; deleted?: boolean };
-
-// How long an armed confirm button (delete / overwrite) stays armed before
-// falling back to its idle state.
-const CONFIRM_TIMEOUT_MS = 4000;
-
-// Only ever called with profile-name keys and the trimmed input — always strings.
-const normalizeName = (name: string): string => name.trim().toLowerCase();
 
 /**
  * Named challenge-settings profiles bar for the per-challenge settings modal.
@@ -96,15 +89,6 @@ export function ChallengeProfilesBar({
         void refreshProfiles();
     }, [refreshProfiles]);
 
-    // Profiles loaded before every chosen-photos list was removed still hold lists, and applying
-    // one would put it back into the form: drop them at once, then read what is stored now.
-    useOnChosenPhotosCleared(() => {
-        setProfiles((current) =>
-            Object.fromEntries(Object.entries(current).map(([name, values]) => [name, withoutChosenPhotos(values)])),
-        );
-        void refreshProfiles();
-    });
-
     const names = Object.keys(profiles).sort((a, b) => a.localeCompare(b));
     const selectedProfile = selectedName && profiles[selectedName] ? profiles[selectedName] : null;
     // Distinguish built-in intent presets from user profiles and edited copies.
@@ -160,26 +144,14 @@ export function ChallengeProfilesBar({
 
     const handleSave = async () => {
         const trimmed = newName.trim();
-        if (!trimmed) {
-            setErrorText(t('app.profileNameRequired'));
+        const check = checkProfileName(trimmed, names, profileLimits);
+        const message = profileNameCheckMessage(check, t);
+        if (message !== null) {
+            setErrorText(message);
             disarm();
             return;
         }
-        const maxNameLength = profileLimits?.maxProfileNameLength;
-        if (maxNameLength != null && trimmed.length > maxNameLength) {
-            setErrorText(t('app.profileNameTooLong').replace('{0}', String(maxNameLength)));
-            disarm();
-            return;
-        }
-        const normalized = normalizeName(trimmed);
-        const exists = names.some((name) => normalizeName(name) === normalized);
-        const maxProfiles = profileLimits?.maxChallengeProfiles;
-        if (!exists && maxProfiles != null && names.length >= maxProfiles) {
-            setErrorText(t('app.profileLimitReached').replace('{0}', String(maxProfiles)));
-            disarm();
-            return;
-        }
-        if (exists && confirming !== 'overwrite') {
+        if (typeof check === 'object' && 'existing' in check && confirming !== 'overwrite') {
             setErrorText('');
             arm('overwrite');
             return;

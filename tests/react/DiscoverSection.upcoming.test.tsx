@@ -10,8 +10,10 @@ import { mockTranslator } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
 import { isKindBadgeText } from '../helpers/kindBadges';
 import { app } from '../../src/ts/translations/english';
+import { createTranslator } from '../../src/ts/translations/translator';
 import type { OpenChallenge } from '../../src/ts/types/gurushots';
 import type { WindowApi } from '../../src/ts/types/ipc';
+import type { Translate } from '../../src/ts/translations/translator';
 
 const NOW_MS = 1_800_000_000_000;
 const NOW_SEC = NOW_MS / 1000;
@@ -26,10 +28,8 @@ type MemberChallenges = jest.MockedFunction<WindowApi['getMemberChallenges']>;
 const answer = (items: OpenChallenge[]) => ({ success: true as const, items });
 
 // The English text with its placeholders filled in, so what a user reads is what is asserted.
-const english = (key: string, ...rest: unknown[]) => {
-    void rest;
-    return key.startsWith('app.') ? ((app as Record<string, string>)[key.slice(4)] ?? key) : key;
-};
+const translator = createTranslator();
+const english: Translate = (key, vars) => translator.t(key, vars, 'en');
 
 let getMemberChallenges: MemberChallenges;
 let joinChallenge: jest.MockedFunction<WindowApi['joinChallenge']>;
@@ -48,7 +48,13 @@ beforeEach(() => {
     mockTranslator.t.mockImplementation(english);
     getMemberChallenges = jest.fn();
     joinChallenge = jest.fn().mockResolvedValue({ success: true, status: 'joined' });
-    window.api = invalid({ onSettingsChanged: undefined, getMemberChallenges, joinChallenge });
+    window.api = invalid({
+        onSettingsChanged: undefined,
+        getMemberChallenges,
+        joinChallenge,
+        // The row chooser reads the row's pins; none are stored, so its pin controls stay idle.
+        getEntryPins: jest.fn().mockResolvedValue({ boost: null, turbo: null }),
+    });
 });
 
 afterEach(() => {
@@ -95,6 +101,15 @@ describe('an upcoming row', () => {
         await settle();
         const choose = screen.getByRole<HTMLButtonElement>('button', { name: 'Choose photos for Soon' });
         expect(choose.disabled).toBe(false);
+    });
+
+    test('its Choose photos chooser offers Auto', async () => {
+        renderSection([upcoming(2, 'Soon', 3600)]);
+        await settle();
+        fireEvent.click(screen.getByRole<HTMLButtonElement>('button', { name: 'Choose photos for Soon' }));
+        await settle();
+        expect(screen.getByRole('dialog')).toBeTruthy();
+        expect(screen.getByRole('button', { name: app.pickAuto })).toBeTruthy();
     });
 
     test('explains when chosen photos get used, once it has some', async () => {

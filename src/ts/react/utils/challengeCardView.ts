@@ -68,9 +68,59 @@ export function nextBoundaryFlip(challenge: Challenge, now: number): number | nu
 }
 
 /**
+ * The exposure figure as the card shows it: the percentage, or an em dash when
+ * the value is not a finite number — a documented-optional `exposure_factor`
+ * reaches the card as null or undefined.
+ */
+export const exposureText = (exposureFactor: number): string =>
+    Number.isFinite(exposureFactor) ? `${exposureFactor}%` : '—';
+
+/**
+ * A whole-number count as the card shows it: grouped digits, or an em dash when
+ * the count is not a finite number.
+ */
+export const countText = (value: number | undefined): string =>
+    typeof value === 'number' && Number.isFinite(value) ? value.toLocaleString() : '—';
+
+/**
+ * The view a minimal card's unconditional action hooks run on (see
+ * ChallengeCard): every gate closed and no stats, because the challenge has no
+ * readable member standing to derive them from. Never rendered — the minimal
+ * branch shows the title, the end time, the notice and the settings button only.
+ */
+export function minimalCardView(): ReturnType<typeof deriveChallengeCardView> {
+    return {
+        member: { ranking: { entries: [], exposure: { exposure_factor: 0 } } },
+        entries: [],
+        exposureFactor: 0,
+        boostStatus: getBoostStatus(undefined),
+        turboStatus: getTurboStatus(undefined),
+        userProgress: undefined,
+        canPlayAutoTurbo: false,
+        slotsRemaining: 0,
+        canFill: false,
+        boostOpen: false,
+        boostTimeLeft: null,
+        lowExposure: false,
+        exposureTone: null,
+        cardAlertClass: 'border',
+        showAutoSubmitBadge: false,
+        showManualPhotosBadge: false,
+        manualOnly: false,
+        showKeyUnlock: false,
+        showFillExposure: false,
+        swapAvailable: false,
+        showVoteButton: false,
+        showRunButton: false,
+    };
+}
+
+/**
  * Everything the challenge card (detailed and compact) derives from the raw
  * challenge at one `now` tick: stats, alert flags/classes and the action gates.
- * Pure, so the two layouts can never disagree about what a state means.
+ * Pure, so the two layouts can never disagree about what a state means. Reads
+ * the member standing unguarded: the caller must not run it for a minimal-card
+ * challenge (`isMinimalCardChallenge` in utils/challengeAlerts).
  *
  * @param challenge - An active challenge; its member standing is read unguarded.
  */
@@ -164,7 +214,9 @@ export function deriveChallengeCardView(
         // turbo/boost/fill actions. Both gates read the card's `now` (not a raw
         // Date.now()), and the card re-renders at the start boundary
         // (nextBoundaryFlip), so they flip the moment a challenge starts.
-        showVoteButton: challenge.start_time < now && exposureFactor < 100,
+        // A non-finite exposure (a documented-optional `exposure_factor` the
+        // read left absent) hides the button — there is no reading to push to.
+        showVoteButton: challenge.start_time < now && Number.isFinite(exposureFactor) && exposureFactor < 100,
         // Run button: fires one full auto-strategy cycle for this card. Hidden
         // while the scheduled autovote loop is active to avoid racing
         // concurrent strategy passes for the same challenge. Also hidden under

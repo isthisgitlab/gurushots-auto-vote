@@ -12,7 +12,6 @@ import { invalid } from '../helpers/invalid';
 
 const {
     sanitizeNotificationText,
-    interpolate,
     computeDueNotifications,
     createDedupe,
     formatNotification,
@@ -22,6 +21,15 @@ const {
 
 const NOW = 1_000_000;
 const ALL_ON = { autoSubmit: true, boost: true, turbo: true, emergencySubmit: true };
+
+/** Fill `{name}` tokens the way the translator core does: a missing var renders as an empty string. */
+const fill = (text: string, vars?: Record<string, string | number | null | undefined>): string =>
+    vars === undefined
+        ? text
+        : text.replace(/\{(\w+)\}/g, (_match, name: string) => {
+              const value = vars[name];
+              return value === null || value === undefined ? '' : String(value);
+          });
 
 type ChallengeActions = Parameters<typeof computeDueNotifications>[0][number]['actions'];
 const challenge = (id: string, title: string, actions: ChallengeActions) => ({ id, title, actions });
@@ -50,6 +58,14 @@ describe('computeDueNotifications — lead-time boundary', () => {
     test('excludes past-due (secondsUntil <= 0)', () => {
         expect(computeDueNotifications([challenge('1', 'x', [action('boost', 0)])], NOW, opts)).toHaveLength(0);
         expect(computeDueNotifications([challenge('1', 'x', [action('boost', -30)])], NOW, opts)).toHaveLength(0);
+    });
+
+    test('a marked challenge (dataIssues) is skipped entirely', () => {
+        const marked = { ...challenge('1', 'x', [action('boost', 120)]), dataIssues: ['close_time'] };
+        expect(computeDueNotifications([marked], NOW, opts)).toHaveLength(0);
+        // An empty array is not a mark.
+        const clean = { ...challenge('1', 'x', [action('boost', 120)]), dataIssues: [] };
+        expect(computeDueNotifications([clean], NOW, opts)).toHaveLength(1);
     });
 
     test('excludes null / NaN dueAt without throwing', () => {
@@ -159,16 +175,11 @@ describe('sanitizeNotificationText', () => {
     });
 });
 
-describe('interpolate', () => {
-    test('fills known tokens, leaves unknown intact', () => {
-        expect(interpolate('{a} and {b}', { a: 1 })).toBe('1 and {b}');
-    });
-});
-
 describe('formatNotification — single & coalesced', () => {
-    // Minimal translator: echoes back a template carrying placeholders so the
-    // interpolation + label reuse is exercised without loading the i18n bundle.
-    const translate = (key: string) => {
+    // Minimal translator: echoes back a template carrying placeholders and
+    // fills them from the vars, so the label reuse is exercised without
+    // loading the i18n bundle.
+    const translate = (key: string, vars?: Record<string, string | number | null | undefined>) => {
         const table: Record<string, string> = {
             'app.notifyTitle': '{action} coming up',
             'app.notifyBody': '{action} for "{title}" in {minutes} min — keep the app open',
@@ -181,7 +192,7 @@ describe('formatNotification — single & coalesced', () => {
                 ]),
             ),
         };
-        return table[key] ?? key;
+        return fill(table[key] ?? key, vars);
     };
 
     test('null / empty entries → null', () => {

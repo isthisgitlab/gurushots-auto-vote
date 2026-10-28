@@ -29,11 +29,11 @@ jest.mock('../../src/ts/logger', () => {
 jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(() => 'tok'),
     setSetting: jest.fn(() => true),
-    isSignOutOwed: jest.fn(() => false),
     loadSettings: jest.fn(() => ({ app: { mock: true }, auth: { token: 'tok' } })),
     getEffectiveSetting: jest.fn(),
     flushPendingWrites: jest.fn(async () => {}),
     forgetOpenChallengeIds: jest.fn(),
+    getEnvironmentInfo: jest.fn(() => ({ defaultMock: true })),
 }));
 
 jest.mock('../../src/ts/apiFactory', () => {
@@ -171,6 +171,19 @@ describe('CLI boost command', () => {
         expect(contains(msgsAt('success'), 'img9')).toBe(true);
     });
 
+    test('a challenge-data-incomplete handler error reads as words, never the raw code', async () => {
+        // The handlers re-read the challenge themselves; the CLI words their refusal.
+        actionsHandlers['apply-boost-to-entry'].mockResolvedValue({
+            success: false,
+            error: 'challenge-data-incomplete',
+        });
+
+        await boostChallenge('111', { imageId: 'img9' });
+
+        expect(contains(msgsAt('error'), "challenge's data cannot be read")).toBe(true);
+        expect(contains(allMsgs(), 'challenge-data-incomplete')).toBe(false);
+    });
+
     test('a null/failed boost is reported as an error', async () => {
         apiFactory.__applyBoost.mockResolvedValue(null);
 
@@ -198,6 +211,28 @@ describe('CLI boost command', () => {
 
         expect(apiFactory.__applyBoost).not.toHaveBeenCalled();
         expect(contains(msgsAt('error'), 'not found')).toBe(true);
+    });
+
+    test('a marked challenge: worded refusal, never the raw code, without dispatching', async () => {
+        apiFactory.__getActiveChallenges.mockResolvedValue(
+            invalid({ challenges: [{ id: 111, title: 'Sunset', dataIssues: ['close_time'] }] }),
+        );
+
+        await boostChallenge('111', {});
+
+        expect(apiFactory.__applyBoost).not.toHaveBeenCalled();
+        expect(actionsHandlers['apply-boost-to-entry']).not.toHaveBeenCalled();
+        expect(contains(msgsAt('error'), 'challenge data cannot be read')).toBe(true);
+        expect(contains(allMsgs(), 'dataIssues')).toBe(false);
+    });
+
+    test('a challenge lost by a prune-unsafe read refuses as unreadable, like every channel', async () => {
+        apiFactory.__getActiveChallenges.mockResolvedValue({ challenges: [], pruneUnsafe: true });
+
+        await boostChallenge('999', {});
+
+        expect(apiFactory.__applyBoost).not.toHaveBeenCalled();
+        expect(contains(msgsAt('error'), 'challenge data cannot be read')).toBe(true);
     });
 
     test('finds the challenge when the API returns string ids', async () => {
@@ -353,12 +388,13 @@ describe('CLI runVotingCycle — challenges gated on success', () => {
 });
 
 describe('CLI logout command', () => {
-    test('clears the stored token when one is present', async () => {
+    test('clears the stored token when one is present, and returns the mode to the environment default', async () => {
         settings.getSetting.mockReturnValue('tok');
 
         await handleLogout();
 
         expect(settings.setSetting).toHaveBeenCalledWith('token', '');
+        expect(settings.setSetting).toHaveBeenCalledWith('mock', true);
         expect(contains(msgsAt('success'), 'Logged out')).toBe(true);
     });
 

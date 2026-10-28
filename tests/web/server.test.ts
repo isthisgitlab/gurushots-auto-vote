@@ -28,6 +28,9 @@ import type { CategoryLogger, GuiLogSink } from '../../src/ts/logger';
 let mockWipeSucceeds = true;
 // While set, 'slow-setting' waits for it: a request that is still in flight when a wipe finishes.
 let mockSlowGate: Promise<void> | null = null;
+// The stored settings the server reads, per key: the clear tests set token and stayLoggedIn per test.
+// A wipe empties the stored configuration, so its handler empties this too (the token then reads '').
+let mockSettingValues: Record<string, string | boolean> = {};
 let mockSettingsDeps: Parameters<typeof settingsHandlersModule.buildHandlers>[0] | null = null;
 jest.mock('../../src/ts/ipc/settings.handlers', () => ({
     buildHandlers: (deps: Parameters<typeof settingsHandlersModule.buildHandlers>[0]) => {
@@ -41,6 +44,7 @@ jest.mock('../../src/ts/ipc/settings.handlers', () => ({
             'wipe-local-data': async () => {
                 if (!mockWipeSucceeds) return { success: false, error: 'busy' };
                 mockSettingsDeps?.afterWipe?.();
+                mockSettingValues = {};
                 return { success: true };
             },
         };
@@ -71,11 +75,15 @@ jest.mock('../../src/ts/services/UpdateChecker', () => ({
 }));
 jest.mock('../../src/ts/services/auth', () => {
     class LogoutNotSavedError extends Error {}
-    return { clearAuthToken: jest.fn(async () => true), LogoutNotSavedError };
+    return {
+        logout: jest.fn(async () => true),
+        clearTokenUnlessStayingLoggedIn: jest.fn(async () => false),
+        LogoutNotSavedError,
+    };
 });
 jest.mock('../../src/ts/api/randomizer', () => ({ initializeHeaders: jest.fn() }));
 jest.mock('../../src/ts/settings', () => ({
-    getSetting: jest.fn(() => ''),
+    getSetting: jest.fn((key: string) => mockSettingValues[key] ?? ''),
     setSetting: jest.fn(() => true),
     seedIntentProfiles: jest.fn(),
     getEnvironmentInfo: jest.fn(() => ({ defaultMock: false })),
@@ -83,7 +91,12 @@ jest.mock('../../src/ts/settings', () => ({
 }));
 // The marker the server holds while it runs: recorded, never written to a user-data directory.
 const mockReleaseMarker = jest.fn<void, []>();
-jest.mock('../../src/ts/settings/cliSessionLock', () => ({ holdWebServerLock: jest.fn(() => mockReleaseMarker) }));
+jest.mock('../../src/ts/settings/cliSessionLock', () => ({
+    holdWebServerLock: jest.fn(() => mockReleaseMarker),
+    isCliSessionActive: jest.fn(() => Promise.resolve(false)),
+    isDesktopAppActive: jest.fn(() => Promise.resolve(false)),
+    isWebServerActive: jest.fn(() => Promise.resolve(false)),
+}));
 const mockLog = { error: jest.fn(), warning: jest.fn(), info: jest.fn() };
 jest.mock('../../src/ts/logger', () => ({
     withCategory: jest.fn((): Pick<CategoryLogger, 'error' | 'warning' | 'info'> => mockLog),
@@ -95,9 +108,8 @@ const auth = jest.mocked(require('../../src/ts/services/auth') as typeof authMod
 const settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
 const randomizer = jest.mocked(require('../../src/ts/api/randomizer') as typeof randomizerModule);
 const updateChecker = jest.mocked(require('../../src/ts/services/UpdateChecker') as typeof updateCheckerModule);
-const { holdWebServerLock } = jest.mocked(
-    require('../../src/ts/settings/cliSessionLock') as typeof cliSessionLockModule,
-);
+const cliSessionLock = jest.mocked(require('../../src/ts/settings/cliSessionLock') as typeof cliSessionLockModule);
+const printLine = jest.mocked(require('../../src/ts/logger') as { printLine: jest.Mock<void, [string]> }).printLine;
 
 type Reply = { status: number; headers: http.IncomingHttpHeaders; body: string };
 
@@ -162,6 +174,7 @@ beforeAll(() => {
     distDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gs-web-dist-'));
     fs.writeFileSync(path.join(distDir, 'web.html'), '<html>web</html>');
     fs.writeFileSync(path.join(distDir, 'web-bundle.js'), 'console.log(1)');
+    fs.writeFileSync(path.join(distDir, 'favicon.png'), 'icon-bytes');
     fs.writeFileSync(path.join(distDir, 'model.onnx'), 'bin');
     fs.mkdirSync(path.join(distDir, 'assets'));
 });
@@ -174,6 +187,7 @@ beforeEach(async () => {
     jest.clearAllMocks();
     mockWipeSucceeds = true;
     mockSlowGate = null;
+    mockSettingValues = {};
     ({ server, emit } = createWebServer({ distDir, token: TOKEN, onLocalDataWiped: onWiped }));
     port = await listen(server);
 });
@@ -199,6 +213,13 @@ describe('static files', () => {
         const head = await request('HEAD', '/web-bundle.js');
         expect(head.status).toBe(200);
         expect(head.body).toBe('');
+    });
+
+    test('/favicon.ico is answered with the app icon staged next to the document', async () => {
+        const icon = await request('GET', '/favicon.ico');
+        expect(icon.status).toBe(200);
+        expect(icon.headers['content-type']).toBe('image/png');
+        expect(icon.body).toBe('icon-bytes');
     });
 
     test('missing files, directories and paths outside dist/ are 404', async () => {
@@ -302,7 +323,7 @@ describe('access token', () => {
                 success: false,
                 error: 'web-shell-token',
             });
-            expect(auth.clearAuthToken).not.toHaveBeenCalled();
+            expect(auth.logout).not.toHaveBeenCalled();
         },
     );
 
@@ -539,15 +560,14 @@ describe('invoke', () => {
 });
 
 describe('logout', () => {
-    test('clears the token and resets mock to the environment default', async () => {
+    test('clears the token through the shared logout core', async () => {
         const reply = await request('POST', '/api/logout', { headers: JSON_HEADERS, body: '{"args":[]}' });
         expect(parsed(reply)).toEqual({ result: { success: true } });
-        expect(auth.clearAuthToken).toHaveBeenCalled();
-        expect(settings.setSetting).toHaveBeenCalledWith('mock', false);
+        expect(auth.logout).toHaveBeenCalled();
     });
 
-    test('a logout the settings refused is answered as refused, and the mock flag is left alone', async () => {
-        auth.clearAuthToken.mockRejectedValueOnce(new auth.LogoutNotSavedError());
+    test('a logout the settings refused is answered as refused', async () => {
+        auth.logout.mockRejectedValueOnce(new auth.LogoutNotSavedError());
         settings.setSetting.mockClear();
 
         const reply = await request('POST', '/api/logout', { headers: JSON_HEADERS, body: '' });
@@ -557,7 +577,7 @@ describe('logout', () => {
     });
 
     test('a failed token flush is logged and the logout still completes', async () => {
-        auth.clearAuthToken.mockRejectedValueOnce(new Error('disk full'));
+        auth.logout.mockRejectedValueOnce(new Error('disk full'));
         const reply = await request('POST', '/api/logout', { headers: JSON_HEADERS, body: '' });
         expect(reply.status).toBe(200);
         expect(mockLog.error).toHaveBeenCalledWith('Logout failed to clear token', expect.any(Error));
@@ -624,17 +644,18 @@ describe('events', () => {
 
 describe('startWebServer', () => {
     const globals = globalThis as typeof globalThis & { sendLogToGUI?: GuiLogSink };
+    const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
     afterEach(() => {
         delete globals.sendLogToGUI;
-        holdWebServerLock.mockClear();
+        cliSessionLock.holdWebServerLock.mockClear();
         mockReleaseMarker.mockClear();
     });
 
     test('holds the web-server marker while it listens, so a wipe from the app or the CLI waits for it', async () => {
         const started = await startWebServer({ port: 0, distDir });
 
-        expect(holdWebServerLock).toHaveBeenCalledTimes(1);
+        expect(cliSessionLock.holdWebServerLock).toHaveBeenCalledTimes(1);
         expect(started.server.listening).toBe(true);
         expect(mockReleaseMarker).not.toHaveBeenCalled();
 
@@ -645,10 +666,10 @@ describe('startWebServer', () => {
     test('holds no marker when it could not start listening', async () => {
         const started = await startWebServer({ port: 0, distDir });
         const taken = (started.server.address() as net.AddressInfo).port;
-        holdWebServerLock.mockClear();
+        cliSessionLock.holdWebServerLock.mockClear();
         try {
             await expect(startWebServer({ port: taken, distDir })).rejects.toThrow(/EADDRINUSE/);
-            expect(holdWebServerLock).not.toHaveBeenCalled();
+            expect(cliSessionLock.holdWebServerLock).not.toHaveBeenCalled();
         } finally {
             await close(started.server);
         }
@@ -736,5 +757,297 @@ describe('startWebServer', () => {
         });
         await expect(startWebServer({ port, distDir })).rejects.toThrow(/EADDRINUSE/);
         expect(mockLog.warning).toHaveBeenCalledWith('Intent profile seeding failed (non-fatal):', expect.any(Error));
+    });
+
+    test('the launch clear runs before listen: a marker check that will not settle defers the listen', async () => {
+        mockSettingValues = { token: 'left-over', stayLoggedIn: false };
+        let answerMarker: (active: boolean) => void = () => undefined;
+        cliSessionLock.isDesktopAppActive.mockImplementationOnce(
+            () => new Promise<boolean>((resolve) => (answerMarker = resolve)),
+        );
+
+        const starting = startWebServer({ port: 0, distDir });
+        await tick();
+        expect(cliSessionLock.holdWebServerLock).not.toHaveBeenCalled();
+
+        answerMarker(false);
+        const started = await starting;
+        expect(cliSessionLock.holdWebServerLock).toHaveBeenCalledTimes(1);
+        expect(started.server.listening).toBe(true);
+        await close(started.server);
+    });
+
+    test('a leftover token with Stay Logged In off is cleared before the server serves', async () => {
+        mockSettingValues = { token: 'left-over', stayLoggedIn: false };
+        auth.clearTokenUnlessStayingLoggedIn.mockResolvedValueOnce(true);
+
+        const started = await startWebServer({ port: 0, distDir });
+        try {
+            expect(printLine).toHaveBeenCalledWith('Attempting to clear the saved login before starting…');
+            expect(auth.clearTokenUnlessStayingLoggedIn).toHaveBeenCalledTimes(1);
+            expect(mockLog.info).toHaveBeenCalledWith(
+                'Cleared a saved token left by an earlier run (Stay Logged In is off)',
+                null,
+            );
+        } finally {
+            await close(started.server);
+        }
+    });
+
+    test('a token the helper did not clear is not reported as cleared', async () => {
+        mockSettingValues = { token: 'left-over', stayLoggedIn: false };
+        auth.clearTokenUnlessStayingLoggedIn.mockResolvedValueOnce(false);
+
+        const started = await startWebServer({ port: 0, distDir });
+        try {
+            expect(mockLog.info).not.toHaveBeenCalledWith(
+                'Cleared a saved token left by an earlier run (Stay Logged In is off)',
+                null,
+            );
+        } finally {
+            await close(started.server);
+        }
+    });
+
+    test.each([
+        ['a CLI session', 'isCliSessionActive'],
+        ['the desktop app', 'isDesktopAppActive'],
+        ['another web server', 'isWebServerActive'],
+    ] as const)('%s holding its marker keeps the login, with the cause logged', async (_name, marker) => {
+        mockSettingValues = { token: 'left-over', stayLoggedIn: false };
+        cliSessionLock[marker].mockResolvedValueOnce(true);
+
+        const started = await startWebServer({ port: 0, distDir });
+        try {
+            expect(auth.clearTokenUnlessStayingLoggedIn).not.toHaveBeenCalled();
+            expect(mockLog.info).toHaveBeenCalledWith(
+                'Kept the saved login token because another session is running and may be using it (CLI, desktop app, or web server)',
+                null,
+            );
+        } finally {
+            await close(started.server);
+        }
+    });
+
+    test('the three marker checks run together, so a stale marker costs one settle wait, not three', async () => {
+        mockSettingValues = { token: 'left-over', stayLoggedIn: false };
+        const answerMarkers: Array<(active: boolean) => void> = [];
+        cliSessionLock.isCliSessionActive.mockImplementationOnce(
+            () => new Promise<boolean>((resolve) => answerMarkers.push(resolve)),
+        );
+        cliSessionLock.isDesktopAppActive.mockImplementationOnce(
+            () => new Promise<boolean>((resolve) => answerMarkers.push(resolve)),
+        );
+        cliSessionLock.isWebServerActive.mockImplementationOnce(
+            () => new Promise<boolean>((resolve) => answerMarkers.push(resolve)),
+        );
+
+        const starting = startWebServer({ port: 0, distDir });
+        await tick();
+        // All three are in flight before any has settled — read one after another, the first would still be holding.
+        expect(answerMarkers).toHaveLength(3);
+        for (const answer of answerMarkers) answer(false);
+
+        const started = await starting;
+        await close(started.server);
+        expect(auth.clearTokenUnlessStayingLoggedIn).toHaveBeenCalledTimes(1);
+    });
+
+    test.each([
+        ['a fresh login landed', { token: 'fresh-login', stayLoggedIn: false }],
+        ['Stay Logged In came on', { token: 'left-over', stayLoggedIn: true }],
+    ])('%s while the launch checks settle: the clear is aborted', async (_name, meanwhile) => {
+        mockSettingValues = { token: 'left-over', stayLoggedIn: false };
+        let answerMarker: (active: boolean) => void = () => undefined;
+        cliSessionLock.isWebServerActive.mockImplementationOnce(
+            () => new Promise<boolean>((resolve) => (answerMarker = resolve)),
+        );
+
+        const starting = startWebServer({ port: 0, distDir });
+        await tick();
+        mockSettingValues = { ...mockSettingValues, ...meanwhile };
+        answerMarker(false);
+
+        const started = await starting;
+        try {
+            expect(auth.clearTokenUnlessStayingLoggedIn).not.toHaveBeenCalled();
+        } finally {
+            await close(started.server);
+        }
+    });
+
+    test.each([
+        ['Stay Logged In is on', { token: 'keep', stayLoggedIn: true }],
+        ['there is no token', { token: '', stayLoggedIn: false }],
+    ])('the launch clear runs nothing when %s', async (_name, values) => {
+        mockSettingValues = values;
+
+        const started = await startWebServer({ port: 0, distDir });
+        try {
+            expect(printLine).not.toHaveBeenCalled();
+            expect(cliSessionLock.isCliSessionActive).not.toHaveBeenCalled();
+            expect(auth.clearTokenUnlessStayingLoggedIn).not.toHaveBeenCalled();
+        } finally {
+            await close(started.server);
+        }
+    });
+
+    test('a launch clear the settings refuse is caught and logged; the server still starts', async () => {
+        mockSettingValues = { token: 'left-over', stayLoggedIn: false };
+        auth.clearTokenUnlessStayingLoggedIn.mockRejectedValueOnce(new auth.LogoutNotSavedError());
+
+        const started = await startWebServer({ port: 0, distDir });
+        try {
+            expect(started.server.listening).toBe(true);
+            expect(mockLog.error).toHaveBeenCalledWith(
+                'Failed to clear a leftover token at startup:',
+                expect.any(auth.LogoutNotSavedError),
+            );
+        } finally {
+            await close(started.server);
+        }
+    });
+
+    // --- the close chain (the launcher's stop and the wipe stop both wait for it) ---
+
+    test('stop() resolves only after the close chain has settled, whose clear prints its attempt first', async () => {
+        const started = await startWebServer({ port: 0, distDir });
+        // The run's user logs in with Stay Logged In off; the launch clear saw no token.
+        mockSettingValues = { token: 'run-token', stayLoggedIn: false };
+        auth.clearTokenUnlessStayingLoggedIn.mockResolvedValueOnce(true);
+        let answerMarker: (active: boolean) => void = () => undefined;
+        cliSessionLock.isCliSessionActive.mockImplementationOnce(
+            () => new Promise<boolean>((resolve) => (answerMarker = resolve)),
+        );
+
+        let settled = false;
+        const stopping = started.stop().finally(() => {
+            settled = true;
+        });
+        await tick();
+        expect(settled).toBe(false);
+        expect(printLine).toHaveBeenCalledWith('Attempting to clear the saved login before exiting…');
+
+        answerMarker(false);
+        await stopping;
+        expect(settled).toBe(true);
+        expect(mockLog.info).toHaveBeenCalledWith('Cleared saved token (Stay Logged In is off)', null);
+    });
+
+    test('the close clear keeps the login while a sibling holds its marker', async () => {
+        const started = await startWebServer({ port: 0, distDir });
+        mockSettingValues = { token: 'run-token', stayLoggedIn: false };
+        cliSessionLock.isDesktopAppActive.mockResolvedValueOnce(true);
+
+        await started.stop();
+
+        expect(auth.clearTokenUnlessStayingLoggedIn).not.toHaveBeenCalled();
+        expect(mockLog.info).toHaveBeenCalledWith(
+            'Kept the saved login token because another session is running and may be using it (CLI, desktop app, or web server)',
+            null,
+        );
+    });
+
+    test.each([
+        ['a fresh login landed', { token: 'fresh-login', stayLoggedIn: false }],
+        ['Stay Logged In came on', { token: 'run-token', stayLoggedIn: true }],
+    ])('%s while the close checks settle: the clear is aborted', async (_name, meanwhile) => {
+        const started = await startWebServer({ port: 0, distDir });
+        mockSettingValues = { token: 'run-token', stayLoggedIn: false };
+        let answerMarker: (active: boolean) => void = () => undefined;
+        cliSessionLock.isCliSessionActive.mockImplementationOnce(
+            () => new Promise<boolean>((resolve) => (answerMarker = resolve)),
+        );
+
+        const stopping = started.stop();
+        await tick();
+        mockSettingValues = { ...mockSettingValues, ...meanwhile };
+        answerMarker(false);
+        await stopping;
+
+        expect(auth.clearTokenUnlessStayingLoggedIn).not.toHaveBeenCalled();
+    });
+
+    test('a close clear the settings refuse is caught and logged; the exit is not blocked', async () => {
+        const started = await startWebServer({ port: 0, distDir });
+        mockSettingValues = { token: 'run-token', stayLoggedIn: false };
+        auth.clearTokenUnlessStayingLoggedIn.mockRejectedValueOnce(new auth.LogoutNotSavedError());
+
+        await started.stop();
+
+        expect(mockLog.error).toHaveBeenCalledWith(
+            'Failed to clear token on shutdown',
+            expect.any(auth.LogoutNotSavedError),
+        );
+    });
+
+    test('stop() is idempotent: the close chain runs once and both calls resolve', async () => {
+        const started = await startWebServer({ port: 0, distDir });
+        mockSettingValues = { token: 'run-token', stayLoggedIn: false };
+        auth.clearTokenUnlessStayingLoggedIn.mockResolvedValueOnce(true);
+
+        await started.stop();
+        await started.stop();
+
+        expect(auth.clearTokenUnlessStayingLoggedIn).toHaveBeenCalledTimes(1);
+    });
+
+    test('the idle keep-alive sockets are dropped on both stop paths, so close is not held open', async () => {
+        const started = await startWebServer({ port: 0, distDir });
+        const dropIdle = jest.spyOn(started.server, 'closeIdleConnections');
+        await started.stop();
+        // The explicit drop in stop() lands before close()'s own (Node's close also drops idle
+        // sockets since v26, so the spy sees two calls here).
+        expect(dropIdle).toHaveBeenCalled();
+
+        const wipeTarget = await startWebServer({ port: 0, distDir });
+        const dropIdleOnWipe = jest.spyOn(wipeTarget.server, 'closeIdleConnections');
+        await fetch(`${wipeTarget.url.split('#')[0]}api/invoke/wipe-local-data`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-web-shell-token': wipeTarget.token },
+            body: JSON.stringify({ args: [] }),
+        });
+        await new Promise<void>((resolve) =>
+            wipeTarget.server.listening ? wipeTarget.server.once('close', () => resolve()) : resolve(),
+        );
+        expect(dropIdleOnWipe).toHaveBeenCalled();
+    });
+
+    test('after a wipe the close chain attempts no clear and prints nothing', async () => {
+        const started = await startWebServer({ port: 0, distDir });
+        mockSettingValues = { token: 'run-token', stayLoggedIn: false };
+
+        await fetch(`${started.url.split('#')[0]}api/invoke/wipe-local-data`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-web-shell-token': started.token },
+            body: JSON.stringify({ args: [] }),
+        });
+        await new Promise<void>((resolve) =>
+            started.server.listening ? started.server.once('close', () => resolve()) : resolve(),
+        );
+
+        expect(started.server.listening).toBe(false);
+        // The wipe emptied the stored configuration, so the chain's token read answers nothing to clear.
+        expect(auth.clearTokenUnlessStayingLoggedIn).not.toHaveBeenCalled();
+        expect(printLine).not.toHaveBeenCalledWith('Attempting to clear the saved login before exiting…');
+    });
+
+    test('a read the wiped store throws is not reported as a failed clear', async () => {
+        const started = await startWebServer({ port: 0, distDir });
+        settings.getSetting.mockImplementationOnce(() => {
+            throw new Error('store discarded');
+        });
+
+        await fetch(`${started.url.split('#')[0]}api/invoke/wipe-local-data`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-web-shell-token': started.token },
+            body: JSON.stringify({ args: [] }),
+        });
+        await new Promise<void>((resolve) =>
+            started.server.listening ? started.server.once('close', () => resolve()) : resolve(),
+        );
+
+        expect(mockLog.error).not.toHaveBeenCalledWith('Failed to clear token on shutdown', expect.anything());
+        expect(printLine).not.toHaveBeenCalledWith('Attempting to clear the saved login before exiting…');
     });
 });

@@ -22,7 +22,7 @@ const CATEGORY_KEYS: Record<string, true> = {
  * The fields a log line renders — a logger ring-buffer entry or a live GUI
  * fan-out entry both carry them.
  */
-export type LogLine = Pick<GuiLogEntry, 'level' | 'message' | 'context' | 'timestamp' | 'category'>;
+export type LogLine = Pick<GuiLogEntry, 'level' | 'message' | 'context' | 'timestamp' | 'category' | 'template'>;
 
 /**
  * Single log entry. The timestamp, the message's icon, three small badges, then the message:
@@ -33,7 +33,9 @@ export function LogEntry({ entry }: { entry: LogLine }) {
     const { language, t } = useTranslation();
     const levelBadge = LEVEL_BADGES[level] || 'badge-neutral';
     const categoryName = category || 'general';
-    const { icon, text } = splitIcon(sentenceCaseLogMessage(language === 'lv' ? localizeLogMessage(message) : message));
+    const { icon, text } = splitIcon(
+        sentenceCaseLogMessage(language === 'lv' ? localizeLogMessage(message, entry.template) : message),
+    );
 
     return (
         <div className="log-entry whitespace-pre-wrap break-words">

@@ -22,7 +22,7 @@ export function VoteButton({
 
     return (
         <IconActionButton
-            className="btn btn-neutral btn-sm"
+            className="btn btn-neutral btn-sm max-sm:min-h-10"
             title={t('app.voteTitle')}
             action={() => ipc.voteOnChallengeManual(challengeId, challengeTitle)}
             onSuccess={onVoteComplete}

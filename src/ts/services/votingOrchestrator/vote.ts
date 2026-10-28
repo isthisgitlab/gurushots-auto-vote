@@ -28,8 +28,9 @@ const submitVoteImages = async (
 
     logger
         .withCategory('voting')
-        .info(
-            `${logger.challengeTag(challenge)} Submitting votes for ${Math.min(voteImages.images.length, maxVotes ?? Infinity)} images`,
+        .infoT(
+            'mc0e03d96165c',
+            [logger.challengeTag(challenge), Math.min(voteImages.images.length, maxVotes ?? Infinity)],
             null,
         );
 
@@ -78,7 +79,7 @@ export const voteOnChallenge = async (
     if (!decision.shouldVote) {
         logger
             .withCategory('voting')
-            .info(`${logger.challengeTag(challenge)} Skipping voting - ${decision.voteReason}`, null);
+            .infoT('md9eea27255b5', [logger.challengeTag(challenge), decision.voteReason], null);
         return outcome;
     }
 
@@ -97,12 +98,14 @@ export const voteOnChallenge = async (
 
         logger
             .withCategory('voting')
-            .info(`${logger.challengeTag(challenge)} Starting voting process - ${decision.voteReason}`, null);
+            .infoT('me55acfad2b92', [logger.challengeTag(challenge), decision.voteReason], null);
 
         const voteImages = await pass.api.getVoteImages(challenge, pass.token);
-        // A capped mission pool is handed to the fill step whole, like any other.
+        // The body (an empty images array included) is handed to the fill step whole, like any other.
         outcome.votePool = voteImages ?? null;
-        if (voteImages && voteImages.images) {
+        // Only a pool with images to vote on is voted: an empty pool is a real
+        // answer (nothing left), a null one a failed read — both skip the vote.
+        if (voteImages && Array.isArray(voteImages.images) && voteImages.images.length > 0) {
             outcome.cancelled = await submitVoteImages(
                 challenge,
                 voteImages,
@@ -115,9 +118,7 @@ export const voteOnChallenge = async (
             // No images is a valid "nothing to do" state — close the op as a
             // DEBUG success (silent) and surface one WARN for user visibility.
             logger.withCategory('voting').endOperation(`vote-${challenge.id}`, 'no vote images available');
-            logger
-                .withCategory('voting')
-                .warning(`${logger.challengeTag(challenge)} No vote images available — skipping`, null);
+            logger.withCategory('voting').warningT('m8dc9275e52f1', [logger.challengeTag(challenge)], null);
         }
     } catch (error) {
         outcome.voteThrew = true;

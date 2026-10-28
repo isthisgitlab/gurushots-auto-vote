@@ -7,7 +7,7 @@
 import * as logger from '../../logger';
 import * as settings from '../../settings';
 import { refreshApi, getMiddleware } from '../../apiFactory';
-import { clearAuthToken } from '../../services/auth';
+import { logout } from '../../services/auth';
 import { errorMessage } from '../../errorMessage';
 import { LOGOUT_NOT_SAVED } from '../../ipc/logoutCode';
 import { createReadlineInterface, askYesNo, askInput, askSecret } from '../prompts';
@@ -84,14 +84,14 @@ const handleLogin = async (): Promise<boolean> => {
 };
 
 /**
- * Clear the saved authentication token. Mirrors the GUI/Capacitor `logout`
- * (both just blank the token in settings); the next vote/run reports
+ * Log out through the shared logout core: it clears the token durably and
+ * returns the mode to the environment default; the next vote/run reports
  * "Not authenticated" until the user logs in again.
  */
 const handleLogout = async (): Promise<boolean> => {
     let hadToken: boolean;
     try {
-        hadToken = await clearAuthToken();
+        hadToken = await logout();
     } catch (error) {
         logger
             .withCategory('authentication')
@@ -100,14 +100,9 @@ const handleLogout = async (): Promise<boolean> => {
             );
         return false;
     }
-    // A logout made while the saved settings could not be loaded just now is recorded, and holds when they are.
-    if (settings.isSignOutOwed()) {
-        logger
-            .withCategory('authentication')
-            .warning(
-                'Logout recorded, but the saved settings could not be loaded just now, so the login may still be stored; it is cleared as soon as they are loaded (the next run, or settings-recovery retry)',
-            );
-    } else if (hadToken) {
+    // The sign-out is refused while the saved settings are not in use (logout throws then), so a saved token
+    // is gone exactly when this answers true.
+    if (hadToken) {
         logger.withCategory('authentication').success('Logged out — token cleared');
     } else {
         logger.withCategory('ui').info('Already logged out — no token was set');

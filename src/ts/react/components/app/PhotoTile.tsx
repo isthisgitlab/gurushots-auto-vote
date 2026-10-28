@@ -3,9 +3,11 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { useImageLoads } from '@/hooks/useImageLoads';
 import { buildPhotoUrl } from '@/utils/formatters';
-import { interp } from '@/utils/interp';
+import { TileStatsLine, withStatsLabel } from './TileStats';
 
 import type { LibraryPhoto } from '@/hooks/useLibraryListing';
+import type { TileStats } from '@/hooks/usePhotoStatsLoader';
+import type { Translate } from '../../../translations/translator';
 
 // Edge length requested from the photo CDN for a tile (the grid shows them ~150px wide).
 const TILE_PX = 240;
@@ -44,7 +46,7 @@ const tileReason = ({
     full: boolean;
     fullKey: string;
     allowedKnown: boolean;
-    t: (key: string) => string;
+    t: Translate;
 }): string | null => {
     // Nothing can be added yet, so the tile must not say it can be.
     if (locked) return t(lockedKey);
@@ -60,9 +62,9 @@ const tileReason = ({
  * Server strings (tags, reason) are React text children only.
  */
 /** A tile's name, with "Number 3 in your list." added after it when it is a selected one. */
-const withPosition = (label: string, t: (key: string) => string, position: number | null): string => {
+const withPosition = (label: string, t: Translate, position: number | null): string => {
     if (position === null) return label;
-    return `${label.replace(/[.!?]*$/, '.')} ${interp(t('app.photoChooserPosition'), { n: position })}`;
+    return `${label.replace(/[.!?]*$/, '.')} ${t('app.photoChooserPosition', { n: position })}`;
 };
 
 /** The visible number on a selected tile: the order the photos are saved in (named in the tile's label too). */
@@ -75,8 +77,8 @@ function PositionBadge({ position }: { position: number | null }) {
 }
 
 /** A tile's name with "Suggestion #3." added after it when it stands in the suggestions. */
-const withRank = (label: string, t: (key: string) => string, rank: number | null): string =>
-    rank === null ? label : `${label.replace(/[.!?]*$/, '.')} ${interp(t('app.pickSuggestionRank'), { n: rank })}.`;
+const withRank = (label: string, t: Translate, rank: number | null): string =>
+    rank === null ? label : `${label.replace(/[.!?]*$/, '.')} ${t('app.pickSuggestionRank', { n: rank })}.`;
 
 /** The visible "#3" on a suggestion's tile: its rank, fixed whatever is picked. */
 function RankBadge({ rank }: { rank: number | null }) {
@@ -84,10 +86,46 @@ function RankBadge({ rank }: { rank: number | null }) {
     return rank === null ? null : (
         <span
             role="img"
-            aria-label={interp(t('app.pickSuggestionRank'), { n: rank })}
+            aria-label={t('app.pickSuggestionRank', { n: rank })}
             className="badge badge-outline badge-sm self-start"
         >
             #{rank}
+        </span>
+    );
+}
+
+/**
+ * The square a tile is built on: the thumbnail once it loads, or the tile's fallback text while
+ * there is no URL to build one from, or the image failed to load. Only the square is dimmed, and
+ * the fallback carries it the same way.
+ */
+function TileImage({
+    show,
+    imageRef,
+    url,
+    dim,
+    fallback,
+}: {
+    show: boolean;
+    imageRef: (img: HTMLImageElement | null) => void;
+    url: string | null;
+    dim: string;
+    fallback: string;
+}) {
+    return show ? (
+        <img
+            ref={imageRef}
+            src={url as string}
+            alt=""
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            className={`aspect-square w-full rounded object-cover ${dim}`}
+        />
+    ) : (
+        <span
+            className={`bg-base-200 flex aspect-square w-full items-center justify-center rounded p-1 text-center text-xs break-words ${dim}`}
+        >
+            {fallback}
         </span>
     );
 }
@@ -98,6 +136,7 @@ function PhotoTileBase({
     selected,
     position,
     rank = null,
+    recommended = false,
     blockedReason,
     atCap,
     fullKey,
@@ -105,6 +144,8 @@ function PhotoTileBase({
     locked,
     lockedKey,
     onToggle,
+    stats = null,
+    showStats = false,
 }: {
     photo: LibraryPhoto;
     memberId: string | null;
@@ -113,6 +154,8 @@ function PhotoTileBase({
     position: number | null;
     /** Where the photo stands in the suggestions (1-based), for a suggestion's tile; null otherwise. */
     rank?: number | null;
+    /** GuruShots suggests the photo for the challenge (a Discover row's chooser). */
+    recommended?: boolean;
     blockedReason: string | null;
     atCap: boolean;
     /** The translation key of what a tile that cannot be added because the selection is full says. */
@@ -122,6 +165,10 @@ function PhotoTileBase({
     /** The translation key of what a locked tile says. */
     lockedKey: string;
     onToggle: (id: string) => void;
+    /** The photo's read stats (the Show-stats loader's): shown while `showStats` is on. */
+    stats?: TileStats | null;
+    /** Show stats is on: the tile carries its ratio, likes and Guru picks. */
+    showStats?: boolean;
 }) {
     const { t } = useTranslation();
     const url = memberId ? buildPhotoUrl(memberId, photo.id, { size: TILE_PX }) : null;
@@ -137,48 +184,40 @@ function PhotoTileBase({
     // what says why the tile cannot be added.
     const dim = unavailable ? 'opacity-50' : '';
     const tone = selected ? 'border-base-content ring-2 ring-base-content' : 'border-base-300';
+    const composed = withRank(
+        withPosition(
+            t('app.photoChooserTileLabel', {
+                id: shortId(photo.id),
+                labels,
+                reason: reason ?? '',
+            }).trim(),
+            t,
+            position,
+        ),
+        t,
+        rank,
+    );
     return (
         <button
             type="button"
             aria-pressed={selected}
-            aria-label={withRank(
-                withPosition(
-                    interp(t('app.photoChooserTileLabel'), {
-                        id: shortId(photo.id),
-                        labels,
-                        reason: reason ?? '',
-                    }).trim(),
-                    t,
-                    position,
-                ),
-                t,
-                rank,
-            )}
+            aria-label={`${recommended ? `${t('app.photoRecommended')}. ` : ''}${
+                showStats && stats ? withStatsLabel(composed, t, stats) : composed
+            }`}
             aria-disabled={unavailable}
             className={`${TILE_BASE} ${tone}`}
             onClick={() => {
                 if (!unavailable) onToggle(photo.id);
             }}
         >
+            {recommended && (
+                <span className="badge badge-outline badge-sm self-start">{t('app.photoRecommended')}</span>
+            )}
             <PositionBadge position={position} />
             <RankBadge rank={rank} />
-            {showImage ? (
-                <img
-                    ref={imageRef}
-                    src={url as string}
-                    alt=""
-                    loading="lazy"
-                    referrerPolicy="no-referrer"
-                    className={`aspect-square w-full rounded object-cover ${dim}`}
-                />
-            ) : (
-                <span
-                    className={`bg-base-200 flex aspect-square w-full items-center justify-center rounded p-1 text-center text-xs break-words ${dim}`}
-                >
-                    {labels}
-                </span>
-            )}
+            <TileImage show={showImage} imageRef={imageRef} url={url} dim={dim} fallback={labels} />
             <span className={`truncate text-xs ${dim}`}>{showImage ? labels : shortId(photo.id)}</span>
+            {showStats && stats && <TileStatsLine stats={stats} dim={dim} />}
             {reason &&
                 (!locked && !full && blockedReason !== null ? (
                     <ToneNote tone="error" as="span" className="text-xs">
@@ -198,18 +237,80 @@ function PhotoTileBase({
 export const PhotoTile = memo(PhotoTileBase);
 
 /**
+ * A saved pick while nothing has been read: its number, its thumbnail once the member check says
+ * whose photo it is (else its short id as text), and no claim about the photo itself — its tags are
+ * unread. A read that lands replaces it with the real tile or a missing one. The ready grid uses it
+ * too, with its own note (`noteKey`), for a chosen pick no batch read so far has shown.
+ */
+export function SavedPickTile({
+    id,
+    memberId,
+    selected,
+    position,
+    atCap,
+    fullKey,
+    locked,
+    lockedKey,
+    onToggle,
+    noteKey = 'app.photoChooserSavedTileNote',
+}: {
+    id: string;
+    memberId: string | null;
+    selected: boolean;
+    /** Where the photo stands in the list (1-based), for a selected tile; null otherwise. */
+    position: number | null;
+    atCap: boolean;
+    /** The translation key of what a tile that cannot be added because the selection is full says. */
+    fullKey: string;
+    locked: boolean;
+    /** The translation key of what a locked tile says. */
+    lockedKey: string;
+    onToggle: (id: string) => void;
+    /** The translation key of the note on an unlocked, uncapped tile: why the photo itself is not shown yet. */
+    noteKey?: string;
+}) {
+    const { t } = useTranslation();
+    const url = memberId ? buildPhotoUrl(memberId, id, { size: TILE_PX }) : null;
+    const [showImage, imageRef] = useImageLoads(url);
+    // A pick stays removable, an unpicked one is blocked at the cap and a locked one is inert; the reason goes in the
+    // label because it replaces the tile's visible text.
+    const unavailable = locked || (!selected && atCap);
+    const reason = locked ? t(lockedKey) : !selected && atCap ? t(fullKey) : t(noteKey);
+    const dim = unavailable ? 'opacity-50' : '';
+    const tone = selected ? 'border-base-content ring-2 ring-base-content' : 'border-base-300';
+    return (
+        <button
+            type="button"
+            aria-pressed={selected}
+            aria-label={withPosition(t('app.photoChooserSavedTileLabel', { id: shortId(id), reason }), t, position)}
+            aria-disabled={unavailable}
+            className={`${TILE_BASE} ${tone}`}
+            onClick={() => {
+                if (!unavailable) onToggle(id);
+            }}
+        >
+            <PositionBadge position={position} />
+            <TileImage show={showImage} imageRef={imageRef} url={url} dim={dim} fallback={shortId(id)} />
+            <span className={`truncate text-xs ${dim}`}>{shortId(id)}</span>
+            <span className="text-xs text-base-content/70">{reason}</span>
+        </button>
+    );
+}
+
+/**
  * What a chosen photo the listing does not return most likely is. With a
  * challenge the usual cause is another challenge holding it; without one every
- * library photo is listed, so it was deleted. A cut-off listing adds that the
- * photo may lie beyond what was read.
+ * library photo is listed, so it was deleted. A listing read as a search
+ * claims only what a search can know: the photo does not match the term.
+ * (A cut-off listing does not reach this tile: its unreached picks show as
+ * saved-pick stubs, which point at Load more photos, and its won picks carry
+ * the won reason.)
  */
-const missingKey = (hasChallenge: boolean, truncated: boolean): string =>
-    hasChallenge
-        ? truncated
-            ? 'app.photoChooserMissingTruncated'
-            : 'app.photoChooserMissing'
-        : truncated
-          ? 'app.photoChooserMissingNoChallengeTruncated'
+const missingKey = (hasChallenge: boolean, search: boolean): string =>
+    search
+        ? 'app.photoChooserMissingSearch'
+        : hasChallenge
+          ? 'app.photoChooserMissing'
           : 'app.photoChooserMissingNoChallenge';
 
 /**
@@ -221,7 +322,7 @@ export function MissingTile({
     position,
     count,
     hasChallenge,
-    truncated,
+    search,
     won,
     onToggle,
 }: {
@@ -229,19 +330,20 @@ export function MissingTile({
     position: number | null;
     count: number;
     hasChallenge: boolean;
-    truncated: boolean;
+    /** The listing came from a search: the tile says only that the photo is not in these results. */
+    search: boolean;
     /** The listing left the photo out because it has won a challenge, which says why it is missing. */
     won: boolean;
     onToggle: (id: string) => void;
 }) {
     const { t } = useTranslation();
-    const text = won ? t('app.photoChooserWonInList') : interp(t(missingKey(hasChallenge, truncated)), { count });
+    const text = won ? t('app.photoChooserWonInList') : t(missingKey(hasChallenge, search), { count });
     return (
         <button
             type="button"
             aria-pressed
             aria-label={withPosition(
-                interp(t('app.photoChooserMissingTileLabel'), { id: shortId(id), reason: text }),
+                t('app.photoChooserMissingTileLabel', { id: shortId(id), reason: text }),
                 t,
                 position,
             )}
@@ -278,7 +380,7 @@ export function PendingTile({
             aria-pressed
             aria-disabled={!recheckFailed}
             aria-label={withPosition(
-                interp(t('app.photoChooserMissingTileLabel'), { id: shortId(id), reason: text }),
+                t('app.photoChooserMissingTileLabel', { id: shortId(id), reason: text }),
                 t,
                 position,
             )}

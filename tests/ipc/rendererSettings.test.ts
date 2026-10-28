@@ -26,14 +26,14 @@ describe('isRendererHiddenKey', () => {
         expect(isRendererHiddenKey(key)).toBe(true);
     });
 
-    test.each(['theme', 'Token', '', 'lastUsername', 'chosenPhotosMemberId'])('leaves %p visible', (key) => {
+    test.each(['theme', 'Token', '', 'lastUsername'])('leaves %p visible', (key) => {
         expect(isRendererHiddenKey(key)).toBe(false);
     });
 });
 
 describe('isRendererReadOnlyKey', () => {
-    test.each(['lastUsername', 'chosenPhotosMemberId'])('%s may be read by the renderer, never written', (key) => {
-        expect(isRendererReadOnlyKey(key)).toBe(true);
+    test('lastUsername may be read by the renderer, never written', () => {
+        expect(isRendererReadOnlyKey('lastUsername')).toBe(true);
     });
 
     test.each(['theme', 'token', 'auth', ''])('%p is not one of them', (key) => {
@@ -45,14 +45,14 @@ describe('toRendererSettings', () => {
     test('drops the whole auth block and derives hasToken from the token', () => {
         const result = toRendererSettings(
             config(
-                { token: 'secret', apiHeaders: { 'x-key': 'v' }, lastUsername: 'me', chosenPhotosMemberId: 'm1' },
+                { token: 'secret', apiHeaders: { 'x-key': 'v' }, lastUsername: 'me' },
                 { app: { ...getDefaultSettings().app, theme: 'dark' } },
             ),
         );
         expect(result.hasToken).toBe(true);
         expect(result.app.theme).toBe('dark');
         expect(result).not.toHaveProperty('auth');
-        expect(JSON.stringify(result)).not.toMatch(/secret|x-key|"me"|m1/);
+        expect(JSON.stringify(result)).not.toMatch(/secret|x-key|"me"/);
     });
 
     test('keeps every other part of the configuration', () => {
@@ -83,7 +83,6 @@ describe('withoutRendererHiddenKeys', () => {
             hasToken: true,
             apiHeaders: { a: 'b' },
             lastUsername: 'me',
-            chosenPhotosMemberId: 'm1',
             auth: { token: 'planted' },
             theme: 'dark',
             mock: false,

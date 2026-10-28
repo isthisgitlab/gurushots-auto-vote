@@ -6,7 +6,7 @@
 import { act, fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { ScenarioResetModal } from '@/components/app/ScenarioResetModal';
 import { invalid } from '../helpers/invalid';
-import { mockTranslator } from './helpers/setup';
+import { mockTranslator, fillTemplate } from './helpers/setup';
 
 type ResetAnswer = { success: true } | { success: false; error: string };
 
@@ -103,7 +103,9 @@ describe('ScenarioResetModal', () => {
     });
 
     test('a challenge with no title is named by its address', () => {
-        mockTranslator.t.mockImplementation((key) => (key === 'app.scenarioResetBody' ? 'Resets “{title}”' : key));
+        mockTranslator.t.mockImplementation((key, vars) =>
+            fillTemplate(key === 'app.scenarioResetBody' ? 'Resets “{title}”' : key, vars),
+        );
         try {
             open({ challenge: { ...challenge, title: '' } });
             expect(screen.getByText('Resets “sunset”')).toBeTruthy();

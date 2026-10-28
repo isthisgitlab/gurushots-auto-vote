@@ -189,6 +189,16 @@ describe('pinChallengeTitles', () => {
         expect(pinStore).toEqual({ 1: 'Pink In Nature' });
     });
 
+    test('a prune-unsafe call with an empty list forwards the flag: the facts store merges in, not replaces', () => {
+        // A read that dropped EVERY element arrives as [] with pruneUnsafe —
+        // the facts id set must not be replaced with the empty set.
+        settings.rememberChallengeTitles.mockClear();
+
+        pinChallengeTitles([], true);
+
+        expect(settings.rememberChallengeTitles).toHaveBeenCalledWith([], true);
+    });
+
     test('mergeTitlePins is called only when the pin set changed, with the right adds/removeIds', () => {
         pinChallengeTitles([
             { id: '1', title: 'One' },
@@ -246,5 +256,73 @@ describe('pinChallengeTitles', () => {
         const next = [{ id: '1', title: 'turbo' }];
         pinChallengeTitles(next);
         expect(next[0].title).toBe('Pink In Nature');
+    });
+
+    test('a marked challenge keeps its id in the active set: only truly absent pins are pruned', () => {
+        pinChallengeTitles([
+            { id: '1', title: 'One' },
+            { id: '2', title: 'Two' },
+        ]);
+        settings.mergeTitlePins.mockClear();
+
+        // Only the marked challenge is in this read. Its id must still count
+        // as active — pin 2 survives while absent pin 1 is pruned.
+        pinChallengeTitles([{ id: '2', title: 'Two', dataIssues: ['close_time'] }]);
+
+        expect(settings.mergeTitlePins).toHaveBeenCalledWith({}, ['1']);
+        expect(pinStore).toEqual({ 2: 'Two' });
+    });
+
+    test('a marked challenge still gets its pinned title restored (rename overwritten)', () => {
+        pinChallengeTitles([{ id: '1', title: 'Pinned' }]);
+
+        const renamed = [{ id: '1', title: 'server rename', dataIssues: ['member'] }];
+        pinChallengeTitles(renamed);
+
+        expect(renamed[0].title).toBe('Pinned');
+    });
+
+    test('no first-seen pin is created from a marked challenge', () => {
+        const challenges = [{ id: '7', title: 'Unreadable', dataIssues: ['start_time'] }];
+
+        pinChallengeTitles(challenges);
+
+        expect(pinStore).toEqual({});
+        expect(settings.mergeTitlePins).not.toHaveBeenCalled();
+        // The list still went to the facts store, un-pruned (safe read).
+        expect(settings.rememberChallengeTitles).toHaveBeenCalledWith(challenges, false);
+    });
+
+    test('a prune-unsafe read removes nothing and forwards the flag to the facts store', () => {
+        pinChallengeTitles([
+            { id: '1', title: 'One' },
+            { id: '2', title: 'Two' },
+        ]);
+        settings.mergeTitlePins.mockClear();
+        settings.rememberChallengeTitles.mockClear();
+
+        const challenges = [{ id: '1', title: 'One' }];
+        pinChallengeTitles(challenges, true);
+
+        // id 2 is absent, but the read dropped id-less rows — absence from
+        // this list is not "gone", so nothing is removed.
+        expect(settings.mergeTitlePins).not.toHaveBeenCalled();
+        expect(pinStore).toEqual({ 1: 'One', 2: 'Two' });
+        expect(settings.rememberChallengeTitles).toHaveBeenCalledWith(challenges, true);
+    });
+
+    test('a prune-unsafe read with a marked challenge: nothing removed, pinned title still restored', () => {
+        pinChallengeTitles([
+            { id: '1', title: 'One' },
+            { id: '2', title: 'Two' },
+        ]);
+        settings.mergeTitlePins.mockClear();
+
+        const marked = { id: '2', title: 'server rename', dataIssues: ['member'] };
+        pinChallengeTitles([{ id: '1', title: 'One' }, marked], true);
+
+        expect(marked.title).toBe('Two');
+        expect(pinStore).toEqual({ 1: 'One', 2: 'Two' });
+        expect(settings.mergeTitlePins).not.toHaveBeenCalled();
     });
 });

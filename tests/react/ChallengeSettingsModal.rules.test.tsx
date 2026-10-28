@@ -6,7 +6,7 @@
  */
 import { act, fireEvent, render, screen, waitFor, within } from './helpers/test-utils';
 import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal';
-import { mockApi, mockTranslator } from './helpers/setup';
+import { mockApi, mockTranslator, fillTemplate } from './helpers/setup';
 import { titleRuleInfo } from './helpers/titleRules';
 import type { useSettingsSchema } from '@/api/useSettingsSchema';
 import { invalid } from '../helpers/invalid';
@@ -44,7 +44,9 @@ const PHOTO = `00000001${'a'.repeat(24)}`;
 
 beforeEach(() => {
     window.api = invalid(mockApi);
-    mockTranslator.t.mockImplementation((key) => (key === 'app.fromRule' ? 'From rule: {title}' : key));
+    mockTranslator.t.mockImplementation((key, vars) =>
+        fillTemplate(key === 'app.fromRule' ? 'From rule: {title}' : key, vars),
+    );
     mockApi.getTitleProfile.mockReset().mockResolvedValue(titleRuleInfo());
     mockApi.getChallengeOverrides.mockReset().mockResolvedValue({});
     mockApi.getChallengeProfiles.mockReset().mockResolvedValue({});
@@ -180,7 +182,9 @@ test("a key the matched profile supplies is the profile's, not credited to a lat
 });
 
 test('a rule without a title is named by its place in the list, in the UI language', async () => {
-    mockTranslator.t.mockImplementation((key) => (lvApp as Record<string, string>)[key.replace('app.', '')] ?? key);
+    mockTranslator.t.mockImplementation((key, vars) =>
+        fillTemplate((lvApp as Record<string, string>)[key.replace('app.', '')] ?? key, vars),
+    );
     mockApi.getTitleProfile.mockResolvedValue(
         titleRuleInfo({
             inlineValues: { scenario: 'Plan' },

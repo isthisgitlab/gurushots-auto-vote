@@ -157,6 +157,21 @@ describe('openBoostWindows', () => {
         expect(openBoostWindows(invalid(challenges), NOW).map((w) => w.id)).toEqual(['k1', 'k2']);
     });
 
+    test('a marked challenge never shows, even with its window open', () => {
+        const challenges = [
+            { id: 'm', title: 'Marked', dataIssues: ['close_time'], member: { boost: { state: 'AVAILABLE_KEY' } } },
+            { id: 'ok', title: 'Clean', member: { boost: { state: 'AVAILABLE_KEY' } } },
+        ];
+        expect(openBoostWindows(invalid(challenges), NOW).map((w) => w.id)).toEqual(['ok']);
+    });
+
+    test('an empty dataIssues array does not hide the window', () => {
+        const challenges = [
+            { id: 'e', title: 'Empty issues', dataIssues: [], member: { boost: { state: 'AVAILABLE_KEY' } } },
+        ];
+        expect(openBoostWindows(invalid(challenges), NOW).map((w) => w.id)).toEqual(['e']);
+    });
+
     test('a missing/empty list is an empty result, not a throw', () => {
         expect(openBoostWindows(null, NOW)).toEqual([]);
         expect(openBoostWindows([], NOW)).toEqual([]);

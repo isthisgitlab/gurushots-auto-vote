@@ -4,13 +4,13 @@ import type { Challenge } from '../../types/gurushots';
 import type { SwapBackRecord } from '../../types/stores';
 
 /**
- * A slot whose recorded boosted/turbo'd original can be swapped back in.
+ * A slot whose recorded boosted, turbo'd or guru-picked original can be swapped back in.
  */
 export type SwapBackOffer = Omit<SwapBackRecord, 'at'>;
 
 /**
  * The challenge's swap-back offers: slots holding a replacement for a photo
- * that was swapped out (through this app) while boosted/turbo'd. Reads only the
+ * that was swapped out (through this app) while boosted, turbo'd or guru-picked. Reads only the
  * main-side ledger.
  *
  * Keyed on one string — the challenge id plus its entry ids — so it refetches

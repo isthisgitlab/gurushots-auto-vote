@@ -17,6 +17,7 @@
 
 import * as settings from '../settings';
 import * as logger from '../logger';
+import { isMarkedChallenge } from '../challengeMarks';
 
 // Bound a server-supplied title before it reaches a log line (CR/LF-stripped
 // and truncated). The sanitizer lives in the core logger — shared with the
@@ -34,10 +35,11 @@ let lastWarnedTitleById = new Map<string, string>();
 const commitPinChanges = (
     adds: Record<string, string>,
     removeIds: string[],
-    challenges: Array<{ id?: string | number; title?: string }>,
+    challenges: Array<{ id?: string | number; title?: string; dataIssues?: string[] }>,
+    pruneUnsafe: boolean,
 ) => {
     if (Object.keys(adds).length > 0 || removeIds.length > 0) settings.mergeTitlePins(adds, removeIds);
-    settings.rememberChallengeTitles(challenges);
+    settings.rememberChallengeTitles(challenges, pruneUnsafe);
     for (const id of removeIds) lastWarnedTitleById.delete(id);
 };
 
@@ -46,17 +48,26 @@ const commitPinChanges = (
  * Mutates the challenge objects in place (restoring pinned titles over
  * server-side renames) and returns the same array.
  *
+ * A marked challenge (dataIssues) keeps its id in the active set and still
+ * gets its pinned title restored, but never creates a first-seen pin.
+ *
+ * With `pruneUnsafe` (the read dropped elements that could not carry an
+ * identity) nothing is removed: absence from this list is not "gone".
+ *
  * No-op on non-array or empty input: an empty list is more likely a
  * degraded/error payload than a genuinely challenge-free account (mirrors
  * cleanupStaleMetadata's guard), and pruning pins on it would let a later
  * fetch re-pin a mutated title.
  */
 const pinChallengeTitles = (
-    challenges: Array<{ id?: string | number; title?: string }>,
-): Array<{ id?: string | number; title?: string }> => {
+    challenges: Array<{ id?: string | number; title?: string; dataIssues?: string[] }>,
+    pruneUnsafe = false,
+): Array<{ id?: string | number; title?: string; dataIssues?: string[] }> => {
     if (!Array.isArray(challenges)) return challenges;
     if (challenges.length === 0) {
-        settings.rememberChallengeTitles(challenges);
+        // An unsafe read that dropped every element still merges the previous
+        // id set in rather than replacing it with the empty set.
+        settings.rememberChallengeTitles(challenges, pruneUnsafe);
         return challenges;
     }
 
@@ -83,8 +94,14 @@ const pinChallengeTitles = (
         if (pinned === null) {
             // First occurrence wins even within a single batch — a malformed
             // response repeating an id must not let the later entry override
-            // the earlier one's first-seen title.
-            if (hasIncoming && incoming.length < MAX_TITLE_LENGTH && !Object.prototype.hasOwnProperty.call(adds, id)) {
+            // the earlier one's first-seen title. A marked challenge never
+            // creates one: its fields failed the boundary read.
+            if (
+                !isMarkedChallenge(challenge) &&
+                hasIncoming &&
+                incoming.length < MAX_TITLE_LENGTH &&
+                !Object.prototype.hasOwnProperty.call(adds, id)
+            ) {
                 adds[id] = incoming;
             }
             continue;
@@ -113,9 +130,9 @@ const pinChallengeTitles = (
     // Prune only when at least one entry carried a usable id — a non-empty
     // list where every entry is malformed is the same degraded-payload state
     // the empty-list guard above protects against, and pruning on it would
-    // wipe every pin.
-    const removeIds = activeIds.size > 0 ? Object.keys(pins).filter((id) => !activeIds.has(id)) : [];
-    commitPinChanges(adds, removeIds, challenges);
+    // wipe every pin. A prune-unsafe read prunes nothing either.
+    const removeIds = !pruneUnsafe && activeIds.size > 0 ? Object.keys(pins).filter((id) => !activeIds.has(id)) : [];
+    commitPinChanges(adds, removeIds, challenges, pruneUnsafe);
 
     return challenges;
 };
