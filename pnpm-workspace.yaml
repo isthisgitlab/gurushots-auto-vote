@@ -48,11 +48,12 @@ minimumReleaseAge: 360
 # the vulnerable range. All but one reach us only through build or test tooling;
 # the global-agent entry is the exception (see it).
 overrides:
-    # xcode pins vulnerable uuid 7.x.
-    'uuid@<11.1.1': 11.1.1
+    # xcode pins vulnerable uuid 7.x. uuid 14 is ESM-only; xcode's CJS
+    # `uuid.v4()` still loads it via Node 26 require(esm) (verified).
+    'uuid@<14.0.3': 14.0.3
     # @tailwindcss/typography pins postcss-selector-parser 6.0.10 exactly, and 6.x
-    # has no fix; the site CSS (`prose`) builds byte-identical on 7.1.6.
-    'postcss-selector-parser@<7.1.6': 7.1.6
+    # has no fix; the site CSS (`prose`) builds byte-identical on 7.1.7.
+    'postcss-selector-parser@<7.1.7': 7.1.7
     # jest > babel-plugin-istanbul > @istanbuljs/load-nyc-config > js-yaml@3 >
     # argparse@1 > sprintf-js (no patched release). js-yaml 3's library code never
     # loads argparse, only its bin/js-yaml.js does, and load-nyc-config calls just
@@ -81,7 +82,7 @@ overrides:
 # the patterns in this repository's package.json (`electronmon.patterns`); no input from
 # the app, the network or a user ever becomes a pattern, and nothing of it ships.
 # tests/ci-validation.test.ts fails if braces ever reaches the production tree.
-# Re-check: 2026-10-22 (look for a braces release, or a micromatch/watchboy one that
+# Re-check: 2026-10-28 (look for a braces release, or a micromatch/watchboy one that
 # drops it, and remove this ignore then).
 auditConfig:
     ignoreGhsas:
