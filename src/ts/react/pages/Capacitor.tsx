@@ -20,6 +20,8 @@ import { getSetting } from '../../settings';
 import { flushLocalStores, initializeLocalStores } from '../../localStores';
 import { isCapacitor } from '../../runtime';
 import { withCategory } from '../../logger';
+import { clearTokenUnlessStayingLoggedIn } from '../../services/auth';
+import { getStatus } from '../../services/NativeAutovoteBridge';
 import { mountForToken } from './mountForToken';
 
 // Mount Login or App based on whether we have a token.
@@ -31,6 +33,44 @@ const mountForCurrentAuthState = () => {
         hasToken = false;
     }
     mountForToken(hasToken);
+};
+
+const clearLeftoverToken = async (): Promise<void> => {
+    try {
+        // Stay and token are read before the native round-trip, so a stay-on or
+        // token-less launch never calls the plugin. Off this entry's native
+        // platform the unhydrated stores read as defaults (no token), so the
+        // gate skips silently — the read never throws (a failing read is
+        // answered with defaults, not an error).
+        const leftover = getSetting('token');
+        if (getSetting('stayLoggedIn') || !leftover) return;
+        const status = await getStatus();
+        // `running` is the persisted armed flag of the background auto-vote
+        // service (it holds across force-stop and reboot), not process
+        // liveness: an armed service is the token's designed consumer, so the
+        // token stays. A getStatus call the plugin rejected carries `error` —
+        // the field's presence, message-less or not — and the state it would
+        // have read is unknown, so the token stays until a launch where the
+        // call succeeds. `available: false` (no plugin) errs toward clearing:
+        // no plugin means no service could ever have been armed.
+        if (status.available && (status.running || 'error' in status)) {
+            withCategory('authentication').info(
+                'error' in status
+                    ? 'Kept the saved login token because background auto-vote state could not be read'
+                    : 'Kept the saved login token because background auto-vote is armed',
+                null,
+            );
+            return;
+        }
+        if (await clearTokenUnlessStayingLoggedIn()) {
+            withCategory('authentication').info(
+                'Cleared a saved token left by an earlier run (Stay Logged In is off)',
+                null,
+            );
+        }
+    } catch (error) {
+        withCategory('authentication').error('Failed to clear a leftover token at startup:', error);
+    }
 };
 
 const bootstrap = async () => {
@@ -58,6 +98,13 @@ const bootstrap = async () => {
     // App.tsx calls the logout IPC from the navbar's logout button.
     subscribe('login-success', () => mountForCurrentAuthState());
     subscribe('logout', () => mountForCurrentAuthState());
+
+    // With Stay Logged In off, a token an earlier run left behind (a crash or
+    // an OS kill skips every exit path) is cleared before the mount decision
+    // reads the token — so the mount never races the clear. Runs once here,
+    // never in the event-driven remounts: a fresh login with stay off must
+    // never be cleared.
+    await clearLeftoverToken();
 
     mountForCurrentAuthState();
 };

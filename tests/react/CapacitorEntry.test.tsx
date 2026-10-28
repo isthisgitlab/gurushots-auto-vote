@@ -1,15 +1,28 @@
 /**
  * Capacitor entry (pages/Capacitor.tsx) — runs its bootstrap at module load:
  * on a native platform installs the bridge and hydrates every write-behind
- * store, wires flush-on-background, then mounts Login or App by token and
- * re-mounts on login-success / logout. Each test loads the module in an isolated registry
- * with its collaborators doMock'ed, so the bootstrap can be driven per case.
+ * store, wires flush-on-background, clears a leftover token with Stay Logged
+ * In off (skipping it while background auto-vote is armed), then mounts Login
+ * or App by token and re-mounts on login-success / logout. Each test loads the
+ * module in an isolated registry with its collaborators doMock'ed, so the
+ * bootstrap can be driven per case.
  */
 
 import type { RendererGlobals } from '../../src/ts/types/capacitor';
 import type { CategoryLogger } from '../../src/ts/logger';
 
 const SRC = '../../src/ts';
+
+/**
+ * What the native bridge's getStatus answers (services/NativeAutovoteBridge's
+ * callPlugin union): no plugin, a plugin success, or a plugin call the plugin
+ * rejected — that last one carries `error`, present whatever the rejection
+ * said (a message-less rejection reads undefined).
+ */
+type BridgeStatus =
+    | { running: false; available: false }
+    | { running: boolean; available: true; cycleCount: number; lastRunAt: number; lastError: string }
+    | { running: false; available: true; error: string | undefined };
 
 const flush = async () => {
     for (let i = 0; i < 20; i += 1) await Promise.resolve();
@@ -54,15 +67,25 @@ describe('Capacitor entry', () => {
     const load = ({
         native = true,
         token = 'tok',
+        stayLoggedIn = false,
         getSettingThrows = false,
         initSettingsRejects = null,
         deferHydrations = false,
+        status = { running: false, available: false },
+        clears = false,
+        clearRejection = null,
     }: {
         native?: boolean;
         token?: string;
+        stayLoggedIn?: boolean;
         getSettingThrows?: boolean;
         initSettingsRejects?: Error | null;
         deferHydrations?: boolean;
+        status?: BridgeStatus;
+        /** When true the mocked clear helper empties the token and reports it cleared, like the real one. */
+        clears?: boolean;
+        /** A value the mocked clear helper rejects with (the settings refusing the write). */
+        clearRejection?: unknown;
     } = {}) => {
         // With deferHydrations the eight store hydrations stay pending until a test calls the resolver they leave here.
         const releases: Array<() => void> = [];
@@ -73,6 +96,10 @@ describe('Capacitor entry', () => {
         const m = {
             releases,
             subscribers: {} as Record<string, () => void>,
+            // The stored stay/token pair the settings mock answers from; the
+            // mocked clear writes it, so a mount after a clear reads the
+            // cleared value like the real stores would.
+            auth: { token, stayLoggedIn },
             installBridge: jest.fn(),
             seedBridgeProfiles: jest.fn(),
             subscribe: jest.fn((event: string, cb: () => void): void => {
@@ -82,9 +109,16 @@ describe('Capacitor entry', () => {
                 ? jest.fn().mockRejectedValue(initSettingsRejects)
                 : jest.fn().mockResolvedValue(undefined),
             flushPendingWrites: jest.fn(),
-            getSetting: jest.fn((): string | undefined => {
+            getSetting: jest.fn((key: string): string | boolean | undefined => {
                 if (getSettingThrows) throw new Error('not hydrated');
-                return token;
+                return key === 'stayLoggedIn' ? m.auth.stayLoggedIn : m.auth.token;
+            }),
+            getStatus: jest.fn((): Promise<BridgeStatus> => Promise.resolve(status)),
+            clearTokenUnlessStayingLoggedIn: jest.fn(async (): Promise<boolean> => {
+                if (clearRejection !== null) throw clearRejection;
+                if (!clears) return false;
+                m.auth.token = '';
+                return true;
             }),
             initializeMetadataAsync: hydration(),
             flushMetadataWrites: jest.fn(),
@@ -104,7 +138,10 @@ describe('Capacitor entry', () => {
             flushPhotoStatsWrites: jest.fn(),
             isCapacitor: jest.fn(() => native),
             categoryError: jest.fn(),
-            withCategory: jest.fn((): Pick<CategoryLogger, 'error'> => ({ error: m.categoryError })),
+            categoryInfo: jest.fn(),
+            withCategory: jest.fn(
+                (): Pick<CategoryLogger, 'error' | 'info'> => ({ error: m.categoryError, info: m.categoryInfo }),
+            ),
             mountApp: jest.fn(),
             mountLogin: jest.fn(),
         };
@@ -153,6 +190,10 @@ describe('Capacitor entry', () => {
             }));
             jest.doMock(`${SRC}/runtime`, () => ({ isCapacitor: m.isCapacitor }));
             jest.doMock(`${SRC}/logger`, () => ({ withCategory: m.withCategory }));
+            jest.doMock(`${SRC}/services/auth`, () => ({
+                clearTokenUnlessStayingLoggedIn: m.clearTokenUnlessStayingLoggedIn,
+            }));
+            jest.doMock(`${SRC}/services/NativeAutovoteBridge`, () => ({ getStatus: m.getStatus }));
             jest.doMock('@/pages/App', () => ({ mountApp: m.mountApp }));
             jest.doMock('@/pages/Login', () => ({ mountLogin: m.mountLogin }));
             require('@/pages/Capacitor');
@@ -293,6 +334,155 @@ describe('Capacitor entry', () => {
         await flush();
         expect(m.withCategory).toHaveBeenCalledWith('general');
         expect(m.categoryError).toHaveBeenCalledWith('Capacitor bootstrap failed', expect.any(Error));
+        // The fallback mounts on token presence with the clear skipped (stay off, token on
+        // disk): App mounts, and the token survives until the next launch — one member of
+        // the retention-until-next-launch residual class.
+        expect(m.clearTokenUnlessStayingLoggedIn).not.toHaveBeenCalled();
         expect(m.mountApp).toHaveBeenCalledTimes(1);
+    });
+
+    test('with stay off, a leftover token is cleared before the mount decision', async () => {
+        const m = load({
+            clears: true,
+            status: { running: false, available: true, cycleCount: 0, lastRunAt: 0, lastError: '' },
+        });
+        await flush();
+        // Stay and token are read first; the plugin is asked only after them.
+        expect(m.getStatus).toHaveBeenCalledTimes(1);
+        expect(m.clearTokenUnlessStayingLoggedIn).toHaveBeenCalledTimes(1);
+        expect(m.clearTokenUnlessStayingLoggedIn.mock.invocationCallOrder[0]).toBeGreaterThan(
+            m.getStatus.mock.invocationCallOrder[0],
+        );
+        expect(m.categoryInfo).toHaveBeenCalledWith(
+            'Cleared a saved token left by an earlier run (Stay Logged In is off)',
+            null,
+        );
+        // The clear settled before the mount decision read the token: Login mounts.
+        expect(m.mountLogin.mock.invocationCallOrder[0]).toBeGreaterThan(
+            m.clearTokenUnlessStayingLoggedIn.mock.invocationCallOrder[0],
+        );
+        expect(m.mountLogin).toHaveBeenCalledTimes(1);
+        expect(m.mountApp).not.toHaveBeenCalled();
+    });
+
+    test('clears when the plugin is absent: no plugin means no service could have been armed', async () => {
+        // available:false is an availability-only answer that errs toward clearing — the safe
+        // direction for this finding, so the clear runs on it.
+        const m = load({ clears: true, status: { running: false, available: false } });
+        await flush();
+        expect(m.clearTokenUnlessStayingLoggedIn).toHaveBeenCalledTimes(1);
+        expect(m.mountLogin).toHaveBeenCalledTimes(1);
+    });
+
+    test('clears a stopped service with an error history: the gate reads the rejected call, never lastError', async () => {
+        // `lastError` is the plugin's own field, which survives a stop; the gate's `error`
+        // is the bridge's rejected-call field, absent on this success shape — so a stopped
+        // service with an error history still clears, as the design promises.
+        const m = load({
+            clears: true,
+            status: { running: false, available: true, cycleCount: 3, lastRunAt: 42, lastError: 'earlier failure' },
+        });
+        await flush();
+        expect(m.clearTokenUnlessStayingLoggedIn).toHaveBeenCalledTimes(1);
+        expect(m.mountLogin).toHaveBeenCalledTimes(1);
+    });
+
+    test('keeps the token while background auto-vote is armed, and says so', async () => {
+        // `running` is the persisted armed flag of the background service (it holds across
+        // force-stop and reboot), not process liveness: the armed service is the token's
+        // designed consumer, so retention here is by design.
+        const m = load({
+            status: { running: true, available: true, cycleCount: 1, lastRunAt: 2, lastError: '' },
+        });
+        await flush();
+        expect(m.clearTokenUnlessStayingLoggedIn).not.toHaveBeenCalled();
+        expect(m.categoryInfo).toHaveBeenCalledWith(
+            'Kept the saved login token because background auto-vote is armed',
+            null,
+        );
+        expect(m.mountApp).toHaveBeenCalledTimes(1);
+    });
+
+    test('keeps the token when the getStatus call was rejected with a message', async () => {
+        // callPlugin answers a rejected plugin call with the `error` field — present whatever
+        // the rejection carried — so the field-presence gate skips. The state it would have
+        // read is unknown: retention until a launch where the call succeeds.
+        const m = load({ status: { running: false, available: true, error: 'getStatus failed' } });
+        await flush();
+        expect(m.clearTokenUnlessStayingLoggedIn).not.toHaveBeenCalled();
+        expect(m.categoryInfo).toHaveBeenCalledWith(
+            'Kept the saved login token because background auto-vote state could not be read',
+            null,
+        );
+        expect(m.mountApp).toHaveBeenCalledTimes(1);
+    });
+
+    test('keeps the token on a message-less getStatus rejection too', async () => {
+        // A message-less rejection still carries the `error` key (errorMessage of a nullish
+        // rejection is undefined): the field-presence test skips either way.
+        const m = load({ status: { running: false, available: true, error: undefined } });
+        await flush();
+        expect(m.clearTokenUnlessStayingLoggedIn).not.toHaveBeenCalled();
+        expect(m.categoryInfo).toHaveBeenCalledWith(
+            'Kept the saved login token because background auto-vote state could not be read',
+            null,
+        );
+        expect(m.mountApp).toHaveBeenCalledTimes(1);
+    });
+
+    test('stay on skips the clear before the plugin is asked', async () => {
+        const m = load({ stayLoggedIn: true });
+        await flush();
+        expect(m.getStatus).not.toHaveBeenCalled();
+        expect(m.clearTokenUnlessStayingLoggedIn).not.toHaveBeenCalled();
+        expect(m.mountApp).toHaveBeenCalledTimes(1);
+    });
+
+    test('no token: the gate skips silently', async () => {
+        const m = load({ token: '' });
+        await flush();
+        expect(m.getStatus).not.toHaveBeenCalled();
+        expect(m.clearTokenUnlessStayingLoggedIn).not.toHaveBeenCalled();
+        expect(m.categoryInfo).not.toHaveBeenCalled();
+        expect(m.mountLogin).toHaveBeenCalledTimes(1);
+    });
+
+    test('a refused clear is caught and logged, never a bootstrap failure, and the subscribes still land', async () => {
+        const m = load({
+            clearRejection: new Error('refused'),
+            status: { running: false, available: true, cycleCount: 0, lastRunAt: 0, lastError: '' },
+        });
+        await flush();
+        expect(m.categoryError).toHaveBeenCalledWith('Failed to clear a leftover token at startup:', expect.any(Error));
+        expect(m.withCategory).not.toHaveBeenCalledWith('general');
+        expect(m.subscribers['login-success']).toBeDefined();
+        expect(m.subscribers.logout).toBeDefined();
+        // A refused clear leaves the login in place: the mount still reads the token.
+        expect(m.mountApp).toHaveBeenCalledTimes(1);
+        expect(m.mountLogin).not.toHaveBeenCalled();
+    });
+
+    test('a login-success remount never clears the fresh login', async () => {
+        const m = load({ token: '' });
+        await flush();
+        expect(m.clearTokenUnlessStayingLoggedIn).not.toHaveBeenCalled();
+
+        m.auth.token = 'fresh-token';
+        m.subscribers['login-success']();
+        expect(m.mountApp).toHaveBeenCalledTimes(1);
+        expect(m.clearTokenUnlessStayingLoggedIn).not.toHaveBeenCalled();
+    });
+
+    test('off-native the unhydrated stores read as defaults and the clear skips silently', async () => {
+        // getSetting never throws off this entry's native platform: a store that has not been
+        // read is answered with the defaults, so the gate sees no token and returns before the
+        // plugin is asked — the launch never lands in the catch.
+        const m = load({ native: false, token: '' });
+        await flush();
+        expect(m.getStatus).not.toHaveBeenCalled();
+        expect(m.clearTokenUnlessStayingLoggedIn).not.toHaveBeenCalled();
+        expect(m.categoryError).not.toHaveBeenCalled();
+        expect(m.categoryInfo).not.toHaveBeenCalled();
+        expect(m.mountLogin).toHaveBeenCalledTimes(1);
     });
 });

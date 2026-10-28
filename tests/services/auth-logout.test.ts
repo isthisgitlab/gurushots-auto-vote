@@ -227,10 +227,13 @@ describe('logout', () => {
 
 /**
  * stayLoggedIn off must drop the token on every shell, CLI and Android included — otherwise
- * the token stays on disk indefinitely, the opposite of what the setting promises. The rule
- * lives with the rest of the auth core so every shell can apply it; the Electron
- * single-instance gate stays in windows/lifecycle.ts because that part really is
- * Electron-specific.
+ * the token stays on disk indefinitely, the opposite of what the setting promises. The one
+ * exception is armed Android: the launch clear (wired in tests/react/CapacitorEntry.test.tsx;
+ * the web shell's are in tests/web/server.test.ts, the CLI's in the voting-command tests)
+ * skips while background auto-vote is armed, because the armed service is the token's
+ * designed consumer. The rule lives with the rest of the auth core so every shell can apply
+ * it; the Electron single-instance gate stays in windows/lifecycle.ts because that part
+ * really is Electron-specific.
  */
 describe('clearTokenUnlessStayingLoggedIn', () => {
     const { clearTokenUnlessStayingLoggedIn } = require('../../src/ts/services/auth') as typeof authModule;

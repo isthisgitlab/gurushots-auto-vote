@@ -182,14 +182,11 @@ const switchAccountToken = (token: string): boolean => {
 };
 
 /**
- * Apply the `stayLoggedIn` preference at shutdown: with it off, the token must not survive
- * the process exiting.
- *
- * Lives here rather than in windows/lifecycle.ts because it is not an Electron rule — it was
- * only ever implemented there, so the CLI and Android kept a token on disk indefinitely even
- * with the setting off, quietly contradicting what the setting promises. The Electron path
- * keeps its own single-instance gate around this (a second instance quitting must not clear
- * the running one's token); that gate is genuinely Electron-specific and stays there.
+ * Apply the `stayLoggedIn` preference when a run's token would otherwise outlive it: with the
+ * preference off, the token must not survive the process. Callers: the CLI's continuous-vote
+ * exit, and the shell clears — the web shell at startup and server close, Android at launch.
+ * The desktop app keeps its own two sites (quit and startup) because their single-instance and
+ * beside-the-window gating is genuinely Electron-specific.
  *
  * @returns true when a token was actually cleared.
  */

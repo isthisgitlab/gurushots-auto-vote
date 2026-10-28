@@ -171,6 +171,8 @@ The Android build is **not on Google Play** — install via direct APK download.
 
 **Background limits:** vendor battery managers may still kill the service (whitelist the app per-vendor; link in Settings). The 1-minute last-minute cadence needs `SCHEDULE_EXACT_ALARM` (auto-granted on Android 13+, manual on Android 12).
 
+With **Stay Logged In** off (the default) and auto-vote off, reopening the app after it was killed asks for a login again. Armed auto-vote keeps the session — that is what keeps background voting alive.
+
 ## 🎯 Quick Start
 
 ### GUI

@@ -272,6 +272,12 @@ describe('Latvian log messages', () => {
         expect(localizeLogMessage('Failed to clear a leftover token at startup:')).toBe(
             'Startējot lietotni, neizdevās notīrīt atlikušo tokenu:',
         );
+        expect(localizeLogMessage('Kept the saved login token because background auto-vote is armed')).toBe(
+            'Saglabātais pieteikšanās tokens paturēts, jo fona automātiskā balsošana ir ieslēgta',
+        );
+        expect(
+            localizeLogMessage('Kept the saved login token because background auto-vote state could not be read'),
+        ).toBe('Saglabātais pieteikšanās tokens paturēts, jo fona automātiskās balsošanas stāvokli neizdevās nolasīt');
     });
 
     test('leaves unknown technical text intact and handles unmatched icons', () => {
