@@ -13,9 +13,15 @@ describe('formatEndTimeIn', () => {
         ['UTC', 'en-GB', '14/11/2023, 22:13'],
         ['Europe/Riga', 'en-GB', '15/11/2023, 00:13'],
         ['Asia/Tokyo', 'en-GB', '15/11/2023, 07:13'],
-        ['UTC', 'lv-LV', '14.11.2023 22:13'],
     ])('writes the instant in %s for %s', (timezone, locale, expected) => {
         expect(formatEndTimeIn(END, timezone, locale)).toBe(expected);
+    });
+
+    // ICU 79's CLDR data ends the Latvian year with its ordinal period, '14.11.2023. 22:13'; ICU 78 writes
+    // '14.11.2023 22:13'. The locale data ships with the platform (the pinned Node 26.12.1 bundles ICU 78.3, a
+    // Homebrew Node links icu4c 79), so both spellings are the same instant written for lv.
+    test('writes the instant in UTC for lv-LV', () => {
+        expect(['14.11.2023 22:13', '14.11.2023. 22:13']).toContain(formatEndTimeIn(END, 'UTC', 'lv-LV'));
     });
 
     describe('the device clock', () => {
