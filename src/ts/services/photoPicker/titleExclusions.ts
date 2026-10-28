@@ -42,8 +42,9 @@ const descriptionExclusions = (
 ): ExcludedConceptName[] => {
     const message = challenge?.welcome_message;
     if (typeof message !== 'string' || message === '') return [];
-    // Single spaces only, so every space in the patterns below is literal.
-    const text = stripTags(message).toLowerCase().replace(/\s+/g, ' ');
+    // Single spaces, none leading or trailing, so every space in the patterns
+    // below is literal and the end of the text is the end of a match.
+    const text = stripTags(message).toLowerCase().replace(/\s+/g, ' ').trim();
     const found: ExcludedConceptName[] = [];
     const add = (matched: string) => {
         if (PEOPLE_NOUNS_RE.test(matched) && !found.includes('people')) found.push('people');
