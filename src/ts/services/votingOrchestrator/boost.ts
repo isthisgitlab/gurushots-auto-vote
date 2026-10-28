@@ -4,7 +4,7 @@ import * as votingLogic from '../VotingLogic';
 import * as autoFill from '../autoFill';
 import { formatDuration } from '../../format/duration';
 import { failureText, oneLine } from '../../format/logSafe';
-import { secondsToBoostDeadline, isKeyUnlockedBoost } from '../../voting/boostWindow';
+import { boostDeadline, secondsToBoostDeadline, isKeyUnlockedBoost } from '../../voting/boostWindow';
 import { consumeMission } from '../missions';
 import { buildFillDeps } from './context';
 
@@ -72,6 +72,30 @@ const logBoostTarget = (challenge: Challenge, key: string, params: unknown[]) =>
     logger.withCategory('boost').infoT(key, [logger.challengeTag(challenge), ...params], null);
 };
 
+// The fill submits the photo in its boundary pass; +60 s puts the next cycle just after it. The
+// same 60 s clamps the wake to `boostDeadline − 60`, mirroring BOOST_HOLD_MARGIN_SEC in
+// getBoostHoldUntil, so one last poll still happens before the boost dies.
+const PIN_WAIT_WAKE_GAP_SEC = 60;
+
+/**
+ * While a Boost pin waits for its photo (the photo is not in the challenge yet), arm a wake just
+ * after the fill boundary that should submit it — but only when a fill will plausibly run: the
+ * autoSubmit toggle on for the challenge and a schedule threshold still ahead of now. Without the
+ * toggle, a configured-but-disabled schedule would re-arm `now + 60` every pass: a per-minute
+ * wake/log loop. A boundary already overdue sets no hold either (the fill's window opened but the
+ * photo did not land); normal cadence re-checks, and the per-pass skip log stays.
+ */
+const armPinWaitWake = ({ challenge, now }: ActionContext) => {
+    const cid = challenge.id.toString();
+    if (settings.getEffectiveSetting('autoSubmit', cid) !== true) return;
+    const fillThresholdSec = votingLogic.getAutoFillThresholdSec(challenge, cid);
+    const fillBoundary = Number(challenge.close_time) - fillThresholdSec;
+    if (fillThresholdSec <= 0 || fillBoundary <= now) return;
+    const wakeAt = Math.min(fillBoundary + PIN_WAIT_WAKE_GAP_SEC, boostDeadline(challenge) - PIN_WAIT_WAKE_GAP_SEC);
+    if (wakeAt <= now) return;
+    challenge.boostHoldUntil = wakeAt;
+};
+
 /**
  * The photo pinned for Boost when it is usable. It beats a pending fill-new
  * photo and both fill-new modes, so it is the first thing a target resolves to.
@@ -116,19 +140,32 @@ const wakeAtPinRelease = ({ challenge, now }: ActionContext) => {
 };
 
 /**
- * The entry a due boost lands on: the photo pinned for Boost; else the photo an earlier
- * fill-new submitted and the boost is still waiting on; else, with fill-new on, a fresh photo
- * submitted now (remembered as pending, so a held boost reuses it instead of submitting
- * another); else the configured Boost Entry.
+ * The entry a due boost lands on: the photo pinned for Boost; else — the pin being absolute —
+ * nothing while that photo is not an entry (the boost waits for it) or while it carries Turbo
+ * (the boost never fires); else the photo an earlier fill-new submitted and the boost is still
+ * waiting on; else, with fill-new on, a fresh photo submitted now (remembered as pending, so a
+ * held boost reuses it instead of submitting another); else the configured Boost Entry.
  *
- * @returns null when no valid target exists — fill-new found none, or no entry can take
- *   the boost (every entry has Turbo or is pinned for Turbo) — and the boost is skipped (already logged)
+ * @returns null when no valid target exists — the pin is waiting or conflicted, fill-new found
+ *   none, or no entry can take the boost (every entry has Turbo or is pinned for Turbo) — and the
+ *   boost is skipped (already logged)
  */
 const resolveBoostTarget = async (ctx: ActionContext): Promise<BoostTarget | null> => {
     const { challenge, token, now, fillDeps, entryAges } = ctx;
     const cid = challenge.id.toString();
-    const named = pinnedBoostTarget(challenge) ?? pendingBoostTarget(ctx);
+    const named = pinnedBoostTarget(challenge);
     if (named) return named;
+    // The pin is absolute: while the pinned photo is not an entry the boost waits for it (no
+    // slot pick, no fill-new substitute, no pending-photo substitute), and while it carries
+    // Turbo the boost never fires.
+    const pin = votingLogic.resolvePin(challenge, cid, 'boost');
+    if (pin.state === 'gone' || pin.state === 'conflict') {
+        logBoostTarget(challenge, pin.state === 'gone' ? 'm3e7a92c4b518' : 'm6b04d81f7c23', []);
+        if (pin.state === 'gone') armPinWaitWake(ctx);
+        return null;
+    }
+    const pending = pendingBoostTarget(ctx);
+    if (pending) return pending;
     const existing = () => existingBoostTarget(challenge, now);
     // 'always' = boostNewSubmit; 'conflict' = boostNewSubmitOnConflict when every
     // entry has Turbo or is pinned for Turbo; 'no' = boost an existing entry.
@@ -185,15 +222,14 @@ const applyAvailableBoost = async (
         logger.withCategory('boost').infoT('m1dd20ed44833', [logger.challengeTag(challenge)], null);
     }
     const timeDisplay = formatDuration(timeUntilDisplayBase);
-
-    // The pin's fallback reason is logged here, on the pass that spends, so a held boost doesn't repeat it.
-    const pinFallback = target.pinned ? null : votingLogic.pinFallbackOf(challenge, challenge.id.toString(), 'boost');
-    const applyingMsg =
-        (isTimerBasedAvailable
-            ? `Applying boost to challenge ${logger.challengeTag(challenge)}`
-            : `Applying boost to challenge ${logger.challengeTag(challenge)} (key-unlocked)`) +
-        (pinFallback ? ` — ${votingLogic.describePinFallback('boost', pinFallback)}` : '');
-    logger.withCategory('boost').startOperation(`boost-${challenge.id}`, applyingMsg);
+    logger
+        .withCategory('boost')
+        .startOperation(
+            `boost-${challenge.id}`,
+            isTimerBasedAvailable
+                ? `Applying boost to challenge ${logger.challengeTag(challenge)}`
+                : `Applying boost to challenge ${logger.challengeTag(challenge)} (key-unlocked)`,
+        );
 
     try {
         const boostResult = target.explicit
@@ -345,14 +381,26 @@ export const runBoost = async (ctx: ActionContext) => {
  * finish before the device sleeps — so a boost fill-new would have put on a
  * fresh photo goes to the existing entry instead, and a photo pinned for Turbo that
  * would give way to the boost before its deadline is taken as already given way.
+ * The Boost pin is absolute here too: while its photo is missing or carries Turbo
+ * the sleep boost skips (no wake is armed — the device cannot come back for one).
  *
  * @returns null when no entry can take the boost (already logged)
  */
 const resolveSuspendBoostTarget = (ctx: ActionContext): BoostTarget | null => {
     const { challenge } = ctx;
-    const named = pinnedBoostTarget(challenge) ?? pendingBoostTarget(ctx);
+    const named = pinnedBoostTarget(challenge);
     if (named) return named;
     const cid = challenge.id.toString();
+    // The same absolute-pin rule as the awake pass, before any other target: a boost pin whose
+    // photo is missing waits (nothing can land before the sleep anyway), and one carrying Turbo
+    // never fires. No wake is armed — the device cannot come back for one.
+    const boostPin = votingLogic.resolvePin(challenge, cid, 'boost');
+    if (boostPin.state === 'gone' || boostPin.state === 'conflict') {
+        logBoostTarget(challenge, boostPin.state === 'gone' ? 'm3e7a92c4b518' : 'm6b04d81f7c23', []);
+        return null;
+    }
+    const pending = pendingBoostTarget(ctx);
+    if (pending) return pending;
     // The device cannot come back for a Turbo pin's release, so a boost that pin blocks now takes the
     // pick the release gives it — sent by id, since applyBoost would pick at the clock and find none.
     // Only a boost the deadline view holds at the release (same rule) is due then; any other is due now.

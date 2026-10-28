@@ -14,8 +14,6 @@ jest.mock('../../src/ts/settings', () => ({
 
 jest.mock('../../src/ts/services/VotingLogic', () => ({
     resolvePin: jest.fn(() => ({ state: 'none' })),
-    pinFallbackOf: jest.fn(() => null),
-    describePinFallback: jest.fn(() => ''),
     isWithinEmergencyWindow: jest.fn(() => false),
     shouldPlayAutoTurbo: jest.fn(() => false),
     orderDeadlineActions: jest.fn(() => []),

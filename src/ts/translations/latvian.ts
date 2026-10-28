@@ -249,16 +249,16 @@ export const app: LatvianApp = {
     pinnedForBoost: 'Piesprausts Boost',
     pinnedForTurbo: 'Piesprausts Turbo',
     pinClear: 'Noņemt piespraudi',
-    pinNotApplying: 'Piespraustais {kind} foto netiek piemērots. Atver kartīti, lai uzzinātu vairāk.',
-    pinNotApplyingBoth: 'Piespraustie {boost} un {turbo} foto netiek piemēroti. Atver kartīti, lai uzzinātu vairāk.',
-    pinNotApplyingShort: '{kind} piespraude netiek piemērota',
-    pinNotApplyingShortBoth: '{boost} un {turbo} piespraudes netiek piemērotas',
+    pinNotApplying: 'Piespraustais foto aiztur {kind}. Atver kartīti, lai uzzinātu vairāk.',
+    pinNotApplyingBoth: 'Piespraustie foto aiztur {boost} un {turbo}. Atver kartīti, lai uzzinātu vairāk.',
+    pinNotApplyingShort: 'Piespraude aiztur {kind}',
+    pinNotApplyingShortBoth: 'Piespraudes aiztur {boost} un {turbo}',
     pinGoneNote:
-        'Piespraustā {kind} foto šajā izaicinājumā pašlaik nav, tāpēc {kind} izmantos tavus parastos {kind} uzstādījumus. Piespraud citu foto vai noņem piespraudi. Ja tas ir viens no taviem izvēlētajiem foto, piespraude stāsies spēkā, kad tas tiks iesniegts.',
+        'Piespraustā {kind} foto šajā izaicinājumā pašlaik nav, tāpēc {kind} gaida šo foto un netiks piemērots citam foto. Ja tas ir viens no taviem izvēlētajiem foto, tas tiks iesniegts automātiski un {kind} tiks piemērots tad. Ja tas nekad netiek iesniegts, {kind} paliek neizmantots. Piespraud citu foto vai noņem piespraudi, lai izmantotu tavus parastos uzstādījumus.',
     pinConflictNote:
-        'Piespraustajam {kind} foto jau ir {other}, tāpēc {kind} izmantos tavus parastos {kind} uzstādījumus. Piespraud citu foto vai noņem piespraudi.',
+        'Piespraustajam {kind} foto jau ir {other}, tāpēc {kind} netiks piemērots. Piespraud citu foto vai noņem piespraudi, lai izmantotu tavus parastos uzstādījumus.',
     pinSwapWarning:
-        'Šis foto ir piesprausts {kind}. Ja to apmainīsi, piespraudei nebūs foto, kam piemērot {kind}, tāpēc {kind} izmantos tavus parastos {kind} uzstādījumus.',
+        'Šis foto ir piesprausts {kind}. Ja to apmainīsi, piespraudei nebūs foto, kam piemērot {kind}, tāpēc {kind} gaida šo foto un netiks piemērots citam foto. Piespraud citu foto vai noņem piespraudi, lai izmantotu tavus parastos uzstādījumus.',
     statusHeaderActive: 'aktīvi',
     statusHeaderBoosts: 'Boost gatavi',
     statusHeaderTurbos: 'Turbo gatavi',

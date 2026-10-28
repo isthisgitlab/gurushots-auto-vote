@@ -340,6 +340,10 @@ describe('forward template localization', () => {
             ['m21b1261f69f8', ['[Challenge 42: Sunset]']],
             ['mc93c515e28d4', ['[Challenge 42: Sunset]', 'e1']],
             ['m9c0719be2c97', ['[Challenge 42: Sunset]', 'e1']],
+            ['m3e7a92c4b518', ['[Challenge 42: Sunset]']],
+            ['m6b04d81f7c23', ['[Challenge 42: Sunset]']],
+            ['m9f25e7a3d681', ['[Challenge 42: Sunset]']],
+            ['m2c58b0e94a76', ['[Challenge 42: Sunset]']],
         ];
         for (const [key, params] of cases) {
             const english = englishLogMessages[key as keyof typeof englishLogMessages]

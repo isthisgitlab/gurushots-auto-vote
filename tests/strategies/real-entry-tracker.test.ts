@@ -31,8 +31,6 @@ jest.mock('../../src/ts/metadata', () => ({
 }));
 jest.mock('../../src/ts/services/VotingLogic', () => ({
     resolvePin: jest.fn(() => ({ state: 'none' })),
-    pinFallbackOf: jest.fn(() => null),
-    describePinFallback: jest.fn(() => ''),
     shouldApplyBoost: jest.fn(() => false),
     getEffectiveBoostTime: jest.fn(() => 3600),
     shouldPlayAutoTurbo: jest.fn(() => false),

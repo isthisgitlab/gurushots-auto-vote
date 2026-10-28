@@ -118,23 +118,6 @@ const pinReleaseAt = (challenge: Challenge, challengeId: string, kind: EntryPinK
     pinBlockOf(challenge, challengeId, kind, now)?.releaseAt ?? null;
 
 /**
- * Why a pin did not decide the pick: `gone` / `conflict`, or null with no pin
- * or a usable one. For the apply log line of a spend that fell back to the slot pick.
- */
-const pinFallbackOf = (challenge: Challenge, challengeId: string, kind: EntryPinKind): 'gone' | 'conflict' | null => {
-    const { state } = resolvePin(challenge, challengeId, kind);
-    return state === 'gone' || state === 'conflict' ? state : null;
-};
-
-/**
- * Log wording for a pin that fell back to the slot pick.
- */
-const describePinFallback = (kind: EntryPinKind, fallback: 'gone' | 'conflict'): string =>
-    fallback === 'gone'
-        ? `pinned photo isn't in the challenge right now — using the usual ${kind} settings`
-        : `pinned photo already has ${kind === 'boost' ? 'Turbo' : 'Boost'} — using the usual ${kind} settings`;
-
-/**
  * Pick the entry at the configured 1-indexed slot, walking backward (wrapping past
  * slot 0 to the last entry) to the first one that carries neither the conflicting
  * action nor the avoided photo.
@@ -320,6 +303,4 @@ export {
     blockingPinnedId,
     pinReleaseAt,
     isWithinEmergencyWindow,
-    pinFallbackOf,
-    describePinFallback,
 };

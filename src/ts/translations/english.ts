@@ -234,16 +234,16 @@ export const app = {
     pinnedForBoost: 'Pinned for Boost',
     pinnedForTurbo: 'Pinned for Turbo',
     pinClear: 'Clear pin',
-    pinNotApplying: "The photo pinned for {kind} isn't applying. Open the card for details.",
-    pinNotApplyingBoth: "The photos pinned for {boost} and {turbo} aren't applying. Open the card for details.",
-    pinNotApplyingShort: '{kind} pin not applying',
-    pinNotApplyingShortBoth: '{boost} and {turbo} pins not applying',
+    pinNotApplying: '{kind} is held by the photo pinned for it. Open the card for details.',
+    pinNotApplyingBoth: '{boost} and {turbo} are held by the photos pinned for them. Open the card for details.',
+    pinNotApplyingShort: '{kind} held by pin',
+    pinNotApplyingShortBoth: '{boost} and {turbo} held by pins',
     pinGoneNote:
-        "The photo pinned for {kind} isn't in this challenge right now, so {kind} will use your usual {kind} settings. Pin another photo or clear the pin. If it's one of your Chosen Photos, the pin applies once it's submitted.",
+        "The photo pinned for {kind} isn't in this challenge right now, so {kind} is waiting for it — it won't be applied to another photo. If it's one of your Chosen Photos, it is submitted automatically and {kind} is applied then. If it never enters the challenge, {kind} goes unused. Pin another photo or clear the pin to use your usual settings.",
     pinConflictNote:
-        'The photo pinned for {kind} already has {other}, so {kind} will use your usual {kind} settings. Pin another photo or clear the pin.',
+        "The photo pinned for {kind} already has {other}, so {kind} won't be applied. Pin another photo or clear the pin to use your usual settings.",
     pinSwapWarning:
-        'This photo is pinned for {kind}. Swapping it out leaves the pin with nothing to apply {kind} to, so {kind} falls back to your usual {kind} settings.',
+        "This photo is pinned for {kind}. Swapping it out leaves the pin with nothing to apply {kind} to, so {kind} will wait for it and won't be applied to another photo. Pin another photo or clear the pin to use your usual settings.",
     statusHeaderActive: 'active',
     statusHeaderBoosts: 'Boosts ready',
     statusHeaderTurbos: 'Turbos ready',

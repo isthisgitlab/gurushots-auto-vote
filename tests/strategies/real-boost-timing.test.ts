@@ -63,8 +63,6 @@ jest.mock('../../src/ts/timing', () => mockUtils);
 // Mock the voting logic service
 const mockVotingLogic = {
     resolvePin: jest.fn(() => ({ state: 'none' })),
-    pinFallbackOf: jest.fn(() => null),
-    describePinFallback: jest.fn(() => ''),
     shouldApplyBoost: jest.fn(),
     isWithinEmergencyWindow: jest.fn(() => false),
     resolveBoostFillNewMode: jest.fn(() => 'no'),

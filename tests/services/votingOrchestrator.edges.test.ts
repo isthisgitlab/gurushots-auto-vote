@@ -14,8 +14,7 @@ jest.mock('../../src/ts/settings', () => ({
 
 jest.mock('../../src/ts/services/VotingLogic', () => ({
     resolvePin: jest.fn(() => ({ state: 'none' })),
-    pinFallbackOf: jest.fn(() => null),
-    describePinFallback: jest.fn(() => ''),
+    getAutoFillThresholdSec: jest.fn(() => 0),
     shouldPlayAutoTurbo: jest.fn(() => false),
     isTurboEarnSaved: jest.fn(() => false),
     orderDeadlineActions: jest.fn(() => []),
@@ -147,8 +146,7 @@ beforeEach(() => {
     votingLogic.resolveBoostFillNewMode.mockReturnValue('no');
     votingLogic.pickBoostEntry.mockReturnValue(invalid({ id: 'e1' }));
     votingLogic.resolvePin.mockReturnValue({ state: 'none' });
-    votingLogic.pinFallbackOf.mockReturnValue(null);
-    votingLogic.describePinFallback.mockReturnValue('');
+    votingLogic.getAutoFillThresholdSec.mockReturnValue(0);
     votingLogic.getBoostHoldUntil.mockReturnValue(null);
     votingLogic.pinReleaseAt.mockReturnValue(null);
     votingLogic.shouldApplyTurbo.mockReturnValue(invalid({ apply: false }));
@@ -987,27 +985,98 @@ describe('pinned photo', () => {
             expect(result.challenges![0].boostHoldUntil).toBe(NOW + 150);
         });
 
-        test('an unusable pin names its reason on the apply line, once, on the pass that spends', async () => {
-            votingLogic.pickBoostEntry.mockReturnValue(invalid({ id: 'e1' }));
-            votingLogic.pinFallbackOf.mockReturnValue('gone');
-            votingLogic.describePinFallback.mockReturnValue('PIN-REASON');
-            // Held first: no apply line, so no reason.
-            votingLogic.getBoostHoldUntil.mockReturnValue(NOW + 150);
-            const held = makeApi([keyedWith(['e1'])]);
-            await run(held, { entryAges: createMemoryEntryAgeLedger() });
-            expect(messages('startOperation').join()).not.toContain('PIN-REASON');
-
-            votingLogic.getBoostHoldUntil.mockReturnValue(null);
-            await run(makeApi([keyedWith(['e1'])]));
-            expect(votingLogic.describePinFallback).toHaveBeenCalledWith('boost', 'gone');
-            expect(messages('startOperation').filter((m) => m.includes('PIN-REASON'))).toHaveLength(1);
+        test('a gone pin waits: no boost, the wait logged, and a wake just after the fill boundary', async () => {
+            votingLogic.resolvePin.mockReturnValue({ state: 'gone' });
+            settings.getEffectiveSetting.mockImplementation((key) => key === 'autoSubmit');
+            votingLogic.getAutoFillThresholdSec.mockReturnValue(900);
+            // Deadline NOW + 1800, fill boundary NOW + 2700: the wake clamps to the deadline − 60 s.
+            const api = makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 1800 })]);
+            const clock = jest.spyOn(Date, 'now').mockReturnValue(NOW * 1000);
+            let result: Awaited<ReturnType<typeof run>>;
+            try {
+                result = await run(api);
+            } finally {
+                clock.mockRestore();
+            }
+            expect(api.applyBoost).not.toHaveBeenCalled();
+            expect(api.applyBoostToEntry).not.toHaveBeenCalled();
+            expect(log.startOperation).not.toHaveBeenCalledWith('boost-101', expect.anything());
+            expect(messages('info')).toEqual(
+                expect.arrayContaining([
+                    expect.stringContaining('boost waiting for the pinned photo (not in the challenge) — not applied'),
+                ]),
+            );
+            expect(result.challenges![0].boostHoldUntil).toBe(NOW + 1740);
         });
 
-        test('a pinned target carries no fallback note', async () => {
-            votingLogic.resolvePin.mockReturnValue(invalid({ state: 'hit', entry: { id: 'e1' } }));
-            votingLogic.pinFallbackOf.mockReturnValue('gone');
-            await run(makeApi([keyedWith(['e1'])]));
-            expect(votingLogic.pinFallbackOf).not.toHaveBeenCalled();
+        test('a gone pin with no fill to wait for sets no wake', async () => {
+            votingLogic.resolvePin.mockReturnValue({ state: 'gone' });
+            // autoSubmit off (the beforeEach default): no wake, even with a threshold ahead.
+            votingLogic.getAutoFillThresholdSec.mockReturnValue(900);
+            const off = await run(makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 1800 })]));
+            expect(off.challenges![0].boostHoldUntil).toBeUndefined();
+
+            // Threshold 0: the schedule is satisfied, so no fill is coming either.
+            settings.getEffectiveSetting.mockImplementation((key) => key === 'autoSubmit');
+            votingLogic.getAutoFillThresholdSec.mockReturnValue(0);
+            const satisfied = await run(makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 1800 })]));
+            expect(satisfied.challenges![0].boostHoldUntil).toBeUndefined();
+
+            // The boundary is overdue: the fill window opened but the photo did not land.
+            votingLogic.getAutoFillThresholdSec.mockReturnValue(7200);
+            const overdue = await run(makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 1800 })]));
+            expect(overdue.challenges![0].boostHoldUntil).toBeUndefined();
+
+            // The deadline clamp lands at or before now: the boost dies within the minute, so a
+            // wake would point past its death — no hold.
+            settings.getEffectiveSetting.mockImplementation((key) => key === 'autoSubmit');
+            votingLogic.getAutoFillThresholdSec.mockReturnValue(900);
+            const dying = await run(makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 30 })]));
+            expect(dying.challenges![0].boostHoldUntil).toBeUndefined();
+        });
+
+        test('a conflict pin never fires: skipped with its own reason, and no wake', async () => {
+            votingLogic.resolvePin.mockReturnValue({ state: 'conflict' });
+            settings.getEffectiveSetting.mockImplementation((key) => key === 'autoSubmit');
+            votingLogic.getAutoFillThresholdSec.mockReturnValue(900);
+            const api = makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 1800 })]);
+            const result = await run(api);
+            expect(api.applyBoost).not.toHaveBeenCalled();
+            expect(result.challenges![0].boostHoldUntil).toBeUndefined();
+            expect(messages('info')).toEqual(
+                expect.arrayContaining([expect.stringContaining('pinned photo already has Turbo — boost not applied')]),
+            );
+        });
+
+        test('a gone pin blocks both bypasses: a pending photo and fill-new are not boosted either', async () => {
+            const challenge = withBoost({ state: 'AVAILABLE', timeout: NOW + 1800 });
+            votingLogic.resolvePin.mockReturnValue({ state: 'gone' });
+            votingLogic.resolveBoostFillNewMode.mockReturnValue('always');
+            const entryAges = createMemoryEntryAgeLedger();
+            entryAges.markPending(challenge, 'pending1', NOW);
+            const api = makeApi([challenge]);
+            await run(api, { entryAges });
+            expect(api.applyBoost).not.toHaveBeenCalled();
+            expect(api.applyBoostToEntry).not.toHaveBeenCalled();
+            expect(autoFill.submitNewEntryForAction).not.toHaveBeenCalled();
+        });
+
+        test('the emergency override does not rescue a gone pin either', async () => {
+            // autoBoost off, inside the Emergency Fill window: shouldApplyBoost still says apply
+            // (the override), but the absolute pin gate in resolveBoostTarget skips the spend.
+            settings.getEffectiveSetting.mockImplementation(() => false);
+            votingLogic.isWithinEmergencyWindow.mockReturnValue(true);
+            votingLogic.shouldApplyBoost.mockReturnValue(true);
+            votingLogic.resolvePin.mockReturnValue({ state: 'gone' });
+            const api = makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 1800 })]);
+            await run(api);
+            expect(api.applyBoost).not.toHaveBeenCalled();
+            expect(api.applyBoostToEntry).not.toHaveBeenCalled();
+            expect(messages('info')).toEqual(
+                expect.arrayContaining([
+                    expect.stringContaining('boost waiting for the pinned photo (not in the challenge) — not applied'),
+                ]),
+            );
         });
     });
 
@@ -1026,14 +1095,43 @@ describe('pinned photo', () => {
             expect(api.applyTurbo).toHaveBeenCalledWith(101, 'e1', 'tok');
         });
 
-        test('the apply line carries the fallback reason', async () => {
+        test('a gone pin waits: the noop decision logs the wait and nothing is applied', async () => {
             votingLogic.shouldApplyTurbo.mockReturnValue(
-                invalid({ apply: true, fillNew: false, imageId: 'e1', pinFallback: 'conflict' }),
+                invalid({
+                    apply: false,
+                    imageId: null,
+                    fillNew: false,
+                    reason: 'pinned photo gone — turbo waits for it',
+                    pinFallback: 'gone',
+                }),
             );
-            votingLogic.describePinFallback.mockReturnValue('PIN-REASON');
-            await run(makeApi([turboChallenge()]));
-            expect(votingLogic.describePinFallback).toHaveBeenCalledWith('turbo', 'conflict');
-            expect(messages('startOperation').join()).toContain('PIN-REASON');
+            const api = makeApi([turboChallenge()]);
+            await run(api);
+            expect(api.applyTurbo).not.toHaveBeenCalled();
+            expect(autoFill.submitNewEntryForAction).not.toHaveBeenCalled();
+            expect(messages('info')).toEqual(
+                expect.arrayContaining([
+                    expect.stringContaining('turbo waiting for the pinned photo (not in the challenge) — not applied'),
+                ]),
+            );
+        });
+
+        test('a conflict pin never fires: the noop decision logs it as not applied', async () => {
+            votingLogic.shouldApplyTurbo.mockReturnValue(
+                invalid({
+                    apply: false,
+                    imageId: null,
+                    fillNew: false,
+                    reason: 'pinned photo conflict — turbo never fires',
+                    pinFallback: 'conflict',
+                }),
+            );
+            const api = makeApi([turboChallenge()]);
+            await run(api);
+            expect(api.applyTurbo).not.toHaveBeenCalled();
+            expect(messages('info')).toEqual(
+                expect.arrayContaining([expect.stringContaining('pinned photo already has Boost — turbo not applied')]),
+            );
         });
     });
 });

@@ -73,19 +73,10 @@ const logTurboWithoutTarget = (challenge: Challenge) => {
     );
 };
 
-const applyTurboToEntry = async (
-    { challenge, token, api }: ActionContext,
-    imageId: string,
-    pinFallback?: 'gone' | 'conflict',
-) => {
-    // The pin's fallback reason is logged on the pass that spends.
-    const fallbackNote = pinFallback ? ` — ${votingLogic.describePinFallback('turbo', pinFallback)}` : '';
+const applyTurboToEntry = async ({ challenge, token, api }: ActionContext, imageId: string) => {
     logger
         .withCategory('turbo')
-        .startOperation(
-            `turbo-apply-${challenge.id}`,
-            `Applying turbo to entry ${imageId} on ${challenge.title}${fallbackNote}`,
-        );
+        .startOperation(`turbo-apply-${challenge.id}`, `Applying turbo to entry ${imageId} on ${challenge.title}`);
     try {
         const result = await api.applyTurbo(challenge.id, imageId, token);
         if (result.ok) {
@@ -110,7 +101,20 @@ export const runTurboApply = async (ctx: ActionContext) => {
     // shouldApplyTurbo apply a won turbo near the deadline even if
     // Auto-Apply Turbo (useTurbo) is off for this challenge.
     const turboApply = votingLogic.shouldApplyTurbo(challenge, now, { emergency: true });
-    if (!turboApply.apply) return;
+    if (!turboApply.apply) {
+        // The pin is absolute: while the pinned photo is not in the challenge the turbo waits
+        // for it, and while it carries Boost the turbo never fires — both skip here every pass.
+        if (turboApply.pinFallback) {
+            logger
+                .withCategory('turbo')
+                .infoT(
+                    turboApply.pinFallback === 'gone' ? 'm9f25e7a3d681' : 'm2c58b0e94a76',
+                    [logger.challengeTag(challenge)],
+                    null,
+                );
+        }
+        return;
+    }
 
     // Surface the override so an applied turbo on a challenge with
     // Auto-Apply Turbo off is explained rather than looking like a bug.
@@ -147,7 +151,7 @@ export const runTurboApply = async (ctx: ActionContext) => {
             );
         return;
     }
-    await applyTurboToEntry(ctx, target.imageId, turboApply.pinFallback);
+    await applyTurboToEntry(ctx, target.imageId);
 };
 
 // Snap answers are paced at seconds each, so a pass plays one game and the rest wait for the next pass.

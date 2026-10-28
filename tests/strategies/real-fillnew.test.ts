@@ -32,8 +32,6 @@ const ALL_ACTIONS: ReturnType<typeof votingLogicModule.orderDeadlineActions> = [
 ];
 jest.mock('../../src/ts/services/VotingLogic', () => ({
     resolvePin: jest.fn(() => ({ state: 'none' })),
-    pinFallbackOf: jest.fn(() => null),
-    describePinFallback: jest.fn(() => ''),
     isWithinEmergencyWindow: jest.fn(() => false),
     shouldApplyBoost: jest.fn(() => false),
     getEffectiveBoostTime: jest.fn(() => 3600),

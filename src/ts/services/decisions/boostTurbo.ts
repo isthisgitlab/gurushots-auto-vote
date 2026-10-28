@@ -18,7 +18,8 @@ interface TurboDecision {
     reason: string;
     /** The target is the photo pinned for Turbo (the user's explicit choice). */
     pinned?: true;
-    /** A pin exists but is unusable, so the pick fell back to the slot rules. */
+    /** Noop only: the photo pinned for Turbo is not in the challenge (`gone` — the turbo waits
+     *  for it) or already carries Boost (`conflict` — the turbo never fires). */
     pinFallback?: 'gone' | 'conflict';
 }
 
@@ -199,12 +200,14 @@ const isTurboEarnSaved = (challenge: Challenge, now: number): boolean => {
 /**
  * Decides whether to apply a won Turbo to one of the user's entries.
  *
- * A usable pinned photo is the target and beats both fill-new modes; an unusable
- * pin (gone, or already boosted) falls back to the rules below and is reported
- * as `pinFallback`. The slot pick never lands on the photo pinned for Boost while that
- * pin is live (pickTurboEntry); with every candidate taken, `turboNewSubmitOnConflict`
- * submits a fresh photo, else the turbo is skipped. Once that pin has given way, a fresh photo is
- * still preferred and the pinned one is the target only when nothing else can take the turbo.
+ * A usable pinned photo is the target and beats both fill-new modes. The pin is absolute:
+ * while that photo is not in the challenge the turbo waits for it (`pinFallback: 'gone'` — no
+ * slot pick, no fill-new substitute), and while it carries Boost the turbo never fires
+ * (`pinFallback: 'conflict'`). With no pin (or once the pinned photo is the target), the slot
+ * pick never lands on the photo pinned for Boost while that pin is live (pickTurboEntry); with
+ * every candidate taken, `turboNewSubmitOnConflict` submits a fresh photo, else the turbo is
+ * skipped. Once that pin has given way, a fresh photo is still preferred and the pinned one is
+ * the target only when nothing else can take the turbo.
  *
  * When `turboNewSubmit` is on the caller will submit a fresh photo and Turbo
  * that instead of an existing entry, so the "no entries" guard is relaxed
@@ -258,9 +261,17 @@ const shouldApplyTurbo = (challenge: Challenge, now: number, options: { emergenc
             reason: 'eligible (pinned)',
         };
     }
-    const pinFallback = pin.state === 'gone' || pin.state === 'conflict' ? pin.state : undefined;
-    const applyWith = (decision: TurboDecision): TurboDecision =>
-        pinFallback ? { ...decision, pinFallback } : decision;
+    // The pin is absolute, and it beats both fill-new modes: while the pinned photo is not in
+    // the challenge the turbo waits for it, and while it carries Boost the turbo never fires.
+    if (pin.state === 'gone' || pin.state === 'conflict') {
+        return {
+            apply: false,
+            imageId: null,
+            fillNew: false,
+            reason: `pinned photo ${pin.state} — turbo ${pin.state === 'gone' ? 'waits for it' : 'never fires'}`,
+            pinFallback: pin.state,
+        };
+    }
 
     // The pick and the fill-new mode (Manual Only turns both fresh-photo options off) are
     // shared with the deadline view, so the two never disagree on what a Turbo does.
@@ -271,19 +282,19 @@ const shouldApplyTurbo = (challenge: Challenge, now: number, options: { emergenc
     const existingImageId = picked?.id || null;
 
     if (fillMode === 'always') {
-        return applyWith({ apply: true, imageId: existingImageId, fillNew: true, reason: 'eligible (fill-new)' });
+        return { apply: true, imageId: existingImageId, fillNew: true, reason: 'eligible (fill-new)' };
     }
     if (fillMode === 'conflict') {
         // Every entry has Boost or is pinned for Boost: submit and Turbo a fresh entry instead. The
         // fallback target is the photo pinned for Boost once that pin has given way, else null — then
         // there is no safe one, and if the fresh submit can't happen the turbo runner skips this cycle
         // rather than turboing the boosted or pinned entry.
-        return applyWith({
+        return {
             apply: true,
             imageId: existingImageId,
             fillNew: true,
             reason: 'eligible (fill-new on conflict)',
-        });
+        };
     }
 
     const entries = challenge.member?.ranking?.entries;
@@ -292,7 +303,7 @@ const shouldApplyTurbo = (challenge: Challenge, now: number, options: { emergenc
     }
     if (!picked) return noop('every entry has Boost or is pinned for Boost');
     if (!existingImageId) return noop('selected entry has no id');
-    return applyWith({ apply: true, imageId: existingImageId, fillNew: false, reason: 'eligible' });
+    return { apply: true, imageId: existingImageId, fillNew: false, reason: 'eligible' };
 };
 
 export {

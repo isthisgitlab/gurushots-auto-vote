@@ -20,6 +20,7 @@ import {
     pickTurboEntry,
     pinReleaseAt,
     resolveBoostFillNewMode,
+    resolvePin,
     resolveTurboFillNewMode,
 } from './entryPick';
 import { isManualPhotosOnly } from '../manualPhotosOnly';
@@ -221,6 +222,10 @@ const describeConflicts = (challenge: Challenge, challengeId: string, now: numbe
  *     only when a turbo is WON and Auto-Apply Turbo is on.
  *   - boost: getBoostThresholdSec's timer branch stays positive when
  *     boostTime=0 ("off") — re-check that, and honour the autoBoost toggle.
+ *   - a pin on the feature's own photo is absolute: `conflict` (the photo carries the other
+ *     feature) hides the row, and `gone` (the photo is not in the challenge) moves it past the
+ *     fill instant — or hides it when no fill will plausibly run (autoSubmit off, or no
+ *     schedule threshold ahead).
  *   - autoSubmit: gate on the autoSubmit toggle (a schedule can imply a threshold
  *     while auto-fill is disabled).
  *   - emergencySubmit: its threshold is a fixed setting that never reflects live
@@ -256,9 +261,23 @@ const describeDeadlineActions = (
     const manualOnly = isManualPhotosOnly(settings, challengeId);
     const conflicts = describeConflicts(challenge, challengeId, now, manualOnly);
     const { boostBlocked, turboBlocked, boostReleaseAt, turboReleaseAt } = conflicts;
+    // The pin on a feature's own photo is absolute, so the row must not promise a spend the
+    // runner will not make: `conflict` (the photo carries the other feature) never fires, and
+    // `gone` (the photo is not in the challenge) waits for the scheduled fill — which never runs
+    // when the autoSubmit toggle is off or no schedule threshold is ahead. The pin banner owns
+    // both explanations.
+    const fillThresholdSec =
+        settings.getEffectiveSetting('autoSubmit', challengeId) === true
+            ? getAutoFillThresholdSec(challenge, challengeId)
+            : 0;
+    const fillInstant = fillThresholdSec > 0 && Number.isFinite(closeTime) ? closeTime - fillThresholdSec : null;
+    const boostPinState = resolvePin(challenge, challengeId, 'boost').state;
+    const turboPinState = resolvePin(challenge, challengeId, 'turbo').state;
+    const ownPinHidesRow = (state: typeof boostPinState) =>
+        state === 'conflict' || (state === 'gone' && fillInstant === null);
     // A blocked spend whose pin will give way is still coming, just later: its row stays.
-    const boostRowHidden = boostBlocked && boostReleaseAt === null;
-    const turboRowHidden = turboBlocked && turboReleaseAt === null;
+    const boostRowHidden = (boostBlocked && boostReleaseAt === null) || ownPinHidesRow(boostPinState);
+    const turboRowHidden = (turboBlocked && turboReleaseAt === null) || ownPinHidesRow(turboPinState);
 
     const isVisible = (action: string, thresholdSec: number): boolean => {
         if (!Number.isFinite(thresholdSec) || thresholdSec <= 0) return false;
@@ -306,7 +325,16 @@ const describeDeadlineActions = (
         .filter(({ action, thresholdSec }) => isVisible(action, thresholdSec))
         .map(({ action, thresholdSec }) => {
             const dueAt = Number.isFinite(closeTime) ? closeTime - thresholdSec : null;
-            const releaseAt = action === 'boost' ? boostReleaseAt : action === 'turbo' ? turboReleaseAt : null;
+            const ownReleaseAt = action === 'boost' ? boostReleaseAt : action === 'turbo' ? turboReleaseAt : null;
+            // A pin waiting for its photo moves the row past the fill that should submit it —
+            // past a blocking pin's release too, when both delays apply.
+            const ownPinGone = (action === 'boost' ? boostPinState : turboPinState) === 'gone';
+            const releaseAt =
+                ownPinGone && fillInstant !== null
+                    ? ownReleaseAt === null
+                        ? fillInstant
+                        : Math.max(ownReleaseAt, fillInstant)
+                    : ownReleaseAt;
             // A held-back spend is due once its pin has given way, if that is later than its own time.
             return releaseAt === null || dueAt === null
                 ? { action, thresholdSec, dueAt }

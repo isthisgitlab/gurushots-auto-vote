@@ -43,6 +43,9 @@ const DEFAULTS = {
 const mockSettings = (overrides: Record<string, unknown> = {}) => {
     const values: Record<string, unknown> = { ...DEFAULTS, ...overrides };
     settings.getEffectiveSetting = invalid(jest.fn((key: string) => values[key]));
+    // The facade always returns a record (defaults when nothing is stored); the pin reads in
+    // describeDeadlineActions run on every call, sparse challenge or not.
+    settings.getEntryPins.mockReturnValue({ boost: null, turbo: null });
 };
 
 const regular = (overrides: Record<string, unknown> = {}) =>

@@ -272,6 +272,60 @@ describe('describeDeadlineActions — row gating', () => {
         });
     });
 
+    describe('a pin waiting for its own photo (the pin is absolute)', () => {
+        const FAR = CLOSE - 5000;
+        const rowsOf = (challenge: Challenge) => VotingLogic.describeDeadlineActions(challenge, FAR).actions;
+        const boostRow = (challenge: Challenge) => rowsOf(challenge).find((a) => a.action === 'boost');
+        const turboRow = (challenge: Challenge) => rowsOf(challenge).find((a) => a.action === 'turbo');
+
+        test('a gone pin with a fill ahead moves the boost row past the fill instant', () => {
+            mockSettings({ keyUnlockedBoostTime: 1800 });
+            settings.getEntryPins.mockReturnValue({ boost: 'zzz', turbo: null });
+            const challenge = build({ boost: { state: 'AVAILABLE_KEY' } });
+            // The fill boundary (close − 900) is later than the boost's own due (close − 1800).
+            expect(boostRow(challenge)).toEqual({ action: 'boost', thresholdSec: 900, dueAt: CLOSE - 900 });
+        });
+
+        test('the fill instant yields to a later blocking-pin release: the later of the two wins', () => {
+            mockSettings({ keyUnlockedBoostTime: 1800 });
+            // The Boost pin is gone AND the Turbo pin blocks the boost, giving way 300 s before close.
+            settings.getEntryPins.mockReturnValue({ boost: 'zzz', turbo: 'e1' });
+            const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'LOCKED' } });
+            expect(VotingLogic.describeDeadlineActions(challenge, FAR)).toMatchObject({
+                boostBlocked: true,
+                boostReleaseAt: CLOSE - 300,
+            });
+            expect(boostRow(challenge)).toEqual({ action: 'boost', thresholdSec: 300, dueAt: CLOSE - 300 });
+        });
+
+        test('a gone turbo pin moves the turbo row past the fill instant the same way', () => {
+            mockSettings({ turboTime: 7200 });
+            settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'zzz' });
+            const challenge = build({ turbo: { state: 'WON', mode: 'classic' } });
+            expect(turboRow(challenge)).toEqual({ action: 'turbo', thresholdSec: 900, dueAt: CLOSE - 900 });
+        });
+
+        test('a conflict pin hides its row even when fill-new would resolve a flag block', () => {
+            mockSettings({ boostNewSubmit: true });
+            settings.getEntryPins.mockReturnValue({ boost: 'e1', turbo: null });
+            // The sole entry is turboed AND pinned for Boost: fill-new would place the boost on a
+            // fresh photo, but the absolute pin means the automatic boost never fires.
+            const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, entries: [{ id: 'e1', turbo: true }] });
+            expect(VotingLogic.describeDeadlineActions(challenge, FAR).boostBlocked).toBe(false);
+            expect(rowsOf(challenge).map((a) => a.action)).not.toContain('boost');
+        });
+
+        test('a gone pin with no fill ahead hides its row: autoSubmit off, or no threshold ahead', () => {
+            mockSettings({ autoSubmit: false, keyUnlockedBoostTime: 1800 });
+            settings.getEntryPins.mockReturnValue({ boost: 'zzz', turbo: null });
+            expect(rowsOf(build({ boost: { state: 'AVAILABLE_KEY' } })).map((a) => a.action)).not.toContain('boost');
+
+            mockSettings({ autoSubmitSchedule: [], keyUnlockedBoostTime: 1800 });
+            settings.getEntryPins.mockReturnValue({ boost: 'zzz', turbo: null });
+            expect(rowsOf(build({ boost: { state: 'AVAILABLE_KEY' } })).map((a) => a.action)).not.toContain('boost');
+        });
+    });
+
     test('a WON turbo of unknown mode is not held, so it blocks nothing and holds no pin', () => {
         const far = CLOSE - 5000;
         mockSettings({ keyUnlockedBoostTime: 900, emergencySubmit: 300 });

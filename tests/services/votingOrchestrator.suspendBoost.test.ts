@@ -12,8 +12,6 @@ jest.mock('../../src/ts/settings', () => ({
 
 jest.mock('../../src/ts/services/VotingLogic', () => ({
     resolvePin: jest.fn(() => ({ state: 'none' })),
-    pinFallbackOf: jest.fn(() => null),
-    describePinFallback: jest.fn(() => ''),
     isWithinEmergencyWindow: jest.fn(() => false),
     resolveBoostFillNewMode: jest.fn(() => 'no'),
     pinReleaseAt: jest.fn<
@@ -119,7 +117,6 @@ beforeEach(() => {
     votingLogic.resolveBoostFillNewMode.mockReturnValue('no');
     votingLogic.pickBoostEntry.mockReturnValue(invalid({ id: 'e1' }));
     votingLogic.resolvePin.mockReturnValue({ state: 'none' });
-    votingLogic.pinFallbackOf.mockReturnValue(null);
     votingLogic.getBoostHoldUntil.mockReturnValue(null);
     votingLogic.pinReleaseAt.mockReturnValue(null);
     votingLogic.isBoostBlocked.mockReturnValue(false);
@@ -177,6 +174,28 @@ describe('runSuspendBoosts — target rule', () => {
             '[Challenge 103: Used] boost no longer available — nothing to send before sleep',
         );
         expect(api.applyBoost).not.toHaveBeenCalled();
+    });
+
+    test('a boost pin whose photo is not in the challenge skips the sleep boost', async () => {
+        votingLogic.resolvePin.mockReturnValue({ state: 'gone' });
+        const api = makeApi();
+        expect(await run([timed()], api)).toEqual([{ status: 'fulfilled', value: 'skipped' }]);
+        expect(api.applyBoost).not.toHaveBeenCalled();
+        expect(api.applyBoostToEntry).not.toHaveBeenCalled();
+        expect(messages('info')).toContain(
+            '[Challenge 101: Orchestrated] boost waiting for the pinned photo (not in the challenge) — not applied',
+        );
+    });
+
+    test('a boost pin whose photo carries Turbo never fires the sleep boost', async () => {
+        votingLogic.resolvePin.mockReturnValue({ state: 'conflict' });
+        const api = makeApi();
+        expect(await run([timed()], api)).toEqual([{ status: 'fulfilled', value: 'skipped' }]);
+        expect(api.applyBoost).not.toHaveBeenCalled();
+        expect(api.applyBoostToEntry).not.toHaveBeenCalled();
+        expect(messages('info')).toContain(
+            '[Challenge 101: Orchestrated] pinned photo already has Turbo — boost not applied',
+        );
     });
 
     test('a pending fill-new photo is boosted via boostFreshEntry and its marker cleared', async () => {

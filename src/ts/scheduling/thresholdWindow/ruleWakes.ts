@@ -114,11 +114,13 @@ export async function soonestScenarioWake(
 }
 
 /**
- * Soonest instant after `now` at which a boost the voting pass held for a fresh
- * photo becomes due (`boostHoldUntil`, set by the pass on the list it returns),
- * across every still-open challenge. Needs no resolver: the hold is live pass
- * state, not a setting. A list fetched fresh by the scheduler carries no holds,
- * so the held boost then goes on the next ordinary cycle.
+ * Soonest instant after `now` at which a boost the voting pass held becomes due
+ * (`boostHoldUntil`, set by the pass on the list it returns), across every
+ * still-open challenge. The field carries three holds: a fresh photo too newly
+ * submitted to boost, a Turbo pin about to give way, and a Boost pin waiting for
+ * its photo to be submitted by the scheduled fill. Needs no resolver: the hold
+ * is live pass state, not a setting. A list fetched fresh by the scheduler
+ * carries no holds, so the held boost then goes on the next ordinary cycle.
  *
  * @param now - Unix timestamp (seconds)
  */

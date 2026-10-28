@@ -504,18 +504,24 @@ describe('shouldApplyTurbo with a pin', () => {
         expect(VotingLogic.shouldApplyTurbo(build([A, B], { turbo: { state: 'FREE' } }), NOW).apply).toBe(false);
     });
 
-    test('a gone or conflicting pin reports pinFallback on every apply path', () => {
+    test('a gone or conflicting pin is a noop on every apply path — the pin is absolute', () => {
         setup({ turbo: 'zzz' });
         expect(VotingLogic.shouldApplyTurbo(build([A, B]), NOW)).toMatchObject({
-            apply: true,
-            imageId: 'aaa',
+            apply: false,
+            imageId: null,
+            fillNew: false,
             pinFallback: 'gone',
         });
         setup({ turbo: 'zzz' }, { turboNewSubmit: true });
-        expect(VotingLogic.shouldApplyTurbo(build([A, B]), NOW)).toMatchObject({ fillNew: true, pinFallback: 'gone' });
+        expect(VotingLogic.shouldApplyTurbo(build([A, B]), NOW)).toMatchObject({
+            apply: false,
+            fillNew: false,
+            pinFallback: 'gone',
+        });
         setup({ turbo: 'aaa' }, { turboNewSubmitOnConflict: true });
         expect(VotingLogic.shouldApplyTurbo(build([{ id: 'aaa', boosted: true }]), NOW)).toMatchObject({
-            fillNew: true,
+            apply: false,
+            fillNew: false,
             imageId: null,
             pinFallback: 'conflict',
         });
@@ -526,26 +532,16 @@ describe('shouldApplyTurbo with a pin', () => {
         const decision = VotingLogic.shouldApplyTurbo(build([A, B]), NOW);
         expect(decision).toEqual({ apply: true, imageId: 'aaa', fillNew: false, reason: 'eligible' });
     });
-});
 
-describe('pinFallbackOf and describePinFallback', () => {
-    test('name why a pin did not decide the pick', () => {
-        setup({ boost: 'zzz', turbo: 'aaa' });
-        const challenge = build([{ id: 'aaa', boosted: true }, B]);
-        expect(VotingLogic.pinFallbackOf(challenge, '42', 'boost')).toBe('gone');
-        expect(VotingLogic.pinFallbackOf(challenge, '42', 'turbo')).toBe('conflict');
-        setup({ boost: 'bbb' });
-        expect(VotingLogic.pinFallbackOf(challenge, '42', 'boost')).toBeNull();
-        setup();
-        expect(VotingLogic.pinFallbackOf(challenge, '42', 'boost')).toBeNull();
-    });
-
-    test('word each fallback for the log', () => {
-        expect(VotingLogic.describePinFallback('boost', 'gone')).toContain(
-            "isn't in the challenge right now — using the usual boost settings",
-        );
-        expect(VotingLogic.describePinFallback('boost', 'conflict')).toContain('already has Turbo');
-        expect(VotingLogic.describePinFallback('turbo', 'conflict')).toContain('already has Boost');
+    test('the Emergency Fill override does not rescue a gone pin either', () => {
+        // useTurbo off, but the challenge is inside the Emergency Fill window (100 s to close,
+        // window 300 s): the override passes the toggle, and the absolute pin still stops the spend.
+        setup({ turbo: 'zzz' }, { useTurbo: false, emergencySubmit: 300 });
+        expect(VotingLogic.shouldApplyTurbo(build([A, B]), NOW, { emergency: true })).toMatchObject({
+            apply: false,
+            fillNew: false,
+            pinFallback: 'gone',
+        });
     });
 });
 

@@ -140,6 +140,7 @@ export const logMessages = {
     m2ba91e16819b:
         'Sarakstā ir nelasāmi izaicinājumi — šoreiz netika iztīrītas virsrakstu piespraudes, katram izaicinājumam paredzētie uzstādījumi un metadati',
     m2bec5b9f920d: 'Boost izmantots izaicinājumā "{0}"',
+    m2c58b0e94a76: '{0} Piespraustajam foto jau ir Boost — Turbo netiek piemērots',
     m2ca46059d540: 'Neizdevās atiestatīt {0} izaicinājumam {1}: pārējie uzstādījumi būtu pretrunā',
     m2d5f722bdf90: 'Izaicinājumā "{1}" nav reģistrēta foto {0} apmaiņa atpakaļ.',
     m2dabfcf67a95: 'CLI manuālais balsošanas process',
@@ -171,6 +172,7 @@ export const logMessages = {
     m3a0e8532ed26:
         'mergeTitlePins: sasniegts piesprausto nosaukumu ierobežojums {0} — izaicinājums {1} netiks piesprausts',
     m3a16ebc435c9: '  Laika josla: {0}',
+    m3e7a92c4b518: '{0} Boost gaida piesprausto foto (tā nav izaicinājumā) — Boost netiek piemērots',
     m3a9d5c139fbf: '🔄 Ielādē aktīvos izaicinājumus',
     m3abf610fa77b: 'Nav piemērota foto, ko iesniegt izaicinājumā {0}. Monētas netika iekasētas.',
     m3b38c04119ef: 'Kļūda {0}:',
@@ -299,6 +301,7 @@ export const logMessages = {
     m697cc3b3a4b6: 'Pievienošanās izaicinājumam {0} jau notiek.',
     m69e455fa3a4d: 'Palaid komandu login, lai pieteiktos',
     m6a0b6158a377: 'Neizdevās lejupielādēt:',
+    m6b04d81f7c23: '{0} Piespraustajam foto jau ir Turbo — Boost netiek piemērots',
     m6b2800cb055b: '{0}: serveris noraidīja pieprasījumu izaicinājumam {1}',
     m6b4c8ffc5f32: 'Kļūda, ielādējot uzstādījumus:',
     m6c44109e191c: '=== GuruShots Bankroll ===',
@@ -466,6 +469,7 @@ export const logMessages = {
     m9e832b7e790b: 'Profilu nosaukumus ar atstarpēm liec pēdiņās: {0} "2-pic tactic"{1}',
     m9e98677f6b1d: 'Vēl nav atrasts {0} žurnāla fails.',
     m9efdcb3f203c: 'Konstatēta macOS — automātiskā lejupielāde bez koda paraksta var nedarboties',
+    m9f25e7a3d681: '{0} Turbo gaida piesprausto foto (tā nav izaicinājumā) — Turbo netiek piemērots',
     ma1987ae4f9e6: 'Kļūda, apstrādājot get-bankroll pieprasījumu:',
     ma26730b44819: '▶️ Pievienošanās pieprasījums: izaicinājums={0}, spendCoins={1}, expectedCost={2}',
     ma2c66b3a8707: '{0} Iesniedz balsis (mērķis: {1} %)',
