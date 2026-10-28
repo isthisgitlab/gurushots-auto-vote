@@ -3,11 +3,12 @@
  * the API layer, the IPC validation, the CLI and the mock all read from one
  * list.
  *
- * The live endpoint sorts with `order` + `sort` (captured 2026-10-24): votes
- * desc is what this app has always sent and stays the default, date desc/asc
- * are GuruShots' own Newest/Oldest. Any other `order` value the endpoint takes
- * (`views`, `likes`, `guru_pick`, `ratio`) — and any unknown one — silently
- * falls back to date desc there, so no name outside this list is ever sent.
+ * The live endpoint takes `order` + `sort`, but the pair cannot be relied on
+ * without a search, so the date orders are enforced on the answers client-side
+ * (`orderByUploadDate` below). Votes desc is what this app has always sent and
+ * stays the default. Any other `order` value the endpoint takes (`views`,
+ * `likes`, `guru_pick`, `ratio`) — and any unknown one — silently falls back
+ * to date desc there, so no name outside this list is ever sent.
  */
 
 const LIBRARY_ORDERS = {
@@ -43,5 +44,23 @@ const isLibraryOrder = (value: unknown): value is LibraryOrder =>
 const isLoadedSort = (value: unknown): value is LoadedSort =>
     typeof value === 'string' && (LOADED_SORTS as readonly string[]).includes(value);
 
-export { LIBRARY_ORDERS, LOADED_SORTS, isLibraryOrder, isLoadedSort };
+/**
+ * The date orders enforced on what a read returned: the endpoint's `order`+`sort` pair cannot be
+ * relied on without a search, so a read's photos are ordered here — per answer in the handler
+ * (`ipc/actions/library.ts`), across the loaded batches in the grid (`PhotoGrid.tsx`). The
+ * `'votes'` arm returns the input array itself; the date arms return a copy. A photo without an
+ * upload date sorts last in both directions, and ties keep the order the server sent
+ * (Array.prototype.sort is stable).
+ */
+const orderByUploadDate = <P extends { uploadDate: number | null }>(photos: P[], order: LibraryOrder): P[] => {
+    if (order !== 'newest' && order !== 'oldest') return photos;
+    const direction = order === 'newest' ? -1 : 1;
+    return [...photos].sort((a, b) => {
+        if (a.uploadDate === null) return b.uploadDate === null ? 0 : 1;
+        if (b.uploadDate === null) return -1;
+        return direction * (a.uploadDate - b.uploadDate);
+    });
+};
+
+export { LIBRARY_ORDERS, LOADED_SORTS, isLibraryOrder, isLoadedSort, orderByUploadDate };
 export type { LibraryOrder, LoadedSort };

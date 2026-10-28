@@ -15,6 +15,7 @@ import { invalid } from '../helpers/invalid';
 import type { TileStats } from '@/hooks/usePhotoStatsLoader';
 import type { LibraryPhoto } from '@/hooks/useLibraryListing';
 import type { usePhotoPicker } from '@/hooks/usePhotoPicker';
+import type { LibraryOrder } from '../../src/ts/librarySort';
 import type { WindowApi } from '../../src/ts/types/ipc';
 import type { Translate } from '../../src/ts/translations/translator';
 
@@ -710,6 +711,67 @@ describe('the loaded-photo sort', () => {
         );
         expect(tileOrder()).toEqual([shortOf(2), shortOf(1)]);
         expect(setTileIds).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('the date order enforced on the loaded photos', () => {
+    // Distinct upload dates, arriving unsorted: a date-ordered tag must sort the tiles.
+    const dated = (n: number, uploadDate: number): LibraryPhoto => photo(n, { uploadDate });
+    const readyIn = (order: LibraryOrder, photos: LibraryPhoto[], over: Partial<Listing> = {}): Picker['state'] => ({
+        status: 'ready',
+        listing: listing(photos, over),
+        order,
+    });
+
+    test('a listing tagged newest renders the tiles by upload date descending, whatever order they arrived in', () => {
+        grid({ picker: basePicker({ state: readyIn('newest', [dated(1, 100), dated(2, 300), dated(3, 200)]) }) });
+        expect(tileOrder()).toEqual([shortOf(2), shortOf(3), shortOf(1)]);
+    });
+
+    test('a listing tagged oldest renders them ascending', () => {
+        grid({ picker: basePicker({ state: readyIn('oldest', [dated(1, 100), dated(2, 300), dated(3, 200)]) }) });
+        expect(tileOrder()).toEqual([shortOf(1), shortOf(3), shortOf(2)]);
+    });
+
+    test('an appended batch slots into its date position, not at the end', () => {
+        const first = grid({
+            picker: basePicker({
+                state: readyIn('newest', [dated(1, 300), dated(2, 100)], { truncated: true, nextStart: 2 }),
+            }),
+        });
+        expect(tileOrder()).toEqual([shortOf(1), shortOf(2)]);
+        first.rerender(
+            <PhotoGrid
+                {...baseProps({
+                    picker: basePicker({
+                        // The appended batch merges into the same listing (the hook appends), unsorted.
+                        state: readyIn('newest', [dated(1, 300), dated(2, 100), dated(3, 200)]),
+                    }),
+                })}
+            />,
+        );
+        expect(tileOrder()).toEqual([shortOf(1), shortOf(3), shortOf(2)]);
+    });
+
+    test('a listing tagged votes keeps the listing order — no date order is enforced', () => {
+        grid({ picker: basePicker({ state: readyIn('votes', [dated(1, 100), dated(2, 300), dated(3, 200)]) }) });
+        expect(tileOrder()).toEqual([shortOf(1), shortOf(2), shortOf(3)]);
+    });
+
+    test('a stats sort wins over the date order, and its ties keep the date order', () => {
+        grid({
+            picker: basePicker({
+                sortBy: 'ratio',
+                sortStats: new Map([
+                    [idOf(1), tileStat(1, { votes: 50, views: 100 })],
+                    [idOf(2), tileStat(2, { votes: 50, views: 100 })],
+                    [idOf(3), tileStat(3, { votes: 90, views: 100 })],
+                ]),
+                state: readyIn('newest', [dated(1, 100), dated(2, 300), dated(3, 200)]),
+            }),
+        });
+        // 3 has the top ratio; 1 and 2 tie, so they stay in the date order (2 is newer than 1).
+        expect(tileOrder()).toEqual([shortOf(3), shortOf(2), shortOf(1)]);
     });
 });
 

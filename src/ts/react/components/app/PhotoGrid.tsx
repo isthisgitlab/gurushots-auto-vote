@@ -5,6 +5,7 @@ import { ipcErrorText } from '@/api/ipcErrorText';
 import { reorderLoadedPhotos } from '@/utils/loadedPhotoSort';
 import { ListingHeader } from './ListingHeader';
 import { MissingTile, PendingTile, PhotoTile, SavedPickTile } from './PhotoTile';
+import { orderByUploadDate } from '../../../librarySort';
 import { MAX_CHOSEN_PHOTOS } from '../../../settings/limits';
 
 import type { FocusEvent, ReactNode } from 'react';
@@ -312,9 +313,14 @@ export function PhotoGrid({
             !chosen.has(photo.id) && !blockedIds?.has(photo.id) && !keepIds?.has(photo.id) && refusedHere(photo);
         const refusedHidden = listing.photos.filter(hiddenFromGrid).length;
         // The shown photos in the order they render: the loaded-photo sort reorders them from the
-        // sort snapshot, never from the live Map a running read is still filling in.
+        // sort snapshot, never from the live Map a running read is still filling in. The date
+        // orders are enforced here across the loaded batches (an appended batch merges into one
+        // date-ordered grid), and the loaded-photo sorts reorder from that date-ordered base.
         const shownPhotos = reorderLoadedPhotos(
-            listing.photos.filter((photo) => !hiddenFromGrid(photo)),
+            orderByUploadDate(
+                listing.photos.filter((photo) => !hiddenFromGrid(photo)),
+                state.order,
+            ),
             sortBy,
             sortStats,
         );

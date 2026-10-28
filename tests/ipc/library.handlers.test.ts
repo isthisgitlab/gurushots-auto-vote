@@ -560,6 +560,61 @@ describe('the order (7th argument)', () => {
         });
         expect(walk.mock.calls[0][2]).toMatchObject({ order: 'newest', start: 100, maxKept: 50 });
     });
+
+    // The handler must enforce the date order on the answer itself: the walk mock
+    // carries distinct, shuffled upload dates, so a mis-wired or absent sort fails.
+    const datedWalkOf = (...dates: Array<number | undefined>): WalkResult => ({
+        items: dates.map((date, index) => ({
+            id: `p${index}`,
+            permission: { allowed: true, message: null },
+            ...(date === undefined ? {} : { upload_date: date }),
+        })),
+        truncated: false,
+    });
+    const photoIds = (result: { photos: Array<{ id: string }> }): string[] => result.photos.map((photo) => photo.id);
+
+    test('a newest answer comes back date-descending, the photo without an upload date last', async () => {
+        stubStrategy({ getEligiblePhotosWalk: newWalk(datedWalkOf(500, undefined, 300, 400)) });
+        const result = (await call('5', undefined, 'fresh', 'submit', undefined, undefined, 'newest')) as {
+            photos: Array<{ id: string }>;
+        };
+        expect(photoIds(result)).toEqual(['p0', 'p3', 'p2', 'p1']);
+    });
+
+    test('an oldest answer comes back date-ascending, the photo without an upload date still last', async () => {
+        stubStrategy({ getEligiblePhotosWalk: newWalk(datedWalkOf(500, undefined, 300, 400)) });
+        const result = (await call('5', undefined, 'fresh', 'submit', undefined, undefined, 'oldest')) as {
+            photos: Array<{ id: string }>;
+        };
+        expect(photoIds(result)).toEqual(['p2', 'p3', 'p0', 'p1']);
+    });
+
+    test("a votes read (no order argument) answers in the walk's order, not date order", async () => {
+        stubStrategy({ getEligiblePhotosWalk: newWalk(datedWalkOf(500, undefined, 300, 400)) });
+        const result = (await call('5')) as { photos: Array<{ id: string }> };
+        expect(photoIds(result)).toEqual(['p0', 'p1', 'p2', 'p3']);
+    });
+
+    test('an answer already date-sorted comes back unchanged under newest', async () => {
+        stubStrategy({ getEligiblePhotosWalk: newWalk(datedWalkOf(900, 500, 300)) });
+        const result = (await call('5', undefined, 'fresh', 'submit', undefined, undefined, 'newest')) as {
+            photos: Array<{ id: string }>;
+        };
+        expect(photoIds(result)).toEqual(['p0', 'p1', 'p2']);
+    });
+
+    test("an answer whose every upload date is unknown keeps the server's order under a date order", async () => {
+        stubStrategy({ getEligiblePhotosWalk: newWalk(datedWalkOf(undefined, undefined, undefined)) });
+        const newest = (await call('5', undefined, 'fresh', 'submit', undefined, undefined, 'newest')) as {
+            photos: Array<{ id: string }>;
+        };
+        expect(photoIds(newest)).toEqual(['p0', 'p1', 'p2']);
+        __resetLibraryThrottle();
+        const oldest = (await call('5', undefined, 'fresh', 'submit', undefined, undefined, 'oldest')) as {
+            photos: Array<{ id: string }>;
+        };
+        expect(photoIds(oldest)).toEqual(['p0', 'p1', 'p2']);
+    });
 });
 
 describe('without a challenge id (get_photos_private needs one)', () => {

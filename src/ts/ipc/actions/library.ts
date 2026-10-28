@@ -20,7 +20,7 @@ import * as logger from '../../logger';
 import * as apiFactory from '../../apiFactory';
 import * as auth from '../../services/auth';
 import { resolveMemberId } from '../../services/autoFill';
-import { isLibraryOrder } from '../../librarySort';
+import { isLibraryOrder, orderByUploadDate } from '../../librarySort';
 import {
     CHOSEN_PHOTO_ID_RE,
     LIBRARY_BATCH_PHOTOS,
@@ -243,7 +243,10 @@ const handleGetLibraryPhotos = (async (
         const skipped = outcome.walk.skipped ?? [];
         const listing = {
             // An id that is not a safe token could never be stored in a list, so it is not offered.
-            photos: outcome.walk.items.filter((photo) => CHOSEN_PHOTO_ID_RE.test(String(photo.id))).map(mapPhoto),
+            photos: orderByUploadDate(
+                outcome.walk.items.filter((photo) => CHOSEN_PHOTO_ID_RE.test(String(photo.id))).map(mapPhoto),
+                order ?? 'votes',
+            ),
             memberId: outcome.memberId,
             // The photos left out for having won a challenge: how many the walk recorded, and their ids (kept in
             // memory only, capped).
