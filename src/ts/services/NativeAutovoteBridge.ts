@@ -56,7 +56,18 @@ const start = () => callPlugin('start', true);
 
 const stop = () => callPlugin('stop', true);
 
-const getStatus = () => callPlugin('getStatus', false);
+/**
+ * What getStatus answers: the plugin's own status on success (callPlugin's return type is shared
+ * with start/stop, whose arms carry only `running`), the no-plugin shape, or the rejected-call
+ * shape — whose `error` key is present whatever the rejection carried (a message-less rejection
+ * reads undefined).
+ */
+type AutoVoteStatus =
+    | { running: false; available: false }
+    | (Awaited<ReturnType<AutoVoteBackgroundPlugin['getStatus']>> & { available: true })
+    | { running: false; available: true; error: string | undefined };
+
+const getStatus = (): Promise<AutoVoteStatus> => callPlugin('getStatus', false) as Promise<AutoVoteStatus>;
 
 const isAvailable = () => getPlugin() !== null;
 
@@ -72,3 +83,4 @@ const compareAndWrite = (key: string, expected: string | null, value: string): P
     getPlugin()?.compareAndWrite({ key, expected, value }) ?? null;
 
 export { start, stop, getStatus, isAvailable, compareAndWrite };
+export type { AutoVoteStatus };

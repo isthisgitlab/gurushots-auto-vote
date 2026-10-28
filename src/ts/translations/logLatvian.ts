@@ -773,7 +773,6 @@ export const logMessages = {
         'Saglabātais pieteikšanās tokens paturēts, jo darbojas cita sesija, kas to var lietot (CLI, darbvirsmas lietotne vai tīmekļa serveris)',
     m26fb653a989a: 'Notīrīts saglabātais tokens, ko atstāja iepriekšējā palaišana ("Palikt pieteicies" ir izslēgts)',
     m1b55faf3cd4e: 'Startējot lietotni, neizdevās notīrīt atlikušo tokenu:',
-    mc6f08614096e: 'Saglabātais pieteikšanās tokens paturēts, jo darbojas CLI sesija, kas to var lietot',
     me63c2785bcce: 'Saglabātais pieteikšanās tokens paturēts, jo fona automātiskā balsošana ir ieslēgta',
     mad0f50fe47b6:
         'Saglabātais pieteikšanās tokens paturēts, jo fona automātiskās balsošanas stāvokli neizdevās nolasīt',

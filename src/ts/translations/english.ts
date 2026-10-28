@@ -1371,7 +1371,7 @@ export const app = {
     resumeCancel: "Don't resume",
     stayLoggedIn: 'Stay Logged In',
     stayLoggedInDesc:
-        'Keep your session so you stay signed in after closing the app — background auto-vote keeps it while it runs.',
+        'Keep your session so you stay signed in after closing the app — on Android, background auto-vote keeps it while it runs.',
     stopAutoVote: 'Stop Auto Vote',
     theme: 'Theme',
     themeDesc: 'Choose the color theme of the app.',

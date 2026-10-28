@@ -54,12 +54,19 @@ const clearLeftoverToken = async (): Promise<void> => {
         // call succeeds. `available: false` (no plugin) errs toward clearing:
         // no plugin means no service could ever have been armed.
         if (status.available && (status.running || 'error' in status)) {
-            withCategory('authentication').info(
-                'error' in status
-                    ? 'Kept the saved login token because background auto-vote state could not be read'
-                    : 'Kept the saved login token because background auto-vote is armed',
-                null,
-            );
+            // The unreadable state is anomalous — the call itself failed — so it says so at warning
+            // level; an armed service keeping its token is normal operation and stays at info.
+            if ('error' in status) {
+                withCategory('authentication').warning(
+                    'Kept the saved login token because background auto-vote state could not be read',
+                    null,
+                );
+            } else {
+                withCategory('authentication').info(
+                    'Kept the saved login token because background auto-vote is armed',
+                    null,
+                );
+            }
             return;
         }
         if (await clearTokenUnlessStayingLoggedIn()) {

@@ -750,7 +750,6 @@ export const logMessages = {
         'Kept the saved login token because another session is running and may be using it (CLI, desktop app, or web server)',
     m26fb653a989a: 'Cleared a saved token left by an earlier run (Stay Logged In is off)',
     m1b55faf3cd4e: 'Failed to clear a leftover token at startup:',
-    mc6f08614096e: 'Kept the saved login token because a CLI session is running and may be using it',
     me63c2785bcce: 'Kept the saved login token because background auto-vote is armed',
     mad0f50fe47b6: 'Kept the saved login token because background auto-vote state could not be read',
 } as const;

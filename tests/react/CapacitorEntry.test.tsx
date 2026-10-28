@@ -10,19 +10,16 @@
 
 import type { RendererGlobals } from '../../src/ts/types/capacitor';
 import type { CategoryLogger } from '../../src/ts/logger';
+import type { AutoVoteStatus } from '../../src/ts/services/NativeAutovoteBridge';
 
 const SRC = '../../src/ts';
 
 /**
- * What the native bridge's getStatus answers (services/NativeAutovoteBridge's
- * callPlugin union): no plugin, a plugin success, or a plugin call the plugin
- * rejected — that last one carries `error`, present whatever the rejection
- * said (a message-less rejection reads undefined).
+ * The native bridge's own getStatus return type, so the mocked statuses cannot drift from the
+ * real union: no plugin, a plugin success, or a plugin call the plugin rejected — that last one
+ * carries `error`, present whatever the rejection said (a message-less rejection reads undefined).
  */
-type BridgeStatus =
-    | { running: false; available: false }
-    | { running: boolean; available: true; cycleCount: number; lastRunAt: number; lastError: string }
-    | { running: false; available: true; error: string | undefined };
+type BridgeStatus = AutoVoteStatus;
 
 const flush = async () => {
     for (let i = 0; i < 20; i += 1) await Promise.resolve();
@@ -139,8 +136,13 @@ describe('Capacitor entry', () => {
             isCapacitor: jest.fn(() => native),
             categoryError: jest.fn(),
             categoryInfo: jest.fn(),
+            categoryWarning: jest.fn(),
             withCategory: jest.fn(
-                (): Pick<CategoryLogger, 'error' | 'info'> => ({ error: m.categoryError, info: m.categoryInfo }),
+                (): Pick<CategoryLogger, 'error' | 'info' | 'warning'> => ({
+                    error: m.categoryError,
+                    info: m.categoryInfo,
+                    warning: m.categoryWarning,
+                }),
             ),
             mountApp: jest.fn(),
             mountLogin: jest.fn(),
@@ -410,7 +412,7 @@ describe('Capacitor entry', () => {
         const m = load({ status: { running: false, available: true, error: 'getStatus failed' } });
         await flush();
         expect(m.clearTokenUnlessStayingLoggedIn).not.toHaveBeenCalled();
-        expect(m.categoryInfo).toHaveBeenCalledWith(
+        expect(m.categoryWarning).toHaveBeenCalledWith(
             'Kept the saved login token because background auto-vote state could not be read',
             null,
         );
@@ -423,7 +425,7 @@ describe('Capacitor entry', () => {
         const m = load({ status: { running: false, available: true, error: undefined } });
         await flush();
         expect(m.clearTokenUnlessStayingLoggedIn).not.toHaveBeenCalled();
-        expect(m.categoryInfo).toHaveBeenCalledWith(
+        expect(m.categoryWarning).toHaveBeenCalledWith(
             'Kept the saved login token because background auto-vote state could not be read',
             null,
         );

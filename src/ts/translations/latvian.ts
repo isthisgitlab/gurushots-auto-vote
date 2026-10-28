@@ -1388,7 +1388,7 @@ export const app: LatvianApp = {
     resumeCancel: 'Neatsākt',
     stayLoggedIn: 'Saglabāt pieteikšanos',
     stayLoggedInDesc:
-        'Saglabāt sesiju, lai pēc lietotnes aizvēršanas tu paliktu pieteicies — fona automātiskā balsošana to patur, kamēr tā darbojas.',
+        'Saglabāt sesiju, lai pēc lietotnes aizvēršanas tu paliktu pieteicies — Androidā fona automātiskā balsošana to patur, kamēr tā darbojas.',
     stopAutoVote: 'Apturēt automātisko balsošanu',
     theme: 'Tēma',
     themeDesc: 'Izvēlies lietotnes krāsu tēmu.',

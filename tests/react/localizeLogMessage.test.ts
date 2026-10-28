@@ -260,9 +260,6 @@ describe('Latvian log messages', () => {
             'Notīrīts saglabātais tokens, ko atstāja iepriekšējā palaišana ("Palikt pieteicies" ir izslēgts)',
         );
         expect(
-            localizeLogMessage('Kept the saved login token because a CLI session is running and may be using it'),
-        ).toBe('Saglabātais pieteikšanās tokens paturēts, jo darbojas CLI sesija, kas to var lietot');
-        expect(
             localizeLogMessage(
                 'Kept the saved login token because another session is running and may be using it (CLI, desktop app, or web server)',
             ),
