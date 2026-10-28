@@ -10,17 +10,6 @@
  * settings-adjacent orchestration channels.
  */
 
-// Lazy require: esbuild must not resolve electron when this module is bundled
-// into the Capacitor renderer; only register() uses BrowserWindow. Gated on
-// isElectron: outside Electron, require('electron') loads the npm package,
-// which downloads the Electron binary when it is missing.
-let BrowserWindow: typeof electronModule.BrowserWindow | null = null;
-let electronApp: typeof electronModule.app | null = null;
-if (runtime.isElectron()) {
-    const electron = require('electron') as typeof import('electron');
-    BrowserWindow = electron.BrowserWindow;
-    electronApp = electron.app;
-}
 import * as settings from '../settings';
 import * as runtime from '../runtime';
 import { registerHandlers, type IpcHandlerMap } from './registerHandlers';
@@ -46,6 +35,18 @@ import type { SettingsSchemaEntry } from '../settings/schema';
 import type { ConfigApp } from '../types/config';
 import type { EntryPinKind } from '../types/settings';
 import type * as electronModule from 'electron';
+
+// Lazy require: esbuild must not resolve electron when this module is bundled
+// into the Capacitor renderer; only register() uses BrowserWindow. Gated on
+// isElectron: outside Electron, require('electron') loads the npm package,
+// which downloads the Electron binary when it is missing.
+let BrowserWindow: typeof electronModule.BrowserWindow | null = null;
+let electronApp: typeof electronModule.app | null = null;
+if (runtime.isElectron()) {
+    const electron = require('electron') as typeof import('electron');
+    BrowserWindow = electron.BrowserWindow;
+    electronApp = electron.app;
+}
 
 /**
  * The renderer-facing projection of one schema entry (no validators).

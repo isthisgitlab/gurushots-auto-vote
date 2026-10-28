@@ -354,7 +354,7 @@ describe('watchSettingsFile change detection', () => {
             await emitChange();
 
             expect(infoLines()).toEqual(['🔄 Settings changed:', '  • auth.lastUsername: [REDACTED] → [REDACTED]']);
-            expect(loggedText()).not.toMatch(/example\.com/);
+            expect(loggedText()).not.toContain('example.com');
         });
     });
 

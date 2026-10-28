@@ -68,7 +68,7 @@ const descriptionExclusions = (
         DESCRIPTION_LEAD_VERDICT_TAIL_RE.lastIndex = end;
         const nounIsRequired =
             DESCRIPTION_LEAD_PHOTO_POSTMODIFIER_RE.test(before) && DESCRIPTION_LEAD_VERDICT_TAIL_RE.test(text);
-        if (DESCRIPTION_LEAD_FOLLOWER_RE.test(text) && !nounIsRequired) add(m[0]);
+        if ((end === text.length || DESCRIPTION_LEAD_FOLLOWER_RE.test(text)) && !nounIsRequired) add(m[0]);
         DESCRIPTION_LEAD_FOLLOWER_RE.lastIndex = 0;
         DESCRIPTION_LEAD_VERDICT_TAIL_RE.lastIndex = 0;
     }
@@ -118,10 +118,11 @@ const DESCRIPTION_LEAD_RE = new RegExp(
 // A lead match counts only when the text at the match end is the end of the
 // text, punctuation, " -" or " (", or opens one of these words. The list is
 // greedy and there is no lookahead to backtrack into, so the match ends after
-// the full list and this check runs anchored exactly there: sticky (`y`), with
-// the end of the text as its `$` alternative, probed on the whole text at the
-// match end — no slice of the input is taken — and lastIndex reset after each
-// probe so no state leaks out.
+// the full list and this check runs anchored exactly there: sticky (`y`),
+// probed on the whole text at the match end — no slice of the input is
+// taken — and lastIndex reset after each probe so no state leaks out. The
+// end of the text is checked in code (end === text.length), keeping every
+// alternative of the pattern non-empty.
 // "will", "are", "is", "can" and "may" stay out — they would let "no animals
 // will be harmed" through — while "should" and "must" stay in, at the pinned
 // cost that "no animals should be harmed" counts too, and "or" is in for a
@@ -129,7 +130,7 @@ const DESCRIPTION_LEAD_RE = new RegExp(
 // disqualified"); the greedy list still ends at the last noun, so "no people
 // or animal lovers" reads " lovers" as its follower and excludes nothing.
 const DESCRIPTION_LEAD_FOLLOWER_RE =
-    /(?:[.,;:!?()]| -| \(| (?:in|on|or|at|please|allowed|permitted|visible|should|must)\b|$)/y;
+    /(?:[.,;:!?()]| -| \(| (?:in|on|or|at|please|allowed|permitted|visible|should|must)\b)/y;
 // The trailing lookahead rejects "places where people are not allowed to enter".
 // The lookbehind rejects a negator before the list ("Photos without pets ...",
 // "Shots that do not include people ..."): there the noun is what the sentence
