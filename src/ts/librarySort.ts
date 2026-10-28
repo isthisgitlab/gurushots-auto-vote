@@ -20,9 +20,10 @@ const LIBRARY_ORDERS = {
 type LibraryOrder = keyof typeof LIBRARY_ORDERS;
 
 /**
- * The sorts a picker's toolbar can apply to the photos it has loaded. `library` is the server's
- * order above; the other three reorder what is loaded from the per-photo stats (`get-photo-stats`),
- * which no server sort exists for.
+ * The sorts a picker's toolbar can apply to the photos it has loaded. `library` is the order the
+ * listing arrived in — the server's votes order, or its date orders as `orderByUploadDate` below
+ * enforces them; the other three reorder what is loaded from the per-photo stats
+ * (`get-photo-stats`), which no server sort exists for.
  */
 const LOADED_SORTS = ['library', 'ratio', 'likes', 'guruPicks'] as const;
 

@@ -615,6 +615,18 @@ describe('the order (7th argument)', () => {
         };
         expect(photoIds(oldest)).toEqual(['p0', 'p1', 'p2']);
     });
+
+    // The search path is the one the endpoint itself orders; the enforcement there must still move
+    // an unknown-dated photo the endpoint left among dated ones (a no-op over its sorted rows).
+    test('a search answer under a date order is enforced too: an unknown date moves last', async () => {
+        const walk = newWalk(datedWalkOf(400, undefined, 500, 300));
+        stubStrategy({ getEligiblePhotosWalk: walk });
+        const result = (await call('5', 'pink', 'fresh', 'submit', undefined, undefined, 'newest')) as {
+            photos: Array<{ id: string }>;
+        };
+        expect(photoIds(result)).toEqual(['p2', 'p0', 'p3', 'p1']);
+        expect(walk.mock.calls[0][2]).toMatchObject({ search: 'pink', order: 'newest' });
+    });
 });
 
 describe('without a challenge id (get_photos_private needs one)', () => {
