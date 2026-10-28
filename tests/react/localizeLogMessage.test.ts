@@ -255,6 +255,25 @@ describe('Latvian log messages', () => {
         );
     });
 
+    test('translates the stay-logged-in clear lines the shells log', () => {
+        expect(localizeLogMessage('Cleared a saved token left by an earlier run (Stay Logged In is off)')).toBe(
+            'Notīrīts saglabātais tokens, ko atstāja iepriekšējā palaišana ("Palikt pieteicies" ir izslēgts)',
+        );
+        expect(
+            localizeLogMessage('Kept the saved login token because a CLI session is running and may be using it'),
+        ).toBe('Saglabātais pieteikšanās tokens paturēts, jo darbojas CLI sesija, kas to var lietot');
+        expect(
+            localizeLogMessage(
+                'Kept the saved login token because another session is running and may be using it (CLI, desktop app, or web server)',
+            ),
+        ).toBe(
+            'Saglabātais pieteikšanās tokens paturēts, jo darbojas cita sesija, kas to var lietot (CLI, darbvirsmas lietotne vai tīmekļa serveris)',
+        );
+        expect(localizeLogMessage('Failed to clear a leftover token at startup:')).toBe(
+            'Startējot lietotni, neizdevās notīrīt atlikušo tokenu:',
+        );
+    });
+
     test('leaves unknown technical text intact and handles unmatched icons', () => {
         expect(localizeLogMessage('upstream-specific-error')).toBe('upstream-specific-error');
         expect(localizeLogMessage('ℹ️ upstream-specific-error')).toBe('ℹ️ upstream-specific-error');

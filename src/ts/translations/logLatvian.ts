@@ -769,4 +769,9 @@ export const logMessages = {
     mfebf9a3cde39: 'Saglabātais pieteikšanās tokens notīrīts ("Palikt pieteicies" ir izslēgts)',
     mfedb076cd73d: 'NativeAutovoteBridge.getPlugin neizdevās',
     mff7f63e80914: 'Uzstādījums "{0}" nav atrasts',
+    m3f9936663978:
+        'Saglabātais pieteikšanās tokens paturēts, jo darbojas cita sesija, kas to var lietot (CLI, darbvirsmas lietotne vai tīmekļa serveris)',
+    m26fb653a989a: 'Notīrīts saglabātais tokens, ko atstāja iepriekšējā palaišana ("Palikt pieteicies" ir izslēgts)',
+    m1b55faf3cd4e: 'Startējot lietotni, neizdevās notīrīt atlikušo tokenu:',
+    mc6f08614096e: 'Saglabātais pieteikšanās tokens paturēts, jo darbojas CLI sesija, kas to var lietot',
 } as const;

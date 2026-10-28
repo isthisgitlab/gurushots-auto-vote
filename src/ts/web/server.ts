@@ -35,11 +35,16 @@ import * as scenariosHandlers from '../ipc/scenarios.handlers';
 import { buildReleaseUpdateHandlers } from '../ipc/releaseUpdates';
 import { invokeHandler } from '../ipc/registerHandlers';
 import * as updateChecker from '../services/UpdateChecker';
-import { logout as sharedLogout, LogoutNotSavedError } from '../services/auth';
+import { logout as sharedLogout, clearTokenUnlessStayingLoggedIn, LogoutNotSavedError } from '../services/auth';
 import { LOGOUT_NOT_SAVED } from '../ipc/logoutCode';
 import { initializeHeaders } from '../api/randomizer';
 import * as settings from '../settings';
-import { holdWebServerLock } from '../settings/cliSessionLock';
+import {
+    holdWebServerLock,
+    isCliSessionActive,
+    isDesktopAppActive,
+    isWebServerActive,
+} from '../settings/cliSessionLock';
 import * as logger from '../logger';
 import { errorMessage } from '../errorMessage';
 import { isPlainObject } from '../plainObject';
@@ -292,6 +297,68 @@ const handleApi = async (
     else await invokeChannel(handlers, res, pathname, body);
 };
 
+// One string for both web clears: the launch clear and the close clear keep the login for the same
+// reason — a sibling shell that is running may be using it.
+const SIBLING_KEEP_LOGIN =
+    'Kept the saved login token because another session is running and may be using it (CLI, desktop app, or web server)';
+
+/** Whether another process holds any sibling shell's marker; the three checks run together, so a stale-but-live marker costs one settle wait, not three. */
+const anySiblingShellActive = (): Promise<boolean> =>
+    Promise.all([isCliSessionActive(), isDesktopAppActive(), isWebServerActive()]).then((states) =>
+        states.some(Boolean),
+    );
+
+/**
+ * A login a run left behind (a crash or a kill skips the close-time clear) is cleared before the
+ * server listens, so no page can observe a pre-clear token — unless "Stay Logged In" is on. A
+ * sibling shell that is running may be using the login, so it is left alone then, and a login made
+ * while the marker checks settle is never cleared either (the token is read again first). Never
+ * throws: a refused clear is logged, never fatal.
+ */
+const clearLeftoverToken = async (): Promise<void> => {
+    try {
+        const leftover = settings.getSetting('token');
+        if (settings.getSetting('stayLoggedIn') || !leftover) return;
+        logger.printLine('Attempting to clear the saved login before starting…');
+        if (await anySiblingShellActive()) {
+            logger.withCategory('authentication').info(SIBLING_KEEP_LOGIN, null);
+            return;
+        }
+        if (settings.getSetting('token') !== leftover || settings.getSetting('stayLoggedIn')) return;
+        if (await clearTokenUnlessStayingLoggedIn()) {
+            logger
+                .withCategory('authentication')
+                .info('Cleared a saved token left by an earlier run (Stay Logged In is off)', null);
+        }
+    } catch (error) {
+        logger.withCategory('authentication').error('Failed to clear a leftover token at startup:', error);
+    }
+};
+
+/**
+ * The close chain's clear: with Stay Logged In off, the token this run leaves behind is cleared
+ * before the process exits — the same gated clear the launch runs, with the stop path's own
+ * wording. A wipe stop says nothing here: the wiped store reads no token, so the gate skips
+ * silently, and a store the wipe discarded must not be reported as a failed clear either.
+ */
+const clearTokenBeforeExit = async (wiped: () => boolean): Promise<void> => {
+    try {
+        const saved = settings.getSetting('token');
+        if (settings.getSetting('stayLoggedIn') || !saved) return;
+        logger.printLine('Attempting to clear the saved login before exiting…');
+        if (await anySiblingShellActive()) {
+            logger.withCategory('authentication').info(SIBLING_KEEP_LOGIN, null);
+            return;
+        }
+        if (settings.getSetting('token') !== saved || settings.getSetting('stayLoggedIn')) return;
+        if (await clearTokenUnlessStayingLoggedIn()) {
+            logger.withCategory('authentication').info('Cleared saved token (Stay Logged In is off)', null);
+        }
+    } catch (error) {
+        if (!wiped()) logger.withCategory('authentication').error('Failed to clear token on shutdown', error);
+    }
+};
+
 interface WebServerOptions {
     /** The built renderer (dist/): web.html, web-bundle.js, styles.css. */
     distDir: string;
@@ -322,12 +389,18 @@ const createWebServer = ({ distDir, token = newShellToken(), onLocalDataWiped }:
         },
     });
 
+    // Ends every connected browser's event stream (a wipe stop and the launcher's stop both do).
+    const endClients = () => {
+        for (const client of clients) client.end();
+    };
+
     // Runs when a reply has been sent: after a wipe, ends the event streams and stops listening, once however many
-    // replies finish after it.
+    // replies finish after it. The idle keep-alive sockets go too, so close() is not held open by them.
     const stopIfWiped = () => {
         if (!wiped || stopped) return;
         stopped = true;
-        for (const client of clients) client.end();
+        endClients();
+        server.closeIdleConnections();
         server.close();
         onLocalDataWiped?.();
     };
@@ -353,7 +426,7 @@ const createWebServer = ({ distDir, token = newShellToken(), onLocalDataWiped }:
             fail(res, 500, 'Internal error');
         });
     });
-    return { server, emit, token };
+    return { server, emit, token, wasWiped: () => wiped, endClients };
 };
 
 interface StartOptions extends WebServerOptions {
@@ -365,7 +438,9 @@ interface StartOptions extends WebServerOptions {
  * loopback interface.
  * @returns the listening server, the token its pages need, and the URL that
  *   opens the UI: it carries the token in its fragment, so print it to stdout
- *   only and keep it out of the logs
+ *   only and keep it out of the logs. `stop` stops listening and waits out the
+ *   close chain; `whenClosed` is that chain's promise, for the paths that close
+ *   the server themselves (a local-data wipe)
  */
 const startWebServer = async ({ port, distDir }: StartOptions) => {
     initializeHeaders();
@@ -374,7 +449,9 @@ const startWebServer = async ({ port, distDir }: StartOptions) => {
     } catch (err) {
         logger.withCategory('settings').warning('Intent profile seeding failed (non-fatal):', err);
     }
-    const { server, emit, token } = createWebServer({
+    // Before the server exists to answer a page: nothing can observe a pre-clear token.
+    await clearLeftoverToken();
+    const { server, emit, token, wasWiped, endClients } = createWebServer({
         distDir,
         onLocalDataWiped: () =>
             logger.printLine('Local data was deleted. The web shell has stopped: start it again to continue.'),
@@ -389,11 +466,43 @@ const startWebServer = async ({ port, distDir }: StartOptions) => {
     });
     // The marker a local-data wipe from the desktop app or the CLI looks for: this server writes the app's data until it
     // stops (every wipe stops it). A server killed by a signal leaves one that goes stale.
-    server.once('close', holdWebServerLock());
+    const releaseWebServerMarker = holdWebServerLock();
+    // The close chain: the marker is released (synchronously), then the stay-logged-in clear runs — the launcher's
+    // exit and stop() wait for it to settle, so a signal cannot win the race against the clear.
+    let settleCloseChain!: () => void;
+    const closeChainSettled = new Promise<void>((resolve) => {
+        settleCloseChain = resolve;
+    });
+    let closeHandled = false;
+    server.once('close', () => {
+        closeHandled = true;
+        releaseWebServerMarker();
+        void clearTokenBeforeExit(wasWiped).finally(settleCloseChain);
+    });
+    /** Resolves once the server is closed and its close chain has settled. */
+    const whenClosed = async (): Promise<void> => {
+        if (!closeHandled)
+            await new Promise<void>((resolve) => {
+                server.once('close', () => resolve());
+            });
+        await closeChainSettled;
+    };
+    /**
+     * Stops listening: ends the event streams, drops the idle keep-alive sockets that would hold
+     * close() open, and waits out the close chain. Calling it again resolves the same way.
+     */
+    const stop = async (): Promise<void> => {
+        endClients();
+        server.closeIdleConnections();
+        // A second stop finds the server already closed: the callback takes the error, so no
+        // 'error' event fires for the leftover listener of the listen promise to trip over.
+        server.close(() => undefined);
+        await whenClosed();
+    };
     const address = server.address() as { port: number };
     const origin = `http://localhost:${address.port}/`;
     logger.withCategory('ui').info(`Web UI listening on ${origin}`, { userData: settings.getUserDataPath() });
-    return { server, token, url: `${origin}#t=${token}` };
+    return { server, token, url: `${origin}#t=${token}`, stop, whenClosed };
 };
 
 export { createWebServer, startWebServer, buildWebHandlers };

@@ -746,4 +746,9 @@ export const logMessages = {
     mfebf9a3cde39: 'Cleared saved token (Stay Logged In is off)',
     mfedb076cd73d: 'NativeAutovoteBridge.getPlugin failed',
     mff7f63e80914: "Setting '{0}' not found",
+    m3f9936663978:
+        'Kept the saved login token because another session is running and may be using it (CLI, desktop app, or web server)',
+    m26fb653a989a: 'Cleared a saved token left by an earlier run (Stay Logged In is off)',
+    m1b55faf3cd4e: 'Failed to clear a leftover token at startup:',
+    mc6f08614096e: 'Kept the saved login token because a CLI session is running and may be using it',
 } as const;

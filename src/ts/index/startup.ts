@@ -15,10 +15,11 @@ import { installPermissionHandlers } from './permissions';
 
 /**
  * A login a run left behind (a crash or a kill skips the quit-time clear) is cleared at the next start unless "Stay
- * Logged In" is on. Only the desktop app does this, and only in the instance that holds the single-instance lock
- * (onReady runs for no other): a CLI session that is running may be using the login, so it is left alone then. Looking
- * for a CLI session can wait a few seconds on an old marker, so this runs beside the first window rather than before
- * it; the login window needs no token, and a login made meanwhile is never cleared (the token is read again first).
+ * Logged In" is on — the desktop app does it here, the web server shell before it starts listening. This clear runs
+ * only in the instance that holds the single-instance lock (onReady runs for no other): a CLI session that is running
+ * may be using the login, so it is left alone then. Looking for a CLI session can wait a few seconds on an old marker,
+ * so this runs beside the first window rather than before it; the login window needs no token, and a login made
+ * meanwhile is never cleared (the token is read again first).
  */
 const clearLeftoverToken = async () => {
     try {
