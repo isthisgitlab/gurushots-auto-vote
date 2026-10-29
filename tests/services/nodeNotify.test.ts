@@ -7,12 +7,22 @@
  * process is spawned.
  */
 
+// Partial mock so getEntryAgeLedger can be spied on (swc-compiled exports are
+// non-configurable getters on the real module).
+jest.mock('../../src/ts/apiFactory', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/apiFactory')>('../../src/ts/apiFactory'),
+}));
+
 import type * as nodeNotifyModule from '../../src/ts/services/notify/nodeNotify';
+import type * as apiFactoryModule from '../../src/ts/apiFactory';
 import type { Challenge } from '../../src/ts/types/gurushots';
+import type { EntryAgeLedger } from '../../src/ts/types/stores';
 import { invalid } from '../helpers/invalid';
 
 const { createNodeDeadlineNotifier, escapeAppleScript, escapePango } =
     require('../../src/ts/services/notify/nodeNotify') as typeof nodeNotifyModule;
+const apiFactory = require('../../src/ts/apiFactory') as typeof apiFactoryModule;
 
 const NOW = 1_000_000;
 const describeWith =
@@ -137,5 +147,33 @@ describe('createNodeDeadlineNotifier', () => {
             NOW,
         );
         expect(deliver).toHaveBeenCalledTimes(1);
+    });
+
+    test('one ledger read per notify tick, however many challenges the batch holds', async () => {
+        const getEntryAgeLedger = jest
+            .spyOn(apiFactory, 'getEntryAgeLedger')
+            .mockReturnValue(invalid<EntryAgeLedger>(null));
+        try {
+            const describeDeadlineActions = jest.fn(() => ({ actions: [act('boost', 120)] }));
+            const notify = createNodeDeadlineNotifier({
+                getSetting: settingGetter(boostOn),
+                describeDeadlineActions,
+                translate: (k) => k,
+                deliver: jest.fn(),
+            });
+
+            await notify(
+                invalid([
+                    { id: '1', title: 'A' },
+                    { id: '2', title: 'B' },
+                ]),
+                NOW,
+            );
+
+            expect(describeDeadlineActions).toHaveBeenCalledTimes(2);
+            expect(getEntryAgeLedger).toHaveBeenCalledTimes(1);
+        } finally {
+            getEntryAgeLedger.mockRestore();
+        }
     });
 });

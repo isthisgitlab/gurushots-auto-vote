@@ -215,7 +215,7 @@ describe('submitBoostPinnedPhoto through runBoost — the pending guard', () => 
 });
 
 describe('submitBoostPinnedPhoto through runBoost — definitive failures latch', () => {
-    test.each([['submit-rejected'], ['pin-refused'], ['pin-not-found'], ['pin-filtered']])(
+    test.each([['submit-rejected'], ['pin-refused'], ['pin-not-found'], ['pin-unreachable'], ['pin-filtered']])(
         '%s: latch set, wait armed, a second due pass makes no fetch/submit call',
         async (reason) => {
             const challenge = goneChallenge();
@@ -240,29 +240,85 @@ describe('submitBoostPinnedPhoto through runBoost — definitive failures latch'
 });
 
 describe('submitBoostPinnedPhoto through runBoost — transient failures retry', () => {
-    test.each([
-        ['fetch-error'],
-        ['data-incomplete'],
-        ['submit-unanswered'],
-        ['walk-incomplete'],
-        ['no-slots'],
-        ['invalid-challenge'],
-    ])('%s: no latch, the next due pass tries again', async (reason) => {
+    test('submit-unanswered retries once, then a server refusal on the next pass latches', async () => {
         const challenge = goneChallenge();
         const ledger = createMemoryEntryAgeLedger();
         const { ctx } = bundle(challenge, ledger);
-        autoFill.submitPinnedEntry.mockResolvedValue(invalid({ ok: false, imageId: null, reason }));
+        autoFill.submitPinnedEntry
+            .mockResolvedValueOnce(invalid({ ok: false, imageId: null, reason: 'submit-unanswered' }))
+            .mockResolvedValueOnce(invalid({ ok: false, imageId: null, reason: 'submit-rejected' }));
 
         await runBoostWith({ ctx });
 
+        // The no-answer pass latches nothing and arms the wake.
         expect(ledger.pinSubmitFailed('101', PIN, boostDeadline(challenge))).toBe(false);
-        expect(log.infoT).toHaveBeenCalledWith('mb2f6a1d84b09', ['[Challenge 101: Pinned]', PIN, reason], null);
+        expect(log.infoT).toHaveBeenCalledWith(
+            'mb2f6a1d84b09',
+            ['[Challenge 101: Pinned]', PIN, 'submit-unanswered'],
+            null,
+        );
         expect(challenge.boostHoldUntil).toBe(boostDeadline(challenge) - 60);
 
         await runBoostWith({ ctx });
 
+        // The next pass's refusal is definitive: latched, no third attempt.
+        expect(ledger.pinSubmitFailed('101', PIN, boostDeadline(challenge))).toBe(true);
+        expect(log.infoT).toHaveBeenCalledWith(
+            'mb0d7e3a91c65',
+            ['[Challenge 101: Pinned]', PIN, 'submit-rejected'],
+            null,
+        );
         expect(autoFill.submitPinnedEntry).toHaveBeenCalledTimes(2);
     });
+
+    test('walk-incomplete retries once, then a completed walk that misses the pin latches', async () => {
+        const challenge = goneChallenge();
+        const ledger = createMemoryEntryAgeLedger();
+        const { ctx } = bundle(challenge, ledger);
+        autoFill.submitPinnedEntry
+            .mockResolvedValueOnce(invalid({ ok: false, imageId: null, reason: 'walk-incomplete' }))
+            .mockResolvedValueOnce(invalid({ ok: false, imageId: null, reason: 'pin-not-found' }));
+
+        await runBoostWith({ ctx });
+
+        expect(ledger.pinSubmitFailed('101', PIN, boostDeadline(challenge))).toBe(false);
+        expect(log.infoT).toHaveBeenCalledWith(
+            'mb2f6a1d84b09',
+            ['[Challenge 101: Pinned]', PIN, 'walk-incomplete'],
+            null,
+        );
+        expect(challenge.boostHoldUntil).toBe(boostDeadline(challenge) - 60);
+
+        await runBoostWith({ ctx });
+
+        expect(ledger.pinSubmitFailed('101', PIN, boostDeadline(challenge))).toBe(true);
+        expect(log.infoT).toHaveBeenCalledWith(
+            'mb0d7e3a91c65',
+            ['[Challenge 101: Pinned]', PIN, 'pin-not-found'],
+            null,
+        );
+        expect(autoFill.submitPinnedEntry).toHaveBeenCalledTimes(2);
+    });
+
+    test.each([['fetch-error'], ['data-incomplete'], ['no-slots'], ['invalid-challenge']])(
+        '%s: no latch, the next due pass tries again',
+        async (reason) => {
+            const challenge = goneChallenge();
+            const ledger = createMemoryEntryAgeLedger();
+            const { ctx } = bundle(challenge, ledger);
+            autoFill.submitPinnedEntry.mockResolvedValue(invalid({ ok: false, imageId: null, reason }));
+
+            await runBoostWith({ ctx });
+
+            expect(ledger.pinSubmitFailed('101', PIN, boostDeadline(challenge))).toBe(false);
+            expect(log.infoT).toHaveBeenCalledWith('mb2f6a1d84b09', ['[Challenge 101: Pinned]', PIN, reason], null);
+            expect(challenge.boostHoldUntil).toBe(boostDeadline(challenge) - 60);
+
+            await runBoostWith({ ctx });
+
+            expect(autoFill.submitPinnedEntry).toHaveBeenCalledTimes(2);
+        },
+    );
 });
 
 describe('submitBoostPinnedPhoto through runBoost — skips and fallbacks', () => {

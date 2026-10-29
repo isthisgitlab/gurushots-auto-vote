@@ -44,14 +44,8 @@ import { submitNewEntryForAction, submitPinnedEntry } from './autoFill/fillNew';
 import { rankCandidatesForChallenge, suggestFillPhotos } from './autoFill/pipeline';
 import { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge } from './autoFill/candidates';
 import { resolveMemberId, __resetMemberIdCache } from './autoFill/memberIdentity';
-import {
-    resolveChosenPhotos,
-    resolveMissingChosen,
-    logChosenSkipOnce,
-    clearChosenSkip,
-    chosenWalkOutcome,
-    enteredIds,
-} from './autoFill/chosenPhotos';
+import { resolveChosenPhotos, logChosenSkipOnce, clearChosenSkip, enteredIds } from './autoFill/chosenPhotos';
+import { resolveMissingChosen, chosenWalkOutcome } from './autoFill/chosenWalkMemo';
 import { describeSubmitFailure } from './autoFill/fillLogging';
 import { getSlotsRemaining, reflectNewEntry, reflectEntryFlag, refreshChallengeState } from './autoFill/challengeState';
 import { resolveScheduleTarget, getNextScheduleThresholdSec } from './autoFill/schedule';

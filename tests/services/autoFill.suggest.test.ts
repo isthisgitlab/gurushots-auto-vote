@@ -28,6 +28,12 @@ jest.mock('../../src/ts/services/autoFill/chosenPhotos', () => ({
         '../../src/ts/services/autoFill/chosenPhotos',
     ),
 }));
+jest.mock('../../src/ts/services/autoFill/chosenWalkMemo', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/services/autoFill/chosenWalkMemo')>(
+        '../../src/ts/services/autoFill/chosenWalkMemo',
+    ),
+}));
 jest.mock('../../src/ts/services/autoFill/pipeline/verify', () => ({
     __esModule: true,
     ...jest.requireActual<typeof import('../../src/ts/services/autoFill/pipeline/verify')>(
@@ -51,6 +57,8 @@ jest.mock('../../src/ts/settings/storage', () => ({
 const { suggestFillPhotos, __resetMemberIdCache } = require('../../src/ts/services/autoFill') as typeof autoFillModule;
 const { SUGGEST_COUNT } = require('../../src/ts/services/autoFill/pipeline/suggest') as typeof suggestModule;
 const chosenPhotos = require('../../src/ts/services/autoFill/chosenPhotos') as typeof chosenPhotosModule;
+const chosenWalkMemo =
+    require('../../src/ts/services/autoFill/chosenWalkMemo') as typeof import('../../src/ts/services/autoFill/chosenWalkMemo');
 const verify = require('../../src/ts/services/autoFill/pipeline/verify') as typeof verifyModule;
 const photoStats = require('../../src/ts/services/photoStats') as typeof photoStatsModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
@@ -513,7 +521,7 @@ describe('suggestFillPhotos', () => {
         test('leaves the entry ledger, the skip and refusal memory and the uncertain-subject record alone', async () => {
             const clearChosenSkip = jest.spyOn(chosenPhotos, 'clearChosenSkip');
             const logChosenSkipOnce = jest.spyOn(chosenPhotos, 'logChosenSkipOnce');
-            const refuseRememberedChosen = jest.spyOn(chosenPhotos, 'refuseRememberedChosen');
+            const refuseRememberedChosen = jest.spyOn(chosenWalkMemo, 'refuseRememberedChosen');
             const recordUncertainSubmission = jest.spyOn(verify, 'recordUncertainSubmission');
             const resetPassState = jest.spyOn(photoStats, 'resetPassState');
             const deps = makeDeps({ settings: { chosen: ['p3'], only: true } });

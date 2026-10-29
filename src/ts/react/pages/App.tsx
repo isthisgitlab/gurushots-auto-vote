@@ -353,7 +353,6 @@ function AppContent() {
                         timezone={timezone}
                         autovoteRunning={autovote.running}
                         autovoteCycles={autovote.cycles}
-                        cycleKey={autovote.lastRun}
                         isLoggedIn={isLoggedIn}
                         onChallengeSettingsClick={challengeSettings.open}
                         bankroll={bankroll}

@@ -104,21 +104,21 @@ describe('canSubmitBoostPin', () => {
     test('null while the failure latch names this pin and Boost window; a new pin or window may try again', () => {
         setup({ boost: 'pin1' });
         const ledger = createMemoryEntryAgeLedger();
-        ledger.markPinSubmitFailed(build([A]), 'pin1', CLOSE);
+        ledger.markPinSubmitFailed(build([A]), 'pin1', CLOSE, NOW);
         expect(VotingLogic.canSubmitBoostPin(build([A]), '42', ledger)).toBeNull();
         // A different pin is a new key.
-        ledger.markPinSubmitFailed(build([A]), 'pin2', CLOSE);
+        ledger.markPinSubmitFailed(build([A]), 'pin2', CLOSE, NOW);
         expect(VotingLogic.canSubmitBoostPin(build([A]), '42', ledger)).toBe('pin1');
         // So is a new Boost window.
         const nextWindow = createMemoryEntryAgeLedger();
-        nextWindow.markPinSubmitFailed(build([A]), 'pin1', CLOSE + 1);
+        nextWindow.markPinSubmitFailed(build([A]), 'pin1', CLOSE + 1, NOW);
         expect(VotingLogic.canSubmitBoostPin(build([A]), '42', nextWindow)).toBe('pin1');
     });
 
     test('a latch whose Boost window passed no longer blocks', () => {
         setup({ boost: 'pin1' });
         const ledger = createMemoryEntryAgeLedger();
-        ledger.markPinSubmitFailed(build([A]), 'pin1', CLOSE);
+        ledger.markPinSubmitFailed(build([A]), 'pin1', CLOSE, NOW);
         ledger.observe(build([A]), CLOSE);
         expect(VotingLogic.canSubmitBoostPin(build([A]), '42', ledger)).toBe('pin1');
     });

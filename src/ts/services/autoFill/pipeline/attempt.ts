@@ -5,14 +5,8 @@
 import { finalizePick } from '../../photoPicker';
 import { refreshChallengeState, swappedOutIds } from '../challengeState';
 import { resolveSemanticScores } from '../candidates';
-import {
-    clearChosenSkip,
-    enteredIds,
-    logChosenSkipOnce,
-    refuseRememberedChosen,
-    resolveChosenPhotos,
-    resolveMissingChosen,
-} from '../chosenPhotos';
+import { clearChosenSkip, enteredIds, logChosenSkipOnce, resolveChosenPhotos } from '../chosenPhotos';
+import { refuseRememberedChosen, resolveMissingChosen } from '../chosenWalkMemo';
 import { describeSubmitFailure, logPopularityPicks, logSelectionDetails } from '../fillLogging';
 import type { FillAttemptParams, FillAttemptResult, FillLabel, RankDeps } from '../../../types/autoFill';
 import type { Challenge } from '../../../types/gurushots';
@@ -81,6 +75,7 @@ const addMissedChosen = async ({
     inOrder,
     loaded,
     usage,
+    onlyIds,
 }: ChosenParams & {
     wantCount: number;
     unentered: string[];
@@ -88,6 +83,12 @@ const addMissedChosen = async ({
     /** What the chosen-photo lookup reads eligibility for (submit when omitted). */
     usage?: LibraryUsage;
     loaded: Extract<Awaited<ReturnType<typeof loadFillCandidates>>, { status: 'loaded' }>;
+    /**
+     * An explicit id pool walks even after an unfiltered read: that read does not report whether
+     * it reached the end of the library, and only a walk that reached the end (or stopped at the
+     * page cap) can give the pinned submit a definitive answer.
+     */
+    onlyIds?: readonly string[];
 }) => {
     const { eligible, semanticScores, ignoreWords } = loaded;
     const missed = await resolveMissingChosen({
@@ -96,7 +97,7 @@ const addMissedChosen = async ({
         ids: unentered,
         eligible,
         wantCount,
-        allowWalk: label !== 'emergencySubmit' && !loaded.walkedUnfiltered,
+        allowWalk: label !== 'emergencySubmit' && (!loaded.walkedUnfiltered || onlyIds !== undefined),
         inOrder,
         deps,
         label,
@@ -243,6 +244,7 @@ const runFillAttempt = async ({
         unentered,
         inOrder: chosenSettings.inOrder,
         loaded,
+        onlyIds,
     });
     // A photo the swap history took out is not picked again on its own; listing
     // it in Chosen Photos allows it.
@@ -358,10 +360,19 @@ const runFillAttempt = async ({
         // Only no body at all (null raw) or a throw is "no answer", and teaches nothing.
         if (result?.raw) refuseRememberedChosen(challenge, picked, Date.now());
         const reason = describeSubmitFailure(result && result.raw);
+        // A body is the server's refusal; no body at all is no answer — the request may not have
+        // landed. The two log differently and travel apart as statuses, so a caller can latch the
+        // refusal and retry the other.
+        if (result?.raw) {
+            logger
+                .withCategory('autoSubmit')
+                .warning(`${label}: submit rejected for ${logger.challengeTag(challenge)}: ${reason}`, null);
+            return { status: 'submit-rejected', reason };
+        }
         logger
             .withCategory('autoSubmit')
-            .warning(`${label}: submit rejected for ${logger.challengeTag(challenge)}: ${reason}`, null);
-        return { status: 'submit-rejected', reason };
+            .warning(`${label}: submit got no answer for ${logger.challengeTag(challenge)}: ${reason}`, null);
+        return { status: 'submit-unanswered', reason };
     } catch (error) {
         logger
             .withCategory('autoSubmit')

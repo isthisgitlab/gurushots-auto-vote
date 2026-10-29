@@ -347,12 +347,24 @@ describe('forward template localization', () => {
     test('localizes the Boost-pinned submit empty-pool line from its template and params', () => {
         expect(
             forward(
-                'm4a2b8c9d1e3',
+                'me1402c9b3dd5',
                 ['img1'],
                 'ℹ️ fillNew: the photo pinned for Boost (img1) cannot be submitted — not offered, not allowed here, or filtered out',
             ),
         ).toBe(
             'ℹ️ fillNew: Boost piesprausto foto (img1) nevar iesniegt — nav piedāvāts, šeit nav atļauts vai izfiltrēts',
+        );
+    });
+
+    test('localizes the pipeline submit got-no-answer line from its template and params', () => {
+        expect(
+            forward(
+                'm0af043c220d5',
+                ['fillNew', '[Challenge 42: Sunset]', 'no response body'],
+                '⚠️ fillNew: submit got no answer for [Challenge 42: Sunset]: no response body',
+            ),
+        ).toBe(
+            '⚠️ Jauna foto iesniegšana: GuruShots neatbildēja uz iesniegšanu izaicinājumam [Izaicinājums 42: Sunset]: no response body',
         );
     });
 

@@ -1683,7 +1683,7 @@ describe('fillChallengeNow — manual fill', () => {
         expect(result.error).toMatch(/no eligible photos/i);
     });
 
-    test('submit ok=false → success=false', async () => {
+    test('submit ok=false with no body → the Submit rejected text with the absent reason', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 86400 });
         const result = await fillChallengeNow(challenge, 'tok', 'one', {
             logger: makeLogger(),
@@ -1691,7 +1691,20 @@ describe('fillChallengeNow — manual fill', () => {
             submitToChallenge: jest.fn().mockResolvedValue({ ok: false, raw: null }),
         });
         expect(result.success).toBe(false);
-        expect(result.error).toBeTruthy();
+        expect(result.submitted).toBe(0);
+        expect(result.skipped).toBe(4);
+        expect(result.error).toBe('Submit rejected: no response body');
+    });
+
+    test('submit ok=false with a refusal body → success=false with the rejection text', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 86400 });
+        const result = await fillChallengeNow(challenge, 'tok', 'one', {
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            submitToChallenge: jest.fn().mockResolvedValue({ ok: false, raw: { success: false, message: 'nope' } }),
+        });
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Submit rejected: nope');
     });
 
     test('submit throws → caught, returns success=false', async () => {

@@ -243,13 +243,16 @@ describe('submissions', () => {
                 items: [],
                 truncated: false,
                 nextStart: 2,
+                stop: 'end',
             });
         });
 
         test('every early stop is reported as truncated', async () => {
             // The page cap.
             makePostRequest.mockResolvedValue(page('a', 'b'));
-            expect((await getEligiblePhotosWalk('c1', token, { limit: 2 })).truncated).toBe(true);
+            const capped = await getEligiblePhotosWalk('c1', token, { limit: 2 });
+            expect(capped.truncated).toBe(true);
+            expect(capped.stop).toBe('page-cap');
             // A failed page, the first included: not knowing is not "empty".
             makePostRequest.mockReset();
             makePostRequest.mockResolvedValueOnce(page('p1', 'p2')).mockRejectedValueOnce(new Error('down'));
@@ -257,6 +260,7 @@ describe('submissions', () => {
                 items: [{ id: 'p1' }, { id: 'p2' }],
                 truncated: true,
                 nextStart: 2,
+                stop: 'failed',
             });
             makePostRequest.mockReset();
             makePostRequest.mockResolvedValueOnce(null);
@@ -264,6 +268,7 @@ describe('submissions', () => {
                 items: [],
                 truncated: true,
                 nextStart: 0,
+                stop: 'failed',
             });
             // A later unreadable page.
             makePostRequest.mockReset();
@@ -354,6 +359,7 @@ describe('submissions', () => {
                 expect(walk.items).toHaveLength(2 * MAX_LIBRARY_PAGES);
                 expect(walk.skipped).toHaveLength(6 * MAX_LIBRARY_PAGES);
                 expect(walk.truncated).toBe(true);
+                expect(walk.stop).toBe('page-cap');
                 expect(warnings()).toContainEqual(expect.stringContaining(`${2 * MAX_LIBRARY_PAGES}-page limit`));
             });
 
@@ -377,6 +383,7 @@ describe('submissions', () => {
                         truncated: true,
                         skipped: ['wa'],
                         nextStart: 6,
+                        stop: 'budget',
                     });
                 } finally {
                     Date.now = realNow;
@@ -456,6 +463,7 @@ describe('submissions', () => {
                 expect(makePostRequest).toHaveBeenCalledTimes(1);
                 expect(ids(walk)).toEqual(['p1', 'p2']);
                 expect(walk.truncated).toBe(true);
+                expect(walk.stop).toBe('batch');
                 expect(walk).not.toHaveProperty('skipped');
                 expect(walk.nextStart).toBe(2);
                 expect(warnings()).toEqual([]);

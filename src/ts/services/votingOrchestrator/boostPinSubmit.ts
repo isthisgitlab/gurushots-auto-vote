@@ -3,10 +3,10 @@ import * as votingLogic from '../VotingLogic';
 import * as autoFill from '../autoFill';
 import { oneLine } from '../../format/logSafe';
 import { boostDeadline } from '../../voting/boostWindow';
-import { armPinWaitWake, logBoostTarget } from './boost';
+import { armPinWaitWake, logBoostTarget } from './boostTargetLog';
 
 import type { ActionContext } from './context';
-import type { BoostTarget } from './boost';
+import type { BoostTarget } from './boostTargetLog';
 
 /**
  * The Boost-pinned submit's gone branch of resolveBoostTarget: the photo pinned
@@ -22,7 +22,13 @@ type BoostPinSubmitOutcome = { kind: 'target'; target: BoostTarget } | { kind: '
 // A server refusal and the library-walk verdicts that mean this photo can never go
 // into this challenge: latched for the rest of the Boost window. Everything else is
 // retried on the next due pass.
-const DEFINITIVE_REASONS = new Set(['submit-rejected', 'pin-refused', 'pin-not-found', 'pin-filtered']);
+const DEFINITIVE_REASONS = new Set([
+    'submit-rejected',
+    'pin-refused',
+    'pin-not-found',
+    'pin-unreachable',
+    'pin-filtered',
+]);
 
 // "Log once" for a definitive failure needs no extra guard: the latch stops any
 // further attempt in this window, so this line is emitted on the last try only.
@@ -70,7 +76,7 @@ const submitBoostPinnedPhoto = async (ctx: ActionContext): Promise<BoostPinSubmi
     }
     const { reason } = filled;
     if (DEFINITIVE_REASONS.has(reason)) {
-        entryAges.markPinSubmitFailed(challenge, eligible, boostDeadline(challenge));
+        entryAges.markPinSubmitFailed(challenge, eligible, boostDeadline(challenge), ctx.now);
         logBoostTarget(challenge, PIN_SUBMIT_DEFINITIVE_KEY, [oneLine(eligible), reason]);
     } else {
         // Transient (fetch-error, data-incomplete, submit-unanswered, walk-incomplete,

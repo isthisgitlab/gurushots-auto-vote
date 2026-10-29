@@ -84,7 +84,6 @@ export function ChallengeCard({
     challenge,
     settingsVersion = 0,
     passVersion = 0,
-    cycleKey = null,
     defaultCompact = false,
     compactActions = false,
     timeRemaining,
@@ -97,9 +96,8 @@ export function ChallengeCard({
 }: {
     challenge: Challenge;
     settingsVersion?: number;
+    /** Autovote cycles plus manual passes; also the deadline preview's cycle signal while the last result said boostPinSubmits. */
     passVersion?: number;
-    /** The autovote context's lastRun; while the last result said boostPinSubmits, each completed cycle refetches the deadline preview. */
-    cycleKey?: string | null;
     defaultCompact?: boolean;
     compactActions?: boolean;
     timeRemaining?: TimeRemaining;
@@ -115,7 +113,7 @@ export function ChallengeCard({
     // Advisory deadline-action preview + boost/turbo conflict flags (read-only,
     // computed main-side). Failure yields empty actions / false — the card just
     // renders without them, never an error surface.
-    const deadline = useDeadlineActions(challenge, settingsVersion, cycleKey);
+    const deadline = useDeadlineActions(challenge, settingsVersion, passVersion);
     const { t } = useTranslation();
     const boostWarning = conflictWarning(t, timezone, 'boost', deadline.boostBlockedBy, deadline.boostReleaseAt);
     const turboWarning = conflictWarning(t, timezone, 'turbo', deadline.turboBlockedBy, deadline.turboReleaseAt);

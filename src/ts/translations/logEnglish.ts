@@ -27,6 +27,7 @@ export const logMessages = {
     m0a782435feef: 'Update check skipped - checked recently',
     m0a78a3ca3e9b: 'Invalid {0} in metadata: {1}, removing',
     m0a7ef884cc20: '  REAL  - Connect to actual GuruShots API (production)',
+    m0af043c220d5: '{0}: submit got no answer for {1}: {2}',
     m0b5c6f44876d: 'Error saving profile',
     m0b945b754745: 'Received SIGTERM signal. Exiting...',
     m0c95f2d8ab4: 'no images in the pool, returning it',
@@ -211,8 +212,6 @@ export const logMessages = {
         '{0}: could not refresh live challenge state for {1}; proceeding with pass-start data — a manually submitted entry may not be seen and could be duplicated',
     m4a0bb479e56d: '⏰ Approaching scheduled fill for "{0}" ({1}) — next cycle in {2}s',
     m4a23eeb4693a: '{0} turbo fill-new: challenge left the active list — turbo skipped',
-    m4a2b8c9d1e3:
-        'fillNew: the photo pinned for Boost ({0}) cannot be submitted — not offered, not allowed here, or filtered out',
     m4ab430d590b1: 'Capacitor preferences write failed:',
     m4b306cfa40b1: 'Error listing profiles',
     m4c2f68de9bcd: '\nSettings:',
@@ -654,6 +653,8 @@ export const logMessages = {
     mde0aa85a6be3: 'Voting on {0}',
     mdf16474102b6: 'Successfully cleaned up stale metadata',
     me127cbd86420: 'Mode options:',
+    me1402c9b3dd5:
+        'fillNew: the photo pinned for Boost ({0}) cannot be submitted — not offered, not allowed here, or filtered out',
     me1516e35fa87: '📝 Manual pick request: Challenge={0}, Photos={1}',
     me19826a5285f: 'Mock authentication with: {0}, password: {1}',
     me1c4073ddb78: '===================================',

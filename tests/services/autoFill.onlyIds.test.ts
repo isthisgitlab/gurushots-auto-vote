@@ -149,6 +149,8 @@ type DepsSpec = {
     library?: PickerPhoto[];
     walkItems?: PickerPhoto[];
     walkTruncated?: boolean;
+    /** Why the walk stopped; a truncated walk defaults to the budget stop. */
+    walkStop?: 'end' | 'page-cap' | 'budget' | 'failed' | 'batch';
     logger?: FillLogger;
     extra?: Record<string, unknown>;
 };
@@ -158,6 +160,7 @@ const makeDeps = ({
     library = [photo('theme-a'), photo('theme-b')],
     walkItems = library,
     walkTruncated = false,
+    walkStop,
     logger = makeLog().logger,
     extra = {},
 }: DepsSpec = {}) => {
@@ -165,7 +168,12 @@ const makeDeps = ({
         settings: makeSettings(settings),
         logger,
         getEligiblePhotos: makeLibrary(library),
-        getEligiblePhotosWalk: jest.fn(async () => ({ items: walkItems, truncated: walkTruncated, nextStart: 0 })),
+        getEligiblePhotosWalk: jest.fn(async () => ({
+            items: walkItems,
+            truncated: walkTruncated,
+            nextStart: 0,
+            stop: walkStop ?? (walkTruncated ? 'budget' : 'end'),
+        })),
         getSemanticScores: jest.fn(async () => null),
         submitToChallenge: submitOk(),
         rankVisually: jest.fn(async (_c: unknown, ids: string[], _e: unknown, want: number) => ids.slice(0, want)),
@@ -273,6 +281,16 @@ describe('the onlyIds pool', () => {
         });
         expect(lines.info).toContain('fillNew: no eligible photos for [Challenge c1]');
     });
+
+    test('the picker-chosen fill new maps a submit with no answer to submit-failed like a refusal', async () => {
+        const deps = makeDeps({ library: [photo('theme-a')] });
+        deps.submitToChallenge.mockResolvedValue(invalid({ ok: false, raw: null }));
+        expect(await submitNewEntryForAction(makeChallenge(), 'tok', deps)).toEqual({
+            ok: false,
+            imageId: null,
+            reason: 'submit-failed',
+        });
+    });
 });
 
 describe('submitPinnedEntry', () => {
@@ -333,6 +351,16 @@ describe('submitPinnedEntry', () => {
             ok: false,
             imageId: null,
             reason: 'submit-rejected',
+        });
+    });
+
+    test('a submit that got no answer at all is transient', async () => {
+        const deps = makeDeps({ library: [photo('theme-a')] });
+        deps.submitToChallenge.mockResolvedValue(invalid({ ok: false, raw: null }));
+        expect(await submitPinnedEntry(makeChallenge(), 'tok', deps, 'theme-a')).toEqual({
+            ok: false,
+            imageId: null,
+            reason: 'submit-unanswered',
         });
     });
 
@@ -415,6 +443,188 @@ describe('submitPinnedEntry', () => {
             walkItems: [photo('theme-a')],
             walkTruncated: true,
         });
+        expect(await submitPinnedEntry(makeChallenge(), 'tok', deps, 'car')).toEqual({
+            ok: false,
+            imageId: null,
+            reason: 'walk-incomplete',
+        });
+    });
+
+    test('no walk at all and no unfiltered read stays transient', async () => {
+        // The themed search found theme-a (so the fetch never walked unfiltered) and there is no
+        // walk dependency to look for the pinned photo with: nothing knows why it is missing.
+        const deps = makeDeps({
+            library: [photo('theme-a')],
+            extra: { getEligiblePhotosWalk: undefined },
+        });
+        expect(await submitPinnedEntry(makeChallenge(), 'tok', deps, 'car')).toEqual({
+            ok: false,
+            imageId: null,
+            reason: 'walk-incomplete',
+        });
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('an unfiltered read without the pin, then a complete walk that does not find it, is definitive', async () => {
+        // Nothing matches the theme, so the fetch walks the whole library — but that read can stop
+        // early (the budget, the page cap, a failed page), so it proves nothing on its own: the
+        // chosen-photo walk still runs, and only its complete verdict answers.
+        const deps = makeDeps({ library: [photo('dog', ['Dog'])], walkItems: [photo('dog')] });
+        expect(await submitPinnedEntry(makeChallenge(), 'tok', deps, 'car')).toEqual({
+            ok: false,
+            imageId: null,
+            reason: 'pin-not-found',
+        });
+        expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(1);
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('an unfiltered read and a walk that fails stays transient', async () => {
+        const deps = makeDeps({ library: [photo('dog', ['Dog'])] });
+        deps.getEligiblePhotosWalk = jest.fn().mockRejectedValue(new Error('walk down'));
+        expect(await submitPinnedEntry(makeChallenge(), 'tok', deps, 'car')).toEqual({
+            ok: false,
+            imageId: null,
+            reason: 'walk-incomplete',
+        });
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('an unfiltered read and a truncated walk stays transient', async () => {
+        const deps = makeDeps({
+            library: [photo('dog', ['Dog'])],
+            walkItems: [photo('dog')],
+            walkTruncated: true,
+        });
+        expect(await submitPinnedEntry(makeChallenge(), 'tok', deps, 'car')).toEqual({
+            ok: false,
+            imageId: null,
+            reason: 'walk-incomplete',
+        });
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('a walk stopped by the budget without the pin stays transient', async () => {
+        const deps = makeDeps({
+            library: [photo('theme-a')],
+            walkItems: [photo('theme-a')],
+            walkTruncated: true,
+            walkStop: 'budget',
+        });
+        expect(await submitPinnedEntry(makeChallenge(), 'tok', deps, 'car')).toEqual({
+            ok: false,
+            imageId: null,
+            reason: 'walk-incomplete',
+        });
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('a walk stopped by a failed page without the pin stays transient', async () => {
+        const deps = makeDeps({
+            library: [photo('theme-a')],
+            walkItems: [photo('theme-a')],
+            walkTruncated: true,
+            walkStop: 'failed',
+        });
+        expect(await submitPinnedEntry(makeChallenge(), 'tok', deps, 'car')).toEqual({
+            ok: false,
+            imageId: null,
+            reason: 'walk-incomplete',
+        });
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('a walk stopped at the page cap without the pin is definitive', async () => {
+        // The pin is not among the first 1,000 library photos by votes: no walk reaches further,
+        // so waiting out the retry backoff can never answer.
+        const deps = makeDeps({
+            library: [photo('theme-a')],
+            walkItems: [photo('theme-a')],
+            walkTruncated: true,
+            walkStop: 'page-cap',
+        });
+        expect(await submitPinnedEntry(makeChallenge(), 'tok', deps, 'car')).toEqual({
+            ok: false,
+            imageId: null,
+            reason: 'pin-unreachable',
+        });
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('within the walk retry wait a second attempt does not walk again and stays transient', async () => {
+        // The walk-after-unfiltered path, cut short by the budget: the memo's backoff holds, and
+        // the pinned submit reads the same no-answer as before instead of re-walking.
+        jest.useFakeTimers();
+        try {
+            const deps = makeDeps({ library: [photo('dog', ['Dog'])], walkItems: [photo('dog')], walkTruncated: true });
+            expect(await submitPinnedEntry(makeChallenge(), 'tok', deps, 'car')).toEqual({
+                ok: false,
+                imageId: null,
+                reason: 'walk-incomplete',
+            });
+            expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(1);
+
+            expect(await submitPinnedEntry(makeChallenge(), 'tok', deps, 'car')).toEqual({
+                ok: false,
+                imageId: null,
+                reason: 'walk-incomplete',
+            });
+            expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(1);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    test('after the walk retry wait a second attempt walks again', async () => {
+        jest.useFakeTimers();
+        try {
+            const deps = makeDeps({ library: [photo('dog', ['Dog'])], walkItems: [photo('dog')], walkTruncated: true });
+            expect(await submitPinnedEntry(makeChallenge(), 'tok', deps, 'car')).toEqual({
+                ok: false,
+                imageId: null,
+                reason: 'walk-incomplete',
+            });
+            expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(1);
+
+            jest.advanceTimersByTime(5 * 60_000 + 1_000);
+            expect(await submitPinnedEntry(makeChallenge(), 'tok', deps, 'car')).toEqual({
+                ok: false,
+                imageId: null,
+                reason: 'walk-incomplete',
+            });
+            expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(2);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    test('without an explicit id pool an unfiltered read still skips the walk', async () => {
+        // The library reads empty and the saved chosen id is missing from it: the fetch has walked
+        // unfiltered, so the scheduled fill (no onlyIds) looks no further and no walk runs.
+        const deps = makeDeps({ library: [], walkItems: [], settings: { chosen: ['car'] } });
+        expect(await submitNewEntryForAction(makeChallenge(), 'tok', deps)).toEqual({
+            ok: false,
+            imageId: null,
+            reason: 'no-eligible',
+        });
+        expect(deps.getEligiblePhotosWalk).not.toHaveBeenCalled();
+    });
+
+    test('an inferred refusal (a failed submit held the photo back) is transient', async () => {
+        const deps = makeDeps({
+            library: [photo('theme-a')],
+            walkItems: [photo('theme-a'), photo('car', ['Car'])],
+        });
+        // First attempt: the walk finds the pinned photo allowed here, the submit is refused with
+        // a body — which photo the server refused is not said, so the memo only infers a refusal.
+        deps.submitToChallenge.mockResolvedValue(invalid({ ok: false, raw: { success: false } }));
+        expect(await submitPinnedEntry(makeChallenge(), 'tok', deps, 'car')).toEqual({
+            ok: false,
+            imageId: null,
+            reason: 'submit-rejected',
+        });
+        // Second attempt: the inferred refusal is not the walk's own verdict on the photo, so the
+        // attempt is retried (transient), not latched like a refusal the walk saw.
         expect(await submitPinnedEntry(makeChallenge(), 'tok', deps, 'car')).toEqual({
             ok: false,
             imageId: null,

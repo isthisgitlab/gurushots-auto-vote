@@ -122,10 +122,13 @@ const createNodeDeadlineNotifier = (
             if (!config.anyEnabled) return; // feature off (default) → zero work
 
             const list = Array.isArray(challenges) ? challenges : [];
+            // One read of the ledger per tick: every challenge's preview reads
+            // the same store, and each read re-parses it.
+            const entryAges = getEntryAgeLedger();
             const perChallengeActions = [];
             for (const challenge of list) {
                 try {
-                    const { actions } = describeDeadlineActions(challenge, now, getEntryAgeLedger()) || {};
+                    const { actions } = describeDeadlineActions(challenge, now, entryAges) || {};
                     // dataIssues carries the boundary's mark, so the decision
                     // core skips a challenge whose data cannot be read.
                     perChallengeActions.push({

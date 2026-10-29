@@ -676,6 +676,32 @@ describe('describeDeadlineActions — the Boost-pinned submit', () => {
         });
     });
 
+    test('the flag is false while Auto Boost is off: eligible, but no boost row to follow', () => {
+        const result = VotingLogic.describeDeadlineActions(
+            eligible({ autoBoost: false }),
+            FAR,
+            createMemoryEntryAgeLedger(),
+        );
+        expect(result.actions.map((a) => a.action)).not.toContain('boost');
+        expect(result.boostPinSubmits).toBe(false);
+    });
+
+    test('the flag is false with Boost Time 0 on a timer Boost: the row stays off', () => {
+        const result = VotingLogic.describeDeadlineActions(
+            eligible({ boostTime: 0 }, { state: 'AVAILABLE', timeout: CLOSE - 600 }),
+            FAR,
+            createMemoryEntryAgeLedger(),
+        );
+        expect(result.actions.map((a) => a.action)).not.toContain('boost');
+        expect(result.boostPinSubmits).toBe(false);
+    });
+
+    test('the flag is false when no Boost is available', () => {
+        const result = VotingLogic.describeDeadlineActions(eligible({}, {}), FAR, createMemoryEntryAgeLedger());
+        expect(result.actions.map((a) => a.action)).not.toContain('boost');
+        expect(result.boostPinSubmits).toBe(false);
+    });
+
     test('every entry has Turbo and a Turbo pin: the row is shown and the boost is not blocked', () => {
         mockSettings({
             boostPinnedSubmit: true,
@@ -716,7 +742,7 @@ describe('describeDeadlineActions — the Boost-pinned submit', () => {
         });
         const ledger = createMemoryEntryAgeLedger();
         expect(VotingLogic.isBoostBlocked(challenge, '42', FAR, ledger)).toBe(false);
-        ledger.markPinSubmitFailed(challenge, 'zzz', boostDeadline(challenge));
+        ledger.markPinSubmitFailed(challenge, 'zzz', boostDeadline(challenge), FAR);
         expect(VotingLogic.isBoostBlocked(challenge, '42', FAR, ledger)).toBe(true);
     });
 
@@ -726,7 +752,7 @@ describe('describeDeadlineActions — the Boost-pinned submit', () => {
             { autoSubmitSchedule: [{ count: 2, seconds: 300 }], boostTime: 1800 },
             { state: 'AVAILABLE', timeout: CLOSE - 600 },
         );
-        ledger.markPinSubmitFailed(challenge, 'zzz', boostDeadline(challenge));
+        ledger.markPinSubmitFailed(challenge, 'zzz', boostDeadline(challenge), FAR);
         // The same clamped moved row the pre-Boost-pinned-submit test pins (close − 660).
         expect(
             VotingLogic.describeDeadlineActions(challenge, FAR, ledger).actions.find((a) => a.action === 'boost'),

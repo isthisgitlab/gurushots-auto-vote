@@ -41,8 +41,10 @@ const {
     rankCandidatesForChallenge,
     __resetMemberIdCache,
 } = require('../../src/ts/services/autoFill') as typeof autoFillModule;
-const { forgetChosenPhotosMemory, resolveMissingChosen, refuseRememberedChosen, logChosenSkipOnce } =
+const { forgetChosenPhotosMemory, logChosenSkipOnce } =
     require('../../src/ts/services/autoFill/chosenPhotos') as typeof chosenPhotosModule;
+const { resolveMissingChosen, refuseRememberedChosen, lastWalkStoppedAtPageCap } =
+    require('../../src/ts/services/autoFill/chosenWalkMemo') as typeof import('../../src/ts/services/autoFill/chosenWalkMemo');
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 const { verifyFillPick, recordUncertainSubmission } =
     require('../../src/ts/services/autoFill/pipeline/verify') as typeof verifyModule;
@@ -809,6 +811,34 @@ describe('looking for a chosen photo the themed fetch missed', () => {
         expect(await maybeAutoFillChallenge(challenge, 'tok', NOW, deps)).toBe('submitted');
         expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(2);
         expect(submittedIds(deps)).toEqual([['car']]);
+    });
+
+    test('the page-cap flag expires with the memo: lastWalkStoppedAtPageCap reads false after the TTL', async () => {
+        const clock = jest.spyOn(Date, 'now').mockReturnValue(5_000_000);
+        const deps = {
+            logger: makeLog().logger,
+            getEligiblePhotosWalk: jest.fn(async () => ({
+                items: [photo('theme-a')],
+                truncated: true,
+                nextStart: 1,
+                stop: 'page-cap' as const,
+            })),
+        };
+        const challenge = makeChallenge();
+        await resolveMissingChosen({
+            challenge,
+            token: 'tok',
+            ids: ['car'],
+            eligible: [],
+            wantCount: 1,
+            allowWalk: true,
+            deps,
+            label: 'autoSubmit',
+        });
+        expect(lastWalkStoppedAtPageCap(challenge)).toBe(true);
+        // One TTL later the whole memo is a fresh answer, the page-cap flag included.
+        clock.mockReturnValue(5_000_000 + 30 * 60_000);
+        expect(lastWalkStoppedAtPageCap(challenge)).toBe(false);
     });
 
     test('the pause after a cut-short walk doubles each time, up to an hour', async () => {

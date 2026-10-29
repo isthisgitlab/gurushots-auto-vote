@@ -122,7 +122,7 @@ describe('no-token contract for every endpoint not covered elsewhere', () => {
         [
             'getEligiblePhotosWalk',
             () => mockApiClient.getEligiblePhotosWalk(1, invalid(null)),
-            { items: [], truncated: true, nextStart: 0 },
+            { items: [], truncated: true, nextStart: 0, stop: 'failed' },
         ],
         ['getImageData', () => mockApiClient.getImageData('photo_old_008', invalid(null)), null],
         ['submitToChallenge', () => mockApiClient.submitToChallenge(1, ['a'], invalid(null)), { ok: false, raw: null }],
@@ -356,7 +356,13 @@ describe('getEligiblePhotosWalk', () => {
         const searched = await settle(
             mockApiClient.getEligiblePhotosWalk(1, 'tok', { search: 'Trophy', skip: () => true }),
         );
-        expect(searched).toEqual({ items: [], truncated: false, skipped: ['photo_won_009'], nextStart: 1 });
+        expect(searched).toEqual({
+            items: [],
+            truncated: false,
+            skipped: ['photo_won_009'],
+            nextStart: 1,
+            stop: 'end',
+        });
     });
 
     test('a search is the same exact tag match as the paged read; a non-string search is ignored', async () => {
@@ -461,7 +467,7 @@ describe('getEligiblePhotosWalk', () => {
         const over = await settle(
             mockApiClient.getEligiblePhotosWalk(1, 'tok', { maxKept: 15, skip: skipWon, start: walk.nextStart }),
         );
-        expect(over).toEqual({ items: [], skipped: [], truncated: false, nextStart: 12 });
+        expect(over).toEqual({ items: [], skipped: [], truncated: false, nextStart: 12, stop: 'end' });
     });
 
     test('a short page wins over the extent, like the real walk', async () => {
@@ -518,15 +524,17 @@ describe('getEligiblePhotosWalk', () => {
             items: [],
             truncated: true,
             nextStart: 12,
+            stop: 'failed',
         });
         await expect(mockApiClient.getEligiblePhotosWalk(1, invalid(null), { start: -5 })).resolves.toEqual({
             items: [],
             truncated: true,
             nextStart: 0,
+            stop: 'failed',
         });
         await expect(
             mockApiClient.getEligiblePhotosWalk(1, invalid(null), invalid({ start: 'later' })),
-        ).resolves.toEqual({ items: [], truncated: true, nextStart: 0 });
+        ).resolves.toEqual({ items: [], truncated: true, nextStart: 0, stop: 'failed' });
     });
 });
 

@@ -45,6 +45,9 @@ jest.mock('../../src/ts/services/autoFill', () => ({
     ...jest.requireActual<typeof import('../../src/ts/services/autoFill/chosenPhotos')>(
         '../../src/ts/services/autoFill/chosenPhotos',
     ),
+    ...jest.requireActual<typeof import('../../src/ts/services/autoFill/chosenWalkMemo')>(
+        '../../src/ts/services/autoFill/chosenWalkMemo',
+    ),
     fetchCandidatesForChallenge: jest.fn(async () => [{ id: 'imgA', permission: { allowed: true } }]),
     resolveSemanticScores: jest.fn(async () => null),
 }));

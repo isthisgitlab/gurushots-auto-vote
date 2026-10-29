@@ -87,17 +87,19 @@ const releaseDelayMs = (releaseAt: number): number =>
  * over, and no fingerprint field moves then, so the fetch that reports those instants
  * (`boostReleaseAt` / `turboReleaseAt`) also arms one refetch, for the sooner of them.
  * The Boost-pinned submit's latch is invisible to the fingerprint too (it lives on the
- * entry-age ledger), so while the last result said `boostPinSubmits: true` each
- * completed auto-vote cycle (`cycleKey`) arms one refetch — the pass that just ran may
- * have submitted the photo or set the latch.
+ * entry-age ledger), so while the last result said `boostPinSubmits: true` each move of
+ * `cycleKey` — the card's `passVersion`, which advances on every completed auto-vote
+ * cycle and every manual pass — arms one refetch: that pass may have submitted the
+ * photo or set the latch.
  *
  * @param settingsVersion - bumped when settings change
- * @param cycleKey - the autovote context's lastRun; changes when a cycle completes
+ * @param cycleKey - the card's `passVersion` (autovote cycles plus manual passes, a monotonic
+ *   number); it changes when a cycle or a manual pass completes
  */
 export function useDeadlineActions(
     challenge: Challenge | null | undefined,
     settingsVersion: number = 0,
-    cycleKey: string | null = null,
+    cycleKey: number = 0,
 ): DeadlineActionsState {
     const [state, setState] = useState<DeadlineActionsState>({ ...settledEmpty(false), loading: true });
 
@@ -137,7 +139,9 @@ export function useDeadlineActions(
     const pinSubmitsRef = useRef(false);
 
     useEffect(() => {
-        if (cycleKey === null || !pinSubmitsRef.current) return;
+        // cycleKey starts at 0 (no pass has run) and only moves when one completes; the mount
+        // run reads pinSubmitsRef false and does nothing.
+        if (!pinSubmitsRef.current) return;
         setCycleTick((tick) => tick + 1);
     }, [cycleKey]);
 

@@ -283,14 +283,14 @@ describe('the Boost-pinned-submit failure latch', () => {
     test('round-trips, answers only for its own photo and Boost window, and is replaced by a new pin or window', () => {
         const ledger = createMemoryEntryAgeLedger();
         ledger.observe(challenge(1, ['a']), NOW);
-        ledger.markPinSubmitFailed(challenge(1, ['a']), 'pin', NOW + 600);
+        ledger.markPinSubmitFailed(challenge(1, ['a']), 'pin', NOW + 600, NOW);
         expect(ledger.pinSubmitFailed(1, 'pin', NOW + 600)).toBe(true);
         expect(ledger.pinSubmitFailed('1', 'pin', NOW + 600)).toBe(true);
         expect(ledger.pinSubmitFailed(1, 'other', NOW + 600)).toBe(false);
         expect(ledger.pinSubmitFailed(1, 'pin', NOW + 601)).toBe(false);
         expect(ledger.pinSubmitFailed(2, 'pin', NOW + 600)).toBe(false);
         // A different pin (or a new Boost window) is a new key: setting it replaces the latch.
-        ledger.markPinSubmitFailed(challenge(1, ['a']), 'pin2', NOW + 600);
+        ledger.markPinSubmitFailed(challenge(1, ['a']), 'pin2', NOW + 600, NOW);
         expect(ledger.pinSubmitFailed(1, 'pin2', NOW + 600)).toBe(true);
         expect(ledger.pinSubmitFailed(1, 'pin', NOW + 600)).toBe(false);
         // Nothing else about the record moved.
@@ -302,7 +302,7 @@ describe('the Boost-pinned-submit failure latch', () => {
     test('a mark on a challenge no fetch saw makes a record the next fetch completes', () => {
         const store = rawStore(null);
         const ledger = createEntryAgeLedger(store);
-        ledger.markPinSubmitFailed(listing(1, []), 7, NOW + 600);
+        ledger.markPinSubmitFailed(listing(1, []), 7, NOW + 600, NOW);
         expect(ledger.pinSubmitFailed(1, 7, NOW + 600)).toBe(true);
         expect(store.peek()['1']).toMatchObject({ observed: false, pinSubmitFailed: { imageId: '7' } });
     });
@@ -330,7 +330,7 @@ describe('the Boost-pinned-submit failure latch', () => {
     test('the latch survives observe while its Boost window is ahead, and is dropped once it passed', () => {
         const ledger = createMemoryEntryAgeLedger();
         ledger.observe(challenge(1, ['a']), NOW);
-        ledger.markPinSubmitFailed(challenge(1, ['a']), 'pin', NOW + 600);
+        ledger.markPinSubmitFailed(challenge(1, ['a']), 'pin', NOW + 600, NOW);
         ledger.observe(challenge(1, ['a']), NOW + 60);
         expect(ledger.pinSubmitFailed(1, 'pin', NOW + 600)).toBe(true);
         expect(ledger.enteredAt(1, 'a')).toBe(0);
@@ -344,11 +344,27 @@ describe('the Boost-pinned-submit failure latch', () => {
         const ledger = createEntryAgeLedger(store);
         ledger.observe(challenge(1, ['a']), NOW);
         const writes = store.writeRaw.mock.calls.length;
-        ledger.markPinSubmitFailed(challenge(1, ['a']), 'pin', NOW + 600);
+        ledger.markPinSubmitFailed(challenge(1, ['a']), 'pin', NOW + 600, NOW);
         expect(store.writeRaw.mock.calls.length).toBe(writes + 1);
         ledger.observe(challenge(1, ['a']), NOW + 60);
         ledger.observe(challenge(1, ['a']), NOW + 120);
         expect(store.writeRaw.mock.calls.length).toBe(writes + 1);
+    });
+
+    test('when only the latch differs — its Boost window has passed — observe writes the record', () => {
+        const store = rawStore(null);
+        const ledger = createEntryAgeLedger(store);
+        ledger.observe(challenge(1, ['a']), NOW);
+        ledger.markPinSubmitFailed(challenge(1, ['a']), 'pin', NOW + 600, NOW);
+        const writes = store.writeRaw.mock.calls.length;
+        // The window is still ahead: the latch reads as the same one, so observe writes nothing.
+        ledger.observe(challenge(1, ['a']), NOW + 300);
+        expect(store.writeRaw.mock.calls.length).toBe(writes);
+        // The window has now passed: the stored and computed records differ in the latch's Boost
+        // deadline alone, and that difference must land in the store.
+        ledger.observe(challenge(1, ['a']), NOW + 600);
+        expect(store.writeRaw.mock.calls.length).toBe(writes + 1);
+        expect(store.peek()['1'].pinSubmitFailed).toBeNull();
     });
 });
 

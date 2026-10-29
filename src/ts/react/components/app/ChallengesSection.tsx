@@ -90,7 +90,6 @@ export function ChallengesSection({
     timezone,
     autovoteRunning,
     autovoteCycles = 0,
-    cycleKey = null,
     isLoggedIn,
     onChallengeSettingsClick,
     bankroll = null,
@@ -99,8 +98,6 @@ export function ChallengesSection({
     timezone: string;
     autovoteRunning: boolean;
     autovoteCycles?: number;
-    /** The autovote context's lastRun, handed to each card's deadline preview as its cycle signal. */
-    cycleKey?: string | null;
     isLoggedIn: boolean;
     onChallengeSettingsClick: (challengeId: Challenge['id'], challengeTitle: string) => void;
     bankroll?: Bankroll | null;
@@ -264,7 +261,6 @@ export function ChallengesSection({
                         key={challenge.id}
                         settingsVersion={refreshKey}
                         passVersion={autovoteCycles + manualPasses}
-                        cycleKey={cycleKey}
                         challenge={challenge}
                         defaultCompact={globalCompact}
                         compactActions={compactActions}

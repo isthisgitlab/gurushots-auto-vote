@@ -244,12 +244,12 @@ describe('useDeadlineActions', () => {
             boostPinSubmits: true,
         });
         const { result, rerender } = renderHook(({ c, k }) => useDeadlineActions(c, 0, k), {
-            initialProps: { c: challenge, k: null as string | null },
+            initialProps: { c: challenge, k: 0 },
         });
         await waitFor(() => expect(result.current.boostPinSubmits).toBe(true));
         expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(1);
 
-        // A cycle completes: the flag was true, so the card refetches once.
+        // A cycle completes (passVersion moves): the flag was true, so the card refetches once.
         mockApi.getDeadlineActions.mockResolvedValueOnce({
             success: true,
             actions: [],
@@ -257,12 +257,45 @@ describe('useDeadlineActions', () => {
             turboBlocked: false,
             ...calm,
         });
-        rerender({ c: challenge, k: 'run-1' });
+        rerender({ c: challenge, k: 1 });
         await waitFor(() => expect(result.current.boostPinSubmits).toBe(false));
         expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
 
         // Another cycle: the refetch said false, so no further fetch.
-        rerender({ c: challenge, k: 'run-2' });
+        rerender({ c: challenge, k: 2 });
+        expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
+    });
+
+    test('a manual pass moving passVersion refetches while boostPinSubmits is true', async () => {
+        mockApi.getDeadlineActions.mockResolvedValueOnce({
+            success: true,
+            actions: [],
+            boostBlocked: false,
+            turboBlocked: false,
+            ...calm,
+            boostPinSubmits: true,
+        });
+        const { result, rerender } = renderHook(({ c, k }) => useDeadlineActions(c, 0, k), {
+            initialProps: { c: challenge, k: 3 },
+        });
+        await waitFor(() => expect(result.current.boostPinSubmits).toBe(true));
+        expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(1);
+
+        // A manual pass completes: passVersion moves with the challenge content and the settings
+        // version unchanged, and the flag was true — one refetch.
+        mockApi.getDeadlineActions.mockResolvedValueOnce({
+            success: true,
+            actions: [],
+            boostBlocked: false,
+            turboBlocked: false,
+            ...calm,
+        });
+        rerender({ c: challenge, k: 4 });
+        await waitFor(() => expect(result.current.boostPinSubmits).toBe(false));
+        expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
+
+        // The refetch said false, so a further manual pass fetches nothing.
+        rerender({ c: challenge, k: 5 });
         expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
     });
 

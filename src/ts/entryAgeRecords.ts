@@ -273,13 +273,17 @@ const submittedEdit = (state: State, challengeId: string, ids: readonly string[]
     return withRecord(state, challengeId, record, now);
 };
 
-/** `state` with the Boost-pinned-submit failure latch set for `challenge`; the record's other fields are left as they are. */
+/**
+ * `state` with the Boost-pinned-submit failure latch set for `challenge`; the record's other fields are left as they are.
+ * @param now - Unix seconds
+ */
 const pinSubmitFailedEdit = (
     state: State,
     challenge: Challenge,
     imageId: string | number,
     boostDeadline: number,
-): State | null => {
+    now: number,
+): State => {
     const challengeId = String(challenge.id);
     const base = state[challengeId] ?? blankRecord(Number(challenge.close_time));
     return withRecord(
@@ -290,7 +294,7 @@ const pinSubmitFailedEdit = (
             closeTime: Number(challenge.close_time),
             pinSubmitFailed: { imageId: String(imageId), boostDeadline },
         },
-        Math.floor(Date.now() / 1000),
+        now,
     );
 };
 

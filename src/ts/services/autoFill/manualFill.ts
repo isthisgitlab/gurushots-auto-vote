@@ -108,7 +108,9 @@ const fillChallengeNow = async (
         // onEmptyPick above always answers with a string.
         return { success: false, submitted: 0, skipped: slotsRemaining, error: attempt.detail as string };
     }
-    if (attempt.status === 'submit-rejected') {
+    if (attempt.status === 'submit-rejected' || attempt.status === 'submit-unanswered') {
+        // A refused submit and one that got no answer both end the fill here: the server's reason,
+        // or its absence, is shown either way.
         return {
             success: false,
             submitted: 0,

@@ -2,12 +2,12 @@ import { oneLine } from '../../format/logSafe';
 import { secondsToBoostDeadline } from '../../voting/boostWindow';
 import * as votingLogic from '../VotingLogic';
 import { buildFillDeps } from './context';
+import { logBoostTarget } from './boostTargetLog';
 import {
     applyAvailableBoost,
     existingBoostTarget,
     freshEntryHoldUntil,
     hasEntries,
-    logBoostTarget,
     logNoBoostEntry,
     pendingBoostTarget,
     pinnedBoostTarget,
@@ -19,7 +19,7 @@ import type { Challenge } from '../../types/gurushots';
 import type { ActionContext } from './context';
 import type { VotingPassApi } from '../../types/votingPass';
 import type { EntryAgeLedger } from '../../types/stores';
-import type { BoostTarget } from './boost';
+import type { BoostTarget } from './boostTargetLog';
 
 /**
  * The sleep-boost half of boost.ts: which entry a boost sent on device sleep

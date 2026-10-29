@@ -27,6 +27,7 @@ export const logMessages = {
     m0a782435feef: 'Atjauninājumu pārbaude izlaista — nesen jau pārbaudīts',
     m0a78a3ca3e9b: 'Nederīgs {0} metadatos: {1}; noņem',
     m0a7ef884cc20: '  REAL  — savienojas ar īsto GuruShots API (darba vide)',
+    m0af043c220d5: '{0}: GuruShots neatbildēja uz iesniegšanu izaicinājumam {1}: {2}',
     m0b5c6f44876d: 'Kļūda, saglabājot profilu',
     m0b945b754745: 'Saņemts SIGTERM signāls. Beidz darbu...',
     m0c95f2d8ab4: 'balsošanas foto kopā nav neviena foto, atgriež to',
@@ -218,8 +219,6 @@ export const logMessages = {
     m4a0bb479e56d: '⏰ Tuvojas plānotā balsošana izaicinājumā "{0}" ({1}) — nākamais cikls pēc {2} s',
     m4a23eeb4693a:
         '{0} Jauna foto iesniegšana Turbo izmantošanai: izaicinājums vairs nav aktīvo sarakstā — Turbo izlaists',
-    m4a2b8c9d1e3:
-        'fillNew: Boost piesprausto foto ({0}) nevar iesniegt — nav piedāvāts, šeit nav atļauts vai izfiltrēts',
     m4ab430d590b1: 'Neizdevās ierakstīt Capacitor uzstādījumus:',
     m4b306cfa40b1: 'Kļūda, uzskaitot profilus',
     m4c2f68de9bcd: '\nUzstādījumi:',
@@ -674,6 +673,8 @@ export const logMessages = {
     mde0aa85a6be3: 'Balso izaicinājumā {0}',
     mdf16474102b6: 'Novecojušie metadati veiksmīgi notīrīti',
     me127cbd86420: 'Režīma iespējas:',
+    me1402c9b3dd5:
+        'fillNew: Boost piesprausto foto ({0}) nevar iesniegt — nav piedāvāts, šeit nav atļauts vai izfiltrēts',
     me1516e35fa87: '📝 Manuālās iesniegšanas pieprasījums (izvēlēti foto): izaicinājums={0}, foto={1}',
     me19826a5285f: 'Autentificējas testa režīmā: lietotājvārds {0}, parole: {1}',
     me1c4073ddb78: '===================================',

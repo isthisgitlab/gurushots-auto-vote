@@ -359,7 +359,9 @@ const describeDeadlineActions = (
         }
     };
 
-    if (manualOnly) return { actions: [], boostPinSubmits: boostPinSubmitActive, ...conflicts };
+    // Manual Only: nothing runs by itself, so the action list is empty and the flag is false with
+    // it (canSubmitBoostPin already answers null under Manual Only).
+    if (manualOnly) return { actions: [], boostPinSubmits: false, ...conflicts };
 
     const actions = orderDeadlineActions(challenge)
         .filter(({ action, thresholdSec }) => isVisible(action, thresholdSec))
@@ -399,7 +401,15 @@ const describeDeadlineActions = (
         // A moved row can now sit out of order; order it by its adjusted threshold.
         .sort(compareDeadlineActions);
 
-    return { actions, boostPinSubmits: boostPinSubmitActive, ...conflicts };
+    // The banner flag follows the Boost row: the pinned submit is only promised when it is
+    // eligible AND the boost row made the action list — Auto Boost off, Boost Time 0 (or a
+    // key-unlocked window of 0) and no available Boost all leave the row out, and the runner
+    // then has no due boost to submit the photo for.
+    return {
+        actions,
+        boostPinSubmits: boostPinSubmitActive && actions.some(({ action }) => action === 'boost'),
+        ...conflicts,
+    };
 };
 
 export { getAutoFillThresholdSec, getBoostThresholdSec, isBoostBlocked, orderDeadlineActions, describeDeadlineActions };

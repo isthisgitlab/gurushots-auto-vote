@@ -134,4 +134,6 @@ export type FillAttemptResult =
     | { status: 'refresh-stand-down' }
     | { status: 'submitted'; picked: string[] }
     | { status: 'submit-rejected'; reason: string }
+    /** The submit got no answer at all (no body): not a refusal — the request may not have landed. */
+    | { status: 'submit-unanswered'; reason: string }
     | { status: 'submit-threw'; error: unknown };

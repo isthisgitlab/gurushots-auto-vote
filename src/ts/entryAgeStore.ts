@@ -59,9 +59,10 @@ const pinSubmitLatch = (read: () => State, write: (edit: (state: State) => State
      * Record that the photo pinned for Boost could not be submitted for this Boost window (a definitive
      * failure): the Boost-pinned submit stops trying until the window ends or the pin changes. The rest of
      * the record — pending, exact, uncertain — is left as it is.
+     * @param now - Unix seconds
      */
-    markPinSubmitFailed: (challenge: Challenge, imageId: string | number, boostDeadline: number) => {
-        write((state) => pinSubmitFailedEdit(state, challenge, imageId, boostDeadline));
+    markPinSubmitFailed: (challenge: Challenge, imageId: string | number, boostDeadline: number, now: number) => {
+        write((state) => pinSubmitFailedEdit(state, challenge, imageId, boostDeadline, now));
     },
 
     /**

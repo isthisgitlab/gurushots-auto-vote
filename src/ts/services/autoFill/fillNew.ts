@@ -6,7 +6,7 @@
  */
 
 import { getSlotsRemaining } from './challengeState';
-import { chosenWalkOutcome } from './chosenPhotos';
+import { chosenWalkOutcome, lastWalkStoppedAtPageCap } from './chosenWalkMemo';
 import { runFillAttempt } from './pipeline';
 
 import type { Challenge } from '../../types/gurushots';
@@ -24,13 +24,14 @@ interface ActionSubmit {
 /**
  * What the shared body of the two action submits answers: the guards and the
  * statuses they read identically, already mapped to their reason, and the ones
- * they word differently (`no-pick`, a rejected or unanswered submit, a
+ * they word differently (`no-pick`, a rejected vs an unanswered submit, a
  * submitted photo) raw, for the caller's own mapping.
  */
 type ActionSubmitOutcome =
     | { kind: 'mapped'; ok: boolean; imageId: string | null; reason: string }
     | { kind: 'no-pick' }
     | { kind: 'submit-rejected' }
+    | { kind: 'submit-unanswered' }
     | { kind: 'submit-threw' }
     | { kind: 'submitted'; imageId: string };
 
@@ -105,6 +106,7 @@ const runForAction = async (
     }
     if (attemptResult.status === 'no-pick') return { kind: 'no-pick' };
     if (attemptResult.status === 'submit-rejected') return { kind: 'submit-rejected' };
+    if (attemptResult.status === 'submit-unanswered') return { kind: 'submit-unanswered' };
     if (attemptResult.status === 'submit-threw') return { kind: 'submit-threw' };
     // No probe is passed here — a stand-down on this path is the live re-check above — so the
     // attempt cannot end as probe-stand-down; the arm keeps the union total.
@@ -148,7 +150,7 @@ const submitNewEntryForAction = async (
     const { logger } = deps;
     const outcome = await runForAction(challenge, token, deps, {});
     if (outcome.kind === 'no-pick') return { ok: false, imageId: null, reason: 'no-eligible' };
-    if (outcome.kind === 'submit-rejected' || outcome.kind === 'submit-threw') {
+    if (outcome.kind === 'submit-rejected' || outcome.kind === 'submit-unanswered' || outcome.kind === 'submit-threw') {
         return { ok: false, imageId: null, reason: 'submit-failed' };
     }
     if (outcome.kind === 'submitted') {
@@ -173,12 +175,16 @@ const submitNewEntryForAction = async (
  *   - 'challenge-gone'    — the attempt found the challenge gone.
  *   - 'data-incomplete'   — the pre-submit re-read cannot be trusted. Transient.
  *   - 'fetch-error'       — the candidate fetch failed. Transient.
- *   - 'submit-unanswered' — the submit threw. Transient.
+ *   - 'submit-unanswered' — the submit threw or got no answer at all. Transient.
  *   - 'submit-rejected'   — the server answered with a refusal. Definitive.
  *   - 'pin-refused'       — the library walk saw the photo refused here. Definitive.
  *   - 'pin-not-found'     — a completed walk did not find it in the library. Definitive.
+ *   - 'pin-unreachable'   — the walk filled its page cap without reaching it: it is not among the
+ *                           first 1,000 library photos by votes the app can read. Definitive.
  *   - 'pin-filtered'      — it was offered but a tag or permission filter kept it out of the pick. Definitive.
- *   - 'walk-incomplete'   — the walk has no answer (not run, cut short, threw, or backing off). Transient.
+ *   - 'walk-incomplete'   — no answer about the photo: the walk not run, cut short, threw, or
+ *                           backing off; or the only refusal known is an inferred one (a failed
+ *                           submit that did not name the photo). Transient.
  *   - 'invalid-challenge' — the challenge has no id.
  *
  * @param deps - getActiveChallenges enables the pre-submit live re-check; when
@@ -205,15 +211,33 @@ const submitPinnedEntry = async (
     });
     if (outcome.kind === 'submitted') return { ok: true, imageId: outcome.imageId, reason: 'submitted' };
     if (outcome.kind === 'submit-rejected') return { ok: false, imageId: null, reason: 'submit-rejected' };
-    if (outcome.kind === 'submit-threw') return { ok: false, imageId: null, reason: 'submit-unanswered' };
+    if (outcome.kind === 'submit-unanswered' || outcome.kind === 'submit-threw') {
+        return { ok: false, imageId: null, reason: 'submit-unanswered' };
+    }
     if (outcome.kind === 'no-pick') {
         // The chosen-photo walk ran inside the pipeline, before the pick; its
         // memo now says why the pinned photo could not go in — when it has an
-        // answer at all.
+        // answer at all. A walk that was cut short or failed records nothing,
+        // so the attempt stays transient.
         const walk = chosenWalkOutcome(challenge, imageId);
-        if (walk === 'refused') return { ok: false, imageId: null, reason: 'pin-refused' };
-        if (walk === 'not-found') return { ok: false, imageId: null, reason: 'pin-not-found' };
+        if (walk?.state === 'refused') {
+            // A refusal with `until` was inferred from a failed submit that did
+            // not name the photo, so it is not this photo's verdict; a refusal
+            // the walk itself saw (permission.allowed false) is.
+            return walk.until === undefined
+                ? { ok: false, imageId: null, reason: 'pin-refused' }
+                : { ok: false, imageId: null, reason: 'walk-incomplete' };
+        }
+        if (walk?.state === 'not-found') return { ok: false, imageId: null, reason: 'pin-not-found' };
         if (offered) return { ok: false, imageId: null, reason: 'pin-filtered' };
+        // No outcome, and the last walk filled its page cap (the first 1,000
+        // photos by votes): the pin is beyond what the app can read of the
+        // library, and no further walk reaches further. Definitive. A walk cut
+        // short by the budget or a failed page is a different stop and stays
+        // walk-incomplete.
+        if (!walk && lastWalkStoppedAtPageCap(challenge)) {
+            return { ok: false, imageId: null, reason: 'pin-unreachable' };
+        }
         return { ok: false, imageId: null, reason: 'walk-incomplete' };
     }
     return { ok: outcome.ok, imageId: outcome.imageId, reason: outcome.reason };

@@ -104,6 +104,7 @@ const getEligiblePhotosWalk: typeof submissionsModule.getEligiblePhotosWalk = mo
             items: [],
             truncated: true,
             nextStart: mockStart(options),
+            stop: 'failed',
         }),
     },
     async (challengeId, token, options = {}) => {
@@ -126,6 +127,7 @@ const getEligiblePhotosWalk: typeof submissionsModule.getEligiblePhotosWalk = mo
                 ...(skip ? { skipped: rows.filter((item) => skip(item)).map((item) => String(item.id)) } : {}),
                 truncated: start + 4 < found.length,
                 nextStart: start + 4,
+                stop: start + 4 < found.length ? ('batch' as const) : ('end' as const),
             };
         }
         if (maxKept !== undefined) {
@@ -135,6 +137,7 @@ const getEligiblePhotosWalk: typeof submissionsModule.getEligiblePhotosWalk = mo
             const skippedIds: string[] = [];
             let offset = start;
             let truncated = false;
+            let stop: 'end' | 'batch' = 'end';
             while (offset < found.length) {
                 const rows = found.slice(offset, offset + 4);
                 for (const item of rows) {
@@ -147,6 +150,7 @@ const getEligiblePhotosWalk: typeof submissionsModule.getEligiblePhotosWalk = mo
                 if (rows.length < 4) break;
                 if (items.length >= maxKept) {
                     truncated = true;
+                    stop = 'batch';
                     break;
                 }
             }
@@ -155,9 +159,10 @@ const getEligiblePhotosWalk: typeof submissionsModule.getEligiblePhotosWalk = mo
                 ...(skip ? { skipped: skippedIds } : {}),
                 truncated,
                 nextStart: offset,
+                stop,
             };
         }
-        if (!skip) return { items: found, truncated: false, nextStart: start + found.length };
+        if (!skip) return { items: found, truncated: false, nextStart: start + found.length, stop: 'end' as const };
         // The photos the caller leaves out are reported, as the real walk does.
         // nextStart counts the rows READ, not the kept ones: a full read
         // consumed every row, whatever skip left out.
@@ -166,6 +171,7 @@ const getEligiblePhotosWalk: typeof submissionsModule.getEligiblePhotosWalk = mo
             truncated: false,
             skipped: found.filter((item) => skip(item)).map((item) => String(item.id)),
             nextStart: start + found.length,
+            stop: 'end' as const,
         };
     },
 );
