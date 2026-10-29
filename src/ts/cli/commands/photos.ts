@@ -8,7 +8,9 @@
  * count and whether the list was cut short, never the photos. `--search` also
  * prints the library's tags that contain the term — terminal only, best effort,
  * like the picker's suggestions — with a hint to rerun the search for one of
- * them, quoted for the shell. `--suggest` prints
+ * them, quoted for the shell. `--stats` reads the picker's Show-stats numbers
+ * (votes, views, likes, Guru picks) for the first --limit=<n> printed photos,
+ * one throttled chunk at a time, and annotates the same lines. `--suggest` prints
  * the ranked ids to the terminal only too, and its own log lines carry counts (the
  * shared visual check logs its shortlist of photo ids as it does for every fill).
  */
@@ -17,6 +19,7 @@ import * as logger from '../../logger';
 import { stripTerminalControl } from '../../format/logSafe';
 import { isLibraryOrder } from '../../librarySort';
 import { suggestedTags } from '../../tagSuggestions';
+import { LIBRARY_BATCH_PHOTOS } from '../../settings/limits';
 import { ensureAuthenticated, INVALID_ID_TEXT } from '../guards';
 
 import type { NullEventHandlers } from '../../types/cli';
@@ -29,6 +32,9 @@ const handlers = (): ActionHandlers =>
     ).buildHandlers());
 
 const ui = () => logger.withCategory('ui');
+
+// The default cap on the photos a `--stats` listing reads numbers for.
+const STATS_DEFAULT_LIMIT = 30;
 
 // What each refusal of the handler means for the person at the terminal.
 const REFUSALS: Record<string, string> = {
@@ -84,6 +90,50 @@ const parseSortFlag = (argv: string[]): string | null => {
 const BAD_SORT_TEXT = 'Use --sort=votes, --sort=newest or --sort=oldest.';
 
 type Listing = Extract<Awaited<ReturnType<ActionHandlers['get-library-photos']>>, { success: true }>;
+type PhotoStat = Extract<Awaited<ReturnType<ActionHandlers['get-photo-stats']>>, { success: true }>['stats'][number];
+
+// What a failed stats read is reported as: one warning line — the listing is the
+// primary output and the command never fails for the stats.
+const STATS_REFUSALS: Record<string, string> = {
+    'invalid-args': INVALID_ID_TEXT,
+    superseded: 'a newer request replaced this one',
+};
+
+/**
+ * Read the display stats for at most `limit` of `ids`, one chunk at a time: the
+ * handler's single-flight queue answers a parallel second call `superseded`, so
+ * each `get-photo-stats` chunk is awaited in turn, never `Promise.all`. The map
+ * carries a stat per answered id and null per `missing` id (the breaker
+ * cool-down) — that photo prints "stats not read", never zeros. On a failed
+ * call the refusal is worded and returned; the remaining chunks are not fetched
+ * and the ids they cover simply print without a stats suffix.
+ */
+const fetchPhotoStats = async (
+    ids: string[],
+    limit: number,
+): Promise<{ stats: Map<string, PhotoStat | null>; failed: string | null }> => {
+    const stats = new Map<string, PhotoStat | null>();
+    const wanted = ids.slice(0, limit);
+    for (let start = 0; start < wanted.length; start += LIBRARY_BATCH_PHOTOS) {
+        const reply = await handlers()['get-photo-stats'](null, wanted.slice(start, start + LIBRARY_BATCH_PHOTOS));
+        if (!reply?.success) {
+            const code = String(reply?.error);
+            const reason = Object.hasOwn(STATS_REFUSALS, code) ? STATS_REFUSALS[code] : stripTerminalControl(code);
+            return { stats, failed: reason };
+        }
+        for (const stat of reply.stats) stats.set(stat.id, stat);
+        for (const id of reply.missing) stats.set(id, null);
+    }
+    return { stats, failed: null };
+};
+
+/** The per-photo stats suffix: the four numbers, "stats not read" for a photo the read missed, or nothing past the cap. */
+const statsSuffix = (stat: PhotoStat | null | undefined): string => {
+    if (stat === undefined) return '';
+    if (stat === null) return '  — stats not read';
+    const picks = stat.guruPicks === 1 ? 'Guru pick' : 'Guru picks';
+    return `  — ${stat.votes} votes, ${stat.views} views, ${stat.likes} likes, ${stat.guruPicks} ${picks}`;
+};
 
 /** How many photos the listing left out for having won a challenge, and why (a cut-short listing may hide more). */
 const wonHiddenText = (listing: Listing): string =>
@@ -125,14 +175,17 @@ const printTagSuggestions = async (search: string, challengeId: string | null, s
 };
 
 /**
- * Print each photo as `id  allowed|not allowed  [labels]` on the terminal only —
- * the log files never get a photo.
+ * Print each photo as `id  allowed|not allowed  [labels]  [— stats]` on the
+ * terminal only — the log files never get a photo. `stats` carries the
+ * `--stats` read (null when it was not asked for); a photo past its cap has no
+ * entry and prints without a suffix.
  */
-const printPhotos = (listing: Listing): void => {
+const printPhotos = (listing: Listing, stats: Map<string, PhotoStat | null> | null): void => {
     for (const photo of listing.photos) {
         const state = listing.allowedKnown ? (photo.allowed ? '  allowed' : '  not allowed') : '';
         const labels = photo.labels.map((label) => stripTerminalControl(label)).join(', ');
-        logger.printLine(`  • ${stripTerminalControl(photo.id)}${state}${labels ? `  [${labels}]` : ''}`);
+        const statsText = stats === null ? '' : statsSuffix(stats.get(photo.id));
+        logger.printLine(`  • ${stripTerminalControl(photo.id)}${state}${labels ? `  [${labels}]` : ''}${statsText}`);
         if (listing.allowedKnown && !photo.allowed && photo.message) {
             logger.printLine(`      ${stripTerminalControl(photo.message)}`);
         }
@@ -146,12 +199,15 @@ const printPhotos = (listing: Listing): void => {
  * @param search - a tag to narrow the listing to
  * @param sort - a whole-library server order (`votes`|`newest`|`oldest`, checked with isLibraryOrder);
  *   null reads the default votes order
+ * @param statsLimit - with a number, also read votes/views/likes/Guru picks for at most this many
+ *   printed photos (`--stats [--limit=<n>]`); null lists without stats
  * @returns the exit code
  */
 const listPhotosCmd = async (
     challengeId: string | null,
     search: string | null,
     sort: string | null = null,
+    statsLimit: number | null = null,
 ): Promise<number> => {
     if (!ensureAuthenticated()) return 1;
     if (sort !== null && !isLibraryOrder(sort)) {
@@ -184,8 +240,21 @@ const listPhotosCmd = async (
         if (search) await printTagSuggestions(search, challengeId, sort);
         return 0;
     }
+    // The stats come before the listing (they annotate its lines) and can only
+    // make it warn: a failed read is one warning line, never a failed command.
+    let stats: Map<string, PhotoStat | null> | null = null;
+    if (statsLimit !== null) {
+        const read = await fetchPhotoStats(
+            result.photos.map((photo) => photo.id),
+            statsLimit,
+        );
+        if (read.failed !== null) {
+            ui().warning(`Could not read the photo stats (${read.failed}); the list follows without them.`);
+        }
+        stats = read.stats;
+    }
     ui().info(`=== Your photos (${result.photos.length}${result.truncated ? ', list cut short' : ''}) ===`);
-    printPhotos(result);
+    printPhotos(result, stats);
     printWonHidden(result);
     if (result.truncated) ui().warning('The list was cut short; narrow it with --search=<tag> to find the rest.');
     if (!result.allowedKnown) {
@@ -241,4 +310,12 @@ const suggestPhotosCmd = async (challengeId: string): Promise<number> => {
     return 0;
 };
 
-export { listPhotosCmd, suggestPhotosCmd, parseSearchFlag, parseSortFlag, BAD_SORT_TEXT, shellQuote };
+export {
+    listPhotosCmd,
+    suggestPhotosCmd,
+    parseSearchFlag,
+    parseSortFlag,
+    BAD_SORT_TEXT,
+    shellQuote,
+    STATS_DEFAULT_LIMIT,
+};

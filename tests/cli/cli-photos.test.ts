@@ -15,7 +15,12 @@ jest.mock('../../src/ts/cli/guards', () => ({
     INVALID_ID_TEXT: 'Invalid challenge or image id.',
 }));
 jest.mock('../../src/ts/ipc/actions.handlers', () => {
-    const handlers = { 'get-library-photos': jest.fn(), 'suggest-photos': jest.fn(), 'search-photo-tags': jest.fn() };
+    const handlers = {
+        'get-library-photos': jest.fn(),
+        'suggest-photos': jest.fn(),
+        'search-photo-tags': jest.fn(),
+        'get-photo-stats': jest.fn(),
+    };
     return { __handlers: handlers, buildHandlers: jest.fn(() => handlers) };
 });
 
@@ -30,6 +35,7 @@ const handlers = invalid<{
         'get-library-photos': jest.Mock<Promise<unknown>, unknown[]>;
         'suggest-photos': jest.Mock<Promise<unknown>, unknown[]>;
         'search-photo-tags': jest.Mock<Promise<unknown>, unknown[]>;
+        'get-photo-stats': jest.Mock<Promise<unknown>, unknown[]>;
     };
 }>(handlersModule).__handlers;
 import type * as photosModule from '../../src/ts/cli/commands/photos';
@@ -54,6 +60,7 @@ beforeEach(() => {
     handlers['get-library-photos'].mockReset();
     handlers['suggest-photos'].mockReset();
     handlers['search-photo-tags'].mockReset();
+    handlers['get-photo-stats'].mockReset();
 });
 
 describe('list-photos', () => {
@@ -496,6 +503,111 @@ describe('list-photos --suggest', () => {
         handlers['suggest-photos'].mockResolvedValue(undefined);
         await expect(suggestPhotosCmd('5')).resolves.toBe(1);
         expect(text('error')).toEqual(['Could not suggest photos: undefined']);
+    });
+});
+
+describe('list-photos --stats', () => {
+    const listingWith = (photoList: { id: string; labels: string[]; allowed: boolean; message: string | null }[]) => ({
+        success: true,
+        photos: photoList,
+        truncated: false,
+        wonIds: [],
+        wonCount: 0,
+        preview: false,
+        readAtMs: 1_700_000_000_000,
+        allowedKnown: true,
+        memberId: 'm',
+    });
+    const stat = (id: string, guruPicks = 1) => ({ id, votes: 12, views: 345, likes: 6, guruPicks });
+
+    test('annotates the printed lines with the stats, and a missing photo says its stats were not read', async () => {
+        handlers['get-library-photos'].mockResolvedValue(listingWith([photos[0], photos[1]]));
+        handlers['get-photo-stats'].mockResolvedValue({
+            success: true,
+            stats: [stat(photos[0].id)],
+            missing: [photos[1].id],
+        });
+        await expect(listPhotosCmd('5', null, null, 30)).resolves.toBe(0);
+        expect(handlers['get-photo-stats']).toHaveBeenCalledTimes(1);
+        expect(handlers['get-photo-stats']).toHaveBeenCalledWith(null, [photos[0].id, photos[1].id]);
+        expect(text('stdout')).toEqual([
+            '  • p1  allowed  [Pink, Flower]  — 12 votes, 345 views, 6 likes, 1 Guru pick',
+            '  • p2  not allowed  [Car]  — stats not read',
+            '      Used in another challenge',
+        ]);
+        // The stats annotate the terminal lines only, like every photo line.
+        expect(text('info').join('')).not.toMatch(/345|stats not read/);
+    });
+
+    test('reads at most --limit photos; a photo past the cap prints without a stats suffix', async () => {
+        const third = { id: 'p3', labels: [], allowed: true, message: null };
+        handlers['get-library-photos'].mockResolvedValue(listingWith([photos[0], photos[1], third]));
+        handlers['get-photo-stats'].mockResolvedValue({
+            success: true,
+            stats: [stat(photos[0].id, 3)],
+            missing: [photos[1].id],
+        });
+        await expect(listPhotosCmd('5', null, null, 2)).resolves.toBe(0);
+        expect(handlers['get-photo-stats']).toHaveBeenCalledWith(null, [photos[0].id, photos[1].id]);
+        expect(text('stdout')).toEqual([
+            '  • p1  allowed  [Pink, Flower]  — 12 votes, 345 views, 6 likes, 3 Guru picks',
+            '  • p2  not allowed  [Car]  — stats not read',
+            '      Used in another challenge',
+            '  • p3  allowed',
+        ]);
+    });
+
+    test('chunks the ids by the handler cap and awaits each chunk in turn, never in parallel', async () => {
+        const many = Array.from({ length: 250 }, (_: undefined, i: number) => ({
+            id: `p${i}`,
+            labels: [],
+            allowed: true,
+            message: null,
+        }));
+        handlers['get-library-photos'].mockResolvedValue(listingWith(many));
+        let inFlight = 0;
+        let overlapped = false;
+        handlers['get-photo-stats'].mockImplementation(async () => {
+            // A parallel second call would start while this one is still pending —
+            // the handler answers it `superseded`, so overlapping is the bug.
+            if (inFlight > 0) overlapped = true;
+            inFlight++;
+            await Promise.resolve();
+            inFlight--;
+            return { success: true, stats: [], missing: [] };
+        });
+        await expect(listPhotosCmd(null, null, null, 250)).resolves.toBe(0);
+        expect(overlapped).toBe(false);
+        expect(handlers['get-photo-stats'].mock.calls.map((c) => (c[1] as string[]).length)).toEqual([100, 100, 50]);
+    });
+
+    test('a failed stats read is one warning and exit 0; the listing follows without them', async () => {
+        handlers['get-library-photos'].mockResolvedValue(listingWith([photos[0]]));
+        handlers['get-photo-stats'].mockResolvedValue({ success: false, error: 'superseded' });
+        await expect(listPhotosCmd('5', null, null, 30)).resolves.toBe(0);
+        expect(text('warning')).toEqual([
+            'Could not read the photo stats (a newer request replaced this one); the list follows without them.',
+        ]);
+        expect(text('stdout')).toEqual(['  • p1  allowed  [Pink, Flower]']);
+    });
+
+    test('a failed stats read is worded for the fixed codes and stripped for the rest', async () => {
+        handlers['get-library-photos'].mockResolvedValue(listingWith([photos[0]]));
+        handlers['get-photo-stats'].mockResolvedValue({ success: false, error: 'invalid-args' });
+        await expect(listPhotosCmd('5', null, null, 30)).resolves.toBe(0);
+        expect(text('warning')[0]).toContain('Invalid challenge or image id.');
+        calls.length = 0;
+        const esc = String.fromCharCode(27);
+        handlers['get-photo-stats'].mockResolvedValue({ success: false, error: `boom ${esc}[31mboom` });
+        await expect(listPhotosCmd('5', null, null, 30)).resolves.toBe(0);
+        expect(text('warning')[0]).toBe('Could not read the photo stats (boom boom); the list follows without them.');
+        expect((text('warning').join('') + text('stdout').join('')).match(/\p{Cc}/u)).toBeNull();
+    });
+
+    test('an empty listing never asks for stats', async () => {
+        handlers['get-library-photos'].mockResolvedValue(listingWith([]));
+        await expect(listPhotosCmd('5', null, null, 30)).resolves.toBe(0);
+        expect(handlers['get-photo-stats']).not.toHaveBeenCalled();
     });
 });
 

@@ -152,13 +152,51 @@ const turboChallenge = async (
     }
 };
 
+// The wording both submit paths (fill-challenge-now and submit-picked-photos)
+// share for the handler's fixed error codes: what happened and what to do next.
+// 'submit-unclear' is never shown as a failure — the photo(s) may have been
+// submitted, so it exits 2 instead of 1.
+const SUBMIT_OUTCOME_TEXT: Record<string, string> = {
+    'not-enough-slots':
+        'The challenge has fewer open slots than photos to submit, so nothing was sent. Submit fewer photos, or wait for a slot to free up.',
+    'already-entered':
+        'One of those photos is already entered in this challenge, so nothing was sent. Submit without it.',
+    'submit-rejected':
+        'GuruShots rejected the submit, so nothing was sent. Check the challenge on the GuruShots website, then try again.',
+    'submit-busy': 'A submit for this challenge is already running. Wait for it to finish, then run the command again.',
+    'submit-unclear':
+        'The submit got no answer, so the photo(s) may have been submitted. Check the challenge before retrying.',
+};
+
+// The line for a failed submit reply: the fixed submit codes are worded from the
+// shared table — 'submit-unclear' as a warning, never as a failure — and any
+// other error (the invalid-id wording, a challenge-data-incomplete refusal, a
+// free-text message carrying API wording) is stripped before it reaches the
+// terminal. Returns the exit code: 2 for unclear, 1 otherwise.
+const reportSubmitFailure = (result: { error?: string | null } | null | undefined): number => {
+    const code = result?.error;
+    if (code === 'submit-unclear') {
+        logger.withCategory('autoSubmit').warning(SUBMIT_OUTCOME_TEXT['submit-unclear']);
+        return 2;
+    }
+    const text =
+        code !== undefined && code !== null && Object.hasOwn(SUBMIT_OUTCOME_TEXT, code)
+            ? SUBMIT_OUTCOME_TEXT[code]
+            : actionError(result, 'Failed to submit photos');
+    logger.withCategory('autoSubmit').error(stripTerminalControl(text));
+    return 1;
+};
+
 /**
- * Submit photo(s) to a challenge's empty slots. `--all` submits to every
- * empty slot; otherwise a single best-ranked eligible photo is submitted.
+ * Submit photo(s) to a challenge's empty slots through the auto-fill path
+ * (`fill-challenge-now`). `--all` submits to every empty slot; otherwise a
+ * single best-ranked eligible photo is submitted. Returns the exit code:
+ * 0 sent, 2 the submit got no answer (it may have landed), 1 every other
+ * failure, including an unknown challenge or a thrown handler.
  */
-const fillChallenge = async (challengeId: string, { all = false }: { all?: boolean } = {}) => {
+const fillChallenge = async (challengeId: string, { all = false }: { all?: boolean } = {}): Promise<number> => {
     const challenge = await resolveChallenge(challengeId);
-    if (!challenge) return;
+    if (!challenge) return 1;
 
     const mode = all ? 'all' : 'one';
     try {
@@ -169,11 +207,40 @@ const fillChallenge = async (challengeId: string, { all = false }: { all?: boole
                 .success(
                     `${result.message || `Submitted photos to "${challenge.title}"`} (submitted ${result.submitted ?? 0}, skipped ${result.skipped ?? 0})`,
                 );
-        } else {
-            logger.withCategory('autoSubmit').error(actionError(result, 'Failed to submit photos'));
+            return 0;
         }
+        return reportSubmitFailure(result);
     } catch (err) {
-        logger.withCategory('autoSubmit').error(`Failed to submit photos: ${errorMessage(err) || err}`);
+        logger
+            .withCategory('autoSubmit')
+            .error(`Failed to submit photos: ${stripTerminalControl(errorMessage(err) || err)}`);
+        return 1;
+    }
+};
+
+/**
+ * Submit exactly the photos named with `--image=<id>[,<id>…]` through the same
+ * handler the card's picked-photos submit uses (submit-picked-photos): no
+ * ranking, no tag rules — the ids go to the challenge as given. Returns the
+ * exit code: 0 sent, 2 unclear (may have landed), 1 every other failure.
+ */
+const submitPickedCmd = async (challengeId: string, imageIds: string[]): Promise<number> => {
+    const challenge = await resolveChallenge(challengeId);
+    if (!challenge) return 1;
+    try {
+        const result = await handlers()['submit-picked-photos'](null, challengeId, imageIds);
+        if (result?.success) {
+            logger
+                .withCategory('autoSubmit')
+                .success(`Submitted ${result.submitted} photo(s) to "${challenge.title}".`);
+            return 0;
+        }
+        return reportSubmitFailure(result);
+    } catch (err) {
+        logger
+            .withCategory('autoSubmit')
+            .error(`Failed to submit photos: ${stripTerminalControl(errorMessage(err) || err)}`);
+        return 1;
     }
 };
 
@@ -296,7 +363,7 @@ const unlockBoostCmd = async (challengeId: string, { yes = false }: { yes?: bool
     });
 
 const SWAP_USAGE = 'Usage: swap --challenge=<id> --image=<id> [--to=<id>] [--yes]';
-const SWAP_BACK_USAGE = 'Usage: swap-back --challenge=<id> --image=<id> [--yes]';
+const SWAP_BACK_USAGE = 'Usage: swap-back --challenge=<id>  |  swap-back --challenge=<id> --image=<id> [--yes]';
 
 /**
  * Reads swap's own flags from the args left after --challenge:
@@ -384,27 +451,46 @@ const SWAP_BACK_KINDS: Record<SwapBackRecord['kind'], string> = {
 /**
  * Spend a SWAP to put a photo swapped out while boosted, turbo'd or guru-picked
  * back into the slot now holding `imageId` — it gets its boost/turbo/Guru's
- * pick back. Only swaps made through this app are known (the mobile swap
- * history has no such flag; the web one's the app does not read).
- * Returns false on a usage error (no --image).
+ * pick back. Without `imageId` the command is a read-only listing: one line per
+ * recorded offer, or an info line when none is recorded. Only swaps made
+ * through this app are known (the mobile swap history has no such flag; the web
+ * one's the app does not read).
+ * Returns false on a failed read or spend (exit 1), true otherwise.
  */
 const swapBackCmd = async (
     challengeId: string,
     { imageId, yes = false }: { imageId?: string | null; yes?: boolean } = {},
 ) => {
-    if (!imageId) {
-        logger.withCategory('ui').error('Please specify the photo now in the slot with --image=<id>');
-        logger.withCategory('ui').info(SWAP_BACK_USAGE);
-        return false;
-    }
     const challenge = await resolveChallenge(challengeId);
-    if (!challenge) return true;
+    if (!challenge) return false;
     try {
         const list = await currencyHandlers()['get-swap-backs'](null, challengeId);
-        const record = (list?.success ? list.items : []).find((r) => r.currentId === String(imageId));
+        if (!list?.success) {
+            logger
+                .withCategory('currency')
+                .error(
+                    `Could not read the recorded swap backs: ${stripTerminalControl(String(list?.error ?? 'no answer'))}. Try again in a moment.`,
+                );
+            return false;
+        }
+        if (!imageId) {
+            if (list.items.length === 0) {
+                logger.withCategory('currency').info(`No swap back is recorded for "${challenge.title}".`);
+                return true;
+            }
+            for (const record of list.items) {
+                logger
+                    .withCategory('currency')
+                    .info(
+                        `${stripTerminalControl(record.currentId)} → ${stripTerminalControl(record.previousId)} (gets its ${SWAP_BACK_KINDS[record.kind]} back)`,
+                    );
+            }
+            return true;
+        }
+        const record = list.items.find((r) => r.currentId === String(imageId));
         if (!record) {
             logger.withCategory('currency').error(`No swap back is recorded for ${imageId} in "${challenge.title}".`);
-            return true;
+            return false;
         }
         if (!yes) {
             logger
@@ -424,7 +510,8 @@ const swapBackCmd = async (
             `Swapped ${record.previousId} back into "${challenge.title}" — its ${SWAP_BACK_KINDS[record.kind]} is back.`,
         );
     } catch (err) {
-        logger.withCategory('currency').error(`Failed to swap back: ${errorMessage(err) || err}`);
+        logger.withCategory('currency').error(`Failed to swap back: ${stripTerminalControl(errorMessage(err) || err)}`);
+        return false;
     }
     return true;
 };
@@ -448,6 +535,7 @@ export {
     actionError,
     turboChallenge,
     fillChallenge,
+    submitPickedCmd,
     unlockBoostCmd,
     swapCmd,
     parseSwapFlags,

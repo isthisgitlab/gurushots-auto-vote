@@ -113,8 +113,8 @@ describe('challenge lookup', () => {
         expect(h['preview-swap-photo']).not.toHaveBeenCalled();
     });
 
-    test('swap-back returns true (not a usage error) when the challenge is unknown', async () => {
-        await expect(actions.swapBackCmd('999', { imageId: 'a' })).resolves.toBe(true);
+    test('swap-back exits 1 when the challenge is unknown', async () => {
+        await expect(actions.swapBackCmd('999', { imageId: 'a' })).resolves.toBe(false);
         expect(h['get-swap-backs']).not.toHaveBeenCalled();
     });
 });
@@ -250,20 +250,21 @@ describe('swap', () => {
 });
 
 describe('swap-back', () => {
-    test('missing --image without opts is a usage error', async () => {
-        await expect(actions.swapBackCmd('111')).resolves.toBe(false);
-        expect(msgs('info')).toEqual([actions.SWAP_BACK_USAGE]);
+    test('no --image without opts lists the recorded offers (the read-only form)', async () => {
+        await expect(actions.swapBackCmd('111')).resolves.toBe(true);
+        expect(msgs('info')).toEqual(['repl → orig (gets its turbo back)']);
     });
 
-    test('no swap-back list at all reports nothing recorded', async () => {
+    test('no swap-back list at all is a failed read: worded, exit 1', async () => {
         h['get-swap-backs'].mockResolvedValue(invalid(null));
-        await expect(actions.swapBackCmd('111', { imageId: 'repl' })).resolves.toBe(true);
-        expect(msgs('error')[0]).toMatch(/No swap back is recorded for repl/);
+        await expect(actions.swapBackCmd('111', { imageId: 'repl' })).resolves.toBe(false);
+        expect(msgs('error')[0]).toMatch(/Could not read the recorded swap backs/);
+        expect(msgs('error')[0]).toMatch(/no answer/);
     });
 
-    test('a thrown lookup is reported (Error and non-Error) and still returns true', async () => {
+    test('a thrown lookup is reported (Error and non-Error) and exits 1', async () => {
         h['get-swap-backs'].mockRejectedValueOnce(new Error('x')).mockRejectedValueOnce('y');
-        await expect(actions.swapBackCmd('111', { imageId: 'repl' })).resolves.toBe(true);
+        await expect(actions.swapBackCmd('111', { imageId: 'repl' })).resolves.toBe(false);
         await actions.swapBackCmd('111', { imageId: 'repl' });
         expect(msgs('error')).toEqual(['Failed to swap back: x', 'Failed to swap back: y']);
     });

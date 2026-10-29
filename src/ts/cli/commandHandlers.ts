@@ -4,11 +4,18 @@
  * import is part of a module cycle — the rows need these handlers at init — and is safe because this
  * module reads `usageOf` only inside handler bodies, never at module scope.
  */
-import { boostChallenge, parseSwapFlags, swapBackCmd, turboChallenge } from './commands/actions';
+import { boostChallenge, fillChallenge, submitPickedCmd, swapBackCmd, turboChallenge } from './commands/actions';
 import { challengesCmd } from './commands/challenges';
+import { deadlinesCmd } from './commands/deadlines';
 import { pinCmd, PIN_USAGE } from './commands/pin';
 import { forgetPaymentCmd, joinChallengeCmd } from './commands/join';
-import { listPhotosCmd, parseSearchFlag, parseSortFlag, suggestPhotosCmd } from './commands/photos';
+import {
+    listPhotosCmd,
+    parseSearchFlag,
+    parseSortFlag,
+    suggestPhotosCmd,
+    STATS_DEFAULT_LIMIT,
+} from './commands/photos';
 import { isPinnableImageId } from '../settings';
 import { getSetting, listProfiles, resetSetting, setGlobalDefault, setSetting } from './commands/settings';
 import { showLogs } from './commands/logs';
@@ -98,8 +105,11 @@ const runForgetPayment: CommandHandler = async (argv) => {
 
 const runListPhotos: CommandHandler = async (argv) => {
     const { challengeId, rest } = extractChallenge(argv);
+    const usage = usageOf('list-photos');
     const suggestFlags = rest.filter((arg) => arg === '--suggest');
-    const listRest = rest.filter((arg) => arg !== '--suggest');
+    const statsFlags = rest.filter((arg) => arg === '--stats');
+    const limitArgs = rest.filter((arg) => arg.startsWith('--limit='));
+    const listRest = rest.filter((arg) => arg !== '--suggest' && arg !== '--stats' && !arg.startsWith('--limit='));
     const search = parseSearchFlag(listRest);
     const sort = parseSortFlag(listRest);
     // Anything that is neither a --search/--sort flag nor its value is a typo.
@@ -112,22 +122,39 @@ const runListPhotos: CommandHandler = async (argv) => {
             listRest[i - 1] !== '--search' &&
             listRest[i - 1] !== '--sort',
     );
+    const limitText = limitArgs[0]?.slice('--limit='.length);
+    const limit = limitText !== undefined && /^\d+$/.test(limitText) ? Number(limitText) : null;
     // A --sort with no value of its own (nothing after it, or another flag) names
     // what it is missing, not just "wrong arguments".
     if (listRest.some((arg) => arg === '--sort') && sort === null) {
-        return usageError('--sort needs one of votes|newest|oldest', usageOf('list-photos'));
+        return usageError('--sort needs one of votes|newest|oldest', usage);
     }
-    if (unexpected.length > 0 || (listRest.some((arg) => arg === '--search') && search === null)) {
-        return usageError('Wrong arguments', usageOf('list-photos'));
+    if (
+        suggestFlags.length > 1 ||
+        statsFlags.length > 1 ||
+        limitArgs.length > 1 ||
+        unexpected.length > 0 ||
+        (listRest.some((arg) => arg === '--search') && search === null)
+    ) {
+        return usageError('Wrong arguments', usage);
+    }
+    if (limitText !== undefined && (limit === null || limit < 1)) {
+        return usageError('--limit needs a positive whole number of photos to read stats for', usage);
+    }
+    if (statsFlags.length > 0 && suggestFlags.length > 0) {
+        return usageError('--stats cannot be combined with --suggest', usage);
+    }
+    if (limitArgs.length > 0 && statsFlags.length === 0) {
+        return usageError('--limit only goes with --stats', usage);
     }
     if (suggestFlags.length > 0) {
         // The suggestions rank for one challenge and are not a search.
-        if (suggestFlags.length > 1 || challengeId === null || listRest.length > 0) {
-            return usageError('Wrong arguments', usageOf('list-photos'));
+        if (challengeId === null || listRest.length > 0) {
+            return usageError('Wrong arguments', usage);
         }
         return suggestPhotosCmd(challengeId);
     }
-    return listPhotosCmd(challengeId, search, sort);
+    return listPhotosCmd(challengeId, search, sort, statsFlags.length > 0 ? (limit ?? STATS_DEFAULT_LIMIT) : null);
 };
 
 const runBoost = async (challengeId: string, rest: string[]) => {
@@ -195,9 +222,72 @@ const runPin = async (challengeId: string, rest: string[]) => {
     return exitCodeOf(await pinCmd(challengeId, pins));
 };
 
-const runSwapBack = async (challengeId: string, rest: string[]) => {
-    const { imageId, yes } = parseSwapFlags(rest);
-    return exitCodeOf(await swapBackCmd(challengeId, { imageId, yes }));
+// `submit` sends photos, so like `turbo` its arguments are strict: a typo
+// (`--images=`), a space form or a repeat is a usage error, never a silent
+// auto-submit. After --challenge, the rest may hold --all at most once (every
+// empty slot, ranked by the auto-submit rules) or --image=<ids> at most once
+// (exactly those photos, comma-separated) — never both. Exit codes: 0 sent,
+// 1 failed (including an unknown id), 2 the submit got no answer (the photo(s)
+// may have been submitted).
+const runSubmit: CommandHandler = async (argv) => {
+    const { challengeId, rest } = extractChallenge(argv);
+    const usage = usageOf('submit');
+    requireChallenge({ challengeId }, usage);
+    const allArgs = rest.filter((a) => a === '--all');
+    const imageArgs = rest.filter((a) => a.startsWith('--image='));
+    if (
+        rest.some((a) => a !== '--all' && !a.startsWith('--image=')) ||
+        allArgs.length > 1 ||
+        imageArgs.length > 1 ||
+        (allArgs.length > 0 && imageArgs.length > 0)
+    ) {
+        return usageError('Wrong arguments', usage);
+    }
+    if (imageArgs.length > 0) {
+        const imageId = imageArgs[0].slice('--image='.length);
+        if (imageId === '') {
+            return usageError('--image needs a photo id (list-photos --challenge=<id> lists them)', usage);
+        }
+        return submitPickedCmd(challengeId as string, imageId.split(','));
+    }
+    return fillChallenge(challengeId as string, { all: allArgs.length > 0 });
+};
+
+// A read-only preview, but strict like the actions: `--challenge 123` (space form), a repeat or
+// any other argument must not quietly read as a listing.
+const runDeadlines: CommandHandler = async (argv) => {
+    const detailArgs = argv.filter((a) => a.startsWith('--challenge='));
+    if (argv.length !== detailArgs.length || detailArgs.length > 1 || detailArgs[0] === '--challenge=') {
+        return usageError('Wrong arguments', usageOf('deadlines'));
+    }
+    const challengeId = detailArgs[0]?.slice('--challenge='.length);
+    if (challengeId === undefined) {
+        return usageError('Please specify a challenge id with --challenge', usageOf('deadlines'));
+    }
+    return exitCodeOf(await deadlinesCmd(challengeId));
+};
+
+// `swap-back` spends a swap, so like `join` its arguments are strict: `--to=` belongs to `swap`,
+// and a typo, a space form or a repeat is a usage error, never a spend. Without --image the
+// command is a read-only listing of the recorded swap-back offers.
+const runSwapBack: CommandHandler = async (argv) => {
+    const { challengeId, rest } = extractChallenge(argv);
+    const usage = usageOf('swap-back');
+    requireChallenge({ challengeId }, usage);
+    const imageArgs = rest.filter((a) => a.startsWith('--image='));
+    const yesArgs = rest.filter((a) => a === '--yes');
+    if (rest.some((a) => !a.startsWith('--image=') && a !== '--yes') || imageArgs.length > 1 || yesArgs.length > 1) {
+        return usageError('Wrong arguments', usage);
+    }
+    const imageId = imageArgs[0]?.slice('--image='.length);
+    if (imageId === '')
+        return usageError('--image needs a photo id (list-photos --challenge=<id> shows the ids)', usage);
+    return exitCodeOf(
+        await swapBackCmd(challengeId as string, {
+            ...(imageId === undefined ? {} : { imageId }),
+            yes: yesArgs.length > 0,
+        }),
+    );
 };
 
 const runGetSetting: CommandHandler = async (argv) => {
@@ -243,6 +333,7 @@ const runListProfiles: CommandHandler = async (argv) => {
 export {
     runBoost,
     runChallenges,
+    runDeadlines,
     runForgetPayment,
     runGetSetting,
     runJoin,
@@ -255,6 +346,7 @@ export {
     runScenarioReset,
     runSetGlobalDefault,
     runSetSetting,
+    runSubmit,
     runSwapBack,
     runTurbo,
     runVote,

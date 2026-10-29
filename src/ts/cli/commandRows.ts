@@ -1,7 +1,6 @@
 import { handleLogin, handleLogout } from './commands/auth';
 import { showStatus, startContinuousVoting } from './commands/voting';
 import {
-    fillChallenge,
     fillExposureCmd,
     parseSwapFlags,
     SWAP_BACK_USAGE,
@@ -38,6 +37,7 @@ import {
 import {
     runBoost,
     runChallenges,
+    runDeadlines,
     runForgetPayment,
     runGetSetting,
     runJoin,
@@ -50,6 +50,7 @@ import {
     runScenarioReset,
     runSetGlobalDefault,
     runSetSetting,
+    runSubmit,
     runSwapBack,
     runTurbo,
     runVote,
@@ -117,6 +118,16 @@ const COMMAND_ROWS: readonly CommandRow[] = [
         ],
         { aliases: ['list'], usage: 'Usage: challenges [--challenge=<id>]' },
     ),
+    row(
+        'deadlines',
+        runDeadlines,
+        [
+            '  deadlines - Show the deadline actions that will run on a challenge by itself (auto-submit, emergency',
+            '             submit, boost, turbo) with the time each is due, and any Boost/Turbo conflict with what',
+            '             blocks it and when a blocking pin gives way. Nothing is spent; the preview is a snapshot.',
+        ],
+        { usage: 'Usage: deadlines --challenge=<id>' },
+    ),
     row('boost', challengeCommand('Usage: boost --challenge=<id> [--image=<id>]', runBoost), [
         '  boost    - Apply a boost to a challenge: boost --challenge=<id> [--image=<id>]',
     ]),
@@ -137,8 +148,15 @@ const COMMAND_ROWS: readonly CommandRow[] = [
     ),
     row(
         'submit',
-        challengeCommand('Usage: submit --challenge=<id> [--all]', flagAction(fillChallenge, 'all', '--all')),
-        ["  submit   - Submit photo(s) to a challenge's empty slots: submit --challenge=<id> [--all]"],
+        runSubmit,
+        [
+            "  submit   - Submit photo(s) to a challenge's empty slots: submit --challenge=<id> [--all | --image=<id>[,<id>…]]",
+            '             --all submits to every empty slot (ranked by the auto-submit rules); --image submits exactly',
+            '             the photos named, comma-separated (list-photos --challenge=<id> shows the ids). Exits 1 when',
+            '             nothing was submitted. Exits 2 when the submit got no answer: the photo(s) may have been',
+            '             submitted — check the challenge before retrying.',
+        ],
+        { usage: 'Usage: submit --challenge=<id> [--all | --image=<id>[,<id>…]]' },
     ),
     row(
         'unlock-boost',
@@ -159,10 +177,16 @@ const COMMAND_ROWS: readonly CommandRow[] = [
             '             swap --challenge=<id> --image=<id> [--to=<id>] [--yes]',
         ],
     ),
-    row('swap-back', challengeCommand(SWAP_BACK_USAGE, runSwapBack), [
-        "  swap-back - Swap a photo that was swapped out while boosted, turbo'd or guru-picked back in (it",
-        "             gets its boost/turbo/Guru's pick back): swap-back --challenge=<id> --image=<current id> [--yes]",
-    ]),
+    row(
+        'swap-back',
+        runSwapBack,
+        [
+            "  swap-back - Swap a photo that was swapped out while boosted, turbo'd or guru-picked back in (it",
+            "             gets its boost/turbo/Guru's pick back): swap-back --challenge=<id> --image=<current id> [--yes]",
+            '             Without --image, list the recorded swap-back offers for the challenge.',
+        ],
+        { usage: SWAP_BACK_USAGE },
+    ),
     row(
         'fill-exposure',
         challengeCommand('Usage: fill-exposure --challenge=<id> [--yes]', flagAction(fillExposureCmd, 'yes', '--yes')),
@@ -225,12 +249,15 @@ const COMMAND_ROWS: readonly CommandRow[] = [
             '             date the photo was added to your library) — and the whole listing comes out in that order.',
             '             --search matches a tag exactly, and also lists the tags in your library that contain the term (3+',
             '             characters), so a partial term still shows the full tag to search with.',
+            '             --stats also reads votes, views, likes and Guru picks for the listed photos — the first',
+            '             --limit=<n> of them, 30 by default; a photo whose stats could not be read says so instead of',
+            '             showing zeros.',
             '  list-photos --challenge=<id> --suggest - Rank your photos for that challenge by your auto-submit rules and list',
             '             the top 5, best first. It is a ranking under those rules, not a replay of the next fill, and',
-            '             nothing is submitted. It cannot be combined with --search or --sort.',
+            '             nothing is submitted. It cannot be combined with --search, --sort or --stats.',
         ],
         {
-            usage: 'Usage: list-photos [--challenge=<id>] [--search=<tag>] [--sort=votes|newest|oldest]  or  list-photos --challenge=<id> --suggest',
+            usage: 'Usage: list-photos [--challenge=<id>] [--search=<tag>] [--sort=votes|newest|oldest] [--stats [--limit=<n>]]  or  list-photos --challenge=<id> --suggest',
         },
     ),
     row('check-updates', exitsZero(checkUpdates), ['  check-updates - Check GitHub for a newer release']),

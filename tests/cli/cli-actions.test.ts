@@ -601,7 +601,7 @@ describe('CLI actions — error paths', () => {
     test('fill: a thrown handler is caught', async () => {
         actionsHandlers['fill-challenge-now'].mockRejectedValue(new Error('boom'));
 
-        await expect(fillChallenge('111', {})).resolves.toBeUndefined();
+        await expect(fillChallenge('111', {})).resolves.toBe(1);
         expect(contains(msgsAt('error'), 'Failed to submit photos')).toBe(true);
     });
 

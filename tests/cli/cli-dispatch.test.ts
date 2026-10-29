@@ -20,6 +20,7 @@ import type * as bankrollModule from '../../src/ts/cli/commands/bankroll';
 import type * as joinModule from '../../src/ts/cli/commands/join';
 import type * as pinModule from '../../src/ts/cli/commands/pin';
 import type * as photosModule from '../../src/ts/cli/commands/photos';
+import type * as deadlinesModule from '../../src/ts/cli/commands/deadlines';
 import type * as updateModule from '../../src/ts/cli/commands/update';
 import type * as logsModule from '../../src/ts/cli/commands/logs';
 import type * as settingsCommandsModule from '../../src/ts/cli/commands/settings';
@@ -40,6 +41,7 @@ type Mods = {
     join: jest.MockedObjectDeep<typeof joinModule>;
     pin: jest.MockedObjectDeep<typeof pinModule>;
     photos: jest.MockedObjectDeep<typeof photosModule>;
+    deadlines: jest.MockedObjectDeep<typeof deadlinesModule>;
     update: jest.MockedObjectDeep<typeof updateModule>;
     logs: jest.MockedObjectDeep<typeof logsModule>;
     cmd: jest.MockedObjectDeep<typeof settingsCommandsModule>;
@@ -118,12 +120,15 @@ jest.mock('../../src/ts/cli/commands/actions', () => {
         boostChallenge: jest.fn(),
         turboChallenge: jest.fn(),
         fillChallenge: jest.fn(),
+        submitPickedCmd: jest.fn(async () => 0),
         unlockBoostCmd: jest.fn(),
         swapCmd: jest.fn(),
         swapBackCmd: jest.fn(),
         fillExposureCmd: jest.fn(),
     };
 });
+
+jest.mock('../../src/ts/cli/commands/deadlines', () => ({ deadlinesCmd: jest.fn(async () => true) }));
 
 jest.mock('../../src/ts/cli/commands/pin', () => ({
     PIN_USAGE: 'Usage: pin --challenge=<id> [--boost=<imageId|none>] [--turbo=<imageId|none>]',
@@ -218,6 +223,7 @@ const run = async (argv: string[], setup?: (mods: Mods) => void) => {
             join: require('../../src/ts/cli/commands/join') as typeof joinModule,
             pin: require('../../src/ts/cli/commands/pin') as typeof pinModule,
             photos: require('../../src/ts/cli/commands/photos') as typeof photosModule,
+            deadlines: require('../../src/ts/cli/commands/deadlines') as typeof deadlinesModule,
             update: require('../../src/ts/cli/commands/update') as typeof updateModule,
             logs: require('../../src/ts/cli/commands/logs') as typeof logsModule,
             cmd: require('../../src/ts/cli/commands/settings') as typeof settingsCommandsModule,
@@ -343,6 +349,7 @@ describe('the CLI session marker', () => {
         ['boost', ['--challenge=1']],
         ['turbo', ['--challenge=1']],
         ['submit', ['--challenge=1']],
+        ['deadlines', ['--challenge=1']],
         ['join', ['1']],
         ['swap', ['--challenge=1']],
         ['fill-exposure', ['--challenge=1']],
@@ -446,6 +453,9 @@ const COMMANDS_BLOCK = `Commands:
   challenges - List the active challenges with their ids — the id every --challenge=<id> command needs.
              Add --challenge=<id> for one challenge in detail (its photo ids, to aim --image=<id> at).
              Alias: list
+  deadlines - Show the deadline actions that will run on a challenge by itself (auto-submit, emergency
+             submit, boost, turbo) with the time each is due, and any Boost/Turbo conflict with what
+             blocks it and when a blocking pin gives way. Nothing is spent; the preview is a snapshot.
   boost    - Apply a boost to a challenge: boost --challenge=<id> [--image=<id>]
   pin      - Pin the photo Boost and Turbo land on (timing is unchanged; none clears a pin; no flags lists them):
              pin --challenge=<id> [--boost=<imageId|none>] [--turbo=<imageId|none>]
@@ -453,7 +463,11 @@ const COMMANDS_BLOCK = `Commands:
              With --image=<id>, apply an already-won Turbo to that photo instead
              (challenges --challenge=<id> lists the photo ids). Exits 1 when the Turbo
              was not earned or applied.
-  submit   - Submit photo(s) to a challenge's empty slots: submit --challenge=<id> [--all]
+  submit   - Submit photo(s) to a challenge's empty slots: submit --challenge=<id> [--all | --image=<id>[,<id>…]]
+             --all submits to every empty slot (ranked by the auto-submit rules); --image submits exactly
+             the photos named, comma-separated (list-photos --challenge=<id> shows the ids). Exits 1 when
+             nothing was submitted. Exits 2 when the submit got no answer: the photo(s) may have been
+             submitted — check the challenge before retrying.
   unlock-boost  - Spend a key to unlock a locked boost (does not apply it):
              unlock-boost --challenge=<id> [--yes]
   swap     - Spend a swap to replace an entered photo: without --to it suggests a different one,
@@ -461,6 +475,7 @@ const COMMANDS_BLOCK = `Commands:
              swap --challenge=<id> --image=<id> [--to=<id>] [--yes]
   swap-back - Swap a photo that was swapped out while boosted, turbo'd or guru-picked back in (it
              gets its boost/turbo/Guru's pick back): swap-back --challenge=<id> --image=<current id> [--yes]
+             Without --image, list the recorded swap-back offers for the challenge.
   fill-exposure - Spend a fill to top exposure up to 100%: fill-exposure --challenge=<id> [--yes]
              Currency actions spend nothing without --yes; they print the cost first.
   start    - Start continuous voting on a schedule (runs until stopped with Ctrl+C)
@@ -484,9 +499,12 @@ const COMMANDS_BLOCK = `Commands:
              date the photo was added to your library) — and the whole listing comes out in that order.
              --search matches a tag exactly, and also lists the tags in your library that contain the term (3+
              characters), so a partial term still shows the full tag to search with.
+             --stats also reads votes, views, likes and Guru picks for the listed photos — the first
+             --limit=<n> of them, 30 by default; a photo whose stats could not be read says so instead of
+             showing zeros.
   list-photos --challenge=<id> --suggest - Rank your photos for that challenge by your auto-submit rules and list
              the top 5, best first. It is a ranking under those rules, not a replay of the next fill, and
-             nothing is submitted. It cannot be combined with --search or --sort.
+             nothing is submitted. It cannot be combined with --search, --sort or --stats.
   check-updates - Check GitHub for a newer release
   get-setting <key> [--challenge=<id>] - Get a setting value (effective value for a challenge with --challenge)
   set-setting <key> <value> [--challenge=<id>] - Set a setting value (per-challenge override with --challenge)
@@ -730,6 +748,41 @@ describe('challenge-scoped actions', () => {
         expect(m.actions.fillChallenge).toHaveBeenCalledWith('5', { all });
     });
 
+    test.each([
+        [['--challenge=5', '--image=abc'], ['abc']],
+        [
+            ['--challenge=5', '--image=abc,def'],
+            ['abc', 'def'],
+        ],
+    ])('submit %p submits the picked photos', async (tail, ids) => {
+        const m = await run(['submit', ...tail]);
+        expect(m.actions.submitPickedCmd).toHaveBeenCalledWith('5', ids);
+        expect(m.actions.fillChallenge).not.toHaveBeenCalled();
+        expect(m.exitCodes).toEqual([0]);
+    });
+
+    test.each([
+        [['--all', '--image=a']],
+        [['--images=a']],
+        [['--image=a', '--image=b']],
+        [['--image', 'a']],
+        [['stray']],
+    ])('submit %p is a usage error and submits nothing', async (tail) => {
+        const m = await run(['submit', '--challenge=5', ...tail]);
+        expect(m.actions.submitPickedCmd).not.toHaveBeenCalled();
+        expect(m.actions.fillChallenge).not.toHaveBeenCalled();
+        expect(m.msgs('error')).toEqual(['Wrong arguments']);
+        expect(m.msgs('info')).toEqual(['Usage: submit --challenge=<id> [--all | --image=<id>[,<id>…]]']);
+        expect(m.exitCodes).toEqual([1]);
+    });
+
+    test('submit --image with no value names what is missing', async () => {
+        const m = await run(['submit', '--challenge=5', '--image=']);
+        expect(m.actions.submitPickedCmd).not.toHaveBeenCalled();
+        expect(m.msgs('error')[0]).toContain('--image needs a photo id');
+        expect(m.exitCodes).toEqual([1]);
+    });
+
     test.each<[string, 'unlockBoostCmd' | 'fillExposureCmd']>([
         ['unlock-boost', 'unlockBoostCmd'],
         ['fill-exposure', 'fillExposureCmd'],
@@ -760,6 +813,61 @@ describe('challenge-scoped actions', () => {
         );
         expect(m.actions.swapBackCmd).toHaveBeenCalledWith('5', { imageId: 'a', yes: false });
         expect(m.exitCodes).toEqual([code]);
+    });
+
+    test('swap-back without --image asks for the recorded offers', async () => {
+        const m = await run(['swap-back', '--challenge=5']);
+        expect(m.actions.swapBackCmd).toHaveBeenCalledWith('5', { imageId: undefined, yes: false });
+        expect(m.exitCodes).toEqual([0]);
+    });
+
+    test.each([[['--to=b']], [['--yes', '--yes']], [['--image=a', '--image=b']], [['--image', 'a']], [['stray']]])(
+        'swap-back %p is a usage error and swaps nothing',
+        async (tail) => {
+            const m = await run(['swap-back', '--challenge=5', ...tail]);
+            expect(m.actions.swapBackCmd).not.toHaveBeenCalled();
+            expect(m.msgs('error')).toEqual(['Wrong arguments']);
+            expect(m.msgs('info')).toEqual([
+                'Usage: swap-back --challenge=<id>  |  swap-back --challenge=<id> --image=<id> [--yes]',
+            ]);
+            expect(m.exitCodes).toEqual([1]);
+        },
+    );
+
+    test('swap-back --image with no value names what is missing', async () => {
+        const m = await run(['swap-back', '--challenge=5', '--image=']);
+        expect(m.actions.swapBackCmd).not.toHaveBeenCalled();
+        expect(m.msgs('error')[0]).toContain('--image needs a photo id');
+        expect(m.exitCodes).toEqual([1]);
+    });
+
+    test('deadlines passes the challenge and exits with the command result', async () => {
+        const m = await run(['deadlines', '--challenge=7'], (mods) =>
+            mods.deadlines.deadlinesCmd.mockResolvedValue(false),
+        );
+        expect(m.deadlines.deadlinesCmd).toHaveBeenCalledWith('7');
+        expect(m.exitCodes).toEqual([1]);
+    });
+
+    test('deadlines with no arguments names what is missing', async () => {
+        const m = await run(['deadlines']);
+        expect(m.deadlines.deadlinesCmd).not.toHaveBeenCalled();
+        expect(m.msgs('error')).toEqual(['Please specify a challenge id with --challenge']);
+        expect(m.msgs('info')).toEqual(['Usage: deadlines --challenge=<id>']);
+        expect(m.exitCodes).toEqual([1]);
+    });
+
+    test.each([
+        [['--challenge', '7']],
+        [['--challenge=']],
+        [['--challenge=7', '--challenge=8']],
+        [['--challenge=7', 'extra']],
+    ])('deadlines %p is a usage error', async (tail) => {
+        const m = await run(['deadlines', ...tail]);
+        expect(m.deadlines.deadlinesCmd).not.toHaveBeenCalled();
+        expect(m.msgs('error')).toEqual(['Wrong arguments']);
+        expect(m.msgs('info')).toEqual(['Usage: deadlines --challenge=<id>']);
+        expect(m.exitCodes).toEqual([1]);
     });
 
     test('join picks the first positional id and --yes', async () => {
@@ -853,18 +961,55 @@ describe('forget-payment', () => {
 
 describe('list-photos', () => {
     test.each([
-        [['list-photos'], null, null, null],
-        [['list-photos', '--challenge=5'], '5', null, null],
-        [['list-photos', '--search=sunset'], null, 'sunset', null],
-        [['list-photos', '--search', 'sun set', '--challenge', '5'], '5', 'sun set', null],
-        [['list-photos', '--sort=newest'], null, null, 'newest'],
-        [['list-photos', '--sort', 'oldest', '--challenge', '5'], '5', null, 'oldest'],
-        [['list-photos', '--sort=newest', '--search=sunset'], null, 'sunset', 'newest'],
-        [['list-photos', '--sort=votes'], null, null, 'votes'],
-    ])('%j reads the library', async (argv, challengeId, search, sort) => {
+        [['list-photos'], null, null, null, null],
+        [['list-photos', '--challenge=5'], '5', null, null, null],
+        [['list-photos', '--search=sunset'], null, 'sunset', null, null],
+        [['list-photos', '--search', 'sun set', '--challenge', '5'], '5', 'sun set', null, null],
+        [['list-photos', '--sort=newest'], null, null, 'newest', null],
+        [['list-photos', '--sort', 'oldest', '--challenge', '5'], '5', null, 'oldest', null],
+        [['list-photos', '--sort=newest', '--search=sunset'], null, 'sunset', 'newest', null],
+        [['list-photos', '--sort=votes'], null, null, 'votes', null],
+    ])('%j reads the library', async (argv, challengeId, search, sort, statsLimit) => {
         const m = await run(argv);
-        expect(m.photos.listPhotosCmd).toHaveBeenCalledWith(challengeId, search, sort);
+        expect(m.photos.listPhotosCmd).toHaveBeenCalledWith(challengeId, search, sort, statsLimit);
         expect(m.exitCodes).toEqual([0]);
+    });
+
+    test.each([
+        [['list-photos', '--stats'], null, 30],
+        [['list-photos', '--stats', '--limit=5'], null, 5],
+        [['list-photos', '--limit=12', '--challenge=5', '--stats'], '5', 12],
+    ])('%j reads the stats with the default or named cap', async (argv, challengeId, statsLimit) => {
+        const m = await run(argv);
+        expect(m.photos.listPhotosCmd).toHaveBeenCalledWith(challengeId, null, null, statsLimit);
+        expect(m.exitCodes).toEqual([0]);
+    });
+
+    test.each([
+        [['--stats', '--suggest'], '--stats cannot be combined with --suggest'],
+        [['--limit=5'], '--limit only goes with --stats'],
+        [['--stats', '--limit=0'], '--limit needs a positive whole number of photos to read stats for'],
+        [['--stats', '--limit=abc'], '--limit needs a positive whole number of photos to read stats for'],
+        [['--stats', '--limit=-2'], '--limit needs a positive whole number of photos to read stats for'],
+    ])('list-photos %p is refused with the named message', async (tail, message) => {
+        const m = await run(['list-photos', ...tail]);
+        expect(m.photos.listPhotosCmd).not.toHaveBeenCalled();
+        expect(m.photos.suggestPhotosCmd).not.toHaveBeenCalled();
+        expect(m.msgs('error')).toEqual([message]);
+        expect(m.exitCodes).toEqual([1]);
+    });
+
+    test.each([
+        [['--stats', '--stats']],
+        [['--stats', '--limit=1', '--limit=2']],
+        [['--stats=true']],
+        [['--stats', '--limit', '5']],
+        [['--statsx']],
+    ])('list-photos %p is a generic usage error', async (tail) => {
+        const m = await run(['list-photos', ...tail]);
+        expect(m.photos.listPhotosCmd).not.toHaveBeenCalled();
+        expect(m.msgs('error')).toEqual(['Wrong arguments']);
+        expect(m.exitCodes).toEqual([1]);
     });
 
     test("the exit code is the command's", async () => {
@@ -895,7 +1040,7 @@ describe('list-photos', () => {
         expect(m.photos.suggestPhotosCmd).not.toHaveBeenCalled();
         expect(m.msgs('error')).toEqual(['Wrong arguments']);
         expect(m.msgs('info')).toEqual([
-            'Usage: list-photos [--challenge=<id>] [--search=<tag>] [--sort=votes|newest|oldest]  or  list-photos --challenge=<id> --suggest',
+            'Usage: list-photos [--challenge=<id>] [--search=<tag>] [--sort=votes|newest|oldest] [--stats [--limit=<n>]]  or  list-photos --challenge=<id> --suggest',
         ]);
         expect(m.exitCodes).toEqual([1]);
     });
@@ -912,7 +1057,7 @@ describe('list-photos', () => {
         expect(m.photos.suggestPhotosCmd).not.toHaveBeenCalled();
         expect(m.msgs('error')).toEqual(['--sort needs one of votes|newest|oldest']);
         expect(m.msgs('info')).toEqual([
-            'Usage: list-photos [--challenge=<id>] [--search=<tag>] [--sort=votes|newest|oldest]  or  list-photos --challenge=<id> --suggest',
+            'Usage: list-photos [--challenge=<id>] [--search=<tag>] [--sort=votes|newest|oldest] [--stats [--limit=<n>]]  or  list-photos --challenge=<id> --suggest',
         ]);
         expect(m.exitCodes).toEqual([1]);
     });
@@ -922,7 +1067,7 @@ describe('list-photos', () => {
         '%j hands the unknown sort to the command, which refuses it',
         async (argv) => {
             const m = await run(argv);
-            expect(m.photos.listPhotosCmd).toHaveBeenCalledWith(null, null, argv[1]!.slice('--sort='.length));
+            expect(m.photos.listPhotosCmd).toHaveBeenCalledWith(null, null, argv[1]!.slice('--sort='.length), null);
             expect(m.photos.suggestPhotosCmd).not.toHaveBeenCalled();
             expect(m.exitCodes).toEqual([0]);
         },

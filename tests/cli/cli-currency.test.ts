@@ -253,13 +253,43 @@ describe('swap-back', () => {
         expect(contains(msgsAt('success'), 'its boost is back')).toBe(true);
     });
 
-    test('no recorded swap back for that photo: reported, nothing spent', async () => {
-        await swapBackCmd('111', { imageId: 'other', yes: true });
+    test('no recorded swap back for that photo: reported, nothing spent, exit 1', async () => {
+        await expect(swapBackCmd('111', { imageId: 'other', yes: true })).resolves.toBe(false);
         expect(handlers['swap-back-entry-photo']).not.toHaveBeenCalled();
         expect(contains(msgsAt('error'), 'No swap back is recorded')).toBe(true);
     });
+});
 
-    test('missing --image is a usage error', async () => {
-        expect(await swapBackCmd('111', {})).toBe(false);
+describe('swap-back listing (no --image)', () => {
+    test('one line per recorded offer, ids and kind worded, and exit 0', async () => {
+        handlers['get-swap-backs'].mockResolvedValue({
+            success: true,
+            items: [
+                { currentId: 'repl', previousId: 'orig', previousMemberId: 'm', kind: 'boost' },
+                { currentId: 'repl2', previousId: 'orig2', previousMemberId: 'm', kind: 'guruPick' },
+            ],
+        });
+        await expect(swapBackCmd('111', {})).resolves.toBe(true);
+        expect(handlers['swap-back-entry-photo']).not.toHaveBeenCalled();
+        expect(contains(msgsAt('info'), 'repl → orig (gets its boost back)')).toBe(true);
+        expect(contains(msgsAt('info'), "repl2 → orig2 (gets its Guru's pick back)")).toBe(true);
+    });
+
+    test('no recorded offers: one info line and exit 0', async () => {
+        handlers['get-swap-backs'].mockResolvedValue({ success: true, items: [] });
+        await expect(swapBackCmd('111', {})).resolves.toBe(true);
+        expect(contains(msgsAt('info'), 'No swap back is recorded for "Sunset".')).toBe(true);
+    });
+
+    test('a failed handler reply is an error and exits 1', async () => {
+        handlers['get-swap-backs'].mockResolvedValue({ success: false, error: 'unreadable' });
+        await expect(swapBackCmd('111', {})).resolves.toBe(false);
+        expect(contains(msgsAt('error'), 'Could not read the recorded swap backs')).toBe(true);
+    });
+
+    test('unknown challenge: exit 1, nothing read', async () => {
+        apiFactory.__getActiveChallenges.mockResolvedValue({ challenges: [] });
+        await expect(swapBackCmd('999', {})).resolves.toBe(false);
+        expect(handlers['get-swap-backs']).not.toHaveBeenCalled();
     });
 });
