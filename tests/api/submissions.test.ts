@@ -495,10 +495,11 @@ describe('submissions', () => {
             });
 
             test('with maxKept the walk reads past the kept-photo cap to reach a counted photo', async () => {
-                // Eleven full pages of kept-but-uncounted photos — past the keep cap of MAX_LIBRARY_PAGES * 2.
+                // One full page of kept-but-uncounted photos past the keep cap of MAX_LIBRARY_PAGES * 2.
+                const fullPages = MAX_LIBRARY_PAGES + 1;
                 let next = 0;
                 makePostRequest.mockImplementation(async () => {
-                    if (next < 11 * 2) return page(`p${next++}`, `p${next++}`);
+                    if (next < fullPages * 2) return page(`p${next++}`, `p${next++}`);
                     return page('a1');
                 });
                 const walk = await getEligiblePhotosWalk('c1', token, {
@@ -507,12 +508,32 @@ describe('submissions', () => {
                     maxKept: 1,
                     counts: (photo: { id: string }) => photo.id.startsWith('a'),
                 });
-                expect(makePostRequest).toHaveBeenCalledTimes(12);
-                expect(ids(walk)).toHaveLength(11 * 2 + 1);
+                expect(makePostRequest).toHaveBeenCalledTimes(fullPages + 1);
+                expect(ids(walk)).toHaveLength(fullPages * 2 + 1);
                 expect(ids(walk)).toContain('a1');
                 expect(walk.stop).toBe('end');
                 expect(walk.truncated).toBe(false);
+                expect(walk.nextStart).toBe((fullPages + 1) * 2);
                 expect(warnings()).toEqual([]);
+            });
+
+            test('with maxKept a walk that never reaches its count stops at the doubled page ceiling', async () => {
+                let next = 0;
+                makePostRequest.mockImplementation(async () => page(`p${next++}`, `p${next++}`));
+                const walk = await getEligiblePhotosWalk('c1', token, {
+                    limit: 2,
+                    // Matches no photo here; a skip is what doubles the page ceiling.
+                    skip: (photo: { id: string }) => photo.id.startsWith('w'),
+                    maxKept: 1,
+                    counts: () => false,
+                });
+                expect(makePostRequest).toHaveBeenCalledTimes(2 * MAX_LIBRARY_PAGES);
+                expect(ids(walk)).toHaveLength(2 * MAX_LIBRARY_PAGES * 2);
+                expect(walk.skipped).toEqual([]);
+                expect(walk.stop).toBe('page-cap');
+                expect(walk.truncated).toBe(true);
+                expect(walk.nextStart).toBe(2 * MAX_LIBRARY_PAGES * 2);
+                expect(warnings()).toContainEqual(expect.stringContaining(`${2 * MAX_LIBRARY_PAGES}-page limit`));
             });
 
             test('counts narrows which kept photos count toward maxKept; uncounted ones stay in items', async () => {
