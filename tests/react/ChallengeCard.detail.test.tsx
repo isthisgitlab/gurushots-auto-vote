@@ -605,6 +605,26 @@ describe('fill', () => {
         expect(onVoteComplete).not.toHaveBeenCalled();
     });
 
+    test('an unclear submit says the photos may be in and refreshes the card', async () => {
+        window.api.fillChallengeNow = jest
+            .fn()
+            .mockResolvedValue({ success: false, submitted: 0, skipped: 3, error: 'submit-unclear' });
+        const { onVoteComplete } = renderCard(makeChallenge());
+        fireEvent.click(screen.getByText('+1'));
+        await waitFor(() => expect(screen.getByText('errors.pickUnclear')).toBeTruthy());
+        expect(onVoteComplete).toHaveBeenCalledTimes(1);
+    });
+
+    test('a submit refused before anything was sent leaves the card stale', async () => {
+        window.api.fillChallengeNow = jest
+            .fn()
+            .mockResolvedValue({ success: false, submitted: 0, skipped: 3, error: 'No eligible photos found' });
+        const { onVoteComplete } = renderCard(makeChallenge());
+        fireEvent.click(screen.getByText('+1'));
+        await waitFor(() => expect(screen.getByText('errors.actionFailed')).toBeTruthy());
+        expect(onVoteComplete).not.toHaveBeenCalled();
+    });
+
     test('an invalid-args fill refusal shows the translated text, not the machine code', async () => {
         window.api.fillChallengeNow = jest.fn().mockResolvedValue({ success: false, error: 'invalid-args' });
         renderCard(makeChallenge());

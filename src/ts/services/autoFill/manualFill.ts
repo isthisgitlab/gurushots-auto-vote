@@ -108,9 +108,9 @@ const fillChallengeNow = async (
         // onEmptyPick above always answers with a string.
         return { success: false, submitted: 0, skipped: slotsRemaining, error: attempt.detail as string };
     }
-    if (attempt.status === 'submit-rejected' || attempt.status === 'submit-unanswered') {
-        // A refused submit and one that got no answer both end the fill here: the server's reason,
-        // or its absence, is shown either way.
+    if (attempt.status === 'submit-rejected') {
+        // A refusal body is the server's answer: the submit did not land, and
+        // its reason is shown.
         return {
             success: false,
             submitted: 0,
@@ -118,15 +118,18 @@ const fillChallengeNow = async (
             error: `Submit rejected: ${attempt.reason}`,
         };
     }
+    if (attempt.status === 'submit-unanswered') {
+        // No body came back, so the request may have landed. It answers the
+        // shared 'submit-unclear' code: the card says the photos may be in and
+        // refreshes, instead of denying a submit that may have gone through.
+        return { success: false, submitted: 0, skipped: slotsRemaining, error: 'submit-unclear' };
+    }
     if (attempt.status !== 'submitted') {
         // Only 'submit-threw' can reach here — manual fill wires no probe,
-        // pick-guard, or refresh hook, so those statuses cannot occur.
-        return {
-            success: false,
-            submitted: 0,
-            skipped: slotsRemaining,
-            error: errorMessage((attempt as { error: unknown }).error) || 'Submit failed',
-        };
+        // pick-guard, or refresh hook, so those statuses cannot occur. A throw
+        // also leaves the request's fate unknown (it may have landed), so it
+        // answers the same 'submit-unclear' code; runFillAttempt logged the error.
+        return { success: false, submitted: 0, skipped: slotsRemaining, error: 'submit-unclear' };
     }
 
     // No reflectNewEntry here: manual fill has always left the local challenge

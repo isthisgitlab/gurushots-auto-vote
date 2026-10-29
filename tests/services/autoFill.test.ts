@@ -1683,7 +1683,7 @@ describe('fillChallengeNow — manual fill', () => {
         expect(result.error).toMatch(/no eligible photos/i);
     });
 
-    test('submit ok=false with no body → the Submit rejected text with the absent reason', async () => {
+    test('submit ok=false with no body → success=false with the submit-unclear code', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 86400 });
         const result = await fillChallengeNow(challenge, 'tok', 'one', {
             logger: makeLogger(),
@@ -1693,7 +1693,7 @@ describe('fillChallengeNow — manual fill', () => {
         expect(result.success).toBe(false);
         expect(result.submitted).toBe(0);
         expect(result.skipped).toBe(4);
-        expect(result.error).toBe('Submit rejected: no response body');
+        expect(result.error).toBe('submit-unclear');
     });
 
     test('submit ok=false with a refusal body → success=false with the rejection text', async () => {
@@ -1707,7 +1707,7 @@ describe('fillChallengeNow — manual fill', () => {
         expect(result.error).toBe('Submit rejected: nope');
     });
 
-    test('submit throws → caught, returns success=false', async () => {
+    test('submit throws → success=false with the submit-unclear code', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 86400 });
         const result = await fillChallengeNow(challenge, 'tok', 'one', {
             logger: makeLogger(),
@@ -1715,7 +1715,7 @@ describe('fillChallengeNow — manual fill', () => {
             submitToChallenge: jest.fn().mockRejectedValue(new Error('boom')),
         });
         expect(result.success).toBe(false);
-        expect(result.error).toBe('boom');
+        expect(result.error).toBe('submit-unclear');
     });
 
     test('returns invalid-challenge when challenge has no id', async () => {
@@ -1752,7 +1752,7 @@ describe('fillChallengeNow — manual fill', () => {
     });
 
     test.each([[{}], [null]])(
-        'submitToChallenge throws non-Error %p → uses fallback "Submit failed"',
+        'submitToChallenge throws non-Error %p → still the submit-unclear code',
         async (thrown) => {
             const challenge = makeChallenge({ maxSubmits: 2, entries: [], closeIn: 86400 });
             const result = await fillChallengeNow(challenge, 'tok', 'one', {
@@ -1761,7 +1761,7 @@ describe('fillChallengeNow — manual fill', () => {
                 submitToChallenge: jest.fn().mockRejectedValue(thrown),
             });
             expect(result.success).toBe(false);
-            expect(result.error).toBe('Submit failed');
+            expect(result.error).toBe('submit-unclear');
         },
     );
 

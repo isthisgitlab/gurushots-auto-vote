@@ -425,7 +425,9 @@ export function useChallengeCardActions({
 
     const handleFill = async (mode: 'one' | 'all') => {
         const result = await fillNow(challenge.id, mode);
-        if (result?.success) onVoteComplete();
+        // 'submit-unclear': the request may have landed, so the card refreshes
+        // to show what is actually in the challenge.
+        if (result?.success || result?.error === 'submit-unclear') onVoteComplete();
     };
 
     return {
