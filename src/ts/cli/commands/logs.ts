@@ -159,15 +159,26 @@ const latestLogFile = (dir: string, prefix: string): LatestLogFile | null => {
 /** Where one followed file is: the byte offset the next poll reads from, the
  * UTF-8 decoder carrying a multi-byte character split across polls, the text
  * after the last newline, held until its newline arrives, and the file's
- * inode — a changed inode means the name names a different file again
- * (deleted and re-created), which restarts the file at byte 0. `-1` means the
- * inode is not known yet; the first poll adopts the file's real one. */
-export type FileFollowState = { offset: number; decoder: StringDecoder; pending: string; ino: number };
+ * identity — inode plus birth time. A change of either means the name names
+ * a different file again (deleted and re-created; a filesystem may hand a
+ * re-created file the same inode), which restarts the file at byte 0. `-1`
+ * means the value is not known yet; the first poll adopts the file's real
+ * one. A birth time of `0` (what a platform without the value reports) is
+ * never compared — there the inode decides alone. */
+export type FileFollowState = {
+    offset: number;
+    decoder: StringDecoder;
+    pending: string;
+    ino: number;
+    birthtimeMs: number;
+};
 
-/** Where the follower is: per-file state for every file of the category, and
- * the file the last printed line came from — the `--- <file path>` separator
- * shows when that changes. */
-export type FollowState = { files: Map<string, FileFollowState>; lastPrinted: string | null };
+/** Where the follower is: per-file state for every file of the category, the
+ * file the last printed line came from — the `--- <file path>` separator
+ * shows when that changes — and whether the start-up seed is still owed
+ * (its listing failed): the first good poll then seeds the files it lists at
+ * their current size, instead of taking them for new ones. */
+export type FollowState = { files: Map<string, FileFollowState>; lastPrinted: string | null; seedPending: boolean };
 
 /** The follower's surroundings, injectable so tests drive the poll steps directly. */
 export type FollowDeps = {
@@ -222,26 +233,59 @@ const printFollowedLine = (state: FollowState, filePath: string, line: string, p
     for (const piece of printPieces(line)) print(piece);
 };
 
+/** The state one existing file is seeded with: its byte size as the offset
+ * the polls continue from — only what is appended after the seed prints —
+ * and the identity the stat read. */
+const seededFileState = (stat: fs.Stats): FileFollowState => ({
+    offset: stat.size,
+    decoder: new StringDecoder('utf8'),
+    pending: '',
+    ino: stat.ino,
+    birthtimeMs: stat.birthtimeMs,
+});
+
+/** The state a file new to the follower starts from: the first byte, and the
+ * `-1` identity the first poll adopts (stat'ing it here would race the
+ * poll's own stat). */
+const newFileState = (): FileFollowState => ({
+    offset: 0,
+    decoder: new StringDecoder('utf8'),
+    pending: '',
+    ino: -1,
+    birthtimeMs: -1,
+});
+
+/** Seed one listed file at its current size; a stat that fails falls back to
+ * the first byte, the way a seed-stat failure behaves in a normal start. */
+const seedOrNewFileState = (filePath: string): FileFollowState => {
+    try {
+        return seededFileState(fs.statSync(filePath));
+    } catch {
+        return newFileState();
+    }
+};
+
 /**
  * Gives every existing file of the category its current byte size as the
  * offset the polls continue from, so only what is appended after the start
  * prints. One whose stat fails is not seeded — the first poll then follows it
- * from its first byte. A listing that cannot be read seeds nothing: the first
- * poll re-lists. The file the initial tail reads has its entry set again by
- * the tail itself, from the bytes it read (printInitialTail).
+ * from its first byte. A listing that cannot be read seeds nothing and marks
+ * the state seedPending: the first good poll seeds the files it lists at
+ * their current size (followStep), so a start-up whose folder read failed
+ * never replays the older files. The file the initial tail reads has its
+ * entry set again by the tail itself, from the bytes it read
+ * (printInitialTail).
  */
 const seedFollowState = (state: FollowState, prefix: string, deps: FollowDeps): void => {
     const listed = deps.list(deps.dir, prefix);
-    if (listed === null) return; // the read failed: the first poll retries
+    if (listed === null) {
+        // The read failed: nothing is known about the folder's contents.
+        state.seedPending = true;
+        return;
+    }
     for (const filePath of listed) {
         try {
-            const stat = fs.statSync(filePath);
-            state.files.set(filePath, {
-                offset: stat.size,
-                decoder: new StringDecoder('utf8'),
-                pending: '',
-                ino: stat.ino,
-            });
+            state.files.set(filePath, seededFileState(fs.statSync(filePath)));
         } catch {
             // Gone between the listing and the stat.
         }
@@ -260,8 +304,11 @@ const seedFollowState = (state: FollowState, prefix: string, deps: FollowDeps): 
 const printInitialTail = (filePath: string, lines: number, state: FollowState, print: (text: string) => void): void => {
     let content: Buffer;
     let ino: number;
+    let birthtimeMs: number;
     try {
-        ino = fs.statSync(filePath).ino;
+        const stat = fs.statSync(filePath);
+        ino = stat.ino;
+        birthtimeMs = stat.birthtimeMs;
         content = fs.readFileSync(filePath);
     } catch {
         return; // gone between the listing and this read; the polls re-resolve
@@ -278,19 +325,22 @@ const printInitialTail = (filePath: string, lines: number, state: FollowState, p
         pieces.length -= 1;
     }
     for (const line of pieces.slice(-lines)) printFollowedLine(state, filePath, line, print);
-    state.files.set(filePath, { offset: content.length, decoder, pending, ino });
+    state.files.set(filePath, { offset: content.length, decoder, pending, ino, birthtimeMs });
 };
 
 /**
- * One poll of one followed file: drops it when it is gone, restarts it at
- * byte 0 when it shrank (truncated in place) or when the inode changed (the
- * name was deleted and a different file written under it — the new file is
- * followed from its first byte, never past the old file's offset), and reads
- * and prints only the bytes appended past its offset — complete lines only,
- * each in its own print call, with the text after the last newline held until
- * its newline arrives. The offset counts bytes and moves by bytes read, so a
- * multi-byte UTF-8 character split across polls survives in the decoder.
- * Mutates `state`.
+ * One poll of one followed file: skips it for the poll when its stat fails
+ * (the state survives — deletion is the listing prune's call and a
+ * re-created name the identity check's), restarts it at byte 0 when it
+ * shrank (truncated in place) or when its identity changed (the name was
+ * deleted and a different file written under it — a changed inode, or a
+ * changed birth time under a reused inode; the new file is followed from its
+ * first byte, never past the old file's offset), and reads and prints only
+ * the bytes appended past its offset — complete lines only, each in its own
+ * print call, with the text after the last newline held until its newline
+ * arrives. The offset counts bytes and moves by bytes read, so a multi-byte
+ * UTF-8 character split across polls survives in the decoder. Mutates
+ * `state`.
  */
 const pollFollowedFile = (
     state: FollowState,
@@ -300,18 +350,32 @@ const pollFollowedFile = (
 ): void => {
     let size: number;
     let ino: number;
+    let birthtimeMs: number;
     try {
         const stat = fs.statSync(filePath);
         size = stat.size;
         ino = stat.ino;
+        birthtimeMs = stat.birthtimeMs;
     } catch {
-        state.files.delete(filePath); // gone under us (cleanupOldLogs removes old files)
+        // A stat error (a transient EACCES/EIO, or the file going away) is
+        // not the fact "gone": skip this file for this poll and keep its
+        // state, so no error can wipe the offset and replay the file. A
+        // deleted file is retired by the listing prune, a re-created one by
+        // the identity check below.
         return;
     }
-    if (ino !== st.ino) {
-        // A different file now carries this name (deleted and re-created):
-        // follow it from its first byte, with fresh decoder and line state.
+    // A different file now carries this name (deleted and re-created): the
+    // inode changed, or the birth time changed under a reused inode (ext4
+    // can hand the same one back). A birth time that is not known yet (-1)
+    // or not reported by the platform (0) cannot be compared — there the
+    // inode decides alone.
+    const birthtimeKnown = st.birthtimeMs > 0 && birthtimeMs > 0;
+    const birthtimeChanged = birthtimeKnown && birthtimeMs !== st.birthtimeMs;
+    if (ino !== st.ino || birthtimeChanged) {
+        // Follow the new file from its first byte, with fresh decoder and
+        // line state.
         st.ino = ino;
+        st.birthtimeMs = birthtimeMs;
         st.offset = 0;
         st.decoder = new StringDecoder('utf8');
         st.pending = '';
@@ -356,10 +420,14 @@ const pollFollowedFile = (
  * make the follower replay a file it already printed. A failed listing (null)
  * skips the poll whole — no prune, no reads, nothing printed — so one poll
  * whose folder read fails cannot wipe the follow state and replay files from
- * byte 0 on the next good listing. A file not in the state appeared (or
- * re-appeared) after the start and is followed from its first byte; a file
- * the listing no longer names has its state removed, so only a listing that
- * succeeded may retire one. Mutates `state`.
+ * byte 0 on the next good listing. When the start-up seed is still owed (its
+ * listing failed), the first good listing is that seed: every file it names
+ * starts at its current size, the same as a normal start, and the file the
+ * initial tail read keeps the offset the tail seeded. From the next poll on,
+ * a file not in the state appeared (or re-appeared) after the start and is
+ * followed from its first byte; a file the listing no longer names has its
+ * state removed, so only a listing that succeeded may retire one. Mutates
+ * `state`.
  */
 const followStep = (state: FollowState, prefix: string, deps: FollowDeps): void => {
     const listed = deps.list(deps.dir, prefix);
@@ -368,12 +436,12 @@ const followStep = (state: FollowState, prefix: string, deps: FollowDeps): void 
     for (const filePath of state.files.keys()) {
         if (!named.has(filePath)) state.files.delete(filePath); // deleted: not in the listing
     }
+    const seeding = state.seedPending;
+    state.seedPending = false;
     for (const filePath of listed) {
         let st = state.files.get(filePath);
         if (st === undefined) {
-            // New to the follower: start at byte 0; the first poll adopts the
-            // file's real inode (the -1 here is "not known yet").
-            st = { offset: 0, decoder: new StringDecoder('utf8'), pending: '', ino: -1 };
+            st = seeding ? seedOrNewFileState(filePath) : newFileState();
             state.files.set(filePath, st);
         }
         pollFollowedFile(state, filePath, st, deps.print);
@@ -401,7 +469,7 @@ const followLogs = async ({
     deps?: FollowDeps;
 } = {}): Promise<number> => {
     const prefix = LOG_FILE_PREFIXES[category];
-    const state: FollowState = { files: new Map(), lastPrinted: null };
+    const state: FollowState = { files: new Map(), lastPrinted: null, seedPending: false };
     seedFollowState(state, prefix, deps);
     const first = deps.latest(deps.dir, prefix);
     if (first === null) {

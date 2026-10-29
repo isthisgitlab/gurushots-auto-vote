@@ -161,12 +161,12 @@ describe('runVotingCycle', () => {
 });
 
 describe('voteChallengeManual fallbacks', () => {
+    // Every refusal comes back as a bare { success: false } — the
+    // user-facing reason is the log line resolveChallenge prints, and the
+    // only field a caller reads is `success`.
     test('a thrown non-Error fetch failure reports the failed-fetch message', async () => {
         mw.getActiveChallenges.mockRejectedValue('offline');
-        await expect(voteChallengeManual('111')).resolves.toEqual({
-            success: false,
-            error: 'Failed to fetch challenges',
-        });
+        await expect(voteChallengeManual('111')).resolves.toEqual({ success: false });
         expect(msgs('error')).toEqual([
             'Could not read the active challenges from GuruShots: offline, so nothing was shown or changed. Check the connection and try again. If the login has expired, run login first.',
         ]);
@@ -174,10 +174,7 @@ describe('voteChallengeManual fallbacks', () => {
 
     test('a fetchFailed read reports the failed-fetch message, never "not found"', async () => {
         mw.getActiveChallenges.mockResolvedValue(invalid({ challenges: [], fetchFailed: true }));
-        await expect(voteChallengeManual('111')).resolves.toEqual({
-            success: false,
-            error: 'Failed to fetch challenges',
-        });
+        await expect(voteChallengeManual('111')).resolves.toEqual({ success: false });
         expect(msgs('error')).toEqual([
             'Could not read the active challenges from GuruShots, so nothing was shown or changed. Check the connection and try again. If the login has expired, run login first.',
         ]);
@@ -186,10 +183,7 @@ describe('voteChallengeManual fallbacks', () => {
 
     test('a null response reports the failed-fetch message, never "not found"', async () => {
         mw.getActiveChallenges.mockResolvedValue(invalid(null));
-        await expect(voteChallengeManual('111')).resolves.toEqual({
-            success: false,
-            error: 'Failed to fetch challenges',
-        });
+        await expect(voteChallengeManual('111')).resolves.toEqual({ success: false });
         expect(msgs('error')).toEqual([
             'Could not read the active challenges from GuruShots, so nothing was shown or changed. Check the connection and try again. If the login has expired, run login first.',
         ]);
@@ -198,10 +192,7 @@ describe('voteChallengeManual fallbacks', () => {
 
     test('a good fetch without the id reports not found', async () => {
         mw.getActiveChallenges.mockResolvedValue(invalid({ challenges: [] }));
-        await expect(voteChallengeManual('111')).resolves.toEqual({
-            success: false,
-            error: 'Challenge 111 not found',
-        });
+        await expect(voteChallengeManual('111')).resolves.toEqual({ success: false });
         expect(msgs('error')).toEqual(['Challenge 111 not found among active challenges']);
     });
 
@@ -209,20 +200,14 @@ describe('voteChallengeManual fallbacks', () => {
         mw.getActiveChallenges.mockResolvedValue(
             invalid({ challenges: [{ id: 111, title: 'Sunset', dataIssues: ['close_time'] }] }),
         );
-        await expect(voteChallengeManual('111')).resolves.toEqual({
-            success: false,
-            error: 'challenge data cannot be read',
-        });
+        await expect(voteChallengeManual('111')).resolves.toEqual({ success: false });
         expect(msgs('error')).toEqual(['Challenge 111: challenge data cannot be read']);
         expect(votingHandlers['vote-on-challenge-manual']).not.toHaveBeenCalled();
     });
 
     test('a challenge lost by a prune-unsafe read refuses as unreadable, like every channel', async () => {
         mw.getActiveChallenges.mockResolvedValue(invalid({ challenges: [], pruneUnsafe: true }));
-        await expect(voteChallengeManual('111')).resolves.toEqual({
-            success: false,
-            error: 'challenge data cannot be read',
-        });
+        await expect(voteChallengeManual('111')).resolves.toEqual({ success: false });
         expect(votingHandlers['vote-on-challenge-manual']).not.toHaveBeenCalled();
     });
 

@@ -96,9 +96,9 @@ jest.mock('electron', () => ({}));
 jest.mock('../../src/ts/cli/guards', () => ({
     requireChallenge: jest.fn(({ challengeId }: { challengeId: string | null }) => challengeId),
     requireProfileArgs: jest.fn((command: string, { rest }: { rest: string[] }) => rest[0]),
-    // The usage line the profile commands print: the real helper's exact format.
-    profileUsage: (command: string, needsChallenge: boolean): string =>
-        needsChallenge ? `Usage: ${command} "<name>" --challenge=<id>` : `Usage: ${command} "<name>"`,
+    // The real helper, so the profile rows are checked against the usage
+    // line the commands actually print, not a copy of its format.
+    profileUsage: jest.requireActual<typeof import('../../src/ts/cli/guards')>('../../src/ts/cli/guards').profileUsage,
     ensureAuthenticated: jest.fn(() => true),
     // The worded refusals the real command modules build on at module scope.
     INVALID_ID_TEXT: 'Invalid challenge or image id.',
@@ -474,6 +474,7 @@ const COMMANDS_BLOCK = `Commands:
   logout   - Clear the saved authentication token
   vote     - Run one manual voting cycle (votes to 100% regardless of settings; skips Manual Only challenges).
              Add --challenge=<id> to manually vote a single challenge, which works on a Manual Only one too.
+             With --challenge=<id>, exits 1 when the vote did not run (0 when it did).
   run      - Run one full auto-strategy cycle (boost / turbo / auto-submit / threshold-aware vote).
              Add --challenge=<id> to scope to a single challenge; on a Manual Only challenge it does nothing.
   challenges - List the active challenges with their ids — the id every --challenge=<id> command needs.
@@ -670,9 +671,21 @@ describe('vote / run', () => {
     });
 
     test.each([[['--challenge=12']], [['--challenge', '12']]])('vote %p votes one challenge', async (tail) => {
-        const m = await run(['vote', ...tail]);
+        const m = await run(['vote', ...tail], (mods) =>
+            mods.voting.voteChallengeManual.mockResolvedValue({ success: true }),
+        );
         expect(m.voting.voteChallengeManual).toHaveBeenCalledWith('12');
         expect(m.voting.runVotingCycle).not.toHaveBeenCalled();
+        expect(m.exitCodes).toEqual([0]);
+    });
+
+    test.each([[{ success: false }], [null]])('vote --challenge exits 1 on %p', async (result) => {
+        const m = await run(['vote', '--challenge=12'], (mods) =>
+            mods.voting.voteChallengeManual.mockResolvedValue(invalid(result)),
+        );
+        expect(m.exitCodes).toEqual([1]);
+        // The failure line is the vote's own, not a dispatch error.
+        expect(m.msgs('error')).toEqual([]);
     });
 
     test.each([[['--challenge=']], [['--challenge']]])('vote %p (empty) refuses to vote everything', async (tail) => {

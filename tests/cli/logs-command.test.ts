@@ -220,17 +220,20 @@ const followDeps = (over: Partial<logsModule.FollowDeps> = {}): logsModule.Follo
 const listOf = (...paths: string[]): jest.Mock<string[] | null, [string, string]> =>
     jest.fn<string[] | null, [string, string]>().mockReturnValue(paths);
 
-const freshState = (): logsModule.FollowState => ({ files: new Map(), lastPrinted: null });
+const freshState = (): logsModule.FollowState => ({ files: new Map(), lastPrinted: null, seedPending: false });
 
-// The inode backFiles' statSync reports; a test that re-creates a file
-// overrides it to a different value, like a new file under the same name.
+// The inode and birth time backFiles' statSync reports; a test that
+// re-creates a file overrides one of them to a different value, like a new
+// file under the same name.
 const INODE = 101;
+const BIRTH = 1700000000000;
 
 const fileState = (offset: number): logsModule.FileFollowState => ({
     offset,
     decoder: new StringDecoder('utf8'),
     pending: '',
     ino: INODE,
+    birthtimeMs: BIRTH,
 });
 
 const bytes = (text: string): Buffer => Buffer.from(text, 'utf8');
@@ -244,7 +247,7 @@ const backFiles = (files: Record<string, Buffer>): void => {
     fs.statSync.mockImplementation((p: fsModule.PathLike) => {
         const file = files[String(p)];
         if (file === undefined) throw new Error('ENOENT');
-        return invalid<fsModule.Stats>({ size: file.length, mtimeMs: 1, ino: INODE });
+        return invalid<fsModule.Stats>({ size: file.length, mtimeMs: 1, ino: INODE, birthtimeMs: BIRTH });
     });
     let opened = '';
     let nextFd = 10;
@@ -447,6 +450,57 @@ describe('CLI logs follow — followStep', () => {
         expect(state.files.get(OLD_FILE)?.ino).toBe(INODE + 1);
     });
 
+    test('a re-created file with a reused inode but a new birth time restarts at byte 0', () => {
+        const files = { [OLD_FILE]: bytes('a1\n') };
+        backFiles(files);
+        const state = freshState();
+        state.files.set(OLD_FILE, fileState(3));
+        const print = jest.fn<void, [string]>();
+        const deps = followDeps({ list: listOf(OLD_FILE), print });
+
+        // ext4 can hand a re-created file the same inode again: the birth
+        // time is what still tells the two files apart, so the fresh content
+        // prints from its first line, never from the old offset.
+        files[OLD_FILE] = bytes('fresh\nmore\n');
+        const realStat = fs.statSync.getMockImplementation() as (p: fsModule.PathLike) => fsModule.Stats;
+        fs.statSync.mockImplementation((p: fsModule.PathLike) => {
+            const st = realStat(p);
+            return String(p) === OLD_FILE ? invalid<fsModule.Stats>({ ...st, birthtimeMs: BIRTH + 1 }) : st;
+        });
+        followStep(state, 'app', deps);
+
+        expect(print.mock.calls).toEqual([['--- ' + OLD_FILE], ['fresh'], ['more']]);
+        expect(state.files.get(OLD_FILE)?.offset).toBe(files[OLD_FILE].length);
+        expect(state.files.get(OLD_FILE)?.ino).toBe(INODE);
+        expect(state.files.get(OLD_FILE)?.birthtimeMs).toBe(BIRTH + 1);
+    });
+
+    test('a birth time of 0 (not reported by the platform) cannot fire the identity check', () => {
+        const files = { [OLD_FILE]: bytes('a1\n') };
+        backFiles(files);
+        const state = freshState();
+        const st = fileState(3);
+        st.birthtimeMs = 0; // the platform never reported one for this file
+        state.files.set(OLD_FILE, st);
+        const print = jest.fn<void, [string]>();
+        const deps = followDeps({ list: listOf(OLD_FILE), print });
+        const realStat = fs.statSync.getMockImplementation() as (p: fsModule.PathLike) => fsModule.Stats;
+        fs.statSync.mockImplementation((p: fsModule.PathLike) => {
+            const stat = realStat(p);
+            return String(p) === OLD_FILE ? invalid<fsModule.Stats>({ ...stat, birthtimeMs: BIRTH }) : stat;
+        });
+
+        // The inode decides alone when a side has no birth time: the file is
+        // not restarted, the appended line prints once from the kept offset,
+        // and the incomparable value is not adopted.
+        files[OLD_FILE] = Buffer.concat([files[OLD_FILE], bytes('a2\n')]);
+        followStep(state, 'app', deps);
+
+        expect(print.mock.calls).toEqual([['--- ' + OLD_FILE], ['a2']]);
+        expect(state.files.get(OLD_FILE)?.offset).toBe(files[OLD_FILE].length);
+        expect(state.files.get(OLD_FILE)?.birthtimeMs).toBe(0);
+    });
+
     test('a read-chunk boundary inside a multi-byte character prints it once and correctly', () => {
         const files = { [OLD_FILE]: bytes('seed\n') };
         backFiles(files);
@@ -546,6 +600,62 @@ describe('CLI logs follow — followStep', () => {
         expect(state.files.get(OLD_FILE)?.offset).toBe(files[OLD_FILE].length);
     });
 
+    test('a start-up seed that failed recovers on the first good listing; a file appearing later starts at byte 0', () => {
+        const files: Record<string, Buffer> = { [OLD_FILE]: bytes('a1\n') };
+        backFiles(files);
+        const state = freshState();
+        state.seedPending = true; // the start-up listing failed
+        let listed: string[] = [OLD_FILE];
+        const list = jest.fn<string[], [string, string]>().mockImplementation(() => listed);
+        const print = jest.fn<void, [string]>();
+        const deps = followDeps({ list, print });
+
+        // The first good listing is the seed the start-up owed: the file
+        // starts at its current size, so nothing of it replays.
+        followStep(state, 'app', deps);
+        expect(print.mock.calls).toEqual([]);
+        expect(state.files.get(OLD_FILE)?.offset).toBe(files[OLD_FILE].length);
+        expect(state.seedPending).toBe(false);
+
+        // From the next poll on a file that appears is a new one again: it
+        // prints from its first line.
+        files[NEW_FILE] = bytes('b1\nb2\n');
+        listed = [OLD_FILE, NEW_FILE];
+        followStep(state, 'app', deps);
+        expect(print.mock.calls).toEqual([['--- ' + NEW_FILE], ['b1'], ['b2']]);
+        expect(state.files.get(NEW_FILE)?.offset).toBe(files[NEW_FILE].length);
+    });
+
+    test('a recovery seed whose stat fails falls back to the first byte, like a normal start', () => {
+        const files = { [OLD_FILE]: bytes('a1\n') };
+        backFiles(files);
+        const state = freshState();
+        state.seedPending = true;
+        const print = jest.fn<void, [string]>();
+        const deps = followDeps({ list: listOf(OLD_FILE), print });
+        const realStat = fs.statSync.getMockImplementation() as (p: fsModule.PathLike) => fsModule.Stats;
+        let failing = true;
+        fs.statSync.mockImplementation((p: fsModule.PathLike) => {
+            if (String(p) === OLD_FILE && failing) throw new Error('EACCES');
+            return realStat(p);
+        });
+
+        followStep(state, 'app', deps);
+
+        // The seed could not size the file: its fallback state starts at the
+        // first byte — the same treatment a stat failure gets in a normal
+        // start — and the poll itself is skipped while the stat still fails.
+        expect(print.mock.calls).toEqual([]);
+        expect(state.files.get(OLD_FILE)?.offset).toBe(0);
+        expect(state.seedPending).toBe(false);
+
+        // With the stat good again the file reads from its first byte.
+        failing = false;
+        followStep(state, 'app', deps);
+        expect(print.mock.calls).toEqual([['--- ' + OLD_FILE], ['a1']]);
+        expect(state.files.get(OLD_FILE)?.offset).toBe(files[OLD_FILE].length);
+    });
+
     test('a file created after the start is followed from its first line', () => {
         const files = { [OLD_FILE]: bytes('a1\n'), [NEW_FILE]: bytes('b1\n') };
         backFiles(files);
@@ -580,6 +690,34 @@ describe('CLI logs follow — followStep', () => {
         followStep(state, 'app', deps);
         expect(print.mock.calls).toEqual([['--- ' + OLD_FILE], ['a1']]);
         expect(fs.closeSync).toHaveBeenCalled();
+    });
+
+    test('a stat failure on one file skips it for that poll and keeps its state', () => {
+        const files = { [OLD_FILE]: bytes('a1\n') };
+        backFiles(files);
+        const state = freshState();
+        state.files.set(OLD_FILE, fileState(3));
+        const print = jest.fn<void, [string]>();
+        const deps = followDeps({ list: listOf(OLD_FILE), print });
+        const realStat = fs.statSync.getMockImplementation() as (p: fsModule.PathLike) => fsModule.Stats;
+        let failing = true;
+        fs.statSync.mockImplementation((p: fsModule.PathLike) => {
+            if (String(p) === OLD_FILE && failing) throw new Error('EIO');
+            return realStat(p);
+        });
+
+        // A stat error is not the fact "the file is gone": the entry
+        // survives, so nothing replays.
+        followStep(state, 'app', deps);
+        expect(print.mock.calls).toEqual([]);
+        expect(state.files.get(OLD_FILE)?.offset).toBe(3);
+
+        // With the stat good again, only what was appended prints — once.
+        failing = false;
+        files[OLD_FILE] = Buffer.concat([files[OLD_FILE], bytes('a2\n')]);
+        followStep(state, 'app', deps);
+        expect(print.mock.calls).toEqual([['--- ' + OLD_FILE], ['a2']]);
+        expect(state.files.get(OLD_FILE)?.offset).toBe(files[OLD_FILE].length);
     });
 
     test('a file that ends right after the stat prints nothing and keeps its offset', () => {
@@ -788,6 +926,43 @@ describe('CLI logs follow — followLogs', () => {
             ['--- ' + OLD_FILE],
             ['a1'],
             ['Following app logs (Ctrl+C to stop)'],
+            ['Stopped following the log.'],
+        ]);
+    });
+
+    test('a failed start-up listing: the first good listing seeds at the current sizes, appended lines print once', async () => {
+        const files = { [OLD_FILE]: bytes('a1\n'), [NEW_FILE]: bytes('b1\nb2\n') };
+        backFiles(files);
+        const latest = jest
+            .fn<logsModule.LatestLogFile | null, [string, string]>()
+            .mockReturnValue({ path: OLD_FILE, mtimeMs: 1 });
+        let listed: string[] | null = null; // the start-up listing fails
+        const list = jest.fn<string[] | null, [string, string]>().mockImplementation(() => listed);
+        let polls = 0;
+        const sleep = jest.fn<Promise<void>, [number]>(async () => {
+            polls += 1;
+            if (polls === 1) listed = [OLD_FILE, NEW_FILE]; // the listing works again
+            if (polls === 2) files[OLD_FILE] = Buffer.concat([files[OLD_FILE], bytes('a2\n')]);
+            if (polls >= 3) process.emit('SIGINT');
+        });
+        const print = jest.fn<void, [string]>();
+
+        const code = await followLogs({
+            category: 'app',
+            lines: 1,
+            deps: followDeps({ list, latest, print, sleep }),
+        });
+
+        // The tailed file prints its tail and then only the appended line;
+        // the second file — listed too late for the tail — is seeded at its
+        // current size by the first good listing, so neither file replays its
+        // older content.
+        expect(code).toBe(0);
+        expect(print.mock.calls).toEqual([
+            ['--- ' + OLD_FILE],
+            ['a1'],
+            ['Following app logs (Ctrl+C to stop)'],
+            ['a2'],
             ['Stopped following the log.'],
         ]);
     });

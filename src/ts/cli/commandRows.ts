@@ -64,6 +64,7 @@ const COMMAND_ROWS: readonly CommandRow[] = [
         [
             '  vote     - Run one manual voting cycle (votes to 100% regardless of settings; skips Manual Only challenges).',
             '             Add --challenge=<id> to manually vote a single challenge, which works on a Manual Only one too.',
+            '             With --challenge=<id>, exits 1 when the vote did not run (0 when it did).',
         ],
         { usage: 'Usage: vote [--challenge=<id>]  (omit --challenge to vote every challenge)' },
     ),

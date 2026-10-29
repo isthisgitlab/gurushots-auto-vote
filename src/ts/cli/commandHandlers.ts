@@ -78,10 +78,14 @@ const runVote: CommandHandler = async (argv) => {
         return usageError('Please specify a challenge id with --challenge', usageOf('vote'));
     }
     if (challengeId != null) {
-        await voteChallengeManual(challengeId);
-    } else {
-        await runVotingCycle(1, { isManual: true });
+        // The single-challenge vote is a script surface: its exit code says
+        // whether the vote ran. A failed fetch, an unknown id, an unreadable
+        // challenge and the handler's null answer all read as success:false,
+        // never as a clean exit.
+        const result = await voteChallengeManual(challengeId);
+        return result?.success === true ? 0 : 1;
     }
+    await runVotingCycle(1, { isManual: true });
     return 0;
 };
 

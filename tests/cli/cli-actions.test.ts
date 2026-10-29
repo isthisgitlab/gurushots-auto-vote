@@ -475,7 +475,7 @@ describe('CLI vote --challenge (single-challenge manual)', () => {
         const result = await voteChallengeManual('111');
 
         expect(votingHandlers['vote-on-challenge-manual']).toHaveBeenCalledWith(null, '111', 'Sunset');
-        expect(result.success).toBe(true);
+        expect(result?.success).toBe(true);
         expect(contains(msgsAt('success'), 'Sunset')).toBe(true);
     });
 
@@ -485,7 +485,7 @@ describe('CLI vote --challenge (single-challenge manual)', () => {
         const result = await voteChallengeManual('999');
 
         expect(votingHandlers['vote-on-challenge-manual']).not.toHaveBeenCalled();
-        expect(result.success).toBe(false);
+        expect(result?.success).toBe(false);
         expect(contains(msgsAt('error'), 'not found')).toBe(true);
     });
 
@@ -495,7 +495,7 @@ describe('CLI vote --challenge (single-challenge manual)', () => {
         const result = await voteChallengeManual('111');
 
         expect(votingHandlers['vote-on-challenge-manual']).not.toHaveBeenCalled();
-        expect(result.success).toBe(false);
+        expect(result?.success).toBe(false);
         expect(contains(allMsgs(), 'Run: login')).toBe(true);
     });
 });
@@ -703,7 +703,7 @@ describe('CLI actions — error paths', () => {
 
         const result = await voteChallengeManual('111');
 
-        expect(result.success).toBe(false);
+        expect(result?.success).toBe(false);
         expect(contains(msgsAt('error'), 'no vote images')).toBe(true);
     });
 
@@ -712,7 +712,7 @@ describe('CLI actions — error paths', () => {
 
         const result = await voteChallengeManual('111');
 
-        expect(result.success).toBe(false);
+        expect(result?.success).toBe(false);
         expect(contains(msgsAt('error'), 'Failed to vote')).toBe(true);
     });
 
@@ -722,7 +722,7 @@ describe('CLI actions — error paths', () => {
         const result = await voteChallengeManual('111');
 
         expect(votingHandlers['vote-on-challenge-manual']).not.toHaveBeenCalled();
-        expect(result.success).toBe(false);
+        expect(result?.success).toBe(false);
         expect(contains(msgsAt('error'), 'Could not read the active challenges from GuruShots: network down')).toBe(
             true,
         );

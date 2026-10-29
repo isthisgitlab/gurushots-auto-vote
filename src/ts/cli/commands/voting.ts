@@ -7,12 +7,11 @@
  */
 
 import * as logger from '../../logger';
-import { ensureAuthenticated, failedFetch, failedFetchMessage } from '../guards';
+import { ensureAuthenticated, resolveChallenge } from '../guards';
 import * as settings from '../../settings';
 import { getMiddleware } from '../../apiFactory';
 import { createScheduler } from '../../scheduling/runScheduler';
 import { formatDateTime } from '../../dateFormat';
-import { findActionableChallenge } from '../../services/findActiveChallenge';
 import { clearTokenUnlessStayingLoggedIn } from '../../services/auth';
 
 // Reuse the GUI's single-challenge manual-vote handler (votes to 100%,
@@ -100,43 +99,18 @@ const runVotingCycle = async (
 
 /**
  * Manually vote a single challenge to 100% (bypassing threshold settings) —
- * the CLI parity of the GUI card's manual-vote button. Reuses the
- * vote-on-challenge-manual handler; resolves the challenge title first
- * because that handler validates a non-empty title.
+ * the CLI parity of the GUI card's manual-vote button. resolveChallenge is
+ * the shared lookup, with the user-facing line for every refusal (not
+ * authenticated, failed fetch, not found, data that cannot be read); the
+ * vote handler re-reads and refuses the same way and validates a non-empty
+ * title, so the resolved challenge itself is what this needs from it.
  */
 const voteChallengeManual = async (
     challengeId: string,
-): Promise<{ success: boolean; message?: string; error?: string }> => {
-    if (!ensureAuthenticated()) {
-        return { success: false, error: 'Not authenticated' };
-    }
-
-    let title;
-    try {
-        const resp = await getMiddleware().getActiveChallenges();
-        // A failed fetch reads as an empty list, so without this gate it would
-        // be reported as "not found" — the fetch's failure is the real cause
-        // (the same treatment resolveChallenge gives every action command).
-        if (failedFetch(resp)) {
-            logger.withCategory('challenges').error(failedFetchMessage());
-            return { success: false, error: 'Failed to fetch challenges' };
-        }
-        const found = findActionableChallenge(resp, challengeId);
-        if ('refused' in found) {
-            // The vote handler re-reads and refuses the same way (its own
-            // mechanic refuses a marked challenge); this is the worded line.
-            if (found.refused === 'data-incomplete') {
-                logger.withCategory('challenges').error(`Challenge ${challengeId}: challenge data cannot be read`);
-                return { success: false, error: 'challenge data cannot be read' };
-            }
-            logger.withCategory('challenges').error(`Challenge ${challengeId} not found among active challenges`);
-            return { success: false, error: `Challenge ${challengeId} not found` };
-        }
-        title = found.challenge.title;
-    } catch (err) {
-        logger.withCategory('challenges').error(failedFetchMessage(errorMessage(err) || String(err)));
-        return { success: false, error: 'Failed to fetch challenges' };
-    }
+): Promise<{ success: boolean; message?: string; error?: string } | null> => {
+    const challenge = await resolveChallenge(challengeId);
+    if (challenge === null) return { success: false };
+    const { title } = challenge;
 
     try {
         const result = await votingHandlers()['vote-on-challenge-manual'](null, challengeId, title);
