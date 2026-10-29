@@ -112,7 +112,7 @@ const challengesCmd = async (detailId: string | null): Promise<boolean> => {
         logger
             .withCategory('challenges')
             .error(
-                `Failed to fetch the active challenges: ${errorMessage(err) || err}. Nothing was read — check the connection and try again (in mock mode: set-setting mock true).`,
+                `Failed to fetch the active challenges: ${errorMessage(err) || err}. Nothing was read — check the connection and try again.`,
             );
         return false;
     }
