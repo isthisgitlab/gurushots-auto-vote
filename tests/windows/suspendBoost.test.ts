@@ -10,7 +10,7 @@ import type * as apiFactoryModule from '../../src/ts/apiFactory';
 import type * as VotingLogicModule from '../../src/ts/services/VotingLogic';
 import type { CategoryLogger } from '../../src/ts/logger';
 import type { Challenge } from '../../src/ts/types/gurushots';
-import type { SuspendBoostOutcome } from '../../src/ts/services/votingOrchestrator/boost';
+import type { SuspendBoostOutcome } from '../../src/ts/services/votingOrchestrator/suspendBoostRunner';
 import { invalid } from '../helpers/invalid';
 
 type Describe = NonNullable<

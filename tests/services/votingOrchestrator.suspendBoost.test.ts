@@ -39,14 +39,15 @@ import votingLogicModule = require('../../src/ts/services/VotingLogic');
 const votingLogic = jest.mocked(votingLogicModule);
 import autoFillModule = require('../../src/ts/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
-import type * as boostModule from '../../src/ts/services/votingOrchestrator/boost';
+import type * as boostModule from '../../src/ts/services/votingOrchestrator/suspendBoostRunner';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import { renderLogTemplate } from '../helpers/logTemplate';
 import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import type { VotingPassApi } from '../../src/ts/types/votingPass';
 import { invalid } from '../helpers/invalid';
-const { runSuspendBoosts } = require('../../src/ts/services/votingOrchestrator/boost') as typeof boostModule;
+const { runSuspendBoosts } =
+    require('../../src/ts/services/votingOrchestrator/suspendBoostRunner') as typeof boostModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 const { createMemoryEntryAgeLedger } = require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
 

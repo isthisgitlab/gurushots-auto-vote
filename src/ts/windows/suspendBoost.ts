@@ -15,7 +15,7 @@
  * Which challenges and when is the quit guard's remembered list and the boost
  * row of describeDeadlineActions (autoBoost / Boost Time 0 = off / turbo-conflict
  * gating already applied). The boost itself is the voting pass's own decision
- * (services/votingOrchestrator/boost.ts runSuspendBoost), reached through
+ * (services/votingOrchestrator/suspendBoostRunner.ts runSuspendBoost), reached through
  * the API strategy so mock mode never touches the real entry-age file. Its one
  * departure from the pass: a fresh-entry hold is overridden, not honoured —
  * the device cannot come back to finish the wait, and a hold never outlasts the

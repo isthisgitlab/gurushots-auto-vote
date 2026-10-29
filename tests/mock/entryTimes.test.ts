@@ -8,7 +8,7 @@ jest.mock('../../src/ts/metadata', () => ({ updateChallengeVoteMetadata: jest.fn
 jest.mock('../../src/ts/services/votingOrchestrator', () => ({
     runVotingPass: jest.fn(async () => ({ success: true, message: 'pass' })),
 }));
-jest.mock('../../src/ts/services/votingOrchestrator/boost', () => ({
+jest.mock('../../src/ts/services/votingOrchestrator/suspendBoostRunner', () => ({
     runSuspendBoosts: jest.fn(async () => []),
 }));
 jest.mock('../../src/ts/services/missions', () => ({
@@ -28,7 +28,7 @@ jest.mock('../../src/ts/services/autoClaim', () => ({
 }));
 
 import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
-import type * as boostModule from '../../src/ts/services/votingOrchestrator/boost';
+import type * as boostModule from '../../src/ts/services/votingOrchestrator/suspendBoostRunner';
 import type * as indexModule from '../../src/ts/mock/index';
 import type * as strategyModule from '../../src/ts/mock/strategy';
 import type * as apiFactoryModule from '../../src/ts/apiFactory';
@@ -45,7 +45,7 @@ const { runVotingPass } = jest.mocked(
     require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule,
 );
 const { runSuspendBoosts } = jest.mocked(
-    require('../../src/ts/services/votingOrchestrator/boost') as typeof boostModule,
+    require('../../src/ts/services/votingOrchestrator/suspendBoostRunner') as typeof boostModule,
 );
 const { mockApiClient, clearSessionCache } = require('../../src/ts/mock/index') as typeof indexModule;
 const { mockEntryAgeLedger } = require('../../src/ts/mock/strategy') as typeof strategyModule;

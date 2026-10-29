@@ -12,7 +12,7 @@
 
 import * as logger from '../logger';
 import { runVotingPass } from '../services/votingOrchestrator';
-import { runSuspendBoosts } from '../services/votingOrchestrator/boost';
+import { runSuspendBoosts } from '../services/votingOrchestrator/suspendBoostRunner';
 import { VOTING_PASS_ENDPOINTS } from '../services/votingOrchestrator/context';
 import { createMemoryEntryTracker } from '../services/newEntryTracker';
 import {

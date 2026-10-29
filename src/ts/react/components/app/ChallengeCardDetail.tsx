@@ -1,6 +1,6 @@
-import { Fragment, useId, useMemo, useRef } from 'react';
+import { Fragment, useId, useMemo } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
-import { formatEndTime, getLevelStatus, isBoostAvailable, statusText } from '@/utils/formatters';
+import { formatEndTime, getLevelStatus, statusText } from '@/utils/formatters';
 import { countText, exposureText, getNextLevelInfo } from '@/utils/challengeCardView';
 import { sanitizeWelcomeMessage } from '@/utils/sanitizeWelcomeMessage';
 import { statusBadgeClass, toneBadgeClass } from '@/utils/statTone';
@@ -9,7 +9,7 @@ import { Countdown } from './Countdown';
 import type { TimeRemaining } from './Countdown';
 import { DeadlineTimeline } from './DeadlineTimeline';
 import { ScenarioStatusPanel } from './ScenarioStatusPanel';
-import { EntryBadge } from './EntryBadge';
+import { EntryDetails } from './EntryDetails';
 import { ChallengeBadgeRow } from './ChallengeBadgeRow';
 import { ChallengeTagBadges } from './ChallengeKindBadges';
 import { stringTags } from '../../../format/challengeListing';
@@ -18,21 +18,16 @@ import { CardDensityToggle } from './CardDensityToggle';
 import { FillButtons } from './ChallengeCardActions';
 import { InlineError } from '@/components/ui/InlineError';
 import * as ipc from '@/api/ipc';
-import { ipcErrorText } from '@/api/ipcErrorText';
-import { useFocusRestore } from '@/hooks/useFocusRestore';
-import { canStillFire, livePinKindOf, unusablePins } from '../../../voting/entryPins';
 import { challengePageUrl } from '@/utils/challengePageUrl';
 
 import type { ComponentChildren } from 'preact';
 import type { Bankroll, Challenge, PrizeTier, RankingTotal } from '../../../types/gurushots';
 import type { ChallengeCardView } from './ChallengeCard';
 import type { ChallengeCardActionSet } from './ChallengeCardActions';
-import type { OpenSwapPick } from './SwapEntryButton';
 import type { ChallengeBadgeRowProps } from './ChallengeBadgeRow';
 import type { DeadlineAction } from './DeadlineTimeline';
 import type * as useSwapBacksModule from '@/api/useSwapBacks';
 import type * as useEntryPinsModule from '@/api/useEntryPins';
-import type { EntryPinKind } from '../../../types/settings';
 import type * as useScenarioStatusModule from '@/api/useScenarioStatus';
 
 export type SwapBackOffers = ReturnType<typeof useSwapBacksModule.useSwapBacks>;
@@ -288,134 +283,6 @@ function StatusCells({
                 )}
                 {fillError && <InlineError onDismiss={clearFillError}>{fillError}</InlineError>}
             </StatCell>
-        </div>
-    );
-}
-
-/**
- * A stored pin that cannot take its feature right now (its photo left the challenge, or carries the other
- * feature), with a way to clear it. Only while the feature can still fire: a spent feature's pin is inert.
- * The button is inert while a pin write is in flight, like the pin toggles: aria-disabled, never `disabled`.
- */
-function DanglingPinNote({
-    kind,
-    state,
-    busy,
-    onClear,
-}: {
-    kind: EntryPinKind;
-    state: 'gone' | 'conflict';
-    busy: boolean;
-    onClear: (button: HTMLButtonElement) => void | Promise<void>;
-}) {
-    const { t } = useTranslation();
-    const text = t(state === 'gone' ? 'app.pinGoneNote' : 'app.pinConflictNote', {
-        kind: t(kind === 'boost' ? 'app.boost' : 'app.turbo'),
-        other: t(kind === 'boost' ? 'app.turbo' : 'app.boost'),
-    });
-    return (
-        <div className="alert alert-info py-2 text-xs" role="status">
-            <span>{text}</span>
-            <button
-                type="button"
-                className={`btn btn-sm max-sm:min-h-10${busy ? ' btn-disabled' : ''}`}
-                aria-disabled={busy}
-                aria-busy={busy}
-                onClick={(event) => {
-                    if (!busy) void onClear(event.currentTarget);
-                }}
-            >
-                {t('app.pinClear')}
-            </button>
-        </div>
-    );
-}
-
-/**
- * Entry details — entry-level boost / turbo badges and actions, the pin toggles and the notes for pins that no
- * longer apply.
- */
-function EntryDetails({
-    challenge,
-    view,
-    swapBacks,
-    entryPins,
-    bankroll,
-    onVoteComplete,
-    onCurrencySpent,
-    onChooseSwap,
-    timezone,
-}: {
-    challenge: Challenge;
-    view: ChallengeCardView;
-    swapBacks: SwapBackOffers;
-    entryPins: EntryPinsState;
-    bankroll: Bankroll | null;
-    onVoteComplete: () => void;
-    onCurrencySpent: () => void;
-    onChooseSwap: OpenSwapPick;
-    timezone: string;
-}) {
-    const { t } = useTranslation();
-    const { pins, togglePin, setPin, loading: pinBusy, error: pinError, clearError: clearPinError } = entryPins;
-    const canPin = { boost: canStillFire(challenge, 'boost'), turbo: canStillFire(challenge, 'turbo') };
-    const detailsRef = useRef<HTMLDivElement>(null);
-    const labelId = useId();
-    // A cleared pin's note unmounts with the focused button inside it: focus would drop to <body>, so it moves to
-    // the section instead.
-    const recordClearedTrigger = useFocusRestore(() => detailsRef.current);
-
-    const clearPin = async (kind: EntryPinKind, button: HTMLButtonElement) => {
-        recordClearedTrigger(button);
-        await setPin(kind, null);
-    };
-
-    return (
-        <div ref={detailsRef} tabIndex={-1} role="group" aria-labelledby={labelId}>
-            <div className="text-xs text-base-content/70 mb-1">
-                <span id={labelId}>{t('app.entryDetails')}</span>:
-            </div>
-            <div className="flex flex-col items-start gap-1">
-                {view.entries.map((entry) => (
-                    <EntryBadge
-                        key={entry.id}
-                        entry={entry}
-                        challengeId={challenge.id}
-                        boostAvailable={isBoostAvailable(view.boostStatus)}
-                        turboAvailable={view.member.turbo?.state === 'WON'}
-                        onBoostApplied={onVoteComplete}
-                        onTurboApplied={onVoteComplete}
-                        swapAvailable={view.swapAvailable}
-                        bankroll={bankroll}
-                        onSwapped={onCurrencySpent}
-                        onChooseSwap={onChooseSwap}
-                        swapBack={swapBacks.find((r) => r.currentId === String(entry.id)) ?? null}
-                        pin={{
-                            pins,
-                            canPin,
-                            livePin: livePinKindOf(challenge, entry, pins),
-                            busy: pinBusy,
-                            onToggle: togglePin,
-                        }}
-                        timezone={timezone}
-                    />
-                ))}
-            </div>
-            {/* Manual Only: a pin only steers the automatic spends, which do not run, so its notes stay hidden. */}
-            {(view.manualOnly ? [] : unusablePins(challenge, pins)).map(({ kind, state }) => (
-                <DanglingPinNote
-                    key={kind}
-                    kind={kind}
-                    state={state}
-                    busy={pinBusy}
-                    onClear={(button) => clearPin(kind, button)}
-                />
-            ))}
-            {pinError && (
-                <InlineError className="mt-1" onDismiss={clearPinError}>
-                    {ipcErrorText(pinError, t)}
-                </InlineError>
-            )}
         </div>
     );
 }

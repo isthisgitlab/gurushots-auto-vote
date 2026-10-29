@@ -43,7 +43,7 @@ import { sleep, getRandomDelay } from '../../timing';
 import * as logger from '../../logger';
 import * as settings from '../../settings';
 import { runVotingPass } from '../../services/votingOrchestrator';
-import { runSuspendBoosts } from '../../services/votingOrchestrator/boost';
+import { runSuspendBoosts } from '../../services/votingOrchestrator/suspendBoostRunner';
 import { VOTING_PASS_ENDPOINTS } from '../../services/votingOrchestrator/context';
 import { createMetadataEntryTracker } from '../../services/newEntryTracker';
 import {

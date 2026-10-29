@@ -46,7 +46,9 @@ jest.mock('../../src/ts/timing', () => ({
     getRandomDelay: jest.fn(() => 3210),
 }));
 jest.mock('../../src/ts/services/votingOrchestrator', () => ({ runVotingPass: jest.fn() }));
-jest.mock('../../src/ts/services/votingOrchestrator/boost', () => ({ runSuspendBoosts: jest.fn(async () => []) }));
+jest.mock('../../src/ts/services/votingOrchestrator/suspendBoostRunner', () => ({
+    runSuspendBoosts: jest.fn(async () => []),
+}));
 jest.mock('../../src/ts/services/newEntryTracker', () => ({
     createMetadataEntryTracker: jest.fn(() => ({ kind: 'metadata-tracker' })),
 }));
@@ -101,7 +103,7 @@ const { runVotingPass } = jest.mocked(
     require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule,
 );
 const { runSuspendBoosts } = jest.mocked(
-    require('../../src/ts/services/votingOrchestrator/boost') as typeof boostModule,
+    require('../../src/ts/services/votingOrchestrator/suspendBoostRunner') as typeof boostModule,
 );
 const { runJoinPass, joinChallengeSingle, forgetUnconfirmedPayment } = jest.mocked(
     require('../../src/ts/services/joinChallenges') as typeof joinChallengesModule,
@@ -116,7 +118,7 @@ import main = require('../../src/ts/strategies/real');
 import entryAgeStoreModule = require('../../src/ts/entryAgeStore');
 import type * as joinStateStoreModule from '../../src/ts/joinStateStore';
 import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
-import type * as boostModule from '../../src/ts/services/votingOrchestrator/boost';
+import type * as boostModule from '../../src/ts/services/votingOrchestrator/suspendBoostRunner';
 import type * as joinChallengesModule from '../../src/ts/services/joinChallenges';
 import type * as autoClaimModule from '../../src/ts/services/autoClaim';
 import type * as missionsModule from '../../src/ts/services/missions';

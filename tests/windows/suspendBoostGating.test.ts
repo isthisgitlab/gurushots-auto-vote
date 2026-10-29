@@ -10,13 +10,14 @@ const settings = jest.mocked(settingsModule);
 import VotingLogic = require('../../src/ts/services/VotingLogic');
 import quitGuard = require('../../src/ts/windows/quitGuard');
 import logger = require('../../src/ts/logger');
-import type * as boostModule from '../../src/ts/services/votingOrchestrator/boost';
+import type * as boostModule from '../../src/ts/services/votingOrchestrator/suspendBoostRunner';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 import type { MemberBoost, RankingEntry } from '../../src/ts/types/gurushots';
 import type { VotingPassApi } from '../../src/ts/types/votingPass';
 import { invalid } from '../helpers/invalid';
-const { runSuspendBoost } = require('../../src/ts/services/votingOrchestrator/boost') as typeof boostModule;
+const { runSuspendBoost } =
+    require('../../src/ts/services/votingOrchestrator/suspendBoostRunner') as typeof boostModule;
 
 jest.mock('../../src/ts/settings');
 
