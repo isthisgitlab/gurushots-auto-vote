@@ -104,6 +104,29 @@ describe('CLI submit — strict flags', () => {
         expect(contains(msgsAt('error'), '--image needs a photo id')).toBe(true);
         expect(handlers['submit-picked-photos']).not.toHaveBeenCalled();
     });
+
+    test.each([
+        ['both in the = form', ['--challenge=111', '--challenge=222', '--image=img1']],
+        ['both in the space form', ['--challenge', '111', '--challenge', '222', '--image=img1']],
+        ['the forms mixed', ['--challenge=111', '--challenge', '222']],
+    ])('a repeated --challenge (%s) prints the usage and exits 1', async (_label, argv) => {
+        await expect(runSubmit(argv)).resolves.toBe(1);
+        expect(contains(msgsAt('error'), 'Wrong arguments')).toBe(true);
+        expect(contains(msgsAt('info'), SUBMIT_USAGE)).toBe(true);
+        expect(handlers['submit-picked-photos']).not.toHaveBeenCalled();
+        expect(handlers['fill-challenge-now']).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ['an empty id among the ids', '--image=img1,,img2', 'an empty photo id', 'the same photo more than once'],
+        ['a repeated id', '--image=img1,img1', 'the same photo more than once', 'an empty photo id'],
+    ])('%s is refused with its own wording and submits nothing', async (_label, flag, wording, otherWording) => {
+        await expect(runSubmit(['--challenge=111', flag])).resolves.toBe(1);
+        expect(contains(msgsAt('error'), wording)).toBe(true);
+        expect(contains(msgsAt('error'), otherWording)).toBe(false);
+        expect(handlers['submit-picked-photos']).not.toHaveBeenCalled();
+        expect(handlers['fill-challenge-now']).not.toHaveBeenCalled();
+    });
 });
 
 describe('CLI submit --image (picked photos)', () => {

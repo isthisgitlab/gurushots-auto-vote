@@ -134,15 +134,17 @@ const exportTitleRulesCmd = (file: string | undefined, overwrite: boolean): numb
 };
 
 /**
- * The JSON text of an import file as `unknown`, or null (said loudly) when the
- * file cannot be read or parsed — an unreadable file is never merged.
+ * The JSON text of an import file as `unknown`, or `{ ok: false }` (said
+ * loudly) when the file cannot be read or parsed — an unreadable file is never
+ * merged. A parsed JSON `null` is a value like any other: the caller hands it
+ * to the preview, which rejects it with its own reason.
  */
-const readRulesFile = (file: string): unknown => {
+const readRulesFile = (file: string): { ok: true; value: unknown } | { ok: false } => {
     try {
-        return JSON.parse(fs.readFileSync(file, 'utf8')) as unknown;
+        return { ok: true, value: JSON.parse(fs.readFileSync(file, 'utf8')) as unknown };
     } catch (error) {
         settingsLog().error(`Could not read ${file} as JSON: ${errorMessage(error)}`);
-        return null;
+        return { ok: false };
     }
 };
 
@@ -164,9 +166,9 @@ const printNotes = (kind: string, notes: readonly settings.TitleRuleNote[]): voi
  * Returns the exit code.
  */
 const importTitleRulesCmd = (file: string, yes: boolean): number => {
-    const parsed = readRulesFile(file);
-    if (parsed === null) return 1;
-    const preview = settings.previewTitleRules(parsed);
+    const read = readRulesFile(file);
+    if (!read.ok) return 1;
+    const preview = settings.previewTitleRules(read.value);
     if (!preview.ok) {
         settingsLog().error(`The rules in ${file} would be rejected: ${preview.error}`);
         return 1;
@@ -180,7 +182,7 @@ const importTitleRulesCmd = (file: string, yes: boolean): number => {
         settingsLog().info(`Nothing imported yet. To import, re-run: import-title-rules ${file} --yes`);
         return 0;
     }
-    if (!settings.setTitleRules(parsed)) {
+    if (!settings.setTitleRules(read.value)) {
         settingsLog().error(
             'The import was rejected — the reason is in the log (logs --settings shows it). The stored rules are unchanged.',
         );

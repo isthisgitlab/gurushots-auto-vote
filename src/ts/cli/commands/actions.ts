@@ -92,6 +92,18 @@ const turboChallenge = async (
     const challenge = await resolveChallenge(challengeId);
     if (!challenge) return false;
 
+    // A won Turbo cannot be replayed — without --image the play is refused with
+    // the apply command, the same one the challenges detail view prints for a
+    // WON turbo.
+    if (!imageId && challenge.member?.turbo?.state === 'WON') {
+        logger
+            .withCategory('turbo')
+            .error(
+                `The Turbo on "${challenge.title}" is already won. Apply it to a photo: turbo --challenge=${challengeId} --image=<photo id> (challenges --challenge=<id> lists the photo ids).`,
+            );
+        return false;
+    }
+
     try {
         if (imageId) {
             const result = await handlers()['apply-turbo-to-entry'](null, challengeId, imageId);

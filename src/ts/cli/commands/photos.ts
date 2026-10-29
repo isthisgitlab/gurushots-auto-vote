@@ -35,6 +35,9 @@ const ui = () => logger.withCategory('ui');
 
 // The default cap on the photos a `--stats` listing reads numbers for.
 const STATS_DEFAULT_LIMIT = 30;
+// The hard cap on it: a `--limit` above this is a usage error — the reads go
+// out one throttled chunk at a time and a bigger ask only stalls the listing.
+const STATS_MAX_LIMIT = 500;
 
 // What each refusal of the handler means for the person at the terminal.
 const REFUSALS: Record<string, string> = {
@@ -318,4 +321,5 @@ export {
     BAD_SORT_TEXT,
     shellQuote,
     STATS_DEFAULT_LIMIT,
+    STATS_MAX_LIMIT,
 };

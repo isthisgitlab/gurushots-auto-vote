@@ -224,4 +224,25 @@ describe('cli parity guard', () => {
             'totally-unknown-channel: no CLI command reaches this channel and no not-applicable reason is recorded',
         );
     });
+
+    test('a mapped command that is not a COMMAND_ROWS row fails the check', () => {
+        const problems = checkCliParity(['get-bankroll'], {
+            'get-bankroll': { commands: ['no-such-command'], flag: null },
+        });
+        expect(problems).toContainEqual('get-bankroll: mapped command "no-such-command" is not a COMMAND_ROWS row');
+    });
+
+    test('a mapped flag appearing in no usage or help line of its row fails the check', () => {
+        const problems = checkCliParity(['get-log-file'], {
+            'get-log-file': { commands: ['logs'], flag: '--no-such-flag' },
+        });
+        expect(problems).toContainEqual('get-log-file: "--no-such-flag" appears in no usage or help line of "logs"');
+    });
+
+    test('a mapping key the channel list does not hold fails the check', () => {
+        const problems = checkCliParity([], {
+            'ghost-channel': { commands: ['login'], flag: null },
+        });
+        expect(problems).toContainEqual('ghost-channel: mapped, but the manifest has no such channel');
+    });
 });

@@ -5,9 +5,10 @@
  * through `getMiddleware().getActiveChallenges()`, the same one `status` uses;
  * every per-challenge read is optional-chained, so a challenge with a partial
  * standing still lists with what can be read. The turbo line names the command
- * that can run right now: play it (`turbo --challenge=<id>`), or apply a won
- * Turbo to a photo (`turbo --challenge=<id> --image=<photo id>`, with the
- * photo ids in the `--challenge=<id>` detail view).
+ * that can run right now: play it (`turbo --challenge=<id>`) — or resume it
+ * when another session is already playing it — or apply a won Turbo to a photo
+ * (`turbo --challenge=<id> --image=<photo id>`, with the photo ids in the
+ * `--challenge=<id>` detail view).
  */
 
 import * as logger from '../../logger';
@@ -39,16 +40,22 @@ const exposureLine = (exposureFactor: number | null | undefined): string => {
  * The turbo line: the state and mode as the API reported them (none reported
  * reads as "none"; a mode that is not a game the bot can play reads as
  * "unknown" — see isKnownTurboMode), then the command that can run now: the
- * mini-game while one can be played (the shared canPlayTurbo), or, on a WON
- * turbo, the apply command — its photo id comes from the detail view's entry
- * list.
+ * mini-game while one can be played: the shared canPlayTurbo gates any hint —
+ * inside it an IN_PROGRESS game (another session may be playing it) names the
+ * resume command and the rest read "can play now" — then, on a WON turbo, the
+ * apply command — its photo id comes from the detail view's entry list. A
+ * state that can be played only with an unknown mode keeps the bare line.
  */
 const turboLine = (challenge: Challenge, id: string, now: number): string => {
     const turbo: MemberTurbo | null | undefined = challenge?.member?.turbo;
     const state = turbo?.state ? stripTerminalControl(turbo.state) : 'none';
     const mode = isKnownTurboMode(turbo) ? stripTerminalControl(turbo?.mode) : 'unknown';
     const base = `  Turbo: ${state} (mode ${mode})`;
-    if (canPlayTurbo(challenge, now)) return `${base} — can play now: turbo --challenge=${id}`;
+    if (canPlayTurbo(challenge, now)) {
+        if (turbo?.state === 'IN_PROGRESS')
+            return `${base} — in progress (another session may be playing it): turbo --challenge=${id} resumes it`;
+        return `${base} — can play now: turbo --challenge=${id}`;
+    }
     if (turbo?.state === 'WON') return `${base} — apply it to a photo: turbo --challenge=${id} --image=<photo id>`;
     return base;
 };
@@ -107,7 +114,15 @@ const challengesCmd = async (detailId: string | null): Promise<boolean> => {
     let challenges: Challenge[];
     try {
         const resp = await getMiddleware().getActiveChallenges();
-        challenges = Array.isArray(resp?.challenges) ? resp.challenges : [];
+        if (resp == null || resp.fetchFailed === true) {
+            logger
+                .withCategory('challenges')
+                .error(
+                    'Failed to fetch the active challenges: the request did not succeed. Nothing was read — check the connection and try again.',
+                );
+            return false;
+        }
+        challenges = resp.challenges;
     } catch (err) {
         logger
             .withCategory('challenges')

@@ -41,6 +41,11 @@ const handlers = invalid<{
 import type * as photosModule from '../../src/ts/cli/commands/photos';
 const { listPhotosCmd, suggestPhotosCmd, parseSearchFlag, parseSortFlag, BAD_SORT_TEXT, shellQuote } =
     require('../../src/ts/cli/commands/photos') as typeof photosModule;
+import type * as actionHandlersModule from '../../src/ts/cli/actionHandlers';
+// The rows↔handlers cycle initialises only rows-first (commandRows reads the handlers'
+// exports at module scope), so load the rows before reaching for their handlers.
+require('../../src/ts/cli/commandRows');
+const { runListPhotos } = require('../../src/ts/cli/actionHandlers') as typeof actionHandlersModule;
 
 const text = (level: string) => calls.filter((c) => c.level === level).map((c) => c.msg);
 const photos = [
@@ -607,6 +612,23 @@ describe('list-photos --stats', () => {
     test('an empty listing never asks for stats', async () => {
         handlers['get-library-photos'].mockResolvedValue(listingWith([]));
         await expect(listPhotosCmd('5', null, null, 30)).resolves.toBe(0);
+        expect(handlers['get-photo-stats']).not.toHaveBeenCalled();
+    });
+
+    test('--limit=500 is accepted: the stats are read for the listing', async () => {
+        handlers['get-library-photos'].mockResolvedValue(listingWith([photos[0]]));
+        handlers['get-photo-stats'].mockResolvedValue({ success: true, stats: [stat(photos[0].id)], missing: [] });
+
+        await expect(runListPhotos(['--challenge=5', '--stats', '--limit=500'])).resolves.toBe(0);
+
+        expect(handlers['get-photo-stats']).toHaveBeenCalledWith(null, [photos[0].id]);
+    });
+
+    test('--limit=501 is refused with the cap before anything is read', async () => {
+        await expect(runListPhotos(['--challenge=5', '--stats', '--limit=501'])).resolves.toBe(1);
+
+        expect(text('error')).toEqual(['--limit can be at most 500']);
+        expect(handlers['get-library-photos']).not.toHaveBeenCalled();
         expect(handlers['get-photo-stats']).not.toHaveBeenCalled();
     });
 });

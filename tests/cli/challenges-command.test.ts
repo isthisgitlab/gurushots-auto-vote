@@ -103,11 +103,15 @@ describe('challenges — the list', () => {
         expect(msgsAt('info')).toEqual(['No active challenges.']);
     });
 
-    test('an unreadable fetch reads as no challenges', async () => {
+    test('an unreadable fetch is a failure, not an empty list', async () => {
         apiFactory.__getActiveChallenges.mockResolvedValue(invalid(null));
 
-        await expect(challenges([])).resolves.toBe(0);
-        expect(msgsAt('info')).toEqual(['No active challenges.']);
+        await expect(challenges([])).resolves.toBe(1);
+
+        const errors = msgsAt('error');
+        expect(contains(errors, 'Failed to fetch the active challenges: the request did not succeed')).toBe(true);
+        expect(contains(errors, 'Nothing was read — check the connection and try again')).toBe(true);
+        expect(msgsAt('info')).toEqual([]);
     });
 
     test('a marked challenge names itself and stops at (data cannot be read)', async () => {
@@ -177,7 +181,7 @@ describe('challenges — the turbo line per state', () => {
         [
             'IN_PROGRESS',
             { state: 'IN_PROGRESS', mode: 'snap' },
-            'Turbo: IN_PROGRESS (mode snap) — can play now: turbo --challenge=c1',
+            'Turbo: IN_PROGRESS (mode snap) — in progress (another session may be playing it): turbo --challenge=c1 resumes it',
         ],
         [
             'a TIMER still counting down',
@@ -190,6 +194,11 @@ describe('challenges — the turbo line per state', () => {
             'Turbo: WON (mode classic) — apply it to a photo: turbo --challenge=c1 --image=<photo id>',
         ],
         ['an unknown mode', { state: 'FREE', mode: 'NEW_MODE' }, 'Turbo: FREE (mode unknown)'],
+        [
+            'an unknown mode, in progress',
+            { state: 'IN_PROGRESS', mode: 'NEW_MODE' },
+            'Turbo: IN_PROGRESS (mode unknown)',
+        ],
     ])('%s', (_label, turbo, line) => {
         apiFactory.__getActiveChallenges.mockResolvedValue(
             invalid({
@@ -256,6 +265,17 @@ describe('challenges — the detail view', () => {
     test('an unknown id exits 1', async () => {
         await expect(challenges(['--challenge=999'])).resolves.toBe(1);
         expect(contains(msgsAt('error'), 'Challenge 999 not found among active challenges')).toBe(true);
+    });
+
+    test('a failed fetch exits 1 and never reads as an unknown id', async () => {
+        apiFactory.__getActiveChallenges.mockResolvedValue(invalid({ challenges: [], fetchFailed: true }));
+
+        await expect(challenges(['--challenge=c1'])).resolves.toBe(1);
+
+        const errors = msgsAt('error');
+        expect(contains(errors, 'Failed to fetch the active challenges: the request did not succeed')).toBe(true);
+        expect(contains(errors, 'Nothing was read — check the connection and try again')).toBe(true);
+        expect(contains(errors, 'not found among active challenges')).toBe(false);
     });
 
     test('a detail challenge with no readable entries prints the block alone', async () => {

@@ -69,6 +69,14 @@ jest.mock('../../src/ts/ipc/actions.handlers', () => {
     return { __handlers: handlers, buildHandlers: () => handlers, register: jest.fn() };
 });
 
+jest.mock('../../src/ts/ipc/currency.handlers', () => {
+    const handlers = {
+        'get-swap-backs': jest.fn(),
+        'swap-back-entry-photo': jest.fn(),
+    };
+    return { __handlers: handlers, buildHandlers: () => handlers, register: jest.fn() };
+});
+
 jest.mock('../../src/ts/ipc/voting.handlers', () => {
     const handlers = { 'vote-on-challenge-manual': jest.fn() };
     return { __handlers: handlers, buildHandlers: () => handlers, register: jest.fn() };
@@ -86,7 +94,7 @@ import type * as actionHandlersModule from '../../src/ts/cli/actionHandlers';
 // The rows↔handlers cycle initialises only rows-first (commandRows reads the handlers'
 // exports at module scope), so load the rows before reaching for their handlers.
 require('../../src/ts/cli/commandRows');
-const { runTurbo } = require('../../src/ts/cli/actionHandlers') as typeof actionHandlersModule;
+const { runTurbo, runSwapBack } = require('../../src/ts/cli/actionHandlers') as typeof actionHandlersModule;
 import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(
     invalid<typeof loggerModule & { __calls: { level: string; msg: unknown; data?: unknown }[] }>(loggerModule),
@@ -116,6 +124,9 @@ type HandlersMock<M extends { buildHandlers: (...args: never[]) => object }> = {
 const actionsHandlers = invalid<HandlersMock<typeof actionsHandlersModule>>(
     require('../../src/ts/ipc/actions.handlers'),
 ).__handlers;
+const currencyHandlers = invalid<HandlersMock<typeof currencyHandlersModule>>(
+    require('../../src/ts/ipc/currency.handlers'),
+).__handlers;
 const votingHandlers = invalid<HandlersMock<typeof votingHandlersModule>>(
     require('../../src/ts/ipc/voting.handlers'),
 ).__handlers;
@@ -124,12 +135,14 @@ const updateChecker = jest.mocked(updateCheckerModule);
 import type * as actionsModule from '../../src/ts/cli/commands/actions';
 import type * as submitModule from '../../src/ts/cli/commands/submit';
 import type * as actionsHandlersModule from '../../src/ts/ipc/actions.handlers';
+import type * as currencyHandlersModule from '../../src/ts/ipc/currency.handlers';
 import type * as votingHandlersModule from '../../src/ts/ipc/voting.handlers';
 import type * as votingModule from '../../src/ts/cli/commands/voting';
 import type * as authModule from '../../src/ts/cli/commands/auth';
 import type * as updateModule from '../../src/ts/cli/commands/update';
 
-const { boostChallenge, turboChallenge } = require('../../src/ts/cli/commands/actions') as typeof actionsModule;
+const { boostChallenge, turboChallenge, SWAP_BACK_USAGE } =
+    require('../../src/ts/cli/commands/actions') as typeof actionsModule;
 const { fillChallenge } = require('../../src/ts/cli/commands/submit') as typeof submitModule;
 const { voteChallengeManual, runVotingCycle } = require('../../src/ts/cli/commands/voting') as typeof votingModule;
 const { handleLogout } = require('../../src/ts/cli/commands/auth') as typeof authModule;
@@ -265,6 +278,35 @@ describe('CLI turbo command', () => {
         expect(contains(msgsAt('success'), 'Sunset')).toBe(true);
     });
 
+    test('a won Turbo is not replayed: the apply command is named, exit 1, nothing played', async () => {
+        apiFactory.__getActiveChallenges.mockResolvedValue(
+            invalid({ challenges: [{ id: 111, title: 'Sunset', member: { turbo: { state: 'WON' } } }] }),
+        );
+
+        await expect(runTurbo(['--challenge=111'])).resolves.toBe(1);
+
+        expect(
+            contains(
+                msgsAt('error'),
+                'The Turbo on "Sunset" is already won. Apply it to a photo: turbo --challenge=111 --image=<photo id> (challenges --challenge=<id> lists the photo ids).',
+            ),
+        ).toBe(true);
+        expect(actionsHandlers['play-auto-turbo']).not.toHaveBeenCalled();
+        expect(actionsHandlers['apply-turbo-to-entry']).not.toHaveBeenCalled();
+    });
+
+    test('a won Turbo with --image still applies to the named photo', async () => {
+        apiFactory.__getActiveChallenges.mockResolvedValue(
+            invalid({ challenges: [{ id: 111, title: 'Sunset', member: { turbo: { state: 'WON' } } }] }),
+        );
+        actionsHandlers['apply-turbo-to-entry'].mockResolvedValue(invalid({ success: true }));
+
+        await expect(runTurbo(['--challenge=111', '--image=img9'])).resolves.toBe(0);
+
+        expect(actionsHandlers['apply-turbo-to-entry']).toHaveBeenCalledWith(null, '111', 'img9');
+        expect(actionsHandlers['play-auto-turbo']).not.toHaveBeenCalled();
+    });
+
     test('surfaces the handler error message and exits 1', async () => {
         actionsHandlers['play-auto-turbo'].mockResolvedValue({
             success: false,
@@ -364,6 +406,32 @@ describe('CLI turbo command — strict --image flag', () => {
 
         expect(actionsHandlers['apply-turbo-to-entry']).toHaveBeenCalledTimes(2);
         expect(actionsHandlers['apply-turbo-to-entry']).toHaveBeenNthCalledWith(1, null, '111', 'img9');
+    });
+
+    test.each([
+        ['both in the = form', ['--challenge=111', '--challenge=222']],
+        ['both in the space form', ['--challenge', '111', '--challenge', '222']],
+        ['the forms mixed', ['--challenge=111', '--challenge', '222']],
+    ])('a repeated --challenge (%s) is a usage error before anything runs', async (_label, argv) => {
+        await expect(runTurbo(argv)).resolves.toBe(1);
+        expect(contains(msgsAt('error'), 'Wrong arguments')).toBe(true);
+        expect(contains(msgsAt('info'), 'Usage: turbo --challenge=<id> [--image=<id>]')).toBe(true);
+        expect(actionsHandlers['play-auto-turbo']).not.toHaveBeenCalled();
+        expect(actionsHandlers['apply-turbo-to-entry']).not.toHaveBeenCalled();
+    });
+});
+
+describe('CLI swap-back command — strict --challenge flag', () => {
+    test.each([
+        ['both in the = form', ['--challenge=111', '--challenge=222']],
+        ['both in the space form', ['--challenge', '111', '--challenge', '222']],
+        ['the forms mixed', ['--challenge=111', '--challenge', '222']],
+    ])('a repeated --challenge (%s) is a usage error before anything runs', async (_label, argv) => {
+        await expect(runSwapBack(argv)).resolves.toBe(1);
+        expect(contains(msgsAt('error'), 'Wrong arguments')).toBe(true);
+        expect(contains(msgsAt('info'), SWAP_BACK_USAGE)).toBe(true);
+        expect(currencyHandlers['get-swap-backs']).not.toHaveBeenCalled();
+        expect(currencyHandlers['swap-back-entry-photo']).not.toHaveBeenCalled();
     });
 });
 

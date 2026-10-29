@@ -1,7 +1,7 @@
 /**
  * Unit tests for the shared turbo helpers (voting/turboMode.ts): the state →
- * status-code mapping the renderer words (getTurboStatus) and the CLI listing
- * prints, and the can-play predicate the card's play-turbo button and the
+ * status-code mapping the renderer words (getTurboStatus) — its only consumer —
+ * and the can-play predicate the card's play-turbo button and the
  * CLI's `challenges` turbo line share — playable states in both known modes,
  * and every way a turbo is not playable.
  */

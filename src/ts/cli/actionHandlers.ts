@@ -14,12 +14,21 @@ import {
     parseSortFlag,
     suggestPhotosCmd,
     STATS_DEFAULT_LIMIT,
+    STATS_MAX_LIMIT,
 } from './commands/photos';
 import { requireChallenge } from './guards';
 import { exitCodeOf, extractChallenge, usageError } from './commandKit';
 
 import type { CommandHandler } from './commandKit';
 import { usageOf } from './commandRows';
+
+// extractChallenge keeps only the first --challenge and drops the rest, so a
+// repeat would silently act on the first id while the user asked for two. The
+// spend/submit commands count the flag themselves (both spellings: an argv
+// entry equal to `--challenge` or starting with `--challenge=`) and refuse a
+// repeat before anything runs.
+const repeatedChallenge = (argv: string[]): boolean =>
+    argv.filter((a) => a === '--challenge' || a.startsWith('--challenge=')).length > 1;
 
 const runListPhotos: CommandHandler = async (argv) => {
     const { challengeId, rest } = extractChallenge(argv);
@@ -59,6 +68,9 @@ const runListPhotos: CommandHandler = async (argv) => {
     if (limitText !== undefined && (limit === null || limit < 1)) {
         return usageError('--limit needs a positive whole number of photos to read stats for', usage);
     }
+    if (limit !== null && limit > STATS_MAX_LIMIT) {
+        return usageError(`--limit can be at most ${STATS_MAX_LIMIT}`, usage);
+    }
     if (statsFlags.length > 0 && suggestFlags.length > 0) {
         return usageError('--stats cannot be combined with --suggest', usage);
     }
@@ -88,14 +100,15 @@ const runBoost = async (challengeId: string, rest: string[]) => {
 const runTurbo: CommandHandler = async (argv) => {
     const { challengeId, rest } = extractChallenge(argv);
     const usage = usageOf('turbo');
-    requireChallenge({ challengeId }, usage);
+    if (repeatedChallenge(argv)) return usageError('Wrong arguments', usage);
+    const id = requireChallenge({ challengeId }, usage);
     const imageArgs = rest.filter((a) => a.startsWith('--image='));
     if (rest.some((a) => !a.startsWith('--image=')) || imageArgs.length > 1) {
         return usageError('Wrong arguments', usage);
     }
     const imageId = imageArgs[0]?.slice('--image='.length) ?? null;
     if (imageId === '') return usageError('--image needs a photo id (challenges --challenge=<id> lists them)', usage);
-    return exitCodeOf(await turboChallenge(challengeId as string, { imageId }));
+    return exitCodeOf(await turboChallenge(id, { imageId }));
 };
 
 // `submit` sends photos, so like `turbo` its arguments are strict: a typo
@@ -108,7 +121,8 @@ const runTurbo: CommandHandler = async (argv) => {
 const runSubmit: CommandHandler = async (argv) => {
     const { challengeId, rest } = extractChallenge(argv);
     const usage = usageOf('submit');
-    requireChallenge({ challengeId }, usage);
+    if (repeatedChallenge(argv)) return usageError('Wrong arguments', usage);
+    const id = requireChallenge({ challengeId }, usage);
     const allArgs = rest.filter((a) => a === '--all');
     const imageArgs = rest.filter((a) => a.startsWith('--image='));
     if (
@@ -124,9 +138,22 @@ const runSubmit: CommandHandler = async (argv) => {
         if (imageId === '') {
             return usageError('--image needs a photo id (list-photos --challenge=<id> lists them)', usage);
         }
-        return submitPickedCmd(challengeId as string, imageId.split(','));
+        const ids = imageId.split(',');
+        if (ids.some((entry) => entry === '')) {
+            return usageError(
+                '--image carries an empty photo id; pass --image=<id>[,<id>…] with a photo id between the commas',
+                usage,
+            );
+        }
+        if (new Set(ids).size !== ids.length) {
+            return usageError(
+                '--image names the same photo more than once; pass --image=<id>[,<id>…] with each photo once',
+                usage,
+            );
+        }
+        return submitPickedCmd(id, ids);
     }
-    return fillChallenge(challengeId as string, { all: allArgs.length > 0 });
+    return fillChallenge(id, { all: allArgs.length > 0 });
 };
 
 // `swap-back` spends a swap, so like `join` its arguments are strict: `--to=` belongs to `swap`,
@@ -135,7 +162,8 @@ const runSubmit: CommandHandler = async (argv) => {
 const runSwapBack: CommandHandler = async (argv) => {
     const { challengeId, rest } = extractChallenge(argv);
     const usage = usageOf('swap-back');
-    requireChallenge({ challengeId }, usage);
+    if (repeatedChallenge(argv)) return usageError('Wrong arguments', usage);
+    const id = requireChallenge({ challengeId }, usage);
     const imageArgs = rest.filter((a) => a.startsWith('--image='));
     const yesArgs = rest.filter((a) => a === '--yes');
     if (rest.some((a) => !a.startsWith('--image=') && a !== '--yes') || imageArgs.length > 1 || yesArgs.length > 1) {
@@ -145,7 +173,7 @@ const runSwapBack: CommandHandler = async (argv) => {
     if (imageId === '')
         return usageError('--image needs a photo id (list-photos --challenge=<id> shows the ids)', usage);
     return exitCodeOf(
-        await swapBackCmd(challengeId as string, {
+        await swapBackCmd(id, {
             ...(imageId === undefined ? {} : { imageId }),
             yes: yesArgs.length > 0,
         }),

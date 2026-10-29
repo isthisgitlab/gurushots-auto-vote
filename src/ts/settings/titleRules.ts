@@ -137,8 +137,14 @@ const _sanitizedUniqueRules = (rules: unknown[], storedProfiles: Record<string, 
                 label: ruleLogLabel(result.rule, result.rule.title),
                 reason: `same match condition as rule ${first.index} ("${_titleForLog(ruleLogLabel(first.rule, first.rule.title))}") — the later values win, at the first one's position`,
             });
+            // The stored rule is the last one (last wins at the first position),
+            // but the stored index stays the first one's, so a third rule with
+            // the same condition cites the rule still listed — not the one this
+            // pass itself collapsed away.
+            byKey.set(key, { rule: result.rule, index: first.index });
+        } else {
+            byKey.set(key, { rule: result.rule, index: position + 1 });
         }
-        byKey.set(key, { rule: result.rule, index: position + 1 });
     }
     return { ok: true, rules: Array.from(byKey.values(), (entry) => entry.rule), dropped, collapsed };
 };

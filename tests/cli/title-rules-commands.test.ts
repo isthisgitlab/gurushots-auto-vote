@@ -235,6 +235,15 @@ describe('import-title-rules', () => {
         expect(settings.setTitleRules).not.toHaveBeenCalled();
     });
 
+    test('a file whose content is null exits 1 with the preview rejection reason, and is never merged', () => {
+        fs.readFileSync.mockReturnValue('null');
+        settings.previewTitleRules.mockReturnValue({ ok: false, error: 'setTitleRules expects an array' });
+        expect(cmd.importTitleRulesCmd('rules.json', true)).toBe(1);
+        expect(settings.previewTitleRules).toHaveBeenCalledWith(null);
+        expect(contains(msgs('error'), 'would be rejected: setTitleRules expects an array')).toBe(true);
+        expect(settings.setTitleRules).not.toHaveBeenCalled();
+    });
+
     test('a list the write would reject exits 1 before anything is stored', () => {
         fs.readFileSync.mockReturnValue('[]');
         settings.previewTitleRules.mockReturnValue({ ok: false, error: 'setTitleRules expects an array' });

@@ -523,8 +523,8 @@ const COMMANDS_BLOCK = `Commands:
              --search matches a tag exactly, and also lists the tags in your library that contain the term (3+
              characters), so a partial term still shows the full tag to search with.
              --stats also reads votes, views, likes and Guru picks for the listed photos — the first
-             --limit=<n> of them, 30 by default; a photo whose stats could not be read says so instead of
-             showing zeros.
+             --limit=<n> of them (at most 500), 30 by default; a photo whose stats could not be read
+             says so instead of showing zeros.
   list-photos --challenge=<id> --suggest - Rank your photos for that challenge by your auto-submit rules and list
              the top 5, best first. It is a ranking under those rules, not a replay of the next fill, and
              nothing is submitted. It cannot be combined with --search, --sort or --stats.

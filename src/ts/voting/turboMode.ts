@@ -10,8 +10,10 @@ const isKnownTurboMode = (turbo: MemberTurbo | null | undefined): boolean =>
 
 /**
  * A challenge-level turbo state as the status code the view words — the shared half of the renderer's
- * `getTurboStatus` (react/utils/formatters.ts), which adds the colour class and the translated text, so the
- * CLI's challenges listing (cli/commands/challenges.ts) and the card can never drift on what a state means.
+ * `getTurboStatus` (react/utils/formatters.ts), which adds the colour class and the translated text, so every
+ * caller words a state the same way. The renderer's `getTurboStatus` is the only consumer; the CLI's
+ * challenges listing words the turbo state itself (cli/commands/challenges.ts) and uses `canPlayTurbo` /
+ * `isKnownTurboMode`, not this.
  *
  * An 'other' code means the API reported a non-empty state this app has no wording for; the raw state travels
  * separately (the renderer shows it verbatim).
