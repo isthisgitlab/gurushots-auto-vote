@@ -26,6 +26,7 @@ import type * as photosModule from '../../src/ts/cli/commands/photos';
 import type * as deadlinesModule from '../../src/ts/cli/commands/deadlines';
 import type * as updateModule from '../../src/ts/cli/commands/update';
 import type * as logsModule from '../../src/ts/cli/commands/logs';
+import type * as logsFollowModule from '../../src/ts/cli/commands/logsFollow';
 import type * as settingsCommandsModule from '../../src/ts/cli/commands/settings';
 import type * as scenariosModule from '../../src/ts/cli/commands/scenarios';
 import type * as cliSessionLockModule from '../../src/ts/settings/cliSessionLock';
@@ -50,6 +51,7 @@ type Mods = {
     deadlines: jest.MockedObjectDeep<typeof deadlinesModule>;
     update: jest.MockedObjectDeep<typeof updateModule>;
     logs: jest.MockedObjectDeep<typeof logsModule>;
+    logsFollow: jest.MockedObjectDeep<typeof logsFollowModule>;
     cmd: jest.MockedObjectDeep<typeof settingsCommandsModule>;
     scenarios: jest.MockedObjectDeep<typeof scenariosModule>;
     sessionLock: jest.MockedObjectDeep<typeof cliSessionLockModule> & { __release: jest.Mock<void, []> };
@@ -170,7 +172,8 @@ jest.mock('../../src/ts/cli/commands/photos', () => ({
     suggestPhotosCmd: jest.fn(async () => 0),
 }));
 jest.mock('../../src/ts/cli/commands/update', () => ({ checkUpdates: jest.fn() }));
-jest.mock('../../src/ts/cli/commands/logs', () => ({ showLogs: jest.fn(), followLogs: jest.fn(async () => 0) }));
+jest.mock('../../src/ts/cli/commands/logs', () => ({ showLogs: jest.fn() }));
+jest.mock('../../src/ts/cli/commands/logsFollow', () => ({ followLogs: jest.fn(async () => 0) }));
 jest.mock('../../src/ts/cli/commands/scenarios', () =>
     Object.fromEntries(
         [
@@ -252,6 +255,7 @@ const run = async (argv: string[], setup?: (mods: Mods) => void) => {
             deadlines: require('../../src/ts/cli/commands/deadlines') as typeof deadlinesModule,
             update: require('../../src/ts/cli/commands/update') as typeof updateModule,
             logs: require('../../src/ts/cli/commands/logs') as typeof logsModule,
+            logsFollow: require('../../src/ts/cli/commands/logsFollow') as typeof logsFollowModule,
             cmd: require('../../src/ts/cli/commands/settings') as typeof settingsCommandsModule,
             scenarios: require('../../src/ts/cli/commands/scenarios') as typeof scenariosModule,
             sessionLock: require('../../src/ts/settings/cliSessionLock') as typeof cliSessionLockModule,
@@ -1346,7 +1350,7 @@ describe('logs', () => {
         [['--error', '--follow', '--lines=3'], 'followLogs', { category: 'error', lines: 3 }],
     ])('logs %p runs %s with %p', async (tail, fn, opts) => {
         const m = await run(['logs', ...tail]);
-        const called = fn === 'showLogs' ? m.logs.showLogs : m.logs.followLogs;
+        const called = fn === 'showLogs' ? m.logs.showLogs : m.logsFollow.followLogs;
         expect(called).toHaveBeenCalledWith(opts);
         expect(m.exitCodes).toEqual([0]);
     });
@@ -1365,7 +1369,7 @@ describe('logs', () => {
         const m = await run(['logs', ...tail]);
         expect(m.exitCodes).toEqual([1]);
         expect(m.logs.showLogs).not.toHaveBeenCalled();
-        expect(m.logs.followLogs).not.toHaveBeenCalled();
+        expect(m.logsFollow.followLogs).not.toHaveBeenCalled();
         expect(m.msgs('info')).toContain('Usage: logs [--error|--api|--settings|--lexicon] [--lines=<n>] [--follow]');
     });
 

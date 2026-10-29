@@ -39,6 +39,7 @@ const logger = jest.mocked(
 );
 import type * as diagnosticsModule from '../../src/ts/services/semantic/diagnostics';
 import type * as logsModule from '../../src/ts/cli/commands/logs';
+import type * as logsFollowModule from '../../src/ts/cli/commands/logsFollow';
 const { diagnostics } = jest.mocked(require('../../src/ts/services/semantic/diagnostics') as typeof diagnosticsModule);
 
 // The fs automock carries every call the follower reads with but readSync;
@@ -49,8 +50,9 @@ if (fsAuto.readSync === undefined) {
     fsAuto.readSync = jest.fn<number, [number, Buffer, number, number, number | null]>();
 }
 
-const { FOLLOW_READ_CHUNK_BYTES, followLogs, followStep, latestLogFile, showLogs } =
-    require('../../src/ts/cli/commands/logs') as typeof logsModule;
+const { latestLogFile, showLogs } = require('../../src/ts/cli/commands/logs') as typeof logsModule;
+const { FOLLOW_READ_CHUNK_BYTES, followLogs, followStep } =
+    require('../../src/ts/cli/commands/logsFollow') as typeof logsFollowModule;
 
 describe('CLI logs command', () => {
     beforeEach(() => jest.clearAllMocks());
@@ -203,7 +205,7 @@ const NEW_FILE = '/logs/app-2026-10-29.log';
 const ERROR_FILE = '/logs/errors-2026-10-29.log';
 
 /** Injected follower surroundings: an empty listing, the newest file, a recording printer and a controllable stop. */
-const followDeps = (over: Partial<logsModule.FollowDeps> = {}): logsModule.FollowDeps => ({
+const followDeps = (over: Partial<logsFollowModule.FollowDeps> = {}): logsFollowModule.FollowDeps => ({
     dir: '/logs',
     intervalMs: 0,
     list: jest.fn<string[] | null, [string, string]>().mockReturnValue([]),
@@ -220,7 +222,7 @@ const followDeps = (over: Partial<logsModule.FollowDeps> = {}): logsModule.Follo
 const listOf = (...paths: string[]): jest.Mock<string[] | null, [string, string]> =>
     jest.fn<string[] | null, [string, string]>().mockReturnValue(paths);
 
-const freshState = (): logsModule.FollowState => ({ files: new Map(), lastPrinted: null, seedPending: false });
+const freshState = (): logsFollowModule.FollowState => ({ files: new Map(), lastPrinted: null, seedPending: false });
 
 // The inode and birth time backFiles' statSync reports; a test that
 // re-creates a file overrides one of them to a different value, like a new
@@ -228,7 +230,7 @@ const freshState = (): logsModule.FollowState => ({ files: new Map(), lastPrinte
 const INODE = 101;
 const BIRTH = 1700000000000;
 
-const fileState = (offset: number): logsModule.FileFollowState => ({
+const fileState = (offset: number): logsFollowModule.FileFollowState => ({
     offset,
     decoder: new StringDecoder('utf8'),
     pending: '',
