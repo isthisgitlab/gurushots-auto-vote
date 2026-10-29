@@ -324,6 +324,26 @@ describe('describeDeadlineActions — row gating', () => {
             settings.getEntryPins.mockReturnValue({ boost: 'zzz', turbo: null });
             expect(rowsOf(build({ boost: { state: 'AVAILABLE_KEY' } })).map((a) => a.action)).not.toContain('boost');
         });
+
+        test('a gone turbo pin leaves the emergency fill row at its own threshold', () => {
+            // The emergency row survives stand-down only under a must-include filter the fill
+            // cannot meet; its runner fires at its own window, so a pin must never move it.
+            mockSettings({ autoSubmitSchedule: [{ count: 2, seconds: 120 }], mustIncludeTags: ['nope'] });
+            settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'zzz' });
+            const challenge = build({ turbo: { state: 'WON', mode: 'classic' } });
+            const emergency = rowsOf(challenge).find((a) => a.action === 'emergencySubmit');
+            // Not moved to the fill boundary (close − 120) by the waiting turbo pin.
+            expect(emergency).toEqual({ action: 'emergencySubmit', thresholdSec: 300, dueAt: CLOSE - 300 });
+        });
+
+        test('a moved boost row never points past the boost deadline: it shows the last chance instead', () => {
+            mockSettings({ autoSubmitSchedule: [{ count: 2, seconds: 300 }], boostTime: 1800 });
+            settings.getEntryPins.mockReturnValue({ boost: 'zzz', turbo: null });
+            // Timer boost dies 600 s before close; the fill boundary (close − 300) lands after
+            // its death, so the row clamps to the deadline's last poll (close − 660).
+            const challenge = build({ boost: { state: 'AVAILABLE', timeout: CLOSE - 600 } });
+            expect(boostRow(challenge)).toEqual({ action: 'boost', thresholdSec: 660, dueAt: CLOSE - 660 });
+        });
     });
 
     test('a WON turbo of unknown mode is not held, so it blocks nothing and holds no pin', () => {

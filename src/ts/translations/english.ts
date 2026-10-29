@@ -239,7 +239,7 @@ export const app = {
     pinNotApplyingShort: '{kind} held by pin',
     pinNotApplyingShortBoth: '{boost} and {turbo} held by pins',
     pinGoneNote:
-        "The photo pinned for {kind} isn't in this challenge right now, so {kind} is waiting for it — it won't be applied to another photo. If it's one of your Chosen Photos, it is submitted automatically and {kind} is applied then. If it never enters the challenge, {kind} goes unused. Pin another photo or clear the pin to use your usual settings.",
+        "The photo pinned for {kind} isn't in this challenge right now, so {kind} is waiting for it — it won't be applied to another photo. If it's one of your Chosen Photos and Auto-Submit is on, it is submitted automatically and {kind} is applied then. If {kind} expires before that, it goes unused. Pin another photo or clear the pin to use your usual settings.",
     pinConflictNote:
         "The photo pinned for {kind} already has {other}, so {kind} won't be applied. Pin another photo or clear the pin to use your usual settings.",
     pinSwapWarning:

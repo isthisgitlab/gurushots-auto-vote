@@ -254,7 +254,7 @@ export const app: LatvianApp = {
     pinNotApplyingShort: 'Piespraude aiztur {kind}',
     pinNotApplyingShortBoth: 'Piespraudes aiztur {boost} un {turbo}',
     pinGoneNote:
-        'Piespraustā {kind} foto šajā izaicinājumā pašlaik nav, tāpēc {kind} gaida šo foto un netiks piemērots citam foto. Ja tas ir viens no taviem izvēlētajiem foto, tas tiks iesniegts automātiski un {kind} tiks piemērots tad. Ja tas nekad netiek iesniegts, {kind} paliek neizmantots. Piespraud citu foto vai noņem piespraudi, lai izmantotu tavus parastos uzstādījumus.',
+        'Piespraustā {kind} foto šajā izaicinājumā pašlaik nav, tāpēc {kind} gaida šo foto un netiks piemērots citam foto. Ja tas ir viens no taviem izvēlētajiem foto un automātiskā iesniegšana ir ieslēgta, tas tiks iesniegts automātiski un {kind} tiks piemērots. Ja {kind} beidzas agrāk, tas paliek neizmantots. Piespraud citu foto vai noņem piespraudi, lai izmantotu tavus parastos uzstādījumus.',
     pinConflictNote:
         'Piespraustajam {kind} foto jau ir {other}, tāpēc {kind} netiks piemērots. Piespraud citu foto vai noņem piespraudi, lai izmantotu tavus parastos uzstādījumus.',
     pinSwapWarning:

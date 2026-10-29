@@ -31,11 +31,11 @@ LICENSES.chromium.html in its resources directory.
 
 Shipped in the desktop app, the CLI binaries and the Android app, or compiled into their bundles.
 
-@capacitor/android 8.5.3
+@capacitor/android 8.6.0
   License: MIT
   Copyright (c) 2017-present Drifty Co.
 
-@capacitor/core 8.5.3
+@capacitor/core 8.6.0
   License: MIT
   Copyright (c) 2017-present Drifty Co.
 
@@ -254,7 +254,7 @@ Shipped in the desktop app, the CLI binaries and the Android app, or compiled in
   License: BSD-3-Clause
   Copyright (c) 2016, Daniel Wirtz
 
-@types/node 26.6.5
+@types/node 26.6.6
   License: MIT
   Copyright (c) Microsoft Corporation.
 

@@ -13,6 +13,13 @@ const noAutomaticIcon = /^(?:$|\s|[=-]|\p{Extended_Pictographic})/u;
 const omittedGrammarSlots: Record<string, string[]> = { m0fc649a6905e: ['1'] };
 
 describe('Latvian log messages', () => {
+    test('the catalogs keep their keys in lexicographic order', () => {
+        // Nothing else gates the order; an out-of-place id made both catalogs harder to scan
+        // and diff once, so pin the convention here.
+        expect(Object.keys(englishLogMessages)).toEqual([...Object.keys(englishLogMessages)].sort());
+        expect(Object.keys(latvianLogMessages)).toEqual([...Object.keys(latvianLogMessages)].sort());
+    });
+
     test('every catalog entry preserves its values and can be matched', () => {
         const failures: string[] = [];
         expect(Object.keys(englishLogMessages).sort()).toEqual(Object.keys(latvianLogMessages).sort());

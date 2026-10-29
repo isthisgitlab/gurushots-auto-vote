@@ -1033,6 +1033,13 @@ describe('pinned photo', () => {
             votingLogic.getAutoFillThresholdSec.mockReturnValue(900);
             const dying = await run(makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 30 })]));
             expect(dying.challenges![0].boostHoldUntil).toBeUndefined();
+
+            // A malformed close_time would pass NaN through the `<=` guards and set a NaN hold.
+            votingLogic.getAutoFillThresholdSec.mockReturnValue(900);
+            const malformed = withBoost({ state: 'AVAILABLE', timeout: NOW + 1800 });
+            malformed.close_time = Number.NaN;
+            const nan = await run(makeApi([malformed]));
+            expect(nan.challenges![0].boostHoldUntil).toBeUndefined();
         });
 
         test('a conflict pin never fires: skipped with its own reason, and no wake', async () => {

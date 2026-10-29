@@ -10,7 +10,7 @@ import * as settings from '../../settings';
 // Single source of truth for the auto-fill schedule threshold math (no import
 // cycle: autoFill.ts does not require VotingLogic).
 import { getNextScheduleThresholdSec, evaluateEmergencyFill, getSlotsRemaining } from '../autoFill';
-import { boostApplyThreshold } from '../../voting/boostWindow';
+import { boostApplyThreshold, boostDeadline } from '../../voting/boostWindow';
 import { isKnownTurboMode } from '../../voting/turboMode';
 import { getEffectiveBoostTime, getEffectiveKeyUnlockedBoostTime, getEffectiveTurboTime } from './thresholds';
 import { isBoostWindowOpen } from './boostTurbo';
@@ -26,6 +26,12 @@ import {
 import { isManualPhotosOnly } from '../manualPhotosOnly';
 
 const tieOrder: Record<string, number> = { autoSubmit: 0, emergencySubmit: 1, boost: 2, turbo: 3 };
+
+// The latest instant a moved Boost row may point at: the boost's own deadline minus one last
+// poll, mirroring BOOST_HOLD_MARGIN_SEC (decisions/boostTurbo) and PIN_WAIT_WAKE_GAP_SEC
+// (votingOrchestrator/boost), so a fill scheduled after the boost dies never moves the row past
+// its death.
+const BOOST_ROW_LAST_CHANCE_SEC = 60;
 
 /** Run order of two deadline actions: the larger threshold first, ties by `tieOrder`. */
 const compareDeadlineActions = (
@@ -264,8 +270,10 @@ const describeDeadlineActions = (
     // The pin on a feature's own photo is absolute, so the row must not promise a spend the
     // runner will not make: `conflict` (the photo carries the other feature) never fires, and
     // `gone` (the photo is not in the challenge) waits for the scheduled fill — which never runs
-    // when the autoSubmit toggle is off or no schedule threshold is ahead. The pin banner owns
-    // both explanations.
+    // when the autoSubmit toggle is off or no schedule threshold is ahead. The emergency fill is
+    // excluded on purpose: it can still submit the photo at the buzzer with autoSubmit off, and
+    // the row then reappears the moment the pin hits, so the hide names only the scheduled fill.
+    // The pin banner owns both explanations.
     const fillThresholdSec =
         settings.getEffectiveSetting('autoSubmit', challengeId) === true
             ? getAutoFillThresholdSec(challenge, challengeId)
@@ -326,14 +334,23 @@ const describeDeadlineActions = (
         .map(({ action, thresholdSec }) => {
             const dueAt = Number.isFinite(closeTime) ? closeTime - thresholdSec : null;
             const ownReleaseAt = action === 'boost' ? boostReleaseAt : action === 'turbo' ? turboReleaseAt : null;
-            // A pin waiting for its photo moves the row past the fill that should submit it —
-            // past a blocking pin's release too, when both delays apply.
-            const ownPinGone = (action === 'boost' ? boostPinState : turboPinState) === 'gone';
+            // Only the feature's own pin moves its row: a gone Boost pin moves the boost row, a
+            // gone Turbo pin the turbo row, and the fill rows (autoSubmit, emergencySubmit) keep
+            // their own thresholds — the runner fires them on their own windows regardless of pins.
+            const ownPinState = action === 'boost' ? boostPinState : action === 'turbo' ? turboPinState : null;
+            // A Boost row never moves past its own deadline's last chance: a fill landing after
+            // the boost dies shows the last poll (boostDeadline − 60, mirroring the wake clamp in
+            // armPinWaitWake) instead of promising a spend past its death. A Turbo's deadline is
+            // the close, which no fill instant can pass, so its row needs no clamp.
+            const waitInstant =
+                action === 'boost' && fillInstant !== null
+                    ? Math.min(fillInstant, boostDeadline(challenge) - BOOST_ROW_LAST_CHANCE_SEC)
+                    : fillInstant;
             const releaseAt =
-                ownPinGone && fillInstant !== null
+                ownPinState === 'gone' && waitInstant !== null
                     ? ownReleaseAt === null
-                        ? fillInstant
-                        : Math.max(ownReleaseAt, fillInstant)
+                        ? waitInstant
+                        : Math.max(ownReleaseAt, waitInstant)
                     : ownReleaseAt;
             // A held-back spend is due once its pin has given way, if that is later than its own time.
             return releaseAt === null || dueAt === null

@@ -78,6 +78,7 @@ export const logMessages = {
     m195ac190ecef: '  Apraksts: {0}',
     m1a53c5a1d259: 'Boost stāvoklis: {0}',
     m1b491949aebd: '📸 Saņemti balsošanas foto: foto nav',
+    m1b55faf3cd4e: 'Startējot lietotni, neizdevās notīrīt atlikušo tokenu:',
     m1b734cba0720: 'Kļūda, pārbaudot atjauninājumus:',
     m1bb63916aa36: '{0}: {1} {2}',
     m1bfe4e623ab5: 'Atklāts Windows portatīvais formāts',
@@ -121,6 +122,7 @@ export const logMessages = {
     m2594374cf0b1: '🔑 Atslēgas atbloķēšanas pieprasījums: izaicinājums={0}, apstiprināts={1}',
     m2611ef1839ec: 'Pievienošanās solī radās kļūda (balsošana turpinās): {0}',
     m2632c99956d4: 'Noraidīts nosaukuma noteikums "{0}": {1}',
+    m26fb653a989a: 'Notīrīts saglabātais tokens, ko atstāja iepriekšējā palaišana ("Palikt pieteicies" ir izslēgts)',
     m27a6caa84238: 'Atjauninājums nav pieejams. Pašreizējā versija ir jaunākā:',
     m27b9a6b5dd90: '{0} Automātiskais Turbo izlaists — automātiski iesniegtajam foto {1} nav skaidras atbilstības',
     m2804bf44f7b0: 'Izrakstījies — pieteikšanās tokens dzēsts',
@@ -134,6 +136,8 @@ export const logMessages = {
         'settings.json neizdevās nolasīt, tāpēc „sākt no jauna” netiek piedāvāts. Palaid „settings-recovery retry” tagad vai „settings-recovery start-fresh --force” noklusējumam.',
     m29e6f639d64d: 'Kļūda, apstrādājot preview-swap-photo pieprasījumu:',
     m2a0067d71800: 'Lai iztērētu apmaiņu, palaid vēlreiz: swap-back --challenge={0} --image={1} --yes',
+    m2a7d4f8c3e91:
+        'Apmaiņa: apmaināmais foto ir ar Boost, Turbo vai Guru izvēli — apmaiņa izaicinājumam {0} netiek tērēta',
     m2ab1aff25c5d: '{0} (iesniegti: {1}, izlaisti: {2})',
     m2ad0743ef2b3: 'Izvēlnes pārbaudē atrasts pieejams atjauninājums:',
     m2ae0bd6f1a88: '🔄 Uzstādījumi mainīti:',
@@ -172,7 +176,6 @@ export const logMessages = {
     m3a0e8532ed26:
         'mergeTitlePins: sasniegts piesprausto nosaukumu ierobežojums {0} — izaicinājums {1} netiks piesprausts',
     m3a16ebc435c9: '  Laika josla: {0}',
-    m3e7a92c4b518: '{0} Boost gaida piesprausto foto (tā nav izaicinājumā) — Boost netiek piemērots',
     m3a9d5c139fbf: '🔄 Ielādē aktīvos izaicinājumus',
     m3abf610fa77b: 'Nav piemērota foto, ko iesniegt izaicinājumā {0}. Monētas netika iekasētas.',
     m3b38c04119ef: 'Kļūda {0}:',
@@ -181,10 +184,13 @@ export const logMessages = {
     m3d6565b3cbfe: 'Izaicinājums {0} ir MAKSAS izaicinājums — pievienošanās maksā monētas: {1}.',
     m3dba9b77678f: '    {0}: {1}',
     m3e29630bfae6: 'Atbloķēt Boost izaicinājumā "{0}" ar atslēgu.',
+    m3e7a92c4b518: '{0} Boost gaida piesprausto foto (tā nav izaicinājumā) — Boost netiek piemērots',
     m3ed0187a6dad: '📝 Manuālās iesniegšanas pieprasījums: izaicinājums={0}, režīms={1}',
     m3ef824a95305: 'Nevar nolasīt swap-back uzskaiti: {0}',
     m3f0ad2e947e2: 'Kļūda, nolasot {0} žurnālu',
     m3f74bd18d787: 'Izrakstoties neizdevās notīrīt pieteikšanās tokenu',
+    m3f9936663978:
+        'Saglabātais pieteikšanās tokens paturēts, jo darbojas cita sesija, kas to var lietot (CLI, darbvirsmas lietotne vai tīmekļa serveris)',
     m3f9fdcb52d97: 'Skalārā vērtība {0} {1} pārvērsta par {2}',
     m3faab6e5b6cb: 'Veiksmīgi apstrādāti visi izaicinājumi: {0}',
     m403be3834f59:
@@ -222,6 +228,7 @@ export const logMessages = {
     m4da881dd3712: '⏰ Tuvojas automātiskais {0} noteikums izaicinājumā "{1}" — nākamais cikls pēc {2} s',
     m4db442090e9c: 'Uzstādījums {0} neatbalsta individuālas vērtības izaicinājumiem',
     m4f653f002d6c: 'ielādēti foto: {0}',
+    m4f9c1b6d8e72: 'Tīmekļa aktīvo izaicinājumu saraksts nav pieejams; Turbo režīms un Guru izvēles nav zināmi',
     m4fbfc26aa499: 'Informācija par Main() izsaukuma kļūdu:',
     m4fd075672867: '=== API izvēles diagnostika ===',
     m508c16d160a0: 'Nav versijas, ko izlaist',
@@ -304,6 +311,7 @@ export const logMessages = {
     m6b04d81f7c23: '{0} Piespraustajam foto jau ir Turbo — Boost netiek piemērots',
     m6b2800cb055b: '{0}: serveris noraidīja pieprasījumu izaicinājumam {1}',
     m6b4c8ffc5f32: 'Kļūda, ielādējot uzstādījumus:',
+    m6c3e9f1a5b87: 'Tīmekļa aktīvo izaicinājumu pārklājums nolasīts',
     m6c44109e191c: '=== GuruShots Bankroll ===',
     m6c4e2a8f0b13:
         '„Join challenges” misijai vajag {0}, bet pievienojas tikai {1} no atvērtajiem izaicinājumiem — gaida automātiskās pievienošanās laiku',
@@ -386,6 +394,7 @@ export const logMessages = {
     m8ae2c1190987: '🗳️ {0} Sāk balsošanu',
     m8aebf9fd4f0c: '{0} Balsis iesniegtas (foto: {1}, redzamība ~{2} %)',
     m8b278c82f6fa: 'Spēlē Turbo minispēli izaicinājumā {0}{1}',
+    m8b5d2e7c4a93: 'Tīmekļa Guru izvēles salīdzinātas ar mobilajiem ierakstiem',
     m8b91014e040b: 'Kļūda, tīrot metadatus:',
     m8bc4a70f1195: 'Izaicinājuma ID: {0}, foto: {1}',
     m8bc62007eb02: 'Autentificēšana veiksmīga',
@@ -442,9 +451,9 @@ export const logMessages = {
     m98ce238c0102: 'Neizdevās balsot izaicinājumā "{0}": {1}',
     m99173c79d86f: 'Kļūda, uzstādot "{0}"',
     m9a1f89a92ee8: '{0} {1} pārdēvēts par {2} (vērtība {3})',
+    m9a274bb9e06b: '🌐 Izmanto īsto API stratēģiju darba videi',
     m9a2f47c1b8e3:
         '{0} automātiskā apmaiņa: GuruShots nesūtīja apmaiņu vēsturi — automātiskās apmaiņas rēķina pati lietotne; manuālās un scenāriju apmaiņas netiek skaitītas',
-    m9a274bb9e06b: '🌐 Izmanto īsto API stratēģiju darba videi',
     m9af18ab83ac0: 'Izmanto Boost izaicinājumā {0}',
     m9af941258be6: 'Aktīvo misiju dēļ priekšlaikus pievienojas līdz {0} izaicinājumiem',
     m9b901c6d995c: '⏰ Tuvojas scenārija solis izaicinājumā "{0}" (fāze {1}) — nākamais cikls pēc {2} s',
@@ -503,6 +512,8 @@ export const logMessages = {
     mac92b562e159: 'Nederīgs profila nosaukums: "{0}"',
     mace0b6fa2afc: 'Spēlē Turbo minispēli izaicinājumā {0} Turbo misijas izpildei (vēl jāizpilda: {1})',
     maced70909050: 'Pieteikšanās tokens iegūts un saglabāts uzstādījumos',
+    mad0f50fe47b6:
+        'Saglabātais pieteikšanās tokens paturēts, jo fona automātiskās balsošanas stāvokli neizdevās nolasīt',
     mad2037e25b72:
         '📝 Manuālās iesniegšanas pieprasījums (izvēlēti foto) atteikts: izaicinājumam {0} iesniegšana jau notiek',
     mad3ace8b901f: 'Nav atrasts pieteikšanās tokens. Lūdzu, vispirms piesakies',
@@ -677,6 +688,7 @@ export const logMessages = {
     me5d193efc730: 'Fails {0} ir importēts vēlreiz; lietotie uzstādījumi un pieteikšanās ir novietoti malā šeit: {1}.',
     me62feb22135b: 'Boost veiksmīgi izmantots foto {0}',
     me63c0d7b952a: '{0} izaicinājumam nav lietojama ID — nepievienojas',
+    me63c2785bcce: 'Saglabātais pieteikšanās tokens paturēts, jo fona automātiskā balsošana ir ieslēgta',
     me648c2aaaba9: '✅ Iesniedz manuālās balsis...',
     me64f12743d74: '{0}: serveris noraidīja iesniegšanu izaicinājumam {1}: {2}',
     me6e1b5a136a3: 'Pilna informācija par {0} cikla kļūdu:',
@@ -740,8 +752,8 @@ export const logMessages = {
     mf716fb1193ce: 'Shēmas uzstādījumu globālās noklusējuma vērtības:',
     mf74643f70b41: 'Kļūda, apstrādājot get-active-challenges pieprasījumu:',
     mf7a0649dc927: 'Neizdevās ielādēt jaunos uzstādījumus salīdzināšanai:',
-    mf81a3e6c47b: 'atvērto izaicinājumu sarakstā ir rinda bez lietojama ID — šoreiz maksājumu ieraksti netiek iztīrīti',
     mf81316b0770e: '              join <id> --yes    (maksas izaicinājumi — tērē monētas)',
+    mf81a3e6c47b: 'atvērto izaicinājumu sarakstā ir rinda bez lietojama ID — šoreiz maksājumu ieraksti netiek iztīrīti',
     mf8914347572e:
         '{0}: izaicinājumā {1} nekas neatbilda tēmai. Pēc iepriekšējiem rezultātiem atlasīti: {2} — {3} no {4} vienlīdz neatbilstošiem kandidātiem{5}. Sadaļā Uzstādījumi pievieno nosaukumam tagu noteikumu.',
     mf8c3523b4364: '❌ Manuālai balsošanai nav atrasts pieteikšanās tokens',
@@ -764,20 +776,8 @@ export const logMessages = {
     mfdf8dd6a7033:
         '{0} Jauna foto iesniegšana Turbo izmantošanai: nevar iesniegt jaunu foto, un citu foto nav — Turbo izlaists',
     mfe5c1ae043d9: 'Otrās instances palaišana bloķēta — vēl nav loga, ko fokusēt (lietotne vēl startē).',
-    m4f9c1b6d8e72: 'Tīmekļa aktīvo izaicinājumu saraksts nav pieejams; Turbo režīms un Guru izvēles nav zināmi',
-    m6c3e9f1a5b87: 'Tīmekļa aktīvo izaicinājumu pārklājums nolasīts',
-    m8b5d2e7c4a93: 'Tīmekļa Guru izvēles salīdzinātas ar mobilajiem ierakstiem',
-    m2a7d4f8c3e91:
-        'Apmaiņa: apmaināmais foto ir ar Boost, Turbo vai Guru izvēli — apmaiņa izaicinājumam {0} netiek tērēta',
     mfe760929b17d: 'Pieprasa aktīvos izaicinājumus no API',
     mfebf9a3cde39: 'Saglabātais pieteikšanās tokens notīrīts ("Palikt pieteicies" ir izslēgts)',
     mfedb076cd73d: 'NativeAutovoteBridge.getPlugin neizdevās',
     mff7f63e80914: 'Uzstādījums "{0}" nav atrasts',
-    m3f9936663978:
-        'Saglabātais pieteikšanās tokens paturēts, jo darbojas cita sesija, kas to var lietot (CLI, darbvirsmas lietotne vai tīmekļa serveris)',
-    m26fb653a989a: 'Notīrīts saglabātais tokens, ko atstāja iepriekšējā palaišana ("Palikt pieteicies" ir izslēgts)',
-    m1b55faf3cd4e: 'Startējot lietotni, neizdevās notīrīt atlikušo tokenu:',
-    me63c2785bcce: 'Saglabātais pieteikšanās tokens paturēts, jo fona automātiskā balsošana ir ieslēgta',
-    mad0f50fe47b6:
-        'Saglabātais pieteikšanās tokens paturēts, jo fona automātiskās balsošanas stāvokli neizdevās nolasīt',
 } as const;

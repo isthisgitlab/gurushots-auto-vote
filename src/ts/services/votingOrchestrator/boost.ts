@@ -89,8 +89,12 @@ const armPinWaitWake = ({ challenge, now }: ActionContext) => {
     const cid = challenge.id.toString();
     if (settings.getEffectiveSetting('autoSubmit', cid) !== true) return;
     const fillThresholdSec = votingLogic.getAutoFillThresholdSec(challenge, cid);
-    const fillBoundary = Number(challenge.close_time) - fillThresholdSec;
-    if (fillThresholdSec <= 0 || fillBoundary <= now) return;
+    const closeTime = Number(challenge.close_time);
+    // A malformed close_time would pass NaN through both `<=` guards below and set a NaN hold;
+    // every sibling fill-instant computation guards the same way.
+    if (fillThresholdSec <= 0 || !Number.isFinite(closeTime)) return;
+    const fillBoundary = closeTime - fillThresholdSec;
+    if (fillBoundary <= now) return;
     const wakeAt = Math.min(fillBoundary + PIN_WAIT_WAKE_GAP_SEC, boostDeadline(challenge) - PIN_WAIT_WAKE_GAP_SEC);
     if (wakeAt <= now) return;
     challenge.boostHoldUntil = wakeAt;
