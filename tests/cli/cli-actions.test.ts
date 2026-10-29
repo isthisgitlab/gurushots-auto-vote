@@ -723,6 +723,8 @@ describe('CLI actions — error paths', () => {
 
         expect(votingHandlers['vote-on-challenge-manual']).not.toHaveBeenCalled();
         expect(result.success).toBe(false);
-        expect(contains(msgsAt('error'), 'Failed to fetch challenges')).toBe(true);
+        expect(contains(msgsAt('error'), 'Could not read the active challenges from GuruShots: network down')).toBe(
+            true,
+        );
     });
 });

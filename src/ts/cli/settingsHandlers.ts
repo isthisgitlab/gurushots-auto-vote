@@ -14,12 +14,16 @@ import {
     setGlobalDefault,
     setSetting,
 } from './commands/settings';
-import { extractChallenge, usageError } from './commandKit';
+import { extractChallenge, repeatedChallenge, usageError } from './commandKit';
 
 import type { CommandHandler } from './commandKit';
 import { usageOf } from './commandRows';
 
 const runGetSetting: CommandHandler = async (argv) => {
+    // A repeated --challenge would act on the first id while the user named
+    // two — refuse before anything reads or writes, like every command that
+    // reads the flag.
+    if (repeatedChallenge(argv)) return usageError('Wrong arguments', usageOf('get-setting'));
     const { challengeId, rest } = extractChallenge(argv);
     if (!rest[0]) return usageError('Please specify a setting key', usageOf('get-setting'));
     getSetting(rest[0], challengeId);
@@ -27,6 +31,7 @@ const runGetSetting: CommandHandler = async (argv) => {
 };
 
 const runSetSetting: CommandHandler = async (argv) => {
+    if (repeatedChallenge(argv)) return usageError('Wrong arguments', usageOf('set-setting'));
     const { challengeId, rest } = extractChallenge(argv);
     if (!rest[0] || rest[1] === undefined) {
         return usageError('Please specify both key and value', usageOf('set-setting'));
@@ -36,6 +41,7 @@ const runSetSetting: CommandHandler = async (argv) => {
 };
 
 const runResetSetting: CommandHandler = async (argv) => {
+    if (repeatedChallenge(argv)) return usageError('Wrong arguments', usageOf('reset-setting'));
     const { challengeId, rest } = extractChallenge(argv);
     if (!rest[0]) return usageError('Please specify a setting key', usageOf('reset-setting'));
     return resetSetting(rest[0], challengeId) ? 0 : 1;
@@ -69,6 +75,7 @@ const runResetAllGlobalDefaults: CommandHandler = async (argv) => {
 };
 
 const runListProfiles: CommandHandler = async (argv) => {
+    if (repeatedChallenge(argv)) return usageError('Wrong arguments', usageOf('list-profiles'));
     const { rest } = extractChallenge(argv);
     if (rest.length > 0) return usageError(`Unexpected arguments: ${rest.join(' ')}`, usageOf('list-profiles'));
     listProfiles();

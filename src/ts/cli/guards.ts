@@ -13,7 +13,7 @@ import { getMiddleware } from '../apiFactory';
 import { findActionableChallenge } from '../services/findActiveChallenge';
 import { errorMessage } from '../errorMessage';
 
-import type { Challenge } from '../types/gurushots';
+import type { ActiveChallengesResponse, Challenge } from '../types/gurushots';
 
 // What the IPC handlers' 'invalid-args' refusal means for the CLI user.
 const INVALID_ID_TEXT = 'Invalid challenge or image id.';
@@ -27,6 +27,16 @@ const INVALID_ID_TEXT = 'Invalid challenge or image id.';
  */
 const failedFetchMessage = (error?: string): string =>
     `Could not read the active challenges from GuruShots${error ? `: ${error}` : ''}, so nothing was shown or changed. Check the connection and try again. If the login has expired, run login first.`;
+
+/**
+ * True when a getActiveChallenges response carries no usable list — the
+ * request failed outright (a null response) or the transport marked it
+ * failed. Either way it reads as an empty list downstream, so every caller
+ * reports the fetch's failure through failedFetchMessage instead of looking
+ * an id up and blaming a missing challenge.
+ */
+const failedFetch = (resp: ActiveChallengesResponse | null | undefined): boolean =>
+    resp == null || resp.fetchFailed === true;
 
 /**
  * True when a token is present. On miss, logs the standard "login first"
@@ -57,7 +67,7 @@ const resolveChallenge = async (challengeId: string): Promise<Challenge | null> 
         const resp = await getMiddleware().getActiveChallenges();
         // A failed fetch reads as an empty list, so without this gate it would
         // be reported as "not found" — the fetch's failure is the real cause.
-        if (resp == null || resp.fetchFailed === true) {
+        if (failedFetch(resp)) {
             logger.withCategory('challenges').error(failedFetchMessage());
             return null;
         }
@@ -80,6 +90,15 @@ const resolveChallenge = async (challengeId: string): Promise<Challenge | null> 
 };
 
 /**
+ * The usage line the profile commands share: `needsChallenge` adds the
+ * --challenge=<id> requirement. One home — requireProfileArgs prints it on
+ * a missing or extra argument, and profileCommand (commandKit.ts) on a
+ * repeated --challenge.
+ */
+const profileUsage = (command: string, needsChallenge: boolean): string =>
+    needsChallenge ? `Usage: ${command} "<name>" --challenge=<id>` : `Usage: ${command} "<name>"`;
+
+/**
  * Validate the `<name>` (+ optional --challenge=<id>) arguments the profile
  * commands share. Exits the process with usage guidance on any miss;
  * returns the validated profile name otherwise.
@@ -93,7 +112,7 @@ const requireProfileArgs = (
     { challengeId, rest }: { challengeId: string | null; rest: string[] },
     { needsChallenge = false, challengeHint = '' }: { needsChallenge?: boolean; challengeHint?: string } = {},
 ): string => {
-    const usage = needsChallenge ? `Usage: ${command} "<name>" --challenge=<id>` : `Usage: ${command} "<name>"`;
+    const usage = profileUsage(command, needsChallenge);
     if (!rest[0]) {
         logger.withCategory('ui').error('Please specify a profile name');
         logger.withCategory('ui').info(usage);
@@ -138,7 +157,9 @@ const requireChallenge = ({ challengeId }: { challengeId: string | null }, usage
 
 export {
     ensureAuthenticated,
+    failedFetch,
     failedFetchMessage,
+    profileUsage,
     requireProfileArgs,
     requireChallenge,
     resolveChallenge,

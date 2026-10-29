@@ -1,5 +1,5 @@
 import * as logger from '../logger';
-import { requireProfileArgs, requireChallenge } from './guards';
+import { profileUsage, requireProfileArgs, requireChallenge } from './guards';
 import { parseChallengeFlag } from './commands/voting';
 
 /**
@@ -96,7 +96,9 @@ const challengeCommand =
     };
 
 /**
- * A profile command: resolve the profile name via requireProfileArgs, then `run(name, challengeId)`.
+ * A profile command: refuse a repeated --challenge (the same refusal every
+ * --challenge reader gives, before anything runs), resolve the profile name
+ * via requireProfileArgs, then `run(name, challengeId)`.
  */
 const profileCommand =
     (
@@ -105,6 +107,8 @@ const profileCommand =
         ...options: [opts?: Parameters<typeof requireProfileArgs>[2]]
     ): CommandHandler =>
     async (argv) => {
+        if (repeatedChallenge(argv))
+            return usageError('Wrong arguments', profileUsage(name, options[0]?.needsChallenge === true));
         const parsed = extractChallenge(argv);
         const profile = requireProfileArgs(name, parsed, ...options);
         // requireProfileArgs exits when a needsChallenge command lacks the id;

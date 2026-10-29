@@ -67,10 +67,15 @@ const COMMAND_ROWS: readonly CommandRow[] = [
         ],
         { usage: 'Usage: vote [--challenge=<id>]  (omit --challenge to vote every challenge)' },
     ),
-    row('run', runRun, [
-        '  run      - Run one full auto-strategy cycle (boost / turbo / auto-submit / threshold-aware vote).',
-        '             Add --challenge=<id> to scope to a single challenge; on a Manual Only challenge it does nothing.',
-    ]),
+    row(
+        'run',
+        runRun,
+        [
+            '  run      - Run one full auto-strategy cycle (boost / turbo / auto-submit / threshold-aware vote).',
+            '             Add --challenge=<id> to scope to a single challenge; on a Manual Only challenge it does nothing.',
+        ],
+        { usage: 'Usage: run [--challenge=<id>]' },
+    ),
     row(
         'challenges',
         runChallenges,
@@ -268,7 +273,8 @@ const COMMAND_ROWS: readonly CommandRow[] = [
         runLogs,
         [
             '  logs [--error|--api|--settings|--lexicon] [--lines=<n>] - Show logs or the local lexicon report',
-            '  logs [--error|--api|--settings] --follow - Follow every log file of the category as it is written; a --- line names the file new output comes from; Ctrl+C stops',
+            '  logs [--error|--api|--settings] --follow - Follow every log file of the category as it is written; a --- line names',
+            '             the file new output comes from; Ctrl+C stops',
         ],
         { usage: 'Usage: logs [--error|--api|--settings|--lexicon] [--lines=<n>] [--follow]' },
     ),

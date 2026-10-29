@@ -7,7 +7,7 @@
  */
 
 import * as logger from '../../logger';
-import { ensureAuthenticated } from '../guards';
+import { ensureAuthenticated, failedFetch, failedFetchMessage } from '../guards';
 import * as settings from '../../settings';
 import { getMiddleware } from '../../apiFactory';
 import { createScheduler } from '../../scheduling/runScheduler';
@@ -114,6 +114,13 @@ const voteChallengeManual = async (
     let title;
     try {
         const resp = await getMiddleware().getActiveChallenges();
+        // A failed fetch reads as an empty list, so without this gate it would
+        // be reported as "not found" — the fetch's failure is the real cause
+        // (the same treatment resolveChallenge gives every action command).
+        if (failedFetch(resp)) {
+            logger.withCategory('challenges').error(failedFetchMessage());
+            return { success: false, error: 'Failed to fetch challenges' };
+        }
         const found = findActionableChallenge(resp, challengeId);
         if ('refused' in found) {
             // The vote handler re-reads and refuses the same way (its own
@@ -127,7 +134,7 @@ const voteChallengeManual = async (
         }
         title = found.challenge.title;
     } catch (err) {
-        logger.withCategory('challenges').error(`Failed to fetch challenges: ${errorMessage(err) || err}`);
+        logger.withCategory('challenges').error(failedFetchMessage(errorMessage(err) || String(err)));
         return { success: false, error: 'Failed to fetch challenges' };
     }
 

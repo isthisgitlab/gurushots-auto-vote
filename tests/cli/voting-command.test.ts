@@ -161,21 +161,48 @@ describe('runVotingCycle', () => {
 });
 
 describe('voteChallengeManual fallbacks', () => {
-    test('a thrown non-Error fetch failure is stringified', async () => {
+    test('a thrown non-Error fetch failure reports the failed-fetch message', async () => {
         mw.getActiveChallenges.mockRejectedValue('offline');
         await expect(voteChallengeManual('111')).resolves.toEqual({
             success: false,
             error: 'Failed to fetch challenges',
         });
-        expect(msgs('error')).toEqual(['Failed to fetch challenges: offline']);
+        expect(msgs('error')).toEqual([
+            'Could not read the active challenges from GuruShots: offline, so nothing was shown or changed. Check the connection and try again. If the login has expired, run login first.',
+        ]);
     });
 
-    test('a response without a list reports not found', async () => {
-        mw.getActiveChallenges.mockResolvedValue(invalid(undefined));
+    test('a fetchFailed read reports the failed-fetch message, never "not found"', async () => {
+        mw.getActiveChallenges.mockResolvedValue(invalid({ challenges: [], fetchFailed: true }));
+        await expect(voteChallengeManual('111')).resolves.toEqual({
+            success: false,
+            error: 'Failed to fetch challenges',
+        });
+        expect(msgs('error')).toEqual([
+            'Could not read the active challenges from GuruShots, so nothing was shown or changed. Check the connection and try again. If the login has expired, run login first.',
+        ]);
+        expect(votingHandlers['vote-on-challenge-manual']).not.toHaveBeenCalled();
+    });
+
+    test('a null response reports the failed-fetch message, never "not found"', async () => {
+        mw.getActiveChallenges.mockResolvedValue(invalid(null));
+        await expect(voteChallengeManual('111')).resolves.toEqual({
+            success: false,
+            error: 'Failed to fetch challenges',
+        });
+        expect(msgs('error')).toEqual([
+            'Could not read the active challenges from GuruShots, so nothing was shown or changed. Check the connection and try again. If the login has expired, run login first.',
+        ]);
+        expect(votingHandlers['vote-on-challenge-manual']).not.toHaveBeenCalled();
+    });
+
+    test('a good fetch without the id reports not found', async () => {
+        mw.getActiveChallenges.mockResolvedValue(invalid({ challenges: [] }));
         await expect(voteChallengeManual('111')).resolves.toEqual({
             success: false,
             error: 'Challenge 111 not found',
         });
+        expect(msgs('error')).toEqual(['Challenge 111 not found among active challenges']);
     });
 
     test('a marked challenge refuses with the worded reason, before the handler runs', async () => {

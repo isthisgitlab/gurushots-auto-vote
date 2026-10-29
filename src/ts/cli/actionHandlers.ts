@@ -25,6 +25,10 @@ import { usageOf } from './commandRows';
 const runListPhotos: CommandHandler = async (argv) => {
     const { challengeId, rest } = extractChallenge(argv);
     const usage = usageOf('list-photos');
+    // A repeated --challenge would list the first id's view while the user
+    // named two — refuse before anything reads, like every command that
+    // reads the flag.
+    if (repeatedChallenge(argv)) return usageError('Wrong arguments', usage);
     const suggestFlags = rest.filter((arg) => arg === '--suggest');
     const statsFlags = rest.filter((arg) => arg === '--stats');
     const limitArgs = rest.filter((arg) => arg.startsWith('--limit='));

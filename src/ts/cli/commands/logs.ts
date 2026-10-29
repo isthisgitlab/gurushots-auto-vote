@@ -49,12 +49,20 @@ const showLexiconReport = () => {
 // logger/write.ts applies to every message (the file's own prefix rides in
 // the same message) — and one printLine call would cut it. A line past the
 // cap prints in order, in pieces no longer than the cap, so every character
-// reaches the console; plain `logs` and the follower share the split.
+// reaches the console; plain `logs` and the follower share the split. A cut
+// that would land between the two code units of a surrogate pair (an astral
+// character at the cap) moves back one unit, so the character prints whole
+// instead of as two U+FFFD.
 const printPieces = (line: string): string[] => {
     const clean = stripTerminalControl(line);
     const pieces: string[] = [];
-    for (let at = 0; at < clean.length; at += MAX_MESSAGE_LENGTH) {
-        pieces.push(clean.slice(at, at + MAX_MESSAGE_LENGTH));
+    let at = 0;
+    while (at < clean.length) {
+        let end = Math.min(at + MAX_MESSAGE_LENGTH, clean.length);
+        const last = clean.charCodeAt(end - 1);
+        if (end < clean.length && last >= 0xd800 && last <= 0xdbff) end -= 1;
+        pieces.push(clean.slice(at, end));
+        at = end;
     }
     return pieces.length > 0 ? pieces : [''];
 };
@@ -102,15 +110,17 @@ const LOG_FILE_PREFIXES: Record<LogFileCategory, string> = {
 
 /**
  * Every `<prefix>-YYYY-MM-DD.log` path in `dir`, sorted by name (the dated
- * names sort chronologically), or an empty list when there is no directory
- * (yet) — nothing to follow.
+ * names sort chronologically). Empty when the directory holds no matching
+ * file; null when the directory itself cannot be read — a failed listing is
+ * not the fact "every file is gone", and only a listing that succeeded may
+ * prune the follow state.
  */
-const listLogFiles = (dir: string, prefix: string): string[] => {
+const listLogFiles = (dir: string, prefix: string): string[] | null => {
     let names: string[];
     try {
         names = fs.readdirSync(dir);
     } catch {
-        return [];
+        return null; // the read failed: nothing is known about the folder's contents
     }
     const pattern = new RegExp(`^${prefix}-\\d{4}-\\d{2}-\\d{2}\\.log$`);
     return names
@@ -131,7 +141,8 @@ export type LatestLogFile = { path: string; mtimeMs: number };
  */
 const latestLogFile = (dir: string, prefix: string): LatestLogFile | null => {
     let best: LatestLogFile | null = null;
-    for (const filePath of listLogFiles(dir, prefix)) {
+    // A failed listing is no file to tail, like an empty folder.
+    for (const filePath of listLogFiles(dir, prefix) ?? []) {
         let mtimeMs: number;
         try {
             mtimeMs = fs.statSync(filePath).mtimeMs;
@@ -146,9 +157,12 @@ const latestLogFile = (dir: string, prefix: string): LatestLogFile | null => {
 };
 
 /** Where one followed file is: the byte offset the next poll reads from, the
- * UTF-8 decoder carrying a multi-byte character split across polls, and the
- * text after the last newline, held until its newline arrives. */
-export type FileFollowState = { offset: number; decoder: StringDecoder; pending: string };
+ * UTF-8 decoder carrying a multi-byte character split across polls, the text
+ * after the last newline, held until its newline arrives, and the file's
+ * inode — a changed inode means the name names a different file again
+ * (deleted and re-created), which restarts the file at byte 0. `-1` means the
+ * inode is not known yet; the first poll adopts the file's real one. */
+export type FileFollowState = { offset: number; decoder: StringDecoder; pending: string; ino: number };
 
 /** Where the follower is: per-file state for every file of the category, and
  * the file the last printed line came from — the `--- <file path>` separator
@@ -159,8 +173,9 @@ export type FollowState = { files: Map<string, FileFollowState>; lastPrinted: st
 export type FollowDeps = {
     dir: string;
     intervalMs: number;
-    /** Every `<prefix>-*.log` path in the directory, in print order. */
-    list: (dir: string, prefix: string) => string[];
+    /** Every `<prefix>-*.log` path in the directory, in print order; null
+     * when the listing itself cannot be read (the poll is skipped whole). */
+    list: (dir: string, prefix: string) => string[] | null;
     /** The newest file of the category — the one the initial tail comes from. */
     latest: (dir: string, prefix: string) => LatestLogFile | null;
     print: (text: string) => void;
@@ -211,14 +226,22 @@ const printFollowedLine = (state: FollowState, filePath: string, line: string, p
  * Gives every existing file of the category its current byte size as the
  * offset the polls continue from, so only what is appended after the start
  * prints. One whose stat fails is not seeded — the first poll then follows it
- * from its first byte. The file the initial tail reads has its entry set
- * again by the tail itself, from the bytes it read (printInitialTail).
+ * from its first byte. A listing that cannot be read seeds nothing: the first
+ * poll re-lists. The file the initial tail reads has its entry set again by
+ * the tail itself, from the bytes it read (printInitialTail).
  */
 const seedFollowState = (state: FollowState, prefix: string, deps: FollowDeps): void => {
-    for (const filePath of deps.list(deps.dir, prefix)) {
+    const listed = deps.list(deps.dir, prefix);
+    if (listed === null) return; // the read failed: the first poll retries
+    for (const filePath of listed) {
         try {
-            const offset = fs.statSync(filePath).size;
-            state.files.set(filePath, { offset, decoder: new StringDecoder('utf8'), pending: '' });
+            const stat = fs.statSync(filePath);
+            state.files.set(filePath, {
+                offset: stat.size,
+                decoder: new StringDecoder('utf8'),
+                pending: '',
+                ino: stat.ino,
+            });
         } catch {
             // Gone between the listing and the stat.
         }
@@ -229,13 +252,16 @@ const seedFollowState = (state: FollowState, prefix: string, deps: FollowDeps): 
  * Prints the last `lines` complete lines of `filePath`, and seeds the file's
  * followed state from this read: the offset is the bytes the tail itself read
  * — not a stat taken earlier, whose size bytes appended since have left
- * behind, so nothing prints twice — the decoder carries a multi-byte
- * character the read's end cut, and a last line without its newline becomes
- * the held partial line, printing once when its newline arrives.
+ * behind, so nothing prints twice — the inode is the file's own, the decoder
+ * carries a multi-byte character the read's end cut, and a last line without
+ * its newline becomes the held partial line, printing once when its newline
+ * arrives.
  */
 const printInitialTail = (filePath: string, lines: number, state: FollowState, print: (text: string) => void): void => {
     let content: Buffer;
+    let ino: number;
     try {
+        ino = fs.statSync(filePath).ino;
         content = fs.readFileSync(filePath);
     } catch {
         return; // gone between the listing and this read; the polls re-resolve
@@ -252,16 +278,19 @@ const printInitialTail = (filePath: string, lines: number, state: FollowState, p
         pieces.length -= 1;
     }
     for (const line of pieces.slice(-lines)) printFollowedLine(state, filePath, line, print);
-    state.files.set(filePath, { offset: content.length, decoder, pending });
+    state.files.set(filePath, { offset: content.length, decoder, pending, ino });
 };
 
 /**
  * One poll of one followed file: drops it when it is gone, restarts it at
- * byte 0 when it shrank (truncated in place), and reads and prints only the
- * bytes appended past its offset — complete lines only, each in its own print
- * call, with the text after the last newline held until its newline arrives.
- * The offset counts bytes and moves by bytes read, so a multi-byte UTF-8
- * character split across polls survives in the decoder. Mutates `state`.
+ * byte 0 when it shrank (truncated in place) or when the inode changed (the
+ * name was deleted and a different file written under it — the new file is
+ * followed from its first byte, never past the old file's offset), and reads
+ * and prints only the bytes appended past its offset — complete lines only,
+ * each in its own print call, with the text after the last newline held until
+ * its newline arrives. The offset counts bytes and moves by bytes read, so a
+ * multi-byte UTF-8 character split across polls survives in the decoder.
+ * Mutates `state`.
  */
 const pollFollowedFile = (
     state: FollowState,
@@ -270,11 +299,22 @@ const pollFollowedFile = (
     print: (text: string) => void,
 ): void => {
     let size: number;
+    let ino: number;
     try {
-        size = fs.statSync(filePath).size;
+        const stat = fs.statSync(filePath);
+        size = stat.size;
+        ino = stat.ino;
     } catch {
         state.files.delete(filePath); // gone under us (cleanupOldLogs removes old files)
         return;
+    }
+    if (ino !== st.ino) {
+        // A different file now carries this name (deleted and re-created):
+        // follow it from its first byte, with fresh decoder and line state.
+        st.ino = ino;
+        st.offset = 0;
+        st.decoder = new StringDecoder('utf8');
+        st.pending = '';
     }
     if (size < st.offset) {
         // Truncated in place: start over as a fresh file.
@@ -313,14 +353,17 @@ const pollFollowedFile = (
  * One poll of the followed category: every `<prefix>-*.log` in the directory
  * is followed at once, each from its own byte offset — never one shared one —
  * so two writers (the desktop app's file and a CLI command's file) can never
- * make the follower replay a file it already printed. A file not in the state
- * appeared (or re-appeared) after the start and is followed from its first
- * byte; a file the listing no longer names has its state removed, so a file
- * recreated under the same name is followed from its first byte again, never
- * from the deleted file's offset. Mutates `state`.
+ * make the follower replay a file it already printed. A failed listing (null)
+ * skips the poll whole — no prune, no reads, nothing printed — so one poll
+ * whose folder read fails cannot wipe the follow state and replay files from
+ * byte 0 on the next good listing. A file not in the state appeared (or
+ * re-appeared) after the start and is followed from its first byte; a file
+ * the listing no longer names has its state removed, so only a listing that
+ * succeeded may retire one. Mutates `state`.
  */
 const followStep = (state: FollowState, prefix: string, deps: FollowDeps): void => {
     const listed = deps.list(deps.dir, prefix);
+    if (listed === null) return; // the folder read failed: prune nothing, poll nothing
     const named = new Set(listed);
     for (const filePath of state.files.keys()) {
         if (!named.has(filePath)) state.files.delete(filePath); // deleted: not in the listing
@@ -328,7 +371,9 @@ const followStep = (state: FollowState, prefix: string, deps: FollowDeps): void 
     for (const filePath of listed) {
         let st = state.files.get(filePath);
         if (st === undefined) {
-            st = { offset: 0, decoder: new StringDecoder('utf8'), pending: '' };
+            // New to the follower: start at byte 0; the first poll adopts the
+            // file's real inode (the -1 here is "not known yet").
+            st = { offset: 0, decoder: new StringDecoder('utf8'), pending: '', ino: -1 };
             state.files.set(filePath, st);
         }
         pollFollowedFile(state, filePath, st, deps.print);

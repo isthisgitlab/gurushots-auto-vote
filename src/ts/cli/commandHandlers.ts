@@ -16,7 +16,7 @@ import { isPinnableImageId } from '../settings';
 import { followLogs, showLogs } from './commands/logs';
 import * as scenarioCommands from './commands/scenarios';
 import { parseChallengeFlag, runVotingCycle, voteChallengeManual } from './commands/voting';
-import { challengeCommand, exitCodeOf, usageError } from './commandKit';
+import { challengeCommand, exitCodeOf, repeatedChallenge, usageError } from './commandKit';
 import * as logger from '../logger';
 import { getMiddleware } from '../apiFactory';
 
@@ -67,9 +67,11 @@ const pruneStaleChallengeSettings = async (): Promise<void> => {
 };
 
 // --challenge scopes to a single-challenge manual vote; bare `vote` votes
-// every challenge to 100%. A present-but-empty --challenge is rejected rather
+// every challenge to 100%. A repeated --challenge would vote the first id
+// while the user named two, and a present-but-empty one is rejected rather
 // than silently voting everything.
 const runVote: CommandHandler = async (argv) => {
+    if (repeatedChallenge(argv)) return usageError('Wrong arguments', usageOf('vote'));
     const challengeId = parseChallengeFlag(argv);
     const hasChallengeFlag = argv.some((a) => a === '--challenge' || a.startsWith('--challenge='));
     if (hasChallengeFlag && challengeId == null) {
@@ -135,6 +137,9 @@ const runLogs: CommandHandler = async (argv) => {
 };
 
 const runRun: CommandHandler = async (argv) => {
+    // A repeated --challenge would scope the cycle to the first id while the
+    // user named two — refuse before anything runs, like `vote`.
+    if (repeatedChallenge(argv)) return usageError('Wrong arguments', usageOf('run'));
     await runVotingCycle(1, { isManual: false, challengeId: parseChallengeFlag(argv) });
     await pruneStaleChallengeSettings();
     return 0;

@@ -1,9 +1,12 @@
 /**
  * The settings and profile command rows of the CLI help, in help order;
  * commandRows.ts spreads them into COMMAND_ROWS at the settings' position.
+ * Like every handler module it reads `usageOf` (commandRows.ts) only inside
+ * handler bodies, never at module scope — the rows need these handlers at init.
  */
 
-import { exitsZero, extractChallenge, profileCommand, row } from './commandKit';
+import { exitsZero, extractChallenge, profileCommand, repeatedChallenge, row, usageError } from './commandKit';
+import { usageOf } from './commandRows';
 import {
     runGetSetting,
     runListProfiles,
@@ -49,10 +52,15 @@ const settingsRows: readonly CommandRow[] = [
     row(
         'list-settings',
         async (argv) => {
+            // A repeated --challenge would show the first id's view while the
+            // user named two — refuse before anything reads, like every
+            // command that reads the flag.
+            if (repeatedChallenge(argv)) return usageError('Wrong arguments', usageOf('list-settings'));
             listSettings(extractChallenge(argv).challengeId);
             return 0;
         },
         ['  list-settings [--challenge=<id>] - Show all settings (per-challenge view with --challenge)'],
+        { usage: 'Usage: list-settings [--challenge=<id>]' },
     ),
     row(
         'reset-setting',

@@ -96,6 +96,9 @@ jest.mock('electron', () => ({}));
 jest.mock('../../src/ts/cli/guards', () => ({
     requireChallenge: jest.fn(({ challengeId }: { challengeId: string | null }) => challengeId),
     requireProfileArgs: jest.fn((command: string, { rest }: { rest: string[] }) => rest[0]),
+    // The usage line the profile commands print: the real helper's exact format.
+    profileUsage: (command: string, needsChallenge: boolean): string =>
+        needsChallenge ? `Usage: ${command} "<name>" --challenge=<id>` : `Usage: ${command} "<name>"`,
     ensureAuthenticated: jest.fn(() => true),
     // The worded refusals the real command modules build on at module scope.
     INVALID_ID_TEXT: 'Invalid challenge or image id.',
@@ -573,7 +576,8 @@ const COMMANDS_BLOCK = `Commands:
              Assign one with: set-setting scenario "<name>" --challenge=<id> (or a challenge rule)
   help-settings - Show detailed settings help (includes profile details)
   logs [--error|--api|--settings|--lexicon] [--lines=<n>] - Show logs or the local lexicon report
-  logs [--error|--api|--settings] --follow - Follow every log file of the category as it is written; a --- line names the file new output comes from; Ctrl+C stops
+  logs [--error|--api|--settings] --follow - Follow every log file of the category as it is written; a --- line names
+             the file new output comes from; Ctrl+C stops
   licenses - Print the third-party license notices
   reset-data --yes - Delete everything stored on this device: settings and the saved login, every store, logs and
              the extracted vision runtime. It cannot be undone, so it does nothing without --yes. Quit the
@@ -687,6 +691,14 @@ describe('vote / run', () => {
         expect(m.exitCodes).toEqual([0]);
     });
 });
+
+// The three spellings a repeated --challenge can take, shared by the refusal
+// tables below.
+const repeatForms: Array<[string, string[]]> = [
+    ['both in the = form', ['--challenge=1', '--challenge=2']],
+    ['both in the space form', ['--challenge', '1', '--challenge', '2']],
+    ['the forms mixed', ['--challenge=1', '--challenge', '2']],
+];
 
 describe('challenge-scoped actions', () => {
     test.each([
@@ -880,11 +892,6 @@ describe('challenge-scoped actions', () => {
     // A repeated --challenge would silently act on the first id while the user
     // named two — for a spend that is money on the wrong challenge. Every
     // challenge command refuses it in any spelling, before anything runs.
-    const repeatForms: Array<[string, string[]]> = [
-        ['both in the = form', ['--challenge=1', '--challenge=2']],
-        ['both in the space form', ['--challenge', '1', '--challenge', '2']],
-        ['the forms mixed', ['--challenge=1', '--challenge', '2']],
-    ];
     const repeatCommands: Array<[string, 'actions' | 'spend', string, string]> = [
         ['boost', 'actions', 'boostChallenge', 'Usage: boost --challenge=<id> [--image=<id>]'],
         ['swap', 'actions', 'swapCmd', 'Usage: swap --challenge=<id> --image=<id> [--to=<id>] [--yes]'],
@@ -986,6 +993,49 @@ describe('challenge-scoped actions', () => {
         // No id still reaches the command, which prints its usage.
         const none = await run(['join', '--yes']);
         expect(none.join.joinChallengeCmd).toHaveBeenCalledWith(undefined, { yes: true });
+    });
+});
+
+// The commands that read --challenge through extractChallenge / parseChallengeFlag
+// (outside the challenge-scoped actions above): a repeated flag would silently act
+// on the first id while the user named two — read, write or vote on it. Every one
+// refuses it in any spelling, prints its usage and exits 1, before anything runs.
+describe('a repeated --challenge in the settings, profile, photo, vote and run commands', () => {
+    const readCommands: Array<[string, keyof Mods, string, string]> = [
+        [
+            'vote',
+            'voting',
+            'voteChallengeManual',
+            'Usage: vote [--challenge=<id>]  (omit --challenge to vote every challenge)',
+        ],
+        ['run', 'voting', 'runVotingCycle', 'Usage: run [--challenge=<id>]'],
+        ['get-setting', 'cmd', 'getSetting', 'Usage: get-setting <key> [--challenge=<id>]'],
+        ['set-setting', 'cmd', 'setSetting', 'Usage: set-setting <key> <value> [--challenge=<id>]'],
+        ['reset-setting', 'cmd', 'resetSetting', 'Usage: reset-setting <key> [--challenge=<id>]'],
+        ['list-settings', 'cmd', 'listSettings', 'Usage: list-settings [--challenge=<id>]'],
+        ['list-profiles', 'cmd', 'listProfiles', 'Usage: list-profiles'],
+        [
+            'list-photos',
+            'photos',
+            'listPhotosCmd',
+            'Usage: list-photos [--challenge=<id>] [--search=<tag>] [--sort=votes|newest|oldest] [--stats [--limit=<n>]]  or  list-photos --challenge=<id> --suggest',
+        ],
+        ['apply-profile', 'cmd', 'applyProfile', 'Usage: apply-profile "<name>" --challenge=<id>'],
+        ['save-profile', 'cmd', 'saveProfileFromChallenge', 'Usage: save-profile "<name>" --challenge=<id>'],
+        ['delete-profile', 'cmd', 'deleteProfile', 'Usage: delete-profile "<name>"'],
+    ];
+    type ReadRepeatRow = [string, string, keyof Mods, string, string, string[]];
+    const readRepeatRows: ReadRepeatRow[] = readCommands.flatMap(([command, mod, fn, usage]) =>
+        repeatForms.map(([label, argv]): ReadRepeatRow => [`${command}: ${label}`, command, mod, fn, usage, argv]),
+    );
+    test.each(readRepeatRows)('%s prints the usage and exits 1', async (_label, command, mod, fn, usage, argv) => {
+        const m = await run([command, ...argv]);
+        expect(
+            invalid<Record<string, Record<string, jest.Mock<unknown, unknown[]>>>>(m)[mod][fn],
+        ).not.toHaveBeenCalled();
+        expect(m.msgs('error')).toEqual(['Wrong arguments']);
+        expect(m.msgs('info')).toEqual([usage]);
+        expect(m.exitCodes).toEqual([1]);
     });
 });
 
