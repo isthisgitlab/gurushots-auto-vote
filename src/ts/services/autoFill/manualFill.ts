@@ -1,5 +1,5 @@
 /**
- * Auto-fill — the manual "Fill Now" path: one or all missing slots in a single
+ * Photo submit — the card's manual +1 / +N path: one or all missing slots in a single
  * request, ignoring the autoSubmit toggle and the schedule.
  */
 
@@ -14,7 +14,7 @@ import type { FillDeps } from '../../types/autoFill';
 import { errorMessage } from '../../errorMessage';
 
 /**
- * Manual fill (GUI button). Submits one or all missing slots in a
+ * Manual submit (the card's +1 / +N buttons). Submits one or all missing slots in a
  * single request. Ignores the autoSubmit toggle and the spacing math,
  * but still honors mustIncludeTags / shouldIncludeTags so the tag
  * rules mean the same thing whether triggered by the user or the
@@ -41,10 +41,10 @@ const fillChallengeNow = async (
         return { success: true, submitted: 0, skipped: 0 };
     }
 
-    // Manual "Fill Now" is its own operation, not part of a voting pass, so it
+    // A manual +1 / +N submit is its own operation, not part of a voting pass, so it
     // gets a fresh photo-stats budget and failure breaker. Without this an
     // earlier background pass that tripped the breaker would silently deny stat
-    // enrichment to every manual fill until the next pass happened to reset it.
+    // enrichment to every manual submit until the next pass happened to reset it.
     resetPhotoStatsPassState();
 
     // settings is optional for fillChallengeNow — unit tests for failure
@@ -76,7 +76,7 @@ const fillChallengeNow = async (
         mustIncludeTags,
         shouldIncludeTags,
         submitWithoutTagMatch,
-        // No onRefreshed hook: manual fill is explicit user intent acting on
+        // No onRefreshed hook: a manual submit is explicit user intent acting on
         // the state the user is looking at — it never ran the pre-submit live
         // re-check, and keeps not running it.
         onEmptyPick: (eligible) => {
@@ -125,14 +125,14 @@ const fillChallengeNow = async (
         return { success: false, submitted: 0, skipped: slotsRemaining, error: 'submit-unclear' };
     }
     if (attempt.status !== 'submitted') {
-        // Only 'submit-threw' can reach here — manual fill wires no probe,
+        // Only 'submit-threw' can reach here — a manual submit wires no probe,
         // pick-guard, or refresh hook, so those statuses cannot occur. A throw
         // also leaves the request's fate unknown (it may have landed), so it
         // answers the same 'submit-unclear' code; runFillAttempt logged the error.
         return { success: false, submitted: 0, skipped: slotsRemaining, error: 'submit-unclear' };
     }
 
-    // No reflectNewEntry here: manual fill has always left the local challenge
+    // No reflectNewEntry here: a manual submit has always left the local challenge
     // object untouched (the GUI re-fetches state after the IPC call returns).
     logger
         .withCategory('autoSubmit')

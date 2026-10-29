@@ -575,8 +575,8 @@ describe('earn turbo', () => {
     });
 });
 
-describe('fill', () => {
-    test('+1 and +N fill the requested mode and refresh on success', async () => {
+describe('+1 / +N submit', () => {
+    test('+1 and +N submit in the requested mode and refresh on success', async () => {
         const { onVoteComplete } = renderCard(makeChallenge());
         fireEvent.click(screen.getByText('+1'));
         await waitFor(() => expect(window.api.fillChallengeNow).toHaveBeenCalledWith(101, 'one'));
@@ -586,7 +586,7 @@ describe('fill', () => {
         await waitFor(() => expect(onVoteComplete).toHaveBeenCalledTimes(2));
     });
 
-    test('both buttons spin while a fill is in flight', async () => {
+    test('both buttons spin while a submit is in flight', async () => {
         const d = deferred<Awaited<ReturnType<WindowApi['fillChallengeNow']>>>();
         window.api.fillChallengeNow = jest.fn(() => d.promise);
         const { container } = renderCard(makeChallenge());
@@ -595,7 +595,7 @@ describe('fill', () => {
         await act(async () => d.resolve(invalid({ success: true })));
     });
 
-    test('a failed fill shows the error and does not refresh', async () => {
+    test('a failed submit shows the error and does not refresh', async () => {
         window.api.fillChallengeNow = jest.fn().mockResolvedValue({ success: false, error: 'no photos' });
         const { onVoteComplete } = renderCard(makeChallenge());
         fireEvent.click(screen.getByText('+1'));
@@ -615,17 +615,17 @@ describe('fill', () => {
         expect(onVoteComplete).toHaveBeenCalledTimes(1);
     });
 
-    test('a submit refused before anything was sent leaves the card stale', async () => {
+    test('a submit the server refused does not refresh the card', async () => {
         window.api.fillChallengeNow = jest
             .fn()
-            .mockResolvedValue({ success: false, submitted: 0, skipped: 3, error: 'No eligible photos found' });
+            .mockResolvedValue({ success: false, submitted: 0, skipped: 3, error: 'Submit rejected: nope' });
         const { onVoteComplete } = renderCard(makeChallenge());
         fireEvent.click(screen.getByText('+1'));
         await waitFor(() => expect(screen.getByText('errors.actionFailed')).toBeTruthy());
         expect(onVoteComplete).not.toHaveBeenCalled();
     });
 
-    test('an invalid-args fill refusal shows the translated text, not the machine code', async () => {
+    test('an invalid-args submit refusal shows the translated text, not the machine code', async () => {
         window.api.fillChallengeNow = jest.fn().mockResolvedValue({ success: false, error: 'invalid-args' });
         renderCard(makeChallenge());
         fireEvent.click(screen.getByText('+1'));
@@ -816,7 +816,7 @@ describe('pick', () => {
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     });
 
-    test('a fill in flight holds Pick…, and a held +1 is not what spins', async () => {
+    test('a +1/+N submit in flight holds Pick…, and a held +1 is not what spins', async () => {
         const d = deferred<Awaited<ReturnType<WindowApi['fillChallengeNow']>>>();
         window.api.fillChallengeNow = jest.fn(() => d.promise);
         renderCard(makeChallenge());
