@@ -42,6 +42,16 @@ jest.mock('../../src/ts/settings', () => ({
 
 jest.mock('../../src/ts/scheduling/runScheduler', () => ({ createScheduler: jest.fn() }));
 
+// The status header's automation lines read the shared handlers; the sections
+// under test here are the boost-window and standing ones.
+jest.mock('../../src/ts/ipc/actions.handlers', () => {
+    const handlers = {
+        'get-auto-claim-status': jest.fn(async () => ({ success: true as const, enabled: false, nextClaimAt: 0 })),
+        'get-auto-join-active': jest.fn(async () => ({ success: true as const, active: false })),
+    };
+    return { __handlers: handlers, buildHandlers: () => handlers };
+});
+
 jest.mock('../../src/ts/apiFactory', () => {
     const mockGetActiveChallenges = jest.fn();
     const mockIsAuthenticated = jest.fn(() => true);

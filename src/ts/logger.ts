@@ -1,6 +1,6 @@
 import { oneLine } from './format/logSafe';
 import { isSourceCode, getAppName, getContext, setContext, clearContext, devMode, cliMode } from './logger/context';
-import { currentLogFiles, cleanupOldLogs } from './logger/files';
+import { currentLogFiles, cleanupOldLogs, logsDir } from './logger/files';
 import { buildProgressMessage, LEVEL_ICONS } from './logger/format';
 import { sanitizeForLog, sanitizeLogString, redactMessage } from './logger/sanitize';
 import { logMessages as englishTemplates } from './translations/logEnglish';
@@ -234,6 +234,7 @@ export {
     startOperation,
     endOperation,
     cleanupOldLogs as cleanup,
+    logsDir,
     getContext,
     setContext,
     clearContext,

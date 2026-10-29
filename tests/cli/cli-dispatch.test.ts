@@ -147,7 +147,7 @@ jest.mock('../../src/ts/cli/commands/photos', () => ({
     suggestPhotosCmd: jest.fn(async () => 0),
 }));
 jest.mock('../../src/ts/cli/commands/update', () => ({ checkUpdates: jest.fn() }));
-jest.mock('../../src/ts/cli/commands/logs', () => ({ showLogs: jest.fn() }));
+jest.mock('../../src/ts/cli/commands/logs', () => ({ showLogs: jest.fn(), followLogs: jest.fn(async () => 0) }));
 jest.mock('../../src/ts/cli/commands/scenarios', () =>
     Object.fromEntries(
         [
@@ -550,6 +550,7 @@ const COMMANDS_BLOCK = `Commands:
              Assign one with: set-setting scenario "<name>" --challenge=<id> (or a challenge rule)
   help-settings - Show detailed settings help (includes profile details)
   logs [--error|--api|--settings|--lexicon] [--lines=<n>] - Show logs or the local lexicon report
+  logs [--error|--api|--settings] --follow - Follow the log file as it is written; Ctrl+C stops
   licenses - Print the third-party license notices
   reset-data --yes - Delete everything stored on this device: settings and the saved login, every store, logs and
              the extracted vision runtime. It cannot be undone, so it does nothing without --yes. Quit the
@@ -1224,15 +1225,41 @@ describe('profile commands', () => {
 });
 
 describe('logs', () => {
-    test.each([
-        [[], { category: 'app', lines: 100 }],
-        [['--error', '--lines=20'], { category: 'error', lines: 20 }],
-        [['--api'], { category: 'api', lines: 100 }],
-        [['--settings', '--lines=abc'], { category: 'settings', lines: 100 }],
-    ])('logs %p', async (tail, opts) => {
+    test.each<[string[], 'showLogs' | 'followLogs', { category: string; lines: number }]>([
+        [[], 'showLogs', { category: 'app', lines: 100 }],
+        [['--error', '--lines=20'], 'showLogs', { category: 'error', lines: 20 }],
+        [['--api'], 'showLogs', { category: 'api', lines: 100 }],
+        [['--lexicon'], 'showLogs', { category: 'lexicon', lines: 100 }],
+        [['--follow'], 'followLogs', { category: 'app', lines: 100 }],
+        [['--error', '--follow', '--lines=3'], 'followLogs', { category: 'error', lines: 3 }],
+    ])('logs %p runs %s with %p', async (tail, fn, opts) => {
         const m = await run(['logs', ...tail]);
-        expect(m.logs.showLogs).toHaveBeenCalledWith(opts);
+        const called = fn === 'showLogs' ? m.logs.showLogs : m.logs.followLogs;
+        expect(called).toHaveBeenCalledWith(opts);
         expect(m.exitCodes).toEqual([0]);
+    });
+
+    test.each([
+        [['--tail']],
+        [['--lines=1', '--lines=2']],
+        [['--lines', '20']],
+        [['--lines=abc']],
+        [['--lines=0']],
+        [['--error', '--api']],
+        [['--follow', '--follow']],
+        [['--lexicon', '--follow']],
+        [['stray']],
+    ])('logs %p is a usage error that runs nothing', async (tail) => {
+        const m = await run(['logs', ...tail]);
+        expect(m.exitCodes).toEqual([1]);
+        expect(m.logs.showLogs).not.toHaveBeenCalled();
+        expect(m.logs.followLogs).not.toHaveBeenCalled();
+        expect(m.msgs('info')).toContain('Usage: logs [--error|--api|--settings|--lexicon] [--lines=<n>] [--follow]');
+    });
+
+    test('the --lexicon --follow refusal says why', async () => {
+        const m = await run(['logs', '--lexicon', '--follow']);
+        expect(m.msgs('error')).toContain('--follow tails a log file; the lexicon report is not a file');
     });
 });
 

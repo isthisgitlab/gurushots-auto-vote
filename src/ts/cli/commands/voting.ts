@@ -31,12 +31,23 @@ import { clearTokenUnlessStayingLoggedIn } from '../../services/auth';
 import type { NullEventHandlers } from '../../types/cli';
 import type { Challenge, RankingTotal } from '../../types/gurushots';
 import type * as voting_handlersModule from '../../ipc/voting.handlers';
+import type * as actions_handlersModule from '../../ipc/actions.handlers';
 import { errorMessage } from '../../errorMessage';
 type VotingHandlers = NullEventHandlers<ReturnType<typeof voting_handlersModule.buildHandlers>>;
 let _votingHandlers: VotingHandlers | undefined;
 const votingHandlers = (): VotingHandlers =>
     (_votingHandlers ??= (
         require('../../ipc/voting.handlers') as typeof import('../../ipc/voting.handlers')
+    ).buildHandlers());
+
+// The shared handlers behind the status header's automation lines, built
+// lazily on first use (the voting.handlers pattern above) so loading this
+// module for other commands does not construct the handler set.
+type ActionsHandlers = NullEventHandlers<ReturnType<typeof actions_handlersModule.buildHandlers>>;
+let _actionsHandlers: ActionsHandlers | undefined;
+const actionsHandlers = (): ActionsHandlers =>
+    (_actionsHandlers ??= (
+        require('../../ipc/actions.handlers') as typeof import('../../ipc/actions.handlers')
     ).buildHandlers());
 
 /**
@@ -309,6 +320,32 @@ const logOverview = (userSettings: ReturnType<typeof settings.loadSettings>, isA
 };
 
 /**
+ * The header's automation lines — the CLI parity of the GUI header indicators:
+ * whether auto-claim is on, and whether an auto-join is armed. A fresh CLI
+ * process cannot know the next claim time (it lives in the running app's
+ * process state), so only the state itself is printed, never a next-claim
+ * time. Best-effort like the rest of status: a failed reply, or a handler
+ * that throws, prints its own "could not be read" line and never breaks the
+ * command.
+ */
+const logAutomationStatus = async () => {
+    const printState = (label: string, state: 'on' | 'off' | 'armed' | null) =>
+        logger.withCategory('ui').info(state === null ? `${label}: could not be read` : `${label}: ${state}`);
+    try {
+        const claim = await actionsHandlers()['get-auto-claim-status'](null);
+        printState('Auto-claim', claim?.success === true ? (claim.enabled ? 'on' : 'off') : null);
+    } catch {
+        printState('Auto-claim', null);
+    }
+    try {
+        const join = await actionsHandlers()['get-auto-join-active'](null);
+        printState('Auto-join', join?.success === true ? (join.active ? 'armed' : 'off') : null);
+    } catch {
+        printState('Auto-join', null);
+    }
+};
+
+/**
  * The Settings section: the app-level preferences, then every challenge that holds values of
  * its own, formatted and masked like every other settings print.
  */
@@ -411,6 +448,7 @@ const showStatus = async () => {
     const isAuthenticated = getMiddleware().isAuthenticated();
 
     logOverview(userSettings, isAuthenticated);
+    await logAutomationStatus();
     logSettingsSection(userSettings);
     logPinnedEntries(userSettings);
 

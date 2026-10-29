@@ -47,6 +47,15 @@ jest.mock('../../src/ts/ipc/voting.handlers', () => {
     return { __handlers: handlers, buildHandlers: () => handlers };
 });
 
+// status reads the automation header through the shared handlers too.
+jest.mock('../../src/ts/ipc/actions.handlers', () => {
+    const handlers = {
+        'get-auto-claim-status': jest.fn(async () => ({ success: true as const, enabled: false, nextClaimAt: 0 })),
+        'get-auto-join-active': jest.fn(async () => ({ success: true as const, active: false })),
+    };
+    return { __handlers: handlers, buildHandlers: () => handlers };
+});
+
 import { invalid } from '../helpers/invalid';
 import type { ConfigV2 } from '../../src/ts/types/config';
 import loggerModule = require('../../src/ts/logger');
@@ -460,6 +469,8 @@ describe('showStatus', () => {
             '=== GuruShots Auto Voter - Status ===',
             'Mode: REAL (live API calls)',
             'Authentication: ❌ Not authenticated',
+            'Auto-claim: off',
+            'Auto-join: off',
             '\nSettings:',
             '  Theme: latvian',
             '  Language: en',
@@ -501,6 +512,8 @@ describe('showStatus', () => {
             'Mode: MOCK (simulated API calls)',
             'Authentication: ✅ Authenticated',
             'Token: ✅ Present',
+            'Auto-claim: off',
+            'Auto-join: off',
             '\nSettings:',
             '  Theme: latvian',
             '  Language: en',

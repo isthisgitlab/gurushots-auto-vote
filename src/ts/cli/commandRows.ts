@@ -470,9 +470,15 @@ const COMMAND_ROWS: readonly CommandRow[] = [
     row('help-settings', exitsZero(helpSettings), [
         '  help-settings - Show detailed settings help (includes profile details)',
     ]),
-    row('logs', runLogs, [
-        '  logs [--error|--api|--settings|--lexicon] [--lines=<n>] - Show logs or the local lexicon report',
-    ]),
+    row(
+        'logs',
+        runLogs,
+        [
+            '  logs [--error|--api|--settings|--lexicon] [--lines=<n>] - Show logs or the local lexicon report',
+            '  logs [--error|--api|--settings] --follow - Follow the log file as it is written; Ctrl+C stops',
+        ],
+        { usage: 'Usage: logs [--error|--api|--settings|--lexicon] [--lines=<n>] [--follow]' },
+    ),
     row('licenses', async () => licensesCmd(), ['  licenses - Print the third-party license notices'], {
         markerless: true,
     }),

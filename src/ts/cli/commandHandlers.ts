@@ -27,7 +27,7 @@ import {
     setSetting,
 } from './commands/settings';
 import { exportTitleRulesCmd, importTitleRulesCmd, listTitleRulesCmd, titleProfileCmd } from './commands/titleRules';
-import { showLogs } from './commands/logs';
+import { followLogs, showLogs } from './commands/logs';
 import * as scenarioCommands from './commands/scenarios';
 import { parseChallengeFlag, runVotingCycle, voteChallengeManual } from './commands/voting';
 import { requireChallenge } from './guards';
@@ -108,18 +108,44 @@ const runScenarioReset: CommandHandler = async (argv) => {
         : usageError('--all takes no other arguments', usageOf('scenario-reset'));
 };
 
-const LOG_CATEGORY_FLAGS: Record<string, string> = {
+// category flag → log category. No --app flag: no flag at all means the app log.
+const LOG_CATEGORY_FLAGS: Record<string, 'app' | 'error' | 'api' | 'settings' | 'lexicon'> = {
     '--error': 'error',
     '--api': 'api',
     '--settings': 'settings',
     '--lexicon': 'lexicon',
 };
 
+// Strict like the actions, though read-only: a mistyped flag (`--lines 20`,
+// `--linesx=5`) must not quietly read as the plain listing, and a repeated
+// flag must not quietly take the last value.
 const runLogs: CommandHandler = async (argv) => {
-    const category = LOG_CATEGORY_FLAGS[argv.find((arg) => Object.hasOwn(LOG_CATEGORY_FLAGS, arg)) ?? ''] || 'app';
-    const linesArg = argv.find((a) => a.startsWith('--lines='));
-    const lines = linesArg ? parseInt(linesArg.slice('--lines='.length), 10) || 100 : 100;
-    showLogs({ category, lines });
+    const usage = usageOf('logs');
+    const categoryFlags = argv.filter((a) => Object.hasOwn(LOG_CATEGORY_FLAGS, a));
+    const followFlags = argv.filter((a) => a === '--follow');
+    const linesFlags = argv.filter((a) => a.startsWith('--lines='));
+    const unknown = argv.filter(
+        (a) => !Object.hasOwn(LOG_CATEGORY_FLAGS, a) && a !== '--follow' && !a.startsWith('--lines='),
+    );
+    if (unknown.length > 0 || categoryFlags.length > 1 || followFlags.length > 1 || linesFlags.length > 1) {
+        return usageError('Wrong arguments', usage);
+    }
+    const linesText = linesFlags[0]?.slice('--lines='.length);
+    const lines = linesText !== undefined && /^\d+$/.test(linesText) ? Number(linesText) : null;
+    if (linesText !== undefined && (lines === null || lines < 1)) {
+        return usageError('--lines needs a positive whole number of lines', usage);
+    }
+    const linesOpt = { lines: lines ?? 100 };
+    const categoryFlag = categoryFlags[0];
+    const category: 'app' | 'error' | 'api' | 'settings' | 'lexicon' =
+        categoryFlag === undefined ? 'app' : LOG_CATEGORY_FLAGS[categoryFlag];
+    if (followFlags.length > 0) {
+        if (category === 'lexicon') {
+            return usageError('--follow tails a log file; the lexicon report is not a file', usage);
+        }
+        return followLogs({ category, ...linesOpt });
+    }
+    showLogs({ category, ...linesOpt });
     return 0;
 };
 
