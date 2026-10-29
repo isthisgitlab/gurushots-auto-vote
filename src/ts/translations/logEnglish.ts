@@ -663,7 +663,6 @@ export const logMessages = {
     me29b55ed6153: 'Error handling vote-on-challenge request:',
     me31ce9ce699f: '{0} Manual Only is off — automatic rules resume',
     me438c2d3abfc: '{0} turbo fill-new: every entry has Boost or is pinned for Boost — turbo skipped',
-    me48953f7d846: 'Please specify the photo now in the slot with --image=<id>',
     me4955e638fd2: 'The import report is marked as seen.',
     me4e3ea625618:
         '⏰ Approaching pre-boost fill for "{0}" — next cycle in {1}s (capped to the {2}m pre-boost boundary)',

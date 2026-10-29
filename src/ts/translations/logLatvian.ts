@@ -684,7 +684,6 @@ export const logMessages = {
     me31ce9ce699f: '{0} „Tikai manuāli” ir izslēgts — automātiskie noteikumi atsākas',
     me438c2d3abfc:
         '{0} Jauna foto iesniegšana Turbo izmantošanai: katram foto ir Boost vai tas ir piesprausts Boost — Turbo izlaists',
-    me48953f7d846: 'Ar --image=<id> norādi foto, kas pašlaik atrodas šajā vietā',
     me4955e638fd2: 'Importa pārskats ir atzīmēts kā redzēts.',
     me4e3ea625618:
         '⏰ Tuvojas redzamības uzpilde pirms Boost izaicinājumā "{0}" — nākamais cikls pēc {1} s (ne vēlāk kā {2} min pirms Boost)',
