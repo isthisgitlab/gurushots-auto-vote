@@ -296,7 +296,7 @@ const walkLibrary = async (
             // A batch end is routine, not an early stop worth a warning about.
             return result(true, 'batch');
         }
-        if (skip && byId.size >= keepCap) {
+        if (skip && maxKept === undefined && byId.size >= keepCap) {
             warn(`stopped reading your photo library at ${byId.size} photo(s); less-voted photos were not considered`);
             return result(true, 'batch');
         }
