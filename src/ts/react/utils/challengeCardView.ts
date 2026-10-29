@@ -6,7 +6,7 @@ import { exposureBand } from '@/utils/statTone';
 import type { StatTone } from '@/utils/statTone';
 import { canKeyUnlock, canSwapEntry, canFillExposure } from '../../voting/currencyActions';
 import { finiteOr } from '../../numbers';
-import { isKnownTurboMode } from '../../voting/turboMode';
+import { canPlayTurbo } from '../../voting/turboMode';
 
 const LEVEL_NAMES = ['', 'POPULAR', 'SKILLED', 'PREMIER', 'ELITE', 'ALL STAR'];
 
@@ -144,16 +144,10 @@ export function deriveChallengeCardView(
     const entries = member.ranking.entries || [];
     const exposureFactor = member.ranking.exposure.exposure_factor;
 
-    // canPlayAutoTurbo flips to true the moment a TIMER cooldown elapses (the
+    // The shared predicate (voting/turboMode.ts) flips to true the moment a TIMER cooldown elapses (the
     // card ticks `now` every second while one runs) without waiting for an external poll.
-    const turboState = member.turbo?.state;
-    const turboCooldownPassed =
-        turboState === 'TIMER' && typeof member.turbo?.time_to_open === 'number' && member.turbo.time_to_open <= now;
+    const canPlayAutoTurbo = canPlayTurbo(challenge, now);
     const challengeStillOpen = challenge.close_time > now;
-    const canPlayAutoTurbo =
-        challengeStillOpen &&
-        isKnownTurboMode(member.turbo) &&
-        (turboState === 'FREE' || turboState === 'IN_PROGRESS' || turboCooldownPassed);
 
     const slotsRemaining = Math.max(0, (challenge.max_photo_submits || 0) - entries.length);
 

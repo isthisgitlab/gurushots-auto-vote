@@ -4,7 +4,8 @@
  * import is part of a module cycle — the rows need these handlers at init — and is safe because this
  * module reads `usageOf` only inside handler bodies, never at module scope.
  */
-import { boostChallenge, parseSwapFlags, swapBackCmd } from './commands/actions';
+import { boostChallenge, parseSwapFlags, swapBackCmd, turboChallenge } from './commands/actions';
+import { challengesCmd } from './commands/challenges';
 import { pinCmd, PIN_USAGE } from './commands/pin';
 import { forgetPaymentCmd, joinChallengeCmd } from './commands/join';
 import { listPhotosCmd, parseSearchFlag, parseSortFlag, suggestPhotosCmd } from './commands/photos';
@@ -13,6 +14,7 @@ import { getSetting, listProfiles, resetSetting, setGlobalDefault, setSetting } 
 import { showLogs } from './commands/logs';
 import * as scenarioCommands from './commands/scenarios';
 import { parseChallengeFlag, runVotingCycle, voteChallengeManual } from './commands/voting';
+import { requireChallenge } from './guards';
 import { challengeCommand, exitCodeOf, extractChallenge, usageError } from './commandKit';
 
 import type { CommandHandler } from './commandKit';
@@ -135,6 +137,32 @@ const runBoost = async (challengeId: string, rest: string[]) => {
     return 0;
 };
 
+// Like `join`: it names which photo a won Turbo lands on, so a flag it does not recognise (`--images=`,
+// a space-form `--image`, a repeat) is a usage error, never a silent auto-play. Exits 1 when the Turbo
+// was not earned or applied.
+const runTurbo: CommandHandler = async (argv) => {
+    const { challengeId, rest } = extractChallenge(argv);
+    const usage = usageOf('turbo');
+    requireChallenge({ challengeId }, usage);
+    const imageArgs = rest.filter((a) => a.startsWith('--image='));
+    if (rest.some((a) => !a.startsWith('--image=')) || imageArgs.length > 1) {
+        return usageError('Wrong arguments', usage);
+    }
+    const imageId = imageArgs[0]?.slice('--image='.length) ?? null;
+    if (imageId === '') return usageError('--image needs a photo id (challenges --challenge=<id> lists them)', usage);
+    return exitCodeOf(await turboChallenge(challengeId as string, { imageId }));
+};
+
+// A read-only command, but strict like the actions: `--challenge 123` (space form), a repeat or any
+// other flag must not quietly read as the plain listing.
+const runChallenges: CommandHandler = async (argv) => {
+    const detailArgs = argv.filter((a) => a.startsWith('--challenge='));
+    if (argv.length !== detailArgs.length || detailArgs.length > 1 || detailArgs[0] === '--challenge=') {
+        return usageError('Wrong arguments', usageOf('challenges'));
+    }
+    return exitCodeOf(await challengesCmd(detailArgs[0]?.slice('--challenge='.length) ?? null));
+};
+
 // --boost= / --turbo= take an image id, or `none` to clear, each at most once. It changes what a later Boost or Turbo
 // lands on, so like `join` anything it does not recognise (`--boost abc`, a typo) is a usage error, never a listing.
 const runPin = async (challengeId: string, rest: string[]) => {
@@ -214,6 +242,7 @@ const runListProfiles: CommandHandler = async (argv) => {
 
 export {
     runBoost,
+    runChallenges,
     runForgetPayment,
     runGetSetting,
     runJoin,
@@ -227,5 +256,6 @@ export {
     runSetGlobalDefault,
     runSetSetting,
     runSwapBack,
+    runTurbo,
     runVote,
 };

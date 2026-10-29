@@ -14,6 +14,7 @@ import * as logger from '../../logger';
 import { ensureAuthenticated, INVALID_ID_TEXT } from '../guards';
 import { getMiddleware } from '../../apiFactory';
 import { findActionableChallenge } from '../../services/findActiveChallenge';
+import { stripTerminalControl } from '../../format/logSafe';
 import { CHOSEN_PHOTO_ID_RE } from '../../settings/limits';
 
 import type { Challenge } from '../../types/gurushots';
@@ -112,23 +113,42 @@ const boostChallenge = async (challengeId: string, { imageId = null }: { imageId
 };
 
 /**
- * Play the Turbo mini-game on a single challenge. Delegates to the
- * play-auto-turbo handler, which resolves the entry (turboImageIndex) and
- * runs the full mini-game loop.
+ * Play the Turbo mini-game on a single challenge — or, with `imageId`, apply
+ * an already-won Turbo to that photo through the same handler the GUI entry
+ * badge uses (the play path delegates to play-auto-turbo, which resolves the
+ * entry via turboImageIndex and runs the full mini-game loop). Returns true
+ * when the Turbo was earned or applied, so the command exits 1 on a refusal,
+ * an unknown challenge, or a thrown error.
  */
-const turboChallenge = async (challengeId: string) => {
+const turboChallenge = async (
+    challengeId: string,
+    { imageId = null }: { imageId?: string | null } = {},
+): Promise<boolean> => {
     const challenge = await resolveChallenge(challengeId);
-    if (!challenge) return;
+    if (!challenge) return false;
 
     try {
+        if (imageId) {
+            const result = await handlers()['apply-turbo-to-entry'](null, challengeId, imageId);
+            if (result?.success) {
+                logger.withCategory('turbo').success(`Turbo applied to image ${imageId} in "${challenge.title}"`);
+                return true;
+            }
+            // The error can carry the API's own wording (the raw upstream
+            // message), so it is stripped before it reaches the terminal.
+            logger.withCategory('turbo').error(stripTerminalControl(actionError(result, 'Failed to apply turbo')));
+            return false;
+        }
         const result = await handlers()['play-auto-turbo'](null, challengeId, challenge.title);
         if (result?.success) {
             logger.withCategory('turbo').success(`Turbo earned on "${challenge.title}"`);
-        } else {
-            logger.withCategory('turbo').error(actionError(result, 'Turbo not earned'));
+            return true;
         }
+        logger.withCategory('turbo').error(stripTerminalControl(actionError(result, 'Turbo not earned')));
+        return false;
     } catch (err) {
-        logger.withCategory('turbo').error(`Failed to play turbo: ${errorMessage(err) || err}`);
+        logger.withCategory('turbo').error(`Failed to play turbo: ${stripTerminalControl(errorMessage(err) || err)}`);
+        return false;
     }
 };
 

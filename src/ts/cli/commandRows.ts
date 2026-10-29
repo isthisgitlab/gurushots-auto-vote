@@ -7,7 +7,6 @@ import {
     SWAP_BACK_USAGE,
     SWAP_USAGE,
     swapCmd,
-    turboChallenge,
     unlockBoostCmd,
 } from './commands/actions';
 import { PIN_USAGE } from './commands/pin';
@@ -38,6 +37,7 @@ import {
 } from './commandKit';
 import {
     runBoost,
+    runChallenges,
     runForgetPayment,
     runGetSetting,
     runJoin,
@@ -51,6 +51,7 @@ import {
     runSetGlobalDefault,
     runSetSetting,
     runSwapBack,
+    runTurbo,
     runVote,
 } from './commandHandlers';
 
@@ -106,6 +107,16 @@ const COMMAND_ROWS: readonly CommandRow[] = [
         '  run      - Run one full auto-strategy cycle (boost / turbo / auto-submit / threshold-aware vote).',
         '             Add --challenge=<id> to scope to a single challenge; on a Manual Only challenge it does nothing.',
     ]),
+    row(
+        'challenges',
+        runChallenges,
+        [
+            '  challenges - List the active challenges with their ids — the id every --challenge=<id> command needs.',
+            '             Add --challenge=<id> for one challenge in detail (its photo ids, to aim --image=<id> at).',
+            '             Alias: list',
+        ],
+        { aliases: ['list'], usage: 'Usage: challenges [--challenge=<id>]' },
+    ),
     row('boost', challengeCommand('Usage: boost --challenge=<id> [--image=<id>]', runBoost), [
         '  boost    - Apply a boost to a challenge: boost --challenge=<id> [--image=<id>]',
     ]),
@@ -115,11 +126,14 @@ const COMMAND_ROWS: readonly CommandRow[] = [
     ]),
     row(
         'turbo',
-        challengeCommand('Usage: turbo --challenge=<id>', async (challengeId) => {
-            await turboChallenge(challengeId);
-            return 0;
-        }),
-        ['  turbo    - Play the turbo mini-game on a challenge: turbo --challenge=<id>'],
+        runTurbo,
+        [
+            '  turbo    - Play the turbo mini-game on a challenge to earn a Turbo: turbo --challenge=<id>.',
+            '             With --image=<id>, apply an already-won Turbo to that photo instead',
+            '             (challenges --challenge=<id> lists the photo ids). Exits 1 when the Turbo',
+            '             was not earned or applied.',
+        ],
+        { usage: 'Usage: turbo --challenge=<id> [--image=<id>]' },
     ),
     row(
         'submit',

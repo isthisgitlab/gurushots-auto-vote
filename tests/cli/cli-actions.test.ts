@@ -62,6 +62,7 @@ jest.mock('../../src/ts/strategies/real/applyBoost', () => ({ applyBoost: jest.f
 jest.mock('../../src/ts/ipc/actions.handlers', () => {
     const handlers = {
         'apply-boost-to-entry': jest.fn(),
+        'apply-turbo-to-entry': jest.fn(),
         'play-auto-turbo': jest.fn(),
         'fill-challenge-now': jest.fn(),
     };
@@ -81,6 +82,11 @@ jest.mock('../../src/ts/services/UpdateChecker', () => ({
 }));
 
 import { invalid } from '../helpers/invalid';
+import type * as commandHandlersModule from '../../src/ts/cli/commandHandlers';
+// The rows↔handlers cycle initialises only rows-first (commandRows reads the handlers'
+// exports at module scope), so load the rows before reaching for their handlers.
+require('../../src/ts/cli/commandRows');
+const { runTurbo } = require('../../src/ts/cli/commandHandlers') as typeof commandHandlersModule;
 import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(
     invalid<typeof loggerModule & { __calls: { level: string; msg: unknown; data?: unknown }[] }>(loggerModule),
@@ -252,21 +258,111 @@ describe('CLI turbo command', () => {
     test('delegates to play-auto-turbo with the resolved title and reports success', async () => {
         actionsHandlers['play-auto-turbo'].mockResolvedValue(invalid({ success: true }));
 
-        await turboChallenge('111');
+        await expect(turboChallenge('111')).resolves.toBe(true);
 
         expect(actionsHandlers['play-auto-turbo']).toHaveBeenCalledWith(null, '111', 'Sunset');
         expect(contains(msgsAt('success'), 'Sunset')).toBe(true);
     });
 
-    test('surfaces the handler error message', async () => {
+    test('surfaces the handler error message and exits 1', async () => {
         actionsHandlers['play-auto-turbo'].mockResolvedValue({
             success: false,
             error: 'Turbo not playable (state=TIMER)',
         });
 
-        await turboChallenge('111');
+        await expect(turboChallenge('111')).resolves.toBe(false);
 
         expect(contains(msgsAt('error'), 'Turbo not playable')).toBe(true);
+    });
+
+    test('--image applies a won Turbo through apply-turbo-to-entry and exits 0', async () => {
+        actionsHandlers['apply-turbo-to-entry'].mockResolvedValue(invalid({ success: true }));
+
+        await expect(turboChallenge('111', { imageId: 'img9' })).resolves.toBe(true);
+
+        expect(actionsHandlers['apply-turbo-to-entry']).toHaveBeenCalledWith(null, '111', 'img9');
+        expect(actionsHandlers['play-auto-turbo']).not.toHaveBeenCalled();
+        expect(contains(msgsAt('success'), 'img9')).toBe(true);
+    });
+
+    test('--image on a failed result surfaces the error and exits 1', async () => {
+        actionsHandlers['apply-turbo-to-entry'].mockResolvedValue({
+            success: false,
+            error: 'Failed to apply turbo',
+        });
+
+        await expect(turboChallenge('111', { imageId: 'img9' })).resolves.toBe(false);
+
+        expect(contains(msgsAt('error'), 'Failed to apply turbo')).toBe(true);
+    });
+
+    test('an error string carrying terminal control codes is stripped before printing', async () => {
+        const esc = String.fromCharCode(27);
+        actionsHandlers['apply-turbo-to-entry'].mockResolvedValue({
+            success: false,
+            error: `Turbo ${esc}[31mrejected${esc}[0m by the server`,
+        });
+
+        await expect(turboChallenge('111', { imageId: 'img9' })).resolves.toBe(false);
+
+        const errors = msgsAt('error');
+        expect(contains(errors, 'Turbo rejected by the server')).toBe(true);
+        expect(errors.some((s) => s.includes(esc))).toBe(false);
+    });
+
+    test('an unknown id exits 1', async () => {
+        apiFactory.__getActiveChallenges.mockResolvedValue({ challenges: [] });
+
+        await expect(turboChallenge('999')).resolves.toBe(false);
+
+        expect(actionsHandlers['play-auto-turbo']).not.toHaveBeenCalled();
+        expect(contains(msgsAt('error'), 'not found')).toBe(true);
+    });
+
+    test('a thrown handler exits 1', async () => {
+        actionsHandlers['play-auto-turbo'].mockRejectedValue(new Error('boom'));
+
+        await expect(turboChallenge('111')).resolves.toBe(false);
+        expect(contains(msgsAt('error'), 'Failed to play turbo')).toBe(true);
+    });
+
+    test('not authenticated exits 1', async () => {
+        apiFactory.__isAuthenticated.mockReturnValue(false);
+
+        await expect(turboChallenge('111')).resolves.toBe(false);
+        expect(contains(allMsgs(), 'Run: login')).toBe(true);
+    });
+});
+
+describe('CLI turbo command — strict --image flag', () => {
+    test.each([
+        ['a typo flag', ['--images=img9']],
+        ['a repeated flag', ['--image=img9', '--image=img8']],
+        ['a space-form flag', ['--image', 'img9']],
+        ['a bare --yes', ['--yes']],
+    ])('%s prints the usage and exits 1', async (_label, rest) => {
+        await expect(runTurbo(['--challenge=111', ...rest])).resolves.toBe(1);
+        expect(contains(msgsAt('error'), 'Wrong arguments')).toBe(true);
+        expect(contains(msgsAt('info'), 'Usage: turbo --challenge=<id> [--image=<id>]')).toBe(true);
+        expect(actionsHandlers['apply-turbo-to-entry']).not.toHaveBeenCalled();
+        expect(actionsHandlers['play-auto-turbo']).not.toHaveBeenCalled();
+    });
+
+    test('an empty --image= names what is missing and exits 1', async () => {
+        await expect(runTurbo(['--challenge=111', '--image='])).resolves.toBe(1);
+        expect(contains(msgsAt('error'), '--image needs a photo id')).toBe(true);
+        expect(actionsHandlers['play-auto-turbo']).not.toHaveBeenCalled();
+    });
+
+    test('runTurbo passes --image through and exits 0 on success, 1 on failure', async () => {
+        actionsHandlers['apply-turbo-to-entry'].mockResolvedValue(invalid({ success: true }));
+        await expect(runTurbo(['--challenge=111', '--image=img9'])).resolves.toBe(0);
+
+        actionsHandlers['apply-turbo-to-entry'].mockResolvedValue({ success: false, error: 'nope' });
+        await expect(runTurbo(['--challenge=111', '--image=img9'])).resolves.toBe(1);
+
+        expect(actionsHandlers['apply-turbo-to-entry']).toHaveBeenCalledTimes(2);
+        expect(actionsHandlers['apply-turbo-to-entry']).toHaveBeenNthCalledWith(1, null, '111', 'img9');
     });
 });
 
@@ -498,7 +594,7 @@ describe('CLI actions — error paths', () => {
     test('turbo: a thrown handler is caught', async () => {
         actionsHandlers['play-auto-turbo'].mockRejectedValue(new Error('boom'));
 
-        await expect(turboChallenge('111')).resolves.toBeUndefined();
+        await expect(turboChallenge('111')).resolves.toBe(false);
         expect(contains(msgsAt('error'), 'Failed to play turbo')).toBe(true);
     });
 

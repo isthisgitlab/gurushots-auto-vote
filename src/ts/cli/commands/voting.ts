@@ -427,4 +427,4 @@ const showStatus = async () => {
     logger.withCategory('ui').info('\nTo change mode, run: login');
 };
 
-export { runVotingCycle, voteChallengeManual, parseChallengeFlag, startContinuousVoting, showStatus };
+export { runVotingCycle, voteChallengeManual, parseChallengeFlag, startContinuousVoting, showStatus, rankingTail };

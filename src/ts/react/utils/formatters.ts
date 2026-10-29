@@ -12,6 +12,9 @@ import { formatEndTimeIn } from '../../format/endTime';
 import { finiteOr } from '../../numbers';
 import { LEVEL_BADGE_CLASS, LEVEL_PROGRESS_CLASS } from './levelBadge';
 import { isGuruPicked } from '../../voting/currencyAuto';
+import { turboStatusCode } from '../../voting/turboMode';
+
+import type { TurboStatusCode } from '../../voting/turboMode';
 
 import type { Translate } from '../../translations/translator';
 
@@ -149,7 +152,9 @@ export type BoostStatusCode =
     | 'unavailable'
     | 'locked'
     | 'other';
-export type TurboStatusCode = 'unavailable' | 'free' | 'timer' | 'inProgress' | 'won' | 'used' | 'locked' | 'other';
+// The turbo state → code half lives in the shared voting/turboMode.ts, so the CLI words the same
+// states; only the colour class (a Tailwind class, renderer-only) is added here.
+export type { TurboStatusCode };
 
 /**
  * Get boost status: a state code and its colour class
@@ -249,34 +254,30 @@ export const getEntryStatus = (
  */
 export { isBoostWindowOpen } from '../../voting/boostWindow';
 
+// The colour each turbo state code reads as on the card.
+const TURBO_STATUS_CLASS: Record<TurboStatusCode, string> = {
+    unavailable: 'text-base-content/70',
+    free: 'text-info',
+    timer: 'text-base-content/70',
+    inProgress: 'text-warning',
+    won: 'text-success',
+    used: 'text-success',
+    locked: 'text-base-content/70',
+    other: 'text-base-content/70',
+};
+
 /**
- * Get turbo status: a state code and its colour class
+ * Get turbo status: a state code and its colour class. The state → code half is the shared
+ * turboStatusCode (voting/turboMode.ts); this adds the renderer-only colour, and for an
+ * unrecognised state the API's own state string, shown verbatim.
  * @param turbo - Turbo object from API
  */
 export const getTurboStatus = (turbo: MemberTurbo | null | undefined): ResourceStatus<TurboStatusCode> => {
-    if (!turbo || !turbo.state) {
-        return { code: 'unavailable', colorClass: 'text-base-content/70' };
-    }
-
-    switch (turbo.state) {
-        case 'FREE':
-            return { code: 'free', colorClass: 'text-info' };
-        case 'TIMER':
-            return { code: 'timer', colorClass: 'text-base-content/70' };
-        case 'IN_PROGRESS':
-            return { code: 'inProgress', colorClass: 'text-warning' };
-        case 'WON':
-            return { code: 'won', colorClass: 'text-success' };
-        case 'USED':
-            return { code: 'used', colorClass: 'text-success' };
-        case 'UNAVAILABLE':
-            return { code: 'unavailable', colorClass: 'text-base-content/70' };
-        case 'LOCKED':
-            return { code: 'locked', colorClass: 'text-base-content/70' };
-        default:
-            // state is non-empty here (guarded above), so it is shown verbatim.
-            return { code: 'other', colorClass: 'text-base-content/70', raw: turbo.state };
-    }
+    const code = turboStatusCode(turbo);
+    // 'other' means the state is non-empty (guarded in the shared mapping), so it is shown as it came.
+    return code === 'other'
+        ? { code, colorClass: TURBO_STATUS_CLASS[code], raw: turbo?.state }
+        : { code, colorClass: TURBO_STATUS_CLASS[code] };
 };
 
 /**

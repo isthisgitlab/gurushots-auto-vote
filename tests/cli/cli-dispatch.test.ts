@@ -443,10 +443,16 @@ const COMMANDS_BLOCK = `Commands:
              Add --challenge=<id> to manually vote a single challenge, which works on a Manual Only one too.
   run      - Run one full auto-strategy cycle (boost / turbo / auto-submit / threshold-aware vote).
              Add --challenge=<id> to scope to a single challenge; on a Manual Only challenge it does nothing.
+  challenges - List the active challenges with their ids — the id every --challenge=<id> command needs.
+             Add --challenge=<id> for one challenge in detail (its photo ids, to aim --image=<id> at).
+             Alias: list
   boost    - Apply a boost to a challenge: boost --challenge=<id> [--image=<id>]
   pin      - Pin the photo Boost and Turbo land on (timing is unchanged; none clears a pin; no flags lists them):
              pin --challenge=<id> [--boost=<imageId|none>] [--turbo=<imageId|none>]
-  turbo    - Play the turbo mini-game on a challenge: turbo --challenge=<id>
+  turbo    - Play the turbo mini-game on a challenge to earn a Turbo: turbo --challenge=<id>.
+             With --image=<id>, apply an already-won Turbo to that photo instead
+             (challenges --challenge=<id> lists the photo ids). Exits 1 when the Turbo
+             was not earned or applied.
   submit   - Submit photo(s) to a challenge's empty slots: submit --challenge=<id> [--all]
   unlock-boost  - Spend a key to unlock a locked boost (does not apply it):
              unlock-boost --challenge=<id> [--yes]
@@ -713,7 +719,7 @@ describe('challenge-scoped actions', () => {
 
     test('turbo', async () => {
         const m = await run(['turbo', '--challenge=5']);
-        expect(m.actions.turboChallenge).toHaveBeenCalledWith('5');
+        expect(m.actions.turboChallenge).toHaveBeenCalledWith('5', { imageId: null });
     });
 
     test.each([
