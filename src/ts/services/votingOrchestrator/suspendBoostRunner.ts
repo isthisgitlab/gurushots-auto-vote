@@ -60,7 +60,7 @@ const resolveSuspendBoostTarget = (ctx: ActionContext): BoostTarget | null => {
     // The device cannot come back for a Turbo pin's release, so a boost that pin blocks now takes the
     // pick the release gives it — sent by id, since applyBoost would pick at the clock and find none.
     // Only a boost the deadline view holds at the release (same rule) is due then; any other is due now.
-    const blocked = votingLogic.isBoostBlocked(challenge, cid, ctx.now);
+    const blocked = votingLogic.isBoostBlocked(challenge, cid, ctx.now, ctx.entryAges);
     const releaseAt = blocked ? votingLogic.pinReleaseAt(challenge, cid, 'turbo', ctx.now) : null;
     const released = releaseAt === null ? null : existingBoostTarget(challenge, releaseAt);
     const existing =

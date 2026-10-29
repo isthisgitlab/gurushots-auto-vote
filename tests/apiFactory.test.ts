@@ -64,6 +64,8 @@ jest.mock('../src/ts/mock', () => ({
         swapPhoto: jest.fn(),
         exposureAutofill: jest.fn(),
     },
+    // The mock surface's in-memory ledger, as the factory's read selector hands it out.
+    mockEntryAgeLedger: { pinSubmitFailed: jest.fn(() => false) },
 }));
 
 jest.mock('../src/ts/logger', () => {
@@ -95,7 +97,9 @@ jest.mock('../src/ts/logger', () => {
     return mock;
 });
 
-const { getApiStrategy, getMiddleware, refreshApi } = require('../src/ts/apiFactory') as typeof apiFactoryModule;
+const { getApiStrategy, getMiddleware, refreshApi, getEntryAgeLedger } =
+    require('../src/ts/apiFactory') as typeof apiFactoryModule;
+const { entryAgeLedger } = require('../src/ts/entryAgeStore') as typeof import('../src/ts/entryAgeStore');
 // The raw surfaces are not exported — the explicit override returns the
 // module-level singletons, so identity assertions still hold.
 const realApi = getApiStrategy({ mock: false });
@@ -259,6 +263,16 @@ describe('apiFactory', () => {
             // Typecheck holds mockApi to realApi's type; this pins the runtime
             // surface too.
             expect(Object.keys(mockApi).sort()).toEqual(Object.keys(realApi).sort());
+        });
+    });
+
+    describe('getEntryAgeLedger', () => {
+        test('mock mode reads the mock surface in-memory ledger, real mode the persisted one', () => {
+            const { mockEntryAgeLedger } = jest.mocked(require('../src/ts/mock') as typeof mockModule);
+            settings.loadSettings.mockReturnValueOnce(invalid({ app: { mock: true }, auth: { token: 'tok' } }));
+            expect(getEntryAgeLedger()).toBe(mockEntryAgeLedger);
+            settings.loadSettings.mockReturnValueOnce(invalid({ app: { mock: false }, auth: { token: 'tok' } }));
+            expect(getEntryAgeLedger()).toBe(entryAgeLedger);
         });
     });
 

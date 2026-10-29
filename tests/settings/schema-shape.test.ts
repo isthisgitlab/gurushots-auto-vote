@@ -49,6 +49,7 @@ describe('settings schema shape', () => {
             'boostImageIndex',
             'boostNewSubmit',
             'boostNewSubmitOnConflict',
+            'boostPinnedSubmit',
             'useTurbo',
             'autoTurbo',
             'turboTime',

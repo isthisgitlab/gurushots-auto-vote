@@ -55,6 +55,7 @@ const blocked = ({ boost, turbo }: { boost?: Block; turbo?: Block }) => ({
     turboBlockedBy: turbo?.by ?? null,
     boostReleaseAt: boost?.releaseAt ?? null,
     turboReleaseAt: turbo?.releaseAt ?? null,
+    boostPinSubmits: false,
 });
 
 const makeChallenge = (overrides = {}) =>

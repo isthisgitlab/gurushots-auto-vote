@@ -6,8 +6,12 @@
 
 import { render, screen, fireEvent, waitFor } from './helpers/test-utils';
 import { ChallengeCard } from '@/components/app/ChallengeCard';
+import { EntryDetails } from '@/components/app/EntryDetails';
+import { deriveChallengeCardView } from '@/utils/challengeCardView';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import type { Challenge } from '../../src/ts/types/gurushots';
+import type { EntryPinsState, SwapBackOffers } from '@/components/app/ChallengeCardDetail';
+import { invalid } from '../helpers/invalid';
 import english = require('../../src/ts/translations/english');
 import latvian = require('../../src/ts/translations/latvian');
 
@@ -266,6 +270,26 @@ describe('a stored pin that no longer applies', () => {
         expect(await screen.findByText('app.pinGoneNote')).not.toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'app.pinClear' }));
         await waitFor(() => expect(window.api.setEntryPin).toHaveBeenCalledWith('boost', 101, null));
+    });
+
+    test('a gone Boost pin with the Boost-pinned submit active gets the submit note, not the wait note', async () => {
+        window.api.getEntryPins = jest.fn().mockResolvedValue({ boost: 'gone', turbo: null });
+        window.api.getDeadlineActions = jest
+            .fn()
+            .mockResolvedValue({ success: true, actions: [], boostBlocked: false, boostPinSubmits: true });
+        renderCard(makeChallenge());
+        expect(await screen.findByText('app.pinGoneSubmitNote')).not.toBeNull();
+        expect(screen.queryByText('app.pinGoneNote')).toBeNull();
+    });
+
+    test('the submit note names only the gone Boost pin: a gone Turbo pin keeps the wait note', async () => {
+        window.api.getEntryPins = jest.fn().mockResolvedValue({ boost: null, turbo: 'gone' });
+        window.api.getDeadlineActions = jest
+            .fn()
+            .mockResolvedValue({ success: true, actions: [], boostBlocked: false, boostPinSubmits: true });
+        renderCard(makeChallenge());
+        expect(await screen.findByText('app.pinGoneNote')).not.toBeNull();
+        expect(screen.queryByText('app.pinGoneSubmitNote')).toBeNull();
     });
 
     test('while a pin write is in flight Clear is aria-disabled and busy, does nothing, and keeps focus', async () => {
@@ -705,5 +729,45 @@ describe('the compact tile', () => {
         renderCard(makeChallenge());
         await waitFor(() => expect(window.api.getEntryPins).toHaveBeenCalled());
         expect(pinButtons('Boost')).toHaveLength(0);
+    });
+});
+
+describe('the gone-pin note text (EntryDetails directly)', () => {
+    const renderDetails = (boostPinSubmits?: boolean) => {
+        const challenge = makeChallenge({}, [{ id: 'e1', member_id: 'm', rank: 3, votes: 40 }]);
+        const view = deriveChallengeCardView(challenge, {
+            now: nowSec(),
+            bankroll: null,
+            autovoteRunning: false,
+            autoSubmitEnabled: false,
+            manualPhotosOnly: false,
+        });
+        return render(
+            <EntryDetails
+                challenge={challenge}
+                view={view}
+                swapBacks={invalid<SwapBackOffers>([])}
+                entryPins={invalid<EntryPinsState>({
+                    pins: { boost: 'zzz', turbo: null },
+                    setPin: jest.fn(),
+                    togglePin: jest.fn(),
+                    loading: false,
+                    error: null,
+                    clearError: jest.fn(),
+                })}
+                bankroll={null}
+                onVoteComplete={() => {}}
+                onCurrencySpent={() => {}}
+                onChooseSwap={() => {}}
+                timezone="local"
+                {...(boostPinSubmits === undefined ? {} : { boostPinSubmits })}
+            />,
+        );
+    };
+
+    test('the flag omitted keeps the wait note (the prop default)', async () => {
+        renderDetails();
+        expect(await screen.findByText('app.pinGoneNote')).not.toBeNull();
+        expect(screen.queryByText('app.pinGoneSubmitNote')).toBeNull();
     });
 });

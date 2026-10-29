@@ -105,7 +105,12 @@ const applyImminentBoostsOnSuspend = async ({
             return;
         }
         const boostLog = logger.withCategory('boost');
-        const imminent = imminentBoostChallenges(now, describeDeadlineActions, SUSPEND_BOOST_HORIZON_SEC);
+        const imminent = imminentBoostChallenges(
+            now,
+            describeDeadlineActions,
+            SUSPEND_BOOST_HORIZON_SEC,
+            apiFactory.getEntryAgeLedger(),
+        );
         const selected: typeof imminent = [];
         for (const entry of imminent) {
             if (settings.getEffectiveSetting('boostOnSleep', entry.challenge.id.toString())) {

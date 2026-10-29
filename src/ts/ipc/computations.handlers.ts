@@ -18,6 +18,7 @@
 import { registerHandlers } from './registerHandlers';
 import * as logger from '../logger';
 import * as votingLogic from '../services/VotingLogic';
+import { getEntryAgeLedger } from '../apiFactory';
 
 import type { IpcMain } from 'electron';
 import type { IpcHandlerMap } from './registerHandlers';
@@ -47,7 +48,8 @@ const buildHandlers = () =>
                     turboBlockedBy,
                     boostReleaseAt,
                     turboReleaseAt,
-                } = votingLogic.describeDeadlineActions(challenge, now);
+                    boostPinSubmits,
+                } = votingLogic.describeDeadlineActions(challenge, now, getEntryAgeLedger());
                 return {
                     success: true as const,
                     actions,
@@ -57,6 +59,7 @@ const buildHandlers = () =>
                     turboBlockedBy,
                     boostReleaseAt,
                     turboReleaseAt,
+                    boostPinSubmits,
                 };
             } catch (error) {
                 logger.withCategory('voting').error('Error computing deadline actions:', error);

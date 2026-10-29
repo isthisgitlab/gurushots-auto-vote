@@ -28,6 +28,7 @@ jest.mock('../../src/ts/services/VotingLogic', () => ({
 
 jest.mock('../../src/ts/services/autoFill', () => ({
     submitNewEntryForAction: jest.fn(async () => ({ ok: false, reason: 'none' })),
+    submitPinnedEntry: jest.fn(async () => ({ ok: false, imageId: null, reason: 'none' })),
     reflectNewEntry: jest.fn(),
     reflectEntryFlag: jest.fn(),
 }));
@@ -144,7 +145,7 @@ describe('runSuspendBoosts — target rule', () => {
         expect(
             await runSuspendBoosts([challenge], 'tok', { api: invalid<VotingPassApi>(api), entryAges: null }, later),
         ).toEqual([{ status: 'fulfilled', value: 'applied' }]);
-        expect(votingLogic.isBoostBlocked).toHaveBeenCalledWith(challenge, '101', later);
+        expect(votingLogic.isBoostBlocked).toHaveBeenCalledWith(challenge, '101', later, null);
     });
 
     test('a key-unlocked boost is boosted too', async () => {
@@ -186,6 +187,18 @@ describe('runSuspendBoosts — target rule', () => {
         expect(messages('info')).toContain(
             '[Challenge 101: Orchestrated] boost waiting for the pinned photo (not in the challenge) — not applied',
         );
+    });
+
+    test('the sleep boost never submits: a gone pin with the Boost-pinned submit on is still just skipped', async () => {
+        votingLogic.resolvePin.mockReturnValue({ state: 'gone' });
+        settings.getEffectiveSetting.mockImplementation((key) =>
+            key === 'autoBoost' || key === 'boostPinnedSubmit' ? true : false,
+        );
+        const api = makeApi();
+        expect(await run([timed()], api)).toEqual([{ status: 'fulfilled', value: 'skipped' }]);
+        expect(api.applyBoost).not.toHaveBeenCalled();
+        expect(api.applyBoostToEntry).not.toHaveBeenCalled();
+        expect(autoFill.submitPinnedEntry).not.toHaveBeenCalled();
     });
 
     test('a boost pin whose photo carries Turbo never fires the sleep boost', async () => {

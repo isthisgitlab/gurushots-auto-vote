@@ -13,6 +13,10 @@ jest.mock('../../src/ts/settings', () => ({
 }));
 
 jest.mock('../../src/ts/services/VotingLogic', () => ({ describeDeadlineActions: jest.fn() }));
+jest.mock('../../src/ts/apiFactory', () => ({
+    // The view ledger is not under test here; null keeps the seam hermetic.
+    getEntryAgeLedger: jest.fn(() => null),
+}));
 
 const { execFile } = jest.mocked(require('node:child_process') as typeof node_child_processModule);
 import votingLogicModule = require('../../src/ts/services/VotingLogic');
@@ -122,7 +126,7 @@ describe('createNodeDeadlineNotifier (default wiring)', () => {
 
         await notify(invalid([{ id: 'c1', title: 'Sunset' }]), NOW);
 
-        expect(votingLogic.describeDeadlineActions).toHaveBeenCalledWith({ id: 'c1', title: 'Sunset' }, NOW);
+        expect(votingLogic.describeDeadlineActions).toHaveBeenCalledWith({ id: 'c1', title: 'Sunset' }, NOW, null);
         expect(execFile).toHaveBeenCalledTimes(1);
         const [cmd, args] = invalid<ExecFileCall>(execFile.mock.calls[0]);
         expect(cmd).toBe('notify-send');
@@ -159,7 +163,7 @@ describe('createNodeDeadlineNotifier (default wiring)', () => {
 
         expect(deliver).toHaveBeenCalledTimes(1);
         expect(describeDeadlineActions).toHaveBeenCalledTimes(1);
-        expect(describeDeadlineActions).toHaveBeenCalledWith({ id: 'outer' }, NOW);
+        expect(describeDeadlineActions).toHaveBeenCalledWith({ id: 'outer' }, NOW, null);
     });
 
     test('swallows a failing cycle and logs Error messages and non-Error throws alike', async () => {

@@ -23,6 +23,7 @@ import { execFile } from 'node:child_process';
 import * as votingLogic from '../VotingLogic';
 import * as settings from '../../settings';
 import * as logger from '../../logger';
+import { getEntryAgeLedger } from '../../apiFactory';
 import {
     computeDueNotifications,
     createDedupe,
@@ -34,6 +35,7 @@ import { createScenarioNotifier } from '../scenarioNotifications';
 import { getScenarioStatus } from '../scenarioStatus';
 
 import type { Challenge } from '../../types/gurushots';
+import type { EntryAgeLedger } from '../../types/stores';
 import type { OutboxItem } from '../scenarioNotifications';
 import type { Translate, TranslateVars } from '../../translations/translator';
 import { errorMessage } from '../../errorMessage';
@@ -97,6 +99,7 @@ const createNodeDeadlineNotifier = (
         describeDeadlineActions?: (
             challenge: Challenge,
             now: number,
+            entryAges: EntryAgeLedger | null,
         ) => { actions: Array<{ action: string; dueAt: number | null }> };
         getSetting?: (key: string) => unknown;
         translate?: Translate;
@@ -122,7 +125,7 @@ const createNodeDeadlineNotifier = (
             const perChallengeActions = [];
             for (const challenge of list) {
                 try {
-                    const { actions } = describeDeadlineActions(challenge, now) || {};
+                    const { actions } = describeDeadlineActions(challenge, now, getEntryAgeLedger()) || {};
                     // dataIssues carries the boundary's mark, so the decision
                     // core skips a challenge whose data cannot be read.
                     perChallengeActions.push({

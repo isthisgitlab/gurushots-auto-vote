@@ -19,6 +19,10 @@ jest.mock('../../src/ts/logger', () => {
     return { withCategory: jest.fn(() => cat), cat };
 });
 jest.mock('../../src/ts/services/VotingLogic', () => ({ describeDeadlineActions: jest.fn(() => ({ actions: [] })) }));
+jest.mock('../../src/ts/apiFactory', () => ({
+    // The view ledger is not under test here; null keeps the seam hermetic.
+    getEntryAgeLedger: jest.fn(() => null),
+}));
 
 const NOW = 1_000_000;
 const timed = invalid<Challenge>({
@@ -148,7 +152,7 @@ describe('holdQuitForOpenBoosts — when to ask', () => {
             { autovoteRunning: true, dialog, parent: null, t, proceed: jest.fn() },
         );
         expect(held).toBe(true);
-        expect(votingLogic.describeDeadlineActions).toHaveBeenCalledWith(keyed, expect.any(Number));
+        expect(votingLogic.describeDeadlineActions).toHaveBeenCalledWith(keyed, expect.any(Number), null);
     });
 
     test('a throw while reading boost state lets the quit through', () => {
@@ -430,7 +434,7 @@ describe('bypass and reset', () => {
 describe('remembered list — suspend selection', () => {
     test('imminentBoostChallenges applies the given horizon, soonest first, and imminentBoosts selects the same set', () => {
         guard.rememberChallenges([timed, keyed, used, expired], false);
-        const all = guard.imminentBoostChallenges(NOW, describe_, guard.QUIT_WARN_HORIZON_SEC);
+        const all = guard.imminentBoostChallenges(NOW, describe_, guard.QUIT_WARN_HORIZON_SEC, null);
         expect(all.map((b) => [b.challenge.id, b.dueAt])).toEqual([
             [2, NOW - 30],
             [1, NOW + 540],
@@ -458,8 +462,8 @@ describe('remembered list — suspend selection', () => {
         guard.rememberChallenges([keyed], false);
         const at = (sec: number) => () => ({ actions: [{ action: 'boost', dueAt: NOW + sec }] });
         expect(guard.SUSPEND_BOOST_HORIZON_SEC).toBe(30 * 60);
-        expect(guard.imminentBoostChallenges(NOW, at(1800), guard.SUSPEND_BOOST_HORIZON_SEC)).toHaveLength(1);
-        expect(guard.imminentBoostChallenges(NOW, at(1860), guard.SUSPEND_BOOST_HORIZON_SEC)).toHaveLength(0);
+        expect(guard.imminentBoostChallenges(NOW, at(1800), guard.SUSPEND_BOOST_HORIZON_SEC, null)).toHaveLength(1);
+        expect(guard.imminentBoostChallenges(NOW, at(1860), guard.SUSPEND_BOOST_HORIZON_SEC, null)).toHaveLength(0);
     });
 
     test('rememberChallenges records the mock flag it was fetched under; a non-array leaves both untouched', () => {

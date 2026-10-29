@@ -71,6 +71,7 @@ describe('no hint under the settings the switch overrides', () => {
         'autoSwap',
         'boostNewSubmit',
         'boostNewSubmitOnConflict',
+        'boostPinnedSubmit',
         'turboNewSubmit',
         'turboNewSubmitOnConflict',
         'autoBoost',

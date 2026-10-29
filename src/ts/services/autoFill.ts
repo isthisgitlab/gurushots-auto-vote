@@ -27,7 +27,7 @@
  *   staggeredFill.ts   maybeAutoFillChallenge (cycle-driven, schedule-based)
  *   emergencyFill.ts   maybeEmergencyFillChallenge + its shared stand-down check
  *   manualFill.ts      fillChallengeNow (GUI "Fill Now"), submitPickedPhotos (GUI "Pick…")
- *   fillNew.ts         submitNewEntryForAction (boost/turbo "fill new")
+ *   fillNew.ts         submitNewEntryForAction (boost/turbo "fill new"), submitPinnedEntry (the Boost-pinned submit)
  *   pipeline.ts        the shared fill pipeline and the submit-free rankings (swap, photo suggestions)
  *   candidates.ts      on-theme candidate fetch, ignore words, semantic scores
  *   memberIdentity.ts  per-token member id cache for tag resolution
@@ -40,7 +40,7 @@
 import { maybeAutoFillChallenge } from './autoFill/staggeredFill';
 import { evaluateEmergencyFill, maybeEmergencyFillChallenge } from './autoFill/emergencyFill';
 import { fillChallengeNow, submitPickedPhotos } from './autoFill/manualFill';
-import { submitNewEntryForAction } from './autoFill/fillNew';
+import { submitNewEntryForAction, submitPinnedEntry } from './autoFill/fillNew';
 import { rankCandidatesForChallenge, suggestFillPhotos } from './autoFill/pipeline';
 import { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge } from './autoFill/candidates';
 import { resolveMemberId, __resetMemberIdCache } from './autoFill/memberIdentity';
@@ -49,6 +49,7 @@ import {
     resolveMissingChosen,
     logChosenSkipOnce,
     clearChosenSkip,
+    chosenWalkOutcome,
     enteredIds,
 } from './autoFill/chosenPhotos';
 import { describeSubmitFailure } from './autoFill/fillLogging';
@@ -61,6 +62,10 @@ export {
     fillChallengeNow,
     submitPickedPhotos,
     submitNewEntryForAction,
+    // The Boost-pinned submit (services/decisions/entryPick's runner, the boost
+    // orchestrator) and the walk verdict it reads.
+    submitPinnedEntry,
+    chosenWalkOutcome,
     reflectNewEntry,
     reflectEntryFlag,
     resolveScheduleTarget,

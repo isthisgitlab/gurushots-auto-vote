@@ -62,7 +62,7 @@ const keyChallenge = (id: number) =>
 
 const selectedIds = () =>
     quitGuard
-        .imminentBoostChallenges(NOW, VotingLogic.describeDeadlineActions, quitGuard.SUSPEND_BOOST_HORIZON_SEC)
+        .imminentBoostChallenges(NOW, VotingLogic.describeDeadlineActions, quitGuard.SUSPEND_BOOST_HORIZON_SEC, null)
         .map(({ challenge: c }) => c.id);
 
 beforeEach(() => {
@@ -142,7 +142,12 @@ describe('imminentBoostChallenges with the real describeDeadlineActions', () => 
         expect(selectedIds()).toEqual([7]);
         expect(
             quitGuard
-                .imminentBoostChallenges(NOW, VotingLogic.describeDeadlineActions, quitGuard.SUSPEND_BOOST_HORIZON_SEC)
+                .imminentBoostChallenges(
+                    NOW,
+                    VotingLogic.describeDeadlineActions,
+                    quitGuard.SUSPEND_BOOST_HORIZON_SEC,
+                    null,
+                )
                 .map(({ dueAt }) => dueAt),
         ).toEqual([NOW + 1500]);
 

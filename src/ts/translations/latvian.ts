@@ -255,6 +255,8 @@ export const app: LatvianApp = {
     pinNotApplyingShortBoth: 'Piespraudes aiztur {boost} un {turbo}',
     pinGoneNote:
         'Piespraustā {kind} foto šajā izaicinājumā pašlaik nav, tāpēc {kind} gaida šo foto un netiks piemērots citam foto. Ja tas ir viens no taviem izvēlētajiem foto un automātiskā iesniegšana ir ieslēgta, tas tiks iesniegts automātiski un {kind} tiks piemērots. Ja {kind} beidzas agrāk, tas paliek neizmantots. Piespraud citu foto vai noņem piespraudi, lai izmantotu tavus parastos uzstādījumus.',
+    pinGoneSubmitNote:
+        'Boost piespraustā foto šajā izaicinājumā pašlaik nav. Tas ir viens no taviem izvēlētajiem foto, tāpēc to iesniegs, kad pienāks Boost laiks, un Boost tam piemēros pēc „Gaidīt pirms Boost jaunam foto”. Ja to nevar iesniegt, Boost turpina to gaidīt un, ja beidzas, paliek neizmantots. Piespraud citu foto vai noņem piespraudi, lai izmantotu tavus parastos uzstādījumus.',
     pinConflictNote:
         'Piespraustajam {kind} foto jau ir {other}, tāpēc {kind} netiks piemērots. Piespraud citu foto vai noņem piespraudi, lai izmantotu tavus parastos uzstādījumus.',
     pinSwapWarning:
@@ -341,6 +343,9 @@ export const app: LatvianApp = {
     boostNewSubmitOnConflict: 'Boost jaunam iesniegtam foto tikai konflikta gadījumā',
     boostNewSubmitOnConflictDesc:
         'Boost jaunam foto iesniedz tikai tad, ja neviens esošais foto nevar saņemt Boost — katram ir Turbo vai tā piespraude. Turbo piespraude, kas ārkārtas iesniegšanas laikā atkāpjas, Boost saņem.',
+    boostPinnedSubmit: 'Iesniegt Boost piesprausto foto, kad pienāk Boost laiks',
+    boostPinnedSubmitDesc:
+        'Ja Boost piespraustā foto izaicinājumā nav, bet tas ir starp „Izvēlētie foto”, to iesniedz, kad pienāk Boost laiks, un Boost tam piemēro pēc „Gaidīt pirms Boost jaunam foto”. Vajadzīga brīva vieta. Ja foto nevar iesniegt, Boost turpina to gaidīt kā līdz šim.',
     turboNewSubmit: 'Turbo jaunam iesniegtam foto',
     turboNewSubmitDesc:
         'Tieši pirms Turbo iesniedz jaunu foto pēc tagu noteikumiem, un Turbo piešķiras jaunajam foto. Nav vietas vai foto — Turbo pāriet uz norādīto Turbo foto, bet bez foto izlaiž ciklu.',

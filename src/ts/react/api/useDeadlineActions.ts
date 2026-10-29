@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useLatestRef } from '../hooks/useLatestRef';
 
 import type { Challenge } from '../../types/gurushots';
@@ -21,6 +21,8 @@ export type DeadlineActionsState = {
     /** Unix seconds the blocking pin gives way; null when the block never does. */
     boostReleaseAt: number | null;
     turboReleaseAt: number | null;
+    /** The Boost-pinned submit can place the boost on its gone pin right now (a banner and row change). */
+    boostPinSubmits: boolean;
     loading: boolean;
     error: boolean;
 };
@@ -39,6 +41,7 @@ const settledEmpty = (error: boolean): DeadlineActionsState => ({
     turboBlockedBy: null,
     boostReleaseAt: null,
     turboReleaseAt: null,
+    boostPinSubmits: false,
     loading: false,
     error,
 });
@@ -56,6 +59,7 @@ const settledFrom = (
     turboBlockedBy: res.turboBlockedBy ?? null,
     boostReleaseAt: res.boostReleaseAt ?? null,
     turboReleaseAt: res.turboReleaseAt ?? null,
+    boostPinSubmits: res.boostPinSubmits === true,
     loading: false,
     error: false,
 });
@@ -82,12 +86,18 @@ const releaseDelayMs = (releaseAt: number): number =>
  * A photo pinned for the other feature blocks a spend only until Emergency Submit takes
  * over, and no fingerprint field moves then, so the fetch that reports those instants
  * (`boostReleaseAt` / `turboReleaseAt`) also arms one refetch, for the sooner of them.
+ * The Boost-pinned submit's latch is invisible to the fingerprint too (it lives on the
+ * entry-age ledger), so while the last result said `boostPinSubmits: true` each
+ * completed auto-vote cycle (`cycleKey`) arms one refetch — the pass that just ran may
+ * have submitted the photo or set the latch.
  *
  * @param settingsVersion - bumped when settings change
+ * @param cycleKey - the autovote context's lastRun; changes when a cycle completes
  */
 export function useDeadlineActions(
     challenge: Challenge | null | undefined,
     settingsVersion: number = 0,
+    cycleKey: string | null = null,
 ): DeadlineActionsState {
     const [state, setState] = useState<DeadlineActionsState>({ ...settledEmpty(false), loading: true });
 
@@ -120,6 +130,16 @@ export function useDeadlineActions(
     const challengeRef = useLatestRef(challenge);
     // Bumped when a blocking pin is due to give way, to refetch once at that instant.
     const [releaseTick, setReleaseTick] = useState(0);
+    // Bumped when a cycle completed while the last result said the Boost-pinned submit was
+    // active, to refetch once then (the pass may have submitted the photo or set the latch).
+    const [cycleTick, setCycleTick] = useState(0);
+    // Whether the last settled result said `boostPinSubmits: true` — the cycle effect reads it.
+    const pinSubmitsRef = useRef(false);
+
+    useEffect(() => {
+        if (cycleKey === null || !pinSubmitsRef.current) return;
+        setCycleTick((tick) => tick + 1);
+    }, [cycleKey]);
 
     useLayoutEffect(() => {
         const current = challengeRef.current;
@@ -138,6 +158,7 @@ export function useDeadlineActions(
                 if (res && res.success) {
                     const settled = settledFrom(res);
                     setState(settled);
+                    pinSubmitsRef.current = settled.boostPinSubmits;
                     const releases = [settled.boostReleaseAt, settled.turboReleaseAt].filter(
                         (at): at is number => typeof at === 'number',
                     );
@@ -148,10 +169,12 @@ export function useDeadlineActions(
                         );
                     }
                 } else {
+                    pinSubmitsRef.current = false;
                     setState(settledEmpty(true));
                 }
             } catch {
                 if (!cancelled) {
+                    pinSubmitsRef.current = false;
                     setState(settledEmpty(true));
                 }
             }
@@ -160,7 +183,7 @@ export function useDeadlineActions(
             cancelled = true;
             clearTimeout(releaseTimer);
         };
-    }, [fingerprint, settingsVersion, challengeRef, releaseTick]);
+    }, [fingerprint, settingsVersion, challengeRef, releaseTick, cycleTick]);
 
     return state;
 }

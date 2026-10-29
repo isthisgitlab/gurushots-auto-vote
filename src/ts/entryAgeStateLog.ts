@@ -57,7 +57,20 @@ const isRecord = (r: unknown): r is LegacyEntryAgeRecord =>
 
 const isString = (value: unknown): value is string => typeof value === 'string';
 
+const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+
 const idList = (value: unknown): string[] => (Array.isArray(value) ? value.slice(0, MAX_IDS).filter(isString) : []);
+
+/**
+ * The stored Boost-pinned-submit latch, read only when it is a plain object
+ * holding a non-empty string `imageId` and a finite `boostDeadline`; anything
+ * else reads as none.
+ */
+const pinSubmitFailedOf = (value: unknown): EntryAgeRecord['pinSubmitFailed'] => {
+    if (!isPlainObject(value)) return null;
+    if (!isString(value.imageId) || value.imageId === '' || !isFiniteNumber(value.boostDeadline)) return null;
+    return { imageId: value.imageId, boostDeadline: value.boostDeadline };
+};
 
 /**
  * The ledger's state from its text. An unreadable or corrupt file reads as empty — every entry's
@@ -85,6 +98,7 @@ const parseState = (raw: string | null): State => {
                 exact: idList(record.exact),
                 observed: record.observed !== false,
                 firstSeen: Math.max(finiteOr(record.firstSeen, 0), 0),
+                pinSubmitFailed: pinSubmitFailedOf(record.pinSubmitFailed),
             };
         }
     }

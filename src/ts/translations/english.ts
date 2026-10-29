@@ -240,6 +240,8 @@ export const app = {
     pinNotApplyingShortBoth: '{boost} and {turbo} held by pins',
     pinGoneNote:
         "The photo pinned for {kind} isn't in this challenge right now, so {kind} is waiting for it — it won't be applied to another photo. If it's one of your Chosen Photos and Auto-Submit is on, it is submitted automatically and {kind} is applied then. If {kind} expires before that, it goes unused. Pin another photo or clear the pin to use your usual settings.",
+    pinGoneSubmitNote:
+        "The photo pinned for Boost isn't in this challenge right now. It is one of your Chosen Photos, so it will be submitted when Boost is due, and Boost is applied to it after Wait Before Boosting a New Photo. If it can't be submitted, Boost keeps waiting for it and goes unused if it expires. Pin another photo or clear the pin to use your usual settings.",
     pinConflictNote:
         "The photo pinned for {kind} already has {other}, so {kind} won't be applied. Pin another photo or clear the pin to use your usual settings.",
     pinSwapWarning:
@@ -324,6 +326,9 @@ export const app = {
     boostNewSubmitOnConflict: 'Boost a Freshly Submitted Photo Only on Conflict',
     boostNewSubmitOnConflictDesc:
         'A new photo is submitted and boosted only when every existing entry has Turbo or a Turbo pin. A Turbo pin yielding in the Emergency Submit window takes the Boost; the option above overrides.',
+    boostPinnedSubmit: 'Submit the Photo Pinned for Boost When Boost Is Due',
+    boostPinnedSubmitDesc:
+        "When the photo pinned for Boost isn't in the challenge but is one of your Chosen Photos, it is submitted when Boost is due, and Boost is applied to it after Wait Before Boosting a New Photo. Needs a free slot. If the photo can't be submitted, Boost keeps waiting for it as before.",
     turboNewSubmit: 'Turbo a Freshly Submitted Photo',
     turboNewSubmitDesc:
         'A new photo (by your Auto-Submit tag rules) is submitted just before Turbo applies and gets it. No free slot or photo: Turbo falls back to your Turbo Entry, or skips this cycle with none yet.',

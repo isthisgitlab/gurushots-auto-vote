@@ -32,6 +32,14 @@ const isEntryAgeRecord = isShape<EntryAgeRecord>({
     exact: isArrayOf(isString),
     observed: isBoolean,
     firstSeen: isNumber,
+    pinSubmitFailed: optional(
+        nullable(
+            isShape<{ imageId: string; boostDeadline: number }>({
+                imageId: isString,
+                boostDeadline: isNumber,
+            }),
+        ),
+    ),
 });
 
 const rawStore = (initial: string | null) => {
@@ -268,6 +276,79 @@ describe('entry-age ledger', () => {
         ledger.observe(listing(2, ['c']), NOW + 120);
         // The challenge had been seen with none, so an entry that appears is new.
         expect(store.peek()['2'].entered).toEqual({ c: NOW + 120 });
+    });
+});
+
+describe('the Boost-pinned-submit failure latch', () => {
+    test('round-trips, answers only for its own photo and Boost window, and is replaced by a new pin or window', () => {
+        const ledger = createMemoryEntryAgeLedger();
+        ledger.observe(challenge(1, ['a']), NOW);
+        ledger.markPinSubmitFailed(challenge(1, ['a']), 'pin', NOW + 600);
+        expect(ledger.pinSubmitFailed(1, 'pin', NOW + 600)).toBe(true);
+        expect(ledger.pinSubmitFailed('1', 'pin', NOW + 600)).toBe(true);
+        expect(ledger.pinSubmitFailed(1, 'other', NOW + 600)).toBe(false);
+        expect(ledger.pinSubmitFailed(1, 'pin', NOW + 601)).toBe(false);
+        expect(ledger.pinSubmitFailed(2, 'pin', NOW + 600)).toBe(false);
+        // A different pin (or a new Boost window) is a new key: setting it replaces the latch.
+        ledger.markPinSubmitFailed(challenge(1, ['a']), 'pin2', NOW + 600);
+        expect(ledger.pinSubmitFailed(1, 'pin2', NOW + 600)).toBe(true);
+        expect(ledger.pinSubmitFailed(1, 'pin', NOW + 600)).toBe(false);
+        // Nothing else about the record moved.
+        expect(ledger.pending(1)).toBeNull();
+        expect(ledger.isUncertain(1, 'a')).toBe(false);
+        expect(ledger.enteredAt(1, 'a')).toBe(0);
+    });
+
+    test('a mark on a challenge no fetch saw makes a record the next fetch completes', () => {
+        const store = rawStore(null);
+        const ledger = createEntryAgeLedger(store);
+        ledger.markPinSubmitFailed(listing(1, []), 7, NOW + 600);
+        expect(ledger.pinSubmitFailed(1, 7, NOW + 600)).toBe(true);
+        expect(store.peek()['1']).toMatchObject({ observed: false, pinSubmitFailed: { imageId: '7' } });
+    });
+
+    test('a stored latch that is not an object with a non-empty string id and a finite deadline reads as none, and the next write drops it', () => {
+        const stored = (pinSubmitFailed: unknown) =>
+            JSON.stringify({
+                1: { closeTime: NOW + 3600, entered: { a: NOW }, pending: null, pinSubmitFailed },
+            });
+        const reads = (pinSubmitFailed: unknown, imageId: string, deadline: number) =>
+            createEntryAgeLedger(rawStore(stored(pinSubmitFailed))).pinSubmitFailed(1, imageId, deadline);
+        expect(reads('nope', 'nope', NOW + 600)).toBe(false);
+        expect(reads({ imageId: '', boostDeadline: NOW + 600 }, '', NOW + 600)).toBe(false);
+        expect(reads({ imageId: 'p', boostDeadline: 'soon' }, 'p', NOW + 600)).toBe(false);
+        expect(reads({ imageId: 'p' }, 'p', NOW + 600)).toBe(false);
+        expect(reads(null, 'p', NOW + 600)).toBe(false);
+        expect(reads({ imageId: 'p', boostDeadline: NOW + 600 }, 'p', NOW + 600)).toBe(true);
+
+        const store = rawStore(stored({ imageId: 'p', boostDeadline: 'soon' }));
+        const ledger = createEntryAgeLedger(store);
+        ledger.markUncertain(listing(1, ['a']), 'u', NOW + 60);
+        expect(store.peek()['1'].pinSubmitFailed).toBeNull();
+    });
+
+    test('the latch survives observe while its Boost window is ahead, and is dropped once it passed', () => {
+        const ledger = createMemoryEntryAgeLedger();
+        ledger.observe(challenge(1, ['a']), NOW);
+        ledger.markPinSubmitFailed(challenge(1, ['a']), 'pin', NOW + 600);
+        ledger.observe(challenge(1, ['a']), NOW + 60);
+        expect(ledger.pinSubmitFailed(1, 'pin', NOW + 600)).toBe(true);
+        expect(ledger.enteredAt(1, 'a')).toBe(0);
+        ledger.observe(challenge(1, ['a']), NOW + 600);
+        expect(ledger.pinSubmitFailed(1, 'pin', NOW + 600)).toBe(false);
+        expect(ledger.enteredAt(1, 'a')).toBe(0);
+    });
+
+    test('an identical latch is no change: observing again writes nothing', () => {
+        const store = rawStore(null);
+        const ledger = createEntryAgeLedger(store);
+        ledger.observe(challenge(1, ['a']), NOW);
+        const writes = store.writeRaw.mock.calls.length;
+        ledger.markPinSubmitFailed(challenge(1, ['a']), 'pin', NOW + 600);
+        expect(store.writeRaw.mock.calls.length).toBe(writes + 1);
+        ledger.observe(challenge(1, ['a']), NOW + 60);
+        ledger.observe(challenge(1, ['a']), NOW + 120);
+        expect(store.writeRaw.mock.calls.length).toBe(writes + 1);
     });
 });
 

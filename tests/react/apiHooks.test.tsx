@@ -189,10 +189,18 @@ describe('useDeadlineActions', () => {
     });
 
     // The block fields of an answer with nothing blocked.
-    const calm = { boostBlockedBy: null, turboBlockedBy: null, boostReleaseAt: null, turboReleaseAt: null };
+    const calm = {
+        boostBlockedBy: null,
+        turboBlockedBy: null,
+        boostReleaseAt: null,
+        turboReleaseAt: null,
+        boostPinSubmits: false,
+    };
 
     test('a success with a non-array actions field yields an empty list', async () => {
-        mockApi.getDeadlineActions.mockResolvedValueOnce(invalid({ success: true, actions: 'x', boostBlocked: true }));
+        mockApi.getDeadlineActions.mockResolvedValueOnce(
+            invalid({ success: true, actions: 'x', boostBlocked: true, boostPinSubmits: true }),
+        );
         const { result } = renderHook(() => useDeadlineActions(challenge));
         await waitFor(() => expect(result.current.loading).toBe(false));
         expect(result.current).toEqual({
@@ -200,6 +208,7 @@ describe('useDeadlineActions', () => {
             boostBlocked: true,
             turboBlocked: false,
             ...calm,
+            boostPinSubmits: true,
             loading: false,
             error: false,
         });
@@ -210,10 +219,51 @@ describe('useDeadlineActions', () => {
         const { result, rerender } = renderHook(({ c }) => useDeadlineActions(c), { initialProps: { c: challenge } });
         await waitFor(() => expect(result.current.error).toBe(true));
 
-        mockApi.getDeadlineActions.mockResolvedValueOnce(invalid({ success: true, actions: [{ action: 'turbo' }] }));
+        mockApi.getDeadlineActions.mockResolvedValueOnce(
+            invalid({ success: true, actions: [{ action: 'turbo' }], boostPinSubmits: false }),
+        );
         rerender({ c: { ...challenge, close_time: 200 } });
         await waitFor(() => expect(result.current.actions).toEqual([{ action: 'turbo' }]));
         expect(result.current.boostBlocked).toBe(false);
+    });
+
+    test('a response without boostPinSubmits settles the flag to false', async () => {
+        mockApi.getDeadlineActions.mockResolvedValueOnce(invalid({ success: true, actions: [] }));
+        const { result } = renderHook(() => useDeadlineActions(challenge));
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        expect(result.current.boostPinSubmits).toBe(false);
+    });
+
+    test('a completed cycle refetches only while the last result said boostPinSubmits', async () => {
+        mockApi.getDeadlineActions.mockResolvedValueOnce({
+            success: true,
+            actions: [],
+            boostBlocked: false,
+            turboBlocked: false,
+            ...calm,
+            boostPinSubmits: true,
+        });
+        const { result, rerender } = renderHook(({ c, k }) => useDeadlineActions(c, 0, k), {
+            initialProps: { c: challenge, k: null as string | null },
+        });
+        await waitFor(() => expect(result.current.boostPinSubmits).toBe(true));
+        expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(1);
+
+        // A cycle completes: the flag was true, so the card refetches once.
+        mockApi.getDeadlineActions.mockResolvedValueOnce({
+            success: true,
+            actions: [],
+            boostBlocked: false,
+            turboBlocked: false,
+            ...calm,
+        });
+        rerender({ c: challenge, k: 'run-1' });
+        await waitFor(() => expect(result.current.boostPinSubmits).toBe(false));
+        expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
+
+        // Another cycle: the refetch said false, so no further fetch.
+        rerender({ c: challenge, k: 'run-2' });
+        expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
     });
 
     test('a new settingsVersion refetches with the same challenge content', async () => {
@@ -395,6 +445,7 @@ describe('useDeadlineActions', () => {
                 turboBlockedBy: 'pin',
                 boostReleaseAt: soon + 600,
                 turboReleaseAt: soon,
+                boostPinSubmits: false,
             });
             mockApi.getDeadlineActions.mockResolvedValueOnce({
                 success: true,

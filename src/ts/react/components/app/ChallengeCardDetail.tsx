@@ -357,6 +357,7 @@ export function ChallengeCardDetail({
     bankroll,
     onVoteComplete,
     onCurrencySpent,
+    boostPinSubmits = false,
 }: {
     challenge: Challenge;
     view: ChallengeCardView;
@@ -375,6 +376,8 @@ export function ChallengeCardDetail({
     bankroll: Bankroll | null;
     onVoteComplete: () => void;
     onCurrencySpent: () => void;
+    /** The Boost-pinned submit can place the boost on its gone pin; picks the gone-pin note's text. */
+    boostPinSubmits?: boolean;
 }) {
     const { t } = useTranslation();
     const { userProgress } = view;
@@ -450,6 +453,7 @@ export function ChallengeCardDetail({
                     onCurrencySpent={onCurrencySpent}
                     onChooseSwap={actions.openSwapPick}
                     timezone={timezone}
+                    boostPinSubmits={boostPinSubmits}
                 />
             )}
 

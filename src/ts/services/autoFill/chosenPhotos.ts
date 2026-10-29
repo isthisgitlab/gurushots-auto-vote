@@ -379,6 +379,18 @@ const clearChosenSkip = (challenge: Challenge): void => {
 };
 
 /**
+ * What the submit-usage walk last learned about one chosen photo id, with the
+ * memo brought up to date (a TTL-expired outcome reads as none). Null when the
+ * memo holds no outcome for the id — the walk did not run for it, was cut
+ * short, threw, or sits out its retry wait. Read by the Boost-pinned submit to
+ * tell a definitive empty pick (refused, not found) from a transient one.
+ */
+const chosenWalkOutcome = (challenge: Challenge, id: string): 'found' | 'refused' | 'not-found' | null => {
+    const outcome = readMemo(challenge, Date.now(), 'submit')?.outcomes.get(id);
+    return outcome ? outcome.state : null;
+};
+
+/**
  * Drop everything remembered about the lists as they were: the walk memos and the explained skips.
  * A logout calls it, so the next sign-in is neither skipped on the strength of a walk made for the
  * last account nor denied a skip line it already got (tests also start clean with it).
@@ -396,6 +408,7 @@ export {
     formatChosenSkipMessage,
     logChosenSkipOnce,
     clearChosenSkip,
+    chosenWalkOutcome,
     forgetChosenPhotosMemory,
 };
 export type { ChosenSettings, ChosenKey, ChosenSkipReason };

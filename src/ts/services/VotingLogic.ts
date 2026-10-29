@@ -45,6 +45,7 @@ export const pickTurboEntry = entryPick.pickTurboEntry;
 export const resolveTurboFillNewMode = entryPick.resolveTurboFillNewMode;
 export const resolvePin = entryPick.resolvePin;
 export const livePinnedIds = entryPick.livePinnedIds;
+export const canSubmitBoostPin = entryPick.canSubmitBoostPin;
 export const pinReleaseAt = entryPick.pinReleaseAt;
 export const isWithinEmergencyWindow = entryPick.isWithinEmergencyWindow;
 export const shouldApplyBoost = boostTurbo.shouldApplyBoost;

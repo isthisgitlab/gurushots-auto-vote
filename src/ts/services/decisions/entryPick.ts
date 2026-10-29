@@ -1,5 +1,6 @@
 import type { Challenge, RankingEntry } from '../../types/gurushots';
 import type { EntryPinKind } from '../../types/settings';
+import type { EntryAgeLedger } from '../../types/stores';
 import type { PinResolution } from '../../voting/entryPins';
 /**
  * Boost/turbo entry selection: which entry a boost or turbo lands on, never
@@ -14,6 +15,7 @@ import { boostDeadline, isBoostWindowOpen } from '../../voting/boostWindow';
 import { resolveEntryIndex } from '../../voting/entrySlot';
 import { canStillFire, findPinnedEntry } from '../../voting/entryPins';
 import { isKnownTurboMode } from '../../voting/turboMode';
+import { getSlotsRemaining, resolveChosenPhotos } from '../autoFill';
 import { isManualPhotosOnly } from '../manualPhotosOnly';
 
 /**
@@ -39,6 +41,36 @@ const livePinnedIds = (challenge: Challenge, challengeId: string): string[] =>
     (['boost', 'turbo'] as const)
         .map((kind) => livePinnedId(challenge, challengeId, kind))
         .filter((id): id is string => id !== null);
+
+/**
+ * Whether the Boost-pinned submit may run on this challenge (the `boostPinnedSubmit` opt-in), and
+ * the photo it would submit: the pinned photo's id when EVERY condition holds, else null.
+ *
+ * The Boost pin must be `gone` — the photo left the challenge — while the stored pin still names
+ * it (the `gone` state carries no id, so the id is read from the pins). The photo must be one of
+ * the user's Chosen Photos, a slot must be free, and no failure latch may sit on this challenge,
+ * pin and Boost window (a definitive submit failure earlier in the window; only the runner writes
+ * it, this function only reads). Without the ledger the latch cannot be honoured, so the feature
+ * stays off. Manual Only always wins: nothing runs on the challenge by itself.
+ */
+const canSubmitBoostPin = (
+    challenge: Challenge,
+    challengeId: string,
+    entryAges: EntryAgeLedger | null,
+): string | null => {
+    if (settings.getEffectiveSetting('boostPinnedSubmit', challengeId) !== true) return null;
+    if (isManualPhotosOnly(settings, challengeId)) return null;
+    if (resolvePin(challenge, challengeId, 'boost').state !== 'gone') return null;
+    const pinnedId = settings.getEntryPins(challengeId).boost;
+    // `gone` implies the pin names a photo; the guard keeps a malformed pin from riding through.
+    if (!pinnedId) return null;
+    const chosen = resolveChosenPhotos({ read: (key) => settings.getEffectiveSetting(key, challengeId) });
+    if (!chosen.ids.includes(pinnedId)) return null;
+    if (getSlotsRemaining(challenge) <= 0) return null;
+    if (entryAges === null) return null;
+    if (entryAges.pinSubmitFailed(challengeId, pinnedId, boostDeadline(challenge))) return null;
+    return pinnedId;
+};
 
 /**
  * True when the per-challenge Emergency Fill window is enabled (> 0) and
@@ -300,6 +332,7 @@ export {
     resolvePin,
     livePinnedId,
     livePinnedIds,
+    canSubmitBoostPin,
     blockingPinnedId,
     pinReleaseAt,
     isWithinEmergencyWindow,

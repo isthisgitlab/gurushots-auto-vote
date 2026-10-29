@@ -55,19 +55,31 @@ describe('get-deadline-actions', () => {
         ['number', 42],
     ])('passes a challenge with a %s id and the current unix time to VotingLogic', async (_label, id) => {
         const actions = [{ kind: 'boost', at: 100 }];
-        votingLogic.describeDeadlineActions.mockReturnValue(invalid({ actions, boostBlocked: true, extra: 'dropped' }));
+        votingLogic.describeDeadlineActions.mockReturnValue(
+            invalid({ actions, boostBlocked: true, boostPinSubmits: true, extra: 'dropped' }),
+        );
         const challenge = invalid<Challenge>({ id, close_time: 999 });
         const before = Math.floor(Date.now() / 1000);
 
         const result = await handler({}, challenge);
 
         const after = Math.floor(Date.now() / 1000);
-        expect(result).toEqual({ success: true, actions, boostBlocked: true });
+        expect(result).toEqual({ success: true, actions, boostBlocked: true, boostPinSubmits: true });
         const [passedChallenge, now] = votingLogic.describeDeadlineActions.mock.calls[0];
         expect(passedChallenge).toBe(challenge);
         expect(Number.isInteger(now)).toBe(true);
         expect(now).toBeGreaterThanOrEqual(before);
         expect(now).toBeLessThanOrEqual(after);
+    });
+
+    test('forwards boostPinSubmits from the view and passes it the mode-aware ledger', async () => {
+        votingLogic.describeDeadlineActions.mockReturnValue(invalid({ actions: [], boostPinSubmits: true }));
+        const result = await handler({}, invalid<Challenge>({ id: 1 }));
+        expect(result).toEqual({ success: true, actions: [], boostPinSubmits: true });
+        const [, , entryAges] = votingLogic.describeDeadlineActions.mock.calls[0];
+        // The mode-aware selector: real settings here read non-mock, so the persisted ledger.
+        expect(entryAges).toBeDefined();
+        expect(entryAges).not.toBeNull();
     });
 
     test('returns a generic failure (no internal message) when VotingLogic throws', async () => {

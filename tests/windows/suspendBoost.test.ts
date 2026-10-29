@@ -47,7 +47,11 @@ jest.mock('../../src/ts/settings', () => ({
     getEnvironmentInfo: jest.fn(),
     consumeChosenPhotos: jest.fn(() => false),
 }));
-jest.mock('../../src/ts/apiFactory', () => ({ getApiStrategy: jest.fn() }));
+jest.mock('../../src/ts/apiFactory', () => ({
+    getApiStrategy: jest.fn(),
+    // The view ledger is not under test here; null keeps the seam hermetic.
+    getEntryAgeLedger: jest.fn(() => null),
+}));
 jest.mock('../../src/ts/services/VotingLogic', () => ({ describeDeadlineActions: jest.fn() }));
 
 const TOKEN = 'secret-token-123';
@@ -234,7 +238,7 @@ describe('applyImminentBoostsOnSuspend — Boost Before Sleep setting', () => {
             'Device is going to sleep — trying to boost [Challenge 2: Two] now, 30m before it was due',
         ]);
         // Challenge 2 landed and was marked applied; challenge 1 was never sent, so it is still open.
-        expect(guard.imminentBoostChallenges(NOW, describe_, 1800).map((b) => b.challenge.id)).toEqual([1]);
+        expect(guard.imminentBoostChallenges(NOW, describe_, 1800, null).map((b) => b.challenge.id)).toEqual([1]);
     });
 
     test('the setting is read with the challenge id', async () => {
@@ -247,7 +251,7 @@ describe('applyImminentBoostsOnSuspend — Boost Before Sleep setting', () => {
         settings.getEffectiveSetting.mockReturnValue(false);
         await run();
         expect(applyBoostsOnSuspend).not.toHaveBeenCalled();
-        const listed = guard.imminentBoostChallenges(NOW, describe_, 3600).map((b) => b.challenge.id);
+        const listed = guard.imminentBoostChallenges(NOW, describe_, 3600, null).map((b) => b.challenge.id);
         expect(listed).toEqual([1, 2, 3]);
     });
 });
@@ -306,7 +310,7 @@ describe('applyImminentBoostsOnSuspend — outcomes', () => {
         applyBoostsOnSuspend.mockResolvedValueOnce(settle('applied', 'skipped'));
         await run();
         // Challenge 1 was marked used; challenge 2 (skipped) is still open.
-        expect(guard.imminentBoostChallenges(NOW, describe_, 1800).map((b) => b.challenge.id)).toEqual([2]);
+        expect(guard.imminentBoostChallenges(NOW, describe_, 1800, null).map((b) => b.challenge.id)).toEqual([2]);
         await run();
         expect(applyBoostsOnSuspend.mock.calls[1][0].map((c) => c.id)).toEqual([2]);
     });
@@ -326,14 +330,14 @@ describe('applyImminentBoostsOnSuspend — outcomes', () => {
             null,
         );
         expect(loggedText().toLowerCase()).not.toContain('failed');
-        expect(guard.imminentBoostChallenges(NOW, describe_, 1800).map((b) => b.challenge.id)).toEqual([1, 2]);
+        expect(guard.imminentBoostChallenges(NOW, describe_, 1800, null).map((b) => b.challenge.id)).toEqual([1, 2]);
     });
 
     test('one rejection does not stop the others and is logged by its failure text', async () => {
         applyBoostsOnSuspend.mockResolvedValueOnce(settle(new Error('rate limited'), 'applied'));
         await run();
         expect(cat.error).toHaveBeenCalledWith('[Challenge 1: One] boost before sleep errored: rate limited', null);
-        expect(guard.imminentBoostChallenges(NOW, describe_, 1800).map((b) => b.challenge.id)).toEqual([1]);
+        expect(guard.imminentBoostChallenges(NOW, describe_, 1800, null).map((b) => b.challenge.id)).toEqual([1]);
     });
 
     test('a non-Error rejection is logged as text', async () => {

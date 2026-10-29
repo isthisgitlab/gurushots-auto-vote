@@ -550,24 +550,24 @@ describe('describeDeadlineActions reads the pinned pick', () => {
 
     test('a usable pin keeps boostBlocked false', () => {
         setup({ boost: 'aaa' });
-        expect(VotingLogic.describeDeadlineActions(build([A, B], { boost: open }), NOW).boostBlocked).toBe(false);
+        expect(VotingLogic.describeDeadlineActions(build([A, B], { boost: open }), NOW, null).boostBlocked).toBe(false);
     });
 
     test('a conflicting pin falls back to the existing conflict row', () => {
         setup({ boost: 'aaa' });
         const challenge = build([{ id: 'aaa', turbo: true }], { boost: open });
-        expect(VotingLogic.describeDeadlineActions(challenge, NOW).boostBlocked).toBe(true);
+        expect(VotingLogic.describeDeadlineActions(challenge, NOW, null).boostBlocked).toBe(true);
     });
 
     test('a Turbo pin on the single entry blocks Boost, and a Boost pin on it blocks Turbo', () => {
         setup({ turbo: 'aaa' });
         const boostSide = build([A], { boost: open, turbo: { state: 'LOCKED' } });
-        expect(VotingLogic.describeDeadlineActions(boostSide, NOW)).toMatchObject({
+        expect(VotingLogic.describeDeadlineActions(boostSide, NOW, null)).toMatchObject({
             boostBlocked: true,
             turboBlocked: false,
         });
         setup({ boost: 'aaa' });
-        expect(VotingLogic.describeDeadlineActions(build([A], { boost: open }), NOW)).toMatchObject({
+        expect(VotingLogic.describeDeadlineActions(build([A], { boost: open }), NOW, null)).toMatchObject({
             boostBlocked: false,
             turboBlocked: true,
         });
@@ -575,20 +575,20 @@ describe('describeDeadlineActions reads the pinned pick', () => {
 
     test('a free slot with the on-conflict option resolves the block', () => {
         setup({ boost: 'aaa' }, { turboNewSubmitOnConflict: true });
-        expect(VotingLogic.describeDeadlineActions(build([A], { boost: open }), NOW).turboBlocked).toBe(false);
+        expect(VotingLogic.describeDeadlineActions(build([A], { boost: open }), NOW, null).turboBlocked).toBe(false);
     });
 
     test('a block that gives way inside Emergency Fill reports the release instant', () => {
         setup({ turbo: 'aaa' }, { emergencySubmit: 300 });
         const challenge = build([A], { boost: open, turbo: { state: 'LOCKED' } });
-        const outside = VotingLogic.describeDeadlineActions(challenge, CLOSE - 1000);
+        const outside = VotingLogic.describeDeadlineActions(challenge, CLOSE - 1000, null);
         expect(outside).toMatchObject({
             boostBlocked: true,
             boostBlockedBy: 'pin',
             boostReleaseAt: CLOSE - 300,
             turboReleaseAt: null,
         });
-        const inside = VotingLogic.describeDeadlineActions(challenge, CLOSE - 100);
+        const inside = VotingLogic.describeDeadlineActions(challenge, CLOSE - 100, null);
         expect(inside).toMatchObject({ boostBlocked: false, boostBlockedBy: null, boostReleaseAt: null });
     });
 });

@@ -246,12 +246,12 @@ describe('a pass over a challenge every automatic photo path wants', () => {
 
     test('control, switch off: the deadline view lists the rows that would act', () => {
         mockSettings({ manualPhotosOnly: false });
-        const rows = VotingLogic.describeDeadlineActions(challenge(), NOW).actions.map((row) => row.action);
+        const rows = VotingLogic.describeDeadlineActions(challenge(), NOW, null).actions.map((row) => row.action);
         expect(rows).toEqual(expect.arrayContaining(['autoSubmit', 'boost', 'turbo']));
     });
 
     test('switch on: the deadline view lists no row at all', () => {
         mockSettings({ manualPhotosOnly: true });
-        expect(VotingLogic.describeDeadlineActions(challenge(), NOW).actions).toEqual([]);
+        expect(VotingLogic.describeDeadlineActions(challenge(), NOW, null).actions).toEqual([]);
     });
 });

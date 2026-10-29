@@ -13,6 +13,8 @@ import * as settings from './settings';
 import { BaseMiddleware } from './services/BaseMiddleware';
 import * as logger from './logger';
 
+import type { EntryAgeLedger } from './types/stores';
+import { entryAgeLedger } from './entryAgeStore';
 import { authenticate } from './api/login';
 import {
     fetchChallengesAndVote,
@@ -33,7 +35,7 @@ import { getEligiblePhotos, getEligiblePhotosWalk, getImageData } from './api/su
 import { getMemberChallenges, getBankroll } from './api/join';
 import { getCurrentMemberProfile, searchTagAutocomplete } from './api/tags';
 import { keyUnlock, exposureAutofill } from './api/currency';
-import { mockApiClient } from './mock';
+import { mockApiClient, mockEntryAgeLedger } from './mock';
 
 const realApi = {
     authenticate,
@@ -162,7 +164,18 @@ const refreshApi = () => {
     lastMockSetting = null;
 };
 
+/**
+ * The entry-age ledger for node-side READ views of what the voting pass writes
+ * (the deadline view's Boost-pinned-submit latch). The view must read the same
+ * ledger the runner writes: mock mode uses the mock surface's in-memory ledger
+ * and never touches the persisted entry-age file, so a latch the mock runner
+ * set would be invisible to a view that read the persisted one. Mirrors how
+ * getApiStrategy selects on the persisted `mock` setting.
+ */
+const getEntryAgeLedger = (): EntryAgeLedger =>
+    settings.loadSettings().app.mock ? mockEntryAgeLedger : entryAgeLedger;
+
 // The raw surfaces are deliberately NOT exported — every caller selects a
 // surface through getApiStrategy (optionally with the explicit { mock }
 // override) so the factory stays the single swap point.
-export { getApiStrategy, getMiddleware, refreshApi };
+export { getApiStrategy, getMiddleware, refreshApi, getEntryAgeLedger };

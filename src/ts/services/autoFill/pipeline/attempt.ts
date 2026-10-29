@@ -37,23 +37,31 @@ type ChosenLabel = FillLabel | 'suggest';
 /** What the chosen-photo steps read: no submitter, so the suggestions cannot reach one. */
 type ChosenParams = { label: ChosenLabel; challenge: Challenge; token: string; deps: RankDeps };
 
-/** `ignoreOnly`: the pick ranks the chosen photos first but never enforces Submit Only (the swap picker's Auto). */
-type PlanParams = ChosenParams & { ignoreOnly?: boolean };
+/**
+ * `ignoreOnly`: the pick ranks the chosen photos first but never enforces Submit Only (the swap
+ * picker's Auto). `onlyIds`: an explicit id pool that replaces the saved Chosen Photos settings
+ * entirely — the pick is restricted to those ids, in that order, and Submit Only is never
+ * enforced from them (the Boost-pinned submit; see FillAttemptParams.onlyIds).
+ */
+type PlanParams = ChosenParams & { ignoreOnly?: boolean; onlyIds?: readonly string[] };
 
 /**
  * What the Chosen Photos settings mean for this attempt: the resolved settings,
  * whether Submit Only applies on this path, the chosen photos not yet entered,
  * and the pick options the scorer takes (null when no list is set).
  */
-const planChosen = ({ label, challenge, deps, ignoreOnly = false }: PlanParams) => {
-    const settings = resolveChosenPhotos({
-        read: (key) => deps.settings?.getEffectiveSetting(key, String(challenge.id)),
-    });
-    const enforceOnly = settings.only && ONLY_LABELS.has(label) && !ignoreOnly;
+const planChosen = ({ label, challenge, deps, ignoreOnly = false, onlyIds }: PlanParams) => {
+    const settings = onlyIds
+        ? { ids: [...onlyIds], only: true, inOrder: true }
+        : resolveChosenPhotos({
+              read: (key) => deps.settings?.getEffectiveSetting(key, String(challenge.id)),
+          });
+    const pinned = onlyIds !== undefined;
+    const enforceOnly = !pinned && settings.only && ONLY_LABELS.has(label) && !ignoreOnly;
     const entered = enteredIds(challenge);
     const chosen: ChosenPick | null =
         settings.ids.length > 0
-            ? { ids: settings.ids, only: enforceOnly, inOrder: settings.inOrder, excludeIds: entered }
+            ? { ids: settings.ids, only: pinned || enforceOnly, inOrder: settings.inOrder, excludeIds: entered }
             : null;
     return { settings, enforceOnly, unentered: settings.ids.filter((id) => !entered.has(id)), chosen };
 };
@@ -199,9 +207,21 @@ const runFillAttempt = async ({
     probeStandDown = null,
     onEmptyPick = null,
     onRefreshed = null,
+    onlyIds,
 }: FillAttemptParams): Promise<FillAttemptResult> => {
     const { logger, submitToChallenge } = deps;
-    const { settings: chosenSettings, enforceOnly, unentered, chosen } = planChosen({ label, challenge, token, deps });
+    const {
+        settings: chosenSettings,
+        enforceOnly,
+        unentered,
+        chosen,
+    } = planChosen({
+        label,
+        challenge,
+        token,
+        deps,
+        onlyIds,
+    });
     // Every chosen photo is already an entry here: nothing is left to choose,
     // so there is nothing to fetch either.
     if (enforceOnly && unentered.length === 0) {
@@ -268,7 +288,10 @@ const runFillAttempt = async ({
         logChosenSkipOnce(logger, challenge, label, 'none-usable');
         return { status: 'no-chosen' };
     }
-    clearChosenSkip(challenge);
+    // An explicit id pool (the Boost-pinned submit) is not a Submit Only skip:
+    // it leaves the scheduled fill's skip line — its explaining and its
+    // clearing — alone.
+    if (onlyIds === undefined) clearChosenSkip(challenge);
 
     const inOrder = chosenSettings.inOrder;
     let picked = finalizePick(scored, wantCount, chosenIds, inOrder ? orderedIds : null);

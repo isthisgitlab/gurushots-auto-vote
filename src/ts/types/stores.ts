@@ -104,6 +104,11 @@ export interface EntryAgeRecord {
      * there by then, which is the time the UI shows for it ("or earlier").
      */
     firstSeen: number;
+    /**
+     * The Boost-pinned-submit failure latch: the pinned photo that could not be submitted, and the Boost window it
+     * failed in. A new Boost window or a different pin is a new key; the latch is dropped once its window passed.
+     */
+    pinSubmitFailed?: { imageId: string; boostDeadline: number } | null;
 }
 
 /**

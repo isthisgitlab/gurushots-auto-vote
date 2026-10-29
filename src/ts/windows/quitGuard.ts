@@ -27,11 +27,13 @@
 
 import * as logger from '../logger';
 import * as votingLogic from '../services/VotingLogic';
+import { getEntryAgeLedger } from '../apiFactory';
 import { openBoostWindows } from '../voting/boostWindow';
 import { formatDuration } from '../format/duration';
 
 import type { BrowserWindow, Dialog, MessageBoxOptions } from 'electron';
 import type { Challenge } from '../types/gurushots';
+import type { EntryAgeLedger } from '../types/stores';
 import type { Translate } from '../translations/translator';
 
 /**
@@ -40,6 +42,7 @@ import type { Translate } from '../translations/translator';
 type DescribeDeadlineActions = (
     challenge: Challenge,
     now: number,
+    entryAges: EntryAgeLedger | null,
 ) => { actions?: Array<{ action: string; dueAt: number | null }> } | null | undefined;
 
 const QUIT_WARN_HORIZON_SEC = 60 * 60;
@@ -107,18 +110,21 @@ const resetQuitGuard = () => {
  *
  * @param now - Unix seconds
  * @param horizonSec - only boosts due within this many seconds
+ * @param entryAges - the ledger describeDeadlineActions honours the Boost-pinned-submit
+ *   latch against; threaded so the guard reads the same ledger the runner writes
  */
 const imminentBoostChallenges = (
     now: number,
     describe: DescribeDeadlineActions,
     horizonSec: number,
+    entryAges: EntryAgeLedger | null,
 ): Array<{ challenge: Challenge; dueAt: number }> => {
     const open = new Set(openBoostWindows(lastChallenges, now).map((w) => w.id));
     return lastChallenges
         .filter((c) => open.has(c.id))
         .map((challenge) => ({
             challenge,
-            dueAt: describe(challenge, now)?.actions?.find((a) => a.action === 'boost')?.dueAt,
+            dueAt: describe(challenge, now, entryAges)?.actions?.find((a) => a.action === 'boost')?.dueAt,
         }))
         .flatMap(({ challenge, dueAt }) =>
             typeof dueAt === 'number' && dueAt - now <= horizonSec ? [{ challenge, dueAt }] : [],
@@ -126,8 +132,12 @@ const imminentBoostChallenges = (
         .sort((a, b) => a.dueAt - b.dueAt);
 };
 
-const imminentBoosts = (now: number, describe: DescribeDeadlineActions): Array<{ title: string; dueIn: number }> =>
-    imminentBoostChallenges(now, describe, QUIT_WARN_HORIZON_SEC).map(({ challenge, dueAt }) => ({
+const imminentBoosts = (
+    now: number,
+    describe: DescribeDeadlineActions,
+    entryAges: EntryAgeLedger | null,
+): Array<{ title: string; dueIn: number }> =>
+    imminentBoostChallenges(now, describe, QUIT_WARN_HORIZON_SEC, entryAges).map(({ challenge, dueAt }) => ({
         title: challenge.title,
         dueIn: dueAt - now,
     }));
@@ -187,7 +197,7 @@ const holdQuitForOpenBoosts = (
     if (bypassed || !autovoteRunning) return false;
     let boosts;
     try {
-        boosts = imminentBoosts(now, describeDeadlineActions);
+        boosts = imminentBoosts(now, describeDeadlineActions, getEntryAgeLedger());
     } catch (error) {
         // Runs inside before-quit: a throw here must never make the app unquittable.
         logger.withCategory('ui').error('Quit guard could not read boost state — not asking:', error);

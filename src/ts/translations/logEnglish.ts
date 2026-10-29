@@ -211,6 +211,8 @@ export const logMessages = {
         '{0}: could not refresh live challenge state for {1}; proceeding with pass-start data — a manually submitted entry may not be seen and could be duplicated',
     m4a0bb479e56d: '⏰ Approaching scheduled fill for "{0}" ({1}) — next cycle in {2}s',
     m4a23eeb4693a: '{0} turbo fill-new: challenge left the active list — turbo skipped',
+    m4a2b8c9d1e3:
+        'fillNew: the photo pinned for Boost ({0}) cannot be submitted — not offered, not allowed here, or filtered out',
     m4ab430d590b1: 'Capacitor preferences write failed:',
     m4b306cfa40b1: 'Error listing profiles',
     m4c2f68de9bcd: '\nSettings:',
@@ -514,11 +516,15 @@ export const logMessages = {
     mb029191fe533: '💡 Use "help-settings" for detailed information about each setting',
     mb04a3d8e5314: 'Error listing settings',
     mb061a82ddf4e: 'Challenge {0}: challenge data cannot be read',
+    mb0d7e3a91c65:
+        '{0}: the photo pinned for Boost ({1}) cannot be submitted ({2}) — Boost keeps waiting for it; no more attempts this Boost window',
     mb13ee01eb217: "The challenge's data cannot be read, so the action was refused.",
     mb15c59bc8864: 'Applying turbo to entry {0} on {1}',
     mb1952ef7eb0a: 'No active challenges found',
     mb1c1035e9290: '{0}: challenge data cannot be read — actions are refused',
     mb25a2bf331bd: 'Error refreshing menu:',
+    mb2f6a1d84b09:
+        '{0}: the photo pinned for Boost ({1}) was not submitted ({2}) — Boost keeps waiting; the next due pass tries again',
     mb30f8c2b6577: 'Error deleting profile',
     mb315c2eb9baa: "Failed to save setting '{0}' - validation failed",
     mb32b7913e19e: 'Removing invalid global default keys: {0}',

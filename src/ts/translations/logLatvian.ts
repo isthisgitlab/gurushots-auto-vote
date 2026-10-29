@@ -218,6 +218,8 @@ export const logMessages = {
     m4a0bb479e56d: '⏰ Tuvojas plānotā balsošana izaicinājumā "{0}" ({1}) — nākamais cikls pēc {2} s',
     m4a23eeb4693a:
         '{0} Jauna foto iesniegšana Turbo izmantošanai: izaicinājums vairs nav aktīvo sarakstā — Turbo izlaists',
+    m4a2b8c9d1e3:
+        'fillNew: Boost piesprausto foto ({0}) nevar iesniegt — nav piedāvāts, šeit nav atļauts vai izfiltrēts',
     m4ab430d590b1: 'Neizdevās ierakstīt Capacitor uzstādījumus:',
     m4b306cfa40b1: 'Kļūda, uzskaitot profilus',
     m4c2f68de9bcd: '\nUzstādījumi:',
@@ -528,11 +530,15 @@ export const logMessages = {
     mb029191fe533: '💡 Palaid "help-settings", lai skatītu detalizētu informāciju par katru uzstādījumu',
     mb04a3d8e5314: 'Kļūda, uzskaitot uzstādījumus',
     mb061a82ddf4e: 'Izaicinājums {0}: izaicinājuma datus nevar nolasīt',
+    mb0d7e3a91c65:
+        '{0}: Boost piesprausto foto ({1}) nevar iesniegt ({2}) — Boost turpina to gaidīt; šajā Boost logā vairs nemēģina',
     mb13ee01eb217: 'Izaicinājuma datus nevar nolasīt, tāpēc darbība tika atteikta.',
     mb15c59bc8864: 'Izmanto Turbo foto {0} izaicinājumā {1}',
     mb1952ef7eb0a: 'Nav atrasts neviens aktīvs izaicinājums',
     mb1c1035e9290: '{0}: izaicinājuma datus nevar nolasīt — darbības tiek atteiktas',
     mb25a2bf331bd: 'Kļūda, atsvaidzinot izvēlni:',
+    mb2f6a1d84b09:
+        '{0}: Boost piesprausto foto ({1}) neiesniedza ({2}) — Boost turpina gaidīt; nākamais cikls mēģinās vēlreiz',
     mb30f8c2b6577: 'Kļūda, dzēšot profilu',
     mb315c2eb9baa: 'Neizdevās saglabāt uzstādījumu "{0}" — vērtība neizturēja pārbaudi',
     mb32b7913e19e: 'Noņem nederīgas globālo noklusējuma vērtību atslēgas: {0}',

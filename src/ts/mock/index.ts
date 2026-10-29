@@ -7,10 +7,14 @@
 
 import { clearSessionCache } from './sessionCache';
 import { mockApiClient } from './apiClient';
+import { mockEntryAgeLedger } from './strategy';
 
 export {
     // Mock API client
     mockApiClient,
+
+    // The mock surface's in-memory entry-age ledger (apiFactory.getEntryAgeLedger)
+    mockEntryAgeLedger,
 
     // Session cache control
     clearSessionCache,

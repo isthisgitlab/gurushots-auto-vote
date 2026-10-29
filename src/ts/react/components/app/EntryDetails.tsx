@@ -24,24 +24,31 @@ import type { EntryPinsState, SwapBackOffers } from './ChallengeCardDetail';
 /**
  * A stored pin that cannot take its feature right now (its photo left the challenge, or carries the other
  * feature), with a way to clear it. Only while the feature can still fire: a spent feature's pin is inert.
- * The button is inert while a pin write is in flight, like the pin toggles: aria-disabled, never `disabled`.
+ * A gone Boost pin with the Boost-pinned submit eligible gets the submit note instead of the plain wait
+ * note. The button is inert while a pin write is in flight, like the pin toggles: aria-disabled, never `disabled`.
  */
 function DanglingPinNote({
     kind,
     state,
     busy,
+    boostPinSubmits,
     onClear,
 }: {
     kind: EntryPinKind;
     state: 'gone' | 'conflict';
     busy: boolean;
+    /** The Boost-pinned submit can place the boost on this gone pin; picks the note's text. */
+    boostPinSubmits: boolean;
     onClear: (button: HTMLButtonElement) => void | Promise<void>;
 }) {
     const { t } = useTranslation();
-    const text = t(state === 'gone' ? 'app.pinGoneNote' : 'app.pinConflictNote', {
-        kind: t(kind === 'boost' ? 'app.boost' : 'app.turbo'),
-        other: t(kind === 'boost' ? 'app.turbo' : 'app.boost'),
-    });
+    const text =
+        kind === 'boost' && state === 'gone' && boostPinSubmits
+            ? t('app.pinGoneSubmitNote')
+            : t(state === 'gone' ? 'app.pinGoneNote' : 'app.pinConflictNote', {
+                  kind: t(kind === 'boost' ? 'app.boost' : 'app.turbo'),
+                  other: t(kind === 'boost' ? 'app.turbo' : 'app.boost'),
+              });
     return (
         <div className="alert alert-info py-2 text-xs" role="status">
             <span>{text}</span>
@@ -74,6 +81,7 @@ export function EntryDetails({
     onCurrencySpent,
     onChooseSwap,
     timezone,
+    boostPinSubmits = false,
 }: {
     challenge: Challenge;
     view: ChallengeCardView;
@@ -84,6 +92,8 @@ export function EntryDetails({
     onCurrencySpent: () => void;
     onChooseSwap: OpenSwapPick;
     timezone: string;
+    /** The Boost-pinned submit can place the boost on its gone pin; forwarded to each DanglingPinNote. */
+    boostPinSubmits?: boolean;
 }) {
     const { t } = useTranslation();
     const { pins, togglePin, setPin, loading: pinBusy, error: pinError, clearError: clearPinError } = entryPins;
@@ -137,6 +147,7 @@ export function EntryDetails({
                     kind={kind}
                     state={state}
                     busy={pinBusy}
+                    boostPinSubmits={boostPinSubmits}
                     onClear={(button) => clearPin(kind, button)}
                 />
             ))}

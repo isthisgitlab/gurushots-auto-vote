@@ -250,6 +250,36 @@ describe('Latvian log messages', () => {
         }
     });
 
+    test('translates the Boost-pinned submit empty-pool line', () => {
+        expect(
+            localizeLogMessage(
+                'ℹ️ fillNew: the photo pinned for Boost (img1) cannot be submitted — not offered, not allowed here, or filtered out',
+            ),
+        ).toBe(
+            'ℹ️ fillNew: Boost piesprausto foto (img1) nevar iesniegt — nav piedāvāts, šeit nav atļauts vai izfiltrēts',
+        );
+    });
+
+    test('translates the Boost-pinned submit definitive-failure line', () => {
+        expect(
+            localizeLogMessage(
+                'ℹ️ [Challenge 42: Sunset]: the photo pinned for Boost (img1) cannot be submitted (submit-rejected) — Boost keeps waiting for it; no more attempts this Boost window',
+            ),
+        ).toBe(
+            'ℹ️ [Challenge 42: Sunset]: Boost piesprausto foto (img1) nevar iesniegt (submit-rejected) — Boost turpina to gaidīt; šajā Boost logā vairs nemēģina',
+        );
+    });
+
+    test('translates the Boost-pinned submit transient-failure line', () => {
+        expect(
+            localizeLogMessage(
+                'ℹ️ [Challenge 42: Sunset]: the photo pinned for Boost (img1) was not submitted (fetch-error) — Boost keeps waiting; the next due pass tries again',
+            ),
+        ).toBe(
+            'ℹ️ [Challenge 42: Sunset]: Boost piesprausto foto (img1) neiesniedza (fetch-error) — Boost turpina gaidīt; nākamais cikls mēģinās vēlreiz',
+        );
+    });
+
     test('translates the title-rules refresh and load failures', () => {
         expect(localizeLogMessage('Error refreshing title rules: disk')).toBe(
             'Kļūda, atsvaidzinot izaicinājumu noteikumus: disk',
@@ -314,6 +344,42 @@ describe('forward template localization', () => {
         );
     });
 
+    test('localizes the Boost-pinned submit empty-pool line from its template and params', () => {
+        expect(
+            forward(
+                'm4a2b8c9d1e3',
+                ['img1'],
+                'ℹ️ fillNew: the photo pinned for Boost (img1) cannot be submitted — not offered, not allowed here, or filtered out',
+            ),
+        ).toBe(
+            'ℹ️ fillNew: Boost piesprausto foto (img1) nevar iesniegt — nav piedāvāts, šeit nav atļauts vai izfiltrēts',
+        );
+    });
+
+    test('localizes the Boost-pinned submit definitive-failure line from its template and params', () => {
+        expect(
+            forward(
+                'mb0d7e3a91c65',
+                ['[Challenge 42: Sunset]', 'img1', 'submit-rejected'],
+                'ℹ️ [Challenge 42: Sunset]: the photo pinned for Boost (img1) cannot be submitted (submit-rejected) — Boost keeps waiting for it; no more attempts this Boost window',
+            ),
+        ).toBe(
+            'ℹ️ [Challenge 42: Sunset]: Boost piesprausto foto (img1) nevar iesniegt (submit-rejected) — Boost turpina to gaidīt; šajā Boost logā vairs nemēģina',
+        );
+    });
+
+    test('localizes the Boost-pinned submit transient-failure line from its template and params', () => {
+        expect(
+            forward(
+                'mb2f6a1d84b09',
+                ['[Challenge 42: Sunset]', 'img1', 'fetch-error'],
+                'ℹ️ [Challenge 42: Sunset]: the photo pinned for Boost (img1) was not submitted (fetch-error) — Boost keeps waiting; the next due pass tries again',
+            ),
+        ).toBe(
+            'ℹ️ [Challenge 42: Sunset]: Boost piesprausto foto (img1) neiesniedza (fetch-error) — Boost turpina gaidīt; nākamais cikls mēģinās vēlreiz',
+        );
+    });
+
     test('an entry whose key is missing from the catalogs falls back to the reverse matcher', () => {
         expect(forward('mffffffffffff', [], 'upstream-specific-error')).toBe('upstream-specific-error');
         expect(forward('mffffffffffff', [], 'ℹ️ Invalid timestamp provided')).toBe('ℹ️ Norādīts nederīgs laika zīmogs');
@@ -351,6 +417,8 @@ describe('forward template localization', () => {
             ['m6b04d81f7c23', ['[Challenge 42: Sunset]']],
             ['m9f25e7a3d681', ['[Challenge 42: Sunset]']],
             ['m2c58b0e94a76', ['[Challenge 42: Sunset]']],
+            ['mb0d7e3a91c65', ['[Challenge 42: Sunset]', 'img1', 'submit-rejected']],
+            ['mb2f6a1d84b09', ['[Challenge 42: Sunset]', 'img1', 'fetch-error']],
         ];
         for (const [key, params] of cases) {
             const english = englishLogMessages[key as keyof typeof englishLogMessages]

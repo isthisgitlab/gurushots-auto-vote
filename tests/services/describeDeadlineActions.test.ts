@@ -15,8 +15,12 @@ import VotingLogic = require('../../src/ts/services/VotingLogic');
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 const { buildChallenge: buildBaseChallenge } =
     require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
+import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
 import type { Challenge, MemberBoost, MemberTurbo, RankingEntry } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
+const { createMemoryEntryAgeLedger } = require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
+const { boostDeadline } =
+    require('../../src/ts/voting/boostWindow') as typeof import('../../src/ts/voting/boostWindow');
 
 jest.mock('../../src/ts/settings');
 
@@ -58,7 +62,7 @@ const build = ({
     });
 
 const actionsOf = (challenge: Challenge, now = NOW) =>
-    VotingLogic.describeDeadlineActions(challenge, now).actions.map((a) => a.action);
+    VotingLogic.describeDeadlineActions(challenge, now, null).actions.map((a) => a.action);
 
 describe('describeDeadlineActions — row gating', () => {
     beforeEach(() => jest.clearAllMocks());
@@ -114,7 +118,7 @@ describe('describeDeadlineActions — row gating', () => {
     test('boost row suppressed when the boost is blocked (sole entry already turboed)', () => {
         mockSettings({ autoBoost: true, keyUnlockedBoostTime: 900 });
         const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, entries: [{ id: 'e1', turbo: true }] });
-        const result = VotingLogic.describeDeadlineActions(challenge, NOW);
+        const result = VotingLogic.describeDeadlineActions(challenge, NOW, null);
         // The conflict owns this case — the timeline must not also show a boost row.
         expect(result.actions.map((a) => a.action)).not.toContain('boost');
         expect(result).toMatchObject({ boostBlocked: true, boostBlockedBy: 'flag', boostReleaseAt: null });
@@ -124,7 +128,7 @@ describe('describeDeadlineActions — row gating', () => {
         mockSettings({ autoBoost: true, keyUnlockedBoostTime: 900, emergencySubmit: 0 });
         settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'e1' });
         const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'LOCKED' } });
-        const result = VotingLogic.describeDeadlineActions(challenge, NOW);
+        const result = VotingLogic.describeDeadlineActions(challenge, NOW, null);
         expect(result.actions.map((a) => a.action)).not.toContain('boost');
         expect(result).toMatchObject({
             boostBlocked: true,
@@ -139,7 +143,7 @@ describe('describeDeadlineActions — row gating', () => {
         mockSettings({ useTurbo: true, emergencySubmit: 0 });
         settings.getEntryPins.mockReturnValue({ boost: 'e1', turbo: null });
         const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'WON', mode: 'classic' } });
-        const result = VotingLogic.describeDeadlineActions(challenge, NOW);
+        const result = VotingLogic.describeDeadlineActions(challenge, NOW, null);
         expect(result.actions.map((a) => a.action)).not.toContain('turbo');
         expect(result).toMatchObject({
             boostBlocked: false,
@@ -163,6 +167,7 @@ describe('describeDeadlineActions — row gating', () => {
                     entries: [{ id: 'e1', turbo: true }],
                 }),
                 NOW,
+                null,
             );
             expect(boost).toEqual(
                 expect.objectContaining({ boostBlocked: true, boostBlockedBy: 'flag', boostReleaseAt: null }),
@@ -175,6 +180,7 @@ describe('describeDeadlineActions — row gating', () => {
                     entries: [{ id: 'e1', boosted: true }],
                 }),
                 NOW,
+                null,
             );
             expect(turbo).toEqual(
                 expect.objectContaining({ turboBlocked: true, turboBlockedBy: 'flag', turboReleaseAt: null }),
@@ -189,7 +195,7 @@ describe('describeDeadlineActions — row gating', () => {
             turbo: { state: 'WON', mode: 'classic' },
             entries: [{ id: 'e1', boosted: true }],
         });
-        expect(VotingLogic.describeDeadlineActions(challenge, NOW)).toMatchObject({
+        expect(VotingLogic.describeDeadlineActions(challenge, NOW, null)).toMatchObject({
             turboBlocked: true,
             turboBlockedBy: 'flag',
             turboReleaseAt: null,
@@ -199,13 +205,13 @@ describe('describeDeadlineActions — row gating', () => {
     describe('a block whose pin is due to give way keeps its row, due at the release', () => {
         const FAR = CLOSE - 5000;
         const rowOf = (challenge: Challenge, action: string) =>
-            VotingLogic.describeDeadlineActions(challenge, FAR).actions.find((a) => a.action === action);
+            VotingLogic.describeDeadlineActions(challenge, FAR, null).actions.find((a) => a.action === action);
 
         test('a key-unlocked Boost blocked by a Turbo pin is due at the release, later than its own time', () => {
             mockSettings({ keyUnlockedBoostTime: 900, emergencySubmit: 300 });
             settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'e1' });
             const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'LOCKED' } });
-            expect(VotingLogic.describeDeadlineActions(challenge, FAR)).toMatchObject({
+            expect(VotingLogic.describeDeadlineActions(challenge, FAR, null)).toMatchObject({
                 boostBlocked: true,
                 boostBlockedBy: 'pin',
                 boostReleaseAt: CLOSE - 300,
@@ -230,7 +236,7 @@ describe('describeDeadlineActions — row gating', () => {
             mockSettings({ turboTime: 7200, useTurbo: true, emergencySubmit: 300 });
             settings.getEntryPins.mockReturnValue({ boost: 'e1', turbo: null });
             const challenge = build({ boost: { state: 'LOCKED' }, turbo: { state: 'WON', mode: 'classic' } });
-            expect(VotingLogic.describeDeadlineActions(challenge, FAR)).toMatchObject({
+            expect(VotingLogic.describeDeadlineActions(challenge, FAR, null)).toMatchObject({
                 turboBlocked: true,
                 turboBlockedBy: 'pin',
                 turboReleaseAt: CLOSE - 300,
@@ -243,7 +249,7 @@ describe('describeDeadlineActions — row gating', () => {
             settings.getEntryPins.mockReturnValue({ boost: 'e1', turbo: null });
             const challenge = build({ boost: { state: 'LOCKED' }, turbo: { state: 'WON', mode: 'classic' } });
             // Turbo ordered first on its own 7200 s, then moved to the release 300 s before close.
-            expect(VotingLogic.describeDeadlineActions(challenge, FAR).actions).toEqual([
+            expect(VotingLogic.describeDeadlineActions(challenge, FAR, null).actions).toEqual([
                 { action: 'autoSubmit', thresholdSec: 900, dueAt: CLOSE - 900 },
                 { action: 'turbo', thresholdSec: 300, dueAt: CLOSE - 300 },
             ]);
@@ -260,7 +266,7 @@ describe('describeDeadlineActions — row gating', () => {
             mockSettings({ keyUnlockedBoostTime: 900, emergencySubmit: 300 });
             settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'e1' });
             const ready = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'WON', mode: 'classic' } });
-            expect(VotingLogic.describeDeadlineActions(ready, FAR)).toMatchObject({
+            expect(VotingLogic.describeDeadlineActions(ready, FAR, null)).toMatchObject({
                 boostBlocked: true,
                 boostReleaseAt: null,
             });
@@ -274,7 +280,7 @@ describe('describeDeadlineActions — row gating', () => {
 
     describe('a pin waiting for its own photo (the pin is absolute)', () => {
         const FAR = CLOSE - 5000;
-        const rowsOf = (challenge: Challenge) => VotingLogic.describeDeadlineActions(challenge, FAR).actions;
+        const rowsOf = (challenge: Challenge) => VotingLogic.describeDeadlineActions(challenge, FAR, null).actions;
         const boostRow = (challenge: Challenge) => rowsOf(challenge).find((a) => a.action === 'boost');
         const turboRow = (challenge: Challenge) => rowsOf(challenge).find((a) => a.action === 'turbo');
 
@@ -291,7 +297,7 @@ describe('describeDeadlineActions — row gating', () => {
             // The Boost pin is gone AND the Turbo pin blocks the boost, giving way 300 s before close.
             settings.getEntryPins.mockReturnValue({ boost: 'zzz', turbo: 'e1' });
             const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'LOCKED' } });
-            expect(VotingLogic.describeDeadlineActions(challenge, FAR)).toMatchObject({
+            expect(VotingLogic.describeDeadlineActions(challenge, FAR, null)).toMatchObject({
                 boostBlocked: true,
                 boostReleaseAt: CLOSE - 300,
             });
@@ -311,7 +317,7 @@ describe('describeDeadlineActions — row gating', () => {
             // The sole entry is turboed AND pinned for Boost: fill-new would place the boost on a
             // fresh photo, but the absolute pin means the automatic boost never fires.
             const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, entries: [{ id: 'e1', turbo: true }] });
-            expect(VotingLogic.describeDeadlineActions(challenge, FAR).boostBlocked).toBe(false);
+            expect(VotingLogic.describeDeadlineActions(challenge, FAR, null).boostBlocked).toBe(false);
             expect(rowsOf(challenge).map((a) => a.action)).not.toContain('boost');
         });
 
@@ -351,11 +357,11 @@ describe('describeDeadlineActions — row gating', () => {
         mockSettings({ keyUnlockedBoostTime: 900, emergencySubmit: 300 });
         settings.getEntryPins.mockReturnValue({ boost: 'e1', turbo: null });
         const modeless = build({ boost: { state: 'LOCKED' }, turbo: { state: 'WON' } });
-        expect(VotingLogic.describeDeadlineActions(modeless, far).turboBlocked).toBe(false);
+        expect(VotingLogic.describeDeadlineActions(modeless, far, null).turboBlocked).toBe(false);
         // The Turbo pin is not ready without a known mode, so it gives way inside Emergency Submit, as for a Turbo not won.
         settings.getEntryPins.mockReturnValue({ boost: null, turbo: 'e1' });
         const pinned = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'WON' } });
-        const { boostBlocked, boostReleaseAt } = VotingLogic.describeDeadlineActions(pinned, far);
+        const { boostBlocked, boostReleaseAt } = VotingLogic.describeDeadlineActions(pinned, far, null);
         expect(boostBlocked).toBe(true);
         expect(boostReleaseAt).not.toBeNull();
     });
@@ -364,9 +370,9 @@ describe('describeDeadlineActions — row gating', () => {
         mockSettings({ emergencySubmit: 0 });
         settings.getEntryPins.mockReturnValue({ boost: 'e1', turbo: null });
         const notHeld = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'NONE' } });
-        expect(VotingLogic.describeDeadlineActions(notHeld, NOW).turboBlocked).toBe(false);
+        expect(VotingLogic.describeDeadlineActions(notHeld, NOW, null).turboBlocked).toBe(false);
         const spare = build({ turbo: { state: 'WON', mode: 'classic' }, entries: [{ id: 'e1' }, { id: 'e2' }] });
-        expect(VotingLogic.describeDeadlineActions(spare, NOW).turboBlocked).toBe(false);
+        expect(VotingLogic.describeDeadlineActions(spare, NOW, null).turboBlocked).toBe(false);
     });
 
     test('autoSubmit row hidden when autoSubmit is off', () => {
@@ -393,7 +399,7 @@ describe('describeDeadlineActions — row gating', () => {
         // mustIncludeTags for this row. Same contract the runner's own tests lock.
         mockSettings({ autoSubmit: false });
         const challenge = build();
-        VotingLogic.describeDeadlineActions(challenge, NOW);
+        VotingLogic.describeDeadlineActions(challenge, NOW, null);
         expect(settings.getEffectiveTagSetting).toHaveBeenCalledWith('mustIncludeTags', challenge);
     });
 
@@ -419,7 +425,7 @@ describe('describeDeadlineActions — row gating', () => {
 
     test('dueAt = close_time − thresholdSec', () => {
         mockSettings({ autoSubmit: true, autoSubmitSchedule: [{ count: 2, seconds: 900 }] });
-        const { actions } = VotingLogic.describeDeadlineActions(build(), NOW);
+        const { actions } = VotingLogic.describeDeadlineActions(build(), NOW, null);
         const autoSubmit = actions.find((a) => a.action === 'autoSubmit');
         expect(autoSubmit!.dueAt).toBe(CLOSE - autoSubmit!.thresholdSec);
     });
@@ -437,7 +443,7 @@ describe('describeDeadlineActions — Manual Only', () => {
             useTurbo: true,
         });
         const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'WON', mode: 'classic' } });
-        expect(VotingLogic.describeDeadlineActions(challenge, NOW).actions).toEqual([]);
+        expect(VotingLogic.describeDeadlineActions(challenge, NOW, null).actions).toEqual([]);
         mockSettings({ autoSubmit: false, emergencySubmit: 300, manualPhotosOnly: true });
         expect(actionsOf(build())).toEqual([]);
     });
@@ -457,7 +463,7 @@ describe('describeDeadlineActions — Manual Only', () => {
             entries: [{ id: 'e1', turbo: true }],
             maxSubmits: 2,
         });
-        const result = VotingLogic.describeDeadlineActions(challenge, NOW);
+        const result = VotingLogic.describeDeadlineActions(challenge, NOW, null);
         expect(result).toEqual(
             expect.objectContaining({ boostBlocked: true, boostBlockedBy: 'flag', boostReleaseAt: null, actions: [] }),
         );
@@ -471,11 +477,11 @@ describe('describeDeadlineActions — Manual Only', () => {
             mockSettings({ manualPhotosOnly: false });
             expect(
                 guard
-                    .imminentBoostChallenges(NOW, VotingLogic.describeDeadlineActions, 3600)
+                    .imminentBoostChallenges(NOW, VotingLogic.describeDeadlineActions, 3600, null)
                     .map((boost) => boost.challenge.id),
             ).toEqual(['42']);
             mockSettings({ manualPhotosOnly: true });
-            expect(guard.imminentBoostChallenges(NOW, VotingLogic.describeDeadlineActions, 3600)).toEqual([]);
+            expect(guard.imminentBoostChallenges(NOW, VotingLogic.describeDeadlineActions, 3600, null)).toEqual([]);
         } finally {
             guard.resetQuitGuard();
         }
@@ -488,6 +494,7 @@ describe('describeDeadlineActions — Manual Only', () => {
         const boost = VotingLogic.describeDeadlineActions(
             build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'LOCKED' } }),
             NOW,
+            null,
         );
         expect(boost).toEqual(
             expect.objectContaining({
@@ -500,6 +507,7 @@ describe('describeDeadlineActions — Manual Only', () => {
         const turbo = VotingLogic.describeDeadlineActions(
             build({ boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'WON', mode: 'classic' } }),
             NOW,
+            null,
         );
         expect(turbo).toEqual(
             expect.objectContaining({
@@ -517,25 +525,25 @@ describe('describeDeadlineActions — boostBlocked', () => {
     test('false on a zero-entry challenge with an open boost window', () => {
         mockSettings();
         const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, entries: [] });
-        expect(VotingLogic.describeDeadlineActions(challenge, NOW).boostBlocked).toBe(false);
+        expect(VotingLogic.describeDeadlineActions(challenge, NOW, null).boostBlocked).toBe(false);
     });
 
     test('true when the sole entry already has Turbo and boost is available', () => {
         mockSettings();
         const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, entries: [{ id: 'e1', turbo: true }] });
-        expect(VotingLogic.describeDeadlineActions(challenge, NOW).boostBlocked).toBe(true);
+        expect(VotingLogic.describeDeadlineActions(challenge, NOW, null).boostBlocked).toBe(true);
     });
 
     test('false when the boost window is closed', () => {
         mockSettings();
         const challenge = build({ boost: { state: 'USED' }, entries: [{ id: 'e1', turbo: true }] });
-        expect(VotingLogic.describeDeadlineActions(challenge, NOW).boostBlocked).toBe(false);
+        expect(VotingLogic.describeDeadlineActions(challenge, NOW, null).boostBlocked).toBe(false);
     });
 
     test('false when the sole entry is placeable (not turboed)', () => {
         mockSettings();
         const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, entries: [{ id: 'e1' }] });
-        expect(VotingLogic.describeDeadlineActions(challenge, NOW).boostBlocked).toBe(false);
+        expect(VotingLogic.describeDeadlineActions(challenge, NOW, null).boostBlocked).toBe(false);
     });
 
     test('false when boostNewSubmit (always) will resolve the conflict via a free slot', () => {
@@ -547,7 +555,7 @@ describe('describeDeadlineActions — boostBlocked', () => {
             entries: [{ id: 'e1', turbo: true }],
             maxSubmits: 2,
         });
-        expect(VotingLogic.describeDeadlineActions(challenge, NOW).boostBlocked).toBe(false);
+        expect(VotingLogic.describeDeadlineActions(challenge, NOW, null).boostBlocked).toBe(false);
     });
 
     test('false when boostNewSubmitOnConflict will resolve the conflict via a free slot', () => {
@@ -557,7 +565,7 @@ describe('describeDeadlineActions — boostBlocked', () => {
             entries: [{ id: 'e1', turbo: true }],
             maxSubmits: 2,
         });
-        expect(VotingLogic.describeDeadlineActions(challenge, NOW).boostBlocked).toBe(false);
+        expect(VotingLogic.describeDeadlineActions(challenge, NOW, null).boostBlocked).toBe(false);
     });
 
     test('true when fill-new is on but there is no free slot to submit into', () => {
@@ -569,7 +577,7 @@ describe('describeDeadlineActions — boostBlocked', () => {
             entries: [{ id: 'e1', turbo: true }],
             maxSubmits: 1,
         });
-        expect(VotingLogic.describeDeadlineActions(challenge, NOW).boostBlocked).toBe(true);
+        expect(VotingLogic.describeDeadlineActions(challenge, NOW, null).boostBlocked).toBe(true);
     });
 
     test('boost row shown (not suppressed) when fill-new will place the boost on a fresh entry', () => {
@@ -625,5 +633,141 @@ describe('resolveBoostFillNewMode', () => {
     test('boostNewSubmit takes precedence over on-conflict', () => {
         mockSettings({ boostNewSubmit: true, boostNewSubmitOnConflict: true });
         expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42')).toBe('always');
+    });
+});
+
+describe('describeDeadlineActions — the Boost-pinned submit', () => {
+    const FAR = CLOSE - 5000;
+    // Eligible path: the opt-in on, the gone pin 'zzz' among the Chosen Photos, a slot free,
+    // and the ledger below carries no latch.
+    const eligible = (over = {}, boost: MemberBoost = { state: 'AVAILABLE_KEY' }) => {
+        mockSettings({
+            boostPinnedSubmit: true,
+            chosenPhotos: ['zzz'],
+            keyUnlockedBoostTime: 1800,
+            autoBoost: true,
+            emergencySubmit: 0,
+            ...over,
+        });
+        settings.getEntryPins.mockReturnValue({ boost: 'zzz', turbo: null });
+        return build({ boost });
+    };
+
+    beforeEach(() => jest.clearAllMocks());
+
+    test('an eligible gone pin keeps the boost row at its own time and reports boostPinSubmits', () => {
+        const result = VotingLogic.describeDeadlineActions(eligible(), FAR, createMemoryEntryAgeLedger());
+        expect(result.boostPinSubmits).toBe(true);
+        // Without the path the gone pin would move the row to the fill instant (close − 900).
+        expect(result.actions.find((a) => a.action === 'boost')).toEqual({
+            action: 'boost',
+            thresholdSec: 1800,
+            dueAt: CLOSE - 1800,
+        });
+    });
+
+    test('an eligible gone pin keeps its row even when no fill will run (autoSubmit off)', () => {
+        const challenge = eligible({ autoSubmit: false });
+        const result = VotingLogic.describeDeadlineActions(challenge, FAR, createMemoryEntryAgeLedger());
+        expect(result.actions.find((a) => a.action === 'boost')).toEqual({
+            action: 'boost',
+            thresholdSec: 1800,
+            dueAt: CLOSE - 1800,
+        });
+    });
+
+    test('every entry has Turbo and a Turbo pin: the row is shown and the boost is not blocked', () => {
+        mockSettings({
+            boostPinnedSubmit: true,
+            chosenPhotos: ['zzz'],
+            keyUnlockedBoostTime: 1800,
+            autoBoost: true,
+            emergencySubmit: 0,
+        });
+        settings.getEntryPins.mockReturnValue({ boost: 'zzz', turbo: 'e1' });
+        const challenge = build({
+            boost: { state: 'AVAILABLE_KEY' },
+            turbo: { state: 'LOCKED' },
+            entries: [{ id: 'e1', turbo: true }],
+        });
+        const result = VotingLogic.describeDeadlineActions(challenge, FAR, createMemoryEntryAgeLedger());
+        expect(result).toMatchObject({
+            boostPinSubmits: true,
+            boostBlocked: false,
+            boostBlockedBy: null,
+            boostReleaseAt: null,
+        });
+        expect(result.actions.map((a) => a.action)).toContain('boost');
+    });
+
+    test('isBoostBlocked is false while eligible with a Turbo pin everywhere, true again once latched', () => {
+        mockSettings({
+            boostPinnedSubmit: true,
+            chosenPhotos: ['zzz'],
+            keyUnlockedBoostTime: 1800,
+            autoBoost: true,
+            emergencySubmit: 0,
+        });
+        settings.getEntryPins.mockReturnValue({ boost: 'zzz', turbo: 'e1' });
+        const challenge = build({
+            boost: { state: 'AVAILABLE_KEY' },
+            turbo: { state: 'LOCKED' },
+            entries: [{ id: 'e1', turbo: true }],
+        });
+        const ledger = createMemoryEntryAgeLedger();
+        expect(VotingLogic.isBoostBlocked(challenge, '42', FAR, ledger)).toBe(false);
+        ledger.markPinSubmitFailed(challenge, 'zzz', boostDeadline(challenge));
+        expect(VotingLogic.isBoostBlocked(challenge, '42', FAR, ledger)).toBe(true);
+    });
+
+    test('a latch set moves the row and clamps it to the last chance, as today, and clears the flag', () => {
+        const ledger = createMemoryEntryAgeLedger();
+        const challenge = eligible(
+            { autoSubmitSchedule: [{ count: 2, seconds: 300 }], boostTime: 1800 },
+            { state: 'AVAILABLE', timeout: CLOSE - 600 },
+        );
+        ledger.markPinSubmitFailed(challenge, 'zzz', boostDeadline(challenge));
+        // The same clamped moved row the pre-Boost-pinned-submit test pins (close − 660).
+        expect(
+            VotingLogic.describeDeadlineActions(challenge, FAR, ledger).actions.find((a) => a.action === 'boost'),
+        ).toEqual({
+            action: 'boost',
+            thresholdSec: 660,
+            dueAt: CLOSE - 660,
+        });
+        expect(VotingLogic.describeDeadlineActions(challenge, FAR, ledger).boostPinSubmits).toBe(false);
+    });
+
+    test('today’s hidden row when every slot is taken: no free slot, and a full challenge has no fill ahead', () => {
+        mockSettings({
+            boostPinnedSubmit: true,
+            chosenPhotos: ['zzz'],
+            keyUnlockedBoostTime: 1800,
+            autoBoost: true,
+            emergencySubmit: 0,
+        });
+        settings.getEntryPins.mockReturnValue({ boost: 'zzz', turbo: null });
+        // Two entries at max 2: no free slot for the pinned submit — and the schedule row
+        // ({count: 2}) is already satisfied, so no fill instant exists to wait at and the
+        // gone pin hides the row, exactly as before the Boost-pinned submit.
+        const full = build({
+            boost: { state: 'AVAILABLE_KEY' },
+            entries: [{ id: 'e1' }, { id: 'e2' }],
+            maxSubmits: 2,
+        });
+        const result = VotingLogic.describeDeadlineActions(full, FAR, createMemoryEntryAgeLedger());
+        expect(result.boostPinSubmits).toBe(false);
+        expect(result.actions.map((a) => a.action)).not.toContain('boost');
+    });
+
+    test('today’s moved row when the setting is off', () => {
+        const challenge = eligible({ boostPinnedSubmit: false });
+        const result = VotingLogic.describeDeadlineActions(challenge, FAR, createMemoryEntryAgeLedger());
+        expect(result.boostPinSubmits).toBe(false);
+        expect(result.actions.find((a) => a.action === 'boost')).toEqual({
+            action: 'boost',
+            thresholdSec: 900,
+            dueAt: CLOSE - 900,
+        });
     });
 });

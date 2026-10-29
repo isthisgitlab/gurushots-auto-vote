@@ -1,4 +1,5 @@
 import type { Challenge } from '../../types/gurushots';
+import type { EntryAgeLedger } from '../../types/stores';
 /**
  * Per-challenge deadline actions (auto-fill, emergency fill, boost, turbo):
  * their seconds-before-close thresholds, the order they run in, and the
@@ -15,6 +16,7 @@ import { isKnownTurboMode } from '../../voting/turboMode';
 import { getEffectiveBoostTime, getEffectiveKeyUnlockedBoostTime, getEffectiveTurboTime } from './thresholds';
 import { isBoostWindowOpen } from './boostTurbo';
 import {
+    canSubmitBoostPin,
     livePinnedId,
     pickBoostEntry,
     pickTurboEntry,
@@ -137,11 +139,18 @@ type Conflicts = {
 /**
  * Whether a Boost is blocked at `now`: it is available to place, there is an entry to place it on,
  * every candidate carries Turbo or is the photo pinned for Turbo, and no fill-new mode with a free
- * slot resolves it. The deadline view and the sleep boost share this one rule.
+ * slot — nor the Boost-pinned submit with a free slot — resolves it. The runner reaches the
+ * Boost-pinned submit before any slot pick, so it also places a Boost whose pin is gone. The
+ * deadline view and the sleep boost share this one rule.
  *
  * @param now - Unix timestamp in seconds
  */
-const isBoostBlocked = (challenge: Challenge, challengeId: string, now: number): boolean => {
+const isBoostBlocked = (
+    challenge: Challenge,
+    challengeId: string,
+    now: number,
+    entryAges: EntryAgeLedger | null,
+): boolean => {
     const entries = challenge?.member?.ranking?.entries;
     const hasEntries = Array.isArray(entries) && entries.length >= 1;
     const hasFreeSlot = getSlotsRemaining(challenge) > 0;
@@ -149,7 +158,11 @@ const isBoostBlocked = (challenge: Challenge, challengeId: string, now: number):
         isBoostWindowOpen(challenge, now) &&
         hasEntries &&
         pickBoostEntry(challenge, challengeId, now) === null &&
-        !(hasFreeSlot && resolveBoostFillNewMode(challenge, challengeId) !== 'no')
+        !(
+            hasFreeSlot &&
+            (resolveBoostFillNewMode(challenge, challengeId) !== 'no' ||
+                canSubmitBoostPin(challenge, challengeId, entryAges) !== null)
+        )
     );
 };
 
@@ -184,11 +197,17 @@ const isBoostBlocked = (challenge: Challenge, challengeId: string, now: number):
  *
  * @param now - Unix timestamp in seconds
  */
-const describeConflicts = (challenge: Challenge, challengeId: string, now: number, manualOnly: boolean): Conflicts => {
+const describeConflicts = (
+    challenge: Challenge,
+    challengeId: string,
+    now: number,
+    manualOnly: boolean,
+    entryAges: EntryAgeLedger | null,
+): Conflicts => {
     const entries = challenge?.member?.ranking?.entries;
     const hasEntries = Array.isArray(entries) && entries.length >= 1;
     const hasFreeSlot = getSlotsRemaining(challenge) > 0;
-    const rawBoostBlocked = isBoostBlocked(challenge, challengeId, now);
+    const rawBoostBlocked = isBoostBlocked(challenge, challengeId, now, entryAges);
     const rawTurboBlocked =
         challenge?.member?.turbo?.state === 'WON' &&
         isKnownTurboMode(challenge.member.turbo) &&
@@ -231,7 +250,9 @@ const describeConflicts = (challenge: Challenge, challengeId: string, now: numbe
  *   - a pin on the feature's own photo is absolute: `conflict` (the photo carries the other
  *     feature) hides the row, and `gone` (the photo is not in the challenge) moves it past the
  *     fill instant — or hides it when no fill will plausibly run (autoSubmit off, or no
- *     schedule threshold ahead).
+ *     schedule threshold ahead). A gone Boost pin is exempt from both while the Boost-pinned
+ *     submit is eligible (boostPinSubmits): the runner submits that photo when the boost is
+ *     due, not at the fill instant.
  *   - autoSubmit: gate on the autoSubmit toggle (a schedule can imply a threshold
  *     while auto-fill is disabled).
  *   - emergencySubmit: its threshold is a fixed setting that never reflects live
@@ -252,11 +273,17 @@ const describeConflicts = (challenge: Challenge, challengeId: string, now: numbe
  * as advisory.
  *
  * @param now - Unix timestamp in seconds
+ * @param entryAges - the ledger the runner writes, so the Boost-pinned submit's failure latch is
+ *   honoured here exactly as the runner reads it (the mode-aware selector apiFactory.getEntryAgeLedger)
  */
 const describeDeadlineActions = (
     challenge: Challenge,
     now: number,
-): { actions: Array<{ action: string; thresholdSec: number; dueAt: number | null }> } & Conflicts => {
+    entryAges: EntryAgeLedger | null,
+): {
+    actions: Array<{ action: string; thresholdSec: number; dueAt: number | null }>;
+    boostPinSubmits: boolean;
+} & Conflicts => {
     const challengeId = challenge?.id?.toString?.() || '';
     const closeTime = Number(challenge?.close_time);
     const boost = challenge?.member?.boost || {};
@@ -265,7 +292,11 @@ const describeDeadlineActions = (
     const turboState = challenge?.member?.turbo?.state;
 
     const manualOnly = isManualPhotosOnly(settings, challengeId);
-    const conflicts = describeConflicts(challenge, challengeId, now, manualOnly);
+    const conflicts = describeConflicts(challenge, challengeId, now, manualOnly, entryAges);
+    // The Boost-pinned submit can place the boost on its gone pin right now; while it can, the
+    // gone pin neither hides the boost row for a missing fill nor moves the row to the fill
+    // instant — the submit happens when the boost is due, at the row's own time.
+    const boostPinSubmitActive = canSubmitBoostPin(challenge, challengeId, entryAges) !== null;
     const { boostBlocked, turboBlocked, boostReleaseAt, turboReleaseAt } = conflicts;
     // The pin on a feature's own photo is absolute, so the row must not promise a spend the
     // runner will not make: `conflict` (the photo carries the other feature) never fires, and
@@ -281,11 +312,12 @@ const describeDeadlineActions = (
     const fillInstant = fillThresholdSec > 0 && Number.isFinite(closeTime) ? closeTime - fillThresholdSec : null;
     const boostPinState = resolvePin(challenge, challengeId, 'boost').state;
     const turboPinState = resolvePin(challenge, challengeId, 'turbo').state;
-    const ownPinHidesRow = (state: typeof boostPinState) =>
-        state === 'conflict' || (state === 'gone' && fillInstant === null);
+    const ownPinHidesRow = (kind: 'boost' | 'turbo', state: typeof boostPinState) =>
+        state === 'conflict' ||
+        (state === 'gone' && fillInstant === null && !(kind === 'boost' && boostPinSubmitActive));
     // A blocked spend whose pin will give way is still coming, just later: its row stays.
-    const boostRowHidden = (boostBlocked && boostReleaseAt === null) || ownPinHidesRow(boostPinState);
-    const turboRowHidden = (turboBlocked && turboReleaseAt === null) || ownPinHidesRow(turboPinState);
+    const boostRowHidden = (boostBlocked && boostReleaseAt === null) || ownPinHidesRow('boost', boostPinState);
+    const turboRowHidden = (turboBlocked && turboReleaseAt === null) || ownPinHidesRow('turbo', turboPinState);
 
     const isVisible = (action: string, thresholdSec: number): boolean => {
         if (!Number.isFinite(thresholdSec) || thresholdSec <= 0) return false;
@@ -327,7 +359,7 @@ const describeDeadlineActions = (
         }
     };
 
-    if (manualOnly) return { actions: [], ...conflicts };
+    if (manualOnly) return { actions: [], boostPinSubmits: boostPinSubmitActive, ...conflicts };
 
     const actions = orderDeadlineActions(challenge)
         .filter(({ action, thresholdSec }) => isVisible(action, thresholdSec))
@@ -337,7 +369,10 @@ const describeDeadlineActions = (
             // Only the feature's own pin moves its row: a gone Boost pin moves the boost row, a
             // gone Turbo pin the turbo row, and the fill rows (autoSubmit, emergencySubmit) keep
             // their own thresholds — the runner fires them on their own windows regardless of pins.
+            // A gone Boost pin with the pinned submit eligible is exempt: the photo goes in when
+            // the boost is due, so the row keeps its own time.
             const ownPinState = action === 'boost' ? boostPinState : action === 'turbo' ? turboPinState : null;
+            const waitsForFill = ownPinState === 'gone' && !(action === 'boost' && boostPinSubmitActive);
             // A Boost row never moves past its own deadline's last chance: a fill landing after
             // the boost dies shows the last poll (boostDeadline − 60, mirroring the wake clamp in
             // armPinWaitWake) instead of promising a spend past its death. A Turbo's deadline is
@@ -347,7 +382,7 @@ const describeDeadlineActions = (
                     ? Math.min(fillInstant, boostDeadline(challenge) - BOOST_ROW_LAST_CHANCE_SEC)
                     : fillInstant;
             const releaseAt =
-                ownPinState === 'gone' && waitInstant !== null
+                waitsForFill && waitInstant !== null
                     ? ownReleaseAt === null
                         ? waitInstant
                         : Math.max(ownReleaseAt, waitInstant)
@@ -364,7 +399,7 @@ const describeDeadlineActions = (
         // A moved row can now sit out of order; order it by its adjusted threshold.
         .sort(compareDeadlineActions);
 
-    return { actions, ...conflicts };
+    return { actions, boostPinSubmits: boostPinSubmitActive, ...conflicts };
 };
 
 export { getAutoFillThresholdSec, getBoostThresholdSec, isBoostBlocked, orderDeadlineActions, describeDeadlineActions };

@@ -291,6 +291,7 @@ describe('deadline-action helpers with sparse challenges', () => {
         const { actions, boostBlocked } = VotingLogic.describeDeadlineActions(
             invalid({ member: { turbo: { state: 'WON', mode: 'classic' } } }),
             NOW,
+            null,
         );
         expect(boostBlocked).toBe(false);
         expect(actions).toEqual([{ action: 'turbo', thresholdSec: 600, dueAt: null }]);

@@ -107,6 +107,12 @@ export interface FillAttemptParams {
     probeStandDown?: ((loaded: LoadedCandidates) => boolean) | null;
     onEmptyPick?: ((eligible: PickerPhoto[]) => string) | null;
     onRefreshed?: ((picked: string[]) => RefreshVerdict | null) | null;
+    /**
+     * An explicit id pool: when set, the Chosen Photos settings are ignored and
+     * the pick is restricted to these ids, in this order (the Boost-pinned
+     * submit; the label's Submit Only behaviour does not apply).
+     */
+    onlyIds?: readonly string[];
 }
 
 /** A failed eligible-photo fetch. */
