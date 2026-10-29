@@ -38,13 +38,18 @@ import {
     runBoost,
     runChallenges,
     runDeadlines,
+    runExportTitleRules,
     runForgetPayment,
     runGetSetting,
+    runImportTitleRules,
     runJoin,
     runListPhotos,
     runListProfiles,
+    runListTitleRules,
     runLogs,
     runPin,
+    runResetAllGlobalDefaults,
+    runResetGlobalDefault,
     runResetSetting,
     runRun,
     runScenarioReset,
@@ -52,6 +57,7 @@ import {
     runSetSetting,
     runSubmit,
     runSwapBack,
+    runTitleProfile,
     runTurbo,
     runVote,
 } from './commandHandlers';
@@ -295,9 +301,16 @@ const COMMAND_ROWS: readonly CommandRow[] = [
         'reset-setting',
         runResetSetting,
         [
-            '  reset-setting <key> [--challenge=<id>] - Reset a setting to default (clear a challenge override with --challenge)',
+            '  reset-setting <key> [--challenge=<id>] - Reset a setting to default (clear a challenge override with --challenge).',
+            '             Without --challenge, a voting setting resets its global default.',
         ],
         { usage: 'Usage: reset-setting <key> [--challenge=<id>]' },
+    ),
+    row(
+        'reset-global-default',
+        runResetGlobalDefault,
+        ["  reset-global-default <key> - Reset a voting setting's global default to its shipped value"],
+        { usage: 'Usage: reset-global-default <key>' },
     ),
     row('reset-all-settings', exitsZero(resetAllSettings), [
         '  reset-all-settings - Reset all settings to defaults',
@@ -306,6 +319,15 @@ const COMMAND_ROWS: readonly CommandRow[] = [
         '      To use no chosen photos for that challenge (overriding rules / global):',
         "             set-setting chosenPhotos '[]' --challenge=<id>",
     ]),
+    row(
+        'reset-all-global-defaults',
+        runResetAllGlobalDefaults,
+        [
+            '  reset-all-global-defaults [--yes] - Without --yes, list the global defaults that differ from',
+            '             their shipped values (current → default) and change nothing; with --yes, reset them all.',
+        ],
+        { usage: 'Usage: reset-all-global-defaults [--yes]' },
+    ),
     row('list-profiles', runListProfiles, ['  list-profiles - Show saved challenge-settings profiles'], {
         usage: 'Usage: list-profiles',
     }),
@@ -329,6 +351,40 @@ const COMMAND_ROWS: readonly CommandRow[] = [
         'delete-profile',
         profileCommand('delete-profile', (name) => deleteProfile(name)),
         ['  delete-profile "<name>" - Delete a saved profile'],
+    ),
+    row(
+        'list-title-rules',
+        runListTitleRules,
+        ['  list-title-rules - Show the stored challenge rules: what each matches and what it does'],
+        { usage: 'Usage: list-title-rules' },
+    ),
+    row(
+        'export-title-rules',
+        runExportTitleRules,
+        [
+            '  export-title-rules [file] [--overwrite] - Print (or write) the challenge rules as JSON,',
+            '             to edit and import back. An existing file is refused without --overwrite.',
+        ],
+        { usage: 'Usage: export-title-rules [file] [--overwrite]' },
+    ),
+    row(
+        'import-title-rules',
+        runImportTitleRules,
+        [
+            '  import-title-rules <file> [--yes] - Check a title-rules JSON file and show what it replaces',
+            '             (what would be stored, and every rule it drops or collapses, with the reason);',
+            '             --yes imports it. A file that cannot be read or parsed is never merged.',
+        ],
+        { usage: 'Usage: import-title-rules <file> [--yes]' },
+    ),
+    row(
+        'title-profile',
+        runTitleProfile,
+        [
+            '  title-profile --challenge=<id> - Which rule or profile applies to a challenge,',
+            '             and the settings they set',
+        ],
+        { usage: 'Usage: title-profile --challenge=<id>' },
     ),
     row(
         'list-scenarios',

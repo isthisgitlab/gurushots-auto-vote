@@ -26,6 +26,9 @@ export const resetSetting = (key: string, challengeId: string | null = null) => 
         const defaultValue = defaultSettings[key];
 
         if (defaultValue === undefined) {
+            // Not an app key: a schema key resets its global default, the same
+            // path `reset-global-default` takes. Anything else stays unknown.
+            if (schemaEntry(key)) return resetGlobalDefault(key);
             logger.withCategory('settings').error(`Setting '${key}' not found in defaults`);
             return false;
         }
@@ -60,6 +63,47 @@ export const resetGlobalDefault = (key: string) => {
         return true;
     } catch (error) {
         logger.withCategory('settings').error(`Error resetting global default '${key}'`, error);
+        return false;
+    }
+};
+
+/**
+ * Reset every schema setting's global default. Without --yes it lists the ones
+ * that differ from their shipped value (current → default) and changes
+ * nothing; --yes resets them all. Returns false on a failed reset.
+ */
+export const resetAllGlobalDefaults = (yes: boolean) => {
+    try {
+        if (!yes) {
+            const modified = Object.entries(settings.SETTINGS_SCHEMA).filter(([key]) =>
+                settings.isGlobalDefaultModified(key),
+            );
+            if (modified.length === 0) {
+                logger
+                    .withCategory('settings')
+                    .info('No global default differs from its shipped value. Nothing to reset.');
+                return true;
+            }
+            for (const [key, entry] of modified) {
+                logger.printLine(
+                    `${key}: ${formatSettingForLog(key, settings.getGlobalDefault(key))} → ${formatSettingForLog(key, entry.default)}`,
+                );
+            }
+            logger
+                .withCategory('settings')
+                .info(
+                    `Nothing reset yet. To reset these ${modified.length} global default(s), re-run: reset-all-global-defaults --yes`,
+                );
+            return true;
+        }
+        if (!settings.resetAllGlobalDefaults()) {
+            logger.withCategory('settings').error('Failed to reset all global defaults');
+            return false;
+        }
+        logger.withCategory('settings').success('All global defaults reset to their shipped values');
+        return true;
+    } catch (error) {
+        logger.withCategory('settings').error('Error resetting all global defaults', error);
         return false;
     }
 };

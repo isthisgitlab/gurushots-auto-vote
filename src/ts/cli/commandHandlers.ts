@@ -17,15 +17,69 @@ import {
     STATS_DEFAULT_LIMIT,
 } from './commands/photos';
 import { isPinnableImageId } from '../settings';
-import { getSetting, listProfiles, resetSetting, setGlobalDefault, setSetting } from './commands/settings';
+import {
+    getSetting,
+    listProfiles,
+    resetAllGlobalDefaults,
+    resetGlobalDefault,
+    resetSetting,
+    setGlobalDefault,
+    setSetting,
+} from './commands/settings';
+import { exportTitleRulesCmd, importTitleRulesCmd, listTitleRulesCmd, titleProfileCmd } from './commands/titleRules';
 import { showLogs } from './commands/logs';
 import * as scenarioCommands from './commands/scenarios';
 import { parseChallengeFlag, runVotingCycle, voteChallengeManual } from './commands/voting';
 import { requireChallenge } from './guards';
 import { challengeCommand, exitCodeOf, extractChallenge, usageError } from './commandKit';
+import * as logger from '../logger';
+import { getMiddleware } from '../apiFactory';
 
 import type { CommandHandler } from './commandKit';
+import type { NullEventHandlers } from '../types/cli';
+import type * as settings_handlersModule from '../ipc/settings.handlers';
 import { usageOf } from './commandRows';
+
+// The settings IPC handlers behind `run`'s stale-settings prune — built lazily
+// on first use (the actions.ts pattern) so loading this module for `help` does
+// not construct the handler set or pull in its transitive dependencies.
+type SettingsHandlers = NullEventHandlers<ReturnType<typeof settings_handlersModule.buildHandlers>>;
+let _settingsHandlers: SettingsHandlers | undefined;
+const settingsHandlers = (): SettingsHandlers =>
+    (_settingsHandlers ??= (
+        require('../ipc/settings.handlers') as typeof import('../ipc/settings.handlers')
+    ).buildHandlers());
+
+/**
+ * Prunes the per-challenge settings of challenges that are gone, off `run`'s
+ * own list read after its cycle — the renderer does the same off its own list
+ * read (useActiveChallenges), never off the voting pass. The handler holds the
+ * mock-mode gate and the id validation, so it is called, never bypassed. The
+ * gates mirror the renderer's: the active ids only, an empty list or a
+ * prune-unsafe read prunes nothing (absence from such a list is not "gone"),
+ * and a failed read prunes nothing (best effort — one debug line at most).
+ * `start` never prunes, the same rule the renderer follows while autovote runs.
+ */
+const pruneStaleChallengeSettings = async (): Promise<void> => {
+    try {
+        const resp = await getMiddleware().getActiveChallenges();
+        if (!resp || resp.fetchFailed) {
+            logger
+                .withCategory('settings')
+                .debug('Skipped stale-settings cleanup: the active challenges could not be read');
+            return;
+        }
+        if (resp.challenges.length === 0 || resp.pruneUnsafe === true) return;
+        await settingsHandlers()['cleanup-stale-challenge-setting'](
+            null,
+            resp.challenges.map((challenge) => challenge.id.toString()),
+        );
+    } catch (error) {
+        logger
+            .withCategory('settings')
+            .debug('Skipped stale-settings cleanup: the active challenges could not be read', error);
+    }
+};
 
 // --challenge scopes to a single-challenge manual vote; bare `vote` votes
 // every challenge to 100%. A present-but-empty --challenge is rejected rather
@@ -71,6 +125,7 @@ const runLogs: CommandHandler = async (argv) => {
 
 const runRun: CommandHandler = async (argv) => {
     await runVotingCycle(1, { isManual: false, challengeId: parseChallengeFlag(argv) });
+    await pruneStaleChallengeSettings();
     return 0;
 };
 
@@ -323,6 +378,62 @@ const runSetGlobalDefault: CommandHandler = async ([key, value]) => {
     return setGlobalDefault(key, value) ? 0 : 1;
 };
 
+// Exactly one positional key: a reset names one thing, so a typo must not read as a second argument.
+const runResetGlobalDefault: CommandHandler = async (argv) => {
+    if (argv.length !== 1) return usageError('Please specify a setting key', usageOf('reset-global-default'));
+    return resetGlobalDefault(argv[0]) ? 0 : 1;
+};
+
+// --yes alone flips it from a listing of what would change into the reset itself;
+// anything else alongside it is a typo and a usage error.
+const runResetAllGlobalDefaults: CommandHandler = async (argv) => {
+    const yesArgs = argv.filter((a) => a === '--yes');
+    if (argv.length !== yesArgs.length || yesArgs.length > 1) {
+        return usageError('Wrong arguments', usageOf('reset-all-global-defaults'));
+    }
+    return resetAllGlobalDefaults(yesArgs.length > 0) ? 0 : 1;
+};
+
+const runListTitleRules: CommandHandler = async (argv) => {
+    if (argv.length > 0) return usageError('Wrong arguments', usageOf('list-title-rules'));
+    listTitleRulesCmd();
+    return 0;
+};
+
+const runExportTitleRules: CommandHandler = async (argv) => {
+    const positionals = argv.filter((a) => !a.startsWith('--'));
+    const overwriteArgs = argv.filter((a) => a === '--overwrite');
+    const unknown = argv.filter((a) => a.startsWith('--') && a !== '--overwrite');
+    if (positionals.length > 1 || overwriteArgs.length > 1 || unknown.length > 0) {
+        return usageError('Wrong arguments', usageOf('export-title-rules'));
+    }
+    return exportTitleRulesCmd(positionals[0], overwriteArgs.length > 0);
+};
+
+const runImportTitleRules: CommandHandler = async (argv) => {
+    const positionals = argv.filter((a) => !a.startsWith('--'));
+    const yesArgs = argv.filter((a) => a === '--yes');
+    const unknown = argv.filter((a) => a.startsWith('--') && a !== '--yes');
+    if (positionals.length !== 1 || yesArgs.length > 1 || unknown.length > 0) {
+        return usageError('Wrong arguments', usageOf('import-title-rules'));
+    }
+    return importTitleRulesCmd(positionals[0], yesArgs.length > 0);
+};
+
+// A read-only command, but strict like the actions: `--challenge 123` (space form), a repeat or
+// any other argument must not quietly read as a listing.
+const runTitleProfile: CommandHandler = async (argv) => {
+    const detailArgs = argv.filter((a) => a.startsWith('--challenge='));
+    if (argv.length !== detailArgs.length || detailArgs.length > 1 || detailArgs[0] === '--challenge=') {
+        return usageError('Wrong arguments', usageOf('title-profile'));
+    }
+    const challengeId = detailArgs[0]?.slice('--challenge='.length);
+    if (challengeId === undefined) {
+        return usageError('Please specify a challenge id with --challenge', usageOf('title-profile'));
+    }
+    return exitCodeOf(await titleProfileCmd(challengeId));
+};
+
 const runListProfiles: CommandHandler = async (argv) => {
     const { rest } = extractChallenge(argv);
     if (rest.length > 0) return usageError(`Unexpected arguments: ${rest.join(' ')}`, usageOf('list-profiles'));
@@ -331,16 +442,22 @@ const runListProfiles: CommandHandler = async (argv) => {
 };
 
 export {
+    pruneStaleChallengeSettings,
     runBoost,
     runChallenges,
     runDeadlines,
+    runExportTitleRules,
     runForgetPayment,
     runGetSetting,
+    runImportTitleRules,
     runJoin,
     runListPhotos,
     runListProfiles,
+    runListTitleRules,
     runLogs,
     runPin,
+    runResetAllGlobalDefaults,
+    runResetGlobalDefault,
     runResetSetting,
     runRun,
     runScenarioReset,
@@ -348,6 +465,7 @@ export {
     runSetSetting,
     runSubmit,
     runSwapBack,
+    runTitleProfile,
     runTurbo,
     runVote,
 };

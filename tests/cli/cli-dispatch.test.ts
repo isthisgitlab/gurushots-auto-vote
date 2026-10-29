@@ -510,16 +510,28 @@ const COMMANDS_BLOCK = `Commands:
   set-setting <key> <value> [--challenge=<id>] - Set a setting value (per-challenge override with --challenge)
   set-global-default <key> <value> - Set global default with validation
   list-settings [--challenge=<id>] - Show all settings (per-challenge view with --challenge)
-  reset-setting <key> [--challenge=<id>] - Reset a setting to default (clear a challenge override with --challenge)
+  reset-setting <key> [--challenge=<id>] - Reset a setting to default (clear a challenge override with --challenge).
+             Without --challenge, a voting setting resets its global default.
+  reset-global-default <key> - Reset a voting setting's global default to its shipped value
   reset-all-settings - Reset all settings to defaults
       To remove one challenge's own chosen-photos list (it then inherits from rules / global):
              reset-setting chosenPhotos --challenge=<id>
       To use no chosen photos for that challenge (overriding rules / global):
              set-setting chosenPhotos '[]' --challenge=<id>
+  reset-all-global-defaults [--yes] - Without --yes, list the global defaults that differ from
+             their shipped values (current → default) and change nothing; with --yes, reset them all.
   list-profiles - Show saved challenge-settings profiles
   save-profile "<name>" --challenge=<id> - Save a challenge's overrides as a named profile
   apply-profile "<name>" --challenge=<id> - Replace a challenge's overrides with a profile
   delete-profile "<name>" - Delete a saved profile
+  list-title-rules - Show the stored challenge rules: what each matches and what it does
+  export-title-rules [file] [--overwrite] - Print (or write) the challenge rules as JSON,
+             to edit and import back. An existing file is refused without --overwrite.
+  import-title-rules <file> [--yes] - Check a title-rules JSON file and show what it replaces
+             (what would be stored, and every rule it drops or collapses, with the reason);
+             --yes imports it. A file that cannot be read or parsed is never merged.
+  title-profile --challenge=<id> - Which rule or profile applies to a challenge,
+             and the settings they set
   list-scenarios - Show saved scenarios and the example templates
   scenario-template <id> [file] - Print (or write) an example scenario to start from
   import-scenario <file> [--overwrite] [--yes] - Check a scenario file and show what it does; --yes imports it

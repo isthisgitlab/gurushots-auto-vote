@@ -97,6 +97,11 @@ export const getEffectiveSetting = challengeOverrides.getEffectiveSetting;
 // Challenge rules (survive challenge rotation)
 export const getTitleRules = titleRules.getTitleRules;
 export const setTitleRules = titleRules.setTitleRules;
+// The dry-run of setTitleRules: what the write would store, drop and collapse,
+// without saving (the CLI import preview runs it).
+export const previewTitleRules = titleRules.previewTitleRules;
+export type TitleRuleNote = titleRules.TitleRuleNote;
+export type TitleRulesPreview = titleRules.TitleRulesPreview;
 export const resolveRuleSetting = titleRules.resolveRuleSetting;
 export const hasRuleJoinOptIn = titleRules.hasRuleJoinOptIn;
 export const getEffectiveTagSetting = titleRules.getEffectiveTagSetting;

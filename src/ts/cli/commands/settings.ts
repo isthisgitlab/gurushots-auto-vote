@@ -8,6 +8,12 @@
 export { formatSettingForLog } from './settings/shared';
 export { getSetting, setSetting, setGlobalDefault } from './settings/access';
 export { listSettings, dumpSchema, listGlobalDefaults } from './settings/listing';
-export { resetSetting, resetGlobalDefault, resetAllSettings, resetWindows } from './settings/resetCommands';
+export {
+    resetSetting,
+    resetGlobalDefault,
+    resetAllGlobalDefaults,
+    resetAllSettings,
+    resetWindows,
+} from './settings/resetCommands';
 export { listProfiles, saveProfileFromChallenge, applyProfile, deleteProfile } from './settings/profileCommands';
 export { helpSettings } from './settings/help';

@@ -34,6 +34,8 @@ jest.mock('../../src/ts/settings', () => ({
     setGlobalDefault: jest.fn(),
     getGlobalDefault: jest.fn(),
     resetGlobalDefault: jest.fn(),
+    resetAllGlobalDefaults: jest.fn(),
+    isGlobalDefaultModified: jest.fn(() => false),
     resetAllSettings: jest.fn(),
     loadSettings: jest.fn(),
     saveSettings: jest.fn(),
@@ -387,6 +389,21 @@ describe('resetSetting', () => {
         expect(msgs('error')).toEqual(["Setting 'ghost' not found in defaults"]);
     });
 
+    test('a schema key with no --challenge resets its global default, the same path reset-global-default takes', () => {
+        settings.getDefaultSettings.mockReturnValue(invalid({ app: {}, auth: {} }));
+        settings.resetGlobalDefault.mockReturnValue(true);
+        expect(cmd.resetSetting('exposure')).toBe(true);
+        expect(settings.resetGlobalDefault).toHaveBeenCalledWith('exposure');
+        expect(msgs('success')).toEqual(['Reset global default exposure to: 50']);
+    });
+
+    test('a schema key whose global-default reset the settings refuse is a failure', () => {
+        settings.getDefaultSettings.mockReturnValue(invalid({ app: {}, auth: {} }));
+        settings.resetGlobalDefault.mockReturnValue(false);
+        expect(cmd.resetSetting('exposure')).toBe(false);
+        expect(msgs('error')).toEqual(["Failed to reset global default 'exposure'"]);
+    });
+
     test('a throwing facade is reported, not thrown', () => {
         settings.getDefaultSettings.mockImplementation(boom);
         expect(cmd.resetSetting('theme')).toBe(false);
@@ -416,6 +433,46 @@ describe('resetGlobalDefault', () => {
         settings.resetGlobalDefault.mockImplementation(boom);
         expect(cmd.resetGlobalDefault('exposure')).toBe(false);
         expect(msgs('error')).toEqual(["Error resetting global default 'exposure'"]);
+    });
+});
+
+describe('resetAllGlobalDefaults', () => {
+    test('with nothing modified it says so and changes nothing', () => {
+        settings.isGlobalDefaultModified.mockReturnValue(false);
+        expect(cmd.resetAllGlobalDefaults(false)).toBe(true);
+        expect(msgs('info')).toEqual(['No global default differs from its shipped value. Nothing to reset.']);
+        expect(settings.resetAllGlobalDefaults).not.toHaveBeenCalled();
+    });
+
+    test('without --yes it lists only the differing defaults, current → shipped, and resets nothing', () => {
+        settings.isGlobalDefaultModified.mockImplementation((key) => key === 'exposure' || key === 'emergencySubmit');
+        settings.getGlobalDefault.mockImplementation((key) => (key === 'exposure' ? 80 : 999));
+        expect(cmd.resetAllGlobalDefaults(false)).toBe(true);
+        expect(msgs('info')).toEqual([
+            'Nothing reset yet. To reset these 2 global default(s), re-run: reset-all-global-defaults --yes',
+        ]);
+        // The listing goes to the console only, never into the log.
+        expect(msgs('stdout')).toEqual(['exposure: 80 → 50', 'emergencySubmit: 999 (16m) → 300 (5m)']);
+        expect(settings.resetAllGlobalDefaults).not.toHaveBeenCalled();
+    });
+
+    test('--yes resets every global default and confirms', () => {
+        settings.resetAllGlobalDefaults.mockReturnValue(true);
+        expect(cmd.resetAllGlobalDefaults(true)).toBe(true);
+        expect(settings.resetAllGlobalDefaults).toHaveBeenCalledWith();
+        expect(msgs('success')).toEqual(['All global defaults reset to their shipped values']);
+    });
+
+    test('a failed reset is reported', () => {
+        settings.resetAllGlobalDefaults.mockReturnValue(false);
+        expect(cmd.resetAllGlobalDefaults(true)).toBe(false);
+        expect(msgs('error')).toEqual(['Failed to reset all global defaults']);
+    });
+
+    test('a throwing facade is reported, not thrown', () => {
+        settings.isGlobalDefaultModified.mockImplementation(boom);
+        expect(cmd.resetAllGlobalDefaults(false)).toBe(false);
+        expect(msgs('error')).toEqual(['Error resetting all global defaults']);
     });
 });
 

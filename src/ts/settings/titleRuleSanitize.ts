@@ -207,13 +207,17 @@ const _sanitizeRuleBehaviour = (
 
 /**
  * Sanitize one rule for storage. Returns `{ valid: false, title, requestedProfile }`
- * on rejection, `{ valid: true, rule: null }` for a no-op rule to drop, or
+ * on rejection, `{ valid: true, rule: null, droppedBecause, label }` for a no-op
+ * rule to drop (with the reason and the label it is named by), or
  * `{ valid: true, rule }` with the sanitized rule.
  */
 const sanitizeTitleRule = (
     rule: RuleLike,
     storedProfiles: Record<string, unknown>,
-): { valid: false; title: string; requestedProfile?: string } | { valid: true; rule: TitleRule | null } => {
+):
+    | { valid: false; title: string; requestedProfile?: string }
+    | { valid: true; rule: null; droppedBecause: string; label: string }
+    | { valid: true; rule: TitleRule } => {
     const titleList = _sanitizeRuleTitleList(rule);
     if (titleList === null) return { valid: false, title: ruleLogLabel(rule, undefined) };
     const { titles, modes } = titleList;
@@ -223,7 +227,8 @@ const sanitizeTitleRule = (
     if (conditions === null) return { valid: false, title: label };
     // A rule needs at least one condition; one without any is the editor's
     // empty new row and is dropped, not rejected.
-    if (!title && Object.keys(conditions).length === 0) return { valid: true, rule: null };
+    if (!title && Object.keys(conditions).length === 0)
+        return { valid: true, rule: null, droppedBecause: 'the rule has no match condition and sets nothing', label };
     if (titles.length > MAX_TITLES_PER_RULE || titles.some((entry) => entry.length > MAX_TITLE_LENGTH)) {
         return { valid: false, title: label };
     }
@@ -236,7 +241,12 @@ const sanitizeTitleRule = (
     // is a complete, meaningful rule.
     const hasInline = Object.keys(inline).length > 0;
     if (!profile && !hasInline && mustIncludeTags.length === 0 && shouldIncludeTags.length === 0) {
-        return { valid: true, rule: null };
+        return {
+            valid: true,
+            rule: null,
+            droppedBecause: 'the rule matches but sets nothing (no tags, profile or overrides)',
+            label,
+        };
     }
 
     const sanitized: TitleRule = { title, mustIncludeTags, shouldIncludeTags, ...inline, ...conditions };

@@ -19,8 +19,31 @@ import {
 } from './ruleResolution';
 import { getEffectiveSetting } from './challengeOverrides';
 
+import type { ConfigV2 } from '../types/config';
 import type { RuleMatchChallenge, SettingValueOf, TitleRule, TitleRuleInfo } from '../types/settings';
 import type { RuleLike } from './challengeRules';
+
+/**
+ * One input rule the sanitize pass did not store, said back to the caller: a
+ * no-op it dropped, or a duplicate match condition it collapsed into an
+ * earlier rule (the later values lose). `index` is the rule's 1-based place in
+ * the input list; `label` names it the way the log lines do.
+ */
+interface TitleRuleNote {
+    index: number;
+    label: string;
+    reason: string;
+}
+
+/**
+ * What the write path checks before saving, answered without saving:
+ * `rules` is the list that would be stored (so a preview cannot drift from
+ * the write), `dropped` and `collapsed` say what the sanitize pass left out
+ * and why, and `error` is the write's rejection reason.
+ */
+type TitleRulesPreview =
+    | { ok: true; rules: TitleRule[]; dropped: TitleRuleNote[]; collapsed: TitleRuleNote[] }
+    | { ok: false; error: string };
 
 /**
  * Setting keys whose rule contribution is merged as a tag union. Named
@@ -85,25 +108,85 @@ const _titleForLog = (title: string): string => (title.length > 80 ? `${title.sl
  * Sanitize every rule and de-dupe on the whole CONDITION, not the title alone:
  * "abc"/exact and "abc"/contains are different rules, and a title-less rule has
  * no title to key on at all. Last wins within one identical condition, at the
- * first one's position. Returns the rule list, or null (logged) on the first
- * rejected rule.
+ * first one's position. Reports what it drops (no-op rules) and collapses
+ * (duplicate conditions) with a reason per entry, or the rejection on the
+ * first rejected rule — setTitleRules and previewTitleRules both run this, so
+ * the preview cannot drift from the write.
  */
-const _sanitizedUniqueRules = (rules: unknown[], storedProfiles: Record<string, unknown>): TitleRule[] | null => {
-    const byKey: Map<string, TitleRule> = new Map();
-    for (const rule of rules) {
+const _sanitizedUniqueRules = (rules: unknown[], storedProfiles: Record<string, unknown>): TitleRulesPreview => {
+    const byKey: Map<string, { rule: TitleRule; index: number }> = new Map();
+    const dropped: TitleRuleNote[] = [];
+    const collapsed: TitleRuleNote[] = [];
+    for (const [position, rule] of rules.entries()) {
         const result = sanitizeTitleRule(rule as RuleLike, storedProfiles);
         if (!result.valid) {
             const detail = result.requestedProfile
                 ? `unknown profile "${profileNameForLog(result.requestedProfile)}"`
                 : `invalid or over-length values`;
-            logger
-                .withCategory('settings')
-                .error(`Title rule rejected for "${_titleForLog(result.title)}": ${detail}`, null);
-            return null;
+            return { ok: false, error: `Title rule rejected for "${_titleForLog(result.title)}": ${detail}` };
         }
-        if (result.rule) byKey.set(titleRuleKey(result.rule), result.rule);
+        if (result.rule === null) {
+            dropped.push({ index: position + 1, label: result.label, reason: result.droppedBecause });
+            continue;
+        }
+        const key = titleRuleKey(result.rule);
+        const first = byKey.get(key);
+        if (first !== undefined) {
+            collapsed.push({
+                index: position + 1,
+                label: ruleLogLabel(result.rule, result.rule.title),
+                reason: `same match condition as rule ${first.index} ("${_titleForLog(ruleLogLabel(first.rule, first.rule.title))}") — the later values win, at the first one's position`,
+            });
+        }
+        byKey.set(key, { rule: result.rule, index: position + 1 });
     }
-    return Array.from(byKey.values());
+    return { ok: true, rules: Array.from(byKey.values(), (entry) => entry.rule), dropped, collapsed };
+};
+
+/**
+ * Everything setTitleRules checks before saving, as one pipeline the write and
+ * the dry-run share: the array check, the cap, the sanitize pass and the
+ * profile-conflict check. Returns the loaded settings with the rules that
+ * would be stored, or the rejection reason.
+ */
+const _checkedRules = (
+    rules: unknown,
+):
+    | { ok: true; settings: ConfigV2; rules: TitleRule[]; dropped: TitleRuleNote[]; collapsed: TitleRuleNote[] }
+    | { ok: false; error: string } => {
+    if (!Array.isArray(rules)) return { ok: false, error: 'setTitleRules expects an array' };
+    if (rules.length > MAX_TITLE_RULES) {
+        return {
+            ok: false,
+            error: `setTitleRules rejected: ${rules.length} rules exceeds the ${MAX_TITLE_RULES} cap`,
+        };
+    }
+
+    const settings = loadSettings();
+    const storedProfiles = settings.profiles;
+    const sanitized = _sanitizedUniqueRules(rules, storedProfiles);
+    if (!sanitized.ok) return sanitized;
+
+    for (const rule of sanitized.rules) {
+        if (rule.profile && !titleProfileComposesWithKnownOverrides(settings, rule, storedProfiles[rule.profile])) {
+            return {
+                ok: false,
+                error: `Title profile conflicts with manual overrides for "${_titleForLog(ruleLogLabel(rule, rule.title))}"`,
+            };
+        }
+    }
+    return { ok: true, settings, rules: sanitized.rules, dropped: sanitized.dropped, collapsed: sanitized.collapsed };
+};
+
+/**
+ * The dry-run of setTitleRules: everything the write checks before saving,
+ * answered without saving. Backed by the same pipeline setTitleRules runs, so
+ * the preview cannot drift from the write.
+ */
+const previewTitleRules = (rules: unknown): TitleRulesPreview => {
+    const checked = _checkedRules(rules);
+    if (!checked.ok) return checked;
+    return { ok: true, rules: checked.rules, dropped: checked.dropped, collapsed: checked.collapsed };
 };
 
 /**
@@ -112,40 +195,19 @@ const _sanitizedUniqueRules = (rules: unknown[], storedProfiles: Record<string, 
  * inline, or any mix. Sanitizes input: trims titles, validates conditions and
  * tag lists against the schema, resolves profile names case-insensitively,
  * drops no-op rules, and de-dupes by the whole match condition (last wins, at
- * the first one's position).
+ * the first one's position). Logs and refuses on the first rejection; the
+ * dry-run `previewTitleRules` answers the same checks without saving.
  */
 const setTitleRules = (rules: unknown): boolean => {
-    if (!Array.isArray(rules)) {
-        logger.withCategory('settings').error('setTitleRules expects an array', null);
+    const checked = _checkedRules(rules);
+    if (!checked.ok) {
+        logger.withCategory('settings').error(checked.error, null);
         return false;
-    }
-    if (rules.length > MAX_TITLE_RULES) {
-        logger
-            .withCategory('settings')
-            .error(`setTitleRules rejected: ${rules.length} rules exceeds the ${MAX_TITLE_RULES} cap`, null);
-        return false;
-    }
-
-    const settings = loadSettings();
-    const storedProfiles = settings.profiles;
-    const sanitized = _sanitizedUniqueRules(rules, storedProfiles);
-    if (sanitized === null) return false;
-
-    for (const rule of sanitized) {
-        if (rule.profile && !titleProfileComposesWithKnownOverrides(settings, rule, storedProfiles[rule.profile])) {
-            logger
-                .withCategory('settings')
-                .error(
-                    `Title profile conflicts with manual overrides for "${_titleForLog(ruleLogLabel(rule, rule.title))}"`,
-                    null,
-                );
-            return false;
-        }
     }
 
     // The list is saved in the order the user gave, which IS the precedence.
-    settings.rules = sanitized;
-    return saveSettings(settings);
+    checked.settings.rules = checked.rules;
+    return saveSettings(checked.settings);
 };
 
 /**
@@ -233,9 +295,11 @@ const getEffectiveIgnoreTitleWords = (challenge: RuleMatchChallenge | null | und
 export {
     getTitleRules,
     setTitleRules,
+    previewTitleRules,
     resolveRuleSetting,
     hasRuleJoinOptIn,
     getTitleProfile,
     getEffectiveTagSetting,
     getEffectiveIgnoreTitleWords,
 };
+export type { TitleRuleNote, TitleRulesPreview };
