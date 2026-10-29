@@ -3,7 +3,8 @@
  * networked command starts with, the profile-argument validation the
  * three profile commands repeat, the --challenge requirement the
  * challenge-scoped action commands share, and the shared challenge lookup
- * the command implementations start with. Each caller keeps its own
+ * the command implementations start with, plus the failed-fetch message the
+ * active-challenges reads print. Each caller keeps its own
  * return shape; only the check + user-facing guidance live here.
  */
 
@@ -16,6 +17,16 @@ import type { Challenge } from '../types/gurushots';
 
 // What the IPC handlers' 'invalid-args' refusal means for the CLI user.
 const INVALID_ID_TEXT = 'Invalid challenge or image id.';
+
+/**
+ * The failed-fetch message the active-challenges reads share — challengesCmd's
+ * listing and resolveChallenge's action lookup: what happened (the read did
+ * not succeed, so nothing was shown or changed) and what to do next (the
+ * connection, or an expired login). `error` carries a thrown error's text
+ * when there is one.
+ */
+const failedFetchMessage = (error?: string): string =>
+    `Could not read the active challenges from GuruShots${error ? `: ${error}` : ''}, so nothing was shown or changed. Check the connection and try again. If the login has expired, run login first.`;
 
 /**
  * True when a token is present. On miss, logs the standard "login first"
@@ -44,6 +55,12 @@ const resolveChallenge = async (challengeId: string): Promise<Challenge | null> 
     }
     try {
         const resp = await getMiddleware().getActiveChallenges();
+        // A failed fetch reads as an empty list, so without this gate it would
+        // be reported as "not found" — the fetch's failure is the real cause.
+        if (resp == null || resp.fetchFailed === true) {
+            logger.withCategory('challenges').error(failedFetchMessage());
+            return null;
+        }
         const found = findActionableChallenge(resp, challengeId);
         if ('refused' in found) {
             // The handlers re-read below refuse the same way, so bailing here
@@ -57,7 +74,7 @@ const resolveChallenge = async (challengeId: string): Promise<Challenge | null> 
         }
         return found.challenge;
     } catch (err) {
-        logger.withCategory('challenges').error(`Failed to fetch challenges: ${errorMessage(err) || err}`);
+        logger.withCategory('challenges').error(failedFetchMessage(errorMessage(err) || String(err)));
         return null;
     }
 };
@@ -119,4 +136,11 @@ const requireChallenge = ({ challengeId }: { challengeId: string | null }, usage
     return challengeId;
 };
 
-export { ensureAuthenticated, requireProfileArgs, requireChallenge, resolveChallenge, INVALID_ID_TEXT };
+export {
+    ensureAuthenticated,
+    failedFetchMessage,
+    requireProfileArgs,
+    requireChallenge,
+    resolveChallenge,
+    INVALID_ID_TEXT,
+};

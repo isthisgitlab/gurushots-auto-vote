@@ -12,6 +12,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import * as logger from '../../logger';
+import { MAX_MESSAGE_LENGTH } from '../../logger/write';
 import { stripTerminalControl } from '../../format/logSafe';
 import { diagnostics } from '../../services/semantic/diagnostics';
 
@@ -44,6 +45,25 @@ const showLexiconReport = () => {
     }
 };
 
+// A log file line can be longer than MAX_MESSAGE_LENGTH — the cap
+// logger/write.ts applies to every message (the file's own prefix rides in
+// the same message) — and one printLine call would cut it. A line past the
+// cap prints in order, in pieces no longer than the cap, so every character
+// reaches the console; plain `logs` and the follower share the split.
+const printPieces = (line: string): string[] => {
+    const clean = stripTerminalControl(line);
+    const pieces: string[] = [];
+    for (let at = 0; at < clean.length; at += MAX_MESSAGE_LENGTH) {
+        pieces.push(clean.slice(at, at + MAX_MESSAGE_LENGTH));
+    }
+    return pieces.length > 0 ? pieces : [''];
+};
+
+// Plain `logs` prints each tail line through the split, console only.
+const printUncut = (text: string): void => {
+    for (const piece of printPieces(text)) logger.printLine(piece);
+};
+
 const showLogs = ({ category = 'app', lines = 100 }: { category?: string; lines?: number } = {}) => {
     if (category === 'lexicon') return showLexiconReport();
     const getPath = LOG_FILE_GETTERS[category] || LOG_FILE_GETTERS.app;
@@ -54,13 +74,16 @@ const showLogs = ({ category = 'app', lines = 100 }: { category?: string; lines?
             return;
         }
         const allLines = fs.readFileSync(filePath, 'utf8').split('\n');
+        // The piece after the file's final newline is the split artefact, not a
+        // line: drop it, so --lines=N prints the last N real lines.
+        if (allLines[allLines.length - 1] === '') allLines.pop();
         const tail = allLines.slice(-lines);
         logger.withCategory('ui').info(`=== ${category} log (last ${lines} lines): ${filePath} ===`);
-        // The log lines as the file holds them, one print call per line — one
-        // call is capped, so a tail printed as one string would lose its newest
-        // lines — on the console only, not written back into the log file they
-        // came from.
-        for (const line of tail) logger.printLine(stripTerminalControl(line));
+        // The log lines as the file holds them, one print call per line — a
+        // tail printed as one string would be cut at the cap and lose its
+        // newest lines — on the console only, not written back into the log
+        // file they came from.
+        for (const line of tail) printUncut(line);
     } catch (error) {
         logger.withCategory('ui').error(`Error reading ${category} log`, error);
     }
@@ -147,9 +170,15 @@ export type FollowDeps = {
 // How often the follower polls for appended bytes and fresher files.
 const FOLLOW_INTERVAL_MS = 1000;
 
+// The most bytes one poll reads from a file in a single read: an unread span
+// is read in chunks of at most this size until the stat's size, never one
+// allocation for whatever grew.
+const FOLLOW_READ_CHUNK_BYTES = 1024 * 1024;
+
 // The one writer the follower prints through: console only (printLine never
 // writes a log entry), the line stripped of terminal control — an info()
-// here would append to the very file being followed.
+// here would append to the very file being followed. Lines arrive from
+// printFollowedLine already split to the print cap.
 const printFollow = (text: string) => logger.printLine(stripTerminalControl(text));
 
 const defaultFollowDeps = (): FollowDeps => ({
@@ -166,23 +195,24 @@ const defaultFollowDeps = (): FollowDeps => ({
 
 /**
  * One followed line: the `--- <file path>` separator first whenever the lines
- * come from a file different from the previous printed lines', then the line —
- * one print call per line, since one call is capped and a longer batch would
- * lose its newest lines. Mutates `state.lastPrinted`.
+ * come from a file different from the previous printed lines', then the line
+ * — one print call, or the pieces printPieces splits a line longer than the
+ * print cap into, so nothing is cut. Mutates `state.lastPrinted`.
  */
 const printFollowedLine = (state: FollowState, filePath: string, line: string, print: (text: string) => void): void => {
     if (state.lastPrinted !== filePath) {
         print(`--- ${filePath}`);
         state.lastPrinted = filePath;
     }
-    print(line);
+    for (const piece of printPieces(line)) print(piece);
 };
 
 /**
  * Gives every existing file of the category its current byte size as the
  * offset the polls continue from, so only what is appended after the start
  * prints. One whose stat fails is not seeded — the first poll then follows it
- * from its first byte.
+ * from its first byte. The file the initial tail reads has its entry set
+ * again by the tail itself, from the bytes it read (printInitialTail).
  */
 const seedFollowState = (state: FollowState, prefix: string, deps: FollowDeps): void => {
     for (const filePath of deps.list(deps.dir, prefix)) {
@@ -195,15 +225,34 @@ const seedFollowState = (state: FollowState, prefix: string, deps: FollowDeps): 
     }
 };
 
-/** Prints the last `lines` lines of `filePath`, one print call per line. */
+/**
+ * Prints the last `lines` complete lines of `filePath`, and seeds the file's
+ * followed state from this read: the offset is the bytes the tail itself read
+ * — not a stat taken earlier, whose size bytes appended since have left
+ * behind, so nothing prints twice — the decoder carries a multi-byte
+ * character the read's end cut, and a last line without its newline becomes
+ * the held partial line, printing once when its newline arrives.
+ */
 const printInitialTail = (filePath: string, lines: number, state: FollowState, print: (text: string) => void): void => {
-    let content: string;
+    let content: Buffer;
     try {
-        content = fs.readFileSync(filePath, 'utf8');
+        content = fs.readFileSync(filePath);
     } catch {
         return; // gone between the listing and this read; the polls re-resolve
     }
-    for (const line of content.split('\n').slice(-lines)) printFollowedLine(state, filePath, line, print);
+    const decoder = new StringDecoder('utf8');
+    const text = decoder.write(content);
+    const pieces = text.split('\n');
+    let pending = '';
+    if (text.endsWith('\n')) {
+        pieces.pop(); // the empty piece the final newline leaves is not a line
+    } else {
+        // The last line has no newline yet: hold it, never print it half.
+        pending = pieces[pieces.length - 1];
+        pieces.length -= 1;
+    }
+    for (const line of pieces.slice(-lines)) printFollowedLine(state, filePath, line, print);
+    state.files.set(filePath, { offset: content.length, decoder, pending });
 };
 
 /**
@@ -241,17 +290,23 @@ const pollFollowedFile = (
         return; // vanished between the stat and the open; the next poll re-stats
     }
     try {
-        const buffer = Buffer.allocUnsafe(size - st.offset);
-        const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, st.offset);
-        if (bytesRead <= 0) return; // the file ended right after the stat
-        st.offset += bytesRead;
-        st.pending += st.decoder.write(buffer.subarray(0, bytesRead));
+        // The unread span is read in bounded chunks (FOLLOW_READ_CHUNK_BYTES)
+        // until the size the stat reported, and each chunk's complete lines
+        // print as they are decoded — the span is never one allocation, and
+        // never one print call past the cap.
+        while (st.offset < size) {
+            const buffer = Buffer.allocUnsafe(Math.min(FOLLOW_READ_CHUNK_BYTES, size - st.offset));
+            const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, st.offset);
+            if (bytesRead <= 0) return; // the file ended right after the stat
+            st.offset += bytesRead;
+            st.pending += st.decoder.write(buffer.subarray(0, bytesRead));
+            const lines = st.pending.split('\n');
+            st.pending = lines[lines.length - 1];
+            for (const line of lines.slice(0, -1)) printFollowedLine(state, filePath, line, print);
+        }
     } finally {
         fs.closeSync(fd);
     }
-    const lines = st.pending.split('\n');
-    st.pending = lines[lines.length - 1];
-    for (const line of lines.slice(0, -1)) printFollowedLine(state, filePath, line, print);
 };
 
 /**
@@ -260,10 +315,17 @@ const pollFollowedFile = (
  * so two writers (the desktop app's file and a CLI command's file) can never
  * make the follower replay a file it already printed. A file not in the state
  * appeared (or re-appeared) after the start and is followed from its first
- * byte. Mutates `state`.
+ * byte; a file the listing no longer names has its state removed, so a file
+ * recreated under the same name is followed from its first byte again, never
+ * from the deleted file's offset. Mutates `state`.
  */
 const followStep = (state: FollowState, prefix: string, deps: FollowDeps): void => {
-    for (const filePath of deps.list(deps.dir, prefix)) {
+    const listed = deps.list(deps.dir, prefix);
+    const named = new Set(listed);
+    for (const filePath of state.files.keys()) {
+        if (!named.has(filePath)) state.files.delete(filePath); // deleted: not in the listing
+    }
+    for (const filePath of listed) {
         let st = state.files.get(filePath);
         if (st === undefined) {
             st = { offset: 0, decoder: new StringDecoder('utf8'), pending: '' };
@@ -302,6 +364,7 @@ const followLogs = async ({
     } else {
         printInitialTail(first.path, lines, state, deps.print);
     }
+    deps.print(`Following ${category} logs (Ctrl+C to stop)`);
     let stopped = false;
     const stop = () => {
         stopped = true;
@@ -319,4 +382,4 @@ const followLogs = async ({
     return 0;
 };
 
-export { followLogs, followStep, latestLogFile, showLogs };
+export { FOLLOW_READ_CHUNK_BYTES, followLogs, followStep, latestLogFile, showLogs };

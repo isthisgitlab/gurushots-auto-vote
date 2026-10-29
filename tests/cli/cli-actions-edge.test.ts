@@ -91,11 +91,21 @@ describe('challenge lookup', () => {
     test('a thrown non-Error fetch failure is stringified', async () => {
         mw.getActiveChallenges.mockRejectedValue('offline');
         await actions.boostChallenge('111');
-        expect(msgs('error')).toEqual(['Failed to fetch challenges: offline']);
+        expect(msgs('error')).toEqual([
+            'Could not read the active challenges from GuruShots: offline, so nothing was shown or changed. Check the connection and try again. If the login has expired, run login first.',
+        ]);
+    });
+
+    test('a null response is a failed fetch, never an unknown id', async () => {
+        mw.getActiveChallenges.mockResolvedValue(invalid(null));
+        await actions.boostChallenge('111');
+        expect(msgs('error')).toEqual([
+            'Could not read the active challenges from GuruShots, so nothing was shown or changed. Check the connection and try again. If the login has expired, run login first.',
+        ]);
     });
 
     test('a response without a challenges list reports not found', async () => {
-        mw.getActiveChallenges.mockResolvedValue(invalid(null));
+        mw.getActiveChallenges.mockResolvedValue(invalid({}));
         await actions.boostChallenge('111');
         expect(msgs('error')).toEqual(['Challenge 111 not found among active challenges']);
     });

@@ -17,18 +17,10 @@ import {
     STATS_MAX_LIMIT,
 } from './commands/photos';
 import { requireChallenge } from './guards';
-import { exitCodeOf, extractChallenge, usageError } from './commandKit';
+import { exitCodeOf, extractChallenge, repeatedChallenge, usageError } from './commandKit';
 
 import type { CommandHandler } from './commandKit';
 import { usageOf } from './commandRows';
-
-// extractChallenge keeps only the first --challenge and drops the rest, so a
-// repeat would silently act on the first id while the user asked for two. The
-// spend/submit commands count the flag themselves (both spellings: an argv
-// entry equal to `--challenge` or starting with `--challenge=`) and refuse a
-// repeat before anything runs.
-const repeatedChallenge = (argv: string[]): boolean =>
-    argv.filter((a) => a === '--challenge' || a.startsWith('--challenge=')).length > 1;
 
 const runListPhotos: CommandHandler = async (argv) => {
     const { challengeId, rest } = extractChallenge(argv);

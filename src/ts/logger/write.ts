@@ -20,7 +20,8 @@ const resolveGuiSink = (): GuiLogSink | null =>
 // backlog fetch.
 const MAX_RECENT = 1000;
 // A message is cut to this length before redaction runs, so no input can make that pass expensive. Messages are one
-// line by convention; the renderer's longest (8 KB) fits with room to spare.
+// line by convention; the renderer's longest (8 KB) fits with room to spare. Exported for callers that print a file
+// line longer than the cap in pieces (the CLI logs command).
 const MAX_MESSAGE_LENGTH = 16384;
 const capLength = <T>(text: T): T | string =>
     typeof text === 'string' && text.length > MAX_MESSAGE_LENGTH ? `${text.slice(0, MAX_MESSAGE_LENGTH)}…` : text;
@@ -200,4 +201,13 @@ const endOperation = (
 // Ring buffer accessor — drives GUI backlog replay on mount.
 const getRecentLogs = () => recentLogs.slice();
 
-export { writeLog, printLine, printStderr, printDocument, startOperation, endOperation, getRecentLogs };
+export {
+    writeLog,
+    printLine,
+    printStderr,
+    printDocument,
+    startOperation,
+    endOperation,
+    getRecentLogs,
+    MAX_MESSAGE_LENGTH,
+};

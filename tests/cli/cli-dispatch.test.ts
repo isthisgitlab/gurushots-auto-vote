@@ -573,7 +573,7 @@ const COMMANDS_BLOCK = `Commands:
              Assign one with: set-setting scenario "<name>" --challenge=<id> (or a challenge rule)
   help-settings - Show detailed settings help (includes profile details)
   logs [--error|--api|--settings|--lexicon] [--lines=<n>] - Show logs or the local lexicon report
-  logs [--error|--api|--settings] --follow - Follow the log file as it is written; Ctrl+C stops
+  logs [--error|--api|--settings] --follow - Follow every log file of the category as it is written; a --- line names the file new output comes from; Ctrl+C stops
   licenses - Print the third-party license notices
   reset-data --yes - Delete everything stored on this device: settings and the saved login, every store, logs and
              the extracted vision runtime. It cannot be undone, so it does nothing without --yes. Quit the
@@ -874,6 +874,32 @@ describe('challenge-scoped actions', () => {
         const m = await run(['swap-back', '--challenge=5', '--image=']);
         expect(m.actions.swapBackCmd).not.toHaveBeenCalled();
         expect(m.msgs('error')[0]).toContain('--image needs a photo id');
+        expect(m.exitCodes).toEqual([1]);
+    });
+
+    // A repeated --challenge would silently act on the first id while the user
+    // named two — for a spend that is money on the wrong challenge. Every
+    // challenge command refuses it in any spelling, before anything runs.
+    const repeatForms: Array<[string, string[]]> = [
+        ['both in the = form', ['--challenge=1', '--challenge=2']],
+        ['both in the space form', ['--challenge', '1', '--challenge', '2']],
+        ['the forms mixed', ['--challenge=1', '--challenge', '2']],
+    ];
+    const repeatCommands: Array<[string, 'actions' | 'spend', string, string]> = [
+        ['boost', 'actions', 'boostChallenge', 'Usage: boost --challenge=<id> [--image=<id>]'],
+        ['swap', 'actions', 'swapCmd', 'Usage: swap --challenge=<id> --image=<id> [--to=<id>] [--yes]'],
+        ['unlock-boost', 'spend', 'unlockBoostCmd', 'Usage: unlock-boost --challenge=<id> [--yes]'],
+        ['fill-exposure', 'spend', 'fillExposureCmd', 'Usage: fill-exposure --challenge=<id> [--yes]'],
+    ];
+    type RepeatRow = [string, string, 'actions' | 'spend', string, string, string[]];
+    const repeatRows: RepeatRow[] = repeatCommands.flatMap(([command, mod, fn, usage]) =>
+        repeatForms.map(([label, argv]): RepeatRow => [`${command}: ${label}`, command, mod, fn, usage, argv]),
+    );
+    test.each(repeatRows)('%s prints the usage and exits 1', async (_label, command, mod, fn, usage, argv) => {
+        const m = await run([command, ...argv]);
+        expect(invalid<Record<string, jest.Mock<Promise<unknown>, unknown[]>>>(m[mod])[fn]).not.toHaveBeenCalled();
+        expect(m.msgs('error')).toEqual(['Wrong arguments']);
+        expect(m.msgs('info')).toEqual([usage]);
         expect(m.exitCodes).toEqual([1]);
     });
 

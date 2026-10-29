@@ -268,7 +268,7 @@ const COMMAND_ROWS: readonly CommandRow[] = [
         runLogs,
         [
             '  logs [--error|--api|--settings|--lexicon] [--lines=<n>] - Show logs or the local lexicon report',
-            '  logs [--error|--api|--settings] --follow - Follow the log file as it is written; Ctrl+C stops',
+            '  logs [--error|--api|--settings] --follow - Follow every log file of the category as it is written; a --- line names the file new output comes from; Ctrl+C stops',
         ],
         { usage: 'Usage: logs [--error|--api|--settings|--lexicon] [--lines=<n>] [--follow]' },
     ),

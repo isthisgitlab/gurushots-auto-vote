@@ -109,8 +109,8 @@ describe('challenges — the list', () => {
         await expect(challenges([])).resolves.toBe(1);
 
         const errors = msgsAt('error');
-        expect(contains(errors, 'Failed to fetch the active challenges: the request did not succeed')).toBe(true);
-        expect(contains(errors, 'Nothing was read — check the connection and try again')).toBe(true);
+        expect(contains(errors, 'Could not read the active challenges from GuruShots')).toBe(true);
+        expect(contains(errors, 'If the login has expired, run login first')).toBe(true);
         expect(msgsAt('info')).toEqual([]);
     });
 
@@ -273,8 +273,7 @@ describe('challenges — the detail view', () => {
         await expect(challenges(['--challenge=c1'])).resolves.toBe(1);
 
         const errors = msgsAt('error');
-        expect(contains(errors, 'Failed to fetch the active challenges: the request did not succeed')).toBe(true);
-        expect(contains(errors, 'Nothing was read — check the connection and try again')).toBe(true);
+        expect(contains(errors, 'Could not read the active challenges from GuruShots')).toBe(true);
         expect(contains(errors, 'not found among active challenges')).toBe(false);
     });
 
@@ -304,8 +303,9 @@ describe('challenges — failures', () => {
         await expect(challenges([])).resolves.toBe(1);
 
         const errors = msgsAt('error');
-        expect(contains(errors, 'Failed to fetch the active challenges: network down')).toBe(true);
-        expect(contains(errors, 'check the connection and try again')).toBe(true);
+        expect(contains(errors, 'Could not read the active challenges from GuruShots: network down')).toBe(true);
+        expect(contains(errors, 'Check the connection and try again')).toBe(true);
+        expect(contains(errors, 'If the login has expired, run login first')).toBe(true);
     });
 
     test('a rejection with no message prints the thrown value itself', async () => {
@@ -313,7 +313,7 @@ describe('challenges — failures', () => {
 
         await expect(challenges([])).resolves.toBe(1);
 
-        expect(contains(msgsAt('error'), 'Failed to fetch the active challenges: undefined')).toBe(true);
+        expect(contains(msgsAt('error'), 'Could not read the active challenges from GuruShots: undefined')).toBe(true);
     });
 
     test('not authenticated exits 1 with the login guidance', async () => {

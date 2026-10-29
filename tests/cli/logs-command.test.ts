@@ -28,6 +28,7 @@ jest.mock('../../src/ts/logger', () => {
 
 import { invalid } from '../helpers/invalid';
 import { StringDecoder } from 'node:string_decoder';
+import { MAX_MESSAGE_LENGTH } from '../../src/ts/logger/write';
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 import loggerModule = require('../../src/ts/logger');
@@ -48,7 +49,7 @@ if (fsAuto.readSync === undefined) {
     fsAuto.readSync = jest.fn<number, [number, Buffer, number, number, number | null]>();
 }
 
-const { followLogs, followStep, latestLogFile, showLogs } =
+const { FOLLOW_READ_CHUNK_BYTES, followLogs, followStep, latestLogFile, showLogs } =
     require('../../src/ts/cli/commands/logs') as typeof logsModule;
 
 describe('CLI logs command', () => {
@@ -65,6 +66,39 @@ describe('CLI logs command', () => {
         // tail printed as one string would lose its newest lines.
         expect(logger.__printMock.mock.calls).toEqual([['line3'], ['line4']]);
         expect(logger.__infoMock.mock.calls.map((c) => c[0]).join('\n')).not.toContain('line3');
+    });
+
+    test('the piece after the final newline is not a line: --lines=N prints the last N real lines', () => {
+        fs.existsSync.mockReturnValue(true);
+        fs.readFileSync.mockReturnValue('l1\nl2\nl3\n');
+
+        showLogs({ lines: 2 });
+
+        expect(logger.__printMock.mock.calls).toEqual([['l2'], ['l3']]);
+    });
+
+    test('a blank line in the file prints as the empty line it is', () => {
+        fs.existsSync.mockReturnValue(true);
+        fs.readFileSync.mockReturnValue('l1\n\nl3\n');
+
+        showLogs({ lines: 3 });
+
+        expect(logger.__printMock.mock.calls).toEqual([['l1'], [''], ['l3']]);
+    });
+
+    test('a line longer than the print cap prints in pieces, in order, every character', () => {
+        fs.existsSync.mockReturnValue(true);
+        const long = 'x'.repeat(20000);
+        fs.readFileSync.mockReturnValue(`before\n${long}\nafter`);
+
+        showLogs({ lines: 10 });
+
+        expect(logger.__printMock.mock.calls).toEqual([
+            ['before'],
+            [long.slice(0, MAX_MESSAGE_LENGTH)],
+            [long.slice(MAX_MESSAGE_LENGTH)],
+            ['after'],
+        ]);
     });
 
     test('terminal control sequences in the file never reach the terminal, line by line', () => {
@@ -211,10 +245,14 @@ const backFiles = (files: Record<string, Buffer>): void => {
         return end - position;
     });
     fs.closeSync.mockImplementation(() => undefined);
-    fs.readFileSync.mockImplementation((p: fsModule.PathOrFileDescriptor) => {
+    // The tail reads bytes (no encoding), plain `logs` reads text ('utf8'):
+    // the mocked read serves both forms off the same in-memory file.
+    invalid<{
+        mockImplementation: (impl: (p: fsModule.PathOrFileDescriptor, encoding?: string) => string | Buffer) => void;
+    }>(fs.readFileSync).mockImplementation((p, encoding) => {
         const file = files[String(p)];
         if (file === undefined) throw new Error('ENOENT');
-        return file.toString('utf8');
+        return encoding === undefined ? file : file.toString('utf8');
     });
 };
 
@@ -272,6 +310,58 @@ describe('CLI logs follow — followStep', () => {
         // One print call per line — a single call is capped at 16384
         // characters, which would lose the newest lines.
         expect(print.mock.calls).toEqual([['--- ' + OLD_FILE], ...appended.map((l) => [l])]);
+        expect(state.files.get(OLD_FILE)?.offset).toBe(files[OLD_FILE].length);
+    });
+
+    test('an unread span larger than one chunk is read in bounded pieces', () => {
+        const files = { [OLD_FILE]: bytes('seed\n') };
+        backFiles(files);
+        const state = freshState();
+        state.files.set(OLD_FILE, fileState(5));
+        const print = jest.fn<void, [string]>();
+        // 150 lines of 10,000 characters: a span well over one read chunk.
+        const line = 'y'.repeat(10000);
+        const whole = Buffer.concat([files[OLD_FILE], bytes(Array.from({ length: 150 }, () => `${line}\n`).join(''))]);
+        files[OLD_FILE] = whole;
+        expect(whole.length).toBeGreaterThan(FOLLOW_READ_CHUNK_BYTES);
+        // The mocked read serves at most 700,000 bytes per call, like a read
+        // that returns short of the requested span.
+        fs.readSync.mockImplementation((_fd, buffer, ...rest): number => {
+            const [offset, length, position] = invalid<[number, number, number | null]>(rest);
+            if (position === null || position >= whole.length) return 0;
+            const end = Math.min(position + Math.min(length, 700000), whole.length);
+            whole.copy(invalid<Buffer>(buffer), offset, position, end);
+            return end - position;
+        });
+
+        followStep(state, 'app', followDeps({ list: listOf(OLD_FILE), print }));
+
+        // Every line printed once, in order, across the bounded reads.
+        expect(print.mock.calls).toEqual([['--- ' + OLD_FILE], ...Array.from({ length: 150 }, () => [line])]);
+        expect(state.files.get(OLD_FILE)?.offset).toBe(whole.length);
+        // No read asked for more than the chunk cap.
+        const requested = fs.readSync.mock.calls.map((call) => invalid<Buffer>(call[1]).length);
+        expect(requested.length).toBeGreaterThan(1);
+        for (const size of requested) expect(size).toBeLessThanOrEqual(FOLLOW_READ_CHUNK_BYTES);
+    });
+
+    test('a line longer than the print cap prints in pieces, every character once', () => {
+        const files = { [OLD_FILE]: bytes('seed\n') };
+        backFiles(files);
+        const state = freshState();
+        state.files.set(OLD_FILE, fileState(5));
+        const print = jest.fn<void, [string]>();
+        const long = 'x'.repeat(20000);
+        expect(long.length).toBeGreaterThan(MAX_MESSAGE_LENGTH);
+        files[OLD_FILE] = Buffer.concat([files[OLD_FILE], bytes(`${long}\n`)]);
+
+        followStep(state, 'app', followDeps({ list: listOf(OLD_FILE), print }));
+
+        expect(print.mock.calls).toEqual([
+            ['--- ' + OLD_FILE],
+            [long.slice(0, MAX_MESSAGE_LENGTH)],
+            [long.slice(MAX_MESSAGE_LENGTH)],
+        ]);
         expect(state.files.get(OLD_FILE)?.offset).toBe(files[OLD_FILE].length);
     });
 
@@ -333,23 +423,31 @@ describe('CLI logs follow — followStep', () => {
         expect(print.mock.calls).toEqual([['--- ' + OLD_FILE], ['a1'], ['b1']]);
     });
 
-    test('a deleted file is dropped; a recreated one is read from its first byte', () => {
+    test('a deleted file is dropped though the listing no longer names it; a recreated one prints from its first line', () => {
         const files: Record<string, Buffer> = { [OLD_FILE]: bytes('a1\n') };
         backFiles(files);
         const state = freshState();
         state.files.set(OLD_FILE, fileState(3));
+        let listed: string[] = [OLD_FILE];
+        const list = jest.fn<string[], [string, string]>().mockImplementation(() => listed);
         const print = jest.fn<void, [string]>();
-        const deps = followDeps({ list: listOf(OLD_FILE), print });
+        const deps = followDeps({ list, print });
 
+        // Deleted: the file is gone and the folder listing leaves it out, so
+        // only the state prune can retire it.
+        listed = [];
         delete files[OLD_FILE];
         followStep(state, 'app', deps);
         expect(print.mock.calls).toEqual([]);
         expect(state.files.has(OLD_FILE)).toBe(false);
 
-        files[OLD_FILE] = bytes('fresh\n');
+        // The same name comes back, already longer than the old offset (3):
+        // it is followed from its first line, never from the old offset.
+        files[OLD_FILE] = bytes('fresh\nmore\n');
+        listed = [OLD_FILE];
         followStep(state, 'app', deps);
-        expect(print.mock.calls).toEqual([['--- ' + OLD_FILE], ['fresh']]);
-        expect(state.files.get(OLD_FILE)?.offset).toBe(6);
+        expect(print.mock.calls).toEqual([['--- ' + OLD_FILE], ['fresh'], ['more']]);
+        expect(state.files.get(OLD_FILE)?.offset).toBe(files[OLD_FILE].length);
     });
 
     test('a file created after the start is followed from its first line', () => {
@@ -423,9 +521,15 @@ describe('CLI logs follow — followLogs', () => {
 
         expect(code).toBe(0);
         // The separator names the file the tail came from; the piece after the
-        // file's final newline prints as the empty line it is; the poll then
-        // finds nothing appended.
-        expect(print.mock.calls).toEqual([['--- ' + OLD_FILE], ['l3'], [''], ['Stopped following the log.']]);
+        // file's final newline is not a line and prints nothing; then the stop
+        // hint, and the poll finds nothing appended.
+        expect(print.mock.calls).toEqual([
+            ['--- ' + OLD_FILE],
+            ['l2'],
+            ['l3'],
+            ['Following app logs (Ctrl+C to stop)'],
+            ['Stopped following the log.'],
+        ]);
     });
 
     test('an initial tail longer than one printLine cap still prints its newest lines', async () => {
@@ -446,11 +550,81 @@ describe('CLI logs follow — followLogs', () => {
 
         const printed = print.mock.calls.map(([line]) => line);
         expect(printed[0]).toBe('--- ' + OLD_FILE);
-        // The 200-piece window holds the 199 newest full lines plus the piece
-        // after the file's final newline, and every piece of it prints whole —
+        // The window holds the 200 newest full lines (the piece after the
+        // file's final newline is not a line), and every line prints whole —
         // printed as one string they would have been cut at the cap.
-        expect(printed.slice(1, -1)).toEqual([...tail.slice(1), '']);
+        expect(printed.slice(1, -2)).toEqual(tail);
+        expect(printed.at(-2)).toBe('Following app logs (Ctrl+C to stop)');
         expect(printed.at(-1)).toBe('Stopped following the log.');
+    });
+
+    test('the tail seeds the followed offset from the bytes the tail read, not the earlier stat', async () => {
+        const files = { [OLD_FILE]: bytes('a1\na2\n') };
+        backFiles(files);
+        // The start-up stat that seeds the state runs before an append lands:
+        // it reports 3 bytes; the tail's own read then sees all 6.
+        const realStat = fs.statSync.getMockImplementation() as (p: fsModule.PathLike) => fsModule.Stats;
+        let seeded = false;
+        fs.statSync.mockImplementation((p: fsModule.PathLike) => {
+            if (!seeded && String(p) === OLD_FILE) {
+                seeded = true;
+                return invalid<fsModule.Stats>({ size: 3, mtimeMs: 1 });
+            }
+            return realStat(p);
+        });
+        const latest = jest
+            .fn<logsModule.LatestLogFile | null, [string, string]>()
+            .mockReturnValue({ path: OLD_FILE, mtimeMs: 5 });
+        const print = jest.fn<void, [string]>();
+
+        await followLogs({
+            category: 'app',
+            lines: 2,
+            deps: followDeps({ list: listOf(OLD_FILE), latest, print }),
+        });
+
+        // The tail printed the last two lines, and the first poll — size 6,
+        // offset 6 — found nothing appended: the bytes between the stale stat
+        // and the tail read did not print twice.
+        expect(print.mock.calls).toEqual([
+            ['--- ' + OLD_FILE],
+            ['a1'],
+            ['a2'],
+            ['Following app logs (Ctrl+C to stop)'],
+            ['Stopped following the log.'],
+        ]);
+    });
+
+    test("the tail's last line without its newline is held, and prints once when it is complete", async () => {
+        const files = { [OLD_FILE]: bytes('l1\nl2\npar') };
+        backFiles(files);
+        const latest = jest
+            .fn<logsModule.LatestLogFile | null, [string, string]>()
+            .mockReturnValue({ path: OLD_FILE, mtimeMs: 1 });
+        let polls = 0;
+        const sleep = jest.fn<Promise<void>, [number]>(async () => {
+            polls += 1;
+            if (polls === 1) files[OLD_FILE] = Buffer.concat([files[OLD_FILE], bytes('tial\n')]);
+            if (polls >= 2) process.emit('SIGINT');
+        });
+        const print = jest.fn<void, [string]>();
+
+        await followLogs({
+            category: 'app',
+            lines: 2,
+            deps: followDeps({ list: listOf(OLD_FILE), latest, print, sleep }),
+        });
+
+        // The tail printed its two real lines and held 'par'; the poll that
+        // completed the line printed it once, whole.
+        expect(print.mock.calls).toEqual([
+            ['--- ' + OLD_FILE],
+            ['l1'],
+            ['l2'],
+            ['Following app logs (Ctrl+C to stop)'],
+            ['partial'],
+            ['Stopped following the log.'],
+        ]);
     });
 
     test('with no log file yet it waits, then follows one from its first line when it appears', async () => {
@@ -481,6 +655,7 @@ describe('CLI logs follow — followLogs', () => {
         // first byte; the text after its final newline is held, not printed.
         expect(print.mock.calls).toEqual([
             ['No error log file to follow yet; waiting for one to appear.'],
+            ['Following error logs (Ctrl+C to stop)'],
             ['--- ' + ERROR_FILE],
             ['whole file'],
             ['Stopped following the log.'],
@@ -501,7 +676,7 @@ describe('CLI logs follow — followLogs', () => {
         });
 
         expect(code).toBe(0);
-        expect(print.mock.calls).toEqual([['Stopped following the log.']]);
+        expect(print.mock.calls).toEqual([['Following app logs (Ctrl+C to stop)'], ['Stopped following the log.']]);
     });
 
     test('SIGINT stops the follower with exit 0 and removes its listener', async () => {
@@ -521,7 +696,7 @@ describe('CLI logs follow — followLogs', () => {
     });
 
     test('defaults to the app category and the last 100 lines', async () => {
-        const content = Array.from({ length: 101 }, (_, i) => `l${i + 1}`).join('\n');
+        const content = `${Array.from({ length: 101 }, (_, i) => `l${i + 1}`).join('\n')}\n`;
         backFiles({ [OLD_FILE]: bytes(content) });
         const list = listOf(OLD_FILE);
         const latest = jest
@@ -538,6 +713,7 @@ describe('CLI logs follow — followLogs', () => {
         expect(lines[0]).toBe('--- ' + OLD_FILE);
         expect(lines[1]).toBe('l2');
         expect(lines[100]).toBe('l101');
+        expect(lines[101]).toBe('Following app logs (Ctrl+C to stop)');
         expect(lines.at(-1)).toBe('Stopped following the log.');
     });
 
@@ -561,13 +737,20 @@ describe('CLI logs follow — followLogs', () => {
             deps: followDeps({ list: listOf(OLD_FILE), latest, print, sleep }),
         });
 
-        // The tail was read from the file, and nothing wrote anywhere: an
-        // info() would append to the followed app log. The text after the
-        // appended line's newline is held as pending, not printed.
-        expect(fs.readFileSync).toHaveBeenCalledWith(OLD_FILE, 'utf8');
+        // The tail was read from the file (as bytes, so the offset it seeds is
+        // a byte count), and nothing wrote anywhere: an info() would append to
+        // the followed app log. The text after the appended line's newline is
+        // held as pending, not printed.
+        expect(fs.readFileSync).toHaveBeenCalledWith(OLD_FILE);
         expect(fs.appendFileSync).not.toHaveBeenCalled();
         expect(fs.writeFileSync).not.toHaveBeenCalled();
-        expect(print.mock.calls).toEqual([['--- ' + OLD_FILE], [''], ['appended'], ['Stopped following the log.']]);
+        expect(print.mock.calls).toEqual([
+            ['--- ' + OLD_FILE],
+            ['seed'],
+            ['Following app logs (Ctrl+C to stop)'],
+            ['appended'],
+            ['Stopped following the log.'],
+        ]);
     });
 
     test('follows with the default poll interval until SIGINT, printing to the console only', async () => {
@@ -586,7 +769,12 @@ describe('CLI logs follow — followLogs', () => {
             files[OLD_FILE] = Buffer.concat([files[OLD_FILE], bytes(`bad ${ESC}[31mred${ESC}[0m line\n`)]);
             // One poll at the default 1s interval.
             await jest.advanceTimersByTimeAsync(1000);
-            expect(logger.__printMock.mock.calls).toEqual([['--- ' + OLD_FILE], ['a'], [''], ['bad red line']]);
+            expect(logger.__printMock.mock.calls).toEqual([
+                ['--- ' + OLD_FILE],
+                ['a'],
+                ['Following app logs (Ctrl+C to stop)'],
+                ['bad red line'],
+            ]);
 
             process.emit('SIGINT');
             await jest.advanceTimersByTimeAsync(1000);

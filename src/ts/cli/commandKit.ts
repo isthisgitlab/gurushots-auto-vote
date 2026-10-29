@@ -48,6 +48,14 @@ const extractChallenge = (argv: string[]): { challengeId: string | null; rest: s
     return { challengeId, rest };
 };
 
+// extractChallenge keeps only the first --challenge and drops the rest, so a
+// repeat would silently act on the first id while the user named two. Every
+// challenge command counts the flag (both spellings: an argv entry equal to
+// `--challenge` or starting with `--challenge=`) and refuses a repeat before
+// anything runs.
+const repeatedChallenge = (argv: string[]): boolean =>
+    argv.filter((a) => a === '--challenge' || a.startsWith('--challenge=')).length > 1;
+
 /**
  * Log a usage error (one error line, then any usage/help lines) and yield exit code 1.
  */
@@ -73,12 +81,14 @@ const exitsZero =
 const exitCodeOf = (ok: boolean | undefined) => (ok === false ? 1 : 0);
 
 /**
- * A per-challenge action: pull --challenge out of argv, require it (printing
- * `usage` otherwise), then `run(challengeId, rest)` → exit code.
+ * A per-challenge action: refuse a repeated --challenge, then pull it out of
+ * argv, require it (printing `usage` otherwise), and `run(challengeId, rest)`
+ * → exit code.
  */
 const challengeCommand =
     (usage: string, run: (challengeId: string, rest: string[]) => number | Promise<number>): CommandHandler =>
     async (argv) => {
+        if (repeatedChallenge(argv)) return usageError('Wrong arguments', usage);
         const { challengeId, rest } = extractChallenge(argv);
         requireChallenge({ challengeId }, usage);
         // requireChallenge exits the process when the id is missing.
@@ -138,6 +148,7 @@ const scenarioCommand =
 
 export {
     extractChallenge,
+    repeatedChallenge,
     usageError,
     exitsZero,
     exitCodeOf,

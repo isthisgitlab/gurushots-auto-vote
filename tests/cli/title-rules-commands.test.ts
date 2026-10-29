@@ -329,7 +329,7 @@ describe('title-profile', () => {
     test('a failed fetch fails the command', async () => {
         mw.getActiveChallenges.mockRejectedValue(new Error('offline'));
         await expect(cmd.titleProfileCmd('111')).resolves.toBe(false);
-        expect(contains(msgs('error'), 'Failed to fetch challenges')).toBe(true);
+        expect(contains(msgs('error'), 'Could not read the active challenges from GuruShots')).toBe(true);
     });
 
     test('no matching rule says so', async () => {

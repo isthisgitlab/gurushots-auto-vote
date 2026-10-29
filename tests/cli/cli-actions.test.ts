@@ -642,7 +642,31 @@ describe('CLI actions — error paths', () => {
         await boostChallenge('111', {});
 
         expect(apiFactory.__applyBoost).not.toHaveBeenCalled();
-        expect(contains(msgsAt('error'), 'Failed to fetch challenges')).toBe(true);
+        expect(contains(msgsAt('error'), 'Could not read the active challenges from GuruShots: network down')).toBe(
+            true,
+        );
+    });
+
+    test.each([
+        ['a fetchFailed read', { challenges: [], fetchFailed: true }],
+        ['a null response', null],
+    ])('boost: %s reads as a failed fetch, never an unknown id', async (_label, resp) => {
+        apiFactory.__getActiveChallenges.mockResolvedValue(invalid(resp));
+
+        await boostChallenge('111', {});
+
+        expect(apiFactory.__applyBoost).not.toHaveBeenCalled();
+        expect(contains(msgsAt('error'), 'Could not read the active challenges from GuruShots')).toBe(true);
+        expect(contains(allMsgs(), 'not found among active challenges')).toBe(false);
+    });
+
+    test('boost: a successful fetch without the id still reads as an unknown id', async () => {
+        apiFactory.__getActiveChallenges.mockResolvedValue(invalid({ challenges: [] }));
+
+        await boostChallenge('111', {});
+
+        expect(contains(msgsAt('error'), 'Challenge 111 not found among active challenges')).toBe(true);
+        expect(contains(allMsgs(), 'Could not read the active challenges from GuruShots')).toBe(false);
     });
 
     test('boost --image: handler failure surfaces the error', async () => {

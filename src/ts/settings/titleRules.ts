@@ -114,7 +114,7 @@ const _titleForLog = (title: string): string => (title.length > 80 ? `${title.sl
  * the preview cannot drift from the write.
  */
 const _sanitizedUniqueRules = (rules: unknown[], storedProfiles: Record<string, unknown>): TitleRulesPreview => {
-    const byKey: Map<string, { rule: TitleRule; index: number }> = new Map();
+    const byKey: Map<string, { rule: TitleRule; index: number; label: string }> = new Map();
     const dropped: TitleRuleNote[] = [];
     const collapsed: TitleRuleNote[] = [];
     for (const [position, rule] of rules.entries()) {
@@ -135,15 +135,19 @@ const _sanitizedUniqueRules = (rules: unknown[], storedProfiles: Record<string, 
             collapsed.push({
                 index: position + 1,
                 label: ruleLogLabel(result.rule, result.rule.title),
-                reason: `same match condition as rule ${first.index} ("${_titleForLog(ruleLogLabel(first.rule, first.rule.title))}") — the later values win, at the first one's position`,
+                reason: `same match condition as rule ${first.index} ("${_titleForLog(first.label)}") — the later values win, at the first one's position`,
             });
             // The stored rule is the last one (last wins at the first position),
-            // but the stored index stays the first one's, so a third rule with
-            // the same condition cites the rule still listed — not the one this
-            // pass itself collapsed away.
-            byKey.set(key, { rule: result.rule, index: first.index });
+            // but the stored index and label stay the first rule's, so a third
+            // rule with the same condition cites the rule still listed at that
+            // position — not the one this pass itself collapsed away.
+            byKey.set(key, { rule: result.rule, index: first.index, label: first.label });
         } else {
-            byKey.set(key, { rule: result.rule, index: position + 1 });
+            byKey.set(key, {
+                rule: result.rule,
+                index: position + 1,
+                label: ruleLogLabel(result.rule, result.rule.title),
+            });
         }
     }
     return { ok: true, rules: Array.from(byKey.values(), (entry) => entry.rule), dropped, collapsed };

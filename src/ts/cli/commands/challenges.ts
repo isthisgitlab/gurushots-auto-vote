@@ -12,7 +12,7 @@
  */
 
 import * as logger from '../../logger';
-import { ensureAuthenticated } from '../guards';
+import { ensureAuthenticated, failedFetchMessage } from '../guards';
 import { getMiddleware } from '../../apiFactory';
 import { findActiveChallenge } from '../../services/findActiveChallenge';
 import { formatDuration } from '../../format/duration';
@@ -115,20 +115,12 @@ const challengesCmd = async (detailId: string | null): Promise<boolean> => {
     try {
         const resp = await getMiddleware().getActiveChallenges();
         if (resp == null || resp.fetchFailed === true) {
-            logger
-                .withCategory('challenges')
-                .error(
-                    'Failed to fetch the active challenges: the request did not succeed. Nothing was read — check the connection and try again.',
-                );
+            logger.withCategory('challenges').error(failedFetchMessage());
             return false;
         }
         challenges = resp.challenges;
     } catch (err) {
-        logger
-            .withCategory('challenges')
-            .error(
-                `Failed to fetch the active challenges: ${errorMessage(err) || err}. Nothing was read — check the connection and try again.`,
-            );
+        logger.withCategory('challenges').error(failedFetchMessage(errorMessage(err) || String(err)));
         return false;
     }
 

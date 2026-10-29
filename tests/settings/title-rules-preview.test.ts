@@ -153,6 +153,35 @@ describe('previewTitleRules — the dry-run of setTitleRules', () => {
         expect(settings.getTitleRules()).toEqual((preview as { rules: unknown[] }).rules);
     });
 
+    test('titles that differ only in case collapse, and every note cites the first rule and its label', () => {
+        seed();
+        const input = [
+            { title: 'Sunset', mustIncludeTags: ['x'] },
+            { title: 'SUNSET', mustIncludeTags: ['y'] },
+            { title: 'sunset', mustIncludeTags: ['z'] },
+        ];
+        const preview = settings.previewTitleRules(input);
+        expect(preview).toEqual({
+            ok: true,
+            rules: [{ title: 'sunset', mustIncludeTags: ['z'], shouldIncludeTags: [] }],
+            dropped: [],
+            collapsed: [
+                {
+                    index: 2,
+                    label: 'SUNSET',
+                    reason: 'same match condition as rule 1 ("Sunset") — the later values win, at the first one\'s position',
+                },
+                {
+                    index: 3,
+                    label: 'sunset',
+                    reason: 'same match condition as rule 1 ("Sunset") — the later values win, at the first one\'s position',
+                },
+            ],
+        });
+        expect(settings.setTitleRules(input)).toBe(true);
+        expect(settings.getTitleRules()).toEqual((preview as { rules: unknown[] }).rules);
+    });
+
     test('the preview matches what the write stores, for the same input', () => {
         seed({ profiles: { Tactic: { exposure: 80 } } });
         const input = [
