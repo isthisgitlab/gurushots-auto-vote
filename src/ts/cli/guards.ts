@@ -1,13 +1,18 @@
 /**
  * Small CLI guard helpers shared across commands: the auth gate every
  * networked command starts with, the profile-argument validation the
- * three profile commands repeat, and the --challenge requirement the
- * challenge-scoped action commands share. Each caller keeps its own
+ * three profile commands repeat, the --challenge requirement the
+ * challenge-scoped action commands share, and the shared challenge lookup
+ * the command implementations start with. Each caller keeps its own
  * return shape; only the check + user-facing guidance live here.
  */
 
 import * as logger from '../logger';
 import { getMiddleware } from '../apiFactory';
+import { findActionableChallenge } from '../services/findActiveChallenge';
+import { errorMessage } from '../errorMessage';
+
+import type { Challenge } from '../types/gurushots';
 
 // What the IPC handlers' 'invalid-args' refusal means for the CLI user.
 const INVALID_ID_TEXT = 'Invalid challenge or image id.';
@@ -21,6 +26,40 @@ const ensureAuthenticated = () => {
     logger.withCategory('authentication').error('No authentication token found. Please login first');
     logger.withCategory('ui').info('Run: login');
     return false;
+};
+
+/**
+ * Shared auth guard + challenge lookup. Returns the live challenge object,
+ * or null after logging a user-facing reason (not authenticated / not found
+ * / data cannot be read / fetch failure) so callers can simply bail on null.
+ *
+ * Note: the turbo/fill handlers re-fetch and re-validate the live challenge
+ * themselves, so this lookup is the friendly auth gate + early "not found"
+ * (and the source of the title for logging), not the authoritative state
+ * check — don't remove the handlers' own fetch on the assumption this covers it.
+ */
+const resolveChallenge = async (challengeId: string): Promise<Challenge | null> => {
+    if (!ensureAuthenticated()) {
+        return null;
+    }
+    try {
+        const resp = await getMiddleware().getActiveChallenges();
+        const found = findActionableChallenge(resp, challengeId);
+        if ('refused' in found) {
+            // The handlers re-read below refuse the same way, so bailing here
+            // only spares the round trip; the wording is the user-facing part.
+            if (found.refused === 'data-incomplete') {
+                logger.withCategory('challenges').error(`Challenge ${challengeId}: challenge data cannot be read`);
+            } else {
+                logger.withCategory('challenges').error(`Challenge ${challengeId} not found among active challenges`);
+            }
+            return null;
+        }
+        return found.challenge;
+    } catch (err) {
+        logger.withCategory('challenges').error(`Failed to fetch challenges: ${errorMessage(err) || err}`);
+        return null;
+    }
 };
 
 /**
@@ -80,4 +119,4 @@ const requireChallenge = ({ challengeId }: { challengeId: string | null }, usage
     return challengeId;
 };
 
-export { ensureAuthenticated, requireProfileArgs, requireChallenge, INVALID_ID_TEXT };
+export { ensureAuthenticated, requireProfileArgs, requireChallenge, resolveChallenge, INVALID_ID_TEXT };

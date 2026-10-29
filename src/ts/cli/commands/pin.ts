@@ -9,7 +9,8 @@ import { stripTerminalControl } from '../../format/logSafe';
 import { isIdArg, MAX_IPC_ID_LENGTH } from '../../ipc/isIdArg';
 import { errorMessage } from '../../errorMessage';
 import { canStillFire, featureNeverFires, findPinnedEntry } from '../../voting/entryPins';
-import { actionError, resolveChallenge } from './actions';
+import { actionError } from './spend';
+import { resolveChallenge } from '../guards';
 
 import type { Challenge } from '../../types/gurushots';
 import type { NullEventHandlers } from '../../types/cli';

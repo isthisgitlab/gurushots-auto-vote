@@ -69,6 +69,7 @@ const apiFactory = jest.mocked(
     >(apiFactoryModule),
 );
 import type * as actionsModule from '../../src/ts/cli/commands/actions';
+import type * as spendModule from '../../src/ts/cli/commands/spend';
 // Both handler mocks, merged into one table the describe.each rows index by
 // channel name: every entry is an async handler the tests treat alike.
 type HandlerTable = Record<string, jest.Mock<Promise<unknown>, unknown[]>>;
@@ -76,8 +77,8 @@ const handlers: HandlerTable = {
     ...invalid<{ __handlers: HandlerTable }>(require('../../src/ts/ipc/actions.handlers')).__handlers,
     ...invalid<{ __handlers: HandlerTable }>(require('../../src/ts/ipc/currency.handlers')).__handlers,
 };
-const { unlockBoostCmd, swapCmd, swapBackCmd, fillExposureCmd } =
-    require('../../src/ts/cli/commands/actions') as typeof actionsModule;
+const { swapCmd, swapBackCmd } = require('../../src/ts/cli/commands/actions') as typeof actionsModule;
+const { unlockBoostCmd, fillExposureCmd } = require('../../src/ts/cli/commands/spend') as typeof spendModule;
 
 const msgsAt = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
 const allMsgs = () => logger.__calls.map((c) => String(c.msg));

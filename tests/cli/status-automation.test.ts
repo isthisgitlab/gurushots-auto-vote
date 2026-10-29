@@ -78,7 +78,7 @@ const apiFactory = jest.mocked(
     >(apiFactoryModule),
 );
 import type * as actionsHandlersModule from '../../src/ts/ipc/actions.handlers';
-import type * as votingModule from '../../src/ts/cli/commands/voting';
+import type * as statusModule from '../../src/ts/cli/commands/status';
 
 type Handlers = ReturnType<typeof actionsHandlersModule.buildHandlers>;
 type ClaimReply = Awaited<ReturnType<Handlers['get-auto-claim-status']>>;
@@ -89,7 +89,7 @@ const { __handlers } = require('../../src/ts/ipc/actions.handlers') as typeof ac
         'get-auto-join-active': jest.MockedFunction<() => Promise<JoinReply>>;
     };
 };
-const { showStatus } = require('../../src/ts/cli/commands/voting') as typeof votingModule;
+const { showStatus } = require('../../src/ts/cli/commands/status') as typeof statusModule;
 
 const printedLines = () =>
     logger.__infoMock.mock.calls.map((c) => c[0]).filter((s): s is string => typeof s === 'string');

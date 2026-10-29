@@ -1,37 +1,22 @@
 /**
- * The CLI command handlers behind the command rows (commandRows.ts). Handlers that print their
- * command's usage read the text back through `usageOf`, so the row stays the one home for it. That
- * import is part of a module cycle — the rows need these handlers at init — and is safe because this
- * module reads `usageOf` only inside handler bodies, never at module scope.
+ * The CLI command handlers behind the command rows (commandRows.ts): the
+ * core run* handlers below, with this module re-exporting the group siblings
+ * (actionHandlers.ts, settingsHandlers.ts, titleRuleHandlers.ts) so the rows
+ * and the tests keep one import site. Handlers that print their command's
+ * usage read the text back through `usageOf`, so the row stays the one home
+ * for it. That import is part of a module cycle — the rows need these
+ * handlers at init — and is safe because every handler module reads `usageOf`
+ * only inside handler bodies, never at module scope.
  */
-import { boostChallenge, fillChallenge, submitPickedCmd, swapBackCmd, turboChallenge } from './commands/actions';
 import { challengesCmd } from './commands/challenges';
 import { deadlinesCmd } from './commands/deadlines';
 import { pinCmd, PIN_USAGE } from './commands/pin';
 import { forgetPaymentCmd, joinChallengeCmd } from './commands/join';
-import {
-    listPhotosCmd,
-    parseSearchFlag,
-    parseSortFlag,
-    suggestPhotosCmd,
-    STATS_DEFAULT_LIMIT,
-} from './commands/photos';
 import { isPinnableImageId } from '../settings';
-import {
-    getSetting,
-    listProfiles,
-    resetAllGlobalDefaults,
-    resetGlobalDefault,
-    resetSetting,
-    setGlobalDefault,
-    setSetting,
-} from './commands/settings';
-import { exportTitleRulesCmd, importTitleRulesCmd, listTitleRulesCmd, titleProfileCmd } from './commands/titleRules';
 import { followLogs, showLogs } from './commands/logs';
 import * as scenarioCommands from './commands/scenarios';
 import { parseChallengeFlag, runVotingCycle, voteChallengeManual } from './commands/voting';
-import { requireChallenge } from './guards';
-import { challengeCommand, exitCodeOf, extractChallenge, usageError } from './commandKit';
+import { challengeCommand, exitCodeOf, usageError } from './commandKit';
 import * as logger from '../logger';
 import { getMiddleware } from '../apiFactory';
 
@@ -184,83 +169,6 @@ const runForgetPayment: CommandHandler = async (argv) => {
     return forgetPaymentCmd(argv[0]);
 };
 
-const runListPhotos: CommandHandler = async (argv) => {
-    const { challengeId, rest } = extractChallenge(argv);
-    const usage = usageOf('list-photos');
-    const suggestFlags = rest.filter((arg) => arg === '--suggest');
-    const statsFlags = rest.filter((arg) => arg === '--stats');
-    const limitArgs = rest.filter((arg) => arg.startsWith('--limit='));
-    const listRest = rest.filter((arg) => arg !== '--suggest' && arg !== '--stats' && !arg.startsWith('--limit='));
-    const search = parseSearchFlag(listRest);
-    const sort = parseSortFlag(listRest);
-    // Anything that is neither a --search/--sort flag nor its value is a typo.
-    const unexpected = listRest.filter(
-        (arg, i) =>
-            arg !== '--search' &&
-            !arg.startsWith('--search=') &&
-            arg !== '--sort' &&
-            !arg.startsWith('--sort=') &&
-            listRest[i - 1] !== '--search' &&
-            listRest[i - 1] !== '--sort',
-    );
-    const limitText = limitArgs[0]?.slice('--limit='.length);
-    const limit = limitText !== undefined && /^\d+$/.test(limitText) ? Number(limitText) : null;
-    // A --sort with no value of its own (nothing after it, or another flag) names
-    // what it is missing, not just "wrong arguments".
-    if (listRest.some((arg) => arg === '--sort') && sort === null) {
-        return usageError('--sort needs one of votes|newest|oldest', usage);
-    }
-    if (
-        suggestFlags.length > 1 ||
-        statsFlags.length > 1 ||
-        limitArgs.length > 1 ||
-        unexpected.length > 0 ||
-        (listRest.some((arg) => arg === '--search') && search === null)
-    ) {
-        return usageError('Wrong arguments', usage);
-    }
-    if (limitText !== undefined && (limit === null || limit < 1)) {
-        return usageError('--limit needs a positive whole number of photos to read stats for', usage);
-    }
-    if (statsFlags.length > 0 && suggestFlags.length > 0) {
-        return usageError('--stats cannot be combined with --suggest', usage);
-    }
-    if (limitArgs.length > 0 && statsFlags.length === 0) {
-        return usageError('--limit only goes with --stats', usage);
-    }
-    if (suggestFlags.length > 0) {
-        // The suggestions rank for one challenge and are not a search.
-        if (challengeId === null || listRest.length > 0) {
-            return usageError('Wrong arguments', usage);
-        }
-        return suggestPhotosCmd(challengeId);
-    }
-    return listPhotosCmd(challengeId, search, sort, statsFlags.length > 0 ? (limit ?? STATS_DEFAULT_LIMIT) : null);
-};
-
-const runBoost = async (challengeId: string, rest: string[]) => {
-    const imageArg = rest.find((a) => a.startsWith('--image='));
-    const imageId = imageArg ? imageArg.slice('--image='.length) || null : null;
-    await boostChallenge(challengeId, { imageId });
-    return 0;
-};
-
-// Like `join`: it names which photo a won Turbo lands on, so a flag it does not recognise (`--images=`,
-// a space-form `--image`, a repeat) is a usage error, never a silent auto-play. Exits 1 when the Turbo
-// was not earned or applied.
-const runTurbo: CommandHandler = async (argv) => {
-    const { challengeId, rest } = extractChallenge(argv);
-    const usage = usageOf('turbo');
-    requireChallenge({ challengeId }, usage);
-    const imageArgs = rest.filter((a) => a.startsWith('--image='));
-    if (rest.some((a) => !a.startsWith('--image=')) || imageArgs.length > 1) {
-        return usageError('Wrong arguments', usage);
-    }
-    const imageId = imageArgs[0]?.slice('--image='.length) ?? null;
-    if (imageId === '') return usageError('--image needs a photo id (challenges --challenge=<id> lists them)', usage);
-    return exitCodeOf(await turboChallenge(challengeId as string, { imageId }));
-};
-
 // A read-only command, but strict like the actions: `--challenge 123` (space form), a repeat or any
 // other flag must not quietly read as the plain listing.
 const runChallenges: CommandHandler = async (argv) => {
@@ -303,37 +211,6 @@ const runPin = async (challengeId: string, rest: string[]) => {
     return exitCodeOf(await pinCmd(challengeId, pins));
 };
 
-// `submit` sends photos, so like `turbo` its arguments are strict: a typo
-// (`--images=`), a space form or a repeat is a usage error, never a silent
-// auto-submit. After --challenge, the rest may hold --all at most once (every
-// empty slot, ranked by the auto-submit rules) or --image=<ids> at most once
-// (exactly those photos, comma-separated) — never both. Exit codes: 0 sent,
-// 1 failed (including an unknown id), 2 the submit got no answer (the photo(s)
-// may have been submitted).
-const runSubmit: CommandHandler = async (argv) => {
-    const { challengeId, rest } = extractChallenge(argv);
-    const usage = usageOf('submit');
-    requireChallenge({ challengeId }, usage);
-    const allArgs = rest.filter((a) => a === '--all');
-    const imageArgs = rest.filter((a) => a.startsWith('--image='));
-    if (
-        rest.some((a) => a !== '--all' && !a.startsWith('--image=')) ||
-        allArgs.length > 1 ||
-        imageArgs.length > 1 ||
-        (allArgs.length > 0 && imageArgs.length > 0)
-    ) {
-        return usageError('Wrong arguments', usage);
-    }
-    if (imageArgs.length > 0) {
-        const imageId = imageArgs[0].slice('--image='.length);
-        if (imageId === '') {
-            return usageError('--image needs a photo id (list-photos --challenge=<id> lists them)', usage);
-        }
-        return submitPickedCmd(challengeId as string, imageId.split(','));
-    }
-    return fillChallenge(challengeId as string, { all: allArgs.length > 0 });
-};
-
 // A read-only preview, but strict like the actions: `--challenge 123` (space form), a repeat or
 // any other argument must not quietly read as a listing.
 const runDeadlines: CommandHandler = async (argv) => {
@@ -348,150 +225,27 @@ const runDeadlines: CommandHandler = async (argv) => {
     return exitCodeOf(await deadlinesCmd(challengeId));
 };
 
-// `swap-back` spends a swap, so like `join` its arguments are strict: `--to=` belongs to `swap`,
-// and a typo, a space form or a repeat is a usage error, never a spend. Without --image the
-// command is a read-only listing of the recorded swap-back offers.
-const runSwapBack: CommandHandler = async (argv) => {
-    const { challengeId, rest } = extractChallenge(argv);
-    const usage = usageOf('swap-back');
-    requireChallenge({ challengeId }, usage);
-    const imageArgs = rest.filter((a) => a.startsWith('--image='));
-    const yesArgs = rest.filter((a) => a === '--yes');
-    if (rest.some((a) => !a.startsWith('--image=') && a !== '--yes') || imageArgs.length > 1 || yesArgs.length > 1) {
-        return usageError('Wrong arguments', usage);
-    }
-    const imageId = imageArgs[0]?.slice('--image='.length);
-    if (imageId === '')
-        return usageError('--image needs a photo id (list-photos --challenge=<id> shows the ids)', usage);
-    return exitCodeOf(
-        await swapBackCmd(challengeId as string, {
-            ...(imageId === undefined ? {} : { imageId }),
-            yes: yesArgs.length > 0,
-        }),
-    );
-};
-
-const runGetSetting: CommandHandler = async (argv) => {
-    const { challengeId, rest } = extractChallenge(argv);
-    if (!rest[0]) return usageError('Please specify a setting key', usageOf('get-setting'));
-    getSetting(rest[0], challengeId);
-    return 0;
-};
-
-const runSetSetting: CommandHandler = async (argv) => {
-    const { challengeId, rest } = extractChallenge(argv);
-    if (!rest[0] || rest[1] === undefined) {
-        return usageError('Please specify both key and value', usageOf('set-setting'));
-    }
-    // A name that is no setting, or a value it refuses, is a failure: the exit code says so to a script.
-    return setSetting(rest[0], rest[1], challengeId) ? 0 : 1;
-};
-
-const runResetSetting: CommandHandler = async (argv) => {
-    const { challengeId, rest } = extractChallenge(argv);
-    if (!rest[0]) return usageError('Please specify a setting key', usageOf('reset-setting'));
-    return resetSetting(rest[0], challengeId) ? 0 : 1;
-};
-
-const runSetGlobalDefault: CommandHandler = async ([key, value]) => {
-    if (!key || !value) {
-        return usageError(
-            'Please specify both setting key and value',
-            usageOf('set-global-default'),
-            'Example: set-global-default exposure 80',
-        );
-    }
-    return setGlobalDefault(key, value) ? 0 : 1;
-};
-
-// Exactly one positional key: a reset names one thing, so a typo must not read as a second argument.
-const runResetGlobalDefault: CommandHandler = async (argv) => {
-    if (argv.length !== 1) return usageError('Please specify a setting key', usageOf('reset-global-default'));
-    return resetGlobalDefault(argv[0]) ? 0 : 1;
-};
-
-// --yes alone flips it from a listing of what would change into the reset itself;
-// anything else alongside it is a typo and a usage error.
-const runResetAllGlobalDefaults: CommandHandler = async (argv) => {
-    const yesArgs = argv.filter((a) => a === '--yes');
-    if (argv.length !== yesArgs.length || yesArgs.length > 1) {
-        return usageError('Wrong arguments', usageOf('reset-all-global-defaults'));
-    }
-    return resetAllGlobalDefaults(yesArgs.length > 0) ? 0 : 1;
-};
-
-const runListTitleRules: CommandHandler = async (argv) => {
-    if (argv.length > 0) return usageError('Wrong arguments', usageOf('list-title-rules'));
-    listTitleRulesCmd();
-    return 0;
-};
-
-const runExportTitleRules: CommandHandler = async (argv) => {
-    const positionals = argv.filter((a) => !a.startsWith('--'));
-    const overwriteArgs = argv.filter((a) => a === '--overwrite');
-    const unknown = argv.filter((a) => a.startsWith('--') && a !== '--overwrite');
-    if (positionals.length > 1 || overwriteArgs.length > 1 || unknown.length > 0) {
-        return usageError('Wrong arguments', usageOf('export-title-rules'));
-    }
-    return exportTitleRulesCmd(positionals[0], overwriteArgs.length > 0);
-};
-
-const runImportTitleRules: CommandHandler = async (argv) => {
-    const positionals = argv.filter((a) => !a.startsWith('--'));
-    const yesArgs = argv.filter((a) => a === '--yes');
-    const unknown = argv.filter((a) => a.startsWith('--') && a !== '--yes');
-    if (positionals.length !== 1 || yesArgs.length > 1 || unknown.length > 0) {
-        return usageError('Wrong arguments', usageOf('import-title-rules'));
-    }
-    return importTitleRulesCmd(positionals[0], yesArgs.length > 0);
-};
-
-// A read-only command, but strict like the actions: `--challenge 123` (space form), a repeat or
-// any other argument must not quietly read as a listing.
-const runTitleProfile: CommandHandler = async (argv) => {
-    const detailArgs = argv.filter((a) => a.startsWith('--challenge='));
-    if (argv.length !== detailArgs.length || detailArgs.length > 1 || detailArgs[0] === '--challenge=') {
-        return usageError('Wrong arguments', usageOf('title-profile'));
-    }
-    const challengeId = detailArgs[0]?.slice('--challenge='.length);
-    if (challengeId === undefined) {
-        return usageError('Please specify a challenge id with --challenge', usageOf('title-profile'));
-    }
-    return exitCodeOf(await titleProfileCmd(challengeId));
-};
-
-const runListProfiles: CommandHandler = async (argv) => {
-    const { rest } = extractChallenge(argv);
-    if (rest.length > 0) return usageError(`Unexpected arguments: ${rest.join(' ')}`, usageOf('list-profiles'));
-    listProfiles();
-    return 0;
-};
-
+export { runBoost, runListPhotos, runSubmit, runSwapBack, runTurbo } from './actionHandlers';
 export {
-    pruneStaleChallengeSettings,
-    runBoost,
-    runChallenges,
-    runDeadlines,
-    runExportTitleRules,
-    runForgetPayment,
     runGetSetting,
-    runImportTitleRules,
-    runJoin,
-    runListPhotos,
     runListProfiles,
-    runListTitleRules,
-    runLogs,
-    runPin,
     runResetAllGlobalDefaults,
     runResetGlobalDefault,
     runResetSetting,
-    runRun,
-    runScenarioReset,
     runSetGlobalDefault,
     runSetSetting,
-    runSubmit,
-    runSwapBack,
-    runTitleProfile,
-    runTurbo,
+} from './settingsHandlers';
+export { runExportTitleRules, runImportTitleRules, runListTitleRules, runTitleProfile } from './titleRuleHandlers';
+
+export {
+    pruneStaleChallengeSettings,
+    runChallenges,
+    runDeadlines,
+    runForgetPayment,
+    runJoin,
+    runLogs,
+    runPin,
+    runRun,
+    runScenarioReset,
     runVote,
 };

@@ -1,6 +1,6 @@
 /**
  * Edge-case tests for the CLI one-shot action and currency commands
- * (commands/actions.ts): fallback messages when a handler returns no error
+ * (commands/actions.ts, commands/submit.ts and commands/spend.ts): fallback messages
  * text or throws a non-Error, the lookup bail-outs, swap flag parsing and the
  * cost line when the balance can't be read. Complements cli-actions.test.ts
  * (happy paths) and cli-currency.test.ts (the --yes confirmation gate).
@@ -55,6 +55,8 @@ const h: jest.Mocked<EdgeHandlers> = {
     ...invalid<{ __handlers: jest.Mocked<CurrencyHandlers> }>(require('../../src/ts/ipc/currency.handlers')).__handlers,
 };
 import actions = require('../../src/ts/cli/commands/actions');
+import submit = require('../../src/ts/cli/commands/submit');
+import spend = require('../../src/ts/cli/commands/spend');
 import type * as apiFactoryModule from '../../src/ts/apiFactory';
 import type * as actionsHandlersModule from '../../src/ts/ipc/actions.handlers';
 import type * as currencyHandlersModule from '../../src/ts/ipc/currency.handlers';
@@ -104,7 +106,14 @@ describe('challenge lookup', () => {
         ['unlockBoostCmd', 'key-unlock-boost'],
         ['fillExposureCmd', 'fill-exposure'],
     ])('%s bails out when the challenge is unknown', async (fn, channel) => {
-        await actions[fn]('999');
+        // The command under test: turbo/fill live in actions/submit, the spends in spend.
+        const cmds = {
+            turboChallenge: actions.turboChallenge,
+            fillChallenge: submit.fillChallenge,
+            unlockBoostCmd: spend.unlockBoostCmd,
+            fillExposureCmd: spend.fillExposureCmd,
+        } as const;
+        await cmds[fn]('999');
         expect(h[channel]).not.toHaveBeenCalled();
     });
 
@@ -148,26 +157,26 @@ describe('boost / turbo / fill fallbacks', () => {
         h['fill-challenge-now'].mockResolvedValue(
             invalid({ success: true, message: 'Done', submitted: 2, skipped: 1 }),
         );
-        await actions.fillChallenge('111');
+        await submit.fillChallenge('111');
         expect(h['fill-challenge-now']).toHaveBeenCalledWith(null, '111', 'one');
         expect(msgs('success')).toEqual(['Done (submitted 2, skipped 1)']);
     });
 
     test('fill success without message/counts falls back to defaults', async () => {
         h['fill-challenge-now'].mockResolvedValue(invalid({ success: true }));
-        await actions.fillChallenge('111', { all: true });
+        await submit.fillChallenge('111', { all: true });
         expect(msgs('success')).toEqual(['Submitted photos to "Sunset" (submitted 0, skipped 0)']);
     });
 
     test('fill failure with no error text uses the default message', async () => {
         h['fill-challenge-now'].mockResolvedValue(invalid(null));
-        await actions.fillChallenge('111');
+        await submit.fillChallenge('111');
         expect(msgs('error')).toEqual(['Failed to submit photos']);
     });
 
     test('fill: a thrown non-Error is stringified', async () => {
         h['fill-challenge-now'].mockRejectedValue('disk');
-        await actions.fillChallenge('111');
+        await submit.fillChallenge('111');
         expect(msgs('error')).toEqual(['Failed to submit photos: disk']);
     });
 });
@@ -187,7 +196,7 @@ describe('invalid-args refusals', () => {
 
     test('fill prints the invalid-id text, not the raw code', async () => {
         h['fill-challenge-now'].mockResolvedValue(invalid({ success: false, error: 'invalid-args' }));
-        await actions.fillChallenge('111');
+        await submit.fillChallenge('111');
         expect(msgs('error')).toEqual(['Invalid challenge or image id.']);
     });
 });
@@ -195,20 +204,20 @@ describe('invalid-args refusals', () => {
 describe('currency spends', () => {
     test('the cost line says so when the balance cannot be read', async () => {
         h['get-bankroll'].mockResolvedValue(invalid({ success: false }));
-        await actions.unlockBoostCmd('111');
+        await spend.unlockBoostCmd('111');
         expect(msgs('info')).toContain('Cost: 1 key (balance could not be read).');
     });
 
     test('the projected balance never goes below zero', async () => {
-        await actions.unlockBoostCmd('111', {});
+        await spend.unlockBoostCmd('111', {});
         expect(msgs('info')).toContain('Cost: 1 key — balance 0 → 0.');
     });
 
     test('a failed spend with only an error string shows it; with nothing, a default', async () => {
         h['key-unlock-boost'].mockResolvedValueOnce({ success: false, error: 'server said no' });
-        await actions.unlockBoostCmd('111', { yes: true });
+        await spend.unlockBoostCmd('111', { yes: true });
         h['fill-exposure'].mockResolvedValueOnce(invalid(undefined));
-        await actions.fillExposureCmd('111', { yes: true });
+        await spend.fillExposureCmd('111', { yes: true });
         expect(msgs('error')).toEqual(['server said no', 'Action failed']);
     });
 
@@ -216,14 +225,15 @@ describe('currency spends', () => {
         ['unlockBoostCmd', 'key-unlock-boost', 'Failed to unlock boost'],
         ['fillExposureCmd', 'fill-exposure', 'Failed to fill exposure'],
     ])('%s: a thrown spend is reported (Error and non-Error)', async (fn, channel, prefix) => {
+        const cmds = { unlockBoostCmd: spend.unlockBoostCmd, fillExposureCmd: spend.fillExposureCmd } as const;
         h[channel].mockRejectedValueOnce(new Error('boom')).mockRejectedValueOnce('raw');
-        await actions[fn]('111', { yes: true });
-        await actions[fn]('111', { yes: true });
+        await cmds[fn]('111', { yes: true });
+        await cmds[fn]('111', { yes: true });
         expect(msgs('error')).toEqual([`${prefix}: boom`, `${prefix}: raw`]);
     });
 
     test('fill-exposure dry run needs no opts', async () => {
-        await actions.fillExposureCmd('111');
+        await spend.fillExposureCmd('111');
         expect(h['fill-exposure']).not.toHaveBeenCalled();
         expect(msgs('info')).toContain('Cost: 1 fill — balance 1 → 0.');
     });

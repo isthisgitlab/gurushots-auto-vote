@@ -19,7 +19,7 @@ import { stripTerminalControl } from '../../format/logSafe';
 import { isMarkedChallenge } from '../../challengeMarks';
 import { canPlayTurbo, isKnownTurboMode } from '../../voting/turboMode';
 import { finiteOr, isInteger } from '../../numbers';
-import { rankingTail } from './voting';
+import { rankingTail } from './status';
 import { errorMessage } from '../../errorMessage';
 
 import type { Challenge, MemberTurbo, RankingEntry, RankingTotal } from '../../types/gurushots';

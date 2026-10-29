@@ -47,11 +47,11 @@ jest.mock('../../src/ts/ipc/actions.handlers', () => {
 });
 
 import { invalid } from '../helpers/invalid';
-import type * as commandHandlersModule from '../../src/ts/cli/commandHandlers';
+import type * as actionHandlersModule from '../../src/ts/cli/actionHandlers';
 // The rows↔handlers cycle initialises only rows-first (commandRows reads the handlers'
 // exports at module scope), so load the rows before reaching for their handlers.
 require('../../src/ts/cli/commandRows');
-const { runSubmit } = require('../../src/ts/cli/commandHandlers') as typeof commandHandlersModule;
+const { runSubmit } = require('../../src/ts/cli/actionHandlers') as typeof actionHandlersModule;
 import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(
     invalid<typeof loggerModule & { __calls: { level: string; msg: unknown; data?: unknown }[] }>(loggerModule),

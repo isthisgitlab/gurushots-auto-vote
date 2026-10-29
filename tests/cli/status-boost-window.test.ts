@@ -78,9 +78,9 @@ const apiFactory = jest.mocked(
         }
     >(apiFactoryModule),
 );
-import type * as votingModule from '../../src/ts/cli/commands/voting';
+import type * as statusModule from '../../src/ts/cli/commands/status';
 import type { Challenge } from '../../src/ts/types/gurushots';
-const { showStatus } = require('../../src/ts/cli/commands/voting') as typeof votingModule;
+const { showStatus } = require('../../src/ts/cli/commands/status') as typeof statusModule;
 
 const challenge = (title: string, boost: { state: string; timeout?: number }) =>
     invalid<Challenge>({

@@ -14,7 +14,7 @@ import * as logger from '../../logger';
 import { stripTerminalControl } from '../../format/logSafe';
 import { formatDuration } from '../../format/duration';
 import { errorMessage } from '../../errorMessage';
-import { resolveChallenge } from './actions';
+import { resolveChallenge } from '../guards';
 
 import type { NullEventHandlers } from '../../types/cli';
 import type * as computations_handlersModule from '../../ipc/computations.handlers';

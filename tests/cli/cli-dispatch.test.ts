@@ -15,7 +15,10 @@ import type * as randomizerModule from '../../src/ts/api/randomizer';
 import type * as guardsModule from '../../src/ts/cli/guards';
 import type * as authModule from '../../src/ts/cli/commands/auth';
 import type * as votingModule from '../../src/ts/cli/commands/voting';
+import type * as statusModule from '../../src/ts/cli/commands/status';
 import type * as actionsModule from '../../src/ts/cli/commands/actions';
+import type * as submitModule from '../../src/ts/cli/commands/submit';
+import type * as spendModule from '../../src/ts/cli/commands/spend';
 import type * as bankrollModule from '../../src/ts/cli/commands/bankroll';
 import type * as joinModule from '../../src/ts/cli/commands/join';
 import type * as pinModule from '../../src/ts/cli/commands/pin';
@@ -36,7 +39,10 @@ type Mods = {
     guards: jest.MockedObjectDeep<typeof guardsModule>;
     auth: jest.MockedObjectDeep<typeof authModule>;
     voting: jest.MockedObjectDeep<typeof votingModule>;
+    status: jest.MockedObjectDeep<typeof statusModule>;
     actions: jest.MockedObjectDeep<typeof actionsModule>;
+    submit: jest.MockedObjectDeep<typeof submitModule>;
+    spend: jest.MockedObjectDeep<typeof spendModule>;
     bankroll: jest.MockedObjectDeep<typeof bankrollModule>;
     join: jest.MockedObjectDeep<typeof joinModule>;
     pin: jest.MockedObjectDeep<typeof pinModule>;
@@ -90,6 +96,10 @@ jest.mock('electron', () => ({}));
 jest.mock('../../src/ts/cli/guards', () => ({
     requireChallenge: jest.fn(({ challengeId }: { challengeId: string | null }) => challengeId),
     requireProfileArgs: jest.fn((command: string, { rest }: { rest: string[] }) => rest[0]),
+    ensureAuthenticated: jest.fn(() => true),
+    // The worded refusals the real command modules build on at module scope.
+    INVALID_ID_TEXT: 'Invalid challenge or image id.',
+    resolveChallenge: jest.fn(async () => null),
 }));
 
 jest.mock('../../src/ts/cli/commands/auth', () => ({ handleLogin: jest.fn(), handleLogout: jest.fn() }));
@@ -105,9 +115,13 @@ jest.mock('../../src/ts/cli/commands/voting', () => {
         runVotingCycle: jest.fn(),
         voteChallengeManual: jest.fn(),
         startContinuousVoting: jest.fn(),
-        showStatus: jest.fn(),
     };
 });
+
+jest.mock('../../src/ts/cli/commands/status', () => ({
+    showStatus: jest.fn(),
+    rankingTail: jest.fn(() => null),
+}));
 
 jest.mock('../../src/ts/cli/commands/actions', () => {
     const { parseSwapFlags, SWAP_USAGE, SWAP_BACK_USAGE } = jest.requireActual<
@@ -119,14 +133,20 @@ jest.mock('../../src/ts/cli/commands/actions', () => {
         SWAP_BACK_USAGE,
         boostChallenge: jest.fn(),
         turboChallenge: jest.fn(),
-        fillChallenge: jest.fn(),
-        submitPickedCmd: jest.fn(async () => 0),
-        unlockBoostCmd: jest.fn(),
         swapCmd: jest.fn(),
         swapBackCmd: jest.fn(),
-        fillExposureCmd: jest.fn(),
     };
 });
+
+jest.mock('../../src/ts/cli/commands/submit', () => ({
+    fillChallenge: jest.fn(),
+    submitPickedCmd: jest.fn(async () => 0),
+}));
+
+jest.mock('../../src/ts/cli/commands/spend', () => ({
+    unlockBoostCmd: jest.fn(),
+    fillExposureCmd: jest.fn(),
+}));
 
 jest.mock('../../src/ts/cli/commands/deadlines', () => ({ deadlinesCmd: jest.fn(async () => true) }));
 
@@ -218,7 +238,10 @@ const run = async (argv: string[], setup?: (mods: Mods) => void) => {
             guards: require('../../src/ts/cli/guards') as typeof guardsModule,
             auth: require('../../src/ts/cli/commands/auth') as typeof authModule,
             voting: require('../../src/ts/cli/commands/voting') as typeof votingModule,
+            status: require('../../src/ts/cli/commands/status') as typeof statusModule,
             actions: require('../../src/ts/cli/commands/actions') as typeof actionsModule,
+            submit: require('../../src/ts/cli/commands/submit') as typeof submitModule,
+            spend: require('../../src/ts/cli/commands/spend') as typeof spendModule,
             bankroll: require('../../src/ts/cli/commands/bankroll') as typeof bankrollModule,
             join: require('../../src/ts/cli/commands/join') as typeof joinModule,
             pin: require('../../src/ts/cli/commands/pin') as typeof pinModule,
@@ -247,7 +270,7 @@ describe('startup', () => {
         expect(m.settings.seedIntentProfiles).toHaveBeenCalled();
         // `exit` releases the session marker `status` holds like every command that loads the settings.
         expect(Object.keys(processHandlers).sort()).toEqual(['exit', 'uncaughtException', 'unhandledRejection']);
-        expect(m.voting.showStatus).toHaveBeenCalled();
+        expect(m.status.showStatus).toHaveBeenCalled();
         expect(m.exitCodes).toEqual([0]);
         expect(m.logger.cleanup).toHaveBeenCalled();
     });
@@ -261,7 +284,7 @@ describe('startup', () => {
             }),
         );
         expect(m.msgs('stderr')).toEqual([expect.stringContaining('/u/settings.json.corrupt-1')]);
-        expect(m.voting.showStatus).toHaveBeenCalled();
+        expect(m.status.showStatus).toHaveBeenCalled();
         expect(m.exitCodes).toEqual([0]);
     });
 
@@ -274,7 +297,7 @@ describe('startup', () => {
         const m = await run(['status'], (mods) => mods.settings.getSetting.mockReturnValue(0));
         expect(m.msgs('stderr')).toEqual([expect.stringContaining('not affiliated with or endorsed by GuruShots')]);
         expect(m.settings.setSetting).toHaveBeenCalledWith('noticeAcknowledgedVersion', CURRENT_NOTICE_VERSION);
-        expect(m.voting.showStatus).toHaveBeenCalled();
+        expect(m.status.showStatus).toHaveBeenCalled();
     });
 
     test('a failed intent-profile seed is a warning, not fatal', async () => {
@@ -284,7 +307,7 @@ describe('startup', () => {
             }),
         );
         expect(m.msgs('warning')).toEqual(['Intent profile seeding failed (non-fatal):']);
-        expect(m.voting.showStatus).toHaveBeenCalled();
+        expect(m.status.showStatus).toHaveBeenCalled();
         expect(m.exitCodes).toEqual([0]);
     });
 
@@ -312,7 +335,7 @@ describe('startup', () => {
         expect(m.msgs('error')).toEqual([expect.stringContaining('/data/gurushots')]);
         expect(m.msgs('error')[0]).toContain('EACCES');
         expect(m.msgs('error')).not.toContain('Error');
-        expect(m.voting.showStatus).not.toHaveBeenCalled();
+        expect(m.status.showStatus).not.toHaveBeenCalled();
         expect(m.exitCodes).toEqual([1]);
     });
 
@@ -612,7 +635,7 @@ describe('simple commands', () => {
         ['login', 'auth', 'handleLogin'],
         ['logout', 'auth', 'handleLogout'],
         ['check-updates', 'update', 'checkUpdates'],
-        ['status', 'voting', 'showStatus'],
+        ['status', 'status', 'showStatus'],
         ['bankroll', 'bankroll', 'showBankroll'],
         ['coins', 'bankroll', 'showBankroll'],
         ['discover', 'join', 'showDiscover'],
@@ -758,7 +781,7 @@ describe('challenge-scoped actions', () => {
         [['--challenge=5'], false],
     ])('submit %p', async (tail, all) => {
         const m = await run(['submit', ...tail]);
-        expect(m.actions.fillChallenge).toHaveBeenCalledWith('5', { all });
+        expect(m.submit.fillChallenge).toHaveBeenCalledWith('5', { all });
     });
 
     test.each([
@@ -769,8 +792,8 @@ describe('challenge-scoped actions', () => {
         ],
     ])('submit %p submits the picked photos', async (tail, ids) => {
         const m = await run(['submit', ...tail]);
-        expect(m.actions.submitPickedCmd).toHaveBeenCalledWith('5', ids);
-        expect(m.actions.fillChallenge).not.toHaveBeenCalled();
+        expect(m.submit.submitPickedCmd).toHaveBeenCalledWith('5', ids);
+        expect(m.submit.fillChallenge).not.toHaveBeenCalled();
         expect(m.exitCodes).toEqual([0]);
     });
 
@@ -782,8 +805,8 @@ describe('challenge-scoped actions', () => {
         [['stray']],
     ])('submit %p is a usage error and submits nothing', async (tail) => {
         const m = await run(['submit', '--challenge=5', ...tail]);
-        expect(m.actions.submitPickedCmd).not.toHaveBeenCalled();
-        expect(m.actions.fillChallenge).not.toHaveBeenCalled();
+        expect(m.submit.submitPickedCmd).not.toHaveBeenCalled();
+        expect(m.submit.fillChallenge).not.toHaveBeenCalled();
         expect(m.msgs('error')).toEqual(['Wrong arguments']);
         expect(m.msgs('info')).toEqual(['Usage: submit --challenge=<id> [--all | --image=<id>[,<id>…]]']);
         expect(m.exitCodes).toEqual([1]);
@@ -791,7 +814,7 @@ describe('challenge-scoped actions', () => {
 
     test('submit --image with no value names what is missing', async () => {
         const m = await run(['submit', '--challenge=5', '--image=']);
-        expect(m.actions.submitPickedCmd).not.toHaveBeenCalled();
+        expect(m.submit.submitPickedCmd).not.toHaveBeenCalled();
         expect(m.msgs('error')[0]).toContain('--image needs a photo id');
         expect(m.exitCodes).toEqual([1]);
     });
@@ -801,7 +824,7 @@ describe('challenge-scoped actions', () => {
         ['fill-exposure', 'fillExposureCmd'],
     ])('%s forwards --yes', async (command, fn) => {
         const m = await run([command, '--challenge=5', '--yes']);
-        expect(m.actions[fn]).toHaveBeenCalledWith('5', { yes: true });
+        expect(m.spend[fn]).toHaveBeenCalledWith('5', { yes: true });
         expect(m.exitCodes).toEqual([0]);
     });
 

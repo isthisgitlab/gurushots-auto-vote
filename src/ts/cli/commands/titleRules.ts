@@ -11,7 +11,7 @@ import * as fs from 'node:fs';
 import * as logger from '../../logger';
 import { escapeTerminalUnsafe, stripTerminalControl } from '../../format/logSafe';
 import { formatSettingForLog } from './settings/shared';
-import { resolveChallenge } from './actions';
+import { resolveChallenge } from '../guards';
 import { errorMessage } from '../../errorMessage';
 import * as settings from '../../settings';
 

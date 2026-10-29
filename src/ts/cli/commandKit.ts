@@ -8,6 +8,29 @@ import { parseChallengeFlag } from './commands/voting';
  */
 type CommandHandler = (argv: string[]) => Promise<number | undefined>;
 
+/**
+ * One row per CLI command — the single home for its metadata: the handler, the usage text (the arg
+ * shape its errors print), its verbatim help lines, any aliases, and whether it holds the CLI
+ * session marker. help.ts renders the Commands block from the rows; commandTable.ts derives the
+ * dispatch map from them.
+ */
+type CommandRow = {
+    name: string;
+    aliases?: readonly string[];
+    handler: CommandHandler;
+    usage?: string;
+    help: readonly string[];
+    markerless?: boolean;
+};
+
+// Builds one row; `extra` carries the row's optional aliases, usage text and markerless flag.
+const row = (
+    name: string,
+    handler: CommandHandler,
+    help: readonly string[],
+    extra?: Pick<CommandRow, 'aliases' | 'usage' | 'markerless'>,
+): CommandRow => ({ name, handler, help, ...extra });
+
 // Pull --challenge=<id> (or --challenge <id>) out of an arg list and return
 // the remaining positional args, so per-challenge settings commands accept
 // the flag in any position (mirrors `run --challenge=<id>`).
@@ -123,4 +146,5 @@ export {
     flagAction,
     scenarioCommand,
 };
-export type { CommandHandler };
+export type { CommandHandler, CommandRow };
+export { row };

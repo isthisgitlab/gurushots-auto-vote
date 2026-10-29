@@ -11,7 +11,8 @@
  * handler factories in cli/commandKit.ts; `help` text is cli/help.ts.
  * The actual command logic lives in:
  *   - cli/commands/auth.ts     login flow
- *   - cli/commands/voting.ts   vote cycles, status, continuous mode
+ *   - cli/commands/voting.ts   vote cycles, continuous mode
+ *   - cli/commands/status.ts   the status banner
  *   - cli/commands/settings.ts get / set / list / reset
  *   - cli/prompts.ts           readline I/O helpers (used by auth)
  *

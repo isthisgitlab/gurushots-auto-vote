@@ -69,12 +69,14 @@ const { __mw: mw } = jest.mocked(
         >;
     },
 );
-import type * as commandHandlersModule from '../../src/ts/cli/commandHandlers';
+import type * as titleRuleHandlersModule from '../../src/ts/cli/titleRuleHandlers';
+import type * as settingsHandlersModule from '../../src/ts/cli/settingsHandlers';
 import type * as titleRulesCommandsModule from '../../src/ts/cli/commands/titleRules';
 // The rows↔handlers cycle initialises only rows-first (commandRows reads the handlers'
 // exports at module scope), so load the rows before reaching for their handlers.
 require('../../src/ts/cli/commandRows');
-const commandHandlers = require('../../src/ts/cli/commandHandlers') as typeof commandHandlersModule;
+const titleRuleHandlers = require('../../src/ts/cli/titleRuleHandlers') as typeof titleRuleHandlersModule;
+const settingsHandlers = require('../../src/ts/cli/settingsHandlers') as typeof settingsHandlersModule;
 const cmd = require('../../src/ts/cli/commands/titleRules') as typeof titleRulesCommandsModule;
 
 const msgs = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
@@ -415,21 +417,21 @@ describe('title-profile', () => {
     });
 });
 
-describe('strict parsing (commandHandlers)', () => {
+describe('strict parsing (titleRuleHandlers / settingsHandlers)', () => {
     test('list-title-rules takes no arguments', async () => {
-        await expect(commandHandlers.runListTitleRules(['--yes'])).resolves.toBe(1);
+        await expect(titleRuleHandlers.runListTitleRules(['--yes'])).resolves.toBe(1);
         expect(contains(msgs('error'), 'Wrong arguments')).toBe(true);
         expect(contains(msgs('info'), 'Usage: list-title-rules')).toBe(true);
         expect(settings.getTitleRules).not.toHaveBeenCalled();
     });
 
     test('a bare list-title-rules lists and exits 0', async () => {
-        await expect(commandHandlers.runListTitleRules([])).resolves.toBe(0);
+        await expect(titleRuleHandlers.runListTitleRules([])).resolves.toBe(0);
         expect(settings.getTitleRules).toHaveBeenCalled();
     });
 
     test('export-title-rules forwards the file and --overwrite, and exits with the command', async () => {
-        await expect(commandHandlers.runExportTitleRules(['rules.json', '--overwrite'])).resolves.toBe(0);
+        await expect(titleRuleHandlers.runExportTitleRules(['rules.json', '--overwrite'])).resolves.toBe(0);
         expect(fs.writeFileSync).toHaveBeenCalledWith('rules.json', expect.any(String), {
             encoding: 'utf8',
             flag: 'w',
@@ -441,7 +443,7 @@ describe('strict parsing (commandHandlers)', () => {
         settings.previewTitleRules.mockReturnValue(invalid({ ok: true, rules: [], dropped: [], collapsed: [] }));
         settings.getTitleRules.mockReturnValue([]);
         settings.setTitleRules.mockReturnValue(true);
-        await expect(commandHandlers.runImportTitleRules(['rules.json', '--yes'])).resolves.toBe(0);
+        await expect(titleRuleHandlers.runImportTitleRules(['rules.json', '--yes'])).resolves.toBe(0);
         expect(settings.setTitleRules).toHaveBeenCalledWith([]);
     });
 
@@ -450,7 +452,7 @@ describe('strict parsing (commandHandlers)', () => {
         ['an unknown flag', ['a.json', '--yes']],
         ['a repeated flag', ['--overwrite', '--overwrite']],
     ])('export-title-rules: %s prints the usage and exits 1', async (_label, argv) => {
-        await expect(commandHandlers.runExportTitleRules(argv)).resolves.toBe(1);
+        await expect(titleRuleHandlers.runExportTitleRules(argv)).resolves.toBe(1);
         expect(contains(msgs('error'), 'Wrong arguments')).toBe(true);
         expect(contains(msgs('info'), 'Usage: export-title-rules [file] [--overwrite]')).toBe(true);
         expect(fs.writeFileSync).not.toHaveBeenCalled();
@@ -462,7 +464,7 @@ describe('strict parsing (commandHandlers)', () => {
         ['an unknown flag', ['a.json', '--overwrite']],
         ['a repeated --yes', ['a.json', '--yes', '--yes']],
     ])('import-title-rules: %s prints the usage and exits 1', async (_label, argv) => {
-        await expect(commandHandlers.runImportTitleRules(argv)).resolves.toBe(1);
+        await expect(titleRuleHandlers.runImportTitleRules(argv)).resolves.toBe(1);
         expect(contains(msgs('error'), 'Wrong arguments')).toBe(true);
         expect(contains(msgs('info'), 'Usage: import-title-rules <file> [--yes]')).toBe(true);
         expect(fs.readFileSync).not.toHaveBeenCalled();
@@ -475,33 +477,33 @@ describe('strict parsing (commandHandlers)', () => {
         ['a repeat', ['--challenge=111', '--challenge=222'], 'Wrong arguments'],
         ['an extra argument', ['--challenge=111', 'extra'], 'Wrong arguments'],
     ])('title-profile: %s prints the usage and exits 1', async (_label, argv, message) => {
-        await expect(commandHandlers.runTitleProfile(argv)).resolves.toBe(1);
+        await expect(titleRuleHandlers.runTitleProfile(argv)).resolves.toBe(1);
         expect(contains(msgs('error'), message)).toBe(true);
         expect(contains(msgs('info'), 'Usage: title-profile --challenge=<id>')).toBe(true);
         expect(mw.getActiveChallenges).not.toHaveBeenCalled();
     });
 
     test('reset-global-default needs exactly one key', async () => {
-        await expect(commandHandlers.runResetGlobalDefault([])).resolves.toBe(1);
-        await expect(commandHandlers.runResetGlobalDefault(['a', 'b'])).resolves.toBe(1);
+        await expect(settingsHandlers.runResetGlobalDefault([])).resolves.toBe(1);
+        await expect(settingsHandlers.runResetGlobalDefault(['a', 'b'])).resolves.toBe(1);
         expect(settings.resetGlobalDefault).not.toHaveBeenCalled();
         settings.resetGlobalDefault.mockReturnValue(true);
-        await expect(commandHandlers.runResetGlobalDefault(['exposure'])).resolves.toBe(0);
+        await expect(settingsHandlers.runResetGlobalDefault(['exposure'])).resolves.toBe(0);
         expect(settings.resetGlobalDefault).toHaveBeenCalledWith('exposure');
         settings.resetGlobalDefault.mockReturnValue(false);
-        await expect(commandHandlers.runResetGlobalDefault(['exposure'])).resolves.toBe(1);
+        await expect(settingsHandlers.runResetGlobalDefault(['exposure'])).resolves.toBe(1);
     });
 
     test('reset-all-global-defaults takes --yes alone', async () => {
-        await expect(commandHandlers.runResetAllGlobalDefaults(['--yes', 'extra'])).resolves.toBe(1);
-        await expect(commandHandlers.runResetAllGlobalDefaults(['--yes', '--yes'])).resolves.toBe(1);
-        await expect(commandHandlers.runResetAllGlobalDefaults(['--nope'])).resolves.toBe(1);
+        await expect(settingsHandlers.runResetAllGlobalDefaults(['--yes', 'extra'])).resolves.toBe(1);
+        await expect(settingsHandlers.runResetAllGlobalDefaults(['--yes', '--yes'])).resolves.toBe(1);
+        await expect(settingsHandlers.runResetAllGlobalDefaults(['--nope'])).resolves.toBe(1);
         expect(settings.resetAllGlobalDefaults).not.toHaveBeenCalled();
         settings.resetAllGlobalDefaults.mockReturnValue(true);
-        await expect(commandHandlers.runResetAllGlobalDefaults(['--yes'])).resolves.toBe(0);
+        await expect(settingsHandlers.runResetAllGlobalDefaults(['--yes'])).resolves.toBe(0);
         expect(settings.resetAllGlobalDefaults).toHaveBeenCalledWith();
         settings.resetAllGlobalDefaults.mockReturnValue(false);
-        await expect(commandHandlers.runResetAllGlobalDefaults(['--yes'])).resolves.toBe(1);
+        await expect(settingsHandlers.runResetAllGlobalDefaults(['--yes'])).resolves.toBe(1);
     });
 
     test('title-profile exits with the command result', async () => {
@@ -515,8 +517,8 @@ describe('strict parsing (commandHandlers)', () => {
                 inlineSources: {},
             }),
         );
-        await expect(commandHandlers.runTitleProfile(['--challenge=111'])).resolves.toBe(0);
+        await expect(titleRuleHandlers.runTitleProfile(['--challenge=111'])).resolves.toBe(0);
         mw.getActiveChallenges.mockResolvedValue(invalid({ challenges: [] }));
-        await expect(commandHandlers.runTitleProfile(['--challenge=999'])).resolves.toBe(1);
+        await expect(titleRuleHandlers.runTitleProfile(['--challenge=999'])).resolves.toBe(1);
     });
 });

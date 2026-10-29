@@ -1,5 +1,6 @@
 /**
- * Unit tests for the CLI voting commands (commands/voting.ts): manual and
+ * Unit tests for the CLI voting commands (commands/voting.ts) and the status
+ * banner (commands/status.ts): manual and
  * strategy cycles, single-challenge manual vote fallbacks, --challenge flag
  * parsing, continuous mode (scheduler wiring + graceful shutdown) and the
  * status banner. The middleware, scheduler, auth service and handlers are
@@ -77,6 +78,7 @@ import type * as runSchedulerModule from '../../src/ts/scheduling/runScheduler';
 import type * as boostWindowModule from '../../src/ts/voting/boostWindow';
 import type * as authModule from '../../src/ts/services/auth';
 import type * as votingModule from '../../src/ts/cli/commands/voting';
+import type * as statusModule from '../../src/ts/cli/commands/status';
 import type * as votingHandlersModule from '../../src/ts/ipc/voting.handlers';
 const { __mw: mw } = jest.mocked(
     require('../../src/ts/apiFactory') as typeof apiFactoryModule & {
@@ -96,8 +98,9 @@ type HandlersMock = {
     __handlers: jest.Mocked<Pick<ReturnType<typeof votingHandlersModule.buildHandlers>, 'vote-on-challenge-manual'>>;
 };
 const votingHandlers = invalid<HandlersMock>(require('../../src/ts/ipc/voting.handlers')).__handlers;
-const { runVotingCycle, voteChallengeManual, parseChallengeFlag, startContinuousVoting, showStatus } =
+const { runVotingCycle, voteChallengeManual, parseChallengeFlag, startContinuousVoting } =
     require('../../src/ts/cli/commands/voting') as typeof votingModule;
+const { showStatus } = require('../../src/ts/cli/commands/status') as typeof statusModule;
 
 const msgs = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
 

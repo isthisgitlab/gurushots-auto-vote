@@ -82,11 +82,11 @@ jest.mock('../../src/ts/services/UpdateChecker', () => ({
 }));
 
 import { invalid } from '../helpers/invalid';
-import type * as commandHandlersModule from '../../src/ts/cli/commandHandlers';
+import type * as actionHandlersModule from '../../src/ts/cli/actionHandlers';
 // The rows↔handlers cycle initialises only rows-first (commandRows reads the handlers'
 // exports at module scope), so load the rows before reaching for their handlers.
 require('../../src/ts/cli/commandRows');
-const { runTurbo } = require('../../src/ts/cli/commandHandlers') as typeof commandHandlersModule;
+const { runTurbo } = require('../../src/ts/cli/actionHandlers') as typeof actionHandlersModule;
 import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(
     invalid<typeof loggerModule & { __calls: { level: string; msg: unknown; data?: unknown }[] }>(loggerModule),
@@ -122,14 +122,15 @@ const votingHandlers = invalid<HandlersMock<typeof votingHandlersModule>>(
 import updateCheckerModule = require('../../src/ts/services/UpdateChecker');
 const updateChecker = jest.mocked(updateCheckerModule);
 import type * as actionsModule from '../../src/ts/cli/commands/actions';
+import type * as submitModule from '../../src/ts/cli/commands/submit';
 import type * as actionsHandlersModule from '../../src/ts/ipc/actions.handlers';
 import type * as votingHandlersModule from '../../src/ts/ipc/voting.handlers';
 import type * as votingModule from '../../src/ts/cli/commands/voting';
 import type * as authModule from '../../src/ts/cli/commands/auth';
 import type * as updateModule from '../../src/ts/cli/commands/update';
 
-const { boostChallenge, turboChallenge, fillChallenge } =
-    require('../../src/ts/cli/commands/actions') as typeof actionsModule;
+const { boostChallenge, turboChallenge } = require('../../src/ts/cli/commands/actions') as typeof actionsModule;
+const { fillChallenge } = require('../../src/ts/cli/commands/submit') as typeof submitModule;
 const { voteChallengeManual, runVotingCycle } = require('../../src/ts/cli/commands/voting') as typeof votingModule;
 const { handleLogout } = require('../../src/ts/cli/commands/auth') as typeof authModule;
 const { checkUpdates } = require('../../src/ts/cli/commands/update') as typeof updateModule;
