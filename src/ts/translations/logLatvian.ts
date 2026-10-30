@@ -152,8 +152,6 @@ export const logMessages = {
     m2dae83def588: 'Automātiskā iesniegšana: izaicinājumā {0} iesniegts 1 foto (atlikušas brīvas vietas: {1}{2})',
     m2ded65cc4a06: 'Izmanto kešatmiņā saglabātos balsošanas foto izaicinājumam {0}',
     m2e27dc229363: 'Manuālā balsošana: nobalsots: {0}, izlaists: {1}, kopā: {2}',
-    m2ea88a7ace6b:
-        '{0}: pievienošanās laiks no sākuma ir garāks par paša izaicinājuma garumu — pievienojas, kad pagājis 99 % no tā',
     m2eb572c92569: 'Noraidīts IPC "{0}" pieprasījums no neuzticama loga ietvara {1}',
     m2f2cd3bb084b: 'API atbildes saturs nav JSON objekts',
     m2f44c7a4f853: 'Kļūda, apstrādājot save-settings pieprasījumu:',
@@ -640,6 +638,8 @@ export const logMessages = {
     md07e34798507: 'Tīra uzstādījumus vairs neaktīviem izaicinājumiem ({0}):',
     md0cd0e7510bc: '🔄 Sāk manuālu balsošanu visos izaicinājumos (neņemot vērā sliekšņus)...',
     md0e704578e0f: 'Izaicinājumam {2} uzstādīts {0} = {1}',
+    md10227656ef8:
+        '{0}: pievienošanās laiks no sākuma sasniedz vairāk nekā 99 % no izaicinājuma garuma, tāpēc pievienojas, kad pagājuši 99 %',
     md23e590a3c70: 'Vizuālā pārbaude izaicinājumam {0} nav pieejama: {1}',
     md24b6f8a31e9:
         '{0} automātiskā uzpilde: balsu foto kopu neizdevās nolasīt — uzpilde netiek tērēta; mēģinās vēlreiz nākamajā ciklā',

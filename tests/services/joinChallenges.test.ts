@@ -1810,7 +1810,7 @@ describe('runJoinPass — hours from start', () => {
         invalid<LoggerMock>(require('../../src/ts/logger'))
             .withCategory()
             .info.mock.calls.map(([msg]) => msg)
-            .filter((msg) => msg.includes('join-after-start offset'));
+            .filter((msg) => msg.includes('join-after-start time reaches past 99%'));
 
     test('defers until the offset has run since start_time, then joins', async () => {
         withAfterStart(30);
@@ -1847,15 +1847,27 @@ describe('runJoinPass — hours from start', () => {
 
     test('a clamped offset is noted once per pass, naming the first clamped challenge', async () => {
         withAfterStart(100);
-        const deps = makeDeps({ getMemberChallenges: openList([candidate(1), candidate(2)]) });
+        // The first candidate runs 120h, so the 100h offset fits it and clamps
+        // nothing; the 48h second is the one the clamp governs, and the one the
+        // note names. The 48h third proves the latch: its own clamp fires but
+        // the second note is suppressed.
+        const long = {
+            id: 1,
+            join_coins: 0,
+            type: 'flash',
+            title: 'Aged 1',
+            start_time: NOW_SEC - 60 * HOUR,
+            close_time: NOW_SEC + 60 * HOUR,
+        };
+        const deps = makeDeps({ getMemberChallenges: openList([long, candidate(2), candidate(3)]) });
         const res = await runJoinPass('tok', NOW_MS, deps);
-        // Both sit far short of the clamped point (99% of the 48h run).
         expect(res.results).toEqual([
             { id: 1, status: 'skipped:too-early' },
             { id: 2, status: 'skipped:too-early' },
+            { id: 3, status: 'skipped:too-early' },
         ]);
         expect(clampNotes()).toEqual([
-            'challenge 1: the join-after-start offset is longer than the challenge — joining at 99% elapsed instead',
+            "challenge 2: the join-after-start time reaches past 99% of the challenge's length, so it is joined at 99% elapsed",
         ]);
     });
 

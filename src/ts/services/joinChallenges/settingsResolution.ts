@@ -7,6 +7,7 @@
 
 import * as logger from '../../logger';
 import * as settings from '../../settings';
+import type { SettingKey } from '../../settings/schema';
 import type { Challenge } from '../../types/gurushots';
 import type { ChallengeValues, TitleRule } from '../../types/settings';
 import { cat } from './shared';
@@ -26,7 +27,7 @@ const PER_ID_JOIN_KEYS: ReadonlySet<string> = new Set([
 // default — are ignored, so no second window can be smuggled in next to the
 // winning one. Read in a fixed order downstream (resolveJoinWindow):
 // after-start → percent → before-end, the first above 0 applies.
-const JOIN_TIMING_KEYS: string[] = [
+const JOIN_TIMING_KEYS: SettingKey[] = [
     'autoJoinAfterHoursFromStart',
     'autoJoinAfterPercentElapsed',
     'autoJoinWithinHoursOfEnd',
@@ -45,7 +46,7 @@ const JOIN_TIMING_KEYS: string[] = [
  * global default. See `ruleValuesFor` in settings/ruleResolution.ts.
  *
  * The three join-timing keys are NOT read through here one by one — they
- * resolve as one group (JOIN_TIMING_KEYS below); this function stays per key
+ * resolve as one group (JOIN_TIMING_KEYS above); this function stays per key
  * for everything else.
  */
 const resolveJoinSetting = (key: string, challenge: Partial<Challenge>): unknown => {

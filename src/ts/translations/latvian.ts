@@ -723,17 +723,17 @@ export const app: LatvianApp = {
     autoJoinAfterHoursFromStartDesc:
         'Nogaidīt, līdz kopš izaicinājuma sākuma pagājušas tik stundas, un tikai tad pievienoties — izaicinājumiem bez noteikta ilguma, piem., izstādēm un žurnāliem. 0 = izslēgts. Ievadīt kā stundas un minūtes.',
     autoJoinAfterHoursFromStartHelp:
-        'Ja vairāk nekā viens pievienošanās laiks ir virs 0, darbojas tikai viens — noteiktā secībā: stundas no sākuma, tad procenti, tad stundas pirms beigām; pirmais virs 0 uzvar. Atšķirībā no atslēgu, apmaiņu un uzpildes automātikas, kurā visiem uzliktajiem nosacījumiem jāizpildās vienlaikus, pievienošanās laiki nekad netiek apvienoti. Vērtība, kas sasniedz vai pārsniedz paša izaicinājuma garumu, tiek ierobežota līdz 99 % no tā — tā nekad nenozīmē „nepievienoties nekad”. Ilgu laiku no sākuma uzliec noteikumam ar tipa vai ilguma nosacījumu, nevis globālajam uzstādījumam.',
+        'Ja vairāk nekā viens pievienošanās laiks ir virs 0, darbojas tikai viens — noteiktā secībā: stundas no sākuma, tad procenti, tad stundas pirms beigām; pirmais virs 0 uzvar; noteikums, kas uzliek jebkuru pievienošanās laiku, aizstāj visus trīs globālos pievienošanās laikus. Atšķirībā no atslēgu, apmaiņu un uzpildes automātikas, kurā visiem uzliktajiem nosacījumiem jāizpildās vienlaikus, pievienošanās laiki nekad netiek apvienoti. Vērtība, kas sasniedz vai pārsniedz paša izaicinājuma garumu, tiek ierobežota līdz 99 % no tā — tā nekad nenozīmē „nepievienoties nekad”. Ilgu laiku no sākuma uzliec noteikumam ar tipa vai ilguma nosacījumu, nevis globālajam uzstādījumam.',
     autoJoinWithinHoursOfEnd: 'Pievienoties tikai tuvu beigām',
     autoJoinWithinHoursOfEndDesc:
         'Nogaidīt, līdz izaicinājumam līdz beigām atlicis tik stundu, un tikai tad pievienoties, nevis pievienoties uzreiz, tiklīdz tas parādās. 0 = pievienoties uzreiz.',
     autoJoinWithinHoursOfEndHelp:
-        'Ārpus loga izaicinājumu neizlaiž pavisam — pārbauda katrā ciklā un pievienojas, tiklīdz tas logā nonāk. Bez norādīta beigu laika un uzstādīta loga tam nepievienojas pāragri. Ja vairāk nekā viens pievienošanās laiks ir virs 0, darbojas tikai viens — stundas no sākuma, tad procenti, tad šis; visi trīs veido vienu grupu no viena avota.',
+        'Ārpus loga izaicinājumu neizlaiž pavisam — pārbauda katrā ciklā un pievienojas, tiklīdz tas logā nonāk. Bez norādīta beigu laika un uzstādīta loga tam nepievienojas pāragri. Ja vairāk nekā viens pievienošanās laiks ir virs 0, darbojas tikai viens — stundas no sākuma, tad procenti, tad šis; noteikums, kas uzliek jebkuru pievienošanās laiku, aizstāj visus trīs globālos pievienošanās laikus.',
     autoJoinAfterPercentElapsed: 'Pievienoties pēc % no izaicinājuma',
     autoJoinAfterPercentElapsedDesc:
         'Nogaidīt, līdz pagājusi šī izaicinājuma daļa, un tikai tad pievienoties; daļu norāda procentos no izaicinājuma garuma. 75 nozīmē „pievienoties, kad pagājušas trīs ceturtdaļas”. 0 = izslēgts.',
     autoJoinAfterPercentElapsedHelp:
-        'Dažāda garuma izaicinājumiem: 75 % ir 6 stundas pirms beigām 24 stundu izaicinājumā un 5 dienas pirms 3 nedēļu izstādes. Ja vairāk nekā viens pievienošanās laiks ir virs 0, darbojas tikai viens — stundas no sākuma, tad procenti, tad stundas pirms beigām; visi trīs veido vienu grupu no viena avota un netiek sajaukti.',
+        'Dažāda garuma izaicinājumiem: 75 % ir 6 stundas pirms beigām 24 stundu izaicinājumā un 5 dienas pirms 3 nedēļu izstādes. Ja vairāk nekā viens pievienošanās laiks ir virs 0, darbojas tikai viens — stundas no sākuma, tad procenti, tad stundas pirms beigām; noteikums, kas uzliek jebkuru pievienošanās laiku, aizstāj visus trīs globālos pievienošanās laikus.',
     autoJoinMaxCoins: 'Maks. monētu par izaicinājumu',
     autoJoinMaxCoinsDesc:
         'Lielākā monētu cena, ko maksāt par pievienošanos vienam izaicinājumam. 0 = tikai bezmaksas. Maksas pievienošanās prasa arī cikla budžetu, kas lielāks par 0.',
@@ -1117,7 +1117,10 @@ export const app: LatvianApp = {
     titleRulePercentElapsed: 'Vai pēc',
     titleRuleJoinWindow: 'Vai laiks pirms beigām',
     titleRuleJoinWindowPlaceholder: 'noklusējums',
-    titleRuleJoinTimingHint: 'Darbojas tikai viens pievienošanās laiks: {0}. Pārējie šim noteikumam tiek ignorēti.',
+    titleRuleJoinTimingHint:
+        'Šis noteikums uzliek pievienošanās laiku, tāpēc globālie pievienošanās laiki uz to neattiecas. Darbojas tikai šis laiks: {0}. Tukši laika lauki skaitās kā 0.',
+    titleRuleJoinTimingZeroHint:
+        'Šis noteikums uzliek pievienošanās laiku 0, tāpēc globālie pievienošanās laiki uz to neattiecas, un atbilstošie izaicinājumi tiek pievienoti, tiklīdz tie parādās.',
     titleRuleOverridesLabel: 'Uzvedība',
     titleRuleBroadWarning:
         'Šim noteikumam nav nosaukuma, tāpēc tas ieslēdz šo iespēju katram atbilstošajam izaicinājumam — tas var tērēt monētas vai foto veselai izaicinājumu grupai.',

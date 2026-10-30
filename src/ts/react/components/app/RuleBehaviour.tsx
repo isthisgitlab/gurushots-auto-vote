@@ -90,16 +90,15 @@ const JOIN_TIMING_FIELDS = [
     },
 ] as const;
 
-// One hint when a rule fills several timing fields: it names the setting that
-// applies, so the ignored entries don't read as pending. It shows only when at
-// least two are filled AND one of them is above 0 — all zeros mean every
-// timing is "join at once", no single field to name.
+// Any filled timing field replaces the global timings (blank ones count as 0),
+// so the hint shows for one field too.
 const joinTimingHint = (rule: TitleRule, t: Translate): SettingHint | null => {
     const filled = JOIN_TIMING_FIELDS.filter((field) => typeof rule[field.settingKey] === 'number');
-    if (filled.length < 2) return null;
+    if (filled.length === 0) return null;
     const winner = filled.find((field) => Number(rule[field.settingKey]) > 0);
-    if (!winner) return null;
-    return { tone: 'info', text: t('app.titleRuleJoinTimingHint', { '0': t(winner.hintLabelKey) }) };
+    return winner
+        ? { tone: 'info', text: t('app.titleRuleJoinTimingHint', { '0': t(winner.hintLabelKey) }) }
+        : { tone: 'info', text: t('app.titleRuleJoinTimingZeroHint') };
 };
 
 // The rule's chosen photos: an explicit list (an empty one means "none", beating a

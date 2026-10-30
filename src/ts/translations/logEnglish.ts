@@ -148,7 +148,6 @@ export const logMessages = {
     m2dae83def588: 'autoSubmit: submitted 1 entry for {0} ({1} slots remain{2})',
     m2ded65cc4a06: 'Using cached vote images for {0}',
     m2e27dc229363: 'Manual vote: {0} voted, {1} skipped of {2}',
-    m2ea88a7ace6b: '{0}: the join-after-start offset is longer than the challenge — joining at 99% elapsed instead',
     m2eb572c92569: "Refused IPC '{0}' from untrusted frame {1}",
     m2f2cd3bb084b: 'API response body is not a JSON object',
     m2f44c7a4f853: 'Error handling save-settings request:',
@@ -620,6 +619,8 @@ export const logMessages = {
     md07e34798507: 'Cleaning up settings for {0} stale challenges:',
     md0cd0e7510bc: '🔄 Starting manual vote all challenges (bypass thresholds)...',
     md0e704578e0f: 'Set {0} = {1} for challenge {2}',
+    md10227656ef8:
+        "{0}: the join-after-start time reaches past 99% of the challenge's length, so it is joined at 99% elapsed",
     md23e590a3c70: 'Visual check unavailable for {0}: {1}',
     md24b6f8a31e9: '{0} auto fill: the vote pool could not be read — not spending a fill; tries again next cycle',
     md3164bc85e73: 'Unhandled Promise Rejection',

@@ -6,7 +6,7 @@
 import * as logger from '../../logger';
 import * as settings from '../../settings';
 import * as cancellation from '../../voting/cancellation';
-import { joinFreshRefusalWhy, joinAfterStartClampSec } from '../VotingLogic';
+import { joinFreshRefusalWhy, joinAfterStartClamped } from '../VotingLogic';
 import { isKnownTurboMode } from '../../voting/turboMode';
 import { consumeMission } from '../missions';
 import type { Bankroll, Challenge } from '../../types/gurushots';
@@ -136,9 +136,9 @@ const noteAfterStartClamp = (
     // after-start value passed as 0), so no clamp applies to it.
     if (pass.earlyJoins > 0 || cfg.joinAfterSecFromStart <= 0) return;
     if (pass.afterStartClampLogged) return;
-    if (joinAfterStartClampSec(challenge, pass.nowSec, cfg.joinAfterSecFromStart) === null) return;
+    if (!joinAfterStartClamped(challenge, pass.nowSec, cfg.joinAfterSecFromStart)) return;
     pass.afterStartClampLogged = true;
-    cat().infoT('m2ea88a7ace6b', [logger.challengeTag(challenge)], null);
+    cat().infoT('md10227656ef8', [logger.challengeTag(challenge)], null);
 };
 
 /**

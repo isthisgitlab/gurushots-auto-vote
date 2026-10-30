@@ -18,6 +18,7 @@
  *   boostTurbo.ts       boost/turbo apply decisions, Emergency Fill override
  *   deadlineActions.ts  deadline-action thresholds, ordering and description
  *   joinDecision.ts     pure auto-join decision
+ *   joinWindow.ts       the join-timing window (three settings → one) and its clamp read
  */
 
 import { resolveEntryIndex } from '../voting/entrySlot';
@@ -28,12 +29,8 @@ import * as voteDecisions from './decisions/voteDecisions';
 import * as entryPick from './decisions/entryPick';
 import * as boostTurbo from './decisions/boostTurbo';
 import * as deadlineActions from './decisions/deadlineActions';
-import {
-    shouldJoinChallenge,
-    joinFreshRefusal,
-    joinFreshRefusalWhy,
-    joinAfterStartClampSec,
-} from './decisions/joinDecision';
+import { shouldJoinChallenge, joinFreshRefusal, joinFreshRefusalWhy } from './decisions/joinDecision';
+import { joinAfterStartClamped } from './decisions/joinWindow';
 
 export const isWithinFinalWindow = thresholds.isWithinFinalWindow;
 export const isWithinLastMinuteThreshold = thresholds.isWithinLastMinuteThreshold;
@@ -69,7 +66,7 @@ export {
     shouldJoinChallenge,
     joinFreshRefusal,
     joinFreshRefusalWhy,
-    joinAfterStartClampSec,
+    joinAfterStartClamped,
     getScheduledFillState,
     getVotingPauseState,
     getBoostPrefillState,

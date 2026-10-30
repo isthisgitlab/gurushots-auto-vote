@@ -21,6 +21,7 @@ import { getEffectiveSetting } from './challengeOverrides';
 
 import type { ConfigV2 } from '../types/config';
 import type { RuleMatchChallenge, SettingValueOf, TitleRule, TitleRuleInfo } from '../types/settings';
+import type { SettingKey } from './schema';
 import type { RuleLike } from './challengeRules';
 
 /**
@@ -99,7 +100,7 @@ const resolveRuleSetting = (key: string, target: RuleMatchChallenge | string): {
  * reaches `values` (ruleInlineEntries drops it).
  */
 const resolveRuleSettingGroup = (
-    keys: string[],
+    keys: SettingKey[],
     target: RuleMatchChallenge | string,
 ): { values: Record<string, unknown> } | null => {
     const { values, sources } = ruleValuesFor(loadSettings(), target);

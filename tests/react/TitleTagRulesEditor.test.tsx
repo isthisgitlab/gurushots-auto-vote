@@ -380,14 +380,25 @@ describe('TitleTagRulesEditor', () => {
         });
 
         /**
-         * The one-timing-applies hint. It names the SETTING (the field labels read
-         * as connectives), asserted under the key-verbatim mock through the t call;
-         * the real-dictionary block below asserts the composed text itself.
+         * The rule-sets-the-timing hint: ANY filled timing field (a number, 0
+         * included) means the rule replaces the global timings, so the hint shows
+         * from one filled field on. Above 0 it names the applying SETTING (the
+         * field labels read as connectives), asserted under the key-verbatim mock
+         * through the t call; with all zeros it shows the zero hint. The
+         * real-dictionary block below asserts the composed text itself.
          */
         describe('join timing hint', () => {
             // The context's t passes the current language as a third argument.
             const hintNames = (settingKey: string) =>
                 expect(mockTranslator.t).toHaveBeenCalledWith('app.titleRuleJoinTimingHint', { '0': settingKey }, 'en');
+
+            test('a single filled field above 0 names its setting', () => {
+                render(
+                    <TitleTagRulesEditor value={rowWith({ autoJoinAfterPercentElapsed: 75 })} onChange={jest.fn()} />,
+                );
+                expect(screen.getByText('app.titleRuleJoinTimingHint')).toBeTruthy();
+                hintNames('app.autoJoinAfterPercentElapsed');
+            });
 
             test('two filled fields name the first above 0 in precedence order', () => {
                 render(
@@ -420,21 +431,29 @@ describe('TitleTagRulesEditor', () => {
                 hintNames('app.autoJoinAfterPercentElapsed');
             });
 
-            test('a single filled field shows no hint', () => {
+            test('a single filled 0 shows the zero hint, not a named field', () => {
                 render(
-                    <TitleTagRulesEditor value={rowWith({ autoJoinAfterPercentElapsed: 75 })} onChange={jest.fn()} />,
+                    <TitleTagRulesEditor value={rowWith({ autoJoinAfterPercentElapsed: 0 })} onChange={jest.fn()} />,
                 );
+                expect(screen.getByText('app.titleRuleJoinTimingZeroHint')).toBeTruthy();
                 expect(screen.queryByText('app.titleRuleJoinTimingHint')).toBeNull();
             });
 
-            test('two filled fields that are all zero show no hint: no field applies', () => {
+            test('all filled fields at 0 show the zero hint, not a named field', () => {
                 render(
                     <TitleTagRulesEditor
                         value={rowWith({ autoJoinAfterHoursFromStart: 0, autoJoinWithinHoursOfEnd: 0 })}
                         onChange={jest.fn()}
                     />,
                 );
+                expect(screen.getByText('app.titleRuleJoinTimingZeroHint')).toBeTruthy();
                 expect(screen.queryByText('app.titleRuleJoinTimingHint')).toBeNull();
+            });
+
+            test('no filled timing field shows no hint', () => {
+                render(<TitleTagRulesEditor value={rowWith()} onChange={jest.fn()} />);
+                expect(screen.queryByText('app.titleRuleJoinTimingHint')).toBeNull();
+                expect(screen.queryByText('app.titleRuleJoinTimingZeroHint')).toBeNull();
             });
 
             describe.each([
@@ -479,6 +498,26 @@ describe('TitleTagRulesEditor', () => {
                             fillTemplate(strings.titleRuleJoinTimingHint, { '0': strings.autoJoinAfterHoursFromStart }),
                         ),
                     ).toBeTruthy();
+                });
+
+                test('a single filled 0 shows the zero hint translated', () => {
+                    render(
+                        <TitleTagRulesEditor
+                            value={rowWith({ autoJoinAfterPercentElapsed: 0 })}
+                            onChange={jest.fn()}
+                        />,
+                    );
+                    expect(screen.getByText(strings.titleRuleJoinTimingZeroHint)).toBeTruthy();
+                });
+
+                test('all filled fields at 0 show the zero hint translated', () => {
+                    render(
+                        <TitleTagRulesEditor
+                            value={rowWith({ autoJoinAfterHoursFromStart: 0, autoJoinWithinHoursOfEnd: 0 })}
+                            onChange={jest.fn()}
+                        />,
+                    );
+                    expect(screen.getByText(strings.titleRuleJoinTimingZeroHint)).toBeTruthy();
                 });
             });
         });

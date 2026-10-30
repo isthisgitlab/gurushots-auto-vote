@@ -16,9 +16,26 @@ import type { SettingsSchemaEntry } from './entry';
 // real challenge cost / balance.
 const MAX_COIN_AMOUNT = 1_000_000;
 const coinAmount = z.number().int().min(0).max(MAX_COIN_AMOUNT);
-// Auto-join timing window, in hours before a candidate's close_time. 0 = off
-// (join as soon as the candidate is seen). The ceiling lives in settings/limits.ts.
+// Auto-join timing window, in hours. 0 = off (join as soon as the candidate is
+// seen). The ceiling lives in settings/limits.ts.
 const joinWindowHours = z.number().min(0).max(MAX_JOIN_WINDOW_HOURS);
+// The field shape the two hours-window join gates share (autoJoinAfterHoursFromStart
+// and autoJoinWithinHoursOfEnd). Each entry below spreads this and adds only its
+// own group, label, description and helpKey — and keeps its own comment, since the
+// gates' semantics differ.
+const joinWindowHoursSetting = {
+    type: 'number',
+    default: 0,
+    perChallenge: true,
+    validation: joinWindowHours,
+    min: 0,
+    max: MAX_JOIN_WINDOW_HOURS,
+    unit: 'app.unitHours',
+    // Display-only (see SettingsSchemaEntry.minutes): the GUI edits this
+    // as an hours + minutes pair; the stored value stays fractional hours.
+    minutes: true,
+    validationOrder: 1,
+} satisfies Partial<SettingsSchemaEntry>;
 
 export const autoJoinSettings = {
     // Enable for the automatic join pre-step (runs each voting cycle on every
@@ -99,7 +116,7 @@ export const autoJoinSettings = {
     // lower source cannot supply one timing key and beat a higher source's key.
     // A window at or beyond the candidate's own length is clamped to 99% of the
     // length (clampAfterStartOffsetSec in joinWindowRefusal,
-    // services/decisions/joinDecision.ts) — it never means "never join".
+    // services/decisions/joinWindow.ts) — it never means "never join".
     //
     // Hours-from-start gate: only join a candidate once this many hours have
     // run since its start_time. 0 = off (join as soon as the candidate is
@@ -112,17 +129,7 @@ export const autoJoinSettings = {
     // be read is NOT joined (see VotingLogic.shouldJoinChallenge) — the same
     // reasoning as the hours-before-close window below.
     autoJoinAfterHoursFromStart: {
-        type: 'number',
-        default: 0,
-        perChallenge: true,
-        validation: joinWindowHours,
-        min: 0,
-        max: MAX_JOIN_WINDOW_HOURS,
-        unit: 'app.unitHours',
-        // Display-only (see SettingsSchemaEntry.minutes): the GUI edits this
-        // as an hours + minutes pair; the stored value stays fractional hours.
-        minutes: true,
-        validationOrder: 1,
+        ...joinWindowHoursSetting,
         group: 'autoJoin',
         label: 'app.autoJoinAfterHoursFromStart',
         description: 'app.autoJoinAfterHoursFromStartDesc',
@@ -154,17 +161,7 @@ export const autoJoinSettings = {
     // every open challenge (verified 2026-09-19), so this guards against the
     // field going away upstream, not against the normal case.
     autoJoinWithinHoursOfEnd: {
-        type: 'number',
-        default: 0,
-        perChallenge: true,
-        validation: joinWindowHours,
-        min: 0,
-        max: MAX_JOIN_WINDOW_HOURS,
-        unit: 'app.unitHours',
-        // Display-only (see SettingsSchemaEntry.minutes): the GUI edits this
-        // as an hours + minutes pair; the stored value stays fractional hours.
-        minutes: true,
-        validationOrder: 1,
+        ...joinWindowHoursSetting,
         group: 'autoJoin',
         label: 'app.autoJoinWithinHoursOfEnd',
         description: 'app.autoJoinWithinHoursOfEndDesc',

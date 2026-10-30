@@ -283,10 +283,10 @@ describe('Latvian log messages', () => {
     test('translates the after-start clamp note', () => {
         expect(
             localizeLogMessage(
-                'ℹ️ [Challenge 42: Sunset]: the join-after-start offset is longer than the challenge — joining at 99% elapsed instead',
+                "ℹ️ [Challenge 42: Sunset]: the join-after-start time reaches past 99% of the challenge's length, so it is joined at 99% elapsed",
             ),
         ).toBe(
-            'ℹ️ [Challenge 42: Sunset]: pievienošanās laiks no sākuma ir garāks par paša izaicinājuma garumu — pievienojas, kad pagājis 99 % no tā',
+            'ℹ️ [Challenge 42: Sunset]: pievienošanās laiks no sākuma sasniedz vairāk nekā 99 % no izaicinājuma garuma, tāpēc pievienojas, kad pagājuši 99 %',
         );
     });
 
@@ -405,12 +405,12 @@ describe('forward template localization', () => {
     test('localizes the after-start clamp note from its template and params', () => {
         expect(
             forward(
-                'm2ea88a7ace6b',
+                'md10227656ef8',
                 ['[Challenge 42: Sunset]'],
-                'ℹ️ [Challenge 42: Sunset]: the join-after-start offset is longer than the challenge — joining at 99% elapsed instead',
+                "ℹ️ [Challenge 42: Sunset]: the join-after-start time reaches past 99% of the challenge's length, so it is joined at 99% elapsed",
             ),
         ).toBe(
-            'ℹ️ [Challenge 42: Sunset]: pievienošanās laiks no sākuma ir garāks par paša izaicinājuma garumu — pievienojas, kad pagājis 99 % no tā',
+            'ℹ️ [Challenge 42: Sunset]: pievienošanās laiks no sākuma sasniedz vairāk nekā 99 % no izaicinājuma garuma, tāpēc pievienojas, kad pagājuši 99 %',
         );
     });
 

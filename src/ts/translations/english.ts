@@ -707,17 +707,17 @@ export const app = {
     autoJoinAfterHoursFromStartDesc:
         'Wait until this many hours have run since a challenge started before joining it — for challenges with no fixed length, e.g. exhibitions and magazines. 0 = off. Edited as hours and minutes.',
     autoJoinAfterHoursFromStartHelp:
-        'When more than one join timing is above 0, only one applies, in a fixed order: hours from start, then percent elapsed, then hours before end — the first above 0 wins. Unlike the Keys, Swaps & Fills timing, where every set condition must hold at once, the join timings never combine. A value at or beyond the challenge\'s own length is clamped to 99% of it, so it never means "never join". A long hours-from-start value belongs on a rule scoped by type or length, not in the global setting.',
+        'When more than one join timing is above 0, only one applies, in a fixed order: hours from start, then percent elapsed, then hours before end — the first above 0 wins, and a challenge rule that sets any join timing replaces all three global join timings. Unlike the Keys, Swaps & Fills timing, where every set condition must hold at once, the join timings never combine. A value at or beyond the challenge\'s own length is clamped to 99% of it, so it never means "never join". A long hours-from-start value belongs on a rule scoped by type or length, not in the global setting.',
     autoJoinWithinHoursOfEnd: 'Join Only Near The End',
     autoJoinWithinHoursOfEndDesc:
         'Wait until a challenge is this many hours from ending before joining it, instead of joining the moment it appears. 0 = join as soon as it is seen.',
     autoJoinWithinHoursOfEndHelp:
-        'Outside the window a challenge is not skipped for good: it is reconsidered each cycle and joined once it enters. One with no end time is left alone while a window is set, not joined early. When more than one join timing is above 0, only one applies — hours from start, then percent elapsed, then this one — and the three resolve as one group from a single source.',
+        'Outside the window a challenge is not skipped for good: it is reconsidered each cycle and joined once it enters. One with no end time is left alone while a window is set, not joined early. When more than one join timing is above 0, only one applies — hours from start, then percent elapsed, then this one — and a challenge rule that sets any join timing replaces all three global join timings.',
     autoJoinAfterPercentElapsed: 'Join After % Of Challenge Has Run',
     autoJoinAfterPercentElapsedDesc:
         'Wait until this much of a challenge has already run before joining it, as a percentage of its own length. 75 means "join once three-quarters is over". 0 = off.',
     autoJoinAfterPercentElapsedHelp:
-        'For challenges of varying length: 75% is 6 h before the end of a 24-hour challenge, 5 days before a 3-week exhibition. When more than one join timing is above 0, only one applies — hours from start, then this percent, then hours before end — and the three resolve as one group from a single source, never mixed across sources.',
+        'For challenges of varying length: 75% is 6 h before the end of a 24-hour challenge, 5 days before a 3-week exhibition. When more than one join timing is above 0, only one applies — hours from start, then this percent, then hours before end — and a challenge rule that sets any join timing replaces all three global join timings.',
     autoJoinMaxCoins: 'Max Coins Per Challenge',
     autoJoinMaxCoinsDesc:
         'Highest coin cost to pay to join a single challenge. 0 = free challenges only. Paid joins also require a per-cycle budget above 0.',
@@ -1109,7 +1109,10 @@ export const app = {
     titleRulePercentElapsed: 'Or after',
     titleRuleJoinWindow: 'Or time before end',
     titleRuleJoinWindowPlaceholder: 'inherit',
-    titleRuleJoinTimingHint: 'Only one join timing applies: {0}. The others are ignored for this rule.',
+    titleRuleJoinTimingHint:
+        'This rule sets the join timing, so the global join timings do not apply to it. Only this timing applies: {0}. Empty timing fields count as 0.',
+    titleRuleJoinTimingZeroHint:
+        'This rule sets the join timing to 0, so the global join timings do not apply to it and matching challenges are joined as soon as they are seen.',
     titleRuleOverridesLabel: 'Behaviour',
     titleRuleBroadWarning:
         'This rule has no title, so it turns this on for every challenge it matches — which can spend coins or photos across a whole group of challenges.',

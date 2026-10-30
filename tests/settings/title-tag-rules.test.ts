@@ -14,6 +14,7 @@
  */
 
 import type { RuleMatchChallenge } from '../../src/ts/types/settings';
+import type { SettingKey } from '../../src/ts/settings/schema';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import settings = require('../../src/ts/settings');
 import { ruleLogLabel, MAX_CLOSE_TIMES_PER_RULE } from '../../src/ts/settings/titleRuleSanitize';
@@ -320,7 +321,11 @@ describe('settings facade — title-keyed tag rules', () => {
      * smuggle a second window in behind it.
      */
     describe('resolveRuleSettingGroup (join timing)', () => {
-        const TIMING_KEYS = ['autoJoinAfterHoursFromStart', 'autoJoinAfterPercentElapsed', 'autoJoinWithinHoursOfEnd'];
+        const TIMING_KEYS: SettingKey[] = [
+            'autoJoinAfterHoursFromStart',
+            'autoJoinAfterPercentElapsed',
+            'autoJoinWithinHoursOfEnd',
+        ];
         const groupFor = (target: RuleMatchChallenge | string) => settings.resolveRuleSettingGroup(TIMING_KEYS, target);
         const save = (...rules: Record<string, unknown>[]) =>
             settings.setTitleRules(rules.map((r) => ({ mustIncludeTags: [], shouldIncludeTags: [], ...r })));

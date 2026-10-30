@@ -166,7 +166,9 @@ Domain terms used throughout, in reader's terms:
   already reports `already-closed` — allowing 100 would ship a maximum that silently never joins. Out-of-range
   values clamp to 99 (as late as possible), never to "never". The after-start offset clamps the same way,
   `min(value, 0.99 × (close_time - start_time))`: a value at or beyond the challenge's own length means
-  "join at 99% elapsed", and the join pass logs a note once per pass whenever the clamp changes the offset.
+  "join at 99% elapsed", and the join pass logs a note once per pass — only for a candidate the window
+  actually governed, one that is joined or deferred as `too-early` (never in early-join mode, where the
+  window is lifted).
 - **Challenge rules match on conditions; the LIST ORDER is the precedence.** A rule in
   `challengeSettings.titleRules` carries any mix of conditions — titles (one `match` mode for all of them:
   `exact`, the default, `starts`, or `contains`), `challengeTag`, `type`, `pics` (`max_photo_submits`) and a
