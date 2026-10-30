@@ -140,4 +140,9 @@ describe('settings schema shape', () => {
         expect(SETTINGS_SCHEMA.boostOnSleep.default).toBe(true);
         expect(SETTINGS_SCHEMA.boostOnSleep.perChallenge).toBe(true);
     });
+
+    test('Boost Pinned Submit is on by default and settable per challenge', () => {
+        expect(SETTINGS_SCHEMA.boostPinnedSubmit.default).toBe(true);
+        expect(SETTINGS_SCHEMA.boostPinnedSubmit.perChallenge).toBe(true);
+    });
 });

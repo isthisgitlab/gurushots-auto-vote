@@ -83,6 +83,7 @@ export function ChallengeCardCompact({
     boostWarning,
     turboWarning,
     deadlineActions,
+    boostPinSubmits,
     scenarioStatus,
     actions,
 }: {
@@ -101,6 +102,8 @@ export function ChallengeCardCompact({
     boostWarning: string | null;
     turboWarning: string | null;
     deadlineActions: DeadlineAction[];
+    /** The Boost-pinned submit fires at the boost row's time; the timeline shows that submit as its own row. */
+    boostPinSubmits?: boolean;
     scenarioStatus: ReturnType<typeof useScenarioStatusModule.useScenarioStatus>;
     actions: ComponentChildren;
 }) {
@@ -226,7 +229,7 @@ export function ChallengeCardCompact({
                     ),
             )}
 
-            <DeadlineTimeline actions={deadlineActions} compact />
+            <DeadlineTimeline actions={deadlineActions} compact boostPinSubmits={boostPinSubmits} />
             <ScenarioStatusLine status={scenarioStatus} compact />
 
             {actions}

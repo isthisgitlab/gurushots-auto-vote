@@ -133,7 +133,7 @@ export const boostSettings = {
     // (needs a free slot); a definitive failure latches for that Boost window.
     boostPinnedSubmit: {
         type: 'boolean',
-        default: false,
+        default: true,
         perChallenge: true,
         validation: zBool,
         validationOrder: 1,

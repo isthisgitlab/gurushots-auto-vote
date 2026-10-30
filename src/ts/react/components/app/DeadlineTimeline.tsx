@@ -25,7 +25,16 @@ export type DeadlineAction = ReturnType<typeof useDeadlineActionsModule.useDeadl
  * header carries an "approximate" note. In compact mode this collapses to a
  * single "next action" line to respect the card's density control.
  */
-export function DeadlineTimeline({ actions, compact = false }: { actions: DeadlineAction[]; compact?: boolean }) {
+export function DeadlineTimeline({
+    actions,
+    compact = false,
+    boostPinSubmits = false,
+}: {
+    actions: DeadlineAction[];
+    compact?: boolean;
+    /** Show the Boost-pinned photo submit as its own row at the boost row's time. */
+    boostPinSubmits?: boolean;
+}) {
     const { t } = useTranslation();
     const hasRows = Array.isArray(actions) && actions.length > 0;
     // Only tick while there's something to count down.
@@ -37,15 +46,26 @@ export function DeadlineTimeline({ actions, compact = false }: { actions: Deadli
         .map((a) => ({ ...a, remaining: a.dueAt - now }));
     if (rows.length === 0) return null;
 
-    const labelFor = (action: string) => t(ACTION_LABEL_KEY[action] || action);
+    // The Boost-pinned photo submit fires at the boost row's instant, just before
+    // it, so it gets its own row there. The label resolves here, not through
+    // ACTION_LABEL_KEY: the Node notify path owns that map and has no such action.
+    const boostIndex = rows.findIndex((r) => r.action === 'boost');
+    if (boostPinSubmits && boostIndex !== -1) {
+        rows.splice(boostIndex, 0, { ...rows[boostIndex], action: 'boostPinSubmit' });
+    }
+
+    const labelFor = (action: string) =>
+        t(action === 'boostPinSubmit' ? 'app.deadlineActionBoostPinSubmit' : ACTION_LABEL_KEY[action] || action);
     const remainingText = (remaining: number) =>
         remaining > 0 ? `~${formatDuration(remaining, { includeSeconds: true })}` : t('app.deadlineDue');
 
     if (compact) {
         // The soonest upcoming action; if every action is already overdue, the
         // least-overdue one (largest remaining, i.e. closest to now) rather than
-        // an arbitrary list position.
-        const sorted = [...rows].sort((a, b) => a.remaining - b.remaining);
+        // an arbitrary list position. A shared dueAt is won by the pinned-submit
+        // row: it happens first at that instant.
+        const submitFirst = (r: (typeof rows)[number]) => (r.action === 'boostPinSubmit' ? 0 : 1);
+        const sorted = [...rows].sort((a, b) => a.remaining - b.remaining || submitFirst(a) - submitFirst(b));
         const next = sorted.find((r) => r.remaining > 0) || sorted[sorted.length - 1];
         return (
             <div className="text-xs text-base-content/70" title={t('app.deadlineTimelineApprox')}>

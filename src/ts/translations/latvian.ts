@@ -235,6 +235,7 @@ export const app: LatvianApp = {
     deadlineDue: 'jau tagad',
     deadlineActionAutoSubmit: 'Automātiskā iesniegšana',
     deadlineActionBoost: 'Boost',
+    deadlineActionBoostPinSubmit: 'Piespraustā foto iesniegšana',
     deadlineActionTurbo: 'Turbo',
     deadlineActionEmergencySubmit: 'Ārkārtas iesniegšana',
     donate: 'Ziedot',

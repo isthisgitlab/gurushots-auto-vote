@@ -236,6 +236,7 @@ export function ChallengeCard({
                 boostWarning={boostWarning}
                 turboWarning={turboWarning}
                 deadlineActions={deadline.actions}
+                boostPinSubmits={deadline.boostPinSubmits}
                 scenarioStatus={scenarioStatus}
                 actions={buildCompactActionRow({ actions, canFill: view.canFill, enabled: compactActions })}
             />

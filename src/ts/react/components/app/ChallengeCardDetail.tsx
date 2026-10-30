@@ -477,7 +477,7 @@ export function ChallengeCardDetail({
 
             {/* Advisory timeline of the automation's upcoming deadline
                 actions (the compact tile shows only the next one). */}
-            <DeadlineTimeline actions={deadlineActions} />
+            <DeadlineTimeline actions={deadlineActions} boostPinSubmits={boostPinSubmits} />
             <ScenarioStatusPanel status={scenarioStatus} challenge={challenge} />
         </div>
     );

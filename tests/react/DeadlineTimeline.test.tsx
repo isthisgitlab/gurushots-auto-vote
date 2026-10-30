@@ -6,8 +6,9 @@ import type { ComponentChildren } from 'preact';
 /**
  * DeadlineTimeline turns the gated deadline-action list into the per-card UI.
  * Covers: empty → nothing; full-mode rows with ~advisory durations; compact
- * mode's single soonest-action line; and the all-overdue fallback picking the
- * least-overdue action rather than an arbitrary list position.
+ * mode's single soonest-action line; the all-overdue fallback picking the
+ * least-overdue action rather than an arbitrary list position; and the
+ * Boost-pinned photo submit row shown at the boost row's time.
  */
 
 const BASE_MS = 1_700_000_000_000;
@@ -71,5 +72,45 @@ describe('DeadlineTimeline', () => {
         const text = document.body.textContent;
         expect(text).toContain('deadlineActionTurbo'); // least overdue wins
         expect(text).toContain('deadlineDue'); // remaining <= 0 → "due now" key
+    });
+
+    test('boostPinSubmits shows the pinned-photo submit row directly before Boost, at the same time', () => {
+        const actions = [
+            { action: 'boost', thresholdSec: 120, dueAt: BASE_SEC + 120 },
+            { action: 'turbo', thresholdSec: 300, dueAt: BASE_SEC + 300 },
+        ];
+        const { container } = wrap(<DeadlineTimeline actions={actions} boostPinSubmits={true} />);
+        const rows = Array.from(container.querySelectorAll('li')).map((li) => li.textContent ?? '');
+        expect(rows).toHaveLength(3);
+        expect(rows[0]).toMatch(/^app\.deadlineActionBoostPinSubmit/);
+        expect(rows[1]).toMatch(/^app\.deadlineActionBoost(?!PinSubmit)/);
+        // Shared dueAt: the submit row carries the same ~advisory time as Boost.
+        expect(rows[0].replace('app.deadlineActionBoostPinSubmit', '')).toBe(
+            rows[1].replace('app.deadlineActionBoost', ''),
+        );
+    });
+
+    test('without boostPinSubmits there is no pinned-photo submit row', () => {
+        const actions = [{ action: 'boost', thresholdSec: 120, dueAt: BASE_SEC + 120 }];
+        wrap(<DeadlineTimeline actions={actions} boostPinSubmits={false} />);
+        expect(document.body.textContent).not.toContain('deadlineActionBoostPinSubmit');
+    });
+
+    test('boostPinSubmits with no boost row adds no pinned-photo submit row', () => {
+        const actions = [{ action: 'turbo', thresholdSec: 300, dueAt: BASE_SEC + 300 }];
+        wrap(<DeadlineTimeline actions={actions} boostPinSubmits={true} />);
+        expect(document.body.textContent).not.toContain('deadlineActionBoostPinSubmit');
+    });
+
+    test('compact mode with boostPinSubmits names the pinned-photo submit as Next, not Boost', () => {
+        const actions = [
+            { action: 'turbo', thresholdSec: 300, dueAt: BASE_SEC + 300 },
+            { action: 'boost', thresholdSec: 120, dueAt: BASE_SEC + 120 },
+        ];
+        wrap(<DeadlineTimeline actions={actions} compact={true} boostPinSubmits={true} />);
+        const text = document.body.textContent ?? '';
+        expect(text).toContain('app.deadlineActionBoostPinSubmit');
+        // The submit row shares Boost's dueAt and happens first, so it wins that slot.
+        expect(text).not.toMatch(/app\.deadlineActionBoost(?!PinSubmit)/);
     });
 });

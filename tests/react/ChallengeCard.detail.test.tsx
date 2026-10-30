@@ -917,6 +917,24 @@ describe('entries, tags and alerts', () => {
         expect(container.firstChild).toBe(root);
     });
 
+    test('the timeline shows the Boost-pinned submit row directly before Boost, at the same time', async () => {
+        window.api.getDeadlineActions = jest.fn().mockResolvedValue({
+            success: true,
+            actions: [{ action: 'boost', thresholdSec: 60, dueAt: nowSec() + 120 }],
+            boostBlocked: false,
+            boostPinSubmits: true,
+        });
+        const { container } = renderCard(makeChallenge());
+        await waitFor(() => expect(container.textContent).toContain('app.deadlineActionBoostPinSubmit'));
+        const submit = screen.getByText('app.deadlineActionBoostPinSubmit').closest('li')!;
+        const boost = submit.nextElementSibling!;
+        expect(boost.textContent).toMatch(/^app\.deadlineActionBoost(?!PinSubmit)/);
+        // Shared dueAt: the submit row carries the same ~advisory time as Boost.
+        expect((submit.textContent ?? '').slice('app.deadlineActionBoostPinSubmit'.length)).toBe(
+            (boost.textContent ?? '').slice('app.deadlineActionBoost'.length),
+        );
+    });
+
     describe('the conflict warning names its cause', () => {
         const releaseAt = nowSec() + 1800;
         const when = formatEndTime(releaseAt, 'local');

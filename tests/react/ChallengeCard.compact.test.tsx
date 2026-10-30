@@ -111,6 +111,7 @@ beforeEach(() => {
     Object.assign(mockChallengeSettings, { isCompact: true, hasCompactOverride: false, toggleCompact: jest.fn() });
     Object.assign(mockTurbo, { playAutoTurbo: jest.fn().mockResolvedValue(null), loading: false, error: null });
     Object.assign(mockFill, { fillNow: jest.fn().mockResolvedValue(null), loading: false, error: null });
+    window.api.getDeadlineActions = jest.fn().mockResolvedValue({ success: true, actions: [], boostBlocked: false });
 });
 
 describe('compact ChallengeCard tile', () => {
@@ -314,6 +315,21 @@ describe('compact ChallengeCard tile', () => {
         expect(text).not.toContain('55%');
         expect(text).not.toContain('3/4');
         expect(text).not.toContain(`17 / ${(1234).toLocaleString()}`);
+    });
+
+    test('the Next line names the Boost-pinned submit when it is active, not the Boost it precedes', async () => {
+        window.api.getDeadlineActions = jest.fn().mockResolvedValue({
+            success: true,
+            actions: [{ action: 'boost', thresholdSec: 60, dueAt: nowSec() + 120 }],
+            boostBlocked: false,
+            boostPinSubmits: true,
+        });
+        const { container } = renderCard();
+        await waitFor(() =>
+            expect(container.textContent).toContain('app.deadlineNext: app.deadlineActionBoostPinSubmit'),
+        );
+        // The submit row shares Boost's dueAt and happens first, so it wins the slot.
+        expect(container.textContent).not.toMatch(/app\.deadlineActionBoost(?!PinSubmit)/);
     });
 });
 
