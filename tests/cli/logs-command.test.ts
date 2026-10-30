@@ -42,11 +42,15 @@ import type * as logsModule from '../../src/ts/cli/commands/logs';
 import type * as logsFollowModule from '../../src/ts/cli/commands/logsFollow';
 const { diagnostics } = jest.mocked(require('../../src/ts/services/semantic/diagnostics') as typeof diagnosticsModule);
 
-// The fs automock carries every call the follower reads with but readSync
-// (fstatSync gets the same guard in case it is missing too); fill any gap
-// before the command module is required — its `import * as fs` snapshots the
-// mocked module, so the patch must land on it first.
+// The mock behind jest.mock('fs') carries every call the follower reads with
+// but readSync and fstatSync, and it carries no fs constants either —
+// checked, all three are missing from it; fill those gaps before the command
+// module is required — its `import * as fs` snapshots the mocked module, so
+// the patch must land on it first.
 const fsAuto = invalid<Record<string, unknown>>(fs);
+if (fsAuto.constants === undefined) {
+    fsAuto.constants = jest.requireActual<typeof import('node:fs')>('node:fs').constants;
+}
 if (fsAuto.readSync === undefined) {
     fsAuto.readSync = jest.fn<number, [number, Buffer, number, number, number | null]>();
 }
@@ -234,6 +238,10 @@ const freshState = (): logsFollowModule.FollowState => ({ files: new Map(), last
 const INODE = 101;
 const BIRTH = 1700000000000;
 
+// The flags the follower opens every file with: read-only, non-blocking, so
+// the open of a FIFO with a log's name returns instead of hanging the poll.
+const OPEN_FLAGS = fsModule.constants.O_RDONLY | fsModule.constants.O_NONBLOCK;
+
 const fileState = (offset: number): logsFollowModule.FileFollowState => ({
     offset,
     decoder: new StringDecoder('utf8'),
@@ -269,7 +277,13 @@ const backFiles = (files: Record<string, Buffer>): void => {
     fs.fstatSync.mockImplementation((fd: number) => {
         const file = files[openFiles.get(fd) ?? ''];
         if (file === undefined) throw new Error('EBADF');
-        return invalid<fsModule.Stats>({ size: file.length, mtimeMs: 1, ino: INODE, birthtimeMs: BIRTH });
+        return invalid<fsModule.Stats>({
+            size: file.length,
+            mtimeMs: 1,
+            ino: INODE,
+            birthtimeMs: BIRTH,
+            isFile: () => true,
+        });
     });
     // jest's mocked type carries the options overload of readSync; the
     // follower calls the positional one, so the span arguments ride in `rest`.
@@ -737,7 +751,7 @@ describe('CLI logs follow — followStep', () => {
         followStep(state, 'app', deps);
         expect(print.mock.calls).toEqual([]);
         expect(state.files.get(OLD_FILE)?.offset).toBe(3);
-        expect(fs.closeSync).toHaveBeenCalled();
+        expect(fs.closeSync).toHaveBeenCalledWith(fs.openSync.mock.results[0].value);
 
         // With the stat good again, only what was appended prints — once.
         failing = false;
@@ -745,6 +759,32 @@ describe('CLI logs follow — followStep', () => {
         followStep(state, 'app', deps);
         expect(print.mock.calls).toEqual([['--- ' + OLD_FILE], ['a2']]);
         expect(state.files.get(OLD_FILE)?.offset).toBe(files[OLD_FILE].length);
+    });
+
+    test('a poll of a non-regular file prints nothing, keeps its state, and closes the descriptor', () => {
+        const files = { [OLD_FILE]: bytes('a1\n') };
+        backFiles(files);
+        const state = freshState();
+        state.files.set(OLD_FILE, fileState(0));
+        const print = jest.fn<void, [string]>();
+        const deps = followDeps({ list: listOf(OLD_FILE), print });
+        const realFstat = fs.fstatSync.getMockImplementation() as (fd: number) => fsModule.Stats;
+        fs.fstatSync.mockImplementation((fd: number) => {
+            const stat = realFstat(fd);
+            return invalid<fsModule.Stats>({ ...stat, isFile: () => false });
+        });
+
+        // A non-regular entry (a FIFO with a log's name) is not followed:
+        // the non-blocking open returned, the fstat said it is not a file,
+        // and the poll skips it with its state kept — the 3 unread bytes
+        // past offset 0 would print without the gate.
+        followStep(state, 'app', deps);
+        expect(print.mock.calls).toEqual([]);
+        expect(state.files.get(OLD_FILE)?.offset).toBe(0);
+        expect(fs.readSync).not.toHaveBeenCalled();
+        expect(fs.openSync).toHaveBeenCalledTimes(1);
+        expect(fs.openSync).toHaveBeenCalledWith(OLD_FILE, OPEN_FLAGS);
+        expect(fs.closeSync).toHaveBeenCalledWith(fs.openSync.mock.results[0].value);
     });
 
     test('a file that ends right after the stat prints nothing and keeps its offset', () => {
@@ -1033,8 +1073,57 @@ describe('CLI logs follow — followLogs', () => {
         // nothing seeded, and the descriptor is closed — the polls
         // re-resolve the file.
         expect(code).toBe(0);
-        expect(fs.closeSync).toHaveBeenCalled();
+        expect(fs.closeSync).toHaveBeenCalledWith(fs.openSync.mock.results[0].value);
         expect(print.mock.calls).toEqual([['Following app logs (Ctrl+C to stop)'], ['Stopped following the log.']]);
+    });
+
+    test('a tail of a non-regular file prints nothing, seeds nothing, and closes the descriptor', async () => {
+        backFiles({ [OLD_FILE]: bytes('l1\nl2\n') });
+        const latest = jest
+            .fn<logsModule.LatestLogFile | null, [string, string]>()
+            .mockReturnValue({ path: OLD_FILE, mtimeMs: 1 });
+        const print = jest.fn<void, [string]>();
+        // The start-up stat that seeds the state is stale (3 bytes), so the
+        // bytes the tail skips are only printed if the tail seeded nothing:
+        // a tail that seeded its read would put the offset at 6 and the poll
+        // would find nothing appended.
+        const realStat = fs.statSync.getMockImplementation() as (p: fsModule.PathLike) => fsModule.Stats;
+        let seeded = false;
+        fs.statSync.mockImplementation((p: fsModule.PathLike) => {
+            if (!seeded && String(p) === OLD_FILE) {
+                seeded = true;
+                return invalid<fsModule.Stats>({ size: 3, mtimeMs: 1, ino: INODE, birthtimeMs: BIRTH });
+            }
+            return realStat(p);
+        });
+        const realFstat = fs.fstatSync.getMockImplementation() as (fd: number) => fsModule.Stats;
+        let fstats = 0;
+        fs.fstatSync.mockImplementation((fd: number) => {
+            fstats += 1;
+            const stat = realFstat(fd);
+            // The first fstat is the tail's and sees the non-regular entry
+            // (a FIFO); the poll then finds a regular file there.
+            return fstats === 1 ? invalid<fsModule.Stats>({ ...stat, isFile: () => false }) : stat;
+        });
+
+        const code = await followLogs({
+            category: 'app',
+            lines: 2,
+            deps: followDeps({ list: listOf(OLD_FILE), latest, print }),
+        });
+
+        // The tail skipped the FIFO without printing or seeding, and the
+        // poll picked the bytes up from the stale seed offset — 'l2' once.
+        expect(code).toBe(0);
+        expect(print.mock.calls).toEqual([
+            ['Following app logs (Ctrl+C to stop)'],
+            ['--- ' + OLD_FILE],
+            ['l2'],
+            ['Stopped following the log.'],
+        ]);
+        expect(fs.openSync).toHaveBeenCalledTimes(2);
+        expect(fs.openSync).toHaveBeenCalledWith(OLD_FILE, OPEN_FLAGS);
+        expect(fs.closeSync).toHaveBeenCalledWith(fs.openSync.mock.results[0].value);
     });
 
     test('SIGINT stops the follower with exit 0 and removes its listener', async () => {
@@ -1099,6 +1188,7 @@ describe('CLI logs follow — followLogs', () => {
         // opened, so the offset it seeds is a byte count), and nothing wrote
         // anywhere: an info() would append to the followed app log. The text
         // after the appended line's newline is held as pending, not printed.
+        expect(fs.openSync).toHaveBeenCalledWith(OLD_FILE, OPEN_FLAGS);
         expect(fs.readFileSync).toHaveBeenCalledWith(expect.any(Number));
         expect(fs.appendFileSync).not.toHaveBeenCalled();
         expect(fs.writeFileSync).not.toHaveBeenCalled();

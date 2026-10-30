@@ -168,12 +168,14 @@ const seedFollowState = (state: FollowState, prefix: string, deps: FollowDeps): 
  * behind, so nothing prints twice — the inode is the file's own, the decoder
  * carries a multi-byte character the read's end cut, and a last line without
  * its newline becomes the held partial line, printing once when its newline
- * arrives.
+ * arrives. A non-regular entry (a FIFO with a log's name) is skipped whole —
+ * its open is non-blocking so it cannot hang the tail, and nothing prints
+ * or seeds.
  */
 const printInitialTail = (filePath: string, lines: number, state: FollowState, print: (text: string) => void): void => {
     let fd: number;
     try {
-        fd = fs.openSync(filePath, 'r');
+        fd = fs.openSync(filePath, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK);
     } catch {
         return; // gone between the listing and this read; the polls re-resolve
     }
@@ -182,6 +184,7 @@ const printInitialTail = (filePath: string, lines: number, state: FollowState, p
     let birthtimeMs: number;
     try {
         const stat = fs.fstatSync(fd);
+        if (!stat.isFile()) return; // a non-regular entry (a FIFO) is not tailed
         ino = stat.ino;
         birthtimeMs = stat.birthtimeMs;
         content = fs.readFileSync(fd);
@@ -209,8 +212,10 @@ const printInitialTail = (filePath: string, lines: number, state: FollowState, p
  * One poll of one followed file: opens the file once and takes its identity
  * and size from that open file (fstat), so the stat and the bytes read are
  * always of the same file; skips it for the poll when the open or that stat
- * fails (the state survives — deletion is the listing prune's call and a
- * re-created name the identity check's), restarts it at byte 0 when it
+ * fails or the entry is not a regular file (the open is non-blocking so a
+ * FIFO with a log's name cannot hang it; the state survives — deletion is
+ * the listing prune's call and a re-created name the identity check's),
+ * restarts it at byte 0 when it
  * shrank (truncated in place) or when its identity changed (the name was
  * deleted and a different file written under it — a changed inode, or a
  * changed birth time under a reused inode; the new file is followed from its
@@ -229,7 +234,7 @@ const pollFollowedFile = (
 ): void => {
     let fd: number;
     try {
-        fd = fs.openSync(filePath, 'r');
+        fd = fs.openSync(filePath, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK);
     } catch {
         // An open error (a transient EACCES/EIO, or the file going away) is
         // not the fact "gone": skip this file for this poll and keep its
@@ -244,6 +249,7 @@ const pollFollowedFile = (
         let birthtimeMs: number;
         try {
             const stat = fs.fstatSync(fd);
+            if (!stat.isFile()) return; // a non-regular entry (a FIFO) is not followed
             size = stat.size;
             ino = stat.ino;
             birthtimeMs = stat.birthtimeMs;
