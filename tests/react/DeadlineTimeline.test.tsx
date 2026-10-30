@@ -63,6 +63,18 @@ describe('DeadlineTimeline', () => {
         expect(text).not.toContain('deadlineActionTurbo');
     });
 
+    test('a NaN due time is dropped like a missing one, so an all-overdue compact line still renders', () => {
+        const actions = [
+            { action: 'boost', thresholdSec: 0, dueAt: BASE_SEC - 60 },
+            { action: 'turbo', thresholdSec: 0, dueAt: Number.NaN },
+        ];
+        wrap(<DeadlineTimeline actions={actions} compact={true} />);
+        const text = document.body.textContent;
+        expect(text).toContain('deadlineActionBoost');
+        expect(text).not.toContain('deadlineActionTurbo');
+        expect(text).toContain('deadlineDue');
+    });
+
     test('compact mode with all actions overdue picks the least-overdue one', () => {
         const actions = [
             { action: 'boost', thresholdSec: 0, dueAt: BASE_SEC - 300 }, // 5m overdue
@@ -74,7 +86,7 @@ describe('DeadlineTimeline', () => {
         expect(text).toContain('deadlineDue'); // remaining <= 0 → "due now" key
     });
 
-    test('boostPinSubmits shows the pinned-photo submit row directly before Boost, at the same time', () => {
+    test('boostPinSubmits shows the pinned-photo submit row directly before Boost, sharing its due time', () => {
         const actions = [
             { action: 'boost', thresholdSec: 120, dueAt: BASE_SEC + 120 },
             { action: 'turbo', thresholdSec: 300, dueAt: BASE_SEC + 300 },
@@ -112,5 +124,46 @@ describe('DeadlineTimeline', () => {
         expect(text).toContain('app.deadlineActionBoostPinSubmit');
         // The submit row shares Boost's dueAt and happens first, so it wins that slot.
         expect(text).not.toMatch(/app\.deadlineActionBoost(?!PinSubmit)/);
+    });
+
+    test('compact mode with every row overdue and a shared least-overdue dueAt names the pinned-photo submit as Next', () => {
+        const actions = [
+            { action: 'autoSubmit', thresholdSec: 0, dueAt: BASE_SEC - 500 }, // most overdue
+            { action: 'boost', thresholdSec: 0, dueAt: BASE_SEC - 10 }, // least overdue
+        ];
+        wrap(<DeadlineTimeline actions={actions} compact={true} boostPinSubmits={true} />);
+        const text = document.body.textContent ?? '';
+        // The submit row shares Boost's dueAt and the all-overdue fallback keeps
+        // the submit-first order, so the submit wins over Boost itself.
+        expect(text).toContain('app.deadlineActionBoostPinSubmit');
+        expect(text).toContain('deadlineDue');
+        expect(text).not.toMatch(/app\.deadlineActionBoost(?!PinSubmit)/);
+    });
+
+    test('compact mode with every row overdue and no pinned submit names Boost as Next', () => {
+        const actions = [
+            { action: 'autoSubmit', thresholdSec: 0, dueAt: BASE_SEC - 500 }, // most overdue
+            { action: 'boost', thresholdSec: 0, dueAt: BASE_SEC - 10 }, // least overdue
+        ];
+        wrap(<DeadlineTimeline actions={actions} compact={true} boostPinSubmits={false} />);
+        const text = document.body.textContent ?? '';
+        expect(text).toMatch(/app\.deadlineActionBoost(?!PinSubmit)/);
+        expect(text).toContain('deadlineDue');
+        expect(text).not.toContain('app.deadlineActionBoostPinSubmit');
+    });
+
+    test('full mode places the pinned-photo submit row directly before a Boost row mid-list', () => {
+        const actions = [
+            { action: 'autoSubmit', thresholdSec: 60, dueAt: BASE_SEC + 60 },
+            { action: 'boost', thresholdSec: 120, dueAt: BASE_SEC + 120 },
+            { action: 'turbo', thresholdSec: 300, dueAt: BASE_SEC + 300 },
+        ];
+        const { container } = wrap(<DeadlineTimeline actions={actions} boostPinSubmits={true} />);
+        const rows = Array.from(container.querySelectorAll('li')).map((li) => li.textContent ?? '');
+        expect(rows).toHaveLength(4);
+        expect(rows[0]).toMatch(/^app\.deadlineActionAutoSubmit/);
+        expect(rows[1]).toMatch(/^app\.deadlineActionBoostPinSubmit/);
+        expect(rows[2]).toMatch(/^app\.deadlineActionBoost(?!PinSubmit)/);
+        expect(rows[3]).toMatch(/^app\.deadlineActionTurbo/);
     });
 });

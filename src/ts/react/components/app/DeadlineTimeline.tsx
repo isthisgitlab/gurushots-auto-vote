@@ -42,13 +42,15 @@ export function DeadlineTimeline({
     if (!hasRows) return null;
 
     const rows = actions
-        .filter((a): a is DeadlineAction & { dueAt: number } => typeof a.dueAt === 'number')
+        .filter((a): a is DeadlineAction & { dueAt: number } => typeof a.dueAt === 'number' && Number.isFinite(a.dueAt))
         .map((a) => ({ ...a, remaining: a.dueAt - now }));
     if (rows.length === 0) return null;
 
-    // The Boost-pinned photo submit fires at the boost row's instant, just before
-    // it, so it gets its own row there. The label resolves here, not through
-    // ACTION_LABEL_KEY: the Node notify path owns that map and has no such action.
+    // The Boost-pinned photo submit happens at the Boost row's due time, so its
+    // row takes that time and sits just before Boost; Boost itself follows after
+    // the fresh-photo wait, which the Boost row does not show. The label
+    // resolves here, not through ACTION_LABEL_KEY: the Node notify path owns
+    // that map and has no such action.
     const boostIndex = rows.findIndex((r) => r.action === 'boost');
     if (boostPinSubmits && boostIndex !== -1) {
         rows.splice(boostIndex, 0, { ...rows[boostIndex], action: 'boostPinSubmit' });
@@ -63,10 +65,13 @@ export function DeadlineTimeline({
         // The soonest upcoming action; if every action is already overdue, the
         // least-overdue one (largest remaining, i.e. closest to now) rather than
         // an arbitrary list position. A shared dueAt is won by the pinned-submit
-        // row: it happens first at that instant.
+        // row: the sort puts it first among the tied rows and it happens first
+        // at that instant. The find is total, so the assertion is safe: some row
+        // is positive, or the largest remaining matches its own equality.
         const submitFirst = (r: (typeof rows)[number]) => (r.action === 'boostPinSubmit' ? 0 : 1);
         const sorted = [...rows].sort((a, b) => a.remaining - b.remaining || submitFirst(a) - submitFirst(b));
-        const next = sorted.find((r) => r.remaining > 0) || sorted[sorted.length - 1];
+        const maxRemaining = sorted[sorted.length - 1].remaining;
+        const next = sorted.find((r) => r.remaining > 0 || r.remaining === maxRemaining)!;
         return (
             <div className="text-xs text-base-content/70" title={t('app.deadlineTimelineApprox')}>
                 <span aria-hidden="true">⏳</span> {t('app.deadlineNext')}: {labelFor(next.action)}{' '}

@@ -128,7 +128,7 @@ export const boostSettings = {
         label: 'app.boostNewSubmitOnConflict',
         description: 'app.boostNewSubmitOnConflictDesc',
     },
-    // Per-challenge opt-in: when the photo pinned for Boost is gone from the challenge
+    // Per-challenge, on by default: when the photo pinned for Boost is gone from the challenge
     // but is one of the user's Chosen Photos, it is submitted when the Boost is due
     // (needs a free slot); a definitive failure latches for that Boost window.
     boostPinnedSubmit: {

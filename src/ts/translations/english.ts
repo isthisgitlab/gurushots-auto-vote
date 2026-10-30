@@ -220,7 +220,7 @@ export const app = {
     deadlineDue: 'due now',
     deadlineActionAutoSubmit: 'Auto-submit',
     deadlineActionBoost: 'Boost',
-    deadlineActionBoostPinSubmit: 'Pinned photo submit',
+    deadlineActionBoostPinSubmit: 'Boost pin submit',
     deadlineActionTurbo: 'Turbo',
     deadlineActionEmergencySubmit: 'Emergency submit',
     donate: 'Donate',
