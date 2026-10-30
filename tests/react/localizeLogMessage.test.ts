@@ -280,6 +280,16 @@ describe('Latvian log messages', () => {
         );
     });
 
+    test('translates the after-start clamp note', () => {
+        expect(
+            localizeLogMessage(
+                'ℹ️ [Challenge 42: Sunset]: the join-after-start offset is longer than the challenge — joining at 99% elapsed instead',
+            ),
+        ).toBe(
+            'ℹ️ [Challenge 42: Sunset]: pievienošanās laiks no sākuma ir garāks par paša izaicinājuma garumu — pievienojas, kad pagājis 99 % no tā',
+        );
+    });
+
     test('translates the title-rules refresh and load failures', () => {
         expect(localizeLogMessage('Error refreshing title rules: disk')).toBe(
             'Kļūda, atsvaidzinot izaicinājumu noteikumus: disk',
@@ -389,6 +399,18 @@ describe('forward template localization', () => {
             ),
         ).toBe(
             'ℹ️ [Challenge 42: Sunset]: Boost piesprausto foto (img1) neiesniedza (fetch-error) — Boost turpina gaidīt; nākamais cikls mēģinās vēlreiz',
+        );
+    });
+
+    test('localizes the after-start clamp note from its template and params', () => {
+        expect(
+            forward(
+                'm2ea88a7ace6b',
+                ['[Challenge 42: Sunset]'],
+                'ℹ️ [Challenge 42: Sunset]: the join-after-start offset is longer than the challenge — joining at 99% elapsed instead',
+            ),
+        ).toBe(
+            'ℹ️ [Challenge 42: Sunset]: pievienošanās laiks no sākuma ir garāks par paša izaicinājuma garumu — pievienojas, kad pagājis 99 % no tā',
         );
     });
 

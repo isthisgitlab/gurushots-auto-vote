@@ -308,6 +308,7 @@ describe('shouldJoinChallenge', () => {
                 includeTypes: ['regular'],
                 excludeTypes: [],
                 maxCoins: 0,
+                joinAfterSecFromStart: 0,
             }),
         );
         expect(result).toEqual({ join: false, needsCoins: 0, reason: 'out-of-scope' });

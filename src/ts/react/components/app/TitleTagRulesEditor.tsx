@@ -143,8 +143,8 @@ function RuleCard({
  *    type?: string, pics?: number, minHours?: number, maxHours?: number,
  *    closesAt?: string, closesAtTimes?: string[],
  *    profile?: string, mustIncludeTags: string[], shouldIncludeTags: string[],
- *    autoJoin?: boolean, autoSubmit?: boolean, autoJoinWithinHoursOfEnd?: number,
- *    autoJoinAfterPercentElapsed?: number, chosenPhotos?: string[],
+ *    autoJoin?: boolean, autoSubmit?: boolean, autoJoinAfterHoursFromStart?: number,
+ *    autoJoinWithinHoursOfEnd?: number, autoJoinAfterPercentElapsed?: number, chosenPhotos?: string[],
  *    chosenPhotosOnly?: boolean }`.
  * `types` feeds the challenge-type suggestions; the field stays free text.
  */

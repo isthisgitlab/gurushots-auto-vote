@@ -90,10 +90,61 @@ export const autoJoinSettings = {
         label: 'app.autoJoinExcludeChallengeTags',
         description: 'app.autoJoinExcludeChallengeTagsDesc',
     },
-    // Join-timing gate: only join a candidate once it is within this many hours
-    // of its close_time. 0 = off (join as soon as the candidate is seen), so
-    // this is the "0 = feature off" sentinel family, NOT the exposureTarget
-    // "0 = same as trigger" one.
+    // The three join-timing entries below are ONE gate, read as ONE group, in a
+    // fixed precedence: after-start → percent → before-end. Only ONE of them
+    // applies to a candidate — the first with a value above 0 — so they never
+    // combine into the intersection of two windows, and the effective timing is
+    // always readable off a single number. They resolve as one group from a
+    // single source (resolveRuleSettingGroup in settings/titleRules.ts), so a
+    // lower source cannot supply one timing key and beat a higher source's key.
+    // A window at or beyond the candidate's own length is clamped to 99% of the
+    // length (clampAfterStartOffsetSec in joinWindowRefusal,
+    // services/decisions/joinDecision.ts) — it never means "never join".
+    //
+    // Hours-from-start gate: only join a candidate once this many hours have
+    // run since its start_time. 0 = off (join as soon as the candidate is
+    // seen), so this is the "0 = feature off" sentinel family, NOT the
+    // exposureTarget "0 = same as trigger" one. Meant for challenges with no
+    // fixed length (exhibitions, magazines), where a percent of the length or
+    // an hours-before-close window is the wrong shape.
+    //
+    // FAIL-CLOSED: while this is above 0, a candidate whose start_time cannot
+    // be read is NOT joined (see VotingLogic.shouldJoinChallenge) — the same
+    // reasoning as the hours-before-close window below.
+    autoJoinAfterHoursFromStart: {
+        type: 'number',
+        default: 0,
+        perChallenge: true,
+        validation: joinWindowHours,
+        min: 0,
+        max: MAX_JOIN_WINDOW_HOURS,
+        unit: 'app.unitHours',
+        // Display-only (see SettingsSchemaEntry.minutes): the GUI edits this
+        // as an hours + minutes pair; the stored value stays fractional hours.
+        minutes: true,
+        validationOrder: 1,
+        group: 'autoJoin',
+        label: 'app.autoJoinAfterHoursFromStart',
+        description: 'app.autoJoinAfterHoursFromStartDesc',
+        helpKey: 'app.autoJoinAfterHoursFromStartHelp',
+    },
+    // Elapsed-fraction join anchor. 0 = off. Sits second in the group's
+    // precedence (after-start → percent → before-end, stated above) — one
+    // candidate gets ONE window, never the intersection of two, so the
+    // effective timing is always readable off a single number.
+    //
+    // FAIL-CLOSED exactly like the hours windows, and on one more field: percent
+    // mode needs start_time AND close_time to know the challenge's length, so a
+    // candidate missing either is deferred rather than joined.
+    autoJoinAfterPercentElapsed: {
+        ...elapsedPercentSetting,
+        group: 'autoJoin',
+        label: 'app.autoJoinAfterPercentElapsed',
+        description: 'app.autoJoinAfterPercentElapsedDesc',
+        helpKey: 'app.autoJoinAfterPercentElapsedHelp',
+    },
+    // Hours-before-close gate: only join a candidate once it is within this
+    // many hours of its close_time, last in the precedence above.
     //
     // FAIL-CLOSED: while this is above 0, a candidate whose close_time cannot be
     // read is NOT joined (see VotingLogic.shouldJoinChallenge). An un-joined
@@ -118,22 +169,6 @@ export const autoJoinSettings = {
         label: 'app.autoJoinWithinHoursOfEnd',
         description: 'app.autoJoinWithinHoursOfEndDesc',
         helpKey: 'app.autoJoinWithinHoursOfEndHelp',
-    },
-    // Elapsed-fraction join anchor. 0 = off. When BOTH this and
-    // autoJoinWithinHoursOfEnd are set on the same resolved source, the percent
-    // wins (see resolveJoinWindow in services/decisions/joinDecision.ts) — one candidate
-    // gets ONE window, never the intersection of two, so the effective timing is
-    // always readable off a single number.
-    //
-    // FAIL-CLOSED exactly like the hours window, and on one more field: percent
-    // mode needs start_time AND close_time to know the challenge's length, so a
-    // candidate missing either is deferred rather than joined.
-    autoJoinAfterPercentElapsed: {
-        ...elapsedPercentSetting,
-        group: 'autoJoin',
-        label: 'app.autoJoinAfterPercentElapsed',
-        description: 'app.autoJoinAfterPercentElapsedDesc',
-        helpKey: 'app.autoJoinAfterPercentElapsedHelp',
     },
     // Per-challenge coin cap. 0 = free only (paid joins disabled). Paid joining
     // requires BOTH this AND autoJoinCycleCoinBudget > 0.

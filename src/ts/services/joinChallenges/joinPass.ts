@@ -6,7 +6,7 @@
 import * as logger from '../../logger';
 import * as settings from '../../settings';
 import * as cancellation from '../../voting/cancellation';
-import { joinFreshRefusalWhy } from '../VotingLogic';
+import { joinFreshRefusalWhy, joinAfterStartClampSec } from '../VotingLogic';
 import { isKnownTurboMode } from '../../voting/turboMode';
 import { consumeMission } from '../missions';
 import type { Bankroll, Challenge } from '../../types/gurushots';
@@ -116,6 +116,32 @@ const noteTimingRefusal = (challenge: Challenge, reason: string, pass: JoinPassS
 };
 
 /**
+ * The clamp note, once per pass beside the missing-timing diagnostic: a
+ * join-after-start offset at or beyond the challenge's own length is clamped to
+ * the latest reachable point (99% elapsed), and the user should know their
+ * value did not apply as written. Runs on the production path only — the
+ * join-mission dry run never reaches this file — and names the first clamped
+ * candidate the window actually governed (joined, or deferred as `too-early`):
+ * a candidate the scope or money checks refuse never reaches the window, so it
+ * says nothing about the clamp.
+ */
+const noteAfterStartClamp = (
+    challenge: Challenge,
+    cfg: ReturnType<typeof resolveCandidateConfig>,
+    decision: ReturnType<typeof decideCandidateJoin>,
+    pass: JoinPassState,
+) => {
+    if (!decision.join && decision.reason !== 'too-early') return;
+    // Early-join mode lifts the window wholesale (the candidate joins with the
+    // after-start value passed as 0), so no clamp applies to it.
+    if (pass.earlyJoins > 0 || cfg.joinAfterSecFromStart <= 0) return;
+    if (pass.afterStartClampLogged) return;
+    if (joinAfterStartClampSec(challenge, pass.nowSec, cfg.joinAfterSecFromStart) === null) return;
+    pass.afterStartClampLogged = true;
+    cat().infoT('m2ea88a7ace6b', [logger.challengeTag(challenge)], null);
+};
+
+/**
  * A full or price-unreadable candidate is never joined, so say why it was
  * skipped — at INFO when the user pointed the pass at this challenge
  * themselves (a title-profile opt-in, or a non-empty Chosen Photos list
@@ -196,6 +222,7 @@ const joinCandidate = async (
     const alreadyPaid = await paidAlready(challenge, deps);
     const cfg = resolveCandidateConfig(challenge);
     const decision = decideCandidateJoin(challenge, cfg, pass, alreadyPaid);
+    noteAfterStartClamp(challenge, cfg, decision, pass);
     let submitOnly = alreadyPaid;
     if (!decision.join) {
         noteTimingRefusal(challenge, decision.reason, pass);
@@ -257,10 +284,12 @@ const rememberOpenList = (candidates: Array<Challenge | null>): void => {
  * skips wholesale when the master is off AND no title rule turns it on.
  * Sequential, cancellation-aware.
  *
- * Candidates are additionally gated by the join WINDOW
- * (`autoJoinWithinHoursOfEnd`, 0 = off): a candidate outside it is deferred with
- * `skipped:too-early` and reconsidered next cycle, so entries land near a
- * challenge's end rather than the moment it appears.
+ * Candidates are additionally gated by the join WINDOW — the three timing
+ * settings (`autoJoinAfterHoursFromStart`, `autoJoinAfterPercentElapsed`,
+ * `autoJoinWithinHoursOfEnd`) resolve to ONE window in a fixed order, the
+ * first above 0 winning; 0 = off — so a candidate outside it is deferred with
+ * `skipped:too-early` and reconsidered next cycle, so entries land late in a
+ * challenge's life rather than the moment it appears.
  *
  * @param now epoch ms — the clock the join window is measured against
  *   (converted to seconds to match `close_time`); defaults to Date.now()
@@ -319,6 +348,8 @@ const runJoinPass = async (
         nowSec,
         // One diagnostic per pass, not per candidate (see warnMissingCloseTime).
         missingCloseTimeLogged: false,
+        // One clamp note per pass, not per candidate (see noteAfterStartClamp).
+        afterStartClampLogged: false,
         earlyJoins: await earlyJoinsFor(token, deps, missions, nowSec),
     };
     // A join mission lifts the window only while the currently open challenges

@@ -98,7 +98,10 @@ describe('hasPostJoinInlineValue', () => {
     test.each([
         ['nothing', {}],
         ['auto-join', { autoJoin: true }],
-        ['the join timing', { autoJoinWithinHoursOfEnd: 6, autoJoinAfterPercentElapsed: 50 }],
+        [
+            'the join timing',
+            { autoJoinWithinHoursOfEnd: 6, autoJoinAfterPercentElapsed: 50, autoJoinAfterHoursFromStart: 2 },
+        ],
         ['a key that is no rule inline key', { exposure: 70 }],
     ])('%s does not', (_name, inline) => {
         expect(hasPostJoinInlineValue(inline)).toBe(false);

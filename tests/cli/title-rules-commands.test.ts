@@ -31,7 +31,7 @@ jest.mock('../../src/ts/settings', () => ({
     // namespace the command modules import rather than a copy.
     __esModule: true,
     SETTINGS_SCHEMA: { exposure: { type: 'number', perChallenge: true, default: 50 } },
-    TITLE_RULE_INLINE_KEYS: ['autoJoin', 'chosenPhotos', 'scenario'],
+    TITLE_RULE_INLINE_KEYS: ['autoJoin', 'autoJoinAfterHoursFromStart', 'chosenPhotos', 'scenario'],
     isPinnableImageId: jest.fn(() => false),
     getTitleRules: jest.fn(() => []),
     setTitleRules: jest.fn(),
@@ -167,6 +167,12 @@ describe('list-title-rules', () => {
         expect(printed).not.toMatch(/(?!\n)[\p{Cc}\p{Cf}]/u);
         expect(contains(stdout(), 'title is "ab"')).toBe(true);
     });
+
+    test('a rule autoJoinAfterHoursFromStart value is listed like the other inline keys', () => {
+        settings.getTitleRules.mockReturnValue(invalid([{ title: 'Seaside', autoJoinAfterHoursFromStart: 48 }]));
+        cmd.listTitleRulesCmd();
+        expect(contains(stdout(), 'autoJoinAfterHoursFromStart: 48')).toBe(true);
+    });
 });
 
 describe('export-title-rules', () => {
@@ -209,6 +215,20 @@ describe('export-title-rules', () => {
         expect(cmd.exportTitleRulesCmd('rules.json', false)).toBe(1);
         expect(contains(msgs('error'), 'Could not write rules.json: disk full')).toBe(true);
     });
+
+    test('autoJoinAfterHoursFromStart survives export and re-import', () => {
+        const rule = { title: 'Seaside', mustIncludeTags: ['sea'], autoJoinAfterHoursFromStart: 48 };
+        settings.getTitleRules.mockReturnValue(invalid([rule]));
+        expect(cmd.exportTitleRulesCmd(undefined, false)).toBe(0);
+        const docs = stdout().filter((line) => line.includes('"title": "Seaside"'));
+        expect(docs).toHaveLength(1);
+        expect(docs[0]).toContain('"autoJoinAfterHoursFromStart": 48');
+        fs.readFileSync.mockReturnValue(docs[0]);
+        settings.previewTitleRules.mockReturnValue(invalid({ ok: true, rules: [rule], dropped: [], collapsed: [] }));
+        settings.setTitleRules.mockReturnValue(true);
+        expect(cmd.importTitleRulesCmd('rules.json', true)).toBe(0);
+        expect(settings.setTitleRules).toHaveBeenCalledWith([rule]);
+    });
 });
 
 describe('import-title-rules', () => {
@@ -249,6 +269,17 @@ describe('import-title-rules', () => {
         settings.previewTitleRules.mockReturnValue({ ok: false, error: 'setTitleRules expects an array' });
         expect(cmd.importTitleRulesCmd('rules.json', true)).toBe(1);
         expect(contains(msgs('error'), 'would be rejected: setTitleRules expects an array')).toBe(true);
+        expect(settings.setTitleRules).not.toHaveBeenCalled();
+    });
+
+    test('a rule with autoJoinAfterHoursFromStart past the 720 h cap (720 h + 1 min) is rejected', () => {
+        fs.readFileSync.mockReturnValue(JSON.stringify([{ title: 'A', autoJoinAfterHoursFromStart: 720 + 1 / 60 }]));
+        settings.previewTitleRules.mockReturnValue({
+            ok: false,
+            error: 'Title rule rejected for "A": invalid or over-length values',
+        });
+        expect(cmd.importTitleRulesCmd('rules.json', true)).toBe(1);
+        expect(contains(msgs('error'), 'would be rejected: Title rule rejected for "A"')).toBe(true);
         expect(settings.setTitleRules).not.toHaveBeenCalled();
     });
 

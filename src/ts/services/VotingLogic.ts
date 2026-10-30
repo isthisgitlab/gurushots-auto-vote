@@ -28,7 +28,12 @@ import * as voteDecisions from './decisions/voteDecisions';
 import * as entryPick from './decisions/entryPick';
 import * as boostTurbo from './decisions/boostTurbo';
 import * as deadlineActions from './decisions/deadlineActions';
-import { shouldJoinChallenge, joinFreshRefusal, joinFreshRefusalWhy } from './decisions/joinDecision';
+import {
+    shouldJoinChallenge,
+    joinFreshRefusal,
+    joinFreshRefusalWhy,
+    joinAfterStartClampSec,
+} from './decisions/joinDecision';
 
 export const isWithinFinalWindow = thresholds.isWithinFinalWindow;
 export const isWithinLastMinuteThreshold = thresholds.isWithinLastMinuteThreshold;
@@ -64,6 +69,7 @@ export {
     shouldJoinChallenge,
     joinFreshRefusal,
     joinFreshRefusalWhy,
+    joinAfterStartClampSec,
     getScheduledFillState,
     getVotingPauseState,
     getBoostPrefillState,

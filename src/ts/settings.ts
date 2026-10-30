@@ -103,6 +103,7 @@ export const previewTitleRules = titleRules.previewTitleRules;
 export type TitleRuleNote = titleRules.TitleRuleNote;
 export type TitleRulesPreview = titleRules.TitleRulesPreview;
 export const resolveRuleSetting = titleRules.resolveRuleSetting;
+export const resolveRuleSettingGroup = titleRules.resolveRuleSettingGroup;
 export const hasRuleJoinOptIn = titleRules.hasRuleJoinOptIn;
 export const getEffectiveTagSetting = titleRules.getEffectiveTagSetting;
 export const getEffectiveIgnoreTitleWords = titleRules.getEffectiveIgnoreTitleWords;

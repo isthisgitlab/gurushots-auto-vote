@@ -20,6 +20,8 @@ type JoinPassState = {
     remainingBudget: number;
     nowSec: number;
     missingCloseTimeLogged: boolean;
+    /** Whether the one-per-pass after-start clamp note has fired. */
+    afterStartClampLogged: boolean;
     /** Joins still to make without the timing window, for the active missions. */
     earlyJoins: number;
 };
@@ -52,6 +54,7 @@ const decideCandidateJoin = (
         excludeTags: cfg.excludeTags,
         joinWithinSec: joinEarly ? 0 : cfg.joinWithinSec,
         joinAfterPercentElapsed: joinEarly ? 0 : cfg.joinAfterPercentElapsed,
+        joinAfterSecFromStart: joinEarly ? 0 : cfg.joinAfterSecFromStart,
         nowSec: pass.nowSec,
         alreadyPaid,
     });
@@ -102,6 +105,7 @@ const joinMissionLift = (
         remainingBudget,
         nowSec,
         missingCloseTimeLogged: false,
+        afterStartClampLogged: false,
         earlyJoins: 1,
     };
     let wouldJoin = 0;

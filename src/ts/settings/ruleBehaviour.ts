@@ -21,6 +21,7 @@
 export const TITLE_RULE_INLINE_KEYS = [
     'autoJoin',
     'autoSubmit',
+    'autoJoinAfterHoursFromStart',
     'autoJoinWithinHoursOfEnd',
     'autoJoinAfterPercentElapsed',
     'scenario',
@@ -46,7 +47,12 @@ export const isDroppedOffValue = (key: string, value: unknown): boolean =>
  * The inline keys that only decide whether, and when, an un-joined challenge is joined. Once it is
  * joined they change nothing, so a challenge they alone customize is not marked as customized.
  */
-const JOIN_ONLY_INLINE_KEYS = ['autoJoin', 'autoJoinWithinHoursOfEnd', 'autoJoinAfterPercentElapsed'];
+const JOIN_ONLY_INLINE_KEYS = [
+    'autoJoin',
+    'autoJoinAfterHoursFromStart',
+    'autoJoinWithinHoursOfEnd',
+    'autoJoinAfterPercentElapsed',
+];
 
 /** Whether inline rule values include any that still matter after the join (auto-submit, scenario, chosen photos). */
 export const hasPostJoinInlineValue = (inline: Record<string, unknown>): boolean =>

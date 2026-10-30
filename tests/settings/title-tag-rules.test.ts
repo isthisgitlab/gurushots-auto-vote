@@ -271,6 +271,25 @@ describe('settings facade — title-keyed tag rules', () => {
             expect(rule).not.toHaveProperty('nonsense');
         });
 
+        test('an after-start offset past the 720 h cap rejects the save; at the cap it is kept', () => {
+            expect(
+                settings.setTitleRules([
+                    {
+                        title: 'abc',
+                        mustIncludeTags: [],
+                        shouldIncludeTags: [],
+                        autoJoinAfterHoursFromStart: 720 + 1 / 60,
+                    },
+                ]),
+            ).toBe(false);
+            expect(
+                settings.setTitleRules([
+                    { title: 'abc', mustIncludeTags: [], shouldIncludeTags: [], autoJoinAfterHoursFromStart: 720 },
+                ]),
+            ).toBe(true);
+            expect(settings.getTitleRules()[0].autoJoinAfterHoursFromStart).toBe(720);
+        });
+
         describe('resolveRuleSetting (inline values)', () => {
             test('returns the inline values for a matching title, case-insensitively', () => {
                 settings.setTitleRules([
@@ -291,6 +310,76 @@ describe('settings facade — title-keyed tag rules', () => {
                 expect(overridesFor('nope')).toEqual({});
                 expect(overridesFor('')).toEqual({});
             });
+        });
+    });
+
+    /**
+     * The join-timing keys read as ONE group (`resolveRuleSettingGroup`): only
+     * one timing setting applies to a candidate, so the whole group comes from
+     * the first source that sets any of the keys, and a lower source cannot
+     * smuggle a second window in behind it.
+     */
+    describe('resolveRuleSettingGroup (join timing)', () => {
+        const TIMING_KEYS = ['autoJoinAfterHoursFromStart', 'autoJoinAfterPercentElapsed', 'autoJoinWithinHoursOfEnd'];
+        const groupFor = (target: RuleMatchChallenge | string) => settings.resolveRuleSettingGroup(TIMING_KEYS, target);
+        const save = (...rules: Record<string, unknown>[]) =>
+            settings.setTitleRules(rules.map((r) => ({ mustIncludeTags: [], shouldIncludeTags: [], ...r })));
+
+        test('the first matching rule that sets any timing key takes the whole group', () => {
+            save(
+                { title: 'abc', autoJoinAfterPercentElapsed: 50 },
+                { challengeTag: 'Turbo', autoJoinAfterHoursFromStart: 12 },
+            );
+            const target = { title: 'abc', tags: ['Turbo'] };
+            expect(groupFor(target)).toEqual({ values: { autoJoinAfterPercentElapsed: 50 } });
+        });
+
+        test("a rule's INLINE timing beats the SAME rule's profile timing", () => {
+            settings.saveChallengeProfile('Late', { autoJoinAfterHoursFromStart: 12 });
+            save({ title: 'abc', profile: 'Late', autoJoinAfterPercentElapsed: 50 });
+            expect(groupFor('abc')).toEqual({ values: { autoJoinAfterPercentElapsed: 50 } });
+        });
+
+        test("a lower rule's inline timing does not beat a higher rule's profile timing", () => {
+            settings.saveChallengeProfile('Late', { autoJoinAfterPercentElapsed: 50 });
+            save({ title: 'abc', profile: 'Late' }, { challengeTag: 'Turbo', autoJoinAfterHoursFromStart: 12 });
+            expect(groupFor({ title: 'abc', tags: ['Turbo'] })).toEqual({
+                values: { autoJoinAfterPercentElapsed: 50 },
+            });
+        });
+
+        test("a higher rule's timing does not beat a lower rule's timing", () => {
+            save(
+                { title: 'abc', autoJoinAfterHoursFromStart: 12 },
+                { challengeTag: 'Turbo', autoJoinAfterPercentElapsed: 50 },
+            );
+            expect(groupFor({ title: 'abc', tags: ['Turbo'] })).toEqual({
+                values: { autoJoinAfterHoursFromStart: 12 },
+            });
+        });
+
+        test("the SAME rule's profile timing does not beat the rule's inline timing", () => {
+            settings.saveChallengeProfile('Late', { autoJoinAfterPercentElapsed: 50 });
+            save({ title: 'abc', profile: 'Late', autoJoinAfterHoursFromStart: 12 });
+            expect(groupFor('abc')).toEqual({ values: { autoJoinAfterHoursFromStart: 12 } });
+        });
+
+        test('an explicit 0 on one key counts as set and takes the group', () => {
+            save({ title: 'abc', autoJoinAfterPercentElapsed: 0 });
+            expect(groupFor('abc')).toEqual({ values: { autoJoinAfterPercentElapsed: 0 } });
+        });
+
+        test('no rule sets any timing key — null', () => {
+            save({ title: 'abc', autoJoin: true });
+            expect(groupFor('abc')).toBeNull();
+            expect(groupFor('nothing matches this')).toBeNull();
+        });
+
+        test('keys the winner does not set are absent from the returned values', () => {
+            save({ title: 'abc', autoJoinAfterHoursFromStart: 3, autoJoin: true });
+            const group = groupFor('abc');
+            expect(group).not.toBeNull();
+            expect(Object.keys(group!.values).sort()).toEqual(['autoJoinAfterHoursFromStart']);
         });
     });
 

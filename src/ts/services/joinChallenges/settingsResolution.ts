@@ -20,6 +20,18 @@ const PER_ID_JOIN_KEYS: ReadonlySet<string> = new Set([
     'manualPhotosOnly',
 ]);
 
+// The three join-timing keys resolve as ONE group (resolveRuleSettingGroup in
+// settings/titleRules.ts): the first rule source that sets ANY of them supplies
+// all three, and the timing keys of lower sources — a later rule, the global
+// default — are ignored, so no second window can be smuggled in next to the
+// winning one. Read in a fixed order downstream (resolveJoinWindow):
+// after-start → percent → before-end, the first above 0 applies.
+const JOIN_TIMING_KEYS: string[] = [
+    'autoJoinAfterHoursFromStart',
+    'autoJoinAfterPercentElapsed',
+    'autoJoinWithinHoursOfEnd',
+];
+
 /**
  * Resolve one setting for an un-joined candidate. The id-keyed
  * getEffectiveSetting(key, id) cannot see a rule for a challenge the user has
@@ -31,6 +43,10 @@ const PER_ID_JOIN_KEYS: ReadonlySet<string> = new Set([
  * per-id override first, then the same chain): rules in list order, the first matching rule that sets the key
  * wins — a rule's inline override before the profile it names — then the
  * global default. See `ruleValuesFor` in settings/ruleResolution.ts.
+ *
+ * The three join-timing keys are NOT read through here one by one — they
+ * resolve as one group (JOIN_TIMING_KEYS below); this function stays per key
+ * for everything else.
  */
 const resolveJoinSetting = (key: string, challenge: Partial<Challenge>): unknown => {
     // The chosen-photos keys and manualPhotosOnly also honour an override saved for THIS id: an
@@ -134,39 +150,53 @@ const hasTitleOptIn = (challenge: Challenge) => settings.hasRuleJoinOptIn?.(chal
 /**
  * Per-candidate scope/coin/timing config, resolved by rule (inline → profile → global).
  */
-const resolveCandidateConfig = (challenge: Challenge) => ({
-    // Empty include list = all types (the default scope once auto-join is on).
-    includeTypes: parseTypeList(resolveJoinSetting('autoJoinTypes', challenge)),
-    excludeTypes: parseTypeList(resolveJoinSetting('autoJoinExcludeTypes', challenge)),
-    // The challenge's OWN tags (Exhibition / Comm / Turbo / …), not photo tags.
-    includeTags: parseTypeList(resolveJoinSetting('autoJoinChallengeTags', challenge)),
-    excludeTags: parseTypeList(resolveJoinSetting('autoJoinExcludeChallengeTags', challenge)),
-    maxCoins: Number(resolveJoinSetting('autoJoinMaxCoins', challenge)) || 0,
-    // Hours → seconds, to match close_time's unit. A non-finite/negative value
-    // degrades to 0 = "no window", i.e. join as soon as seen.
-    joinWithinSec: Math.max(0, Number(resolveJoinSetting('autoJoinWithinHoursOfEnd', challenge)) || 0) * 3600,
-    // Elapsed-fraction anchor, resolved through the same tier chain. Percent and
-    // hours never combine: resolveJoinWindow picks ONE (percent wins), so a
-    // category row saying "90%" fully replaces an inherited hours window rather
-    // than intersecting with it.
-    joinAfterPercentElapsed: Math.max(0, Number(resolveJoinSetting('autoJoinAfterPercentElapsed', challenge)) || 0),
-    hasProfileMatch: hasTitleOptIn(challenge),
-});
+const resolveCandidateConfig = (challenge: Challenge) => {
+    // The timing keys go through the one-group read: the first source that sets
+    // any of them supplies all three, a key its source does not set counts as 0,
+    // and the global read is NOT consulted for it. Null (no source sets any
+    // timing key) leaves each key on the global default, like every per-key
+    // read here.
+    const group = settings.resolveRuleSettingGroup?.(JOIN_TIMING_KEYS, challenge) ?? null;
+    const timingValue = (key: string): unknown =>
+        group === null ? settings.getEffectiveSetting(key, null) : (group.values[key] ?? 0);
+    return {
+        // Empty include list = all types (the default scope once auto-join is on).
+        includeTypes: parseTypeList(resolveJoinSetting('autoJoinTypes', challenge)),
+        excludeTypes: parseTypeList(resolveJoinSetting('autoJoinExcludeTypes', challenge)),
+        // The challenge's OWN tags (Exhibition / Comm / Turbo / …), not photo tags.
+        includeTags: parseTypeList(resolveJoinSetting('autoJoinChallengeTags', challenge)),
+        excludeTags: parseTypeList(resolveJoinSetting('autoJoinExcludeChallengeTags', challenge)),
+        maxCoins: Number(resolveJoinSetting('autoJoinMaxCoins', challenge)) || 0,
+        // The three timing values above resolve to ONE window in a fixed order —
+        // after-start → percent → before-end, the first above 0 applies
+        // (resolveJoinWindow) — so a category row saying "90%" fully replaces an
+        // inherited hours window rather than intersecting with it, and a
+        // non-finite/negative value degrades to 0 = "no window", i.e. join as
+        // soon as seen.
+        // Hours → seconds, to match close_time's unit.
+        joinWithinSec: Math.max(0, Number(timingValue('autoJoinWithinHoursOfEnd')) || 0) * 3600,
+        joinAfterPercentElapsed: Math.max(0, Number(timingValue('autoJoinAfterPercentElapsed')) || 0),
+        // Hours-from-start anchor, converted like joinWithinSec: hours → seconds,
+        // to match start_time's unit.
+        joinAfterSecFromStart: Math.max(0, Number(timingValue('autoJoinAfterHoursFromStart')) || 0) * 3600,
+        hasProfileMatch: hasTitleOptIn(challenge),
+    };
+};
 
 /**
  * Report a candidate the join window could not evaluate.
  *
  * The live get_member_challenges response DOES carry close_time AND start_time
  * on every open challenge — verified 2026-09-19 — so this should never fire in
- * practice. `reason` names which of the two the gate could not read (only the
- * percent-elapsed anchor reads start_time). It stays because the fail-closed gate skips such a candidate, which
+ * practice. `reason` names which of the two the gate could not read (the
+ * percent-elapsed and after-start anchors read start_time). It stays because the fail-closed gate skips such a candidate, which
  * would otherwise be indistinguishable from "nothing to join": if GuruShots ever
  * drops or renames the field, the window would silently stop every join. Naming
  * the fields that ARE present makes that diagnosable from one run.
  */
 const warnMissingCloseTime = (challenge: Challenge, reason: string) => {
     const fields = Object.keys(challenge || {}).join(', ') || '(none)';
-    // start_time is only read by the percent-elapsed anchor, so name the field
+    // start_time is read by the percent-elapsed and after-start anchors, so name the field
     // the gate actually could not read rather than a generic "timing" message.
     const field = reason === 'start-time-unknown' ? 'start_time' : 'close_time';
     cat().warning(

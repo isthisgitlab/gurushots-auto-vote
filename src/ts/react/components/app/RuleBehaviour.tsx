@@ -7,7 +7,7 @@ import { RuleHoursMinutesField, RuleNumberField } from './RuleFields';
 
 import type { LooseRecord, TitleRule } from '../../../types/settings';
 import type { RuleFieldProps, RulePatchHandler } from './RuleFields';
-import type { SettingHint } from '../../../types/settingsEditor';
+import type { SettingHint, Translate } from '../../../types/settingsEditor';
 
 // Tri-state boolean override. '' = inherit (the key is omitted from the saved
 // rule entirely, so the rule never freezes today's default into storage);
@@ -58,10 +58,24 @@ const TRISTATE_OVERRIDES = [
     { settingKey: 'chosenPhotosInOrder', labelKey: 'app.chosenPhotosInOrder' },
     { settingKey: 'manualPhotosOnly', labelKey: 'app.manualPhotosOnly', onOnly: true },
 ];
+// The join-timing overrides in precedence order: after-start, then percent,
+// then before-end — the first field above 0 is the one that applies (0 counts
+// as filled but never wins). `minutes: true` edits as an hours + minutes pair
+// (the stored value stays fractional hours); the percent anchor stays a
+// number field. The labels read as connectives ("Or after"), so the hint names
+// the SETTING through `hintLabelKey` instead.
 const JOIN_TIMING_FIELDS = [
+    {
+        settingKey: 'autoJoinAfterHoursFromStart',
+        labelKey: 'app.titleRuleJoinAfterStart',
+        hintLabelKey: 'app.autoJoinAfterHoursFromStart',
+        placeholderKey: 'app.titleRuleJoinWindowPlaceholder',
+        minutes: true,
+    },
     {
         settingKey: 'autoJoinAfterPercentElapsed',
         labelKey: 'app.titleRulePercentElapsed',
+        hintLabelKey: 'app.autoJoinAfterPercentElapsed',
         unitKey: 'app.unitPercent',
         placeholderKey: 'app.titleRuleJoinWindowPlaceholder',
         min: 0,
@@ -70,12 +84,23 @@ const JOIN_TIMING_FIELDS = [
     {
         settingKey: 'autoJoinWithinHoursOfEnd',
         labelKey: 'app.titleRuleJoinWindow',
-        unitKey: 'app.unitHours',
+        hintLabelKey: 'app.autoJoinWithinHoursOfEnd',
         placeholderKey: 'app.titleRuleJoinWindowPlaceholder',
-        min: 0,
-        max: 720,
+        minutes: true,
     },
-];
+] as const;
+
+// One hint when a rule fills several timing fields: it names the setting that
+// applies, so the ignored entries don't read as pending. It shows only when at
+// least two are filled AND one of them is above 0 — all zeros mean every
+// timing is "join at once", no single field to name.
+const joinTimingHint = (rule: TitleRule, t: Translate): SettingHint | null => {
+    const filled = JOIN_TIMING_FIELDS.filter((field) => typeof rule[field.settingKey] === 'number');
+    if (filled.length < 2) return null;
+    const winner = filled.find((field) => Number(rule[field.settingKey]) > 0);
+    if (!winner) return null;
+    return { tone: 'info', text: t('app.titleRuleJoinTimingHint', { '0': t(winner.hintLabelKey) }) };
+};
 
 // The rule's chosen photos: an explicit list (an empty one means "none", beating a
 // lower layer's list) or inherit, which is how the rule stores ''.
@@ -99,6 +124,7 @@ function RulePhotosField({ rule, onPatch }: { rule: TitleRule; onPatch: RulePatc
 
 export function RuleBehaviour({ rule, onPatch }: { rule: TitleRule; onPatch: RulePatchHandler }) {
     const { t } = useTranslation();
+    const timingHint = joinTimingHint(rule, t);
     return (
         <div className="space-y-2">
             <span className="text-sm font-medium">{t('app.titleRuleOverridesLabel')}</span>
@@ -116,15 +142,33 @@ export function RuleBehaviour({ rule, onPatch }: { rule: TitleRule; onPatch: Rul
                         }
                     />
                 ))}
-                {/* The hours window edits as an hours + minutes pair (stored value
-                    stays fractional hours); the percent anchor stays a number field. */}
+                {/* Explicit props (not a spread) so hintLabelKey stays out of the
+                    field components — it belongs to the precedence hint alone. */}
                 {JOIN_TIMING_FIELDS.map((field) =>
-                    field.settingKey === 'autoJoinWithinHoursOfEnd' ? (
-                        <RuleHoursMinutesField key={field.settingKey} {...field} rule={rule} onPatch={onPatch} />
+                    'minutes' in field ? (
+                        <RuleHoursMinutesField
+                            key={field.settingKey}
+                            settingKey={field.settingKey}
+                            labelKey={field.labelKey}
+                            placeholderKey={field.placeholderKey}
+                            rule={rule}
+                            onPatch={onPatch}
+                        />
                     ) : (
-                        <RuleNumberField key={field.settingKey} {...field} rule={rule} onPatch={onPatch} />
+                        <RuleNumberField
+                            key={field.settingKey}
+                            settingKey={field.settingKey}
+                            labelKey={field.labelKey}
+                            unitKey={field.unitKey}
+                            placeholderKey={field.placeholderKey}
+                            min={field.min}
+                            max={field.max}
+                            rule={rule}
+                            onPatch={onPatch}
+                        />
                     ),
                 )}
+                {timingHint && <SettingHintList hints={[timingHint]} />}
             </div>
             <RulePhotosField rule={rule} onPatch={onPatch} />
             {rule.chosenPhotosOnly === true && <SettingHintList hints={[chosenPhotosOnlyReachHint(t)]} />}

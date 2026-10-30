@@ -148,6 +148,7 @@ export const logMessages = {
     m2dae83def588: 'autoSubmit: submitted 1 entry for {0} ({1} slots remain{2})',
     m2ded65cc4a06: 'Using cached vote images for {0}',
     m2e27dc229363: 'Manual vote: {0} voted, {1} skipped of {2}',
+    m2ea88a7ace6b: '{0}: the join-after-start offset is longer than the challenge — joining at 99% elapsed instead',
     m2eb572c92569: "Refused IPC '{0}' from untrusted frame {1}",
     m2f2cd3bb084b: 'API response body is not a JSON object',
     m2f44c7a4f853: 'Error handling save-settings request:',

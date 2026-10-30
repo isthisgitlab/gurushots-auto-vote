@@ -181,3 +181,34 @@ describe('CLI settings commands — challenge profiles', () => {
         expect(() => deleteProfile('ghost')).not.toThrow();
     });
 });
+
+describe('CLI settings commands — autoJoinAfterHoursFromStart', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        settings.SETTINGS_SCHEMA = invalid({
+            autoJoinAfterHoursFromStart: { type: 'number', perChallenge: true, default: 0 },
+        });
+    });
+
+    test('720 h + 1 min is rejected as the global default', () => {
+        settings.setGlobalDefault.mockReturnValue(false);
+        expect(setSetting('autoJoinAfterHoursFromStart', String(720 + 1 / 60))).toBe(false);
+        expect(settings.setGlobalDefault).toHaveBeenCalledWith('autoJoinAfterHoursFromStart', 720 + 1 / 60);
+        expect(settings.setSetting).not.toHaveBeenCalled();
+    });
+
+    test('a normal value is accepted, applied as the global default and read back', () => {
+        settings.setGlobalDefault.mockReturnValue(true);
+        settings.getGlobalDefault.mockReturnValue(48);
+        expect(setSetting('autoJoinAfterHoursFromStart', '48')).toBe(true);
+        expect(settings.setGlobalDefault).toHaveBeenCalledWith('autoJoinAfterHoursFromStart', 48);
+        expect(settings.getGlobalDefault).toHaveBeenCalledWith('autoJoinAfterHoursFromStart');
+    });
+
+    test('0 is accepted (the off sentinel)', () => {
+        settings.setGlobalDefault.mockReturnValue(true);
+        settings.getGlobalDefault.mockReturnValue(0);
+        expect(setSetting('autoJoinAfterHoursFromStart', '0')).toBe(true);
+        expect(settings.setGlobalDefault).toHaveBeenCalledWith('autoJoinAfterHoursFromStart', 0);
+    });
+});

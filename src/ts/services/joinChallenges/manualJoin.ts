@@ -66,9 +66,10 @@ const notOpenResult = async (
 };
 
 /**
- * Join ONE challenge by id, on user request. The `autoJoinWithinHoursOfEnd`
- * window deliberately does NOT apply here — it defers the AUTOMATIC pass, and an
- * explicit click is the user overriding that timing on purpose.
+ * Join ONE challenge by id, on user request. The join-timing settings
+ * (`autoJoinAfterHoursFromStart`, `autoJoinAfterPercentElapsed`,
+ * `autoJoinWithinHoursOfEnd`) deliberately do NOT apply here — they defer the
+ * AUTOMATIC pass, and an explicit click is the user overriding that timing on purpose.
  *
  * Re-fetches the live candidate so a
  * stale/closed entry in the renderer's cached list cannot trigger a wasted

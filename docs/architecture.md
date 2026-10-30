@@ -135,25 +135,38 @@ Domain terms used throughout, in reader's terms:
   short-circuits wholesale when the master is off **and** no rule turns it on (a rule that only adds photo
   tags never does); everything else (scope/coin caps/join window) is rule-resolved too, except
   `autoJoinCycleCoinBudget`, which is genuinely pass-global.
-- **The join window gates WHEN, never WHETHER.** Two settings express it, both on the `0` = off sentinel:
+- **The join window gates WHEN, never WHETHER.** Three settings express it, all on the `0` = off sentinel:
   `autoJoinWithinHoursOfEnd` joins a candidate once it is within that many hours of its own `close_time`,
-  and `autoJoinAfterPercentElapsed` joins it once that percentage of its own lifetime
-  (`close_time` - `start_time`) has run. Outside the window the candidate is _deferred_
-  (`skipped:too-early`) and reconsidered next cycle, not rejected. It is **fail-closed**: a candidate whose
-  `close_time` cannot be read is not joined while a window is set (percent mode additionally needs
-  `start_time`, and reports `skipped:start-time-unknown`), and the pass logs that candidate's actual field
-  names once per pass. Unlike the type filters, a rule opt-in does **not** bypass the window (bypassing an
-  explicit "join late" would invert it), and the manual single-join path ignores the window entirely — a
-  click is the user overriding timing.
-- **Percent and hours never combine — `resolveJoinWindow` picks exactly ONE.** Percent wins whenever it is
-  above 0, so a rule saying "90%" fully _replaces_ an inherited hours window instead of
-  intersecting with it; the effective timing for a candidate is therefore always readable off a single
-  number. The reason percent exists at all: hours-before-close does not transfer across challenge lengths.
-  The live open list carries 2h flash challenges and 515.7h exhibitions side by side, so one absolute window
-  is either far too late for the short ones or far too early for the long ones, while `75` means the same
-  thing to both. The percent ceiling is **99, not 100**: a challenge is only 100% elapsed once `close_time`
-  has passed, at which point the gate already reports `already-closed` — allowing 100 would ship a maximum
-  that silently never joins. Out-of-range values clamp to 99 (as late as possible), never to "never".
+  `autoJoinAfterPercentElapsed` joins it once that percentage of its own lifetime (`close_time` - `start_time`)
+  has run, and `autoJoinAfterHoursFromStart` joins it once that many hours have run since its `start_time`.
+  Exactly ONE applies, in the FIXED order after-start → percent → before-end (next bullet). Outside the window the
+  candidate is _deferred_ (`skipped:too-early`) and reconsidered next cycle, not rejected. It is **fail-closed**: a
+  candidate whose `close_time` cannot be read is not joined while a window is set (percent and after-start
+  additionally need `start_time`, and report `skipped:start-time-unknown`; with after-start set, a missing,
+  non-finite or non-positive `start_time`, or `close_time` - `start_time` <= 0, defers the same way), and the pass
+  logs that candidate's actual field names once per pass. A `start_time` in the future gives a negative elapsed time
+  and defers (`skipped:too-early`) — never joins. Unlike the type filters, a rule opt-in does **not** bypass the
+  window (bypassing an explicit "join late" would invert it), and the manual single-join path ignores the window
+  entirely — a click is the user overriding timing.
+- **The three timings never combine — `resolveJoinWindow` picks exactly ONE, in the FIXED order
+  after-start → percent → before-end.** The first above 0 applies, so a rule saying "90%" or "join 6 hours in"
+  fully _replaces_ an inherited window instead of intersecting with it; the effective timing for a candidate is
+  therefore always readable off a single number. The three keys also resolve as ONE group across settings
+  sources — the ONE exception to per-key resolution (see the resolution cascade below): the first source that
+  sets ANY timing key supplies all three, a key that source does not set counts as 0, and timing keys from
+  lower sources, the global defaults included, are ignored. An explicit `0` counts as set, so a rule setting
+  only `autoJoinAfterPercentElapsed: 0` takes the group and disables every inherited window — the candidate
+  joins as soon as it is seen (a blank, inherit field is absent and does not count). Per-key resolution would
+  let a lower source supply one timing key and beat a higher source's. The reason percent and after-start exist
+  at all: hours-before-close does not transfer across challenge lengths. The live open list carries 2h flash
+  challenges and 515.7h exhibitions side by side, so one absolute window is either far too late for the short
+  ones or far too early for the long ones, while `75` means the same thing to both. After-start exists because
+  exhibitions and magazines have no fixed length and the user wants "join N hours in". The percent ceiling is
+  **99, not 100**: a challenge is only 100% elapsed once `close_time` has passed, at which point the gate
+  already reports `already-closed` — allowing 100 would ship a maximum that silently never joins. Out-of-range
+  values clamp to 99 (as late as possible), never to "never". The after-start offset clamps the same way,
+  `min(value, 0.99 × (close_time - start_time))`: a value at or beyond the challenge's own length means
+  "join at 99% elapsed", and the join pass logs a note once per pass whenever the clamp changes the offset.
 - **Challenge rules match on conditions; the LIST ORDER is the precedence.** A rule in
   `challengeSettings.titleRules` carries any mix of conditions — titles (one `match` mode for all of them:
   `exact`, the default, `starts`, or `contains`), `challengeTag`, `type`, `pics` (`max_photo_submits`) and a
@@ -179,7 +192,10 @@ Domain terms used throughout, in reader's terms:
 - **Resolution cascades per key (`ruleValuesFor` in `settings/ruleResolution.ts`).** The matching rules are walked in list order and, for
   each setting, the FIRST rule that sets it wins — its own inline value first, then (for the first rule
   naming a profile only) that profile's value; a key it leaves unset falls through to the next matching
-  rule, then to the global default. Only **one profile** ever applies to a challenge, because profiles are
+  rule, then to the global default. The three join-timing keys are the ONE exception: they resolve as a group —
+  the first source that sets any of them supplies all three (a key it does not set counts as 0) — because only
+  one join timing ever applies, and per-key resolution would let a lower source supply one timing key and beat
+  a higher source's. Only **one profile** ever applies to a challenge, because profiles are
   validated as a whole value set (cross-field rules like `exposureTarget >= exposure`) and mixing keys from
   two could assemble a combination neither allows. An omitted key at any tier means _inherit_ and is never
   written as a value, so no rule can freeze today's default into storage. Id-keyed callers

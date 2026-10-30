@@ -74,6 +74,7 @@ jest.mock('../../src/ts/settings', () => ({
     getTitleRules: jest.fn(() => []),
     getChallengeProfiles: jest.fn(() => ({})),
     resolveRuleSetting: jest.fn(() => null),
+    resolveRuleSettingGroup: jest.fn(() => null),
     hasRuleJoinOptIn: jest.fn(() => false),
     getChallengeOverride: jest.fn(() => null),
 }));
@@ -100,6 +101,7 @@ import {
     pruneClosedClaims,
     readUnlockedState,
 } from '../../src/ts/services/joinChallenges/unlockMarker';
+import { resolveCandidateConfig } from '../../src/ts/services/joinChallenges/settingsResolution';
 import type { JoinDeps } from '../../src/ts/services/joinChallenges';
 import type { acquireUnlockLock as AcquireUnlockLock } from '../../src/ts/joinStateStore';
 import { parseJsonObject } from '../helpers/parseJson';
@@ -131,6 +133,18 @@ const rulesGive = (valuesFor: (target: Challenge) => Record<string, unknown>) =>
     settings.resolveRuleSetting.mockImplementation((key, target) => {
         const values = valuesFor(invalid(target)) || {};
         return Object.prototype.hasOwnProperty.call(values, key) ? { value: values[key] } : null;
+    });
+
+// The three timing keys resolve as ONE group; this stands in for
+// resolveRuleSettingGroup — what the first source that sets any timing key
+// contributes for a candidate. A key absent from the map counts as 0; null (no
+// source sets any timing key) leaves the global timing values in force. The
+// facade's own winner-picking (rule order, inline before profile) is covered in
+// the settings tests; these mocks stand in for its answers.
+const rulesGiveGroup = (valuesFor: (target: Challenge) => Record<string, unknown> | null) =>
+    settings.resolveRuleSettingGroup.mockImplementation((_keys, target) => {
+        const values = valuesFor(invalid(target));
+        return values === null ? null : { values };
     });
 
 // A claim made just now: far from any age at which claims are pruned.
@@ -191,6 +205,7 @@ beforeEach(() => {
     settings.getTitleRules.mockReturnValue([]);
     settings.getChallengeProfiles.mockReturnValue({});
     settings.resolveRuleSetting.mockReturnValue(null);
+    settings.resolveRuleSettingGroup.mockReturnValue(null);
     settings.hasRuleJoinOptIn.mockReturnValue(false);
     settings.getEffectiveSetting.mockImplementation((key) => DEFAULT_SETTINGS[key]);
     inFlight.clear();
@@ -1578,7 +1593,7 @@ describe('runJoinPass — join window', () => {
         // Global says "join on sight"; the rule for this title says "only in the
         // last 24h" — the title must still be deferred.
         withWindow(0);
-        rulesGive((target) => (titleOf(target) === 'abc' ? { autoJoinWithinHoursOfEnd: 24 } : {}));
+        rulesGiveGroup((target) => (titleOf(target) === 'abc' ? { autoJoinWithinHoursOfEnd: 24 } : null));
         const deps = makeDeps({
             getMemberChallenges: openList([
                 { id: 1, join_coins: 0, type: 'flash', title: 'abc', close_time: NOW_SEC + 48 * HOUR },
@@ -1673,6 +1688,195 @@ describe('runJoinPass — join window', () => {
     });
 });
 
+/**
+ * The three join-timing keys resolve as ONE group (resolveRuleSettingGroup in
+ * settings/titleRules.ts): the first rule source that sets any of them supplies
+ * all three, a key its source does not set counts as 0, and the global timing
+ * values are ignored while a group is in force. The mock stands in for that
+ * read — these tests pin what the join CONFIG does with the group; the
+ * facade's own winner-picking (rule order, inline before profile) is covered in
+ * the settings tests.
+ */
+describe('join timing as one group', () => {
+    const HOUR = 3600;
+    const NOW_MS = 1_700_000_000_000;
+    const NOW_SEC = NOW_MS / 1000;
+    const configFor = (challenge: Partial<Challenge>) =>
+        resolveCandidateConfig(
+            invalid<Challenge>({ id: 1, join_coins: 0, type: 'flash', title: 'Ruled', ...challenge }),
+        );
+
+    test('a global after-start does not beat a rule percent: a group in force omits what its source does not set', () => {
+        settings.getEffectiveSetting.mockImplementation((k) =>
+            k === 'autoJoinAfterHoursFromStart' ? 100 : DEFAULT_SETTINGS[k],
+        );
+        rulesGiveGroup((target) => (titleOf(target) === 'Ruled' ? { autoJoinAfterPercentElapsed: 50 } : null));
+        const cfg = configFor({});
+        expect(cfg.joinAfterPercentElapsed).toBe(50);
+        // The group's source set no after-start, so it reads 0 — NOT the global 100.
+        expect(cfg.joinAfterSecFromStart).toBe(0);
+        expect(cfg.joinWithinSec).toBe(0);
+        // A candidate no rule matches keeps the global values in force.
+        expect(configFor({ title: 'Untouched' }).joinAfterSecFromStart).toBe(100 * HOUR);
+    });
+
+    test('a lower rule after-start does not beat a higher rule percent: the group stops the per-key rule reads', () => {
+        // Read per key, the cascade would hand after-start to the lower rule;
+        // with the group in force the absent key reads 0 instead.
+        rulesGive(() => ({ autoJoinAfterHoursFromStart: 2 }));
+        rulesGiveGroup(() => ({ autoJoinAfterPercentElapsed: 90 }));
+        const cfg = configFor({});
+        expect(cfg.joinAfterPercentElapsed).toBe(90);
+        expect(cfg.joinAfterSecFromStart).toBe(0);
+    });
+
+    test('a rule 0 on one key takes the group over a global window on another key — and joins now', async () => {
+        settings.getEffectiveSetting.mockImplementation((k) =>
+            k === 'autoJoinWithinHoursOfEnd' ? 24 : DEFAULT_SETTINGS[k],
+        );
+        rulesGiveGroup((target) => (titleOf(target) === 'Ruled' ? { autoJoinAfterPercentElapsed: 0 } : null));
+        const cfg = configFor({});
+        // The explicit 0 counts as set, and the absent keys read 0 — the global
+        // 24h window never applies.
+        expect(cfg.joinWithinSec).toBe(0);
+        expect(cfg.joinAfterSecFromStart).toBe(0);
+        expect(cfg.joinAfterPercentElapsed).toBe(0);
+        const deps = makeDeps({
+            getMemberChallenges: openList([
+                { id: 1, join_coins: 0, type: 'flash', title: 'Ruled', close_time: NOW_SEC + 48 * HOUR },
+            ]),
+        });
+        const res = await runJoinPass('tok', NOW_MS, deps);
+        expect(res.results).toEqual([{ id: 1, status: 'joined' }]);
+    });
+
+    test('a rule with all timing blank leaves the global window in force', async () => {
+        settings.getEffectiveSetting.mockImplementation((k) =>
+            k === 'autoJoinWithinHoursOfEnd' ? 24 : DEFAULT_SETTINGS[k],
+        );
+        // No source sets any timing key → the group read returns null.
+        rulesGiveGroup(() => null);
+        expect(configFor({}).joinWithinSec).toBe(24 * HOUR);
+        const deps = makeDeps({
+            getMemberChallenges: openList([
+                { id: 1, join_coins: 0, type: 'flash', title: 'Ruled', close_time: NOW_SEC + 48 * HOUR },
+            ]),
+        });
+        const res = await runJoinPass('tok', NOW_MS, deps);
+        expect(res.results).toEqual([{ id: 1, status: 'skipped:too-early' }]);
+    });
+
+    test('a profile-set timing key reaches the config through the group read', () => {
+        // The mock hands back the group a profile-sourced key produces; how the
+        // facade weighs inline against profile is covered upstream.
+        rulesGiveGroup(() => ({ autoJoinAfterHoursFromStart: 2 }));
+        expect(configFor({}).joinAfterSecFromStart).toBe(2 * HOUR);
+    });
+
+    test("a rule's inline percent beats the same rule's profile after-start: the profile timing is dropped", () => {
+        // The group carries ONLY the winner's keys — the inline percent — so a
+        // profile after-start behind the same rule reads 0, never rides along.
+        rulesGiveGroup(() => ({ autoJoinAfterPercentElapsed: 90 }));
+        const cfg = configFor({});
+        expect(cfg.joinAfterPercentElapsed).toBe(90);
+        expect(cfg.joinAfterSecFromStart).toBe(0);
+    });
+});
+
+/**
+ * The after-start window end-to-end through the pass: the deferral and its
+ * lift for the active missions, and the once-per-pass clamp note for a value
+ * at or beyond the challenge's own length.
+ */
+describe('runJoinPass — hours from start', () => {
+    const HOUR = 3600;
+    const NOW_MS = 1_700_000_000_000;
+    const NOW_SEC = NOW_MS / 1000;
+    const START = NOW_SEC - 24 * HOUR;
+    // A 48h challenge, 24h of which have run.
+    const candidate = (id: number) => ({
+        id,
+        join_coins: 0,
+        type: 'flash',
+        title: `Aged ${id}`,
+        start_time: START,
+        close_time: NOW_SEC + 24 * HOUR,
+    });
+    const withAfterStart = (hours: number) =>
+        settings.getEffectiveSetting.mockImplementation((k) =>
+            k === 'autoJoinAfterHoursFromStart' ? hours : DEFAULT_SETTINGS[k],
+        );
+    const clampNotes = () =>
+        invalid<LoggerMock>(require('../../src/ts/logger'))
+            .withCategory()
+            .info.mock.calls.map(([msg]) => msg)
+            .filter((msg) => msg.includes('join-after-start offset'));
+
+    test('defers until the offset has run since start_time, then joins', async () => {
+        withAfterStart(30);
+        const deps = makeDeps({ getMemberChallenges: openList([candidate(1)]) });
+        const res = await runJoinPass('tok', NOW_MS, deps);
+        expect(res.results).toEqual([{ id: 1, status: 'skipped:too-early' }]);
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+        // 24h of the 48h run is short of the 30h offset — no clamp, no note.
+        expect(clampNotes()).toEqual([]);
+
+        const later = makeDeps({ getMemberChallenges: openList([candidate(1)]) });
+        const joined = await runJoinPass('tok', NOW_MS + 7 * HOUR * 1000, later);
+        expect(joined.results).toEqual([{ id: 1, status: 'joined' }]);
+    });
+
+    test('an active join mission lifts the deferral — and the clamp note stays quiet in early-join mode', async () => {
+        // 100h would clamp on this challenge, but the window is lifted wholesale.
+        settings.getEffectiveSetting.mockImplementation((k) => {
+            const map: Record<string, unknown> = {
+                ...DEFAULT_SETTINGS,
+                autoJoinAfterHoursFromStart: 100,
+                missionJoinEarly: true,
+            };
+            return map[k];
+        });
+        const deps = makeDeps({
+            getMemberChallenges: openList([candidate(1)]),
+            getActiveChallenges: double<'getActiveChallenges'>(async () => ({ challenges: [] })),
+        });
+        const res = await runJoinPass('tok', NOW_MS, deps, { join: 1, fill: 0, turbo: 0, boost: 0, vote: 0 });
+        expect(res.results).toEqual([{ id: 1, status: 'joined' }]);
+        expect(clampNotes()).toEqual([]);
+    });
+
+    test('a clamped offset is noted once per pass, naming the first clamped challenge', async () => {
+        withAfterStart(100);
+        const deps = makeDeps({ getMemberChallenges: openList([candidate(1), candidate(2)]) });
+        const res = await runJoinPass('tok', NOW_MS, deps);
+        // Both sit far short of the clamped point (99% of the 48h run).
+        expect(res.results).toEqual([
+            { id: 1, status: 'skipped:too-early' },
+            { id: 2, status: 'skipped:too-early' },
+        ]);
+        expect(clampNotes()).toEqual([
+            'challenge 1: the join-after-start offset is longer than the challenge — joining at 99% elapsed instead',
+        ]);
+    });
+
+    test('a candidate the scope checks refuse names no clamp note, whatever the offset', async () => {
+        // 100h would clamp on this challenge, but the type refusal comes before
+        // the window: the clamp never governed this candidate.
+        settings.getEffectiveSetting.mockImplementation((k) => {
+            const map: Record<string, unknown> = {
+                ...DEFAULT_SETTINGS,
+                autoJoinAfterHoursFromStart: 100,
+                autoJoinExcludeTypes: 'flash',
+            };
+            return map[k];
+        });
+        const deps = makeDeps({ getMemberChallenges: openList([candidate(1)]) });
+        const res = await runJoinPass('tok', NOW_MS, deps);
+        expect(res.results).toEqual([{ id: 1, status: 'skipped:excluded-type' }]);
+        expect(clampNotes()).toEqual([]);
+    });
+});
+
 describe('runJoinPass — inline rule arming', () => {
     test('master off but an inline autoJoin:true rule arms the pass', async () => {
         settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? false : DEFAULT_SETTINGS[k]));
@@ -1724,7 +1928,7 @@ describe('runJoinPass — inline rule arming', () => {
         settings.getEffectiveSetting.mockImplementation((k) =>
             k === 'autoJoinExcludeTypes' ? 'flash' : DEFAULT_SETTINGS[k],
         );
-        rulesGive(() => ({ autoJoinWithinHoursOfEnd: 24 }));
+        rulesGiveGroup(() => ({ autoJoinWithinHoursOfEnd: 24 }));
         const deps = makeDeps({
             getMemberChallenges: openList([{ id: 1, join_coins: 0, type: 'flash', title: 'Timed' }]),
         });
@@ -1780,7 +1984,9 @@ describe('runJoinPass — challenge tags', () => {
         const HOUR = 3600;
         const nowMs = 1_700_000_000_000;
         const nowSec = nowMs / 1000;
-        rulesGive((target) => ((target?.tags || []).includes('Exhibition') ? { autoJoinWithinHoursOfEnd: 24 } : {}));
+        rulesGiveGroup((target) =>
+            (target?.tags || []).includes('Exhibition') ? { autoJoinWithinHoursOfEnd: 24 } : null,
+        );
         const deps = makeDeps({
             getMemberChallenges: openList([
                 // Tagged Exhibition and far from closing -> deferred by the rule.
@@ -3142,7 +3348,7 @@ describe('runJoinPass \u2014 join timing from class rules', () => {
         // Global says "only in the last hour" \u2014 this candidate has 4h left.
         globalSetting({ autoJoinWithinHoursOfEnd: 1 });
         // The rule widens it to 6h, so this one joins.
-        rulesGive((target) => (target?.max_photo_submits === 4 ? { autoJoinWithinHoursOfEnd: 6 } : {}));
+        rulesGiveGroup((target) => (target?.max_photo_submits === 4 ? { autoJoinWithinHoursOfEnd: 6 } : null));
         const deps = makeDeps({ getMemberChallenges: openList([candidate()]) });
         const res = await runJoinPass('tok', NOW_MS, deps);
         expect(res.joined).toBe(1);
@@ -3151,7 +3357,7 @@ describe('runJoinPass \u2014 join timing from class rules', () => {
 
     test('a class rule can also make the timing STRICTER than the global', async () => {
         globalSetting({ autoJoinWithinHoursOfEnd: 48 });
-        rulesGive((target) => (target?.max_photo_submits === 4 ? { autoJoinWithinHoursOfEnd: 1 } : {}));
+        rulesGiveGroup((target) => (target?.max_photo_submits === 4 ? { autoJoinWithinHoursOfEnd: 1 } : null));
         const deps = makeDeps({ getMemberChallenges: openList([candidate()]) });
         const res = await runJoinPass('tok', NOW_MS, deps);
         expect(res.joined).toBe(0);
@@ -3163,7 +3369,7 @@ describe('runJoinPass \u2014 join timing from class rules', () => {
         // The global hours window alone would defer (1h allowed, 4h left).
         globalSetting({ autoJoinWithinHoursOfEnd: 1 });
         // 83% elapsed clears a 75% anchor, so the candidate joins.
-        rulesGive((target) => (target?.max_photo_submits === 4 ? { autoJoinAfterPercentElapsed: 75 } : {}));
+        rulesGiveGroup((target) => (target?.max_photo_submits === 4 ? { autoJoinAfterPercentElapsed: 75 } : null));
         const deps = makeDeps({ getMemberChallenges: openList([candidate()]) });
         const res = await runJoinPass('tok', NOW_MS, deps);
         expect(res.joined).toBe(1);
@@ -3171,7 +3377,7 @@ describe('runJoinPass \u2014 join timing from class rules', () => {
 
     test('a percent rule defers a candidate that has not run long enough yet', async () => {
         globalSetting({ autoJoinWithinHoursOfEnd: 0 });
-        rulesGive((target) => (target?.max_photo_submits === 4 ? { autoJoinAfterPercentElapsed: 90 } : {}));
+        rulesGiveGroup((target) => (target?.max_photo_submits === 4 ? { autoJoinAfterPercentElapsed: 90 } : null));
         const deps = makeDeps({ getMemberChallenges: openList([candidate()]) });
         const res = await runJoinPass('tok', NOW_MS, deps);
         expect(res.joined).toBe(0);

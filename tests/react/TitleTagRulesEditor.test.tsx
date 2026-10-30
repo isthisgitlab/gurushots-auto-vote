@@ -9,6 +9,9 @@ import { fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { TitleTagRulesEditor } from '@/components/app/TitleTagRulesEditor';
 import type { TitleRule } from '../../src/ts/types/settings';
 import { invalid } from '../helpers/invalid';
+import { fillTemplate, mockTranslator } from './helpers/setup';
+import { app as englishApp } from '../../src/ts/translations/english';
+import { app as latvianApp } from '../../src/ts/translations/latvian';
 
 describe('TitleTagRulesEditor', () => {
     test('renders the empty-state hint when there are no rules', () => {
@@ -324,6 +327,160 @@ describe('TitleTagRulesEditor', () => {
             render(<TitleTagRulesEditor value={rowWith({ autoJoinWithinHoursOfEnd: 0 })} onChange={jest.fn()} />);
             expect(screen.getByLabelText<HTMLInputElement>('app.titleRuleJoinWindow app.hours').value).toBe('0');
             expect(screen.getByLabelText<HTMLInputElement>('app.titleRuleJoinWindow app.minutes').value).toBe('0');
+        });
+
+        test('the after-start field edits as hours + minutes and stores fractional hours', () => {
+            const onChange = jest.fn();
+            render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+            fireEvent.change(screen.getByLabelText('app.titleRuleJoinAfterStart app.hours'), {
+                target: { value: '2' },
+            });
+            expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ autoJoinAfterHoursFromStart: 2 })]);
+            fireEvent.change(screen.getByLabelText('app.titleRuleJoinAfterStart app.minutes'), {
+                target: { value: '30' },
+            });
+            expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ autoJoinAfterHoursFromStart: 2.5 })]);
+        });
+
+        test('clearing the after-start field emits inherit, NOT 0', () => {
+            const onChange = jest.fn();
+            render(<TitleTagRulesEditor value={rowWith({ autoJoinAfterHoursFromStart: 2.5 })} onChange={onChange} />);
+            fireEvent.change(screen.getByLabelText('app.titleRuleJoinAfterStart app.hours'), { target: { value: '' } });
+            expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ autoJoinAfterHoursFromStart: 0.5 })]);
+            fireEvent.change(screen.getByLabelText('app.titleRuleJoinAfterStart app.minutes'), {
+                target: { value: '' },
+            });
+            expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ autoJoinAfterHoursFromStart: '' })]);
+        });
+
+        test('an explicit 0 after-start renders as 0h 0m, not as an empty (inherit) pair', () => {
+            render(<TitleTagRulesEditor value={rowWith({ autoJoinAfterHoursFromStart: 0 })} onChange={jest.fn()} />);
+            expect(screen.getByLabelText<HTMLInputElement>('app.titleRuleJoinAfterStart app.hours').value).toBe('0');
+            expect(screen.getByLabelText<HTMLInputElement>('app.titleRuleJoinAfterStart app.minutes').value).toBe('0');
+        });
+
+        test('the after-start hours entry caps at 720 hours', () => {
+            const onChange = jest.fn();
+            render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+            fireEvent.change(screen.getByLabelText('app.titleRuleJoinAfterStart app.hours'), {
+                target: { value: '721' },
+            });
+            expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ autoJoinAfterHoursFromStart: 720 })]);
+        });
+
+        test('the timing fields render in precedence order: after-start, percent, before-end', () => {
+            render(<TitleTagRulesEditor value={rowWith()} onChange={jest.fn()} />);
+            const afterStart = screen.getByLabelText('app.titleRuleJoinAfterStart app.hours');
+            const percent = screen.getByLabelText('app.titleRulePercentElapsed');
+            const beforeEnd = screen.getByLabelText('app.titleRuleJoinWindow app.hours');
+            expect(afterStart.getAttribute('max')).toBe('720');
+            expect(percent.getAttribute('max')).toBe('99');
+            expect(afterStart.compareDocumentPosition(percent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            expect(percent.compareDocumentPosition(beforeEnd) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        });
+
+        /**
+         * The one-timing-applies hint. It names the SETTING (the field labels read
+         * as connectives), asserted under the key-verbatim mock through the t call;
+         * the real-dictionary block below asserts the composed text itself.
+         */
+        describe('join timing hint', () => {
+            // The context's t passes the current language as a third argument.
+            const hintNames = (settingKey: string) =>
+                expect(mockTranslator.t).toHaveBeenCalledWith('app.titleRuleJoinTimingHint', { '0': settingKey }, 'en');
+
+            test('two filled fields name the first above 0 in precedence order', () => {
+                render(
+                    <TitleTagRulesEditor
+                        value={rowWith({ autoJoinAfterPercentElapsed: 75, autoJoinWithinHoursOfEnd: 24 })}
+                        onChange={jest.fn()}
+                    />,
+                );
+                expect(screen.getByText('app.titleRuleJoinTimingHint')).toBeTruthy();
+                hintNames('app.autoJoinAfterPercentElapsed');
+            });
+
+            test('after-start wins over percent', () => {
+                render(
+                    <TitleTagRulesEditor
+                        value={rowWith({ autoJoinAfterHoursFromStart: 5, autoJoinAfterPercentElapsed: 75 })}
+                        onChange={jest.fn()}
+                    />,
+                );
+                hintNames('app.autoJoinAfterHoursFromStart');
+            });
+
+            test('a zero-filled field is skipped even when it sits first', () => {
+                render(
+                    <TitleTagRulesEditor
+                        value={rowWith({ autoJoinAfterHoursFromStart: 0, autoJoinAfterPercentElapsed: 75 })}
+                        onChange={jest.fn()}
+                    />,
+                );
+                hintNames('app.autoJoinAfterPercentElapsed');
+            });
+
+            test('a single filled field shows no hint', () => {
+                render(
+                    <TitleTagRulesEditor value={rowWith({ autoJoinAfterPercentElapsed: 75 })} onChange={jest.fn()} />,
+                );
+                expect(screen.queryByText('app.titleRuleJoinTimingHint')).toBeNull();
+            });
+
+            test('two filled fields that are all zero show no hint: no field applies', () => {
+                render(
+                    <TitleTagRulesEditor
+                        value={rowWith({ autoJoinAfterHoursFromStart: 0, autoJoinWithinHoursOfEnd: 0 })}
+                        onChange={jest.fn()}
+                    />,
+                );
+                expect(screen.queryByText('app.titleRuleJoinTimingHint')).toBeNull();
+            });
+
+            describe.each([
+                ['English', englishApp],
+                ['Latvian', latvianApp],
+            ])('with real %s strings', (_language, strings: typeof englishApp | typeof latvianApp) => {
+                const byKey = new Map(Object.entries(strings));
+                let previousTranslator: ReturnType<typeof mockTranslator.t.getMockImplementation>;
+                beforeEach(() => {
+                    previousTranslator = mockTranslator.t.getMockImplementation();
+                    mockTranslator.t.mockImplementation((key, vars) =>
+                        fillTemplate(byKey.get(key.replace(/^app\./, '')) ?? key, vars),
+                    );
+                });
+                afterEach(() => {
+                    mockTranslator.t.mockImplementation(previousTranslator);
+                });
+
+                test('percent over before-end names the percent setting translated', () => {
+                    render(
+                        <TitleTagRulesEditor
+                            value={rowWith({ autoJoinAfterPercentElapsed: 75, autoJoinWithinHoursOfEnd: 24 })}
+                            onChange={jest.fn()}
+                        />,
+                    );
+                    expect(
+                        screen.getByText(
+                            fillTemplate(strings.titleRuleJoinTimingHint, { '0': strings.autoJoinAfterPercentElapsed }),
+                        ),
+                    ).toBeTruthy();
+                });
+
+                test('after-start over percent names the after-start setting translated', () => {
+                    render(
+                        <TitleTagRulesEditor
+                            value={rowWith({ autoJoinAfterHoursFromStart: 5, autoJoinAfterPercentElapsed: 75 })}
+                            onChange={jest.fn()}
+                        />,
+                    );
+                    expect(
+                        screen.getByText(
+                            fillTemplate(strings.titleRuleJoinTimingHint, { '0': strings.autoJoinAfterHoursFromStart }),
+                        ),
+                    ).toBeTruthy();
+                });
+            });
         });
     });
 

@@ -85,6 +85,44 @@ const resolveRuleSetting = (key: string, target: RuleMatchChallenge | string): {
 };
 
 /**
+ * The join-timing keys resolved as ONE group for callers holding a challenge
+ * payload (the join pass resolves un-joined candidates, which have no
+ * id-keyed state). The three join-timing keys must be read together because
+ * only one timing setting applies to a candidate — reading each key from its
+ * own best source would let a lower source smuggle in a second window. So the
+ * group is what the FIRST source that sets ANY of the keys sets, the winner by
+ * (rule index, inline before profile), and the returned `values` holds exactly
+ * the requested keys whose source is that winner — keys set by lower sources
+ * (a later rule, a profile behind the same rule's inline value, everything
+ * global) are omitted, and the caller reads them as 0. Null when no source
+ * sets any of the keys. An explicit 0 counts as set; a blank field never
+ * reaches `values` (ruleInlineEntries drops it).
+ */
+const resolveRuleSettingGroup = (
+    keys: string[],
+    target: RuleMatchChallenge | string,
+): { values: Record<string, unknown> } | null => {
+    const { values, sources } = ruleValuesFor(loadSettings(), target);
+    const setKeys = keys.filter((key) => Object.prototype.hasOwnProperty.call(values, key));
+    if (setKeys.length === 0) return null;
+    // The winning source: lower rule index first; within one rule, its own
+    // inline value before its profile's. `take` in ruleValuesFor hands every
+    // key of one rule's layer the same source object, so the winner is
+    // compared by identity below.
+    const winner = setKeys
+        .map((key) => sources[key])
+        .reduce((best, source) => {
+            if (source.index !== best.index) return source.index < best.index ? source : best;
+            return best.viaProfile && !source.viaProfile ? source : best;
+        });
+    const group: Record<string, unknown> = {};
+    for (const key of keys) {
+        if (sources[key] === winner) group[key] = values[key];
+    }
+    return { values: group };
+};
+
+/**
  * Whether the rules explicitly opt a candidate into auto-join strongly enough
  * to bypass the join TYPE filters: they resolve `autoJoin` to true (inline or
  * via the profile), or the applying profile comes from a rule naming a title or
@@ -307,6 +345,7 @@ export {
     setTitleRules,
     previewTitleRules,
     resolveRuleSetting,
+    resolveRuleSettingGroup,
     hasRuleJoinOptIn,
     getTitleProfile,
     getEffectiveTagSetting,

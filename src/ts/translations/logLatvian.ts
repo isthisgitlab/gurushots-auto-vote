@@ -152,6 +152,8 @@ export const logMessages = {
     m2dae83def588: 'Automātiskā iesniegšana: izaicinājumā {0} iesniegts 1 foto (atlikušas brīvas vietas: {1}{2})',
     m2ded65cc4a06: 'Izmanto kešatmiņā saglabātos balsošanas foto izaicinājumam {0}',
     m2e27dc229363: 'Manuālā balsošana: nobalsots: {0}, izlaists: {1}, kopā: {2}',
+    m2ea88a7ace6b:
+        '{0}: pievienošanās laiks no sākuma ir garāks par paša izaicinājuma garumu — pievienojas, kad pagājis 99 % no tā',
     m2eb572c92569: 'Noraidīts IPC "{0}" pieprasījums no neuzticama loga ietvara {1}',
     m2f2cd3bb084b: 'API atbildes saturs nav JSON objekts',
     m2f44c7a4f853: 'Kļūda, apstrādājot save-settings pieprasījumu:',

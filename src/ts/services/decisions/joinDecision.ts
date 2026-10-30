@@ -10,22 +10,40 @@
 const MAX_REACHABLE_PERCENT_ELAPSED = 99;
 
 /**
- * Collapse the two join-timing settings into the ONE window that governs a
+ * The one clamp both after-start readers share: an offset at or beyond the
+ * challenge's own length degrades to the latest REACHABLE point (99% of the
+ * run — the seconds form of MAX_REACHABLE_PERCENT_ELAPSED), never to "never
+ * join". `joinWindowRefusal` joins against it; `joinAfterStartClampSec`
+ * reports it, so the join pass can note the reduction.
+ */
+const clampAfterStartOffsetSec = (offsetSec: number, durationSec: number): number =>
+    Math.min(offsetSec, (MAX_REACHABLE_PERCENT_ELAPSED / 100) * durationSec);
+
+/**
+ * Collapse the three join-timing settings into the ONE window that governs a
  * candidate.
  *
- * A candidate is never gated by both at once. `autoJoinAfterPercentElapsed`
- * wins whenever it is set, because it is the more specific instruction: it
- * names a point in the challenge's own life, while the hours window names a
- * distance from the end that means different things for a 2h flash and a 515h
- * exhibition. With percent off, the hours window applies on its own.
+ * A candidate is never gated by more than one at once. The settings are read in
+ * a fixed order — after-start (seconds since the challenge's own `start_time`),
+ * then percent elapsed, then hours before end — and the FIRST with a value
+ * above 0 applies, each being the more specific instruction than the ones below
+ * it. The settings schema resolves the three as one group upstream
+ * (`resolveRuleSettingGroup` in settings/titleRules.ts), so no source can
+ * contribute a second window on top of the winning one; each sentinel stays
+ * `0 = off`.
  *
+ * @param joinAfterSecFromStart seconds after start_time to wait before joining (0 = off)
  * @param joinWithinSec seconds before close_time to start joining (0 = off)
  * @param percentElapsed percent of the challenge's lifetime that must have run (0 = off)
  */
 const resolveJoinWindow = (
+    joinAfterSecFromStart: number,
     joinWithinSec: number,
     percentElapsed: number,
-): { mode: 'percent' | 'hours' | 'off'; value: number } => {
+): { mode: 'afterStart' | 'percent' | 'hours' | 'off'; value: number } => {
+    if (Number.isFinite(joinAfterSecFromStart) && joinAfterSecFromStart > 0) {
+        return { mode: 'afterStart', value: joinAfterSecFromStart };
+    }
     if (Number.isFinite(percentElapsed) && percentElapsed > 0) {
         // Clamp to the latest REACHABLE fraction. 100% is only true once
         // close_time has passed, and joinWindowRefusal rejects an already-closed
@@ -44,7 +62,7 @@ const resolveJoinWindow = (
  * decision reads as one list of vetoes.
  *
  * Returns the refusal reason, or null when the window does not veto — either
- * because no window is set (both sentinels 0 = off: join as soon as seen) or
+ * because no window is set (every sentinel 0 = off: join as soon as seen) or
  * because the candidate is inside it.
  *
  * FAIL-CLOSED: a candidate that cannot prove it is inside the window (no
@@ -54,19 +72,23 @@ const resolveJoinWindow = (
  * `start_time`, to know how long the challenge runs — and is fail-closed on it
  * for the same reason: without a length, a percentage means nothing, and
  * guessing one would spend the entry at exactly the moment the setting exists
- * to avoid.
+ * to avoid. The after-start window anchors on that same `start_time` and is
+ * fail-closed on it identically: without it there is nothing to measure the
+ * wait against.
  *
  * @param joinWithinSec seconds before close_time to start joining (0 = off)
  * @param nowSec current time in epoch SECONDS (close_time's unit)
  * @param percentElapsed percent of the challenge's lifetime that must have run (0 = off)
+ * @param joinAfterSecFromStart seconds after start_time to wait before joining (0 = off)
  */
 const joinWindowRefusal = (
     challenge: { close_time?: number; start_time?: number },
     joinWithinSec: number,
     nowSec: number,
     percentElapsed: number,
+    joinAfterSecFromStart: number,
 ): string | null => {
-    const window = resolveJoinWindow(joinWithinSec, percentElapsed);
+    const window = resolveJoinWindow(joinAfterSecFromStart, joinWithinSec, percentElapsed);
     if (window.mode === 'off') return null;
 
     const closeTime = Number(challenge?.close_time);
@@ -77,6 +99,23 @@ const joinWindowRefusal = (
     // Already closed (a stale entry in the open list) — joining would burn a
     // submission on a dead challenge.
     if (secondsLeft <= 0) return 'already-closed';
+
+    if (window.mode === 'afterStart') {
+        const startTime = Number(challenge?.start_time);
+        if (!Number.isFinite(startTime) || startTime <= 0) return 'start-time-unknown';
+        const durationSec = closeTime - startTime;
+        // A non-positive duration is a nonsensical payload (start at or after
+        // close); there is no anchor to measure the wait from, so refuse.
+        if (durationSec <= 0) return 'start-time-unknown';
+        // Clamp to the latest REACHABLE point — the same ceiling as percent
+        // mode: a value at or beyond the challenge's own length must degrade
+        // to "as late as possible", never to "never join".
+        // Deliberately NO clamp at 0 on the elapsed side: a start_time in the
+        // future (clock skew) gives negative elapsed, below any positive
+        // offset — 'too-early', never a join.
+        const elapsedSec = nowSec - startTime;
+        return elapsedSec < clampAfterStartOffsetSec(window.value, durationSec) ? 'too-early' : null;
+    }
 
     if (window.mode === 'percent') {
         const startTime = Number(challenge?.start_time);
@@ -92,6 +131,42 @@ const joinWindowRefusal = (
     }
 
     return secondsLeft > window.value ? 'too-early' : null;
+};
+
+/**
+ * The after-start offset AFTER the clamp, but only when the clamp reduced it —
+ * null otherwise. The join pass logs its clamp note only on a non-null result,
+ * so this is a read over `joinWindowRefusal`'s exact math, never a second
+ * implementation of it (both call `clampAfterStartOffsetSec`).
+ *
+ * Non-null requires the after-start window to be the active gate — a value
+ * above 0 IS after-start mode, the first timing key above 0 winning — and the
+ * candidate still open: every state where `joinWindowRefusal` refuses before
+ * consulting the offset ('close-time-unknown', 'already-closed',
+ * 'start-time-unknown') reads as null here, and so does a value the clamp
+ * left alone.
+ *
+ * @param challenge the candidate, read for `close_time`/`start_time` only
+ * @param nowSec current time in epoch SECONDS (close_time's unit)
+ * @param joinAfterSecFromStart seconds after start_time to wait before joining (0 = off)
+ * @returns the clamped offset in seconds, or null when nothing was reduced
+ */
+const joinAfterStartClampSec = (
+    challenge: { close_time?: number; start_time?: number },
+    nowSec: number,
+    joinAfterSecFromStart: number,
+): number | null => {
+    if (!Number.isFinite(joinAfterSecFromStart) || joinAfterSecFromStart <= 0) return null;
+    const closeTime = Number(challenge?.close_time);
+    if (!Number.isFinite(closeTime) || closeTime <= 0 || !Number.isFinite(nowSec) || nowSec <= 0) return null;
+    // Already closed: the gate reports 'already-closed' and never reads the offset.
+    if (closeTime <= nowSec) return null;
+    const startTime = Number(challenge?.start_time);
+    if (!Number.isFinite(startTime) || startTime <= 0) return null;
+    const durationSec = closeTime - startTime;
+    if (durationSec <= 0) return null;
+    const clamped = clampAfterStartOffsetSec(joinAfterSecFromStart, durationSec);
+    return clamped < joinAfterSecFromStart ? clamped : null;
 };
 
 /**
@@ -240,23 +315,30 @@ const normalizeJoinFacets = (
  * list. So "join all EXCEPT flash and exhibition" = exclude `flash,exhibition`
  * with no include list.
  *
- * Timing comes from two `0 = off` settings that resolve to ONE window
- * (`resolveJoinWindow`): `joinWithinSec` joins a candidate once it is within
- * that many seconds of its own `close_time`, while `joinAfterPercentElapsed`
- * joins it once that percentage of its own lifetime has run. Percent wins when
- * both are set. Either way entries land late in a challenge's life instead of
- * the moment it appears. Unlike the
+ * Timing comes from three `0 = off` settings that resolve to ONE window
+ * (`resolveJoinWindow`), read in a fixed order — the first above 0 applies:
+ * `joinAfterSecFromStart` joins a candidate once that many seconds have run
+ * since its own `start_time`, `joinAfterPercentElapsed` once that percentage
+ * of its own lifetime has run, and `joinWithinSec` once it is within that many
+ * seconds of its own `close_time`. The settings schema resolves the three as
+ * one group upstream (`resolveRuleSettingGroup` in settings/titleRules.ts), so
+ * they never combine into the intersection of two windows. An offset at or
+ * beyond the challenge's own length clamps to the latest reachable point (99%
+ * of the run), never to "never join". Either way entries land late in a
+ * challenge's life instead of the moment it appears. Unlike the
  * type filters, a title match does NOT bypass this — the window is itself a
  * deliberate per-title instruction, so bypassing it would invert the user's
  * intent. It is a pure gate on WHEN: it never looks at cost, and the coin caps
  * below still decide whether a paid join happens at all.
  *
  * Timing is FAIL-CLOSED. A candidate that cannot prove it is inside the window
- * (`close_time` missing, unparseable, or already past) is not joined while a
- * window is set. "Join only near the end" must never degrade into "join now" on
- * a payload the caller could not read — that is precisely the spend the setting
- * exists to prevent. With `joinWithinSec` 0 the field is not read at all, so a
- * missing `close_time` never blocks a join-as-soon-as-seen candidate.
+ * (`close_time` missing, unparseable, or already past; for the percent and
+ * after-start anchors also a `start_time` that cannot be read) is not joined
+ * while a window is set. "Join only near the end" must never degrade into
+ * "join now" on a payload the caller could not read — that is precisely the
+ * spend the setting exists to prevent. With every timing sentinel 0 the fields
+ * are not read at all, so a missing `close_time` never blocks a
+ * join-as-soon-as-seen candidate.
  *
  * Fail-safe on money: a null `bankroll` (balance could not be read) blocks every
  * paid join but still allows free joins. Both coin caps use the `0 = off`
@@ -278,10 +360,11 @@ const normalizeJoinFacets = (
  * @param params.hasProfileMatch a title rule/profile matched this title — a deliberate opt-in that bypasses the exclude veto and include narrowing
  * @param params.includeTags normalized lowercase CHALLENGE tags from `autoJoinChallengeTags`; EMPTY = any
  * @param params.excludeTags normalized lowercase CHALLENGE tags from `autoJoinExcludeChallengeTags`; any match vetoes the join
+ * @param params.joinAfterSecFromStart join only once this many seconds have run since the candidate's `start_time` (0 = off); first in the timing order, ahead of the other two
  * @param params.joinWithinSec join only within this many seconds of `close_time` (0/absent = off)
- * @param params.nowSec current time in epoch SECONDS (matches `close_time`'s unit); required when `joinWithinSec` > 0
+ * @param params.nowSec current time in epoch SECONDS (matches `close_time`'s unit); required when any timing window is set
  * @param params.alreadyPaid this account already spent the coins (an unlock marker): the cost checks are skipped, the join only submits
- * @param params.joinAfterPercentElapsed join only once this percent of the candidate's lifetime (`close_time` - `start_time`) has elapsed (0/absent = off); wins over `joinWithinSec` when both are set
+ * @param params.joinAfterPercentElapsed join only once this percent of the candidate's lifetime (`close_time` - `start_time`) has elapsed (0/absent = off)
  */
 const shouldJoinChallenge = ({
     challenge,
@@ -293,6 +376,7 @@ const shouldJoinChallenge = ({
     hasProfileMatch,
     includeTags = [],
     excludeTags = [],
+    joinAfterSecFromStart,
     joinWithinSec = 0,
     nowSec = 0,
     joinAfterPercentElapsed = 0,
@@ -317,6 +401,7 @@ const shouldJoinChallenge = ({
     hasProfileMatch: boolean;
     includeTags?: string[];
     excludeTags?: string[];
+    joinAfterSecFromStart: number;
     joinWithinSec?: number;
     nowSec?: number;
     joinAfterPercentElapsed?: number;
@@ -337,7 +422,13 @@ const shouldJoinChallenge = ({
     // reports WHY it is out of scope) and before the cost branch (timing gates
     // free and paid candidates identically). Deliberately NOT bypassed by
     // hasProfileMatch — see the header.
-    const timingRefusal = joinWindowRefusal(challenge, joinWithinSec, nowSec, joinAfterPercentElapsed);
+    const timingRefusal = joinWindowRefusal(
+        challenge,
+        joinWithinSec,
+        nowSec,
+        joinAfterPercentElapsed,
+        joinAfterSecFromStart,
+    );
     if (timingRefusal) {
         return { join: false, needsCoins, reason: timingRefusal };
     }
@@ -363,4 +454,4 @@ const shouldJoinChallenge = ({
     return { join: true, needsCoins, reason: 'paid' };
 };
 
-export { shouldJoinChallenge, joinFreshRefusal, joinFreshRefusalWhy };
+export { shouldJoinChallenge, joinFreshRefusal, joinFreshRefusalWhy, joinAfterStartClampSec };
