@@ -42,12 +42,16 @@ import type * as logsModule from '../../src/ts/cli/commands/logs';
 import type * as logsFollowModule from '../../src/ts/cli/commands/logsFollow';
 const { diagnostics } = jest.mocked(require('../../src/ts/services/semantic/diagnostics') as typeof diagnosticsModule);
 
-// The fs automock carries every call the follower reads with but readSync;
-// fill that one gap before the command module is required — its `import * as
-// fs` snapshots the mocked module, so the patch must land on it first.
+// The fs automock carries every call the follower reads with but readSync
+// (fstatSync gets the same guard in case it is missing too); fill any gap
+// before the command module is required — its `import * as fs` snapshots the
+// mocked module, so the patch must land on it first.
 const fsAuto = invalid<Record<string, unknown>>(fs);
 if (fsAuto.readSync === undefined) {
     fsAuto.readSync = jest.fn<number, [number, Buffer, number, number, number | null]>();
+}
+if (fsAuto.fstatSync === undefined) {
+    fsAuto.fstatSync = jest.fn<fsModule.Stats, [number]>();
 }
 
 const { latestLogFile, showLogs } = require('../../src/ts/cli/commands/logs') as typeof logsModule;
@@ -241,8 +245,10 @@ const fileState = (offset: number): logsFollowModule.FileFollowState => ({
 const bytes = (text: string): Buffer => Buffer.from(text, 'utf8');
 
 /**
- * Backs the mocked fs with in-memory byte files: statSync serves byte sizes,
- * openSync/readSync serve byte spans, readFileSync serves whole-file text.
+ * Backs the mocked fs with in-memory byte files: statSync serves byte sizes
+ * by path, openSync hands out descriptors that remember their file, and
+ * fstatSync/readSync/readFileSync serve the byte spans and whole-file text
+ * through those descriptors (or by path, for the plain `logs` read).
  * Appending between polls is replacing a record's Buffer.
  */
 const backFiles = (files: Record<string, Buffer>): void => {
@@ -251,32 +257,40 @@ const backFiles = (files: Record<string, Buffer>): void => {
         if (file === undefined) throw new Error('ENOENT');
         return invalid<fsModule.Stats>({ size: file.length, mtimeMs: 1, ino: INODE, birthtimeMs: BIRTH });
     });
-    let opened = '';
+    const openFiles = new Map<number, string>();
     let nextFd = 10;
     fs.openSync.mockImplementation((p: fsModule.PathLike) => {
         if (files[String(p)] === undefined) throw new Error('ENOENT');
-        opened = String(p);
         const fd = nextFd;
         nextFd += 1;
+        openFiles.set(fd, String(p));
         return fd;
+    });
+    fs.fstatSync.mockImplementation((fd: number) => {
+        const file = files[openFiles.get(fd) ?? ''];
+        if (file === undefined) throw new Error('EBADF');
+        return invalid<fsModule.Stats>({ size: file.length, mtimeMs: 1, ino: INODE, birthtimeMs: BIRTH });
     });
     // jest's mocked type carries the options overload of readSync; the
     // follower calls the positional one, so the span arguments ride in `rest`.
-    fs.readSync.mockImplementation((_fd, buffer, ...rest): number => {
+    fs.readSync.mockImplementation((fd, buffer, ...rest): number => {
         const [offset, length, position] = invalid<[number, number, number | null]>(rest);
-        const file = files[opened];
+        const file = files[openFiles.get(fd) ?? ''];
         if (file === undefined || position === null || position >= file.length) return 0;
         const end = Math.min(position + length, file.length);
         file.copy(invalid<Buffer>(buffer), offset, position, end);
         return end - position;
     });
-    fs.closeSync.mockImplementation(() => undefined);
-    // The tail reads bytes (no encoding), plain `logs` reads text ('utf8'):
-    // the mocked read serves both forms off the same in-memory file.
+    fs.closeSync.mockImplementation((fd: number) => {
+        openFiles.delete(fd);
+    });
+    // The tail reads bytes (no encoding) through the descriptor it opened,
+    // plain `logs` reads text ('utf8') by path: the mocked read serves both
+    // forms off the same in-memory file.
     invalid<{
         mockImplementation: (impl: (p: fsModule.PathOrFileDescriptor, encoding?: string) => string | Buffer) => void;
     }>(fs.readFileSync).mockImplementation((p, encoding) => {
-        const file = files[String(p)];
+        const file = files[typeof p === 'number' ? (openFiles.get(p) ?? '') : String(p)];
         if (file === undefined) throw new Error('ENOENT');
         return encoding === undefined ? file : file.toString('utf8');
     });
@@ -440,10 +454,12 @@ describe('CLI logs follow — followStep', () => {
         // the two files apart: the new content prints from its first line,
         // never from the deleted file's offset.
         files[OLD_FILE] = bytes('fresh\nmore\n');
-        const realStat = fs.statSync.getMockImplementation() as (p: fsModule.PathLike) => fsModule.Stats;
-        fs.statSync.mockImplementation((p: fsModule.PathLike) => {
-            const st = realStat(p);
-            return String(p) === OLD_FILE ? invalid<fsModule.Stats>({ ...st, ino: INODE + 1 }) : st;
+        // OLD_FILE is the only followed file, so every fstat this test sees
+        // is its poll's stat of the open file.
+        const realFstat = fs.fstatSync.getMockImplementation() as (fd: number) => fsModule.Stats;
+        fs.fstatSync.mockImplementation((fd: number) => {
+            const st = realFstat(fd);
+            return invalid<fsModule.Stats>({ ...st, ino: INODE + 1 });
         });
         followStep(state, 'app', deps);
 
@@ -464,10 +480,10 @@ describe('CLI logs follow — followStep', () => {
         // time is what still tells the two files apart, so the fresh content
         // prints from its first line, never from the old offset.
         files[OLD_FILE] = bytes('fresh\nmore\n');
-        const realStat = fs.statSync.getMockImplementation() as (p: fsModule.PathLike) => fsModule.Stats;
-        fs.statSync.mockImplementation((p: fsModule.PathLike) => {
-            const st = realStat(p);
-            return String(p) === OLD_FILE ? invalid<fsModule.Stats>({ ...st, birthtimeMs: BIRTH + 1 }) : st;
+        const realFstat = fs.fstatSync.getMockImplementation() as (fd: number) => fsModule.Stats;
+        fs.fstatSync.mockImplementation((fd: number) => {
+            const st = realFstat(fd);
+            return invalid<fsModule.Stats>({ ...st, birthtimeMs: BIRTH + 1 });
         });
         followStep(state, 'app', deps);
 
@@ -486,10 +502,10 @@ describe('CLI logs follow — followStep', () => {
         state.files.set(OLD_FILE, st);
         const print = jest.fn<void, [string]>();
         const deps = followDeps({ list: listOf(OLD_FILE), print });
-        const realStat = fs.statSync.getMockImplementation() as (p: fsModule.PathLike) => fsModule.Stats;
-        fs.statSync.mockImplementation((p: fsModule.PathLike) => {
-            const stat = realStat(p);
-            return String(p) === OLD_FILE ? invalid<fsModule.Stats>({ ...stat, birthtimeMs: BIRTH }) : stat;
+        const realFstat = fs.fstatSync.getMockImplementation() as (fd: number) => fsModule.Stats;
+        fs.fstatSync.mockImplementation((fd: number) => {
+            const stat = realFstat(fd);
+            return invalid<fsModule.Stats>({ ...stat, birthtimeMs: BIRTH });
         });
 
         // The inode decides alone when a side has no birth time: the file is
@@ -635,11 +651,18 @@ describe('CLI logs follow — followStep', () => {
         state.seedPending = true;
         const print = jest.fn<void, [string]>();
         const deps = followDeps({ list: listOf(OLD_FILE), print });
+        // The seed stats by path; the poll stats the open file, so the
+        // failure is injected at both calls while it lasts.
         const realStat = fs.statSync.getMockImplementation() as (p: fsModule.PathLike) => fsModule.Stats;
+        const realFstat = fs.fstatSync.getMockImplementation() as (fd: number) => fsModule.Stats;
         let failing = true;
         fs.statSync.mockImplementation((p: fsModule.PathLike) => {
             if (String(p) === OLD_FILE && failing) throw new Error('EACCES');
             return realStat(p);
+        });
+        fs.fstatSync.mockImplementation((fd: number) => {
+            if (failing) throw new Error('EACCES');
+            return realFstat(fd);
         });
 
         followStep(state, 'app', deps);
@@ -671,7 +694,7 @@ describe('CLI logs follow — followStep', () => {
         expect(state.files.get(NEW_FILE)?.offset).toBe(3);
     });
 
-    test('a file that cannot be opened between the stat and the read is retried next poll', () => {
+    test('a file that cannot be opened is skipped and retried next poll', () => {
         const files = { [OLD_FILE]: bytes('a1\n') };
         backFiles(files);
         const state = freshState();
@@ -694,25 +717,27 @@ describe('CLI logs follow — followStep', () => {
         expect(fs.closeSync).toHaveBeenCalled();
     });
 
-    test('a stat failure on one file skips it for that poll and keeps its state', () => {
+    test('an fstat failure on one file skips it for that poll and keeps its state', () => {
         const files = { [OLD_FILE]: bytes('a1\n') };
         backFiles(files);
         const state = freshState();
         state.files.set(OLD_FILE, fileState(3));
         const print = jest.fn<void, [string]>();
         const deps = followDeps({ list: listOf(OLD_FILE), print });
-        const realStat = fs.statSync.getMockImplementation() as (p: fsModule.PathLike) => fsModule.Stats;
+        const realFstat = fs.fstatSync.getMockImplementation() as (fd: number) => fsModule.Stats;
         let failing = true;
-        fs.statSync.mockImplementation((p: fsModule.PathLike) => {
-            if (String(p) === OLD_FILE && failing) throw new Error('EIO');
-            return realStat(p);
+        fs.fstatSync.mockImplementation((fd: number) => {
+            if (failing) throw new Error('EIO');
+            return realFstat(fd);
         });
 
-        // A stat error is not the fact "the file is gone": the entry
-        // survives, so nothing replays.
+        // An fstat error is not the fact "the file is gone": the entry
+        // survives, and the descriptor the poll opened is closed, so nothing
+        // replays.
         followStep(state, 'app', deps);
         expect(print.mock.calls).toEqual([]);
         expect(state.files.get(OLD_FILE)?.offset).toBe(3);
+        expect(fs.closeSync).toHaveBeenCalled();
 
         // With the stat good again, only what was appended prints — once.
         failing = false;
@@ -986,6 +1011,32 @@ describe('CLI logs follow — followLogs', () => {
         expect(print.mock.calls).toEqual([['Following app logs (Ctrl+C to stop)'], ['Stopped following the log.']]);
     });
 
+    test('a tail whose read fails after the open closes the descriptor and prints nothing', async () => {
+        backFiles({ [OLD_FILE]: bytes('l1\nl2\n') });
+        const latest = jest
+            .fn<logsModule.LatestLogFile | null, [string, string]>()
+            .mockReturnValue({ path: OLD_FILE, mtimeMs: 1 });
+        const print = jest.fn<void, [string]>();
+        fs.readFileSync.mockImplementation(() => {
+            throw new Error('EIO');
+        });
+
+        const code = await followLogs({
+            category: 'app',
+            lines: 2,
+            // Nothing listed: no poll after the failed tail muddies the
+            // printed output.
+            deps: followDeps({ list: listOf(), latest, print }),
+        });
+
+        // The open worked but the read through it failed: nothing printed,
+        // nothing seeded, and the descriptor is closed — the polls
+        // re-resolve the file.
+        expect(code).toBe(0);
+        expect(fs.closeSync).toHaveBeenCalled();
+        expect(print.mock.calls).toEqual([['Following app logs (Ctrl+C to stop)'], ['Stopped following the log.']]);
+    });
+
     test('SIGINT stops the follower with exit 0 and removes its listener', async () => {
         const before = process.listenerCount('SIGINT');
         backFiles({ [OLD_FILE]: bytes('x\n') });
@@ -1044,11 +1095,11 @@ describe('CLI logs follow — followLogs', () => {
             deps: followDeps({ list: listOf(OLD_FILE), latest, print, sleep }),
         });
 
-        // The tail was read from the file (as bytes, so the offset it seeds is
-        // a byte count), and nothing wrote anywhere: an info() would append to
-        // the followed app log. The text after the appended line's newline is
-        // held as pending, not printed.
-        expect(fs.readFileSync).toHaveBeenCalledWith(OLD_FILE);
+        // The tail was read from the file (as bytes through the descriptor it
+        // opened, so the offset it seeds is a byte count), and nothing wrote
+        // anywhere: an info() would append to the followed app log. The text
+        // after the appended line's newline is held as pending, not printed.
+        expect(fs.readFileSync).toHaveBeenCalledWith(expect.any(Number));
         expect(fs.appendFileSync).not.toHaveBeenCalled();
         expect(fs.writeFileSync).not.toHaveBeenCalled();
         expect(print.mock.calls).toEqual([

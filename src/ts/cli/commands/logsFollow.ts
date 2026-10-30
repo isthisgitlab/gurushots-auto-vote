@@ -171,16 +171,24 @@ const seedFollowState = (state: FollowState, prefix: string, deps: FollowDeps): 
  * arrives.
  */
 const printInitialTail = (filePath: string, lines: number, state: FollowState, print: (text: string) => void): void => {
+    let fd: number;
+    try {
+        fd = fs.openSync(filePath, 'r');
+    } catch {
+        return; // gone between the listing and this read; the polls re-resolve
+    }
     let content: Buffer;
     let ino: number;
     let birthtimeMs: number;
     try {
-        const stat = fs.statSync(filePath);
+        const stat = fs.fstatSync(fd);
         ino = stat.ino;
         birthtimeMs = stat.birthtimeMs;
-        content = fs.readFileSync(filePath);
+        content = fs.readFileSync(fd);
     } catch {
-        return; // gone between the listing and this read; the polls re-resolve
+        return; // the fstat or the read of the open file failed; the polls re-resolve
+    } finally {
+        fs.closeSync(fd);
     }
     const decoder = new StringDecoder('utf8');
     const text = decoder.write(content);
@@ -198,8 +206,10 @@ const printInitialTail = (filePath: string, lines: number, state: FollowState, p
 };
 
 /**
- * One poll of one followed file: skips it for the poll when its stat fails
- * (the state survives — deletion is the listing prune's call and a
+ * One poll of one followed file: opens the file once and takes its identity
+ * and size from that open file (fstat), so the stat and the bytes read are
+ * always of the same file; skips it for the poll when the open or that stat
+ * fails (the state survives — deletion is the listing prune's call and a
  * re-created name the identity check's), restarts it at byte 0 when it
  * shrank (truncated in place) or when its identity changed (the name was
  * deleted and a different file written under it — a changed inode, or a
@@ -217,60 +227,60 @@ const pollFollowedFile = (
     st: FileFollowState,
     print: (text: string) => void,
 ): void => {
-    let size: number;
-    let ino: number;
-    let birthtimeMs: number;
+    let fd: number;
     try {
-        const stat = fs.statSync(filePath);
-        size = stat.size;
-        ino = stat.ino;
-        birthtimeMs = stat.birthtimeMs;
+        fd = fs.openSync(filePath, 'r');
     } catch {
-        // A stat error (a transient EACCES/EIO, or the file going away) is
+        // An open error (a transient EACCES/EIO, or the file going away) is
         // not the fact "gone": skip this file for this poll and keep its
         // state, so no error can wipe the offset and replay the file. A
         // deleted file is retired by the listing prune, a re-created one by
         // the identity check below.
         return;
     }
-    // A different file now carries this name (deleted and re-created): the
-    // inode changed, or the birth time changed under a reused inode (ext4
-    // can hand the same one back). A birth time that is not known yet (-1)
-    // or not reported by the platform (0) cannot be compared — there the
-    // inode decides alone.
-    const birthtimeKnown = st.birthtimeMs > 0 && birthtimeMs > 0;
-    const birthtimeChanged = birthtimeKnown && birthtimeMs !== st.birthtimeMs;
-    if (ino !== st.ino || birthtimeChanged) {
-        // Follow the new file from its first byte, with fresh decoder and
-        // line state.
-        st.ino = ino;
-        st.birthtimeMs = birthtimeMs;
-        st.offset = 0;
-        st.decoder = new StringDecoder('utf8');
-        st.pending = '';
-    }
-    if (size < st.offset) {
-        // Truncated in place: start over as a fresh file.
-        st.offset = 0;
-        st.decoder = new StringDecoder('utf8');
-        st.pending = '';
-    }
-    if (size <= st.offset) return; // nothing appended past the offset
-    let fd: number;
     try {
-        fd = fs.openSync(filePath, 'r');
-    } catch {
-        return; // vanished between the stat and the open; the next poll re-stats
-    }
-    try {
+        let size: number;
+        let ino: number;
+        let birthtimeMs: number;
+        try {
+            const stat = fs.fstatSync(fd);
+            size = stat.size;
+            ino = stat.ino;
+            birthtimeMs = stat.birthtimeMs;
+        } catch {
+            return; // the stat through the open file failed: skip, as above
+        }
+        // A different file now carries this name (deleted and re-created): the
+        // inode changed, or the birth time changed under a reused inode (ext4
+        // can hand the same one back). A birth time that is not known yet (-1)
+        // or not reported by the platform (0) cannot be compared — there the
+        // inode decides alone.
+        const birthtimeKnown = st.birthtimeMs > 0 && birthtimeMs > 0;
+        const birthtimeChanged = birthtimeKnown && birthtimeMs !== st.birthtimeMs;
+        if (ino !== st.ino || birthtimeChanged) {
+            // Follow the new file from its first byte, with fresh decoder and
+            // line state.
+            st.ino = ino;
+            st.birthtimeMs = birthtimeMs;
+            st.offset = 0;
+            st.decoder = new StringDecoder('utf8');
+            st.pending = '';
+        }
+        if (size < st.offset) {
+            // Truncated in place: start over as a fresh file.
+            st.offset = 0;
+            st.decoder = new StringDecoder('utf8');
+            st.pending = '';
+        }
+        if (size <= st.offset) return; // nothing appended past the offset
         // The unread span is read in bounded chunks (FOLLOW_READ_CHUNK_BYTES)
-        // until the size the stat reported, and each chunk's complete lines
+        // until the size the fstat reported, and each chunk's complete lines
         // print as they are decoded — the span is never one allocation, and
         // never one print call past the cap.
         while (st.offset < size) {
             const buffer = Buffer.allocUnsafe(Math.min(FOLLOW_READ_CHUNK_BYTES, size - st.offset));
             const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, st.offset);
-            if (bytesRead <= 0) return; // the file ended right after the stat
+            if (bytesRead <= 0) return; // the file ended before this position
             st.offset += bytesRead;
             st.pending += st.decoder.write(buffer.subarray(0, bytesRead));
             const lines = st.pending.split('\n');
