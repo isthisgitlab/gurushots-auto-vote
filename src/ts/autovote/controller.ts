@@ -104,8 +104,6 @@ export type AutovoteController = {
     maybeResume: () => Promise<void>;
     /** Cancel the timers and a pending resume; never touches persisted state. */
     dispose: () => void;
-    /** Whether dispose() ran — the adapter revives a disposed controller on an effect re-run. */
-    isDisposed: () => boolean;
     getState: () => AutovoteState;
     subscribe: (listener: () => void) => () => void;
 };
@@ -527,7 +525,6 @@ export const createAutovoteController = (host: AutovoteHost): AutovoteController
         rearmSchedule,
         maybeResume,
         dispose,
-        isDisposed: () => disposed,
         getState: () => state,
         subscribe: (listener: () => void) => {
             listeners.add(listener);

@@ -429,11 +429,8 @@ describe('createAutovoteController', () => {
             expect(host.runVotingCycle).toHaveBeenCalledTimes(1);
         });
 
-        it('dispose is a no-op when nothing was ever armed, and isDisposed reports it', () => {
+        it('dispose is a no-op when nothing was ever armed', () => {
             setup();
-            expect(controller!.isDisposed()).toBe(false);
-            controller!.dispose();
-            expect(controller!.isDisposed()).toBe(true);
             expect(() => controller!.dispose()).not.toThrow();
         });
 

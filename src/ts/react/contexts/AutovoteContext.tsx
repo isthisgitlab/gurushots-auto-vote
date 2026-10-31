@@ -56,20 +56,6 @@ function createRendererDeadlineNotifier(): CycleNotifier | null {
 }
 
 /**
- * One live controller over `host`: a stored, disposed controller is replaced
- * with a fresh one, so a provider-effect re-run can never resume on (or
- * re-arm) a controller whose mount already went away.
- *
- * The revive path is defensive only: preact runs no StrictMode double-invoke,
- * so an effect re-run without a remount cannot occur. And a revive only keeps
- * exactly one live chain — after it, the render-scope controls and the
- * subscription stay bound to the disposed controller until the next render,
- * which the dead path never needs.
- */
-export const ensureLiveController = (stored: AutovoteController, host: AutovoteHost): AutovoteController =>
-    stored.isDisposed() ? createAutovoteController(host) : stored;
-
-/**
  * Provider for the autovote state machine. A thin adapter over the autovote
  * controller (src/ts/autovote/controller.ts, which owns the renderer's
  * cadence chain): it builds the controller's host once per mount — the bridge
@@ -150,15 +136,12 @@ export function AutovoteProvider({
         window.dispatchEvent(new CustomEvent('autovote:running-changed', { detail: state.running }));
     }, [state.running]);
 
-    // Exactly one live controller per effect run: revive a controller a
-    // previous run's cleanup disposed, resume once, and dispose the
-    // controller this run adopted on the way out.
+    // The mount-time auto-resume, once per mount; dispose() cancels the
+    // timers and any pending resume, and never touches persisted state.
     useEffect(() => {
-        const live = ensureLiveController(controllerRef.current!, hostRef.current!);
-        controllerRef.current = live;
-        void live.maybeResume();
-        return () => live.dispose();
-    }, []);
+        void controller.maybeResume();
+        return () => controller.dispose();
+    }, [controller]);
 
     // Stable per mount: the controller reads the latest onChallengesRefresh
     // identity at call time (through the host), so the controls never need to
