@@ -23,16 +23,19 @@ import type {
 } from '../platform/port';
 
 type CapacitorBridgeModule = typeof import('./capacitor');
+type NativeAutovoteBridgeModule = typeof import('../services/NativeAutovoteBridge');
+type ForegroundServiceModule = typeof import('../services/ForegroundServiceController');
+type ApkInstallerModule = typeof import('../services/AndroidUpdateInstaller');
 
-// The install must run before the logger loads.
+// The install must run before the logger loads. The requires are cast to the
+// real modules' own types, so the `satisfies PlatformNative` below checks
+// each real module against its port type instead of the port against itself.
 const capacitorBridge = (): CapacitorBridgeModule => require('./capacitor') as CapacitorBridgeModule;
-// The install must run before the logger loads.
-const nativeAutovoteBridge = (): PlatformAutovote => require('../services/NativeAutovoteBridge') as PlatformAutovote;
-// The install must run before the logger loads.
-const foregroundService = (): PlatformForegroundService =>
-    require('../services/ForegroundServiceController') as PlatformForegroundService;
-// The install must run before the logger loads.
-const apkInstaller = (): PlatformApkInstaller => require('../services/AndroidUpdateInstaller') as PlatformApkInstaller;
+const nativeAutovoteBridge = (): NativeAutovoteBridgeModule =>
+    require('../services/NativeAutovoteBridge') as NativeAutovoteBridgeModule;
+const foregroundService = (): ForegroundServiceModule =>
+    require('../services/ForegroundServiceController') as ForegroundServiceModule;
+const apkInstaller = (): ApkInstallerModule => require('../services/AndroidUpdateInstaller') as ApkInstallerModule;
 
 /**
  * The native plugin's wipe (AutoVoteBackground.wipeLocalData), or null where the build has none. Asked on the wipe.
