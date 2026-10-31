@@ -10,7 +10,7 @@
 
 import type * as loggerModule from '../../src/ts/logger';
 import type * as settingsModule from '../../src/ts/settings';
-import type * as runtimeModule from '../../src/ts/runtime';
+import type * as nodePathsModule from '../../src/ts/platforms/node/paths';
 import type * as randomizerModule from '../../src/ts/api/randomizer';
 import type * as guardsModule from '../../src/ts/cli/guards';
 import type * as authModule from '../../src/ts/cli/commands/auth';
@@ -337,8 +337,8 @@ describe('startup', () => {
     test('a user-data folder that cannot be created is said in plain words and exits 1', async () => {
         const m = await run(['status'], (mods) =>
             mods.randomizer.initializeHeaders.mockImplementation(() => {
-                const runtime = require('../../src/ts/runtime') as typeof runtimeModule;
-                throw new runtime.UserDataUnavailableError('/data/gurushots', 'EACCES');
+                const nodePaths = require('../../src/ts/platforms/node/paths') as typeof nodePathsModule;
+                throw new nodePaths.UserDataUnavailableError('/data/gurushots', 'EACCES');
             }),
         );
         expect(m.msgs('error')).toEqual([expect.stringContaining('/data/gurushots')]);

@@ -23,7 +23,6 @@ import { listPreferenceKeys, removePreferenceKeys } from './capacitorPreferences
 import { createJsonStore, discardStores, refuseWrites, resumeWrites, settleStores } from './jsonStore';
 import { rebaseConfigText } from './settingsMerge';
 import {
-    electronApp,
     getDefaultMockSetting,
     getEnvironmentInfo,
     getLegacySettingsPath,
@@ -232,7 +231,4 @@ export {
     getUserDataPath,
     getEnvironmentInfo,
     createJsonStore,
-    // electronApp is exposed for the rare caller (test harness, CLI scripts)
-    // that needs the raw electron app handle.
-    electronApp,
 };

@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import * as tar from 'tar';
 import * as sea from 'node:sea';
-import * as runtime from '../runtime';
+import { platform } from '../platform/port';
 
 const IN_USE_WINDOW_MS = 60 * 60 * 1000;
 
@@ -81,7 +81,7 @@ const verifyVisionRuntime = (root: string) => {
 /** Extract the build-embedded model and native Node runtime once per version. */
 const extractVisionCliAssets = () => {
     const expected = sea.getAsset('vision-runtime.sha256', 'utf8').trim();
-    const parent = path.join(runtime.getUserDataDir('gurushots-auto-vote'), 'vision');
+    const parent = path.join(platform().paths.getUserDataDir('gurushots-auto-vote'), 'vision');
     const root = path.join(parent, expected.slice(0, 20));
     const ready = path.join(root, '.ready');
     if (!fs.existsSync(ready)) {

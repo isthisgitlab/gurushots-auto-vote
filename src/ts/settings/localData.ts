@@ -12,6 +12,7 @@ import * as logger from '../logger';
 import * as runtime from '../runtime';
 import { errorMessage } from '../errorMessage';
 import { isPlainObject } from '../plainObject';
+import { platform } from '../platform/port';
 import * as cancellation from '../voting/cancellation';
 import { APP_PARTITION } from '../index/session';
 import { isVotingPassRunning } from '../voting/passActivity';
@@ -170,7 +171,7 @@ const localDataPaths = (userData: string): string[] => {
         }
     })();
     const directories = LOCAL_DATA_DIRECTORIES.map((dir) =>
-        dir === 'vision' ? vision(runtime.getUserDataDir(VISION_APP_NAME)) : path.join(userData, dir),
+        dir === 'vision' ? vision(platform().paths.getUserDataDir(VISION_APP_NAME)) : path.join(userData, dir),
     );
     const all = [
         ...new Set([

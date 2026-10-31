@@ -1,11 +1,12 @@
 import * as runtime from '../runtime';
 import { platform } from '../platform/port';
+import { getAppName } from '../platform/appIdentity';
 
-// Runtime owns the single implementation of source-detection, app naming,
-// and user-data resolution — logger re-exports isSourceCode/getAppName
-// because settings.ts and tests consume them through this module.
-const { isSourceCode, getAppName } = runtime;
-const getUserDataPath = runtime.getAppUserDataPath;
+// The app identity and the user-data resolution are the platform's — logger
+// re-exports isSourceCode/getAppName because settings.ts and tests consume
+// them through this module.
+const isSourceCode = () => platform().paths.isSourceCode();
+const getUserDataPath = () => platform().paths.userData();
 
 // Check if we're in development mode (not mock)
 const devMode = runtime.isDevelopment();

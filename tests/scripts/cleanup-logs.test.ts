@@ -1,7 +1,8 @@
 /**
  * Tests for scripts/cleanup-logs.ts — deletes api-debug-* files from
- * the userData logs dir. Hermetic: runtime is mocked to a temp dir, and all
- * fs work happens under os.tmpdir(); the real logs/ is never touched.
+ * the userData logs dir. Hermetic: the platform resolves user data into a
+ * temp dir, and all fs work happens under os.tmpdir(); the real logs/ is
+ * never touched.
  */
 
 // tests/setup.ts mocks fs/path globally; this suite needs the real modules
@@ -17,12 +18,10 @@ import os = require('node:os');
 import pathModule = require('node:path');
 const path = jest.mocked(pathModule);
 import type * as cleanup_logsModule from '../../scripts/cleanup-logs';
-import { clearInstalledPlatform } from '../helpers/platform';
+import { platform } from '../../src/ts/platform/port';
+import { clearInstalledPlatform, installTestPlatform } from '../helpers/platform';
 
 let mockUserDataPath = '';
-jest.mock('../../src/ts/runtime', () => ({
-    getAppUserDataPath: () => mockUserDataPath,
-}));
 
 clearInstalledPlatform();
 const { cleanupLogs } = require('../../scripts/cleanup-logs') as typeof cleanup_logsModule;
@@ -34,6 +33,8 @@ describe('cleanup-logs', () => {
     beforeEach(() => {
         tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cleanup-logs-'));
         mockUserDataPath = tmp;
+        // The script resolves the logs dir from the platform: point it at this test's temp dir.
+        installTestPlatform({ paths: { ...platform().paths, userData: () => mockUserDataPath } });
         logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
     });
 

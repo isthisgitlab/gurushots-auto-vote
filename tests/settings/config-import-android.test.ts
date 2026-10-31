@@ -4,12 +4,8 @@
  * configuration decides which context imports first).
  */
 
-// No test here may touch the real user-data folder: the path is a made-up one that does not exist.
-jest.mock('../../src/ts/runtime', () => ({
-    __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/runtime')>('../../src/ts/runtime'),
-    getAppUserDataPath: () => '/nonexistent/gurushots-auto-vote-test-user-data',
-}));
+// No test here touches the real user-data folder: the installed test platform resolves it into the
+// file's own temporary directory (tests/setupPlatform.ts guards the real home).
 jest.mock('../../src/ts/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {

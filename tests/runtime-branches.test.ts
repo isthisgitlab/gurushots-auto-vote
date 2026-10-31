@@ -1,14 +1,13 @@
 /**
- * Branch coverage for runtime.ts platform detection, env flags and path
- * resolution. Platform-specific inputs (process.versions, process.platform,
- * g.Capacitor, the electron / node:sea modules) are faked per test
+ * Branch coverage for runtime.ts platform detection and env flags. The path
+ * resolution, app identity and packaged-build bodies that lived here are the
+ * platform families' now (tests/platforms/node|webview|headless/paths.test.ts,
+ * same assertions); runtime keeps the detection helpers and the env readers.
+ * Platform-specific inputs (process.versions, g.Capacitor) are faked per test
  * and every module load that depends on them goes through isolateModules.
  */
 
-import fsModule = require('node:fs');
-const fs = jest.mocked(fsModule);
 import type * as runtimeModule from '../src/ts/runtime';
-import type * as node_osModule from 'node:os';
 import { invalid } from './helpers/invalid';
 
 const g = globalThis as typeof globalThis & { Capacitor?: unknown };
@@ -22,19 +21,8 @@ const setProp = (obj: object, key: PropertyKey, value: unknown) => {
 const restorers: (() => unknown)[] = [];
 const withProp = (obj: object, key: PropertyKey, value: unknown) => restorers.push(setProp(obj, key, value));
 
-// runtime require()s electron / node:sea lazily inside its functions, so the
-// assertions must run INSIDE the isolated registry — once isolateModules
-// returns, a lazy require would hit (and poison) the shared registry.
-const withRuntime = (
-    { electron, sea }: { electron?: () => unknown; sea?: () => unknown } = {},
-    fn: (rt: typeof runtimeModule) => void,
-) => {
-    jest.isolateModules(() => {
-        if (electron !== undefined) jest.doMock('electron', electron, { virtual: true });
-        if (sea !== undefined) jest.doMock('node:sea', sea, { virtual: true });
-        fn(require('../src/ts/runtime') as typeof runtimeModule);
-    });
-};
+// The assertions that read process.versions / g.Capacitor at module load run
+// INSIDE the isolated registry.
 const loadRuntime = () => {
     let rt!: typeof runtimeModule;
     jest.isolateModules(() => {
@@ -58,8 +46,6 @@ afterEach(() => {
     }
     delete g.Capacitor;
     delete (process.versions as { electron?: string }).electron;
-    jest.dontMock('electron');
-    jest.dontMock('node:sea');
 });
 
 const capacitor = (platform = 'android', native = true) => ({
@@ -111,35 +97,6 @@ describe('platform detection', () => {
     });
 });
 
-describe('isPackaged', () => {
-    test('Electron: reads app.isPackaged', () => {
-        (process.versions as { electron?: string }).electron = '43.0.0';
-        withRuntime({ electron: () => ({ app: { isPackaged: true } }) }, (rt) => expect(rt.isPackaged()).toBe(true));
-    });
-
-    test('Electron: an unloadable electron module means not packaged', () => {
-        (process.versions as { electron?: string }).electron = '43.0.0';
-        withRuntime(
-            {
-                electron: () => {
-                    throw new Error('no electron');
-                },
-            },
-            (rt) => expect(rt.isPackaged()).toBe(false),
-        );
-    });
-
-    test('Capacitor: native platform counts as packaged', () => {
-        const rt = loadRuntime();
-        g.Capacitor = capacitor('android', true);
-        expect(rt.isPackaged()).toBe(true);
-    });
-
-    test('plain Node is never packaged', () => {
-        expect(loadRuntime().isPackaged()).toBe(false);
-    });
-});
-
 describe('env flags', () => {
     const rt = require('../src/ts/runtime') as typeof runtimeModule;
 
@@ -163,110 +120,5 @@ describe('env flags', () => {
         expect(rt.getEnvSnapshot()).toEqual({ nodeEnv: 'test', dev: '1', prod: '0' });
         process.env.NODE_ENV = 'production';
         expect(rt.isTest()).toBe(false);
-    });
-});
-
-describe('getUserDataDir', () => {
-    const os = require('node:os') as typeof node_osModule;
-    const rt = require('../src/ts/runtime') as typeof runtimeModule;
-
-    test('Capacitor returns a stub path without touching the OS', () => {
-        g.Capacitor = capacitor();
-        expect(rt.getUserDataDir('app')).toBe('/app');
-    });
-
-    test('macOS uses Application Support', () => {
-        withProp(process, 'platform', 'darwin');
-        expect(rt.getUserDataDir('app')).toBe(`${os.homedir()}/Library/Application Support/app`);
-    });
-
-    test('Windows uses APPDATA, falling back to the roaming profile dir', () => {
-        withProp(process, 'platform', 'win32');
-        process.env.APPDATA = 'C:/Users/u/AppData/Roaming';
-        expect(rt.getUserDataDir('app')).toBe('C:/Users/u/AppData/Roaming/app');
-        delete process.env.APPDATA;
-        expect(rt.getUserDataDir('app')).toBe(`${os.homedir()}/AppData/Roaming/app`);
-    });
-
-    test('other platforms use ~/.config', () => {
-        withProp(process, 'platform', 'linux');
-        expect(rt.getUserDataDir('app')).toBe(`${os.homedir()}/.config/app`);
-    });
-});
-
-describe('isSourceCode', () => {
-    test('a SEA binary is not source', () => {
-        withRuntime({ sea: () => ({ isSea: () => true }) }, (rt) => expect(rt.isSourceCode()).toBe(false));
-    });
-
-    test('Electron without an app object (run-as-node) falls through to source detection', () => {
-        (process.versions as { electron?: string }).electron = '43.0.0';
-        withRuntime({ electron: () => ({}) }, (rt) => expect(rt.isSourceCode()).toBe(true));
-    });
-
-    test('Electron module that fails to load is treated as source', () => {
-        (process.versions as { electron?: string }).electron = '43.0.0';
-        withRuntime(
-            {
-                electron: () => {
-                    throw new Error('no electron');
-                },
-            },
-            (rt) => expect(rt.isSourceCode()).toBe(true),
-        );
-    });
-});
-
-describe('getAppUserDataPath', () => {
-    beforeEach(() => {
-        fs.existsSync.mockReset();
-        fs.mkdirSync.mockReset();
-    });
-
-    test('Electron app without getPath falls back to the CLI resolution', () => {
-        (process.versions as { electron?: string }).electron = '43.0.0';
-        fs.existsSync.mockReturnValue(true);
-        withRuntime({ electron: () => ({ app: { isPackaged: false } }) }, (rt) =>
-            expect(rt.getAppUserDataPath()).toBe(rt.getUserDataDir('gurushots-auto-vote-dev')),
-        );
-    });
-
-    test('Electron module that throws falls back to the CLI resolution', () => {
-        (process.versions as { electron?: string }).electron = '43.0.0';
-        fs.existsSync.mockReturnValue(true);
-        withRuntime(
-            {
-                electron: () => {
-                    throw new Error('no electron');
-                },
-            },
-            (rt) => expect(rt.getAppUserDataPath()).toBe(rt.getUserDataDir('gurushots-auto-vote-dev')),
-        );
-    });
-
-    test('mkdir failure without an error code reports the message in the typed error', () => {
-        const rt = loadRuntime();
-        fs.existsSync.mockReturnValue(false);
-        fs.mkdirSync.mockImplementationOnce(() => {
-            throw new Error('read-only fs');
-        });
-
-        expect(() => rt.getAppUserDataPath()).toThrow(rt.UserDataUnavailableError);
-        expect(() => {
-            fs.mkdirSync.mockImplementationOnce(() => {
-                throw new Error('read-only fs');
-            });
-            rt.getAppUserDataPath();
-        }).toThrow(/read-only fs/);
-        expect(fs.mkdirSync).toHaveBeenCalledTimes(2);
-    });
-
-    test('no usable fs returns the platform path untouched', () => {
-        const rt = loadRuntime();
-        fs.existsSync.mockImplementation(() => {
-            throw new Error('fs shim');
-        });
-        expect(rt.getAppUserDataPath()).toBe(rt.getUserDataDir('gurushots-auto-vote-dev'));
-        expect(fs.mkdirSync).not.toHaveBeenCalled();
     });
 });

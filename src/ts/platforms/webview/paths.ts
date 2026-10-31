@@ -1,29 +1,33 @@
 /**
- * The webview family's paths member: the OS-path reads delegated to
- * runtime.ts, whose Capacitor branches answer the stub paths of a WebView (no
- * fs behind them; writers fail-soft). The app-root members have no answer on
- * the WebView — no WebView code resolves a path below an app root, the
- * read-only assets are fetched from the webDir — so they throw rather than
- * invent one.
+ * The webview family's paths member: the stub paths of a WebView, the same
+ * answers runtime.ts gave on a Capacitor page (no fs behind them; writers
+ * fail-soft). The app name comes from the core app identity, asked at call
+ * time like every wrapped module. The app-root members have no answer on the
+ * WebView — no WebView code resolves a path below an app root, the read-only
+ * assets are fetched from the webDir — so they throw rather than invent one.
  */
 
+import type { CapacitorGlobals } from '../../types/capacitor';
 import type { PlatformPaths } from '../../platform/port';
 
-type RuntimeModule = typeof import('../../runtime');
+type AppIdentityModule = typeof import('../../platform/appIdentity');
 
 // Reached at call time: the setup file loads the helpers that import this
-// family, so an import-time module graph (runtime's node:path and node:os)
-// lands in the setup's registry before a test file registers its own mocks
-// (platforms/node/index.ts states the reason in full).
-const runtime = (): RuntimeModule => require('../../runtime') as RuntimeModule;
+// family, so an import-time module graph lands in the setup's registry before
+// a test file registers its own mocks (platforms/node/index.ts states the
+// reason in full).
+const appIdentity = (): AppIdentityModule => require('../../platform/appIdentity') as AppIdentityModule;
 
 const createWebviewPaths = (): PlatformPaths => ({
     // The Capacitor branches of runtime: the stub path /<appName>, and the
     // native-runtime read of isPackaged (isNativePlatform).
-    userData: () => runtime().getAppUserDataPath(),
-    getUserDataDir: (appName) => runtime().getUserDataDir(appName),
-    isPackaged: () => runtime().isPackaged(),
-    isSourceCode: () => runtime().isSourceCode(),
+    userData: () => `/${appIdentity().getAppName()}`,
+    getUserDataDir: (appName) => `/${appName}`,
+    isPackaged: () => {
+        const cap = (globalThis as CapacitorGlobals).Capacitor;
+        return cap != null && typeof cap.isNativePlatform === 'function' ? cap.isNativePlatform() : false;
+    },
+    isSourceCode: () => true,
     resourcesPath: () => {
         throw new Error('webview has no app-root path');
     },

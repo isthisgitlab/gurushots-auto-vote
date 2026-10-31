@@ -1,41 +1,52 @@
 /**
- * The webview family's paths member: the OS-path reads delegated to runtime,
- * whose Capacitor branches answer the stub paths of a WebView, and the
- * app-root members that throw — the family invents no app-root path.
+ * The webview family's paths member: the stub paths of a WebView, the answers
+ * runtime.ts gave on a Capacitor page — `/<appName>` (no fs behind them;
+ * writers fail-soft), isPackaged from the Capacitor global's isNativePlatform,
+ * source detection always true. The app name comes through the core app
+ * identity, so the family's isSourceCode answer drives it; the app-root
+ * members throw — the family invents no app-root path.
  */
 
-jest.mock('../../../src/ts/runtime', () => ({
-    __esModule: true,
-    ...jest.requireActual<typeof import('../../../src/ts/runtime')>('../../../src/ts/runtime'),
-    getAppUserDataPath: jest.fn(() => '/gurushots-auto-vote'),
-    getUserDataDir: jest.fn((appName: string) => `/${appName}`),
-    isPackaged: jest.fn(() => true),
-    isSourceCode: jest.fn(() => false),
-}));
-
-const runtime = jest.mocked(require('../../../src/ts/runtime') as typeof import('../../../src/ts/runtime'));
-
 import { createWebviewPaths } from '../../../src/ts/platforms/webview/paths';
+import { installWebviewTestPlatform } from '../../helpers/platform';
 
-describe('the runtime delegations', () => {
-    test('userData delegates to the app user-data path', () => {
-        expect(createWebviewPaths().userData()).toBe('/gurushots-auto-vote');
-        expect(runtime.getAppUserDataPath).toHaveBeenCalled();
+import type * as appIdentityModule from '../../../src/ts/platform/appIdentity';
+
+const g = globalThis as typeof globalThis & { Capacitor?: unknown };
+
+const capacitor = (native = true) => ({
+    isNativePlatform: () => native,
+    getPlatform: () => 'android',
+});
+
+afterEach(() => {
+    delete g.Capacitor;
+});
+
+describe('the WebView stub paths', () => {
+    test('userData is /<appName>, the dev name the family itself reports', () => {
+        installWebviewTestPlatform();
+        const { getAppName } = require('../../../src/ts/platform/appIdentity') as typeof appIdentityModule;
+        expect(createWebviewPaths().userData()).toBe(`/${getAppName()}`);
+        expect(createWebviewPaths().userData()).toBe('/gurushots-auto-vote-dev');
     });
 
-    test('getUserDataDir delegates with the app name', () => {
+    test('getUserDataDir stubs every app name', () => {
         expect(createWebviewPaths().getUserDataDir('gurushots-auto-vote')).toBe('/gurushots-auto-vote');
-        expect(runtime.getUserDataDir).toHaveBeenCalledWith('gurushots-auto-vote');
     });
 
-    test('isPackaged delegates (the native-runtime read)', () => {
+    test('isPackaged reads the Capacitor global only when isNativePlatform is a function', () => {
+        expect(createWebviewPaths().isPackaged()).toBe(false);
+        g.Capacitor = {};
+        expect(createWebviewPaths().isPackaged()).toBe(false);
+        g.Capacitor = capacitor();
         expect(createWebviewPaths().isPackaged()).toBe(true);
-        expect(runtime.isPackaged).toHaveBeenCalled();
+        g.Capacitor = capacitor(false);
+        expect(createWebviewPaths().isPackaged()).toBe(false);
     });
 
-    test('isSourceCode delegates', () => {
-        expect(createWebviewPaths().isSourceCode()).toBe(false);
-        expect(runtime.isSourceCode).toHaveBeenCalled();
+    test('isSourceCode is always true', () => {
+        expect(createWebviewPaths().isSourceCode()).toBe(true);
     });
 });
 

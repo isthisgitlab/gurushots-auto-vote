@@ -29,6 +29,15 @@ import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
 import type { AutoVoteBackgroundPlugin } from '../../src/ts/types/capacitor';
 import { invalid } from '../helpers/invalid';
 
+// A store's file sits beside the settings file (jsonStore joins
+// path.dirname(getSettingsPath()) with the file name), so the suite resolves
+// the setup mock's bare dirname with the real one — otherwise every store
+// path the tests see is root-relative, and a write's directory-creation step
+// runs on a broken path.
+const realPath = jest.requireActual<typeof import('path')>('path');
+const pathMock = jest.mocked(require('node:path') as typeof import('path'));
+pathMock.dirname.mockImplementation((p: string) => realPath.dirname(p));
+
 const g = globalThis as typeof globalThis & {
     Capacitor?: { isNativePlatform: () => boolean; getPlatform: () => string };
     __GS_HEADLESS__?: boolean;

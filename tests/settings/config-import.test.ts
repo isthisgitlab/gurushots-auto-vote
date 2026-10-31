@@ -31,13 +31,14 @@ jest.mock('../../src/ts/logger', () => {
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type * as runtimeModule from '../../src/ts/runtime';
 import type * as settingsModule from '../../src/ts/settings';
 import type * as loggerModule from '../../src/ts/logger';
 import type * as joinStateModule from '../../src/ts/joinStateStore';
 import type * as lockWaitModule from '../../src/ts/lockWait';
 import type * as storageModule from '../../src/ts/settings/storage';
 import type { CategoryLogger } from '../../src/ts/logger';
+import { platform } from '../../src/ts/platform/port';
+import { installTestPlatform } from '../helpers/platform';
 import { invalid } from '../helpers/invalid';
 import { parseJsonObject } from '../helpers/parseJson';
 
@@ -77,13 +78,9 @@ describe('the import of a settings.json (real fs)', () => {
     // Each test gets its own module graph: the recovery state lives in the settings module.
     const loadFresh = (setup?: () => void) => {
         jest.isolateModules(() => {
-            // A factory, not a spy: `jest.restoreAllMocks()` in a test must not send the module back to the real user-data folder.
-            const actualRuntime = jest.requireActual<typeof runtimeModule>('../../src/ts/runtime');
-            jest.doMock('../../src/ts/runtime', () => ({
-                __esModule: true,
-                ...actualRuntime,
-                getAppUserDataPath: () => userData,
-            }));
+            // The settings file sits in the user-data directory: the platform resolves it into this test's
+            // temp dir (a closure, so `jest.restoreAllMocks()` cannot send it back to the real folder).
+            installTestPlatform({ paths: { ...platform().paths, userData: () => userData } });
             setup?.();
             settings = require('../../src/ts/settings') as typeof settingsModule;
             cat = invalid<typeof loggerModule & { __cat: CatDouble }>(

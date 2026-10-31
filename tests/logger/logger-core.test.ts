@@ -28,9 +28,6 @@ const makeFs = (overrides = {}) => ({
 });
 
 const makeRuntime = (overrides = {}) => ({
-    isSourceCode: jest.fn(() => true),
-    getAppName: jest.fn(() => 'gurushots-auto-vote-dev'),
-    getAppUserDataPath: jest.fn(() => '/ud'),
     isDevelopment: jest.fn(() => false),
     isTest: jest.fn(() => true),
     isElectron: jest.fn(() => false),
@@ -40,15 +37,20 @@ const makeRuntime = (overrides = {}) => ({
 /**
  * Load a fresh copy of the real logger under a controlled environment.
  * Returns the module plus the stubs and the captured process 'exit' handler.
+ * The user-data directory and the source-detection answer are the platform's
+ * (the logs dir sits under it; the debug/api gating reads isSourceCode), so
+ * the install pins both per scenario.
  */
 const loadLogger = ({
     electron = false,
     argv1,
+    sourceCode = true,
     fs = makeFs(),
     runtime = makeRuntime({ isElectron: jest.fn(() => electron) }),
 }: {
     electron?: boolean;
     argv1?: string;
+    sourceCode?: boolean;
     fs?: ReturnType<typeof makeFs>;
     runtime?: ReturnType<typeof makeRuntime>;
 } = {}) => {
@@ -64,7 +66,14 @@ const loadLogger = ({
         jest.isolateModules(() => {
             jest.doMock('fs', () => fs);
             jest.doMock('../../src/ts/runtime', () => runtime);
+            const family = jest.requireActual<typeof import('../../src/ts/platforms/node/paths')>(
+                '../../src/ts/platforms/node/paths',
+            );
+            const paths = family.createNodePaths();
+            paths.userData = () => '/ud';
+            paths.isSourceCode = () => sourceCode;
             installTestPlatform({
+                paths,
                 capabilities: {
                     refreshMissionNeeds: false,
                     snapAllowed: true,
@@ -595,7 +604,7 @@ describe('top-level sugar methods', () => {
     });
 
     test('packaged builds suppress debug and api channels', () => {
-        const { logger } = loadLogger({ runtime: makeRuntime({ isSourceCode: jest.fn(() => false) }) });
+        const { logger } = loadLogger({ sourceCode: false });
         logger.debug('d');
         logger.api('a');
         logger.apiRequest('GET', '/a');
@@ -608,10 +617,13 @@ describe('top-level sugar methods', () => {
         expect(logger.getRecentLogs()).toEqual([]);
     });
 
-    test('re-exports runtime identity helpers', () => {
-        const { logger, runtime } = loadLogger();
-        expect(logger.isSourceCode).toBe(runtime.isSourceCode);
-        expect(logger.getAppName).toBe(runtime.getAppName);
+    test('re-exports the identity helpers the platform answers', () => {
+        const { logger } = loadLogger();
+        expect(logger.isSourceCode()).toBe(true);
+        expect(logger.getAppName()).toBe('gurushots-auto-vote-dev');
+        const packaged = loadLogger({ sourceCode: false });
+        expect(packaged.logger.isSourceCode()).toBe(false);
+        expect(packaged.logger.getAppName()).toBe('gurushots-auto-vote');
         expect(logger.CATEGORIES.GENERAL).toBe('general');
     });
 

@@ -30,8 +30,9 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type * as importMarkerModule from '../../src/ts/settings/importMarker';
 import type * as loggerModule from '../../src/ts/logger';
-import type * as runtimeModule from '../../src/ts/runtime';
 import type { CategoryLogger } from '../../src/ts/logger';
+import { platform } from '../../src/ts/platform/port';
+import { installTestPlatform } from '../helpers/platform';
 import { invalid } from '../helpers/invalid';
 import { parseJsonObject } from '../helpers/parseJson';
 
@@ -46,12 +47,9 @@ describe('the import marker (real fs)', () => {
 
     const load = () => {
         jest.isolateModules(() => {
-            const actualRuntime = jest.requireActual<typeof runtimeModule>('../../src/ts/runtime');
-            jest.doMock('../../src/ts/runtime', () => ({
-                __esModule: true,
-                ...actualRuntime,
-                getAppUserDataPath: () => root,
-            }));
+            // The marker file sits in the user-data directory: the platform
+            // resolves it into this test's temp dir.
+            installTestPlatform({ paths: { ...platform().paths, userData: () => root } });
             const actualWait = jest.requireActual<typeof import('../../src/ts/lockWait')>('../../src/ts/lockWait');
             jest.doMock('../../src/ts/lockWait', () => ({
                 acquireWithin: (...args: Parameters<typeof actualWait.acquireWithin>) =>
@@ -75,7 +73,6 @@ describe('the import marker (real fs)', () => {
     afterEach(() => {
         jest.useRealTimers();
         jest.restoreAllMocks();
-        jest.dontMock('../../src/ts/runtime');
         jest.dontMock('../../src/ts/lockWait');
         fs.rmSync(root, { recursive: true, force: true });
     });

@@ -13,6 +13,8 @@ jest.mock('node:fs', () => {
 });
 jest.unmock('path');
 jest.unmock('node:path');
+// A partial mock, so the Electron tests can spy isElectron (a real module's
+// exports are not spy-able as is).
 jest.mock('../../src/ts/runtime', () => ({
     __esModule: true,
     ...jest.requireActual<typeof import('../../src/ts/runtime')>('../../src/ts/runtime'),
@@ -52,6 +54,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { APP_PARTITION } from '../../src/ts/index/session';
+import { buildNodeTestPlatform } from '../helpers/platform';
 import type * as runtimeModule from '../../src/ts/runtime';
 import type * as localDataModule from '../../src/ts/settings/localData';
 import type * as storageModule from '../../src/ts/settings/storage';
@@ -172,11 +175,18 @@ describe('wipeLocalData', () => {
 
     const load = () => {
         jest.isolateModules(() => {
-            const runtime = require('../../src/ts/runtime') as typeof runtimeModule;
-            jest.spyOn(runtime, 'getAppUserDataPath').mockReturnValue(userData);
-            jest.spyOn(runtime, 'getUserDataDir').mockReturnValue(visionParent);
+            // The wipe reads the user-data directory and the CLI vision directory
+            // through the platform: point both at this test's directories.
+            const family =
+                require('../../src/ts/platforms/node/paths') as typeof import('../../src/ts/platforms/node/paths');
+            const paths = family.createNodePaths();
+            paths.userData = () => userData;
+            paths.getUserDataDir = () => visionParent;
+            const port = require('../../src/ts/platform/port') as typeof import('../../src/ts/platform/port');
+            port.resetPlatformForTests();
+            port.installPlatform(Object.assign(buildNodeTestPlatform(), { paths }));
             ctx = {
-                runtime,
+                runtime: require('../../src/ts/runtime') as typeof runtimeModule,
                 localData: require('../../src/ts/settings/localData') as typeof localDataModule,
                 storage: require('../../src/ts/settings/storage') as typeof storageModule,
                 settings: require('../../src/ts/settings') as typeof settingsModule,

@@ -16,6 +16,7 @@ import {
     __resetExtractedRootForTests,
 } from '../../../src/ts/platforms/node/assets';
 
+import type { PlatformAssets } from '../../../src/ts/platform/port';
 import type * as runtimeModule from '../../../src/ts/runtime';
 import type * as appPathsModule from '../../../src/ts/appPaths';
 
@@ -37,7 +38,6 @@ jest.mock('../../../src/ts/runtime', () => ({
     __esModule: true,
     ...jest.requireActual<typeof runtimeModule>('../../../src/ts/runtime'),
     isElectron: jest.fn(() => false),
-    isPackaged: jest.fn(() => false),
 }));
 jest.mock('../../../src/ts/appPaths', () => ({
     __esModule: true,
@@ -47,11 +47,30 @@ jest.mock('../../../src/ts/appPaths', () => ({
 const runtime = jest.mocked(require('../../../src/ts/runtime') as typeof runtimeModule);
 const appPaths = jest.mocked(require('../../../src/ts/appPaths') as typeof appPathsModule);
 
+// The packaged-Electron answer comes from the family's paths member (its
+// guarded electron read), faked the way the paths tests fake it: a fresh
+// registry whose electron module answers `app` and whose isElectron is on.
+const withPackagedElectron = (fn: (assets: PlatformAssets) => void) => {
+    jest.isolateModules(() => {
+        (process.versions as { electron?: string }).electron = '43.0.0';
+        jest.doMock('electron', () => ({ app: { isPackaged: true } }), { virtual: true });
+        const rt = require('../../../src/ts/runtime') as typeof runtimeModule;
+        jest.spyOn(rt, 'isElectron').mockReturnValue(true);
+        const assets =
+            require('../../../src/ts/platforms/node/assets') as typeof import('../../../src/ts/platforms/node/assets');
+        try {
+            fn(assets.createNodeAssets());
+        } finally {
+            delete (process.versions as { electron?: string }).electron;
+            jest.dontMock('electron');
+        }
+    });
+};
+
 beforeEach(() => {
     mockSea.isSea = () => false;
     mockSea.getAsset = () => '';
     runtime.isElectron.mockReturnValue(false);
-    runtime.isPackaged.mockReturnValue(false);
     appPaths.appPath.mockClear();
     __resetExtractedRootForTests();
 });
@@ -141,11 +160,12 @@ describe('visionModel', () => {
     });
 
     test('a packaged Electron build reads the resources directory', () => {
-        (process.versions as { electron?: string }).electron = '43.0.0';
-        runtime.isElectron.mockReturnValue(true);
-        runtime.isPackaged.mockReturnValue(true);
         (process as { resourcesPath?: string }).resourcesPath = '/res';
-        expect(createNodeAssets().visionModel.location()).toBe('/res/');
+        try {
+            withPackagedElectron((assets) => expect(assets.visionModel.location()).toBe('/res/'));
+        } finally {
+            delete (process as { resourcesPath?: string }).resourcesPath;
+        }
     });
 
     test('from source the model lives in the app root .cache directory', () => {
@@ -172,18 +192,29 @@ describe('visionModel.bundled', () => {
         expect(fs.existsSync).not.toHaveBeenCalled();
     });
 
-    test('not a SEA build, the model beside the location the model loads from decides', async () => {
-        (process.versions as { electron?: string }).electron = '43.0.0';
-        runtime.isElectron.mockReturnValue(true);
-        runtime.isPackaged.mockReturnValue(true);
+    test('not a SEA build, the model beside the location the model loads from decides', () => {
         (process as { resourcesPath?: string }).resourcesPath = '/res';
-        fs.existsSync.mockReturnValue(true);
-        await expect(createNodeAssets().visionModel.bundled()).resolves.toBe(true);
-        expect(fs.existsSync).toHaveBeenCalledWith(
-            (require('node:path') as typeof import('node:path')).join('/res/', 'vision-model', 'config.json'),
-        );
-        fs.existsSync.mockReturnValue(false);
-        await expect(createNodeAssets().visionModel.bundled()).resolves.toBe(false);
+        // bundled() runs its fs check synchronously, so both calls start inside
+        // the island; only the assertions await the captured answers.
+        let present!: Promise<boolean>;
+        let missing!: Promise<boolean>;
+        try {
+            withPackagedElectron((assets) => {
+                fs.existsSync.mockReturnValue(true);
+                present = assets.visionModel.bundled();
+                fs.existsSync.mockReturnValue(false);
+                missing = assets.visionModel.bundled();
+            });
+        } finally {
+            delete (process as { resourcesPath?: string }).resourcesPath;
+        }
+        return (async () => {
+            await expect(present).resolves.toBe(true);
+            expect(fs.existsSync).toHaveBeenCalledWith(
+                (require('node:path') as typeof import('node:path')).join('/res/', 'vision-model', 'config.json'),
+            );
+            await expect(missing).resolves.toBe(false);
+        })();
     });
 });
 

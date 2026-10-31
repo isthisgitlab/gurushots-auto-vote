@@ -30,7 +30,16 @@ jest.mock('../../src/ts/runtime', () => ({
     __esModule: true,
     ...jest.requireActual<typeof import('../../src/ts/runtime')>('../../src/ts/runtime'),
     isElectron: () => runtimeFlags.electron,
-    isPackaged: () => runtimeFlags.packaged,
+}));
+// The packaged answer is the node family's paths member now (its guarded
+// electron read), so the electron module answers through the same flags.
+jest.mock('electron', () => ({
+    __esModule: true,
+    app: {
+        get isPackaged() {
+            return runtimeFlags.packaged;
+        },
+    },
 }));
 jest.mock('../../src/ts/logger', () => ({ withCategory: jest.fn(() => mockLog) }));
 jest.mock('node:sea', () => mockSea, { virtual: true });
