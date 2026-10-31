@@ -108,10 +108,8 @@ export function AutovoteProvider({
         };
     }
 
-    // One controller per mount, created during the first render so
-    // useAutovote()'s first-render state is the live one; the mount effect
-    // below revives it if an earlier cleanup disposed it, and disposes it on
-    // the way out.
+    // One controller per mount, created at render time; the effect below
+    // resumes it on mount and disposes it in the cleanup.
     const controllerRef = useRef<AutovoteController | null>(null);
     if (controllerRef.current === null) {
         controllerRef.current = createAutovoteController(hostRef.current);

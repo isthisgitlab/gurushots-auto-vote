@@ -60,10 +60,10 @@ export type AutovoteHost = {
     logRendererError: (message: string) => Promise<void>;
     // Timers driving the resume hold only, injectable so tests drive the hold
     // through the host. The cycle timer is NOT theirs: the shared cadence
-    // chain owns it and arms it with the global setTimeout (chain.ts is out
-    // of scope here), so the controller cancels chain timers with the global
-    // clearTimeout — clearing them through a host seam could miss the chain's
-    // own handle.
+    // chain owns it and arms it with the global setTimeout
+    // (src/ts/scheduling/cadenceChain/chain.ts), so the controller cancels
+    // chain timers with the global clearTimeout — clearing them through a
+    // host seam could miss the chain's own handle.
     setTimeout: (callback: () => void, ms: number) => TimerHandle;
     clearTimeout: (handle: TimerHandle) => void;
     // The platform background service (the Capacitor bridges, or a no-op).

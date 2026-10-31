@@ -577,7 +577,7 @@ describe('renderer button colours', () => {
 });
 
 // The layering plan keeps the platform code out of the renderer bundles: the renderer chain lives in
-// src/ts/autovote/controller.ts and the native services arrive as an injected background host
+// src/ts/autovote/chain.ts (controller.ts composes it) and the native services arrive as an injected background host
 // (src/ts/bridge/capacitorBackgroundHost.ts) that only the Capacitor page imports. An indirect import could
 // route around a source-text scan, so the evidence is esbuild's own module graph: the four renderer bundles
 // are rebuilt in-process with the build script's exact options and every input file is checked.
@@ -598,29 +598,83 @@ describe('renderer bundle graphs', () => {
     ];
     const FORBIDDEN_DIR = 'src/ts/platforms/';
 
-    test('no renderer bundle pulls in the platform layer or the native services', async () => {
+    type BuildReact = typeof import('../scripts/build-react');
+    type EntryName = keyof BuildReact['entryPoints'];
+
+    // build-react reads process.env.NODE_ENV at module load and bakes its
+    // options, so under Jest it would build the NODE_ENV=test graph while a
+    // release builds production. Load it in isolation with the release value
+    // set, restoring the original in a finally — nothing else may observe the
+    // temporary value.
+    const loadBuildOptions = (): Pick<BuildReact, 'commonOptions' | 'entryPoints' | 'perEntryOptions'> => {
+        const saved = process.env.NODE_ENV;
+        try {
+            process.env.NODE_ENV = 'production';
+            let options: Pick<BuildReact, 'commonOptions' | 'entryPoints' | 'perEntryOptions'>;
+            jest.isolateModules(() => {
+                const loaded = jest.requireActual<BuildReact>('../scripts/build-react');
+                options = {
+                    commonOptions: loaded.commonOptions,
+                    entryPoints: loaded.entryPoints,
+                    perEntryOptions: loaded.perEntryOptions,
+                };
+            });
+            return options!;
+        } finally {
+            if (saved === undefined) delete process.env.NODE_ENV;
+            else process.env.NODE_ENV = saved;
+        }
+    };
+
+    // Build one entry's graph in-process and return its inputs normalised to
+    // root-relative slash paths, alongside the entry itself normalised the
+    // same way.
+    const buildGraph = async (name: EntryName) => {
         const esbuild = jest.requireActual<typeof import('esbuild')>('esbuild');
-        const { commonOptions, entryPoints, perEntryOptions } =
-            jest.requireActual<typeof import('../scripts/build-react')>('../scripts/build-react');
+        const { commonOptions, entryPoints, perEntryOptions } = loadBuildOptions();
+        const result = await esbuild.build({
+            ...commonOptions,
+            ...perEntryOptions[name],
+            entryPoints: [entryPoints[name]],
+            metafile: true,
+            write: false,
+            logLevel: 'silent',
+            // The build script runs from the repository root: the metafile keys
+            // are relative to it and the alias map resolves from here.
+            absWorkingDir: root,
+        });
+        const inputs = Object.keys(result.metafile!.inputs).map((input) =>
+            path.relative(root, path.resolve(root, input)).split(path.sep).join('/'),
+        );
+        const entryRel = path.relative(root, path.resolve(root, entryPoints[name])).split(path.sep).join('/');
+        return { inputs, entryRel };
+    };
+
+    test('no renderer bundle pulls in the platform layer or the native services', async () => {
         const offenders: string[] = [];
         for (const name of CHECKED_ENTRIES) {
-            const result = await esbuild.build({
-                ...commonOptions,
-                ...perEntryOptions[name],
-                entryPoints: [entryPoints[name]],
-                metafile: true,
-                write: false,
-                logLevel: 'silent',
-                // The build script runs from the repository root: the metafile keys
-                // are relative to it and the alias map resolves from here.
-                absWorkingDir: root,
-            });
-            const { metafile } = result;
-            for (const input of Object.keys(metafile.inputs)) {
-                const rel = path.relative(root, path.resolve(root, input)).split(path.sep).join('/');
-                if (FORBIDDEN_EXACT.includes(rel) || rel.startsWith(FORBIDDEN_DIR)) offenders.push(`${name}: ${rel}`);
+            const { inputs, entryRel } = await buildGraph(name);
+            // Positive control: each checked graph contains its own entry,
+            // normalised exactly like the forbidden paths — if the
+            // normalisation or the metafile key format drifts, the check
+            // below would silently pass on nothing.
+            expect(inputs).toContain(entryRel);
+            for (const input of inputs) {
+                if (FORBIDDEN_EXACT.includes(input) || input.startsWith(FORBIDDEN_DIR))
+                    offenders.push(`${name}: ${input}`);
             }
         }
         expect(offenders).toEqual([]);
-    }, 60_000);
+    }, 120_000);
+
+    test('the capacitor bundle is the sanctioned route to the platform port and the native bridge', async () => {
+        // The Capacitor page legitimately reaches both through
+        // src/ts/bridge/capacitorBackgroundHost.ts. Their presence — built
+        // with the same options and read through the same normalisation — is
+        // the positive control that the forbidden-path check sees real
+        // module graphs, not an empty match set.
+        const { inputs } = await buildGraph('capacitor');
+        expect(inputs).toContain('src/ts/platform/port.ts');
+        expect(inputs).toContain('src/ts/services/NativeAutovoteBridge.ts');
+    }, 120_000);
 });

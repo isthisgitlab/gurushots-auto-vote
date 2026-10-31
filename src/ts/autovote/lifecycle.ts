@@ -7,7 +7,7 @@
 import { ACTIONS } from './state';
 
 import type { Challenge } from '../types/gurushots';
-import type { TimerHandle } from '../scheduling/cadenceChain';
+import type { createCadenceChain, TimerHandle } from '../scheduling/cadenceChain';
 import type { AutovoteAction } from './state';
 import type { AutovotePersistence } from './persistence';
 import type { ResumeHold } from './resume';
@@ -50,7 +50,7 @@ type LifecycleDeps = {
     resume: Pick<ResumeHold, 'resumeTimer' | 'clearResumeTimer'>;
     persist: AutovotePersistence;
     runCycle: () => Promise<Challenge[] | boolean>;
-    scheduleNext: (prefetched?: Challenge[] | boolean | null, previousCycleStartMs?: number | null) => Promise<void>;
+    scheduleNext: ReturnType<typeof createCadenceChain>['scheduleNext'];
 };
 
 /**
@@ -105,7 +105,8 @@ export const createLifecycle = ({
         if (!flags.running()) return;
 
         // Persist the running flag so a remount can resume voting without
-        // the user tapping Start again, after the launch marker (see above).
+        // the user tapping Start again, after the launch marker
+        // (persistence.ts's persistStartedLaunch).
         await persist.persistStartedLaunch();
         if (!flags.running()) return;
         await persist.persistRunningFlag(true);

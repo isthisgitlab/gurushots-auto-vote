@@ -23,16 +23,7 @@ import { createControllerChain } from './chain';
 import { createResumeHold } from './resume';
 import { cancelCycleTimer, createLifecycle } from './lifecycle';
 
-export type {
-    AutovoteController,
-    AutovoteHost,
-    BackgroundHost,
-    CallOrNull,
-    ControllerCore,
-    CycleNotifier,
-    SessionFlags,
-    SessionFlagWriters,
-} from './types';
+export type { AutovoteController, AutovoteHost, BackgroundHost, CallOrNull, CycleNotifier } from './types';
 
 /**
  * Create one autovote controller over `host`. There is no module-level
