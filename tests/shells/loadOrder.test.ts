@@ -28,6 +28,9 @@ describe('the shell platform modules load with the port clear and the logger moc
     test('each installs, throws to nobody, and never loads the logger', () => {
         const failures: string[] = [];
         for (const entry of SHELL_PLATFORM_ENTRIES) {
+            // Cold registry per entry: nothing a previous iteration or a
+            // previous file in this worker cached can decide the outcome.
+            jest.resetModules();
             let loggerLoaded = false;
             let threw: string | null = null;
             jest.isolateModules(() => {
@@ -48,20 +51,23 @@ describe('the shell platform modules load with the port clear and the logger moc
                     };
                 });
                 try {
-                    // The scripts entry sits outside the jest roots, which
-                    // the sandboxed require cannot leave: requireActual
-                    // resolves it (ci-validation does the same for
-                    // build-react) and its dependencies still resolve
-                    // through this isolate's mocks.
-                    if (entry.startsWith('scripts/')) jest.requireActual(requirePathOf(entry));
-                    else require(requirePathOf(entry));
+                    require(requirePathOf(entry));
                 } catch (error) {
                     threw = error instanceof Error ? error.message : String(error);
+                }
+                if ((globalThis as { [key: symbol]: unknown })[Symbol.for('gurushots.platform')] === undefined) {
+                    failures.push(`${entry} did not install the platform`);
                 }
             });
             if (threw !== null) failures.push(`${entry} threw at load: ${threw}`);
             if (loggerLoaded) failures.push(`${entry} loaded the logger at module scope`);
         }
         expect(failures).toEqual([]);
+    });
+
+    // The recording doMock must never outlive its isolate (it would answer
+    // later loads with silent stubs).
+    afterEach(() => {
+        jest.dontMock('../../src/ts/logger');
     });
 });
