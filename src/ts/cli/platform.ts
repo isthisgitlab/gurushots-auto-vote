@@ -5,15 +5,22 @@
  * loadClassifier has extracted it) instead of the source checkout's .cache.
  * The windows are the explicit no-ops of a shell with no windows. Installed
  * when the module loads; cli.ts imports it first, before any core module.
+ * visionVerifier is reached at call time — the install must run before the
+ * logger loads — so this module's own import chain is the port and the
+ * family builder only.
  */
 
 import * as path from 'node:path';
 
 import { installPlatform } from '../platform/port';
 import { createNodePlatform } from '../platforms/node';
-import { getCliAssetRoot } from '../services/visionVerifier';
 
 import type { PlatformWindows } from '../platform/port';
+
+type VisionVerifierModule = typeof import('../services/visionVerifier');
+
+// The install must run before the logger loads.
+const visionVerifier = (): VisionVerifierModule => require('../services/visionVerifier') as VisionVerifierModule;
 
 // The CLI has no windows to broadcast to or relaunch.
 const windows: PlatformWindows = {
@@ -32,7 +39,7 @@ cliPlatform.assets = {
     visionModel: {
         device: cliPlatform.assets.visionModel.device,
         location: () => {
-            const root = getCliAssetRoot();
+            const root = visionVerifier().getCliAssetRoot();
             return root === undefined ? nodeModelLocation() : `${root}${path.sep}`;
         },
     },

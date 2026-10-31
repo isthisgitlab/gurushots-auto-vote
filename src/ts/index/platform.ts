@@ -5,23 +5,37 @@
  * requires. Everything else is the family's (paths.isPackaged rides on
  * runtime.isPackaged, whose Electron branch reads app.isPackaged through the
  * guarded require). Installed when the module loads; index.ts imports it
- * first, before any core module.
+ * first, before any core module. The wrapped modules are reached at call
+ * time — the install must run before the logger loads — so this module's own
+ * import chain is the port and the family builder only.
  */
 
-import { afterWipe, broadcastSettingsChanged } from '../ipc/settings.handlers';
 import { installPlatform } from '../platform/port';
 import { createNodePlatform } from '../platforms/node';
-import { clearElectronSession } from '../settings/localData';
 
 import type { ElectronPlatform, PlatformWindows } from '../platform/port';
 
+type SettingsHandlersModule = typeof import('../ipc/settings.handlers');
+type LocalDataModule = typeof import('../settings/localData');
+
+// The install must run before the logger loads.
+const settingsHandlers = (): SettingsHandlersModule => require('../ipc/settings.handlers') as SettingsHandlersModule;
+// The install must run before the logger loads.
+const localData = (): LocalDataModule => require('../settings/localData') as LocalDataModule;
+
 /** The Electron windows: every live window's settings broadcast, and the relaunch. */
-const windows: PlatformWindows = { broadcastSettingsChanged, afterWipe };
+const windows: PlatformWindows = {
+    broadcastSettingsChanged: (newSettings) => settingsHandlers().broadcastSettingsChanged(newSettings),
+    afterWipe: () => settingsHandlers().afterWipe(),
+};
 
 const electronPlatform = createNodePlatform(windows);
 // The Electron wipe also clears the app's browser session; ElectronPlatform requires it.
 const installed: ElectronPlatform = Object.assign(electronPlatform, {
-    wipe: { ...electronPlatform.wipe, clearSession: clearElectronSession },
+    wipe: {
+        ...electronPlatform.wipe,
+        clearSession: () => localData().clearElectronSession(),
+    },
 });
 
 installPlatform(installed);

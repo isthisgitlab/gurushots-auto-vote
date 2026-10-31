@@ -36,3 +36,35 @@ describe('the scripts platform module', () => {
         expect(capabilities.logCleanup).toBe(false);
     });
 });
+
+// The light-chain suite stands last: its jest.doMock registration is cleaned
+// in its own afterEach, and nothing after it needs the logger mock. The
+// module's import chain is the port and the family builder only — the
+// install must run before the logger loads.
+describe('loading the scripts platform module loads no heavy module', () => {
+    const HEAVY = ['../../src/ts/logger'];
+    let mockLoaded: string[];
+
+    beforeEach(() => {
+        mockLoaded = [];
+    });
+
+    afterEach(() => {
+        for (const heavy of HEAVY) jest.dontMock(heavy);
+    });
+
+    test('loading installs the platform without touching the logger', () => {
+        jest.isolateModules(() => {
+            clearInstalledPlatform();
+            for (const heavy of HEAVY) {
+                jest.doMock(heavy, () => {
+                    mockLoaded.push(heavy);
+                    return {};
+                });
+            }
+            require('../../scripts/lib/platform');
+            expect(mockLoaded).toEqual([]);
+            expect(platform()).toBeDefined();
+        });
+    });
+});

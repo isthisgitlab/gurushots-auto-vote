@@ -1,7 +1,10 @@
 /**
  * The test platforms and the installers every test swaps platforms through
  * (the port's install rules refuse a second, different install, so a swap is
- * reset + install). The node test platform resolves paths.userData() inside
+ * reset + install). The install contract holds in tests as in production —
+ * installPlatform keeps refusing a different object — so a test that loads an
+ * entry module calls clearInstalledPlatform() first, as the entry-importing
+ * test files do. The node test platform resolves paths.userData() inside
  * one temporary directory per test file — created with the real fs, because
  * tests/setup.ts mocks the fs module — never inside the real home, which the
  * guard in tests/setupPlatform.ts checks; the setup file removes the

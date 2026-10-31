@@ -75,6 +75,86 @@ const webview = require('../../src/ts/platforms/webview') as {
 };
 const parts = webview.__recorded.parts as WebviewParts;
 
+// The modules the shell members wrap, reached at call time — the install
+// must run before the logger loads (whose own absence from the chain the
+// bundle check proves). The deferral suite stands FIRST: a jest.doMock
+// inside isolateModules only wins while the wrapped module has not been
+// instantiated in the outer registry (the tests below instantiate the
+// file-level bridge mock), and its afterEach re-registers that mock.
+const HEAVY = [
+    '../../src/ts/bridge/capacitor',
+    '../../src/ts/services/NativeAutovoteBridge',
+    '../../src/ts/services/ForegroundServiceController',
+    '../../src/ts/services/AndroidUpdateInstaller',
+    '../../src/ts/settings/localData',
+];
+
+describe('loading the Capacitor shell platform module defers the wrapped modules', () => {
+    let mockLoaded: string[];
+
+    beforeEach(() => {
+        mockLoaded = [];
+    });
+
+    afterEach(() => {
+        for (const heavy of HEAVY) jest.dontMock(heavy);
+        // doMock (not mock): the hoisted registration was removed by
+        // dontMock above, and a runtime re-registration is a doMock.
+        jest.doMock('../../src/ts/bridge/capacitor', () => ({
+            __esModule: true,
+            emit: jest.fn<void, [string, unknown]>(),
+            reloadWindow: jest.fn(async (): Promise<{ success: boolean }> => ({ success: true })),
+        }));
+    });
+
+    test('loading installs the platform and loads none of them', () => {
+        jest.isolateModules(() => {
+            clearInstalledPlatform();
+            for (const heavy of HEAVY) {
+                jest.doMock(heavy, () => {
+                    mockLoaded.push(heavy);
+                    return {};
+                });
+            }
+            require('../../src/ts/bridge/capacitorPlatform');
+            expect(mockLoaded).toEqual([]);
+            expect(platform()).toBeDefined();
+        });
+    });
+
+    test('calling a member reaches the module it wraps', () => {
+        jest.isolateModules(() => {
+            clearInstalledPlatform();
+            jest.doMock('../../src/ts/bridge/capacitor', () => ({
+                __esModule: true,
+                emit: jest.fn<void, [string, unknown]>(),
+                reloadWindow: jest.fn(async (): Promise<{ success: boolean }> => ({ success: true })),
+            }));
+            jest.doMock('../../src/ts/services/NativeAutovoteBridge', () => ({
+                __esModule: true,
+                isAvailable: () => true,
+            }));
+            jest.doMock('../../src/ts/settings/localData', () => ({
+                __esModule: true,
+                nativeWipe: async (): Promise<{ ok: boolean }> => ({ ok: true }),
+            }));
+            require('../../src/ts/bridge/capacitorPlatform');
+            // The deferred require of each wrapped module is the next thing
+            // these members run, so each call lands in the doMock'ed module.
+            const bridgeMock = require('../../src/ts/bridge/capacitor') as {
+                emit: jest.Mock<void, [string, unknown]>;
+                reloadWindow: jest.Mock<Promise<{ success: boolean }>, []>;
+            };
+            void platform().wipe.nativeWipe();
+            expect(platform().capabilities.backgroundServiceOwnsScenarios()).toBe(true);
+            platform().windows.broadcastSettingsChanged({});
+            expect(bridgeMock.emit).toHaveBeenCalledWith('settings-changed', {});
+            void platform().windows.afterWipe();
+            expect(bridgeMock.reloadWindow).toHaveBeenCalledTimes(1);
+        });
+    });
+});
+
 describe('the Capacitor shell platform module', () => {
     test('the module installs the platform the family builds with the recorded parts', () => {
         expect(parts).not.toBeNull();

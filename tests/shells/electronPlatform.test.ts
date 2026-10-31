@@ -1,13 +1,13 @@
 /**
  * The Electron shell's platform module: it installs the node family with the
- * shell's own members when it loads. The shell members are checked against
- * the code they wrap — the settings broadcast and the post-wipe relaunch are
- * the settings.handlers exports, and the wipe's session clear is the
- * localData export. electron is mocked; runtime is a partial mock with
- * isElectron true, so the guarded electron reads resolve the way they do in
- * the main process. The installed object is captured once: the setup file's
- * afterEach reinstalls the node test platform on the port, so the tests read
- * the captured object, not the slot.
+ * shell's own members when it loads, and loads none of the modules it wraps
+ * — the settings broadcast, the post-wipe relaunch and the session clear are
+ * reached at call time, so the install runs before the logger loads. electron
+ * is mocked; runtime is a partial mock with isElectron true, so the guarded
+ * electron reads resolve the way they do in the main process. The installed
+ * object is captured once: the setup file's afterEach reinstalls the node
+ * test platform on the port, so the tests read the captured object, not the
+ * slot.
  */
 
 import { APP_PARTITION } from '../../src/ts/index/session';
@@ -77,17 +77,12 @@ clearInstalledPlatform();
 require('../../src/ts/index/platform');
 const installed: ElectronPlatform = platform() as ElectronPlatform;
 
-const settingsHandlers =
-    require('../../src/ts/ipc/settings.handlers') as typeof import('../../src/ts/ipc/settings.handlers');
-const localData = require('../../src/ts/settings/localData') as typeof import('../../src/ts/settings/localData');
+// The modules the shell members wrap, reached at call time — the install
+// must run before the logger loads (whose own absence from the chain the
+// bundle check proves).
+const HEAVY = ['../../src/ts/ipc/settings.handlers', '../../src/ts/settings/localData'];
 
 describe('the Electron shell platform module', () => {
-    test('the module installs the platform, with the shell members it wraps', () => {
-        expect(installed.wipe.clearSession).toBe(localData.clearElectronSession);
-        expect(installed.windows.broadcastSettingsChanged).toBe(settingsHandlers.broadcastSettingsChanged);
-        expect(installed.windows.afterWipe).toBe(settingsHandlers.afterWipe);
-    });
-
     test('the broadcast sends the new settings to every live window, never a destroyed one', () => {
         const send = (): FakeBrowserWindow['webContents']['send'] => jest.fn<void, [string, unknown]>();
         const live: FakeBrowserWindow = { isDestroyed: () => false, webContents: { send: send() } };
@@ -137,5 +132,62 @@ describe('the Electron shell platform module', () => {
         // default rule).
         expect(capabilities.logContext()).toBe('GUI');
         expect(capabilities.logCleanup).toBe(true);
+    });
+});
+
+// The deferral suite stands last: its jest.doMock registrations are cleaned
+// in its own afterEach, and nothing after it needs the file-level mocks.
+describe('loading the Electron shell platform module defers the wrapped modules', () => {
+    let mockLoaded: string[];
+    const mockBroadcast = jest.fn<void, [object]>();
+    const mockAfterWipe = jest.fn<void, []>();
+    const mockClearSession = jest.fn<Promise<void>, []>();
+
+    beforeEach(() => {
+        mockLoaded = [];
+    });
+
+    afterEach(() => {
+        for (const heavy of HEAVY) jest.dontMock(heavy);
+    });
+
+    test('loading installs the platform and loads none of them', () => {
+        jest.isolateModules(() => {
+            clearInstalledPlatform();
+            for (const heavy of HEAVY) {
+                jest.doMock(heavy, () => {
+                    mockLoaded.push(heavy);
+                    return {};
+                });
+            }
+            require('../../src/ts/index/platform');
+            expect(mockLoaded).toEqual([]);
+            expect(platform()).toBeDefined();
+            expect(platform().wipe.clearSession).not.toBeNull();
+        });
+    });
+
+    test('calling a member reaches the module it wraps', () => {
+        jest.isolateModules(() => {
+            clearInstalledPlatform();
+            jest.doMock('../../src/ts/ipc/settings.handlers', () => ({
+                __esModule: true,
+                broadcastSettingsChanged: mockBroadcast,
+                afterWipe: mockAfterWipe,
+            }));
+            jest.doMock('../../src/ts/settings/localData', () => ({
+                __esModule: true,
+                clearElectronSession: mockClearSession,
+            }));
+            require('../../src/ts/index/platform');
+            // The deferred require of each wrapped module is the next thing
+            // these members run, so each call lands in its mock.
+            platform().windows.broadcastSettingsChanged({});
+            platform().windows.afterWipe();
+            void platform().wipe.clearSession?.();
+            expect(mockBroadcast).toHaveBeenCalledWith({});
+            expect(mockAfterWipe).toHaveBeenCalledTimes(1);
+            expect(mockClearSession).toHaveBeenCalledTimes(1);
+        });
     });
 });

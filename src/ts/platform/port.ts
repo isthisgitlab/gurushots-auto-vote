@@ -9,6 +9,11 @@
  * shells or the platform packages — the families and the shells import it.
  * Every reference to a shell-only module is a type-only import, erased at
  * build, so the port carries the call shapes without loading the modules.
+ * A shell platform module's own import chain is only this port and its
+ * family builder (plus node builtins), and no module in that chain reads
+ * platform() at load — so every entry's install runs before the logger and
+ * the rest of core load, and Phase 3 can move the logger's load-time reads
+ * behind the port.
  */
 
 import type { AxiosAdapter } from 'axios';
