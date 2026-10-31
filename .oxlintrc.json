@@ -242,12 +242,12 @@
         },
         // Layer boundaries: core is shared, a platform isolates one runtime, a shell is
         // one entry point; the table in scripts/lint/layer-boundaries.mts names each
-        // boundary. Warn, not error: today's code still crosses boundaries, and the
-        // warning count is the exit gate the layering phases must drive to zero.
+        // boundary. The layering is complete, so the rule is an error: a new import
+        // across a boundary fails lint.
         {
             "files": ["src/ts/**/*.ts", "src/ts/**/*.tsx"],
             "rules": {
-                "layer-boundaries/no-cross-layer-import": "warn"
+                "layer-boundaries/no-cross-layer-import": "error"
             }
         },
         // Renderer (Preact via preact/compat).

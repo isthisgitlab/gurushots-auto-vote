@@ -376,14 +376,14 @@ describe('ipcMain registration', () => {
 });
 
 // The layer-boundaries Oxlint rule (scripts/lint/layer-boundaries.mts) reports an import crossing a layer
-// boundary; the layering phases count these warnings as their exit gate, so the rule must stay switched on over
-// all of src/ts and at warn — erroring would fail today's code, a quieter level would hide the count.
+// boundary; the layering is complete, so the rule must stay switched on over all of src/ts and at error — a
+// quieter level would let a new crossing through.
 describe('layer boundaries', () => {
     const RULE = 'layer-boundaries/no-cross-layer-import';
     const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
     const path = jest.requireActual<typeof import('node:path')>('node:path');
     const root = path.join(__dirname, '..');
-    test('Oxlint runs the layer-boundaries rule over all of src/ts at warn, with no file exempt', () => {
+    test('Oxlint runs the layer-boundaries rule over all of src/ts at error, with no file exempt', () => {
         const { execFileSync } = jest.requireActual<typeof import('node:child_process')>('node:child_process');
         const printed: unknown = JSON.parse(
             execFileSync(process.execPath, [path.join(root, 'node_modules/oxlint/bin/oxlint'), '--print-config'], {
@@ -403,9 +403,9 @@ describe('layer boundaries', () => {
         expect(enabling).toHaveLength(1);
         expect(enabling[0]).toMatchObject({
             files: ['src/ts/**/*.ts', 'src/ts/**/*.tsx'],
-            rules: { [RULE]: 'warn' },
+            rules: { [RULE]: 'deny' }, // Oxlint prints the config's "error" as "deny"
         });
-        // A file exemption would hide the crossings a later phase has to count.
+        // A file exemption would let a crossing through unflagged.
         expect(enabling[0]).not.toHaveProperty('excludeFiles');
     });
 });
