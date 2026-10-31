@@ -31,6 +31,7 @@ import type * as settingsCommandsModule from '../../src/ts/cli/commands/settings
 import type * as scenariosModule from '../../src/ts/cli/commands/scenarios';
 import type * as cliSessionLockModule from '../../src/ts/settings/cliSessionLock';
 import { invalid } from '../helpers/invalid';
+import { clearInstalledPlatform } from '../helpers/platform';
 import { CURRENT_NOTICE_VERSION } from '../../src/ts/noticeVersion';
 
 type Mods = {
@@ -261,6 +262,7 @@ const run = async (argv: string[], setup?: (mods: Mods) => void) => {
             sessionLock: require('../../src/ts/settings/cliSessionLock') as typeof cliSessionLockModule,
         });
         setup?.(m);
+        clearInstalledPlatform();
         require('../../src/ts/cli/cli');
     });
     await flush();

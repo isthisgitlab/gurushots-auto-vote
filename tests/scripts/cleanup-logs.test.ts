@@ -17,12 +17,14 @@ import os = require('node:os');
 import pathModule = require('node:path');
 const path = jest.mocked(pathModule);
 import type * as cleanup_logsModule from '../../scripts/cleanup-logs';
+import { clearInstalledPlatform } from '../helpers/platform';
 
 let mockUserDataPath = '';
 jest.mock('../../src/ts/runtime', () => ({
     getAppUserDataPath: () => mockUserDataPath,
 }));
 
+clearInstalledPlatform();
 const { cleanupLogs } = require('../../scripts/cleanup-logs') as typeof cleanup_logsModule;
 
 describe('cleanup-logs', () => {

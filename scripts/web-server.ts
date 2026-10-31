@@ -4,6 +4,9 @@
 // the built renderer in dist/. `pnpm web` builds the CSS and bundles first;
 // pass --port=<n> (default 4400, 0 = any free port). The printed URL carries a
 // random per-run token (`#t=...`) the pages need for every /api/ request.
+// The web platform installs before any core module loads (the same module the
+// server imports, so it evaluates once).
+import '../src/ts/web/platform';
 import { startWebServer } from '../src/ts/web/server';
 import { appPath } from '../src/ts/appPaths';
 import { errorMessage } from '../src/ts/errorMessage';

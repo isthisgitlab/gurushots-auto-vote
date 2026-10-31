@@ -36,6 +36,8 @@ import type * as stopwordsModule from '../../src/ts/services/photoPicker/stopwor
 import type * as stemModule from '../../src/ts/services/photoPicker/stem';
 import type { ConceptsConfig } from '../../scripts/build-lexicon';
 import { invalid } from '../helpers/invalid';
+import { clearInstalledPlatform } from '../helpers/platform';
+clearInstalledPlatform();
 const { main, checkSubjectCases } = require('../../scripts/validate-lexicon') as typeof validate_lexiconModule;
 
 // Fake lexicon: embed() mean-pools the known words (null when none are known),

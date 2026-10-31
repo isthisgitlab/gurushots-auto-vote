@@ -279,4 +279,4 @@ const installBridge = (): WindowApi => {
     return api as WindowApi;
 };
 
-export { installBridge, seedBridgeProfiles, subscribe, emit };
+export { installBridge, seedBridgeProfiles, subscribe, emit, reloadWindow };

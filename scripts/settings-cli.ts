@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+// The CLI platform installs before any core module loads.
+import '../src/ts/cli/platform';
+
 import * as settings from '../src/ts/settings';
 import * as logger from '../src/ts/logger';
 import {

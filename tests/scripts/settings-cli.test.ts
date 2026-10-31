@@ -82,6 +82,7 @@ jest.mock('../../src/ts/cli/commands/settings', () => ({
 
 import type * as settingsCli from '../../scripts/settings-cli';
 import { invalid } from '../helpers/invalid';
+import { clearInstalledPlatform } from '../helpers/platform';
 
 import sharedCommandsModule = require('../../src/ts/cli/commands/settings');
 const sharedCommands = jest.mocked(sharedCommandsModule);
@@ -107,6 +108,7 @@ const runScript = async (...argv: string[]) => {
     try {
         scriptHooks.beforeRequire?.({ exitSpy });
         jest.isolateModules(() => {
+            clearInstalledPlatform();
             void (require('../../scripts/settings-cli') as typeof settingsCli).run();
         });
         await scriptHooks.afterRequire?.();

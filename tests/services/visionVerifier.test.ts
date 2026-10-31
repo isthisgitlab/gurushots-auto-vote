@@ -46,6 +46,7 @@ const {
     descriptionLead,
     snapPrompts,
     judgeSnapImage,
+    getCliAssetRoot,
     __resetForTests,
 } = require('../../src/ts/services/visionVerifier') as typeof visionVerifierModule;
 
@@ -377,6 +378,18 @@ describe('rankVisually', () => {
         );
         expect(mockTransformers.pipeline).not.toHaveBeenCalled();
         expect(logger.scoped.warning).not.toHaveBeenCalled();
+    });
+});
+
+describe('getCliAssetRoot', () => {
+    test('the extracted SEA runtime root is answered once loadClassifier has set it', async () => {
+        expect(getCliAssetRoot()).toBeUndefined();
+        mockRuntime.isCli.mockReturnValue(true);
+        mockRuntime.isElectron.mockReturnValue(false);
+        mockSea.isSea.mockReturnValue(true);
+        logitsBy({ a: [-2, -2] });
+        await rankVisually(LEAVES, [hex('a')], [photo('a')], 1, { logger: makeLogger() });
+        expect(getCliAssetRoot()).toBe('/vision/root');
     });
 });
 

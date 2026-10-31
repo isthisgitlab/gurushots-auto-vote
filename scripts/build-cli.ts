@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+// The scripts' platform installs before any app module loads.
+import './lib/platform';
+
 import { build } from 'esbuild';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';

@@ -20,6 +20,9 @@
  * rather than re-porting the strategy to Kotlin.
  */
 
+// The headless platform installs before any core module loads.
+import './platform';
+
 import * as settings from '../settings';
 import * as apiFactory from '../apiFactory';
 import * as logger from '../logger';

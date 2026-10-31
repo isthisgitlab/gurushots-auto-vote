@@ -415,24 +415,31 @@ const buildHandlers = (options: SettingsHandlerOptions = {}) => {
     return { ...handlers, ...buildThinHandlers(options) };
 };
 
-const register = (ipcMain: IpcMain) => {
-    const broadcastSettingsChange: BroadcastSettingsChange = (newSettings) => {
-        // A window closing mid-save must not turn a landed write into a
-        // reported failure (a send to a destroyed window throws). register()
-        // only runs under Electron, where BrowserWindow resolved.
-        (BrowserWindow as typeof electronModule.BrowserWindow).getAllWindows().forEach((win) => {
-            if (!win.isDestroyed()) win.webContents.send('settings-changed', newSettings);
-        });
-    };
-    // The window is closed by the exit, so the reply to the wipe is let out first.
-    const afterWipe = () => {
-        setTimeout(() => {
-            const app = electronApp as typeof electronModule.app;
-            app.relaunch();
-            app.exit(0);
-        }, 200);
-    };
-    registerHandlers(ipcMain, buildHandlers({ broadcastSettingsChange, afterWipe }));
+/**
+ * Sends the new settings to every window. register() hands it to the handlers
+ * as the shell's broadcast, and so does the Electron platform module — the
+ * closures it replaces stood inside register().
+ */
+const broadcastSettingsChanged: BroadcastSettingsChange = (newSettings) => {
+    // A window closing mid-save must not turn a landed write into a
+    // reported failure (a send to a destroyed window throws). register()
+    // only runs under Electron, where BrowserWindow resolved.
+    (BrowserWindow as typeof electronModule.BrowserWindow).getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) win.webContents.send('settings-changed', newSettings);
+    });
 };
 
-export { register, buildHandlers };
+// The window is closed by the exit, so the reply to the wipe is let out first.
+const afterWipe = () => {
+    setTimeout(() => {
+        const app = electronApp as typeof electronModule.app;
+        app.relaunch();
+        app.exit(0);
+    }, 200);
+};
+
+const register = (ipcMain: IpcMain) => {
+    registerHandlers(ipcMain, buildHandlers({ broadcastSettingsChange: broadcastSettingsChanged, afterWipe }));
+};
+
+export { register, buildHandlers, broadcastSettingsChanged, afterWipe };

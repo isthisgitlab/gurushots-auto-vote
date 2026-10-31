@@ -20,6 +20,9 @@
  * cannot learn it.
  */
 
+// The web platform installs before any core module loads; the server
+// registers its per-run fan-out and wipe stop on it (setWebShellRun).
+import { setWebShellRun } from './platform';
 import * as crypto from 'node:crypto';
 import * as http from 'node:http';
 import * as fs from 'node:fs';
@@ -317,11 +320,14 @@ const createWebServer = ({ distDir, token = newShellToken(), onLocalDataWiped }:
         const frame = `event: ${channel}\ndata: ${JSON.stringify(payload ?? null)}\n\n`;
         for (const client of clients) client.write(frame);
     };
-    const handlers = buildWebHandlers(emit, {
-        afterWipe: () => {
-            wiped = true;
-        },
-    });
+    // The window is closed by the exit, so the reply to the wipe is let out first.
+    const afterWipe = () => {
+        wiped = true;
+    };
+    const handlers = buildWebHandlers(emit, { afterWipe });
+    // The platform's windows delegate to this run while it listens; the close
+    // chain of a started server unregisters it again.
+    setWebShellRun({ emit, afterWipe });
 
     // Ends every connected browser's event stream (a wipe stop and the launcher's stop both do).
     const endClients = () => {
@@ -412,6 +418,7 @@ const startWebServer = async ({ port, distDir }: StartOptions) => {
     server.once('close', () => {
         closeHandled = true;
         releaseWebServerMarker();
+        setWebShellRun(null);
         void clearTokenBeforeExit(wasWiped).finally(settleCloseChain);
     });
     /** Resolves once the server is closed and its close chain has settled. */

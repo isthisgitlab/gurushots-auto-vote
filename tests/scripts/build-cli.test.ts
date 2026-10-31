@@ -40,6 +40,7 @@ const { build } = jest.mocked(require('esbuild') as typeof esbuildModule);
 const { execFileSync } = jest.mocked(require('node:child_process') as typeof node_child_processModule);
 const { version } = require('../../package.json') as typeof package_jsonModule;
 
+clearInstalledPlatform();
 import buildCli = require('../../scripts/build-cli');
 import type * as esbuildModule from 'esbuild';
 import type * as node_child_processModule from 'node:child_process';
@@ -50,6 +51,7 @@ import type * as node_osModule from 'node:os';
 import type { PathLike } from 'node:fs';
 import { invalid } from '../helpers/invalid';
 import { parseJsonObject } from '../helpers/parseJson';
+import { clearInstalledPlatform } from '../helpers/platform';
 
 const ROOT = path.join(__dirname, '..', '..');
 const DIST_DIR = path.join(ROOT, 'dist');
@@ -174,6 +176,7 @@ describe('build-cli', () => {
 
     test('requiring the module has no side effects', () => {
         jest.isolateModules(() => {
+            clearInstalledPlatform();
             require('../../scripts/build-cli');
         });
         expect(build).not.toHaveBeenCalled();

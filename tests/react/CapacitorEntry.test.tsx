@@ -153,6 +153,12 @@ describe('Capacitor entry', () => {
                 seedBridgeProfiles: m.seedBridgeProfiles,
                 subscribe: m.subscribe,
             }));
+            // The page's first import is its shell platform module: every
+            // collaborator here is mocked, so the real install (and the core
+            // imports it would pull in under this file's runtime mock) must
+            // not run — and a second, different install would throw on the
+            // next isolated load.
+            jest.doMock(`${SRC}/bridge/capacitorPlatform`, () => ({}));
             jest.doMock(`${SRC}/settings`, () => ({
                 initializeAsync: m.initSettings,
                 flushPendingWrites: m.flushPendingWrites,

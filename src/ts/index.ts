@@ -1,3 +1,5 @@
+// The Electron platform installs before any core module loads.
+import './index/platform';
 import { app, ipcMain, shell } from 'electron';
 import * as settings from './settings';
 import * as logger from './logger';

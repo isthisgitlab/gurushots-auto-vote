@@ -28,6 +28,7 @@ import type * as navigationGuardModule from '../../src/ts/index/navigationGuard'
 import type * as permissionsModule from '../../src/ts/index/permissions';
 import type * as sessionModule from '../../src/ts/index/session';
 import { invalid } from '../helpers/invalid';
+import { clearInstalledPlatform } from '../helpers/platform';
 import { APP_PARTITION } from '../../src/ts/index/session';
 
 /** An event / IPC / process listener the fakes record by name. */
@@ -320,6 +321,7 @@ function load({ lock = true, whenReady }: { lock?: boolean; whenReady?: () => Pr
         permissions: require('../../src/ts/index/permissions') as typeof permissionsModule,
     });
     m.cat = m.logger.cat;
+    clearInstalledPlatform();
     require('../../src/ts/index');
     return m;
 }
@@ -478,6 +480,7 @@ describe('startup (whenReady)', () => {
         );
         AU.mockImplementation(() => invalid({ checkForUpdates: check, setMainWindow: jest.fn() }));
         const electron = require('electron') as FakeElectron;
+        clearInstalledPlatform();
         require('../../src/ts/index');
         await flush();
 
@@ -510,6 +513,7 @@ describe('startup (whenReady)', () => {
         );
         const { cat } = jest.mocked(require('../../src/ts/logger') as MockLogger);
         const electron = require('electron') as FakeElectron;
+        clearInstalledPlatform();
         require('../../src/ts/index');
         await flush();
 
@@ -527,6 +531,7 @@ describe('startup (whenReady)', () => {
             throw boom;
         });
         const { cat } = jest.mocked(require('../../src/ts/logger') as MockLogger);
+        clearInstalledPlatform();
         require('../../src/ts/index');
         await flush();
 

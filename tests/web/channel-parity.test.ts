@@ -13,9 +13,11 @@ jest.mock('../../src/ts/apiFactory', () => ({
 }));
 
 import type * as serverModule from '../../src/ts/web/server';
+import { clearInstalledPlatform } from '../helpers/platform';
 import type * as bridgeModule from '../../src/ts/bridge/web';
 import type * as manifestModule from '../../src/ts/ipc/manifest';
 
+clearInstalledPlatform();
 const { buildWebHandlers } = require('../../src/ts/web/server') as typeof serverModule;
 const { BROWSER_CHANNELS } = require('../../src/ts/bridge/web') as typeof bridgeModule;
 const { allInvokeChannels } = require('../../src/ts/ipc/manifest') as typeof manifestModule;

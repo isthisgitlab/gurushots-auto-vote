@@ -55,6 +55,9 @@
  *      inside the pre-committed percentile gate above.
  */
 
+// The scripts' platform installs before any app module loads.
+import './lib/platform';
+
 import * as lexicon from '../src/ts/services/semantic/lexicon';
 import { SEMANTIC_MATCH_FLOOR, abstractTitleWords, tokenise } from '../src/ts/services/photoPicker';
 import { runIfMain } from './lib/run-if-main';

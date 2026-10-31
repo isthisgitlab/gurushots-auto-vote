@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+// The CLI platform installs before any core module loads.
+import '../src/ts/cli/platform';
+
 import fs from 'node:fs';
 import path from 'node:path';
 // The shared resolver, so this script targets the same userData dir as the

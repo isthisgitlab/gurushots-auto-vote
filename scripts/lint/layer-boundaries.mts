@@ -75,6 +75,7 @@ export const LAYER_TABLE: ReadonlyArray<{ target: string; layer: string }> = [
     { target: 'src/ts/react/pages/Web.tsx', layer: 'shell:web' },
     // The Capacitor (Android) shell.
     { target: 'src/ts/bridge/capacitor.ts', layer: 'shell:capacitor' },
+    { target: 'src/ts/bridge/capacitorPlatform.ts', layer: 'shell:capacitor' },
     { target: 'src/ts/localStores.ts', layer: 'shell:capacitor' },
     { target: 'src/ts/react/pages/Capacitor.tsx', layer: 'shell:capacitor' },
     { target: 'src/ts/services/AndroidUpdateInstaller.ts', layer: 'shell:capacitor' },

@@ -15,6 +15,7 @@ import * as net from 'node:net';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { clearInstalledPlatform } from '../helpers/platform';
 
 import type * as serverModule from '../../src/ts/web/server';
 import type * as settingsHandlersModule from '../../src/ts/ipc/settings.handlers';
@@ -103,6 +104,7 @@ jest.mock('../../src/ts/logger', () => ({
     printLine: jest.fn(),
 }));
 
+clearInstalledPlatform();
 const { createWebServer, startWebServer } = require('../../src/ts/web/server') as typeof serverModule;
 const auth = jest.mocked(require('../../src/ts/services/auth') as typeof authModule);
 const settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);

@@ -27,6 +27,9 @@
  * asar and is embedded as a SEA asset for the CLI single binary.
  */
 
+// The scripts' platform installs before any app module loads.
+import './lib/platform';
+
 import fs from 'node:fs';
 import path from 'node:path';
 import { isPlainObject } from '../src/ts/plainObject';

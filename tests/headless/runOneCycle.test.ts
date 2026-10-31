@@ -26,11 +26,13 @@ import type * as indexModule from '../../src/ts/headless/index';
 import type * as loggerModule from '../../src/ts/logger';
 import type { HeadlessGlobals } from '../../src/ts/types/capacitor';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
+import { clearInstalledPlatform } from '../helpers/platform';
 import { invalid } from '../helpers/invalid';
 import { isBoolean, isNumber, isShape, isString, optional, parseJsonAs } from '../helpers/parseJson';
 const { OFFLINE_RETRY_MS } = require('../../src/ts/scheduling/randomDelay') as typeof randomDelayModule;
 
 // Requiring the entry installs globalThis.GS.
+clearInstalledPlatform();
 const { computeNextDelayMs } = require('../../src/ts/headless/index') as typeof indexModule;
 
 // What runOneCycle reports through AndroidHeadlessBridge.onCycleComplete (JSON).

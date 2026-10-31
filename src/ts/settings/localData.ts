@@ -130,19 +130,26 @@ const liveBusyReason = async (): Promise<WipeBusyCode | null> => {
     return isVotingPassRunning() ? 'busy-pass' : null;
 };
 
+/**
+ * Clears the cookies, local storage and cache of the app's windows' session and Electron's default session — the
+ * wipe's clearSession on Electron (the Electron shell's platform module passes it, as does defaultDeps here). A no-op
+ * outside Electron, where there is no session to clear.
+ */
+const clearElectronSession = async (): Promise<void> => {
+    if (!runtime.isElectron()) return;
+    // The default session writes its cookies, storage and caches at the user-data root, beside the app's files.
+    const { session } = require('electron') as typeof import('electron');
+    for (const target of [appSession(), session.defaultSession]) {
+        await target.clearStorageData();
+        await target.clearCache();
+    }
+};
+
 const defaultDeps = (): WipeDeps => ({
     busyReason: liveBusyReason,
     stopScheduler: () => cancellation.setCancelled(true),
     wipeNative: nativeWipe,
-    clearSession: async () => {
-        if (!runtime.isElectron()) return;
-        // The default session writes its cookies, storage and caches at the user-data root, beside the app's files.
-        const { session } = require('electron') as typeof import('electron');
-        for (const target of [appSession(), session.defaultSession]) {
-            await target.clearStorageData();
-            await target.clearCache();
-        }
-    },
+    clearSession: clearElectronSession,
 });
 
 const vision = (dir: string) => path.join(dir, 'vision');
@@ -257,5 +264,5 @@ const wipeLocalData = async (overrides: Partial<WipeDeps> = {}): Promise<WipeRes
     return { success: true, removed };
 };
 
-export { LOCAL_DATA_STORES, LOCAL_DATA_DIRECTORIES, appSession, wipeLocalData };
+export { LOCAL_DATA_STORES, LOCAL_DATA_DIRECTORIES, appSession, nativeWipe, clearElectronSession, wipeLocalData };
 export type { LocalDataStore, WipeBusyCode, WipeResult, WipeDeps };

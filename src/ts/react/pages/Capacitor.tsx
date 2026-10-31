@@ -9,6 +9,10 @@
  * loads this entry.
  */
 
+// The Capacitor platform installs before any core module loads. It reads no
+// page global, so it stands above the bootstrap flag.
+import '../../bridge/capacitorPlatform';
+
 import type { RendererGlobals } from '../../types/capacitor';
 
 // Tell App.tsx not to auto-mount when imported below. The import

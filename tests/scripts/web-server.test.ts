@@ -7,10 +7,12 @@
  */
 
 import type * as scriptModule from '../../scripts/web-server';
+import { clearInstalledPlatform } from '../helpers/platform';
 import type * as serverModule from '../../src/ts/web/server';
 
 jest.mock('../../src/ts/web/server', () => ({ startWebServer: jest.fn() }));
 
+clearInstalledPlatform();
 const { main, parsePort } = require('../../scripts/web-server') as typeof scriptModule;
 const server = jest.mocked(require('../../src/ts/web/server') as typeof serverModule);
 

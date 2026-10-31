@@ -19,6 +19,9 @@
  * Run: pnpm cli:<command>, or node --import tsx src/ts/cli/cli.ts <command> [...args]
  */
 
+// The CLI platform installs before any core module loads.
+import './platform';
+
 import * as logger from '../logger';
 logger.withCategory('api').debug('CLI module loaded, starting initialization', null);
 

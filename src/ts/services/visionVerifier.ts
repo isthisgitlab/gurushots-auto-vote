@@ -46,6 +46,13 @@ let classifierPromise: ReturnType<typeof loadClassifier> | undefined;
 let bundledPromise: Promise<boolean> | undefined;
 let cliAssetRoot: string | undefined;
 
+/**
+ * The SEA build's extracted vision-runtime root (visionCliAssets), once
+ * loadClassifier has extracted it — the first branch of getModelLocation,
+ * which the CLI shell's platform module reads for its vision model location.
+ */
+const getCliAssetRoot = (): string | undefined => cliAssetRoot;
+
 const getModelLocation = () => {
     if (runtime.isCapacitor() || runtime.isHeadlessService()) return './';
     const path = require('node:path') as typeof import('node:path');
@@ -349,5 +356,6 @@ export {
     snapPrompts,
     SNAP_CAPTION_MAX_CHARS,
     judgeSnapImage,
+    getCliAssetRoot,
     __resetForTests,
 };
