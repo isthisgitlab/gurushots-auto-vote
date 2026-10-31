@@ -249,7 +249,7 @@ const installBridge = (): WindowApi => {
     // still mounts the app against a kind that reads capacitor. Calling the
     // probe — not just checking it exists — keeps a Capacitor web target
     // unmarked, so it reads the default kind (electron) and gets the desktop
-    // capabilities, as it did before.
+    // capabilities.
     if ((globalThis as CapacitorGlobals).Capacitor?.isNativePlatform?.() === true) {
         markPlatformKind('capacitor');
     }

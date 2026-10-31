@@ -107,11 +107,17 @@ const layerOfCut = (path: string): string => {
         if (target.endsWith('/')) {
             if (path !== target.slice(0, -1) && !path.startsWith(target)) continue;
             if (!layer.includes('<x>')) return layer;
-            // A file directly inside the pattern directory has no platform of its own — no segment follows the
-            // prefix — so `<x>` becomes the empty segment, and every import between it and a named platform or
-            // shell is reported.
+            // A file directly inside the pattern directory ends in `.ts`/`.tsx` and has no segment after the
+            // prefix, so `<x>` becomes the empty one (`src/ts/platforms/index.ts` is `platform:`); a remainder
+            // without a `/` that lacks the extension is an extensionless directory name, taken as the segment
+            // itself (`src/ts/platforms/node` is `platform:node`). The rule cannot read the file system, so an
+            // extensionless import of a file that sits directly in the directory (`'../index'`) cannot be told
+            // apart and reads as a directory. A file in the empty layer gets no named platform or shell of its
+            // own, so the normal rules apply to the empty layer — an import between `platform:` and
+            // `platform:node` is reported, because they are different platforms.
             const rest = path.slice(target.length);
-            return layer.replace('<x>', () => (rest.includes('/') ? rest.split('/')[0] : ''));
+            if (rest.includes('/')) return layer.replace('<x>', () => rest.split('/')[0]);
+            return layer.replace('<x>', () => (rest.endsWith('.ts') || rest.endsWith('.tsx') ? '' : rest));
         }
         if (path === target || path === target.replace(/\.tsx?$/, '')) return layer;
     }

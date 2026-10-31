@@ -11,6 +11,7 @@ import type * as settingsModule from '../../src/ts/settings';
 import type * as settingsHandlersModule from '../../src/ts/ipc/settings.handlers';
 import type * as updateCheckerModule from '../../src/ts/services/UpdateChecker';
 import type * as installerModule from '../../src/ts/services/AndroidUpdateInstaller';
+import type * as logHandlersModule from '../../src/ts/ipc/log.handlers';
 import type * as authModule from '../../src/ts/services/auth';
 import type * as loggerModule from '../../src/ts/logger';
 import type { CategoryLogger, GuiLogSink } from '../../src/ts/logger';
@@ -30,7 +31,9 @@ jest.mock('../../src/ts/ipc/settings.handlers', () => ({
 jest.mock('../../src/ts/ipc/voting.handlers', () => ({
     buildHandlers: () => ({ 'gui-vote': jest.fn(async (_event) => ({ success: true, via: 'gui-vote' })) }),
 }));
-const mockLogBuildHandlers = jest.fn(() => ({}));
+const mockLogBuildHandlers = jest.fn<ReturnType<typeof logHandlersModule.buildHandlers>, []>(() =>
+    invalid<ReturnType<typeof logHandlersModule.buildHandlers>>({}),
+);
 jest.mock('../../src/ts/ipc/log.handlers', () => ({ buildHandlers: mockLogBuildHandlers }));
 jest.mock('../../src/ts/ipc/actions.handlers', () => ({
     buildHandlers: () => ({

@@ -106,6 +106,8 @@ const VALID: ReadonlyArray<readonly [string, string]> = [
     // The pattern rows, through directories that do not exist on disk.
     ["import '../../services/votingOrchestrator';", file('src/ts/platforms/node/store.ts')],
     ["import '../../react/api/ipc';", file('src/ts/shells/web/main.ts')],
+    // An extensionless directory index: `src/ts/platforms/node` is `platform:node`, the same layer.
+    ["import '.';", file('src/ts/platforms/node/store.ts')],
     // The core row of the table.
     ["import './store';", file('src/ts/core/store.ts')],
     // A type-only import is skipped only when the build erases it whole — the declaration-level forms, even to a
@@ -214,6 +216,12 @@ const INVALID: ReadonlyArray<readonly [string, string, ...string[]]> = [
         "import '../other/store';",
         file('src/ts/platforms/node/store.ts'),
         crossing('platform:node', 'platform:other', '../other/store'),
+    ],
+    // An extensionless sibling directory reads as that directory's platform, so the crossing is reported.
+    [
+        "import '../other';",
+        file('src/ts/platforms/node/store.ts'),
+        crossing('platform:node', 'platform:other', '../other'),
     ],
     // `../..` onto the pattern row's directory itself: the captured segment is the empty one.
     ["import '../..';", file('src/ts/platforms/node/sub/store.ts'), crossing('platform:node', 'platform:', '../..')],
