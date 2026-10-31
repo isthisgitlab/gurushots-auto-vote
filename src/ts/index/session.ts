@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import * as logger from '../logger';
+
+type LoggerModule = typeof import('../logger');
 
 /**
  * The session partition every app window uses (index/windows.ts), locked down by index/permissions.ts and cleared by
@@ -9,6 +10,11 @@ import * as logger from '../logger';
  * store, API calls go through Node).
  */
 const APP_PARTITION = 'gurushots';
+
+// The logger is reached at call time: index/platform imports this module for
+// APP_PARTITION, the platform install must run before the logger loads, and
+// the logger reads platform() at load (logger/context's module-scope rule).
+const logger = (): LoggerModule => require('../logger') as LoggerModule;
 
 /**
  * Removes the directory a persistent partition of this name keeps under the user-data directory
@@ -20,9 +26,9 @@ const removeStalePartitionData = (getUserDataPath: () => string): void => {
         const stale = path.join(getUserDataPath(), 'Partitions', APP_PARTITION);
         if (!fs.existsSync(stale)) return;
         fs.rmSync(stale, { recursive: true, force: true });
-        logger.withCategory('ui').info('Removed stale on-disk browser session data', null);
+        logger().withCategory('ui').info('Removed stale on-disk browser session data', null);
     } catch (error) {
-        logger.withCategory('ui').warning('Could not remove stale on-disk browser session data (non-fatal):', error);
+        logger().withCategory('ui').warning('Could not remove stale on-disk browser session data (non-fatal):', error);
     }
 };
 

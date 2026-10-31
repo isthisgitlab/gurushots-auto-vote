@@ -47,14 +47,18 @@ import type { CasAnswer, ThroughResult } from '../../types/stores';
 import type { SettingsFileState } from './settingsFileProtocol';
 
 type LoggerModule = typeof import('../../logger');
-type SaveDroppedModule = typeof import('../../settings/saveDropped');
 type StorageModule = typeof import('../../settings/storage');
 
 // See the header: the wrapped modules, reached at call time.
 const logger = (): LoggerModule => require('../../logger') as LoggerModule;
-const saveDropped = (): SaveDroppedModule => require('../../settings/saveDropped') as SaveDroppedModule;
-// The key naming of a set-aside copy lives on the settings storage (its wipe inventory names the same keys).
-const corruptSuffix = (): string => (require('../../settings/storage') as StorageModule).CORRUPT_SUFFIX;
+// Lazy for both reasons the header names: this file sits in the shell
+// platform modules' static chain and the settings graph reaches the logger,
+// which reads platform() at load — the install must run first — and a graph
+// loaded in the Jest setup's registry would beat a test file's own mocks.
+// The public storage facade carries CORRUPT_SUFFIX (its wipe inventory names
+// the same keys) and SaveConflictError; the facade's internals are private
+// to it.
+const storage = (): StorageModule => require('../../settings/storage') as StorageModule;
 
 // The Preferences keys whose cache holds something known: hydrated, refreshed or written.
 const knownKeys = new Set<string>();
@@ -146,7 +150,7 @@ const saveThroughCas = async (
         if (saved) return data;
         base = current;
     }
-    throw new (saveDropped().SaveConflictError)('the key kept changing');
+    throw new (storage().SaveConflictError)('the key kept changing');
 };
 
 /**
@@ -356,7 +360,9 @@ const hydrateFromPreferences = async (state: SettingsFileState, prefKey: string)
         const prefs = getCapacitorPreferences();
         const { value } = await prefs.get({ key: prefKey });
         hydrate(state, value); // null if no preferences entry exists
-        state.hasBackupKey = (await prefs.keys()).keys.some((key) => key.startsWith(`${prefKey}${corruptSuffix()}`));
+        state.hasBackupKey = (await prefs.keys()).keys.some((key) =>
+            key.startsWith(`${prefKey}${storage().CORRUPT_SUFFIX}`),
+        );
     } catch (err) {
         logger().withCategory('settings').error('Capacitor preferences read failed:', err);
         hydrate(state, null);
@@ -521,7 +527,7 @@ const settingsFileTransport = (
         isPersisted: () => state.cachedJson === state.persistedJson,
         hasQuarantined: () => state.hasBackupKey,
         quarantineRaw: (raw) => {
-            const backupKey = `${ref.prefKey}${corruptSuffix()}-${setAsideStamp()}`;
+            const backupKey = `${ref.prefKey}${storage().CORRUPT_SUFFIX}-${setAsideStamp()}`;
             const hadBackupKey = beginQuarantine(state);
             // The move gets its own serial, so a write issued before it does not touch the emptied cache on its turn.
             issueQueuedWrite(state);

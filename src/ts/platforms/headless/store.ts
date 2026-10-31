@@ -30,13 +30,17 @@ import type { AndroidHeadlessStore, HeadlessSettingsBridge } from '../../types/s
 import type { ThroughResult } from '../../types/stores';
 
 type LoggerModule = typeof import('../../logger');
-type SaveDroppedModule = typeof import('../../settings/saveDropped');
-type JsonStoreModule = typeof import('../../settings/jsonStore');
+type StorageModule = typeof import('../../settings/storage');
 
 // See the header: the wrapped modules, reached at call time.
 const logger = (): LoggerModule => require('../../logger') as LoggerModule;
-const saveDropped = (): SaveDroppedModule => require('../../settings/saveDropped') as SaveDroppedModule;
-const jsonStore = (): JsonStoreModule => require('../../settings/jsonStore') as JsonStoreModule;
+// Lazy for both reasons the header names: this file sits in the shell
+// platform modules' static chain and the settings graph reaches the logger,
+// which reads platform() at load — the install must run first — and a graph
+// loaded in the Jest setup's registry would beat a test file's own mocks.
+// The public storage facade carries writeNow and SaveConflictError; the
+// facade's internals are private to it.
+const storage = (): StorageModule => require('../../settings/storage') as StorageModule;
 
 /**
  * The Android headless-service bridge, read at call time (absent everywhere
@@ -149,7 +153,7 @@ const headlessSettingsWrite = (
         if (now === theirs) return null;
         theirs = now;
     }
-    throw new (saveDropped().SaveConflictError)('the settings kept changing');
+    throw new (storage().SaveConflictError)('the settings kept changing');
 };
 
 /**
@@ -266,7 +270,7 @@ const jsonStoreTransport = (ref: SettingsStoreRef, flags: { strict: boolean; sha
     const updateNow = (update: (current: string | null) => string | null): ThroughResult =>
         flags.shared
             ? headlessUpdate(ref.prefKey, update)
-            : jsonStore().writeNow(ref.prefKey, { readRaw, writeRaw }, update);
+            : storage().writeNow(ref.prefKey, { readRaw, writeRaw }, update);
     return {
         readRaw,
         writeRaw,

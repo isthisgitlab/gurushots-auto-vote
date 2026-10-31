@@ -184,6 +184,11 @@ const discardPendingWrites = async (): Promise<void> => {
 
 export type { QueuedWriteOutcome } from './storageTypes';
 export type { SaveDroppedCause } from './saveDropped';
+// The one-step save of a generic JSON store and its conflict error, for the
+// platform families' transports — the settings-facade internals are private
+// to the facade, so the public storage module carries them.
+export { writeNow } from './jsonStore';
+export { SaveConflictError } from './saveDropped';
 export {
     LEGACY_SETTINGS_KEY,
     CONFIG_KEY,

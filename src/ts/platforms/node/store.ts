@@ -28,14 +28,20 @@ import type {
 type AtomicWriteModule = typeof import('./atomicWrite');
 type OwnerOnlyWriteModule = typeof import('./ownerOnlyWrite');
 type SettingsFileNodeModule = typeof import('./settingsFileNode');
-type JsonStoreModule = typeof import('../../settings/jsonStore');
+type StorageModule = typeof import('../../settings/storage');
 type FsModule = typeof import('node:fs');
 
 // See the header: the wrapped modules, reached at call time.
 const atomicWrite = (): AtomicWriteModule => require('./atomicWrite') as AtomicWriteModule;
 const ownerOnlyWrite = (): OwnerOnlyWriteModule => require('./ownerOnlyWrite') as OwnerOnlyWriteModule;
 const settingsFileNode = (): SettingsFileNodeModule => require('./settingsFileNode') as SettingsFileNodeModule;
-const jsonStore = (): JsonStoreModule => require('../../settings/jsonStore') as JsonStoreModule;
+// Lazy for both reasons the header names: this file sits in the shell
+// platform modules' static chain and the settings graph reaches the logger,
+// which reads platform() at load — the install must run first — and a graph
+// loaded in the Jest setup's registry would beat a test file's own mocks.
+// The public storage facade carries writeNow; the facade's internals are
+// private to it.
+const storage = (): StorageModule => require('../../settings/storage') as StorageModule;
 const nodeFs = (): FsModule => require('node:fs') as FsModule;
 
 // The plain read of one store file (jsonStore readRaw / the settings file's readHere on a desktop).
@@ -84,8 +90,8 @@ const jsonStoreTransport = (
         writeRaw,
         hydrate: async () => undefined,
         reread: async () => true,
-        updateNow: (update) => jsonStore().writeNow(ref.prefKey, { readRaw, writeRaw }, update),
-        updateThrough: async (update) => jsonStore().writeNow(ref.prefKey, { readRaw, writeRaw }, update),
+        updateNow: (update) => storage().writeNow(ref.prefKey, { readRaw, writeRaw }, update),
+        updateThrough: async (update) => storage().writeNow(ref.prefKey, { readRaw, writeRaw }, update),
         peekStored: async () => readRaw(),
         flush: async () => undefined,
         discard: () => undefined,
