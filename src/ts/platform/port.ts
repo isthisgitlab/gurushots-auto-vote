@@ -21,8 +21,10 @@ import type { PreferencesPlugin } from '@capacitor/preferences';
 import type { BroadcastSettingsChange } from '../ipc/settingsThinHandlers';
 import type { CasAnswer } from '../settings/storeTransport';
 import type { QuarantineResult, WriteIfAbsentResult } from '../settings/storageTypes';
+import type { AutoVoteStatus } from '../types/capacitor';
 import type { AndroidHeadlessStore } from '../types/settings';
 import type { ThroughResult } from '../types/stores';
+import type { TransformersModule } from '../types/vision';
 
 /**
  * The two names one store's data is kept under: the Preferences / native-bridge
@@ -131,7 +133,7 @@ export type PlatformAssets = {
         location: () => string;
         device: 'wasm' | 'cpu';
         bundled: () => Promise<boolean>;
-        loadTransformers: () => Promise<typeof import('@huggingface/transformers')>;
+        loadTransformers: () => Promise<TransformersModule>;
     };
 };
 
@@ -168,14 +170,71 @@ export type PlatformWipe = {
 };
 
 /**
- * The native services of the platform, with the call shapes their controllers
- * have today. Each is null where the platform has none. There is deliberately
- * no openExternal member.
+ * What a native AutoVoteBackground call answers through the bridge (start,
+ * stop): the plugin's `running` with `available`, the no-plugin shape, or the
+ * failed-call shape.
+ */
+export type AutoVoteCallResult = { running: boolean; available: boolean; error?: string | undefined };
+
+/**
+ * The AutoVoteBackground plugin through its bridge (NativeAutovoteBridge):
+ * the call shapes the service's exports have, declared here so the port
+ * carries no module of the shell.
+ */
+export type PlatformAutovote = {
+    /** Starts the native cycle (AutoVoteBackground.start). */
+    start: () => Promise<AutoVoteCallResult>;
+    /** Stops the native cycle (AutoVoteBackground.stop). */
+    stop: () => Promise<AutoVoteCallResult>;
+    /** The plugin's status (AutoVoteBackground.getStatus), or the no-plugin / failed-call shape. */
+    getStatus: () => Promise<AutoVoteStatus>;
+    /** Whether the plugin is registered on this build. */
+    isAvailable: () => boolean;
+    /** The native compare-and-write of one key — the call storage's `cas` member wraps. */
+    compareAndWrite: PlatformCas;
+};
+
+/** The Android foreground-service controller (ForegroundServiceController), as core calls it. */
+export type PlatformForegroundService = {
+    /** Starts the persistent "running" notification; answers whether it started. */
+    start: (notification?: { title?: string; body?: string }) => Promise<boolean>;
+    /** Updates the notification text; a call without a body updates nothing. */
+    update: (notification: { title?: string; body?: string }) => Promise<void>;
+    /** Stops the foreground service; safe to call when it is not running. */
+    stop: () => Promise<void>;
+    /** The notification permission, asked for when it is not granted. */
+    requestPermissions: () => Promise<{ display: string }>;
+};
+
+/**
+ * What an APK install came to: installed, or not and why. `code` is the native refusal's when it gave one; a
+ * failure that opened the release page instead carries `release-page-opened`.
+ */
+export type ApkInstallResult =
+    | { success: true; version?: string | null; viaFallback?: boolean }
+    | { success: false; version?: string | null; error: string; code?: string };
+
+/** The Android APK installer (AndroidUpdateInstaller). */
+export type PlatformApkInstaller = {
+    /**
+     * Downloads the APK and hands it to the system installer, falling back to the release page in the browser; the
+     * native path reports download progress through `onProgress`.
+     */
+    downloadAndInstall: (call: {
+        downloadUrl: string;
+        version?: string | null;
+        onProgress?: (progress: { percent?: number }) => void;
+    }) => Promise<ApkInstallResult>;
+};
+
+/**
+ * The native services of the platform. Each is null where the platform has
+ * none. There is deliberately no openExternal member.
  */
 export type PlatformNative = {
-    autovote: typeof import('../services/NativeAutovoteBridge') | null;
-    foregroundService: typeof import('../services/ForegroundServiceController') | null;
-    apkInstaller: typeof import('../services/AndroidUpdateInstaller') | null;
+    autovote: PlatformAutovote | null;
+    foregroundService: PlatformForegroundService | null;
+    apkInstaller: PlatformApkInstaller | null;
 };
 
 /**

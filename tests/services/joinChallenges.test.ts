@@ -92,6 +92,7 @@ import type { RawJsonStore } from '../../src/ts/types/stores';
 import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
 import type { RuleMatchChallenge } from '../../src/ts/types/settings';
 import { invalid } from '../helpers/invalid';
+import { installWebviewTestPlatform } from '../helpers/platform';
 import { isPlainObject } from '../../src/ts/plainObject';
 import {
     clearUnlocked,
@@ -4128,6 +4129,11 @@ describe('on the app window, where the background service writes the same claims
         let mod!: JoinStateModule;
         jest.isolateModules(() => {
             mod = require('../../src/ts/joinStateStore') as JoinStateModule;
+            // The shared store's saves reach the plugin through the platform's native member: a bridge loaded here
+            // is fresh per window, so it reads the plugin global this test set.
+            const autovote =
+                require('../../src/ts/services/NativeAutovoteBridge') as typeof import('../../src/ts/services/NativeAutovoteBridge');
+            installWebviewTestPlatform({ native: { autovote, foregroundService: null, apkInstaller: null } });
         });
         await mod.initializeJoinStateAsync();
         const deps = (over: Partial<JoinDeps> = {}) =>

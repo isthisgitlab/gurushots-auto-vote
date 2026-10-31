@@ -12,7 +12,7 @@ import { getCapacitorPreferences } from './capacitorPreferences';
 import { writeOwnerOnly } from './ownerOnlyWrite';
 import { createWriteBehind, headlessUpdate, readHeadlessKey, writeHeadlessKey } from './storeTransport';
 import { getSettingsPath } from './userDataPaths';
-import { compareAndWrite } from '../services/NativeAutovoteBridge';
+import { platform } from '../platform/port';
 import type { ThroughResult } from '../types/stores';
 
 // Set by refuseWrites until resumeWrites: every store refuses writes, so nothing is created again while
@@ -117,7 +117,11 @@ const createJsonStore = ({
         strict,
         getCapacitorPreferences,
         cache,
-        shared ? (expected, data) => compareAndWrite(prefKey, expected, data) : undefined,
+        // The native compare-and-write of the platform (the app WebView's bridge); a platform without one saves
+        // straight to Preferences, as the bridge's own no-plugin answer did.
+        shared
+            ? (expected, data) => platform().native.autovote?.compareAndWrite(prefKey, expected, data) ?? null
+            : undefined,
     );
     let swept = false;
     const discardListeners: Array<() => void> = [];

@@ -27,6 +27,7 @@ import type * as storageModule from '../../src/ts/settings/storage';
 import type * as jsonStoreModule from '../../src/ts/settings/jsonStore';
 import loggerModule = require('../../src/ts/logger');
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
+import { installWebviewTestPlatform } from '../helpers/platform';
 import { invalid } from '../helpers/invalid';
 
 const g = globalThis as typeof globalThis & {
@@ -38,6 +39,11 @@ const loadStorage = () => {
     let mod: typeof storageModule | undefined;
     jest.isolateModules(() => {
         mod = require('../../src/ts/settings/storage') as typeof storageModule;
+        // The window's saves reach the plugin through the platform's native member: a bridge loaded here is fresh
+        // per load, so it reads the plugin global this test set (the headless suites never reach the member).
+        const autovote =
+            require('../../src/ts/services/NativeAutovoteBridge') as typeof import('../../src/ts/services/NativeAutovoteBridge');
+        installWebviewTestPlatform({ native: { autovote, foregroundService: null, apkInstaller: null } });
     });
     return mod!;
 };

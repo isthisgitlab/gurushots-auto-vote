@@ -45,6 +45,16 @@ export interface AutoVoteBackgroundPlugin {
     wipeLocalData(): Promise<{ ok: boolean }>;
 }
 
+/**
+ * What the status call answers through the bridge (NativeAutovoteBridge.getStatus): the plugin's own status on
+ * success, the no-plugin shape, or the rejected-call shape — whose `error` key is present whatever the rejection
+ * carried (a message-less rejection reads undefined).
+ */
+export type AutoVoteStatus =
+    | { running: false; available: false }
+    | (Awaited<ReturnType<AutoVoteBackgroundPlugin['getStatus']>> & { available: true })
+    | { running: false; available: true; error: string | undefined };
+
 export interface CapacitorPlugins {
     ApkInstaller?: ApkInstallerPlugin;
     Browser?: BrowserPlugin;

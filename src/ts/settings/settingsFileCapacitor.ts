@@ -13,7 +13,7 @@
 import * as logger from '../logger';
 
 import { getCapacitorPreferences } from './capacitorPreferences';
-import { compareAndWrite } from '../services/NativeAutovoteBridge';
+import { platform } from '../platform/port';
 import { headlessSettingsWrite, headlessStore, keyedSettingsBridge, saveThroughCas } from './storeTransport';
 import {
     hydrate,
@@ -32,6 +32,9 @@ import type { QueuedWriteOutcome, SettingsFileOptions, WriteIfAbsentResult, Writ
 // Preferences still holds what was last known of it, else the change is made again on what the background service
 // saved since (`update` decides what is saved from what is there). Once the latest write is saved, the cache holds
 // the saved text.
+// The compare-and-write reads the platform's native member (the app WebView's bridge; without one it saves straight
+// to Preferences), asked at call time — this module loads in the headless and node bundles too. The body moves into
+// the webview family in Phase 3 step 7.
 const saveThroughCasWith = async (
     state: SettingsFileState,
     prefKey: string,
@@ -48,7 +51,7 @@ const saveThroughCasWith = async (
             saved = next ?? stored;
             return next;
         },
-        (expected, text) => compareAndWrite(prefKey, expected, text),
+        (expected, text) => platform().native.autovote?.compareAndWrite(prefKey, expected, text) ?? null,
     );
     notePersisted(state, saved, serial);
     return result;

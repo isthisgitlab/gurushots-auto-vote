@@ -13,7 +13,7 @@
 import * as runtime from '../runtime';
 import * as logger from '../logger';
 
-import type { AutoVoteBackgroundPlugin, CapacitorGlobals } from '../types/capacitor';
+import type { AutoVoteBackgroundPlugin, AutoVoteStatus, CapacitorGlobals } from '../types/capacitor';
 import { errorMessage } from '../errorMessage';
 
 let pluginInstance: AutoVoteBackgroundPlugin | null = null;
@@ -55,17 +55,6 @@ const callPlugin = async (action: 'start' | 'stop' | 'getStatus', logFailure: bo
 const start = () => callPlugin('start', true);
 
 const stop = () => callPlugin('stop', true);
-
-/**
- * What getStatus answers: the plugin's own status on success (callPlugin's return type is shared
- * with start/stop, whose arms carry only `running`), the no-plugin shape, or the rejected-call
- * shape — whose `error` key is present whatever the rejection carried (a message-less rejection
- * reads undefined).
- */
-type AutoVoteStatus =
-    | { running: false; available: false }
-    | (Awaited<ReturnType<AutoVoteBackgroundPlugin['getStatus']>> & { available: true })
-    | { running: false; available: true; error: string | undefined };
 
 const getStatus = (): Promise<AutoVoteStatus> => callPlugin('getStatus', false) as Promise<AutoVoteStatus>;
 

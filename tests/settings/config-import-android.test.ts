@@ -41,6 +41,7 @@ jest.mock('@capacitor/preferences', () => ({ Preferences: mockPreferences }), { 
 import type * as settingsModule from '../../src/ts/settings';
 import type * as intentProfilesModule from '../../src/ts/settings/intentProfiles';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
+import { installWebviewTestPlatform } from '../helpers/platform';
 import { parseJsonObject } from '../helpers/parseJson';
 
 const g = globalThis as typeof globalThis & {
@@ -57,6 +58,11 @@ const loadSettingsModule = () => {
     let mod: typeof settingsModule | undefined;
     jest.isolateModules(() => {
         mod = require('../../src/ts/settings') as typeof settingsModule;
+        // The window's saves reach the plugin through the platform's native member: a bridge loaded here is fresh
+        // per load, so it reads the plugin global this test set (the headless suites never reach the member).
+        const autovote =
+            require('../../src/ts/services/NativeAutovoteBridge') as typeof import('../../src/ts/services/NativeAutovoteBridge');
+        installWebviewTestPlatform({ native: { autovote, foregroundService: null, apkInstaller: null } });
     });
     return mod!;
 };
@@ -94,6 +100,9 @@ describe('the import in the Android app window', () => {
         jest.isolateModules(() => {
             settings = require('../../src/ts/settings') as typeof settingsModule;
             cat = (require('../../src/ts/logger') as unknown as { __cat: typeof cat }).__cat;
+            const autovote =
+                require('../../src/ts/services/NativeAutovoteBridge') as typeof import('../../src/ts/services/NativeAutovoteBridge');
+            installWebviewTestPlatform({ native: { autovote, foregroundService: null, apkInstaller: null } });
         });
 
         // Before the window has hydrated, nothing can be read: the defaults answer, it is no import failure (nothing

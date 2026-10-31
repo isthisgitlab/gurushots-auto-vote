@@ -15,23 +15,24 @@ import { createWebviewPlatform } from '../platforms/webview';
 import { isPlainObject } from '../plainObject';
 
 import type { CapacitorGlobals } from '../types/capacitor';
-import type { PlatformNative } from '../platform/port';
+import type {
+    PlatformApkInstaller,
+    PlatformAutovote,
+    PlatformForegroundService,
+    PlatformNative,
+} from '../platform/port';
 
 type CapacitorBridgeModule = typeof import('./capacitor');
-type NativeAutovoteBridgeModule = typeof import('../services/NativeAutovoteBridge');
-type ForegroundServiceModule = typeof import('../services/ForegroundServiceController');
-type ApkInstallerModule = typeof import('../services/AndroidUpdateInstaller');
 
 // The install must run before the logger loads.
 const capacitorBridge = (): CapacitorBridgeModule => require('./capacitor') as CapacitorBridgeModule;
 // The install must run before the logger loads.
-const nativeAutovoteBridge = (): NativeAutovoteBridgeModule =>
-    require('../services/NativeAutovoteBridge') as NativeAutovoteBridgeModule;
+const nativeAutovoteBridge = (): PlatformAutovote => require('../services/NativeAutovoteBridge') as PlatformAutovote;
 // The install must run before the logger loads.
-const foregroundService = (): ForegroundServiceModule =>
-    require('../services/ForegroundServiceController') as ForegroundServiceModule;
+const foregroundService = (): PlatformForegroundService =>
+    require('../services/ForegroundServiceController') as PlatformForegroundService;
 // The install must run before the logger loads.
-const apkInstaller = (): ApkInstallerModule => require('../services/AndroidUpdateInstaller') as ApkInstallerModule;
+const apkInstaller = (): PlatformApkInstaller => require('../services/AndroidUpdateInstaller') as PlatformApkInstaller;
 
 /**
  * The native plugin's wipe (AutoVoteBackground.wipeLocalData), or null where the build has none. Asked on the wipe.
@@ -51,13 +52,13 @@ const capacitorPlatform = createWebviewPlatform({
     // The AutoVoteBackground plugin's wipe of the native stores.
     nativeWipe,
     native: {
-        get autovote(): NativeAutovoteBridgeModule {
+        get autovote(): PlatformAutovote {
             return nativeAutovoteBridge();
         },
-        get foregroundService(): ForegroundServiceModule {
+        get foregroundService(): PlatformForegroundService {
             return foregroundService();
         },
-        get apkInstaller(): ApkInstallerModule {
+        get apkInstaller(): PlatformApkInstaller {
             return apkInstaller();
         },
     } satisfies PlatformNative,

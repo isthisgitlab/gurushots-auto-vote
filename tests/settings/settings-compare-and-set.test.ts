@@ -28,6 +28,7 @@ import type * as settingsModule from '../../src/ts/settings';
 import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
 import type { CasAnswer } from '../../src/ts/settings/storeTransport';
 import loggerModule = require('../../src/ts/logger');
+import { installWebviewTestPlatform } from '../helpers/platform';
 import { invalid } from '../helpers/invalid';
 
 type CompareAndWrite = (call: { key: string; expected: string | null; value: string }) => Promise<CasAnswer>;
@@ -44,6 +45,11 @@ const loadStorage = () => {
     let mod: typeof storageModule | undefined;
     jest.isolateModules(() => {
         mod = require('../../src/ts/settings/storage') as typeof storageModule;
+        // The window's saves reach the plugin through the platform's native member: a bridge loaded here is fresh
+        // per load, so it reads the plugin global this test set (the headless suites never reach the member).
+        const autovote =
+            require('../../src/ts/services/NativeAutovoteBridge') as typeof import('../../src/ts/services/NativeAutovoteBridge');
+        installWebviewTestPlatform({ native: { autovote, foregroundService: null, apkInstaller: null } });
     });
     return mod!;
 };
@@ -755,6 +761,9 @@ describe('the app window being told that a save was given up', () => {
         let facade: typeof settingsModule | undefined;
         jest.isolateModules(() => {
             facade = require('../../src/ts/settings') as typeof settingsModule;
+            const autovote =
+                require('../../src/ts/services/NativeAutovoteBridge') as typeof import('../../src/ts/services/NativeAutovoteBridge');
+            installWebviewTestPlatform({ native: { autovote, foregroundService: null, apkInstaller: null } });
         });
         await facade!.initializeAsync();
         const listener = jest.fn();

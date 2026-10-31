@@ -27,6 +27,7 @@ import type * as storeTransportModule from '../../src/ts/settings/storeTransport
 import * as logger from '../../src/ts/logger';
 import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
 import type { AutoVoteBackgroundPlugin } from '../../src/ts/types/capacitor';
+import { installWebviewTestPlatform } from '../helpers/platform';
 import { invalid } from '../helpers/invalid';
 
 // A store's file sits beside the settings file (jsonStore joins
@@ -1302,6 +1303,11 @@ describe('a store the app window shares with the background service (shared)', (
         let storage!: Storage;
         jest.isolateModules(() => {
             storage = require('../../src/ts/settings/storage') as Storage;
+            // The shared store's saves reach the plugin through the platform's native member: a bridge loaded here
+            // is fresh per window, so it reads the plugin global this test set.
+            const autovote =
+                require('../../src/ts/services/NativeAutovoteBridge') as typeof import('../../src/ts/services/NativeAutovoteBridge');
+            installWebviewTestPlatform({ native: { autovote, foregroundService: null, apkInstaller: null } });
         });
         return storage.createJsonStore({
             fileName: 'joinState.json',
