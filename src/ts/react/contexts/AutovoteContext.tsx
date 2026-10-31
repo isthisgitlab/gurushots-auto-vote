@@ -4,7 +4,7 @@ import { startupResumeAt } from '../../scheduling/startupDelay';
 import { finiteOr } from '../../numbers';
 import * as foregroundService from '../../services/ForegroundServiceController';
 import * as nativeAutovote from '../../services/NativeAutovoteBridge';
-import { ACTIONS, initialState, autovoteReducer } from './autovoteReducer';
+import { ACTIONS, initialState, autovoteReducer } from '../../autovote/state';
 import {
     resolveThreshold,
     resolveScheduledFill,
@@ -25,7 +25,7 @@ import type { ComponentChildren } from 'preact';
 import type { Dispatch } from 'react';
 import type { Challenge } from '../../types/gurushots';
 import type { TimerHandle } from '../../scheduling/cadenceChain';
-import type { AutovoteAction, AutovoteState } from './autovoteReducer';
+import type { AutovoteAction, AutovoteState } from '../../autovote/state';
 import { errorMessage } from '../../errorMessage';
 
 /**

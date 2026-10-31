@@ -1,5 +1,5 @@
 import { invalid } from '../helpers/invalid';
-import { autovoteReducer, initialState, ACTIONS } from '@/contexts/autovoteReducer';
+import { autovoteReducer, initialState, ACTIONS } from '../../src/ts/autovote/state';
 
 /**
  * The nextRunAt slice powers the status header's next-action countdown. It is
