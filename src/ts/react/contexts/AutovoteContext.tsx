@@ -10,7 +10,7 @@ import { isNativePlatform } from '../api/usePlatformCapabilities';
 import { dateLocale } from '../utils/formatters';
 
 import type { ComponentChildren } from 'preact';
-import type { AutovoteHost, BackgroundHost, CycleNotifier } from '../../autovote/controller';
+import type { AutovoteController, AutovoteHost, BackgroundHost, CycleNotifier } from '../../autovote/controller';
 import type { AutovoteState } from '../../autovote/state';
 
 /**
@@ -56,6 +56,14 @@ function createRendererDeadlineNotifier(): CycleNotifier | null {
 }
 
 /**
+ * One live controller over `host`: a stored, disposed controller is replaced
+ * with a fresh one, so a provider-effect re-run can never resume on (or
+ * re-arm) a controller whose mount already went away.
+ */
+export const ensureLiveController = (stored: AutovoteController, host: AutovoteHost): AutovoteController =>
+    stored.isDisposed() ? createAutovoteController(host) : stored;
+
+/**
  * Provider for the autovote state machine. A thin adapter over the autovote
  * controller (src/ts/autovote/controller.ts, which owns the renderer's
  * cadence chain): it builds the controller's host once per mount — the bridge
@@ -66,6 +74,8 @@ function createRendererDeadlineNotifier(): CycleNotifier | null {
 export function AutovoteProvider({
     children,
     onChallengesRefresh,
+    // Read once per mount, when the host is built: a prop identity change
+    // later in the mount's life does not reach the controller.
     backgroundHost = noopBackgroundHost,
 }: {
     children?: ComponentChildren;
@@ -88,7 +98,6 @@ export function AutovoteProvider({
             getEffectiveSetting: ipc.getEffectiveSetting,
             getGlobalDefault: ipc.getGlobalDefault,
             getActiveChallenges: ipc.getActiveChallenges,
-            getDeadlineActions: ipc.getDeadlineActions,
             getScenarioStatus: ipc.getScenarioStatus,
             setCancelVoting: ipc.setCancelVoting,
             setSetting: ipc.setSetting,
@@ -107,8 +116,11 @@ export function AutovoteProvider({
         };
     }
 
-    // One controller per mount; the effect below disposes it on the way out.
-    const controllerRef = useRef<ReturnType<typeof createAutovoteController> | null>(null);
+    // One controller per mount, created during the first render so
+    // useAutovote()'s first-render state is the live one; the mount effect
+    // below revives it if an earlier cleanup disposed it, and disposes it on
+    // the way out.
+    const controllerRef = useRef<AutovoteController | null>(null);
     if (controllerRef.current === null) {
         controllerRef.current = createAutovoteController(hostRef.current);
     }
@@ -132,12 +144,15 @@ export function AutovoteProvider({
         window.dispatchEvent(new CustomEvent('autovote:running-changed', { detail: state.running }));
     }, [state.running]);
 
-    // The mount-time auto-resume, once per mount; dispose() cancels the
-    // timers and any pending resume, and never touches persisted state.
+    // Exactly one live controller per effect run: revive a controller a
+    // previous run's cleanup disposed, resume once, and dispose the
+    // controller this run adopted on the way out.
     useEffect(() => {
-        void controller.maybeResume();
-        return () => controller.dispose();
-    }, [controller]);
+        const live = ensureLiveController(controllerRef.current!, hostRef.current!);
+        controllerRef.current = live;
+        void live.maybeResume();
+        return () => live.dispose();
+    }, []);
 
     // Stable per mount: the controller reads the latest onChallengesRefresh
     // identity at call time (through the host), so the controls never need to
@@ -147,7 +162,10 @@ export function AutovoteProvider({
     const rearmSchedule = useCallback(() => controller.rearmSchedule(), [controller]);
 
     /**
-     * Toggle autovote
+     * Toggle autovote. Reading the reducer's `running` is correct here:
+     * start/stop dispatch START/STOP — and set the live flag — synchronously
+     * before their first await, so `getState()` never lags behind a session
+     * that is mid-setup.
      */
     const toggle = useCallback(async () => {
         if (controller.getState().running) {

@@ -14,7 +14,7 @@
 
 import { memo } from 'react';
 import { render, act } from '@testing-library/preact';
-import { AutovoteProvider, useAutovote } from '@/contexts/AutovoteContext';
+import { AutovoteProvider, ensureLiveController, useAutovote } from '@/contexts/AutovoteContext';
 import { noopBackgroundHost } from '../../src/ts/react/contexts/noopBackgroundHost';
 import { mockApi, mockTranslator, defaultTranslate } from './helpers/setup';
 import { resetPlatformKind } from '../helpers/platformKind';
@@ -24,8 +24,12 @@ import type { RenderResult } from '@testing-library/preact';
 import type * as cadenceChainModule from '../../src/ts/scheduling/cadenceChain';
 import type * as deadlineNotifierModule from '../../src/ts/react/notifications/deadlineNotifier';
 import type * as scenarioNotifierModule from '../../src/ts/react/notifications/scenarioNotifier';
+import type * as controllerModule from '../../src/ts/autovote/controller';
+import type { AutovoteHost } from '../../src/ts/autovote/controller';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
+
+const { createAutovoteController } = require('../../src/ts/autovote/controller') as typeof controllerModule;
 
 type ChainDeps = Parameters<typeof cadenceChainModule.createCadenceChain>[0];
 type NotifierDeps = Parameters<typeof deadlineNotifierModule.createDeadlineNotifier>[0];
@@ -158,6 +162,39 @@ describe('AutovoteContext', () => {
         const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
         expect(() => render(<Capture />)).toThrow('useAutovote must be used within an AutovoteProvider');
         spy.mockRestore();
+    });
+
+    it('the first render exposes the initial state shape, before and after the mount effect', async () => {
+        makeStartable();
+        renderProvider();
+        const initial = {
+            running: false,
+            cycles: 0,
+            lastRun: null,
+            nextRunAt: null,
+            pendingStartAt: null,
+            status: 'Stopped',
+            statusClass: 'badge-neutral',
+            error: null,
+        };
+        expect(ctx).toMatchObject(initial);
+        await flush();
+        expect(ctx).toMatchObject(initial);
+    });
+
+    describe('ensureLiveController', () => {
+        it('keeps a live stored controller and revives a disposed one over the same host', () => {
+            // The helper only touches the host when it revives; the built
+            // controller reads the rest lazily.
+            const host = invalid<AutovoteHost>({ notifier: null });
+            const stored = createAutovoteController(host);
+            expect(ensureLiveController(stored, host)).toBe(stored);
+
+            stored.dispose();
+            const revived = ensureLiveController(stored, host);
+            expect(revived).not.toBe(stored);
+            expect(revived.isDisposed()).toBe(false);
+        });
     });
 
     it('the default background host is the no-op host, and a start reaches it', async () => {

@@ -6,7 +6,18 @@
  * facade. Built as a factory over the autovote host so the controller
  * (src/ts/autovote/controller.ts) injects them into the shared cadence chain
  * (src/ts/scheduling/cadenceChain.ts) and the loop and math stay written
- * once. The two sets stay separate — see nodeResolvers.ts's header.
+ * once.
+ *
+ * The two sets stay separate on purpose: the scenario wake shapes differ —
+ * services/scenarioStatus.scenarioWakeInput takes the service's unwrapped
+ * `{scenario, state, corrupt, timezone}` shape, while the get-scenario-status
+ * IPC answers a `{success, ...}` wrapper whose failure arm carries no status
+ * fields at all — and the currency-auto manual-only gate reads through
+ * different mechanisms (`isManualPhotosOnly` over the settings facade on the
+ * Node side, the raw `manualPhotosOnly` key over IPC here). One shared
+ * factory would need a normalization adapter on the Node side — a behavior
+ * surface that does not exist today — so the Node resolvers keep their
+ * synchronous bodies and the WebView keeps this async set.
  */
 
 import type { AutovoteHost } from './controller';

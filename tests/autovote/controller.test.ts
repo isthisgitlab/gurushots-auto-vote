@@ -10,6 +10,7 @@
 
 import type * as controllerModule from '../../src/ts/autovote/controller';
 import type { AutovoteHost } from '../../src/ts/autovote/controller';
+import { formatOversleptMessage } from '../../src/ts/scheduling/cadenceChain';
 
 const { createAutovoteController } = require('../../src/ts/autovote/controller') as typeof controllerModule;
 
@@ -71,7 +72,6 @@ const makeHost = (overrides: Partial<AutovoteHost> = {}) => {
         getEffectiveSetting: jest.fn(),
         getGlobalDefault: jest.fn(),
         getActiveChallenges: jest.fn(),
-        getDeadlineActions: jest.fn(),
         getScenarioStatus: jest.fn(),
         setCancelVoting: jest.fn(),
         setSetting: jest.fn(),
@@ -316,6 +316,69 @@ describe('createAutovoteController', () => {
             expect(host.runVotingCycle).not.toHaveBeenCalled();
             expect(controller!.getState().running).toBe(false);
             expect(controller!.getState().nextRunAt).toBeNull();
+            // The interrupted start never reached its side effects: the flag
+            // was never written true and the background host never started
+            // (the only autovoteRunning write here is stop()'s own false).
+            expect(
+                jest
+                    .mocked(host.setSetting)
+                    .mock.calls.filter(([key, value]) => key === 'autovoteRunning' && value === true),
+            ).toEqual([]);
+            expect(host.background.start).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            [
+                'the launch-marker read',
+                (gate: ReturnType<typeof deferred>) =>
+                    jest.mocked(host.getEnvironmentInfo).mockImplementation(() => invalid(gate.promise)),
+            ],
+            [
+                'the running-flag write',
+                (gate: ReturnType<typeof deferred>) =>
+                    jest
+                        .mocked(host.setSetting)
+                        .mockImplementationOnce(() => Promise.resolve(invalid(undefined)))
+                        .mockImplementationOnce(() => invalid(gate.promise)),
+            ],
+        ])('a stop during %s in start setup leaves nothing armed', async (_label, gateOn) => {
+            setup();
+            const gate = deferred();
+            gateOn(gate);
+
+            const startPromise = controller!.start();
+            await advance(0);
+            await controller!.stop();
+            gate.resolve();
+            await startPromise;
+
+            expect(host.runVotingCycle).not.toHaveBeenCalled();
+            expect(host.background.start).not.toHaveBeenCalled();
+            // The true-write raced the stop; the last write on the record is
+            // stop()'s false, so a remount does not resume.
+            const flagWrites = jest.mocked(host.setSetting).mock.calls.filter(([key]) => key === 'autovoteRunning');
+            expect(flagWrites.at(-1)).toEqual(['autovoteRunning', false]);
+            await advance(30 * MIN);
+            expect(host.runVotingCycle).not.toHaveBeenCalled();
+        });
+
+        it('a stop during the background handoff in start setup skips the first cycle', async () => {
+            setup();
+            const gate = deferred();
+            jest.mocked(host.background.start).mockImplementation(() => invalid(gate.promise));
+
+            const startPromise = controller!.start();
+            await advance(0);
+            await controller!.stop();
+            gate.resolve();
+            await startPromise;
+
+            // The flag write already happened (the stop raced it), but the
+            // cycle and the chain did not.
+            expect(host.runVotingCycle).not.toHaveBeenCalled();
+            await advance(30 * MIN);
+            expect(host.runVotingCycle).not.toHaveBeenCalled();
+            expect(controller!.getState().running).toBe(false);
         });
 
         it('a stop while the first cycle is in flight discards its result', async () => {
@@ -366,9 +429,115 @@ describe('createAutovoteController', () => {
             expect(host.runVotingCycle).toHaveBeenCalledTimes(1);
         });
 
-        it('dispose is a no-op when nothing was ever armed', () => {
+        it('dispose is a no-op when nothing was ever armed, and isDisposed reports it', () => {
             setup();
+            expect(controller!.isDisposed()).toBe(false);
+            controller!.dispose();
+            expect(controller!.isDisposed()).toBe(true);
             expect(() => controller!.dispose()).not.toThrow();
+        });
+
+        it('a dispose while the first cycle is in flight leaves no chain and no outcome', async () => {
+            setup();
+            const gate = deferred();
+            jest.mocked(host.runVotingCycle).mockImplementationOnce(() => invalid(gate.promise));
+
+            const startPromise = controller!.start();
+            await advance(0);
+            controller!.dispose();
+            gate.resolve({ success: true });
+            await startPromise;
+
+            // The in-flight cycle was the one gated call; the disposed
+            // controller discards its result and arms nothing.
+            expect(host.runVotingCycle).toHaveBeenCalledTimes(1);
+            expect(controller!.getState().cycles).toBe(0);
+            await advance(30 * MIN);
+            expect(host.runVotingCycle).toHaveBeenCalledTimes(1);
+        });
+
+        it('a dispose during start setup still persists the session but arms nothing', async () => {
+            setup();
+            const gate = deferred();
+            jest.mocked(host.background.start).mockImplementation(() => invalid(gate.promise));
+
+            const startPromise = controller!.start();
+            await advance(0);
+            controller!.dispose();
+            gate.resolve();
+            await startPromise;
+
+            // Dispose means the mount went away, not that the session stopped:
+            // the persists and the background handoff landed so a remount
+            // adopts a consistent session, but no cycle ran and nothing armed.
+            expect(jest.mocked(host.setSetting).mock.calls.filter(([key]) => key === 'autovoteRunning')).toEqual([
+                ['autovoteRunning', true],
+            ]);
+            expect(host.background.start).toHaveBeenCalledTimes(1);
+            expect(host.runVotingCycle).not.toHaveBeenCalled();
+            await advance(30 * MIN);
+            expect(host.runVotingCycle).not.toHaveBeenCalled();
+        });
+
+        it('a dispose while a rearm is in flight arms nothing', async () => {
+            setup();
+            await controller!.start();
+            expect(host.runVotingCycle).toHaveBeenCalledTimes(1);
+
+            const gate = deferred();
+            jest.mocked(host.getSettings).mockImplementation(() => invalid(gate.promise));
+            const rearmPromise = controller!.rearmSchedule();
+            controller!.dispose();
+            gate.resolve(invalid({ app: { checkFrequencyMin: 5, checkFrequencyMax: 5 }, hasToken: true }));
+            await rearmPromise;
+
+            await advance(30 * MIN);
+            expect(host.runVotingCycle).toHaveBeenCalledTimes(1);
+        });
+
+        it('a disposed controller notifies no subscriber anymore', async () => {
+            setup();
+            const gate = deferred();
+            jest.mocked(host.runVotingCycle).mockImplementationOnce(() => invalid(gate.promise));
+            let notifications = 0;
+            controller!.subscribe(() => {
+                notifications += 1;
+            });
+
+            const startPromise = controller!.start();
+            await advance(0); // start is parked at the gated cycle
+            expect(notifications).toBe(1); // START, before the dispose
+            controller!.dispose();
+            gate.resolve({ success: true });
+            await startPromise;
+            // Whatever still fires on the disposed controller reaches nobody.
+            await controller!.start();
+            await advance(30 * MIN);
+
+            expect(notifications).toBe(1);
+            expect(host.runVotingCycle).toHaveBeenCalledTimes(1);
+        });
+
+        it('running flips synchronously in start and stop, before any await resolves', async () => {
+            setup();
+            const started = controller!.start();
+            expect(controller!.getState().running).toBe(true);
+            const stopped = controller!.stop();
+            expect(controller!.getState().running).toBe(false);
+
+            await started;
+            await stopped;
+            // The interrupted start never reached its cycle.
+            expect(host.runVotingCycle).not.toHaveBeenCalled();
+        });
+
+        it('a rejected notification update is logged, never unhandled', async () => {
+            setup();
+            jest.mocked(host.background.update).mockRejectedValue(new Error('no notification'));
+            await controller!.start();
+            expect(host.logRendererWarning).toHaveBeenCalledWith(
+                'Background notification update failed: no notification',
+            );
         });
     });
 
@@ -740,6 +909,7 @@ describe('createAutovoteController', () => {
 
             // The overslept warning stays wired through the shared formatter.
             log.overslept!(120_000, 60_000);
+            expect(host.logRendererWarning).toHaveBeenLastCalledWith(formatOversleptMessage(120_000, 60_000));
             expect(host.logRendererWarning).toHaveBeenCalledTimes(6);
         });
 

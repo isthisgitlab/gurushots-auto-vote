@@ -56,9 +56,8 @@ export type CallOrNull = <T>(call: () => T | Promise<T>) => Promise<T | null>;
  * Everything the controller needs from its environment, built once per
  * `AutovoteProvider` mount. The exact signatures come from today's call
  * sites: the IPC members are the bridge wrappers (`react/api/ipc.ts`, typed
- * `WindowApi`), the timers are injectable so tests drive them, and the
- * formatting/translation seams keep `dateLocale`/`rendererTranslator` out of
- * core.
+ * `WindowApi`), and the formatting/translation seams keep
+ * `dateLocale`/`rendererTranslator` out of core.
  */
 export type AutovoteHost = {
     // IPC, all built by the adapter from react/api/ipc.ts.
@@ -68,7 +67,6 @@ export type AutovoteHost = {
     getEffectiveSetting: WindowApi['getEffectiveSetting'];
     getGlobalDefault: WindowApi['getGlobalDefault'];
     getActiveChallenges: WindowApi['getActiveChallenges'];
-    getDeadlineActions: WindowApi['getDeadlineActions'];
     getScenarioStatus: WindowApi['getScenarioStatus'];
     setCancelVoting: WindowApi['setCancelVoting'];
     setSetting: WindowApi['setSetting'];
@@ -77,7 +75,12 @@ export type AutovoteHost = {
     logRendererDebug: (message: string) => Promise<void>;
     logRendererWarning: (message: string) => Promise<void>;
     logRendererError: (message: string) => Promise<void>;
-    // Timers, so tests drive them through the host.
+    // Timers driving the resume hold only, injectable so tests drive the hold
+    // through the host. The cycle timer is NOT theirs: the shared cadence
+    // chain owns it and arms it with the global setTimeout (chain.ts is out
+    // of scope here), so the controller cancels chain timers with the global
+    // clearTimeout — clearing them through a host seam could miss the chain's
+    // own handle.
     setTimeout: (callback: () => void, ms: number) => TimerHandle;
     clearTimeout: (handle: TimerHandle) => void;
     // The platform background service (the Capacitor bridges, or a no-op).
@@ -91,11 +94,31 @@ export type AutovoteHost = {
 };
 
 /**
- * Cancel the cadence chain's armed timer, if any, leaving the slot as-is.
+ * The controller's public surface, as the adapter and the tests consume it.
  */
-const cancelCycleTimer = (host: AutovoteHost, timer: { current: TimerHandle | null }) => {
+export type AutovoteController = {
+    start: () => Promise<void>;
+    stop: () => Promise<void>;
+    rearmSchedule: () => Promise<void>;
+    /** The mount-time auto-resume check; the adapter calls it once on mount. */
+    maybeResume: () => Promise<void>;
+    /** Cancel the timers and a pending resume; never touches persisted state. */
+    dispose: () => void;
+    /** Whether dispose() ran — the adapter revives a disposed controller on an effect re-run. */
+    isDisposed: () => boolean;
+    getState: () => AutovoteState;
+    subscribe: (listener: () => void) => () => void;
+};
+
+/**
+ * Cancel the cadence chain's armed timer, if any, leaving the slot as-is.
+ * The GLOBAL clearTimeout: the chain armed this handle itself (chain.ts owns
+ * the cycle timer), so the clear must reach the same timer seam the chain
+ * used.
+ */
+const cancelCycleTimer = (timer: { current: TimerHandle | null }) => {
     if (timer.current) {
-        host.clearTimeout(timer.current);
+        clearTimeout(timer.current);
     }
 };
 
@@ -103,8 +126,8 @@ const cancelCycleTimer = (host: AutovoteHost, timer: { current: TimerHandle | nu
  * Cancel the armed timer and empty the slot, so the old timeout is stale under
  * the chain's generation guard.
  */
-const clearCycleTimer = (host: AutovoteHost, timer: { current: TimerHandle | null }) => {
-    cancelCycleTimer(host, timer);
+const clearCycleTimer = (timer: { current: TimerHandle | null }) => {
+    cancelCycleTimer(timer);
     timer.current = null;
 };
 
@@ -123,19 +146,7 @@ const clearResumeTimer = (host: AutovoteHost, timer: { current: TimerHandle | nu
  * singleton: the adapter creates one per `AutovoteProvider` mount and calls
  * `dispose()` from the effect cleanup.
  */
-export const createAutovoteController = (
-    host: AutovoteHost,
-): {
-    start: () => Promise<void>;
-    stop: () => Promise<void>;
-    rearmSchedule: () => Promise<void>;
-    /** The mount-time auto-resume check; the adapter calls it once on mount. */
-    maybeResume: () => Promise<void>;
-    /** Cancel the timers and a pending resume; never touches persisted state. */
-    dispose: () => void;
-    getState: () => AutovoteState;
-    subscribe: (listener: () => void) => () => void;
-} => {
+export const createAutovoteController = (host: AutovoteHost): AutovoteController => {
     // The state machine's state, applied through the pure reducer. Every
     // change notifies every subscriber.
     let state: AutovoteState = initialState;
@@ -175,10 +186,14 @@ export const createAutovoteController = (
         apply({ type: ACTIONS.INCREMENT_CYCLE });
         const lastRunStr = host.formatTime(Date.now());
         apply({ type: ACTIONS.UPDATE_LAST_RUN, payload: lastRunStr });
-        void host.background.update(
-            host.translate('app.title'),
-            host.translate('app.autovoteNotificationLastCycle', { time: lastRunStr }),
-        );
+        void host.background
+            .update(
+                host.translate('app.title'),
+                host.translate('app.autovoteNotificationLastCycle', { time: lastRunStr }),
+            )
+            .catch((err) =>
+                host.logRendererWarning(`Background notification update failed: ${errorMessage(err) || err}`),
+            );
     };
 
     /**
@@ -192,7 +207,7 @@ export const createAutovoteController = (
      *   Consumers MUST treat any non-array as "fetch fresh" (Array.isArray guard).
      */
     const runCycle = async (): Promise<Challenge[] | boolean> => {
-        if (!running) {
+        if (!running || disposed) {
             return false;
         }
 
@@ -205,7 +220,7 @@ export const createAutovoteController = (
 
             const result = await host.runVotingCycle();
 
-            if (!running) {
+            if (!running || disposed) {
                 return false;
             }
 
@@ -243,7 +258,9 @@ export const createAutovoteController = (
      * new refresh identity never re-arms the chain.
      */
     const chain = createCadenceChain({
-        isRunning: () => running,
+        // A disposed controller must not re-arm from the chain's finally: the
+        // mount went away, so even a still-true running flag stops the loop.
+        isRunning: () => running && !disposed,
         getTimer: () => cycleTimer.current,
         setTimer: (handle) => {
             cycleTimer.current = handle;
@@ -336,12 +353,12 @@ export const createAutovoteController = (
      * armed timer was computed from the old settings, so a newly-configured
      * threshold or scheduled-fill window could otherwise be slept past until
      * the current (possibly hours-long normal-mode) wait elapses. No-op when
-     * autovote is stopped. Clearing the timer first makes the old timeout
-     * stale under scheduleNext's generation guard.
+     * autovote is stopped or the controller is disposed. Clearing the timer
+     * first makes the old timeout stale under scheduleNext's generation guard.
      */
     const rearmSchedule = async (): Promise<void> => {
-        if (!running) return;
-        clearCycleTimer(host, cycleTimer);
+        if (!running || disposed) return;
+        clearCycleTimer(cycleTimer);
         await scheduleNext();
     };
 
@@ -361,16 +378,23 @@ export const createAutovoteController = (
         // see running === false and bail before arming the timer.
         running = true;
         await host.setCancelVoting(false);
+        // A stop (or a remount racing the setup) must not leave the later
+        // side effects behind: re-read the flag after every await and bail
+        // before the next one lands.
+        if (!running) return;
 
         // Persist the running flag so a remount can resume voting without
         // the user tapping Start again, after the launch marker (see above).
         await persistStartedLaunch();
+        if (!running) return;
         await persistRunningFlag(true);
+        if (!running) return;
 
         // The JS-side cycle below still runs while the app is open so the
         // user gets immediate visual feedback (cycle counter, last-run
         // timestamp) and the in-app boost / turbo / fill surfaces keep working.
         await host.background.start(host.translate('app.autovoteNotificationPreparing'));
+        if (!running) return;
 
         // Run immediately
         const initialCycleStartMs = Date.now();
@@ -380,7 +404,7 @@ export const createAutovoteController = (
         // in-window / capped approaching / normal) means start() doesn't need
         // to special-case "already inside a window" — scheduleNext picks the
         // right cadence from the initial cycle's challenge list.
-        clearCycleTimer(host, cycleTimer);
+        clearCycleTimer(cycleTimer);
         await scheduleNext(initialChallenges, initialCycleStartMs);
     };
 
@@ -416,7 +440,7 @@ export const createAutovoteController = (
         await host.background.stop();
 
         // Clear the cadence timer.
-        clearCycleTimer(host, cycleTimer);
+        clearCycleTimer(cycleTimer);
 
         // Trigger challenges refresh to show vote buttons
         const refresh = host.getOnChallengesRefresh();
@@ -483,15 +507,18 @@ export const createAutovoteController = (
     };
 
     /**
-     * Cancel the cycle timer and the resume hold, and stop a pending
-     * maybeResume() from arming anything after the mount went away. Does not
-     * change the persisted running flag and does not dispatch STOP: the
-     * session outlives its mount.
+     * Cancel the cycle timer and the resume hold, drop every state listener,
+     * and stop a pending maybeResume() from arming anything after the mount
+     * went away. Does not change the persisted running flag and does not
+     * dispatch STOP: the session outlives its mount. Whatever is still in
+     * flight on the disposed controller (a cycle's await, a start()'s setup)
+     * finds every guard closed and updates nothing.
      */
     const dispose = (): void => {
         disposed = true;
-        cancelCycleTimer(host, cycleTimer);
+        cancelCycleTimer(cycleTimer);
         clearResumeTimer(host, resumeTimer);
+        listeners.clear();
     };
 
     return {
@@ -500,6 +527,7 @@ export const createAutovoteController = (
         rearmSchedule,
         maybeResume,
         dispose,
+        isDisposed: () => disposed,
         getState: () => state,
         subscribe: (listener: () => void) => {
             listeners.add(listener);
