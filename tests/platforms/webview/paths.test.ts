@@ -1,7 +1,7 @@
 /**
  * The webview family's paths member: the OS-path reads delegated to runtime,
- * whose Capacitor branches answer the stub paths of a WebView, plus the
- * webDir answers (the resources root, a path below the app root).
+ * whose Capacitor branches answer the stub paths of a WebView, and the
+ * app-root members that throw — the family invents no app-root path.
  */
 
 jest.mock('../../../src/ts/runtime', () => ({
@@ -39,12 +39,10 @@ describe('the runtime delegations', () => {
     });
 });
 
-describe('the webDir answers', () => {
-    test('resourcesPath is the document root the fetch readers resolve against', () => {
-        expect(createWebviewPaths().resourcesPath()).toBe('./');
-    });
-
-    test('a path below the app root is webDir-relative', () => {
-        expect(createWebviewPaths().appPath('src', 'assets', 'x.txt')).toBe('src/assets/x.txt');
+describe('the app-root members', () => {
+    test('resourcesPath and appPath throw: no WebView code resolves a path below an app root', () => {
+        const paths = createWebviewPaths();
+        expect(() => paths.resourcesPath()).toThrow('webview has no app-root path');
+        expect(() => paths.appPath('src', 'assets')).toThrow('webview has no app-root path');
     });
 });

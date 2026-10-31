@@ -1,10 +1,10 @@
 /**
  * The webview family's paths member: the OS-path reads delegated to
  * runtime.ts, whose Capacitor branches answer the stub paths of a WebView (no
- * fs behind them; writers fail-soft). The read-only resources are the webDir
- * the WebView document is served from, so resourcesPath answers the document
- * root the fetch readers resolve against, and a path below the app root is a
- * webDir-relative one.
+ * fs behind them; writers fail-soft). The app-root members have no answer on
+ * the WebView — no WebView code resolves a path below an app root, the
+ * read-only assets are fetched from the webDir — so they throw rather than
+ * invent one.
  */
 
 import type { PlatformPaths } from '../../platform/port';
@@ -24,8 +24,12 @@ const createWebviewPaths = (): PlatformPaths => ({
     getUserDataDir: (appName) => runtime().getUserDataDir(appName),
     isPackaged: () => runtime().isPackaged(),
     isSourceCode: () => runtime().isSourceCode(),
-    resourcesPath: () => './',
-    appPath: (...segments) => segments.join('/'),
+    resourcesPath: () => {
+        throw new Error('webview has no app-root path');
+    },
+    appPath: () => {
+        throw new Error('webview has no app-root path');
+    },
 });
 
 export { createWebviewPaths };

@@ -5,8 +5,8 @@
  * caller for a reload once the user has been told. There is no Electron
  * session to clear (the wipe's clearSession dep answers at once without
  * Electron). The native plugin's wipe is not built here — the plugin global
- * is the shell's to reach — so the shell module passes it in; without it the
- * wipe finds no plugin, the way localData answers without one.
+ * is the shell's to reach — so the shell module passes it in as the required
+ * nativeWipe part.
  */
 
 import type { PlatformWipe } from '../../platform/port';
@@ -20,9 +20,8 @@ type CapacitorPreferencesModule = typeof import('../../settings/capacitorPrefere
 const capacitorPreferences = (): CapacitorPreferencesModule =>
     require('../../settings/capacitorPreferences') as CapacitorPreferencesModule;
 
-const createWebviewWipe = (): PlatformWipe => ({
+const createWebviewWipe = (): Omit<PlatformWipe, 'nativeWipe'> => ({
     clearSession: null,
-    nativeWipe: async () => null,
     // The Capacitor branch of localData: `reload` — the caches were emptied and
     // what is stored is only partly gone.
     reloadAfterWipe: true,

@@ -16,26 +16,34 @@ import { platform } from '../../../src/ts/platform/port';
 import { createHeadlessPlatform } from '../../../src/ts/platforms/headless';
 
 import type { AxiosAdapter, AxiosPromise } from 'axios';
+import type { PlatformWindows } from '../../../src/ts/platform/port';
 
 const apiClient = jest.mocked(
     require('../../../src/ts/api/api-client') as typeof import('../../../src/ts/api/api-client'),
 );
 
+// The service's windows: the explicit no-ops its shell module passes (a bare
+// service WebView has no windows to broadcast to or relaunch).
+const windows: PlatformWindows = {
+    broadcastSettingsChanged: () => undefined,
+    afterWipe: () => undefined,
+};
+
 describe('the headless platform', () => {
     test('the adapter is the AndroidHeadlessHttp one, resolved on read', () => {
-        const p = createHeadlessPlatform();
+        const p = createHeadlessPlatform(windows);
         expect(p.http.adapter).toBe(mockAdapter);
         expect(apiClient.getHeadlessHttpAdapter).toHaveBeenCalled();
     });
 
-    test('the service is itself the native side, and there are no windows', () => {
-        const p = createHeadlessPlatform();
+    test('the service is itself the native side, and the windows are the no-ops the shell passes', () => {
+        const p = createHeadlessPlatform(windows);
         expect(p.native).toEqual({ autovote: null, foregroundService: null, apkInstaller: null });
-        expect(p.windows).toBeNull();
+        expect(p.windows).toBe(windows);
     });
 
     test('the wipe reaches nothing from the service', async () => {
-        const wipe = createHeadlessPlatform().wipe;
+        const wipe = createHeadlessPlatform(windows).wipe;
         expect(wipe.clearSession).toBeNull();
         expect(wipe.listPreferenceKeys).toBeNull();
         expect(wipe.removePreferenceKeys).toBeNull();
@@ -44,7 +52,7 @@ describe('the headless platform', () => {
     });
 
     test('the capabilities name the service answers', () => {
-        const c = createHeadlessPlatform().capabilities;
+        const c = createHeadlessPlatform(windows).capabilities;
         expect(c.refreshMissionNeeds).toBe(true);
         expect(c.snapAllowed).toBe(false);
         expect(c.backgroundServiceOwnsScenarios()).toBe(false);

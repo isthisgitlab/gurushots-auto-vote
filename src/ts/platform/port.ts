@@ -22,11 +22,15 @@ import type { ThroughResult } from '../types/stores';
 /**
  * The two names one store's data is kept under: the Preferences / native-bridge
  * key (the Capacitor and Android headless transports), and the file's full
- * path, read at call time (the fs transport).
+ * path, read at call time (the fs transport). `atomic` is the store's
+ * createJsonStore option: an atomic store's file is swept for the temp files
+ * an earlier crash left beside it, once per file path, before the first read
+ * or write.
  */
 export type SettingsStoreRef = {
     prefKey: string;
     filePath: () => string;
+    atomic: boolean;
 };
 
 /**
@@ -51,9 +55,15 @@ export type PlatformCas = (key: string, expected: string | null, data: string) =
  * a member is null where the platform's transport has no such step.
  */
 export type PlatformStorage = {
-    /** The stored text of one store (readRaw / readHere), or null when nothing is stored. */
+    /**
+     * The stored text of one store (readRaw / readHere), or null when nothing is stored. Includes the stale-temp
+     * sweep of an atomic store's file, once per file path, before the read.
+     */
     readRaw: (store: SettingsStoreRef) => string | null;
-    /** Saves the text of one store; `atomic` replaces the file by temp file and rename (createJsonStore `atomic`). */
+    /**
+     * Saves the text of one store; `atomic` replaces the file by temp file and rename (createJsonStore `atomic`).
+     * Includes the stale-temp sweep of an atomic store's file, once per file path, before the write.
+     */
     writeRaw: (store: SettingsStoreRef, data: string, atomic: boolean) => void;
     /** Saves only if nothing is stored yet (the import write); answers the text that is already there (`exists`). */
     writeIfAbsent: (store: SettingsStoreRef, data: string) => WriteIfAbsentResult;
@@ -137,7 +147,11 @@ export type PlatformNative = {
     apkInstaller: typeof import('../services/AndroidUpdateInstaller') | null;
 };
 
-/** What the platform can do to the app's windows. */
+/**
+ * What the platform can do to the app's windows: the settings broadcast and
+ * the post-wipe relaunch. Every shell supplies them — a family takes them as
+ * an input and invents none.
+ */
 export type PlatformWindows = {
     /** Sends the new settings to every window. */
     broadcastSettingsChanged: BroadcastSettingsChange;
@@ -158,7 +172,12 @@ export type PlatformCapabilities = {
     backgroundServiceOwnsScenarios: () => boolean;
     /** What the user can do about an untrustable ledger: the file's name, or a retry next cycle. */
     recoveryWording: 'file' | 'store';
-    /** The log context line: CLI or GUI. */
+    /**
+     * The log context line: CLI or GUI. The default rule only — the
+     * setContext('GUI') override stays inside logger/context, and no member
+     * calls getContext: Phase 3 points getContext at this member, so a member
+     * that called it would recurse.
+     */
     logContext: () => 'CLI' | 'GUI';
     /** Whether the hourly log cleanup interval is armed. */
     logCleanup: boolean;
@@ -173,15 +192,14 @@ export interface Platform {
     assets: PlatformAssets;
     wipe: PlatformWipe;
     native: PlatformNative;
-    /** Null where there are no windows to reach (the Android WebViews); the shell's platform module fills it. */
-    windows: PlatformWindows | null;
+    /** The windows the shell drives; every shell supplies them, and a family takes them as an input. */
+    windows: PlatformWindows;
     capabilities: PlatformCapabilities;
 }
 
-/** The Electron platform: it has a session, so the wipe's clearSession is required, and its windows are real. */
+/** The Electron platform: it has a session, so the wipe's clearSession is required. */
 export interface ElectronPlatform extends Platform {
     wipe: Omit<PlatformWipe, 'clearSession'> & { clearSession: () => Promise<void> };
-    windows: PlatformWindows;
 }
 
 /** The globalThis slot the installed platform lives in; a Symbol.for key survives jest.resetModules / isolateModules. */

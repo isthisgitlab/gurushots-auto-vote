@@ -1,11 +1,9 @@
 /**
  * The headless family's paths member: the OS-path reads delegated to
- * runtime.ts, answered as they answer here — the bare service WebView has no
- * Capacitor runtime, so the stub-path note applies as runtime resolves it,
- * with the bundler's shims behind it. The read-only resources are the webDir
- * the service's document is served from, so resourcesPath answers the
- * document root the fetch readers resolve against, and a path below the app
- * root is a webDir-relative one.
+ * runtime.ts, answered the way runtime answers them on the bare service
+ * WebView. The app-root members have no answer on the service — no service
+ * code resolves a path below an app root, the read-only assets are fetched
+ * from the webDir — so they throw rather than invent one.
  */
 
 import type { PlatformPaths } from '../../platform/port';
@@ -23,8 +21,12 @@ const createHeadlessPaths = (): PlatformPaths => ({
     getUserDataDir: (appName) => runtime().getUserDataDir(appName),
     isPackaged: () => runtime().isPackaged(),
     isSourceCode: () => runtime().isSourceCode(),
-    resourcesPath: () => './',
-    appPath: (...segments) => segments.join('/'),
+    resourcesPath: () => {
+        throw new Error('headless has no app-root path');
+    },
+    appPath: () => {
+        throw new Error('headless has no app-root path');
+    },
 });
 
 export { createHeadlessPaths };

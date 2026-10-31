@@ -36,7 +36,11 @@ import { createNodeStorage } from '../../../src/ts/platforms/node/store';
 import type { SettingsStoreRef } from '../../../src/ts/platform/port';
 import type { WriteIfAbsentResult } from '../../../src/ts/settings/storageTypes';
 
-const store = (file: string): SettingsStoreRef => ({ prefKey: 'gs_test', filePath: () => file });
+const store = (file: string, atomic = false): SettingsStoreRef => ({
+    prefKey: 'gs_test',
+    filePath: () => file,
+    atomic,
+});
 const storage = createNodeStorage();
 
 describe('readRaw', () => {
@@ -63,6 +67,27 @@ describe('writeRaw', () => {
     test('a store that is not atomic is written in place', () => {
         storage.writeRaw(store('/data/x.json'), 'DATA', false);
         expect(ownerOnly.writeOwnerOnly).toHaveBeenCalledWith('/data/x.json', 'DATA');
+    });
+});
+
+describe('the stale-temp sweep of an atomic store', () => {
+    test('the first read sweeps the file, and nothing sweeps twice for the path', () => {
+        const swept = createNodeStorage();
+        fs.existsSync.mockReturnValue(false);
+        swept.readRaw(store('/data/atomic.json', true));
+        expect(atomicWrite.sweepStaleTemps).toHaveBeenCalledTimes(1);
+        expect(atomicWrite.sweepStaleTemps).toHaveBeenCalledWith('/data/atomic.json');
+        swept.readRaw(store('/data/atomic.json', true));
+        swept.writeRaw(store('/data/atomic.json', true), 'DATA', true);
+        expect(atomicWrite.sweepStaleTemps).toHaveBeenCalledTimes(1);
+    });
+
+    test('a store that is not atomic never sweeps', () => {
+        const swept = createNodeStorage();
+        fs.existsSync.mockReturnValue(false);
+        swept.readRaw(store('/data/plain.json'));
+        swept.writeRaw(store('/data/plain.json'), 'DATA', false);
+        expect(atomicWrite.sweepStaleTemps).not.toHaveBeenCalled();
     });
 });
 

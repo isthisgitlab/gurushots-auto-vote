@@ -8,7 +8,7 @@ import { createHeadlessStorage } from '../../../src/ts/platforms/headless/store'
 
 import type { SettingsStoreRef } from '../../../src/ts/platform/port';
 
-const store: SettingsStoreRef = { prefKey: 'gs_test', filePath: () => '/data/gs_test.json' };
+const store: SettingsStoreRef = { prefKey: 'gs_test', filePath: () => '/data/gs_test.json', atomic: false };
 const storage = createHeadlessStorage();
 const NOT_MOVED = 'headless storage moves behind the port in Phase 3 step 7';
 

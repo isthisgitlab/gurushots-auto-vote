@@ -1,16 +1,17 @@
 /**
  * The webview platform family: the app WebView (the Capacitor page's Android
- * UI). The Preferences write-behind storage, the CapacitorHttp adapter, the
- * fetch assets, the stub paths, and the wipe that empties the Preferences
- * keys and asks for a reload. A shell's platform module builds this and
- * installs it; the family itself never calls installPlatform.
+ * UI). The CapacitorHttp adapter, the fetch assets, the stub paths, and the
+ * wipe that empties the Preferences keys and asks for a reload. The shell's
+ * platform module builds this and installs it; the family itself never calls
+ * installPlatform.
  *
- * The members that need the shell's own code are left empty here and passed
- * in through `parts`: the native services call services/NativeAutovoteBridge.ts
- * and its siblings (shell modules a family cannot import), and the native
- * wipe calls the AutoVoteBackground plugin. The storage transport is a
- * placeholder until Phase 3 step 7 (see store.ts), and takes no parts yet.
- * There are no windows to reach from the WebView, so windows is null.
+ * The members that need the shell's own code are passed in through `parts` —
+ * every part is required, so a shell that forgets one fails to compile: the
+ * native services call services/NativeAutovoteBridge.ts and its siblings
+ * (shell modules a family cannot import), the native wipe calls the
+ * AutoVoteBackground plugin, the compare-and-write goes to the native bridge,
+ * and the windows are the shell's broadcast and reload (bridge/capacitor.ts).
+ * The storage transport is a placeholder until Phase 3 step 7 (see store.ts).
  *
  * The modules the family delegates to are reached at call time, never at
  * load: the node project's setup file loads the test helpers that import
@@ -26,44 +27,48 @@ import { createWebviewPaths } from './paths';
 import { createWebviewStorage } from './store';
 import { createWebviewWipe } from './wipe';
 
-import type { Platform, PlatformNative, PlatformWipe } from '../../platform/port';
+import type { Platform, PlatformCas, PlatformNative, PlatformWindows, PlatformWipe } from '../../platform/port';
 
-/** The parts the shell module passes in: the native members a family cannot build. */
+/** The parts the shell module passes in: the native members and the windows, all required. */
 type WebviewNativeParts = {
+    /** The native compare-and-write of one Preferences key, null while the storage transport is a placeholder. */
+    cas: PlatformCas | null;
     /** The native plugin's wipe (AutoVoteBackground wipeLocalData). */
-    nativeWipe?: PlatformWipe['nativeWipe'];
+    nativeWipe: PlatformWipe['nativeWipe'];
     /** The native services (the bridges and controllers the WebView page drives). */
-    native?: PlatformNative;
+    native: PlatformNative;
+    /** The shell's windows: the bridge's settings emit and the post-wipe reload. */
+    windows: PlatformWindows;
 };
 
 type ApiClientModule = typeof import('../../api/api-client');
-type StepModule = typeof import('../../services/scenarioRunner/step');
 
 const apiClient = (): ApiClientModule => require('../../api/api-client') as ApiClientModule;
-const step = (): StepModule => require('../../services/scenarioRunner/step') as StepModule;
 
-const createWebviewCapabilities = (): Platform['capabilities'] => ({
+const createWebviewCapabilities = (parts: WebviewNativeParts): Platform['capabilities'] => ({
     // The mission-needs refresh resolver is the headless cycle's; Snap plays
-    // from the app; recovery names the store to clear; and the log context and
-    // the hourly cleanup are the logger's WebView answers (logger/context
-    // answers CLI without Electron; logger/files arms the interval only for
+    // from the app; recovery names the store to clear; and the log context
+    // and the hourly cleanup are the logger's WebView answers (the default
+    // rule answers CLI on a WebView; logger/files arms the interval only for
     // Electron or a CLI start).
     refreshMissionNeeds: false,
     snapAllowed: true,
-    // The rule the branch answers today (services/scenarioRunner/step): the
-    // native background service owns the scenarios while the app WebView has
-    // its bridge. Reached at call time — the bridge it asks for is shell code.
-    backgroundServiceOwnsScenarios: () => step().backgroundServiceOwnsScenarios(),
+    // The rule the branch answers today (services/scenarioRunner/step:205):
+    // the native background service owns the scenarios while the app WebView
+    // has its bridge. Computed from the native part — calling the step's own
+    // function would recurse once Phase 3 points it at this capability.
+    backgroundServiceOwnsScenarios: () => parts.native.autovote?.isAvailable() === true,
     recoveryWording: 'store',
     logContext: () => 'CLI',
     logCleanup: false,
 });
 
 /**
- * The webview platform; `parts` carries the native members the shell passes
- * in (see the header). Everything else is the family's.
+ * The webview platform; `parts` carries the shell's native members and
+ * windows, every one required (see the header). Everything else is the
+ * family's.
  */
-const createWebviewPlatform = (parts: WebviewNativeParts = {}): Platform => ({
+const createWebviewPlatform = (parts: WebviewNativeParts): Platform => ({
     // The CapacitorHttp adapter of api-client.ts, resolved on read so building
     // the platform loads no module graph.
     http: {
@@ -74,10 +79,10 @@ const createWebviewPlatform = (parts: WebviewNativeParts = {}): Platform => ({
     storage: createWebviewStorage(),
     paths: createWebviewPaths(),
     assets: createWebviewAssets(),
-    wipe: parts.nativeWipe ? { ...createWebviewWipe(), nativeWipe: parts.nativeWipe } : createWebviewWipe(),
-    native: parts.native ?? { autovote: null, foregroundService: null, apkInstaller: null },
-    windows: null,
-    capabilities: createWebviewCapabilities(),
+    wipe: { ...createWebviewWipe(), nativeWipe: parts.nativeWipe },
+    native: parts.native,
+    windows: parts.windows,
+    capabilities: createWebviewCapabilities(parts),
 });
 
 export { createWebviewPlatform };

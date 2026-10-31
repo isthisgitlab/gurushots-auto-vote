@@ -36,7 +36,21 @@ const createNodeAssets = (): PlatformAssets => ({
     // are), so the node family's synchronous reads are wrapped.
     readText: async (relativePath: string): Promise<string> => readAssetText(relativePath),
     readJson: async (relativePath: string): Promise<unknown> => {
-        const parsed: unknown = JSON.parse(readAssetText(relativePath));
+        // The SEA asset is parsed inside the try, the way the lexicon loader
+        // parses it (services/semantic/assets.ts loadViaNode): a SEA asset
+        // that fails to parse falls back to the fs read, the way an
+        // unreadable one does.
+        try {
+            const sea = require('node:sea') as typeof import('node:sea');
+            if (sea.isSea()) {
+                const fromSea: unknown = JSON.parse(sea.getAsset(relativePath, 'utf8'));
+                return fromSea;
+            }
+        } catch {
+            // The asset read or its parse failed — fall through to the fs read.
+        }
+        const fs = require('node:fs') as typeof import('node:fs');
+        const parsed: unknown = JSON.parse(fs.readFileSync(appPaths().appPath('src', 'assets', relativePath), 'utf8'));
         return parsed;
     },
     visionModel: {

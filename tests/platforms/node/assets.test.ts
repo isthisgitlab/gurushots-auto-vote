@@ -76,6 +76,22 @@ describe('readJson', () => {
         fs.readFileSync.mockReturnValue('{"a":1}');
         await expect(createNodeAssets().readJson('semantic-vectors.json')).resolves.toEqual({ a: 1 });
     });
+
+    test('a SEA build parses the embedded asset, and reads no file', async () => {
+        mockSea.isSea = () => true;
+        mockSea.getAsset = () => '{"sea":true}';
+        fs.readFileSync.mockClear();
+        await expect(createNodeAssets().readJson('semantic-vectors.json')).resolves.toEqual({ sea: true });
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+    });
+
+    test('a SEA asset that fails to parse falls back to the file, the way the lexicon loader parses', async () => {
+        mockSea.isSea = () => true;
+        mockSea.getAsset = () => '{not json';
+        fs.readFileSync.mockReturnValue('{"a":1}');
+        await expect(createNodeAssets().readJson('semantic-vectors.json')).resolves.toEqual({ a: 1 });
+        expect(fs.readFileSync).toHaveBeenCalledWith('/app/src/assets/semantic-vectors.json', 'utf8');
+    });
 });
 
 describe('visionModel', () => {

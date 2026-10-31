@@ -22,7 +22,7 @@ import { createNodePaths } from './paths';
 import { createNodeStorage } from './store';
 import { createNodeWipe } from './wipe';
 
-import type { Platform } from '../../platform/port';
+import type { Platform, PlatformWindows } from '../../platform/port';
 
 type ContextModule = typeof import('../../logger/context');
 
@@ -36,36 +36,39 @@ const createNodeNative = (): Platform['native'] => ({
     apkInstaller: null,
 });
 
-const createNodeWindows = (): Platform['windows'] => ({
-    broadcastSettingsChanged: () => undefined,
-    afterWipe: () => undefined,
-});
-
 const createNodeCapabilities = (): Platform['capabilities'] => ({
     // The mission-needs refresh resolver is the headless cycle's; Snap plays
     // from the app, the desktop and the CLI; the scenarios are owned by the
     // native service, of which node has none; recovery names the file to
     // delete; the log context and the hourly cleanup are the logger's own
-    // node answers.
+    // node answers. The log context is the default rule, computed from the
+    // context's two flags: the setContext override stays inside
+    // logger/context, and this member must not call getContext (the port's
+    // doc says why).
     refreshMissionNeeds: false,
     snapAllowed: true,
     backgroundServiceOwnsScenarios: () => false,
     recoveryWording: 'file',
-    logContext: (): 'CLI' | 'GUI' => (context().getContext() === 'GUI' ? 'GUI' : 'CLI'),
+    logContext: (): 'CLI' | 'GUI' => (context().isElectronApp && !context().startedViaCli ? 'GUI' : 'CLI'),
     get logCleanup(): boolean {
         const ctx = context();
         return ctx.isElectronApp || ctx.startedViaCli;
     },
 });
 
-const createNodePlatform = (): Platform => ({
+/**
+ * The node platform; `windows` is the shell's (Electron's broadcast and
+ * relaunch, the web server's, or the CLI's explicit no-ops — each shell
+ * module passes its own).
+ */
+const createNodePlatform = (windows: PlatformWindows): Platform => ({
     http: createNodeHttp(),
     storage: createNodeStorage(),
     paths: createNodePaths(),
     assets: createNodeAssets(),
     wipe: createNodeWipe(),
     native: createNodeNative(),
-    windows: createNodeWindows(),
+    windows,
     capabilities: createNodeCapabilities(),
 });
 

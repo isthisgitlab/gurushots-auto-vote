@@ -41,30 +41,44 @@ const readStoreFile = (file: string): string | null => {
 // The time a value was set aside, as part of the name it is kept under (settingsFileMethods setAsideStamp).
 const setAsideStamp = (): string => new Date().toISOString().replace(/[:.]/g, '-');
 
-const createNodeStorage = (): PlatformStorage => ({
-    readRaw: (store) => readStoreFile(store.filePath()),
-    writeRaw: (store, data, atomic) => {
-        const write = atomic ? atomicWrite().writeAtomicOwnerOnly : ownerOnlyWrite().writeOwnerOnly;
-        write(store.filePath(), data);
-    },
-    writeIfAbsent: (store, data) => settingsFileNode().writeIfAbsentOnDisk(store.filePath(), data),
-    location: (store) => store.filePath(),
-    hasQuarantined: (store) => settingsFileNode().hasQuarantinedOnDisk(store.filePath),
-    quarantineRaw: (store, _raw) => {
-        const file = store.filePath();
-        return settingsFileNode().renameToCorruptBackup(file, `${file}.corrupt-${setAsideStamp()}`);
-    },
-    // A desktop read is the file itself: no boot hydration, no re-read, no read that can fail, no
-    // queue to flush, and no native bridge or compare-and-write to reach.
-    storedKey: null,
-    preferences: null,
-    headlessStore: () => undefined,
-    cas: null,
-    sharedUpdate: null,
-    readFailed: () => false,
-    loaded: () => true,
-    flushed: async () => undefined,
-    lockPolicy: 'file',
-});
+const createNodeStorage = (): PlatformStorage => {
+    // The stale-temp sweep of an atomic store's file: once per file path, before the first read or write
+    // (jsonStore's and settingsFileMethods' sweepOnce). Reached at call time with the wrapped helpers.
+    const swept = new Set<string>();
+    const sweepOnce = (file: string): void => {
+        if (swept.has(file)) return;
+        swept.add(file);
+        atomicWrite().sweepStaleTemps(file);
+    };
+    return {
+        readRaw: (store) => {
+            if (store.atomic) sweepOnce(store.filePath());
+            return readStoreFile(store.filePath());
+        },
+        writeRaw: (store, data, atomic) => {
+            if (store.atomic) sweepOnce(store.filePath());
+            const write = atomic ? atomicWrite().writeAtomicOwnerOnly : ownerOnlyWrite().writeOwnerOnly;
+            write(store.filePath(), data);
+        },
+        writeIfAbsent: (store, data) => settingsFileNode().writeIfAbsentOnDisk(store.filePath(), data),
+        location: (store) => store.filePath(),
+        hasQuarantined: (store) => settingsFileNode().hasQuarantinedOnDisk(store.filePath),
+        quarantineRaw: (store, _raw) => {
+            const file = store.filePath();
+            return settingsFileNode().renameToCorruptBackup(file, `${file}.corrupt-${setAsideStamp()}`);
+        },
+        // A desktop read is the file itself: no boot hydration, no re-read, no read that can fail, no
+        // queue to flush, and no native bridge or compare-and-write to reach.
+        storedKey: null,
+        preferences: null,
+        headlessStore: () => undefined,
+        cas: null,
+        sharedUpdate: null,
+        readFailed: () => false,
+        loaded: () => true,
+        flushed: async () => undefined,
+        lockPolicy: 'file',
+    };
+};
 
 export { createNodeStorage };
