@@ -748,15 +748,20 @@ describe('shell platform module load-time chains', () => {
 
     test('no shell platform module reaches the logger through its load-time imports', async () => {
         const offenders: string[] = [];
+        const portMisses: string[] = [];
         for (const entry of SHELL_PLATFORM_ENTRIES) {
             const chain = await loadTimeChain(entry);
             // Per-entry control: every shell platform module statically
             // imports the port it installs, so the walk must reach it
             // through a real edge — a walk that followed no edges, or that
-            // normalised one entry's paths wrongly, fails here.
-            expect(chain).toContain('src/ts/platform/port.ts');
+            // normalised one entry's paths wrongly, fails here. The
+            // assertion requires each shell platform module to import the
+            // port statically, so a module that installs another way fails
+            // it on purpose.
+            if (!chain.includes('src/ts/platform/port.ts')) portMisses.push(entry);
             offenders.push(...chain.filter(isLoggerModule).map((file) => `${entry}: ${file}`));
         }
+        expect(portMisses).toEqual([]);
         expect(offenders).toEqual([]);
     }, 120_000);
 
