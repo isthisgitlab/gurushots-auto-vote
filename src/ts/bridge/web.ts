@@ -25,7 +25,7 @@ import { invokeChannels, aliases, sendMethods, eventMethods, kebabToCamel } from
 import { LOGOUT_NOT_SAVED } from '../ipc/logoutCode';
 import { isSafeExternalUrl } from '../format/urlSafe';
 import { isPlainObject } from '../plainObject';
-import { markWebShell } from './webShellFlag';
+import { markPlatformKind } from '../platform/kind';
 
 import type { WindowApi } from '../types/ipc';
 
@@ -132,7 +132,7 @@ const subscribeServer = (channel: string, fn: Listener) => {
 
 const installWebBridge = (): WindowApi => {
     takeShellToken();
-    markWebShell();
+    markPlatformKind('web');
     const api: Record<string, (...args: never[]) => unknown> = {};
 
     for (const channel of invokeChannels.filter((name) => !BROWSER_CHANNELS.has(name))) {

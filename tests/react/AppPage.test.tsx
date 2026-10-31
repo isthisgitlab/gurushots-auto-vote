@@ -10,6 +10,8 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
 import { DEFAULT_TIMEZONE } from '../../src/ts/settings/uiDefaults';
 import { invalid } from '../helpers/invalid';
+import { resetPlatformKind } from '../helpers/platformKind';
+import { markPlatformKind } from '../../src/ts/platform/kind';
 import { CURRENT_NOTICE_VERSION } from '../../src/ts/noticeVersion';
 
 import type { ComponentChildren } from 'preact';
@@ -130,7 +132,7 @@ describe('App page', () => {
         Object.assign(window.api, originals);
         document.documentElement.removeAttribute('data-theme');
         document.body.innerHTML = '';
-        delete (globalThis as RendererGlobals).Capacitor;
+        resetPlatformKind();
         delete (globalThis as RendererGlobals).__capacitorBootstrap;
     });
 
@@ -450,7 +452,7 @@ describe('App page', () => {
     });
 
     test('settings and logs modals open from the navbar and close via onClose', async () => {
-        (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+        markPlatformKind('capacitor');
         await renderReady();
         expect(mockProps.SettingsModal.isOpen).toBe(false);
         fireEvent.click(screen.getByTitle('app.settings'));

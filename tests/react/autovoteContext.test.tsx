@@ -13,12 +13,13 @@ import { AutovoteProvider, useAutovote } from '@/contexts/AutovoteContext';
 import * as foregroundService from '../../src/ts/services/ForegroundServiceController';
 import * as nativeAutovote from '../../src/ts/services/NativeAutovoteBridge';
 import { mockApi, mockTranslator, defaultTranslate, fillTemplate } from './helpers/setup';
+import { resetPlatformKind } from '../helpers/platformKind';
+import { markPlatformKind } from '../../src/ts/platform/kind';
 import type { ComponentProps } from 'preact';
 import type { RenderResult } from '@testing-library/preact';
 import type * as cadenceChainModule from '../../src/ts/scheduling/cadenceChain';
 import type * as deadlineNotifierModule from '../../src/ts/react/notifications/deadlineNotifier';
 import type * as scenarioNotifierModule from '../../src/ts/react/notifications/scenarioNotifier';
-import type { RendererGlobals } from '../../src/ts/types/capacitor';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
@@ -35,7 +36,6 @@ const captured: {
     notifierDeps: null,
     scenarioDeps: null,
 };
-const g = globalThis as RendererGlobals;
 
 jest.mock('../../src/ts/scheduling/cadenceChain', () => {
     const actual = jest.requireActual<typeof cadenceChainModule>('../../src/ts/scheduling/cadenceChain');
@@ -127,7 +127,7 @@ describe('AutovoteContext', () => {
         captured.chainDeps = null;
         captured.notifierDeps = null;
         captured.scenarioDeps = null;
-        delete g.Capacitor;
+        resetPlatformKind();
 
         const now = Math.floor(Date.now() / 1000);
         const far = invalid<Challenge[]>([{ id: 1, title: 'Far', type: 'regular', close_time: now + 100_000 }]);
@@ -158,7 +158,7 @@ describe('AutovoteContext', () => {
         view?.unmount();
         view = null;
         ctx = invalid(null);
-        delete g.Capacitor;
+        resetPlatformKind();
         jest.clearAllTimers();
         jest.useRealTimers();
     });
@@ -865,16 +865,10 @@ describe('AutovoteContext', () => {
         });
 
         it('is not wired on native Android (the foreground service owns notifications)', () => {
-            g.Capacitor = { isNativePlatform: () => true };
+            markPlatformKind('capacitor');
             renderProvider();
             expect(captured.notifierDeps).toBeNull();
             expect(captured.chainDeps!.onCycleChallenges).toBeUndefined();
-        });
-
-        it('treats a Capacitor global without isNativePlatform as non-native', () => {
-            g.Capacitor = {};
-            renderProvider();
-            expect(captured.chainDeps!.onCycleChallenges).toEqual(expect.any(Function));
         });
     });
 

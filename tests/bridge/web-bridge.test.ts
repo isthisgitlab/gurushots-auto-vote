@@ -10,6 +10,8 @@ import type * as bridgeModule from '../../src/ts/bridge/web';
 import type * as manifestModule from '../../src/ts/ipc/manifest';
 import type { WindowApi } from '../../src/ts/types/ipc';
 import { invalid } from '../helpers/invalid';
+import { resetPlatformKind } from '../helpers/platformKind';
+import { platformKind } from '../../src/ts/platform/kind';
 
 type FetchReply = { ok: boolean; status: number; json: () => Promise<unknown> };
 
@@ -88,7 +90,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-    delete (g as { webShell?: true }).webShell;
+    resetPlatformKind();
     Object.assign(g, saved);
     if (savedSessionStorage) Object.defineProperty(globalThis, 'sessionStorage', savedSessionStorage);
     else Reflect.deleteProperty(globalThis, 'sessionStorage');
@@ -111,7 +113,7 @@ describe('web bridge — invoke', () => {
     });
 
     test('marks the page as the web shell', () => {
-        expect((g as { webShell?: true }).webShell).toBe(true);
+        expect(platformKind()).toBe('web');
     });
 
     test('undefined arguments travel as null plus their positions', async () => {

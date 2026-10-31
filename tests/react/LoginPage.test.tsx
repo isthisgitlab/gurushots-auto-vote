@@ -11,6 +11,8 @@ import { pickOption } from './helpers/test-utils';
 import { act } from '@testing-library/preact';
 import { fireSettingsChanged } from './helpers/setup';
 import { CURRENT_NOTICE_VERSION } from '../../src/ts/noticeVersion';
+import { resetPlatformKind } from '../helpers/platformKind';
+import { markPlatformKind } from '../../src/ts/platform/kind';
 
 import type { RendererGlobals } from '../../src/ts/types/capacitor';
 import type { WindowApi } from '../../src/ts/types/ipc';
@@ -45,7 +47,7 @@ describe('Login page', () => {
         document.documentElement.removeAttribute('data-theme');
         document.body.innerHTML = '';
         delete (globalThis as RendererGlobals).__capacitorBootstrap;
-        delete (globalThis as RendererGlobals).Capacitor;
+        resetPlatformKind();
     });
 
     const renderReady = async () => {
@@ -397,7 +399,7 @@ describe('Login page', () => {
     });
 
     test('on Android a login that could not be saved says to restart the app, not to fix a file', async () => {
-        (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+        markPlatformKind('capacitor');
         jest.mocked(window.api.authenticate).mockResolvedValue({ success: false, error: 'token-not-saved' });
         await renderReady();
         submit('alice', 'pw');

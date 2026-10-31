@@ -1,16 +1,14 @@
 import { useMemo } from 'react';
 
-import { isWebShell } from '../../bridge/webShellFlag';
-
-import type { RendererGlobals } from '../../types/capacitor';
+import { platformKind } from '../../platform/kind';
 
 /**
- * Whether the page runs inside the native Android app. Asks the Capacitor runtime's platform probe — calling it, not
- * just checking it exists, excludes a Capacitor web target — without importing the Node-flavoured runtime module into
- * the browser bundle. The one place the renderer reads the Capacitor global; components go through
- * usePlatformCapabilities.
+ * Whether the page runs inside the native Android app. platformKind() is the single source of truth for the
+ * renderer's platform: the shell bridges mark the kind when they expose window.api — the Capacitor one only after
+ * the runtime's platform probe answers native (calling it, not just checking it exists, excludes a Capacitor web
+ * target) — so this never reads the Capacitor global itself. Components go through usePlatformCapabilities.
  */
-export const isNativePlatform = (): boolean => (globalThis as RendererGlobals).Capacitor?.isNativePlatform?.() === true;
+export const isNativePlatform = (): boolean => platformKind() === 'capacitor';
 
 /**
  * What the current platform offers the UI, so no component branches on the platform itself.
@@ -29,7 +27,8 @@ export type PlatformCapabilities = {
 };
 
 /**
- * The capabilities of the platform the renderer runs on. Fixed for the life of the page.
+ * The capabilities of the platform the renderer runs on. The kind the bridge marked is fixed for the life of the
+ * page.
  */
 export function usePlatformCapabilities(): PlatformCapabilities {
     return useMemo(() => {
@@ -39,7 +38,7 @@ export function usePlatformCapabilities(): PlatformCapabilities {
             batteryGuidance: native,
             backgroundService: native,
             settingsFile: !native,
-            relaunchesAfterWipe: !isWebShell(),
+            relaunchesAfterWipe: platformKind() !== 'web',
         };
     }, []);
 }

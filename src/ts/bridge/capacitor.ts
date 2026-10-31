@@ -31,6 +31,7 @@ import { buildReleaseUpdateHandlers } from '../ipc/releaseUpdates';
 // kebab-case channel name → camelCase renderer method name — shared with
 // preload.ts via the channel manifest so both shells derive identically.
 import { kebabToCamel, aliases, sendMethods, eventMethods } from '../ipc/manifest';
+import { markPlatformKind } from '../platform/kind';
 
 import { invokeHandler } from '../ipc/registerHandlers';
 import type { IpcHandler } from '../ipc/registerHandlers';
@@ -265,6 +266,13 @@ const installBridge = (): WindowApi => {
     // manifest, so the checker cannot follow it to WindowApi; the handlers it
     // maps are the same modules WindowApi is derived from.
     (globalThis as typeof globalThis & { api?: object }).api = api;
+    // The renderer reads its platform from platform/kind, so the bridge marks
+    // it here, where the Capacitor runtime's probe lives: calling the probe —
+    // not just checking it exists — keeps a Capacitor web target unmarked, so
+    // it reads as the web shell, not the native app.
+    if ((globalThis as CapacitorGlobals).Capacitor?.isNativePlatform?.() === true) {
+        markPlatformKind('capacitor');
+    }
     return api as WindowApi;
 };
 

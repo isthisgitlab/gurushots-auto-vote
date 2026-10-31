@@ -17,6 +17,8 @@ import type { CategoryLogger, GuiLogSink } from '../../src/ts/logger';
 import type { CapacitorGlobals } from '../../src/ts/types/capacitor';
 import type { WindowApi } from '../../src/ts/types/ipc';
 import { invalid } from '../helpers/invalid';
+import { resetPlatformKind } from '../helpers/platformKind';
+import { platformKind } from '../../src/ts/platform/kind';
 
 let mockSettingsDeps: Parameters<typeof settingsHandlersModule.buildHandlers>[0] | null = null;
 jest.mock('../../src/ts/ipc/settings.handlers', () => ({
@@ -82,6 +84,8 @@ describe('Capacitor bridge', () => {
     afterEach(() => {
         delete g.api;
         delete g.sendLogToGUI;
+        delete g.Capacitor;
+        resetPlatformKind();
     });
 
     describe('installation', () => {
@@ -105,6 +109,26 @@ describe('Capacitor bridge', () => {
             bridge.seedBridgeProfiles();
 
             expect(settings.seedIntentProfiles).toHaveBeenCalledTimes(1);
+        });
+
+        test('marks the platform kind capacitor when the runtime probes native', () => {
+            g.Capacitor = { isNativePlatform: () => true };
+            bridge.installBridge();
+
+            expect(platformKind()).toBe('capacitor');
+        });
+
+        test('does not mark when the Capacitor runtime is absent (no probe to ask)', () => {
+            bridge.installBridge();
+
+            expect(platformKind()).toBe('electron');
+        });
+
+        test('does not mark when the probe answers false (a Capacitor web target)', () => {
+            g.Capacitor = { isNativePlatform: () => false };
+            bridge.installBridge();
+
+            expect(platformKind()).toBe('electron');
         });
 
         test('a failing intent-profile seed is logged and does not throw', () => {

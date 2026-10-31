@@ -9,11 +9,12 @@ import { act, render, screen, fireEvent, waitFor, within } from './helpers/test-
 import { DiscoverSection } from '@/components/app/DiscoverSection';
 import { fillTemplate, fireSettingsChanged, mockApi, mockTranslator } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
+import { resetPlatformKind } from '../helpers/platformKind';
+import { markPlatformKind } from '../../src/ts/platform/kind';
 import { app, errors } from '../../src/ts/translations/english';
 import { createTranslator } from '../../src/ts/translations/translator';
 import type { OpenChallenge } from '../../src/ts/types/gurushots';
 import type { WindowApi } from '../../src/ts/types/ipc';
-import type { RendererGlobals } from '../../src/ts/types/capacitor';
 import type { JoinOutcome } from '@/components/app/DiscoverSection';
 import type { Translate } from '../../src/ts/translations/translator';
 
@@ -1053,7 +1054,7 @@ describe('edge paths', () => {
         });
 
         test('an unreadable join state tells an Android user to clear the app storage, not to move a file', async () => {
-            (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+            markPlatformKind('capacitor');
             try {
                 window.api.forgetUnconfirmedPayment = forgetMock().mockResolvedValue(
                     invalid({ success: false, error: 'unreadable', status: 'unreadable' }),
@@ -1063,7 +1064,7 @@ describe('edge paths', () => {
                 expect(await screen.findByText('app.discoverForgetUnreadableAndroid')).toBeTruthy();
                 expect(screen.queryByText('app.discoverForgetUnreadable')).toBeNull();
             } finally {
-                delete (globalThis as RendererGlobals).Capacitor;
+                resetPlatformKind();
             }
         });
 

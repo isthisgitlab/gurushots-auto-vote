@@ -10,7 +10,8 @@ import { fireSettingsChanged, mockTranslator, defaultTranslate } from './helpers
 import { IMPORT_REF_ENGLISH } from '../../src/ts/settings/importRefs';
 import type { ImportRefText } from '../../src/ts/settings/importRefs';
 import { invalid } from '../helpers/invalid';
-import type { RendererGlobals } from '../../src/ts/types/capacitor';
+import { resetPlatformKind } from '../helpers/platformKind';
+import { markPlatformKind } from '../../src/ts/platform/kind';
 
 const report = (refsBlocked: unknown[], acknowledged = false) => ({
     success: true as const,
@@ -81,7 +82,7 @@ describe('ImportReportModal', () => {
     });
 
     test('on Android the dialog does not name a settings.json the user never sees', async () => {
-        (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+        markPlatformKind('capacitor');
         answer(report(['rules[0].profile: "Gone"']));
         render(<ImportReportModal />);
 
@@ -89,7 +90,7 @@ describe('ImportReportModal', () => {
 
         expect(within(dialog).getByText('notice.importReportIntroAndroid')).toBeTruthy();
         expect(within(dialog).queryByText('notice.importReportIntro')).toBeNull();
-        delete (globalThis as RendererGlobals).Capacitor;
+        resetPlatformKind();
     });
 
     test('OK acknowledges it and the dialog goes', async () => {

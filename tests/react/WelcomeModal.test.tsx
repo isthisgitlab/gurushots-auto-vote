@@ -5,15 +5,12 @@
  * t() returns the key, so assertions match translation keys.)
  */
 import { fireEvent, render, screen } from './helpers/test-utils';
-import type { RendererGlobals } from '../../src/ts/types/capacitor';
+import { resetPlatformKind } from '../helpers/platformKind';
+import { markPlatformKind } from '../../src/ts/platform/kind';
 import { WelcomeModal } from '@/components/app/WelcomeModal';
 
-const g = globalThis as RendererGlobals;
-
 describe('WelcomeModal', () => {
-    afterEach(() => {
-        delete g.Capacitor;
-    });
+    afterEach(resetPlatformKind);
 
     test('renders intro and dismiss action when open', () => {
         render(<WelcomeModal isOpen onClose={() => {}} />);
@@ -28,7 +25,7 @@ describe('WelcomeModal', () => {
     });
 
     test('shows the battery guidance on Capacitor', () => {
-        g.Capacitor = { isNativePlatform: () => true };
+        markPlatformKind('capacitor');
         render(<WelcomeModal isOpen onClose={() => {}} />);
         expect(screen.getByText('onboarding.batteryBody')).toBeTruthy();
     });

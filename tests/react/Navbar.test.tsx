@@ -4,15 +4,12 @@
  * test mock's t() returns the key, so the button's title is 'logs.title'.
  */
 import { fireEvent, render, screen } from './helpers/test-utils';
-import type { RendererGlobals } from '../../src/ts/types/capacitor';
+import { resetPlatformKind } from '../helpers/platformKind';
+import { markPlatformKind } from '../../src/ts/platform/kind';
 import { Navbar } from '@/components/layout/Navbar';
 
-const g = globalThis as RendererGlobals;
-
 describe('Navbar', () => {
-    afterEach(() => {
-        delete g.Capacitor;
-    });
+    afterEach(resetPlatformKind);
 
     test('hides the Logs button off Capacitor', () => {
         render(<Navbar isMock={false} onLogsClick={() => {}} onSettingsClick={() => {}} onLogout={() => {}} />);
@@ -22,7 +19,7 @@ describe('Navbar', () => {
     });
 
     test('shows the Logs button on Capacitor and calls onLogsClick', () => {
-        g.Capacitor = { isNativePlatform: () => true };
+        markPlatformKind('capacitor');
         const onLogsClick = jest.fn();
         render(<Navbar isMock={false} onLogsClick={onLogsClick} onSettingsClick={() => {}} onLogout={() => {}} />);
         const logsBtn = screen.getByTitle('logs.title');
@@ -39,7 +36,7 @@ describe('Navbar', () => {
     });
 
     test('the icon-only buttons carry accessible names', () => {
-        g.Capacitor = { isNativePlatform: () => true };
+        markPlatformKind('capacitor');
         render(<Navbar isMock={false} onLogsClick={() => {}} onSettingsClick={() => {}} onLogout={() => {}} />);
         for (const name of ['logs.title', 'app.settings', 'app.logout']) {
             expect(screen.getByRole('button', { name })).toBeTruthy();

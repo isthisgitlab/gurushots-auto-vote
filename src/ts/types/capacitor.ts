@@ -52,7 +52,13 @@ export interface CapacitorPlugins {
 }
 
 /** `globalThis` in the Capacitor WebView. */
-export type CapacitorGlobals = typeof globalThis & { Capacitor?: { Plugins?: CapacitorPlugins } };
+export type CapacitorGlobals = typeof globalThis & {
+    Capacitor?: {
+        Plugins?: CapacitorPlugins;
+        /** The runtime's platform probe: false on a Capacitor web target. */
+        isNativePlatform?: () => boolean;
+    };
+};
 
 /** `globalThis` in the headless WebView (android/.../AutoVoteService.kt). */
 export type HeadlessGlobals = typeof globalThis & {

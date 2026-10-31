@@ -10,11 +10,12 @@ import { useImportReport } from '@/api/useImportReport';
 import { SettingsNavProvider } from '@/contexts/SettingsNavContext';
 import { mockTranslator, defaultTranslate, fillTemplate } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
+import { resetPlatformKind } from '../helpers/platformKind';
+import { markPlatformKind } from '../../src/ts/platform/kind';
 import { IMPORT_REF_ENGLISH } from '../../src/ts/settings/importRefs';
 import type { ImportRefText } from '../../src/ts/settings/importRefs';
 import { about as englishAbout } from '../../src/ts/translations/english';
 import { about as latvianAbout } from '../../src/ts/translations/latvian';
-import type { RendererGlobals } from '../../src/ts/types/capacitor';
 
 import type { ReactNode } from 'react';
 import type { ImportReport } from '@/api/useImportReport';
@@ -56,8 +57,7 @@ const renderWithReport = () =>
     );
 
 afterEach(() => {
-    delete (globalThis as RendererGlobals).Capacitor;
-    delete (globalThis as { webShell?: true }).webShell;
+    resetPlatformKind();
 });
 
 describe('third-party licenses', () => {
@@ -205,7 +205,7 @@ describe('Delete all local data', () => {
     });
 
     test('on Android the background service state is listed too', () => {
-        (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+        markPlatformKind('capacitor');
         renderSection();
         openDelete();
         expect(within(dialog()).getByText('about.deleteBackground')).toBeTruthy();
@@ -250,7 +250,7 @@ describe('Delete all local data', () => {
     });
 
     test('in the web shell the delete text says the server stops and must be started again', async () => {
-        (globalThis as { webShell?: true }).webShell = true;
+        markPlatformKind('web');
         jest.mocked(window.api.wipeLocalData).mockResolvedValue({ success: true });
         renderSection();
         openDelete();
@@ -382,7 +382,7 @@ describe('Delete all local data', () => {
 
     test('a native failure on Android (the window will reload) says what Closing does', async () => {
         jest.mocked(window.api.wipeLocalData).mockResolvedValue({ success: false, error: 'x', reload: true });
-        (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+        markPlatformKind('capacitor');
         renderSection();
         openDelete();
         confirm();
@@ -394,7 +394,7 @@ describe('Delete all local data', () => {
     test('on Android a failure that asks for no reload, or a call that throws, names the stored data, not other programs', async () => {
         jest.mocked(window.api.wipeLocalData).mockResolvedValueOnce({ success: false, error: 'preferences failed' });
         jest.mocked(window.api.wipeLocalData).mockRejectedValueOnce(new Error('ipc closed'));
-        (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+        markPlatformKind('capacitor');
         renderSection();
         openDelete();
         confirm();
@@ -566,13 +566,13 @@ describe('the import report in About and data', () => {
     });
 
     test('on Android the date line does not name a settings.json the user never sees', async () => {
-        (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+        markPlatformKind('capacitor');
         answer({ success: true, report: { at: '2026-10-16T12:00:00.000Z', refsBlocked: [], acknowledged: true } });
         renderWithReport();
 
         expect(await screen.findByText('about.importAtAndroid')).toBeTruthy();
         expect(screen.queryByText('about.importAt')).toBeNull();
-        delete (globalThis as RendererGlobals).Capacitor;
+        resetPlatformKind();
     });
 
     test('says when it ran, in the date format of the page language', async () => {

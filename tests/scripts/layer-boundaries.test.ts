@@ -179,6 +179,12 @@ const INVALID: ReadonlyArray<readonly [string, string, ...string[]]> = [
         crossing('platform:node', 'platform:webview', './settings/settingsFileCapacitor'),
     ],
     ["import './react/api/ipc';", file('src/ts/appPaths.ts'), crossing('platform:node', 'react', './react/api/ipc')],
+    // …and never a shell: the settings file a platform owns cannot reach a shell module.
+    [
+        "import '../services/NativeAutovoteBridge';",
+        file('src/ts/settings/capacitorPreferences.ts'),
+        crossing('platform:webview', 'shell:capacitor', '../services/NativeAutovoteBridge'),
+    ],
     // The platforms/<x>/ row takes the segment after the prefix.
     [
         "import '../other/store';",
@@ -319,6 +325,11 @@ describe('under Oxlint', () => {
                     [crossing('platform:node', 'platform:webview', '../../settings/capacitorPreferences')],
                 ],
                 ['platforms/node', "import 'electron';", []],
+                [
+                    'platforms/webview',
+                    "import '../../bridge/capacitor';",
+                    [crossing('platform:webview', 'shell:capacitor', '../../bridge/capacitor')],
+                ],
                 [
                     'platforms/node',
                     "import '../other/store';",

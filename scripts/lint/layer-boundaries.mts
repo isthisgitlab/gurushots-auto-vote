@@ -66,7 +66,6 @@ export const LAYER_TABLE: ReadonlyArray<{ target: string; layer: string }> = [
     // The web shell: the localhost server and its bridge.
     { target: 'src/ts/web/', layer: 'shell:web' },
     { target: 'src/ts/bridge/web.ts', layer: 'shell:web' },
-    { target: 'src/ts/bridge/webShellFlag.ts', layer: 'shell:web' },
     { target: 'src/ts/react/pages/Web.tsx', layer: 'shell:web' },
     // The Capacitor (Android) shell.
     { target: 'src/ts/bridge/capacitor.ts', layer: 'shell:capacitor' },
