@@ -6,7 +6,11 @@ cycle — is shared via `computeNextCycleDelayMs` in
 `src/ts/core/scheduling/thresholdWindow/cadenceDecision.ts`. The **timer engine** that acts on
 that decision is per-shell, because each shell has a different process
 model. Future contributors should keep the decision shared and resist
-re-introducing a separate boundary-switch timer per host.
+re-introducing a separate boundary-switch timer per host. In the renderer
+(Electron and the web shell, and the Android WebView while the app is open)
+the timer chain is not React code: it is the autovote controller,
+`src/ts/core/autovote/`, a plain-TypeScript object the React provider builds
+a host for.
 
 ## The shared cadence decision
 
@@ -289,19 +293,45 @@ Deliberate semantics and caveats:
   signal handling and process keep-alive; the scheduler is just the
   cadence engine.
 
-## Electron — UI-driven AutovoteContext
+## Renderer — the autovote controller (Electron, web shell, and the Android WebView)
 
 - **Owner**: the renderer's autovote controller,
-  `src/ts/core/autovote/controller.ts` (the React provider
-  `src/ts/react/contexts/AutovoteContext.tsx` is a thin adapter that builds
-  its host, subscribes to the state, and renders).
+  `src/ts/core/autovote/controller.ts` (`createAutovoteController(host)`). It
+  runs the whole voting loop — start/stop, the outcome handling of each
+  cycle, the mount-time auto-resume hold, and the cadence chain — **outside
+  React**, as a plain object over an injected `AutovoteHost`. It lives in
+  `core/`, so it may not touch the DOM, a platform module or a shell; the
+  parts beside it (`store`, `persistence`, `cycle`, `chain`, `resume`,
+  `lifecycle`, `resolvers`) are composed in `controller.ts`.
+- **The React side is an adapter.** `src/ts/react/contexts/AutovoteContext.tsx`
+  builds the host from `window.api` (through `react/api/ipc.ts`), the
+  formatters and the translator, creates **one controller per
+  `AutovoteProvider` mount**, subscribes React to its state, calls
+  `maybeResume()` once on mount and `dispose()` in the effect cleanup. There is
+  no module-level singleton. **The renderer still owns the timer**: the chain's
+  single `setTimeout` handle lives in the controller in the renderer process,
+  never in the main process, so no IPC runs per cycle tick.
+- **Background host (injected).** `AutovoteHost.background` is a
+  `BackgroundHost` (`start`, `stop`, `update`, `status`) the page passes in
+  through `mountForToken` → `AutovoteProvider`. The Capacitor page injects
+  `shells/capacitor/bridge/capacitorBackgroundHost.ts` (the native
+  `AutoVoteBackground` plugin, with the foreground-notification-only
+  controller as the fallback); Electron and the web shell inject
+  `noopBackgroundHost`. This is why the renderer bundles for Electron and the
+  web contain no platform or native-service module (a CI graph check,
+  `architecture.md` §12), and why no IPC channel was added for it.
 - **Started by**: the Start / Stop button in the React UI (or auto-
   resume on mount when the persisted `autovoteRunning` flag is true).
-- **Cadence**: a single recursive `setTimeout` chain driven by the same
+- **Cadence**: a single recursive `setTimeout` chain (`createCadenceChain`,
+  composed in `src/ts/core/autovote/chain.ts`) driven by the same
   `computeNextCycleDelayMs` decision, bound to the async IPC resolvers in
-  `src/ts/core/autovote/resolvers.ts`. No separate interval/boundary timer.
-- **Lifecycle**: tied to the renderer window. Closing the window stops
-  the loop. The persisted `autovoteRunning` flag means a relaunch
+  `src/ts/core/autovote/resolvers.ts`. The chain arms its timer with the global
+  `setTimeout`, so the controller cancels it with the global `clearTimeout`
+  (the host's timer seam drives only the resume hold). No separate
+  interval/boundary timer.
+- **Lifecycle**: tied to the renderer window (the controller's `dispose()`
+  cancels its timers and a pending resume and never touches persisted state).
+  Closing the window stops the loop. The persisted `autovoteRunning` flag means a relaunch
   resumes voting without the user re-clicking Start.
 - **Startup hold**: that resume waits until `autovoteStartupDelay`
   seconds (default 60, `0` = off) after the app _launched_, so settings
@@ -384,7 +414,9 @@ Deliberate semantics and caveats:
 ## Android — native Foreground Service + AlarmManager
 
 - **Owner**: `src/ts/shells/capacitor/NativeAutovoteBridge.ts` (JS bridge to
-  the custom Capacitor plugin `AutoVoteBackground`).
+  the custom Capacitor plugin `AutoVoteBackground`), reached by the controller
+  only through the injected background host
+  (`shells/capacitor/bridge/capacitorBackgroundHost.ts`).
 - **Fallback**: `src/ts/shells/capacitor/ForegroundServiceController.ts` runs
   the foreground notification only — used when the native plugin is
   not available on a given build.
@@ -401,7 +433,8 @@ Deliberate semantics and caveats:
   feedback (cycle counter, last-run timestamp) and the in-app boost / turbo /
   submit surfaces keep working. The two loops do not both spend: with the
   native service installed, the app's pass leaves automatic joins and fills to
-  the service, and only the service advances scenarios.
+  the service (the `backgroundServiceOwnsScenarios` capability of the Platform
+  port, `architecture.md` §12), and only the service advances scenarios.
 - **Lifecycle**: independent of the WebView. Survives swipe-to-close.
   Only stopped explicitly via `nativeAutovote.stop()` or by
   vendor-specific battery killers (Samsung / Xiaomi / OnePlus may kill
@@ -415,8 +448,9 @@ engine_ stays per-shell:
 
 - **CLI** is a long-running node process — a `setTimeout` chain is enough.
 - **Electron** has a renderer that's alive whenever the window is
-  open, so the React tree owns the timer — moving it to the main
-  process would force IPC chatter for every cycle tick.
+  open, so the renderer owns the timer (the autovote controller, driven from
+  the React tree's provider) — moving it to the main process would force IPC
+  chatter for every cycle tick.
 - **Android** has neither a long-running node process nor a
   guaranteed-alive WebView. The OS will tear down the WebView when
   the user swipes the app from recents; only a foreground service +

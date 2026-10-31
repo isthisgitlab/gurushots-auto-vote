@@ -2,14 +2,15 @@
 
 This is the deep reference behind the terse invariant bullets in `CLAUDE.md` / `AGENTS.md`. It documents
 the application's own conventions — the voting engine, scheduler, API transport, IPC surface, persistence,
-renderer, i18n, and security — the things a contributor (human or agent) must not break but that the code
+renderer, i18n, security, and the code layout — the things a contributor (human or agent) must not break but that the code
 alone doesn't spell out. For the three per-platform timer engines, see the companion `scheduling.md`.
 
 **Citation convention.** Each reference names the **symbol/function** and its file, and carries no line
 numbers: this repo has high edit velocity and line ranges rot on the next unrelated edit. Search by name.
 
-**Path convention.** Paths are relative to `src/ts/`; renderer paths keep their `react/…` segments
-(e.g. `react/components/ui/Modal.tsx`).
+**Path convention.** Paths are relative to `src/ts/core/` unless they start with `platforms/`, `shells/` or
+`react/` (e.g. `react/components/ui/Modal.tsx`, `shells/electron/registerIpc.ts`), which are relative to `src/ts/`;
+`appPaths.ts` is the one file at `src/ts/`'s root. §12 describes the layout and the layer rules.
 
 ---
 
@@ -105,14 +106,16 @@ Domain terms used throughout, in reader's terms:
   honouring it. It is the **one deliberate exception to the sequential-runner rule**: `runSuspendBoosts` runs the
   selected challenges in parallel (`Promise.allSettled`), because they are separate challenge objects with no shared
   mutation (there is no auto-fill here to reflect a new entry) and the device is about to lose the network, so
-  the 2–5 s inter-challenge delay is not affordable. The quit guard (`windows/quitGuard.ts`) and the sleep boost
+  the 2–5 s inter-challenge delay is not affordable. The quit guard (the Electron dialog half in `shells/electron/windows/quitGuard.ts`, over the platform-free selection in
+  `services/boostGuard/`) and the sleep boost
   pick their challenges with the same `imminentBoostChallenges`, differing only in horizon (60 min vs 30 min).
 
 ## 2. Scheduling
 
 - `createCadenceChain()` (`scheduling/cadenceChain/chain.ts`) is a single recursive `setTimeout`
-  chain — **no cron** — shared by the CLI (`scheduling/runScheduler.ts`) and the GUI
-  (`react/contexts/AutovoteContext.tsx`). The Android headless service (`headless/index.ts`) has no chain: the
+  chain — **no cron** — shared by the CLI (`shells/cli/runScheduler.ts`) and the GUI (the renderer's autovote
+  controller, `autovote/controller.ts`, which `react/contexts/AutovoteContext.tsx` builds a host for and renders; the
+  renderer owns the timer). The Android headless service (`shells/headless/index.ts`) has no chain: the
   native service's `AlarmManager` ticks, each tick runs one cycle, and the next delay comes from
   `computeNextCycleDelayMs()` below. See `scheduling.md` for the three timer engines per platform.
 - The single cadence decision is `computeNextCycleDelayMs()` (`scheduling/thresholdWindow/cadenceDecision.ts`): modes `last-minute` / `approaching` / `scheduled` / `normal`, with the invariant **never sleep
@@ -427,7 +430,7 @@ repeated six times is one that gets forgotten at one of them.
       The Android-only copies under `dist/` and the standalone `onnxruntime-web` package are excluded from
       the asar, and `scripts/afterPack.mts` deletes other OS/CPU `onnxruntime-node` binaries.
     - CLI: the build embeds a `pnpm deploy --prod` tree + model as a SEA asset (pruned to the host OS/CPU by
-      `pruneVisionRuntime`); `services/visionCliAssets.ts` verifies its sha256, extracts it once per version
+      `pruneVisionRuntime`); `shells/cli/visionCliAssets.ts` verifies its sha256, extracts it once per version
       into `<userData>/vision/<sha>`, and removes finished copies from earlier versions unless one was marked in use
       within the last hour (an older CLI still running may not have loaded its model yet).
     - Android: `dist/` is the WebView root, so `vision-model/` and the single-threaded ORT WASM files are
@@ -600,20 +603,33 @@ repeated six times is one that gets forgotten at one of them.
 - `ipc/manifest.ts` is the **dependency-free single source of truth** for the whole `window.api` surface —
   four lists: `invokeChannels`, `aliases`, `sendMethods`, `eventMethods`, plus the Logs window's subsets
   `logsWindowInvokeChannels` / `logsWindowEventMethods` and the settings it may read, `logsWindowSettingKeys`
-  (`language` only). Both shells generate from it:
-  Electron `preload.ts` builds `contextBridge.exposeInMainWorld('api', …)`; Capacitor
-  `bridge/capacitor.ts` builds the identical surface in-process.
+  (`language` only). Both renderer shells generate from it:
+  Electron `shells/electron/preload.ts` builds `contextBridge.exposeInMainWorld('api', …)`; Capacitor
+  `shells/capacitor/bridge/capacitor.ts` builds the identical surface in-process, and the web shell
+  (`shells/web/bridge/web.ts`) the same over HTTP.
 - **Drift is CI-enforced** by `tests/ipc/manifest.test.ts` at the name level. Signatures travel through the
   `WindowApi` type (`types/ipc.ts`, derived from the manifest lists and every `buildHandlers()`), so a
   renderer call in a type-checked file is checked against its handler's parameters and result — only as
-  precise as that handler's type annotations.
-- Handler shape: every `ipc/*.handlers.ts` exports `buildHandlers(deps) → {channel: impl}` **and**
-  `register(ipcMain)`. **CLI and Capacitor reuse the same handler modules** (`cli/commands/*.ts` lazily
-  require `buildHandlers()`) — never write a parallel implementation.
+  precise as that handler's type annotations. `types/ipc.ts` and `ipc/releaseUpdates.ts` keep `typeof import(…)`
+  references to the two Electron-only handler modules (`shells/electron/misc.handlers.ts`,
+  `shells/electron/update.handlers.ts`) so the type sees their handlers; core may not import a shell, but a
+  `typeof import()` is erased at build and carries no runtime edge, which the `layer-boundaries` rule's type-only
+  exemption allows (§12).
+- Handler shape: every handler module exports `buildHandlers(deps) → {channel: impl}` and nothing that
+  registers itself. The shared ones are `ipc/*.handlers.ts`; the two Electron-only ones (`misc` — shell and
+  window calls — and `update` — electron-updater) live in `shells/electron/`. `ipc/invokeHandler.ts` holds the
+  contract every shell shares: the `IpcHandler` type and `invokeHandler`, the one place renderer arguments reach a
+  handler. **CLI, web shell and Capacitor reuse the same handler modules** (`shells/cli/commands/*.ts` lazily
+  require `buildHandlers()`; the web server and the Capacitor bridge spread them and call through `invokeHandler`)
+  — never write a parallel implementation.
+- **Electron registration** is `shells/electron/registerIpc.ts` (it names every handler module and
+  registers each, in a fixed order) over `shells/electron/registerHandlers.ts`, whose `registerHandlers()` wraps
+  each channel in `ipcMain.handle` with the sender checks (`isTrustedSender`, the Logs-window channel and
+  setting-key checks — §10) before it calls `invokeHandler`.
 - **Add a channel end-to-end**: (a) add the channel string to the right list in `manifest.ts`; (b)
-  implement it in the matching `ipc/*.handlers.ts` `buildHandlers()`; (c) Electron picks it up
-  automatically via `preload.ts` + the module's `register()`; (d) ensure the handler module is in
-  `capacitor.ts`'s spread for the Capacitor build.
+  implement it in the matching `buildHandlers()`; (c) Electron picks it up automatically via `preload.ts` +
+  `registerIpc.ts`; (d) the web server and `shells/capacitor/bridge/capacitor.ts` spread each shared handler
+  module's `buildHandlers()`, so a new module must be added to both spreads (and to `registerIpc.ts`).
 - Handlers **never throw to the renderer** — they return a tagged `{ success, error }` object. Shared
   preconditions use a Result guard: `requireAuthToken()` (`services/auth.ts`) returns
   `{ ok: true, token, settings }` or `{ ok: false, response }`, and callers do
@@ -624,15 +640,22 @@ repeated six times is one that gets forgotten at one of them.
 
 ## 7. Persistence & platform detection
 
-- **Don't hand-roll `fs`.** `createJsonStore({fileName, prefKey})` (`settings/storage.ts`) is
-  the reusable three-platform JSON store: sync fs at `userData/<fileName>` (mode `0o600`) on Electron/CLI,
-  hydrate-once cache + ordered async write-behind to `@capacitor/preferences` on Capacitor, and the native
-  keyed preference bridge (`settings/storeTransport.ts`) on the Android headless service. The write-protocol
-  state behind that transport (the write serials and the cached and stored texts) changes in one place only,
-  `settings/settingsFileProtocol.ts`: the factory bodies and the method helpers read it and make every change
-  through its named transitions. Every consumer is
-  listed in the store registry `settings/localData.ts` (`LOCAL_DATA_STORES`) — also what "Delete all local
-  data" removes — and `tests/settings/localData.test.ts` fails for a `createJsonStore` call site missing there.
+- **Don't hand-roll `fs`.** `createJsonStore({fileName, prefKey})` (`settings/jsonStore.ts`, imported through
+  `settings/storage.ts`) is the reusable JSON store. It is a core wrapper (the refuse-writes checks, the discard
+  listeners, the public surface) over a **transport the platform builds**: `platform().storage.jsonStore(…)`
+  (and `platform().storage.settingsFile(…)` for the two settings files), so core never tests which family it
+  runs on. The transports live in the platform families: sync fs at `userData/<fileName>` (mode `0o600`, atomic
+  writes) in `platforms/node/` (`store.ts`, `settingsFileNode.ts`, `atomicWrite.ts`, `ownerOnlyWrite.ts`) for Electron,
+  the CLI and the web server; a hydrate-once cache with an ordered async write-behind to `@capacitor/preferences`
+  in `platforms/webview/` (`store.ts`, `writeBehind.ts`, `capacitorPreferences.ts`); and the native keyed
+  preference bridge (`AndroidHeadlessStore`) on the Android headless service in `platforms/headless/store.ts`. The
+  write-protocol state behind the WebView's settings-file transport (the write serials and the cached and stored
+  texts) changes in one place only, `platforms/webview/settingsFileProtocol.ts`: the transport bodies read it and make every
+  change through its named transitions. The native compare-and-write the WebView's shared keys are saved through
+  arrives as the port's `cas` (`platforms/webview/index.ts`'s `parts.cas`; the Capacitor shell passes
+  `NativeAutovoteBridge.compareAndWrite`). Every consumer is
+  listed in the store registry `settings/localData.ts` (`LOCAL_DATA_STORES`) — also what "Delete all local data"
+  removes — and `tests/settings/localData.test.ts` fails for a `createJsonStore` call site missing there.
 - **The configuration (`config.json`, `ConfigV2` in `types/config.ts`, `version: 2`; the `gurushots-config` key on
   Android) is the app's settings blob and the only source of truth.** It holds `app` (preferences and app-state
   flags), `auth` (token, API headers, last user name), `defaults` (the global per-challenge
@@ -641,7 +664,7 @@ repeated six times is one that gets forgotten at one of them.
   structured entries — the rule number from 1 and its title, the profile name, or the challenge id and title where the
   import knew it, and the profile or scenario they name — or as the text an earlier build stored; whether the report
   was seen). Title pins stay in their own cache store. A load validates it and fills what it lacks
-  over the defaults (`loadValidation.ts`); `persistence.ts` owns load and save, `storage.ts` the bytes.
+  over the defaults (`loadValidation.ts`); `persistence.ts` owns load and save, `storage.ts` the bytes through the platform's transport.
 - **`auth` never reaches a renderer.** `toRendererSettings` (`ipc/rendererSettings.ts`) takes the block out of what
   a window receives and answers only `hasToken`, derived from the stored token; `withoutRendererHiddenKeys` drops
   `auth`, `token`, `hasToken` and `apiHeaders` from a renderer's write, and `lastUsername`
@@ -759,9 +782,10 @@ repeated six times is one that gets forgotten at one of them.
   `setSetting` hands `saveSettings` only the changed key, so the service's own load-and-save has no stale whole blob
   to write back. Desktop and the CLI write the file atomically and are unchanged.
 - **Session markers and "Delete all local data".** Two processes can hold the user-data directory at once, so each
-  running one leaves a marker file there (`settings/cliSessionLock.ts`): every CLI command that loads
+  running one leaves a marker file there (`platforms/node/cliSessionLock.ts`; the wipe reads them through the port's
+  `wipe.markers`): every CLI command that loads
   the settings, which a load can write back and a command can spend from (all but `help`, `--help`, `-h`, `licenses` and
-  `reset-data`; taken once in `cli/cli.ts` before the settings are first touched, released when the process exits, and
+  `reset-data`; taken once in `shells/cli/cli.ts` before the settings are first touched, released when the process exits, and
   best effort: a marker that cannot be written is one warning, not a failure) holds `cli-session-<pid>.lock` (a CLI
   marker named just `cli-session.lock` counts the same), the `pnpm web` server
   holds `web-server-<pid>.lock` while it listens, and the desktop app holds `desktop-app.lock` for its lifetime. Each
@@ -793,19 +817,23 @@ repeated six times is one that gets forgotten at one of them.
   behind cannot bring an import of it back (the marker goes with them); a removal that fails on a busy file is
   retried. On
   Electron it clears the storage and cache of the app's windows and of Electron's default session (its files sit at
-  the user-data root). After a successful wipe Electron and Android relaunch; the web shell's server stops, so its text says to
+  the user-data root) through the port's `wipe.clearSession`, which the Electron platform module
+  (`shells/electron/platform.ts`) supplies and `ElectronPlatform` requires; on Android the plugin-backed
+  `wipe.nativeWipe` (`AutoVoteBackground.wipeLocalData`) empties the native stores. After a successful wipe Electron and Android relaunch; the web shell's server stops, so its text says to
   start `pnpm web` again (`usePlatformCapabilities().relaunchesAfterWipe`, read from the platform kind the web
   bridge marks).
 - Write-behind is **ordered** (writes chain onto a promise) and `flushPendingWrites()` awaits durability
   before session invalidation. On Capacitor, `initializeAsync()` must be awaited before the first sync
   read — **each store hydrates independently**, so a new store must be wired into the Capacitor bootstrap
-  (`react/pages/Capacitor.tsx`) or its markers are invisible after relaunch. `joinState` is wired there
+  (`shells/capacitor/page.tsx`, with `shells/capacitor/localStores.ts`) or its markers are invisible after relaunch. `joinState` is wired there
   alongside settings + metadata; skipping it would double-charge a paid retry on Android.
-- Platform detection has two sides: **node-side** via `runtime.ts` (`isCapacitor()`, `isHeadlessService()`,
-  `getPlatform()`, `getAppUserDataPath()` — the single path resolver shared with the logger); **renderer-
-  side** via `platformKind()` (`platform/kind.ts`), marked by the bridges (the Capacitor bridge only when
-  `Capacitor.isNativePlatform()` is true), to keep node out of the browser
-  bundle.
+- Platform detection has two sides, and neither is a branch in business logic. **Node-side** code asks the
+  installed Platform port (`platform()`, `platform/port.ts` — §12) for what differs per family (paths, storage,
+  assets, wipe, native services, capabilities, the HTTP adapter); `runtime.ts` is only the env flags
+  (`isDevelopment()`, `isTest()`, `getEnvSnapshot()`) — the single reader of `process.env`.
+  **Renderer-side** code asks `platformKind()` (`platform/kind.ts`), marked by the bridges (the Capacitor bridge only
+  when `Capacitor.isNativePlatform()` is true; unmarked means Electron, because its preload runs in an isolated
+  world), which keeps node out of the browser bundle.
 - **The Electron main process runs from a bundle.** `scripts/build-main.ts` bundles `src/ts/shells/electron/index.ts` into
   `out/main/app.js` with a linked source map, loaded by the `out/main/index.js` stub (package.json `main`)
   that turns source maps on first so main-process stack traces point at `src/ts`. Every package import stays
@@ -813,7 +841,8 @@ repeated six times is one that gets forgotten at one of them.
   `dist/` (Capacitor's webDir, which ships in the APK). Inside the bundle every module shares the bundle's
   `__dirname`, so paths to the app's own files (HTML pages, preload bundle, assets, the dev model cache) come
   from `appPath(...)` (`appPaths.ts`), which resolves the root as `__dirname/../..` — valid because the bundle
-  sits at the same depth below the root as `src/ts/`.
+  sits at the same depth below the root as `src/ts/`. That depth is why `appPaths.ts` stays at the root of `src/ts/`
+  instead of moving into `platforms/node/`; the node platform's `paths.appPath` delegates to it (§12).
 
 ## 8. Renderer / UI conventions
 
@@ -871,46 +900,50 @@ repeated six times is one that gets forgotten at one of them.
 ## 10. Security (renderer / main) — state the limits, don't over-promise
 
 - The login and main windows set `contextIsolation: on`, `nodeIntegration: off`, `webSecurity: on`
-  and `sandbox: on` explicitly (`index/windows.ts`, after any caller-supplied preferences so a caller
-  can't override them). The Logs window (`ui/applicationMenu.ts`) sets `contextIsolation`,
+  and `sandbox: on` explicitly (`shells/electron/index/windows.ts`, after any caller-supplied preferences so a caller
+  can't override them). The Logs window (`shells/electron/ui/applicationMenu.ts`) sets `contextIsolation`,
   `nodeIntegration` and `sandbox` explicitly and relies on Electron's default for `webSecurity`; the
   menu keeps one reference to it, focuses it when open and clears it on `closed`. The renderer is exposed only `window.api` via `contextBridge`, never
   `ipcRenderer`. Regressing context-isolation / node-integration / sandbox is a classic severe-vuln class.
-- A defense-in-depth **sender-frame trust check** (`isTrustedSender`, `ipc/registerHandlers.ts`) has
+- A defense-in-depth **sender-frame trust check** (`isTrustedSender`, `shells/electron/registerHandlers.ts`) has
   these rules: no Electron event at all (a direct call from the CLI, Capacitor, the web shell or a
   test) is trusted; an event with no `senderFrame`, or a frame whose `url` is not a string, is refused;
   a frame that is not the window's main frame is refused; the main frame is trusted only when its URL
   starts with `file://`; anything that throws while being inspected is refused. It does not check that
   the file lies inside the app, so a packaged or portable layout can't lock itself out — the navigation
   guard below is what keeps a window on the app's own pages. The check is reused by the manual
-  `ipcMain.on` channels, and its refusal log line carries the sender URL.
-- **Logs window** (`ui/applicationMenu.ts`): it loads its own sandboxed preload, `dist/preloadLogs-bundle.js`
-  (`preloadLogs.ts`), built from the same `preloadApi.ts` helpers as the main preload but from the manifest's
+  `ipcMain.on` channels, and its refusal log line carries the sender URL. It runs on every invoke because
+  `registerIpc.ts` registers every handler module through `registerHandlers()` — the one Electron registration
+  path — which calls `invokeHandler` (`ipc/invokeHandler.ts`) only after the checks pass; the CLI, the web shell and
+  Capacitor reach `invokeHandler` directly, with no Electron event, which `isTrustedSender` treats as trusted
+  because no untrusted frame can be behind it.
+- **Logs window** (`shells/electron/ui/applicationMenu.ts`): it loads its own sandboxed preload, `dist/preloadLogs-bundle.js`
+  (`shells/electron/preloadLogs.ts`), built from the same `shells/electron/preloadApi.ts` helpers as the main preload but from the manifest's
   `logsWindowInvokeChannels` (`get-setting`, `log-error`, `get-log-backlog`, `start-log-stream`,
   `stop-log-stream`) and `logsWindowEventMethods` (`onLogMessage`, `onSettingsChanged`) only — no spend, no
   settings write, no other log channel. The main process enforces the same set per sender, whatever the
   preload exposes: the menu registers the window's `webContents` with `restrictToLogsChannels`, and
-  `registerHandlers` refuses any other invoke from it (`isChannelAllowedForSender`), next to `isTrustedSender`.
+  `registerHandlers` (`shells/electron/registerHandlers.ts`) refuses any other invoke from it (`isChannelAllowedForSender`), next to `isTrustedSender`.
   Its settings read is language-only: `get-setting` from that window answers only the `logsWindowSettingKeys`
   (`isSettingKeyAllowedForSender` refuses any other key), and the `settings-changed` events the main process sends
   it are cut down to the same keys, so the window learns the language and nothing else about the settings.
   `restrictToLogsChannels` filters only `webContents.send`, so the `frame-guard/no-unfiltered-frame-send` lint rule
-  (`scripts/lint/frame-guard.mts`) keeps frame handles and every other send out of `src/ts`.
+  (`scripts/lint/frame-guard.mts`) keeps frame handles and every other send out of `src/ts`, wherever the file sits in the layers.
   The rule catches accidental frame-handle use and unfiltered sends; deliberate obfuscation (reflection such as
   `Reflect.apply` or `Function.prototype.call.call`, aliasing `webContents.send` and rebinding it, computed keys
   from variables) is out of its scope. The runtime guarantee is the Logs window's reduced preload, which exposes
   no listener for any other channel, plus the per-sender channel check in the main process.
-- **Navigation guard** (`index/navigationGuard.ts`, registered in `index.ts` on `web-contents-created`
+- **Navigation guard** (`shells/electron/index/navigationGuard.ts`, registered in `shells/electron/index.ts` on `web-contents-created`
   so it covers every window): no window opens another — `setWindowOpenHandler` always denies, and hands
   the URL to the system (`shell.openExternal`) only when `isOpenableLinkUrl` (`format/urlSafe.ts`)
   accepts it: `https:`/`http:` without userinfo, or `mailto:`. `will-navigate` and `will-redirect` let a
-  window stay on its current URL (reload) or move to an app page (`isAppFileUrl`, `appFileUrl.ts`: a
+  window stay on its current URL (reload) or move to an app page (`isAppFileUrl`, `shells/electron/appFileUrl.ts`: a
   `file:` URL below `src/html`, compared with the platform's path rules — case-insensitive on Windows,
   another drive or a UNC share rejected); any other target is cancelled and then opened externally if
   openable, else logged as refused. Challenge `welcome_message` links (`sanitizeWelcomeMessage`) rely on
   this: they never load in an app window.
-- **Permission handlers** (`index/permissions.ts`, installed in `onReady` before the first window): on
-  the default session and on the in-memory app session `gurushots` (`APP_PARTITION`, `index/session.ts`:
+- **Permission handlers** (`shells/electron/index/permissions.ts`, installed in `onReady` before the first window): on
+  the default session and on the in-memory app session `gurushots` (`APP_PARTITION`, `shells/electron/index/session.ts`:
   no `persist:` prefix, so its cookies, storage and cache never reach the disk; a stale on-disk partition
   directory is removed at startup), only `notifications` is granted (the deadline
   notifier), and only when the requesting `webContents.getURL()` starts with `file:`. Checks are judged
@@ -924,7 +957,7 @@ repeated six times is one that gets forgotten at one of them.
   so their `connect-src` also allows `https://api.github.com` and the photo CDN, and their `script-src`
   adds `'wasm-unsafe-eval'` for the vision runtime.
 - The settings file `config.json` is written
-  mode `0o600` — but **only at creation. A pre-existing or backup-restored file keeps whatever mode it already
+  mode `0o600` (by the node platform's transport, `platforms/node/atomicWrite.ts`) — but **only at creation. A pre-existing or backup-restored file keeps whatever mode it already
   had** (the source says as much); don't state 0600 as an always-guarantee. The renderer never receives the `auth`
   block of the configuration, only `hasToken` (§7).
 - **Log redaction (`logger/sanitize.ts`, through the `logger.ts` facade) is two-layer but credential-key-keyed, not exhaustive.** `sanitizeForLog`
@@ -956,7 +989,7 @@ These are known and deliberate; don't describe the app as stronger than this.
   all local data" removes them. The damaged copy the app sets aside cannot be read as settings, so a logout cannot
   clear it: the notice that names it says it may still hold the sign-in and advises deleting it. It
   is not encrypted because the Node CLI shares the files with the GUI and cannot read Electron `safeStorage`, and
-  macOS runs Chromium on a mock keychain on purpose (`use-mock-keychain`, `index.ts`), so `safeStorage` would add no
+  macOS runs Chromium on a mock keychain on purpose (`use-mock-keychain`, `shells/electron/index.ts`), so `safeStorage` would add no
   real protection there. Anything that can read the owner's files, or run as that user, can read the token; logging
   out removes it from `config.json`, and so does "Delete all local data".
 - **Desktop builds are not signed by a publisher** (no Developer ID or notarization on macOS, no publisher
@@ -1135,6 +1168,109 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editab
 - **Builder** (`react/components/app/scenarioBuilder/`): forms generated from `scenarios/builderSpec.ts` (every
   condition / action / selector's fields and kinds — a test checks every default against the validator) over
   pure draft edits in `scenarios/builderModel.ts`; it never validates itself — save and simulate do.
-- **Surfaces**: IPC `ipc/scenarios.handlers.ts` (the CLI reuses it), CLI `cli/commands/scenarios.ts`,
+- **Surfaces**: IPC `ipc/scenarios.handlers.ts` (the CLI reuses it), CLI `shells/cli/commands/scenarios.ts`,
   GUI `ScenariosSection` (+ the builder), the `scenario` field in `SettingInput`, and the card
   `ScenarioStatusLine`.
+
+## 12. Code layout, layers and the Platform port
+
+The app ships as five entry points over one shared core. `src/ts/` is split by who may import whom:
+
+```
+src/ts/
+  core/       shared logic: api, apiFactory, strategies, mock, services, settings, scheduling, voting, scenarios,
+              metadata, format, logger, translations, types, ipc (manifest, buildHandlers halves, invokeHandler),
+              platform (the port), autovote (the renderer's controller), runtime.ts (env flags only)
+  platforms/  one runtime each: node/ (fs transport, OS paths, fs assets, file lock), webview/ (Preferences
+              transport, CapacitorHttp adapter, fetch assets), headless/ (AndroidHeadlessStore / AndroidHeadlessHttp)
+  shells/     one entry point each: electron/, cli/, web/, capacitor/, headless/ (main file, windows, bridges,
+              native-service wrappers, and the shell's platform.ts)
+  react/      the UI only: pages, components, hooks, contexts, react/api
+  appPaths.ts the one file at the root
+```
+
+**Why `appPaths.ts` stays at the root.** It resolves the app root as `__dirname/../..`, and in the bundled Electron main
+that `__dirname` is `out/main/` — the same depth below the root as `src/ts/`. Moving it into `platforms/node/` would
+change the depth the bundle needs. The lint table classes it as node-platform, and `platforms/node/paths.ts` reaches it
+at call time.
+
+**Layer rules** (`scripts/lint/layer-boundaries.mts`, the one table that names each boundary):
+
+- **core** imports only core — not `electron*`, `@capacitor/*`, `@capawesome-team/*`, `platforms/`, `shells/` or `react/`.
+- **platforms/x** imports core — not another platform, not a shell.
+- **shells/x** imports core, platforms and react — not another shell.
+- **react** imports react and core — not platforms, shells, `electron*` or `@capacitor/*` (the renderer rules in §8 stay).
+
+The `layer-boundaries/no-cross-layer-import` Oxlint rule enforces them over all of `src/ts` and is an **error**: a new
+import across a boundary fails `pnpm lint`. It reads static imports, `require('…')` string literals and `import()`.
+`import type`, `export type … from` and `typeof import(…)` are exempt, because the build erases them and they leave no
+runtime edge; an inline `import { type A }` is not erased under `verbatimModuleSyntax`, so it is checked like any runtime
+import. That exemption is what lets core types name Electron-only handler modules (`types/ipc.ts`,
+`ipc/releaseUpdates.ts`; §6). `tests/ci-validation.test.ts` pins the rule's level and that no file is exempt.
+
+**The renderer bundle graph check.** A rule on source text cannot see an indirect import, so the same test file
+rebuilds the four renderer bundles (`app`, `login`, `logs`, `web`) in-process with the build script's exact options and
+reads esbuild's module graph: none may contain `core/platform/port.ts`, anything under `platforms/`, or the Capacitor
+native services. The Capacitor bundle is the sanctioned route to both — it reaches them through the injected
+background host (`shells/capacitor/bridge/capacitorBackgroundHost.ts`) — and a second test asserts it does, so the
+check cannot pass on an empty graph.
+
+### The Platform port
+
+`core/platform/port.ts` is the one seam between the core and the platform families. A shell installs its family's
+`Platform` object once, before any core module loads; core asks `platform()` for what it used to branch on itself.
+Members:
+
+| Member         | What it is for                                                                                                                                                                                                                                         |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `http`         | The axios adapter (`CapacitorHttp` on the WebView, `AndroidHeadlessHttp` in the service); null means axios's default.                                                                                                                                  |
+| `storage`      | `jsonStore(ref, flags)` and `settingsFile(ref, wiring)` build one transport per store (read, write, hydrate, flush, discard, compare-and-write); `loaded(key)`; `lockPolicy` (`file` lock on node, `none` where the native compare-and-write decides). |
+| `paths`        | The user-data directory, the OS user-data dir of an app name, packaged and source-code detection, the resources path, `appPath(...)`.                                                                                                                  |
+| `assets`       | `readText` / `readJson` of the runtime assets and the local vision model (location, device, whether it ships, the library loader).                                                                                                                     |
+| `wipe`         | What "Delete all local data" reaches: the session clear (required on Electron), the plugin's native wipe, reload-after-wipe, the Preferences keys to list and remove, the user-data markers to respect.                                                |
+| `native`       | The Android services core calls: `autovote` (the AutoVoteBackground plugin), `foregroundService`, `apkInstaller`; each null where the platform has none. There is deliberately no `openExternal`.                                                      |
+| `windows`      | What the shell does to its windows: broadcast settings changes, relaunch after a wipe. Every shell supplies it.                                                                                                                                        |
+| `capabilities` | Facts the rules read: whether the mission-needs refresh resolver exists, whether Snap may play, whether the native service owns scenarios, the recovery wording (`file` or `store`), the log context line, the hourly log cleanup.                     |
+
+`installPlatform(p)` stores the object in a `globalThis` slot keyed by `Symbol.for('gurushots.platform')`, so it survives
+`jest.resetModules`. Installing the same object again does nothing; **a second, different install throws** (an entry
+forgot its install, or two entries installed). `platform()` throws when none is installed — a core module ran before
+its entry's install, a real boundary and not a default to fall back on. `installedPlatform()` answers null instead, for
+modules a renderer bundle also loads, where the port stays empty by design. Renderer pages install nothing. Tests swap
+platforms only through `tests/helpers/platform.ts`.
+
+Each family builds one object (`createNodePlatform`, `createWebviewPlatform`, `createHeadlessPlatform`) and **never calls
+`installPlatform` itself**. What a family cannot import — a shell's native services, windows, plugin wipe,
+compare-and-write — the shell passes in, and the builder's parameters are required, so a shell that forgets one fails to
+compile. The Capacitor shell (`shells/capacitor/platform.ts`) passes the plugin-backed native wipe, `cas`, native services
+and windows; `tests/shells/capacitorPlatform.test.ts` asserts each is the plugin-backed one.
+
+**The renderer's platform** is a separate, smaller thing: `core/platform/kind.ts` (`electron` / `web` / `capacitor`),
+marked by the web and Capacitor bridges when they install `window.api`, read with `platformKind()`; unmarked means
+Electron. It is dependency-free so a renderer can read it without importing a bridge.
+
+### Install before the logger
+
+The logger reads `platform()` at module scope (`logger/context.ts`, `logger/files.ts`), so **every entry installs its
+platform before the logger — and therefore the rest of core — loads**. Each shell has `platform.ts`
+(`shells/<shell>/platform.ts`, and `scripts/lib/platform.ts` for scripts), imported first by the entry point
+(`shells/electron/index.ts`, `shells/cli/cli.ts`, `shells/web/server.ts`, `shells/capacitor/page.tsx`,
+`shells/headless/index.ts`). The rule for such a module:
+
+- Its static imports are the port and its family builder, plus type-only imports, node builtins, and (Electron only)
+  `shells/electron/index/session.ts`, a leaf whose own logger access is a call-time `require`.
+- Everything else — the shell's native services, the bridge, the vision assets, `electron` — is reached at **call
+  time** with a lazy `require('./x') as typeof import('./x')` inside the member that needs it, never at load.
+- No module in that load chain reads `platform()` at load. The families follow the same rule for the modules they
+  delegate to.
+
+A static logger import anywhere in that chain throws before the install runs — the bundled Electron main crashed at
+startup exactly that way. Two CI guards enforce it, and they cover each other's blind spot:
+
+- **The metafile load-time chain test** (`tests/ci-validation.test.ts`, "shell platform module load-time chains")
+  bundles each shell platform module in-process and walks esbuild's metafile over `import-statement` edges only (call-time
+  requires are the documented exception), and fails on any logger module it reaches. A control asserts the Electron entry
+  does reach the logger, so the walk is known to see real edges. It cannot see a module-scope `require`.
+- **`tests/shells/loadOrder.test.ts`** runs the load itself: with the port slot cleared and the logger mocked by a
+  recording factory, each shell platform module must install without throwing and without loading the logger — which
+  catches a module-scope `require` of the logger and any other load-time `platform()` read the static walk misses.
