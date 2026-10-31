@@ -104,10 +104,13 @@ export type PlatformPaths = {
 
 /** The runtime assets the app reads (the lexicon, the notices, the vision model). */
 export type PlatformAssets = {
-    /** The asset's text; rejects when it cannot be read. */
-    readText: (relativePath: string) => string;
-    /** The asset's parsed JSON, unchecked — its reader validates (buildTable). */
-    readJson: <T>(relativePath: string) => T;
+    /**
+     * The asset's text; throws when it cannot be read — rejects where the
+     * platform reads it through fetch (the WebViews' reads are async).
+     */
+    readText: (relativePath: string) => string | Promise<string>;
+    /** The asset's parsed JSON, unchecked — its reader validates (buildTable), the caller narrows the `unknown`. */
+    readJson: (relativePath: string) => unknown;
     /** The local vision model: where it lives, and the device inference runs on. */
     visionModel: { location: () => string; device: 'wasm' | 'cpu' };
 };
@@ -173,7 +176,8 @@ export interface Platform {
     assets: PlatformAssets;
     wipe: PlatformWipe;
     native: PlatformNative;
-    windows: PlatformWindows;
+    /** Null where there are no windows to reach (the Android WebViews); the shell's platform module fills it. */
+    windows: PlatformWindows | null;
     capabilities: PlatformCapabilities;
 }
 

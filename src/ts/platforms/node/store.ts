@@ -6,12 +6,15 @@
  * hydrate, no queue and no native bridge, so those members answer null or
  * their no-op, the way the branches do off Capacitor and headless.
  *
- * Everything wrapped is reached at call time (see index.ts for why): the fs
- * module, and the settings-side write helpers (settings/atomicWrite,
- * settings/ownerOnlyWrite, settings/settingsFileNode), which are
- * facade-private to static imports — the settings no-restricted-imports
- * pattern allows type imports only. Phase 3 moves the bodies into this
- * family and retires the indirection.
+ * Everything wrapped is reached at call time: the node project's setup file
+ * loads the test helpers that import this family, so a module graph loaded at
+ * import time would land in the setup's registry — the tests/setup.ts
+ * fs/path mocks included — before a test file registers its own, and the
+ * test's factory would lose to the cached module (platforms/node/index.ts
+ * states the reason in full). The wrapped settings-side write helpers
+ * (settings/atomicWrite, settings/ownerOnlyWrite, settings/settingsFileNode)
+ * are part of that graph, and Phase 3 moves their bodies into this family
+ * and retires the indirection.
  */
 
 import type { PlatformStorage } from '../../platform/port';

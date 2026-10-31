@@ -392,4 +392,11 @@ const createCommonHeaders = (token: string | undefined): RequestHeaders => {
     return generateRandomHeaders(token);
 };
 
-export { makePostRequest, postOnce, createCommonHeaders, FORM_CONTENT_TYPE };
+export {
+    makePostRequest,
+    postOnce,
+    createCommonHeaders,
+    FORM_CONTENT_TYPE,
+    getCapacitorHttpAdapter,
+    getHeadlessHttpAdapter,
+};

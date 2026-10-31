@@ -33,7 +33,10 @@ const readAssetText = (relativePath: string): string => {
 
 const createNodeAssets = (): PlatformAssets => ({
     readText: readAssetText,
-    readJson: <T>(relativePath: string): T => JSON.parse(readAssetText(relativePath)) as T,
+    readJson: (relativePath: string): unknown => {
+        const parsed: unknown = JSON.parse(readAssetText(relativePath));
+        return parsed;
+    },
     visionModel: {
         // The non-SEA branches of visionVerifier getModelLocation. The SEA
         // build's extracted runtime root is the CLI shell's (visionCliAssets,

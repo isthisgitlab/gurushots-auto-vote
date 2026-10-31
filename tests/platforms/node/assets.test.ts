@@ -72,7 +72,7 @@ describe('readText', () => {
 describe('readJson', () => {
     test('it parses the asset text', () => {
         fs.readFileSync.mockReturnValue('{"a":1}');
-        expect(createNodeAssets().readJson<Record<string, number>>('semantic-vectors.json')).toEqual({ a: 1 });
+        expect(createNodeAssets().readJson('semantic-vectors.json')).toEqual({ a: 1 });
     });
 });
 

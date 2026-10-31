@@ -24,8 +24,8 @@ describe('the node platform', () => {
 
     test('its windows are no-ops', () => {
         const p = createNodePlatform();
-        expect(() => p.windows.broadcastSettingsChanged({})).not.toThrow();
-        expect(() => p.windows.afterWipe()).not.toThrow();
+        expect(() => p.windows?.broadcastSettingsChanged({})).not.toThrow();
+        expect(() => p.windows?.afterWipe()).not.toThrow();
     });
 
     test('the constants name the node answers', () => {
