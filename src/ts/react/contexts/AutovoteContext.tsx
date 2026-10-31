@@ -59,6 +59,12 @@ function createRendererDeadlineNotifier(): CycleNotifier | null {
  * One live controller over `host`: a stored, disposed controller is replaced
  * with a fresh one, so a provider-effect re-run can never resume on (or
  * re-arm) a controller whose mount already went away.
+ *
+ * The revive path is defensive only: preact runs no StrictMode double-invoke,
+ * so an effect re-run without a remount cannot occur. And a revive only keeps
+ * exactly one live chain — after it, the render-scope controls and the
+ * subscription stay bound to the disposed controller until the next render,
+ * which the dead path never needs.
  */
 export const ensureLiveController = (stored: AutovoteController, host: AutovoteHost): AutovoteController =>
     stored.isDisposed() ? createAutovoteController(host) : stored;
