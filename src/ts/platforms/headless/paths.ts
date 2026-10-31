@@ -67,6 +67,7 @@ const getUserDataPath = () => {
 
 const createHeadlessPaths = (): PlatformPaths => ({
     userData: getUserDataPath,
+    warnLegacyDevDir: () => undefined,
     getUserDataDir,
     isPackaged: () => false,
     isElectronPackaged: () => false,

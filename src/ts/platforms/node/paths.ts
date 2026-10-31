@@ -95,7 +95,7 @@ const isPackaged = () => {
 // userData() — the one-shot flag lives with the body that resolves the path.
 let legacyDevDirChecked = false;
 /** @param userDataPath */
-const warnIfLegacyDevDir = (userDataPath: string) => {
+const warnLegacyDevDir = (userDataPath: string) => {
     if (legacyDevDirChecked) return;
     legacyDevDirChecked = true;
     try {
@@ -155,11 +155,8 @@ const createNodePaths = (): PlatformPaths => {
     };
 
     const paths: PlatformPaths = {
-        userData: () => {
-            const userDataPath = getAppUserDataPath();
-            warnIfLegacyDevDir(userDataPath);
-            return userDataPath;
-        },
+        userData: () => getAppUserDataPath(),
+        warnLegacyDevDir,
         getUserDataDir,
         isPackaged,
         isElectronPackaged: () => isElectron() && isPackaged(),

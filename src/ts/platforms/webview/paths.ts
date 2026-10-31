@@ -22,6 +22,8 @@ const createWebviewPaths = (): PlatformPaths => ({
     // The Capacitor branches of runtime: the stub path /<appName>, and the
     // native-runtime read of isPackaged (isNativePlatform).
     userData: () => `/${appIdentity().getAppName()}`,
+    // No Electron dev dir exists on the WebView: the notice is a no-op.
+    warnLegacyDevDir: () => undefined,
     getUserDataDir: (appName) => `/${appName}`,
     isPackaged: () => {
         const cap = (globalThis as CapacitorGlobals).Capacitor;

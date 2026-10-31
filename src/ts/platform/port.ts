@@ -144,6 +144,13 @@ export type PlatformStorage = {
 export type PlatformPaths = {
     /** The app's user-data directory, created when missing. */
     userData: () => string;
+    /**
+     * The one-shot notice for a legacy Electron dev directory beside the user
+     * data. It belongs to the settings-path resolution — a userData()-time
+     * call ran while the logger loaded and re-entered it half-loaded — and is
+     * a no-op where the family has no Electron dev dir.
+     */
+    warnLegacyDevDir: (userDataPath: string) => void;
     /** The platform-native user-data directory of one app name. */
     getUserDataDir: (appName: string) => string;
     /** Whether this is a packaged build (packaged Electron, a native runtime). */

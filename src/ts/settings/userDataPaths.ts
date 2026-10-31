@@ -12,7 +12,14 @@ import { getAppName } from '../platform/appIdentity';
 
 // Define the configuration file path in the userData directory. Resolution lives behind platform().paths.userData —
 // the ONE implementation shared with the logger, so logs and settings can never land in different directories.
-const getSettingsPath = () => path.join(platform().paths.userData(), 'config.json');
+const getSettingsPath = () => {
+    const userDataPath = platform().paths.userData();
+    // The one-shot legacy dev-dir notice runs here, at the settings-path
+    // resolution: a userData()-time call ran while the logger loaded and
+    // re-entered it half-loaded, so the notice was lost.
+    platform().paths.warnLegacyDevDir(userDataPath);
+    return path.join(userDataPath, 'config.json');
+};
 
 // The `settings.json` the configuration is imported from, beside it.
 const getLegacySettingsPath = () => path.join(path.dirname(getSettingsPath()), 'settings.json');
