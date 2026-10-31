@@ -8,7 +8,7 @@
  * bootstrap can be driven per case.
  */
 
-import type { RendererGlobals } from '../../src/ts/types/capacitor';
+import type { CapacitorGlobals, RendererGlobals } from '../../src/ts/types/capacitor';
 import type { CategoryLogger } from '../../src/ts/logger';
 import type { AutoVoteStatus } from '../../src/ts/services/NativeAutovoteBridge';
 
@@ -55,6 +55,7 @@ describe('Capacitor entry', () => {
             if (savedGlobals[k] === undefined) delete (globalThis as RendererGlobals)[k];
             else (globalThis as RendererGlobals)[k] = savedGlobals[k];
         }
+        delete (globalThis as CapacitorGlobals).Capacitor;
         document.body.innerHTML = '';
     });
 
@@ -133,7 +134,6 @@ describe('Capacitor entry', () => {
             flushDiagnosticsWrites: jest.fn(),
             initializePhotoStatsAsync: hydration(),
             flushPhotoStatsWrites: jest.fn(),
-            isCapacitor: jest.fn(() => native),
             categoryError: jest.fn(),
             categoryInfo: jest.fn(),
             categoryWarning: jest.fn(),
@@ -155,6 +155,7 @@ describe('Capacitor entry', () => {
                 installBridge: m.installBridge,
                 seedBridgeProfiles: m.seedBridgeProfiles,
                 subscribe: m.subscribe,
+                isCapacitorNative: () => native,
             }));
             // The page's first import is its shell platform module: every
             // collaborator here is mocked, so the real install (and the core
@@ -199,7 +200,14 @@ describe('Capacitor entry', () => {
                 initializePhotoStatsAsync: m.initializePhotoStatsAsync,
                 flushPhotoStatsWrites: m.flushPhotoStatsWrites,
             }));
-            jest.doMock(`${SRC}/runtime`, () => ({ isCapacitor: m.isCapacitor }));
+            // The entry's native check reads the Capacitor global directly
+            // (presence and a platform probe): on the native path the global
+            // stands, off it the global is absent.
+            if (native) {
+                (globalThis as CapacitorGlobals).Capacitor = { isNativePlatform: () => true };
+            } else {
+                delete (globalThis as CapacitorGlobals).Capacitor;
+            }
             jest.doMock(`${SRC}/logger`, () => ({ withCategory: m.withCategory }));
             jest.doMock(`${SRC}/services/auth`, () => ({
                 clearTokenUnlessStayingLoggedIn: m.clearTokenUnlessStayingLoggedIn,

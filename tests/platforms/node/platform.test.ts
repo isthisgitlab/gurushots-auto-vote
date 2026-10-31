@@ -1,7 +1,7 @@
 /**
  * The node family as a whole: the platform createNodePlatform builds with the
  * windows the shell passes. The log context is the default rule, computed
- * from the runtime's Electron check and the context module's CLI-start flag —
+ * from the family's Electron check and the context module's CLI-start flag —
  * both are mocked here with live flags, and no case calls getContext.
  */
 
@@ -21,8 +21,11 @@ jest.mock('../../../src/ts/logger/context', () => ({
         return mockContextFlags.startedViaCli;
     },
 }));
-jest.mock('../../../src/ts/runtime', () => ({
+jest.mock('../../../src/ts/platforms/node/paths', () => ({
     __esModule: true,
+    ...jest.requireActual<typeof import('../../../src/ts/platforms/node/paths')>(
+        '../../../src/ts/platforms/node/paths',
+    ),
     isElectron: () => mockContextFlags.isElectron,
 }));
 jest.mock('../../../src/ts/settings/cliSessionLock', () => mockLock);

@@ -21,18 +21,26 @@
  *    from battery optimization per-vendor.
  */
 
-import * as runtime from '../runtime';
 import * as logger from '../logger';
 
 import type { ForegroundServicePlugin } from '@capawesome-team/capacitor-android-foreground-service';
+import type { CapacitorGlobals } from '../types/capacitor';
 import { errorMessage } from '../errorMessage';
 
 let plugin: ForegroundServicePlugin | null = null;
 const NOTIFICATION_ID = 27782; // arbitrary stable id
 const APP_NAME = 'GuruShots Auto Vote';
 
+// The Capacitor runtime's presence — the global is here and its platform
+// probe is a function. The probe is not called, so a Capacitor web target
+// (no native runtime) counts as absent.
+const isCapacitorNative = () => {
+    const cap = (globalThis as CapacitorGlobals).Capacitor;
+    return cap != null && typeof cap.isNativePlatform === 'function';
+};
+
 const getPlugin = () => {
-    if (!runtime.isCapacitor()) return null;
+    if (!isCapacitorNative()) return null;
     if (plugin) return plugin;
     try {
         plugin = (

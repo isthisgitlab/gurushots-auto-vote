@@ -3,8 +3,8 @@
  * shell's own members when it loads — the settings broadcast, the post-wipe
  * relaunch and the session clear are the module's own bodies, their electron
  * reads reached at call time, so the install runs before the logger loads and
- * no electron import happens at install time. electron is mocked; runtime is
- * a partial mock with isElectron true, so the family's guarded electron reads
+ * no electron import happens at install time. electron is mocked; the
+ * process.versions.electron flag is set, so the family's Electron reads
  * resolve the way they do in the main process. The installed object is
  * captured once: the setup file's afterEach reinstalls the node test platform
  * on the port, so the tests read the captured object, not the slot.
@@ -40,13 +40,6 @@ interface FakeElectron {
     session: { fromPartition: jest.Mock<FakeSessionTarget, [string]>; defaultSession: FakeSessionTarget };
 }
 
-jest.mock('../../src/ts/runtime', () => ({
-    __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/runtime')>('../../src/ts/runtime'),
-    isElectron: () => true,
-    isPackaged: () => true,
-}));
-
 jest.mock('electron', () => ({
     __esModule: true,
     BrowserWindow: { getAllWindows: jest.fn<FakeBrowserWindow[], []>() },
@@ -76,6 +69,16 @@ const electron = require('electron') as FakeElectron;
 clearInstalledPlatform();
 require('../../src/ts/index/platform');
 const installed: ElectronPlatform = platform() as ElectronPlatform;
+
+// The version flag is what the family's Electron check reads, so every test
+// has it the way the main process does.
+beforeEach(() => {
+    (process.versions as { electron?: string }).electron = '43.0.0';
+});
+
+afterEach(() => {
+    delete (process.versions as { electron?: string }).electron;
+});
 
 // The electron reads are reached at call time — the install must run before
 // the logger loads (whose own absence from the chain the bundle check proves)

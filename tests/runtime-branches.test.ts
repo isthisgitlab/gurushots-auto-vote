@@ -1,37 +1,17 @@
 /**
- * Branch coverage for runtime.ts platform detection and env flags. The path
- * resolution, app identity and packaged-build bodies that lived here are the
- * platform families' now (tests/platforms/node|webview|headless/paths.test.ts,
- * same assertions); runtime keeps the detection helpers and the env readers.
- * Platform-specific inputs (process.versions, g.Capacitor) are faked per test
- * and every module load that depends on them goes through isolateModules.
+ * Branch coverage for the runtime.ts env flags. The platform detection
+ * helpers that lived here are gone: the platform families and the shell
+ * files carry their own checks now (the node family's Electron read in
+ * tests/platforms/node/paths.test.ts, the Capacitor-global guards in the
+ * native-service tests, the headless platform in tests/shells/). Platform-
+ * specific inputs (process.env) are faked per test.
  */
 
 import type * as runtimeModule from '../src/ts/runtime';
-import { invalid } from './helpers/invalid';
 
-const g = globalThis as typeof globalThis & { Capacitor?: unknown };
+const rt = require('../src/ts/runtime') as typeof runtimeModule;
 
-const setProp = (obj: object, key: PropertyKey, value: unknown) => {
-    const original = Object.getOwnPropertyDescriptor(obj, key);
-    Object.defineProperty(obj, key, { value, configurable: true, writable: true, enumerable: true });
-    return () => Object.defineProperty(obj, key, invalid<PropertyDescriptor>(original));
-};
-
-const restorers: (() => unknown)[] = [];
-const withProp = (obj: object, key: PropertyKey, value: unknown) => restorers.push(setProp(obj, key, value));
-
-// The assertions that read process.versions / g.Capacitor at module load run
-// INSIDE the isolated registry.
-const loadRuntime = () => {
-    let rt!: typeof runtimeModule;
-    jest.isolateModules(() => {
-        rt = require('../src/ts/runtime') as typeof rt;
-    });
-    return rt;
-};
-
-const envKeys = ['NODE_ENV', 'DEV', 'PROD', 'APPDATA'];
+const envKeys = ['NODE_ENV', 'DEV', 'PROD'];
 let savedEnv: Record<string, string | undefined>;
 
 beforeEach(() => {
@@ -39,67 +19,13 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-    while (restorers.length) restorers.pop()!();
     for (const k of envKeys) {
         if (savedEnv[k] === undefined) delete process.env[k];
         else process.env[k] = savedEnv[k];
     }
-    delete g.Capacitor;
-    delete (process.versions as { electron?: string }).electron;
-});
-
-const capacitor = (platform = 'android', native = true) => ({
-    isNativePlatform: () => native,
-    getPlatform: () => platform,
-});
-
-describe('platform detection', () => {
-    test('plain Node is the CLI platform', () => {
-        const rt = loadRuntime();
-        expect(rt.isCli()).toBe(true);
-        expect(rt.getPlatform()).toBe('cli');
-    });
-
-    test('Electron wins over CLI', () => {
-        (process.versions as { electron?: string }).electron = '43.0.0';
-        const rt = loadRuntime();
-        expect(rt.isElectron()).toBe(true);
-        expect(rt.isCli()).toBe(false);
-        expect(rt.getPlatform()).toBe('electron');
-    });
-
-    test("the WebView bundles' process stub (type 'browser', no Electron version) is not Electron", () => {
-        (process as { type?: string }).type = 'browser';
-        try {
-            expect(loadRuntime().isElectron()).toBe(false);
-        } finally {
-            delete (process as { type?: string }).type;
-        }
-    });
-
-    test('Capacitor is detected only when isNativePlatform is a function', () => {
-        const rt = loadRuntime();
-        g.Capacitor = {};
-        expect(rt.isCapacitor()).toBe(false);
-        g.Capacitor = capacitor();
-        expect(rt.isCapacitor()).toBe(true);
-    });
-
-    test('a WebView without Node reports capacitor, then unknown without Capacitor', () => {
-        withProp(process, 'versions', undefined);
-        const rt = loadRuntime();
-        g.Capacitor = capacitor('android');
-        expect(rt.getPlatform()).toBe('capacitor');
-        delete g.Capacitor;
-        expect(rt.isElectron()).toBe(false);
-        expect(rt.isCli()).toBe(false);
-        expect(rt.getPlatform()).toBe('unknown');
-    });
 });
 
 describe('env flags', () => {
-    const rt = require('../src/ts/runtime') as typeof runtimeModule;
-
     test.each([
         [{ NODE_ENV: 'development' }, true],
         [{ NODE_ENV: 'dev' }, true],

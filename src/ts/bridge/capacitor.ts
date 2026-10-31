@@ -197,6 +197,17 @@ const reloadWindow = () => {
     return Promise.resolve({ success: true });
 };
 
+/**
+ * The Capacitor runtime's presence — the global is here and its platform
+ * probe is a function. The probe is not called, so a Capacitor web target
+ * (no native runtime) counts as absent. The renderer pages take this through
+ * the bridge: react/ carries no Capacitor-global reads of its own.
+ */
+const isCapacitorNative = () => {
+    const cap = (globalThis as CapacitorGlobals).Capacitor;
+    return cap != null && typeof cap.isNativePlatform === 'function';
+};
+
 const openExternalUrl = (url: unknown) => {
     // Same https-only scheme gate as the Electron handler (shared via
     // format/urlSafe) — the two platforms must not diverge on this
@@ -273,4 +284,4 @@ const installBridge = (): WindowApi => {
     return api as WindowApi;
 };
 
-export { installBridge, seedBridgeProfiles, subscribe, emit, reloadWindow };
+export { installBridge, seedBridgeProfiles, subscribe, emit, reloadWindow, isCapacitorNative };

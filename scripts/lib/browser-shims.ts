@@ -42,18 +42,19 @@ const NODE_BUILTINS_BARE = [
 export const NODE_BUILTINS = [...NODE_BUILTINS_BARE, ...NODE_BUILTINS_BARE.map((m) => `node:${m}`)];
 // Two browser-shim banners. require() is faked because external
 // imports leave runtime require() calls that the WebView cannot
-// resolve. process is faked because logger.ts / runtime.ts read
-// process.type / process.versions / process.platform at module
-// load (before any isCapacitor() guard runs); without a stub the
-// bundle ReferenceErrors before React mounts.
+// resolve. process is faked because the bundled code reads
+// process fields at module load (the logger's argv read, the env
+// flags' process.env — before any Capacitor-global guard runs);
+// without a stub the bundle ReferenceErrors before React mounts.
 // Browser shims for Node globals that the bundled code touches at
-// module load before any isCapacitor() guard can run. The require
+// module load before any Capacitor-global guard can run. The require
 // shim returns module-aware stubs (fs/path/os) with the small
-// surface area logger.ts / runtime.ts / settings.ts actually call —
+// surface area logger.ts / settings.ts actually call —
 // each method either no-ops or returns a sensible neutral value
 // (false for existsSync, joined string for path.join, etc.) so
 // module init does not throw. All real fs work lives behind
-// runtime.isCapacitor() guards or try/catch wrappers, so these
+// the platform families (the WebView ones never touch fs) or
+// try/catch wrappers, so these
 // stub methods are never reached by the actual app code on
 // Capacitor — they just keep module init green.
 export const SHIM_BANNER = [

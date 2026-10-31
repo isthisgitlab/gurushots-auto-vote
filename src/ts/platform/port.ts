@@ -2,8 +2,8 @@
  * The Platform port: the one seam between the shared core and the platform
  * families under src/ts/platforms/. An entry point installs its family's
  * object before any core module loads; core asks `platform()` for what it
- * would otherwise branch on (runtime.isCapacitor() / isHeadlessService(),
- * the fs / Preferences transport switch, the shell globals).
+ * would otherwise branch on itself (the Capacitor / headless detection, the
+ * fs / Preferences transport switch, the shell globals).
  *
  * This module imports nothing at runtime from the platform families, the
  * shells or the platform packages — the families and the shells import it.

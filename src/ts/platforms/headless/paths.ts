@@ -1,6 +1,6 @@
 /**
- * The headless family's paths member: the answers runtime.ts gave on the bare
- * service WebView (`__GS_HEADLESS__`, no Capacitor runtime). The OS branch
+ * The headless family's paths member: the stub paths of the bare service
+ * WebView (`__GS_HEADLESS__`, no Capacitor runtime). The OS branch
  * runs through the bundle's os shim on the device; the fail-soft body returns
  * the path without ever requiring a real file system. The app name comes from
  * the core app identity, asked at call time like every wrapped module. The

@@ -1,10 +1,10 @@
 /**
- * The webview family's paths member: the stub paths of a WebView, the same
- * answers runtime.ts gave on a Capacitor page (no fs behind them; writers
- * fail-soft). The app name comes from the core app identity, asked at call
- * time like every wrapped module. The app-root members have no answer on the
- * WebView — no WebView code resolves a path below an app root, the read-only
- * assets are fetched from the webDir — so they throw rather than invent one.
+ * The webview family's paths member: the stub paths of a WebView (no fs
+ * behind them; writers fail-soft). The app name comes from the core app
+ * identity, asked at call time like every wrapped module. The app-root
+ * members have no answer on the WebView — no WebView code resolves a path
+ * below an app root, the read-only assets are fetched from the webDir — so
+ * they throw rather than invent one.
  */
 
 import type { CapacitorGlobals } from '../../types/capacitor';

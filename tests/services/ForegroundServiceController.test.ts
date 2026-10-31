@@ -1,13 +1,14 @@
 /**
  * ForegroundServiceController is a thin wrapper around the Android foreground-
  * service plugin — it owns ONLY the persistent "auto-vote running" notification.
- * These tests cover the runtime guard (no-op off Capacitor), the permission
- * check/request branches, and the success / throw-swallowing paths of
- * start/update/stop, without a device. The plugin module and runtime are mocked.
+ * These tests cover the Capacitor-global guard (no-op off Capacitor), the
+ * permission check/request branches, and the success / throw-swallowing paths
+ * of start/update/stop, without a device. The plugin module is mocked; the
+ * guard flips through the globalThis.Capacitor the module reads.
  */
 
 import type * as ForegroundServiceControllerModule from '../../src/ts/services/ForegroundServiceController';
-import type * as RuntimeModule from '../../src/ts/runtime';
+import type { CapacitorGlobals } from '../../src/ts/types/capacitor';
 import { invalid } from '../helpers/invalid';
 
 const mockFsPlugin = {
@@ -19,18 +20,16 @@ const mockFsPlugin = {
 };
 
 jest.mock('@capawesome-team/capacitor-android-foreground-service', () => ({ ForegroundService: mockFsPlugin }));
-jest.mock('../../src/ts/runtime', () => ({
-    isCapacitor: jest.fn(() => false),
-}));
+
+const g = globalThis as CapacitorGlobals;
 
 describe('ForegroundServiceController', () => {
-    let runtime: jest.MockedObject<typeof RuntimeModule>;
     let controller: typeof ForegroundServiceControllerModule;
 
     beforeEach(() => {
         jest.resetModules();
-        runtime = jest.mocked(require('../../src/ts/runtime') as typeof RuntimeModule);
-        runtime.isCapacitor.mockReturnValue(true);
+        // On the native platform by default; individual tests override as needed.
+        g.Capacitor = { isNativePlatform: () => true };
         // Happy defaults; individual tests override as needed.
         mockFsPlugin.checkPermissions.mockResolvedValue({ display: 'granted' });
         mockFsPlugin.requestPermissions.mockResolvedValue({ display: 'granted' });
@@ -40,8 +39,16 @@ describe('ForegroundServiceController', () => {
         controller = require('../../src/ts/services/ForegroundServiceController') as typeof controller;
     });
 
+    afterEach(() => {
+        delete g.Capacitor;
+    });
+
     describe('when not running on Capacitor (no-op)', () => {
-        beforeEach(() => runtime.isCapacitor.mockReturnValue(false));
+        beforeEach(() => {
+            delete g.Capacitor;
+            controller =
+                require('../../src/ts/services/ForegroundServiceController') as typeof ForegroundServiceControllerModule;
+        });
 
         test('start resolves false and never touches the plugin', async () => {
             await expect(controller.start()).resolves.toBe(false);
@@ -128,9 +135,7 @@ describe('ForegroundServiceController', () => {
         jest.mocked(
             require('../../src/ts/logger') as typeof import('../../src/ts/logger'),
         ).withCategory.mockReturnValueOnce(invalid({ warning }));
-        jest.mocked(
-            require('../../src/ts/runtime') as typeof import('../../src/ts/runtime'),
-        ).isCapacitor.mockReturnValue(true);
+        g.Capacitor = { isNativePlatform: () => true };
         try {
             const isolated =
                 require('../../src/ts/services/ForegroundServiceController') as typeof ForegroundServiceControllerModule;

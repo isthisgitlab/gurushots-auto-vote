@@ -17,7 +17,6 @@ import {
 } from '../../../src/ts/platforms/node/assets';
 
 import type { PlatformAssets } from '../../../src/ts/platform/port';
-import type * as runtimeModule from '../../../src/ts/runtime';
 import type * as appPathsModule from '../../../src/ts/appPaths';
 
 const mockSea: { isSea: () => boolean; getAsset: (key: string, encoding: string) => string } = {
@@ -34,28 +33,21 @@ const mockExtract = jest.fn(() => ({ root: '/vision/root', modulePath: '/vision/
 jest.mock('node:sea', () => mockSea, { virtual: true });
 jest.mock('node:module', () => ({ createRequire: mockCreateRequire }));
 jest.mock('@huggingface/transformers', () => ({ __esModule: true, default: {} }));
-jest.mock('../../../src/ts/runtime', () => ({
-    __esModule: true,
-    ...jest.requireActual<typeof runtimeModule>('../../../src/ts/runtime'),
-    isElectron: jest.fn(() => false),
-}));
 jest.mock('../../../src/ts/appPaths', () => ({
     __esModule: true,
     appPath: jest.fn((...segments: string[]) => `/app/${segments.join('/')}`),
 }));
 
-const runtime = jest.mocked(require('../../../src/ts/runtime') as typeof runtimeModule);
 const appPaths = jest.mocked(require('../../../src/ts/appPaths') as typeof appPathsModule);
 
 // The packaged-Electron answer comes from the family's paths member (its
 // guarded electron read), faked the way the paths tests fake it: a fresh
-// registry whose electron module answers `app` and whose isElectron is on.
+// registry whose electron module answers `app` and whose version flag is set
+// (the family's isElectron read).
 const withPackagedElectron = (fn: (assets: PlatformAssets) => void) => {
     jest.isolateModules(() => {
         (process.versions as { electron?: string }).electron = '43.0.0';
         jest.doMock('electron', () => ({ app: { isPackaged: true } }), { virtual: true });
-        const rt = require('../../../src/ts/runtime') as typeof runtimeModule;
-        jest.spyOn(rt, 'isElectron').mockReturnValue(true);
         const assets =
             require('../../../src/ts/platforms/node/assets') as typeof import('../../../src/ts/platforms/node/assets');
         try {
@@ -70,7 +62,6 @@ const withPackagedElectron = (fn: (assets: PlatformAssets) => void) => {
 beforeEach(() => {
     mockSea.isSea = () => false;
     mockSea.getAsset = () => '';
-    runtime.isElectron.mockReturnValue(false);
     appPaths.appPath.mockClear();
     __resetExtractedRootForTests();
 });

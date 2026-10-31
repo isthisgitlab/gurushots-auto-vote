@@ -1,14 +1,14 @@
 /**
- * The node family's paths member: the bodies runtime.ts answered, moved into
- * the family — the OS branches of getUserDataDir, the CLI and Electron
- * resolutions of userData, the packaged-build and source detection, and the
- * app identity the family serves to the core (settings names the app through
- * platform().paths via the appIdentity module). Platform-specific inputs
- * (process.platform, process.versions, the electron / node:sea modules) are
- * faked per test and every module load that depends on them goes through
- * isolateModules — a lazy require inside the callback still resolves there.
- * The one-shot legacy dev-dir notice fires through getSettingsPath in the
- * settings tests (tests/settings/storage-coverage.test.ts), its trigger point.
+ * The node family's paths member: the OS branches of getUserDataDir, the CLI
+ * and Electron resolutions of userData, the packaged-build and source
+ * detection, and the app identity the family serves to the core (settings
+ * names the app through platform().paths via the appIdentity module).
+ * Platform-specific inputs (process.platform, process.versions, the electron /
+ * node:sea modules) are faked per test and every module load that depends on
+ * them goes through isolateModules — a lazy require inside the callback still
+ * resolves there. The one-shot legacy dev-dir notice fires through
+ * getSettingsPath in the settings tests (tests/settings/storage-coverage.test.ts),
+ * its trigger point.
  */
 
 import { createNodePaths, UserDataUnavailableError } from '../../../src/ts/platforms/node/paths';
@@ -53,7 +53,7 @@ const withNodePaths = (
 ) => {
     jest.isolateModules(() => {
         if (electron !== undefined) {
-            // The version flag is what gates the branch (runtime.isElectron).
+            // The version flag is what gates the branch (the family's isElectron).
             (process.versions as { electron?: string }).electron = '43.0.0';
             jest.doMock('electron', electron, { virtual: true });
         }

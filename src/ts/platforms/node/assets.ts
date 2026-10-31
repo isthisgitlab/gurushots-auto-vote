@@ -13,12 +13,10 @@
 
 import type { PlatformAssets } from '../../platform/port';
 
-type RuntimeModule = typeof import('../../runtime');
 type AppPathsModule = typeof import('../../appPaths');
 type NodePathsModule = typeof import('./paths');
 type VisionCliAssetsModule = typeof import('../../services/visionCliAssets');
 
-const runtime = (): RuntimeModule => require('../../runtime') as RuntimeModule;
 const appPaths = (): AppPathsModule => require('../../appPaths') as AppPathsModule;
 const nodePaths = (): NodePathsModule => require('./paths') as NodePathsModule;
 
@@ -76,7 +74,7 @@ const readAssetText = (relativePath: string): string => {
 // the CLI shell's override (it reads extractedVisionRootOf).
 const modelLocation = (): string => {
     const path = require('node:path') as typeof import('node:path');
-    if (runtime().isElectron() && nodePaths().isPackaged()) return `${process.resourcesPath}${path.sep}`;
+    if (nodePaths().isElectron() && nodePaths().isPackaged()) return `${process.resourcesPath}${path.sep}`;
     return `${appPaths().appPath('.cache')}${path.sep}`;
 };
 

@@ -36,14 +36,6 @@ jest.mock('../../src/ts/services/autoFill', () => {
         getSlotsRemaining: actual.getSlotsRemaining,
     };
 });
-jest.mock('../../src/ts/runtime', () => ({
-    // The scenario state file still picks its transport here (it moves in
-    // step 7), and settings/userDataPaths gates its electron require on
-    // isElectron at load; the step's own rule reads the platform now.
-    isCapacitor: jest.fn(() => false),
-    isHeadlessService: jest.fn(() => false),
-    isElectron: jest.fn(() => false),
-}));
 
 import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(loggerModule);

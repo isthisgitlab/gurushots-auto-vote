@@ -8,9 +8,14 @@ import type { PlatformWindows } from '../../src/ts/platform/port';
 /** The mocked transformers `env`: the module writes arbitrary config keys onto it. */
 type MockEnv = { backends: { onnx: { wasm: object } }; localModelPath?: string; [key: string]: unknown };
 
-// The node family answers its location from these two flags (mocked with the
-// real module riding along, the way the family's own test mocks it).
-const runtimeFlags = { electron: true, packaged: true };
+// The node family answers its location from these inputs: the version flag
+// its Electron check reads (set through setElectron), and the packaged answer
+// its guarded electron read takes from the mocked electron module.
+const runtimeFlags = { packaged: true };
+const setElectron = (on: boolean) => {
+    if (on) (process.versions as { electron?: string }).electron = '43.0.0';
+    else delete (process.versions as { electron?: string }).electron;
+};
 const mockSea = { isSea: jest.fn(() => false), getAsset: jest.fn(() => 'sha') };
 const mockClassifier = jest.fn();
 const mockLog = { warning: jest.fn() };
@@ -26,11 +31,6 @@ const mockCreateRequire = jest.fn(() => () => mockSeaTransformers);
 const mockExtract = jest.fn(() => ({ root: '/vision/root', modulePath: '/vision/root/vision-entry.js' }));
 
 jest.mock('path', () => jest.requireActual<typeof import('path')>('path'));
-jest.mock('../../src/ts/runtime', () => ({
-    __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/runtime')>('../../src/ts/runtime'),
-    isElectron: () => runtimeFlags.electron,
-}));
 // The packaged answer is the node family's paths member now (its guarded
 // electron read), so the electron module answers through the same flags.
 jest.mock('electron', () => ({
@@ -122,7 +122,7 @@ beforeEach(() => {
     __resetForTests();
     __resetExtractedRootForTests();
     jest.clearAllMocks();
-    runtimeFlags.electron = true;
+    setElectron(true);
     runtimeFlags.packaged = true;
     mockSea.isSea.mockReturnValue(false);
     mockSea.getAsset.mockReturnValue('sha');
@@ -137,6 +137,10 @@ beforeEach(() => {
     (process as { resourcesPath?: string }).resourcesPath = '/app/resources';
     // The node test platform stands (the setup installed it); a test that
     // swapped it gets it back from the setup's afterEach.
+});
+
+afterEach(() => {
+    setElectron(false);
 });
 
 afterAll(() => {
@@ -360,7 +364,7 @@ describe('rankVisually', () => {
 
     test('the SEA CLI loads transformers and the model from its extracted runtime', async () => {
         installNodePlatformWithExtractor();
-        runtimeFlags.electron = false;
+        setElectron(false);
         mockSea.isSea.mockReturnValue(true);
         logitsBy({ a: [-2, -2] });
         await rankVisually(LEAVES, [hex('a')], [photo('a')], 1, { logger: makeLogger() });
@@ -372,7 +376,7 @@ describe('rankVisually', () => {
 
     test('a failed integrity check is not kept: the next call extracts and loads again', async () => {
         installNodePlatformWithExtractor();
-        runtimeFlags.electron = false;
+        setElectron(false);
         mockSea.isSea.mockReturnValue(true);
         mockExtract.mockImplementationOnce(() => {
             throw new Error('Vision runtime failed its integrity check');
@@ -393,7 +397,7 @@ describe('rankVisually', () => {
         [
             'a source-run CLI',
             () => {
-                runtimeFlags.electron = false;
+                setElectron(false);
             },
         ],
         [
@@ -461,7 +465,7 @@ describe('hasBundledModel', () => {
     });
 
     test('a source-run CLI checks the build cache', async () => {
-        runtimeFlags.electron = false;
+        setElectron(false);
         fs.existsSync.mockReturnValue(false);
         expect(await hasBundledModel()).toBe(false);
         expect(fs.existsSync).toHaveBeenCalledWith(

@@ -15,7 +15,6 @@
  * unchecked. The same holds with no plugin.
  */
 
-import * as runtime from '../runtime';
 import * as logger from '../logger';
 import * as updateChecker from './UpdateChecker';
 import { errorMessage } from '../errorMessage';
@@ -38,9 +37,17 @@ const rejectionCode = (err: unknown): string | undefined => {
     return typeof code === 'string' && code ? code : undefined;
 };
 
+// The Capacitor runtime's presence — the global is here and its platform
+// probe is a function. The probe is not called, so a Capacitor web target
+// (no native runtime) counts as absent.
+const isCapacitorNative = () => {
+    const cap = (globalThis as CapacitorGlobals).Capacitor;
+    return cap != null && typeof cap.isNativePlatform === 'function';
+};
+
 // The native plugin, when this build registered it. Accessed lazily (only
-// after downloadAndInstall's isCapacitor() gate) so non-Capacitor paths never
-// touch globalThis.Capacitor.
+// after downloadAndInstall's Capacitor-global gate) so non-Capacitor paths
+// never touch globalThis.Capacitor.
 const getNativeInstaller = () => (globalThis as CapacitorGlobals).Capacitor?.Plugins?.ApkInstaller || null;
 
 // Browser fallback: hand the release page to the system browser, where the user downloads the APK. Works with no
@@ -84,7 +91,7 @@ const downloadAndInstall = async ({
     onProgress?: (progress: { percent?: number }) => void;
 }): Promise<InstallResult> => {
     if (!downloadUrl) return { success: false, error: 'No download URL provided' };
-    if (!runtime.isCapacitor()) return { success: false, error: 'Android updater is a no-op outside Capacitor' };
+    if (!isCapacitorNative()) return { success: false, error: 'Android updater is a no-op outside Capacitor' };
 
     const native = getNativeInstaller();
     if (native?.downloadAndInstall) {

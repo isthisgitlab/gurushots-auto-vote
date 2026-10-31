@@ -19,11 +19,10 @@ import type { RendererGlobals } from '../../types/capacitor';
 // must happen after this assignment.
 (globalThis as RendererGlobals).__capacitorBootstrap = true;
 
-import { installBridge, seedBridgeProfiles, subscribe } from '../../bridge/capacitor';
+import { installBridge, isCapacitorNative, seedBridgeProfiles, subscribe } from '../../bridge/capacitor';
 import { capacitorBackgroundHost } from '../../bridge/capacitorBackgroundHost';
 import { getSetting } from '../../settings';
 import { flushLocalStores, initializeLocalStores } from '../../localStores';
-import { isCapacitor } from '../../runtime';
 import { withCategory } from '../../logger';
 import { clearTokenUnlessStayingLoggedIn } from '../../services/auth';
 import { getStatus } from '../../services/NativeAutovoteBridge';
@@ -87,7 +86,10 @@ const clearLeftoverToken = async (): Promise<void> => {
 };
 
 const bootstrap = async () => {
-    if (isCapacitor()) {
+    // The bridge's Capacitor-global presence check (the global is here and
+    // its platform probe is a function — the probe is not called, so a
+    // Capacitor web target counts as absent).
+    if (isCapacitorNative()) {
         installBridge();
         // The local stores hydrate through localStores (one list; see it): the settings come first, and seeding
         // reads and writes the settings, so the bridge's profiles are seeded between that and the other stores;

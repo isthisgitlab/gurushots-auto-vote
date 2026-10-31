@@ -2,11 +2,11 @@
  * Headless background entry point (Android foreground service).
  *
  * Loaded in a bare WebView owned by AutoVoteService — there is NO
- * Capacitor runtime here. `headless.html` sets `window.__GS_HEADLESS__`
- * so runtime.isHeadlessService() is true, which routes the settings and
- * HTTP layers through the native @JavascriptInterface bridges
- * (AndroidHeadlessStore / AndroidHeadlessHttp) instead of
- * @capacitor/preferences / CapacitorHttp.
+ * Capacitor runtime here. `headless.html` sets `window.__GS_HEADLESS__`,
+ * the service marker, and this module's first import is the shell's
+ * platform, which routes the settings and HTTP layers through the native
+ * @JavascriptInterface bridges (AndroidHeadlessStore / AndroidHeadlessHttp)
+ * instead of @capacitor/preferences / CapacitorHttp.
  *
  * The native service calls `GS.runOneCycle()` on each AlarmManager tick.
  * We run ONE full voting cycle via the existing orchestrator

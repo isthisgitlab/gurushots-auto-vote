@@ -1,16 +1,13 @@
 /**
  * The node family's paths member (Electron main, CLI, web server): the OS
- * paths, the app's own file paths, and the packaged-build / source detection
- * — the bodies runtime.ts answered, moved here from core. runtime.ts keeps
- * the detection helpers (isElectron, isCapacitor) the bodies branch on; they
- * are reached at call time like every wrapped module (see index.ts for why),
- * so every member resolves the code it needs, and the value it answers, on
- * each call.
+ * paths, the app's own file paths, and the packaged-build / source detection.
+ * The Electron read the bodies branch on is the family's own; every wrapped
+ * module is reached at call time (see index.ts for why), so every member
+ * resolves the code it needs, and the value it answers, on each call.
  */
 
 import type { PlatformPaths } from '../../platform/port';
 
-type RuntimeModule = typeof import('../../runtime');
 type AppPathsModule = typeof import('../../appPaths');
 type AppIdentityModule = typeof import('../../platform/appIdentity');
 type LoggerModule = typeof import('../../logger');
@@ -19,13 +16,21 @@ type PathModule = typeof import('node:path');
 type OsModule = typeof import('node:os');
 
 // See the header: the wrapped modules, reached at call time.
-const runtime = (): RuntimeModule => require('../../runtime') as RuntimeModule;
 const appPaths = (): AppPathsModule => require('../../appPaths') as AppPathsModule;
 const appIdentity = (): AppIdentityModule => require('../../platform/appIdentity') as AppIdentityModule;
 const logger = (): LoggerModule => require('../../logger') as LoggerModule;
 const nodeFs = (): FsModule => require('node:fs') as FsModule;
 const nodePath = (): PathModule => require('node:path') as PathModule;
 const nodeOs = (): OsModule => require('node:os') as OsModule;
+
+/**
+ * Whether this node process is the Electron main process (the
+ * `process.versions.electron` read). The paths, assets and capabilities
+ * members branch on it; the WebView families know what they run on and need
+ * no equivalent.
+ */
+const isElectron = () =>
+    typeof process !== 'undefined' && process.versions != null && process.versions.electron != null;
 
 /**
  * The app's user-data directory does not exist and cannot be created. The message says what happened, why and what to
@@ -64,7 +69,7 @@ const getUserDataDir = (appName: string): string => {
  * or asar). Drives the -dev suffix so dev state never pollutes prod state.
  */
 const isSourceCode = () => {
-    if (runtime().isElectron()) {
+    if (isElectron()) {
         try {
             if ((require('electron') as typeof import('electron')).app?.isPackaged) return false;
         } catch {
@@ -85,7 +90,7 @@ const isSourceCode = () => {
 };
 
 const isPackaged = () => {
-    if (runtime().isElectron()) {
+    if (isElectron()) {
         try {
             return (require('electron') as typeof import('electron')).app.isPackaged;
         } catch {
@@ -107,7 +112,7 @@ const warnIfLegacyDevDir = (userDataPath: string) => {
     if (legacyDevDirChecked) return;
     legacyDevDirChecked = true;
     try {
-        const electronApp = runtime().isElectron() ? (require('electron') as typeof import('electron')).app : null;
+        const electronApp = isElectron() ? (require('electron') as typeof import('electron')).app : null;
         if (!(electronApp && electronApp.getPath) || !isSourceCode()) return;
         const legacy = nodePath().join(nodePath().dirname(electronApp.getPath('userData')), 'gurushots-auto-vote-dev');
         if (legacy !== userDataPath && nodeFs().existsSync(nodePath().join(legacy, 'settings.json'))) {
@@ -133,7 +138,7 @@ const warnIfLegacyDevDir = (userDataPath: string) => {
 // the directory through the member, so a member override is what it answers.
 const createNodePaths = (): PlatformPaths => {
     const getAppUserDataPath = () => {
-        if (runtime().isElectron()) {
+        if (isElectron()) {
             try {
                 const app = (require('electron') as typeof import('electron')).app;
                 if (app && app.getPath) {
@@ -174,10 +179,10 @@ const createNodePaths = (): PlatformPaths => {
         // The packaged-Electron branch of the vision model's location
         // (visionVerifier getModelLocation): from source, the resources are the
         // app root's own (src/assets, .cache).
-        resourcesPath: () => (runtime().isElectron() && isPackaged() ? process.resourcesPath : appPaths().appPath()),
+        resourcesPath: () => (isElectron() && isPackaged() ? process.resourcesPath : appPaths().appPath()),
         appPath: (...segments) => appPaths().appPath(...segments),
     };
     return paths;
 };
 
-export { createNodePaths, getUserDataDir, isPackaged, isSourceCode, UserDataUnavailableError };
+export { createNodePaths, getUserDataDir, isElectron, isPackaged, isSourceCode, UserDataUnavailableError };

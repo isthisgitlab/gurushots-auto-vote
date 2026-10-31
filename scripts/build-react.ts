@@ -124,8 +124,9 @@ const webHtml = rendererHtml({
 });
 
 // Headless background document. Loaded by AutoVoteService in a bare
-// WebView (no Capacitor). headless-flag.js sets the headless flag before the
-// bundle executes so runtime.isHeadlessService() is true at module load, then
+// WebView (no Capacitor). headless-flag.js sets the service marker before
+// the bundle executes, whose first import is the shell's platform module —
+// it routes the settings and HTTP layers through the native bridges — then
 // the bundle installs window.GS.runOneCycle() for the service to call.
 const HEADLESS_FLAG_FILE = 'headless-flag.js';
 const HEADLESS_FLAG_SOURCE = 'window.__GS_HEADLESS__ = true;\n';
@@ -189,9 +190,9 @@ const RENDERER_EXTERNALS = [
 // require shim's empty object, so .Preferences.set(...) etc.
 // throws "X is not a function" at runtime, surfacing as silent
 // "Error saving settings" failures on Android.
-// Electron entries can keep them externalized since Electron's
-// isCapacitor() returns false and the require shim is never
-// exercised in practice.
+// Electron entries can keep them externalized since the Capacitor
+// global is absent on Electron, so the Capacitor-only modules'
+// guards refuse them and the require shim is never exercised.
 const CAPACITOR_EXTERNALS = [
     '@capacitor/core',
     '@capacitor/preferences',
@@ -201,7 +202,7 @@ const REQUIRE_SHIM = { js: SHIM_BANNER };
 const perEntryOptions: Record<EntryName, BuildOptions> = {
     // Electron entries: externalize Capacitor packages too. Their
     // require shim returns an empty object that is never accessed
-    // because runtime.isCapacitor() returns false on Electron.
+    // because the Capacitor global is absent on Electron.
     login: { external: [...RENDERER_EXTERNALS, ...CAPACITOR_EXTERNALS], banner: REQUIRE_SHIM },
     app: { external: [...RENDERER_EXTERNALS, ...CAPACITOR_EXTERNALS], banner: REQUIRE_SHIM },
     logs: { external: [...RENDERER_EXTERNALS, ...CAPACITOR_EXTERNALS], banner: REQUIRE_SHIM },

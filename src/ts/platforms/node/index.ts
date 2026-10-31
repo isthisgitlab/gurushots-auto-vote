@@ -26,11 +26,11 @@ import { createNodeWipe } from './wipe';
 import type { Platform, PlatformWindows } from '../../platform/port';
 
 type ContextModule = typeof import('../../logger/context');
-type RuntimeModule = typeof import('../../runtime');
+type PathsModule = typeof import('./paths');
 type NodeAssetParts = Parameters<typeof createNodeAssets>[0];
 
 const context = (): ContextModule => require('../../logger/context') as ContextModule;
-const runtime = (): RuntimeModule => require('../../runtime') as RuntimeModule;
+const paths = (): PathsModule => require('./paths') as PathsModule;
 
 const createNodeHttp = (): Platform['http'] => ({ adapter: null });
 
@@ -46,16 +46,16 @@ const createNodeCapabilities = (): Platform['capabilities'] => ({
     // native service, of which node has none; recovery names the file to
     // delete; the log context and the hourly cleanup are the logger's own
     // node answers. The log context is the default rule, computed from the
-    // runtime's Electron check and the context's CLI-start flag: the
+    // family's Electron check and the context's CLI-start flag: the
     // setContext override stays inside logger/context, and this member must
     // not call getContext (the port's doc says why).
     refreshMissionNeeds: false,
     snapAllowed: true,
     backgroundServiceOwnsScenarios: () => false,
     recoveryWording: 'file',
-    logContext: (): 'CLI' | 'GUI' => (runtime().isElectron() && !context().startedViaCli ? 'GUI' : 'CLI'),
+    logContext: (): 'CLI' | 'GUI' => (paths().isElectron() && !context().startedViaCli ? 'GUI' : 'CLI'),
     get logCleanup(): boolean {
-        return runtime().isElectron() || context().startedViaCli;
+        return paths().isElectron() || context().startedViaCli;
     },
 });
 

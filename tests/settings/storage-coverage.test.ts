@@ -11,14 +11,13 @@
  * at require time, so each case loads a fresh module graph via
  * jest.isolateModules and configures the mocks from THAT registry — the
  * settings path resolves through the node family's paths member required in
- * the same registry, whose lazy requires (runtime, electron, node:sea) also
- * resolve there while the case's assertions run inside it.
+ * the same registry, whose lazy requires (electron, node:sea) also resolve
+ * there while the case's assertions run inside it.
  */
 
 import type * as node_fsModule from 'node:fs';
 import type * as node_pathModule from 'node:path';
 import type * as loggerModule from '../../src/ts/logger';
-import type * as runtimeModule from '../../src/ts/runtime';
 import type * as storageModule from '../../src/ts/settings/storage';
 import type { GetOptions, GetResult, SetOptions } from '@capacitor/preferences';
 import type { App } from 'electron';
@@ -42,7 +41,6 @@ type StorageCtx = {
         debug: jest.Mock<void, Parameters<loggerModule.CategoryLogger['debug']>>;
         warning: jest.Mock<void, Parameters<loggerModule.CategoryLogger['warning']>>;
     };
-    runtime: typeof runtimeModule;
     /** The `electron` module factory of this registry; the no-Electron test asserts it is never called. */
     electronFactory: jest.MockedFunction<() => unknown>;
 };
@@ -50,10 +48,6 @@ type StorageCtx = {
 const mockPrefSet = jest.fn<Promise<void>, [SetOptions]>(() => Promise.resolve());
 const mockPrefGet = jest.fn<Promise<GetResult>, [GetOptions]>(() => Promise.resolve({ value: null }));
 const mockPrefKeys = jest.fn<Promise<{ keys: string[] }>, []>(() => Promise.resolve({ keys: [] }));
-jest.mock('../../src/ts/runtime', () => ({
-    __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/runtime')>('../../src/ts/runtime'),
-}));
 jest.mock(
     '@capacitor/preferences',
     () => ({
@@ -70,8 +64,9 @@ const USER_DATA = '/home/u/.config/gurushots-auto-vote-dev';
 
 /**
  * Load a fresh storage module and run `fn` inside its registry. `electronApp`
- * (or null) is what the electron mock answers with (runtime.isElectron is
- * mocked to match); `sourceCode` drives the family's SEA check. `noElectron`
+ * (or null) is what the electron mock answers with (the version flag the
+ * family's Electron check reads is set to match); `sourceCode` drives the
+ * family's SEA check. `noElectron`
  * makes the electron mock throw; the no-Electron test asserts the factory is
  * never invoked. The platform is (re)installed with the node family's paths,
  * so getSettingsPath resolves through the family body; the CLI branch's
@@ -109,8 +104,10 @@ const loadStorage = (
         const logger = jest.mocked(require('../../src/ts/logger') as typeof loggerModule);
         const categoryLogger = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), warning: jest.fn() };
         logger.withCategory.mockReturnValue(invalid(categoryLogger));
-        const runtime = require('../../src/ts/runtime') as typeof runtimeModule;
-        jest.spyOn(runtime, 'isElectron').mockReturnValue(electronApp !== null);
+        // The family's Electron check reads the version flag; the electron
+        // module the flag gates on is this registry's mock.
+        if (electronApp !== null) (process.versions as { electron?: string }).electron = '43.0.0';
+        else delete (process.versions as { electron?: string }).electron;
         if (family === 'webview') {
             installWebviewTestPlatform();
         } else if (family === 'headless') {
@@ -123,8 +120,9 @@ const loadStorage = (
             installTestPlatform({ paths });
         }
         const mod = require('../../src/ts/settings/storage') as typeof storageModule;
-        await fn({ mod, fs, categoryLogger, runtime, electronFactory });
+        await fn({ mod, fs, categoryLogger, electronFactory });
         restoreNodeTestPlatform();
+        delete (process.versions as { electron?: string }).electron;
     });
 };
 

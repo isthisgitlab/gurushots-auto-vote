@@ -431,6 +431,16 @@ describe('Capacitor bridge', () => {
             await expect(api.refreshMenu()).resolves.toEqual({ success: true });
         });
 
+        test('isCapacitorNative: a global with a platform probe, never its result', () => {
+            delete g.Capacitor;
+            expect(bridge.isCapacitorNative()).toBe(false);
+            // A Capacitor web target: the global is present, the probe is not.
+            g.Capacitor = {};
+            expect(bridge.isCapacitorNative()).toBe(false);
+            g.Capacitor = { isNativePlatform: () => false };
+            expect(bridge.isCapacitorNative()).toBe(true);
+        });
+
         test('openExternalUrl refuses non-https schemes', async () => {
             globalThis.open = jest.fn();
 
