@@ -1,9 +1,5 @@
 import * as runtime from '../runtime';
-
-// Whether this is a real Electron process (main or renderer). Decided by
-// process.versions.electron via runtime, not process.type: the WebView
-// bundles' process stub reports type 'browser' too.
-const isElectronApp = runtime.isElectron();
+import { platform } from '../platform/port';
 
 // Runtime owns the single implementation of source-detection, app naming,
 // and user-data resolution — logger re-exports isSourceCode/getAppName
@@ -19,7 +15,9 @@ const devMode = runtime.isDevelopment();
 // electron main process handles CLI commands
 // GUI mode: electron main process handling GUI IPC calls
 const startedViaCli = Boolean(process.argv[1] && /cli\.[jt]s/.test(process.argv[1]));
-const cliMode = !isElectronApp || startedViaCli;
+// The default rule is the platform's; the entry points install it before any
+// core module (this module) loads.
+const cliMode = platform().capabilities.logContext() === 'CLI';
 
 // Context override for explicit context setting
 let contextOverride: string | null = null;
@@ -42,27 +40,11 @@ const clearContext = () => {
  * Get context identifier (CLI/GUI)
  */
 const getContext = (): string => {
-    // Use explicit override if set
-    if (contextOverride) {
-        return contextOverride;
-    }
-
-    // Check if we're in a pure CLI environment (no Electron at all)
-    if (!isElectronApp) {
-        return 'CLI';
-    }
-
-    // If we're in Electron, check if we were started via CLI
-    if (startedViaCli) {
-        return 'CLI';
-    }
-
-    // Default for Electron main process is GUI
-    return 'GUI';
+    // Use explicit override if set, else the platform's default rule.
+    return contextOverride ?? platform().capabilities.logContext();
 };
 
 export {
-    isElectronApp,
     isSourceCode,
     getAppName,
     getUserDataPath,

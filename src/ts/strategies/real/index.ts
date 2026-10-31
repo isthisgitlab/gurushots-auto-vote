@@ -54,7 +54,7 @@ import {
 import { JOIN_ENDPOINTS } from '../../services/joinChallenges/shared';
 import { runClaimPass, CLAIM_ENDPOINTS } from '../../services/autoClaim';
 import { loadMissionNeeds, registerMissionNeeds } from '../../services/missions';
-import * as runtime from '../../runtime';
+import { platform } from '../../platform/port';
 import { joinStateStore, acquireUnlockLock, refreshJoinStateAsync } from '../../joinStateStore';
 
 import type { Challenge, TurboGameResult, TurboMiniGameResult } from '../../types/gurushots';
@@ -347,7 +347,7 @@ const fetchChallengesAndVote = async (
                 lock: scenarioStepLock,
             },
             missions,
-            refreshMissionNeeds: runtime.isHeadlessService()
+            refreshMissionNeeds: platform().capabilities.refreshMissionNeeds
                 ? () => loadMissionNeeds(token, Date.now(), { getMyMissions })
                 : null,
         });

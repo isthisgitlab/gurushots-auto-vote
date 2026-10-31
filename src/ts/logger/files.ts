@@ -2,7 +2,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as runtime from '../runtime';
 import { errorMessage } from '../errorMessage';
-import { isElectronApp, startedViaCli, getUserDataPath } from './context';
+import { getUserDataPath } from './context';
+import { platform } from '../platform/port';
 import { writeConsole } from './consoleSink';
 
 // Create logs directory in the same location as settings.
@@ -146,7 +147,7 @@ cleanupOldLogs();
 
 // Set up periodic cleanup (every hour) only in actual application contexts
 let cleanupInterval: ReturnType<typeof setInterval> | undefined;
-if (isElectronApp || startedViaCli) {
+if (platform().capabilities.logCleanup) {
     cleanupInterval = setInterval(cleanupOldLogs, 60 * 60 * 1000); // 1 hour
 }
 

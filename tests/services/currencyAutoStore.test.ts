@@ -11,6 +11,7 @@ const { createAutoSpendLedger, createMemoryAutoSpendLedger } =
 import type { AutoSpendRecord } from '../../src/ts/types/stores';
 import { invalid } from '../helpers/invalid';
 import { isNumber, isRecordOf, isShape, parseJsonAs } from '../helpers/parseJson';
+import { installWebviewTestPlatform } from '../helpers/platform';
 
 const rawStore = (initial: string | null) => {
     let raw = initial;
@@ -476,7 +477,7 @@ describe('whether the ledger of the real store can be trusted', () => {
         jest.mocked(logger.withCategory).mockReturnValue(invalid({ warning, error: jest.fn() }));
         load().fills(1);
         expect(said()).toMatch(/delete .*autoSpends\.json to start the fill and swap counts over\)$/);
-        g.Capacitor = { isNativePlatform: () => true };
+        installWebviewTestPlatform();
         load().fills(1);
         expect(said()).toMatch(/\(tries again next cycle\)$/);
     });

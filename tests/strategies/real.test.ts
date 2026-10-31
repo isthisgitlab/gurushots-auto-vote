@@ -127,6 +127,7 @@ import type { Challenge } from '../../src/ts/types/gurushots';
 import type { CategoryLogger } from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
+import { installHeadlessTestPlatform } from '../helpers/platform';
 
 const { runTurboGame, joinChallenge, fetchChallengesAndVote } = main;
 const { runSnapGame } = jest.mocked(require('../../src/ts/strategies/real/snapGame') as typeof snapGameModule);
@@ -559,23 +560,17 @@ describe('fetchChallengesAndVote', () => {
     });
 
     test('headless Android passes a live mission refresh to the voting pass', async () => {
-        const original = Object.getOwnPropertyDescriptor(globalThis, '__GS_HEADLESS__');
-        Object.assign(globalThis, { __GS_HEADLESS__: true });
+        installHeadlessTestPlatform();
         loadMissionNeeds
             .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 1, boost: 0, vote: 0 })
             .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 0, boost: 0, vote: 0 });
-        try {
-            await fetchChallengesAndVote('tok');
-            const refresh = runVotingPass.mock.calls.at(-1)![2].refreshMissionNeeds;
-            expect(refresh).toEqual(expect.any(Function));
-            await expect(refresh?.()).resolves.toMatchObject({ turbo: 0 });
-            expect(loadMissionNeeds).toHaveBeenLastCalledWith('tok', expect.any(Number), {
-                getMyMissions: rewards.getMyMissions,
-            });
-        } finally {
-            if (original) Object.defineProperty(globalThis, '__GS_HEADLESS__', original);
-            else Reflect.deleteProperty(globalThis, '__GS_HEADLESS__');
-        }
+        await fetchChallengesAndVote('tok');
+        const refresh = runVotingPass.mock.calls.at(-1)![2].refreshMissionNeeds;
+        expect(refresh).toEqual(expect.any(Function));
+        await expect(refresh?.()).resolves.toMatchObject({ turbo: 0 });
+        expect(loadMissionNeeds).toHaveBeenLastCalledWith('tok', expect.any(Number), {
+            getMyMissions: rewards.getMyMissions,
+        });
     });
 
     test('skips the join pre-step for a single-challenge run', async () => {

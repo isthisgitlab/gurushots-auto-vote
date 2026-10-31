@@ -57,6 +57,7 @@ import autoFillModule = require('../../src/ts/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
 import cancellationModule = require('../../src/ts/voting/cancellation');
 const cancellation = jest.mocked(cancellationModule);
+import { installHeadlessTestPlatform } from '../helpers/platform';
 import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import type * as settingsModule from '../../src/ts/settings';
@@ -421,13 +422,9 @@ describe('mock-parity behaviors on the shared path', () => {
             const api = makeApi([snapChallenge(1), makeChallenge({ id: 2 })]);
             api.runTurboGame.mockResolvedValue(snapWon);
             votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
-            const globals = globalThis as { __GS_HEADLESS__?: boolean };
-            globals.__GS_HEADLESS__ = true;
-            try {
-                await runVotingPass('tok', null, deps(api));
-            } finally {
-                delete globals.__GS_HEADLESS__;
-            }
+            installHeadlessTestPlatform();
+
+            await runVotingPass('tok', null, deps(api));
 
             expect(api.runTurboGame.mock.calls.map(([challenge]) => challenge.id)).toEqual([2]);
         });

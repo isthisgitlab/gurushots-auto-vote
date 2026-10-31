@@ -9,6 +9,7 @@
 import vm from 'node:vm';
 import type * as LoggerModule from '../../src/ts/logger';
 import { SHIM_BANNER } from '../../scripts/lib/browser-shims';
+import { installTestPlatform } from '../helpers/platform';
 import { invalid } from '../helpers/invalid';
 
 const LOGS_DIR = '/ud/logs';
@@ -54,11 +55,25 @@ const loadLogger = ({
     const origArgv = process.argv;
     const onSpy = jest.spyOn(process, 'on').mockImplementation(() => process);
     process.argv = [origArgv[0], invalid<string>(argv1)];
+    // The context line and the cleanup arming are the platform's to answer at
+    // load; the node family computes them from the real runtime, so the
+    // Electron scenario installs them overridden, the same rule it applies.
+    const cliArg = Boolean(argv1 && /cli\.[jt]s/.test(argv1));
     let logger!: typeof LoggerModule;
     try {
         jest.isolateModules(() => {
             jest.doMock('fs', () => fs);
             jest.doMock('../../src/ts/runtime', () => runtime);
+            installTestPlatform({
+                capabilities: {
+                    refreshMissionNeeds: false,
+                    snapAllowed: true,
+                    backgroundServiceOwnsScenarios: () => false,
+                    recoveryWording: 'file',
+                    logContext: () => (electron && !cliArg ? 'GUI' : 'CLI'),
+                    logCleanup: electron || cliArg,
+                },
+            });
             logger = jest.requireActual<typeof import('../../src/ts/logger')>('../../src/ts/logger');
         });
     } finally {

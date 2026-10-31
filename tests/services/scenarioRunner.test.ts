@@ -37,12 +37,13 @@ jest.mock('../../src/ts/services/autoFill', () => {
     };
 });
 jest.mock('../../src/ts/runtime', () => ({
+    // The scenario state file still picks its transport here (it moves in
+    // step 7), and settings/userDataPaths gates its electron require on
+    // isElectron at load; the step's own rule reads the platform now.
     isCapacitor: jest.fn(() => false),
     isHeadlessService: jest.fn(() => false),
-    // settings/userDataPaths gates its electron require on this at load.
     isElectron: jest.fn(() => false),
 }));
-jest.mock('../../src/ts/services/NativeAutovoteBridge', () => ({ isAvailable: jest.fn(() => false) }));
 
 import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(loggerModule);
@@ -52,10 +53,6 @@ import currencyActionsModule = require('../../src/ts/services/currencyActions');
 const currencyActions = jest.mocked(currencyActionsModule);
 import autoFillModule = require('../../src/ts/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
-import runtimeModule = require('../../src/ts/runtime');
-const runtime = jest.mocked(runtimeModule);
-import nativeAutovoteModule = require('../../src/ts/services/NativeAutovoteBridge');
-const nativeAutovote = jest.mocked(nativeAutovoteModule);
 import type * as scenarioRunnerModule from '../../src/ts/services/scenarioRunner';
 import type * as ruleModule from '../../src/ts/services/scenarioRunner/rule';
 import type * as supportModule from '../../src/ts/services/scenarioRunner/support';
@@ -66,6 +63,7 @@ import type { CategoryLogger } from '../../src/ts/logger';
 import type { VotingPassApi } from '../../src/ts/types/votingPass';
 import type { CurrencyPassDeps } from '../../src/ts/services/currencyAuto';
 import type { SwapBackLedger } from '../../src/ts/services/currencyActions';
+import { installHeadlessTestPlatform, installWebviewTestPlatform } from '../helpers/platform';
 import { invalid } from '../helpers/invalid';
 const { runScenarioStep, backgroundServiceOwnsScenarios } =
     require('../../src/ts/services/scenarioRunner') as typeof scenarioRunnerModule;
@@ -2089,10 +2087,20 @@ describe('rule execution', () => {
 describe('backgroundServiceOwnsScenarios', () => {
     test('only the Android app WebView with the native service defers', () => {
         expect(backgroundServiceOwnsScenarios()).toBe(false);
-        runtime.isCapacitor.mockReturnValue(true);
-        nativeAutovote.isAvailable.mockReturnValue(true);
+        // The step's answer is the installed platform's; the webview family's
+        // own computation from its native part is the webview family test's.
+        installWebviewTestPlatform({
+            capabilities: {
+                refreshMissionNeeds: false,
+                snapAllowed: true,
+                backgroundServiceOwnsScenarios: () => true,
+                recoveryWording: 'store',
+                logContext: () => 'CLI',
+                logCleanup: false,
+            },
+        });
         expect(backgroundServiceOwnsScenarios()).toBe(true);
-        runtime.isHeadlessService.mockReturnValue(true);
+        installHeadlessTestPlatform();
         expect(backgroundServiceOwnsScenarios()).toBe(false);
     });
 });

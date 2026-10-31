@@ -1,20 +1,21 @@
 /**
  * The node family as a whole: the platform createNodePlatform builds with the
  * windows the shell passes. The log context is the default rule, computed
- * from the context module's two flags — logger/context is mocked here with
- * live flags, and no case calls getContext.
+ * from the runtime's Electron check and the context module's CLI-start flag —
+ * both are mocked here with live flags, and no case calls getContext.
  */
 
-const mockContextFlags = { isElectronApp: false, startedViaCli: false };
+const mockContextFlags = { isElectron: false, startedViaCli: false };
 
 jest.mock('../../../src/ts/logger/context', () => ({
     __esModule: true,
-    get isElectronApp() {
-        return mockContextFlags.isElectronApp;
-    },
     get startedViaCli() {
         return mockContextFlags.startedViaCli;
     },
+}));
+jest.mock('../../../src/ts/runtime', () => ({
+    __esModule: true,
+    isElectron: () => mockContextFlags.isElectron,
 }));
 
 import { createNodePlatform } from '../../../src/ts/platforms/node';
@@ -58,29 +59,29 @@ describe('the node platform', () => {
         expect(createNodePlatform(windows).capabilities.backgroundServiceOwnsScenarios()).toBe(false);
     });
 
-    test('the log context is the default rule over the context flags, never getContext', () => {
-        // (isElectronApp, startedViaCli): a CLI process of either kind answers
+    test('the log context is the default rule over the electron check and the CLI-start flag, never getContext', () => {
+        // (isElectron, startedViaCli): a CLI process of either kind answers
         // CLI; only the Electron main process, not started over the CLI,
         // answers GUI.
-        mockContextFlags.isElectronApp = false;
+        mockContextFlags.isElectron = false;
         mockContextFlags.startedViaCli = false;
         expect(createNodePlatform(windows).capabilities.logContext()).toBe('CLI');
-        mockContextFlags.isElectronApp = false;
+        mockContextFlags.isElectron = false;
         mockContextFlags.startedViaCli = true;
         expect(createNodePlatform(windows).capabilities.logContext()).toBe('CLI');
-        mockContextFlags.isElectronApp = true;
+        mockContextFlags.isElectron = true;
         mockContextFlags.startedViaCli = false;
         expect(createNodePlatform(windows).capabilities.logContext()).toBe('GUI');
-        mockContextFlags.isElectronApp = true;
+        mockContextFlags.isElectron = true;
         mockContextFlags.startedViaCli = true;
         expect(createNodePlatform(windows).capabilities.logContext()).toBe('CLI');
     });
 
     test('the hourly cleanup is armed only for an Electron or CLI start', () => {
-        mockContextFlags.isElectronApp = true;
+        mockContextFlags.isElectron = true;
         mockContextFlags.startedViaCli = false;
         expect(createNodePlatform(windows).capabilities.logCleanup).toBe(true);
-        mockContextFlags.isElectronApp = false;
+        mockContextFlags.isElectron = false;
         mockContextFlags.startedViaCli = true;
         expect(createNodePlatform(windows).capabilities.logCleanup).toBe(true);
         mockContextFlags.startedViaCli = false;

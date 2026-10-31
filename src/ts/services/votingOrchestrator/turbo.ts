@@ -1,5 +1,5 @@
 import * as logger from '../../logger';
-import * as runtime from '../../runtime';
+import { platform } from '../../platform/port';
 import * as settings from '../../settings';
 import * as votingLogic from '../VotingLogic';
 import * as autoFill from '../autoFill';
@@ -195,7 +195,7 @@ export const playAutoTurbo = async (
         return;
     }
     // The Android headless cycle is capped at 120 s; Snap plays from the app, the desktop and the CLI.
-    if (isSnap && runtime.isHeadlessService()) {
+    if (isSnap && !platform().capabilities.snapAllowed) {
         logger
             .withCategory('turbo')
             .debug(

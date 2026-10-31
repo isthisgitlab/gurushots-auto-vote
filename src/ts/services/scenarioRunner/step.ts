@@ -7,8 +7,7 @@
 
 import * as logger from '../../logger';
 import * as settings from '../../settings';
-import * as runtime from '../../runtime';
-import * as nativeAutovote from '../NativeAutovoteBridge';
+import { platform } from '../../platform/port';
 import { effectiveTimezone } from '../../settings/uiDefaults';
 import { evaluateScenario } from '../../scenarios/evaluate';
 import { entriesOf } from '../../scenarios/selectors';
@@ -200,9 +199,10 @@ const runScenarioStep = async (challenge: Challenge, now: number, pass: PassCont
  * available: that service runs its own voting pass (and its own copy of the
  * scenario state) alongside the in-app loop, so it alone advances scenarios —
  * and runs the automatic joins and the automatic fills, whose claims and counts
- * the app window would otherwise overwrite with its own copy.
+ * the app window would otherwise overwrite with its own copy. The answer is
+ * the platform's (the webview family computes it from its injected native
+ * part); the named export stays for the shell-side callers.
  */
-const backgroundServiceOwnsScenarios = () =>
-    runtime.isCapacitor() && !runtime.isHeadlessService() && nativeAutovote.isAvailable();
+const backgroundServiceOwnsScenarios = () => platform().capabilities.backgroundServiceOwnsScenarios();
 
 export { runScenarioStep, backgroundServiceOwnsScenarios };

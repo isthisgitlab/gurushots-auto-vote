@@ -46,6 +46,7 @@ import type * as plainObjectModule from '../../src/ts/plainObject';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import { LIBRARY_BATCH_PHOTOS } from '../../src/ts/settings/limits';
 import { invalid } from '../helpers/invalid';
+import { installHeadlessTestPlatform } from '../helpers/platform';
 
 /** The mock autocomplete called without a member id, as the no-token / term tests do. */
 type TwoArgAutocomplete = (token: string | null, term: unknown) => Promise<string[]>;
@@ -801,20 +802,14 @@ describe('fetchChallengesAndVote — join pre-step', () => {
     });
 
     test('headless mock mode also passes a live mission refresh', async () => {
-        const original = Object.getOwnPropertyDescriptor(globalThis, '__GS_HEADLESS__');
-        Object.assign(globalThis, { __GS_HEADLESS__: true });
+        installHeadlessTestPlatform();
         loadMissionNeeds
             .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 1, boost: 0, vote: 0 })
             .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 0, boost: 0, vote: 0 });
-        try {
-            await mockApiClient.fetchChallengesAndVote('tok');
-            const refresh = runVotingPass.mock.calls.at(-1)![2].refreshMissionNeeds;
-            expect(refresh).toEqual(expect.any(Function));
-            await expect(refresh?.()).resolves.toMatchObject({ turbo: 0 });
-        } finally {
-            if (original) Object.defineProperty(globalThis, '__GS_HEADLESS__', original);
-            else Reflect.deleteProperty(globalThis, '__GS_HEADLESS__');
-        }
+        await mockApiClient.fetchChallengesAndVote('tok');
+        const refresh = runVotingPass.mock.calls.at(-1)![2].refreshMissionNeeds;
+        expect(refresh).toEqual(expect.any(Function));
+        await expect(refresh?.()).resolves.toMatchObject({ turbo: 0 });
     });
 
     test('a single-challenge run skips the join pass', async () => {

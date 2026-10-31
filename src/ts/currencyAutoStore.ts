@@ -28,7 +28,7 @@ import { isPlainObject } from './plainObject';
 import { fileErrorMessage } from './errorMessage';
 import { storeLoaded, throughStore } from './settings/storeTransport';
 import { createMemoryRawJsonStore } from './parseUntrustedJson';
-import * as runtime from './runtime';
+import { platform } from './platform/port';
 
 // `strict`: a write the service's native bridge did not persist is a failed write: the cap is only as good as the count.
 const AUTO_SPEND_KEY = 'gs_auto_spends';
@@ -46,7 +46,7 @@ const autoSpendStore = createJsonStore({
 // What to do about a ledger that cannot be trusted: on Android it is read again every cycle; on the desktop the file
 // is named, and deleting it starts the count over.
 const recoveryStep = (): string =>
-    runtime.isCapacitor() || runtime.isHeadlessService()
+    platform().capabilities.recoveryWording === 'store'
         ? 'tries again next cycle'
         : `delete ${autoSpendStore.getFilePath()} to start the fill and swap counts over`;
 

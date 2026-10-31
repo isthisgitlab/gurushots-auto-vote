@@ -23,7 +23,7 @@ import {
 import { JOIN_ENDPOINTS } from '../services/joinChallenges/shared';
 import { runClaimPass, CLAIM_ENDPOINTS } from '../services/autoClaim';
 import { loadMissionNeeds, registerMissionNeeds } from '../services/missions';
-import * as runtime from '../runtime';
+import { platform } from '../platform/port';
 import { pickEndpoints } from '../pickEndpoints';
 import { mockSwapBackLedger } from '../swapBackStore';
 import { createMemoryAutoSpendLedger } from '../currencyAutoStore';
@@ -111,7 +111,7 @@ const mockVotingPassDeps = (client: MockEndpoints, token: string, missions: Miss
     // in-app loop always runs mock scenarios.
     scenarios: { ledger: mockScenarioStateLedger },
     missions,
-    refreshMissionNeeds: runtime.isHeadlessService()
+    refreshMissionNeeds: platform().capabilities.refreshMissionNeeds
         ? () => loadMissionNeeds(token, Date.now(), { getMyMissions: client.getMyMissions })
         : null,
 });
