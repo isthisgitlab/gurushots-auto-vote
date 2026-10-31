@@ -1,16 +1,16 @@
 import type { FillLogger } from '../../src/ts/types/autoFill';
 import { invalid } from '../helpers/invalid';
+import { createNodePlatform, extractedVisionRootOf, __resetExtractedRootForTests } from '../../src/ts/platforms/node';
+import { installHeadlessTestPlatform, installTestPlatform, installWebviewTestPlatform } from '../helpers/platform';
+
+import type { PlatformWindows } from '../../src/ts/platform/port';
 
 /** The mocked transformers `env`: the module writes arbitrary config keys onto it. */
 type MockEnv = { backends: { onnx: { wasm: object } }; localModelPath?: string; [key: string]: unknown };
 
-const mockRuntime = {
-    isCapacitor: jest.fn(() => false),
-    isHeadlessService: jest.fn(() => false),
-    isCli: jest.fn(() => false),
-    isElectron: jest.fn(() => true),
-    isPackaged: jest.fn(() => true),
-};
+// The node family answers its location from these two flags (mocked with the
+// real module riding along, the way the family's own test mocks it).
+const runtimeFlags = { electron: true, packaged: true };
 const mockSea = { isSea: jest.fn(() => false), getAsset: jest.fn(() => 'sha') };
 const mockClassifier = jest.fn();
 const mockLog = { warning: jest.fn() };
@@ -26,12 +26,16 @@ const mockCreateRequire = jest.fn(() => () => mockSeaTransformers);
 const mockExtract = jest.fn(() => ({ root: '/vision/root', modulePath: '/vision/root/vision-entry.js' }));
 
 jest.mock('path', () => jest.requireActual<typeof import('path')>('path'));
-jest.mock('../../src/ts/runtime', () => mockRuntime);
+jest.mock('../../src/ts/runtime', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/runtime')>('../../src/ts/runtime'),
+    isElectron: () => runtimeFlags.electron,
+    isPackaged: () => runtimeFlags.packaged,
+}));
 jest.mock('../../src/ts/logger', () => ({ withCategory: jest.fn(() => mockLog) }));
 jest.mock('node:sea', () => mockSea, { virtual: true });
 jest.mock('node:module', () => ({ createRequire: mockCreateRequire }));
 jest.mock('@huggingface/transformers', () => mockTransformers);
-jest.mock('../../src/ts/services/visionCliAssets', () => ({ extractVisionCliAssets: mockExtract }));
 
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
@@ -46,9 +50,35 @@ const {
     descriptionLead,
     snapPrompts,
     judgeSnapImage,
-    getCliAssetRoot,
     __resetForTests,
 } = require('../../src/ts/services/visionVerifier') as typeof visionVerifierModule;
+
+// The service's windows: the explicit no-ops its shell module passes.
+const windows: PlatformWindows = {
+    broadcastSettingsChanged: () => undefined,
+    afterWipe: () => undefined,
+};
+
+/**
+ * The node platform with the CLI's extractor injected, as the CLI shell
+ * installs it: its transformers load extracts through the mock and remembers
+ * the root, which the shell's location override answers.
+ */
+const installNodePlatformWithExtractor = (): void => {
+    const installed = installTestPlatform();
+    const family = createNodePlatform(windows, { extractVisionCliAssets: () => mockExtract() });
+    const nodeModelLocation = family.assets.visionModel.location;
+    installed.assets = {
+        ...family.assets,
+        visionModel: {
+            ...family.assets.visionModel,
+            location: () => {
+                const root = extractedVisionRootOf();
+                return root === undefined ? nodeModelLocation() : `${root}${path.sep}`;
+            },
+        },
+    };
+};
 
 const hex = (seed: string) => seed.repeat(32).slice(0, 32);
 const photo = (id: string) => ({ id: hex(id), member_id: hex('f') });
@@ -81,12 +111,10 @@ const logitsBy = (table: Record<string, number[]>) =>
 
 beforeEach(() => {
     __resetForTests();
+    __resetExtractedRootForTests();
     jest.clearAllMocks();
-    mockRuntime.isCapacitor.mockReturnValue(false);
-    mockRuntime.isHeadlessService.mockReturnValue(false);
-    mockRuntime.isCli.mockReturnValue(false);
-    mockRuntime.isElectron.mockReturnValue(true);
-    mockRuntime.isPackaged.mockReturnValue(true);
+    runtimeFlags.electron = true;
+    runtimeFlags.packaged = true;
     mockSea.isSea.mockReturnValue(false);
     mockSea.getAsset.mockReturnValue('sha');
     jest.spyOn(fs, 'existsSync').mockReturnValue(true);
@@ -98,6 +126,8 @@ beforeEach(() => {
         env.backends.onnx.wasm = {};
     }
     (process as { resourcesPath?: string }).resourcesPath = '/app/resources';
+    // The node test platform stands (the setup installed it); a test that
+    // swapped it gets it back from the setup's afterEach.
 });
 
 afterAll(() => {
@@ -305,8 +335,8 @@ describe('rankVisually', () => {
     });
 
     test.each([
-        ['Capacitor', () => mockRuntime.isCapacitor.mockReturnValue(true)],
-        ['the headless service', () => mockRuntime.isHeadlessService.mockReturnValue(true)],
+        ['Capacitor', () => installWebviewTestPlatform()],
+        ['the headless service', () => installHeadlessTestPlatform()],
     ])('%s runs single-threaded WASM from the WebView origin', async (_name, arrange) => {
         arrange();
         logitsBy({ a: [-2, -2] });
@@ -320,8 +350,8 @@ describe('rankVisually', () => {
     });
 
     test('the SEA CLI loads transformers and the model from its extracted runtime', async () => {
-        mockRuntime.isCli.mockReturnValue(true);
-        mockRuntime.isElectron.mockReturnValue(false);
+        installNodePlatformWithExtractor();
+        runtimeFlags.electron = false;
         mockSea.isSea.mockReturnValue(true);
         logitsBy({ a: [-2, -2] });
         await rankVisually(LEAVES, [hex('a')], [photo('a')], 1, { logger: makeLogger() });
@@ -332,8 +362,8 @@ describe('rankVisually', () => {
     });
 
     test('a failed integrity check is not kept: the next call extracts and loads again', async () => {
-        mockRuntime.isCli.mockReturnValue(true);
-        mockRuntime.isElectron.mockReturnValue(false);
+        installNodePlatformWithExtractor();
+        runtimeFlags.electron = false;
         mockSea.isSea.mockReturnValue(true);
         mockExtract.mockImplementationOnce(() => {
             throw new Error('Vision runtime failed its integrity check');
@@ -354,11 +384,15 @@ describe('rankVisually', () => {
         [
             'a source-run CLI',
             () => {
-                mockRuntime.isCli.mockReturnValue(true);
-                mockRuntime.isElectron.mockReturnValue(false);
+                runtimeFlags.electron = false;
             },
         ],
-        ['unpackaged Electron', () => mockRuntime.isPackaged.mockReturnValue(false)],
+        [
+            'unpackaged Electron',
+            () => {
+                runtimeFlags.packaged = false;
+            },
+        ],
     ])('%s reads the build cache under the repository root', async (_name, arrange) => {
         arrange();
         logitsBy({ a: [-2, -2] });
@@ -381,15 +415,14 @@ describe('rankVisually', () => {
     });
 });
 
-describe('getCliAssetRoot', () => {
-    test('the extracted SEA runtime root is answered once loadClassifier has set it', async () => {
-        expect(getCliAssetRoot()).toBeUndefined();
-        mockRuntime.isCli.mockReturnValue(true);
-        mockRuntime.isElectron.mockReturnValue(false);
+describe('the family remembers the extracted SEA runtime root', () => {
+    test('the root is answered once the transformers load has extracted it', async () => {
+        expect(extractedVisionRootOf()).toBeUndefined();
+        installNodePlatformWithExtractor();
         mockSea.isSea.mockReturnValue(true);
         logitsBy({ a: [-2, -2] });
         await rankVisually(LEAVES, [hex('a')], [photo('a')], 1, { logger: makeLogger() });
-        expect(getCliAssetRoot()).toBe('/vision/root');
+        expect(extractedVisionRootOf()).toBe('/vision/root');
     });
 });
 
@@ -399,14 +432,13 @@ describe('hasBundledModel', () => {
         ['answers 404', async () => ({ ok: false }), false],
         ['cannot fetch at all', async () => Promise.reject(new Error('offline')), false],
     ])('the Android WebView sees the model when its webDir %s', async (_name, response, expected) => {
-        mockRuntime.isCapacitor.mockReturnValue(true);
+        installWebviewTestPlatform();
         jest.mocked(global.fetch).mockImplementation(invalid(response));
         expect(await hasBundledModel()).toBe(expected);
         expect(global.fetch).toHaveBeenCalledWith('vision-model/config.json');
     });
 
     test('the SEA CLI looks for the embedded runtime asset', async () => {
-        mockRuntime.isCli.mockReturnValue(true);
         mockSea.isSea.mockReturnValue(true);
         expect(await hasBundledModel()).toBe(true);
         expect(mockSea.getAsset).toHaveBeenCalledWith('vision-runtime.sha256');
@@ -420,8 +452,7 @@ describe('hasBundledModel', () => {
     });
 
     test('a source-run CLI checks the build cache', async () => {
-        mockRuntime.isCli.mockReturnValue(true);
-        mockRuntime.isElectron.mockReturnValue(false);
+        runtimeFlags.electron = false;
         fs.existsSync.mockReturnValue(false);
         expect(await hasBundledModel()).toBe(false);
         expect(fs.existsSync).toHaveBeenCalledWith(

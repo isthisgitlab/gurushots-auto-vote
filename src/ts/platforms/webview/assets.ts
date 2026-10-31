@@ -1,9 +1,9 @@
 /**
  * The webview family's assets member: the fetch readers of the WebView asset
  * branches (thirdPartyNotices.ts, services/semantic/assets.ts) and the vision
- * model's location and device there (services/visionVerifier.ts). The read is
- * the shared fetchAsset reader of the platform port's core; Phase 3 retires
- * the loaders' private copies for it.
+ * model's answers there (services/visionVerifier.ts). The read is the shared
+ * fetchAsset reader of the platform port's core; the model and the wasm
+ * runtime sit in the webDir the document resolves against.
  */
 
 import { fetchAsset } from '../../platform/fetchAsset';
@@ -17,10 +17,14 @@ const createWebviewAssets = (): PlatformAssets => ({
         return parsed;
     },
     visionModel: {
-        // The WebView branch of visionVerifier getModelLocation: the model and
-        // the wasm runtime sit in the webDir the document resolves against.
         location: () => './',
         device: 'wasm',
+        // The webDir carries the model when the build is not --lite.
+        bundled: async (): Promise<boolean> => {
+            const response = await fetch('vision-model/config.json').catch(() => null);
+            return Boolean(response?.ok);
+        },
+        loadTransformers: async () => import('@huggingface/transformers'),
     },
 });
 

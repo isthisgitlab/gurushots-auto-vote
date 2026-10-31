@@ -1,26 +1,26 @@
 /**
  * The CLI shell's platform: the node family with the single binary's vision
- * model location — the SEA build resolves it into the runtime the build
- * extracted (visionCliAssets, via visionVerifier's cliAssetRoot, set once
- * loadClassifier has extracted it) instead of the source checkout's .cache.
- * The windows are the explicit no-ops of a shell with no windows. Installed
- * when the module loads; cli.ts imports it first, before any core module.
- * visionVerifier is reached at call time — the install must run before the
- * logger loads — so this module's own import chain is the port and the
- * family builder only.
+ * runtime extractor injected — a SEA build's transformers load extracts the
+ * embedded runtime (visionCliAssets) through it, and the model location is
+ * the extracted root the family remembered while it is set, the source
+ * checkout's .cache without it. The windows are the explicit no-ops of a
+ * shell with no windows. Installed when the module loads; cli.ts imports it
+ * first, before any core module. The wrapped modules are reached at call
+ * time — the install must run before the logger loads — so this module's own
+ * import chain is the port and the family builder only.
  */
 
 import * as path from 'node:path';
 
 import { installPlatform } from '../platform/port';
-import { createNodePlatform } from '../platforms/node';
+import { createNodePlatform, extractedVisionRootOf } from '../platforms/node';
 
 import type { PlatformWindows } from '../platform/port';
 
-type VisionVerifierModule = typeof import('../services/visionVerifier');
+type VisionCliAssetsModule = typeof import('../services/visionCliAssets');
 
 // The install must run before the logger loads.
-const visionVerifier = (): VisionVerifierModule => require('../services/visionVerifier') as VisionVerifierModule;
+const visionCliAssets = (): VisionCliAssetsModule => require('../services/visionCliAssets') as VisionCliAssetsModule;
 
 // The CLI has no windows to broadcast to or relaunch.
 const windows: PlatformWindows = {
@@ -28,18 +28,20 @@ const windows: PlatformWindows = {
     afterWipe: () => undefined,
 };
 
-const cliPlatform = createNodePlatform(windows);
-// The extracted runtime root wins while it is set — today's first branch of
-// visionVerifier getModelLocation; without it the family's location stands
-// (the source checkout's .cache). The family member is captured before the
-// assets group is replaced, so the fallback delegates and never recurses.
+const cliPlatform = createNodePlatform(windows, {
+    extractVisionCliAssets: () => visionCliAssets().extractVisionCliAssets(),
+});
+// The extracted runtime root wins while it is set — the root the family's
+// transformers load remembered; without it the family location stands (the
+// source checkout's .cache). The family member is captured before the assets
+// group is replaced, so the fallback delegates and never recurses.
 const nodeModelLocation = cliPlatform.assets.visionModel.location;
 cliPlatform.assets = {
     ...cliPlatform.assets,
     visionModel: {
-        device: cliPlatform.assets.visionModel.device,
+        ...cliPlatform.assets.visionModel,
         location: () => {
-            const root = visionVerifier().getCliAssetRoot();
+            const root = extractedVisionRootOf();
             return root === undefined ? nodeModelLocation() : `${root}${path.sep}`;
         },
     },

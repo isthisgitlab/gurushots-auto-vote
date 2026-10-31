@@ -10,8 +10,7 @@
  * The Week", "It's all About Balance"), a failed image fetch, or a failed
  * inference leaves the tag order untouched.
  */
-import * as runtime from '../runtime';
-import { appPath } from '../appPaths';
+import { platform } from '../platform/port';
 import { entryPhotoUrl } from '../format/photoUrl';
 import { oneLine } from '../format/logSafe';
 import { stripTags, visualSubjectWords } from './photoPicker';
@@ -20,7 +19,6 @@ import * as lexicon from './semantic/lexicon';
 import type { ChallengeText, IgnoreWords, PickerPhoto } from '../types/photoPicker';
 import type { FillLogger } from '../types/autoFill';
 import type { SnapImage } from '../types/gurushots';
-import type * as Transformers from '@huggingface/transformers';
 import type { ZeroShotImageClassificationPipeline } from '@huggingface/transformers';
 import { errorMessage } from '../errorMessage';
 import * as logger from '../logger';
@@ -44,86 +42,38 @@ const HTML_ENTITIES = Object.freeze({ '&amp;': '&', '&quot;': '"', '&#39;': "'",
 
 let classifierPromise: ReturnType<typeof loadClassifier> | undefined;
 let bundledPromise: Promise<boolean> | undefined;
-let cliAssetRoot: string | undefined;
-
-/**
- * The SEA build's extracted vision-runtime root (visionCliAssets), once
- * loadClassifier has extracted it — the first branch of getModelLocation,
- * which the CLI shell's platform module reads for its vision model location.
- */
-const getCliAssetRoot = (): string | undefined => cliAssetRoot;
-
-const getModelLocation = () => {
-    if (runtime.isCapacitor() || runtime.isHeadlessService()) return './';
-    const path = require('node:path') as typeof import('node:path');
-    if (cliAssetRoot) return `${cliAssetRoot}${path.sep}`;
-    if (runtime.isElectron() && runtime.isPackaged()) return `${process.resourcesPath}${path.sep}`;
-    return appPath('.cache') + path.sep;
-};
-
-const isModelBundled = async () => {
-    if (runtime.isCapacitor() || runtime.isHeadlessService()) {
-        const response = await fetch('vision-model/config.json').catch(() => null);
-        return Boolean(response?.ok);
-    }
-    if (runtime.isCli()) {
-        const sea = require('node:sea') as typeof import('node:sea');
-        if (sea.isSea()) {
-            try {
-                sea.getAsset('vision-runtime.sha256');
-                return true;
-            } catch {
-                return false;
-            }
-        }
-    }
-    const path = require('node:path') as typeof import('node:path');
-    return (require('node:fs') as typeof import('node:fs')).existsSync(
-        path.join(getModelLocation(), 'vision-model', 'config.json'),
-    );
-};
 
 /**
  * Whether this build ships the model. Lite builds (`build:*:lite`) leave it
  * and its inference runtime out, so the visual check is skipped without a
- * warning and the update check stays on the lite downloads.
+ * warning and the update check stays on the lite downloads. The answer is
+ * the platform's, memoized.
  */
 const hasBundledModel = (): Promise<boolean> => {
-    if (!bundledPromise) bundledPromise = isModelBundled();
+    if (!bundledPromise) bundledPromise = platform().assets.visionModel.bundled();
     return bundledPromise;
 };
 
 /**
- * The SEA path loads the package through createRequire, which returns `any`;
- * it is the same package, so it is typed as the module the import path loads.
+ * The transformers library and the pipeline come from the platform (the SEA
+ * build's extracted runtime, else the package import); the model location,
+ * the device and the wasm setup are its answers too.
  */
 const loadClassifier = async (): Promise<ZeroShotImageClassificationPipeline> => {
-    let transformers: typeof Transformers | undefined;
-    if (runtime.isCli()) {
-        const sea = require('node:sea') as typeof import('node:sea');
-        if (sea.isSea()) {
-            const assets = (
-                require('./visionCliAssets') as typeof import('./visionCliAssets')
-            ).extractVisionCliAssets();
-            cliAssetRoot = assets.root;
-            const { createRequire } = require('node:module') as typeof import('node:module');
-            transformers = createRequire(assets.modulePath)('@huggingface/transformers') as typeof Transformers;
-        }
-    }
-    transformers ||= await import('@huggingface/transformers');
-    const { env, pipeline } = transformers;
+    const visionModel = platform().assets.visionModel;
+    const { env, pipeline } = await visionModel.loadTransformers();
     env.allowRemoteModels = false;
     env.allowLocalModels = true;
-    env.localModelPath = getModelLocation();
-    if (runtime.isCapacitor() || runtime.isHeadlessService()) {
-        // The library types every build's onnx env as Partial; the WebView build this
-        // branch runs on always has the wasm backend.
+    env.localModelPath = visionModel.location();
+    if (visionModel.device === 'wasm') {
+        // The library types every build's onnx env as Partial; the wasm
+        // device this branch runs on always has the wasm backend.
         env.backends.onnx.wasm!.wasmPaths = './';
         env.backends.onnx.wasm!.numThreads = 1;
     }
     return pipeline('zero-shot-image-classification', 'vision-model', {
         dtype: 'q8',
-        device: runtime.isCapacitor() || runtime.isHeadlessService() ? 'wasm' : 'cpu',
+        device: visionModel.device,
     });
 };
 
@@ -344,7 +294,6 @@ const judgeSnapImage = async (caption: string, image: SnapImage): Promise<SnapJu
 const __resetForTests = () => {
     classifierPromise = undefined;
     bundledPromise = undefined;
-    cliAssetRoot = undefined;
 };
 
 export {
@@ -356,6 +305,5 @@ export {
     snapPrompts,
     SNAP_CAPTION_MAX_CHARS,
     judgeSnapImage,
-    getCliAssetRoot,
     __resetForTests,
 };

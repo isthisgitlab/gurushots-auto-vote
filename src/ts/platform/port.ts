@@ -125,8 +125,14 @@ export type PlatformAssets = {
     readText: (relativePath: string) => Promise<string>;
     /** The asset's parsed JSON — its reader validates (buildTable), the caller awaits and narrows the `unknown`. */
     readJson: (relativePath: string) => Promise<unknown>;
-    /** The local vision model: where it lives, and the device inference runs on. */
-    visionModel: { location: () => string; device: 'wasm' | 'cpu' };
+    /** The local vision model: where it lives, the device inference runs on, whether this build ships it, and the
+     * library the classifier pipeline is built from (the SEA build's extracted copy, else the package import). */
+    visionModel: {
+        location: () => string;
+        device: 'wasm' | 'cpu';
+        bundled: () => Promise<boolean>;
+        loadTransformers: () => Promise<typeof import('@huggingface/transformers')>;
+    };
 };
 
 /** What deleting all local data reaches on this platform. */

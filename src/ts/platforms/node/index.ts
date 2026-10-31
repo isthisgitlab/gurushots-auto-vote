@@ -18,7 +18,7 @@
  * explicit no-ops).
  */
 
-import { createNodeAssets } from './assets';
+import { createNodeAssets, extractedVisionRootOf, __resetExtractedRootForTests } from './assets';
 import { createNodePaths } from './paths';
 import { createNodeStorage } from './store';
 import { createNodeWipe } from './wipe';
@@ -27,6 +27,7 @@ import type { Platform, PlatformWindows } from '../../platform/port';
 
 type ContextModule = typeof import('../../logger/context');
 type RuntimeModule = typeof import('../../runtime');
+type NodeAssetParts = Parameters<typeof createNodeAssets>[0];
 
 const context = (): ContextModule => require('../../logger/context') as ContextModule;
 const runtime = (): RuntimeModule => require('../../runtime') as RuntimeModule;
@@ -61,17 +62,18 @@ const createNodeCapabilities = (): Platform['capabilities'] => ({
 /**
  * The node platform; `windows` is the shell's (Electron's broadcast and
  * relaunch, the web server's, or the CLI's explicit no-ops — each shell
- * module passes its own).
+ * module passes its own), and `parts` carries the shell-only members a shell
+ * injects (the CLI's vision-runtime extractor).
  */
-const createNodePlatform = (windows: PlatformWindows): Platform => ({
+const createNodePlatform = (windows: PlatformWindows, parts: NodeAssetParts = {}): Platform => ({
     http: createNodeHttp(),
     storage: createNodeStorage(),
     paths: createNodePaths(),
-    assets: createNodeAssets(),
+    assets: createNodeAssets(parts),
     wipe: createNodeWipe(),
     native: createNodeNative(),
     windows,
     capabilities: createNodeCapabilities(),
 });
 
-export { createNodePlatform };
+export { createNodePlatform, extractedVisionRootOf, __resetExtractedRootForTests };
