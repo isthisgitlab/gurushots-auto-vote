@@ -358,7 +358,7 @@ describe('AutovoteContext', () => {
             expect(ctx.running).toBe(true);
         });
 
-        it('publishes new controls when onChallengesRefresh changes', async () => {
+        it('keeps the controls stable when only onChallengesRefresh changes', async () => {
             const { rerender } = render(<Host onChallengesRefresh={jest.fn()} />);
             await flush();
             const first = ctx;
@@ -366,8 +366,10 @@ describe('AutovoteContext', () => {
             rerender(<Host onChallengesRefresh={jest.fn()} />);
             await flush();
 
-            expect(ctx).not.toBe(first);
-            expect(ctx.stop).not.toBe(first.stop);
+            // The controller reads the latest refresh identity at call time
+            // (through the host), so neither the value nor the controls churn.
+            expect(ctx).toBe(first);
+            expect(ctx.stop).toBe(first.stop);
             expect(ctx.running).toBe(first.running);
         });
     });

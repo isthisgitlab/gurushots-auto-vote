@@ -139,11 +139,12 @@ export function AutovoteProvider({
         return () => controller.dispose();
     }, [controller]);
 
-    // Re-created when onChallengesRefresh changes identity (the controller
-    // and the chain are not — it reads the latest refresh at call time).
-    const start = useCallback(() => controller.start(), [controller, onChallengesRefresh]);
-    const stop = useCallback(() => controller.stop(), [controller, onChallengesRefresh]);
-    const rearmSchedule = useCallback(() => controller.rearmSchedule(), [controller, onChallengesRefresh]);
+    // Stable per mount: the controller reads the latest onChallengesRefresh
+    // identity at call time (through the host), so the controls never need to
+    // track it.
+    const start = useCallback(() => controller.start(), [controller]);
+    const stop = useCallback(() => controller.stop(), [controller]);
+    const rearmSchedule = useCallback(() => controller.rearmSchedule(), [controller]);
 
     /**
      * Toggle autovote
