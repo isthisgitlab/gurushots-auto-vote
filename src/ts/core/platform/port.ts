@@ -12,8 +12,7 @@
  * A shell platform module's own import chain is only this port and its
  * family builder (plus node builtins), and no module in that chain reads
  * platform() at load — so every entry's install runs before the logger and
- * the rest of core load, and Phase 3 can move the logger's load-time reads
- * behind the port.
+ * the rest of core load, and the logger can read platform() at load.
  */
 
 import type { AxiosAdapter } from 'axios';
@@ -313,8 +312,8 @@ export type PlatformCapabilities = {
     /**
      * The log context line: CLI or GUI. The default rule only — the
      * setContext('GUI') override stays inside logger/context, and no member
-     * calls getContext: Phase 3 points getContext at this member, so a member
-     * that called it would recurse.
+     * calls getContext: getContext reads this member, so a member that called
+     * it would recurse.
      */
     logContext: () => 'CLI' | 'GUI';
     /** Whether the hourly log cleanup interval is armed. */

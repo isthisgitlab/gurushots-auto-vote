@@ -61,7 +61,7 @@ const createWebviewCapabilities = (parts: WebviewNativeParts): Platform['capabil
     // The rule the branch answers today (services/scenarioRunner/step:205):
     // the native background service owns the scenarios while the app WebView
     // has its bridge. Computed from the native part — calling the step's own
-    // function would recurse once Phase 3 points it at this capability.
+    // function would recurse, since the step reads this capability.
     backgroundServiceOwnsScenarios: () => parts.native.autovote?.isAvailable() === true,
     recoveryWording: 'store',
     logContext: () => 'CLI',

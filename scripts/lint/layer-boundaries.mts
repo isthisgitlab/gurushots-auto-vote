@@ -5,8 +5,8 @@
  * runtime (Node, the WebView), `react` is the renderer tree, and `shell:<x>` is one entry point (Electron, CLI, web,
  * Capacitor, the Android headless service). A layer reaches itself and the layers under it, never a sibling shell;
  * and the packages that belong to one runtime (`electron`, `@capacitor/*`, …) may only be imported where that
- * runtime runs. The table below is the one place a boundary is written — a layering phase moves a file by editing
- * it there — and counts these warnings as its exit gate.
+ * runtime runs. The table below is the one place a boundary is written — moving a file to another layer is an edit
+ * there — and the rule is an error, so a new crossing fails lint.
  *
  * A type-only declaration is skipped only when the build erases it whole — `import type …`, `export type … from`,
  * `export type * from`: those carry no runtime edge. An inline `type` inside the braces is not erased: with
