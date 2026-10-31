@@ -678,3 +678,93 @@ describe('renderer bundle graphs', () => {
         expect(inputs).toContain('src/ts/services/NativeAutovoteBridge.ts');
     }, 120_000);
 });
+
+// Every shell platform module must install before the logger loads: the
+// logger reads platform() at module scope (logger/context's context rules),
+// so one static logger import anywhere in a shell platform module's load-time
+// chain throws before the install runs — the bundled Electron main crashed at
+// startup exactly that way. The families' call-time requires are the
+// documented exception (they run when a member is called, never at load), so
+// the guard walks only esbuild's import-statement edges — never require-call
+// or dynamic-import edges — and fails on any logger module they reach.
+describe('shell platform module load-time chains', () => {
+    // tests/setup.ts mocks fs and path globally; esbuild's client resolves paths for real.
+    jest.unmock('fs');
+    jest.unmock('path');
+    const path = jest.requireActual<typeof import('node:path')>('node:path');
+    const root = path.join(__dirname, '..');
+
+    const SHELL_PLATFORM_ENTRIES = [
+        'src/ts/index/platform.ts',
+        'src/ts/cli/platform.ts',
+        'src/ts/web/platform.ts',
+        'src/ts/bridge/capacitorPlatform.ts',
+        'src/ts/headless/platform.ts',
+        'scripts/lib/platform.ts',
+    ];
+    const LOGGER_ENTRY = 'src/ts/logger.ts';
+    const isLoggerModule = (file: string): boolean => file === LOGGER_ENTRY || file.startsWith('src/ts/logger/');
+
+    // Bundles one entry in-process and walks its metafile graph over
+    // import-statement edges only, answering every reached file normalised to
+    // root-relative slash paths, entry included.
+    const loadTimeChain = async (entry: string): Promise<string[]> => {
+        const esbuild = jest.requireActual<typeof import('esbuild')>('esbuild');
+        const result = await esbuild.build({
+            entryPoints: [entry],
+            bundle: true,
+            platform: 'node',
+            format: 'cjs',
+            metafile: true,
+            write: false,
+            logLevel: 'silent',
+            // The metafile keys are relative to the repository root; the
+            // normalisation below matches them.
+            absWorkingDir: root,
+            external: ['electron', '@capacitor/*', '@capawesome-team/*'],
+        });
+        const importsOf = new Map<string, string[]>();
+        for (const [file, info] of Object.entries(result.metafile!.inputs)) {
+            const normalised = path.relative(root, path.resolve(root, file)).split(path.sep).join('/');
+            importsOf.set(
+                normalised,
+                (info.imports ?? [])
+                    .filter((imp) => imp.kind === 'import-statement' && !imp.external)
+                    .map((imp) => path.relative(root, path.resolve(root, imp.path)).split(path.sep).join('/')),
+            );
+        }
+        const reached = new Set<string>([entry]);
+        const queue = [entry];
+        while (queue.length > 0) {
+            const file = queue.shift()!;
+            for (const next of importsOf.get(file) ?? []) {
+                if (reached.has(next)) continue;
+                reached.add(next);
+                queue.push(next);
+            }
+        }
+        return [...reached];
+    };
+
+    test('no shell platform module reaches the logger through its load-time imports', async () => {
+        const offenders: string[] = [];
+        for (const entry of SHELL_PLATFORM_ENTRIES) {
+            const chain = await loadTimeChain(entry);
+            // Positive control: the walk reaches the entry itself, so the
+            // check below can never silently pass on an empty walk.
+            expect(chain).toContain(entry);
+            offenders.push(...chain.filter(isLoggerModule).map((file) => `${entry}: ${file}`));
+        }
+        expect(offenders).toEqual([]);
+    }, 120_000);
+
+    test('the guard is honest: the Electron entry does reach the logger, and the check names it', async () => {
+        // src/ts/index.ts imports the settings facade statically, and the
+        // facade reaches the logger — the same-shaped graph that broke the
+        // main bundle. Its presence here, named by the same filter the guard
+        // fails on, proves the walk and the check see real logger modules.
+        const chain = await loadTimeChain('src/ts/index.ts');
+        expect(chain).toContain(LOGGER_ENTRY);
+        expect(chain.filter(isLoggerModule)).toContain(LOGGER_ENTRY);
+    }, 120_000);
+});
