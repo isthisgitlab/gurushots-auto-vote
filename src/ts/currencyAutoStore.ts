@@ -23,10 +23,9 @@
 
 import type { AutoSpendRecord, RawJsonStore, ThroughResult } from './types/stores';
 import * as logger from './logger';
-import { createJsonStore } from './settings/storage';
+import { createJsonStore, throughStore } from './settings/storage';
 import { isPlainObject } from './plainObject';
 import { fileErrorMessage } from './errorMessage';
-import { throughStore } from './settings/storage';
 import { createMemoryRawJsonStore } from './parseUntrustedJson';
 import { platform } from './platform/port';
 
