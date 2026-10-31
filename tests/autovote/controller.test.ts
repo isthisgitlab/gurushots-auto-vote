@@ -531,13 +531,14 @@ describe('createAutovoteController', () => {
             expect(host.runVotingCycle).not.toHaveBeenCalled();
         });
 
-        it('a rejected notification update is logged, never unhandled', async () => {
+        it.each([
+            [new Error('no notification'), 'Background notification update failed: no notification'],
+            [null, 'Background notification update failed: null'],
+        ])('a rejected notification update (%p) is logged, never unhandled', async (thrown, logged) => {
             setup();
-            jest.mocked(host.background.update).mockRejectedValue(new Error('no notification'));
+            jest.mocked(host.background.update).mockRejectedValue(thrown);
             await controller!.start();
-            expect(host.logRendererWarning).toHaveBeenCalledWith(
-                'Background notification update failed: no notification',
-            );
+            expect(host.logRendererWarning).toHaveBeenCalledWith(logged);
         });
     });
 
