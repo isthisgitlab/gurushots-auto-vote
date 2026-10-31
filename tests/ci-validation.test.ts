@@ -750,19 +750,22 @@ describe('shell platform module load-time chains', () => {
         const offenders: string[] = [];
         for (const entry of SHELL_PLATFORM_ENTRIES) {
             const chain = await loadTimeChain(entry);
-            // Positive control: the walk reaches the entry itself, so the
-            // check below can never silently pass on an empty walk.
-            expect(chain).toContain(entry);
+            // Per-entry control: every shell platform module statically
+            // imports the port it installs, so the walk must reach it
+            // through a real edge — a walk that followed no edges, or that
+            // normalised one entry's paths wrongly, fails here.
+            expect(chain).toContain('src/ts/platform/port.ts');
             offenders.push(...chain.filter(isLoggerModule).map((file) => `${entry}: ${file}`));
         }
         expect(offenders).toEqual([]);
     }, 120_000);
 
     test('the guard is honest: the Electron entry does reach the logger, and the check names it', async () => {
-        // src/ts/index.ts imports the settings facade statically, and the
-        // facade reaches the logger — the same-shaped graph that broke the
-        // main bundle. Its presence here, named by the same filter the guard
-        // fails on, proves the walk and the check see real logger modules.
+        // The mechanism control: src/ts/index.ts imports the settings facade
+        // statically, and the facade reaches the logger — the same-shaped
+        // graph that broke the main bundle. Its presence here, named by the
+        // same filter the guard fails on, proves the walk and the check see
+        // real logger modules.
         const chain = await loadTimeChain('src/ts/index.ts');
         expect(chain).toContain(LOGGER_ENTRY);
         expect(chain.filter(isLoggerModule)).toContain(LOGGER_ENTRY);
