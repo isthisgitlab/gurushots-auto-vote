@@ -144,6 +144,9 @@ describe('Capacitor entry', () => {
                     warning: m.categoryWarning,
                 }),
             ),
+            // The sentinel the shell must hand to mountForToken for the App
+            // mount: the entry passes the Capacitor background host through.
+            backgroundHost: { marker: 'capacitor-background-host' },
             mountApp: jest.fn(),
             mountLogin: jest.fn(),
         };
@@ -202,6 +205,9 @@ describe('Capacitor entry', () => {
                 clearTokenUnlessStayingLoggedIn: m.clearTokenUnlessStayingLoggedIn,
             }));
             jest.doMock(`${SRC}/services/NativeAutovoteBridge`, () => ({ getStatus: m.getStatus }));
+            jest.doMock(`${SRC}/bridge/capacitorBackgroundHost`, () => ({
+                capacitorBackgroundHost: m.backgroundHost,
+            }));
             jest.doMock('@/pages/App', () => ({ mountApp: m.mountApp }));
             jest.doMock('@/pages/Login', () => ({ mountLogin: m.mountLogin }));
             require('@/pages/Capacitor');
@@ -259,6 +265,8 @@ describe('Capacitor entry', () => {
         m.releases.at(-1)!();
         await flush();
         expect(m.mountApp).toHaveBeenCalledTimes(1);
+        // The App mount carries the Capacitor background host.
+        expect(m.mountApp).toHaveBeenCalledWith(m.backgroundHost);
         expect(m.mountLogin).not.toHaveBeenCalled();
         // Stale DOM from a previous tree is cleared before mounting.
         expect(root.childNodes).toHaveLength(0);
@@ -335,6 +343,8 @@ describe('Capacitor entry', () => {
         expect(m.seedBridgeProfiles).not.toHaveBeenCalled();
         expect(docListeners.visibilitychange).toBeUndefined();
         expect(m.mountApp).toHaveBeenCalledTimes(1);
+        // The Capacitor host is the App mount's background host off-native too.
+        expect(m.mountApp).toHaveBeenCalledWith(m.backgroundHost);
     });
 
     test('a bootstrap failure is logged and still mounts', async () => {

@@ -1,7 +1,8 @@
 /**
  * Shared last-minute threshold math for both voting schedulers.
  *
- * `runScheduler.ts` (CLI/Android) and `autovoteScheduler.ts` (React GUI) both
+ * `runScheduler.ts` (CLI/Android) and the renderer's autovote controller
+ * (`../autovote/controller.ts`) both
  * answer "which challenge crosses its lastMinuteThreshold next?" and "is any
  * challenge in its window now?" through this module. The only difference is
  * how a per-challenge threshold gets resolved:
@@ -16,8 +17,8 @@
  *   - thresholdWindow/ruleWakes       currency-rule, scenario and boost-hold wakes
  *   - thresholdWindow/cadenceDecision `computeNextCycleDelayMs`, the whole
  *                                     per-cycle cadence decision every host
- *                                     (CLI `runScheduler.ts`, GUI
- *                                     `AutovoteContext.tsx`, Android
+ *                                     (CLI `runScheduler.ts`, the GUI
+ *                                     `autovote/controller.ts`, Android
  *                                     `headless/index.ts`) drives its single
  *                                     setTimeout/alarm chain from
  *   - thresholdWindow/shared          types and helpers common to the above

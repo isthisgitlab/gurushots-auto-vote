@@ -36,6 +36,8 @@ describe('Web entry', () => {
             }),
             getSettings: jest.fn(getSettings),
             logRendererError: jest.fn(async (_message: string) => {}),
+            // The sentinel the shell must hand to mountForToken for the App mount.
+            noopHost: { marker: 'web-noop-background-host' },
             mountApp: jest.fn(),
             mountLogin: jest.fn(),
         };
@@ -45,6 +47,7 @@ describe('Web entry', () => {
                 onShellEvent: m.onShellEvent,
             }));
             jest.doMock('@/api/ipc', () => ({ getSettings: m.getSettings, logRendererError: m.logRendererError }));
+            jest.doMock('@/contexts/noopBackgroundHost', () => ({ noopBackgroundHost: m.noopHost }));
             jest.doMock('@/pages/App', () => ({ mountApp: m.mountApp }));
             jest.doMock('@/pages/Login', () => ({ mountLogin: m.mountLogin }));
             require('@/pages/Web');
@@ -59,6 +62,8 @@ describe('Web entry', () => {
         expect(m.installWebBridge.mock.invocationCallOrder[0]).toBeLessThan(m.getSettings.mock.invocationCallOrder[0]);
         expect(m.getSettings).toHaveBeenCalledTimes(1);
         expect(m.mountApp).toHaveBeenCalledTimes(1);
+        // The App mount carries the no-op background host (the web shell has none).
+        expect(m.mountApp).toHaveBeenCalledWith(m.noopHost);
         expect(m.mountLogin).not.toHaveBeenCalled();
     });
 

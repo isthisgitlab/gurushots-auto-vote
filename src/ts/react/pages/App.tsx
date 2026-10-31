@@ -1,10 +1,12 @@
 import type { Challenge } from '../../types/gurushots';
 import type { RendererGlobals } from '../../types/capacitor';
+import type { BackgroundHost } from '../../autovote/controller';
 import { createRoot } from 'react-dom/client';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { TranslationProvider, useTranslation } from '@/contexts/TranslationContext';
 import { ChallengesProvider, useChallenges } from '@/contexts/ChallengesContext';
 import { AutovoteProvider, useAutovote } from '@/contexts/AutovoteContext';
+import { noopBackgroundHost } from '@/contexts/noopBackgroundHost';
 import { UpdateProvider } from '@/contexts/UpdateContext';
 import { useSettings } from '@/api/useSettings';
 import { LOGOUT_NOT_SAVED } from '../../ipc/logoutCode';
@@ -390,11 +392,11 @@ function AppContent() {
 /**
  * App with Autovote provider (needs challenges refetch callback)
  */
-function AppWithAutovote() {
+function AppWithAutovote({ backgroundHost }: { backgroundHost: BackgroundHost }) {
     const { refetch } = useChallenges();
 
     return (
-        <AutovoteProvider onChallengesRefresh={refetch}>
+        <AutovoteProvider onChallengesRefresh={refetch} backgroundHost={backgroundHost}>
             <AppContent />
         </AutovoteProvider>
     );
@@ -403,7 +405,7 @@ function AppWithAutovote() {
 /**
  * App with Challenges provider
  */
-function AppWithChallenges() {
+function AppWithChallenges({ backgroundHost }: { backgroundHost: BackgroundHost }) {
     const [autovoteRunning, setAutovoteRunning] = useState(false);
 
     // AutovoteProvider dispatches 'autovote:running-changed' whenever its
@@ -421,7 +423,7 @@ function AppWithChallenges() {
 
     return (
         <ChallengesProvider autovoteRunning={autovoteRunning}>
-            <AppWithAutovote />
+            <AppWithAutovote backgroundHost={backgroundHost} />
         </ChallengesProvider>
     );
 }
@@ -429,11 +431,11 @@ function AppWithChallenges() {
 /**
  * Main App component with all providers
  */
-function App() {
+function App({ backgroundHost = noopBackgroundHost }: { backgroundHost?: BackgroundHost }) {
     return (
         <TranslationProvider>
             <UpdateProvider>
-                <AppWithChallenges />
+                <AppWithChallenges backgroundHost={backgroundHost} />
             </UpdateProvider>
         </TranslationProvider>
     );
@@ -442,12 +444,14 @@ function App() {
 // Mount the React app at module load. The Capacitor entry sets
 // __capacitorBootstrap before importing this module so it can defer
 // mounting until after the bridge is installed and settings are
-// hydrated; everywhere else (Electron) auto-mounts.
-export const mountApp = () => {
+// hydrated; everywhere else (Electron) auto-mounts. The background host
+// is the shell's choice: the no-op host here, the Capacitor bridges from
+// pages/Capacitor.tsx (via mountForToken).
+export const mountApp = (backgroundHost: BackgroundHost = noopBackgroundHost) => {
     const container = document.getElementById('root');
     if (container) {
         const root = createRoot(container);
-        root.render(<App />);
+        root.render(<App backgroundHost={backgroundHost} />);
     }
 };
 
@@ -457,7 +461,7 @@ export const mountApp = () => {
 // and double-mount on top of Login.tsx, breaking React's reconciler.
 queueMicrotask(() => {
     if (!(globalThis as RendererGlobals).__capacitorBootstrap) {
-        mountApp();
+        mountApp(noopBackgroundHost);
     }
 });
 

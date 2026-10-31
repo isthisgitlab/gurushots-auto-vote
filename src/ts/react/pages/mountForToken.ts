@@ -9,17 +9,20 @@
 import { mountApp } from './App';
 import { mountLogin } from './Login';
 
+import type { BackgroundHost } from '../../autovote/controller';
+
 /**
  * @param hasToken - whether a session token is stored; without one Login mounts
  * @param startupError - an IPC failure to show on Login (the shell could not read the session state)
+ * @param backgroundHost - the autovote controller's background host (the shell's choice; mountApp defaults to the no-op host)
  */
-export const mountForToken = (hasToken: boolean, startupError?: string) => {
+export const mountForToken = (hasToken: boolean, startupError?: string, backgroundHost?: BackgroundHost) => {
     const container = document.getElementById('root');
     if (container) {
         while (container.firstChild) container.removeChild(container.firstChild);
     }
     if (hasToken) {
-        mountApp();
+        mountApp(backgroundHost);
     } else {
         mountLogin(startupError);
     }

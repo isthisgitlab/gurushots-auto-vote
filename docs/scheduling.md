@@ -51,7 +51,7 @@ nextCurrencyRule, nextScenarioWake, nextBoostHold }`:
   has not started yet is judged from its start phase. Every still-open
   challenge counts, flash included. Resolvers: `nodeResolvers.resolveScenarioWake`
   (over `services/scenarioStatus.ts`) and its IPC twin in
-  `react/contexts/autovoteScheduler.ts` (`get-scenario-status`).
+  `src/ts/autovote/resolvers.ts` (`get-scenario-status`).
 - **normal**: otherwise the random delay in `[checkFrequencyMin,
 checkFrequencyMax]`.
 
@@ -291,13 +291,15 @@ Deliberate semantics and caveats:
 
 ## Electron — UI-driven AutovoteContext
 
-- **Owner**: `src/ts/react/contexts/AutovoteContext.tsx`
+- **Owner**: the renderer's autovote controller,
+  `src/ts/autovote/controller.ts` (the React provider
+  `src/ts/react/contexts/AutovoteContext.tsx` is a thin adapter that builds
+  its host, subscribes to the state, and renders).
 - **Started by**: the Start / Stop button in the React UI (or auto-
   resume on mount when the persisted `autovoteRunning` flag is true).
-- **Cadence**: a single recursive `setTimeout` chain (`cycleTimerRef` +
-  `scheduleNext`) driven by the same `computeNextCycleDelayMs` decision,
-  bound to the async IPC resolver via `autovoteScheduler.ts`. No separate
-  interval/boundary timer.
+- **Cadence**: a single recursive `setTimeout` chain driven by the same
+  `computeNextCycleDelayMs` decision, bound to the async IPC resolvers in
+  `src/ts/autovote/resolvers.ts`. No separate interval/boundary timer.
 - **Lifecycle**: tied to the renderer window. Closing the window stops
   the loop. The persisted `autovoteRunning` flag means a relaunch
   resumes voting without the user re-clicking Start.
@@ -392,9 +394,10 @@ Deliberate semantics and caveats:
   The _next-delay decision_ is the shared one: the headless JS entry
   (`src/ts/headless/index.ts`) runs one cycle per alarm and reports
   `nextDelayMs` from `computeNextCycleDelayMs` back to the plugin, which
-  schedules the next alarm accordingly. While the app is open, `AutovoteContext`
-  also runs its own cadence chain in the WebView (`createCadenceChain`, the
-  same shared decision, its own timer), so the user gets immediate visual
+  schedules the next alarm accordingly. While the app is open, the autovote
+  controller (`src/ts/autovote/controller.ts`) also runs its own cadence
+  chain in the WebView (`createCadenceChain`, the same shared decision, its
+  own timer), so the user gets immediate visual
   feedback (cycle counter, last-run timestamp) and the in-app boost / turbo /
   submit surfaces keep working. The two loops do not both spend: with the
   native service installed, the app's pass leaves automatic joins and fills to

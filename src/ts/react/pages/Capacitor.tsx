@@ -20,6 +20,7 @@ import type { RendererGlobals } from '../../types/capacitor';
 (globalThis as RendererGlobals).__capacitorBootstrap = true;
 
 import { installBridge, seedBridgeProfiles, subscribe } from '../../bridge/capacitor';
+import { capacitorBackgroundHost } from '../../bridge/capacitorBackgroundHost';
 import { getSetting } from '../../settings';
 import { flushLocalStores, initializeLocalStores } from '../../localStores';
 import { isCapacitor } from '../../runtime';
@@ -28,7 +29,8 @@ import { clearTokenUnlessStayingLoggedIn } from '../../services/auth';
 import { getStatus } from '../../services/NativeAutovoteBridge';
 import { mountForToken } from './mountForToken';
 
-// Mount Login or App based on whether we have a token.
+// Mount Login or App based on whether we have a token. App gets the real
+// background host (the Capacitor bridges); Login needs none.
 const mountForCurrentAuthState = () => {
     let hasToken;
     try {
@@ -36,7 +38,7 @@ const mountForCurrentAuthState = () => {
     } catch {
         hasToken = false;
     }
-    mountForToken(hasToken);
+    mountForToken(hasToken, undefined, capacitorBackgroundHost);
 };
 
 const clearLeftoverToken = async (): Promise<void> => {

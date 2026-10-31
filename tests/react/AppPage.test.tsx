@@ -99,6 +99,11 @@ jest.mock('@/components/app/LogsModal', () => ({ LogsModal: mockStub('LogsModal'
 jest.mock('@/components/app/UpdateDialog', () => ({ UpdateDialog: mockStub('UpdateDialog') }));
 jest.mock('@/components/app/WelcomeModal', () => ({ WelcomeModal: mockStub('WelcomeModal') }));
 
+// The auto-mount and every default `<App />` render pass the no-op background
+// host down to AutovoteProvider; the sentinel pins the identity.
+const mockNoopHost = { marker: 'noop-background-host' };
+jest.mock('@/contexts/noopBackgroundHost', () => ({ noopBackgroundHost: mockNoopHost }));
+
 let App: typeof AppModule.default;
 let mountApp: typeof AppModule.mountApp;
 
@@ -612,5 +617,7 @@ describe('App page', () => {
         });
         await Promise.resolve();
         expect(root.textContent).toBe('common.loading');
+        // The auto-mount passes the no-op background host to the provider.
+        expect(mockProps.AutovoteProvider.backgroundHost).toBe(mockNoopHost);
     });
 });

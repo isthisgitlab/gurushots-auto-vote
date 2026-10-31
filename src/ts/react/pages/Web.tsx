@@ -18,6 +18,7 @@ import { installWebBridge, onShellEvent } from '../../bridge/web';
 import { getSettings, logRendererError } from '../api/ipc';
 import { errorMessage } from '../../errorMessage';
 import { mountForToken } from './mountForToken';
+import { noopBackgroundHost } from '../contexts/noopBackgroundHost';
 
 // What the server answers a request without this run's access token (web/server.ts).
 const TOKEN_REFUSED = 'web-shell-token';
@@ -34,7 +35,7 @@ const mountForCurrentAuthState = async () => {
         if (message === TOKEN_REFUSED) startupError = TOKEN_REFUSED;
         await logRendererError(`Web UI could not read the session state: ${message}`);
     }
-    mountForToken(hasToken, startupError);
+    mountForToken(hasToken, startupError, noopBackgroundHost);
 };
 
 installWebBridge();

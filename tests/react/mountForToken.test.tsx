@@ -19,10 +19,15 @@ const LoginProbe = () => {
     return <span>login</span>;
 };
 
+import { invalid } from '../helpers/invalid';
+
+import type { BackgroundHost } from '../../src/ts/autovote/controller';
+
 const mockMount = (name: string) => () =>
     createRoot(document.getElementById('root')!).render(name === 'app' ? <AppProbe /> : <LoginProbe />);
 
-jest.mock('@/pages/App', () => ({ mountApp: () => mockMount('app')() }));
+const mockMountApp = jest.fn((_backgroundHost?: unknown) => mockMount('app')());
+jest.mock('@/pages/App', () => ({ mountApp: (backgroundHost?: unknown) => mockMountApp(backgroundHost) }));
 const mockMountLogin = jest.fn();
 jest.mock('@/pages/Login', () => ({
     mountLogin: (startupError?: string) => {
@@ -74,4 +79,20 @@ test('a failure the shell met is handed to Login, and only to Login', () => {
 
     mountForToken(true, 'web-shell-token');
     expect(mockMountLogin).toHaveBeenCalledTimes(1);
+});
+
+test('the App mount carries the background host the shell passes', () => {
+    const root = document.createElement('div');
+    root.id = 'root';
+    document.body.appendChild(root);
+
+    // No host of its own: the omitted third arg is forwarded untouched, and
+    // the real mountApp defaults it to the no-op host (pinned by AppPage's
+    // auto-mount case).
+    mountForToken(true);
+    expect(mockMountApp).toHaveBeenLastCalledWith(undefined);
+
+    const custom = invalid<BackgroundHost>({ marker: 'custom-host' });
+    mountForToken(true, undefined, custom);
+    expect(mockMountApp).toHaveBeenLastCalledWith(custom);
 });

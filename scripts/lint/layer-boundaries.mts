@@ -81,6 +81,7 @@ export const LAYER_TABLE: ReadonlyArray<{ target: string; layer: string }> = [
     { target: 'src/ts/services/AndroidUpdateInstaller.ts', layer: 'shell:capacitor' },
     { target: 'src/ts/services/ForegroundServiceController.ts', layer: 'shell:capacitor' },
     { target: 'src/ts/services/NativeAutovoteBridge.ts', layer: 'shell:capacitor' },
+    { target: 'src/ts/bridge/capacitorBackgroundHost.ts', layer: 'shell:capacitor' },
     // The Android headless background service.
     { target: 'src/ts/headless/', layer: 'shell:headless' },
     // Platforms: one runtime each, below every shell.

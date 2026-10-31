@@ -99,6 +99,10 @@ const VALID: ReadonlyArray<readonly [string, string]> = [
     ["import '../react/pages/Web';", file('src/ts/bridge/web.ts')],
     ["import './plainObject';", file('src/ts/localStores.ts')],
     ["import '../logger';", file('src/ts/headless/index.ts')],
+    // The Capacitor background host is a shell:capacitor row: it reaches the
+    // bridges (its own shell) and core (the controller's host type).
+    ["import './capacitorBackgroundHost';", file('src/ts/bridge/capacitor.ts')],
+    ["import '../autovote/controller';", file('src/ts/bridge/capacitorBackgroundHost.ts')],
     // react reaches itself and core.
     ["import './api/ipc';", file('src/ts/react/App.tsx')],
     ["import '../plainObject';", file('src/ts/react/App.tsx')],
@@ -271,6 +275,13 @@ const INVALID: ReadonlyArray<readonly [string, string, ...string[]]> = [
     ],
     // The directory boundary keeps `src/ts/cliX/` out of `src/ts/cli/`: it is plain core.
     ["import '../appPaths';", file('src/ts/cliX/a.ts'), crossing('core', 'platform:node', '../appPaths')],
+    // The capacitorBackgroundHost row keeps the bridges out of the renderer tree: without it the
+    // file would read as plain core, and react could import it silently.
+    [
+        "import '../bridge/capacitorBackgroundHost';",
+        file('src/ts/react/App.tsx'),
+        crossing('react', 'shell:capacitor', '../bridge/capacitorBackgroundHost'),
+    ],
 ];
 
 test('is registered under its plugin name', () => {
