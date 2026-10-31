@@ -340,7 +340,7 @@ Deliberate semantics and caveats:
       and release so it is never a silent behaviour.
     - A user-initiated sleep cannot be cancelled on macOS, and a sleeping
       machine cannot reach the API. On Electron's `powerMonitor` `'suspend'`,
-      `src/ts/windows/suspendBoost.ts` therefore applies, right away, every
+      `src/ts/services/boostGuard/suspendBoost.ts` therefore applies, right away, every
       boost auto-vote would apply within the next 30 minutes
       (`SUSPEND_BOOST_HORIZON_SEC`), using the voting pass's own boost
       decision (`runSuspendBoost`). It is best effort: the event only

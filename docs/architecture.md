@@ -98,7 +98,7 @@ Domain terms used throughout, in reader's terms:
   interface: it hides nothing, but it buys import-path stability under the length-limit split policy, and is
   kept deliberately for that reason.
 - **Sleep boost** (`runSuspendBoost` / `runSuspendBoosts` in `services/votingOrchestrator/boost.ts`, driven by
-  `windows/suspendBoost.ts` on `powerMonitor` `'suspend'`): not a fork of the pass — it reuses `runBoost`'s target
+  `services/boostGuard/suspendBoost.ts` on `powerMonitor` `'suspend'`): not a fork of the pass — it reuses `runBoost`'s target
   resolution, uncertain-photo skip and turboed-only skip, and is reached through the strategy's
   `applyBoostsOnSuspend` binder (real in `strategies/real/index.ts`, mock in `mock/strategy.ts`) exactly as
   `runVotingPass` is reached through `deps`. It never submits a new photo and overrides a fresh-entry hold instead of
@@ -581,7 +581,7 @@ repeated six times is one that gets forgotten at one of them.
   (`maxDurationMin`), because substituting or honouring those would both be fail-_closed_ and could stop
   voting for good. Both catches **log**: the orchestrator has a per-challenge catch that reports the errors
   it sees, so a silent swallow here would be the least visible failure in the pass.
-- **Sleep-boost guards** (`windows/suspendBoost.ts`, `windows/quitGuard.ts`): the remembered challenge list carries
+- **Sleep-boost guards** (`services/boostGuard/suspendBoost.ts`, `windows/quitGuard.ts`): the remembered challenge list carries
   the `mock` flag it was fetched under, and the sleep path acts only when it matches the current mode (mock mode
   also uses the in-memory entry-age ledger, never the real file), so a real list is never boosted from mock mode
   or the reverse. A module-level re-entrancy flag stops two quick sleeps from sending twice and is released in
