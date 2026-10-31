@@ -12,7 +12,7 @@
 
 import * as settings from '../settings';
 import { platform } from '../platform/port';
-import { registerHandlers, type IpcHandlerMap } from './registerHandlers';
+import type { IpcHandlerMap } from './invokeHandler';
 import { errorResult } from './errorResult';
 import {
     toRendererSettings,
@@ -30,7 +30,6 @@ import { refuseInvalidArgs } from './actions/shared';
 import { wipeLocalData } from '../settings/localData';
 import { loadThirdPartyNotices } from '../thirdPartyNotices';
 
-import type { IpcMain } from 'electron';
 import type { SettingsSchemaEntry } from '../settings/schema';
 import type { ConfigApp } from '../types/config';
 import type { EntryPinKind } from '../types/settings';
@@ -396,8 +395,4 @@ const buildHandlers = () => {
     return { ...handlers, ...buildThinHandlers(actions) };
 };
 
-const register = (ipcMain: IpcMain) => {
-    registerHandlers(ipcMain, buildHandlers());
-};
-
-export { register, buildHandlers };
+export { buildHandlers };

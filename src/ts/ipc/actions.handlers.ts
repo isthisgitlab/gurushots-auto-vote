@@ -12,7 +12,6 @@
  * only their token-presence guard is shared via services/auth.ts.
  */
 
-import { registerHandlers } from './registerHandlers';
 import {
     handleGetAutoClaimStatus,
     handleGetActiveChallenges,
@@ -34,8 +33,7 @@ import {
 import { handleGetLibraryPhotos, handleSearchPhotoTags } from './actions/library';
 import { handleGetPhotoStats } from './actions/photoStats';
 
-import type { IpcMain } from 'electron';
-import type { IpcHandlerMap } from './registerHandlers';
+import type { IpcHandlerMap } from './invokeHandler';
 
 const buildHandlers = () =>
     ({
@@ -59,8 +57,4 @@ const buildHandlers = () =>
         'get-photo-stats': handleGetPhotoStats,
     }) satisfies IpcHandlerMap;
 
-const register = (ipcMain: IpcMain) => {
-    registerHandlers(ipcMain, buildHandlers());
-};
-
-export { register, buildHandlers };
+export { buildHandlers };

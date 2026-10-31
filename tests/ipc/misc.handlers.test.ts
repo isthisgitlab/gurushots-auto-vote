@@ -7,7 +7,6 @@
 
 import type * as misc_handlersModule from '../../src/ts/ipc/misc.handlers';
 import type * as applicationMenuModule from '../../src/ts/ui/applicationMenu';
-import type { IpcMain } from 'electron';
 import { invalid } from '../helpers/invalid';
 
 const openExternalMock = jest.fn().mockResolvedValue(undefined);
@@ -162,23 +161,5 @@ describe('misc.handlers refresh-menu', () => {
         const handlers = buildHandlers({ getMainWindow: jest.fn(), getLoginWindow: jest.fn() });
 
         await expect(handlers['refresh-menu']()).resolves.toEqual({ success: false, error: 'Failed to refresh menu' });
-    });
-});
-
-describe('misc.handlers register', () => {
-    test('registers every channel with the injected window accessors', async () => {
-        const { register } = require('../../src/ts/ipc/misc.handlers') as typeof misc_handlersModule;
-        const channels = new Map<string, Parameters<IpcMain['handle']>[1]>();
-        const main = { isDestroyed: () => false, reload: jest.fn() };
-        register(
-            invalid({
-                handle: (channel: string, impl: Parameters<IpcMain['handle']>[1]) => channels.set(channel, impl),
-            }),
-            { getMainWindow: () => invalid(main), getLoginWindow: () => null },
-        );
-
-        expect([...channels.keys()].sort()).toEqual(['open-external-url', 'refresh-menu', 'reload-window']);
-        await expect(channels.get('reload-window')!(invalid(undefined))).resolves.toEqual({ success: true });
-        expect(main.reload).toHaveBeenCalled();
     });
 });

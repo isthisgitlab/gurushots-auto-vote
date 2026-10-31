@@ -26,7 +26,6 @@ import * as logger from '../logger';
 import * as settings from '../settings';
 import * as apiFactory from '../apiFactory';
 import * as auth from '../services/auth';
-import { registerHandlers } from './registerHandlers';
 import { errorResult } from './errorResult';
 import { isIdArg } from './isIdArg';
 import { getScenarioStatus, ledgerForMode, stepLockForMode } from '../services/scenarioStatus';
@@ -40,8 +39,7 @@ import { SCENARIO_TEMPLATES } from '../scenarios/templates';
 import { refreshScenarioStateAsync } from '../scenarioStateStore';
 import { backgroundServiceOwnsScenarios } from '../services/scenarioRunner';
 
-import type { IpcMain } from 'electron';
-import type { IpcHandlerMap } from './registerHandlers';
+import type { IpcHandlerMap } from './invokeHandler';
 import type { ScenarioDocument, ScenarioIssue } from '../settings/scenarioSchema';
 import type { VoteHistory } from '../scenarios/speed';
 import type { ActiveChallengesResponse, Bankroll, Challenge } from '../types/gurushots';
@@ -350,6 +348,4 @@ const buildHandlers = () =>
         },
     }) satisfies IpcHandlerMap;
 
-const register = (ipcMain: IpcMain) => registerHandlers(ipcMain, buildHandlers());
-
-export { register, buildHandlers };
+export { buildHandlers };

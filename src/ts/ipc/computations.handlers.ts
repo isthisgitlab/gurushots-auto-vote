@@ -10,18 +10,16 @@
  * It is strictly read-only: it never calls an apply/mutation path, so it
  * cannot perturb a concurrent voting pass.
  *
- * Registered through registerHandlers() (like every other module) so it
+ * Registered through registerHandlers() in the Electron shell (like every other module) so it
  * inherits the isTrustedSender frame-origin guard; a hand-rolled
  * ipcMain.handle would bypass it while still passing manifest name-parity.
  */
 
-import { registerHandlers } from './registerHandlers';
 import * as logger from '../logger';
 import * as votingLogic from '../services/VotingLogic';
 import { getEntryAgeLedger } from '../apiFactory';
 
-import type { IpcMain } from 'electron';
-import type { IpcHandlerMap } from './registerHandlers';
+import type { IpcHandlerMap } from './invokeHandler';
 import type { Challenge } from '../types/gurushots';
 
 const buildHandlers = () =>
@@ -68,8 +66,4 @@ const buildHandlers = () =>
         },
     }) satisfies IpcHandlerMap;
 
-const register = (ipcMain: IpcMain) => {
-    registerHandlers(ipcMain, buildHandlers());
-};
-
-export { register, buildHandlers };
+export { buildHandlers };

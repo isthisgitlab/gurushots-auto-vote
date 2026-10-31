@@ -14,7 +14,7 @@ import { rememberChallenges } from '../../services/boostGuard/selection';
 import { sanitizeForLog, refuseInvalidArgs } from './shared';
 import { isPlainObject } from '../../plainObject';
 
-import type { IpcReplyFn } from '../registerHandlers';
+import type { IpcReplyFn } from '../invokeHandler';
 import type { joinChallengeSingle } from '../../services/joinChallenges';
 import type {
     ActiveChallengesResponse,

@@ -10,7 +10,7 @@ import { isKnownTurboMode } from '../../voting/turboMode';
 import { claimTurboRun, releaseTurboRun } from '../../services/turboRunLock';
 import { sanitizeForLog, refuseInvalidArgs, fetchLiveChallenge, liveRefusalError } from './shared';
 
-import type { IpcReplyFn } from '../registerHandlers';
+import type { IpcReplyFn } from '../invokeHandler';
 import type { Challenge, SnapStopReason, TurboGameResult } from '../../types/gurushots';
 
 /**

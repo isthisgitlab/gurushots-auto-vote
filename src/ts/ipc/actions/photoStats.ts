@@ -14,7 +14,7 @@ import { errorResult } from '../errorResult';
 import { refuseInvalidArgs } from './shared';
 import { SUPERSEDED, createThrottle } from './throttle';
 
-import type { IpcReplyFn } from '../registerHandlers';
+import type { IpcReplyFn } from '../invokeHandler';
 
 // After a stats call's failure breaker trips, later calls answer every uncached
 // id as missing without fetching, for this long. GuruShots pushing back on one

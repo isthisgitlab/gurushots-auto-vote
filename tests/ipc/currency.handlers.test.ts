@@ -11,7 +11,6 @@ jest.mock('../../src/ts/apiFactory');
 jest.mock('../../src/ts/services/auth');
 jest.mock('../../src/ts/services/currencyActions');
 
-import type { IpcMain } from 'electron';
 import { invalid } from '../helpers/invalid';
 import { logCategories } from '../helpers/logCategories';
 
@@ -462,21 +461,5 @@ describe('get-swap-backs listing', () => {
             items: [],
             error: 'api-failed',
         });
-    });
-});
-
-describe('register', () => {
-    test('registers every currency channel on ipcMain', async () => {
-        const { register } = require('../../src/ts/ipc/currency.handlers') as typeof currency_handlersModule;
-        const channels = new Map<string, Parameters<IpcMain['handle']>[1]>();
-        register(
-            invalid({
-                handle: (channel: string, impl: Parameters<IpcMain['handle']>[1]) => channels.set(channel, impl),
-            }),
-        );
-        expect([...channels.keys()].sort()).toEqual(Object.keys(handlers).sort());
-        expect(((await channels.get('fill-exposure')!(invalid(undefined), 10, false)) as Envelope).outcome).toBe(
-            'needs-confirm',
-        );
     });
 });

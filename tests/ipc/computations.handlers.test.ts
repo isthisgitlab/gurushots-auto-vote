@@ -8,15 +8,13 @@
 
 jest.mock('../../src/ts/services/VotingLogic', () => ({ describeDeadlineActions: jest.fn() }));
 
-import type { IpcMain } from 'electron';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 import votingLogicModule = require('../../src/ts/services/VotingLogic');
 const votingLogic = jest.mocked(votingLogicModule);
 import type * as computations_handlersModule from '../../src/ts/ipc/computations.handlers';
-const { buildHandlers, register } =
-    require('../../src/ts/ipc/computations.handlers') as typeof computations_handlersModule;
+const { buildHandlers } = require('../../src/ts/ipc/computations.handlers') as typeof computations_handlersModule;
 
 let handler: ReturnType<typeof buildHandlers>['get-deadline-actions'];
 
@@ -90,28 +88,5 @@ describe('get-deadline-actions', () => {
             success: false,
             error: 'Failed to compute deadline actions',
         });
-    });
-});
-
-describe('register', () => {
-    test('registers get-deadline-actions through the guarded registerHandlers', async () => {
-        const channels = new Map<string, Parameters<IpcMain['handle']>[1]>();
-        register(
-            invalid({
-                handle: (channel: string, impl: Parameters<IpcMain['handle']>[1]) => channels.set(channel, impl),
-            }),
-        );
-        expect([...channels.keys()]).toEqual(['get-deadline-actions']);
-
-        // An untrusted (remote main frame) sender is refused before the handler runs.
-        const frame = { url: 'https://evil.example/' };
-        const result: unknown = await channels.get('get-deadline-actions')!(
-            invalid({ senderFrame: frame, sender: { mainFrame: frame } }),
-            {
-                id: 1,
-            },
-        );
-        expect(result).toEqual({ success: false, error: 'Refused: untrusted sender' });
-        expect(votingLogic.describeDeadlineActions).not.toHaveBeenCalled();
     });
 });

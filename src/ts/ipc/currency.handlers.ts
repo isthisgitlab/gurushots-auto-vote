@@ -13,7 +13,6 @@
  */
 
 import * as settings from '../settings';
-import { registerHandlers } from './registerHandlers';
 import { isIdArg } from './isIdArg';
 import * as logger from '../logger';
 import * as apiFactory from '../apiFactory';
@@ -24,8 +23,7 @@ import { CURRENCY_OUTCOME } from '../voting/currencyActions';
 import { CHOSEN_PHOTO_ID_RE } from '../settings/limits';
 import { swapBackLedger, mockSwapBackLedger } from '../swapBackStore';
 
-import type { IpcMain } from 'electron';
-import type { IpcHandlerMap, IpcReplyFn } from './registerHandlers';
+import type { IpcHandlerMap, IpcReplyFn } from './invokeHandler';
 import type { ApiStrategy } from '../apiFactory';
 import type { SpendOutcome } from '../services/currencyActions';
 
@@ -262,8 +260,4 @@ const buildHandlers = () =>
         },
     }) satisfies IpcHandlerMap;
 
-const register = (ipcMain: IpcMain) => {
-    registerHandlers(ipcMain, buildHandlers());
-};
-
-export { register, buildHandlers };
+export { buildHandlers };

@@ -12,12 +12,11 @@
  */
 
 import * as logger from '../logger';
-import { registerHandlers } from './registerHandlers';
 import { errorResult } from './errorResult';
 
-import type { IpcMain, IpcMainInvokeEvent, WebContents } from 'electron';
-import type { IpcHandlerMap } from './registerHandlers';
-import type { GuiLogEntry, GuiLogSink } from '../logger';
+import type { IpcMainInvokeEvent, WebContents } from 'electron';
+import type { IpcHandlerMap } from './invokeHandler';
+import type { GuiLogEntry } from '../logger';
 
 // Longest message a renderer log call may write; a compromised window cannot push more into the log files.
 const MAX_LOG_MESSAGE_LENGTH = 8 * 1024;
@@ -118,11 +117,4 @@ const buildHandlers = () =>
         },
     }) satisfies IpcHandlerMap;
 
-const register = (ipcMain: IpcMain) => {
-    registerHandlers(ipcMain, buildHandlers());
-    // logger.ts looks up this function via the global to push log
-    // events from any module without a back-reference.
-    (global as typeof globalThis & { sendLogToGUI?: GuiLogSink }).sendLogToGUI = sendLogToGUI;
-};
-
-export { register, buildHandlers, sendLogToGUI };
+export { buildHandlers, sendLogToGUI };

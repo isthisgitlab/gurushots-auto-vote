@@ -36,7 +36,7 @@ import * as computationsHandlers from '../ipc/computations.handlers';
 import * as currencyHandlers from '../ipc/currency.handlers';
 import * as scenariosHandlers from '../ipc/scenarios.handlers';
 import { buildReleaseUpdateHandlers } from '../ipc/releaseUpdates';
-import { invokeHandler } from '../ipc/registerHandlers';
+import { invokeHandler } from '../ipc/invokeHandler';
 import * as updateChecker from '../services/UpdateChecker';
 import { logout as sharedLogout, LogoutNotSavedError } from '../services/auth';
 import { LOGOUT_NOT_SAVED } from '../ipc/logoutCode';
@@ -50,7 +50,7 @@ import { isPlainObject } from '../plainObject';
 import { isInteger } from '../numbers';
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { IpcHandler } from '../ipc/registerHandlers';
+import type { IpcHandler } from '../ipc/invokeHandler';
 import type { ShellUpdateHandlers } from '../ipc/releaseUpdates';
 import type { GuiLogSink } from '../logger';
 

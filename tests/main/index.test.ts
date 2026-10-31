@@ -8,15 +8,14 @@
  * fresh module registry (window state lives in index/state.ts).
  */
 
-import type { BrowserWindowConstructorOptions, Dialog, IpcMain, Rectangle, WebPreferences } from 'electron';
+import type { BrowserWindowConstructorOptions, Dialog, Rectangle, WebPreferences } from 'electron';
 import type * as settingsModule from '../../src/ts/settings';
 import type * as loggerModule from '../../src/ts/logger';
 import type { CategoryLogger } from '../../src/ts/logger';
 import type * as randomizerModule from '../../src/ts/api/randomizer';
 import type * as autoUpdaterModule from '../../src/ts/services/AutoUpdater';
 import type * as authModule from '../../src/ts/services/auth';
-import type * as updateHandlersModule from '../../src/ts/ipc/update.handlers';
-import type * as miscHandlersModule from '../../src/ts/ipc/misc.handlers';
+import type * as registerIpcModule from '../../src/ts/ipc/registerIpc';
 import type * as registerHandlersModule from '../../src/ts/ipc/registerHandlers';
 import type * as lifecycleModule from '../../src/ts/windows/lifecycle';
 import type * as settingsWatcherModule from '../../src/ts/windows/settingsWatcher';
@@ -96,8 +95,7 @@ interface LoadedMocks {
     randomizer: jest.MaybeMockedDeep<typeof randomizerModule>;
     AutoUpdater: jest.MaybeMockedDeep<typeof autoUpdaterModule.AutoUpdater>;
     auth: jest.MaybeMockedDeep<typeof authModule>;
-    updateIpc: jest.MaybeMockedDeep<typeof updateHandlersModule>;
-    miscIpc: jest.MaybeMockedDeep<typeof miscHandlersModule>;
+    registerIpc: jest.MaybeMockedDeep<typeof registerIpcModule>;
     registerHandlers: jest.MaybeMockedDeep<typeof registerHandlersModule>;
     lifecycle: jest.MaybeMockedDeep<typeof lifecycleModule>;
     watcher: jest.MaybeMockedDeep<typeof settingsWatcherModule>;
@@ -234,9 +232,7 @@ jest.mock('../../src/ts/services/auth', () => {
     class LogoutNotSavedError extends Error {}
     return { logout: jest.fn(() => Promise.resolve()), LogoutNotSavedError };
 });
-for (const mod of ['log', 'update', 'misc', 'settings', 'voting', 'actions', 'computations', 'currency', 'scenarios']) {
-    jest.mock(`../../src/ts/ipc/${mod}.handlers`, () => ({ register: jest.fn() }));
-}
+jest.mock('../../src/ts/ipc/registerIpc', () => ({ registerIpc: jest.fn() }));
 jest.mock('../../src/ts/ipc/registerHandlers', () => ({
     isTrustedSender: jest.fn(() => true),
     isChannelAllowedForSender: jest.fn(() => true),
@@ -308,8 +304,7 @@ function load({ lock = true, whenReady }: { lock?: boolean; whenReady?: () => Pr
             require('../../src/ts/services/AutoUpdater') as typeof import('../../src/ts/services/AutoUpdater')
         ).AutoUpdater,
         auth: require('../../src/ts/services/auth') as typeof authModule,
-        updateIpc: require('../../src/ts/ipc/update.handlers') as typeof updateHandlersModule,
-        miscIpc: require('../../src/ts/ipc/misc.handlers') as typeof miscHandlersModule,
+        registerIpc: require('../../src/ts/ipc/registerIpc') as typeof registerIpcModule,
         registerHandlers: require('../../src/ts/ipc/registerHandlers') as typeof registerHandlersModule,
         lifecycle: require('../../src/ts/windows/lifecycle') as typeof lifecycleModule,
         watcher: require('../../src/ts/windows/settingsWatcher') as typeof settingsWatcherModule,
@@ -359,22 +354,8 @@ describe('module bootstrap', () => {
         expect((global as typeof globalThis & { translationManager?: unknown }).translationManager).toBeUndefined();
         expect(m.app.commandLine.appendSwitch).toHaveBeenCalledWith('disable-features', 'ServiceWorker');
         expect(m.app.commandLine.appendSwitch).toHaveBeenCalledWith('use-mock-keychain');
-        for (const mod of [
-            'log',
-            'update',
-            'misc',
-            'settings',
-            'voting',
-            'actions',
-            'computations',
-            'currency',
-            'scenarios',
-        ]) {
-            expect(
-                (require(`../../src/ts/ipc/${mod}.handlers`) as { register: jest.Mock<void, [IpcMain]> }).register.mock
-                    .calls[0][0],
-            ).toBe(m.ipcMain);
-        }
+        expect(m.registerIpc.registerIpc).toHaveBeenCalledTimes(1);
+        expect(m.registerIpc.registerIpc.mock.calls[0][0]).toBe(m.ipcMain);
         expect(Object.keys(m.ipcMain.handlers)).toEqual(['login-success', 'logout']);
         await flush();
     });
@@ -392,8 +373,7 @@ describe('module bootstrap', () => {
     it('exposes live window / updater accessors to the update and misc IPC modules', async () => {
         load();
         await flush();
-        const updateDeps = m.updateIpc.register.mock.calls[0][1];
-        const miscDeps = m.miscIpc.register.mock.calls[0][1];
+        const { update: updateDeps, misc: miscDeps } = m.registerIpc.registerIpc.mock.calls[0][1];
 
         expect(updateDeps.getAutoUpdater()).toBe(autoUpdaterInstance());
         const replacement = { setMainWindow: jest.fn() };
@@ -708,7 +688,7 @@ describe('login window', () => {
         ]);
 
         win.handlers.closed();
-        expect(m.miscIpc.register.mock.calls[0][1].getLoginWindow()).toBeNull();
+        expect(m.registerIpc.registerIpc.mock.calls[0][1].misc.getLoginWindow()).toBeNull();
     });
 
     it('logs when the login page fails to load', async () => {

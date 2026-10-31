@@ -18,7 +18,6 @@ jest.mock('../../src/ts/services/manualVote', () => ({
     STAGGER_MS: 0,
 }));
 
-import type { IpcMain } from 'electron';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
@@ -498,21 +497,5 @@ describe('vote-on-challenge log categories', () => {
         expect(
             logCategories('warning', '❌ Challenge not found:', { challengeId: '123', challengeTitle: 'Missing' }),
         ).toEqual(['challenges']);
-    });
-});
-
-describe('register', () => {
-    test('registers every voting channel on ipcMain', () => {
-        const { register } = require('../../src/ts/ipc/voting.handlers') as typeof voting_handlersModule;
-        const channels = new Map<string, Parameters<IpcMain['handle']>[1]>();
-        register(
-            invalid({
-                handle: (channel: string, impl: Parameters<IpcMain['handle']>[1]) => channels.set(channel, impl),
-            }),
-        );
-        expect([...channels.keys()].sort()).toEqual(Object.keys(buildHandlers()).sort());
-
-        cancellation.isCancelled = jest.fn().mockReturnValue(false);
-        expect(channels.get('should-cancel-voting')!(invalid(undefined))).toBe(false);
     });
 });

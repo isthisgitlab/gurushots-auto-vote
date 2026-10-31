@@ -64,6 +64,8 @@ export const LAYER_TABLE: ReadonlyArray<{ target: string; layer: string }> = [
     { target: 'src/ts/services/AutoUpdater.ts', layer: 'shell:electron' },
     { target: 'src/ts/ipc/misc.handlers.ts', layer: 'shell:electron' },
     { target: 'src/ts/ipc/update.handlers.ts', layer: 'shell:electron' },
+    { target: 'src/ts/ipc/registerHandlers.ts', layer: 'shell:electron' },
+    { target: 'src/ts/ipc/registerIpc.ts', layer: 'shell:electron' },
     // The CLI shell: the command-line entry point and its Node-only edges.
     { target: 'src/ts/cli/', layer: 'shell:cli' },
     { target: 'src/ts/scheduling/runScheduler.ts', layer: 'shell:cli' },

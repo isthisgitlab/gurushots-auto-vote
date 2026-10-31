@@ -4,7 +4,7 @@
  */
 
 import * as settings from '../settings';
-import type { IpcHandler } from './registerHandlers';
+import type { IpcHandler } from './invokeHandler';
 import { isRendererHiddenKey, toRendererSettings } from './rendererSettings';
 import * as logger from '../logger';
 import { isIdArg } from './isIdArg';

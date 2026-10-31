@@ -18,7 +18,6 @@ jest.mock('../../src/ts/services/VotingLogic');
 jest.mock('../../src/ts/services/autoFill');
 jest.mock('../../src/ts/services/boostGuard/selection', () => ({ rememberChallenges: jest.fn() }));
 
-import type { IpcMain } from 'electron';
 import { invalid } from '../helpers/invalid';
 import {
     __resetSnapUnavailableForTests,
@@ -2602,25 +2601,6 @@ describe('log categories', () => {
             'voting',
         ]);
         expect(logCategories('info', '🚀 Applying boost to entry: Challenge=123, Image=i1', null)).toEqual(['voting']);
-    });
-});
-
-describe('register', () => {
-    test('registers every action channel on ipcMain', async () => {
-        const { register } = require('../../src/ts/ipc/actions.handlers') as typeof actions_handlersModule;
-        const channels = new Map<string, Parameters<IpcMain['handle']>[1]>();
-        register(
-            invalid({
-                handle: (channel: string, impl: Parameters<IpcMain['handle']>[1]) => channels.set(channel, impl),
-            }),
-        );
-        expect([...channels.keys()].sort()).toEqual(Object.keys(buildHandlers()).sort());
-
-        stubAuthGuardFail();
-        await expect(channels.get('get-bankroll')!(invalid(undefined))).resolves.toEqual({
-            success: false,
-            error: 'No authentication token found',
-        });
     });
 });
 

@@ -4,16 +4,8 @@ import { app, ipcMain, shell } from 'electron';
 import * as settings from './settings';
 import * as logger from './logger';
 import { logout, LogoutNotSavedError } from './services/auth';
-import * as logIpc from './ipc/log.handlers';
-import * as updateIpc from './ipc/update.handlers';
-import * as miscIpc from './ipc/misc.handlers';
-import * as settingsIpc from './ipc/settings.handlers';
-import * as votingIpc from './ipc/voting.handlers';
-import * as actionsIpc from './ipc/actions.handlers';
-import * as computationsIpc from './ipc/computations.handlers';
-import * as currencyIpc from './ipc/currency.handlers';
-import * as scenariosIpc from './ipc/scenarios.handlers';
 import { isTrustedSender, isChannelAllowedForSender } from './ipc/registerHandlers';
+import { registerIpc } from './ipc/registerIpc';
 import { ensureExit, focusExistingWindow, clearTokenOnQuit } from './windows/lifecycle';
 import { bypassQuitGuard } from './windows/quitGuard';
 import { appState } from './index/state';
@@ -56,24 +48,19 @@ if (!gotSingleInstanceLock) {
 // receives the accessors it needs to read/write the shared window and
 // updater state (index/state.ts). The windows' lifecycle lives in
 // index/windows.ts and the startup sequence in index/startup.ts.
-logIpc.register(ipcMain);
-updateIpc.register(ipcMain, {
-    getAutoUpdater: () => appState.autoUpdater,
-    setAutoUpdater: (v: AutoUpdater) => {
-        appState.autoUpdater = v;
+registerIpc(ipcMain, {
+    update: {
+        getAutoUpdater: () => appState.autoUpdater,
+        setAutoUpdater: (v: AutoUpdater) => {
+            appState.autoUpdater = v;
+        },
+        getMainWindow: () => appState.mainWindow,
     },
-    getMainWindow: () => appState.mainWindow,
+    misc: {
+        getMainWindow: () => appState.mainWindow,
+        getLoginWindow: () => appState.loginWindow,
+    },
 });
-miscIpc.register(ipcMain, {
-    getMainWindow: () => appState.mainWindow,
-    getLoginWindow: () => appState.loginWindow,
-});
-settingsIpc.register(ipcMain);
-votingIpc.register(ipcMain);
-actionsIpc.register(ipcMain);
-computationsIpc.register(ipcMain);
-currencyIpc.register(ipcMain);
-scenariosIpc.register(ipcMain);
 
 if (gotSingleInstanceLock) {
     // Only the instance holding the lock may touch the user-data directory.

@@ -58,7 +58,7 @@ import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore'
 import type * as templatesModule from '../../src/ts/scenarios/templates';
 import type * as scenarios_handlersModule from '../../src/ts/ipc/scenarios.handlers';
 const { SCENARIO_TEMPLATES } = require('../../src/ts/scenarios/templates') as typeof templatesModule;
-const { buildHandlers, register } = require('../../src/ts/ipc/scenarios.handlers') as typeof scenarios_handlersModule;
+const { buildHandlers } = require('../../src/ts/ipc/scenarios.handlers') as typeof scenarios_handlersModule;
 
 const handlers = buildHandlers();
 const issue = { path: 'start', message: 'No phase named "x"' };
@@ -646,10 +646,4 @@ describe('simulate-scenario', () => {
             error: 'no-scenario',
         });
     });
-});
-
-test('register wires every handler through the trusted-sender wrapper', () => {
-    const ipcMain = { handle: jest.fn<void, [channel: string, listener: unknown]>() };
-    register(invalid(ipcMain));
-    expect(ipcMain.handle.mock.calls.map(([channel]) => channel)).toEqual(Object.keys(handlers));
 });

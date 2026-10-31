@@ -7,14 +7,12 @@
 
 import type * as loggerModule from '../../src/ts/logger';
 import type * as logHandlersModule from '../../src/ts/ipc/log.handlers';
-import type { IpcMain } from 'electron';
 import { invalid } from '../helpers/invalid';
 
 // The factory below also exposes the per-category loggers it hands out.
 type CategoryMock = jest.Mocked<Pick<loggerModule.CategoryLogger, 'debug' | 'error' | 'warning' | 'api'>>;
 type MockedLogger = jest.MockedObject<typeof loggerModule> & { categories: Record<string, CategoryMock> };
 type Handlers = ReturnType<typeof logHandlersModule.buildHandlers>;
-type ChannelImpl = Parameters<IpcMain['handle']>[1];
 const g = global as typeof global & { sendLogToGUI?: unknown };
 
 jest.mock('../../src/ts/logger', () => {
@@ -161,7 +159,7 @@ describe('log.handlers — renderer log writes and file lookups', () => {
     });
 });
 
-describe('log.handlers — stream edge cases and register', () => {
+describe('log.handlers — stream edge cases', () => {
     let logHandlers: typeof logHandlersModule;
     let handlers: Handlers;
     let logger: MockedLogger;
@@ -253,14 +251,5 @@ describe('log.handlers — stream edge cases and register', () => {
             success: false,
             error: 'Failed to stop log stream',
         });
-    });
-
-    test('register wires every channel and installs the global fan-out hook', async () => {
-        const channels = new Map<string, ChannelImpl>();
-        logHandlers.register(invalid({ handle: (channel: string, impl: ChannelImpl) => channels.set(channel, impl) }));
-
-        expect([...channels.keys()].sort()).toEqual(Object.keys(handlers).sort());
-        expect(g.sendLogToGUI).toBe(logHandlers.sendLogToGUI);
-        await expect(channels.get('get-log-file')!(invalid(undefined))).resolves.toBe('/logs/app.log');
     });
 });

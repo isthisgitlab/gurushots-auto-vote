@@ -37,7 +37,7 @@ import { isIdArg } from '../isIdArg';
 import { isUsageArg, refuseInvalidArgs } from './shared';
 import { SUPERSEDED, createThrottle } from './throttle';
 
-import type { IpcReplyFn } from '../registerHandlers';
+import type { IpcReplyFn } from '../invokeHandler';
 import type { LibraryPhoto } from '../../types/gurushots';
 import type { LibraryOrder } from '../../librarySort';
 import type { LibraryUsage } from '../../types/photoPicker';

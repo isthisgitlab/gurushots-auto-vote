@@ -1,6 +1,6 @@
 /**
  * Tests for the hand-written (non-thin) channels in
- * settings.handlers.ts plus the register() wiring of the installed platform's
+ * settings.handlers.ts plus the wiring of the installed platform's
  * windows (the write announcements and the post-wipe hand-over; the Electron
  * bodies are tests/shells/electronPlatform.test.ts).
  * The thin-handler rows are covered by settings.handlers.thin-table.test.ts.
@@ -20,7 +20,6 @@ jest.mock('../../src/ts/apiFactory', () => ({
     getMiddleware: jest.fn(),
 }));
 
-import type { IpcMain } from 'electron';
 import { invalid } from '../helpers/invalid';
 import { installTestPlatform } from '../helpers/platform';
 
@@ -37,9 +36,7 @@ const localData = jest.mocked(localDataModule);
 import noticesModule = require('../../src/ts/thirdPartyNotices');
 const notices = jest.mocked(noticesModule);
 import type * as settings_handlersModule from '../../src/ts/ipc/settings.handlers';
-const { buildHandlers, register } = require('../../src/ts/ipc/settings.handlers') as typeof settings_handlersModule;
-
-type ChannelImpl = Parameters<IpcMain['handle']>[1];
+const { buildHandlers } = require('../../src/ts/ipc/settings.handlers') as typeof settings_handlersModule;
 
 const boom = () => {
     throw new Error('boom');
@@ -779,29 +776,16 @@ describe('set-entry-pin', () => {
     });
 });
 
-describe('register', () => {
-    const makeIpcMain = () => {
-        const channels = new Map<string, ChannelImpl>();
-        return { channels, handle: (channel: string, impl: ChannelImpl) => channels.set(channel, impl) };
-    };
-
-    test('registers every built channel', () => {
-        const ipcMain = makeIpcMain();
-        register(invalid(ipcMain));
-        expect([...ipcMain.channels.keys()].sort()).toEqual(Object.keys(buildHandlers()).sort());
-    });
-
-    test('a successful save announces through the platform windows register built the handlers over', async () => {
+describe('platform windows', () => {
+    test('a successful save announces through the platform windows the handlers were built over', async () => {
         const windows = installWindows();
         settings.saveAppSettings = jest.fn().mockReturnValue(true);
         jest.mocked(settings.loadSettings).mockReturnValue(
             invalid({ auth: { token: 'secret' }, app: { theme: 'dark' } }),
         );
-        const ipcMain = makeIpcMain();
-        register(invalid(ipcMain));
 
         const payload = { theme: 'dark' };
-        await expect(ipcMain.channels.get('save-settings')!(invalid(undefined), payload)).resolves.toBe(true);
+        await expect(buildHandlers()['save-settings'](invalid(undefined), payload)).resolves.toBe(true);
 
         expect(windows.broadcastSettingsChanged).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
     });
@@ -809,10 +793,8 @@ describe('register', () => {
     test('a landed wipe hands over to the platform windows once the wipe has been answered', async () => {
         const windows = installWindows();
         localData.wipeLocalData.mockResolvedValue({ success: true, removed: [] });
-        const ipcMain = makeIpcMain();
-        register(invalid(ipcMain));
 
-        await expect(ipcMain.channels.get('wipe-local-data')!(invalid(undefined))).resolves.toEqual({
+        await expect(buildHandlers()['wipe-local-data']()).resolves.toEqual({
             success: true,
         });
         expect(windows.afterWipe).toHaveBeenCalledTimes(1);

@@ -13,7 +13,7 @@ import { CHOSEN_PHOTO_ID_RE, MAX_CHOSEN_PHOTOS, MAX_SUGGEST_EXCLUDE } from '../.
 import { sanitizeForLog, refuseInvalidArgs, isUsageArg, fetchLiveChallenge, liveRefusalError } from './shared';
 import { mapPhoto } from './library';
 
-import type { IpcReplyFn } from '../registerHandlers';
+import type { IpcReplyFn } from '../invokeHandler';
 import type { ActiveChallengesResponse } from '../../types/gurushots';
 import type { LibraryUsage } from '../../types/photoPicker';
 

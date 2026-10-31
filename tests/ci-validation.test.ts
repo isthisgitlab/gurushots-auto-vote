@@ -332,6 +332,46 @@ describe('sends toward the Logs window', () => {
     });
 });
 
+// Every channel an ipcMain call registers must pass the sender-frame check. registerHandlers wraps each handle
+// channel in it, so no other file may call ipcMain.handle; the two send-style channels the Electron entry registers
+// with ipcMain.on carry no reply and apply the same checks by hand, each at its own guarded site.
+describe('ipcMain registration', () => {
+    const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
+    const path = jest.requireActual<typeof import('node:path')>('node:path');
+    const root = path.join(__dirname, '..');
+    const REGISTER_HANDLERS = 'src/ts/ipc/registerHandlers.ts';
+    const ENTRY = 'src/ts/index.ts';
+    const callsOf = (method: 'handle' | 'on'): Array<readonly [string, string]> =>
+        fs
+            .globSync('src/ts/**/*.{ts,tsx}', { cwd: root })
+            .sort()
+            .flatMap((file) =>
+                [
+                    ...fs
+                        .readFileSync(path.join(root, file), 'utf8')
+                        .matchAll(new RegExp(`\\bipcMain\\.${method}\\(([^,)]*)`, 'g')),
+                ].map((match) => [file, match[1].trim()] as const),
+            );
+
+    test('ipcMain.handle is called only in registerHandlers, once', () => {
+        expect(callsOf('handle')).toEqual([[REGISTER_HANDLERS, 'channel']]);
+    });
+
+    test('ipcMain.on is called only in the Electron entry, at the two guarded sites', () => {
+        expect(callsOf('on')).toEqual([
+            [ENTRY, "'login-success'"],
+            [ENTRY, "'logout'"],
+        ]);
+        const entry = fs.readFileSync(path.join(root, ENTRY), 'utf8');
+        for (const channel of ['login-success', 'logout']) {
+            const site = entry.slice(entry.indexOf(`ipcMain.on('${channel}'`));
+            const guard = site.slice(0, site.indexOf('});'));
+            expect(guard).toContain('isTrustedSender(event)');
+            expect(guard).toContain(`isChannelAllowedForSender(event, '${channel}')`);
+        }
+    });
+});
+
 // The layer-boundaries Oxlint rule (scripts/lint/layer-boundaries.mts) reports an import crossing a layer
 // boundary; the layering phases count these warnings as their exit gate, so the rule must stay switched on over
 // all of src/ts and at warn — erroring would fail today's code, a quieter level would hide the count.

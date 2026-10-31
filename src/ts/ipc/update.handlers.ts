@@ -10,13 +10,12 @@
  */
 
 import * as logger from '../logger';
-import { registerHandlers } from './registerHandlers';
 import { errorResult } from './errorResult';
 import { AutoUpdater } from '../services/AutoUpdater';
 import { getReleasesUrl } from '../services/UpdateChecker';
 
-import type { BrowserWindow, IpcMain } from 'electron';
-import type { IpcHandlerMap } from './registerHandlers';
+import type { BrowserWindow } from 'electron';
+import type { IpcHandlerMap } from './invokeHandler';
 import type { UpdateSummary } from '../services/AutoUpdater';
 
 interface UpdateHandlerDeps {
@@ -148,8 +147,4 @@ const buildHandlers = (deps: UpdateHandlerDeps) =>
         ...buildUpdateStateHandlers(deps),
     }) satisfies IpcHandlerMap;
 
-const register = (ipcMain: IpcMain, deps: UpdateHandlerDeps) => {
-    registerHandlers(ipcMain, buildHandlers(deps));
-};
-
-export { register, buildHandlers };
+export { buildHandlers };

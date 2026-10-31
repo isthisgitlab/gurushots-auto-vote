@@ -5,15 +5,14 @@
  */
 
 import { shell } from 'electron';
-import { registerHandlers } from './registerHandlers';
 import { errorResult } from './errorResult';
 import * as logger from '../logger';
 import { updateMenuTranslations } from '../ui/applicationMenu';
 import { translationManager } from '../translations/index';
 import { isSafeExternalUrl } from '../format/urlSafe';
 
-import type { BrowserWindow, IpcMain } from 'electron';
-import type { IpcHandlerMap } from './registerHandlers';
+import type { BrowserWindow } from 'electron';
+import type { IpcHandlerMap } from './invokeHandler';
 
 interface MiscHandlerDeps {
     getMainWindow: () => BrowserWindow | null;
@@ -77,8 +76,4 @@ const buildHandlers = (deps: MiscHandlerDeps) => {
     } satisfies IpcHandlerMap;
 };
 
-const register = (ipcMain: IpcMain, deps: MiscHandlerDeps) => {
-    registerHandlers(ipcMain, buildHandlers(deps));
-};
-
-export { register, buildHandlers };
+export { buildHandlers };

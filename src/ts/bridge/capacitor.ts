@@ -34,8 +34,8 @@ import { kebabToCamel, aliases, sendMethods, eventMethods } from '../ipc/manifes
 import { markPlatformKind } from '../platform/kind';
 import { isCapacitorNative as sharedIsCapacitorNative } from './capacitorPresence';
 
-import { invokeHandler } from '../ipc/registerHandlers';
-import type { IpcHandler } from '../ipc/registerHandlers';
+import { invokeHandler } from '../ipc/invokeHandler';
+import type { IpcHandler } from '../ipc/invokeHandler';
 import type { CapacitorGlobals } from '../types/capacitor';
 import type { GuiLogSink } from '../logger';
 import type { ShellUpdateHandlers } from '../ipc/releaseUpdates';

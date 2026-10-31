@@ -13,7 +13,6 @@
  */
 
 import * as settings from '../settings';
-import { registerHandlers } from './registerHandlers';
 import { errorResult } from './errorResult';
 import * as logger from '../logger';
 import * as apiFactory from '../apiFactory';
@@ -22,8 +21,7 @@ import { submitVotesForChallenge, voteAllChallengesManual } from '../services/ma
 import { findActiveChallenge } from '../services/findActiveChallenge';
 import { isIdArg } from './isIdArg';
 
-import type { IpcMain } from 'electron';
-import type { IpcHandlerMap, IpcReplyFn } from './registerHandlers';
+import type { IpcHandlerMap, IpcReplyFn } from './invokeHandler';
 import type { ActiveChallengesResponse } from '../types/gurushots';
 
 // Run one full strategy pass — global when challengeId is null, scoped
@@ -257,8 +255,4 @@ const buildHandlers = () =>
         },
     }) satisfies IpcHandlerMap;
 
-const register = (ipcMain: IpcMain) => {
-    registerHandlers(ipcMain, buildHandlers());
-};
-
-export { register, buildHandlers };
+export { buildHandlers };
