@@ -1,7 +1,7 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { ResetButton } from '@/components/ui/ResetButton';
 
-import type { SettingResetHandler } from '../../../types/settingsEditor';
+import type { SettingResetHandler } from '../../../core/types/settingsEditor';
 
 /**
  * The per-setting reset control every settings field ends with: resets

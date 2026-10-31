@@ -3,8 +3,8 @@ import { Modal, ModalActions } from '@/components/ui/Modal';
 import { BusyContent } from '@/components/ui/LoadingSpinner';
 
 import type { ComponentChildren } from 'preact';
-import type { Bankroll } from '../../../types/gurushots';
-import type { Translate } from '../../../translations/translator';
+import type { Bankroll } from '../../../core/types/gurushots';
+import type { Translate } from '../../../core/translations/translator';
 
 // Outcome code (voting/currencyActions CURRENCY_OUTCOME) → translated message.
 // Anything unmapped (auth failure, unexpected string) reads as a generic

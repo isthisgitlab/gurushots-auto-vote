@@ -10,7 +10,7 @@
  * to stay untouched (runRun never bypasses the handler).
  */
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const calls: { level: string; msg: unknown; data?: unknown }[] = [];
     const rec = (level: string) => (msg: unknown, data?: unknown) => calls.push({ level, msg, data });
     const cat = {
@@ -25,12 +25,12 @@ jest.mock('../../src/ts/logger', () => {
     return { __calls: calls, withCategory: jest.fn(() => cat) };
 });
 
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     loadSettings: jest.fn(() => ({ app: { mock: true }, auth: { token: '' }, challenges: {} })),
     cleanupStaleChallengeSetting: jest.fn(() => true),
 }));
 
-jest.mock('../../src/ts/apiFactory', () => {
+jest.mock('../../src/ts/core/apiFactory', () => {
     const mw = {
         isAuthenticated: jest.fn(() => true),
         getActiveChallenges: jest.fn(),
@@ -40,29 +40,29 @@ jest.mock('../../src/ts/apiFactory', () => {
     return { __mw: mw, getMiddleware: jest.fn(() => mw) };
 });
 
-jest.mock('../../src/ts/ipc/settings.handlers', () => {
+jest.mock('../../src/ts/core/ipc/settings.handlers', () => {
     const cleanup = jest.fn(async () => ({ success: true as const }));
     const buildHandlers = jest.fn(() => ({ 'cleanup-stale-challenge-setting': cleanup }));
     return { __cleanup: cleanup, __buildHandlers: buildHandlers, buildHandlers, register: jest.fn() };
 });
 
-jest.mock('../../src/ts/scheduling/runScheduler', () => ({ createScheduler: jest.fn() }));
-jest.mock('../../src/ts/dateFormat', () => ({ formatDateTime: jest.fn(() => 'NOW') }));
-jest.mock('../../src/ts/services/auth', () => ({ clearTokenUnlessStayingLoggedIn: jest.fn() }));
+jest.mock('../../src/ts/shells/cli/runScheduler', () => ({ createScheduler: jest.fn() }));
+jest.mock('../../src/ts/core/dateFormat', () => ({ formatDateTime: jest.fn(() => 'NOW') }));
+jest.mock('../../src/ts/core/services/auth', () => ({ clearTokenUnlessStayingLoggedIn: jest.fn() }));
 
 import { invalid } from '../helpers/invalid';
-import type { ConfigV2 } from '../../src/ts/types/config';
-import loggerModule = require('../../src/ts/logger');
+import type { ConfigV2 } from '../../src/ts/core/types/config';
+import loggerModule = require('../../src/ts/core/logger');
 const logger = jest.mocked(invalid<typeof loggerModule & { __calls: { level: string; msg: unknown }[] }>(loggerModule));
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import type * as apiFactoryModule from '../../src/ts/apiFactory';
-import type * as runSchedulerModule from '../../src/ts/scheduling/runScheduler';
-import type * as commandHandlersModule from '../../src/ts/cli/commandHandlers';
-import type * as votingModule from '../../src/ts/cli/commands/voting';
-import type * as settingsHandlersModule from '../../src/ts/ipc/settings.handlers';
+import type * as apiFactoryModule from '../../src/ts/core/apiFactory';
+import type * as runSchedulerModule from '../../src/ts/shells/cli/runScheduler';
+import type * as commandHandlersModule from '../../src/ts/shells/cli/commandHandlers';
+import type * as votingModule from '../../src/ts/shells/cli/commands/voting';
+import type * as settingsHandlersModule from '../../src/ts/core/ipc/settings.handlers';
 const { __mw: mw } = jest.mocked(
-    require('../../src/ts/apiFactory') as typeof apiFactoryModule & {
+    require('../../src/ts/core/apiFactory') as typeof apiFactoryModule & {
         __mw: jest.Mocked<
             Pick<
                 ReturnType<typeof apiFactoryModule.getMiddleware>,
@@ -71,7 +71,7 @@ const { __mw: mw } = jest.mocked(
         >;
     },
 );
-const { createScheduler } = jest.mocked(require('../../src/ts/scheduling/runScheduler') as typeof runSchedulerModule);
+const { createScheduler } = jest.mocked(require('../../src/ts/shells/cli/runScheduler') as typeof runSchedulerModule);
 // The settings-handler mock exposes both its built handler table and the
 // builder itself, so `start` can be asserted to never even construct them.
 type SettingsHandlersMock = {
@@ -83,12 +83,12 @@ type SettingsHandlersMock = {
     >;
     __buildHandlers: jest.MockedFunction<typeof settingsHandlersModule.buildHandlers>;
 };
-const settingsHandlers = invalid<SettingsHandlersMock>(require('../../src/ts/ipc/settings.handlers'));
+const settingsHandlers = invalid<SettingsHandlersMock>(require('../../src/ts/core/ipc/settings.handlers'));
 
 // The rows↔handlers cycle initialises only rows-first, so load the rows first.
-require('../../src/ts/cli/commandRows');
-const { runRun } = require('../../src/ts/cli/commandHandlers') as typeof commandHandlersModule;
-const { startContinuousVoting } = require('../../src/ts/cli/commands/voting') as typeof votingModule;
+require('../../src/ts/shells/cli/commandRows');
+const { runRun } = require('../../src/ts/shells/cli/commandHandlers') as typeof commandHandlersModule;
+const { startContinuousVoting } = require('../../src/ts/shells/cli/commands/voting') as typeof votingModule;
 
 const config = (): ConfigV2 => invalid<ConfigV2>({ app: { mock: true }, auth: { token: '' }, challenges: {} });
 

@@ -10,41 +10,41 @@ jest.mock('electron', () => ({
     BrowserWindow: { getAllWindows: jest.fn(() => []) },
     powerMonitor: { on: jest.fn() },
 }));
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     getUserDataPath: jest.fn(() => '/u'),
     loadSettings: jest.fn(),
     setSetting: jest.fn(),
     seedIntentProfiles: jest.fn(),
 }));
-jest.mock('../../src/ts/settings/cliSessionLock', () => ({
+jest.mock('../../src/ts/platforms/node/cliSessionLock', () => ({
     isCliSessionActive: jest.fn(() => Promise.resolve(false)),
     isWebServerActive: jest.fn(() => Promise.resolve(false)),
     holdDesktopAppLock: jest.fn(() => mockReleaseAppLock),
     refreshDesktopAppLock: jest.fn(),
 }));
-jest.mock('../../src/ts/api/randomizer', () => ({ initializeHeaders: jest.fn() }));
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/api/randomizer', () => ({ initializeHeaders: jest.fn() }));
+jest.mock('../../src/ts/core/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn(), warning: jest.fn(), debug: jest.fn() };
     return { withCategory: jest.fn(() => cat), cleanup: jest.fn(), __cat: cat };
 });
-jest.mock('../../src/ts/services/AutoUpdater', () => ({
+jest.mock('../../src/ts/shells/electron/AutoUpdater', () => ({
     AutoUpdater: jest.fn(() => ({ checkForUpdates: jest.fn().mockResolvedValue(undefined) })),
 }));
-jest.mock('../../src/ts/windows/lifecycle', () => ({ ensureExit: jest.fn() }));
-jest.mock('../../src/ts/windows/quitGuard', () => ({ bypassQuitGuard: jest.fn() }));
-jest.mock('../../src/ts/services/boostGuard/suspendBoost', () => ({ applyImminentBoostsOnSuspend: jest.fn() }));
-jest.mock('../../src/ts/ui/applicationMenu', () => ({ createApplicationMenu: jest.fn() }));
-jest.mock('../../src/ts/index/windows', () => ({ checkAutoLogin: jest.fn() }));
-jest.mock('../../src/ts/index/permissions', () => ({ installPermissionHandlers: jest.fn() }));
-jest.mock('../../src/ts/index/state', () => ({ appState: {} }));
+jest.mock('../../src/ts/shells/electron/windows/lifecycle', () => ({ ensureExit: jest.fn() }));
+jest.mock('../../src/ts/shells/electron/windows/quitGuard', () => ({ bypassQuitGuard: jest.fn() }));
+jest.mock('../../src/ts/core/services/boostGuard/suspendBoost', () => ({ applyImminentBoostsOnSuspend: jest.fn() }));
+jest.mock('../../src/ts/shells/electron/ui/applicationMenu', () => ({ createApplicationMenu: jest.fn() }));
+jest.mock('../../src/ts/shells/electron/index/windows', () => ({ checkAutoLogin: jest.fn() }));
+jest.mock('../../src/ts/shells/electron/index/permissions', () => ({ installPermissionHandlers: jest.fn() }));
+jest.mock('../../src/ts/shells/electron/index/state', () => ({ appState: {} }));
 
 import { app, powerMonitor } from 'electron';
-import loggerModule = require('../../src/ts/logger');
-import settingsModule = require('../../src/ts/settings');
-import lockModule = require('../../src/ts/settings/cliSessionLock');
-import windowsModule = require('../../src/ts/index/windows');
-import type * as startupModule from '../../src/ts/index/startup';
-import type { ConfigV2 } from '../../src/ts/types/config';
+import loggerModule = require('../../src/ts/core/logger');
+import settingsModule = require('../../src/ts/core/settings');
+import lockModule = require('../../src/ts/platforms/node/cliSessionLock');
+import windowsModule = require('../../src/ts/shells/electron/index/windows');
+import type * as startupModule from '../../src/ts/shells/electron/index/startup';
+import type { ConfigV2 } from '../../src/ts/core/types/config';
 import { invalid } from '../helpers/invalid';
 
 const settings = jest.mocked(settingsModule);
@@ -57,7 +57,7 @@ const cat = invalid<{
         warning: jest.Mock<void, [string, ...unknown[]]>;
     };
 }>(loggerModule).__cat;
-const { onReady } = require('../../src/ts/index/startup') as typeof startupModule;
+const { onReady } = require('../../src/ts/shells/electron/index/startup') as typeof startupModule;
 
 // Each onReady adds process listeners (SIGINT, SIGTERM, exit); the ones a test added are taken off again after it.
 const SIGNAL_EVENTS = ['SIGINT', 'SIGTERM', 'exit'] as const;
@@ -168,8 +168,9 @@ describe('desktop startup clears a leftover login', () => {
     });
 
     test('every message it logs survives the log redactor unchanged', async () => {
-        const { redactMessage } =
-            jest.requireActual<typeof import('../../src/ts/logger/sanitize')>('../../src/ts/logger/sanitize');
+        const { redactMessage } = jest.requireActual<typeof import('../../src/ts/core/logger/sanitize')>(
+            '../../src/ts/core/logger/sanitize',
+        );
         stored({ token: 'cli-uses-this', stayLoggedIn: false });
         lock.isCliSessionActive.mockResolvedValueOnce(true);
         await onReady();

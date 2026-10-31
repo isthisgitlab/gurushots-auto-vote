@@ -5,8 +5,8 @@ import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { useConfirmedAction } from '@/hooks/useConfirmedAction';
 import * as ipc from '@/api/ipc';
 
-import type { OpenChallenge } from '../../../types/gurushots';
-import type { ForgetStatus } from '../../../types/join';
+import type { OpenChallenge } from '../../../core/types/gurushots';
+import type { ForgetStatus } from '../../../core/types/join';
 
 // The text of each answer that forgets nothing; a call that failed outright, or an answer with no status, reads as
 // the general one.

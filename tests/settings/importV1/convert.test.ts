@@ -4,12 +4,12 @@
  * reported as blocked.
  */
 
-import { convertV1Blob, TOP_LEVEL_ONLY_KEYS } from '../../../src/ts/settings/importV1/convert';
-import { getV1Defaults } from '../../../src/ts/settings/importV1/defaults';
-import { V1_MIGRATION_FLAGS } from '../../../src/ts/settings/importV1/migrations';
-import { V1_REFUSED_KEY_PREFIX } from '../../../src/ts/settings/importV1/renames';
+import { convertV1Blob, TOP_LEVEL_ONLY_KEYS } from '../../../src/ts/core/settings/importV1/convert';
+import { getV1Defaults } from '../../../src/ts/core/settings/importV1/defaults';
+import { V1_MIGRATION_FLAGS } from '../../../src/ts/core/settings/importV1/migrations';
+import { V1_REFUSED_KEY_PREFIX } from '../../../src/ts/core/settings/importV1/renames';
 
-import type { V1Blob } from '../../../src/ts/settings/importV1/types';
+import type { V1Blob } from '../../../src/ts/core/settings/importV1/types';
 
 type Values = Record<string, unknown>;
 

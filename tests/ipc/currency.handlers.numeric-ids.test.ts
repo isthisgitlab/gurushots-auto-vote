@@ -7,23 +7,23 @@
  * swap-back handlers are validated and normalised the same way.
  */
 
-jest.mock('../../src/ts/settings');
-jest.mock('../../src/ts/apiFactory');
-jest.mock('../../src/ts/services/auth');
+jest.mock('../../src/ts/core/settings');
+jest.mock('../../src/ts/core/apiFactory');
+jest.mock('../../src/ts/core/services/auth');
 
 import { invalid } from '../helpers/invalid';
 
-import apiFactoryModule = require('../../src/ts/apiFactory');
+import apiFactoryModule = require('../../src/ts/core/apiFactory');
 const apiFactory = jest.mocked(apiFactoryModule);
-import authModule = require('../../src/ts/services/auth');
+import authModule = require('../../src/ts/core/services/auth');
 const auth = jest.mocked(authModule);
-import type * as autoFillModule from '../../src/ts/services/autoFill';
-import type * as currency_handlersModule from '../../src/ts/ipc/currency.handlers';
-import type * as swapBackStoreModule from '../../src/ts/swapBackStore';
-import type { Challenge } from '../../src/ts/types/gurushots';
-const { __resetMemberIdCache } = require('../../src/ts/services/autoFill') as typeof autoFillModule;
-const { mockSwapBackLedger } = require('../../src/ts/swapBackStore') as typeof swapBackStoreModule;
-const { buildHandlers } = require('../../src/ts/ipc/currency.handlers') as typeof currency_handlersModule;
+import type * as autoFillModule from '../../src/ts/core/services/autoFill';
+import type * as currency_handlersModule from '../../src/ts/core/ipc/currency.handlers';
+import type * as swapBackStoreModule from '../../src/ts/core/swapBackStore';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
+const { __resetMemberIdCache } = require('../../src/ts/core/services/autoFill') as typeof autoFillModule;
+const { mockSwapBackLedger } = require('../../src/ts/core/swapBackStore') as typeof swapBackStoreModule;
+const { buildHandlers } = require('../../src/ts/core/ipc/currency.handlers') as typeof currency_handlersModule;
 
 const NOW = () => Math.floor(Date.now() / 1000);
 const FULL = { keys: 2, swaps: 2, fills: 2, coins: 0 };

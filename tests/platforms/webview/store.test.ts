@@ -10,7 +10,7 @@
 
 const error = jest.fn();
 
-jest.mock('../../../src/ts/logger', () => ({
+jest.mock('../../../src/ts/core/logger', () => ({
     __esModule: true,
     withCategory: jest.fn(() => ({ error, info: jest.fn(), warning: jest.fn(), debug: jest.fn(), success: jest.fn() })),
 }));
@@ -36,8 +36,8 @@ jest.mock(
 
 import { createWebviewStorage } from '../../../src/ts/platforms/webview/store';
 
-import type { CasAnswer } from '../../../src/ts/types/stores';
-import type { SettingsStoreRef, SettingsFileWiring } from '../../../src/ts/platform/port';
+import type { CasAnswer } from '../../../src/ts/core/types/stores';
+import type { SettingsStoreRef, SettingsFileWiring } from '../../../src/ts/core/platform/port';
 
 const ref = (prefKey: string, file = `/data/${prefKey}.json`): SettingsStoreRef => ({
     prefKey,

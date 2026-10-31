@@ -47,7 +47,7 @@ const androidCsp = baseCsp({
 });
 
 const reactDir = path.join(__dirname, '..', 'src', 'ts', 'react');
-const tsDir = path.join(__dirname, '..', 'src', 'ts');
+const shellsDir = path.join(__dirname, '..', 'src', 'ts', 'shells');
 const distDir = path.join(__dirname, '..', 'dist');
 
 // Entry points for each page
@@ -55,20 +55,20 @@ const entryPoints = {
     login: path.join(reactDir, 'pages', 'Login.tsx'),
     app: path.join(reactDir, 'pages', 'App.tsx'),
     logs: path.join(reactDir, 'pages', 'Logs.tsx'),
-    capacitor: path.join(reactDir, 'pages', 'Capacitor.tsx'),
-    // Browser entry served by the web shell (`pnpm web`, src/ts/web/server.ts).
-    web: path.join(reactDir, 'pages', 'Web.tsx'),
+    capacitor: path.join(shellsDir, 'capacitor', 'page.tsx'),
+    // Browser entry served by the web shell (`pnpm web`, src/ts/shells/web/server.ts).
+    web: path.join(shellsDir, 'web', 'page.tsx'),
     // Android background service entry — runs in a bare WebView (no
     // Capacitor runtime) owned by AutoVoteService. Not a React page.
-    headless: path.join(tsDir, 'headless', 'index.ts'),
+    headless: path.join(shellsDir, 'headless', 'index.ts'),
     // Electron preload. Electron sandboxes preloads by default, and a
     // sandboxed preload's require() shim only resolves 'electron' + a few
     // builtins — NOT relative modules — so the shared channel manifest
-    // (src/ts/ipc/manifest.ts) must be BUNDLED into the preload file the
+    // (src/ts/core/ipc/manifest.ts) must be BUNDLED into the preload file the
     // BrowserWindows load (dist/preload.js).
-    preload: path.join(tsDir, 'preload.ts'),
+    preload: path.join(shellsDir, 'electron', 'preload.ts'),
     // The Logs window's reduced preload (only the log-feed subset of the manifest).
-    preloadLogs: path.join(tsDir, 'preloadLogs.ts'),
+    preloadLogs: path.join(shellsDir, 'electron', 'preloadLogs.ts'),
 };
 
 type EntryName = keyof typeof entryPoints;
@@ -113,7 +113,7 @@ const capacitorIndexHtml = rendererHtml({
     bundle: 'capacitor-bundle.js',
 });
 
-// Web shell document, served at / by src/ts/web/server.ts. Same CSP as the
+// Web shell document, served at / by src/ts/shells/web/server.ts. Same CSP as the
 // Electron pages: script-src 'self' keeps injected inline script from running
 // against the window.api surface.
 const webHtml = rendererHtml({
@@ -238,7 +238,7 @@ const prepareDist = async () => {
     // Background service document (loaded by AutoVoteService's WebView).
     fs.writeFileSync(path.join(distDir, 'headless.html'), headlessHtml);
     fs.writeFileSync(path.join(distDir, HEADLESS_FLAG_FILE), HEADLESS_FLAG_SOURCE);
-    // Web shell document (served by src/ts/web/server.ts).
+    // Web shell document (served by src/ts/shells/web/server.ts).
     fs.writeFileSync(path.join(distDir, 'web.html'), webHtml);
     // The app icon next to it: the server answers the browser's /favicon.ico
     // with this file. The same committed logo the Electron and Android builds

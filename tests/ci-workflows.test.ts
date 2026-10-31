@@ -6,7 +6,7 @@
  */
 
 import { parse } from 'yaml';
-import { isPlainObject } from '../src/ts/plainObject';
+import { isPlainObject } from '../src/ts/core/plainObject';
 
 const { execFileSync } = jest.requireActual<typeof import('node:child_process')>('node:child_process');
 const fs = jest.requireActual<typeof import('node:fs')>('node:fs');

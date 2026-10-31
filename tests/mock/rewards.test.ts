@@ -6,19 +6,21 @@
  */
 
 // The CLAIM_ENDPOINTS name list rides along; a whole-module factory would leave it undefined for the mock strategy.
-jest.mock('../../src/ts/services/autoClaim', () => ({
+jest.mock('../../src/ts/core/services/autoClaim', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/services/autoClaim')>('../../src/ts/services/autoClaim'),
+    ...jest.requireActual<typeof import('../../src/ts/core/services/autoClaim')>(
+        '../../src/ts/core/services/autoClaim',
+    ),
     runClaimPass: jest.fn(),
 }));
-jest.mock('../../src/ts/services/joinChallenges', () => ({
+jest.mock('../../src/ts/core/services/joinChallenges', () => ({
     runJoinPass: jest.fn(async () => undefined),
     joinChallengeSingle: jest.fn(),
 }));
-jest.mock('../../src/ts/services/votingOrchestrator', () => ({
+jest.mock('../../src/ts/core/services/votingOrchestrator', () => ({
     runVotingPass: jest.fn(async () => ({ success: true, challenges: [] })),
 }));
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const level = {
         info: jest.fn(),
         error: jest.fn(),
@@ -30,17 +32,17 @@ jest.mock('../../src/ts/logger', () => {
     return { withCategory: jest.fn(() => level), __level: level };
 });
 
-import loggerModule = require('../../src/ts/logger');
+import loggerModule = require('../../src/ts/core/logger');
 const logger = jest.mocked(loggerModule);
-import type * as autoClaimModule from '../../src/ts/services/autoClaim';
-import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
-import type * as indexModule from '../../src/ts/mock/index';
+import type * as autoClaimModule from '../../src/ts/core/services/autoClaim';
+import type * as votingOrchestratorModule from '../../src/ts/core/services/votingOrchestrator';
+import type * as indexModule from '../../src/ts/core/mock/index';
 import { invalid } from '../helpers/invalid';
-const { runClaimPass } = jest.mocked(require('../../src/ts/services/autoClaim') as typeof autoClaimModule);
+const { runClaimPass } = jest.mocked(require('../../src/ts/core/services/autoClaim') as typeof autoClaimModule);
 const { runVotingPass } = jest.mocked(
-    require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule,
+    require('../../src/ts/core/services/votingOrchestrator') as typeof votingOrchestratorModule,
 );
-const { mockApiClient } = require('../../src/ts/mock/index') as typeof indexModule;
+const { mockApiClient } = require('../../src/ts/core/mock/index') as typeof indexModule;
 
 /** The shared category logger this file's logger mock hands out. */
 type LoggerMock = {

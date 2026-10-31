@@ -2,18 +2,18 @@
  * The CLI's unofficial-tool notice: on stderr, once per notice version, then the version is stored.
  */
 
-jest.mock('../../src/ts/settings', () => ({ getSetting: jest.fn(), setSetting: jest.fn(() => true) }));
-jest.mock('../../src/ts/logger', () => ({ printStderr: jest.fn() }));
+jest.mock('../../src/ts/core/settings', () => ({ getSetting: jest.fn(), setSetting: jest.fn(() => true) }));
+jest.mock('../../src/ts/core/logger', () => ({ printStderr: jest.fn() }));
 
-import loggerModule = require('../../src/ts/logger');
-import settingsModule = require('../../src/ts/settings');
-import type * as noticeModule from '../../src/ts/cli/commands/unofficialNotice';
-import { CURRENT_NOTICE_VERSION } from '../../src/ts/noticeVersion';
+import loggerModule = require('../../src/ts/core/logger');
+import settingsModule = require('../../src/ts/core/settings');
+import type * as noticeModule from '../../src/ts/shells/cli/commands/unofficialNotice';
+import { CURRENT_NOTICE_VERSION } from '../../src/ts/core/noticeVersion';
 
 const logger = jest.mocked(loggerModule);
 const settings = jest.mocked(settingsModule);
 const { showUnofficialNotice, UNOFFICIAL_NOTICE } =
-    require('../../src/ts/cli/commands/unofficialNotice') as typeof noticeModule;
+    require('../../src/ts/shells/cli/commands/unofficialNotice') as typeof noticeModule;
 
 beforeEach(() => jest.clearAllMocks());
 

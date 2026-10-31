@@ -3,7 +3,7 @@
  * (else its badge), the photos it takes, and its tags, each read defensively from a server payload.
  */
 
-import { challengeKind, challengePhotoCount, listedTags, stringTags } from '../../src/ts/format/challengeListing';
+import { challengeKind, challengePhotoCount, listedTags, stringTags } from '../../src/ts/core/format/challengeListing';
 import { invalid } from '../helpers/invalid';
 
 describe('challengeKind', () => {

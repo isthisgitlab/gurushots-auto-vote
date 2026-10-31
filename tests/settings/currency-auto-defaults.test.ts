@@ -5,10 +5,10 @@
  */
 
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
-import settings = require('../../src/ts/settings');
-import type * as nodeResolversModule from '../../src/ts/scheduling/nodeResolvers';
-import type { SettingsSchemaEntry } from '../../src/ts/settings/schema';
-const { resolveCurrencyAuto } = require('../../src/ts/scheduling/nodeResolvers') as typeof nodeResolversModule;
+import settings = require('../../src/ts/core/settings');
+import type * as nodeResolversModule from '../../src/ts/core/scheduling/nodeResolvers';
+import type { SettingsSchemaEntry } from '../../src/ts/core/settings/schema';
+const { resolveCurrencyAuto } = require('../../src/ts/core/scheduling/nodeResolvers') as typeof nodeResolversModule;
 
 // The node resolver answers synchronously; its shared type also admits the renderer's async variant.
 

@@ -9,7 +9,7 @@ import type { ComponentType } from 'preact';
 import { act, render, screen, fireEvent, within } from './helpers/test-utils';
 import { ItemEditor, ConditionList, ActionList } from '@/components/app/scenarioBuilder/ItemEditors';
 import { invalid } from '../helpers/invalid';
-import { isPlainObject } from '../../src/ts/plainObject';
+import { isPlainObject } from '../../src/ts/core/plainObject';
 import { isArrayOf, isUnknown, parseJson, parseJsonAs, parseJsonObject } from '../helpers/parseJson';
 
 /** A form control the tests drive: a select, or an input for text / number / checkbox fields. */

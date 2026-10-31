@@ -5,11 +5,11 @@
  * token never sees (or keeps) another token's result.
  */
 
-import type * as teamMatchModule from '../../src/ts/strategies/real/teamMatch';
-import type * as teamsModule from '../../src/ts/api/teams';
-import type { TeamMatch } from '../../src/ts/types/gurushots';
+import type * as teamMatchModule from '../../src/ts/core/strategies/real/teamMatch';
+import type * as teamsModule from '../../src/ts/core/api/teams';
+import type { TeamMatch } from '../../src/ts/core/types/gurushots';
 
-jest.mock('../../src/ts/api/teams', () => ({ fetchActiveTeamMatch: jest.fn() }));
+jest.mock('../../src/ts/core/api/teams', () => ({ fetchActiveTeamMatch: jest.fn() }));
 
 type Read = Awaited<ReturnType<typeof teamsModule.fetchActiveTeamMatch>>;
 
@@ -57,8 +57,10 @@ beforeEach(() => {
     jest.setSystemTime(new Date('2026-10-19T12:00:00Z'));
     jest.resetModules();
     ({ refreshTeamMatch, settledTeamMatch } =
-        require('../../src/ts/strategies/real/teamMatch') as typeof teamMatchModule);
-    fetchActiveTeamMatch = jest.mocked((require('../../src/ts/api/teams') as typeof teamsModule).fetchActiveTeamMatch);
+        require('../../src/ts/core/strategies/real/teamMatch') as typeof teamMatchModule);
+    fetchActiveTeamMatch = jest.mocked(
+        (require('../../src/ts/core/api/teams') as typeof teamsModule).fetchActiveTeamMatch,
+    );
 });
 
 afterEach(() => jest.useRealTimers());

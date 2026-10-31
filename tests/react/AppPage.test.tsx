@@ -8,16 +8,16 @@
  * the window.api mock.
  */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
-import { DEFAULT_TIMEZONE } from '../../src/ts/settings/uiDefaults';
+import { DEFAULT_TIMEZONE } from '../../src/ts/core/settings/uiDefaults';
 import { invalid } from '../helpers/invalid';
 import { resetPlatformKind } from '../helpers/platformKind';
-import { markPlatformKind } from '../../src/ts/platform/kind';
-import { CURRENT_NOTICE_VERSION } from '../../src/ts/noticeVersion';
+import { markPlatformKind } from '../../src/ts/core/platform/kind';
+import { CURRENT_NOTICE_VERSION } from '../../src/ts/core/noticeVersion';
 
 import type { ComponentChildren } from 'preact';
-import type { Challenge } from '../../src/ts/types/gurushots';
-import type { RendererGlobals } from '../../src/ts/types/capacitor';
-import type { WindowApi } from '../../src/ts/types/ipc';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
+import type { RendererGlobals } from '../../src/ts/core/types/capacitor';
+import type { WindowApi } from '../../src/ts/core/types/ipc';
 import type * as AppModule from '@/pages/App';
 import type { ChallengesContextValue, ChallengesProvider } from '@/contexts/ChallengesContext';
 import type { AutovoteProvider } from '@/contexts/AutovoteContext';

@@ -7,11 +7,11 @@
 import { useState } from 'react';
 import { fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { TitleTagRulesEditor } from '@/components/app/TitleTagRulesEditor';
-import type { TitleRule } from '../../src/ts/types/settings';
+import type { TitleRule } from '../../src/ts/core/types/settings';
 import { invalid } from '../helpers/invalid';
 import { fillTemplate, mockTranslator } from './helpers/setup';
-import { app as englishApp } from '../../src/ts/translations/english';
-import { app as latvianApp } from '../../src/ts/translations/latvian';
+import { app as englishApp } from '../../src/ts/core/translations/english';
+import { app as latvianApp } from '../../src/ts/core/translations/latvian';
 
 describe('TitleTagRulesEditor', () => {
     test('renders the empty-state hint when there are no rules', () => {

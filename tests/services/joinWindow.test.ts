@@ -5,11 +5,11 @@
  * clamp read the join pass logs its note from.
  */
 
-import type * as VotingLogicModule from '../../src/ts/services/VotingLogic';
+import type * as VotingLogicModule from '../../src/ts/core/services/VotingLogic';
 import { invalid } from '../helpers/invalid';
 
 const { shouldJoinChallenge, joinAfterStartClamped } =
-    require('../../src/ts/services/VotingLogic') as typeof VotingLogicModule;
+    require('../../src/ts/core/services/VotingLogic') as typeof VotingLogicModule;
 
 type JoinParams = Parameters<typeof shouldJoinChallenge>[0];
 

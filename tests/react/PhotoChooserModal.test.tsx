@@ -16,14 +16,14 @@ import { useImageLoads } from '@/hooks/useImageLoads';
 import { Modal } from '@/components/ui/Modal';
 import { mockTranslator } from './helpers/setup';
 import { rememberCurrentMember } from '../../src/ts/react/hooks/currentMember';
-import { createTranslator } from '../../src/ts/translations/translator';
-import { MAX_CHOSEN_PHOTOS } from '../../src/ts/settings/limits';
+import { createTranslator } from '../../src/ts/core/translations/translator';
+import { MAX_CHOSEN_PHOTOS } from '../../src/ts/core/settings/limits';
 import { invalid } from '../helpers/invalid';
 import type { usePhotoPicker } from '@/hooks/usePhotoPicker';
 import type { TileStats } from '@/hooks/usePhotoStatsLoader';
-import type { EntryPinKind } from '../../src/ts/types/settings';
-import type { WindowApi } from '../../src/ts/types/ipc';
-import type { Translate } from '../../src/ts/translations/translator';
+import type { EntryPinKind } from '../../src/ts/core/types/settings';
+import type { WindowApi } from '../../src/ts/core/types/ipc';
+import type { Translate } from '../../src/ts/core/translations/translator';
 
 // The live picker instances, so a test can press loadMore: the saved-list read keys on the listing the
 // appended batch leaves (the same one on screen), and one case presses it directly.

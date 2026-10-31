@@ -18,14 +18,14 @@ import {
     missedBoostChallenges,
     LOW_EXPOSURE_THRESHOLD,
 } from '@/utils/challengeAlerts';
-import { isMarkedChallenge } from '../../src/ts/challengeMarks';
+import { isMarkedChallenge } from '../../src/ts/core/challengeMarks';
 import { LowExposureBanner } from '@/components/app/LowExposureBanner';
 import { BoostWindowBanner } from '@/components/app/BoostWindowBanner';
 import { ChallengeNav } from '@/components/app/ChallengeNav';
 import { ChallengeCard } from '@/components/app/ChallengeCard';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import { invalid } from '../helpers/invalid';
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 import type { ComponentProps } from 'preact';
 
 type BoostFixture = { state: string; timeout?: number | null };

@@ -27,16 +27,16 @@ jest.mock(
     }),
     { virtual: true },
 );
-jest.mock('../src/ts/joinStateStore', () => ({
+jest.mock('../src/ts/core/joinStateStore', () => ({
     acquireUnlockLock: jest.fn((_id: string | number) => ({ ok: true, release: () => {} })),
 }));
-jest.mock('../src/ts/logger', () => {
+jest.mock('../src/ts/core/logger', () => {
     const category = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return { withCategory: jest.fn(() => category) };
 });
 
-import type * as scenarioStateStoreModule from '../src/ts/scenarioStateStore';
-import type { AndroidHeadlessStore } from '../src/ts/types/settings';
+import type * as scenarioStateStoreModule from '../src/ts/core/scenarioStateStore';
+import type { AndroidHeadlessStore } from '../src/ts/core/types/settings';
 import { installHeadlessTestPlatform, installTestPlatform, installWebviewTestPlatform } from './helpers/platform';
 import { parseJsonObject } from './helpers/parseJson';
 
@@ -44,14 +44,14 @@ const STATE = 'gs_scenario_state';
 const RESETS = 'gs_scenario_resets';
 
 let store: typeof scenarioStateStoreModule;
-const { initialState } = require('../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
+const { initialState } = require('../src/ts/core/scenarioStateStore') as typeof scenarioStateStoreModule;
 const record = () => initialState('Plan', 'buildup', 1000);
 const stopped = () => ({ ...record(), inFlight: { ruleId: 'r', actionIndex: 0, unclear: ['swap' as const] } });
 
 const boot = async (files: Record<string, string> = {}) => {
     for (const [key, value] of Object.entries(files)) stored.set(key, value);
     jest.isolateModules(() => {
-        store = require('../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
+        store = require('../src/ts/core/scenarioStateStore') as typeof scenarioStateStoreModule;
     });
     await store.initializeScenarioStateAsync();
 };
@@ -231,7 +231,7 @@ describe('the background service', () => {
     const service = () => {
         installHeadlessTestPlatform();
         jest.isolateModules(() => {
-            store = require('../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
+            store = require('../src/ts/core/scenarioStateStore') as typeof scenarioStateStoreModule;
         });
     };
     afterEach(() => {

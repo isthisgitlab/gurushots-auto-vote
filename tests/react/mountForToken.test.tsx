@@ -21,7 +21,7 @@ const LoginProbe = () => {
 
 import { invalid } from '../helpers/invalid';
 
-import type { BackgroundHost } from '../../src/ts/autovote/controller';
+import type { BackgroundHost } from '../../src/ts/core/autovote/controller';
 
 const mockMount = (name: string) => () =>
     createRoot(document.getElementById('root')!).render(name === 'app' ? <AppProbe /> : <LoginProbe />);

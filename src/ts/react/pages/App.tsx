@@ -1,6 +1,6 @@
-import type { Challenge } from '../../types/gurushots';
-import type { RendererGlobals } from '../../types/capacitor';
-import type { BackgroundHost } from '../../autovote/controller';
+import type { Challenge } from '../../core/types/gurushots';
+import type { RendererGlobals } from '../../core/types/capacitor';
+import type { BackgroundHost } from '../../core/autovote/controller';
 import { createRoot } from 'react-dom/client';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { TranslationProvider, useTranslation } from '@/contexts/TranslationContext';
@@ -9,7 +9,7 @@ import { AutovoteProvider, useAutovote } from '@/contexts/AutovoteContext';
 import { noopBackgroundHost } from '@/contexts/noopBackgroundHost';
 import { UpdateProvider } from '@/contexts/UpdateContext';
 import { useSettings } from '@/api/useSettings';
-import { LOGOUT_NOT_SAVED } from '../../ipc/logoutCode';
+import { LOGOUT_NOT_SAVED } from '../../core/ipc/logoutCode';
 import { useBankroll } from '@/api/useBankroll';
 import { useAutoJoinActive } from '@/api/useAutoJoinActive';
 import { useAutoClaimStatus } from '@/api/useAutoClaimStatus';
@@ -32,9 +32,9 @@ import { ScrollToTopButton } from '@/components/ui/ScrollToTopButton';
 import { useDisclosure } from '@/hooks/useDisclosure';
 import { useDocumentTheme } from '@/hooks/useDocumentTheme';
 import { useNoticeGate } from '@/hooks/useNoticeGate';
-import { effectiveTimezone } from '../../settings/uiDefaults';
+import { effectiveTimezone } from '../../core/settings/uiDefaults';
 import * as ipc from '@/api/ipc';
-import { errorMessage } from '../../errorMessage';
+import { errorMessage } from '../../core/errorMessage';
 
 const NO_CHALLENGE: { id: Challenge['id'] | null; title: string } = { id: null, title: '' };
 
@@ -446,7 +446,7 @@ function App({ backgroundHost = noopBackgroundHost }: { backgroundHost?: Backgro
 // mounting until after the bridge is installed and settings are
 // hydrated; everywhere else (Electron) auto-mounts. The background host
 // is the shell's choice: the no-op host here, the Capacitor bridges from
-// pages/Capacitor.tsx (via mountForToken). Returns the root it created
+// shells/capacitor/page.tsx (via mountForToken). Returns the root it created
 // (null without a container) so the single-document shells can unmount
 // the previous tree — and dispose its autovote controller — on a swap.
 export const mountApp = (backgroundHost: BackgroundHost = noopBackgroundHost): ReturnType<typeof createRoot> | null => {
@@ -459,7 +459,7 @@ export const mountApp = (backgroundHost: BackgroundHost = noopBackgroundHost): R
     return root;
 };
 
-// Deferred via queueMicrotask: ESM hoists Capacitor.tsx's static
+// Deferred via queueMicrotask: ESM hoists shells/capacitor/page.tsx's static
 // imports above its `globalThis.__capacitorBootstrap = true;` assignment,
 // so a synchronous check at module load would see the flag undefined
 // and double-mount on top of Login.tsx, breaking React's reconciler.

@@ -6,7 +6,7 @@
 
 // No test here touches the real user-data folder: the installed test platform resolves it into the
 // file's own temporary directory (tests/setupPlatform.ts guards the real home).
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
         info: jest.fn(),
@@ -38,8 +38,8 @@ const mockPreferences = {
 };
 jest.mock('@capacitor/preferences', () => ({ Preferences: mockPreferences }), { virtual: true });
 
-import type * as settingsModule from '../../src/ts/settings';
-import type * as intentProfilesModule from '../../src/ts/settings/intentProfiles';
+import type * as settingsModule from '../../src/ts/core/settings';
+import type * as intentProfilesModule from '../../src/ts/core/settings/intentProfiles';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import { installHeadlessTestPlatform, installWebviewTestPlatform } from '../helpers/platform';
 import { createWebviewStorage } from '../../src/ts/platforms/webview/store';
@@ -60,11 +60,11 @@ const loadSettingsModule = () => {
     jest.isolateModules(() => {
         // The platform stands before the module loads: the transports it builds are the family's.
         const autovote =
-            require('../../src/ts/services/NativeAutovoteBridge') as typeof import('../../src/ts/services/NativeAutovoteBridge');
+            require('../../src/ts/shells/capacitor/NativeAutovoteBridge') as typeof import('../../src/ts/shells/capacitor/NativeAutovoteBridge');
         installWebviewTestPlatform({
             storage: createWebviewStorage((key, expected, data) => autovote.compareAndWrite(key, expected, data)),
         });
-        mod = require('../../src/ts/settings') as typeof settingsModule;
+        mod = require('../../src/ts/core/settings') as typeof settingsModule;
     });
     return mod!;
 };
@@ -74,7 +74,7 @@ const loadHeadlessSettingsModule = () => {
     let mod: typeof settingsModule | undefined;
     jest.isolateModules(() => {
         installHeadlessTestPlatform();
-        mod = require('../../src/ts/settings') as typeof settingsModule;
+        mod = require('../../src/ts/core/settings') as typeof settingsModule;
     });
     return mod!;
 };
@@ -111,12 +111,12 @@ describe('the import in the Android app window', () => {
         let cat!: Record<'error' | 'warning', jest.Mock<void, [string, ...unknown[]]>>;
         jest.isolateModules(() => {
             const autovote =
-                require('../../src/ts/services/NativeAutovoteBridge') as typeof import('../../src/ts/services/NativeAutovoteBridge');
+                require('../../src/ts/shells/capacitor/NativeAutovoteBridge') as typeof import('../../src/ts/shells/capacitor/NativeAutovoteBridge');
             installWebviewTestPlatform({
                 storage: createWebviewStorage((key, expected, data) => autovote.compareAndWrite(key, expected, data)),
             });
-            settings = require('../../src/ts/settings') as typeof settingsModule;
-            cat = (require('../../src/ts/logger') as unknown as { __cat: typeof cat }).__cat;
+            settings = require('../../src/ts/core/settings') as typeof settingsModule;
+            cat = (require('../../src/ts/core/logger') as unknown as { __cat: typeof cat }).__cat;
         });
 
         // Before the window has hydrated, nothing can be read: the defaults answer, it is no import failure (nothing
@@ -276,7 +276,7 @@ describe('the intent profiles in the Android app window', () => {
         await settings.flushPendingWrites();
 
         const stored = saved('gurushots-config');
-        const { INTENT_PROFILES } = require('../../src/ts/settings/intentProfiles') as typeof intentProfilesModule;
+        const { INTENT_PROFILES } = require('../../src/ts/core/settings/intentProfiles') as typeof intentProfilesModule;
         expect(Object.keys(settings.getChallengeProfiles()).sort()).toEqual(
             INTENT_PROFILES.map((intent) => intent.name).sort(),
         );

@@ -3,7 +3,7 @@ import { ScenarioStatusLine } from './ScenarioStatusLine';
 import { ScenarioResetModal } from './ScenarioResetModal';
 import { refreshScenarioStatuses } from '@/api/useScenarioStatus';
 import type * as useScenarioStatusModule from '@/api/useScenarioStatus';
-import type { Challenge } from '../../../types/gurushots';
+import type { Challenge } from '../../../core/types/gurushots';
 
 /**
  * A card's scenario status with the way to reset its progress: the status line, and the dialog its Reset button

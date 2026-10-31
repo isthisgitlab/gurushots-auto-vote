@@ -13,19 +13,19 @@ import { ToneNote } from '@/components/ui/ToneNote';
 import { formatDuration, formatEndTime } from '@/utils/formatters';
 import * as ipc from '@/api/ipc';
 import { ipcErrorText, joinRefusalText } from '@/api/ipcErrorText';
-import { listedTags } from '../../../format/challengeListing';
-import { endTimeOf } from '../../../format/endTime';
+import { listedTags } from '../../../core/format/challengeListing';
+import { endTimeOf } from '../../../core/format/endTime';
 // The pure fresh-join guard the facade re-exports (services/VotingLogic) — imported at its home
 // module, so the renderer bundle does not pull the whole voting-decision barrel in for one function.
-import { joinFreshRefusal } from '../../../services/decisions/joinDecision';
+import { joinFreshRefusal } from '../../../core/services/decisions/joinDecision';
 import { ChallengeKindBadges, ChallengeTagBadges } from './ChallengeKindBadges';
 import { prizeItemsText } from '@/utils/prizeText';
 import { PhotoChooserModal } from './PhotoChooserModal';
 import { ForgetPaymentModal } from './ForgetPaymentModal';
 import { JoinConfirmModal } from './JoinConfirmModal';
 
-import type { Bankroll, Challenge, OpenChallenge } from '../../../types/gurushots';
-import type { JoinReason } from '../../../types/join';
+import type { Bankroll, Challenge, OpenChallenge } from '../../../core/types/gurushots';
+import type { JoinReason } from '../../../core/types/join';
 
 /**
  * What a join left behind for its row: the join-challenge result (either arm)

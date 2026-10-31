@@ -11,7 +11,7 @@
 
 // The real logger is the point of this test: the setup file's logger mock
 // would answer the notice with a silent jest.fn.
-jest.unmock('../../src/ts/logger');
+jest.unmock('../../src/ts/core/logger');
 
 describe('the legacy dev-dir notice at the settings-path resolution', () => {
     const LEGACY_FILE = '/apps/gurushots-auto-vote-dev/settings.json';
@@ -38,11 +38,11 @@ describe('the legacy dev-dir notice at the settings-path resolution', () => {
                 path.join.mockImplementation(actualPath.join);
                 path.dirname.mockImplementation(actualPath.dirname);
                 // The real logger loads first, against the installed platform.
-                require('../../src/ts/logger');
+                require('../../src/ts/core/logger');
                 const helpers = require('../helpers/platform') as typeof import('../helpers/platform');
                 helpers.installTestPlatform();
                 const { getSettingsPath } =
-                    require('../../src/ts/settings/userDataPaths') as typeof import('../../src/ts/settings/userDataPaths');
+                    require('../../src/ts/core/settings/userDataPaths') as typeof import('../../src/ts/core/settings/userDataPaths');
                 getSettingsPath();
             });
         } finally {

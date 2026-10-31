@@ -7,11 +7,11 @@
  * deadlineNotifier.ts).
  */
 
-import { createScenarioNotifier } from '../../services/scenarioNotifications';
+import { createScenarioNotifier } from '../../core/services/scenarioNotifications';
 
-import type { OutboxItem } from '../../services/scenarioNotifications';
-import type { Challenge } from '../../types/gurushots';
-import type { Translate } from '../../translations/translator';
+import type { OutboxItem } from '../../core/services/scenarioNotifications';
+import type { Challenge } from '../../core/types/gurushots';
+import type { Translate } from '../../core/translations/translator';
 
 /**
  * @param deps.getSetting - the getGlobalDefault IPC

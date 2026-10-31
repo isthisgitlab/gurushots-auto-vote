@@ -1,4 +1,4 @@
-import { isPlainObject } from '../../src/ts/plainObject';
+import { isPlainObject } from '../../src/ts/core/plainObject';
 
 /**
  * Parsed JSON in a test is `unknown` until a guard has checked it: `parseJson`

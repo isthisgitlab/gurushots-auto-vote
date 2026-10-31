@@ -8,12 +8,12 @@ import { act, fireEvent, pickOption, render, screen, waitFor, within } from './h
 import { PICK_TEXTS, PhotoSubmitModal } from '@/components/app/PhotoSubmitModal';
 import type { PickOutcome } from '@/components/app/PhotoSubmitModal';
 import { mockTranslator } from './helpers/setup';
-import { createTranslator } from '../../src/ts/translations/translator';
+import { createTranslator } from '../../src/ts/core/translations/translator';
 import { invalid } from '../helpers/invalid';
-import { MAX_SUGGEST_EXCLUDE } from '../../src/ts/settings/limits';
+import { MAX_SUGGEST_EXCLUDE } from '../../src/ts/core/settings/limits';
 import type { usePhotoPicker } from '@/hooks/usePhotoPicker';
-import type { WindowApi } from '../../src/ts/types/ipc';
-import type { Translate } from '../../src/ts/translations/translator';
+import type { WindowApi } from '../../src/ts/core/types/ipc';
+import type { Translate } from '../../src/ts/core/translations/translator';
 
 // The live picker instances, so a test can press loadMore directly: the keepIds contract already
 // runs through the real component wiring.

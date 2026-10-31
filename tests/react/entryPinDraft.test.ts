@@ -5,7 +5,7 @@
 
 import { PIN_KINDS, pinDraftWithout, pinOf, planPinCommits, toggledPinDraft } from '@/utils/entryPinDraft';
 
-import type { EntryPins } from '../../src/ts/types/settings';
+import type { EntryPins } from '../../src/ts/core/types/settings';
 
 const stored = (boost: string | null, turbo: string | null): EntryPins => ({ boost, turbo });
 

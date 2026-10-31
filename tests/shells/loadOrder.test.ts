@@ -13,11 +13,11 @@
 import { clearInstalledPlatform, restoreNodeTestPlatform } from '../helpers/platform';
 
 const SHELL_PLATFORM_ENTRIES = [
-    'src/ts/index/platform.ts',
-    'src/ts/cli/platform.ts',
-    'src/ts/web/platform.ts',
-    'src/ts/bridge/capacitorPlatform.ts',
-    'src/ts/headless/platform.ts',
+    'src/ts/shells/electron/platform.ts',
+    'src/ts/shells/cli/platform.ts',
+    'src/ts/shells/web/platform.ts',
+    'src/ts/shells/capacitor/platform.ts',
+    'src/ts/shells/headless/platform.ts',
     'scripts/lib/platform.ts',
 ] as const;
 
@@ -35,7 +35,7 @@ describe('the shell platform modules load with the port clear and the logger moc
             let threw: string | null = null;
             jest.isolateModules(() => {
                 clearInstalledPlatform();
-                jest.doMock('../../src/ts/logger', () => {
+                jest.doMock('../../src/ts/core/logger', () => {
                     loggerLoaded = true;
                     const cat = {
                         debug: () => undefined,
@@ -70,7 +70,7 @@ describe('the shell platform modules load with the port clear and the logger moc
     // slot and installed shell platforms on it: both are restored here, so
     // nothing this file cleared or registered leaks past it.
     afterEach(() => {
-        jest.dontMock('../../src/ts/logger');
+        jest.dontMock('../../src/ts/core/logger');
         restoreNodeTestPlatform();
     });
 });

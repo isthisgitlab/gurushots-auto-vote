@@ -8,11 +8,11 @@
  * getPlugin() caches its lookup, so each test resets the module registry.
  */
 
-import type { CapacitorGlobals, CapacitorPlugins } from '../../src/ts/types/capacitor';
+import type { CapacitorGlobals, CapacitorPlugins } from '../../src/ts/core/types/capacitor';
 import { invalid } from '../helpers/invalid';
 
 const loadBridge = () =>
-    require('../../src/ts/services/NativeAutovoteBridge') as typeof import('../../src/ts/services/NativeAutovoteBridge');
+    require('../../src/ts/shells/capacitor/NativeAutovoteBridge') as typeof import('../../src/ts/shells/capacitor/NativeAutovoteBridge');
 
 const g = globalThis as CapacitorGlobals;
 
@@ -45,7 +45,7 @@ describe('NativeAutovoteBridge', () => {
     test('says once that the plugin is not registered, however often it is asked for', () => {
         const warning = jest.fn();
         jest.mocked(
-            require('../../src/ts/logger') as typeof import('../../src/ts/logger'),
+            require('../../src/ts/core/logger') as typeof import('../../src/ts/core/logger'),
         ).withCategory.mockReturnValue(invalid({ warning }));
         g.Capacitor = { isNativePlatform: () => true, Plugins: {} };
         const bridge = loadBridge();
@@ -99,7 +99,7 @@ describe('NativeAutovoteBridge', () => {
     test('a start/stop failure is logged, a getStatus failure is not (it polls)', async () => {
         const error = jest.fn();
         jest.mocked(
-            require('../../src/ts/logger') as typeof import('../../src/ts/logger'),
+            require('../../src/ts/core/logger') as typeof import('../../src/ts/core/logger'),
         ).withCategory.mockReturnValue(invalid({ error }));
         const startFailure = new Error('boom');
         const stopFailure = new Error('stop boom');
@@ -126,7 +126,7 @@ describe('NativeAutovoteBridge', () => {
     test('reports unavailable (and logs) when reading the plugin registry throws', async () => {
         const warning = jest.fn();
         jest.mocked(
-            require('../../src/ts/logger') as typeof import('../../src/ts/logger'),
+            require('../../src/ts/core/logger') as typeof import('../../src/ts/core/logger'),
         ).withCategory.mockReturnValueOnce(invalid({ warning }));
         g.Capacitor = {
             isNativePlatform: () => true,

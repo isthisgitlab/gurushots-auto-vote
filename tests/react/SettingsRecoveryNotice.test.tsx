@@ -9,7 +9,7 @@ import { SettingsRecoveryNotice } from '@/components/app/SettingsRecoveryNotice'
 import { mockTranslator, defaultTranslate, fillTemplate, fireSettingsChanged } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
 import { resetPlatformKind } from '../helpers/platformKind';
-import { markPlatformKind } from '../../src/ts/platform/kind';
+import { markPlatformKind } from '../../src/ts/core/platform/kind';
 
 const answer = (recovery: unknown) =>
     jest.mocked(window.api.getSettingsRecovery).mockResolvedValue(invalid({ success: true, recovery }));

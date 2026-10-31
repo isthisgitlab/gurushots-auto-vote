@@ -1,5 +1,5 @@
-import type * as urlSafeModule from '../../src/ts/format/urlSafe';
-const { isSafeExternalUrl, isOpenableLinkUrl } = require('../../src/ts/format/urlSafe') as typeof urlSafeModule;
+import type * as urlSafeModule from '../../src/ts/core/format/urlSafe';
+const { isSafeExternalUrl, isOpenableLinkUrl } = require('../../src/ts/core/format/urlSafe') as typeof urlSafeModule;
 
 describe('isSafeExternalUrl', () => {
     test('accepts well-formed https URLs', () => {

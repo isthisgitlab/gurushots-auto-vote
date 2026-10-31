@@ -20,12 +20,12 @@ import { getCapacitorPreferences } from './capacitorPreferences';
 import { createWriteBehind, knownKeys } from './writeBehind';
 import { settingsFileTransport } from './settingsFileTransport';
 
-import type { JsonStoreTransport, PlatformCas, PlatformStorage, SettingsStoreRef } from '../../platform/port';
+import type { JsonStoreTransport, PlatformCas, PlatformStorage, SettingsStoreRef } from '../../core/platform/port';
 
-type LoggerModule = typeof import('../../logger');
+type LoggerModule = typeof import('../../core/logger');
 
 // See the header: the wrapped modules, reached at call time.
-const logger = (): LoggerModule => require('../../logger') as LoggerModule;
+const logger = (): LoggerModule => require('../../core/logger') as LoggerModule;
 
 // The generic JSON store's Preferences transport. `flags.shared` marks a key
 // the background service writes too: its saves go through the shell's `cas`

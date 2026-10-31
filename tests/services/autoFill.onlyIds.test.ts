@@ -6,23 +6,23 @@
  * definitive failure (latched for the Boost window) from a transient one.
  */
 
-import type * as autoFillModule from '../../src/ts/services/autoFill';
-import type * as chosenPhotosModule from '../../src/ts/services/autoFill/chosenPhotos';
+import type * as autoFillModule from '../../src/ts/core/services/autoFill';
+import type * as chosenPhotosModule from '../../src/ts/core/services/autoFill/chosenPhotos';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-import type { FillDeps, FillLogger, FillSettings } from '../../src/ts/types/autoFill';
-import type { PickerPhoto } from '../../src/ts/types/photoPicker';
+import type { FillDeps, FillLogger, FillSettings } from '../../src/ts/core/types/autoFill';
+import type { PickerPhoto } from '../../src/ts/core/types/photoPicker';
 import { invalid } from '../helpers/invalid';
 
-jest.mock('../../src/ts/services/semantic/lexicon', () => ({
+jest.mock('../../src/ts/core/services/semantic/lexicon', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/services/semantic/lexicon')>(
-        '../../src/ts/services/semantic/lexicon',
+    ...jest.requireActual<typeof import('../../src/ts/core/services/semantic/lexicon')>(
+        '../../src/ts/core/services/semantic/lexicon',
     ),
 }));
 // photoStats persists its cache through this store; keep it in memory.
-jest.mock('../../src/ts/settings/storage', () => ({
+jest.mock('../../src/ts/core/settings/storage', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/settings/storage')>('../../src/ts/settings/storage'),
+    ...jest.requireActual<typeof import('../../src/ts/core/settings/storage')>('../../src/ts/core/settings/storage'),
     createJsonStore: () => ({
         readRaw: () => null,
         writeRaw: () => {},
@@ -32,16 +32,16 @@ jest.mock('../../src/ts/settings/storage', () => ({
 }));
 // Spied on (never replaced): the pinned submit must leave the Submit Only
 // skip lines — their explaining and their clearing — untouched.
-jest.mock('../../src/ts/services/autoFill/chosenPhotos', () => ({
+jest.mock('../../src/ts/core/services/autoFill/chosenPhotos', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/services/autoFill/chosenPhotos')>(
-        '../../src/ts/services/autoFill/chosenPhotos',
+    ...jest.requireActual<typeof import('../../src/ts/core/services/autoFill/chosenPhotos')>(
+        '../../src/ts/core/services/autoFill/chosenPhotos',
     ),
 }));
 
 const { submitNewEntryForAction, submitPinnedEntry, __resetMemberIdCache } =
-    require('../../src/ts/services/autoFill') as typeof autoFillModule;
-const chosenPhotos = require('../../src/ts/services/autoFill/chosenPhotos') as typeof chosenPhotosModule;
+    require('../../src/ts/core/services/autoFill') as typeof autoFillModule;
+const chosenPhotos = require('../../src/ts/core/services/autoFill/chosenPhotos') as typeof chosenPhotosModule;
 const { forgetChosenPhotosMemory } = chosenPhotos;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 

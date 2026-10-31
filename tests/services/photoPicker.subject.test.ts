@@ -12,17 +12,17 @@ const mockLexicon = JSON.parse(
     realFs.readFileSync(realPath.join(__dirname, '..', '..', 'src', 'assets', 'semantic-vectors.json'), 'utf8'),
 ) as RawLexicon;
 
-jest.mock('../../src/ts/services/semantic/assets', () => ({
+jest.mock('../../src/ts/core/services/semantic/assets', () => ({
     loadLexiconAsset: async () => mockLexicon,
     ASSET_NAME: 'semantic-vectors.json',
     __resetForTests: () => {},
 }));
 
-import lexicon = require('../../src/ts/services/semantic/lexicon');
-import type * as photoPickerModule from '../../src/ts/services/photoPicker';
-import type * as semanticModule from '../../src/ts/services/semantic';
-import type { PickerPhoto } from '../../src/ts/types/photoPicker';
-import type { RawLexicon } from '../../src/ts/types/semantic';
+import lexicon = require('../../src/ts/core/services/semantic/lexicon');
+import type * as photoPickerModule from '../../src/ts/core/services/photoPicker';
+import type * as semanticModule from '../../src/ts/core/services/semantic';
+import type { PickerPhoto } from '../../src/ts/core/types/photoPicker';
+import type { RawLexicon } from '../../src/ts/core/types/semantic';
 import { invalid } from '../helpers/invalid';
 const {
     abstractTitleWords,
@@ -35,9 +35,9 @@ const {
     readChallengeTheme,
     pickPhotosForChallenge,
     SEMANTIC_MATCH_FLOOR,
-} = require('../../src/ts/services/photoPicker') as typeof photoPickerModule;
+} = require('../../src/ts/core/services/photoPicker') as typeof photoPickerModule;
 // The facade, so the assets mock above covers the lexicon load it triggers.
-const { getSemanticScores } = require('../../src/ts/services/semantic') as typeof semanticModule;
+const { getSemanticScores } = require('../../src/ts/core/services/semantic') as typeof semanticModule;
 
 const allowed = (id: string, labels: string[], uploadDate: number, extras: Partial<PickerPhoto> = {}) => ({
     id,

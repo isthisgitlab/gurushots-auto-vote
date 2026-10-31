@@ -10,7 +10,7 @@
 import { createWebviewPaths } from '../../../src/ts/platforms/webview/paths';
 import { installWebviewTestPlatform } from '../../helpers/platform';
 
-import type * as appIdentityModule from '../../../src/ts/platform/appIdentity';
+import type * as appIdentityModule from '../../../src/ts/core/platform/appIdentity';
 
 const g = globalThis as typeof globalThis & { Capacitor?: unknown };
 
@@ -26,7 +26,7 @@ afterEach(() => {
 describe('the WebView stub paths', () => {
     test('userData is /<appName>, the dev name the family itself reports', () => {
         installWebviewTestPlatform();
-        const { getAppName } = require('../../../src/ts/platform/appIdentity') as typeof appIdentityModule;
+        const { getAppName } = require('../../../src/ts/core/platform/appIdentity') as typeof appIdentityModule;
         expect(createWebviewPaths().userData()).toBe(`/${getAppName()}`);
         expect(createWebviewPaths().userData()).toBe('/gurushots-auto-vote-dev');
     });

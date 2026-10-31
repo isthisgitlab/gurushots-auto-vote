@@ -6,15 +6,15 @@
  * fallback logs, and the fresh-entry hold on the submitted photo.
  */
 
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     getEffectiveSetting: jest.fn(() => false),
     getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
     consumeChosenPhotos: jest.fn(() => false),
 }));
 
-jest.mock('../../src/ts/services/VotingLogic', () => ({
+jest.mock('../../src/ts/core/services/VotingLogic', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof votingLogicModule>('../../src/ts/services/VotingLogic'),
+    ...jest.requireActual<typeof votingLogicModule>('../../src/ts/core/services/VotingLogic'),
     resolvePin: jest.fn(() => ({ state: 'none' })),
     shouldApplyBoost: jest.fn(() => false),
     isBoostDueForMission: jest.fn(() => false),
@@ -22,7 +22,7 @@ jest.mock('../../src/ts/services/VotingLogic', () => ({
     isWithinEmergencyWindow: jest.fn(() => false),
 }));
 
-jest.mock('../../src/ts/services/autoFill', () => ({
+jest.mock('../../src/ts/core/services/autoFill', () => ({
     submitPinnedEntry: jest.fn(async () => ({ ok: false, imageId: null, reason: 'fetch-error' })),
     submitNewEntryForAction: jest.fn(async () => ({ ok: false, imageId: null, reason: 'none' })),
     reflectNewEntry: jest.fn(),
@@ -42,25 +42,25 @@ jest.mock('../../src/ts/services/autoFill', () => ({
     ),
 }));
 
-import logger = require('../../src/ts/logger');
-import settingsModule = require('../../src/ts/settings');
+import logger = require('../../src/ts/core/logger');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import votingLogicModule = require('../../src/ts/services/VotingLogic');
+import votingLogicModule = require('../../src/ts/core/services/VotingLogic');
 const votingLogic = jest.mocked(votingLogicModule);
-import autoFillModule = require('../../src/ts/services/autoFill');
+import autoFillModule = require('../../src/ts/core/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
-import type * as boostModule from '../../src/ts/services/votingOrchestrator/boost';
+import type * as boostModule from '../../src/ts/core/services/votingOrchestrator/boost';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
+import type * as entryAgeStoreModule from '../../src/ts/core/entryAgeStore';
 import { renderLogTemplate } from '../helpers/logTemplate';
-import type { Challenge } from '../../src/ts/types/gurushots';
-import type { ActionContext } from '../../src/ts/services/votingOrchestrator/context';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
+import type { ActionContext } from '../../src/ts/core/services/votingOrchestrator/context';
 import { invalid } from '../helpers/invalid';
-const { runBoost } = require('../../src/ts/services/votingOrchestrator/boost') as typeof boostModule;
+const { runBoost } = require('../../src/ts/core/services/votingOrchestrator/boost') as typeof boostModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
-const { createMemoryEntryAgeLedger } = require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
+const { createMemoryEntryAgeLedger } = require('../../src/ts/core/entryAgeStore') as typeof entryAgeStoreModule;
 const { boostDeadline } =
-    require('../../src/ts/voting/boostWindow') as typeof import('../../src/ts/voting/boostWindow');
+    require('../../src/ts/core/voting/boostWindow') as typeof import('../../src/ts/core/voting/boostWindow');
 
 const NOW = Math.floor(Date.now() / 1000);
 const CLOSE = NOW + 3600;

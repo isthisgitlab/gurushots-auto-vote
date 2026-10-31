@@ -6,15 +6,15 @@ import { SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
 import { ResetButton } from '@/components/ui/ResetButton';
 import { ThemeSelect } from '@/components/ui/ThemeSelect';
 import { ToneNote } from '@/components/ui/ToneNote';
-import { BUILT_IN_TIMEZONES } from '../../../settings/uiDefaults';
+import { BUILT_IN_TIMEZONES } from '../../../core/settings/uiDefaults';
 import { SettingLabel, numberRangeMessage, parseNumberInput } from './SettingInput';
 import { SettingsSectionPanel } from './SettingsSectionPanel';
 
 import type { ComponentChildren } from 'preact';
 import type { useCustomTimezoneInput } from '@/hooks/useCustomTimezoneInput';
-import type { UiChangeHandler, UiResetHandler, UiValues } from '../../../types/settingsEditor';
+import type { UiChangeHandler, UiResetHandler, UiValues } from '../../../core/types/settingsEditor';
 import type { SettingFilterTexts } from '@/utils/matchesSettingFilter';
-import type { Translate } from '../../../translations/translator';
+import type { Translate } from '../../../core/translations/translator';
 import type { ReactNode } from 'react';
 
 export type TimezoneInputState = ReturnType<typeof useCustomTimezoneInput>;

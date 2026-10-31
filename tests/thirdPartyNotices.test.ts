@@ -1,5 +1,5 @@
 /**
- * The third-party notices loader (src/ts/thirdPartyNotices.ts): it asks the
+ * The third-party notices loader (src/ts/core/thirdPartyNotices.ts): it asks the
  * installed platform for the asset text, whose readers per family are the
  * webviews' fetch (Android), the CLI binary's embedded asset and the file
  * under src/assets (node). The per-family reads are proven in the family
@@ -18,7 +18,7 @@ jest.mock('node:sea', () => mockSea, { virtual: true });
 
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
-import { loadThirdPartyNotices, NOTICES_ASSET_NAME } from '../src/ts/thirdPartyNotices';
+import { loadThirdPartyNotices, NOTICES_ASSET_NAME } from '../src/ts/core/thirdPartyNotices';
 import { installHeadlessTestPlatform, installTestPlatform, installWebviewTestPlatform } from './helpers/platform';
 import { invalid } from './helpers/invalid';
 

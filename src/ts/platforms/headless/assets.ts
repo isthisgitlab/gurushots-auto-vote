@@ -7,9 +7,9 @@
  * document the service loads.
  */
 
-import { fetchAsset } from '../../platform/fetchAsset';
+import { fetchAsset } from '../../core/platform/fetchAsset';
 
-import type { PlatformAssets } from '../../platform/port';
+import type { PlatformAssets } from '../../core/platform/port';
 
 const createHeadlessAssets = (): PlatformAssets => ({
     readText: fetchAsset,

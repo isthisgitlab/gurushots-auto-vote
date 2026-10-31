@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTick } from './useTick';
 import { useLatestRef } from './useLatestRef';
-import { UPCOMING_GRACE_SEC } from '../../settings/limits';
+import { UPCOMING_GRACE_SEC } from '../../core/settings/limits';
 
-import type { OpenChallenge } from '../../types/gurushots';
+import type { OpenChallenge } from '../../core/types/gurushots';
 
 /** How often the list is re-read meanwhile. */
 const STARTING_RECHECK_MS = 60_000;

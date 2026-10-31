@@ -18,7 +18,7 @@ import { invalid } from '../../helpers/invalid';
 import type * as node_fsModule from 'node:fs';
 import type * as node_osModule from 'node:os';
 import type * as appPathsModule from '../../../src/ts/appPaths';
-import type * as appIdentityModule from '../../../src/ts/platform/appIdentity';
+import type * as appIdentityModule from '../../../src/ts/core/platform/appIdentity';
 
 const fs = jest.mocked(require('node:fs') as typeof node_fsModule);
 
@@ -296,13 +296,13 @@ describe('isElectronPackaged', () => {
 describe('the app identity the family serves', () => {
     test('getAppName carries the -dev suffix when running from source', () => {
         installTestPlatform({ paths: createNodePaths() });
-        const { getAppName } = require('../../../src/ts/platform/appIdentity') as typeof appIdentityModule;
+        const { getAppName } = require('../../../src/ts/core/platform/appIdentity') as typeof appIdentityModule;
         expect(getAppName()).toBe('gurushots-auto-vote-dev');
     });
 
     test('a packaged build drops the suffix', () => {
         withNodePaths({ electron: () => ({ app: { isPackaged: true, getPath: () => '/ud/App' } }) }, () => {
-            const { getAppName } = require('../../../src/ts/platform/appIdentity') as typeof appIdentityModule;
+            const { getAppName } = require('../../../src/ts/core/platform/appIdentity') as typeof appIdentityModule;
             expect(getAppName()).toBe('gurushots-auto-vote');
         });
     });

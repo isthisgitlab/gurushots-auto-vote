@@ -9,11 +9,11 @@
  * so they throw rather than invent one.
  */
 
-import { UserDataUnavailableError } from '../../platform/userDataUnavailable';
+import { UserDataUnavailableError } from '../../core/platform/userDataUnavailable';
 
-import type { PlatformPaths } from '../../platform/port';
+import type { PlatformPaths } from '../../core/platform/port';
 
-type AppIdentityModule = typeof import('../../platform/appIdentity');
+type AppIdentityModule = typeof import('../../core/platform/appIdentity');
 type FsModule = typeof import('node:fs');
 type PathModule = typeof import('node:path');
 type OsModule = typeof import('node:os');
@@ -22,7 +22,7 @@ type OsModule = typeof import('node:os');
 // family, so an import-time module graph lands in the setup's registry before
 // a test file registers its own mocks (platforms/node/index.ts states the
 // reason in full).
-const appIdentity = (): AppIdentityModule => require('../../platform/appIdentity') as AppIdentityModule;
+const appIdentity = (): AppIdentityModule => require('../../core/platform/appIdentity') as AppIdentityModule;
 const nodeFs = (): FsModule => require('node:fs') as FsModule;
 const nodePath = (): PathModule => require('node:path') as PathModule;
 const nodeOs = (): OsModule => require('node:os') as OsModule;

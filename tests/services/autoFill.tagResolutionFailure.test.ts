@@ -4,20 +4,22 @@
  * with its loud "nothing on theme" warning) and says why at debug level.
  */
 
-import type * as tagResolverModule from '../../src/ts/services/tagResolver';
-import type * as autoFillModule from '../../src/ts/services/autoFill';
-import type * as submissionsModule from '../../src/ts/api/submissions';
-import type { Challenge, MemberIdentity } from '../../src/ts/types/gurushots';
-import type { FillLogger } from '../../src/ts/types/autoFill';
+import type * as tagResolverModule from '../../src/ts/core/services/tagResolver';
+import type * as autoFillModule from '../../src/ts/core/services/autoFill';
+import type * as submissionsModule from '../../src/ts/core/api/submissions';
+import type { Challenge, MemberIdentity } from '../../src/ts/core/types/gurushots';
+import type { FillLogger } from '../../src/ts/core/types/autoFill';
 import { invalid } from '../helpers/invalid';
 
-jest.mock('../../src/ts/services/tagResolver', () => ({
+jest.mock('../../src/ts/core/services/tagResolver', () => ({
     resolveTermsToTags: jest.fn(),
 }));
 
-const { resolveTermsToTags } = jest.mocked(require('../../src/ts/services/tagResolver') as typeof tagResolverModule);
+const { resolveTermsToTags } = jest.mocked(
+    require('../../src/ts/core/services/tagResolver') as typeof tagResolverModule,
+);
 const { fetchCandidatesForChallenge, __resetMemberIdCache } =
-    require('../../src/ts/services/autoFill') as typeof autoFillModule;
+    require('../../src/ts/core/services/autoFill') as typeof autoFillModule;
 
 const allowed = (id: string, labels: string[]) => ({ id, labels, permission: { allowed: true, message: null } });
 const LIBRARY = [allowed('a', ['Yoga']), allowed('b', ['Misc'])];

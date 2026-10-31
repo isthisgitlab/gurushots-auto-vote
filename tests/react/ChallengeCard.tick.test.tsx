@@ -10,7 +10,7 @@ import { Countdown } from '@/components/app/Countdown';
 import { needsSecondTick, nextBoundaryFlip } from '@/utils/challengeCardView';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import { invalid } from '../helpers/invalid';
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 
 const mockRenders = { count: 0 };
 

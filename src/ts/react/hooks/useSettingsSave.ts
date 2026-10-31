@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { settingsTabId } from '@/contexts/SettingsNavContext';
 import * as ipc from '@/api/ipc';
-import { errorMessage } from '../../errorMessage';
+import { errorMessage } from '../../core/errorMessage';
 
 import type { SettingsNav } from '@/contexts/SettingsNavContext';
 import type { SettingsBand, SettingsSection, SettingsTab, SettingsTabId } from '@/utils/groupSettings';

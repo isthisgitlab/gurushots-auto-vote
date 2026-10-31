@@ -1,6 +1,6 @@
 /**
  * Tests for the settings-file watcher's optional `onSettingsChanged`
- * side-channel (src/ts/windows/settingsWatcher.ts).
+ * side-channel (src/ts/shells/electron/windows/settingsWatcher.ts).
  *
  * The main process learns that auto-vote started or stopped by watching the
  * `autovoteRunning` flag the renderer persists — there is no dedicated IPC
@@ -11,7 +11,7 @@
  */
 
 import { invalid } from '../helpers/invalid';
-import type { ConfigV2 } from '../../src/ts/types/config';
+import type { ConfigV2 } from '../../src/ts/core/types/config';
 
 jest.unmock('path');
 jest.unmock('node:path');
@@ -33,7 +33,7 @@ jest.mock('electron', () => ({
     },
 }));
 
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     getSettingsPath: jest.fn(() => '/tmp/config.json'),
     loadSettings: jest.fn(),
 }));
@@ -45,16 +45,17 @@ const mockLog = {
     warning: jest.fn<void, LogArgs>(),
     error: jest.fn<void, LogArgs>(),
 };
-jest.mock('../../src/ts/logger', () => ({
+jest.mock('../../src/ts/core/logger', () => ({
     withCategory: jest.fn(() => mockLog),
 }));
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import type * as settingsWatcherModule from '../../src/ts/windows/settingsWatcher';
+import type * as settingsWatcherModule from '../../src/ts/shells/electron/windows/settingsWatcher';
 import type * as electronModule from 'electron';
 import type * as node_fsModule from 'node:fs';
-const { watchSettingsFile } = require('../../src/ts/windows/settingsWatcher') as typeof settingsWatcherModule;
+const { watchSettingsFile } =
+    require('../../src/ts/shells/electron/windows/settingsWatcher') as typeof settingsWatcherModule;
 
 type Deps = Parameters<typeof watchSettingsFile>[0];
 

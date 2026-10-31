@@ -9,9 +9,9 @@
 
 import { act, renderHook, waitFor } from '@testing-library/preact';
 import { usePhotoStatsLoader } from '@/hooks/usePhotoStatsLoader';
-import { STATS_MIN_INTERVAL_MS } from '../../src/ts/settings/limits';
+import { STATS_MIN_INTERVAL_MS } from '../../src/ts/core/settings/limits';
 
-import type { WindowApi } from '../../src/ts/types/ipc';
+import type { WindowApi } from '../../src/ts/core/types/ipc';
 
 type StatsReply = Awaited<ReturnType<WindowApi['getPhotoStats']>>;
 type StatsAnswer = Extract<StatsReply, { success: true }>;

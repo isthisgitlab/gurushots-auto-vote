@@ -4,9 +4,9 @@ import { RuleProfileSelect, RuleScenarioSelect, RuleTagsField, TAG_FIELDS } from
 import { RuleTitleList } from './RuleTitleList';
 import { RuleClassConditions } from './RuleConditions';
 import { RuleBehaviour } from './RuleBehaviour';
-import { hasRuleCondition, rulePatterns, sortRulesByDefaultOrder } from '../../../settings/challengeRules';
+import { hasRuleCondition, rulePatterns, sortRulesByDefaultOrder } from '../../../core/settings/challengeRules';
 
-import type { LooseRecord, TitleRule } from '../../../types/settings';
+import type { LooseRecord, TitleRule } from '../../../core/types/settings';
 import type { RulePatchHandler } from './RuleFields';
 
 /**

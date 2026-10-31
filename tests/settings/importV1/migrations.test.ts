@@ -3,8 +3,8 @@
  * migrations, load validation). The same inputs run against the live loader in parity.test.ts.
  */
 
-import { interpretV1Settings } from '../../../src/ts/settings/importV1';
-import { V1_MIGRATION_FLAGS } from '../../../src/ts/settings/importV1/migrations';
+import { interpretV1Settings } from '../../../src/ts/core/settings/importV1';
+import { V1_MIGRATION_FLAGS } from '../../../src/ts/core/settings/importV1/migrations';
 
 type Values = Record<string, unknown>;
 

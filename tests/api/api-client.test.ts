@@ -10,14 +10,14 @@ import { invalid } from '../helpers/invalid';
 import { installHeadlessTestPlatform, installWebviewTestPlatform } from '../helpers/platform';
 // tests/setup.ts replaces axios with a bare jest.fn(), called with one config.
 const axios: jest.Mock<Promise<unknown>, [config: AxiosRequestConfig]> = invalid(axiosModule);
-import type * as api_clientModule from '../../src/ts/api/api-client';
-import type * as constantsModule from '../../src/ts/api/constants';
-import type * as settingsModule from '../../src/ts/settings';
-import type * as loggerModule from '../../src/ts/logger';
+import type * as api_clientModule from '../../src/ts/core/api/api-client';
+import type * as constantsModule from '../../src/ts/core/api/constants';
+import type * as settingsModule from '../../src/ts/core/settings';
+import type * as loggerModule from '../../src/ts/core/logger';
 import type * as coreModule from '@capacitor/core';
 const { makePostRequest, postOnce, createCommonHeaders, FORM_CONTENT_TYPE } =
-    require('../../src/ts/api/api-client') as typeof api_clientModule;
-const { ENDPOINTS } = require('../../src/ts/api/constants') as typeof constantsModule;
+    require('../../src/ts/core/api/api-client') as typeof api_clientModule;
+const { ENDPOINTS } = require('../../src/ts/core/api/constants') as typeof constantsModule;
 
 // The logger factory below also exports its shared api/apiRequest mocks.
 type LoggerMock = typeof loggerModule & {
@@ -33,7 +33,7 @@ const g = globalThis as typeof globalThis & {
 };
 
 // Mock the randomizer module
-jest.mock('../../src/ts/api/randomizer', () => ({
+jest.mock('../../src/ts/core/api/randomizer', () => ({
     generateRandomHeaders: jest.fn((token: string | undefined) => ({
         'x-token': token || 'mock-token',
         'user-agent': 'GuruShots/1.0 (iPhone; iOS 16.0; en_US)',
@@ -55,12 +55,12 @@ jest.mock(
 // Mock settings so the request timeout and retry/backoff knobs are
 // deterministic. The default impl is installed in beforeEach;
 // apiRetryBaseDelayMs is 0 there so backoff sleeps are instant.
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     getSetting: jest.fn(),
 }));
 
 // Mock the logger module
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const mockApiFn = jest.fn();
     const mockApiRequestFn = jest.fn();
 
@@ -96,7 +96,7 @@ describe('api-client', () => {
     const mockToken = 'test-token-123';
     const mockUrl = 'https://api.gurushots.com/test';
     const mockData = 'test=data';
-    const settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
+    const settings = jest.mocked(require('../../src/ts/core/settings') as typeof settingsModule);
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -251,7 +251,7 @@ describe('api-client', () => {
         });
 
         test('should log API requests and responses', async () => {
-            const logger: LoggerMock = invalid(require('../../src/ts/logger'));
+            const logger: LoggerMock = invalid(require('../../src/ts/core/logger'));
             const mockResponse = {
                 status: 200,
                 headers: { 'content-type': 'application/json' },
@@ -277,7 +277,7 @@ describe('api-client', () => {
         test.each([['getTeams'], ['getMatch'], ['webActiveChallenges'], ['getMemberChallenges']] as const)(
             "logs the status of %s but never its body (it carries other members' data)",
             async (endpoint) => {
-                const logger: LoggerMock = invalid(require('../../src/ts/logger'));
+                const logger: LoggerMock = invalid(require('../../src/ts/core/logger'));
                 const url = ENDPOINTS[endpoint];
                 axios.mockResolvedValueOnce({
                     status: 200,
@@ -297,7 +297,7 @@ describe('api-client', () => {
         );
 
         test('should log API errors', async () => {
-            const logger: LoggerMock = invalid(require('../../src/ts/logger'));
+            const logger: LoggerMock = invalid(require('../../src/ts/core/logger'));
             const mockError: Error & { response?: unknown } = new Error('API error');
             mockError.response = {
                 status: 400,
@@ -323,7 +323,7 @@ describe('api-client', () => {
         });
 
         test('should log API errors without response', async () => {
-            const logger: LoggerMock = invalid(require('../../src/ts/logger'));
+            const logger: LoggerMock = invalid(require('../../src/ts/core/logger'));
             const mockError = new Error('Network timeout');
 
             axios.mockRejectedValueOnce(mockError);
@@ -459,7 +459,7 @@ describe('api-client', () => {
         });
 
         test('should log API response with full data', async () => {
-            const logger: LoggerMock = invalid(require('../../src/ts/logger'));
+            const logger: LoggerMock = invalid(require('../../src/ts/core/logger'));
 
             const mockResponse = {
                 status: 200,

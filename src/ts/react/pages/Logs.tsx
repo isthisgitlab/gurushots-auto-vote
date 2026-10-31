@@ -7,7 +7,7 @@ import { useLogStream } from '@/hooks/useLogStream';
 import { LogsNavbar } from '@/components/logs/LogsNavbar';
 import { LogViewerBody } from '@/components/logs/LogViewerBody';
 import { PageLoader } from '@/components/ui/LoadingSpinner';
-import { isPlainObject } from '../../plainObject';
+import { isPlainObject } from '../../core/plainObject';
 
 /**
  * Logs page content component

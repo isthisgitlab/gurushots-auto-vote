@@ -3,7 +3,7 @@ import { useRef, useEffect, useMemo } from 'react';
 import { formatTimeRemaining } from '@/utils/formatters';
 
 import type { Signal } from '@preact/signals';
-import type { Challenge } from '../../types/gurushots';
+import type { Challenge } from '../../core/types/gurushots';
 
 /**
  * Hook that manages countdown timers for challenges.

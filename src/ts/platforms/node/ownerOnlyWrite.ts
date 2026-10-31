@@ -4,8 +4,8 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import * as logger from '../../logger';
-import { errorMessage } from '../../errorMessage';
+import * as logger from '../../core/logger';
+import { errorMessage } from '../../core/errorMessage';
 
 // Paths whose refused chmod has been logged. A path is dropped again (and the
 // recovery logged) once a chmod on it succeeds, so a file that stays

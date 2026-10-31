@@ -6,11 +6,11 @@
 
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import type { MemoryStore } from '../helpers/headlessStore';
-import settings = require('../../src/ts/settings');
+import settings = require('../../src/ts/core/settings');
 import { isConfig } from '../helpers/storedShapes';
 import { parseJsonAs } from '../helpers/parseJson';
 
-jest.mock('../../src/ts/logger', () => ({
+jest.mock('../../src/ts/core/logger', () => ({
     info: jest.fn(),
     warning: jest.fn(),
     error: jest.fn(),

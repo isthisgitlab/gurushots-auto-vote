@@ -3,14 +3,14 @@
  * reset, and what the obsolete-key prune then removed.
  */
 
-import { interpretV1Settings } from '../../../src/ts/settings/importV1';
-import { getV1Defaults } from '../../../src/ts/settings/importV1/defaults';
+import { interpretV1Settings } from '../../../src/ts/core/settings/importV1';
+import { getV1Defaults } from '../../../src/ts/core/settings/importV1/defaults';
 import {
     dropInvalidV1Values,
     isReservedChallengeId,
     mergeV1WithDefaults,
     pruneV1Obsolete,
-} from '../../../src/ts/settings/importV1/loadValidation';
+} from '../../../src/ts/core/settings/importV1/loadValidation';
 import { parseJsonObject } from '../../helpers/parseJson';
 
 type Values = Record<string, unknown>;

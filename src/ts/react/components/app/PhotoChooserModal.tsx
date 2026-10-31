@@ -15,12 +15,12 @@ import { PinToggle } from './PinToggle';
 import { useCurrentMember } from '@/hooks/currentMember';
 import { useChooserSave } from '@/hooks/usePhotoChooser';
 import { usePhotoPicker } from '@/hooks/usePhotoPicker';
-import { MAX_CHOSEN_PHOTOS } from '../../../settings/limits';
+import { MAX_CHOSEN_PHOTOS } from '../../../core/settings/limits';
 
-import type { EntryPinKind } from '../../../types/settings';
+import type { EntryPinKind } from '../../../core/types/settings';
 import type { PinDraft } from '@/utils/entryPinDraft';
 import type { LibraryPhoto } from '@/hooks/useLibraryListing';
-import type { Translate } from '../../../translations/translator';
+import type { Translate } from '../../../core/translations/translator';
 
 /** A kind's feature name, as the pin strings fill {kind}. */
 const kindName = (kind: EntryPinKind, t: Translate): string => t(kind === 'boost' ? 'app.boost' : 'app.turbo');

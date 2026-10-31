@@ -20,7 +20,7 @@ import { render, fireEvent, screen } from './helpers/test-utils';
 import type { ComponentProps } from 'preact';
 import { SettingInput, SettingLabel, numberRangeMessage, parseNumberInput } from '@/components/app/SettingInput';
 import { SAVE_ERROR_ID } from '@/components/ui/ModalActionRow';
-import type { SerializableSchemaEntry } from '../../src/ts/ipc/settings.handlers';
+import type { SerializableSchemaEntry } from '../../src/ts/core/ipc/settings.handlers';
 import { invalid } from '../helpers/invalid';
 import { fillTemplate } from './helpers/setup';
 

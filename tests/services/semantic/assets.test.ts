@@ -19,7 +19,7 @@ jest.mock('node:sea', () => mockSea, { virtual: true });
 
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
-import assets = require('../../../src/ts/services/semantic/assets');
+import assets = require('../../../src/ts/core/services/semantic/assets');
 import { installHeadlessTestPlatform, installTestPlatform, installWebviewTestPlatform } from '../../helpers/platform';
 import { invalid } from '../../helpers/invalid';
 

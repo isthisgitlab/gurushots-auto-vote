@@ -5,17 +5,17 @@
  * the join and survives stale cleanup. Drives the in-memory headless-store seam so the facade round-trips.
  */
 
-import settings = require('../../src/ts/settings');
-import type * as settingsResolutionModule from '../../src/ts/services/joinChallenges/settingsResolution';
+import settings = require('../../src/ts/core/settings');
+import type * as settingsResolutionModule from '../../src/ts/core/services/joinChallenges/settingsResolution';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import type { MemoryStore } from '../helpers/headlessStore';
-import { hasPostJoinInlineValue, ruleHasBehaviour } from '../../src/ts/settings/ruleBehaviour';
+import { hasPostJoinInlineValue, ruleHasBehaviour } from '../../src/ts/core/settings/ruleBehaviour';
 import { isConfig } from '../helpers/storedShapes';
 import { parseJsonAs } from '../helpers/parseJson';
 const { resolveJoinSetting } =
-    require('../../src/ts/services/joinChallenges/settingsResolution') as typeof settingsResolutionModule;
+    require('../../src/ts/core/services/joinChallenges/settingsResolution') as typeof settingsResolutionModule;
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const category = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
         info: jest.fn(),

@@ -3,7 +3,7 @@
  * (never read as a fresh start), pruning, and the parse memo.
  */
 
-jest.mock('../src/ts/joinStateStore', () => ({
+jest.mock('../src/ts/core/joinStateStore', () => ({
     acquireUnlockLock: jest.fn((_id: string | number, _category?: string) => ({ ok: true, release: () => {} })),
 }));
 
@@ -17,19 +17,19 @@ const {
     initializeScenarioStateAsync,
     refreshScenarioStateAsync,
     flushScenarioStateWrites,
-} = require('../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
+} = require('../src/ts/core/scenarioStateStore') as typeof scenarioStateStoreModule;
 import fsModule = require('node:fs');
-import joinStateStoreModule = require('../src/ts/joinStateStore');
+import joinStateStoreModule = require('../src/ts/core/joinStateStore');
 const acquireUnlockLock = jest.mocked(joinStateStoreModule.acquireUnlockLock);
-import loggerModule = require('../src/ts/logger');
+import loggerModule = require('../src/ts/core/logger');
 const logger = jest.mocked(loggerModule);
-import type * as scenarioStateStoreModule from '../src/ts/scenarioStateStore';
-import type { CategoryLogger } from '../src/ts/logger';
+import type * as scenarioStateStoreModule from '../src/ts/core/scenarioStateStore';
+import type { CategoryLogger } from '../src/ts/core/logger';
 import { installHeadlessTestPlatform, installTestPlatform, installWebviewTestPlatform } from './helpers/platform';
 import { invalid } from './helpers/invalid';
 import { isNumber, isRecordOf, parseJsonAs, parseJsonObject } from './helpers/parseJson';
 
-jest.mock('../src/ts/logger', () => {
+jest.mock('../src/ts/core/logger', () => {
     const category = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return { withCategory: jest.fn(() => category) };
 });
@@ -1016,7 +1016,7 @@ describe('flushing the state and the resets asked for', () => {
         let flush!: typeof flushScenarioStateWrites;
         jest.isolateModules(() => {
             let next = 0;
-            jest.doMock('../src/ts/settings/storage', () => ({
+            jest.doMock('../src/ts/core/settings/storage', () => ({
                 createJsonStore: jest.fn(() => ({
                     readRaw: () => null,
                     writeRaw: jest.fn(),
@@ -1025,10 +1025,10 @@ describe('flushing the state and the resets asked for', () => {
                     flushPendingWrites: jest.fn(flushes[next++]),
                 })),
             }));
-            flush = (require('../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule)
+            flush = (require('../src/ts/core/scenarioStateStore') as typeof scenarioStateStoreModule)
                 .flushScenarioStateWrites;
         });
-        jest.dontMock('../src/ts/settings/storage');
+        jest.dontMock('../src/ts/core/settings/storage');
         return flush;
     };
     const fails = (message: string) => async () => {
@@ -1071,8 +1071,8 @@ describe('the persisted file', () => {
             flushPendingWrites: jest.fn(),
         }));
         jest.isolateModules(() => {
-            jest.doMock('../src/ts/settings/storage', () => ({ createJsonStore }));
-            require('../src/ts/scenarioStateStore');
+            jest.doMock('../src/ts/core/settings/storage', () => ({ createJsonStore }));
+            require('../src/ts/core/scenarioStateStore');
         });
         // Both are replaced whole, and a write the native bridge did not persist is a failed write.
         expect(createJsonStore).toHaveBeenCalledWith({
@@ -1087,6 +1087,6 @@ describe('the persisted file', () => {
             atomic: true,
             strict: true,
         });
-        jest.dontMock('../src/ts/settings/storage');
+        jest.dontMock('../src/ts/core/settings/storage');
     });
 });

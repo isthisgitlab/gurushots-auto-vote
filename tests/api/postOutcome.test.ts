@@ -2,7 +2,7 @@
  * postOutcome.ts — a spend's POST answer as an ActionResult.
  */
 
-import { toActionResult } from '../../src/ts/api/postOutcome';
+import { toActionResult } from '../../src/ts/core/api/postOutcome';
 
 test('ok on a success body, a refusal is not unclear, an unclear one says so', () => {
     expect(toActionResult({ kind: 'body', body: { success: true } })).toEqual({ ok: true, raw: { success: true } });

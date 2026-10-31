@@ -8,7 +8,7 @@
  * middleware are mocked; every fixed submit code is asserted worded, never raw.
  */
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const calls: { level: string; msg: unknown; data?: unknown }[] = [];
     const rec = (level: string) => (msg: unknown, data?: unknown) => calls.push({ level, msg, data });
     const cat = {
@@ -21,12 +21,12 @@ jest.mock('../../src/ts/logger', () => {
     return { __calls: calls, withCategory: jest.fn(() => cat), CATEGORIES: {} };
 });
 
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     getSetting: jest.fn(() => 'tok'),
     loadSettings: jest.fn(() => ({ app: { mock: true }, auth: { token: 'tok' } })),
 }));
 
-jest.mock('../../src/ts/apiFactory', () => {
+jest.mock('../../src/ts/core/apiFactory', () => {
     const getActiveChallenges = jest.fn();
     const isAuthenticated = jest.fn(() => true);
     return {
@@ -38,7 +38,7 @@ jest.mock('../../src/ts/apiFactory', () => {
     };
 });
 
-jest.mock('../../src/ts/ipc/actions.handlers', () => {
+jest.mock('../../src/ts/core/ipc/actions.handlers', () => {
     const handlers = {
         'fill-challenge-now': jest.fn(),
         'submit-picked-photos': jest.fn(),
@@ -47,16 +47,16 @@ jest.mock('../../src/ts/ipc/actions.handlers', () => {
 });
 
 import { invalid } from '../helpers/invalid';
-import type * as actionHandlersModule from '../../src/ts/cli/actionHandlers';
+import type * as actionHandlersModule from '../../src/ts/shells/cli/actionHandlers';
 // The rows↔handlers cycle initialises only rows-first (commandRows reads the handlers'
 // exports at module scope), so load the rows before reaching for their handlers.
-require('../../src/ts/cli/commandRows');
-const { runSubmit } = require('../../src/ts/cli/actionHandlers') as typeof actionHandlersModule;
-import loggerModule = require('../../src/ts/logger');
+require('../../src/ts/shells/cli/commandRows');
+const { runSubmit } = require('../../src/ts/shells/cli/actionHandlers') as typeof actionHandlersModule;
+import loggerModule = require('../../src/ts/core/logger');
 const logger = jest.mocked(
     invalid<typeof loggerModule & { __calls: { level: string; msg: unknown; data?: unknown }[] }>(loggerModule),
 );
-import apiFactoryModule = require('../../src/ts/apiFactory');
+import apiFactoryModule = require('../../src/ts/core/apiFactory');
 // The middleware whose methods the factory mock exposes as __-prefixed jest.fns.
 type Middleware = ReturnType<typeof apiFactoryModule.getMiddleware>;
 const apiFactory = jest.mocked(
@@ -67,9 +67,9 @@ const apiFactory = jest.mocked(
         }
     >(apiFactoryModule),
 );
-import type * as actionsHandlersModule from '../../src/ts/ipc/actions.handlers';
+import type * as actionsHandlersModule from '../../src/ts/core/ipc/actions.handlers';
 type HandlersMock = { __handlers: jest.Mocked<ReturnType<typeof actionsHandlersModule.buildHandlers>> };
-const handlers = invalid<HandlersMock>(require('../../src/ts/ipc/actions.handlers')).__handlers;
+const handlers = invalid<HandlersMock>(require('../../src/ts/core/ipc/actions.handlers')).__handlers;
 
 const msgsAt = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
 const allMsgs = () => logger.__calls.map((c) => String(c.msg));

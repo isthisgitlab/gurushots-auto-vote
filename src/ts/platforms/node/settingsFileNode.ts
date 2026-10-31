@@ -8,10 +8,10 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { errorMessage } from '../../errorMessage';
+import { errorMessage } from '../../core/errorMessage';
 import { writeAtomicOwnerOnly } from './atomicWrite';
 
-import type { QuarantineResult, WriteIfAbsentResult } from '../../settings/storageTypes';
+import type { QuarantineResult, WriteIfAbsentResult } from '../../core/settings/storageTypes';
 
 /**
  * Whether an unusable copy of the file was set aside earlier: a `<file>.corrupt-<time>` entry beside it. The read

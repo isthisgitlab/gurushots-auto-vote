@@ -5,7 +5,7 @@
  * check this replaced did. Each Capacitor shell module reads this one check.
  */
 
-import type { CapacitorGlobals } from '../../src/ts/types/capacitor';
+import type { CapacitorGlobals } from '../../src/ts/core/types/capacitor';
 
 const g = globalThis as CapacitorGlobals;
 
@@ -24,7 +24,7 @@ describe('isCapacitorNative', () => {
         const probe = jest.fn(() => false);
         g.Capacitor = { isNativePlatform: probe };
         const { isCapacitorNative } =
-            require('../../src/ts/bridge/capacitorPresence') as typeof import('../../src/ts/bridge/capacitorPresence');
+            require('../../src/ts/shells/capacitor/bridge/capacitorPresence') as typeof import('../../src/ts/shells/capacitor/bridge/capacitorPresence');
         expect(isCapacitorNative()).toBe(true);
         expect(probe).not.toHaveBeenCalled();
     });
@@ -32,14 +32,14 @@ describe('isCapacitorNative', () => {
     test('answers false when the global is absent', () => {
         delete g.Capacitor;
         const { isCapacitorNative } =
-            require('../../src/ts/bridge/capacitorPresence') as typeof import('../../src/ts/bridge/capacitorPresence');
+            require('../../src/ts/shells/capacitor/bridge/capacitorPresence') as typeof import('../../src/ts/shells/capacitor/bridge/capacitorPresence');
         expect(isCapacitorNative()).toBe(false);
     });
 
     test('answers false when the global carries no platform probe', () => {
         g.Capacitor = {};
         const { isCapacitorNative } =
-            require('../../src/ts/bridge/capacitorPresence') as typeof import('../../src/ts/bridge/capacitorPresence');
+            require('../../src/ts/shells/capacitor/bridge/capacitorPresence') as typeof import('../../src/ts/shells/capacitor/bridge/capacitorPresence');
         expect(isCapacitorNative()).toBe(false);
     });
 });

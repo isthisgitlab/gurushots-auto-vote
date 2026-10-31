@@ -1,4 +1,4 @@
-import type { Translate } from '../../translations/translator';
+import type { Translate } from '../../core/translations/translator';
 
 /**
  * One kind of validator message: the pattern it is recognised by, the translation key of its wording and the

@@ -4,7 +4,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import { useIpcQuery } from '@/api/useIpcQuery';
 import * as ipc from '@/api/ipc';
-import { errorMessage } from '../../../errorMessage';
+import { errorMessage } from '../../../core/errorMessage';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { BusyContent } from '@/components/ui/LoadingSpinner';
 

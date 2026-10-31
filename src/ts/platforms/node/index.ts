@@ -23,13 +23,13 @@ import { createNodePaths } from './paths';
 import { createNodeStorage } from './store';
 import { createNodeWipe } from './wipe';
 
-import type { Platform, PlatformWindows } from '../../platform/port';
+import type { Platform, PlatformWindows } from '../../core/platform/port';
 
-type ContextModule = typeof import('../../logger/context');
+type ContextModule = typeof import('../../core/logger/context');
 type PathsModule = typeof import('./paths');
 type NodeAssetParts = Parameters<typeof createNodeAssets>[0];
 
-const context = (): ContextModule => require('../../logger/context') as ContextModule;
+const context = (): ContextModule => require('../../core/logger/context') as ContextModule;
 const paths = (): PathsModule => require('./paths') as PathsModule;
 
 const createNodeHttp = (): Platform['http'] => ({ adapter: null });

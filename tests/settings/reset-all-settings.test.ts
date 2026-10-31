@@ -11,17 +11,19 @@
 
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import type { MemoryStore } from '../helpers/headlessStore';
-import settings = require('../../src/ts/settings');
+import settings = require('../../src/ts/core/settings');
 import { isConfig } from '../helpers/storedShapes';
 import { parseJsonAs } from '../helpers/parseJson';
 import { logCategories } from '../helpers/logCategories';
-import titlePinsModule = require('../../src/ts/settings/titlePins');
+import titlePinsModule = require('../../src/ts/core/settings/titlePins');
 
-jest.mock('../../src/ts/settings/titlePins', () => ({
+jest.mock('../../src/ts/core/settings/titlePins', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/settings/titlePins')>('../../src/ts/settings/titlePins'),
+    ...jest.requireActual<typeof import('../../src/ts/core/settings/titlePins')>(
+        '../../src/ts/core/settings/titlePins',
+    ),
 }));
-jest.mock('../../src/ts/logger', () => ({
+jest.mock('../../src/ts/core/logger', () => ({
     info: jest.fn(),
     warning: jest.fn(),
     error: jest.fn(),

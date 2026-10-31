@@ -1,7 +1,7 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { formatDuration } from '@/utils/formatters';
-import { openBoostWindows } from '../../../voting/boostWindow';
-import { isKnownTurboMode } from '../../../voting/turboMode';
+import { openBoostWindows } from '../../../core/voting/boostWindow';
+import { isKnownTurboMode } from '../../../core/voting/turboMode';
 import { useTick } from '@/hooks/useTick';
 import { isMinimalCardChallenge, lowExposureChallenges, missedBoostChallenges } from '@/utils/challengeAlerts';
 import { scrollToChallenge } from '@/utils/scrollToChallenge';
@@ -10,7 +10,7 @@ import { FocusDropdown } from '@/components/ui/FocusDropdown';
 import { useId } from 'react';
 
 import type { ComponentChildren } from 'preact';
-import type { Bankroll, Challenge, MemberTurbo } from '../../../types/gurushots';
+import type { Bankroll, Challenge, MemberTurbo } from '../../../core/types/gurushots';
 
 // A turbo is "available" for this challenge when it's ready to apply (WON, in a
 // known mode — a mode-less one is the mobile copy, whose WON can be false for a

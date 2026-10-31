@@ -1,15 +1,15 @@
 /**
- * src/ts/appFileUrl.ts — which `file:` URLs count as the app's own pages.
+ * src/ts/shells/electron/appFileUrl.ts — which `file:` URLs count as the app's own pages.
  * Both path flavours are exercised through the `platform` argument with a
  * root in that flavour, so the result does not depend on the host OS.
  */
 
-import type * as appFileUrlModule from '../src/ts/appFileUrl';
+import type * as appFileUrlModule from '../src/ts/shells/electron/appFileUrl';
 import type * as appPathsModule from '../src/ts/appPaths';
 
 jest.mock('../src/ts/appPaths', () => ({ appPath: jest.fn() }));
 
-const { isAppFileUrl } = require('../src/ts/appFileUrl') as typeof appFileUrlModule;
+const { isAppFileUrl } = require('../src/ts/shells/electron/appFileUrl') as typeof appFileUrlModule;
 const { appPath } = jest.mocked(require('../src/ts/appPaths') as typeof appPathsModule);
 
 const useRoot = (root: string) =>

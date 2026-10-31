@@ -11,11 +11,11 @@ import { SettingsNavProvider } from '@/contexts/SettingsNavContext';
 import { mockTranslator, defaultTranslate, fillTemplate } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
 import { resetPlatformKind } from '../helpers/platformKind';
-import { markPlatformKind } from '../../src/ts/platform/kind';
-import { IMPORT_REF_ENGLISH } from '../../src/ts/settings/importRefs';
-import type { ImportRefText } from '../../src/ts/settings/importRefs';
-import { about as englishAbout } from '../../src/ts/translations/english';
-import { about as latvianAbout } from '../../src/ts/translations/latvian';
+import { markPlatformKind } from '../../src/ts/core/platform/kind';
+import { IMPORT_REF_ENGLISH } from '../../src/ts/core/settings/importRefs';
+import type { ImportRefText } from '../../src/ts/core/settings/importRefs';
+import { about as englishAbout } from '../../src/ts/core/translations/english';
+import { about as latvianAbout } from '../../src/ts/core/translations/latvian';
 
 import type { ReactNode } from 'react';
 import type { ImportReport } from '@/api/useImportReport';

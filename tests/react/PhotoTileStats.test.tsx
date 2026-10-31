@@ -8,11 +8,11 @@
 import { render, screen } from './helpers/test-utils';
 import { PhotoTile } from '@/components/app/PhotoTile';
 import { mockTranslator } from './helpers/setup';
-import { createTranslator } from '../../src/ts/translations/translator';
+import { createTranslator } from '../../src/ts/core/translations/translator';
 
 import type { TileStats } from '@/hooks/usePhotoStatsLoader';
 import type { LibraryPhoto } from '@/hooks/useLibraryListing';
-import type { Translate } from '../../src/ts/translations/translator';
+import type { Translate } from '../../src/ts/core/translations/translator';
 
 const MEMBER = 'c'.repeat(32);
 const photo: LibraryPhoto = {

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 
-import { platformKind } from '../../platform/kind';
+import { platformKind } from '../../core/platform/kind';
 
 /**
  * Whether the page runs inside the native Android app. platformKind() is the single source of truth for the

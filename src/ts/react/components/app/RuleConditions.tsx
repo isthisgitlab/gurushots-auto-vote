@@ -2,9 +2,9 @@ import { useEffect, useId, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { RuleNumberField } from './RuleFields';
-import { normalizeRuleClosesAt } from '../../../settings/challengeRules';
+import { normalizeRuleClosesAt } from '../../../core/settings/challengeRules';
 
-import type { LooseRecord, TitleRule } from '../../../types/settings';
+import type { LooseRecord, TitleRule } from '../../../core/types/settings';
 import type { RulePatchHandler } from './RuleFields';
 
 /**

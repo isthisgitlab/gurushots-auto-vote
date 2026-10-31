@@ -5,7 +5,7 @@
  * the AST shapes the rule assumes are the ones Oxlint produces.
  */
 import type layerBoundariesPlugin from '../../scripts/lint/layer-boundaries.mts';
-import { isPlainObject } from '../../src/ts/plainObject';
+import { isPlainObject } from '../../src/ts/core/plainObject';
 import { invalid } from '../helpers/invalid';
 
 const plugin: typeof layerBoundariesPlugin = (
@@ -65,13 +65,13 @@ const messagesFor = (code: string, filename: string): string[] =>
 const file = (path: string): string => `/repo/${path}`;
 const crossing = (from: string, to: string, specifier: string): string =>
     `layer-boundaries: ${from} → ${to} (${specifier})`;
-// A file with no table row of its own: plain core.
-const CORE = file('src/ts/services/votingOrchestrator.ts');
+// A file under the core/ row.
+const CORE = file('src/ts/core/services/votingOrchestrator.ts');
 
 // Each import that stays inside the boundaries, with the file that imports it.
 const VALID: ReadonlyArray<readonly [string, string]> = [
     // core reaches core, and every package that is not a forbidden one — the package `react` included.
-    ["import './votingOrchestrator';", file('src/ts/services/real/pass.ts')],
+    ["import './votingOrchestrator';", file('src/ts/core/services/real/pass.ts')],
     ["import './plainObject';", CORE],
     ["import 'zod';", CORE],
     ["import 'react';", CORE],
@@ -82,33 +82,33 @@ const VALID: ReadonlyArray<readonly [string, string]> = [
     ["export * from './logger';", CORE],
     ["export { open } from './windowsBridge';", CORE],
     // platform:<x> reaches core, its own platform, and every package — a forbidden one included.
-    ["import '../services/votingOrchestrator';", file('src/ts/appPaths.ts')],
+    ["import './core/services/votingOrchestrator';", file('src/ts/appPaths.ts')],
     ["import './atomicWrite';", file('src/ts/platforms/node/store.ts')],
     ["import './capacitorPreferences';", file('src/ts/platforms/webview/store.ts')],
     ["import 'electron';", file('src/ts/appPaths.ts')],
     ["import '@capacitor/preferences';", file('src/ts/platforms/webview/capacitorPreferences.ts')],
     // shell:<x> reaches core, any platform, react, itself, and every package.
-    ["import '../services/votingOrchestrator';", file('src/ts/windows/quitGuard.ts')],
-    ["import '../appPaths';", file('src/ts/windows/quitGuard.ts')],
-    ["import '../react/api/ipc';", file('src/ts/windows/quitGuard.ts')],
-    ["import './lifecycle';", file('src/ts/windows/quitGuard.ts')],
-    ["import 'electron';", file('src/ts/index.ts')],
-    ["import '../services/votingOrchestrator';", file('src/ts/scheduling/runScheduler.ts')],
-    ["import '../react/api/ipc';", file('src/ts/bridge/web.ts')],
-    ["import '../platforms/webview/capacitorPreferences';", file('src/ts/web/server.ts')],
-    ["import '../react/pages/Web';", file('src/ts/bridge/web.ts')],
-    ["import './plainObject';", file('src/ts/localStores.ts')],
-    ["import '../logger';", file('src/ts/headless/index.ts')],
-    // The Capacitor background host is a shell:capacitor row: it reaches the
+    ["import '../../../core/services/votingOrchestrator';", file('src/ts/shells/electron/windows/quitGuard.ts')],
+    ["import '../../../appPaths';", file('src/ts/shells/electron/windows/quitGuard.ts')],
+    ["import '../../../react/api/ipc';", file('src/ts/shells/electron/windows/quitGuard.ts')],
+    ["import './lifecycle';", file('src/ts/shells/electron/windows/quitGuard.ts')],
+    ["import 'electron';", file('src/ts/shells/electron/index.ts')],
+    ["import '../../core/services/votingOrchestrator';", file('src/ts/shells/cli/runScheduler.ts')],
+    ["import '../../../react/api/ipc';", file('src/ts/shells/web/bridge/web.ts')],
+    ["import '../../platforms/webview/capacitorPreferences';", file('src/ts/shells/web/server.ts')],
+    ["import '../page';", file('src/ts/shells/web/bridge/web.ts')],
+    ["import '../../core/plainObject';", file('src/ts/shells/capacitor/localStores.ts')],
+    ["import '../../core/logger';", file('src/ts/shells/headless/index.ts')],
+    // The Capacitor background host sits in the Capacitor shell: it reaches the
     // bridges (its own shell) and core (the controller's host type).
-    ["import './capacitorBackgroundHost';", file('src/ts/bridge/capacitor.ts')],
-    ["import '../autovote/controller';", file('src/ts/bridge/capacitorBackgroundHost.ts')],
+    ["import './capacitorBackgroundHost';", file('src/ts/shells/capacitor/bridge/capacitor.ts')],
+    ["import '../../../core/autovote/controller';", file('src/ts/shells/capacitor/bridge/capacitorBackgroundHost.ts')],
     // react reaches itself and core.
     ["import './api/ipc';", file('src/ts/react/App.tsx')],
-    ["import '../plainObject';", file('src/ts/react/App.tsx')],
+    ["import '../core/plainObject';", file('src/ts/react/App.tsx')],
     ["import './pages/Gallery';", file('src/ts/react/App.tsx')],
     // The pattern rows, through directories that do not exist on disk.
-    ["import '../../services/votingOrchestrator';", file('src/ts/platforms/node/store.ts')],
+    ["import '../../core/services/votingOrchestrator';", file('src/ts/platforms/node/store.ts')],
     ["import '../../react/api/ipc';", file('src/ts/shells/web/main.ts')],
     // An extensionless directory index: `src/ts/platforms/node` is `platform:node`, the same layer.
     ["import '.';", file('src/ts/platforms/node/store.ts')],
@@ -122,15 +122,17 @@ const VALID: ReadonlyArray<readonly [string, string]> = [
     ["type T = typeof import('electron');", CORE],
     // The renderer alias `@/` (tsconfig maps it to `src/ts/react/*`): react reaching itself.
     ["import '@/hooks/x';", file('src/ts/react/App.tsx')],
-    // `src/ts/platform/` (singular) has no row: the core port is plain core.
-    ["import '../plainObject';", file('src/ts/platform/kind.ts')],
+    // `src/ts/core/platform/` is the core port: plain core.
+    ["import '../plainObject';", file('src/ts/core/platform/kind.ts')],
+    // A file under src/ts that no row names is plain core.
+    ["import 'zod';", file('src/ts/stray.ts')],
     // A file outside src/ts is nobody's layer and not checked.
     ["import 'electron';", file('scripts/build-main.ts')],
-    ["import '../src/ts/windows/quitGuard';", file('scripts/build-main.ts')],
+    ["import '../src/ts/shells/electron/windows/quitGuard';", file('scripts/build-main.ts')],
     // A path with `src/ts` but no `src/ts/` has no layer either.
     ["import 'electron';", file('src/tsx/odd.ts')],
     // A relative specifier that resolves outside src/ts imports a shared asset, not an app file.
-    ["import '../../assets/foo.json';", CORE],
+    ["import '../../../assets/foo.json';", CORE],
     // Not module edges: no source, a non-literal or non-string argument, wrong arity, a member `require`.
     ['export const value = 1;', CORE],
     ['require(name);', CORE],
@@ -140,7 +142,7 @@ const VALID: ReadonlyArray<readonly [string, string]> = [
     ['import(name).then(use);', CORE],
     ["other.require('electron');", CORE],
     // A `\`-separated filename is normalized before the cut.
-    ["import './lifecycle';", 'C:\\repo\\src\\ts\\windows\\quitGuard.ts'],
+    ["import './lifecycle';", 'C:\\repo\\src\\ts\\shells\\electron\\windows\\quitGuard.ts'],
     // `..` and `./` collapse onto the directory row of the layer itself.
     ["import '../..';", file('src/ts/react/pages/a.tsx')],
     ["import './';", file('src/ts/react/App.tsx')],
@@ -150,18 +152,26 @@ const VALID: ReadonlyArray<readonly [string, string]> = [
 const INVALID: ReadonlyArray<readonly [string, string, ...string[]]> = [
     // The case the layering plan pins: a core file reaching a shell module.
     [
-        "import '../../windows/quitGuard';",
-        file('src/ts/ipc/actions/account.ts'),
-        crossing('core', 'shell:electron', '../../windows/quitGuard'),
+        "import '../../../shells/electron/windows/quitGuard';",
+        file('src/ts/core/ipc/actions/account.ts'),
+        crossing('core', 'shell:electron', '../../../shells/electron/windows/quitGuard'),
     ],
     // core reaches nothing but core.
-    ["import '../react/api/ipc';", CORE, crossing('core', 'react', '../react/api/ipc')],
-    ["import '../appPaths';", CORE, crossing('core', 'platform:node', '../appPaths')],
-    ["import '../platforms/webview/store';", CORE, crossing('core', 'platform:webview', '../platforms/webview/store')],
-    ["import '../cli/cli';", CORE, crossing('core', 'shell:cli', '../cli/cli')],
-    ["import '../bridge/web';", CORE, crossing('core', 'shell:web', '../bridge/web')],
-    ["import '../localStores';", CORE, crossing('core', 'shell:capacitor', '../localStores')],
-    ["import '../headless/index';", CORE, crossing('core', 'shell:headless', '../headless/index')],
+    ["import '../../react/api/ipc';", CORE, crossing('core', 'react', '../../react/api/ipc')],
+    ["import '../../appPaths';", CORE, crossing('core', 'platform:node', '../../appPaths')],
+    [
+        "import '../../platforms/webview/store';",
+        CORE,
+        crossing('core', 'platform:webview', '../../platforms/webview/store'),
+    ],
+    ["import '../../shells/cli/cli';", CORE, crossing('core', 'shell:cli', '../../shells/cli/cli')],
+    ["import '../../shells/web/bridge/web';", CORE, crossing('core', 'shell:web', '../../shells/web/bridge/web')],
+    [
+        "import '../../shells/capacitor/localStores';",
+        CORE,
+        crossing('core', 'shell:capacitor', '../../shells/capacitor/localStores'),
+    ],
+    ["import '../../shells/headless/index';", CORE, crossing('core', 'shell:headless', '../../shells/headless/index')],
     // A forbidden package is a crossing on its own, in every import form — the side-effect form included.
     ["import 'electron';", CORE, crossing('core', 'forbidden-package', 'electron')],
     ["import 'electron-log';", CORE, crossing('core', 'forbidden-package', 'electron-log')],
@@ -184,13 +194,17 @@ const INVALID: ReadonlyArray<readonly [string, string, ...string[]]> = [
         crossing('core', 'forbidden-package', 'electron'),
     ],
     ["export { type app } from 'electron';", CORE, crossing('core', 'forbidden-package', 'electron')],
-    // The renderer alias `@/` resolves into `src/ts/react/`: react never reaches a shell.
-    ["import '@/pages/Web';", file('src/ts/react/PhotoCard.tsx'), crossing('react', 'shell:web', '@/pages/Web')],
+    // react never reaches a shell, the pages of the web and Capacitor shells included.
+    [
+        "import '../shells/web/page';",
+        file('src/ts/react/PhotoCard.tsx'),
+        crossing('react', 'shell:web', '../shells/web/page'),
+    ],
     // A checkout under a parent path that itself contains `src/ts/` cuts at the repository's own `src/ts/`.
     [
-        "import '../react/api/ipc';",
-        '/home/u/src/ts/checkout/src/ts/services/x.ts',
-        crossing('core', 'react', '../react/api/ipc'),
+        "import '../../react/api/ipc';",
+        '/home/u/src/ts/checkout/src/ts/core/services/x.ts',
+        crossing('core', 'react', '../../react/api/ipc'),
     ],
     // A file directly inside a pattern directory has no platform of its own: the captured segment is the empty one.
     [
@@ -207,9 +221,9 @@ const INVALID: ReadonlyArray<readonly [string, string, ...string[]]> = [
     ["import './react/api/ipc';", file('src/ts/appPaths.ts'), crossing('platform:node', 'react', './react/api/ipc')],
     // …and never a shell: the settings file a platform owns cannot reach a shell module.
     [
-        "import '../../services/NativeAutovoteBridge';",
+        "import '../../shells/capacitor/NativeAutovoteBridge';",
         file('src/ts/platforms/webview/capacitorPreferences.ts'),
-        crossing('platform:webview', 'shell:capacitor', '../../services/NativeAutovoteBridge'),
+        crossing('platform:webview', 'shell:capacitor', '../../shells/capacitor/NativeAutovoteBridge'),
     ],
     // The platforms/<x>/ row takes the segment after the prefix.
     [
@@ -227,25 +241,29 @@ const INVALID: ReadonlyArray<readonly [string, string, ...string[]]> = [
     ["import '../..';", file('src/ts/platforms/node/sub/store.ts'), crossing('platform:node', 'platform:', '../..')],
     // shell:<x> never reaches a sibling shell or a forbidden package.
     [
-        "import '../bridge/web';",
-        file('src/ts/windows/quitGuard.ts'),
-        crossing('shell:electron', 'shell:web', '../bridge/web'),
-    ],
-    ["import './capacitor';", file('src/ts/bridge/web.ts'), crossing('shell:web', 'shell:capacitor', './capacitor')],
-    [
-        "import './headless/index';",
-        file('src/ts/localStores.ts'),
-        crossing('shell:capacitor', 'shell:headless', './headless/index'),
+        "import '../../web/bridge/web';",
+        file('src/ts/shells/electron/windows/quitGuard.ts'),
+        crossing('shell:electron', 'shell:web', '../../web/bridge/web'),
     ],
     [
-        "import '../windows/quitGuard';",
-        file('src/ts/headless/index.ts'),
-        crossing('shell:headless', 'shell:electron', '../windows/quitGuard'),
+        "import '../../capacitor/bridge/capacitor';",
+        file('src/ts/shells/web/bridge/web.ts'),
+        crossing('shell:web', 'shell:capacitor', '../../capacitor/bridge/capacitor'),
     ],
     [
-        "import '../windows/quitGuard';",
-        file('src/ts/scheduling/runScheduler.ts'),
-        crossing('shell:cli', 'shell:electron', '../windows/quitGuard'),
+        "import '../headless/index';",
+        file('src/ts/shells/capacitor/localStores.ts'),
+        crossing('shell:capacitor', 'shell:headless', '../headless/index'),
+    ],
+    [
+        "import '../electron/windows/quitGuard';",
+        file('src/ts/shells/headless/index.ts'),
+        crossing('shell:headless', 'shell:electron', '../electron/windows/quitGuard'),
+    ],
+    [
+        "import '../electron/windows/quitGuard';",
+        file('src/ts/shells/cli/runScheduler.ts'),
+        crossing('shell:cli', 'shell:electron', '../electron/windows/quitGuard'),
     ],
     // The shells/<x>/ row: a sibling shell through a directory that does not exist on disk.
     ["import '../cli/main';", file('src/ts/shells/web/other.ts'), crossing('shell:web', 'shell:cli', '../cli/main')],
@@ -256,28 +274,27 @@ const INVALID: ReadonlyArray<readonly [string, string, ...string[]]> = [
         file('src/ts/react/App.tsx'),
         crossing('react', 'forbidden-package', '@capacitor/preferences'),
     ],
-    // First match wins: the Web.tsx row is shell:web, not the react directory row under it.
-    ["import './pages/Web';", file('src/ts/react/PhotoCard.tsx'), crossing('react', 'shell:web', './pages/Web')],
-    // An extensionless specifier matches the `.tsx` file row as well as the `.ts` row (quitGuard above).
+    // A page of a shell is that shell's, with or without the extension.
     [
-        "import './pages/Capacitor';",
+        "import '../shells/capacitor/page';",
         file('src/ts/react/PhotoCard.tsx'),
-        crossing('react', 'shell:capacitor', './pages/Capacitor'),
+        crossing('react', 'shell:capacitor', '../shells/capacitor/page'),
     ],
     [
-        "import './pages/Capacitor.tsx';",
+        "import '../shells/capacitor/page.tsx';",
         file('src/ts/react/PhotoCard.tsx'),
-        crossing('react', 'shell:capacitor', './pages/Capacitor.tsx'),
+        crossing('react', 'shell:capacitor', '../shells/capacitor/page.tsx'),
     ],
-    // The directory boundary keeps `src/ts/cliX/` out of `src/ts/cli/`: it is plain core.
+    // A directory under src/ts that no row names is plain core.
     ["import '../appPaths';", file('src/ts/cliX/a.ts'), crossing('core', 'platform:node', '../appPaths')],
-    // The capacitorBackgroundHost row keeps the bridges out of the renderer tree: without it the
-    // file would read as plain core, and react could import it silently.
+    // The bridges are shell files: react cannot import the background host.
     [
-        "import '../bridge/capacitorBackgroundHost';",
+        "import '../shells/capacitor/bridge/capacitorBackgroundHost';",
         file('src/ts/react/App.tsx'),
-        crossing('react', 'shell:capacitor', '../bridge/capacitorBackgroundHost'),
+        crossing('react', 'shell:capacitor', '../shells/capacitor/bridge/capacitorBackgroundHost'),
     ],
+    // A file under src/ts that no row names is plain core, so a stray file cannot reach react.
+    ["import './react/api/ipc';", file('src/ts/stray.ts'), crossing('core', 'react', './react/api/ipc')],
 ];
 
 test('is registered under its plugin name', () => {
@@ -303,13 +320,13 @@ test('each crossing reports once, in document order', () => {
     const code = [
         "import './plainObject';",
         "import 'electron';",
-        "import '../appPaths';",
-        "import '../react/api/ipc';",
+        "import '../../appPaths';",
+        "import '../../react/api/ipc';",
     ].join('\n');
     expect(reportsFor(code, CORE).map(({ message }) => message)).toEqual([
         crossing('core', 'forbidden-package', 'electron'),
-        crossing('core', 'platform:node', '../appPaths'),
-        crossing('core', 'react', '../react/api/ipc'),
+        crossing('core', 'platform:node', '../../appPaths'),
+        crossing('core', 'react', '../../react/api/ipc'),
     ]);
 });
 
@@ -327,45 +344,61 @@ describe('under Oxlint', () => {
             // Each case: the file's directory under `src/ts/`, its snippet, the crossings expected in it. The
             // pattern-row directories need not exist anywhere else — the test creates what it lints.
             const cases: Array<readonly [string, string, readonly string[]]> = [
-                ['services', "import './votingOrchestrator';", []],
-                ['services', "import 'zod';", []],
+                ['core/services', "import './votingOrchestrator';", []],
+                ['core/services', "import 'zod';", []],
                 // A side-effect import of a forbidden target: zero specifiers, and still a runtime edge.
-                ['services', "import 'electron';", [crossing('core', 'forbidden-package', 'electron')]],
+                ['core/services', "import 'electron';", [crossing('core', 'forbidden-package', 'electron')]],
                 [
-                    'ipc/actions',
-                    "import '../../windows/quitGuard';",
-                    [crossing('core', 'shell:electron', '../../windows/quitGuard')],
+                    'core/ipc/actions',
+                    "import '../../../shells/electron/windows/quitGuard';",
+                    [crossing('core', 'shell:electron', '../../../shells/electron/windows/quitGuard')],
                 ],
-                ['services', "import type { app } from 'electron';", []],
+                ['core/services', "import type { app } from 'electron';", []],
                 [
-                    'services',
+                    'core/services',
                     "import { type app, type BrowserWindow } from 'electron';",
                     [crossing('core', 'forbidden-package', 'electron')],
                 ],
-                ['services', "export type { app } from 'electron';", []],
+                ['core/services', "export type { app } from 'electron';", []],
                 [
-                    'services',
+                    'core/services',
                     "export { type app } from 'electron';",
                     [crossing('core', 'forbidden-package', 'electron')],
                 ],
-                ['services', "type T = typeof import('electron');", []],
-                ['services', "export * from 'electron';", [crossing('core', 'forbidden-package', 'electron')]],
-                ['services', "export type * from 'electron';", []],
-                ['services', "export { editor } from 'electron';", [crossing('core', 'forbidden-package', 'electron')]],
+                ['core/services', "type T = typeof import('electron');", []],
+                ['core/services', "export * from 'electron';", [crossing('core', 'forbidden-package', 'electron')]],
+                ['core/services', "export type * from 'electron';", []],
                 [
-                    'services',
+                    'core/services',
+                    "export { editor } from 'electron';",
+                    [crossing('core', 'forbidden-package', 'electron')],
+                ],
+                [
+                    'core/services',
                     "import { type app, BrowserWindow } from 'electron';",
                     [crossing('core', 'forbidden-package', 'electron')],
                 ],
-                ['services', "const c = require('electron');", [crossing('core', 'forbidden-package', 'electron')]],
-                ['services', "const m = import('electron');", [crossing('core', 'forbidden-package', 'electron')]],
-                ['services', "import '../../assets/foo.json';", []],
-                ['services', 'require(name);', []],
-                ['index', "import './lifecycle';", []],
-                ['index', "import '../appPaths';", []],
-                ['index', "import '../bridge/web';", [crossing('shell:electron', 'shell:web', '../bridge/web')]],
+                [
+                    'core/services',
+                    "const c = require('electron');",
+                    [crossing('core', 'forbidden-package', 'electron')],
+                ],
+                ['core/services', "const m = import('electron');", [crossing('core', 'forbidden-package', 'electron')]],
+                ['core/services', "import '../../../assets/foo.json';", []],
+                ['core/services', 'require(name);', []],
+                ['shells/electron/index', "import './startup';", []],
+                ['shells/electron/index', "import '../../../appPaths';", []],
+                [
+                    'shells/electron/index',
+                    "import '../../web/bridge/web';",
+                    [crossing('shell:electron', 'shell:web', '../../web/bridge/web')],
+                ],
                 ['react', "import '../appPaths';", [crossing('react', 'platform:node', '../appPaths')]],
-                ['react/pages', "import './Web';", [crossing('react', 'shell:web', './Web')]],
+                [
+                    'react/pages',
+                    "import '../../shells/web/page';",
+                    [crossing('react', 'shell:web', '../../shells/web/page')],
+                ],
                 [
                     'platforms/node',
                     "import '../webview/store';",
@@ -374,8 +407,8 @@ describe('under Oxlint', () => {
                 ['platforms/node', "import 'electron';", []],
                 [
                     'platforms/webview',
-                    "import '../../bridge/capacitor';",
-                    [crossing('platform:webview', 'shell:capacitor', '../../bridge/capacitor')],
+                    "import '../../shells/capacitor/bridge/capacitor';",
+                    [crossing('platform:webview', 'shell:capacitor', '../../shells/capacitor/bridge/capacitor')],
                 ],
                 [
                     'platforms/node',
@@ -384,16 +417,15 @@ describe('under Oxlint', () => {
                 ],
                 ['shells/web', "import '../../react/api/ipc';", []],
                 ['shells/web', "import '../cli/main';", [crossing('shell:web', 'shell:cli', '../cli/main')]],
-                ['react', "import '@/pages/Web';", [crossing('react', 'shell:web', '@/pages/Web')]],
                 ['react', "import '@/hooks/x';", []],
                 // A parent path that itself contains `src/ts/`: the cut is the repository's own, the last one.
                 [
-                    'checkout/src/ts/services',
-                    "import '../react/api/ipc';",
-                    [crossing('core', 'react', '../react/api/ipc')],
+                    'checkout/src/ts/core/services',
+                    "import '../../react/api/ipc';",
+                    [crossing('core', 'react', '../../react/api/ipc')],
                 ],
                 ['platforms', "import './node/store';", [crossing('platform:', 'platform:node', './node/store')]],
-                ['platform', "import '../plainObject';", []],
+                ['core/platform', "import '../plainObject';", []],
             ];
             const config = path.join(dir, 'oxlintrc.json');
             fs.writeFileSync(

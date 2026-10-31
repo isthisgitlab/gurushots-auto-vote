@@ -2,28 +2,28 @@
  * Tests for submissions.ts — getEligiblePhotos and submitToChallenge.
  */
 
-import type * as submissionsModule from '../../src/ts/api/submissions';
-import type * as api_clientModule from '../../src/ts/api/api-client';
-import type { CategoryLogger } from '../../src/ts/logger';
-import { LIBRARY_BATCH_PHOTOS, MAX_LIBRARY_KEEP_PHOTOS } from '../../src/ts/settings/limits';
+import type * as submissionsModule from '../../src/ts/core/api/submissions';
+import type * as api_clientModule from '../../src/ts/core/api/api-client';
+import type { CategoryLogger } from '../../src/ts/core/logger';
+import { LIBRARY_BATCH_PHOTOS, MAX_LIBRARY_KEEP_PHOTOS } from '../../src/ts/core/settings/limits';
 import { invalid } from '../helpers/invalid';
 
 const { getEligiblePhotos, getEligiblePhotosWalk, getImageData, submitToChallenge, MAX_LIBRARY_PAGES } =
-    require('../../src/ts/api/submissions') as typeof submissionsModule;
+    require('../../src/ts/core/api/submissions') as typeof submissionsModule;
 
-jest.mock('../../src/ts/api/api-client', () => ({
+jest.mock('../../src/ts/core/api/api-client', () => ({
     makePostRequest: jest.fn(),
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8',
 }));
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const level = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return { withCategory: jest.fn(() => level), __level: level };
 });
 
 describe('submissions', () => {
     const token = 'tok-123';
-    const { makePostRequest } = jest.mocked(require('../../src/ts/api/api-client') as typeof api_clientModule);
+    const { makePostRequest } = jest.mocked(require('../../src/ts/core/api/api-client') as typeof api_clientModule);
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -104,7 +104,7 @@ describe('submissions', () => {
             __level: {
                 [K in 'info' | 'error' | 'debug' | 'success' | 'warning']: jest.MockedFunction<CategoryLogger[K]>;
             };
-        } = invalid(require('../../src/ts/logger'));
+        } = invalid(require('../../src/ts/core/logger'));
         // limit=2 keeps the page arithmetic readable; a "short" page is <limit.
         const page = (...ids: string[]) => ({ items: ids.map((id) => ({ id })) });
 
@@ -309,7 +309,7 @@ describe('submissions', () => {
             const isWinner = (photo: { id: string }) => photo.id.startsWith('w');
             const warnings = () => {
                 const { __level: log }: { __level: { warning: jest.Mock<void, [string, unknown]> } } = invalid(
-                    require('../../src/ts/logger'),
+                    require('../../src/ts/core/logger'),
                 );
                 return log.warning.mock.calls.map((call) => call[0]);
             };
@@ -451,7 +451,7 @@ describe('submissions', () => {
         describe('with maxKept and counts (batched walks)', () => {
             const warnings = () => {
                 const { __level: log }: { __level: { warning: jest.Mock<void, [string, unknown]> } } = invalid(
-                    require('../../src/ts/logger'),
+                    require('../../src/ts/core/logger'),
                 );
                 return log.warning.mock.calls.map((call) => call[0]);
             };
@@ -692,7 +692,7 @@ describe('submissions', () => {
 
 describe('getEligiblePhotos usage option', () => {
     const token = 'tok-123';
-    const { makePostRequest } = jest.mocked(require('../../src/ts/api/api-client') as typeof api_clientModule);
+    const { makePostRequest } = jest.mocked(require('../../src/ts/core/api/api-client') as typeof api_clientModule);
 
     beforeEach(() => jest.clearAllMocks());
 
@@ -724,7 +724,7 @@ describe('getEligiblePhotos usage option', () => {
 
 describe('getEligiblePhotos order mapping (librarySort)', () => {
     const token = 'tok-123';
-    const { makePostRequest } = jest.mocked(require('../../src/ts/api/api-client') as typeof api_clientModule);
+    const { makePostRequest } = jest.mocked(require('../../src/ts/core/api/api-client') as typeof api_clientModule);
 
     beforeEach(() => jest.clearAllMocks());
 
@@ -756,7 +756,7 @@ describe('getEligiblePhotos order mapping (librarySort)', () => {
 
 describe('getEligiblePhotos readState: a failed first page is told apart from an empty library', () => {
     const token = 'tok-123';
-    const { makePostRequest } = jest.mocked(require('../../src/ts/api/api-client') as typeof api_clientModule);
+    const { makePostRequest } = jest.mocked(require('../../src/ts/core/api/api-client') as typeof api_clientModule);
     const state = () => ({ firstPageFailed: false });
 
     beforeEach(() => jest.clearAllMocks());

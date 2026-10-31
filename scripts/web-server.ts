@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 
-// Serves the web UI (src/ts/web/server.ts) on http://localhost:<port>/ from
+// Serves the web UI (src/ts/shells/web/server.ts) on http://localhost:<port>/ from
 // the built renderer in dist/. `pnpm web` builds the CSS and bundles first;
 // pass --port=<n> (default 4400, 0 = any free port). The printed URL carries a
 // random per-run token (`#t=...`) the pages need for every /api/ request.
 // The web platform installs before any core module loads (the same module the
 // server imports, so it evaluates once).
-import '../src/ts/web/platform';
-import { startWebServer } from '../src/ts/web/server';
+import '../src/ts/shells/web/platform';
+import { startWebServer } from '../src/ts/shells/web/server';
 import { appPath } from '../src/ts/appPaths';
-import { errorMessage } from '../src/ts/errorMessage';
+import { errorMessage } from '../src/ts/core/errorMessage';
 import { runIfMain } from './lib/run-if-main';
 
 const DEFAULT_PORT = 4400;

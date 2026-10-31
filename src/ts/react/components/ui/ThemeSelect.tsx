@@ -1,5 +1,5 @@
 import { useTranslation } from '@/contexts/TranslationContext';
-import { THEMES } from '../../../settings/uiDefaults';
+import { THEMES } from '../../../core/settings/uiDefaults';
 
 /**
  * Picker over every DaisyUI theme the stylesheet compiles, shared by the

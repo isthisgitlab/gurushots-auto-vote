@@ -3,31 +3,31 @@
  * scheduler resolver built on them.
  */
 
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     getSetting: jest.fn(),
     getEffectiveSetting: jest.fn(),
     getScenario: jest.fn(),
 }));
-jest.mock('../../src/ts/joinStateStore', () => ({
+jest.mock('../../src/ts/core/joinStateStore', () => ({
     acquireUnlockLock: jest.fn((id: string | number, _category?: string) => ({
         ok: id !== 'scenario-9',
         release: () => {},
     })),
 }));
-jest.mock('../../src/ts/logger', () => ({ withCategory: jest.fn(() => ({ error: jest.fn() })) }));
+jest.mock('../../src/ts/core/logger', () => ({ withCategory: jest.fn(() => ({ error: jest.fn() })) }));
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import type * as scenarioStatusModule from '../../src/ts/services/scenarioStatus';
-import type * as nodeResolversModule from '../../src/ts/scheduling/nodeResolvers';
-import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
-import type { ScenarioDocument } from '../../src/ts/settings/scenarioSchema';
+import type * as scenarioStatusModule from '../../src/ts/core/services/scenarioStatus';
+import type * as nodeResolversModule from '../../src/ts/core/scheduling/nodeResolvers';
+import type * as scenarioStateStoreModule from '../../src/ts/core/scenarioStateStore';
+import type { ScenarioDocument } from '../../src/ts/core/settings/scenarioSchema';
 import { invalid } from '../helpers/invalid';
 const { getScenarioStatus, scenarioWakeInput, ledgerForMode, stepLockForMode } =
-    require('../../src/ts/services/scenarioStatus') as typeof scenarioStatusModule;
-const { resolveScenarioWake } = require('../../src/ts/scheduling/nodeResolvers') as typeof nodeResolversModule;
+    require('../../src/ts/core/services/scenarioStatus') as typeof scenarioStatusModule;
+const { resolveScenarioWake } = require('../../src/ts/core/scheduling/nodeResolvers') as typeof nodeResolversModule;
 const { createMemoryStateLedger, initialState, scenarioStateLedger, mockScenarioStateLedger } =
-    require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
+    require('../../src/ts/core/scenarioStateStore') as typeof scenarioStateStoreModule;
 
 const scenario = invalid<ScenarioDocument>({ name: 'Plan', version: 1, start: 'main', phases: { main: {} } });
 let topLevel: Record<string, unknown>;

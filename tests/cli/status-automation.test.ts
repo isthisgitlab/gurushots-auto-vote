@@ -8,7 +8,7 @@
  * middleware and the handlers are mocked.
  */
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const infoMock = jest.fn();
     return {
         __infoMock: infoMock,
@@ -23,7 +23,7 @@ jest.mock('../../src/ts/logger', () => {
     };
 });
 
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     loadSettings: jest.fn(() => ({
         app: {
             mock: true,
@@ -41,9 +41,9 @@ jest.mock('../../src/ts/settings', () => ({
     getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
 }));
 
-jest.mock('../../src/ts/scheduling/runScheduler', () => ({ createScheduler: jest.fn() }));
+jest.mock('../../src/ts/shells/cli/runScheduler', () => ({ createScheduler: jest.fn() }));
 
-jest.mock('../../src/ts/apiFactory', () => {
+jest.mock('../../src/ts/core/apiFactory', () => {
     const mockGetActiveChallenges = jest.fn();
     const mockIsAuthenticated = jest.fn(() => true);
     return {
@@ -56,7 +56,7 @@ jest.mock('../../src/ts/apiFactory', () => {
     };
 });
 
-jest.mock('../../src/ts/ipc/actions.handlers', () => {
+jest.mock('../../src/ts/core/ipc/actions.handlers', () => {
     const handlers = {
         'get-auto-claim-status': jest.fn(),
         'get-auto-join-active': jest.fn(),
@@ -65,9 +65,9 @@ jest.mock('../../src/ts/ipc/actions.handlers', () => {
 });
 
 import { invalid } from '../helpers/invalid';
-import loggerModule = require('../../src/ts/logger');
+import loggerModule = require('../../src/ts/core/logger');
 const logger = jest.mocked(invalid<typeof loggerModule & { __infoMock: jest.Mock<void, [unknown]> }>(loggerModule));
-import apiFactoryModule = require('../../src/ts/apiFactory');
+import apiFactoryModule = require('../../src/ts/core/apiFactory');
 type Middleware = ReturnType<typeof apiFactoryModule.getMiddleware>;
 const apiFactory = jest.mocked(
     invalid<
@@ -77,19 +77,19 @@ const apiFactory = jest.mocked(
         }
     >(apiFactoryModule),
 );
-import type * as actionsHandlersModule from '../../src/ts/ipc/actions.handlers';
-import type * as statusModule from '../../src/ts/cli/commands/status';
+import type * as actionsHandlersModule from '../../src/ts/core/ipc/actions.handlers';
+import type * as statusModule from '../../src/ts/shells/cli/commands/status';
 
 type Handlers = ReturnType<typeof actionsHandlersModule.buildHandlers>;
 type ClaimReply = Awaited<ReturnType<Handlers['get-auto-claim-status']>>;
 type JoinReply = Awaited<ReturnType<Handlers['get-auto-join-active']>>;
-const { __handlers } = require('../../src/ts/ipc/actions.handlers') as typeof actionsHandlersModule & {
+const { __handlers } = require('../../src/ts/core/ipc/actions.handlers') as typeof actionsHandlersModule & {
     __handlers: {
         'get-auto-claim-status': jest.MockedFunction<() => Promise<ClaimReply>>;
         'get-auto-join-active': jest.MockedFunction<() => Promise<JoinReply>>;
     };
 };
-const { showStatus } = require('../../src/ts/cli/commands/status') as typeof statusModule;
+const { showStatus } = require('../../src/ts/shells/cli/commands/status') as typeof statusModule;
 
 const printedLines = () =>
     logger.__infoMock.mock.calls.map((c) => c[0]).filter((s): s is string => typeof s === 'string');

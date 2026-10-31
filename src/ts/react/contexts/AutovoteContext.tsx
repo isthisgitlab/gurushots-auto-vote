@@ -1,17 +1,17 @@
 import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createAutovoteController } from '../../autovote/controller';
+import { createAutovoteController } from '../../core/autovote/controller';
 import { noopBackgroundHost } from './noopBackgroundHost';
 import { createDeadlineNotifier, deliverElectronNotification } from '../notifications/deadlineNotifier';
 import { createRendererScenarioNotifier } from '../notifications/scenarioNotifier';
 import { useLatestRef } from '../hooks/useLatestRef';
-import { rendererTranslator } from '../../translations/renderer';
+import { rendererTranslator } from '../../core/translations/renderer';
 import * as ipc from '../api/ipc';
 import { isNativePlatform } from '../api/usePlatformCapabilities';
 import { dateLocale } from '../utils/formatters';
 
 import type { ComponentChildren } from 'preact';
-import type { AutovoteController, AutovoteHost, BackgroundHost, CycleNotifier } from '../../autovote/controller';
-import type { AutovoteState } from '../../autovote/state';
+import type { AutovoteController, AutovoteHost, BackgroundHost, CycleNotifier } from '../../core/autovote/controller';
+import type { AutovoteState } from '../../core/autovote/state';
 
 /**
  * What useAutovote returns: the state machine's state plus its controls.
@@ -57,7 +57,7 @@ function createRendererDeadlineNotifier(): CycleNotifier | null {
 
 /**
  * Provider for the autovote state machine. A thin adapter over the autovote
- * controller (src/ts/autovote/controller.ts, which owns the renderer's
+ * controller (src/ts/core/autovote/controller.ts, which owns the renderer's
  * cadence chain): it builds the controller's host once per mount — the bridge
  * IPC, the page translator and locale formatting, the platform-picked
  * deadline notifier, and the injected background host — subscribes React to

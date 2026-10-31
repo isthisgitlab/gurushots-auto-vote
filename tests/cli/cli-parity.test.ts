@@ -11,11 +11,12 @@
  * tests/web/channel-parity.test.ts for the CLI side.
  */
 
-import type * as commandRowsModule from '../../src/ts/cli/commandRows';
-import type * as manifestModule from '../../src/ts/ipc/manifest';
+import type * as commandRowsModule from '../../src/ts/shells/cli/commandRows';
+import type * as manifestModule from '../../src/ts/core/ipc/manifest';
 
-const { COMMAND_ROWS } = require('../../src/ts/cli/commandRows') as typeof commandRowsModule;
-const { aliases, allInvokeChannels, invokeChannels } = require('../../src/ts/ipc/manifest') as typeof manifestModule;
+const { COMMAND_ROWS } = require('../../src/ts/shells/cli/commandRows') as typeof commandRowsModule;
+const { aliases, allInvokeChannels, invokeChannels } =
+    require('../../src/ts/core/ipc/manifest') as typeof manifestModule;
 
 // Every channel the manifest exposes, as the literal union the mapping's keys are checked against.
 type InvokeChannel = (typeof invokeChannels)[number] | (typeof aliases)[keyof typeof aliases];

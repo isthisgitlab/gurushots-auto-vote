@@ -6,12 +6,12 @@
  * stubbed on globalThis.
  */
 
-import type * as bridgeModule from '../../src/ts/bridge/web';
-import type * as manifestModule from '../../src/ts/ipc/manifest';
-import type { WindowApi } from '../../src/ts/types/ipc';
+import type * as bridgeModule from '../../src/ts/shells/web/bridge/web';
+import type * as manifestModule from '../../src/ts/core/ipc/manifest';
+import type { WindowApi } from '../../src/ts/core/types/ipc';
 import { invalid } from '../helpers/invalid';
 import { resetPlatformKind } from '../helpers/platformKind';
-import { platformKind } from '../../src/ts/platform/kind';
+import { platformKind } from '../../src/ts/core/platform/kind';
 
 type FetchReply = { ok: boolean; status: number; json: () => Promise<unknown> };
 
@@ -85,7 +85,7 @@ beforeEach(() => {
     g.history = invalid({ replaceState: mockReplaceState });
     g.open = mockOpen;
     jest.resetModules();
-    bridge = require('../../src/ts/bridge/web') as typeof bridgeModule;
+    bridge = require('../../src/ts/shells/web/bridge/web') as typeof bridgeModule;
     api = bridge.installWebBridge();
 });
 
@@ -134,7 +134,7 @@ describe('web bridge — invoke', () => {
     });
 
     test('every invoke channel is served by the server except the browser ones', async () => {
-        const { invokeChannels, kebabToCamel } = require('../../src/ts/ipc/manifest') as typeof manifestModule;
+        const { invokeChannels, kebabToCamel } = require('../../src/ts/core/ipc/manifest') as typeof manifestModule;
         const methods = invalid<Record<string, (...args: unknown[]) => Promise<unknown>>>(api);
         for (const channel of invokeChannels) {
             if (bridge.BROWSER_CHANNELS.has(channel)) continue;
@@ -150,7 +150,7 @@ describe('web bridge — access token', () => {
         stubLocation(hash);
         mockReplaceState.mockReset();
         jest.resetModules();
-        bridge = require('../../src/ts/bridge/web') as typeof bridgeModule;
+        bridge = require('../../src/ts/shells/web/bridge/web') as typeof bridgeModule;
         return bridge.installWebBridge();
     };
     const sentHeaders = () => mockFetch.mock.calls[0][1].headers as Record<string, string>;

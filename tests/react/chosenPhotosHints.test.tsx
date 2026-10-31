@@ -7,7 +7,7 @@
 import { render, screen } from './helpers/test-utils';
 import { ChallengeProfilesBar } from '@/components/app/ChallengeProfilesBar';
 import { SettingHintList, challengeSettingHints, globalSettingHints } from '@/components/app/SettingHints';
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 const t = (key: string) => key;

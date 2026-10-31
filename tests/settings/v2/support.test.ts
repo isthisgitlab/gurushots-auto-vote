@@ -2,8 +2,8 @@
  * The pieces the equivalence harness stands on: the random file generator and the key names.
  */
 
-import { V1_SETTINGS_SCHEMA } from '../../../src/ts/settings/importV1/schema';
-import { importV1Settings } from '../../../src/ts/settings/importV1';
+import { V1_SETTINGS_SCHEMA } from '../../../src/ts/core/settings/importV1/schema';
+import { importV1Settings } from '../../../src/ts/core/settings/importV1';
 import { liveKey } from './liveAdapter';
 import { drawFor, makeRng, parseSeeds, randomCase, SCHEMA_KEYS, valueFor } from './random';
 

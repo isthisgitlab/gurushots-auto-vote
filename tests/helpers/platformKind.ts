@@ -2,7 +2,7 @@
  * Clears the platform kind a test marked (platform/kind stores it on globalThis), so it cannot leak into the next
  * test — in this file or, on the shared global, a later one.
  */
-import type { PlatformKind } from '../../src/ts/platform/kind';
+import type { PlatformKind } from '../../src/ts/core/platform/kind';
 
 type PlatformGlobals = typeof globalThis & { __autovotePlatformKind?: PlatformKind };
 

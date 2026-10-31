@@ -5,21 +5,21 @@
  * conflict — is the production rule, not a restatement of it.
  */
 
-import settingsModule = require('../../../src/ts/settings');
+import settingsModule = require('../../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import VotingLogic = require('../../../src/ts/services/VotingLogic');
-import quitGuard = require('../../../src/ts/services/boostGuard/selection');
-import logger = require('../../../src/ts/logger');
-import type * as boostModule from '../../../src/ts/services/votingOrchestrator/suspendBoostRunner';
+import VotingLogic = require('../../../src/ts/core/services/VotingLogic');
+import quitGuard = require('../../../src/ts/core/services/boostGuard/selection');
+import logger = require('../../../src/ts/core/logger');
+import type * as boostModule from '../../../src/ts/core/services/votingOrchestrator/suspendBoostRunner';
 import type * as challengeFixturesModule from '../../helpers/challengeFixtures';
 const { buildChallenge } = require('../../helpers/challengeFixtures') as typeof challengeFixturesModule;
-import type { MemberBoost, RankingEntry } from '../../../src/ts/types/gurushots';
-import type { VotingPassApi } from '../../../src/ts/types/votingPass';
+import type { MemberBoost, RankingEntry } from '../../../src/ts/core/types/gurushots';
+import type { VotingPassApi } from '../../../src/ts/core/types/votingPass';
 import { invalid } from '../../helpers/invalid';
 const { runSuspendBoost } =
-    require('../../../src/ts/services/votingOrchestrator/suspendBoostRunner') as typeof boostModule;
+    require('../../../src/ts/core/services/votingOrchestrator/suspendBoostRunner') as typeof boostModule;
 
-jest.mock('../../../src/ts/settings');
+jest.mock('../../../src/ts/core/settings');
 
 const CLOSE = 1_000_000;
 const NOW = CLOSE - 3600;

@@ -2,18 +2,18 @@
  * mock/challenges.ts — the generated active-challenge list for mock mode.
  */
 
-import { HOUR, MINUTE } from '../../src/ts/mock/time';
-import type * as challengesModule from '../../src/ts/mock/challenges';
-import type * as joinModule from '../../src/ts/mock/endpoints/join';
-import type * as rewardsModule from '../../src/ts/mock/endpoints/rewards';
-import type * as joinDecisionModule from '../../src/ts/services/decisions/joinDecision';
-import type * as missionsModule from '../../src/ts/services/missions';
+import { HOUR, MINUTE } from '../../src/ts/core/mock/time';
+import type * as challengesModule from '../../src/ts/core/mock/challenges';
+import type * as joinModule from '../../src/ts/core/mock/endpoints/join';
+import type * as rewardsModule from '../../src/ts/core/mock/endpoints/rewards';
+import type * as joinDecisionModule from '../../src/ts/core/services/decisions/joinDecision';
+import type * as missionsModule from '../../src/ts/core/services/missions';
 
-const { generateMockChallenges } = require('../../src/ts/mock/challenges') as typeof challengesModule;
-const { getMemberChallenges } = require('../../src/ts/mock/endpoints/join') as typeof joinModule;
-const { getMyMissions } = require('../../src/ts/mock/endpoints/rewards') as typeof rewardsModule;
-const { joinFreshRefusal } = require('../../src/ts/services/decisions/joinDecision') as typeof joinDecisionModule;
-const { classifyMission } = require('../../src/ts/services/missions') as typeof missionsModule;
+const { generateMockChallenges } = require('../../src/ts/core/mock/challenges') as typeof challengesModule;
+const { getMemberChallenges } = require('../../src/ts/core/mock/endpoints/join') as typeof joinModule;
+const { getMyMissions } = require('../../src/ts/core/mock/endpoints/rewards') as typeof rewardsModule;
+const { joinFreshRefusal } = require('../../src/ts/core/services/decisions/joinDecision') as typeof joinDecisionModule;
+const { classifyMission } = require('../../src/ts/core/services/missions') as typeof missionsModule;
 
 // The same fixed epoch the generators guard pins, so the boost windows read exactly.
 const PINNED_NOW_MS = Date.UTC(2026, 0, 15, 12, 0, 0);

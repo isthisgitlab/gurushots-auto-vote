@@ -4,7 +4,7 @@
  * of votes still needed to PASS it.
  */
 
-import { benchmarkGap, parseBenchmarkScores } from '../../src/ts/format/benchmark';
+import { benchmarkGap, parseBenchmarkScores } from '../../src/ts/core/format/benchmark';
 import { invalid } from '../helpers/invalid';
 
 describe('parseBenchmarkScores', () => {

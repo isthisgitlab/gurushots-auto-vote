@@ -16,7 +16,7 @@ import {
     __resetExtractedRootForTests,
 } from '../../../src/ts/platforms/node/assets';
 
-import type { PlatformAssets } from '../../../src/ts/platform/port';
+import type { PlatformAssets } from '../../../src/ts/core/platform/port';
 import type * as appPathsModule from '../../../src/ts/appPaths';
 
 const mockSea: { isSea: () => boolean; getAsset: (key: string, encoding: string) => string } = {

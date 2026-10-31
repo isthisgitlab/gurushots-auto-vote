@@ -9,7 +9,7 @@
  * reload of it).
  */
 
-import type { PlatformWipe } from '../../platform/port';
+import type { PlatformWipe } from '../../core/platform/port';
 
 const createHeadlessWipe = (): PlatformWipe => ({
     clearSession: null,

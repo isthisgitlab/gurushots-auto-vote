@@ -9,11 +9,11 @@ import { DiscoverSection } from '@/components/app/DiscoverSection';
 import { mockTranslator } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
 import { isKindBadgeText } from '../helpers/kindBadges';
-import { app } from '../../src/ts/translations/english';
-import { createTranslator } from '../../src/ts/translations/translator';
-import type { OpenChallenge } from '../../src/ts/types/gurushots';
-import type { WindowApi } from '../../src/ts/types/ipc';
-import type { Translate } from '../../src/ts/translations/translator';
+import { app } from '../../src/ts/core/translations/english';
+import { createTranslator } from '../../src/ts/core/translations/translator';
+import type { OpenChallenge } from '../../src/ts/core/types/gurushots';
+import type { WindowApi } from '../../src/ts/core/types/ipc';
+import type { Translate } from '../../src/ts/core/translations/translator';
 
 const NOW_MS = 1_800_000_000_000;
 const NOW_SEC = NOW_MS / 1000;

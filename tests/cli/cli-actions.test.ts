@@ -10,7 +10,7 @@
  * never bypasses the factory to reach the real API surface.
  */
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const calls: { level: string; msg: unknown; data?: unknown }[] = [];
     const rec = (level: string) => (msg: unknown, data?: unknown) => calls.push({ level, msg, data });
     const cat = {
@@ -26,7 +26,7 @@ jest.mock('../../src/ts/logger', () => {
     return { __calls: calls, withCategory: jest.fn(() => cat), CATEGORIES: {} };
 });
 
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     getSetting: jest.fn(() => 'tok'),
     setSetting: jest.fn(() => true),
     loadSettings: jest.fn(() => ({ app: { mock: true }, auth: { token: 'tok' } })),
@@ -36,7 +36,7 @@ jest.mock('../../src/ts/settings', () => ({
     getEnvironmentInfo: jest.fn(() => ({ defaultMock: true })),
 }));
 
-jest.mock('../../src/ts/apiFactory', () => {
+jest.mock('../../src/ts/core/apiFactory', () => {
     const getActiveChallenges = jest.fn();
     const isAuthenticated = jest.fn(() => true);
     const applyBoost = jest.fn();
@@ -57,9 +57,9 @@ jest.mock('../../src/ts/apiFactory', () => {
 // Mocked ONLY to prove the CLI never reaches the real API module directly —
 // in mock mode a direct import would fire a real boost request (the bug this
 // guards against). Every boost must flow through the middleware above.
-jest.mock('../../src/ts/strategies/real/applyBoost', () => ({ applyBoost: jest.fn() }));
+jest.mock('../../src/ts/core/strategies/real/applyBoost', () => ({ applyBoost: jest.fn() }));
 
-jest.mock('../../src/ts/ipc/actions.handlers', () => {
+jest.mock('../../src/ts/core/ipc/actions.handlers', () => {
     const handlers = {
         'apply-boost-to-entry': jest.fn(),
         'apply-turbo-to-entry': jest.fn(),
@@ -69,7 +69,7 @@ jest.mock('../../src/ts/ipc/actions.handlers', () => {
     return { __handlers: handlers, buildHandlers: () => handlers, register: jest.fn() };
 });
 
-jest.mock('../../src/ts/ipc/currency.handlers', () => {
+jest.mock('../../src/ts/core/ipc/currency.handlers', () => {
     const handlers = {
         'get-swap-backs': jest.fn(),
         'swap-back-entry-photo': jest.fn(),
@@ -77,31 +77,31 @@ jest.mock('../../src/ts/ipc/currency.handlers', () => {
     return { __handlers: handlers, buildHandlers: () => handlers, register: jest.fn() };
 });
 
-jest.mock('../../src/ts/ipc/voting.handlers', () => {
+jest.mock('../../src/ts/core/ipc/voting.handlers', () => {
     const handlers = { 'vote-on-challenge-manual': jest.fn() };
     return { __handlers: handlers, buildHandlers: () => handlers, register: jest.fn() };
 });
 
-jest.mock('../../src/ts/scheduling/runScheduler', () => ({ createScheduler: jest.fn() }));
+jest.mock('../../src/ts/shells/cli/runScheduler', () => ({ createScheduler: jest.fn() }));
 
-jest.mock('../../src/ts/services/UpdateChecker', () => ({
+jest.mock('../../src/ts/core/services/UpdateChecker', () => ({
     checkForUpdates: jest.fn(),
     getReleasesUrl: jest.fn(() => 'https://github.com/owner/repo/releases/latest'),
 }));
 
 import { invalid } from '../helpers/invalid';
-import type * as actionHandlersModule from '../../src/ts/cli/actionHandlers';
+import type * as actionHandlersModule from '../../src/ts/shells/cli/actionHandlers';
 // The rows↔handlers cycle initialises only rows-first (commandRows reads the handlers'
 // exports at module scope), so load the rows before reaching for their handlers.
-require('../../src/ts/cli/commandRows');
-const { runTurbo, runSwapBack } = require('../../src/ts/cli/actionHandlers') as typeof actionHandlersModule;
-import loggerModule = require('../../src/ts/logger');
+require('../../src/ts/shells/cli/commandRows');
+const { runTurbo, runSwapBack } = require('../../src/ts/shells/cli/actionHandlers') as typeof actionHandlersModule;
+import loggerModule = require('../../src/ts/core/logger');
 const logger = jest.mocked(
     invalid<typeof loggerModule & { __calls: { level: string; msg: unknown; data?: unknown }[] }>(loggerModule),
 );
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import apiFactoryModule = require('../../src/ts/apiFactory');
+import apiFactoryModule = require('../../src/ts/core/apiFactory');
 // The middleware whose methods the factory mock exposes as __-prefixed jest.fns.
 type Middleware = ReturnType<typeof apiFactoryModule.getMiddleware>;
 const apiFactory = jest.mocked(
@@ -115,38 +115,39 @@ const apiFactory = jest.mocked(
         }
     >(apiFactoryModule),
 );
-import boostApiModule = require('../../src/ts/strategies/real/applyBoost');
+import boostApiModule = require('../../src/ts/core/strategies/real/applyBoost');
 const boostApi = jest.mocked(boostApiModule);
 // The handler-module mocks expose their jest.fn table for the assertions.
 type HandlersMock<M extends { buildHandlers: (...args: never[]) => object }> = {
     __handlers: jest.Mocked<ReturnType<M['buildHandlers']>>;
 };
 const actionsHandlers = invalid<HandlersMock<typeof actionsHandlersModule>>(
-    require('../../src/ts/ipc/actions.handlers'),
+    require('../../src/ts/core/ipc/actions.handlers'),
 ).__handlers;
 const currencyHandlers = invalid<HandlersMock<typeof currencyHandlersModule>>(
-    require('../../src/ts/ipc/currency.handlers'),
+    require('../../src/ts/core/ipc/currency.handlers'),
 ).__handlers;
 const votingHandlers = invalid<HandlersMock<typeof votingHandlersModule>>(
-    require('../../src/ts/ipc/voting.handlers'),
+    require('../../src/ts/core/ipc/voting.handlers'),
 ).__handlers;
-import updateCheckerModule = require('../../src/ts/services/UpdateChecker');
+import updateCheckerModule = require('../../src/ts/core/services/UpdateChecker');
 const updateChecker = jest.mocked(updateCheckerModule);
-import type * as actionsModule from '../../src/ts/cli/commands/actions';
-import type * as submitModule from '../../src/ts/cli/commands/submit';
-import type * as actionsHandlersModule from '../../src/ts/ipc/actions.handlers';
-import type * as currencyHandlersModule from '../../src/ts/ipc/currency.handlers';
-import type * as votingHandlersModule from '../../src/ts/ipc/voting.handlers';
-import type * as votingModule from '../../src/ts/cli/commands/voting';
-import type * as authModule from '../../src/ts/cli/commands/auth';
-import type * as updateModule from '../../src/ts/cli/commands/update';
+import type * as actionsModule from '../../src/ts/shells/cli/commands/actions';
+import type * as submitModule from '../../src/ts/shells/cli/commands/submit';
+import type * as actionsHandlersModule from '../../src/ts/core/ipc/actions.handlers';
+import type * as currencyHandlersModule from '../../src/ts/core/ipc/currency.handlers';
+import type * as votingHandlersModule from '../../src/ts/core/ipc/voting.handlers';
+import type * as votingModule from '../../src/ts/shells/cli/commands/voting';
+import type * as authModule from '../../src/ts/shells/cli/commands/auth';
+import type * as updateModule from '../../src/ts/shells/cli/commands/update';
 
 const { boostChallenge, turboChallenge, SWAP_BACK_USAGE } =
-    require('../../src/ts/cli/commands/actions') as typeof actionsModule;
-const { fillChallenge } = require('../../src/ts/cli/commands/submit') as typeof submitModule;
-const { voteChallengeManual, runVotingCycle } = require('../../src/ts/cli/commands/voting') as typeof votingModule;
-const { handleLogout } = require('../../src/ts/cli/commands/auth') as typeof authModule;
-const { checkUpdates } = require('../../src/ts/cli/commands/update') as typeof updateModule;
+    require('../../src/ts/shells/cli/commands/actions') as typeof actionsModule;
+const { fillChallenge } = require('../../src/ts/shells/cli/commands/submit') as typeof submitModule;
+const { voteChallengeManual, runVotingCycle } =
+    require('../../src/ts/shells/cli/commands/voting') as typeof votingModule;
+const { handleLogout } = require('../../src/ts/shells/cli/commands/auth') as typeof authModule;
+const { checkUpdates } = require('../../src/ts/shells/cli/commands/update') as typeof updateModule;
 
 const msgsAt = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
 const allMsgs = () => logger.__calls.map((c) => String(c.msg));

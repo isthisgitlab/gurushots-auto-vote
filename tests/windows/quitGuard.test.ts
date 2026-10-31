@@ -3,24 +3,26 @@
  * due within the horizon, asks, and re-issues it only on "Quit anyway".
  */
 
-import type * as VotingLogicModule from '../../src/ts/services/VotingLogic';
-import type * as quitGuardModule from '../../src/ts/windows/quitGuard';
-import type * as selectionModule from '../../src/ts/services/boostGuard/selection';
+import type * as VotingLogicModule from '../../src/ts/core/services/VotingLogic';
+import type * as quitGuardModule from '../../src/ts/shells/electron/windows/quitGuard';
+import type * as selectionModule from '../../src/ts/core/services/boostGuard/selection';
 import type { BrowserWindow, Dialog } from 'electron';
-import type { Challenge } from '../../src/ts/types/gurushots';
-import type { CategoryLogger } from '../../src/ts/logger';
-import { createTranslator } from '../../src/ts/translations/translator';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
+import type { CategoryLogger } from '../../src/ts/core/logger';
+import { createTranslator } from '../../src/ts/core/translations/translator';
 import { invalid } from '../helpers/invalid';
 
 type Deps = Parameters<typeof quitGuardModule.holdQuitForOpenBoosts>[1];
 type ShowMessageBox = jest.MockedFunction<Dialog['showMessageBox']>;
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn() };
     return { withCategory: jest.fn(() => cat), cat };
 });
-jest.mock('../../src/ts/services/VotingLogic', () => ({ describeDeadlineActions: jest.fn(() => ({ actions: [] })) }));
-jest.mock('../../src/ts/apiFactory', () => ({
+jest.mock('../../src/ts/core/services/VotingLogic', () => ({
+    describeDeadlineActions: jest.fn(() => ({ actions: [] })),
+}));
+jest.mock('../../src/ts/core/apiFactory', () => ({
     // The view ledger is not under test here; null keeps the seam hermetic.
     getEntryAgeLedger: jest.fn(() => null),
 }));
@@ -66,9 +68,9 @@ let logger: {
 beforeEach(() => {
     // Module-level state (list, bypass, prompting) must not leak across tests.
     jest.resetModules();
-    guard = require('../../src/ts/windows/quitGuard') as typeof guard;
-    selection = require('../../src/ts/services/boostGuard/selection') as typeof selection;
-    logger = require('../../src/ts/logger') as typeof logger;
+    guard = require('../../src/ts/shells/electron/windows/quitGuard') as typeof guard;
+    selection = require('../../src/ts/core/services/boostGuard/selection') as typeof selection;
+    logger = require('../../src/ts/core/logger') as typeof logger;
 });
 
 const setup = ({
@@ -140,7 +142,7 @@ describe('holdQuitForOpenBoosts — when to ask', () => {
     });
 
     test('defaults to the real clock and VotingLogic.describeDeadlineActions', () => {
-        const votingLogic = jest.mocked(require('../../src/ts/services/VotingLogic') as typeof VotingLogicModule);
+        const votingLogic = jest.mocked(require('../../src/ts/core/services/VotingLogic') as typeof VotingLogicModule);
         selection.rememberChallenges([keyed], false);
         votingLogic.describeDeadlineActions.mockReturnValue(
             invalid({

@@ -6,7 +6,7 @@
  */
 import { fireEvent, render, screen } from './helpers/test-utils';
 import { resetPlatformKind } from '../helpers/platformKind';
-import { markPlatformKind } from '../../src/ts/platform/kind';
+import { markPlatformKind } from '../../src/ts/core/platform/kind';
 import { WelcomeModal } from '@/components/app/WelcomeModal';
 
 describe('WelcomeModal', () => {

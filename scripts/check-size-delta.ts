@@ -31,7 +31,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 
-import { isPlainObject } from '../src/ts/plainObject';
+import { isPlainObject } from '../src/ts/core/plainObject';
 import { runIfMain } from './lib/run-if-main';
 
 const ROOT = path.join(__dirname, '..');

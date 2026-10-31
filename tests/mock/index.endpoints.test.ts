@@ -8,16 +8,16 @@
  * (900004 unlock/spend fails, 900005 submit fails).
  */
 
-jest.mock('../../src/ts/metadata', () => ({ updateChallengeVoteMetadata: jest.fn(() => true) }));
-jest.mock('../../src/ts/services/votingOrchestrator', () => ({
+jest.mock('../../src/ts/core/metadata', () => ({ updateChallengeVoteMetadata: jest.fn(() => true) }));
+jest.mock('../../src/ts/core/services/votingOrchestrator', () => ({
     runVotingPass: jest.fn(async () => ({ success: true, message: 'pass' })),
 }));
-jest.mock('../../src/ts/services/joinChallenges', () => ({
+jest.mock('../../src/ts/core/services/joinChallenges', () => ({
     runJoinPass: jest.fn(async () => ({ ran: false, joined: 0, results: [] })),
     joinChallengeSingle: jest.fn(async () => ({ status: 'joined' })),
     forgetUnconfirmedPayment: jest.fn(async () => ({ status: 'nothing-to-forget', challengeId: 1 })),
 }));
-jest.mock('../../src/ts/services/missions', () => ({
+jest.mock('../../src/ts/core/services/missions', () => ({
     loadMissionNeeds: jest.fn(async () => null),
     registerMissionNeeds: jest.fn((_token: string, needs: missionsModule.MissionNeeds | null) =>
         needs ? jest.fn() : null,
@@ -25,47 +25,47 @@ jest.mock('../../src/ts/services/missions', () => ({
 }));
 // Partial mock: the real module spread, so rememberChallengeTitles can be
 // spied on (swc's real-module exports are non-configurable getters).
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/settings')>('../../src/ts/settings'),
+    ...jest.requireActual<typeof import('../../src/ts/core/settings')>('../../src/ts/core/settings'),
 }));
 
-import loggerModule = require('../../src/ts/logger');
+import loggerModule = require('../../src/ts/core/logger');
 const logger = jest.mocked(loggerModule);
-import metadataModule = require('../../src/ts/metadata');
+import metadataModule = require('../../src/ts/core/metadata');
 const metadata = jest.mocked(metadataModule);
-import settingsModule = require('../../src/ts/settings');
-import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
-import type * as joinChallengesModule from '../../src/ts/services/joinChallenges';
-import type * as missionsModule from '../../src/ts/services/missions';
-import type * as indexModule from '../../src/ts/mock/index';
-import type * as photoLibraryModule from '../../src/ts/mock/photoLibrary';
-import type * as sessionCacheModule from '../../src/ts/mock/sessionCache';
-import type * as challengeIntegrityModule from '../../src/ts/challengeIntegrity';
-import type * as plainObjectModule from '../../src/ts/plainObject';
-import type { Challenge } from '../../src/ts/types/gurushots';
-import { LIBRARY_BATCH_PHOTOS } from '../../src/ts/settings/limits';
+import settingsModule = require('../../src/ts/core/settings');
+import type * as votingOrchestratorModule from '../../src/ts/core/services/votingOrchestrator';
+import type * as joinChallengesModule from '../../src/ts/core/services/joinChallenges';
+import type * as missionsModule from '../../src/ts/core/services/missions';
+import type * as indexModule from '../../src/ts/core/mock/index';
+import type * as photoLibraryModule from '../../src/ts/core/mock/photoLibrary';
+import type * as sessionCacheModule from '../../src/ts/core/mock/sessionCache';
+import type * as challengeIntegrityModule from '../../src/ts/core/challengeIntegrity';
+import type * as plainObjectModule from '../../src/ts/core/plainObject';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
+import { LIBRARY_BATCH_PHOTOS } from '../../src/ts/core/settings/limits';
 import { invalid } from '../helpers/invalid';
 import { installHeadlessTestPlatform } from '../helpers/platform';
 
 /** The mock autocomplete called without a member id, as the no-token / term tests do. */
 type TwoArgAutocomplete = (token: string | null, term: unknown) => Promise<string[]>;
 const { runVotingPass } = jest.mocked(
-    require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule,
+    require('../../src/ts/core/services/votingOrchestrator') as typeof votingOrchestratorModule,
 );
 const { runJoinPass, joinChallengeSingle, forgetUnconfirmedPayment } = jest.mocked(
-    require('../../src/ts/services/joinChallenges') as typeof joinChallengesModule,
+    require('../../src/ts/core/services/joinChallenges') as typeof joinChallengesModule,
 );
 const { loadMissionNeeds, registerMissionNeeds } = jest.mocked(
-    require('../../src/ts/services/missions') as typeof missionsModule,
+    require('../../src/ts/core/services/missions') as typeof missionsModule,
 );
-const { mockApiClient, clearSessionCache } = require('../../src/ts/mock/index') as typeof indexModule;
-const { getSessionCache } = require('../../src/ts/mock/sessionCache') as typeof sessionCacheModule;
+const { mockApiClient, clearSessionCache } = require('../../src/ts/core/mock/index') as typeof indexModule;
+const { getSessionCache } = require('../../src/ts/core/mock/sessionCache') as typeof sessionCacheModule;
 const { __resetForTests: resetBoundaryLogState } =
-    require('../../src/ts/challengeIntegrity') as typeof challengeIntegrityModule;
-const { isPlainObject } = require('../../src/ts/plainObject') as typeof plainObjectModule;
+    require('../../src/ts/core/challengeIntegrity') as typeof challengeIntegrityModule;
+const { isPlainObject } = require('../../src/ts/core/plainObject') as typeof plainObjectModule;
 const { buildLibraryPhotos, SUGGESTED_PHOTO_IDS } =
-    require('../../src/ts/mock/photoLibrary') as typeof photoLibraryModule;
+    require('../../src/ts/core/mock/photoLibrary') as typeof photoLibraryModule;
 
 /** Resolve a promise that is gated on simulated latency. */
 const settle = async <T>(promise: Promise<T>): Promise<T> => {

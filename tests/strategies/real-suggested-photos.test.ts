@@ -6,7 +6,7 @@
  * are kept, twenty per challenge at most.
  */
 
-import type * as suggestedPhotosModule from '../../src/ts/strategies/real/suggestedPhotos';
+import type * as suggestedPhotosModule from '../../src/ts/core/strategies/real/suggestedPhotos';
 
 let beginSuggestedPhotos: typeof suggestedPhotosModule.beginSuggestedPhotos;
 let storeSuggestedPhotos: typeof suggestedPhotosModule.storeSuggestedPhotos;
@@ -20,7 +20,7 @@ const suggestions = (...entries: Array<[string | number, string[]]>): Map<string
 beforeEach(() => {
     jest.resetModules();
     ({ beginSuggestedPhotos, storeSuggestedPhotos, getSuggestedPhotoIds } =
-        require('../../src/ts/strategies/real/suggestedPhotos') as typeof suggestedPhotosModule);
+        require('../../src/ts/core/strategies/real/suggestedPhotos') as typeof suggestedPhotosModule);
 });
 
 describe('getSuggestedPhotoIds', () => {

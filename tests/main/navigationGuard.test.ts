@@ -1,29 +1,31 @@
 /**
- * src/ts/index/navigationGuard.ts — the window-open and navigation policy
+ * src/ts/shells/electron/index/navigationGuard.ts — the window-open and navigation policy
  * applied to every web contents. Electron's app, shell and web contents are
  * recorded fakes; the URL predicates are the real urlSafe gate and a stubbed
  * app-file check.
  */
 
 import type { App, Event, Shell, WebContents, WindowOpenHandlerResponse } from 'electron';
-import type * as navigationGuardModule from '../../src/ts/index/navigationGuard';
-import type * as appFileUrlModule from '../../src/ts/appFileUrl';
-import type * as loggerModule from '../../src/ts/logger';
-import type { CategoryLogger } from '../../src/ts/logger';
+import type * as navigationGuardModule from '../../src/ts/shells/electron/index/navigationGuard';
+import type * as appFileUrlModule from '../../src/ts/shells/electron/appFileUrl';
+import type * as loggerModule from '../../src/ts/core/logger';
+import type { CategoryLogger } from '../../src/ts/core/logger';
 import { invalid } from '../helpers/invalid';
 
 type NavigationListener = (event: Event, url: string) => void;
 type OpenHandler = (details: { url: string }) => WindowOpenHandlerResponse;
 
-jest.mock('../../src/ts/appFileUrl', () => ({ isAppFileUrl: jest.fn() }));
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/shells/electron/appFileUrl', () => ({ isAppFileUrl: jest.fn() }));
+jest.mock('../../src/ts/core/logger', () => {
     const cat = { info: jest.fn(), warning: jest.fn(), error: jest.fn(), debug: jest.fn() };
     return { withCategory: jest.fn(() => cat), cat };
 });
 
-const { register } = require('../../src/ts/index/navigationGuard') as typeof navigationGuardModule;
-const isAppFileUrl = jest.mocked((require('../../src/ts/appFileUrl') as typeof appFileUrlModule).isAppFileUrl);
-const cat = jest.mocked((require('../../src/ts/logger') as typeof loggerModule & { cat: CategoryLogger }).cat);
+const { register } = require('../../src/ts/shells/electron/index/navigationGuard') as typeof navigationGuardModule;
+const isAppFileUrl = jest.mocked(
+    (require('../../src/ts/shells/electron/appFileUrl') as typeof appFileUrlModule).isAppFileUrl,
+);
+const cat = jest.mocked((require('../../src/ts/core/logger') as typeof loggerModule & { cat: CategoryLogger }).cat);
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 

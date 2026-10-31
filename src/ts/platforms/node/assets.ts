@@ -11,11 +11,11 @@
  * time (see index.ts for why).
  */
 
-import type { PlatformAssets } from '../../platform/port';
+import type { PlatformAssets } from '../../core/platform/port';
 
 type AppPathsModule = typeof import('../../appPaths');
 type NodePathsModule = typeof import('./paths');
-type VisionCliAssetsModule = typeof import('../../services/visionCliAssets');
+type VisionCliAssetsModule = typeof import('../../shells/cli/visionCliAssets');
 
 const appPaths = (): AppPathsModule => require('../../appPaths') as AppPathsModule;
 const nodePaths = (): NodePathsModule => require('./paths') as NodePathsModule;

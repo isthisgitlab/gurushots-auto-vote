@@ -1,0 +1,243 @@
+// The Electron platform installs before any core module loads.
+import './platform';
+import { app, ipcMain, shell } from 'electron';
+import * as settings from '../../core/settings';
+import * as logger from '../../core/logger';
+import { logout, LogoutNotSavedError } from '../../core/services/auth';
+import { isTrustedSender, isChannelAllowedForSender } from './registerHandlers';
+import { registerIpc } from './registerIpc';
+import { ensureExit, focusExistingWindow, clearTokenOnQuit } from './windows/lifecycle';
+import { bypassQuitGuard } from './windows/quitGuard';
+import { appState } from './index/state';
+import { holdForOpenBoosts, createLoginWindow, createMainWindow, reportLogoutRefused } from './index/windows';
+import { onReady } from './index/startup';
+import { register as registerNavigationGuard } from './index/navigationGuard';
+import { removeStalePartitionData } from './index/session';
+
+import type { AutoUpdater } from './AutoUpdater';
+
+// Disable service workers at the application level. Kept deliberately:
+// with contextIsolation on, the preload.ts register() patch only covers
+// the isolated world — this switch is the only main-world-and-subframe-
+// effective service worker block.
+app.commandLine.appendSwitch('disable-features', 'ServiceWorker');
+
+// Chromium encrypts the cookie store of Electron's default on-disk session with a key it
+// keeps in the macOS Keychain, and re-prompts for it whenever the Electron binary changes.
+// The app windows' own partition is in memory (index/session.ts) and nothing here relies on
+// cookies (the auth token lives in the settings store, API calls go through Node), so skip
+// the real Keychain. No-op on other platforms.
+app.commandLine.appendSwitch('use-mock-keychain');
+
+// Applies to every web contents created from here on, so it is registered at
+// module load, before any window exists.
+registerNavigationGuard(app, shell);
+
+// Enforce a single running instance. A second launch would share the same
+// userData dir and fight over Chromium's LevelDB locks (the source of the
+// "Failed to delete the database: Database IO error" startup error).
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+    logger.withCategory('ui').info('Another instance is already running — exiting this one.', null);
+    app.quit();
+}
+
+// ensureExit (force-exit safety net) lives in windows/lifecycle.ts.
+
+// Register IPC handlers from their focused modules. Each module
+// receives the accessors it needs to read/write the shared window and
+// updater state (index/state.ts). The windows' lifecycle lives in
+// index/windows.ts and the startup sequence in index/startup.ts.
+registerIpc(ipcMain, {
+    update: {
+        getAutoUpdater: () => appState.autoUpdater,
+        setAutoUpdater: (v: AutoUpdater) => {
+            appState.autoUpdater = v;
+        },
+        getMainWindow: () => appState.mainWindow,
+    },
+    misc: {
+        getMainWindow: () => appState.mainWindow,
+        getLoginWindow: () => appState.loginWindow,
+    },
+});
+
+if (gotSingleInstanceLock) {
+    // Only the instance holding the lock may touch the user-data directory.
+    removeStalePartitionData(settings.getUserDataPath);
+
+    // Registered synchronously, not inside whenReady: second-instance can
+    // fire while the primary is still booting, and an event emitted before
+    // a listener exists is lost, not queued.
+    app.on('second-instance', () => {
+        const windowToFocus = appState.mainWindow ?? appState.loginWindow;
+        if (windowToFocus) {
+            logger.withCategory('ui').info('Second instance launch blocked — focusing existing window.', null);
+        } else {
+            logger
+                .withCategory('ui')
+                .info('Second instance launch blocked — no window to focus yet (still starting up).', null);
+        }
+        if (process.platform === 'darwin') {
+            // Cmd+H hides at the NSApplication level; win.show() alone can't undo it.
+            app.show();
+        }
+        focusExistingWindow(windowToFocus);
+    });
+
+    // When Electron has finished initialization
+    app.whenReady()
+        .then(onReady)
+        .catch((error) => {
+            // The main process has no global unhandledRejection handler (unlike the
+            // CLI), so a throw anywhere in the bootstrap above would otherwise vanish.
+            logger.withCategory('ui').error('Startup failed:', error);
+        });
+}
+
+// Clear token when app is about to quit if stay logged in is not enabled.
+// Gated on the lock inside the helper — a losing second instance must not
+// touch the shared config.json and wipe the primary's session.
+app.on('before-quit', (event) => {
+    // Lock first: a losing second instance must not read config.json either.
+    if (gotSingleInstanceLock && holdForOpenBoosts(event, () => app.quit())) return;
+
+    // A throw here must never skip ensureExit — the force-exit net below is
+    // the guarantee that quit always terminates the process.
+    try {
+        clearTokenOnQuit(gotSingleInstanceLock, settings);
+    } catch (error) {
+        logger.withCategory('ui').error('Failed to clear token on quit:', error);
+    }
+
+    logger.withCategory('ui').info('Application is about to quit. Forcing exit...', null);
+
+    // Use the global force exit handler to ensure the process terminates
+    ensureExit('before-quit');
+});
+
+// Quit when all windows are closed, except on macOS
+app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+        app.quit();
+        logger.withCategory('ui').info('All windows closed. Forcing exit...', null);
+
+        // Use the global force exit handler to ensure the process terminates
+        ensureExit('window-all-closed');
+    }
+});
+
+// Handle login success.
+//
+// registerHandlers applies isTrustedSender to every ipcMain.handle channel, but these two
+// are registered with ipcMain.on (a send, with no reply) and so bypassed it entirely — this
+// one swaps windows and the next clears the auth token. Nothing untrusted is loaded today,
+// so the exposure is theoretical, but there is no reason for these to be the exceptions.
+// The Logs window is held to its channel set here too (isChannelAllowedForSender).
+ipcMain.on('login-success', (event) => {
+    if (!isTrustedSender(event)) {
+        logger.withCategory('api').warning("Refused IPC 'login-success' from untrusted frame", null);
+        return;
+    }
+    if (!isChannelAllowedForSender(event, 'login-success')) {
+        logger.withCategory('api').warning("Refused IPC 'login-success' from the Logs window", null);
+        return;
+    }
+    // A login window is swapped for the main window only after a login has stored its token, and
+    // never twice: a page that fires this without a login (or with a main window up) changes nothing.
+    if (!settings.loadSettings().auth.token || appState.mainWindow) {
+        logger
+            .withCategory('api')
+            .warning("Ignored IPC 'login-success': no login token, or a main window is open", null);
+        return;
+    }
+    // Close login window
+    if (appState.loginWindow) {
+        appState.loginWindow.close();
+    }
+    createMainWindow();
+});
+
+// Handle logout. ipcMain.on expects a void listener, so the async flow runs
+// in a caught IIFE. A logout the settings refused (the sign-in is still stored) is logged and told to the user, and the
+// main window stays; any other failure ends in the window teardown, so the user is never stuck on a dead main window.
+ipcMain.on('logout', (event) => {
+    if (!isTrustedSender(event)) {
+        logger.withCategory('api').warning("Refused IPC 'logout' from untrusted frame", null);
+        return;
+    }
+    if (!isChannelAllowedForSender(event, 'logout')) {
+        logger.withCategory('api').warning("Refused IPC 'logout' from the Logs window", null);
+        return;
+    }
+    if (!appState.mainWindow) return;
+
+    let refused = false;
+    void (async () => {
+        // Always clear the token on logout (regardless of stay logged in setting)
+        await logout();
+    })()
+        .catch((err) => {
+            logger.withCategory('authentication').error('Logout failed to clear token', err);
+            refused = err instanceof LogoutNotSavedError;
+            if (!refused) return;
+            // The main window stays, still logged in. If it went away during the flush, it is opened again first (the user is
+            // still logged in, so the login form would be wrong), so that the dialog has a window to belong to.
+            try {
+                if (!appState.mainWindow || appState.mainWindow.isDestroyed()) createMainWindow();
+            } catch (windowError) {
+                // The refusal is told whatever happens to the window: a dialog without a parent.
+                logger.withCategory('authentication').error('The main window could not be opened again', windowError);
+            }
+            reportLogoutRefused();
+        })
+        .finally(() => {
+            if (refused) return;
+
+            // Re-check the window here, not just at entry. logout awaits a settings
+            // flush, and the user can close the main window during that await — dereferencing
+            // a destroyed window inside .finally() threw an unhandled rejection in the main
+            // process, which has no global handler. Nothing left to tear down in that case,
+            // so just make sure they land back on a login window.
+            if (!appState.mainWindow || appState.mainWindow.isDestroyed()) {
+                if (appState.loginWindow) {
+                    appState.loginWindow.focus();
+                } else {
+                    createLoginWindow();
+                }
+                return;
+            }
+
+            // Open the login window only after the main window is fully closed
+            appState.mainWindow.once('closed', () => {
+                // If a login window is already open, just focus it instead of creating a second one
+                if (appState.loginWindow) {
+                    appState.loginWindow.focus();
+                } else {
+                    createLoginWindow();
+                }
+            });
+
+            // Close main window — logging out is its own confirmation.
+            bypassQuitGuard();
+            appState.mainWindow.close();
+        });
+});
+
+// Settings IPC handlers live in ipc/settings.handlers.ts — that
+// includes get-settings, get-setting, set-setting, save-settings,
+// schema, boost thresholds, get-environment-info, refresh-api, the
+// thin passthrough table, and cleanup-stale-metadata.
+
+// gui-vote, run-voting-cycle, vote-all-challenges-manual, vote-on-challenge,
+// vote-on-challenge-manual, should-cancel-voting, set-cancel-voting all
+// live in ipc/voting.handlers.ts.
+
+// Logger handlers live in ipc/log.handlers.ts.
+// open-external-url, reload-window, refresh-menu live in ipc/misc.handlers.ts.
+// authenticate, get-active-challenges, play-auto-turbo, apply-turbo-to-entry,
+// apply-boost-to-entry live in ipc/actions.handlers.ts.
+
+// AutoUpdater IPC handlers live in ipc/update.handlers.ts.
+
+// Log streaming + log file IPC handlers live in ipc/log.handlers.ts.

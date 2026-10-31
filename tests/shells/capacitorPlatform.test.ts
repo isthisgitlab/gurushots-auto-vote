@@ -11,16 +11,16 @@
  * not the slot.
  */
 
-import { platform } from '../../src/ts/platform/port';
+import { platform } from '../../src/ts/core/platform/port';
 import type { createWebviewPlatform } from '../../src/ts/platforms/webview';
 import { clearInstalledPlatform } from '../helpers/platform';
 
-import type { CapacitorGlobals } from '../../src/ts/types/capacitor';
-import type { Platform } from '../../src/ts/platform/port';
+import type { CapacitorGlobals } from '../../src/ts/core/types/capacitor';
+import type { Platform } from '../../src/ts/core/platform/port';
 
 type WebviewParts = Parameters<typeof createWebviewPlatform>[0];
 
-jest.mock('../../src/ts/bridge/capacitor', () => ({
+jest.mock('../../src/ts/shells/capacitor/bridge/capacitor', () => ({
     __esModule: true,
     emit: jest.fn<void, [string, unknown]>(),
     reloadWindow: jest.fn(async (): Promise<{ success: boolean }> => ({ success: true })),
@@ -67,7 +67,7 @@ afterAll(() => {
 // passes; the slot is cleared first, because the setup file installed the
 // node test platform before this file loaded.
 clearInstalledPlatform();
-require('../../src/ts/bridge/capacitorPlatform');
+require('../../src/ts/shells/capacitor/platform');
 const installed: Platform = platform();
 
 const webview = require('../../src/ts/platforms/webview') as {
@@ -84,10 +84,10 @@ const parts = webview.__recorded.parts as WebviewParts;
 // not been instantiated in the outer registry (the tests below instantiate
 // the file-level bridge mock), and its afterEach re-registers that mock.
 const HEAVY = [
-    '../../src/ts/bridge/capacitor',
-    '../../src/ts/services/NativeAutovoteBridge',
-    '../../src/ts/services/ForegroundServiceController',
-    '../../src/ts/services/AndroidUpdateInstaller',
+    '../../src/ts/shells/capacitor/bridge/capacitor',
+    '../../src/ts/shells/capacitor/NativeAutovoteBridge',
+    '../../src/ts/shells/capacitor/ForegroundServiceController',
+    '../../src/ts/shells/capacitor/AndroidUpdateInstaller',
 ];
 
 describe('loading the Capacitor shell platform module defers the wrapped modules', () => {
@@ -101,7 +101,7 @@ describe('loading the Capacitor shell platform module defers the wrapped modules
         for (const heavy of HEAVY) jest.dontMock(heavy);
         // doMock (not mock): the hoisted registration was removed by
         // dontMock above, and a runtime re-registration is a doMock.
-        jest.doMock('../../src/ts/bridge/capacitor', () => ({
+        jest.doMock('../../src/ts/shells/capacitor/bridge/capacitor', () => ({
             __esModule: true,
             emit: jest.fn<void, [string, unknown]>(),
             reloadWindow: jest.fn(async (): Promise<{ success: boolean }> => ({ success: true })),
@@ -117,7 +117,7 @@ describe('loading the Capacitor shell platform module defers the wrapped modules
                     return {};
                 });
             }
-            require('../../src/ts/bridge/capacitorPlatform');
+            require('../../src/ts/shells/capacitor/platform');
             expect(mockLoaded).toEqual([]);
             expect(platform()).toBeDefined();
         });
@@ -126,21 +126,21 @@ describe('loading the Capacitor shell platform module defers the wrapped modules
     test('calling a member reaches the module it wraps', () => {
         jest.isolateModules(() => {
             clearInstalledPlatform();
-            jest.doMock('../../src/ts/bridge/capacitor', () => ({
+            jest.doMock('../../src/ts/shells/capacitor/bridge/capacitor', () => ({
                 __esModule: true,
                 emit: jest.fn<void, [string, unknown]>(),
                 reloadWindow: jest.fn(async (): Promise<{ success: boolean }> => ({ success: true })),
             }));
-            jest.doMock('../../src/ts/services/NativeAutovoteBridge', () => ({
+            jest.doMock('../../src/ts/shells/capacitor/NativeAutovoteBridge', () => ({
                 __esModule: true,
                 isAvailable: () => true,
             }));
-            require('../../src/ts/bridge/capacitorPlatform');
+            require('../../src/ts/shells/capacitor/platform');
             // The deferred require of each wrapped module is the next thing
             // these members run, so each call lands in the doMock'ed module;
             // the native wipe is the shell's own body, reading the plugin
             // global at call time.
-            const bridgeMock = require('../../src/ts/bridge/capacitor') as {
+            const bridgeMock = require('../../src/ts/shells/capacitor/bridge/capacitor') as {
                 emit: jest.Mock<void, [string, unknown]>;
                 reloadWindow: jest.Mock<Promise<{ success: boolean }>, []>;
             };
@@ -165,9 +165,11 @@ describe('the Capacitor shell platform module', () => {
     test('every part is present, and the native members are the real services', () => {
         expect(parts.cas).not.toBeNull();
         expect(parts.nativeWipe).not.toBeNull();
-        expect(parts.native.autovote).toBe(require('../../src/ts/services/NativeAutovoteBridge'));
-        expect(parts.native.foregroundService).toBe(require('../../src/ts/services/ForegroundServiceController'));
-        expect(parts.native.apkInstaller).toBe(require('../../src/ts/services/AndroidUpdateInstaller'));
+        expect(parts.native.autovote).toBe(require('../../src/ts/shells/capacitor/NativeAutovoteBridge'));
+        expect(parts.native.foregroundService).toBe(
+            require('../../src/ts/shells/capacitor/ForegroundServiceController'),
+        );
+        expect(parts.native.apkInstaller).toBe(require('../../src/ts/shells/capacitor/AndroidUpdateInstaller'));
         expect(parts.windows).toBeDefined();
     });
 
@@ -183,7 +185,7 @@ describe('the Capacitor shell platform module', () => {
 
     test('the windows are the bridge emit and the reload', () => {
         const capacitorBridge = jest.mocked(
-            require('../../src/ts/bridge/capacitor') as typeof import('../../src/ts/bridge/capacitor'),
+            require('../../src/ts/shells/capacitor/bridge/capacitor') as typeof import('../../src/ts/shells/capacitor/bridge/capacitor'),
         );
         const settings = { theme: 'dark' };
         installed.windows.broadcastSettingsChanged(settings);

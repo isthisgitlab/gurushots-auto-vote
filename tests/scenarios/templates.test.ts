@@ -4,13 +4,13 @@
  * validator accepts.
  */
 
-const { SCENARIO_TEMPLATES } = require('../../src/ts/scenarios/templates') as typeof templatesModule;
-import vocabulary = require('../../src/ts/scenarios/vocabulary');
-import type * as templatesModule from '../../src/ts/scenarios/templates';
-import type * as scenarioSchemaModule from '../../src/ts/settings/scenarioSchema';
-import type * as defaultsModule from '../../src/ts/settings/defaults';
-const { validateScenario } = require('../../src/ts/settings/scenarioSchema') as typeof scenarioSchemaModule;
-const { schemaDefaults } = require('../../src/ts/settings/defaults') as typeof defaultsModule;
+const { SCENARIO_TEMPLATES } = require('../../src/ts/core/scenarios/templates') as typeof templatesModule;
+import vocabulary = require('../../src/ts/core/scenarios/vocabulary');
+import type * as templatesModule from '../../src/ts/core/scenarios/templates';
+import type * as scenarioSchemaModule from '../../src/ts/core/settings/scenarioSchema';
+import type * as defaultsModule from '../../src/ts/core/settings/defaults';
+const { validateScenario } = require('../../src/ts/core/settings/scenarioSchema') as typeof scenarioSchemaModule;
+const { schemaDefaults } = require('../../src/ts/core/settings/defaults') as typeof defaultsModule;
 
 const globalDefaults = schemaDefaults();
 

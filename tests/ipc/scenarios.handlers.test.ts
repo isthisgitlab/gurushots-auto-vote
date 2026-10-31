@@ -3,7 +3,7 @@
  * and never a throw to the renderer.
  */
 
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     checkScenario: jest.fn(),
     getScenarios: jest.fn(() => ({})),
     saveScenario: jest.fn(),
@@ -15,7 +15,7 @@ jest.mock('../../src/ts/settings', () => ({
     exportScenarioWithNotes: jest.fn(),
     getEffectiveSetting: jest.fn(() => false),
 }));
-jest.mock('../../src/ts/services/scenarioStatus', () => {
+jest.mock('../../src/ts/core/services/scenarioStatus', () => {
     const ledger = { remove: jest.fn(async () => 'removed'), removeAll: jest.fn(async () => 'removed') };
     const release = jest.fn();
     return {
@@ -26,39 +26,41 @@ jest.mock('../../src/ts/services/scenarioStatus', () => {
         __release: release,
     };
 });
-jest.mock('../../src/ts/scenarioStateStore', () => ({
+jest.mock('../../src/ts/core/scenarioStateStore', () => ({
     refreshScenarioStateAsync: jest.fn(async () => {}),
 }));
-jest.mock('../../src/ts/services/scenarioRunner', () => ({ backgroundServiceOwnsScenarios: jest.fn(() => false) }));
-jest.mock('../../src/ts/services/auth', () => ({ requireAuthToken: jest.fn(() => ({ ok: true, token: 'tok' })) }));
-jest.mock('../../src/ts/apiFactory', () => ({ getApiStrategy: jest.fn() }));
-jest.mock('../../src/ts/logger', () => ({
+jest.mock('../../src/ts/core/services/scenarioRunner', () => ({
+    backgroundServiceOwnsScenarios: jest.fn(() => false),
+}));
+jest.mock('../../src/ts/core/services/auth', () => ({ requireAuthToken: jest.fn(() => ({ ok: true, token: 'tok' })) }));
+jest.mock('../../src/ts/core/apiFactory', () => ({ getApiStrategy: jest.fn() }));
+jest.mock('../../src/ts/core/logger', () => ({
     withCategory: jest.fn(() => ({ error: jest.fn(), info: jest.fn(), warning: jest.fn() })),
     sanitizeLogString: (value: string) => value,
 }));
 
-import type { ScenarioDocument } from '../../src/ts/settings/scenarioSchema';
-import type { ScenarioStateLedger } from '../../src/ts/types/votingPass';
-import type { ScenarioState } from '../../src/ts/types/stores';
+import type { ScenarioDocument } from '../../src/ts/core/settings/scenarioSchema';
+import type { ScenarioStateLedger } from '../../src/ts/core/types/votingPass';
+import type { ScenarioState } from '../../src/ts/core/types/stores';
 import { invalid } from '../helpers/invalid';
 
-import scenarioRunner = require('../../src/ts/services/scenarioRunner');
-import settingsModule = require('../../src/ts/settings');
+import scenarioRunner = require('../../src/ts/core/services/scenarioRunner');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import scenarioStatusModule = require('../../src/ts/services/scenarioStatus');
+import scenarioStatusModule = require('../../src/ts/core/services/scenarioStatus');
 const scenarioStatus = jest.mocked(scenarioStatusModule);
 const { refreshScenarioStateAsync } = jest.mocked(
-    require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule,
+    require('../../src/ts/core/scenarioStateStore') as typeof scenarioStateStoreModule,
 );
-import authModule = require('../../src/ts/services/auth');
+import authModule = require('../../src/ts/core/services/auth');
 const auth = jest.mocked(authModule);
-import apiFactoryModule = require('../../src/ts/apiFactory');
+import apiFactoryModule = require('../../src/ts/core/apiFactory');
 const apiFactory = jest.mocked(apiFactoryModule);
-import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
-import type * as templatesModule from '../../src/ts/scenarios/templates';
-import type * as scenarios_handlersModule from '../../src/ts/ipc/scenarios.handlers';
-const { SCENARIO_TEMPLATES } = require('../../src/ts/scenarios/templates') as typeof templatesModule;
-const { buildHandlers } = require('../../src/ts/ipc/scenarios.handlers') as typeof scenarios_handlersModule;
+import type * as scenarioStateStoreModule from '../../src/ts/core/scenarioStateStore';
+import type * as templatesModule from '../../src/ts/core/scenarios/templates';
+import type * as scenarios_handlersModule from '../../src/ts/core/ipc/scenarios.handlers';
+const { SCENARIO_TEMPLATES } = require('../../src/ts/core/scenarios/templates') as typeof templatesModule;
+const { buildHandlers } = require('../../src/ts/core/ipc/scenarios.handlers') as typeof scenarios_handlersModule;
 
 const handlers = buildHandlers();
 const issue = { path: 'start', message: 'No phase named "x"' };

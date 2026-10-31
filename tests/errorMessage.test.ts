@@ -1,4 +1,4 @@
-import { errorKind, errorMessage, fileErrorMessage } from '../src/ts/errorMessage';
+import { errorKind, errorMessage, fileErrorMessage } from '../src/ts/core/errorMessage';
 
 describe('errorMessage', () => {
     test.each<[string, unknown, string | undefined]>([

@@ -8,8 +8,8 @@ import {
     renameV1Keys,
     renameV1ScenarioDocument,
     renameV1Value,
-} from '../../../src/ts/settings/importV1/renames';
-import { V1_SETTINGS_SCHEMA } from '../../../src/ts/settings/importV1/schema';
+} from '../../../src/ts/core/settings/importV1/renames';
+import { V1_SETTINGS_SCHEMA } from '../../../src/ts/core/settings/importV1/schema';
 import { invalid } from '../../helpers/invalid';
 import { parseJsonObject } from '../../helpers/parseJson';
 

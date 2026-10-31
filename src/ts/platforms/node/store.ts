@@ -23,12 +23,12 @@ import type {
     SettingsFileTransport,
     SettingsFileWiring,
     SettingsStoreRef,
-} from '../../platform/port';
+} from '../../core/platform/port';
 
 type AtomicWriteModule = typeof import('./atomicWrite');
 type OwnerOnlyWriteModule = typeof import('./ownerOnlyWrite');
 type SettingsFileNodeModule = typeof import('./settingsFileNode');
-type StorageModule = typeof import('../../settings/storage');
+type StorageModule = typeof import('../../core/settings/storage');
 type FsModule = typeof import('node:fs');
 
 // See the header: the wrapped modules, reached at call time.
@@ -41,7 +41,7 @@ const settingsFileNode = (): SettingsFileNodeModule => require('./settingsFileNo
 // loaded in the Jest setup's registry would beat a test file's own mocks.
 // The public storage facade carries writeNow; the facade's internals are
 // private to it.
-const storage = (): StorageModule => require('../../settings/storage') as StorageModule;
+const storage = (): StorageModule => require('../../core/settings/storage') as StorageModule;
 const nodeFs = (): FsModule => require('node:fs') as FsModule;
 
 // The plain read of one store file (jsonStore readRaw / the settings file's readHere on a desktop).

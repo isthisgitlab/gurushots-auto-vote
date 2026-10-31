@@ -10,8 +10,8 @@
  * resultJson is a JSON string { status, body, headers }.
  */
 
-import { isPlainObject } from '../../plainObject';
-import { finalizeAdapterResponse } from '../../api/api-client';
+import { isPlainObject } from '../../core/plainObject';
+import { finalizeAdapterResponse } from '../../core/api/api-client';
 
 import type { AxiosAdapter } from 'axios';
 

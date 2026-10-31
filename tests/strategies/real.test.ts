@@ -1,5 +1,5 @@
 /**
- * Unit tests for the real-strategy binder in src/ts/strategies/real/index.ts:
+ * Unit tests for the real-strategy binder in src/ts/core/strategies/real/index.ts:
  *   - runTurboGame: the classic pair-by-pair Turbo mini-game loop (first pick, flip
  *     on a wrong pick, early stop on WON, skip of resolved / malformed battles)
  *     and the dispatch by turbo mode (classic / Snap / unknown);
@@ -12,125 +12,130 @@
  * Every collaborator is mocked; sleep resolves immediately so no real timer runs.
  */
 
-jest.mock('../../src/ts/strategies/real/activeChallenges', () => ({ getActiveChallenges: jest.fn() }));
-jest.mock('../../src/ts/api/voting', () => ({ getVoteImages: jest.fn(), submitVotes: jest.fn() }));
-jest.mock('../../src/ts/strategies/real/applyBoost', () => ({ applyBoost: jest.fn() }));
-jest.mock('../../src/ts/strategies/real/snapGame', () => ({ runSnapGame: jest.fn() }));
-jest.mock('../../src/ts/api/boost', () => ({ applyBoostToEntry: jest.fn() }));
-jest.mock('../../src/ts/api/turbo', () => ({
+jest.mock('../../src/ts/core/strategies/real/activeChallenges', () => ({ getActiveChallenges: jest.fn() }));
+jest.mock('../../src/ts/core/api/voting', () => ({ getVoteImages: jest.fn(), submitVotes: jest.fn() }));
+jest.mock('../../src/ts/core/strategies/real/applyBoost', () => ({ applyBoost: jest.fn() }));
+jest.mock('../../src/ts/core/strategies/real/snapGame', () => ({ runSnapGame: jest.fn() }));
+jest.mock('../../src/ts/core/api/boost', () => ({ applyBoostToEntry: jest.fn() }));
+jest.mock('../../src/ts/core/api/turbo', () => ({
     getChallengeTurbo: jest.fn(),
     submitTurboSelection: jest.fn(),
     applyTurbo: jest.fn(),
     TURBO_SELECTION_DELAY_MS: 1234,
 }));
-jest.mock('../../src/ts/api/submissions', () => ({
+jest.mock('../../src/ts/core/api/submissions', () => ({
     getEligiblePhotos: jest.fn(),
     getEligiblePhotosWalk: jest.fn(),
     getImageData: jest.fn(),
     submitToChallenge: jest.fn(),
 }));
-jest.mock('../../src/ts/api/currency', () => ({
+jest.mock('../../src/ts/core/api/currency', () => ({
     keyUnlock: jest.fn(),
     swapPhoto: jest.fn(),
     exposureAutofill: jest.fn(),
 }));
-jest.mock('../../src/ts/api/tags', () => ({ getCurrentMemberProfile: jest.fn(), searchTagAutocomplete: jest.fn() }));
-jest.mock('../../src/ts/api/join', () => ({
+jest.mock('../../src/ts/core/api/tags', () => ({
+    getCurrentMemberProfile: jest.fn(),
+    searchTagAutocomplete: jest.fn(),
+}));
+jest.mock('../../src/ts/core/api/join', () => ({
     getMemberChallenges: jest.fn(),
     getBankroll: jest.fn(),
     coinsUnlock: jest.fn(),
 }));
-jest.mock('../../src/ts/metadata', () => ({ cleanupStaleMetadata: jest.fn(() => true) }));
-jest.mock('../../src/ts/timing', () => ({
+jest.mock('../../src/ts/core/metadata', () => ({ cleanupStaleMetadata: jest.fn(() => true) }));
+jest.mock('../../src/ts/core/timing', () => ({
     sleep: jest.fn(() => Promise.resolve()),
     getRandomDelay: jest.fn(() => 3210),
 }));
-jest.mock('../../src/ts/services/votingOrchestrator', () => ({ runVotingPass: jest.fn() }));
-jest.mock('../../src/ts/services/votingOrchestrator/suspendBoostRunner', () => ({
+jest.mock('../../src/ts/core/services/votingOrchestrator', () => ({ runVotingPass: jest.fn() }));
+jest.mock('../../src/ts/core/services/votingOrchestrator/suspendBoostRunner', () => ({
     runSuspendBoosts: jest.fn(async () => []),
 }));
-jest.mock('../../src/ts/services/newEntryTracker', () => ({
+jest.mock('../../src/ts/core/services/newEntryTracker', () => ({
     createMetadataEntryTracker: jest.fn(() => ({ kind: 'metadata-tracker' })),
 }));
-jest.mock('../../src/ts/services/joinChallenges', () => ({
+jest.mock('../../src/ts/core/services/joinChallenges', () => ({
     runJoinPass: jest.fn(),
     joinChallengeSingle: jest.fn(),
     forgetUnconfirmedPayment: jest.fn(),
 }));
 // The real module's exports are non-configurable getters, so the CLAIM_ENDPOINTS name list the strategy projects
 // from rides along instead of the factory replacing the module whole.
-jest.mock('../../src/ts/services/autoClaim', () => ({
+jest.mock('../../src/ts/core/services/autoClaim', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/services/autoClaim')>('../../src/ts/services/autoClaim'),
+    ...jest.requireActual<typeof import('../../src/ts/core/services/autoClaim')>(
+        '../../src/ts/core/services/autoClaim',
+    ),
     runClaimPass: jest.fn(),
 }));
-jest.mock('../../src/ts/services/missions', () => ({
+jest.mock('../../src/ts/core/services/missions', () => ({
     loadMissionNeeds: jest.fn(async () => null),
     registerMissionNeeds: jest.fn((_token: string, needs: missionsModule.MissionNeeds | null) =>
         needs ? jest.fn() : null,
     ),
 }));
-jest.mock('../../src/ts/api/rewards', () => ({
+jest.mock('../../src/ts/core/api/rewards', () => ({
     getMyCompletedChallenges: jest.fn(),
     claimChallengeResources: jest.fn(),
     getMyMissions: jest.fn(),
     claimMissionPrize: jest.fn(),
 }));
-jest.mock('../../src/ts/joinStateStore', () => ({
+jest.mock('../../src/ts/core/joinStateStore', () => ({
     joinStateStore: { kind: 'join-state-store' },
     acquireUnlockLock: jest.fn(),
 }));
 
-import logger = require('../../src/ts/logger');
-import turboModule = require('../../src/ts/api/turbo');
+import logger = require('../../src/ts/core/logger');
+import turboModule = require('../../src/ts/core/api/turbo');
 const turbo = jest.mocked(turboModule);
-import timingModule = require('../../src/ts/timing');
+import timingModule = require('../../src/ts/core/timing');
 const timing = jest.mocked(timingModule);
-import metadataModule = require('../../src/ts/metadata');
+import metadataModule = require('../../src/ts/core/metadata');
 const metadata = jest.mocked(metadataModule);
-import joinModule = require('../../src/ts/api/join');
+import joinModule = require('../../src/ts/core/api/join');
 const join = jest.mocked(joinModule);
-import currencyModule = require('../../src/ts/api/currency');
+import currencyModule = require('../../src/ts/core/api/currency');
 const currency = jest.mocked(currencyModule);
-import tagsModule = require('../../src/ts/api/tags');
+import tagsModule = require('../../src/ts/core/api/tags');
 const tags = jest.mocked(tagsModule);
-import submissionsModule = require('../../src/ts/api/submissions');
+import submissionsModule = require('../../src/ts/core/api/submissions');
 const submissions = jest.mocked(submissionsModule);
 const { joinStateStore, acquireUnlockLock } = jest.mocked(
-    require('../../src/ts/joinStateStore') as typeof joinStateStoreModule,
+    require('../../src/ts/core/joinStateStore') as typeof joinStateStoreModule,
 );
 const { runVotingPass } = jest.mocked(
-    require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule,
+    require('../../src/ts/core/services/votingOrchestrator') as typeof votingOrchestratorModule,
 );
 const { runSuspendBoosts } = jest.mocked(
-    require('../../src/ts/services/votingOrchestrator/suspendBoostRunner') as typeof boostModule,
+    require('../../src/ts/core/services/votingOrchestrator/suspendBoostRunner') as typeof boostModule,
 );
 const { runJoinPass, joinChallengeSingle, forgetUnconfirmedPayment } = jest.mocked(
-    require('../../src/ts/services/joinChallenges') as typeof joinChallengesModule,
+    require('../../src/ts/core/services/joinChallenges') as typeof joinChallengesModule,
 );
-const { runClaimPass } = jest.mocked(require('../../src/ts/services/autoClaim') as typeof autoClaimModule);
+const { runClaimPass } = jest.mocked(require('../../src/ts/core/services/autoClaim') as typeof autoClaimModule);
 const { loadMissionNeeds, registerMissionNeeds } = jest.mocked(
-    require('../../src/ts/services/missions') as typeof missionsModule,
+    require('../../src/ts/core/services/missions') as typeof missionsModule,
 );
-import rewardsModule = require('../../src/ts/api/rewards');
+import rewardsModule = require('../../src/ts/core/api/rewards');
 const rewards = jest.mocked(rewardsModule);
-import main = require('../../src/ts/strategies/real');
-import entryAgeStoreModule = require('../../src/ts/entryAgeStore');
-import type * as joinStateStoreModule from '../../src/ts/joinStateStore';
-import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
-import type * as boostModule from '../../src/ts/services/votingOrchestrator/suspendBoostRunner';
-import type * as joinChallengesModule from '../../src/ts/services/joinChallenges';
-import type * as autoClaimModule from '../../src/ts/services/autoClaim';
-import type * as missionsModule from '../../src/ts/services/missions';
-import type * as snapGameModule from '../../src/ts/strategies/real/snapGame';
-import type { Challenge } from '../../src/ts/types/gurushots';
-import type { CategoryLogger } from '../../src/ts/logger';
+import main = require('../../src/ts/core/strategies/real');
+import entryAgeStoreModule = require('../../src/ts/core/entryAgeStore');
+import type * as joinStateStoreModule from '../../src/ts/core/joinStateStore';
+import type * as votingOrchestratorModule from '../../src/ts/core/services/votingOrchestrator';
+import type * as boostModule from '../../src/ts/core/services/votingOrchestrator/suspendBoostRunner';
+import type * as joinChallengesModule from '../../src/ts/core/services/joinChallenges';
+import type * as autoClaimModule from '../../src/ts/core/services/autoClaim';
+import type * as missionsModule from '../../src/ts/core/services/missions';
+import type * as snapGameModule from '../../src/ts/core/strategies/real/snapGame';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
+import type { CategoryLogger } from '../../src/ts/core/logger';
 import { invalid } from '../helpers/invalid';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import { installHeadlessTestPlatform } from '../helpers/platform';
 
 const { runTurboGame, joinChallenge, fetchChallengesAndVote } = main;
-const { runSnapGame } = jest.mocked(require('../../src/ts/strategies/real/snapGame') as typeof snapGameModule);
+const { runSnapGame } = jest.mocked(require('../../src/ts/core/strategies/real/snapGame') as typeof snapGameModule);
 
 // A partial challenge: the mini-game reads only its id, title and turbo mode.
 const CHALLENGE = invalid<Challenge>({ id: 42, title: 'Turbo Test', member: { turbo: { mode: 'classic' } } });
@@ -154,9 +159,9 @@ describe('module wiring', () => {
         let isolatedFactory;
         jest.isolateModules(() => {
             isolatedFactory = (
-                require('../../src/ts/services/newEntryTracker') as typeof import('../../src/ts/services/newEntryTracker')
+                require('../../src/ts/core/services/newEntryTracker') as typeof import('../../src/ts/core/services/newEntryTracker')
             ).createMetadataEntryTracker;
-            require('../../src/ts/strategies/real');
+            require('../../src/ts/core/strategies/real');
         });
         expect(isolatedFactory).toHaveBeenCalledTimes(1);
         expect(isolatedFactory).toHaveBeenCalledWith();
@@ -165,12 +170,12 @@ describe('module wiring', () => {
     test('exposes the entry-picking boost and the title-pinned challenge read', () => {
         expect(main.applyBoost).toBe(
             (
-                require('../../src/ts/strategies/real/applyBoost') as typeof import('../../src/ts/strategies/real/applyBoost')
+                require('../../src/ts/core/strategies/real/applyBoost') as typeof import('../../src/ts/core/strategies/real/applyBoost')
             ).applyBoost,
         );
         expect(main.getActiveChallenges).toBe(
             (
-                require('../../src/ts/strategies/real/activeChallenges') as typeof import('../../src/ts/strategies/real/activeChallenges')
+                require('../../src/ts/core/strategies/real/activeChallenges') as typeof import('../../src/ts/core/strategies/real/activeChallenges')
             ).getActiveChallenges,
         );
     });

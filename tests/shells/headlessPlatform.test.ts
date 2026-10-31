@@ -7,16 +7,16 @@
  * platform on the port, so the tests read the captured object, not the slot.
  */
 
-import { platform } from '../../src/ts/platform/port';
+import { platform } from '../../src/ts/core/platform/port';
 import { clearInstalledPlatform } from '../helpers/platform';
 
-import type { Platform } from '../../src/ts/platform/port';
+import type { Platform } from '../../src/ts/core/platform/port';
 
 // Requiring the module installs the platform; the slot is cleared first,
 // because the setup file installed the node test platform before this file
 // loaded.
 clearInstalledPlatform();
-require('../../src/ts/headless/platform');
+require('../../src/ts/shells/headless/platform');
 const installed: Platform = platform();
 
 describe('the headless shell platform module', () => {
@@ -49,7 +49,7 @@ describe('the headless shell platform module', () => {
 // module's import chain is the port and the family builder only — the
 // install must run before the logger loads.
 describe('loading the headless shell platform module loads no heavy module', () => {
-    const HEAVY = ['../../src/ts/logger'];
+    const HEAVY = ['../../src/ts/core/logger'];
     let mockLoaded: string[];
 
     beforeEach(() => {
@@ -69,7 +69,7 @@ describe('loading the headless shell platform module loads no heavy module', () 
                     return {};
                 });
             }
-            require('../../src/ts/headless/platform');
+            require('../../src/ts/shells/headless/platform');
             expect(mockLoaded).toEqual([]);
             expect(platform()).toBeDefined();
         });

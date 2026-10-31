@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from 'react';
 import { deriveChallengeCardView, minimalCardView, needsSecondTick, nextBoundaryFlip } from '@/utils/challengeCardView';
 import { isMinimalCardChallenge } from '@/utils/challengeAlerts';
-import { isMarkedChallenge } from '../../../challengeMarks';
+import { isMarkedChallenge } from '../../../core/challengeMarks';
 import { useDeadlineActions } from '@/api/useDeadlineActions';
 import { useSwapBacks } from '@/api/useSwapBacks';
 import { useEntryPins } from '@/api/useEntryPins';
@@ -17,9 +17,9 @@ import { Countdown } from './Countdown';
 import type { TimeRemaining } from './Countdown';
 import { useChallengeCardActions, buildCompactActionRow } from './ChallengeCardActions';
 
-import type { Bankroll, Challenge } from '../../../types/gurushots';
+import type { Bankroll, Challenge } from '../../../core/types/gurushots';
 import type { DeadlineActionsState } from '@/api/useDeadlineActions';
-import type { Translate } from '../../../translations/translator';
+import type { Translate } from '../../../core/translations/translator';
 
 /**
  * Everything the card derives from its challenge at one tick (see

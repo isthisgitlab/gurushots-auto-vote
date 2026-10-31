@@ -1,0 +1,113 @@
+/**
+ * CLI auth commands: `login` — interactive credential prompt that mutes the
+ * password echo and refuses non-TTY invocation (piped stdin would let the
+ * password through unmuted) — and `logout`, which clears the saved token.
+ */
+
+import * as logger from '../../../core/logger';
+import * as settings from '../../../core/settings';
+import { refreshApi, getMiddleware } from '../../../core/apiFactory';
+import { logout } from '../../../core/services/auth';
+import { errorMessage } from '../../../core/errorMessage';
+import { LOGOUT_NOT_SAVED } from '../../../core/ipc/logoutCode';
+import { createReadlineInterface, askYesNo, askInput, askSecret } from '../prompts';
+
+/**
+ * @returns whether a token was saved: false for a non-terminal session, rejected credentials, an unsaved token or an error
+ */
+const handleLogin = async (): Promise<boolean> => {
+    // askSecret's mute only works on a real terminal — _writeToOutput is
+    // bypassed when stdin is piped or when readline runs in non-terminal
+    // mode. Refuse interactive login in that case so a user piping
+    // `echo password | node cli.ts login` does not get a false sense of
+    // protection (the password would echo through the unmuted path).
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+        logger
+            .withCategory('ui')
+            .error(
+                'Interactive login requires a terminal. Run the `login` command directly in a terminal session — piped or redirected stdin is not supported because the password prompt cannot mute echo.',
+            );
+        return false;
+    }
+
+    const rl = createReadlineInterface();
+
+    try {
+        logger.withCategory('ui').info('=== GuruShots Auto Voter - Login ===');
+
+        const userSettings = settings.loadSettings();
+        const currentMockMode = userSettings.app.mock;
+
+        logger.withCategory('ui').info(`Current mode: ${currentMockMode ? 'MOCK' : 'REAL'}`);
+
+        const changeMode = await askYesNo('Do you want to change the mode?', rl);
+
+        let useMockMode = currentMockMode;
+
+        if (changeMode) {
+            logger.withCategory('ui').info('Mode options:');
+            logger.withCategory('ui').info('  REAL  - Connect to actual GuruShots API (production)');
+            logger.withCategory('ui').info('  MOCK  - Simulate API calls for testing (development)');
+
+            const useMock = await askYesNo('Use MOCK mode?', rl);
+            useMockMode = useMock;
+
+            settings.setSetting('mock', useMockMode);
+            logger.withCategory('settings').success(`Mode changed to: ${useMockMode ? 'MOCK' : 'REAL'}`);
+        }
+
+        const email = await askInput('\nEnter your GuruShots email: ', rl);
+        const password = await askSecret('Enter your GuruShots password: ', rl);
+
+        logger.withCategory('authentication').startOperation('login-auth', 'Authenticating with GuruShots');
+
+        // Pick up the freshly-set mock flag (if changed above) before
+        // grabbing the middleware instance.
+        refreshApi();
+        const middleware = getMiddleware();
+
+        const loginResult = await middleware.cliLogin(email, password);
+
+        if (loginResult.success) {
+            logger.withCategory('authentication').endOperation('login-auth', 'Login successful');
+            logger.withCategory('authentication').success(`Token saved for ${useMockMode ? 'MOCK' : 'REAL'} mode`);
+            return true;
+        }
+        logger.withCategory('authentication').endOperation('login-auth', null, loginResult.error || 'Unknown error');
+        return false;
+    } catch (error) {
+        logger.withCategory('authentication').error('Login error', error);
+        return false;
+    } finally {
+        rl.close();
+    }
+};
+
+/**
+ * Log out through the shared logout core: it clears the token durably and
+ * returns the mode to the environment default; the next vote/run reports
+ * "Not authenticated" until the user logs in again.
+ */
+const handleLogout = async (): Promise<boolean> => {
+    let hadToken: boolean;
+    try {
+        hadToken = await logout();
+    } catch (error) {
+        logger
+            .withCategory('authentication')
+            .error(
+                `Logout was not saved (${errorMessage(error) === LOGOUT_NOT_SAVED ? 'the saved settings are not in use' : (errorMessage(error) ?? 'unknown error')}); you are still logged in. Fix the settings (see settings-recovery) and run logout again`,
+            );
+        return false;
+    }
+    // The sign-out is refused while the saved settings are not in use (logout throws then), so a saved token
+    // is gone exactly when this answers true.
+    if (hadToken) {
+        logger.withCategory('authentication').success('Logged out — token cleared');
+    } else {
+        logger.withCategory('ui').info('Already logged out — no token was set');
+    }
+    return true;
+};
+
+export { handleLogin, handleLogout };

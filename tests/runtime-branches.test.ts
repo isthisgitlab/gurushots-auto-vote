@@ -7,9 +7,9 @@
  * specific inputs (process.env) are faked per test.
  */
 
-import type * as runtimeModule from '../src/ts/runtime';
+import type * as runtimeModule from '../src/ts/core/runtime';
 
-const rt = require('../src/ts/runtime') as typeof runtimeModule;
+const rt = require('../src/ts/core/runtime') as typeof runtimeModule;
 
 const envKeys = ['NODE_ENV', 'DEV', 'PROD'];
 let savedEnv: Record<string, string | undefined>;

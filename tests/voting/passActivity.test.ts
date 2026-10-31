@@ -2,7 +2,7 @@
  * The count of voting passes under way, which the local-data wipe refuses to run beneath.
  */
 
-import { beginVotingPass, isVotingPassRunning } from '../../src/ts/voting/passActivity';
+import { beginVotingPass, isVotingPassRunning } from '../../src/ts/core/voting/passActivity';
 
 describe('voting pass activity', () => {
     test('is idle until a pass begins, and idle again once it ends', () => {

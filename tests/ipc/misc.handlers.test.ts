@@ -5,8 +5,8 @@
  * manifest test only collects channel NAMES, it never invokes the handler.
  */
 
-import type * as misc_handlersModule from '../../src/ts/ipc/misc.handlers';
-import type * as applicationMenuModule from '../../src/ts/ui/applicationMenu';
+import type * as misc_handlersModule from '../../src/ts/shells/electron/misc.handlers';
+import type * as applicationMenuModule from '../../src/ts/shells/electron/ui/applicationMenu';
 import { invalid } from '../helpers/invalid';
 
 const openExternalMock = jest.fn().mockResolvedValue(undefined);
@@ -14,17 +14,17 @@ const openExternalMock = jest.fn().mockResolvedValue(undefined);
 jest.mock('electron', () => ({
     shell: { openExternal: openExternalMock },
 }));
-jest.mock('../../src/ts/ui/applicationMenu', () => ({
+jest.mock('../../src/ts/shells/electron/ui/applicationMenu', () => ({
     updateMenuTranslations: jest.fn(),
 }));
 const mockTranslationManager = { loadLanguageFromSettings: jest.fn() };
-jest.mock('../../src/ts/translations/index', () => ({ translationManager: mockTranslationManager }));
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/translations/index', () => ({ translationManager: mockTranslationManager }));
+jest.mock('../../src/ts/core/logger', () => {
     const cat = { warning: jest.fn(), error: jest.fn(), info: jest.fn() };
     return { withCategory: jest.fn(() => cat) };
 });
 
-const { buildHandlers } = require('../../src/ts/ipc/misc.handlers') as typeof misc_handlersModule;
+const { buildHandlers } = require('../../src/ts/shells/electron/misc.handlers') as typeof misc_handlersModule;
 
 describe('misc.handlers open-external-url scheme gate', () => {
     let handler: (event: unknown, url: string) => Promise<{ success: boolean; error?: string }>;
@@ -127,7 +127,7 @@ describe('misc.handlers reload-window', () => {
 
 describe('misc.handlers refresh-menu', () => {
     const { updateMenuTranslations } = jest.mocked(
-        require('../../src/ts/ui/applicationMenu') as typeof applicationMenuModule,
+        require('../../src/ts/shells/electron/ui/applicationMenu') as typeof applicationMenuModule,
     );
     const { loadLanguageFromSettings } = mockTranslationManager;
 

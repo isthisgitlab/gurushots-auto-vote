@@ -1,8 +1,8 @@
 import { invalid } from '../helpers/invalid';
 import { fillTemplate } from './helpers/setup';
 import type * as formattersModule from '../../src/ts/react/utils/formatters';
-import type * as wallClockModule from '../../src/ts/scheduling/wallClock';
-import type * as rendererModule from '../../src/ts/translations/renderer';
+import type * as wallClockModule from '../../src/ts/core/scheduling/wallClock';
+import type * as rendererModule from '../../src/ts/core/translations/renderer';
 import type * as levelBadgeModule from '../../src/ts/react/utils/levelBadge';
 const {
     formatSettingDefault,
@@ -16,8 +16,8 @@ const {
     statusText,
     dateLocale,
 } = require('../../src/ts/react/utils/formatters') as typeof formattersModule;
-const { timeOfDayIn } = require('../../src/ts/scheduling/wallClock') as typeof wallClockModule;
-const { rendererTranslator } = require('../../src/ts/translations/renderer') as typeof rendererModule;
+const { timeOfDayIn } = require('../../src/ts/core/scheduling/wallClock') as typeof wallClockModule;
+const { rendererTranslator } = require('../../src/ts/core/translations/renderer') as typeof rendererModule;
 const { LEVEL_BADGE_CLASS, LEVEL_PROGRESS_CLASS } =
     require('../../src/ts/react/utils/levelBadge') as typeof levelBadgeModule;
 
@@ -304,16 +304,18 @@ describe('re-exports from the shared core', () => {
     test('formatters exposes the same functions the core modules define', () => {
         const fm = require('../../src/ts/react/utils/formatters') as typeof formattersModule;
         // formatDuration is the shared one in the UI's language (see formatDuration.test.ts): same text in English.
-        const core = (require('../../src/ts/format/duration') as typeof import('../../src/ts/format/duration'))
-            .formatDuration;
+        const core = (
+            require('../../src/ts/core/format/duration') as typeof import('../../src/ts/core/format/duration')
+        ).formatDuration;
         expect([0, 59, 630, 3700, 90_000].map((seconds) => fm.formatDuration(seconds))).toEqual(
             [0, 59, 630, 3700, 90_000].map((seconds) => core(seconds)),
         );
         expect(fm.entryPhotoUrl).toBe(
-            (require('../../src/ts/format/photoUrl') as typeof import('../../src/ts/format/photoUrl')).entryPhotoUrl,
+            (require('../../src/ts/core/format/photoUrl') as typeof import('../../src/ts/core/format/photoUrl'))
+                .entryPhotoUrl,
         );
         expect(fm.isBoostWindowOpen).toBe(
-            (require('../../src/ts/voting/boostWindow') as typeof import('../../src/ts/voting/boostWindow'))
+            (require('../../src/ts/core/voting/boostWindow') as typeof import('../../src/ts/core/voting/boostWindow'))
                 .isBoostWindowOpen,
         );
     });

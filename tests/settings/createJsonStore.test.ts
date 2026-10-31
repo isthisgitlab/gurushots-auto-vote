@@ -22,10 +22,10 @@ jest.mock(
 
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
-import type * as storageModule from '../../src/ts/settings/storage';
-import * as logger from '../../src/ts/logger';
-import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
-import type { AutoVoteBackgroundPlugin } from '../../src/ts/types/capacitor';
+import type * as storageModule from '../../src/ts/core/settings/storage';
+import * as logger from '../../src/ts/core/logger';
+import type { AndroidHeadlessStore } from '../../src/ts/core/types/settings';
+import type { AutoVoteBackgroundPlugin } from '../../src/ts/core/types/capacitor';
 import { createHeadlessStorage } from '../../src/ts/platforms/headless/store';
 import { createWebviewStorage } from '../../src/ts/platforms/webview/store';
 import { installHeadlessTestPlatform, installTestPlatform, installWebviewTestPlatform } from '../helpers/platform';
@@ -61,7 +61,7 @@ describe('createJsonStore', () => {
         let store: ReturnType<typeof storageModule.createJsonStore>;
 
         beforeEach(() => {
-            const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+            const { createJsonStore } = require('../../src/ts/core/settings/storage') as typeof storageModule;
             store = createJsonStore({ fileName: 'metadata.json', prefKey: 'gurushots-metadata' });
         });
 
@@ -90,7 +90,7 @@ describe('createJsonStore', () => {
             const TEMP = /joinState\.json\.\d+\.[0-9a-f]{8}\.tmp$/;
 
             beforeEach(() => {
-                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                const { createJsonStore } = require('../../src/ts/core/settings/storage') as typeof storageModule;
                 atomic = createJsonStore({ fileName: 'joinState.json', prefKey: 'gs_join_state', atomic: true });
                 fs.existsSync.mockReturnValue(true);
                 fs.readdirSync.mockReturnValue([]);
@@ -245,7 +245,7 @@ describe('createJsonStore', () => {
                         throw new Error('EACCES');
                     });
                     expect(() => atomic.readRaw()).not.toThrow();
-                    const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                    const { createJsonStore } = require('../../src/ts/core/settings/storage') as typeof storageModule;
                     const other = createJsonStore({ fileName: 'joinState.json', prefKey: 'k', atomic: true });
                     listing('joinState.json.4242.0a1b2c3d.tmp');
                     fs.unlinkSync.mockImplementationOnce(() => {
@@ -306,7 +306,7 @@ describe('createJsonStore', () => {
         beforeEach(() => {
             installWebviewTestPlatform();
             mockPrefGet.mockResolvedValue({ value: '{"persisted":true}' });
-            const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+            const { createJsonStore } = require('../../src/ts/core/settings/storage') as typeof storageModule;
             store = createJsonStore({ fileName: 'metadata.json', prefKey: 'gurushots-metadata' });
         });
 
@@ -334,7 +334,7 @@ describe('createJsonStore', () => {
 
         describe('a write that did not persist', () => {
             const strictStore = (prefKey = 'gs_scenario_state') => {
-                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                const { createJsonStore } = require('../../src/ts/core/settings/storage') as typeof storageModule;
                 return createJsonStore({ fileName: 'scenarioState.json', prefKey, strict: true });
             };
             const failOnce = () => mockPrefSet.mockRejectedValueOnce(new Error('disk full'));
@@ -467,7 +467,7 @@ describe('createJsonStore', () => {
 
         describe('a write that must not show before it is saved (updateThrough)', () => {
             const strictStore = (prefKey = 'gs_scenario_resets') => {
-                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                const { createJsonStore } = require('../../src/ts/core/settings/storage') as typeof storageModule;
                 return createJsonStore({ fileName: 'scenarioResets.json', prefKey, strict: true });
             };
             const hold = () => {
@@ -588,7 +588,7 @@ describe('createJsonStore', () => {
             test('off the app window is written before it answers, failed when that write throws, aborted when it declines', async () => {
                 installTestPlatform();
                 fs.existsSync.mockReturnValue(false);
-                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                const { createJsonStore } = require('../../src/ts/core/settings/storage') as typeof storageModule;
                 const file = createJsonStore({ fileName: 'scenarioResets.json', prefKey: 'gs_scenario_resets' });
                 await expect(file.updateThrough((current) => `${current}!`)).resolves.toBe('saved');
                 expect(fs.writeFileSync).toHaveBeenCalledWith(expect.stringContaining('scenarioResets.json'), 'null!', {
@@ -612,7 +612,7 @@ describe('createJsonStore', () => {
 
                 installTestPlatform();
                 fs.existsSync.mockReturnValue(false);
-                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                const { createJsonStore } = require('../../src/ts/core/settings/storage') as typeof storageModule;
                 const file = createJsonStore({ fileName: 'scenarioResets.json', prefKey: 'gs_scenario_resets' });
                 expect(file.updateNow((current) => `${current}!`)).toBe('saved');
                 expect(file.updateNow(() => null)).toBe('aborted');
@@ -625,7 +625,7 @@ describe('createJsonStore', () => {
             test('updateNow written on a file another process changed meanwhile makes the change again on that, so neither is erased', () => {
                 installTestPlatform();
                 fs.existsSync.mockReturnValue(true);
-                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                const { createJsonStore } = require('../../src/ts/core/settings/storage') as typeof storageModule;
                 const file = createJsonStore({ fileName: 'v2-import.json', prefKey: 'gs_v2_import' });
                 // Read (A), made from, read again before the write (B: changed), then the change is made on B and B holds.
                 fs.readFileSync
@@ -648,7 +648,7 @@ describe('createJsonStore', () => {
             test('updateNow gives up, and says so, on a file that keeps changing under it', () => {
                 installTestPlatform();
                 fs.existsSync.mockReturnValue(true);
-                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                const { createJsonStore } = require('../../src/ts/core/settings/storage') as typeof storageModule;
                 const file = createJsonStore({ fileName: 'v2-import.json', prefKey: 'gs_v2_import' });
                 let reads = 0;
                 fs.readFileSync.mockImplementation(() => `v${reads++}`);
@@ -668,7 +668,7 @@ describe('createJsonStore', () => {
                     read: () => null,
                     write: () => true,
                 });
-                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                const { createJsonStore } = require('../../src/ts/core/settings/storage') as typeof storageModule;
                 const shared = createJsonStore({ fileName: 'titlePins.json', prefKey: 'gs_title_pins', shared: true });
 
                 try {
@@ -681,9 +681,9 @@ describe('createJsonStore', () => {
 
             test('updateNow fails where writes are refused (local data is being deleted)', async () => {
                 const { discardPendingWrites, resumeWrites } =
-                    require('../../src/ts/settings/storage') as typeof storageModule;
+                    require('../../src/ts/core/settings/storage') as typeof storageModule;
                 installTestPlatform();
-                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                const { createJsonStore } = require('../../src/ts/core/settings/storage') as typeof storageModule;
                 const file = createJsonStore({ fileName: 'scenarioResets.json', prefKey: 'gs_scenario_resets' });
                 await discardPendingWrites();
 
@@ -694,9 +694,9 @@ describe('createJsonStore', () => {
 
             test('a listener registered with onDiscard is told when the stores are discarded (local data deleted)', async () => {
                 const { discardPendingWrites, resumeWrites } =
-                    require('../../src/ts/settings/storage') as typeof storageModule;
+                    require('../../src/ts/core/settings/storage') as typeof storageModule;
                 installTestPlatform();
-                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                const { createJsonStore } = require('../../src/ts/core/settings/storage') as typeof storageModule;
                 const file = createJsonStore({ fileName: 'entryAges.json', prefKey: 'gs_entry_ages' });
                 const told = jest.fn();
                 file.onDiscard(told);
@@ -721,7 +721,7 @@ describe('createJsonStore', () => {
                 installTestPlatform();
                 fs.existsSync.mockReturnValue(true);
                 fs.readFileSync.mockReturnValue('{"a":1}');
-                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                const { createJsonStore } = require('../../src/ts/core/settings/storage') as typeof storageModule;
                 const file = createJsonStore({ fileName: 'scenarioResets.json', prefKey: 'gs_scenario_resets' });
 
                 await expect(file.peekStored()).resolves.toBe('{"a":1}');
@@ -740,7 +740,7 @@ describe('createJsonStore', () => {
                 return (value: string | null) => answer({ value });
             };
             const strictStore = () => {
-                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                const { createJsonStore } = require('../../src/ts/core/settings/storage') as typeof storageModule;
                 return createJsonStore({ fileName: 'scenarioState.json', prefKey: 'gs_scenario_state', strict: true });
             };
             const inFlight = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -1058,7 +1058,7 @@ describe('createJsonStore', () => {
         describe('whether the cache holds something known', () => {
             const known = () => createWebviewStorage(null).loaded('gs_scenario_state');
             const strictStore = () => {
-                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                const { createJsonStore } = require('../../src/ts/core/settings/storage') as typeof storageModule;
                 return createJsonStore({ fileName: 'scenarioState.json', prefKey: 'gs_scenario_state', strict: true });
             };
 
@@ -1144,7 +1144,7 @@ describe('createJsonStore', () => {
 
         beforeEach(() => {
             installHeadlessTestPlatform();
-            const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+            const { createJsonStore } = require('../../src/ts/core/settings/storage') as typeof storageModule;
             store = createJsonStore({ fileName: 'metadata.json', prefKey: 'gurushots-metadata' });
         });
 
@@ -1169,7 +1169,7 @@ describe('createJsonStore', () => {
                 delete (globalThis as typeof globalThis & { AndroidHeadlessStore?: unknown }).AndroidHeadlessStore;
             });
             const strictStore = () => {
-                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                const { createJsonStore } = require('../../src/ts/core/settings/storage') as typeof storageModule;
                 return createJsonStore({ fileName: 'scenarioState.json', prefKey: 'gs_scenario_state', strict: true });
             };
 
@@ -1298,11 +1298,11 @@ describe('a store the app window shares with the background service (shared)', (
         });
         let storage!: Storage;
         jest.isolateModules(() => {
-            storage = require('../../src/ts/settings/storage') as Storage;
+            storage = require('../../src/ts/core/settings/storage') as Storage;
             // The shared store's saves reach the plugin through the family's compare-and-write part: a bridge loaded
             // here is fresh per window, so it reads the plugin global this test set.
             const autovote =
-                require('../../src/ts/services/NativeAutovoteBridge') as typeof import('../../src/ts/services/NativeAutovoteBridge');
+                require('../../src/ts/shells/capacitor/NativeAutovoteBridge') as typeof import('../../src/ts/shells/capacitor/NativeAutovoteBridge');
             installWebviewTestPlatform({
                 storage: createWebviewStorage((key, expected, data) => autovote.compareAndWrite(key, expected, data)),
             });
@@ -1433,7 +1433,7 @@ describe('a store the app window shares with the background service (shared)', (
         // Off the app window the read is the file itself, so a refresh is a no-op that read.
         installTestPlatform();
         fs.existsSync.mockReturnValue(false);
-        const file = (require('../../src/ts/settings/storage') as Storage).createJsonStore({
+        const file = (require('../../src/ts/core/settings/storage') as Storage).createJsonStore({
             fileName: 'joinState.json',
             prefKey: 'gs_join_state',
             strict: true,
@@ -1467,7 +1467,7 @@ describe('a store the app window shares with the background service (shared)', (
             installHeadlessTestPlatform();
             let storage!: Storage;
             jest.isolateModules(() => {
-                storage = require('../../src/ts/settings/storage') as Storage;
+                storage = require('../../src/ts/core/settings/storage') as Storage;
             });
             return storage.createJsonStore({
                 fileName: 'joinState.json',
@@ -1554,7 +1554,7 @@ describe('a store the app window shares with the background service (shared)', (
             installHeadlessTestPlatform();
             let storage!: Storage;
             jest.isolateModules(() => {
-                storage = require('../../src/ts/settings/storage') as Storage;
+                storage = require('../../src/ts/core/settings/storage') as Storage;
             });
             const plain = storage.createJsonStore({ fileName: 'x.json', prefKey: 'gs_scenario_state', strict: true });
             await expect(plain.updateThrough(() => '{}')).resolves.toBe('saved');

@@ -38,58 +38,19 @@ interface RuleContext {
 
 // The layer table: the first row whose target matches the file's path, read from `src/ts/` on, names the file's
 // layer; no match means `core`. A target ending in `/` is a directory row — it matches the directory itself and
-// everything under it, the trailing slash keeping `src/ts/cliX/` out of `src/ts/cli/` — and a `<x>` in its layer
+// everything under it, the trailing slash keeping `src/ts/coreX/` out of `src/ts/core/` — and a `<x>` in its layer
 // takes the path segment after the prefix (`src/ts/platforms/node/store.ts` is `platform:node`); a file directly
 // inside the directory has no segment, so `<x>` becomes the empty one (`src/ts/platforms/index.ts` is
 // `platform:`). A file row also matches without its `.ts`/`.tsx` extension, the way an extensionless import
 // specifier resolves.
 export const LAYER_TABLE: ReadonlyArray<{ target: string; layer: string }> = [
     { target: 'src/ts/core/', layer: 'core' },
-    // `src/ts/platform/` (singular) is the core port and has no row, so it is `core`; `src/ts/platforms/<x>/`
-    // (plural) holds one platform's implementation.
+    // `src/ts/platforms/<x>/` holds one platform's implementation (`src/ts/core/platform/` is the core port).
     { target: 'src/ts/platforms/', layer: 'platform:<x>' },
+    // `src/ts/shells/<x>/` is one entry point: its main file, its windows, its bridges and its platform install.
     { target: 'src/ts/shells/', layer: 'shell:<x>' },
-    // The Electron shell: the main process, its windows and their preloads.
-    { target: 'src/ts/index.ts', layer: 'shell:electron' },
-    { target: 'src/ts/index/', layer: 'shell:electron' },
-    { target: 'src/ts/ui/', layer: 'shell:electron' },
-    { target: 'src/ts/preload.ts', layer: 'shell:electron' },
-    { target: 'src/ts/preloadLogs.ts', layer: 'shell:electron' },
-    { target: 'src/ts/preloadApi.ts', layer: 'shell:electron' },
-    { target: 'src/ts/appFileUrl.ts', layer: 'shell:electron' },
-    { target: 'src/ts/windows/lifecycle.ts', layer: 'shell:electron' },
-    { target: 'src/ts/windows/backgroundActivity.ts', layer: 'shell:electron' },
-    { target: 'src/ts/windows/settingsWatcher.ts', layer: 'shell:electron' },
-    { target: 'src/ts/windows/quitGuard.ts', layer: 'shell:electron' },
-    { target: 'src/ts/services/AutoUpdater.ts', layer: 'shell:electron' },
-    { target: 'src/ts/ipc/misc.handlers.ts', layer: 'shell:electron' },
-    { target: 'src/ts/ipc/update.handlers.ts', layer: 'shell:electron' },
-    { target: 'src/ts/ipc/registerHandlers.ts', layer: 'shell:electron' },
-    { target: 'src/ts/ipc/registerIpc.ts', layer: 'shell:electron' },
-    // The CLI shell: the command-line entry point and its Node-only edges.
-    { target: 'src/ts/cli/', layer: 'shell:cli' },
-    { target: 'src/ts/scheduling/runScheduler.ts', layer: 'shell:cli' },
-    { target: 'src/ts/services/notify/nodeNotify.ts', layer: 'shell:cli' },
-    { target: 'src/ts/services/visionCliAssets.ts', layer: 'shell:cli' },
-    // The web shell: the localhost server and its bridge.
-    { target: 'src/ts/web/', layer: 'shell:web' },
-    { target: 'src/ts/bridge/web.ts', layer: 'shell:web' },
-    { target: 'src/ts/react/pages/Web.tsx', layer: 'shell:web' },
-    // The Capacitor (Android) shell.
-    { target: 'src/ts/bridge/capacitor.ts', layer: 'shell:capacitor' },
-    { target: 'src/ts/bridge/capacitorPlatform.ts', layer: 'shell:capacitor' },
-    { target: 'src/ts/localStores.ts', layer: 'shell:capacitor' },
-    { target: 'src/ts/react/pages/Capacitor.tsx', layer: 'shell:capacitor' },
-    { target: 'src/ts/services/AndroidUpdateInstaller.ts', layer: 'shell:capacitor' },
-    { target: 'src/ts/services/ForegroundServiceController.ts', layer: 'shell:capacitor' },
-    { target: 'src/ts/services/NativeAutovoteBridge.ts', layer: 'shell:capacitor' },
-    { target: 'src/ts/bridge/capacitorBackgroundHost.ts', layer: 'shell:capacitor' },
-    { target: 'src/ts/bridge/capacitorPresence.ts', layer: 'shell:capacitor' },
-    // The Android headless background service.
-    { target: 'src/ts/headless/', layer: 'shell:headless' },
-    // Platforms: one runtime each, below every shell.
+    // The one platform file outside `platforms/`: `__dirname/../..` must match the bundle's depth (out/main/app.js).
     { target: 'src/ts/appPaths.ts', layer: 'platform:node' },
-    { target: 'src/ts/settings/cliSessionLock.ts', layer: 'platform:node' },
     // The renderer tree, below every shell, above core.
     { target: 'src/ts/react/', layer: 'react' },
 ];

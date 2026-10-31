@@ -12,7 +12,7 @@
 
 // The shape of a stored configuration: app preferences and the sign-in state sit under their containers, and a bare
 // name is read through getSetting (the facade looks it up in either).
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     loadSettings: jest.fn(() => ({
         version: 2,
         app: { theme: 'dark' },
@@ -26,7 +26,7 @@ jest.mock('../../src/ts/settings', () => ({
 // Faithful stand-in for the logger's key-based deep redaction (the real
 // implementation is exercised by the logger's own tests); everything else
 // the script may touch is inert.
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const SENSITIVE_KEY_RE = /^(token|auth[_-]?token|password|api[_-]?key|secret|cookie|authorization)$/i;
     const sanitizeForLog = (value: unknown): unknown => {
         if (value === null || typeof value !== 'object') return value;
@@ -69,8 +69,8 @@ jest.mock('node:child_process', () => ({
     }),
 }));
 
-jest.mock('../../src/ts/cli/parseValue', () => ({ parseSettingValue: jest.fn((v: string) => v) }));
-jest.mock('../../src/ts/cli/commands/settings', () => ({
+jest.mock('../../src/ts/shells/cli/parseValue', () => ({ parseSettingValue: jest.fn((v: string) => v) }));
+jest.mock('../../src/ts/shells/cli/commands/settings', () => ({
     dumpSchema: jest.fn(),
     listGlobalDefaults: jest.fn(),
     setSetting: jest.fn(() => true),
@@ -84,9 +84,9 @@ import type * as settingsCli from '../../scripts/settings-cli';
 import { invalid } from '../helpers/invalid';
 import { clearInstalledPlatform } from '../helpers/platform';
 
-import sharedCommandsModule = require('../../src/ts/cli/commands/settings');
+import sharedCommandsModule = require('../../src/ts/shells/cli/commands/settings');
 const sharedCommands = jest.mocked(sharedCommandsModule);
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
 import type * as node_child_processModule from 'node:child_process';
 const { spawn } = jest.mocked(require('node:child_process') as typeof node_child_processModule);

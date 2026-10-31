@@ -10,11 +10,11 @@
  * on the port, so the tests read the captured object, not the slot.
  */
 
-import { APP_PARTITION } from '../../src/ts/index/session';
-import { platform } from '../../src/ts/platform/port';
+import { APP_PARTITION } from '../../src/ts/shells/electron/index/session';
+import { platform } from '../../src/ts/core/platform/port';
 import { clearInstalledPlatform } from '../helpers/platform';
 
-import type { ElectronPlatform } from '../../src/ts/platform/port';
+import type { ElectronPlatform } from '../../src/ts/core/platform/port';
 
 /** One session the wipe clears: the fake answers what clearElectronSession calls. */
 interface FakeSessionTarget {
@@ -67,7 +67,7 @@ const electron = require('electron') as FakeElectron;
 // because the setup file installed the node test platform before this file
 // loaded.
 clearInstalledPlatform();
-require('../../src/ts/index/platform');
+require('../../src/ts/shells/electron/platform');
 const installed: ElectronPlatform = platform() as ElectronPlatform;
 
 // The version flag is what the family's Electron check reads, so every test
@@ -151,7 +151,7 @@ describe('loading the Electron shell platform module defers electron', () => {
             jest.doMock('electron', () => {
                 throw new Error('electron must not load at install time');
             });
-            require('../../src/ts/index/platform');
+            require('../../src/ts/shells/electron/platform');
             expect(platform()).toBeDefined();
             expect(platform().wipe.clearSession).not.toBeNull();
         });

@@ -12,9 +12,9 @@
 let storeData: string | null = null;
 const mockInitializeAsync = jest.fn(async () => {});
 const mockFlushPendingWrites = jest.fn(async () => {});
-jest.mock('../../src/ts/settings/storage', () => ({
+jest.mock('../../src/ts/core/settings/storage', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/settings/storage')>('../../src/ts/settings/storage'),
+    ...jest.requireActual<typeof import('../../src/ts/core/settings/storage')>('../../src/ts/core/settings/storage'),
     createJsonStore: () => ({
         readRaw: () => storeData,
         writeRaw: (data: string) => {
@@ -26,15 +26,15 @@ jest.mock('../../src/ts/settings/storage', () => ({
     }),
 }));
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const level = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return { withCategory: jest.fn(() => level), __level: level };
 });
 
-import photoStats = require('../../src/ts/services/photoStats');
-import type { PickerPhoto } from '../../src/ts/types/photoPicker';
-import type { RankDeps } from '../../src/ts/types/autoFill';
-import type { CategoryLogger } from '../../src/ts/logger';
+import photoStats = require('../../src/ts/core/services/photoStats');
+import type { PickerPhoto } from '../../src/ts/core/types/photoPicker';
+import type { RankDeps } from '../../src/ts/core/types/autoFill';
+import type { CategoryLogger } from '../../src/ts/core/logger';
 import { invalid } from '../helpers/invalid';
 import { isPhotoStatsFile } from '../helpers/storedShapes';
 import { parseJson, parseJsonAs } from '../helpers/parseJson';
@@ -48,7 +48,7 @@ const {
     MAX_CACHE_ENTRIES,
     STATS_TTL_MS,
 } = photoStats;
-const { __level: log } = invalid<{ __level: LevelMock }>(require('../../src/ts/logger'));
+const { __level: log } = invalid<{ __level: LevelMock }>(require('../../src/ts/core/logger'));
 
 /** The per-category logger double the logger mock above hands out (and exposes as `__level`). */
 type LevelMock = {

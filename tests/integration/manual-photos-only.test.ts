@@ -8,10 +8,10 @@
  * none of them.
  */
 
-jest.mock('../../src/ts/settings');
-jest.mock('../../src/ts/settings/storage', () => ({
+jest.mock('../../src/ts/core/settings');
+jest.mock('../../src/ts/core/settings/storage', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/settings/storage')>('../../src/ts/settings/storage'),
+    ...jest.requireActual<typeof import('../../src/ts/core/settings/storage')>('../../src/ts/core/settings/storage'),
     createJsonStore: () => ({
         readRaw: () => null,
         writeRaw: () => {},
@@ -19,30 +19,31 @@ jest.mock('../../src/ts/settings/storage', () => ({
         initializeAsync: async () => {},
     }),
 }));
-jest.mock('../../src/ts/services/currencyActions', () => ({
+jest.mock('../../src/ts/core/services/currencyActions', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/services/currencyActions')>(
-        '../../src/ts/services/currencyActions',
+    ...jest.requireActual<typeof import('../../src/ts/core/services/currencyActions')>(
+        '../../src/ts/core/services/currencyActions',
     ),
     previewSwap: jest.fn(),
     swapEntry: jest.fn(),
 }));
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import currencyActionsModule = require('../../src/ts/services/currencyActions');
+import currencyActionsModule = require('../../src/ts/core/services/currencyActions');
 const currencyActions = jest.mocked(currencyActionsModule);
-import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
-import type * as currencyAutoStoreModule from '../../src/ts/currencyAutoStore';
+import type * as votingOrchestratorModule from '../../src/ts/core/services/votingOrchestrator';
+import type * as currencyAutoStoreModule from '../../src/ts/core/currencyAutoStore';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-import type * as VotingLogicModule from '../../src/ts/services/VotingLogic';
-import type { Challenge } from '../../src/ts/types/gurushots';
-import type { VotingPassDeps } from '../../src/ts/types/votingPass';
+import type * as VotingLogicModule from '../../src/ts/core/services/VotingLogic';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
+import type { VotingPassDeps } from '../../src/ts/core/types/votingPass';
 import { invalid } from '../helpers/invalid';
-const { runVotingPass } = require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule;
-const { createMemoryAutoSpendLedger } = require('../../src/ts/currencyAutoStore') as typeof currencyAutoStoreModule;
+const { runVotingPass } = require('../../src/ts/core/services/votingOrchestrator') as typeof votingOrchestratorModule;
+const { createMemoryAutoSpendLedger } =
+    require('../../src/ts/core/currencyAutoStore') as typeof currencyAutoStoreModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
-const VotingLogic = require('../../src/ts/services/VotingLogic') as typeof VotingLogicModule;
+const VotingLogic = require('../../src/ts/core/services/VotingLogic') as typeof VotingLogicModule;
 
 const NOW = Math.floor(Date.now() / 1000);
 

@@ -4,16 +4,16 @@
  * against a stubbed API strategy).
  */
 
-import logger = require('../../src/ts/logger');
-import type * as autoFillModule from '../../src/ts/services/autoFill';
-import type * as currencyActionsModule from '../../src/ts/services/currencyActions';
-import type * as swapBackStoreModule from '../../src/ts/swapBackStore';
-import type { ActionResult, Challenge, MemberBoost, MemberRanking } from '../../src/ts/types/gurushots';
-import type * as settingsModule from '../../src/ts/settings';
+import logger = require('../../src/ts/core/logger');
+import type * as autoFillModule from '../../src/ts/core/services/autoFill';
+import type * as currencyActionsModule from '../../src/ts/core/services/currencyActions';
+import type * as swapBackStoreModule from '../../src/ts/core/swapBackStore';
+import type { ActionResult, Challenge, MemberBoost, MemberRanking } from '../../src/ts/core/types/gurushots';
+import type * as settingsModule from '../../src/ts/core/settings';
 import { invalid } from '../helpers/invalid';
-const { __resetMemberIdCache } = require('../../src/ts/services/autoFill') as typeof autoFillModule;
+const { __resetMemberIdCache } = require('../../src/ts/core/services/autoFill') as typeof autoFillModule;
 const { unlockBoostWithKey, previewSwap, swapEntry, fillExposure } =
-    require('../../src/ts/services/currencyActions') as typeof currencyActionsModule;
+    require('../../src/ts/core/services/currencyActions') as typeof currencyActionsModule;
 
 const NOW = () => Math.floor(Date.now() / 1000);
 
@@ -368,7 +368,7 @@ describe('swapEntry', () => {
 
     test('drops the photo chooser’s cached listing of the challenge', async () => {
         const cache =
-            require('../../src/ts/services/libraryCache') as typeof import('../../src/ts/services/libraryCache');
+            require('../../src/ts/core/services/libraryCache') as typeof import('../../src/ts/core/services/libraryCache');
         const listing = () => ({
             photos: [],
             memberId: null,
@@ -453,8 +453,8 @@ describe('swapEntry', () => {
 });
 
 describe('swap back', () => {
-    const { createMemoryLedger } = require('../../src/ts/swapBackStore') as typeof swapBackStoreModule;
-    const { swapBack } = require('../../src/ts/services/currencyActions') as typeof currencyActionsModule;
+    const { createMemoryLedger } = require('../../src/ts/core/swapBackStore') as typeof swapBackStoreModule;
+    const { swapBack } = require('../../src/ts/core/services/currencyActions') as typeof currencyActionsModule;
 
     // Slot now holds 'repl'; the boosted original 'orig' sits in the swap history.
     const swappedChallenge = () =>
@@ -503,7 +503,7 @@ describe('swap back', () => {
 
     test('a swap back drops the photo chooser’s cached listing of the challenge too', async () => {
         const cache =
-            require('../../src/ts/services/libraryCache') as typeof import('../../src/ts/services/libraryCache');
+            require('../../src/ts/core/services/libraryCache') as typeof import('../../src/ts/core/services/libraryCache');
         const strategy = stubStrategy({ challenge: swappedChallenge() });
         const ledger = createMemoryLedger();
         ledger.onSwapped(555, { id: 'orig', member_id: 'mem1', boosted: true }, 'repl');
@@ -551,8 +551,8 @@ describe('swap back', () => {
 });
 
 describe('edge paths', () => {
-    const { createMemoryLedger } = require('../../src/ts/swapBackStore') as typeof swapBackStoreModule;
-    const { swapBack } = require('../../src/ts/services/currencyActions') as typeof currencyActionsModule;
+    const { createMemoryLedger } = require('../../src/ts/core/swapBackStore') as typeof swapBackStoreModule;
+    const { swapBack } = require('../../src/ts/core/services/currencyActions') as typeof currencyActionsModule;
 
     test('previewSwap: a live block (swap locked) spends and ranks nothing', async () => {
         const strategy = stubStrategy({ challenge: makeChallenge({ swap_locked: true }) });
@@ -661,8 +661,8 @@ describe('edge paths', () => {
 });
 
 describe('a spend that got no answer is not "rejected"', () => {
-    const { createMemoryLedger } = require('../../src/ts/swapBackStore') as typeof swapBackStoreModule;
-    const { swapBack } = require('../../src/ts/services/currencyActions') as typeof currencyActionsModule;
+    const { createMemoryLedger } = require('../../src/ts/core/swapBackStore') as typeof swapBackStoreModule;
+    const { swapBack } = require('../../src/ts/core/services/currencyActions') as typeof currencyActionsModule;
     const noAnswer = { ok: false, raw: null, unclear: true };
     // A spend that answers with the given result, and the live challenge list as the strategy reads it.
     const answering = (result: ActionResult) => jest.fn<Promise<ActionResult>, unknown[]>().mockResolvedValue(result);

@@ -1,10 +1,10 @@
 import { render, screen } from './helpers/test-utils';
 import { mockTranslator } from './helpers/setup';
 import { EntryTime } from '@/components/app/EntryTime';
-import { createTranslator } from '../../src/ts/translations/translator';
-import { app } from '../../src/ts/translations/english';
-import { formatEndTimeIn } from '../../src/ts/format/endTime';
-import type { Translate } from '../../src/ts/translations/translator';
+import { createTranslator } from '../../src/ts/core/translations/translator';
+import { app } from '../../src/ts/core/translations/english';
+import { formatEndTimeIn } from '../../src/ts/core/format/endTime';
+import type { Translate } from '../../src/ts/core/translations/translator';
 
 const AT = 1_792_420_000;
 const when = formatEndTimeIn(AT, 'UTC', 'en-GB');

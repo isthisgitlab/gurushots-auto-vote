@@ -11,7 +11,7 @@
 
 import { installHeadlessTestPlatform, restoreNodeTestPlatform } from './platform';
 
-import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
+import type { AndroidHeadlessStore } from '../../src/ts/core/types/settings';
 
 // The Preferences keys of the configuration and of the 1.x settings blob (settings/storage.ts); not imported, so that
 // loading this helper does not load the settings.

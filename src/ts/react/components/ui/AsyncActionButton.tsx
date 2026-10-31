@@ -4,7 +4,7 @@ import { ipcErrorText } from '@/api/ipcErrorText';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import type { ComponentChildren } from 'preact';
-import { errorMessage } from '../../../errorMessage';
+import { errorMessage } from '../../../core/errorMessage';
 
 /**
  * Props of AsyncActionButton.

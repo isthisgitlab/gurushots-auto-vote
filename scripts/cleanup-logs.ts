@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 
 // The CLI platform installs before any core module loads.
-import '../src/ts/cli/platform';
+import '../src/ts/shells/cli/platform';
 
 import fs from 'node:fs';
 import path from 'node:path';
 // The shared resolver, so this script targets the same userData dir as the
 // app (the -dev dir when run from source, where the logs actually live).
-import { platform } from '../src/ts/platform/port';
+import { platform } from '../src/ts/core/platform/port';
 import { runIfMain } from './lib/run-if-main';
 
 // Deletes the api-debug-* files from `logsDir` (defaults to the

@@ -27,7 +27,7 @@ jest.mock('../../scripts/build-notices', () => ({
     },
 }));
 
-jest.mock('../../src/ts/services/visionCliAssets', () => ({ digestVisionRuntime: jest.fn(() => 'code-digest') }));
+jest.mock('../../src/ts/shells/cli/visionCliAssets', () => ({ digestVisionRuntime: jest.fn(() => 'code-digest') }));
 
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
@@ -46,7 +46,7 @@ import type * as esbuildModule from 'esbuild';
 import type * as node_child_processModule from 'node:child_process';
 import type * as package_jsonModule from '../../package.json';
 import type * as fetch_vision_modelModule from '../../scripts/fetch-vision-model';
-import type * as visionCliAssetsModule from '../../src/ts/services/visionCliAssets';
+import type * as visionCliAssetsModule from '../../src/ts/shells/cli/visionCliAssets';
 import type * as node_osModule from 'node:os';
 import type { PathLike } from 'node:fs';
 import { invalid } from '../helpers/invalid';
@@ -209,7 +209,7 @@ describe('build-cli', () => {
         await buildCli.bundleCli();
         expect(build).toHaveBeenCalledWith(
             expect.objectContaining({
-                entryPoints: [path.join(ROOT, 'src', 'ts', 'cli', 'cli.ts')],
+                entryPoints: [path.join(ROOT, 'src', 'ts', 'shells', 'cli', 'cli.ts')],
                 outfile: path.join(DIST_DIR, 'cli-bundled.js'),
                 platform: 'node',
                 format: 'cjs',
@@ -269,7 +269,7 @@ describe('build-cli', () => {
 
         test('embeds a digest of the runtime code taken over the tree it archives', async () => {
             const { digestVisionRuntime } = jest.mocked(
-                require('../../src/ts/services/visionCliAssets') as typeof visionCliAssetsModule,
+                require('../../src/ts/shells/cli/visionCliAssets') as typeof visionCliAssetsModule,
             );
             await buildCli.prepareVisionRuntime();
             expect(digestVisionRuntime).toHaveBeenCalledWith(DEPLOY_DIR);

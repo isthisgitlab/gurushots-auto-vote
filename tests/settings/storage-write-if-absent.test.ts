@@ -6,7 +6,7 @@
 
 // No test here touches the real user-data folder: the installed test platform resolves it into the
 // file's own temporary directory (tests/setupPlatform.ts guards the real home).
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
         isSourceCode: jest.fn(() => true),
@@ -23,9 +23,9 @@ const mockPreferences = {
 };
 jest.mock('@capacitor/preferences', () => ({ Preferences: mockPreferences }), { virtual: true });
 
-import type * as storageModule from '../../src/ts/settings/storage';
-import type * as jsonStoreModule from '../../src/ts/settings/jsonStore';
-import loggerModule = require('../../src/ts/logger');
+import type * as storageModule from '../../src/ts/core/settings/storage';
+import type * as jsonStoreModule from '../../src/ts/core/settings/jsonStore';
+import loggerModule = require('../../src/ts/core/logger');
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import { installHeadlessTestPlatform, installWebviewTestPlatform } from '../helpers/platform';
 import { createWebviewStorage } from '../../src/ts/platforms/webview/store';
@@ -36,7 +36,7 @@ const loadHeadlessStorage = () => {
     let mod: typeof storageModule | undefined;
     jest.isolateModules(() => {
         installHeadlessTestPlatform();
-        mod = require('../../src/ts/settings/storage') as typeof storageModule;
+        mod = require('../../src/ts/core/settings/storage') as typeof storageModule;
     });
     return mod!;
 };
@@ -51,11 +51,11 @@ const loadStorage = () => {
     jest.isolateModules(() => {
         // The platform stands before the module loads: the transports it builds are the family's.
         const autovote =
-            require('../../src/ts/services/NativeAutovoteBridge') as typeof import('../../src/ts/services/NativeAutovoteBridge');
+            require('../../src/ts/shells/capacitor/NativeAutovoteBridge') as typeof import('../../src/ts/shells/capacitor/NativeAutovoteBridge');
         installWebviewTestPlatform({
             storage: createWebviewStorage((key, expected, data) => autovote.compareAndWrite(key, expected, data)),
         });
-        mod = require('../../src/ts/settings/storage') as typeof storageModule;
+        mod = require('../../src/ts/core/settings/storage') as typeof storageModule;
     });
     return mod!;
 };
@@ -286,8 +286,8 @@ describe('writes the storage refuses (a wipe in progress)', () => {
         let storage: typeof storageModule.storage | undefined;
         let jsonStore: typeof jsonStoreModule | undefined;
         jest.isolateModules(() => {
-            ({ storage } = require('../../src/ts/settings/storage') as typeof storageModule);
-            jsonStore = require('../../src/ts/settings/jsonStore') as typeof jsonStoreModule;
+            ({ storage } = require('../../src/ts/core/settings/storage') as typeof storageModule);
+            jsonStore = require('../../src/ts/core/settings/jsonStore') as typeof jsonStoreModule;
         });
         const { refuseWrites, resumeWrites } = jsonStore!;
 

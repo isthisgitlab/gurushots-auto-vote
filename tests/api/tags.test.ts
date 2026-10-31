@@ -3,21 +3,21 @@
  * term into a tag the member's library actually carries.
  */
 
-import type * as tagsModule from '../../src/ts/api/tags';
-import type * as api_clientModule from '../../src/ts/api/api-client';
+import type * as tagsModule from '../../src/ts/core/api/tags';
+import type * as api_clientModule from '../../src/ts/core/api/api-client';
 import { invalid } from '../helpers/invalid';
-import { MIN_AUTOCOMPLETE_CHARS } from '../../src/ts/settings/limits';
+import { MIN_AUTOCOMPLETE_CHARS } from '../../src/ts/core/settings/limits';
 
-const { getCurrentMemberProfile, searchTagAutocomplete } = require('../../src/ts/api/tags') as typeof tagsModule;
+const { getCurrentMemberProfile, searchTagAutocomplete } = require('../../src/ts/core/api/tags') as typeof tagsModule;
 
-jest.mock('../../src/ts/api/api-client', () => ({
+jest.mock('../../src/ts/core/api/api-client', () => ({
     makePostRequest: jest.fn(),
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8',
 }));
 
 describe('api/tags', () => {
     const token = 'tok-123';
-    const { makePostRequest } = jest.mocked(require('../../src/ts/api/api-client') as typeof api_clientModule);
+    const { makePostRequest } = jest.mocked(require('../../src/ts/core/api/api-client') as typeof api_clientModule);
 
     beforeEach(() => {
         makePostRequest.mockReset();

@@ -1,10 +1,10 @@
 import { useCallback } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
-import { describeImportRef } from '../../settings/importRefs';
+import { describeImportRef } from '../../core/settings/importRefs';
 import * as ipc from './ipc';
 import { useIpcQuery } from './useIpcQuery';
 
-import type { ImportRef } from '../../types/config';
+import type { ImportRef } from '../../core/types/config';
 import type { IpcQueryTools } from './useIpcQuery';
 
 type ImportReportAnswer = Awaited<ReturnType<typeof ipc.getImportReport>>;

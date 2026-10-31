@@ -13,7 +13,7 @@ jest.mock('node:fs', () => {
 });
 jest.unmock('path');
 jest.unmock('node:path');
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
         info: jest.fn(),
@@ -47,15 +47,15 @@ jest.mock('electron', () => ({ session: { fromPartition: mockFromPartition, defa
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { APP_PARTITION } from '../../src/ts/index/session';
+import { APP_PARTITION } from '../../src/ts/shells/electron/index/session';
 import { buildNodeTestPlatform } from '../helpers/platform';
-import type { ElectronPlatform, PlatformWipe } from '../../src/ts/platform/port';
-import type * as localDataModule from '../../src/ts/settings/localData';
-import type * as storageModule from '../../src/ts/settings/storage';
-import type * as settingsModule from '../../src/ts/settings';
-import type * as cancellationModule from '../../src/ts/voting/cancellation';
-import type * as lockModule from '../../src/ts/settings/cliSessionLock';
-import type * as passActivityModule from '../../src/ts/voting/passActivity';
+import type { ElectronPlatform, PlatformWipe } from '../../src/ts/core/platform/port';
+import type * as localDataModule from '../../src/ts/core/settings/localData';
+import type * as storageModule from '../../src/ts/core/settings/storage';
+import type * as settingsModule from '../../src/ts/core/settings';
+import type * as cancellationModule from '../../src/ts/core/voting/cancellation';
+import type * as lockModule from '../../src/ts/platforms/node/cliSessionLock';
+import type * as passActivityModule from '../../src/ts/core/voting/passActivity';
 
 const SRC_ROOT = path.join(__dirname, '..', '..', 'src', 'ts');
 
@@ -91,7 +91,7 @@ const literalOrConstant = (value: string, text: string): string => {
 };
 
 describe('the local-data registry', () => {
-    const { LOCAL_DATA_STORES } = require('../../src/ts/settings/localData') as typeof localDataModule;
+    const { LOCAL_DATA_STORES } = require('../../src/ts/core/settings/localData') as typeof localDataModule;
 
     // Every store: the createJsonStore ones, and the two settings files storage.ts makes with createSettingsFile.
     const callSites = sourceFiles(SRC_ROOT).flatMap((file) => {
@@ -184,16 +184,16 @@ describe('wipeLocalData', () => {
                 base,
                 wipeOverride ? { paths, wipe: { ...base.wipe, ...wipeOverride } } : { paths },
             );
-            const port = require('../../src/ts/platform/port') as typeof import('../../src/ts/platform/port');
+            const port = require('../../src/ts/core/platform/port') as typeof import('../../src/ts/core/platform/port');
             port.resetPlatformForTests();
             port.installPlatform(installed);
             ctx = {
-                localData: require('../../src/ts/settings/localData') as typeof localDataModule,
-                storage: require('../../src/ts/settings/storage') as typeof storageModule,
-                settings: require('../../src/ts/settings') as typeof settingsModule,
-                cancellation: require('../../src/ts/voting/cancellation') as typeof cancellationModule,
-                lock: require('../../src/ts/settings/cliSessionLock') as typeof lockModule,
-                passActivity: require('../../src/ts/voting/passActivity') as typeof passActivityModule,
+                localData: require('../../src/ts/core/settings/localData') as typeof localDataModule,
+                storage: require('../../src/ts/core/settings/storage') as typeof storageModule,
+                settings: require('../../src/ts/core/settings') as typeof settingsModule,
+                cancellation: require('../../src/ts/core/voting/cancellation') as typeof cancellationModule,
+                lock: require('../../src/ts/platforms/node/cliSessionLock') as typeof lockModule,
+                passActivity: require('../../src/ts/core/voting/passActivity') as typeof passActivityModule,
             };
         });
     };
@@ -201,18 +201,18 @@ describe('wipeLocalData', () => {
     /** The Electron shell's platform module: its wipe owns the session clear the moved assertion drives. */
     const loadElectron = () => {
         jest.isolateModules(() => {
-            const port = require('../../src/ts/platform/port') as typeof import('../../src/ts/platform/port');
+            const port = require('../../src/ts/core/platform/port') as typeof import('../../src/ts/core/platform/port');
             port.resetPlatformForTests();
-            require('../../src/ts/index/platform');
+            require('../../src/ts/shells/electron/platform');
             const installed = port.platform() as ElectronPlatform;
             installed.paths = { ...installed.paths, userData: () => userData, getUserDataDir: () => visionParent };
             ctx = {
-                localData: require('../../src/ts/settings/localData') as typeof localDataModule,
-                storage: require('../../src/ts/settings/storage') as typeof storageModule,
-                settings: require('../../src/ts/settings') as typeof settingsModule,
-                cancellation: require('../../src/ts/voting/cancellation') as typeof cancellationModule,
-                lock: require('../../src/ts/settings/cliSessionLock') as typeof lockModule,
-                passActivity: require('../../src/ts/voting/passActivity') as typeof passActivityModule,
+                localData: require('../../src/ts/core/settings/localData') as typeof localDataModule,
+                storage: require('../../src/ts/core/settings/storage') as typeof storageModule,
+                settings: require('../../src/ts/core/settings') as typeof settingsModule,
+                cancellation: require('../../src/ts/core/voting/cancellation') as typeof cancellationModule,
+                lock: require('../../src/ts/platforms/node/cliSessionLock') as typeof lockModule,
+                passActivity: require('../../src/ts/core/voting/passActivity') as typeof passActivityModule,
             };
         });
     };
@@ -220,16 +220,16 @@ describe('wipeLocalData', () => {
     /** The Capacitor page's platform module: its wipe owns the native plugin read and the Preferences keys. */
     const loadCapacitor = () => {
         jest.isolateModules(() => {
-            const port = require('../../src/ts/platform/port') as typeof import('../../src/ts/platform/port');
+            const port = require('../../src/ts/core/platform/port') as typeof import('../../src/ts/core/platform/port');
             port.resetPlatformForTests();
-            require('../../src/ts/bridge/capacitorPlatform');
+            require('../../src/ts/shells/capacitor/platform');
             ctx = {
-                localData: require('../../src/ts/settings/localData') as typeof localDataModule,
-                storage: require('../../src/ts/settings/storage') as typeof storageModule,
-                settings: require('../../src/ts/settings') as typeof settingsModule,
-                cancellation: require('../../src/ts/voting/cancellation') as typeof cancellationModule,
-                lock: require('../../src/ts/settings/cliSessionLock') as typeof lockModule,
-                passActivity: require('../../src/ts/voting/passActivity') as typeof passActivityModule,
+                localData: require('../../src/ts/core/settings/localData') as typeof localDataModule,
+                storage: require('../../src/ts/core/settings/storage') as typeof storageModule,
+                settings: require('../../src/ts/core/settings') as typeof settingsModule,
+                cancellation: require('../../src/ts/core/voting/cancellation') as typeof cancellationModule,
+                lock: require('../../src/ts/platforms/node/cliSessionLock') as typeof lockModule,
+                passActivity: require('../../src/ts/core/voting/passActivity') as typeof passActivityModule,
             };
         });
     };

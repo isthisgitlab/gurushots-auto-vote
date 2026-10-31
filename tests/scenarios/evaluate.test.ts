@@ -3,24 +3,24 @@
  * scheduler wake-up it reports.
  */
 
-import type * as evaluateModule from '../../src/ts/scenarios/evaluate';
-import type * as nextWakeModule from '../../src/ts/scenarios/nextWake';
-import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
-import type * as wallClockModule from '../../src/ts/scheduling/wallClock';
-import type { ScenarioDocument } from '../../src/ts/settings/scenarioSchema';
-import type { Challenge } from '../../src/ts/types/gurushots';
-import type { ScenarioEngineState } from '../../src/ts/types/scenario';
-import type { ScenarioFiredRecord } from '../../src/ts/types/stores';
+import type * as evaluateModule from '../../src/ts/core/scenarios/evaluate';
+import type * as nextWakeModule from '../../src/ts/core/scenarios/nextWake';
+import type * as scenarioStateStoreModule from '../../src/ts/core/scenarioStateStore';
+import type * as wallClockModule from '../../src/ts/core/scheduling/wallClock';
+import type { ScenarioDocument } from '../../src/ts/core/settings/scenarioSchema';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
+import type { ScenarioEngineState } from '../../src/ts/core/types/scenario';
+import type { ScenarioFiredRecord } from '../../src/ts/core/types/stores';
 import { invalid } from '../helpers/invalid';
-import type { EvaluateInput } from '../../src/ts/scenarios/evaluate';
+import type { EvaluateInput } from '../../src/ts/core/scenarios/evaluate';
 
 const { evaluateScenario, firedRecord, localDayOf } =
-    require('../../src/ts/scenarios/evaluate') as typeof evaluateModule;
-const { nextWakeAt } = require('../../src/ts/scenarios/nextWake') as typeof nextWakeModule;
-const { initialState } = require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
-const { epochForWallTime } = require('../../src/ts/scheduling/wallClock') as typeof wallClockModule;
+    require('../../src/ts/core/scenarios/evaluate') as typeof evaluateModule;
+const { nextWakeAt } = require('../../src/ts/core/scenarios/nextWake') as typeof nextWakeModule;
+const { initialState } = require('../../src/ts/core/scenarioStateStore') as typeof scenarioStateStoreModule;
+const { epochForWallTime } = require('../../src/ts/core/scheduling/wallClock') as typeof wallClockModule;
 
-jest.mock('../../src/ts/logger', () => ({ withCategory: jest.fn(() => ({ error: jest.fn() })) }));
+jest.mock('../../src/ts/core/logger', () => ({ withCategory: jest.fn(() => ({ error: jest.fn() })) }));
 
 const TZ = 'Europe/Riga';
 const at = (y: number, m: number, d: number, hh: number, mm: number) => epochForWallTime(y, m, d, hh, mm, TZ);

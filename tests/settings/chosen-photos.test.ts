@@ -5,21 +5,21 @@
  * Drives the in-memory headless-store seam so the facade round-trips without fs.
  */
 
-import settings = require('../../src/ts/settings');
+import settings = require('../../src/ts/core/settings');
 import { invalid } from '../helpers/invalid';
-import logger = require('../../src/ts/logger');
-import type * as openChallengesModule from '../../src/ts/settings/openChallenges';
-import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
+import logger = require('../../src/ts/core/logger');
+import type * as openChallengesModule from '../../src/ts/core/settings/openChallenges';
+import type * as scenarioStateStoreModule from '../../src/ts/core/scenarioStateStore';
 import { isConfig } from '../helpers/storedShapes';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import { isRecordOf, isShape, isUnknown, parseJsonAs } from '../helpers/parseJson';
 import type { MemoryStore } from '../helpers/headlessStore';
 const { forgetOpenChallengeIds, getOpenChallengeIds, getUpcomingChallengeIds } =
-    require('../../src/ts/settings/openChallenges') as typeof openChallengesModule;
+    require('../../src/ts/core/settings/openChallenges') as typeof openChallengesModule;
 const { scenarioStateLedger, initialState } =
-    require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
+    require('../../src/ts/core/scenarioStateStore') as typeof scenarioStateStoreModule;
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const category = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
         info: jest.fn(),

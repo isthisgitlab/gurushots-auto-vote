@@ -10,8 +10,8 @@
  * fallback path deliberately renders every group unbanded rather than crashing.
  */
 
-jest.mock('../../src/ts/settings');
-jest.mock('../../src/ts/apiFactory', () => ({
+jest.mock('../../src/ts/core/settings');
+jest.mock('../../src/ts/core/apiFactory', () => ({
     refreshApi: jest.fn(),
     getApiStrategy: jest.fn(),
     getMiddleware: jest.fn(),
@@ -19,10 +19,10 @@ jest.mock('../../src/ts/apiFactory', () => ({
 
 import { invalid } from '../helpers/invalid';
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import type * as settings_handlersModule from '../../src/ts/ipc/settings.handlers';
-const { buildHandlers } = require('../../src/ts/ipc/settings.handlers') as typeof settings_handlersModule;
+import type * as settings_handlersModule from '../../src/ts/core/ipc/settings.handlers';
+const { buildHandlers } = require('../../src/ts/core/ipc/settings.handlers') as typeof settings_handlersModule;
 
 // The success-path payload; the handler takes no arguments, the test passes the event as Electron would.
 type SchemaPayload = Extract<

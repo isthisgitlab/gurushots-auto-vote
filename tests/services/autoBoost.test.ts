@@ -5,15 +5,15 @@
  * shouldPlayAutoTurbo enforces.
  */
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import VotingLogic = require('../../src/ts/services/VotingLogic');
+import VotingLogic = require('../../src/ts/core/services/VotingLogic');
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
-jest.mock('../../src/ts/settings');
+jest.mock('../../src/ts/core/settings');
 
 const NOW = () => Math.floor(Date.now() / 1000);
 

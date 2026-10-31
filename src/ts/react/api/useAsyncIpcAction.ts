@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { errorMessage } from '../../errorMessage';
+import { errorMessage } from '../../core/errorMessage';
 import { logRendererError, logRendererWarning } from './ipc';
 
 /**

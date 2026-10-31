@@ -1,5 +1,5 @@
 import { Component } from 'react';
-import { rendererTranslator } from '../../../translations/renderer';
+import { rendererTranslator } from '../../../core/translations/renderer';
 import * as ipc from '@/api/ipc';
 import type { ComponentChildren, ErrorInfo } from 'preact';
 

@@ -5,14 +5,14 @@
  * whether the final window exposure logic is applied or not.
  */
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import VotingLogic = require('../../src/ts/services/VotingLogic');
-import type { Challenge } from '../../src/ts/types/gurushots';
+import VotingLogic = require('../../src/ts/core/services/VotingLogic');
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 // Mock the settings module
-jest.mock('../../src/ts/settings');
+jest.mock('../../src/ts/core/settings');
 
 describe('useFinalWindowExposure setting', () => {
     beforeEach(() => {

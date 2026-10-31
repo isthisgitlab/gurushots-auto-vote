@@ -4,10 +4,10 @@
  * error text as a successful completion.
  */
 
-import type * as logSafeModule from '../../src/ts/format/logSafe';
+import type * as logSafeModule from '../../src/ts/core/format/logSafe';
 
 const { failureText, sentenceCaseLogMessage, splitIcon, stripTerminalControl, escapeTerminalUnsafe } =
-    require('../../src/ts/format/logSafe') as typeof logSafeModule;
+    require('../../src/ts/core/format/logSafe') as typeof logSafeModule;
 
 describe('sentenceCaseLogMessage', () => {
     test.each([

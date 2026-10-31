@@ -6,26 +6,28 @@
  * the chosen photos in list order.
  */
 
-import settings = require('../../src/ts/settings');
-import loggerModule = require('../../src/ts/logger');
-import type * as actionsHandlersModule from '../../src/ts/ipc/actions.handlers';
-import type * as apiFactoryModule from '../../src/ts/apiFactory';
-import type * as autoFillModule from '../../src/ts/services/autoFill';
-import type * as joinChallengesModule from '../../src/ts/services/joinChallenges';
-import type * as discoverChallengesModule from '../../src/ts/services/discoverChallenges';
-import type * as openChallengeCacheModule from '../../src/ts/services/openChallengeCache';
-import type * as cliJoinModule from '../../src/ts/cli/commands/join';
+import settings = require('../../src/ts/core/settings');
+import loggerModule = require('../../src/ts/core/logger');
+import type * as actionsHandlersModule from '../../src/ts/core/ipc/actions.handlers';
+import type * as apiFactoryModule from '../../src/ts/core/apiFactory';
+import type * as autoFillModule from '../../src/ts/core/services/autoFill';
+import type * as joinChallengesModule from '../../src/ts/core/services/joinChallenges';
+import type * as discoverChallengesModule from '../../src/ts/core/services/discoverChallenges';
+import type * as openChallengeCacheModule from '../../src/ts/core/services/openChallengeCache';
+import type * as cliJoinModule from '../../src/ts/shells/cli/commands/join';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
-const { buildHandlers } = require('../../src/ts/ipc/actions.handlers') as typeof actionsHandlersModule;
-const { getApiStrategy, refreshApi } = require('../../src/ts/apiFactory') as typeof apiFactoryModule;
-const { fillChallengeNow } = require('../../src/ts/services/autoFill') as typeof autoFillModule;
-const { runJoinPass } = require('../../src/ts/services/joinChallenges') as typeof joinChallengesModule;
-const { clearUpcomingCache } = require('../../src/ts/services/discoverChallenges') as typeof discoverChallengesModule;
-const { clearOpenChallenges } = require('../../src/ts/services/openChallengeCache') as typeof openChallengeCacheModule;
-const { showDiscover } = require('../../src/ts/cli/commands/join') as typeof cliJoinModule;
+const { buildHandlers } = require('../../src/ts/core/ipc/actions.handlers') as typeof actionsHandlersModule;
+const { getApiStrategy, refreshApi } = require('../../src/ts/core/apiFactory') as typeof apiFactoryModule;
+const { fillChallengeNow } = require('../../src/ts/core/services/autoFill') as typeof autoFillModule;
+const { runJoinPass } = require('../../src/ts/core/services/joinChallenges') as typeof joinChallengesModule;
+const { clearUpcomingCache } =
+    require('../../src/ts/core/services/discoverChallenges') as typeof discoverChallengesModule;
+const { clearOpenChallenges } =
+    require('../../src/ts/core/services/openChallengeCache') as typeof openChallengeCacheModule;
+const { showDiscover } = require('../../src/ts/shells/cli/commands/join') as typeof cliJoinModule;
 
 // Mock endpoints answer after a simulated delay; give the whole story room.
 jest.setTimeout(30000);

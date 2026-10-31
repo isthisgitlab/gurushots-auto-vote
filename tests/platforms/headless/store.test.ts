@@ -11,15 +11,15 @@
 
 const error = jest.fn();
 
-jest.mock('../../../src/ts/logger', () => ({
+jest.mock('../../../src/ts/core/logger', () => ({
     __esModule: true,
     withCategory: jest.fn(() => ({ error, info: jest.fn(), warning: jest.fn(), debug: jest.fn(), success: jest.fn() })),
 }));
 
 import { createHeadlessStorage } from '../../../src/ts/platforms/headless/store';
 
-import type { AndroidHeadlessStore } from '../../../src/ts/types/settings';
-import type { SettingsFileWiring, SettingsStoreRef } from '../../../src/ts/platform/port';
+import type { AndroidHeadlessStore } from '../../../src/ts/core/types/settings';
+import type { SettingsFileWiring, SettingsStoreRef } from '../../../src/ts/core/platform/port';
 
 const g = globalThis as typeof globalThis & { AndroidHeadlessStore?: AndroidHeadlessStore };
 

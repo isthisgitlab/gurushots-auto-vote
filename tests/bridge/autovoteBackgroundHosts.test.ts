@@ -5,23 +5,24 @@
  * (Electron, web shell).
  */
 
-import * as foregroundService from '../../src/ts/services/ForegroundServiceController';
-import * as nativeAutovote from '../../src/ts/services/NativeAutovoteBridge';
-import type * as hostsModule from '../../src/ts/bridge/capacitorBackgroundHost';
+import * as foregroundService from '../../src/ts/shells/capacitor/ForegroundServiceController';
+import * as nativeAutovote from '../../src/ts/shells/capacitor/NativeAutovoteBridge';
+import type * as hostsModule from '../../src/ts/shells/capacitor/bridge/capacitorBackgroundHost';
 import type * as noopModule from '../../src/ts/react/contexts/noopBackgroundHost';
 import { invalid } from '../helpers/invalid';
 
-const { capacitorBackgroundHost } = require('../../src/ts/bridge/capacitorBackgroundHost') as typeof hostsModule;
+const { capacitorBackgroundHost } =
+    require('../../src/ts/shells/capacitor/bridge/capacitorBackgroundHost') as typeof hostsModule;
 const { noopBackgroundHost } = require('../../src/ts/react/contexts/noopBackgroundHost') as typeof noopModule;
 
-jest.mock('../../src/ts/services/ForegroundServiceController', () => ({
+jest.mock('../../src/ts/shells/capacitor/ForegroundServiceController', () => ({
     __esModule: true,
     start: jest.fn(),
     stop: jest.fn(),
     update: jest.fn(),
 }));
 
-jest.mock('../../src/ts/services/NativeAutovoteBridge', () => ({
+jest.mock('../../src/ts/shells/capacitor/NativeAutovoteBridge', () => ({
     __esModule: true,
     start: jest.fn(),
     stop: jest.fn(),

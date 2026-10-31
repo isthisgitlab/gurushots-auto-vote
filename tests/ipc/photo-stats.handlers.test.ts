@@ -7,15 +7,15 @@
  * an in-memory stand-in for its JSON store.
  */
 
-jest.mock('../../src/ts/settings');
-jest.mock('../../src/ts/apiFactory');
-jest.mock('../../src/ts/services/auth');
+jest.mock('../../src/ts/core/settings');
+jest.mock('../../src/ts/core/apiFactory');
+jest.mock('../../src/ts/core/services/auth');
 
 // In-memory stand-in for the cross-platform JSON store photoStats persists to.
 let storeData: string | null = null;
-jest.mock('../../src/ts/settings/storage', () => ({
+jest.mock('../../src/ts/core/settings/storage', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/settings/storage')>('../../src/ts/settings/storage'),
+    ...jest.requireActual<typeof import('../../src/ts/core/settings/storage')>('../../src/ts/core/settings/storage'),
     createJsonStore: () => ({
         readRaw: () => storeData,
         writeRaw: (data: string) => {
@@ -27,23 +27,23 @@ jest.mock('../../src/ts/settings/storage', () => ({
     }),
 }));
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import apiFactoryModule = require('../../src/ts/apiFactory');
+import apiFactoryModule = require('../../src/ts/core/apiFactory');
 const apiFactory = jest.mocked(apiFactoryModule);
-import authModule = require('../../src/ts/services/auth');
+import authModule = require('../../src/ts/core/services/auth');
 const auth = jest.mocked(authModule);
-import loggerModule = require('../../src/ts/logger');
+import loggerModule = require('../../src/ts/core/logger');
 const logger = jest.mocked(loggerModule);
-import photoStatsModule = require('../../src/ts/services/photoStats');
-import type * as photoStatsHandlersModule from '../../src/ts/ipc/actions/photoStats';
-import { LIBRARY_BATCH_PHOTOS } from '../../src/ts/settings/limits';
-import { isPlainObject } from '../../src/ts/plainObject';
+import photoStatsModule = require('../../src/ts/core/services/photoStats');
+import type * as photoStatsHandlersModule from '../../src/ts/core/ipc/actions/photoStats';
+import { LIBRARY_BATCH_PHOTOS } from '../../src/ts/core/settings/limits';
+import { isPlainObject } from '../../src/ts/core/plainObject';
 import { invalid } from '../helpers/invalid';
 import { logCategories } from '../helpers/logCategories';
 
 const { handleGetPhotoStats, __resetPhotoStatsThrottle, STATS_MIN_INTERVAL_MS, STATS_COOLDOWN_MS } =
-    require('../../src/ts/ipc/actions/photoStats') as typeof photoStatsHandlersModule;
+    require('../../src/ts/core/ipc/actions/photoStats') as typeof photoStatsHandlersModule;
 const { __resetForTests, STATS_TTL_MS } = photoStatsModule;
 
 // The handler is invoked the way ipcMain does: the event first.

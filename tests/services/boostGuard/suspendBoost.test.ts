@@ -3,21 +3,21 @@
  * apply within 30 min, through the API strategy, and never throws.
  */
 
-import type * as suspendBoostModule from '../../../src/ts/services/boostGuard/suspendBoost';
-import type * as quitGuardModule from '../../../src/ts/services/boostGuard/selection';
-import type * as settingsModule from '../../../src/ts/settings';
-import type * as apiFactoryModule from '../../../src/ts/apiFactory';
-import type * as VotingLogicModule from '../../../src/ts/services/VotingLogic';
-import type { CategoryLogger } from '../../../src/ts/logger';
-import type { Challenge } from '../../../src/ts/types/gurushots';
-import type { SuspendBoostOutcome } from '../../../src/ts/services/votingOrchestrator/suspendBoostRunner';
+import type * as suspendBoostModule from '../../../src/ts/core/services/boostGuard/suspendBoost';
+import type * as quitGuardModule from '../../../src/ts/core/services/boostGuard/selection';
+import type * as settingsModule from '../../../src/ts/core/settings';
+import type * as apiFactoryModule from '../../../src/ts/core/apiFactory';
+import type * as VotingLogicModule from '../../../src/ts/core/services/VotingLogic';
+import type { CategoryLogger } from '../../../src/ts/core/logger';
+import type { Challenge } from '../../../src/ts/core/types/gurushots';
+import type { SuspendBoostOutcome } from '../../../src/ts/core/services/votingOrchestrator/suspendBoostRunner';
 import { invalid } from '../../helpers/invalid';
 
 type Describe = NonNullable<
     NonNullable<Parameters<typeof suspendBoostModule.applyImminentBoostsOnSuspend>[0]>['describeDeadlineActions']
 >;
 
-jest.mock('../../../src/ts/logger', () => {
+jest.mock('../../../src/ts/core/logger', () => {
     const { renderLogTemplate } = require('../../helpers/logTemplate') as typeof import('../../helpers/logTemplate');
     // The T-methods render through the real catalog onto the same level fn, so
     // the assertions below keep reading today's rendered lines.
@@ -40,19 +40,19 @@ jest.mock('../../../src/ts/logger', () => {
         cat,
     };
 });
-jest.mock('../../../src/ts/settings', () => ({
+jest.mock('../../../src/ts/core/settings', () => ({
     loadSettings: jest.fn(),
     getSetting: jest.fn(),
     getEffectiveSetting: jest.fn(),
     getEnvironmentInfo: jest.fn(),
     consumeChosenPhotos: jest.fn(() => false),
 }));
-jest.mock('../../../src/ts/apiFactory', () => ({
+jest.mock('../../../src/ts/core/apiFactory', () => ({
     getApiStrategy: jest.fn(),
     // The view ledger is not under test here; null keeps the seam hermetic.
     getEntryAgeLedger: jest.fn(() => null),
 }));
-jest.mock('../../../src/ts/services/VotingLogic', () => ({ describeDeadlineActions: jest.fn() }));
+jest.mock('../../../src/ts/core/services/VotingLogic', () => ({ describeDeadlineActions: jest.fn() }));
 
 const TOKEN = 'secret-token-123';
 const NOW = 1_000_000;
@@ -95,11 +95,11 @@ const loggedText = () => JSON.stringify([cat.info.mock.calls, cat.warning.mock.c
 
 beforeEach(() => {
     jest.resetModules();
-    suspend = require('../../../src/ts/services/boostGuard/suspendBoost') as typeof suspend;
-    guard = require('../../../src/ts/services/boostGuard/selection') as typeof guard;
-    settings = jest.mocked(require('../../../src/ts/settings') as typeof settingsModule);
-    cat = (require('../../../src/ts/logger') as { cat: typeof cat }).cat;
-    const apiFactory = jest.mocked(require('../../../src/ts/apiFactory') as typeof apiFactoryModule);
+    suspend = require('../../../src/ts/core/services/boostGuard/suspendBoost') as typeof suspend;
+    guard = require('../../../src/ts/core/services/boostGuard/selection') as typeof guard;
+    settings = jest.mocked(require('../../../src/ts/core/settings') as typeof settingsModule);
+    cat = (require('../../../src/ts/core/logger') as { cat: typeof cat }).cat;
+    const apiFactory = jest.mocked(require('../../../src/ts/core/apiFactory') as typeof apiFactoryModule);
     applyBoostsOnSuspend = jest.fn(async (challenges: readonly Challenge[], _token: string) =>
         settle(...challenges.map(() => 'applied' as const)),
     );
@@ -198,7 +198,9 @@ describe('applyImminentBoostsOnSuspend — no-ops', () => {
     });
 
     test('the default describeDeadlineActions is VotingLogic.describeDeadlineActions and the default clock is real', async () => {
-        const votingLogic = jest.mocked(require('../../../src/ts/services/VotingLogic') as typeof VotingLogicModule);
+        const votingLogic = jest.mocked(
+            require('../../../src/ts/core/services/VotingLogic') as typeof VotingLogicModule,
+        );
         votingLogic.describeDeadlineActions.mockReturnValue(
             invalid({ actions: [{ action: 'boost', dueAt: Math.floor(Date.now() / 1000) + 60 }] }),
         );

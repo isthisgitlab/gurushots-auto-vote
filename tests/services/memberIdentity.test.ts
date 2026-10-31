@@ -5,9 +5,9 @@
  */
 
 import { invalid } from '../helpers/invalid';
-import type * as memberIdentityModule from '../../src/ts/services/autoFill/memberIdentity';
+import type * as memberIdentityModule from '../../src/ts/core/services/autoFill/memberIdentity';
 const { resolveMemberId, NEGATIVE_IDENTITY_TTL_MS, __resetMemberIdCache } =
-    require('../../src/ts/services/autoFill/memberIdentity') as typeof memberIdentityModule;
+    require('../../src/ts/core/services/autoFill/memberIdentity') as typeof memberIdentityModule;
 
 type Profile = Awaited<ReturnType<NonNullable<Parameters<typeof resolveMemberId>[1]>>>;
 let profile: jest.MockedFunction<(token: string) => Promise<Profile>>;

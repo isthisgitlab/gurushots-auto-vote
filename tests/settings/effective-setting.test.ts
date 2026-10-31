@@ -9,11 +9,11 @@
  * referentially identical to the underlying modules.
  */
 
-import settings = require('../../src/ts/settings');
-import schemaModule = require('../../src/ts/settings/schema');
-import storageModule = require('../../src/ts/settings/storage');
+import settings = require('../../src/ts/core/settings');
+import schemaModule = require('../../src/ts/core/settings/schema');
+import storageModule = require('../../src/ts/core/settings/storage');
 
-jest.mock('../../src/ts/logger', () => ({
+jest.mock('../../src/ts/core/logger', () => ({
     info: jest.fn(),
     warning: jest.fn(),
     error: jest.fn(),

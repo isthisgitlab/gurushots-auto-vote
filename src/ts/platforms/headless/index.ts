@@ -23,7 +23,7 @@ import { createHeadlessPaths } from './paths';
 import { createHeadlessStorage } from './store';
 import { createHeadlessWipe } from './wipe';
 
-import type { Platform, PlatformWindows } from '../../platform/port';
+import type { Platform, PlatformWindows } from '../../core/platform/port';
 
 type HeadlessHttpModule = typeof import('./http');
 

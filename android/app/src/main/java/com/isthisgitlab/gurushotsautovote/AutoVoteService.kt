@@ -97,7 +97,7 @@ class AutoVoteService : Service() {
         // The one origin the headless WebView may load from or talk to: the asset loader's.
         private const val ASSET_HOST = "appassets.androidplatform.net"
         private const val HEADLESS_URL = "https://$ASSET_HOST/assets/public/headless.html"
-        // The vision verifier fetches entry photos from here (src/ts/services/visionVerifier.ts): the one other origin.
+        // The vision verifier fetches entry photos from here (src/ts/core/services/visionVerifier.ts): the one other origin.
         private const val PHOTO_HOST = "photos.gurushots.com"
 
         private fun isPhotoFetch(url: Uri, method: String): Boolean =

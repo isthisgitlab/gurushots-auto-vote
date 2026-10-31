@@ -7,18 +7,18 @@
  * Robolectric tests; here we cover the JS routing.
  */
 
-jest.mock('../../src/ts/services/UpdateChecker', () => ({
+jest.mock('../../src/ts/core/services/UpdateChecker', () => ({
     getReleaseAsset: jest.fn(),
     getReleasesUrl: jest.fn(() => 'https://github.com/o/r/releases/latest'),
 }));
 
-import logger = require('../../src/ts/logger');
-import updateCheckerModule = require('../../src/ts/services/UpdateChecker');
+import logger = require('../../src/ts/core/logger');
+import updateCheckerModule = require('../../src/ts/core/services/UpdateChecker');
 const updateChecker = jest.mocked(updateCheckerModule);
-import type * as AndroidUpdateInstallerModule from '../../src/ts/services/AndroidUpdateInstaller';
+import type * as AndroidUpdateInstallerModule from '../../src/ts/shells/capacitor/AndroidUpdateInstaller';
 const { downloadAndInstall } =
-    require('../../src/ts/services/AndroidUpdateInstaller') as typeof AndroidUpdateInstallerModule;
-import type { ApkInstallerPlugin, CapacitorGlobals } from '../../src/ts/types/capacitor';
+    require('../../src/ts/shells/capacitor/AndroidUpdateInstaller') as typeof AndroidUpdateInstallerModule;
+import type { ApkInstallerPlugin, CapacitorGlobals } from '../../src/ts/core/types/capacitor';
 import { invalid } from '../helpers/invalid';
 
 // The globals the installer reads; open and location are removed on purpose to reach the last fallbacks.

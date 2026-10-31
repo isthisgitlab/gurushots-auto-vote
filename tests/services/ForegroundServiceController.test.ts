@@ -7,8 +7,8 @@
  * guard flips through the globalThis.Capacitor the module reads.
  */
 
-import type * as ForegroundServiceControllerModule from '../../src/ts/services/ForegroundServiceController';
-import type { CapacitorGlobals } from '../../src/ts/types/capacitor';
+import type * as ForegroundServiceControllerModule from '../../src/ts/shells/capacitor/ForegroundServiceController';
+import type { CapacitorGlobals } from '../../src/ts/core/types/capacitor';
 import { invalid } from '../helpers/invalid';
 
 const mockFsPlugin = {
@@ -36,7 +36,7 @@ describe('ForegroundServiceController', () => {
         mockFsPlugin.startForegroundService.mockResolvedValue(undefined);
         mockFsPlugin.updateForegroundService.mockResolvedValue(undefined);
         mockFsPlugin.stopForegroundService.mockResolvedValue(undefined);
-        controller = require('../../src/ts/services/ForegroundServiceController') as typeof controller;
+        controller = require('../../src/ts/shells/capacitor/ForegroundServiceController') as typeof controller;
     });
 
     afterEach(() => {
@@ -47,7 +47,7 @@ describe('ForegroundServiceController', () => {
         beforeEach(() => {
             delete g.Capacitor;
             controller =
-                require('../../src/ts/services/ForegroundServiceController') as typeof ForegroundServiceControllerModule;
+                require('../../src/ts/shells/capacitor/ForegroundServiceController') as typeof ForegroundServiceControllerModule;
         });
 
         test('start resolves false and never touches the plugin', async () => {
@@ -133,12 +133,12 @@ describe('ForegroundServiceController', () => {
         });
         const warning = jest.fn();
         jest.mocked(
-            require('../../src/ts/logger') as typeof import('../../src/ts/logger'),
+            require('../../src/ts/core/logger') as typeof import('../../src/ts/core/logger'),
         ).withCategory.mockReturnValueOnce(invalid({ warning }));
         g.Capacitor = { isNativePlatform: () => true };
         try {
             const isolated =
-                require('../../src/ts/services/ForegroundServiceController') as typeof ForegroundServiceControllerModule;
+                require('../../src/ts/shells/capacitor/ForegroundServiceController') as typeof ForegroundServiceControllerModule;
 
             await expect(isolated.start()).resolves.toBe(false);
             expect(mockFsPlugin.startForegroundService).not.toHaveBeenCalled();

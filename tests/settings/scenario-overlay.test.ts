@@ -7,13 +7,13 @@
 
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import type { MemoryStore } from '../helpers/headlessStore';
-import settings = require('../../src/ts/settings');
-import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
+import settings = require('../../src/ts/core/settings');
+import type * as scenarioStateStoreModule from '../../src/ts/core/scenarioStateStore';
 import { isNumber, isRecordOf, isShape, parseJsonAs } from '../helpers/parseJson';
 const { scenarioStateLedger, mockScenarioStateLedger, initialState } =
-    require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
+    require('../../src/ts/core/scenarioStateStore') as typeof scenarioStateStoreModule;
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const category = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
         info: jest.fn(),

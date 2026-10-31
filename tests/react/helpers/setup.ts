@@ -3,11 +3,11 @@
  * Mocks browser globals and window.api
  */
 
-import type * as manifestModule from '../../../src/ts/ipc/manifest';
-import type { WindowApi } from '../../../src/ts/types/ipc';
+import type * as manifestModule from '../../../src/ts/core/ipc/manifest';
+import type { WindowApi } from '../../../src/ts/core/types/ipc';
 
 const { invokeChannels, aliases, sendMethods, eventMethods, kebabToCamel } =
-    require('../../../src/ts/ipc/manifest') as typeof manifestModule;
+    require('../../../src/ts/core/ipc/manifest') as typeof manifestModule;
 
 // Mock window.api for IPC calls. The base surface is GENERATED from the
 // shared channel manifest so every method preload/capacitor would expose
@@ -216,7 +216,7 @@ const mockTranslator = {
     getCurrentLanguage: jest.fn().mockReturnValue('en'),
     setCurrentLanguage: jest.fn(),
 };
-jest.mock('../../../src/ts/translations/renderer', () => ({ rendererTranslator: mockTranslator }));
+jest.mock('../../../src/ts/core/translations/renderer', () => ({ rendererTranslator: mockTranslator }));
 
 // Set up global mocks. Augment the test-env window in place rather than
 // replacing it with a plain object — spreading `{...window}` only copies

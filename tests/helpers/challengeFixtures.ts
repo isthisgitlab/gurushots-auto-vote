@@ -18,7 +18,7 @@
  * patterns only match *(spec|test).js(x) filenames.
  */
 
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 import { invalid } from './invalid';
 
 type Plain = Record<string, unknown>;

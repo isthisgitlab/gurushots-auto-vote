@@ -3,11 +3,11 @@
  * LIBRARY_FRESH_MS, capped, with a newest-of-all listing kept for previews, frozen entries and copied answers.
  */
 
-import type * as libraryCacheModule from '../../src/ts/services/libraryCache';
+import type * as libraryCacheModule from '../../src/ts/core/services/libraryCache';
 
 type Debug = jest.Mock<void, [string, unknown]>;
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const level = { debug: jest.fn() };
     return { withCategory: jest.fn(() => level), __level: level };
 });
@@ -22,8 +22,8 @@ const {
     clearLibraryCache,
     LIBRARY_FRESH_MS,
     MAX_LIBRARY_ENTRIES,
-} = require('../../src/ts/services/libraryCache') as typeof libraryCacheModule;
-const { __level: log } = require('../../src/ts/logger') as { __level: { debug: Debug } };
+} = require('../../src/ts/core/services/libraryCache') as typeof libraryCacheModule;
+const { __level: log } = require('../../src/ts/core/logger') as { __level: { debug: Debug } };
 
 const T0 = 1_000_000;
 

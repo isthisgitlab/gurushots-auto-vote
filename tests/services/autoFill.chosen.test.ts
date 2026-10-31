@@ -5,26 +5,26 @@
  * emergency fill — and the emergency stand-down check agrees with the runner.
  */
 
-import type * as autoFillModule from '../../src/ts/services/autoFill';
-import type * as chosenPhotosModule from '../../src/ts/services/autoFill/chosenPhotos';
-import type * as verifyModule from '../../src/ts/services/autoFill/pipeline/verify';
-import type * as photoPickerModule from '../../src/ts/services/photoPicker';
+import type * as autoFillModule from '../../src/ts/core/services/autoFill';
+import type * as chosenPhotosModule from '../../src/ts/core/services/autoFill/chosenPhotos';
+import type * as verifyModule from '../../src/ts/core/services/autoFill/pipeline/verify';
+import type * as photoPickerModule from '../../src/ts/core/services/photoPicker';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
-import type { FillDeps, FillLogger, FillSettings, RankDeps } from '../../src/ts/types/autoFill';
-import type { PickerPhoto, ScoredCandidate } from '../../src/ts/types/photoPicker';
+import type * as entryAgeStoreModule from '../../src/ts/core/entryAgeStore';
+import type { FillDeps, FillLogger, FillSettings, RankDeps } from '../../src/ts/core/types/autoFill';
+import type { PickerPhoto, ScoredCandidate } from '../../src/ts/core/types/photoPicker';
 import { invalid } from '../helpers/invalid';
 
-jest.mock('../../src/ts/services/semantic/lexicon', () => ({
+jest.mock('../../src/ts/core/services/semantic/lexicon', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/services/semantic/lexicon')>(
-        '../../src/ts/services/semantic/lexicon',
+    ...jest.requireActual<typeof import('../../src/ts/core/services/semantic/lexicon')>(
+        '../../src/ts/core/services/semantic/lexicon',
     ),
 }));
 // photoStats persists its cache through this store; keep it in memory.
-jest.mock('../../src/ts/settings/storage', () => ({
+jest.mock('../../src/ts/core/settings/storage', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/settings/storage')>('../../src/ts/settings/storage'),
+    ...jest.requireActual<typeof import('../../src/ts/core/settings/storage')>('../../src/ts/core/settings/storage'),
     createJsonStore: () => ({
         readRaw: () => null,
         writeRaw: () => {},
@@ -42,16 +42,16 @@ const {
     reflectNewEntry,
     rankCandidatesForChallenge,
     __resetMemberIdCache,
-} = require('../../src/ts/services/autoFill') as typeof autoFillModule;
+} = require('../../src/ts/core/services/autoFill') as typeof autoFillModule;
 const { forgetChosenPhotosMemory, logChosenSkipOnce } =
-    require('../../src/ts/services/autoFill/chosenPhotos') as typeof chosenPhotosModule;
+    require('../../src/ts/core/services/autoFill/chosenPhotos') as typeof chosenPhotosModule;
 const { resolveMissingChosen, refuseRememberedChosen, lastWalkStoppedAtPageCap } =
-    require('../../src/ts/services/autoFill/chosenWalkMemo') as typeof import('../../src/ts/services/autoFill/chosenWalkMemo');
+    require('../../src/ts/core/services/autoFill/chosenWalkMemo') as typeof import('../../src/ts/core/services/autoFill/chosenWalkMemo');
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 const { verifyFillPick, recordUncertainSubmission } =
-    require('../../src/ts/services/autoFill/pipeline/verify') as typeof verifyModule;
-const { buildChosenCandidates } = require('../../src/ts/services/photoPicker') as typeof photoPickerModule;
-const { createMemoryEntryAgeLedger } = require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
+    require('../../src/ts/core/services/autoFill/pipeline/verify') as typeof verifyModule;
+const { buildChosenCandidates } = require('../../src/ts/core/services/photoPicker') as typeof photoPickerModule;
+const { createMemoryEntryAgeLedger } = require('../../src/ts/core/entryAgeStore') as typeof entryAgeStoreModule;
 
 const NOW = 1_000_000;
 

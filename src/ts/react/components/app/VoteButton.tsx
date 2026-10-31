@@ -1,4 +1,4 @@
-import type { Challenge } from '../../../types/gurushots';
+import type { Challenge } from '../../../core/types/gurushots';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { IconActionButton } from '@/components/ui/IconActionButton';
 import { ICON_PATHS } from '@/components/ui/StrokeIcon';

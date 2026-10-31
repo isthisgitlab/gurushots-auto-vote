@@ -7,7 +7,7 @@
  */
 
 import vm from 'node:vm';
-import type * as LoggerModule from '../../src/ts/logger';
+import type * as LoggerModule from '../../src/ts/core/logger';
 import { SHIM_BANNER } from '../../scripts/lib/browser-shims';
 import { installTestPlatform } from '../helpers/platform';
 import { invalid } from '../helpers/invalid';
@@ -65,7 +65,7 @@ const loadLogger = ({
     try {
         jest.isolateModules(() => {
             jest.doMock('fs', () => fs);
-            jest.doMock('../../src/ts/runtime', () => runtime);
+            jest.doMock('../../src/ts/core/runtime', () => runtime);
             const family = jest.requireActual<typeof import('../../src/ts/platforms/node/paths')>(
                 '../../src/ts/platforms/node/paths',
             );
@@ -83,7 +83,7 @@ const loadLogger = ({
                     logCleanup: electron || cliArg,
                 },
             });
-            logger = jest.requireActual<typeof import('../../src/ts/logger')>('../../src/ts/logger');
+            logger = jest.requireActual<typeof import('../../src/ts/core/logger')>('../../src/ts/core/logger');
         });
     } finally {
         process.argv = origArgv;
@@ -403,7 +403,7 @@ describe('periodic cleanup interval', () => {
     });
 
     test('the tsx source run via cli.ts is a CLI run too', () => {
-        const { fs } = loadLogger({ argv1: '/app/src/ts/cli/cli.ts' });
+        const { fs } = loadLogger({ argv1: '/app/src/ts/shells/cli/cli.ts' });
         fs.readdirSync.mockClear();
         jest.advanceTimersByTime(60 * 60 * 1000);
         expect(fs.readdirSync).toHaveBeenCalledTimes(1);

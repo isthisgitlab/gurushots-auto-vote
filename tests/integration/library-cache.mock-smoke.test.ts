@@ -6,18 +6,18 @@
  * logout forgets everything.
  */
 
-import settings = require('../../src/ts/settings');
-import type * as actionsHandlersModule from '../../src/ts/ipc/actions.handlers';
-import type * as apiFactoryModule from '../../src/ts/apiFactory';
-import type * as authModule from '../../src/ts/services/auth';
-import type * as libraryCacheModule from '../../src/ts/services/libraryCache';
+import settings = require('../../src/ts/core/settings');
+import type * as actionsHandlersModule from '../../src/ts/core/ipc/actions.handlers';
+import type * as apiFactoryModule from '../../src/ts/core/apiFactory';
+import type * as authModule from '../../src/ts/core/services/auth';
+import type * as libraryCacheModule from '../../src/ts/core/services/libraryCache';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import { invalid } from '../helpers/invalid';
 
-const { buildHandlers } = require('../../src/ts/ipc/actions.handlers') as typeof actionsHandlersModule;
-const { getApiStrategy, refreshApi } = require('../../src/ts/apiFactory') as typeof apiFactoryModule;
-const { clearAuthToken } = require('../../src/ts/services/auth') as typeof authModule;
-const { clearLibraryCache } = require('../../src/ts/services/libraryCache') as typeof libraryCacheModule;
+const { buildHandlers } = require('../../src/ts/core/ipc/actions.handlers') as typeof actionsHandlersModule;
+const { getApiStrategy, refreshApi } = require('../../src/ts/core/apiFactory') as typeof apiFactoryModule;
+const { clearAuthToken } = require('../../src/ts/core/services/auth') as typeof authModule;
+const { clearLibraryCache } = require('../../src/ts/core/services/libraryCache') as typeof libraryCacheModule;
 
 // Mock endpoints answer after a simulated delay; give the whole story room.
 jest.setTimeout(30000);

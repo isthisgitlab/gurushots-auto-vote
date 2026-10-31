@@ -4,15 +4,15 @@
  */
 
 import type * as zodModule from 'zod';
-import type * as schemaModule from '../../src/ts/settings/schema';
-import type * as intentProfilesModule from '../../src/ts/settings/intentProfiles';
+import type * as schemaModule from '../../src/ts/core/settings/schema';
+import type * as intentProfilesModule from '../../src/ts/core/settings/intentProfiles';
 import { invalid } from '../helpers/invalid';
 
 const { z } = require('zod') as typeof zodModule;
 const { SETTINGS_SCHEMA, validateSetting, getValidationError } =
-    require('../../src/ts/settings/schema') as typeof schemaModule;
+    require('../../src/ts/core/settings/schema') as typeof schemaModule;
 const { INTENT_PROFILES, getIntentByName, intentValuesMatch } =
-    require('../../src/ts/settings/intentProfiles') as typeof intentProfilesModule;
+    require('../../src/ts/core/settings/intentProfiles') as typeof intentProfilesModule;
 
 describe('schema validation fallbacks', () => {
     test('an unknown key is always valid and has no error', () => {

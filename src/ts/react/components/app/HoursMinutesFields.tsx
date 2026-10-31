@@ -9,7 +9,7 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useLatestRef } from '@/hooks/useLatestRef';
 import { secondsToHoursMinutes, hoursMinutesToSeconds } from '@/utils/timeFieldUnits';
-import { MAX_JOIN_WINDOW_HOURS } from '../../../settings/limits';
+import { MAX_JOIN_WINDOW_HOURS } from '../../../core/settings/limits';
 import { SAVE_ERROR_ID } from '@/components/ui/ModalActionRow';
 
 import { useEffect, useState } from 'react';

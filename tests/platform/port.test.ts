@@ -6,10 +6,10 @@
  */
 
 import { buildNodeTestPlatform, clearInstalledPlatform, installTestPlatform } from '../helpers/platform';
-import { installPlatform, platform } from '../../src/ts/platform/port';
+import { installPlatform, platform } from '../../src/ts/core/platform/port';
 
-import type { ElectronPlatform } from '../../src/ts/platform/port';
-import type * as portModule from '../../src/ts/platform/port';
+import type { ElectronPlatform } from '../../src/ts/core/platform/port';
+import type * as portModule from '../../src/ts/core/platform/port';
 
 describe('the platform port', () => {
     test('platform() throws when nothing is installed', () => {
@@ -40,7 +40,7 @@ describe('the platform port', () => {
         const p = installTestPlatform();
         jest.resetModules();
         jest.isolateModules(() => {
-            const fresh = require('../../src/ts/platform/port') as typeof portModule;
+            const fresh = require('../../src/ts/core/platform/port') as typeof portModule;
             expect(fresh.platform()).toBe(p);
         });
     });

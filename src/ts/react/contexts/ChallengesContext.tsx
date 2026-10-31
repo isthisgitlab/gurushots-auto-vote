@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo } from 'react';
 import { useActiveChallenges } from '@/api/useActiveChallenges';
 
 import type { ComponentChildren } from 'preact';
-import type { Challenge } from '../../types/gurushots';
+import type { Challenge } from '../../core/types/gurushots';
 
 /**
  * What useChallenges returns: the active challenges sorted by close time.

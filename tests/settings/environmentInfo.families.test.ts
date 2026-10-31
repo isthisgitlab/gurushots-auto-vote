@@ -8,12 +8,13 @@
 
 import { installHeadlessTestPlatform, installWebviewTestPlatform } from '../helpers/platform';
 
-import type * as userDataPathsModule from '../../src/ts/settings/userDataPaths';
+import type * as userDataPathsModule from '../../src/ts/core/settings/userDataPaths';
 
 describe('the environment info on the Android shells', () => {
     test('the app WebView pins isElectronPackaged and isBuiltApp false', () => {
         installWebviewTestPlatform();
-        const { getEnvironmentInfo } = require('../../src/ts/settings/userDataPaths') as typeof userDataPathsModule;
+        const { getEnvironmentInfo } =
+            require('../../src/ts/core/settings/userDataPaths') as typeof userDataPathsModule;
         const info = getEnvironmentInfo();
         expect(info.isElectronPackaged).toBe(false);
         expect(info.isBuiltApp).toBe(false);
@@ -21,7 +22,8 @@ describe('the environment info on the Android shells', () => {
 
     test('the headless service pins them false too', () => {
         installHeadlessTestPlatform();
-        const { getEnvironmentInfo } = require('../../src/ts/settings/userDataPaths') as typeof userDataPathsModule;
+        const { getEnvironmentInfo } =
+            require('../../src/ts/core/settings/userDataPaths') as typeof userDataPathsModule;
         const info = getEnvironmentInfo();
         expect(info.isElectronPackaged).toBe(false);
         expect(info.isBuiltApp).toBe(false);

@@ -8,13 +8,13 @@
 
 import type * as scriptModule from '../../scripts/web-server';
 import { clearInstalledPlatform } from '../helpers/platform';
-import type * as serverModule from '../../src/ts/web/server';
+import type * as serverModule from '../../src/ts/shells/web/server';
 
-jest.mock('../../src/ts/web/server', () => ({ startWebServer: jest.fn() }));
+jest.mock('../../src/ts/shells/web/server', () => ({ startWebServer: jest.fn() }));
 
 clearInstalledPlatform();
 const { main, parsePort } = require('../../scripts/web-server') as typeof scriptModule;
-const server = jest.mocked(require('../../src/ts/web/server') as typeof serverModule);
+const server = jest.mocked(require('../../src/ts/shells/web/server') as typeof serverModule);
 
 type Started = Awaited<ReturnType<typeof serverModule.startWebServer>>;
 

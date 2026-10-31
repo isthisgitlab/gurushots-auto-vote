@@ -17,11 +17,11 @@ jest.unmock('node:path');
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { platform } from '../../src/ts/platform/port';
-import type * as storageModule from '../../src/ts/settings/storage';
+import { platform } from '../../src/ts/core/platform/port';
+import type * as storageModule from '../../src/ts/core/settings/storage';
 import { installTestPlatform } from '../helpers/platform';
 
-const { storage, createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+const { storage, createJsonStore } = require('../../src/ts/core/settings/storage') as typeof storageModule;
 
 const modeOf = (p: string) => fs.statSync(p).mode & 0o777;
 

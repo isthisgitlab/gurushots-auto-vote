@@ -1,5 +1,5 @@
 /**
- * Capacitor entry (pages/Capacitor.tsx) — runs its bootstrap at module load:
+ * Capacitor entry (shells/capacitor/page.tsx) — runs its bootstrap at module load:
  * on a native platform installs the bridge and hydrates every write-behind
  * store, wires flush-on-background, clears a leftover token with Stay Logged
  * In off (skipping it while background auto-vote is armed), then mounts Login
@@ -8,9 +8,9 @@
  * bootstrap can be driven per case.
  */
 
-import type { CapacitorGlobals, RendererGlobals } from '../../src/ts/types/capacitor';
-import type { CategoryLogger } from '../../src/ts/logger';
-import type { AutoVoteStatus } from '../../src/ts/services/NativeAutovoteBridge';
+import type { CapacitorGlobals, RendererGlobals } from '../../src/ts/core/types/capacitor';
+import type { CategoryLogger } from '../../src/ts/core/logger';
+import type { AutoVoteStatus } from '../../src/ts/shells/capacitor/NativeAutovoteBridge';
 
 const SRC = '../../src/ts';
 
@@ -60,7 +60,7 @@ describe('Capacitor entry', () => {
     });
 
     /**
-     * Load Capacitor.tsx with mocked collaborators.
+     * Load shells/capacitor/page.tsx with mocked collaborators.
      */
     const load = ({
         native = true,
@@ -151,7 +151,7 @@ describe('Capacitor entry', () => {
             mountLogin: jest.fn(),
         };
         jest.isolateModules(() => {
-            jest.doMock(`${SRC}/bridge/capacitor`, () => ({
+            jest.doMock(`${SRC}/shells/capacitor/bridge/capacitor`, () => ({
                 installBridge: m.installBridge,
                 seedBridgeProfiles: m.seedBridgeProfiles,
                 subscribe: m.subscribe,
@@ -162,41 +162,41 @@ describe('Capacitor entry', () => {
             // imports it would pull in under this file's runtime mock) must
             // not run — and a second, different install would throw on the
             // next isolated load.
-            jest.doMock(`${SRC}/bridge/capacitorPlatform`, () => ({}));
-            jest.doMock(`${SRC}/settings`, () => ({
+            jest.doMock(`${SRC}/shells/capacitor/platform`, () => ({}));
+            jest.doMock(`${SRC}/core/settings`, () => ({
                 initializeAsync: m.initSettings,
                 flushPendingWrites: m.flushPendingWrites,
                 getSetting: m.getSetting,
             }));
-            jest.doMock(`${SRC}/metadata`, () => ({
+            jest.doMock(`${SRC}/core/metadata`, () => ({
                 initializeMetadataAsync: m.initializeMetadataAsync,
                 flushMetadataWrites: m.flushMetadataWrites,
             }));
-            jest.doMock(`${SRC}/joinStateStore`, () => ({
+            jest.doMock(`${SRC}/core/joinStateStore`, () => ({
                 initializeJoinStateAsync: m.initializeJoinStateAsync,
                 flushJoinStateWrites: m.flushJoinStateWrites,
             }));
-            jest.doMock(`${SRC}/swapBackStore`, () => ({
+            jest.doMock(`${SRC}/core/swapBackStore`, () => ({
                 initializeSwapBackAsync: m.initializeSwapBackAsync,
                 flushSwapBackWrites: m.flushSwapBackWrites,
             }));
-            jest.doMock(`${SRC}/currencyAutoStore`, () => ({
+            jest.doMock(`${SRC}/core/currencyAutoStore`, () => ({
                 initializeAutoSpendAsync: m.initializeAutoSpendAsync,
                 flushAutoSpendWrites: m.flushAutoSpendWrites,
             }));
-            jest.doMock(`${SRC}/entryAgeStore`, () => ({
+            jest.doMock(`${SRC}/core/entryAgeStore`, () => ({
                 initializeEntryAgesAsync: m.initializeEntryAgesAsync,
                 flushEntryAgeWrites: m.flushEntryAgeWrites,
             }));
-            jest.doMock(`${SRC}/scenarioStateStore`, () => ({
+            jest.doMock(`${SRC}/core/scenarioStateStore`, () => ({
                 initializeScenarioStateAsync: m.initializeScenarioStateAsync,
                 flushScenarioStateWrites: m.flushScenarioStateWrites,
             }));
-            jest.doMock(`${SRC}/services/semantic/diagnostics`, () => ({
+            jest.doMock(`${SRC}/core/services/semantic/diagnostics`, () => ({
                 initializeDiagnosticsAsync: m.initializeDiagnosticsAsync,
                 flushDiagnosticsWrites: m.flushDiagnosticsWrites,
             }));
-            jest.doMock(`${SRC}/services/photoStats`, () => ({
+            jest.doMock(`${SRC}/core/services/photoStats`, () => ({
                 initializePhotoStatsAsync: m.initializePhotoStatsAsync,
                 flushPhotoStatsWrites: m.flushPhotoStatsWrites,
             }));
@@ -208,17 +208,17 @@ describe('Capacitor entry', () => {
             } else {
                 delete (globalThis as CapacitorGlobals).Capacitor;
             }
-            jest.doMock(`${SRC}/logger`, () => ({ withCategory: m.withCategory }));
-            jest.doMock(`${SRC}/services/auth`, () => ({
+            jest.doMock(`${SRC}/core/logger`, () => ({ withCategory: m.withCategory }));
+            jest.doMock(`${SRC}/core/services/auth`, () => ({
                 clearTokenUnlessStayingLoggedIn: m.clearTokenUnlessStayingLoggedIn,
             }));
-            jest.doMock(`${SRC}/services/NativeAutovoteBridge`, () => ({ getStatus: m.getStatus }));
-            jest.doMock(`${SRC}/bridge/capacitorBackgroundHost`, () => ({
+            jest.doMock(`${SRC}/shells/capacitor/NativeAutovoteBridge`, () => ({ getStatus: m.getStatus }));
+            jest.doMock(`${SRC}/shells/capacitor/bridge/capacitorBackgroundHost`, () => ({
                 capacitorBackgroundHost: m.backgroundHost,
             }));
             jest.doMock('@/pages/App', () => ({ mountApp: m.mountApp }));
             jest.doMock('@/pages/Login', () => ({ mountLogin: m.mountLogin }));
-            require('@/pages/Capacitor');
+            require('../../src/ts/shells/capacitor/page');
         });
         return m;
     };

@@ -3,8 +3,8 @@ import { useIpcQuery } from './useIpcQuery';
 import { useAsyncIpcAction } from './useAsyncIpcAction';
 import * as ipc from './ipc';
 
-import type { Challenge } from '../../types/gurushots';
-import type { EntryPinKind, EntryPins } from '../../types/settings';
+import type { Challenge } from '../../core/types/gurushots';
+import type { EntryPinKind, EntryPins } from '../../core/types/settings';
 import type { IpcQueryApply } from './useIpcQuery';
 
 const NO_PINS: EntryPins = { boost: null, turbo: null };

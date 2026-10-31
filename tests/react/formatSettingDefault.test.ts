@@ -1,6 +1,6 @@
 import type * as formattersModule from '../../src/ts/react/utils/formatters';
 import { fillTemplate } from './helpers/setup';
-import type { Translate } from '../../src/ts/translations/translator';
+import type { Translate } from '../../src/ts/core/translations/translator';
 const { formatSettingDefault } = require('../../src/ts/react/utils/formatters') as typeof formattersModule;
 
 // Minimal stand-in for the React translation function: maps the keys this

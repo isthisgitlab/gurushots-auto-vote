@@ -6,10 +6,10 @@
  * the last 1.x release, over the frozen schema; it never follows the live code.
  */
 
-import { isPlainObject } from '../../../src/ts/plainObject';
-import { V1_SETTINGS_SCHEMA, v1SchemaEntry } from '../../../src/ts/settings/importV1/schema';
+import { isPlainObject } from '../../../src/ts/core/plainObject';
+import { V1_SETTINGS_SCHEMA, v1SchemaEntry } from '../../../src/ts/core/settings/importV1/schema';
 
-import type { V1Blob, V1Values } from '../../../src/ts/settings/importV1/types';
+import type { V1Blob, V1Values } from '../../../src/ts/core/settings/importV1/types';
 
 type ContextValidator = (value: unknown, allSettings: Record<string, unknown>) => boolean;
 

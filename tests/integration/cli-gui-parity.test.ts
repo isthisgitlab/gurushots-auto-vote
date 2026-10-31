@@ -5,27 +5,27 @@
  * in the CLI version, ensuring feature parity between the two interfaces.
  */
 
-const { getMiddleware, getApiStrategy } = require('../../src/ts/apiFactory') as typeof apiFactoryModule;
+const { getMiddleware, getApiStrategy } = require('../../src/ts/core/apiFactory') as typeof apiFactoryModule;
 // The raw surfaces are not exported; the explicit override returns
 // the module-level singletons.
 const realApi = getApiStrategy({ mock: false });
 const mockApi = getApiStrategy({ mock: true });
-import settings = require('../../src/ts/settings');
-import type * as apiFactoryModule from '../../src/ts/apiFactory';
-import type * as authModule from '../../src/ts/services/auth';
-import type * as BaseMiddlewareModule from '../../src/ts/services/BaseMiddleware';
-const { LogoutNotSavedError } = require('../../src/ts/services/auth') as typeof authModule;
-const { BaseMiddleware } = require('../../src/ts/services/BaseMiddleware') as typeof BaseMiddlewareModule;
+import settings = require('../../src/ts/core/settings');
+import type * as apiFactoryModule from '../../src/ts/core/apiFactory';
+import type * as authModule from '../../src/ts/core/services/auth';
+import type * as BaseMiddlewareModule from '../../src/ts/core/services/BaseMiddleware';
+const { LogoutNotSavedError } = require('../../src/ts/core/services/auth') as typeof authModule;
+const { BaseMiddleware } = require('../../src/ts/core/services/BaseMiddleware') as typeof BaseMiddlewareModule;
 
 // Mock the API client for testing
-jest.mock('../../src/ts/api/api-client', () => ({
+jest.mock('../../src/ts/core/api/api-client', () => ({
     makePostRequest: jest.fn(),
     createCommonHeaders: jest.fn(),
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded',
 }));
 
 // Mock the logger
-jest.mock('../../src/ts/logger', () => ({
+jest.mock('../../src/ts/core/logger', () => ({
     log: jest.fn(),
     warn: jest.fn(),
     error: jest.fn(),

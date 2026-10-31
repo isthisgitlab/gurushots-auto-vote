@@ -12,7 +12,7 @@ import { ChosenPhotosControl } from '@/components/app/ChosenPhotosField';
 import { rememberCurrentMember } from '@/hooks/currentMember';
 import { buildPhotoUrl } from '@/utils/formatters';
 import { SettingsChallengeProvider } from '@/contexts/SettingsChallengeContext';
-import type { SerializableSchemaEntry } from '../../src/ts/ipc/settings.handlers';
+import type { SerializableSchemaEntry } from '../../src/ts/core/ipc/settings.handlers';
 import { invalid } from '../helpers/invalid';
 
 const MEMBER = 'c'.repeat(32);

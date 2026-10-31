@@ -3,35 +3,35 @@
  * modules have always registered in, and the log module's fan-out hook is installed on the global the logger reads.
  */
 
-import type * as registerIpcModule from '../../src/ts/ipc/registerIpc';
-import type * as actions_handlersModule from '../../src/ts/ipc/actions.handlers';
-import type * as computations_handlersModule from '../../src/ts/ipc/computations.handlers';
-import type * as currency_handlersModule from '../../src/ts/ipc/currency.handlers';
-import type * as log_handlersModule from '../../src/ts/ipc/log.handlers';
-import type * as misc_handlersModule from '../../src/ts/ipc/misc.handlers';
-import type * as scenarios_handlersModule from '../../src/ts/ipc/scenarios.handlers';
-import type * as settings_handlersModule from '../../src/ts/ipc/settings.handlers';
-import type * as update_handlersModule from '../../src/ts/ipc/update.handlers';
-import type * as voting_handlersModule from '../../src/ts/ipc/voting.handlers';
+import type * as registerIpcModule from '../../src/ts/shells/electron/registerIpc';
+import type * as actions_handlersModule from '../../src/ts/core/ipc/actions.handlers';
+import type * as computations_handlersModule from '../../src/ts/core/ipc/computations.handlers';
+import type * as currency_handlersModule from '../../src/ts/core/ipc/currency.handlers';
+import type * as log_handlersModule from '../../src/ts/core/ipc/log.handlers';
+import type * as misc_handlersModule from '../../src/ts/shells/electron/misc.handlers';
+import type * as scenarios_handlersModule from '../../src/ts/core/ipc/scenarios.handlers';
+import type * as settings_handlersModule from '../../src/ts/core/ipc/settings.handlers';
+import type * as update_handlersModule from '../../src/ts/shells/electron/update.handlers';
+import type * as voting_handlersModule from '../../src/ts/core/ipc/voting.handlers';
 import type { IpcMain } from 'electron';
 import { invalid } from '../helpers/invalid';
 
 jest.mock('electron', () => ({ shell: { openExternal: jest.fn() } }));
-jest.mock('../../src/ts/services/AutoUpdater', () => ({ AutoUpdater: jest.fn() }));
-jest.mock('../../src/ts/ui/applicationMenu', () => ({ updateMenuTranslations: jest.fn() }));
+jest.mock('../../src/ts/shells/electron/AutoUpdater', () => ({ AutoUpdater: jest.fn() }));
+jest.mock('../../src/ts/shells/electron/ui/applicationMenu', () => ({ updateMenuTranslations: jest.fn() }));
 
 type ChannelImpl = Parameters<IpcMain['handle']>[1];
 
-const { registerIpc } = require('../../src/ts/ipc/registerIpc') as typeof registerIpcModule;
-const logIpc = require('../../src/ts/ipc/log.handlers') as typeof log_handlersModule;
-const updateIpc = require('../../src/ts/ipc/update.handlers') as typeof update_handlersModule;
-const miscIpc = require('../../src/ts/ipc/misc.handlers') as typeof misc_handlersModule;
-const settingsIpc = require('../../src/ts/ipc/settings.handlers') as typeof settings_handlersModule;
-const votingIpc = require('../../src/ts/ipc/voting.handlers') as typeof voting_handlersModule;
-const actionsIpc = require('../../src/ts/ipc/actions.handlers') as typeof actions_handlersModule;
-const computationsIpc = require('../../src/ts/ipc/computations.handlers') as typeof computations_handlersModule;
-const currencyIpc = require('../../src/ts/ipc/currency.handlers') as typeof currency_handlersModule;
-const scenariosIpc = require('../../src/ts/ipc/scenarios.handlers') as typeof scenarios_handlersModule;
+const { registerIpc } = require('../../src/ts/shells/electron/registerIpc') as typeof registerIpcModule;
+const logIpc = require('../../src/ts/core/ipc/log.handlers') as typeof log_handlersModule;
+const updateIpc = require('../../src/ts/shells/electron/update.handlers') as typeof update_handlersModule;
+const miscIpc = require('../../src/ts/shells/electron/misc.handlers') as typeof misc_handlersModule;
+const settingsIpc = require('../../src/ts/core/ipc/settings.handlers') as typeof settings_handlersModule;
+const votingIpc = require('../../src/ts/core/ipc/voting.handlers') as typeof voting_handlersModule;
+const actionsIpc = require('../../src/ts/core/ipc/actions.handlers') as typeof actions_handlersModule;
+const computationsIpc = require('../../src/ts/core/ipc/computations.handlers') as typeof computations_handlersModule;
+const currencyIpc = require('../../src/ts/core/ipc/currency.handlers') as typeof currency_handlersModule;
+const scenariosIpc = require('../../src/ts/core/ipc/scenarios.handlers') as typeof scenarios_handlersModule;
 
 const deps = {
     update: { getAutoUpdater: () => null, setAutoUpdater: jest.fn(), getMainWindow: () => null },

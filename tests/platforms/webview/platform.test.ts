@@ -32,11 +32,11 @@ jest.mock('../../../src/ts/platforms/webview/capacitorPreferences', () => ({
 
 import { installWebviewTestPlatform } from '../../helpers/platform';
 import { invalid } from '../../helpers/invalid';
-import { platform } from '../../../src/ts/platform/port';
+import { platform } from '../../../src/ts/core/platform/port';
 import { createWebviewPlatform } from '../../../src/ts/platforms/webview';
 
 import type { AxiosAdapter, AxiosPromise } from 'axios';
-import type { PlatformNative } from '../../../src/ts/platform/port';
+import type { PlatformNative } from '../../../src/ts/core/platform/port';
 
 const webviewHttp = jest.mocked(
     require('../../../src/ts/platforms/webview/http') as typeof import('../../../src/ts/platforms/webview/http'),

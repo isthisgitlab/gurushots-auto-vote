@@ -3,7 +3,7 @@
  * the import preview + --yes gate, file reads/writes and exit codes.
  */
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const calls: { level: string; msg: string }[] = [];
     const rec = (level: string) => (msg: unknown) => calls.push({ level, msg: String(msg) });
     const cat = { info: rec('info'), error: rec('error'), success: rec('success'), warning: rec('warning') };
@@ -15,7 +15,7 @@ jest.mock('../../src/ts/logger', () => {
         printStderr: rec('stderr'),
     };
 });
-jest.mock('../../src/ts/ipc/scenarios.handlers', () => {
+jest.mock('../../src/ts/core/ipc/scenarios.handlers', () => {
     const handlers = Object.fromEntries(
         [
             'get-scenarios',
@@ -38,16 +38,18 @@ jest.mock('node:fs', () => ({ readFileSync: jest.fn(), writeFileSync: jest.fn() 
 import { invalid } from '../helpers/invalid';
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
-import loggerModule = require('../../src/ts/logger');
+import loggerModule = require('../../src/ts/core/logger');
 const logger = jest.mocked(invalid<typeof loggerModule & { __calls: { level: string; msg: string }[] }>(loggerModule));
 type Handlers = ReturnType<typeof scenarios_handlersModule.buildHandlers>;
 type Resolved<K extends keyof Handlers> = Awaited<ReturnType<Handlers[K]>>;
 const { __handlers: h } = jest.mocked(
-    invalid<typeof scenarios_handlersModule & { __handlers: Handlers }>(require('../../src/ts/ipc/scenarios.handlers')),
+    invalid<typeof scenarios_handlersModule & { __handlers: Handlers }>(
+        require('../../src/ts/core/ipc/scenarios.handlers'),
+    ),
 );
-import cmd = require('../../src/ts/cli/commands/scenarios');
-import type * as scenarios_handlersModule from '../../src/ts/ipc/scenarios.handlers';
-import type { ScenarioIssue } from '../../src/ts/settings/scenarioSchema';
+import cmd = require('../../src/ts/shells/cli/commands/scenarios');
+import type * as scenarios_handlersModule from '../../src/ts/core/ipc/scenarios.handlers';
+import type { ScenarioIssue } from '../../src/ts/core/settings/scenarioSchema';
 
 const lines = (level?: string) => logger.__calls.filter((c) => !level || c.level === level).map((c) => c.msg);
 const text = (level?: string) => lines(level).join('\n');

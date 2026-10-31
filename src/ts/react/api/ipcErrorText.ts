@@ -1,4 +1,4 @@
-import type { Translate } from '../../translations/translator';
+import type { Translate } from '../../core/translations/translator';
 
 /**
  * The translation key for each failure a handler (or the login path behind it) reports, by the exact text or

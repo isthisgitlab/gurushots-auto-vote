@@ -14,9 +14,9 @@
  */
 
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
-import settings = require('../../src/ts/settings');
+import settings = require('../../src/ts/core/settings');
 
-jest.mock('../../src/ts/logger', () => ({
+jest.mock('../../src/ts/core/logger', () => ({
     info: jest.fn(),
     warning: jest.fn(),
     error: jest.fn(),

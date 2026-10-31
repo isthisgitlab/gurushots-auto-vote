@@ -5,22 +5,22 @@
  * neither. Mirrors tests/ipc/manifest.test.ts for the Electron shell.
  */
 
-jest.mock('../../src/ts/settings');
-jest.mock('../../src/ts/apiFactory', () => ({
+jest.mock('../../src/ts/core/settings');
+jest.mock('../../src/ts/core/apiFactory', () => ({
     getApiStrategy: jest.fn(),
     getMiddleware: jest.fn(),
     refreshApi: jest.fn(),
 }));
 
-import type * as serverModule from '../../src/ts/web/server';
+import type * as serverModule from '../../src/ts/shells/web/server';
 import { clearInstalledPlatform } from '../helpers/platform';
-import type * as bridgeModule from '../../src/ts/bridge/web';
-import type * as manifestModule from '../../src/ts/ipc/manifest';
+import type * as bridgeModule from '../../src/ts/shells/web/bridge/web';
+import type * as manifestModule from '../../src/ts/core/ipc/manifest';
 
 clearInstalledPlatform();
-const { buildWebHandlers } = require('../../src/ts/web/server') as typeof serverModule;
-const { BROWSER_CHANNELS } = require('../../src/ts/bridge/web') as typeof bridgeModule;
-const { allInvokeChannels } = require('../../src/ts/ipc/manifest') as typeof manifestModule;
+const { buildWebHandlers } = require('../../src/ts/shells/web/server') as typeof serverModule;
+const { BROWSER_CHANNELS } = require('../../src/ts/shells/web/bridge/web') as typeof bridgeModule;
+const { allInvokeChannels } = require('../../src/ts/core/ipc/manifest') as typeof manifestModule;
 
 test('server channels and browser channels partition the manifest invoke surface', () => {
     const served = Object.keys(buildWebHandlers(() => {}));

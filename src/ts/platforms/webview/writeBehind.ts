@@ -11,20 +11,20 @@
  */
 
 import type { PreferencesPlugin } from '@capacitor/preferences';
-import type { CasAnswer, ThroughResult } from '../../types/stores';
+import type { CasAnswer, ThroughResult } from '../../core/types/stores';
 
-type LoggerModule = typeof import('../../logger');
-type StorageModule = typeof import('../../settings/storage');
+type LoggerModule = typeof import('../../core/logger');
+type StorageModule = typeof import('../../core/settings/storage');
 
 // See store.ts's header: the wrapped modules, reached at call time.
-const logger = (): LoggerModule => require('../../logger') as LoggerModule;
+const logger = (): LoggerModule => require('../../core/logger') as LoggerModule;
 // Lazy for both reasons store.ts's header names: this file sits in the shell
 // platform modules' static chain and the settings graph reaches the logger,
 // which reads platform() at load — the install must run first — and a graph
 // loaded in the Jest setup's registry would beat a test file's own mocks.
 // The public storage facade carries SaveConflictError; the facade's
 // internals are private to it.
-const storage = (): StorageModule => require('../../settings/storage') as StorageModule;
+const storage = (): StorageModule => require('../../core/settings/storage') as StorageModule;
 
 // The Preferences keys whose cache holds something known: hydrated, refreshed or written.
 export const knownKeys = new Set<string>();

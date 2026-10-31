@@ -26,10 +26,10 @@
         "es2024": true
     },
     // Type-only declaration files carry no code to lint; tsc checks them.
-    "ignorePatterns": ["src/ts/types/**"],
+    "ignorePatterns": ["src/ts/core/types/**"],
     // eslint:recommended (Oxlint lacks only no-dupe-args and no-octal, both
     // syntax errors in the strict src/ts modules), plus: logging goes through
-    // src/ts/logger.ts (console.warn/error stay for bootstrap code that runs before
+    // src/ts/core/logger.ts (console.warn/error stay for bootstrap code that runs before
     // the logger exists), and _-prefixed args / catch bindings are deliberately
     // unused. No formatting rules anywhere: Prettier owns formatting.
     "rules": {
@@ -112,7 +112,7 @@
     "overrides": [
         // The logger's console sink owns the console, and build/dev scripts print to it.
         {
-            "files": ["src/ts/logger/consoleSink.ts", "scripts/**"],
+            "files": ["src/ts/core/logger/consoleSink.ts", "scripts/**"],
             "rules": {
                 "no-console": "off"
             }
@@ -134,9 +134,9 @@
                 "no-undef": "off"
             }
         },
-        // src/ts/ui (the application menu) is linted with browser and Node globals.
+        // src/ts/shells/electron/ui (the application menu) is linted with browser and Node globals.
         {
-            "files": ["src/ts/ui/**/*.ts"],
+            "files": ["src/ts/shells/electron/ui/**/*.ts"],
             "env": {
                 "browser": true,
                 "node": true
@@ -152,7 +152,7 @@
         // challengeRules stay importable.
         {
             "files": ["src/ts/**/*.ts", "src/ts/**/*.tsx", "scripts/**/*.ts", "scripts/**/*.mts"],
-            "excludeFiles": ["src/ts/settings.ts", "src/ts/settings/**"],
+            "excludeFiles": ["src/ts/core/settings.ts", "src/ts/core/settings/**"],
             "rules": {
                 "no-restricted-imports": [
                     "error",
@@ -160,10 +160,10 @@
                         "patterns": [
                             {
                                 "regex": "(^|/)logger/consoleSink(\\.js)?$",
-                                "message": "consoleSink is the logger's unredacted console path — only src/ts/logger/ may import it; log through the logger."
+                                "message": "consoleSink is the logger's unredacted console path — only src/ts/core/logger/ may import it; log through the logger."
                             },
                             {
-                                "regex": "settings/(atomicWrite|capacitorPreferences|challengeFacts|challengeOverrides|chosenPhotosClear|defaults|formatOneMirror|importMarker|importReport|importV1|importedRecord|jsonStore|legacyImport|loadValidation|logValue|migrations|openChallenges|ownerOnlyWrite|persistence|profileStore|profiles|reset|ruleResolution|saveDropped|scenarioLookup|scenarioOverlay|scenarioSchema|scenarios|settingsFileCapacitor|settingsFileMethods|settingsFileNode|settingsLock|settingsMerge|signInFingerprint|staleChallengeCleanup|storageTypes|titlePins|titleRuleSanitize|titleRules|userDataPaths)(/[^/]+)?(\\.js)?$",
+                                "regex": "settings/(challengeFacts|challengeOverrides|chosenPhotosClear|defaults|formatOneMirror|importMarker|importReport|importV1|importedRecord|jsonStore|legacyImport|loadValidation|logValue|migrations|openChallenges|persistence|profileStore|profiles|reset|ruleResolution|saveDropped|scenarioLookup|scenarioOverlay|scenarioSchema|scenarios|settingsLock|settingsMerge|signInFingerprint|staleChallengeCleanup|storageTypes|titlePins|titleRuleSanitize|titleRules|userDataPaths)(/[^/]+)?(\\.js)?$",
                                 "message": "Settings internals are private to the facade — import settings.ts instead.",
                                 "allowTypeImports": true
                             },
@@ -180,7 +180,7 @@
         // The settings facade's own files are excluded from the override above, but
         // still must not reach the logger's unredacted console path.
         {
-            "files": ["src/ts/settings.ts", "src/ts/settings/**"],
+            "files": ["src/ts/core/settings.ts", "src/ts/core/settings/**"],
             "rules": {
                 "no-restricted-imports": [
                     "error",
@@ -188,7 +188,7 @@
                         "patterns": [
                             {
                                 "regex": "(^|/)logger/consoleSink(\\.js)?$",
-                                "message": "consoleSink is the logger's unredacted console path — only src/ts/logger/ may import it; log through the logger."
+                                "message": "consoleSink is the logger's unredacted console path — only src/ts/core/logger/ may import it; log through the logger."
                             }
                         ]
                     }
@@ -285,15 +285,15 @@
                         ],
                         "patterns": [
                             {
-                                "group": ["**/services/notify/nodeNotify", "**/services/notify/nodeNotify.js"],
+                                "group": ["**/shells/cli/nodeNotify", "**/shells/cli/nodeNotify.js"],
                                 "message": "nodeNotify is a Node-only (child_process) delivery module — never import it into the renderer bundle."
                             },
                             {
                                 "regex": "(^|/)logger/consoleSink(\\.js)?$",
-                                "message": "consoleSink is the logger's unredacted console path — only src/ts/logger/ may import it; log through the logger."
+                                "message": "consoleSink is the logger's unredacted console path — only src/ts/core/logger/ may import it; log through the logger."
                             },
                             {
-                                "regex": "settings/(atomicWrite|capacitorPreferences|challengeFacts|challengeOverrides|chosenPhotosClear|defaults|formatOneMirror|importMarker|importReport|importV1|importedRecord|jsonStore|legacyImport|loadValidation|logValue|migrations|openChallenges|ownerOnlyWrite|persistence|profileStore|profiles|reset|ruleResolution|saveDropped|scenarioLookup|scenarioOverlay|scenarioSchema|scenarios|settingsFileCapacitor|settingsFileMethods|settingsFileNode|settingsLock|settingsMerge|signInFingerprint|staleChallengeCleanup|storageTypes|titlePins|titleRuleSanitize|titleRules|userDataPaths)(/[^/]+)?(\\.js)?$",
+                                "regex": "settings/(challengeFacts|challengeOverrides|chosenPhotosClear|defaults|formatOneMirror|importMarker|importReport|importV1|importedRecord|jsonStore|legacyImport|loadValidation|logValue|migrations|openChallenges|persistence|profileStore|profiles|reset|ruleResolution|saveDropped|scenarioLookup|scenarioOverlay|scenarioSchema|scenarios|settingsLock|settingsMerge|signInFingerprint|staleChallengeCleanup|storageTypes|titlePins|titleRuleSanitize|titleRules|userDataPaths)(/[^/]+)?(\\.js)?$",
                                 "message": "Settings internals are private to the facade — import settings.ts instead.",
                                 "allowTypeImports": true
                             },

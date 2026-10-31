@@ -9,8 +9,8 @@ import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal'
 import { mockApi, mockTranslator, fillTemplate } from './helpers/setup';
 import { titleRuleInfo } from './helpers/titleRules';
 import type { useSettingsSchema } from '@/api/useSettingsSchema';
-import type { Challenge } from '../../src/ts/types/gurushots';
-import type { RendererSettings } from '../../src/ts/types/settings';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
+import type { RendererSettings } from '../../src/ts/core/types/settings';
 import { invalid } from '../helpers/invalid';
 
 const field = (group: string, type: string, dflt: unknown) => ({

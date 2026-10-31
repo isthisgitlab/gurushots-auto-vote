@@ -9,7 +9,7 @@
 import { mountApp } from './App';
 import { mountLogin } from './Login';
 
-import type { BackgroundHost } from '../../autovote/controller';
+import type { BackgroundHost } from '../../core/autovote/controller';
 
 /**
  * The app root still standing, if any. It holds the autovote controller's

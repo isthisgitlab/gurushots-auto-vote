@@ -4,19 +4,19 @@ import { getGroupApplicability } from '@/utils/challengeApplicability';
 import { formatSettingDefault } from '@/utils/formatters';
 import { sourceBadgeTone } from '@/utils/customizationTone';
 import type { CustomizationSource } from '@/utils/customizationTone';
-import { getScheduleShift } from '../../../services/scheduleRemap';
+import { getScheduleShift } from '../../../core/services/scheduleRemap';
 import { SettingHelp } from '@/components/ui/SettingHelp';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { SettingInput, SettingLabel } from './SettingInput';
 import { SettingHintList } from './SettingHints';
 
-import type { SerializableSchemaEntry } from '../../../ipc/settings.handlers';
+import type { SerializableSchemaEntry } from '../../../core/ipc/settings.handlers';
 import type { useChallengeOverrides } from '@/hooks/useChallengeOverrides';
 import type { ComponentChildren } from 'preact';
-import type { Challenge } from '../../../types/gurushots';
-import type { RuleSource } from '../../../types/settings';
-import type { FillSchedule } from '../../../services/scheduleRemap';
-import type { HintsFor } from '../../../types/settingsEditor';
+import type { Challenge } from '../../../core/types/gurushots';
+import type { RuleSource } from '../../../core/types/settings';
+import type { FillSchedule } from '../../../core/services/scheduleRemap';
+import type { HintsFor } from '../../../core/types/settingsEditor';
 
 /**
  * What every cell of a per-challenge settings group reads: the challenge, the

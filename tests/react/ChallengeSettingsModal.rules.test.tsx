@@ -10,7 +10,7 @@ import { mockApi, mockTranslator, fillTemplate } from './helpers/setup';
 import { titleRuleInfo } from './helpers/titleRules';
 import type { useSettingsSchema } from '@/api/useSettingsSchema';
 import { invalid } from '../helpers/invalid';
-import { app as lvApp } from '../../src/ts/translations/latvian';
+import { app as lvApp } from '../../src/ts/core/translations/latvian';
 
 const field = (type: string, dflt: unknown, label: string) => ({
     type,

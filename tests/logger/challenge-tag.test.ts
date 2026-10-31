@@ -5,7 +5,7 @@
  * synthetic log line (log injection) in the plain-text log file.
  */
 
-const { challengeTag } = jest.requireActual<typeof import('../../src/ts/logger')>('../../src/ts/logger');
+const { challengeTag } = jest.requireActual<typeof import('../../src/ts/core/logger')>('../../src/ts/core/logger');
 
 describe('challengeTag', () => {
     test('formats a challenge object', () => {

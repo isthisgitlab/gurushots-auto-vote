@@ -5,16 +5,16 @@
  * lists are treated as empty.
  */
 
-import type * as thresholdWindowModule from '../../src/ts/scheduling/thresholdWindow';
-import type * as scheduledFillModule from '../../src/ts/scheduling/scheduledFill';
-import type * as cadenceChainModule from '../../src/ts/scheduling/cadenceChain';
-import type * as randomDelayModule from '../../src/ts/scheduling/randomDelay';
-import type { TimerHandle } from '../../src/ts/scheduling/cadenceChain';
+import type * as thresholdWindowModule from '../../src/ts/core/scheduling/thresholdWindow';
+import type * as scheduledFillModule from '../../src/ts/core/scheduling/scheduledFill';
+import type * as cadenceChainModule from '../../src/ts/core/scheduling/cadenceChain';
+import type * as randomDelayModule from '../../src/ts/core/scheduling/randomDelay';
+import type { TimerHandle } from '../../src/ts/core/scheduling/cadenceChain';
 import { invalid } from '../helpers/invalid';
 
 const { soonestFinalWindowTopUpStart, soonestBoostPrefillStart, calculateNextThresholdEntry } =
-    require('../../src/ts/scheduling/thresholdWindow') as typeof thresholdWindowModule;
-const { soonestScheduledStart } = require('../../src/ts/scheduling/scheduledFill') as typeof scheduledFillModule;
+    require('../../src/ts/core/scheduling/thresholdWindow') as typeof thresholdWindowModule;
+const { soonestScheduledStart } = require('../../src/ts/core/scheduling/scheduledFill') as typeof scheduledFillModule;
 
 const NOW = 1_700_000_000;
 
@@ -86,8 +86,8 @@ describe('soonestScheduledStart', () => {
 });
 
 describe('createCadenceChain transport fallbacks', () => {
-    const { createCadenceChain } = require('../../src/ts/scheduling/cadenceChain') as typeof cadenceChainModule;
-    const { MS_PER_MINUTE } = require('../../src/ts/scheduling/randomDelay') as typeof randomDelayModule;
+    const { createCadenceChain } = require('../../src/ts/core/scheduling/cadenceChain') as typeof cadenceChainModule;
+    const { MS_PER_MINUTE } = require('../../src/ts/core/scheduling/randomDelay') as typeof randomDelayModule;
 
     const makeDeps = (overrides = {}) => {
         let timer: TimerHandle | null = null;
@@ -142,8 +142,8 @@ describe('createCadenceChain transport fallbacks', () => {
 });
 
 describe('overslept hook rejection', () => {
-    const { createCadenceChain } = require('../../src/ts/scheduling/cadenceChain') as typeof cadenceChainModule;
-    const { MS_PER_MINUTE } = require('../../src/ts/scheduling/randomDelay') as typeof randomDelayModule;
+    const { createCadenceChain } = require('../../src/ts/core/scheduling/cadenceChain') as typeof cadenceChainModule;
+    const { MS_PER_MINUTE } = require('../../src/ts/core/scheduling/randomDelay') as typeof randomDelayModule;
 
     beforeEach(() => jest.useFakeTimers());
     afterEach(() => {

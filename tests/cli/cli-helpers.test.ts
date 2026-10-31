@@ -5,14 +5,14 @@
  * stubbed to throw so a guard's early exit halts the helper like the real one.
  */
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const calls: { level: string; msg: unknown }[] = [];
     const rec = (level: string) => (msg: unknown) => calls.push({ level, msg });
     const cat = { info: rec('info'), error: rec('error') };
     return { __calls: calls, withCategory: jest.fn(() => cat) };
 });
 
-jest.mock('../../src/ts/apiFactory', () => {
+jest.mock('../../src/ts/core/apiFactory', () => {
     const isAuthenticated = jest.fn(() => true);
     return { __isAuthenticated: isAuthenticated, getMiddleware: jest.fn(() => ({ isAuthenticated })) };
 });
@@ -20,9 +20,9 @@ jest.mock('../../src/ts/apiFactory', () => {
 jest.mock('node:readline', () => ({ createInterface: jest.fn(() => ({ tag: 'rl' })) }));
 
 import { invalid } from '../helpers/invalid';
-import loggerModule = require('../../src/ts/logger');
+import loggerModule = require('../../src/ts/core/logger');
 const logger = jest.mocked(invalid<typeof loggerModule & { __calls: { level: string; msg: unknown }[] }>(loggerModule));
-import apiFactoryModule = require('../../src/ts/apiFactory');
+import apiFactoryModule = require('../../src/ts/core/apiFactory');
 const apiFactory = jest.mocked(
     invalid<
         typeof apiFactoryModule & {
@@ -32,14 +32,14 @@ const apiFactory = jest.mocked(
 );
 import readlineModule = require('node:readline');
 const readline = jest.mocked(readlineModule);
-import type * as guardsModule from '../../src/ts/cli/guards';
-import type * as promptsModule from '../../src/ts/cli/prompts';
-import type * as parseValueModule from '../../src/ts/cli/parseValue';
+import type * as guardsModule from '../../src/ts/shells/cli/guards';
+import type * as promptsModule from '../../src/ts/shells/cli/prompts';
+import type * as parseValueModule from '../../src/ts/shells/cli/parseValue';
 const { ensureAuthenticated, requireProfileArgs, requireChallenge } =
-    require('../../src/ts/cli/guards') as typeof guardsModule;
+    require('../../src/ts/shells/cli/guards') as typeof guardsModule;
 const { createReadlineInterface, askYesNo, askInput, askSecret } =
-    require('../../src/ts/cli/prompts') as typeof promptsModule;
-const { parseSettingValue } = require('../../src/ts/cli/parseValue') as typeof parseValueModule;
+    require('../../src/ts/shells/cli/prompts') as typeof promptsModule;
+const { parseSettingValue } = require('../../src/ts/shells/cli/parseValue') as typeof parseValueModule;
 
 const msgs = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => c.msg);
 

@@ -6,27 +6,27 @@
  * can be reached directly.
  */
 
-jest.mock('../../src/ts/services/VotingLogic', () => ({ pickBoostEntry: jest.fn() }));
+jest.mock('../../src/ts/core/services/VotingLogic', () => ({ pickBoostEntry: jest.fn() }));
 
-jest.mock('../../src/ts/api/api-client', () => ({
+jest.mock('../../src/ts/core/api/api-client', () => ({
     makePostRequest: jest.fn(),
     createCommonHeaders: jest.fn((token: string) => ({ 'x-token': token })),
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8',
 }));
 
-const { pickBoostEntry } = jest.mocked(require('../../src/ts/services/VotingLogic') as typeof VotingLogicModule);
-const { makePostRequest } = jest.mocked(require('../../src/ts/api/api-client') as typeof api_clientModule);
-const { ENDPOINTS } = require('../../src/ts/api/constants') as typeof constantsModule;
-import logger = require('../../src/ts/logger');
-import type * as VotingLogicModule from '../../src/ts/services/VotingLogic';
-import type * as api_clientModule from '../../src/ts/api/api-client';
-import type * as constantsModule from '../../src/ts/api/constants';
-import type * as boostModule from '../../src/ts/api/boost';
-import type * as applyBoostModule from '../../src/ts/strategies/real/applyBoost';
-const { applyBoostToEntry } = require('../../src/ts/api/boost') as typeof boostModule;
-const { applyBoost } = require('../../src/ts/strategies/real/applyBoost') as typeof applyBoostModule;
-import type { CategoryLogger } from '../../src/ts/logger';
-import type { RankingEntry } from '../../src/ts/types/gurushots';
+const { pickBoostEntry } = jest.mocked(require('../../src/ts/core/services/VotingLogic') as typeof VotingLogicModule);
+const { makePostRequest } = jest.mocked(require('../../src/ts/core/api/api-client') as typeof api_clientModule);
+const { ENDPOINTS } = require('../../src/ts/core/api/constants') as typeof constantsModule;
+import logger = require('../../src/ts/core/logger');
+import type * as VotingLogicModule from '../../src/ts/core/services/VotingLogic';
+import type * as api_clientModule from '../../src/ts/core/api/api-client';
+import type * as constantsModule from '../../src/ts/core/api/constants';
+import type * as boostModule from '../../src/ts/core/api/boost';
+import type * as applyBoostModule from '../../src/ts/core/strategies/real/applyBoost';
+const { applyBoostToEntry } = require('../../src/ts/core/api/boost') as typeof boostModule;
+const { applyBoost } = require('../../src/ts/core/strategies/real/applyBoost') as typeof applyBoostModule;
+import type { CategoryLogger } from '../../src/ts/core/logger';
+import type { RankingEntry } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 const scopedErrors = () =>

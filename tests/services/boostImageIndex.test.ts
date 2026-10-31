@@ -20,36 +20,36 @@
  * which we mock here for determinism.
  */
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-const { applyBoost } = require('../../src/ts/strategies/real/applyBoost') as typeof applyBoostModule;
+const { applyBoost } = require('../../src/ts/core/strategies/real/applyBoost') as typeof applyBoostModule;
 const { resolveEntryIndex, pickEntryAvoidingConflict } =
-    require('../../src/ts/services/VotingLogic') as typeof VotingLogicModule;
-import apiClientModule = require('../../src/ts/api/api-client');
+    require('../../src/ts/core/services/VotingLogic') as typeof VotingLogicModule;
+import apiClientModule = require('../../src/ts/core/api/api-client');
 const apiClient = jest.mocked(apiClientModule);
-import type * as applyBoostModule from '../../src/ts/strategies/real/applyBoost';
-import type * as VotingLogicModule from '../../src/ts/services/VotingLogic';
+import type * as applyBoostModule from '../../src/ts/core/strategies/real/applyBoost';
+import type * as VotingLogicModule from '../../src/ts/core/services/VotingLogic';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-import type * as autoFillModule from '../../src/ts/services/autoFill';
-import type { Challenge, RankingEntry } from '../../src/ts/types/gurushots';
-import type { CategoryLogger } from '../../src/ts/logger';
-import logger = require('../../src/ts/logger');
+import type * as autoFillModule from '../../src/ts/core/services/autoFill';
+import type { Challenge, RankingEntry } from '../../src/ts/core/types/gurushots';
+import type { CategoryLogger } from '../../src/ts/core/logger';
+import logger = require('../../src/ts/core/logger');
 import { invalid } from '../helpers/invalid';
 const { buildChallenge: buildBaseChallenge } =
     require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     getEffectiveSetting: jest.fn(),
     getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
 }));
 
-jest.mock('../../src/ts/api/api-client', () => ({
+jest.mock('../../src/ts/core/api/api-client', () => ({
     makePostRequest: jest.fn(),
     createCommonHeaders: jest.fn(() => ({ 'x-token': 'mock-token' })),
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8',
 }));
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const { renderLogTemplate } = require('../helpers/logTemplate') as typeof import('../helpers/logTemplate');
     const info = jest.fn();
     const warning = jest.fn();
@@ -341,7 +341,7 @@ describe('same-pass boost/turbo conflict reflection', () => {
     });
 
     test('reflectEntryFlag marks a turboed entry so a later boost avoids it', () => {
-        const { reflectEntryFlag } = require('../../src/ts/services/autoFill') as typeof autoFillModule;
+        const { reflectEntryFlag } = require('../../src/ts/core/services/autoFill') as typeof autoFillModule;
         const challenge = buildChallenge([{ id: 'e1' }, { id: 'e2' }]);
 
         reflectEntryFlag(challenge, 'e1', 'turbo');
@@ -352,7 +352,7 @@ describe('same-pass boost/turbo conflict reflection', () => {
     });
 
     test('reflectEntryFlag is a no-op for an unknown id or a missing entry list', () => {
-        const { reflectEntryFlag } = require('../../src/ts/services/autoFill') as typeof autoFillModule;
+        const { reflectEntryFlag } = require('../../src/ts/core/services/autoFill') as typeof autoFillModule;
         const challenge = buildChallenge([{ id: 'e1' }]);
 
         expect(() => reflectEntryFlag(challenge, 'nope', 'turbo')).not.toThrow();

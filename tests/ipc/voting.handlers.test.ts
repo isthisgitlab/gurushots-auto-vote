@@ -9,31 +9,31 @@
  * inner mechanic lives in BaseMiddleware and has its own coverage.
  */
 
-jest.mock('../../src/ts/settings');
-jest.mock('../../src/ts/apiFactory');
-jest.mock('../../src/ts/voting/cancellation');
-jest.mock('../../src/ts/services/manualVote', () => ({
+jest.mock('../../src/ts/core/settings');
+jest.mock('../../src/ts/core/apiFactory');
+jest.mock('../../src/ts/core/voting/cancellation');
+jest.mock('../../src/ts/core/services/manualVote', () => ({
     submitVotesForChallenge: jest.fn(),
     voteAllChallengesManual: jest.fn(),
     STAGGER_MS: 0,
 }));
 
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import apiFactoryModule = require('../../src/ts/apiFactory');
+import apiFactoryModule = require('../../src/ts/core/apiFactory');
 const apiFactory = jest.mocked(apiFactoryModule);
-import cancellationModule = require('../../src/ts/voting/cancellation');
+import cancellationModule = require('../../src/ts/core/voting/cancellation');
 const cancellation = jest.mocked(cancellationModule);
-import manualVoteModule = require('../../src/ts/services/manualVote');
+import manualVoteModule = require('../../src/ts/core/services/manualVote');
 const manualVote = jest.mocked(manualVoteModule);
-import type * as voting_handlersModule from '../../src/ts/ipc/voting.handlers';
+import type * as voting_handlersModule from '../../src/ts/core/ipc/voting.handlers';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import type * as logCategoriesModule from '../helpers/logCategories';
-import type * as loggerModule from '../../src/ts/logger';
-const { buildHandlers } = require('../../src/ts/ipc/voting.handlers') as typeof voting_handlersModule;
+import type * as loggerModule from '../../src/ts/core/logger';
+const { buildHandlers } = require('../../src/ts/core/ipc/voting.handlers') as typeof voting_handlersModule;
 const { buildChallenge: buildBaseChallenge } =
     require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 const { logCategories } = require('../helpers/logCategories') as typeof logCategoriesModule;
@@ -432,7 +432,7 @@ describe('vote-all-challenges-manual progress callback', () => {
         // logger is the global jest.fn() mock from tests/setup.ts; swap its
         // implementation and put the original back (spyOn + mockRestore would
         // strip the setup implementation and break later tests).
-        const logger = jest.mocked(require('../../src/ts/logger') as typeof loggerModule);
+        const logger = jest.mocked(require('../../src/ts/core/logger') as typeof loggerModule);
         const progress = jest.fn();
         const originalImpl = logger.withCategory.getMockImplementation();
         logger.withCategory.mockImplementation(() =>

@@ -6,21 +6,21 @@
  * resolves the code it needs, and the value it answers, on each call.
  */
 
-import { UserDataUnavailableError } from '../../platform/userDataUnavailable';
+import { UserDataUnavailableError } from '../../core/platform/userDataUnavailable';
 
-import type { PlatformPaths } from '../../platform/port';
+import type { PlatformPaths } from '../../core/platform/port';
 
 type AppPathsModule = typeof import('../../appPaths');
-type AppIdentityModule = typeof import('../../platform/appIdentity');
-type LoggerModule = typeof import('../../logger');
+type AppIdentityModule = typeof import('../../core/platform/appIdentity');
+type LoggerModule = typeof import('../../core/logger');
 type FsModule = typeof import('node:fs');
 type PathModule = typeof import('node:path');
 type OsModule = typeof import('node:os');
 
 // See the header: the wrapped modules, reached at call time.
 const appPaths = (): AppPathsModule => require('../../appPaths') as AppPathsModule;
-const appIdentity = (): AppIdentityModule => require('../../platform/appIdentity') as AppIdentityModule;
-const logger = (): LoggerModule => require('../../logger') as LoggerModule;
+const appIdentity = (): AppIdentityModule => require('../../core/platform/appIdentity') as AppIdentityModule;
+const logger = (): LoggerModule => require('../../core/logger') as LoggerModule;
 const nodeFs = (): FsModule => require('node:fs') as FsModule;
 const nodePath = (): PathModule => require('node:path') as PathModule;
 const nodeOs = (): OsModule => require('node:os') as OsModule;

@@ -5,7 +5,7 @@
  * with its collaborators doMock'ed.
  */
 
-import type { RendererGlobals } from '../../src/ts/types/capacitor';
+import type { RendererGlobals } from '../../src/ts/core/types/capacitor';
 
 const SRC = '../../src/ts';
 
@@ -42,7 +42,7 @@ describe('Web entry', () => {
             mountLogin: jest.fn(),
         };
         jest.isolateModules(() => {
-            jest.doMock(`${SRC}/bridge/web`, () => ({
+            jest.doMock(`${SRC}/shells/web/bridge/web`, () => ({
                 installWebBridge: m.installWebBridge,
                 onShellEvent: m.onShellEvent,
             }));
@@ -50,7 +50,7 @@ describe('Web entry', () => {
             jest.doMock('@/contexts/noopBackgroundHost', () => ({ noopBackgroundHost: m.noopHost }));
             jest.doMock('@/pages/App', () => ({ mountApp: m.mountApp }));
             jest.doMock('@/pages/Login', () => ({ mountLogin: m.mountLogin }));
-            require('@/pages/Web');
+            require('../../src/ts/shells/web/page');
         });
         return m;
     };

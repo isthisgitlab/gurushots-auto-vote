@@ -1,4 +1,4 @@
-import type { EntryEnteredTime } from '../../../types/gurushots';
+import type { EntryEnteredTime } from '../../../core/types/gurushots';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { formatEndTime } from '@/utils/formatters';
 

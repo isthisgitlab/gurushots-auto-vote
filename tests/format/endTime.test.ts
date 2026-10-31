@@ -3,7 +3,7 @@
  * timezone, in the given locale.
  */
 
-import { endTimeOf, formatEndTimeIn } from '../../src/ts/format/endTime';
+import { endTimeOf, formatEndTimeIn } from '../../src/ts/core/format/endTime';
 
 // 2023-11-14 22:13 UTC.
 const END = 1_700_000_000;

@@ -5,8 +5,8 @@
  * registers a webContents and fans log entries out to it.
  */
 
-import type * as loggerModule from '../../src/ts/logger';
-import type * as logHandlersModule from '../../src/ts/ipc/log.handlers';
+import type * as loggerModule from '../../src/ts/core/logger';
+import type * as logHandlersModule from '../../src/ts/core/ipc/log.handlers';
 import { invalid } from '../helpers/invalid';
 
 // The factory below also exposes the per-category loggers it hands out.
@@ -15,7 +15,7 @@ type MockedLogger = jest.MockedObject<typeof loggerModule> & { categories: Recor
 type Handlers = ReturnType<typeof logHandlersModule.buildHandlers>;
 const g = global as typeof global & { sendLogToGUI?: unknown };
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const categories: Record<string, CategoryMock> = {};
     const withCategory = jest.fn((name: string) => {
         categories[name] = categories[name] || {
@@ -29,9 +29,9 @@ jest.mock('../../src/ts/logger', () => {
     return {
         categories,
         withCategory,
-        sanitizeLogString:
-            jest.requireActual<typeof import('../../src/ts/logger/sanitize')>('../../src/ts/logger/sanitize')
-                .sanitizeLogString,
+        sanitizeLogString: jest.requireActual<typeof import('../../src/ts/core/logger/sanitize')>(
+            '../../src/ts/core/logger/sanitize',
+        ).sanitizeLogString,
         setContext: jest.fn(),
         clearContext: jest.fn(),
         getLogFile: jest.fn(() => '/logs/app.log'),
@@ -49,7 +49,7 @@ describe('log.handlers — stream lifecycle', () => {
     // empty each time — no registered webContents bleeds across tests.
     beforeEach(() => {
         jest.resetModules();
-        logHandlers = require('../../src/ts/ipc/log.handlers') as typeof logHandlers;
+        logHandlers = require('../../src/ts/core/ipc/log.handlers') as typeof logHandlers;
         handlers = logHandlers.buildHandlers();
     });
 
@@ -81,9 +81,9 @@ describe('log.handlers — renderer log writes and file lookups', () => {
 
     beforeEach(() => {
         jest.resetModules();
-        logger = require('../../src/ts/logger') as typeof logger;
+        logger = require('../../src/ts/core/logger') as typeof logger;
         handlers = (
-            require('../../src/ts/ipc/log.handlers') as typeof import('../../src/ts/ipc/log.handlers')
+            require('../../src/ts/core/ipc/log.handlers') as typeof import('../../src/ts/core/ipc/log.handlers')
         ).buildHandlers();
     });
 
@@ -166,8 +166,8 @@ describe('log.handlers — stream edge cases', () => {
 
     beforeEach(() => {
         jest.resetModules();
-        logger = require('../../src/ts/logger') as typeof logger;
-        logHandlers = require('../../src/ts/ipc/log.handlers') as typeof logHandlers;
+        logger = require('../../src/ts/core/logger') as typeof logger;
+        logHandlers = require('../../src/ts/core/ipc/log.handlers') as typeof logHandlers;
         handlers = logHandlers.buildHandlers();
     });
 

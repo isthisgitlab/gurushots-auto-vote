@@ -1,4 +1,4 @@
-import type { Bankroll, Challenge } from '../../../types/gurushots';
+import type { Bankroll, Challenge } from '../../../core/types/gurushots';
 import { useState, useCallback, useLayoutEffect } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useChallenges } from '@/contexts/ChallengesContext';

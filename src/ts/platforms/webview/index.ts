@@ -27,7 +27,7 @@ import { createWebviewPaths } from './paths';
 import { createWebviewStorage } from './store';
 import { createWebviewWipe } from './wipe';
 
-import type { Platform, PlatformCas, PlatformNative, PlatformWindows, PlatformWipe } from '../../platform/port';
+import type { Platform, PlatformCas, PlatformNative, PlatformWindows, PlatformWipe } from '../../core/platform/port';
 
 /** The parts the shell module passes in: the native members and the windows, all required. */
 type WebviewNativeParts = {

@@ -19,11 +19,11 @@ import childProcess = require('node:child_process');
 const mockSea = { getAsset: jest.fn<string | Buffer, [key: string, encoding?: string]>() };
 jest.mock('node:sea', () => mockSea, { virtual: true });
 
-import { platform } from '../../src/ts/platform/port';
+import { platform } from '../../src/ts/core/platform/port';
 import { installTestPlatform } from '../helpers/platform';
-import type * as visionCliAssetsModule from '../../src/ts/services/visionCliAssets';
+import type * as visionCliAssetsModule from '../../src/ts/shells/cli/visionCliAssets';
 const { extractVisionCliAssets, digestVisionRuntime } =
-    require('../../src/ts/services/visionCliAssets') as typeof visionCliAssetsModule;
+    require('../../src/ts/shells/cli/visionCliAssets') as typeof visionCliAssetsModule;
 
 // The vision directory's parent comes from the platform (the CLI's user-data
 // directory): each test points the installed platform at its own directory.

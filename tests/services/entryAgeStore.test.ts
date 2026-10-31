@@ -3,10 +3,10 @@
  * photo a boost fill-new is waiting on, behind boostFreshEntryWait.
  */
 
-import logger = require('../../src/ts/logger');
-import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
-import type { Challenge } from '../../src/ts/types/gurushots';
-import type { EntryAgeRecord, ThroughResult } from '../../src/ts/types/stores';
+import logger = require('../../src/ts/core/logger');
+import type * as entryAgeStoreModule from '../../src/ts/core/entryAgeStore';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
+import type { EntryAgeRecord, ThroughResult } from '../../src/ts/core/types/stores';
 import { invalid } from '../helpers/invalid';
 import {
     isArrayOf,
@@ -20,7 +20,7 @@ import {
     parseJsonAs,
 } from '../helpers/parseJson';
 const { createEntryAgeLedger, createMemoryEntryAgeLedger } =
-    require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
+    require('../../src/ts/core/entryAgeStore') as typeof entryAgeStoreModule;
 
 const NOW = 1_800_000_000;
 

@@ -13,7 +13,7 @@ import { invalid } from '../../helpers/invalid';
 
 import type * as node_fsModule from 'node:fs';
 import type * as node_osModule from 'node:os';
-import type * as appIdentityModule from '../../../src/ts/platform/appIdentity';
+import type * as appIdentityModule from '../../../src/ts/core/platform/appIdentity';
 
 const fs = jest.mocked(require('node:fs') as typeof node_fsModule);
 
@@ -64,7 +64,7 @@ describe('userData (the fail-soft body)', () => {
         withProp(process, 'platform', 'linux');
 
         const result = paths.userData();
-        const { getAppName } = require('../../../src/ts/platform/appIdentity') as typeof appIdentityModule;
+        const { getAppName } = require('../../../src/ts/core/platform/appIdentity') as typeof appIdentityModule;
 
         expect(result).toBe(`${os.homedir()}/.config/${getAppName()}`);
         expect(fs.mkdirSync).toHaveBeenCalledWith(result, { recursive: true, mode: 0o700 });

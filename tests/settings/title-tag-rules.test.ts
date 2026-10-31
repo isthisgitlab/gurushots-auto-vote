@@ -13,13 +13,13 @@
  * uses) so the facade's loadSettings/saveSettings round-trip without touching fs.
  */
 
-import type { RuleMatchChallenge } from '../../src/ts/types/settings';
-import type { SettingKey } from '../../src/ts/settings/schema';
+import type { RuleMatchChallenge } from '../../src/ts/core/types/settings';
+import type { SettingKey } from '../../src/ts/core/settings/schema';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
-import settings = require('../../src/ts/settings');
-import { ruleLogLabel, MAX_CLOSE_TIMES_PER_RULE } from '../../src/ts/settings/titleRuleSanitize';
+import settings = require('../../src/ts/core/settings');
+import { ruleLogLabel, MAX_CLOSE_TIMES_PER_RULE } from '../../src/ts/core/settings/titleRuleSanitize';
 
-jest.mock('../../src/ts/logger', () => ({
+jest.mock('../../src/ts/core/logger', () => ({
     info: jest.fn(),
     warning: jest.fn(),
     error: jest.fn(),

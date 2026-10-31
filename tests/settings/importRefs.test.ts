@@ -4,11 +4,11 @@
  * English the CLI prints.
  */
 
-import { describeImportRef, IMPORT_REF_ENGLISH } from '../../src/ts/settings/importRefs';
-import { notice as englishNotice } from '../../src/ts/translations/english';
-import { notice as latvianNotice } from '../../src/ts/translations/latvian';
+import { describeImportRef, IMPORT_REF_ENGLISH } from '../../src/ts/core/settings/importRefs';
+import { notice as englishNotice } from '../../src/ts/core/translations/english';
+import { notice as latvianNotice } from '../../src/ts/core/translations/latvian';
 
-import type { ImportRef } from '../../src/ts/types/config';
+import type { ImportRef } from '../../src/ts/core/types/config';
 
 const describe_ = (ref: string | ImportRef, clean?: (value: string) => string) =>
     describeImportRef(ref, IMPORT_REF_ENGLISH, clean);

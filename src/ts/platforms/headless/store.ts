@@ -24,23 +24,23 @@ import type {
     SettingsFileTransport,
     SettingsFileWiring,
     SettingsStoreRef,
-} from '../../platform/port';
-import type { WriteIfAbsentResult, WriteResult } from '../../settings/storageTypes';
-import type { AndroidHeadlessStore, HeadlessSettingsBridge } from '../../types/settings';
-import type { ThroughResult } from '../../types/stores';
+} from '../../core/platform/port';
+import type { WriteIfAbsentResult, WriteResult } from '../../core/settings/storageTypes';
+import type { AndroidHeadlessStore, HeadlessSettingsBridge } from '../../core/types/settings';
+import type { ThroughResult } from '../../core/types/stores';
 
-type LoggerModule = typeof import('../../logger');
-type StorageModule = typeof import('../../settings/storage');
+type LoggerModule = typeof import('../../core/logger');
+type StorageModule = typeof import('../../core/settings/storage');
 
 // See the header: the wrapped modules, reached at call time.
-const logger = (): LoggerModule => require('../../logger') as LoggerModule;
+const logger = (): LoggerModule => require('../../core/logger') as LoggerModule;
 // Lazy for both reasons the header names: this file sits in the shell
 // platform modules' static chain and the settings graph reaches the logger,
 // which reads platform() at load — the install must run first — and a graph
 // loaded in the Jest setup's registry would beat a test file's own mocks.
 // The public storage facade carries writeNow and SaveConflictError; the
 // facade's internals are private to it.
-const storage = (): StorageModule => require('../../settings/storage') as StorageModule;
+const storage = (): StorageModule => require('../../core/settings/storage') as StorageModule;
 
 /**
  * The Android headless-service bridge, read at call time (absent everywhere

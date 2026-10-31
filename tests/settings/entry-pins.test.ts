@@ -9,7 +9,7 @@
 
 import { invalid } from '../helpers/invalid';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
-import settings = require('../../src/ts/settings');
+import settings = require('../../src/ts/core/settings');
 import { isConfig } from '../helpers/storedShapes';
 import { parseJsonAs } from '../helpers/parseJson';
 
@@ -17,7 +17,7 @@ import type { MemoryStore } from '../helpers/headlessStore';
 
 const mockWarning = jest.fn<void, unknown[]>();
 
-jest.mock('../../src/ts/logger', () => ({
+jest.mock('../../src/ts/core/logger', () => ({
     info: jest.fn(),
     warning: jest.fn(),
     error: jest.fn(),

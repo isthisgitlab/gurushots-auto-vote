@@ -66,19 +66,19 @@ const mockStore = {
     readRaw: jest.fn(() => '{"c1":{}}'),
     updateThrough: jest.fn(async () => 'saved' as const),
 };
-jest.mock('../src/ts/settings/storage', () => ({
+jest.mock('../src/ts/core/settings/storage', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../src/ts/settings/storage')>('../src/ts/settings/storage'),
+    ...jest.requireActual<typeof import('../src/ts/core/settings/storage')>('../src/ts/core/settings/storage'),
     createJsonStore: jest.fn(() => mockStore),
     getSettingsPath: jest.fn(() => '/cfg/settings.json'),
 }));
 
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
-import logger = require('../src/ts/logger');
-import storageModule = require('../src/ts/settings/storage');
+import logger = require('../src/ts/core/logger');
+import storageModule = require('../src/ts/core/settings/storage');
 const storage = jest.mocked(storageModule);
-import joinState = require('../src/ts/joinStateStore');
+import joinState = require('../src/ts/core/joinStateStore');
 import { installHeadlessTestPlatform, installWebviewTestPlatform } from './helpers/platform';
 import { invalid } from './helpers/invalid';
 

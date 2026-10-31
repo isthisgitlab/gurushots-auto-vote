@@ -1,5 +1,5 @@
 /**
- * The autovote controller (src/ts/autovote/controller.ts) driven directly
+ * The autovote controller (src/ts/core/autovote/controller.ts) driven directly
  * through a hand-built host: start/stop/toggle lifecycle, the voting-cycle
  * outcome handling, the mount-time auto-resume hold, and the transport glue
  * the controller hands to the shared cadence chain. These are the cases the
@@ -8,23 +8,23 @@
  * service modules.
  */
 
-import type * as controllerModule from '../../src/ts/autovote/controller';
-import type { AutovoteHost } from '../../src/ts/autovote/controller';
-import { formatOversleptMessage } from '../../src/ts/scheduling/cadenceChain';
+import type * as controllerModule from '../../src/ts/core/autovote/controller';
+import type { AutovoteHost } from '../../src/ts/core/autovote/controller';
+import { formatOversleptMessage } from '../../src/ts/core/scheduling/cadenceChain';
 
-const { createAutovoteController } = require('../../src/ts/autovote/controller') as typeof controllerModule;
+const { createAutovoteController } = require('../../src/ts/core/autovote/controller') as typeof controllerModule;
 
-import type { AutovoteState } from '../../src/ts/autovote/state';
-import type * as cadenceChainModule from '../../src/ts/scheduling/cadenceChain';
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type { AutovoteState } from '../../src/ts/core/autovote/state';
+import type * as cadenceChainModule from '../../src/ts/core/scheduling/cadenceChain';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 type ChainDeps = Parameters<typeof cadenceChainModule.createCadenceChain>[0];
 
 const captured: { chainDeps: ChainDeps | null } = { chainDeps: null };
 
-jest.mock('../../src/ts/scheduling/cadenceChain', () => {
-    const actual = jest.requireActual<typeof cadenceChainModule>('../../src/ts/scheduling/cadenceChain');
+jest.mock('../../src/ts/core/scheduling/cadenceChain', () => {
+    const actual = jest.requireActual<typeof cadenceChainModule>('../../src/ts/core/scheduling/cadenceChain');
     return {
         ...actual,
         createCadenceChain: (deps: ChainDeps) => {

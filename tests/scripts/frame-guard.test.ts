@@ -5,7 +5,7 @@
  * are the ones Oxlint produces.
  */
 import type frameGuardPlugin from '../../scripts/lint/frame-guard.mts';
-import { isPlainObject } from '../../src/ts/plainObject';
+import { isPlainObject } from '../../src/ts/core/plainObject';
 import { invalid } from '../helpers/invalid';
 
 const plugin: typeof frameGuardPlugin = (

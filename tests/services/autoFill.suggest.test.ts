@@ -4,50 +4,52 @@
  * budget, and the side effects it must never have.
  */
 
-import type * as autoFillModule from '../../src/ts/services/autoFill';
-import type * as chosenPhotosModule from '../../src/ts/services/autoFill/chosenPhotos';
-import type * as verifyModule from '../../src/ts/services/autoFill/pipeline/verify';
-import type * as photoStatsModule from '../../src/ts/services/photoStats';
-import type * as suggestModule from '../../src/ts/services/autoFill/pipeline/suggest';
+import type * as autoFillModule from '../../src/ts/core/services/autoFill';
+import type * as chosenPhotosModule from '../../src/ts/core/services/autoFill/chosenPhotos';
+import type * as verifyModule from '../../src/ts/core/services/autoFill/pipeline/verify';
+import type * as photoStatsModule from '../../src/ts/core/services/photoStats';
+import type * as suggestModule from '../../src/ts/core/services/autoFill/pipeline/suggest';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-import type { FillLogger, FillSettings, RankDeps } from '../../src/ts/types/autoFill';
-import type { ImageRecord } from '../../src/ts/types/gurushots';
-import type { PickerPhoto } from '../../src/ts/types/photoPicker';
+import type { FillLogger, FillSettings, RankDeps } from '../../src/ts/core/types/autoFill';
+import type { ImageRecord } from '../../src/ts/core/types/gurushots';
+import type { PickerPhoto } from '../../src/ts/core/types/photoPicker';
 import { invalid } from '../helpers/invalid';
 
-jest.mock('../../src/ts/services/semantic/lexicon', () => ({
+jest.mock('../../src/ts/core/services/semantic/lexicon', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/services/semantic/lexicon')>(
-        '../../src/ts/services/semantic/lexicon',
+    ...jest.requireActual<typeof import('../../src/ts/core/services/semantic/lexicon')>(
+        '../../src/ts/core/services/semantic/lexicon',
     ),
 }));
 // The things a suggestion run must never do are spied on: give each module a spy-able copy.
-jest.mock('../../src/ts/services/autoFill/chosenPhotos', () => ({
+jest.mock('../../src/ts/core/services/autoFill/chosenPhotos', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/services/autoFill/chosenPhotos')>(
-        '../../src/ts/services/autoFill/chosenPhotos',
+    ...jest.requireActual<typeof import('../../src/ts/core/services/autoFill/chosenPhotos')>(
+        '../../src/ts/core/services/autoFill/chosenPhotos',
     ),
 }));
-jest.mock('../../src/ts/services/autoFill/chosenWalkMemo', () => ({
+jest.mock('../../src/ts/core/services/autoFill/chosenWalkMemo', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/services/autoFill/chosenWalkMemo')>(
-        '../../src/ts/services/autoFill/chosenWalkMemo',
+    ...jest.requireActual<typeof import('../../src/ts/core/services/autoFill/chosenWalkMemo')>(
+        '../../src/ts/core/services/autoFill/chosenWalkMemo',
     ),
 }));
-jest.mock('../../src/ts/services/autoFill/pipeline/verify', () => ({
+jest.mock('../../src/ts/core/services/autoFill/pipeline/verify', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/services/autoFill/pipeline/verify')>(
-        '../../src/ts/services/autoFill/pipeline/verify',
+    ...jest.requireActual<typeof import('../../src/ts/core/services/autoFill/pipeline/verify')>(
+        '../../src/ts/core/services/autoFill/pipeline/verify',
     ),
 }));
-jest.mock('../../src/ts/services/photoStats', () => ({
+jest.mock('../../src/ts/core/services/photoStats', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/services/photoStats')>('../../src/ts/services/photoStats'),
+    ...jest.requireActual<typeof import('../../src/ts/core/services/photoStats')>(
+        '../../src/ts/core/services/photoStats',
+    ),
 }));
 // photoStats persists its cache through this store; keep it in memory.
-jest.mock('../../src/ts/settings/storage', () => ({
+jest.mock('../../src/ts/core/settings/storage', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/settings/storage')>('../../src/ts/settings/storage'),
+    ...jest.requireActual<typeof import('../../src/ts/core/settings/storage')>('../../src/ts/core/settings/storage'),
     createJsonStore: () => ({
         readRaw: () => null,
         writeRaw: () => {},
@@ -56,13 +58,14 @@ jest.mock('../../src/ts/settings/storage', () => ({
     }),
 }));
 
-const { suggestFillPhotos, __resetMemberIdCache } = require('../../src/ts/services/autoFill') as typeof autoFillModule;
-const { SUGGEST_COUNT } = require('../../src/ts/services/autoFill/pipeline/suggest') as typeof suggestModule;
-const chosenPhotos = require('../../src/ts/services/autoFill/chosenPhotos') as typeof chosenPhotosModule;
+const { suggestFillPhotos, __resetMemberIdCache } =
+    require('../../src/ts/core/services/autoFill') as typeof autoFillModule;
+const { SUGGEST_COUNT } = require('../../src/ts/core/services/autoFill/pipeline/suggest') as typeof suggestModule;
+const chosenPhotos = require('../../src/ts/core/services/autoFill/chosenPhotos') as typeof chosenPhotosModule;
 const chosenWalkMemo =
-    require('../../src/ts/services/autoFill/chosenWalkMemo') as typeof import('../../src/ts/services/autoFill/chosenWalkMemo');
-const verify = require('../../src/ts/services/autoFill/pipeline/verify') as typeof verifyModule;
-const photoStats = require('../../src/ts/services/photoStats') as typeof photoStatsModule;
+    require('../../src/ts/core/services/autoFill/chosenWalkMemo') as typeof import('../../src/ts/core/services/autoFill/chosenWalkMemo');
+const verify = require('../../src/ts/core/services/autoFill/pipeline/verify') as typeof verifyModule;
+const photoStats = require('../../src/ts/core/services/photoStats') as typeof photoStatsModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
 const imageRecord = (votes: number, views: number): ImageRecord => ({ votes, views, achievements: [] });

@@ -1,14 +1,14 @@
 /**
- * src/ts/index/session.ts — the one in-memory partition the app windows use, and the best-effort removal of the
+ * src/ts/shells/electron/index/session.ts — the one in-memory partition the app windows use, and the best-effort removal of the
  * on-disk partition directory a persistent partition of that name would have left under the user-data directory.
  */
 
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type * as loggerModule from '../../src/ts/logger';
-import type * as sessionModule from '../../src/ts/index/session';
-import type { CategoryLogger } from '../../src/ts/logger';
+import type * as loggerModule from '../../src/ts/core/logger';
+import type * as sessionModule from '../../src/ts/shells/electron/index/session';
+import type { CategoryLogger } from '../../src/ts/core/logger';
 
 // A partial mock of the real fs, so a failing delete can be injected.
 jest.mock('node:fs', () => {
@@ -17,13 +17,14 @@ jest.mock('node:fs', () => {
 });
 jest.unmock('path');
 jest.unmock('node:path');
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const cat = { info: jest.fn(), warning: jest.fn() };
     return { withCategory: jest.fn(() => cat), cat };
 });
 
-const { APP_PARTITION, removeStalePartitionData } = require('../../src/ts/index/session') as typeof sessionModule;
-const cat = jest.mocked((require('../../src/ts/logger') as typeof loggerModule & { cat: CategoryLogger }).cat);
+const { APP_PARTITION, removeStalePartitionData } =
+    require('../../src/ts/shells/electron/index/session') as typeof sessionModule;
+const cat = jest.mocked((require('../../src/ts/core/logger') as typeof loggerModule & { cat: CategoryLogger }).cat);
 
 let userData: string;
 

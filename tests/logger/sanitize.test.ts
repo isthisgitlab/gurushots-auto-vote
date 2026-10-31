@@ -6,7 +6,7 @@ import { parseJson } from '../helpers/parseJson';
  * cycle guard, array handling, and case-insensitive matching.
  */
 
-const { sanitizeForLog } = jest.requireActual<typeof import('../../src/ts/logger')>('../../src/ts/logger');
+const { sanitizeForLog } = jest.requireActual<typeof import('../../src/ts/core/logger')>('../../src/ts/core/logger');
 
 describe('sanitizeForLog', () => {
     test('returns primitives unchanged', () => {

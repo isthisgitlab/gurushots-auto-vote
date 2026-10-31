@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useLatestRef } from '../hooks/useLatestRef';
 
-import type { Challenge } from '../../types/gurushots';
+import type { Challenge } from '../../core/types/gurushots';
 
 /**
  * One previewed deadline action.

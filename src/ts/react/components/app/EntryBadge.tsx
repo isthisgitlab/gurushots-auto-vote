@@ -1,5 +1,5 @@
-import type { Bankroll, Challenge, RankingEntry } from '../../../types/gurushots';
-import type { EntryPinKind, EntryPins } from '../../../types/settings';
+import type { Bankroll, Challenge, RankingEntry } from '../../../core/types/gurushots';
+import type { EntryPinKind, EntryPins } from '../../../core/types/settings';
 import type { SwapBackOffer } from '@/api/useSwapBacks';
 import type { OpenSwapPick } from './SwapEntryButton';
 import { useTranslation } from '@/contexts/TranslationContext';

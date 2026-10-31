@@ -20,7 +20,7 @@ import { buildChallenge } from '../helpers/challengeFixtures';
 import type { useTurbo } from '@/api/useTurbo';
 import type { useFillChallenge } from '@/api/useFillChallenge';
 import { invalid } from '../helpers/invalid';
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 
 const mockChallengeSettings = {
     hasCustomSettings: false,

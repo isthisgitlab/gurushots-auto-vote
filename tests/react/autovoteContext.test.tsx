@@ -18,13 +18,13 @@ import { AutovoteProvider, useAutovote } from '@/contexts/AutovoteContext';
 import { noopBackgroundHost } from '../../src/ts/react/contexts/noopBackgroundHost';
 import { mockApi, mockTranslator, defaultTranslate } from './helpers/setup';
 import { resetPlatformKind } from '../helpers/platformKind';
-import { markPlatformKind } from '../../src/ts/platform/kind';
+import { markPlatformKind } from '../../src/ts/core/platform/kind';
 import type { ComponentProps } from 'preact';
 import type { RenderResult } from '@testing-library/preact';
-import type * as cadenceChainModule from '../../src/ts/scheduling/cadenceChain';
+import type * as cadenceChainModule from '../../src/ts/core/scheduling/cadenceChain';
 import type * as deadlineNotifierModule from '../../src/ts/react/notifications/deadlineNotifier';
 import type * as scenarioNotifierModule from '../../src/ts/react/notifications/scenarioNotifier';
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 type ChainDeps = Parameters<typeof cadenceChainModule.createCadenceChain>[0];
@@ -41,8 +41,8 @@ const captured: {
     scenarioDeps: null,
 };
 
-jest.mock('../../src/ts/scheduling/cadenceChain', () => {
-    const actual = jest.requireActual<typeof cadenceChainModule>('../../src/ts/scheduling/cadenceChain');
+jest.mock('../../src/ts/core/scheduling/cadenceChain', () => {
+    const actual = jest.requireActual<typeof cadenceChainModule>('../../src/ts/core/scheduling/cadenceChain');
     return {
         ...actual,
         createCadenceChain: (deps: ChainDeps) => {

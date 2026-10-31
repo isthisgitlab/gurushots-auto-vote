@@ -7,59 +7,59 @@
  */
 
 import { invalid } from './helpers/invalid';
-import { flushLocalStores, initializeLocalStores } from '../src/ts/localStores';
-import * as logger from '../src/ts/logger';
-import * as settings from '../src/ts/settings';
-import * as metadata from '../src/ts/metadata';
-import * as joinStateStore from '../src/ts/joinStateStore';
-import * as swapBackStore from '../src/ts/swapBackStore';
-import * as currencyAutoStore from '../src/ts/currencyAutoStore';
-import * as entryAgeStore from '../src/ts/entryAgeStore';
-import * as scenarioStateStore from '../src/ts/scenarioStateStore';
-import * as diagnostics from '../src/ts/services/semantic/diagnostics';
-import * as photoStats from '../src/ts/services/photoStats';
+import { flushLocalStores, initializeLocalStores } from '../src/ts/shells/capacitor/localStores';
+import * as logger from '../src/ts/core/logger';
+import * as settings from '../src/ts/core/settings';
+import * as metadata from '../src/ts/core/metadata';
+import * as joinStateStore from '../src/ts/core/joinStateStore';
+import * as swapBackStore from '../src/ts/core/swapBackStore';
+import * as currencyAutoStore from '../src/ts/core/currencyAutoStore';
+import * as entryAgeStore from '../src/ts/core/entryAgeStore';
+import * as scenarioStateStore from '../src/ts/core/scenarioStateStore';
+import * as diagnostics from '../src/ts/core/services/semantic/diagnostics';
+import * as photoStats from '../src/ts/core/services/photoStats';
 
-jest.mock('../src/ts/settings', () => ({
+jest.mock('../src/ts/core/settings', () => ({
     __esModule: true,
     initializeAsync: jest.fn<Promise<void>, []>(),
     flushPendingWrites: jest.fn<Promise<void>, []>(),
 }));
-jest.mock('../src/ts/metadata', () => ({
+jest.mock('../src/ts/core/metadata', () => ({
     __esModule: true,
     initializeMetadataAsync: jest.fn<Promise<void>, []>(),
     flushMetadataWrites: jest.fn<Promise<void>, []>(),
 }));
-jest.mock('../src/ts/joinStateStore', () => ({
+jest.mock('../src/ts/core/joinStateStore', () => ({
     __esModule: true,
     initializeJoinStateAsync: jest.fn<Promise<void>, []>(),
     flushJoinStateWrites: jest.fn<Promise<void>, []>(),
 }));
-jest.mock('../src/ts/swapBackStore', () => ({
+jest.mock('../src/ts/core/swapBackStore', () => ({
     __esModule: true,
     initializeSwapBackAsync: jest.fn<Promise<void>, []>(),
     flushSwapBackWrites: jest.fn<Promise<void>, []>(),
 }));
-jest.mock('../src/ts/currencyAutoStore', () => ({
+jest.mock('../src/ts/core/currencyAutoStore', () => ({
     __esModule: true,
     initializeAutoSpendAsync: jest.fn<Promise<void>, []>(),
     flushAutoSpendWrites: jest.fn<Promise<void>, []>(),
 }));
-jest.mock('../src/ts/entryAgeStore', () => ({
+jest.mock('../src/ts/core/entryAgeStore', () => ({
     __esModule: true,
     initializeEntryAgesAsync: jest.fn<Promise<void>, []>(),
     flushEntryAgeWrites: jest.fn<Promise<void>, []>(),
 }));
-jest.mock('../src/ts/scenarioStateStore', () => ({
+jest.mock('../src/ts/core/scenarioStateStore', () => ({
     __esModule: true,
     initializeScenarioStateAsync: jest.fn<Promise<void>, []>(),
     flushScenarioStateWrites: jest.fn<Promise<void>, []>(),
 }));
-jest.mock('../src/ts/services/semantic/diagnostics', () => ({
+jest.mock('../src/ts/core/services/semantic/diagnostics', () => ({
     __esModule: true,
     initializeDiagnosticsAsync: jest.fn<Promise<void>, []>(),
     flushDiagnosticsWrites: jest.fn<Promise<void>, []>(),
 }));
-jest.mock('../src/ts/services/photoStats', () => ({
+jest.mock('../src/ts/core/services/photoStats', () => ({
     __esModule: true,
     initializePhotoStatsAsync: jest.fn<Promise<void>, []>(),
     flushPhotoStatsWrites: jest.fn<Promise<void>, []>(),

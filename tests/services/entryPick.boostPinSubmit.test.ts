@@ -5,18 +5,18 @@
  * is free, and no failure latch sits on this challenge, pin and Boost window.
  */
 
-jest.mock('../../src/ts/settings');
+jest.mock('../../src/ts/core/settings');
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import type * as VotingLogicModule from '../../src/ts/services/VotingLogic';
-import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
+import type * as VotingLogicModule from '../../src/ts/core/services/VotingLogic';
+import type * as entryAgeStoreModule from '../../src/ts/core/entryAgeStore';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-import type { Challenge, RankingEntry } from '../../src/ts/types/gurushots';
-import type { EntryPins } from '../../src/ts/types/settings';
+import type { Challenge, RankingEntry } from '../../src/ts/core/types/gurushots';
+import type { EntryPins } from '../../src/ts/core/types/settings';
 import { invalid } from '../helpers/invalid';
-const VotingLogic = require('../../src/ts/services/VotingLogic') as typeof VotingLogicModule;
-const { createMemoryEntryAgeLedger } = require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
+const VotingLogic = require('../../src/ts/core/services/VotingLogic') as typeof VotingLogicModule;
+const { createMemoryEntryAgeLedger } = require('../../src/ts/core/entryAgeStore') as typeof entryAgeStoreModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
 const NOW = 1_800_000_000;

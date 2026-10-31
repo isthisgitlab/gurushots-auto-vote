@@ -7,7 +7,7 @@
  * `saved()` reads back what the facade last persisted.
  */
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
         info: jest.fn(),
@@ -22,11 +22,11 @@ jest.mock('../../src/ts/logger', () => {
     };
 });
 
-import settings = require('../../src/ts/settings');
-import loggerModule = require('../../src/ts/logger');
+import settings = require('../../src/ts/core/settings');
+import loggerModule = require('../../src/ts/core/logger');
 const logger = jest.mocked(loggerModule);
 import type * as node_fsModule from 'node:fs';
-import type { CategoryLogger } from '../../src/ts/logger';
+import type { CategoryLogger } from '../../src/ts/core/logger';
 import { invalid } from '../helpers/invalid';
 import { isConfig } from '../helpers/storedShapes';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
@@ -762,7 +762,7 @@ describe('settings facade — edge cases', () => {
                 throw new Error('EROFS');
             });
             jest.isolateModules(() => {
-                fsSettings = require('../../src/ts/settings') as typeof settings;
+                fsSettings = require('../../src/ts/core/settings') as typeof settings;
             });
         };
 

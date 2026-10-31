@@ -1,4 +1,4 @@
-import { isPlainObject } from '../../plainObject';
+import { isPlainObject } from '../../core/plainObject';
 
 // The value with every object's keys in sorted order (arrays keep theirs), so equal content stringifies equally.
 const withSortedKeys = (value: unknown): unknown => {

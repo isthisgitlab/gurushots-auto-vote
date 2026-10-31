@@ -10,11 +10,11 @@
  * must never throw across IPC.
  */
 
-jest.mock('../../src/ts/settings');
-jest.mock('../../src/ts/settings/localData', () => ({ wipeLocalData: jest.fn() }));
-jest.mock('../../src/ts/thirdPartyNotices', () => ({ loadThirdPartyNotices: jest.fn() }));
-jest.mock('../../src/ts/metadata', () => ({ cleanupStaleMetadata: jest.fn() }));
-jest.mock('../../src/ts/apiFactory', () => ({
+jest.mock('../../src/ts/core/settings');
+jest.mock('../../src/ts/core/settings/localData', () => ({ wipeLocalData: jest.fn() }));
+jest.mock('../../src/ts/core/thirdPartyNotices', () => ({ loadThirdPartyNotices: jest.fn() }));
+jest.mock('../../src/ts/core/metadata', () => ({ cleanupStaleMetadata: jest.fn() }));
+jest.mock('../../src/ts/core/apiFactory', () => ({
     refreshApi: jest.fn(),
     getApiStrategy: jest.fn(),
     getMiddleware: jest.fn(),
@@ -23,20 +23,20 @@ jest.mock('../../src/ts/apiFactory', () => ({
 import { invalid } from '../helpers/invalid';
 import { installTestPlatform } from '../helpers/platform';
 
-import type { PlatformWindows } from '../../src/ts/platform/port';
+import type { PlatformWindows } from '../../src/ts/core/platform/port';
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import metadataModule = require('../../src/ts/metadata');
+import metadataModule = require('../../src/ts/core/metadata');
 const metadata = jest.mocked(metadataModule);
-import apiFactoryModule = require('../../src/ts/apiFactory');
+import apiFactoryModule = require('../../src/ts/core/apiFactory');
 const apiFactory = jest.mocked(apiFactoryModule);
-import localDataModule = require('../../src/ts/settings/localData');
+import localDataModule = require('../../src/ts/core/settings/localData');
 const localData = jest.mocked(localDataModule);
-import noticesModule = require('../../src/ts/thirdPartyNotices');
+import noticesModule = require('../../src/ts/core/thirdPartyNotices');
 const notices = jest.mocked(noticesModule);
-import type * as settings_handlersModule from '../../src/ts/ipc/settings.handlers';
-const { buildHandlers } = require('../../src/ts/ipc/settings.handlers') as typeof settings_handlersModule;
+import type * as settings_handlersModule from '../../src/ts/core/ipc/settings.handlers';
+const { buildHandlers } = require('../../src/ts/core/ipc/settings.handlers') as typeof settings_handlersModule;
 
 const boom = () => {
     throw new Error('boom');

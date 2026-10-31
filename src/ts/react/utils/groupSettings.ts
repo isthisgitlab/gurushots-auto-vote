@@ -1,8 +1,8 @@
 import { matchesFilterTexts, matchesSettingFilter } from './matchesSettingFilter';
 
-import type { SerializableSchemaEntry } from '../../ipc/settings.handlers';
+import type { SerializableSchemaEntry } from '../../core/ipc/settings.handlers';
 import type { SettingFilterTexts } from './matchesSettingFilter';
-import type { Translate } from '../../translations/translator';
+import type { Translate } from '../../core/translations/translator';
 
 /**
  * One settings group as the modals receive it (SETTINGS_GROUPS entry).

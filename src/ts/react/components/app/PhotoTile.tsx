@@ -7,7 +7,7 @@ import { TileStatsLine, withStatsLabel } from './TileStats';
 
 import type { LibraryPhoto } from '@/hooks/useLibraryListing';
 import type { TileStats } from '@/hooks/usePhotoStatsLoader';
-import type { Translate } from '../../../translations/translator';
+import type { Translate } from '../../../core/translations/translator';
 
 // Edge length requested from the photo CDN for a tile (the grid shows them ~150px wide).
 const TILE_PX = 240;

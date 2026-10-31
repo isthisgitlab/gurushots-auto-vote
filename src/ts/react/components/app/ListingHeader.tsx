@@ -2,9 +2,9 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useSettings } from '@/api/useSettings';
 import { dateLocale } from '@/utils/formatters';
-import { effectiveTimezone } from '../../../settings/uiDefaults';
+import { effectiveTimezone } from '../../../core/settings/uiDefaults';
 
-import type { Translate } from '../../../translations/translator';
+import type { Translate } from '../../../core/translations/translator';
 
 /**
  * When the listing was read, as the line above the photos words it: the time, with the date when it is not

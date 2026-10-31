@@ -7,10 +7,10 @@
  * feature can't silently leave the other behind.
  */
 
-import type * as schemaModule from '../../src/ts/settings/schema';
+import type * as schemaModule from '../../src/ts/core/settings/schema';
 
 const { validateSetting, getValidationError, SETTINGS_SCHEMA } =
-    require('../../src/ts/settings/schema') as typeof schemaModule;
+    require('../../src/ts/core/settings/schema') as typeof schemaModule;
 
 describe('voting pause schema validation', () => {
     test('all four keys exist, are per-challenge, and sit in the votingPause group', () => {

@@ -15,9 +15,9 @@ import { useOpenChosenAnnotations } from '@/api/useOpenChosenAnnotations';
 import { useSwapBacks } from '@/api/useSwapBacks';
 import { useActiveChallenges } from '@/api/useActiveChallenges';
 import { mockApi } from './helpers/setup';
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
-import { MAX_ANNOTATED_IDS } from '../../src/ts/settings/limits';
+import { MAX_ANNOTATED_IDS } from '../../src/ts/core/settings/limits';
 
 const deferred = () => {
     let resolve!: (value: unknown) => void;

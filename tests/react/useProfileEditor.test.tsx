@@ -9,8 +9,8 @@ import { useProfileEditor } from '@/hooks/useProfileEditor';
 import { mockApi } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
 
-import type { RendererSchema } from '../../src/ts/types/settingsEditor';
-import type { ChallengeValues } from '../../src/ts/types/settings';
+import type { RendererSchema } from '../../src/ts/core/types/settingsEditor';
+import type { ChallengeValues } from '../../src/ts/core/types/settings';
 
 const SCHEMA = invalid<RendererSchema>({
     exposure: { perChallenge: true, group: 'g', default: 70 },

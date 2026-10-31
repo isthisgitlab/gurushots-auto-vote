@@ -1,8 +1,8 @@
-import { logMessages as englishLogMessages } from '../../../translations/logEnglish';
-import { logMessages as latvianLogMessages } from '../../../translations/logLatvian';
-import { sentenceCaseLogMessage, splitIcon } from '../../../format/logSafe';
+import { logMessages as englishLogMessages } from '../../../core/translations/logEnglish';
+import { logMessages as latvianLogMessages } from '../../../core/translations/logLatvian';
+import { sentenceCaseLogMessage, splitIcon } from '../../../core/format/logSafe';
 
-import type { GuiLogEntry } from '../../../logger';
+import type { GuiLogEntry } from '../../../core/logger';
 
 const placeholders = /\{(\d+)\}/g;
 const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

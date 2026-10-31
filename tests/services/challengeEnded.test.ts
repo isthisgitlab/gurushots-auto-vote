@@ -13,15 +13,15 @@
  * too rather than being voted to 100%.
  */
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import VotingLogic = require('../../src/ts/services/VotingLogic');
+import VotingLogic = require('../../src/ts/core/services/VotingLogic');
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 const { buildChallenge: buildBaseChallenge } =
     require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 import { invalid } from '../helpers/invalid';
 
-jest.mock('../../src/ts/settings');
+jest.mock('../../src/ts/core/settings');
 
 const NOW = Math.floor(Date.now() / 1000);
 

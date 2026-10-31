@@ -1,39 +1,39 @@
 /**
- * Tests for the Android headless background entry (src/ts/headless/index.ts).
+ * Tests for the Android headless background entry (src/ts/shells/headless/index.ts).
  * It runs one full voting cycle via the existing orchestrator and reports
  * the result + next cadence back to the native service through
  * AndroidHeadlessBridge.onCycleComplete.
  */
 
-jest.mock('../../src/ts/apiFactory', () => ({ getApiStrategy: jest.fn() }));
+jest.mock('../../src/ts/core/apiFactory', () => ({ getApiStrategy: jest.fn() }));
 // Partial factory: the shell's four reads stay mocked, the rest of the facade
 // (the chosen-photos consumption above all) rides along real.
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/settings')>('../../src/ts/settings'),
+    ...jest.requireActual<typeof import('../../src/ts/core/settings')>('../../src/ts/core/settings'),
     getSetting: jest.fn(),
     setSetting: jest.fn(),
     loadSettings: jest.fn(() => ({ checkFrequencyMin: 2, checkFrequencyMax: 2 })),
     getEffectiveSetting: jest.fn(),
 }));
 
-import apiFactoryModule = require('../../src/ts/apiFactory');
+import apiFactoryModule = require('../../src/ts/core/apiFactory');
 const apiFactory = jest.mocked(apiFactoryModule);
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import type * as randomDelayModule from '../../src/ts/scheduling/randomDelay';
-import type * as indexModule from '../../src/ts/headless/index';
-import type * as loggerModule from '../../src/ts/logger';
-import type { HeadlessGlobals } from '../../src/ts/types/capacitor';
+import type * as randomDelayModule from '../../src/ts/core/scheduling/randomDelay';
+import type * as indexModule from '../../src/ts/shells/headless/index';
+import type * as loggerModule from '../../src/ts/core/logger';
+import type { HeadlessGlobals } from '../../src/ts/core/types/capacitor';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import { clearInstalledPlatform } from '../helpers/platform';
 import { invalid } from '../helpers/invalid';
 import { isBoolean, isNumber, isShape, isString, optional, parseJsonAs } from '../helpers/parseJson';
-const { OFFLINE_RETRY_MS } = require('../../src/ts/scheduling/randomDelay') as typeof randomDelayModule;
+const { OFFLINE_RETRY_MS } = require('../../src/ts/core/scheduling/randomDelay') as typeof randomDelayModule;
 
 // Requiring the entry installs globalThis.GS.
 clearInstalledPlatform();
-const { computeNextDelayMs } = require('../../src/ts/headless/index') as typeof indexModule;
+const { computeNextDelayMs } = require('../../src/ts/shells/headless/index') as typeof indexModule;
 
 // What runOneCycle reports through AndroidHeadlessBridge.onCycleComplete (JSON).
 type CyclePayload = { ok: boolean; nextDelayMs: number; error?: string; skipped?: string };
@@ -52,7 +52,7 @@ const g = globalThis as HeadlessGlobals;
 // it asserts on; the mock-endpoint pass below needs the full category logger
 // (its .api preamble included), captured here before any test re-pointed it.
 const fullWithCategory = jest
-    .mocked(require('../../src/ts/logger') as typeof loggerModule)
+    .mocked(require('../../src/ts/core/logger') as typeof loggerModule)
     .withCategory.getMockImplementation();
 
 describe('headless runOneCycle', () => {
@@ -333,7 +333,7 @@ describe('headless runOneCycle', () => {
     // the next delay once to OFFLINE_RETRY_MS; the same set does not cap
     // again, an empty set never caps, and pruneUnsafe plays no part.
     describe('marked-read cap', () => {
-        const { __resetMarkedReadCapForTests } = require('../../src/ts/headless/index') as typeof indexModule;
+        const { __resetMarkedReadCapForTests } = require('../../src/ts/shells/headless/index') as typeof indexModule;
 
         beforeEach(() => {
             __resetMarkedReadCapForTests();
@@ -407,7 +407,7 @@ describe('headless runOneCycle', () => {
     });
 
     describe('defensive fallbacks', () => {
-        const logger = jest.mocked(require('../../src/ts/logger') as typeof loggerModule);
+        const logger = jest.mocked(require('../../src/ts/core/logger') as typeof loggerModule);
         let info: jest.MockedFunction<loggerModule.CategoryLogger['info']>;
 
         beforeEach(() => {
@@ -514,8 +514,8 @@ describe('headless runOneCycle', () => {
     // mocks, the pass's settings resolve over the store. The mock session ids
     // are random, so the joined challenge with an entry is looked up, not named.
     describe('chosen-photos lazy net (real facade, planted store)', () => {
-        const realSettings = jest.requireActual('../../src/ts/settings') as typeof settingsModule;
-        const realApiFactory = jest.requireActual('../../src/ts/apiFactory') as typeof apiFactoryModule;
+        const realSettings = jest.requireActual('../../src/ts/core/settings') as typeof settingsModule;
+        const realApiFactory = jest.requireActual('../../src/ts/core/apiFactory') as typeof apiFactoryModule;
         // The full mock passes still cross many awaits; the fake clock keeps
         // them quick, with headroom for the two drains.
         jest.setTimeout(60_000);
@@ -523,7 +523,7 @@ describe('headless runOneCycle', () => {
         beforeEach(() => {
             installHeadlessStore();
             jest.useFakeTimers();
-            jest.mocked(require('../../src/ts/logger') as typeof loggerModule).withCategory.mockImplementation(
+            jest.mocked(require('../../src/ts/core/logger') as typeof loggerModule).withCategory.mockImplementation(
                 fullWithCategory!,
             );
             settings.loadSettings.mockReturnValue(

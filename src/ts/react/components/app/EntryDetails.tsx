@@ -13,12 +13,12 @@ import { EntryBadge } from './EntryBadge';
 import { InlineError } from '@/components/ui/InlineError';
 import { ipcErrorText } from '@/api/ipcErrorText';
 import { useFocusRestore } from '@/hooks/useFocusRestore';
-import { canStillFire, livePinKindOf, unusablePins } from '../../../voting/entryPins';
+import { canStillFire, livePinKindOf, unusablePins } from '../../../core/voting/entryPins';
 
-import type { Bankroll, Challenge } from '../../../types/gurushots';
+import type { Bankroll, Challenge } from '../../../core/types/gurushots';
 import type { ChallengeCardView } from './ChallengeCard';
 import type { OpenSwapPick } from './SwapEntryButton';
-import type { EntryPinKind } from '../../../types/settings';
+import type { EntryPinKind } from '../../../core/types/settings';
 import type { EntryPinsState, SwapBackOffers } from './ChallengeCardDetail';
 
 /**

@@ -11,12 +11,12 @@
  *      values must be rejected, and the schema default is one hour (3600).
  */
 
-import type * as VotingLogicModule from '../../src/ts/services/VotingLogic';
-import type * as schemaModule from '../../src/ts/settings/schema';
+import type * as VotingLogicModule from '../../src/ts/core/services/VotingLogic';
+import type * as schemaModule from '../../src/ts/core/settings/schema';
 
-const { isWithinFinalWindow } = require('../../src/ts/services/VotingLogic') as typeof VotingLogicModule;
+const { isWithinFinalWindow } = require('../../src/ts/core/services/VotingLogic') as typeof VotingLogicModule;
 const { validateSetting, getSchemaDefault, SETTINGS_SCHEMA } =
-    require('../../src/ts/settings/schema') as typeof schemaModule;
+    require('../../src/ts/core/settings/schema') as typeof schemaModule;
 
 describe('isWithinFinalWindow with a non-default windowSec', () => {
     const now = 1_000_000;

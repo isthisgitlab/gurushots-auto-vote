@@ -1,8 +1,8 @@
 import type * as electronModule from 'electron';
 import type { AppUpdater } from 'electron-updater';
-import type * as AutoUpdaterModule from '../../src/ts/services/AutoUpdater';
-import type { UpdateCheckData } from '../../src/ts/types/stores';
-import type { CategoryLogger } from '../../src/ts/logger';
+import type * as AutoUpdaterModule from '../../src/ts/shells/electron/AutoUpdater';
+import type { UpdateCheckData } from '../../src/ts/core/types/stores';
+import type { CategoryLogger } from '../../src/ts/core/logger';
 import { invalid } from '../helpers/invalid';
 // Mock electron modules
 jest.mock('electron', () => ({
@@ -37,7 +37,7 @@ jest.mock('electron-updater', () => ({
 }));
 
 // Mock logger
-jest.mock('../../src/ts/logger', () => ({
+jest.mock('../../src/ts/core/logger', () => ({
     withCategory: jest.fn(() => ({
         info: jest.fn(),
         debug: jest.fn(),
@@ -54,7 +54,7 @@ const mockMetadata = {
     clearLegacySkipVersion: jest.fn(() => true),
 };
 
-jest.mock('../../src/ts/metadata', () => mockMetadata);
+jest.mock('../../src/ts/core/metadata', () => mockMetadata);
 
 // Mock settings — the canonical skip-version store. A tiny in-memory map so
 // the write->verify->clear migration ordering is observable.
@@ -67,13 +67,13 @@ const mockSettings = {
     }),
 };
 
-jest.mock('../../src/ts/settings', () => mockSettings);
+jest.mock('../../src/ts/core/settings', () => mockSettings);
 
 const mockHasBundledModel = jest.fn(async () => true);
-jest.mock('../../src/ts/services/visionVerifier', () => ({ hasBundledModel: mockHasBundledModel }));
+jest.mock('../../src/ts/core/services/visionVerifier', () => ({ hasBundledModel: mockHasBundledModel }));
 
 const mockQuitGuard = { bypassQuitGuard: jest.fn() };
-jest.mock('../../src/ts/windows/quitGuard', () => mockQuitGuard);
+jest.mock('../../src/ts/shells/electron/windows/quitGuard', () => mockQuitGuard);
 
 describe('AutoUpdater', () => {
     let AutoUpdater: typeof AutoUpdaterModule.AutoUpdater;
@@ -105,7 +105,7 @@ describe('AutoUpdater', () => {
         );
 
         // Re-require AutoUpdater after mocks are set up
-        ({ AutoUpdater } = require('../../src/ts/services/AutoUpdater') as typeof AutoUpdaterModule);
+        ({ AutoUpdater } = require('../../src/ts/shells/electron/AutoUpdater') as typeof AutoUpdaterModule);
         autoUpdater = new AutoUpdater();
     });
 
@@ -486,7 +486,7 @@ describe('AutoUpdater', () => {
             autoUpdater.setMainWindow(invalid({ isDestroyed: () => false, webContents: { send } }));
             log = { info: jest.fn(), debug: jest.fn(), warning: jest.fn(), error: jest.fn() };
             jest.mocked(
-                require('../../src/ts/logger') as typeof import('../../src/ts/logger'),
+                require('../../src/ts/core/logger') as typeof import('../../src/ts/core/logger'),
             ).withCategory.mockReturnValue(invalid(log));
         });
 
@@ -600,7 +600,7 @@ describe('AutoUpdater', () => {
         it('a throwing legacy store never breaks construction', () => {
             const error = jest.fn();
             jest.mocked(
-                require('../../src/ts/logger') as typeof import('../../src/ts/logger'),
+                require('../../src/ts/core/logger') as typeof import('../../src/ts/core/logger'),
             ).withCategory.mockReturnValueOnce(invalid({ error }));
             mockMetadata.getLegacySkipVersion.mockImplementationOnce(() => {
                 throw new Error('metadata.json corrupt');

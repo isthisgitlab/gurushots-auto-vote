@@ -3,9 +3,9 @@ import { exposureText } from '@/utils/challengeCardView';
 import { StatusBadge } from '../ui/StatusBadge';
 import { PulseDot } from '../ui/PulseDot';
 import { ChallengeKindBadges } from './ChallengeKindBadges';
-import { challengeKind, challengePhotoCount } from '../../../format/challengeListing';
+import { challengeKind, challengePhotoCount } from '../../../core/format/challengeListing';
 
-import type { Challenge, TeamMatch, TeamStanding } from '../../../types/gurushots';
+import type { Challenge, TeamMatch, TeamStanding } from '../../../core/types/gurushots';
 import type { ChallengeCardView } from './ChallengeCard';
 
 /**

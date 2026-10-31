@@ -13,7 +13,7 @@ jest.mock('node:fs', () => {
 });
 jest.unmock('path');
 jest.unmock('node:path');
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
         info: jest.fn(),
@@ -31,13 +31,13 @@ jest.mock('../../src/ts/logger', () => {
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type * as settingsModule from '../../src/ts/settings';
-import type * as loggerModule from '../../src/ts/logger';
-import type * as joinStateModule from '../../src/ts/joinStateStore';
-import type * as lockWaitModule from '../../src/ts/lockWait';
-import type * as storageModule from '../../src/ts/settings/storage';
-import type { CategoryLogger } from '../../src/ts/logger';
-import { platform } from '../../src/ts/platform/port';
+import type * as settingsModule from '../../src/ts/core/settings';
+import type * as loggerModule from '../../src/ts/core/logger';
+import type * as joinStateModule from '../../src/ts/core/joinStateStore';
+import type * as lockWaitModule from '../../src/ts/core/lockWait';
+import type * as storageModule from '../../src/ts/core/settings/storage';
+import type { CategoryLogger } from '../../src/ts/core/logger';
+import { platform } from '../../src/ts/core/platform/port';
 import { installTestPlatform } from '../helpers/platform';
 import { invalid } from '../helpers/invalid';
 import { parseJsonObject } from '../helpers/parseJson';
@@ -82,9 +82,9 @@ describe('the import of a settings.json (real fs)', () => {
             // temp dir (a closure, so `jest.restoreAllMocks()` cannot send it back to the real folder).
             installTestPlatform({ paths: { ...platform().paths, userData: () => userData } });
             setup?.();
-            settings = require('../../src/ts/settings') as typeof settingsModule;
+            settings = require('../../src/ts/core/settings') as typeof settingsModule;
             cat = invalid<typeof loggerModule & { __cat: CatDouble }>(
-                require('../../src/ts/logger') as typeof loggerModule,
+                require('../../src/ts/core/logger') as typeof loggerModule,
             ).__cat;
         });
     };
@@ -103,12 +103,12 @@ describe('the import of a settings.json (real fs)', () => {
 
     afterEach(() => {
         jest.restoreAllMocks();
-        jest.dontMock('../../src/ts/runtime');
-        jest.dontMock('../../src/ts/lockWait');
-        jest.dontMock('../../src/ts/settings/importV1');
-        jest.dontMock('../../src/ts/joinStateStore');
-        jest.dontMock('../../src/ts/settings/importMarker');
-        jest.dontMock('../../src/ts/settings/storage');
+        jest.dontMock('../../src/ts/core/runtime');
+        jest.dontMock('../../src/ts/core/lockWait');
+        jest.dontMock('../../src/ts/core/settings/importV1');
+        jest.dontMock('../../src/ts/core/joinStateStore');
+        jest.dontMock('../../src/ts/core/settings/importMarker');
+        jest.dontMock('../../src/ts/core/settings/storage');
         fs.rmSync(root, { recursive: true, force: true });
     });
 
@@ -383,10 +383,10 @@ describe('the import of a settings.json (real fs)', () => {
             fs.writeFileSync(legacyFile, '{broken');
             let attempts = 0;
             loadFresh(() => {
-                const actual = jest.requireActual<typeof import('../../src/ts/settings/importV1')>(
-                    '../../src/ts/settings/importV1',
+                const actual = jest.requireActual<typeof import('../../src/ts/core/settings/importV1')>(
+                    '../../src/ts/core/settings/importV1',
                 );
-                jest.doMock('../../src/ts/settings/importV1', () => ({
+                jest.doMock('../../src/ts/core/settings/importV1', () => ({
                     ...actual,
                     importV1Settings: (...args: unknown[]) => {
                         attempts += 1;
@@ -523,7 +523,7 @@ describe('the import of a settings.json (real fs)', () => {
         test('a file the frozen pipeline cannot handle: the defaults are stored with the failure, and the file stays', () => {
             fs.writeFileSync(legacyFile, RAW);
             loadFresh(() => {
-                jest.doMock('../../src/ts/settings/importV1', () => ({
+                jest.doMock('../../src/ts/core/settings/importV1', () => ({
                     importV1Settings: () => ({ ok: false, code: 'migration-failed', detail: 'a pass exploded' }),
                 }));
             });
@@ -550,8 +550,8 @@ describe('the import of a settings.json (real fs)', () => {
                 // The race the compare-and-write answers: config.json is missing at the load's read and at the
                 // import's, and is there (another process saved its import) when the defaults are written — the only
                 // writeIfAbsent call this run makes, the import having failed at its conversion.
-                const actual = jest.requireActual<typeof storageModule>('../../src/ts/settings/storage');
-                jest.doMock('../../src/ts/settings/storage', () => ({
+                const actual = jest.requireActual<typeof storageModule>('../../src/ts/core/settings/storage');
+                jest.doMock('../../src/ts/core/settings/storage', () => ({
                     __esModule: true,
                     ...actual,
                     storage: {
@@ -579,8 +579,8 @@ describe('the import of a settings.json (real fs)', () => {
         test('an empty file planted in the same race cannot be adopted: the failure stays blocking', () => {
             fs.writeFileSync(legacyFile, '{broken');
             loadFresh(() => {
-                const actual = jest.requireActual<typeof storageModule>('../../src/ts/settings/storage');
-                jest.doMock('../../src/ts/settings/storage', () => ({
+                const actual = jest.requireActual<typeof storageModule>('../../src/ts/core/settings/storage');
+                jest.doMock('../../src/ts/core/settings/storage', () => ({
                     __esModule: true,
                     ...actual,
                     storage: {
@@ -609,9 +609,9 @@ describe('the import of a settings.json (real fs)', () => {
             loadFresh(() => {
                 // The import's own acquisition goes through; the settled defaults write that follows it finds the
                 // lock held (another process) for the whole wait.
-                const actual = jest.requireActual<typeof lockWaitModule>('../../src/ts/lockWait');
+                const actual = jest.requireActual<typeof lockWaitModule>('../../src/ts/core/lockWait');
                 let acquisitions = 0;
-                jest.doMock('../../src/ts/lockWait', () => ({
+                jest.doMock('../../src/ts/core/lockWait', () => ({
                     acquireWithin: (acquire: Parameters<typeof actual.acquireWithin>[0], waitMs: number) => {
                         acquisitions += 1;
                         return acquisitions === 1 ? actual.acquireWithin(acquire, waitMs) : ('busy' as const);
@@ -698,7 +698,7 @@ describe('the import of a settings.json (real fs)', () => {
         test('another process holding the import lock: busy, nothing written, said in the log', () => {
             fs.writeFileSync(legacyFile, RAW);
             loadFresh(() => {
-                jest.doMock('../../src/ts/lockWait', () => ({ acquireWithin: () => 'busy' }));
+                jest.doMock('../../src/ts/core/lockWait', () => ({ acquireWithin: () => 'busy' }));
             });
 
             settings.loadSettings();
@@ -717,7 +717,7 @@ describe('the import of a settings.json (real fs)', () => {
         test('an import lock that cannot be taken at all fails closed too', () => {
             fs.writeFileSync(legacyFile, RAW);
             loadFresh(() => {
-                jest.doMock('../../src/ts/lockWait', () => ({ acquireWithin: () => 'unavailable' }));
+                jest.doMock('../../src/ts/core/lockWait', () => ({ acquireWithin: () => 'unavailable' }));
             });
 
             settings.loadSettings();
@@ -735,7 +735,7 @@ describe('the import of a settings.json (real fs)', () => {
             (_name, thrown, said) => {
                 fs.writeFileSync(legacyFile, RAW);
                 loadFresh(() => {
-                    jest.doMock('../../src/ts/settings/importMarker', () => ({
+                    jest.doMock('../../src/ts/core/settings/importMarker', () => ({
                         isImportMarked: () => {
                             throw thrown();
                         },
@@ -759,8 +759,8 @@ describe('the import of a settings.json (real fs)', () => {
             const acquired: Array<{ id: unknown; options: unknown }> = [];
             let released = 0;
             loadFresh(() => {
-                const actual = jest.requireActual<typeof joinStateModule>('../../src/ts/joinStateStore');
-                jest.doMock('../../src/ts/joinStateStore', () => ({
+                const actual = jest.requireActual<typeof joinStateModule>('../../src/ts/core/joinStateStore');
+                jest.doMock('../../src/ts/core/joinStateStore', () => ({
                     ...actual,
                     acquireUnlockLock: (id: string, options: unknown) => {
                         acquired.push({ id, options });
@@ -803,8 +803,8 @@ describe('the import of a settings.json (real fs)', () => {
             arrange();
             let taken = 0;
             loadFresh(() => {
-                const actual = jest.requireActual<typeof joinStateModule>('../../src/ts/joinStateStore');
-                jest.doMock('../../src/ts/joinStateStore', () => ({
+                const actual = jest.requireActual<typeof joinStateModule>('../../src/ts/core/joinStateStore');
+                jest.doMock('../../src/ts/core/joinStateStore', () => ({
                     ...actual,
                     acquireUnlockLock: (id: string, options: unknown) => {
                         taken += 1;
@@ -823,7 +823,7 @@ describe('the import of a settings.json (real fs)', () => {
         test('a configuration another process saved while this one waited is adopted, not imported over', () => {
             fs.writeFileSync(legacyFile, RAW);
             loadFresh(() => {
-                jest.doMock('../../src/ts/lockWait', () => ({
+                jest.doMock('../../src/ts/core/lockWait', () => ({
                     // The other process finishes its import while this one waits for the lock.
                     acquireWithin: () => {
                         fs.writeFileSync(configFile, JSON.stringify({ app: { theme: 'light' } }));
@@ -841,7 +841,7 @@ describe('the import of a settings.json (real fs)', () => {
         test('the marker another process wrote while this one waited stands the import down', () => {
             fs.writeFileSync(legacyFile, RAW);
             loadFresh(() => {
-                jest.doMock('../../src/ts/lockWait', () => ({
+                jest.doMock('../../src/ts/core/lockWait', () => ({
                     acquireWithin: () => {
                         fs.writeFileSync(markerFile, '{"importedAt":"2026-01-01T00:00:00.000Z"}');
                         return { ok: true, release: () => undefined };
@@ -859,7 +859,7 @@ describe('the import of a settings.json (real fs)', () => {
     describe('a configuration another process saved while this one converted', () => {
         const convertingWhile = (write: () => void) =>
             loadFresh(() => {
-                jest.doMock('../../src/ts/settings/importV1', () => ({
+                jest.doMock('../../src/ts/core/settings/importV1', () => ({
                     importV1Settings: () => {
                         write();
                         return {
@@ -903,7 +903,7 @@ describe('the import of a settings.json (real fs)', () => {
         test('retryImport while the import lock is held fails again, and is said again', () => {
             fs.writeFileSync(legacyFile, RAW);
             loadFresh(() => {
-                jest.doMock('../../src/ts/lockWait', () => ({ acquireWithin: () => 'busy' }));
+                jest.doMock('../../src/ts/core/lockWait', () => ({ acquireWithin: () => 'busy' }));
             });
             settings.loadSettings();
             expect(settings.getSettingsRecovery()?.blocking).toBe(true);

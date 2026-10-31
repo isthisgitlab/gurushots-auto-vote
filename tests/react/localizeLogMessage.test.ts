@@ -1,12 +1,12 @@
-import { logMessages as englishLogMessages } from '../../src/ts/translations/logEnglish';
-import { logMessages as latvianLogMessages } from '../../src/ts/translations/logLatvian';
+import { logMessages as englishLogMessages } from '../../src/ts/core/translations/logEnglish';
+import { logMessages as latvianLogMessages } from '../../src/ts/core/translations/logLatvian';
 import { localizeLogMessage } from '../../src/ts/react/components/logs/localizeLogMessage';
-import { sentenceCaseLogMessage, splitIcon } from '../../src/ts/format/logSafe';
-import { formatOversleptMessage } from '../../src/ts/scheduling/cadenceChain/oversleep';
-import { formatChosenSkipMessage } from '../../src/ts/services/autoFill/chosenPhotos';
-import { formatTagSearchFallbackMessage } from '../../src/ts/services/autoFill/candidates';
-import { formatOffThemePickMessage } from '../../src/ts/services/autoFill/fillLogging';
-import { START_FRESH_BLOCKED } from '../../src/ts/cli/commands/settingsRecovery';
+import { sentenceCaseLogMessage, splitIcon } from '../../src/ts/core/format/logSafe';
+import { formatOversleptMessage } from '../../src/ts/core/scheduling/cadenceChain/oversleep';
+import { formatChosenSkipMessage } from '../../src/ts/core/services/autoFill/chosenPhotos';
+import { formatTagSearchFallbackMessage } from '../../src/ts/core/services/autoFill/candidates';
+import { formatOffThemePickMessage } from '../../src/ts/core/services/autoFill/fillLogging';
+import { START_FRESH_BLOCKED } from '../../src/ts/shells/cli/commands/settingsRecovery';
 
 const slots = /\{(\d+)\}/g;
 const noAutomaticIcon = /^(?:$|\s|[=-]|\p{Extended_Pictographic})/u;

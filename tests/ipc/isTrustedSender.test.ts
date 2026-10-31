@@ -16,13 +16,13 @@
  *   - anything that throws while being inspected is refused rather than assumed safe
  */
 
-import type * as registerHandlersModule from '../../src/ts/ipc/registerHandlers';
-import type * as loggerModule from '../../src/ts/logger';
+import type * as registerHandlersModule from '../../src/ts/shells/electron/registerHandlers';
+import type * as loggerModule from '../../src/ts/core/logger';
 import type { IpcMainInvokeEvent } from 'electron';
 import { invalid } from '../helpers/invalid';
 
 const { isTrustedSender, isChannelAllowedForSender, registerHandlers, restrictToLogsChannels } =
-    require('../../src/ts/ipc/registerHandlers') as typeof registerHandlersModule;
+    require('../../src/ts/shells/electron/registerHandlers') as typeof registerHandlersModule;
 
 type ChannelImpl = (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown;
 
@@ -239,7 +239,7 @@ describe('registerHandlers holds the Logs window to the Logs channel set', () =>
 
     test('a refusal is logged with the channel', async () => {
         const { channels } = setup();
-        const logger = jest.mocked(require('../../src/ts/logger') as typeof loggerModule);
+        const logger = jest.mocked(require('../../src/ts/core/logger') as typeof loggerModule);
         const warning = jest.fn<void, [string, unknown]>();
         const originalImpl = logger.withCategory.getMockImplementation();
         logger.withCategory.mockImplementation(() => invalid({ warning }));
@@ -254,7 +254,7 @@ describe('registerHandlers holds the Logs window to the Logs channel set', () =>
 
 describe('registerHandlers refusal logging', () => {
     const channelFor = (warning: jest.Mock<void, [string, unknown]>) => {
-        const logger = jest.mocked(require('../../src/ts/logger') as typeof loggerModule);
+        const logger = jest.mocked(require('../../src/ts/core/logger') as typeof loggerModule);
         const originalImpl = logger.withCategory.getMockImplementation();
         logger.withCategory.mockImplementation(() => invalid({ warning }));
         const channels = new Map<string, ChannelImpl>();
@@ -310,7 +310,7 @@ describe('registerHandlers refusal logging', () => {
     });
 
     test('refuses a non-main frame that has no url (logged as <unknown>)', async () => {
-        const logger = jest.mocked(require('../../src/ts/logger') as typeof loggerModule);
+        const logger = jest.mocked(require('../../src/ts/core/logger') as typeof loggerModule);
         const warning = jest.fn<void, [string, unknown]>();
         // Swap (then restore) the setup-mock implementation rather than spyOn +
         // mockRestore, which would strip it for every later test.

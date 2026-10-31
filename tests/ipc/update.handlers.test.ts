@@ -10,17 +10,17 @@
  * Every channel returns a {success, ...} envelope and never throws.
  */
 
-import type * as AutoUpdaterModule from '../../src/ts/services/AutoUpdater';
-import type * as update_handlersModule from '../../src/ts/ipc/update.handlers';
+import type * as AutoUpdaterModule from '../../src/ts/shells/electron/AutoUpdater';
+import type * as update_handlersModule from '../../src/ts/shells/electron/update.handlers';
 import { invalid } from '../helpers/invalid';
 
-jest.mock('../../src/ts/services/AutoUpdater', () => ({ AutoUpdater: jest.fn() }));
-jest.mock('../../src/ts/services/UpdateChecker', () => ({
+jest.mock('../../src/ts/shells/electron/AutoUpdater', () => ({ AutoUpdater: jest.fn() }));
+jest.mock('../../src/ts/core/services/UpdateChecker', () => ({
     getReleasesUrl: jest.fn(() => 'https://github.com/example/releases'),
 }));
 
-const { AutoUpdater } = jest.mocked(require('../../src/ts/services/AutoUpdater') as typeof AutoUpdaterModule);
-const { buildHandlers } = require('../../src/ts/ipc/update.handlers') as typeof update_handlersModule;
+const { AutoUpdater } = jest.mocked(require('../../src/ts/shells/electron/AutoUpdater') as typeof AutoUpdaterModule);
+const { buildHandlers } = require('../../src/ts/shells/electron/update.handlers') as typeof update_handlersModule;
 
 const makeUpdater = (overrides = {}) => ({
     checkForUpdates: jest.fn().mockResolvedValue({ latestVersion: '9.9.9' }),

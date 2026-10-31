@@ -6,9 +6,9 @@
  * settings (incl. the token) stay in sync between app and background.
  */
 
-import type * as storageModule from '../../src/ts/settings/storage';
+import type * as storageModule from '../../src/ts/core/settings/storage';
 import type { GetOptions, GetResult, SetOptions } from '@capacitor/preferences';
-import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
+import type { AndroidHeadlessStore } from '../../src/ts/core/types/settings';
 import { installHeadlessTestPlatform, installWebviewTestPlatform } from '../helpers/platform';
 
 const g = globalThis as typeof globalThis & {
@@ -53,7 +53,7 @@ describe('storage — headless service branch', () => {
         };
         g.AndroidHeadlessStore = store;
         jest.isolateModules(() => {
-            const mod = require('../../src/ts/settings/storage') as typeof storageModule;
+            const mod = require('../../src/ts/core/settings/storage') as typeof storageModule;
             storage = mod.storage;
             createJsonStore = mod.createJsonStore;
         });
@@ -128,7 +128,7 @@ describe('storage — capacitor write-behind', () => {
         mockPrefGet.mockResolvedValue({ value: null });
         // The app window's write-behind transport is the webview family's, so the window's platform is installed.
         installWebviewTestPlatform();
-        const mod = require('../../src/ts/settings/storage') as typeof storageModule;
+        const mod = require('../../src/ts/core/settings/storage') as typeof storageModule;
         capStorage = mod.storage;
         flushPendingWrites = mod.flushPendingWrites;
     });

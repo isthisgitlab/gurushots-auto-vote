@@ -4,7 +4,7 @@
  * sort exists for them. `library` is the server's own order and reorders nothing.
  */
 
-import type { LoadedSort } from '../../librarySort';
+import type { LoadedSort } from '../../core/librarySort';
 import type { TileStats } from '@/hooks/usePhotoStatsLoader';
 
 /** Which bucket a photo falls into: 0 a real value, 1 known but unrankable (a ratio with no views), 2 unknown. */

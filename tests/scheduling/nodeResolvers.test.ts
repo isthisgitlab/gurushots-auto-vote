@@ -5,15 +5,15 @@
  * onlyBoost off.
  */
 
-jest.mock('../../src/ts/settings', () => ({ getEffectiveSetting: jest.fn() }));
+jest.mock('../../src/ts/core/settings', () => ({ getEffectiveSetting: jest.fn() }));
 
 import { invalid } from '../helpers/invalid';
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import type * as nodeResolversModule from '../../src/ts/scheduling/nodeResolvers';
+import type * as nodeResolversModule from '../../src/ts/core/scheduling/nodeResolvers';
 const { resolveThreshold, resolveScheduledFill, resolveFinalWindowTopUp, resolveBoostPrefill, resolveCurrencyAuto } =
-    require('../../src/ts/scheduling/nodeResolvers') as typeof nodeResolversModule;
+    require('../../src/ts/core/scheduling/nodeResolvers') as typeof nodeResolversModule;
 
 const withSettings = (values: Record<string, unknown>) => {
     settings.getEffectiveSetting.mockImplementation((key) => invalid(values[key]));

@@ -1,7 +1,7 @@
 import { useIpcQuery } from './useIpcQuery';
 
-import type { WindowApi } from '../../types/ipc';
-import type { RendererSchema } from '../../types/settingsEditor';
+import type { WindowApi } from '../../core/types/ipc';
+import type { RendererSchema } from '../../core/types/settingsEditor';
 
 type SettingsSchemaPayload = Awaited<ReturnType<WindowApi['getSettingsSchema']>>;
 export type FullSettingsSchema = Extract<SettingsSchemaPayload, { groups: unknown[] }>;

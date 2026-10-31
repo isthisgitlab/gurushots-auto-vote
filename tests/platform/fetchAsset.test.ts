@@ -5,7 +5,7 @@
  */
 
 import { invalid } from '../helpers/invalid';
-import { fetchAsset } from '../../src/ts/platform/fetchAsset';
+import { fetchAsset } from '../../src/ts/core/platform/fetchAsset';
 
 const realFetch = globalThis.fetch;
 

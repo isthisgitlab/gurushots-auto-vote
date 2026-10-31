@@ -7,16 +7,16 @@
  * they throw rather than invent one.
  */
 
-import type { CapacitorGlobals } from '../../types/capacitor';
-import type { PlatformPaths } from '../../platform/port';
+import type { CapacitorGlobals } from '../../core/types/capacitor';
+import type { PlatformPaths } from '../../core/platform/port';
 
-type AppIdentityModule = typeof import('../../platform/appIdentity');
+type AppIdentityModule = typeof import('../../core/platform/appIdentity');
 
 // Reached at call time: the setup file loads the helpers that import this
 // family, so an import-time module graph lands in the setup's registry before
 // a test file registers its own mocks (platforms/node/index.ts states the
 // reason in full).
-const appIdentity = (): AppIdentityModule => require('../../platform/appIdentity') as AppIdentityModule;
+const appIdentity = (): AppIdentityModule => require('../../core/platform/appIdentity') as AppIdentityModule;
 
 const createWebviewPaths = (): PlatformPaths => ({
     // The Capacitor branches of runtime: the stub path /<appName>, and the

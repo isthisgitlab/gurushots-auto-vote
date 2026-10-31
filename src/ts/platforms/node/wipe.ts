@@ -8,13 +8,13 @@
  * ElectronPlatform requires.
  */
 
-import type { PlatformWipe } from '../../platform/port';
+import type { PlatformWipe } from '../../core/platform/port';
 
-type CliSessionLockModule = typeof import('../../settings/cliSessionLock');
+type CliSessionLockModule = typeof import('./cliSessionLock');
 
 // Reached at call time (see index.ts for why): the markers live in the
 // user-data directory, so reading them pulls the settings-side graph.
-const cliSessionLock = (): CliSessionLockModule => require('../../settings/cliSessionLock') as CliSessionLockModule;
+const cliSessionLock = (): CliSessionLockModule => require('./cliSessionLock') as CliSessionLockModule;
 
 const createNodeWipe = (): PlatformWipe => ({
     clearSession: null,

@@ -4,18 +4,18 @@
  * on, and required-argument guards.
  */
 
-import type * as rewardsModule from '../../src/ts/api/rewards';
-import type * as api_clientModule from '../../src/ts/api/api-client';
+import type * as rewardsModule from '../../src/ts/core/api/rewards';
+import type * as api_clientModule from '../../src/ts/core/api/api-client';
 import { invalid } from '../helpers/invalid';
 
 const { getMyCompletedChallenges, claimChallengeResources, getMyMissions, claimMissionPrize } =
-    require('../../src/ts/api/rewards') as typeof rewardsModule;
+    require('../../src/ts/core/api/rewards') as typeof rewardsModule;
 
-jest.mock('../../src/ts/api/api-client', () => ({
+jest.mock('../../src/ts/core/api/api-client', () => ({
     makePostRequest: jest.fn(),
 }));
 
-const { makePostRequest } = jest.mocked(require('../../src/ts/api/api-client') as typeof api_clientModule);
+const { makePostRequest } = jest.mocked(require('../../src/ts/core/api/api-client') as typeof api_clientModule);
 const token = 'tok-123';
 
 beforeEach(() => jest.clearAllMocks());

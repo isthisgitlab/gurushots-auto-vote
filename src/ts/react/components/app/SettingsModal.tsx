@@ -47,7 +47,12 @@ import type { ImportReport } from '@/api/useImportReport';
 import type { SettingsBand, SettingsSection, SettingsTab, SettingsTabId } from '@/utils/groupSettings';
 import type { SettingFilterTexts } from '@/utils/matchesSettingFilter';
 import type { TabDescriptor } from '@/components/ui/Tabs';
-import type { HintsFor, SettingChangeHandler, SettingResetHandler, Translate } from '../../../types/settingsEditor';
+import type {
+    HintsFor,
+    SettingChangeHandler,
+    SettingResetHandler,
+    Translate,
+} from '../../../core/types/settingsEditor';
 
 /**
  * The form state every schema-driven setting input reads and writes.

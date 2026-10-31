@@ -4,12 +4,12 @@
  * an entry is live-pinned for, and the pin-write rule (a photo pinned for at most one of Boost/Turbo).
  */
 
-import type * as entryPinsModule from '../../src/ts/voting/entryPins';
-import type { Challenge, RankingEntry } from '../../src/ts/types/gurushots';
+import type * as entryPinsModule from '../../src/ts/core/voting/entryPins';
+import type { Challenge, RankingEntry } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 const { applyPinToRecord, findPinnedEntry, canStillFire, featureNeverFires, unusablePins, livePinKindOf } =
-    require('../../src/ts/voting/entryPins') as typeof entryPinsModule;
+    require('../../src/ts/core/voting/entryPins') as typeof entryPinsModule;
 
 const build = (
     entries: RankingEntry[],

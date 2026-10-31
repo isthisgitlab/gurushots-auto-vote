@@ -7,11 +7,11 @@
 import { act, fireEvent, render, screen, waitFor, within } from './helpers/test-utils';
 import { ImportReportModal } from '@/components/app/ImportReportModal';
 import { fireSettingsChanged, mockTranslator, defaultTranslate } from './helpers/setup';
-import { IMPORT_REF_ENGLISH } from '../../src/ts/settings/importRefs';
-import type { ImportRefText } from '../../src/ts/settings/importRefs';
+import { IMPORT_REF_ENGLISH } from '../../src/ts/core/settings/importRefs';
+import type { ImportRefText } from '../../src/ts/core/settings/importRefs';
 import { invalid } from '../helpers/invalid';
 import { resetPlatformKind } from '../helpers/platformKind';
-import { markPlatformKind } from '../../src/ts/platform/kind';
+import { markPlatformKind } from '../../src/ts/core/platform/kind';
 
 const report = (refsBlocked: unknown[], acknowledged = false) => ({
     success: true as const,

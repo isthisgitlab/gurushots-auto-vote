@@ -2,7 +2,7 @@
  * platform/kind — the dependency-free platform marker the shell bridges set. A page with no stored kind reads
  * `electron` (the Electron renderer has no bridge to mark with); a marked one reads what was stored.
  */
-import { markPlatformKind, platformKind } from '../../src/ts/platform/kind';
+import { markPlatformKind, platformKind } from '../../src/ts/core/platform/kind';
 import { resetPlatformKind } from '../helpers/platformKind';
 
 describe('platform kind', () => {

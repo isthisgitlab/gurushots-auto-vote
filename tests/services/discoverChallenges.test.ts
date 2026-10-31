@@ -4,11 +4,11 @@
  */
 
 import { invalid } from '../helpers/invalid';
-import type * as discoverModule from '../../src/ts/services/discoverChallenges';
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type * as discoverModule from '../../src/ts/core/services/discoverChallenges';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 
 const { mergeDiscoverLists, fetchUpcoming, clearUpcomingCache, UPCOMING_CACHE_MS, MAX_UPCOMING_ROWS } =
-    require('../../src/ts/services/discoverChallenges') as typeof discoverModule;
+    require('../../src/ts/core/services/discoverChallenges') as typeof discoverModule;
 
 const NOW = 1_800_000_000;
 const HOUR = 3600;

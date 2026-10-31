@@ -6,10 +6,10 @@
  * counted from the rosters in vote-sorted positions.
  */
 
-import type * as teamsModule from '../../src/ts/api/teams';
-import type * as api_clientModule from '../../src/ts/api/api-client';
-import type * as loggerModule from '../../src/ts/logger';
-import type { CategoryLogger } from '../../src/ts/logger';
+import type * as teamsModule from '../../src/ts/core/api/teams';
+import type * as api_clientModule from '../../src/ts/core/api/api-client';
+import type * as loggerModule from '../../src/ts/core/logger';
+import type { CategoryLogger } from '../../src/ts/core/logger';
 import { invalid } from '../helpers/invalid';
 
 type LoggerMock = typeof loggerModule & {
@@ -17,11 +17,11 @@ type LoggerMock = typeof loggerModule & {
     __mockWarningFn: jest.MockedFunction<CategoryLogger['warning']>;
 };
 
-jest.mock('../../src/ts/api/api-client', () => ({
+jest.mock('../../src/ts/core/api/api-client', () => ({
     makePostRequest: jest.fn(),
 }));
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const mockDebugFn = jest.fn();
     const mockWarningFn = jest.fn();
     return {
@@ -31,9 +31,10 @@ jest.mock('../../src/ts/logger', () => {
     };
 });
 
-const { fetchActiveTeamMatch, __resetMatchStatusForTests } = require('../../src/ts/api/teams') as typeof teamsModule;
-const { makePostRequest } = jest.mocked(require('../../src/ts/api/api-client') as typeof api_clientModule);
-const logger: LoggerMock = invalid(require('../../src/ts/logger'));
+const { fetchActiveTeamMatch, __resetMatchStatusForTests } =
+    require('../../src/ts/core/api/teams') as typeof teamsModule;
+const { makePostRequest } = jest.mocked(require('../../src/ts/core/api/api-client') as typeof api_clientModule);
+const logger: LoggerMock = invalid(require('../../src/ts/core/logger'));
 const token = 'tok-123';
 
 const joined = (id: unknown = 111, meId?: unknown) => ({

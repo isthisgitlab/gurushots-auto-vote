@@ -4,10 +4,10 @@ import { useLatestRef } from './useLatestRef';
 import * as ipc from '@/api/ipc';
 import { valuesEqual } from '@/utils/valuesEqual';
 import { normalizeProfileName } from '@/utils/profileName';
-import { isPlainObject } from '../../plainObject';
-import { errorMessage } from '../../errorMessage';
+import { isPlainObject } from '../../core/plainObject';
+import { errorMessage } from '../../core/errorMessage';
 
-import type { ChallengeValues, TitleRule } from '../../types/settings';
+import type { ChallengeValues, TitleRule } from '../../core/types/settings';
 
 const fetchTitleRules = () => Promise.all([ipc.getTitleRules(), ipc.getChallengeProfiles()]);
 

@@ -7,10 +7,10 @@
  * captured object, not the slot.
  */
 
-import { platform } from '../../src/ts/platform/port';
+import { platform } from '../../src/ts/core/platform/port';
 import { clearInstalledPlatform } from '../helpers/platform';
 
-import type { Platform } from '../../src/ts/platform/port';
+import type { Platform } from '../../src/ts/core/platform/port';
 
 // Requiring the module installs the platform; the slot is cleared first,
 // because the setup file installed the node test platform before this file
@@ -42,7 +42,7 @@ describe('the scripts platform module', () => {
 // module's import chain is the port and the family builder only — the
 // install must run before the logger loads.
 describe('loading the scripts platform module loads no heavy module', () => {
-    const HEAVY = ['../../src/ts/logger'];
+    const HEAVY = ['../../src/ts/core/logger'];
     let mockLoaded: string[];
 
     beforeEach(() => {

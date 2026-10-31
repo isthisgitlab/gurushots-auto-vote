@@ -1,9 +1,9 @@
-import type { FillLogger } from '../../src/ts/types/autoFill';
+import type { FillLogger } from '../../src/ts/core/types/autoFill';
 import { invalid } from '../helpers/invalid';
 import { createNodePlatform, extractedVisionRootOf, __resetExtractedRootForTests } from '../../src/ts/platforms/node';
 import { installHeadlessTestPlatform, installTestPlatform, installWebviewTestPlatform } from '../helpers/platform';
 
-import type { PlatformWindows } from '../../src/ts/platform/port';
+import type { PlatformWindows } from '../../src/ts/core/platform/port';
 
 /** The mocked transformers `env`: the module writes arbitrary config keys onto it. */
 type MockEnv = { backends: { onnx: { wasm: object } }; localModelPath?: string; [key: string]: unknown };
@@ -41,7 +41,7 @@ jest.mock('electron', () => ({
         },
     },
 }));
-jest.mock('../../src/ts/logger', () => ({ withCategory: jest.fn(() => mockLog) }));
+jest.mock('../../src/ts/core/logger', () => ({ withCategory: jest.fn(() => mockLog) }));
 jest.mock('node:sea', () => mockSea, { virtual: true });
 jest.mock('node:module', () => ({ createRequire: mockCreateRequire }));
 jest.mock('@huggingface/transformers', () => mockTransformers);
@@ -50,7 +50,7 @@ import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 import pathModule = require('node:path');
 const path = jest.mocked(pathModule);
-import type * as visionVerifierModule from '../../src/ts/services/visionVerifier';
+import type * as visionVerifierModule from '../../src/ts/core/services/visionVerifier';
 const {
     rankVisually,
     hasBundledModel,
@@ -60,7 +60,7 @@ const {
     snapPrompts,
     judgeSnapImage,
     __resetForTests,
-} = require('../../src/ts/services/visionVerifier') as typeof visionVerifierModule;
+} = require('../../src/ts/core/services/visionVerifier') as typeof visionVerifierModule;
 
 // The service's windows: the explicit no-ops its shell module passes.
 const windows: PlatformWindows = {

@@ -14,12 +14,12 @@
 import axiosModule = require('axios');
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { invalid } from '../helpers/invalid';
-import type { CategoryLogger } from '../../src/ts/logger';
+import type { CategoryLogger } from '../../src/ts/core/logger';
 // tests/setup.ts replaces axios with a bare jest.fn(), called with one config.
 type AxiosMock = jest.Mock<Promise<unknown>, [config: AxiosRequestConfig]>;
 const axios: AxiosMock = invalid(axiosModule);
 
-jest.mock('../../src/ts/api/randomizer', () => ({
+jest.mock('../../src/ts/core/api/randomizer', () => ({
     generateRandomHeaders: jest.fn((token: string) => ({ 'x-token': token })),
 }));
 
@@ -31,18 +31,18 @@ jest.mock(
     { virtual: true },
 );
 
-jest.mock('../../src/ts/settings', () => ({ getSetting: jest.fn() }));
+jest.mock('../../src/ts/core/settings', () => ({ getSetting: jest.fn() }));
 
-jest.mock('../../src/ts/timing', () => ({ sleep: jest.fn(() => Promise.resolve()) }));
+jest.mock('../../src/ts/core/timing', () => ({ sleep: jest.fn(() => Promise.resolve()) }));
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import timingModule = require('../../src/ts/timing');
+import timingModule = require('../../src/ts/core/timing');
 const timing = jest.mocked(timingModule);
 import { installHeadlessTestPlatform, installWebviewTestPlatform } from '../helpers/platform';
-import logger = require('../../src/ts/logger');
-import type * as api_clientModule from '../../src/ts/api/api-client';
-const { makePostRequest } = require('../../src/ts/api/api-client') as typeof api_clientModule;
+import logger = require('../../src/ts/core/logger');
+import type * as api_clientModule from '../../src/ts/core/api/api-client';
+const { makePostRequest } = require('../../src/ts/core/api/api-client') as typeof api_clientModule;
 
 const URL = 'https://api.gurushots.com/edge';
 
@@ -205,7 +205,7 @@ describe('headless adapter', () => {
                 installHeadlessTestPlatform();
                 isolatedAxios.mockResolvedValueOnce({ status: 200, headers: {}, data: {} });
                 (
-                    require('../../src/ts/api/api-client') as typeof import('../../src/ts/api/api-client')
+                    require('../../src/ts/core/api/api-client') as typeof import('../../src/ts/core/api/api-client')
                 ).makePostRequest(URL, {}, '');
                 expect(g.__gsResolveHeadlessHttp).toBe(existing);
             } finally {

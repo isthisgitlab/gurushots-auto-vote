@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useAsyncIpcAction } from './useAsyncIpcAction';
-import { errorMessage } from '../../errorMessage';
+import { errorMessage } from '../../core/errorMessage';
 import { logRendererError } from './ipc';
 
 /**

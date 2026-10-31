@@ -9,7 +9,7 @@
  * nativeWipe part.
  */
 
-import type { PlatformWipe } from '../../platform/port';
+import type { PlatformWipe } from '../../core/platform/port';
 
 type CapacitorPreferencesModule = typeof import('./capacitorPreferences');
 

@@ -5,7 +5,7 @@
  * mocked and the tests assert what gets printed and dispatched.
  */
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const calls: { level: string; msg: unknown; data?: unknown }[] = [];
     const rec = (level: string) => (msg: unknown, data?: unknown) => calls.push({ level, msg, data });
     const cat = {
@@ -28,27 +28,27 @@ jest.mock('../../src/ts/logger', () => {
     };
 });
 
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     getSetting: jest.fn(),
     loadSettings: jest.fn(() => ({ mock: false })),
     setSetting: jest.fn(),
 }));
 
-jest.mock('../../src/ts/apiFactory', () => {
+jest.mock('../../src/ts/core/apiFactory', () => {
     const middleware = { isAuthenticated: jest.fn(() => true), cliLogin: jest.fn() };
     return { __mw: middleware, getMiddleware: jest.fn(() => middleware), refreshApi: jest.fn() };
 });
 
-jest.mock('../../src/ts/services/auth', () => ({ logout: jest.fn() }));
+jest.mock('../../src/ts/core/services/auth', () => ({ logout: jest.fn() }));
 
-jest.mock('../../src/ts/cli/prompts', () => ({
+jest.mock('../../src/ts/shells/cli/prompts', () => ({
     createReadlineInterface: jest.fn(),
     askYesNo: jest.fn(),
     askInput: jest.fn(),
     askSecret: jest.fn(),
 }));
 
-jest.mock('../../src/ts/ipc/actions.handlers', () => {
+jest.mock('../../src/ts/core/ipc/actions.handlers', () => {
     const handlers = {
         'get-bankroll': jest.fn(),
         'get-member-challenges': jest.fn(),
@@ -58,25 +58,25 @@ jest.mock('../../src/ts/ipc/actions.handlers', () => {
     return { __handlers: handlers, buildHandlers: jest.fn(() => handlers) };
 });
 
-jest.mock('../../src/ts/services/UpdateChecker', () => ({
+jest.mock('../../src/ts/core/services/UpdateChecker', () => ({
     checkForUpdates: jest.fn(),
     getReleasesUrl: jest.fn(() => 'https://releases'),
 }));
 
 const mockHasBundledModel = jest.fn(async () => true);
-jest.mock('../../src/ts/services/visionVerifier', () => ({ hasBundledModel: mockHasBundledModel }));
+jest.mock('../../src/ts/core/services/visionVerifier', () => ({ hasBundledModel: mockHasBundledModel }));
 
 import { invalid } from '../helpers/invalid';
-import { DEFAULT_TIMEZONE } from '../../src/ts/settings/uiDefaults';
+import { DEFAULT_TIMEZONE } from '../../src/ts/core/settings/uiDefaults';
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
-import loggerModule = require('../../src/ts/logger');
+import loggerModule = require('../../src/ts/core/logger');
 const logger = jest.mocked(
     invalid<typeof loggerModule & { __calls: { level: string; msg: unknown; data?: unknown }[] }>(loggerModule),
 );
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import apiFactoryModule = require('../../src/ts/apiFactory');
+import apiFactoryModule = require('../../src/ts/core/apiFactory');
 type Middleware = ReturnType<typeof apiFactoryModule.getMiddleware>;
 const apiFactory = jest.mocked(
     invalid<
@@ -88,8 +88,8 @@ const apiFactory = jest.mocked(
         }
     >(apiFactoryModule),
 );
-const { logout } = jest.mocked(require('../../src/ts/services/auth') as typeof authModule);
-import promptsModule = require('../../src/ts/cli/prompts');
+const { logout } = jest.mocked(require('../../src/ts/core/services/auth') as typeof authModule);
+import promptsModule = require('../../src/ts/shells/cli/prompts');
 const prompts = jest.mocked(promptsModule);
 // The handler-module mocks expose their jest.fn table for the assertions.
 type HandlersMock = {
@@ -100,24 +100,24 @@ type HandlersMock = {
         >
     >;
 };
-const handlers = invalid<HandlersMock>(require('../../src/ts/ipc/actions.handlers')).__handlers;
-import updateCheckerModule = require('../../src/ts/services/UpdateChecker');
+const handlers = invalid<HandlersMock>(require('../../src/ts/core/ipc/actions.handlers')).__handlers;
+import updateCheckerModule = require('../../src/ts/core/services/UpdateChecker');
 const updateChecker = jest.mocked(updateCheckerModule);
-import type * as authModule from '../../src/ts/services/auth';
-import type * as actionsHandlersModule from '../../src/ts/ipc/actions.handlers';
-import type * as authCommandsModule from '../../src/ts/cli/commands/auth';
-import type * as bankrollModule from '../../src/ts/cli/commands/bankroll';
-import type * as joinModule from '../../src/ts/cli/commands/join';
-import type * as updateModule from '../../src/ts/cli/commands/update';
-import type * as logsModule from '../../src/ts/cli/commands/logs';
+import type * as authModule from '../../src/ts/core/services/auth';
+import type * as actionsHandlersModule from '../../src/ts/core/ipc/actions.handlers';
+import type * as authCommandsModule from '../../src/ts/shells/cli/commands/auth';
+import type * as bankrollModule from '../../src/ts/shells/cli/commands/bankroll';
+import type * as joinModule from '../../src/ts/shells/cli/commands/join';
+import type * as updateModule from '../../src/ts/shells/cli/commands/update';
+import type * as logsModule from '../../src/ts/shells/cli/commands/logs';
 const pkg = jest.requireActual<typeof import('../../package.json')>('../../package.json');
 
-const { handleLogin, handleLogout } = require('../../src/ts/cli/commands/auth') as typeof authCommandsModule;
-const { showBankroll } = require('../../src/ts/cli/commands/bankroll') as typeof bankrollModule;
+const { handleLogin, handleLogout } = require('../../src/ts/shells/cli/commands/auth') as typeof authCommandsModule;
+const { showBankroll } = require('../../src/ts/shells/cli/commands/bankroll') as typeof bankrollModule;
 const { showDiscover, joinChallengeCmd, forgetPaymentCmd } =
-    require('../../src/ts/cli/commands/join') as typeof joinModule;
-const { checkUpdates } = require('../../src/ts/cli/commands/update') as typeof updateModule;
-const { showLogs } = require('../../src/ts/cli/commands/logs') as typeof logsModule;
+    require('../../src/ts/shells/cli/commands/join') as typeof joinModule;
+const { checkUpdates } = require('../../src/ts/shells/cli/commands/update') as typeof updateModule;
+const { showLogs } = require('../../src/ts/shells/cli/commands/logs') as typeof logsModule;
 
 const msgs = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
 const all = () => logger.__calls.map((c) => String(c.msg)).join('\n');

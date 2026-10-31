@@ -12,11 +12,11 @@ jest.mock('../../../src/ts/platforms/headless/http', () => ({
 }));
 
 import { installHeadlessTestPlatform } from '../../helpers/platform';
-import { platform } from '../../../src/ts/platform/port';
+import { platform } from '../../../src/ts/core/platform/port';
 import { createHeadlessPlatform } from '../../../src/ts/platforms/headless';
 
 import type { AxiosAdapter, AxiosPromise } from 'axios';
-import type { PlatformWindows } from '../../../src/ts/platform/port';
+import type { PlatformWindows } from '../../../src/ts/core/platform/port';
 
 const headlessHttp = jest.mocked(
     require('../../../src/ts/platforms/headless/http') as typeof import('../../../src/ts/platforms/headless/http'),

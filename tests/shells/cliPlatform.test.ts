@@ -12,10 +12,10 @@
 
 import * as path from 'node:path';
 
-import { platform } from '../../src/ts/platform/port';
+import { platform } from '../../src/ts/core/platform/port';
 import { clearInstalledPlatform } from '../helpers/platform';
 
-import type { Platform } from '../../src/ts/platform/port';
+import type { Platform } from '../../src/ts/core/platform/port';
 
 const mockExtract = jest.fn(() => ({
     root: '/extracted/vision-runtime',
@@ -25,7 +25,7 @@ const mockSea = { isSea: jest.fn(() => true), getAsset: jest.fn(() => 'sha') };
 const mockSeaTransformers = { env: {}, pipeline: jest.fn() };
 const mockCreateRequire = jest.fn(() => () => mockSeaTransformers);
 
-jest.mock('../../src/ts/services/visionCliAssets', () => ({
+jest.mock('../../src/ts/shells/cli/visionCliAssets', () => ({
     __esModule: true,
     extractVisionCliAssets: mockExtract,
 }));
@@ -36,7 +36,7 @@ jest.mock('node:module', () => ({ createRequire: mockCreateRequire }));
 // because the setup file installed the node test platform before this file
 // loaded.
 clearInstalledPlatform();
-require('../../src/ts/cli/platform');
+require('../../src/ts/shells/cli/platform');
 const installed: Platform = platform();
 
 const appPaths = require('../../src/ts/appPaths') as typeof import('../../src/ts/appPaths');
@@ -49,7 +49,7 @@ const { __resetExtractedRootForTests } =
 // inside isolateModules only wins while the wrapped module has not been
 // instantiated in the outer registry (the location tests below instantiate
 // the file-level mock), and its afterEach re-registers that mock.
-const HEAVY = ['../../src/ts/services/visionCliAssets'];
+const HEAVY = ['../../src/ts/shells/cli/visionCliAssets'];
 
 describe('loading the CLI shell platform module defers the wrapped modules', () => {
     let mockLoaded: string[];
@@ -62,7 +62,7 @@ describe('loading the CLI shell platform module defers the wrapped modules', () 
         for (const heavy of HEAVY) jest.dontMock(heavy);
         // doMock (not mock): the hoisted registration was removed by
         // dontMock above, and a runtime re-registration is a doMock.
-        jest.doMock('../../src/ts/services/visionCliAssets', () => ({
+        jest.doMock('../../src/ts/shells/cli/visionCliAssets', () => ({
             __esModule: true,
             extractVisionCliAssets: mockExtract,
         }));
@@ -77,7 +77,7 @@ describe('loading the CLI shell platform module defers the wrapped modules', () 
                     return {};
                 });
             }
-            require('../../src/ts/cli/platform');
+            require('../../src/ts/shells/cli/platform');
             expect(mockLoaded).toEqual([]);
             expect(platform()).toBeDefined();
         });
@@ -100,7 +100,7 @@ describe('loading the CLI shell platform module defers the wrapped modules', () 
                 }),
                 extractedVisionRootOf: () => '/from-mock',
             }));
-            require('../../src/ts/cli/platform');
+            require('../../src/ts/shells/cli/platform');
             // The deferred read of the family's remembered root is the next
             // thing the location member runs, so the root comes back from
             // the mock.

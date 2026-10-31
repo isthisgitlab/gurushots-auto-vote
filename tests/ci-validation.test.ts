@@ -3,7 +3,7 @@
  *
  * These tests verify that the CI environment and configurations are working correctly.
  */
-import { isPlainObject } from '../src/ts/plainObject';
+import { isPlainObject } from '../src/ts/core/plainObject';
 import { invalid } from './helpers/invalid';
 
 describe('CI Environment Validation', () => {
@@ -146,7 +146,7 @@ describe('sends toward the Logs window', () => {
         // A file exemption would let a new send through in the file that implements the filter.
         expect(enabling[0]).not.toHaveProperty('excludeFiles');
         // Nothing under src/ts besides the type-only declarations is skipped by Oxlint.
-        expect(config.ignorePatterns).toEqual(['src/ts/types/**']);
+        expect(config.ignorePatterns).toEqual(['src/ts/core/types/**']);
     });
 
     // A second config would apply to the files under its directory instead of the root one.
@@ -169,8 +169,8 @@ describe('sends toward the Logs window', () => {
         expect(scripts.lint).toBe('oxlint src scripts tests');
     });
 
-    // Oxlint ignores src/ts/types, so nothing there may run: every top-level statement is a type declaration.
-    test('src/ts/types holds only type declarations', () => {
+    // Oxlint ignores src/ts/core/types, so nothing there may run: every top-level statement is a type declaration.
+    test('src/ts/core/types holds only type declarations', () => {
         const TYPE_ONLY = new Set(['TSInterfaceDeclaration', 'TSTypeAliasDeclaration']);
         const isTypeOnly = (statement: unknown): boolean => {
             const node = invalid<{
@@ -227,7 +227,7 @@ describe('sends toward the Logs window', () => {
             ),
         ).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
         const offenders: string[] = [];
-        const files = fs.globSync('src/ts/types/**/*.{ts,tsx}', { cwd: root });
+        const files = fs.globSync('src/ts/core/types/**/*.{ts,tsx}', { cwd: root });
         expect(files.length).toBeGreaterThan(0);
         for (const file of files) {
             for (const line of runtimeLines(fs.readFileSync(path.join(root, file), 'utf8'))) {
@@ -239,14 +239,17 @@ describe('sends toward the Logs window', () => {
 
     // The only legitimate frame reads and off-window sends, each a line-level disable with a reason.
     const EXEMPTIONS: ReadonlyArray<readonly [string, string]> = [
-        ['src/ts/ipc/registerHandlers.ts', 'const frame = event.senderFrame;'],
+        ['src/ts/shells/electron/registerHandlers.ts', 'const frame = event.senderFrame;'],
         [
-            'src/ts/ipc/registerHandlers.ts',
+            'src/ts/shells/electron/registerHandlers.ts',
             'if (event.sender?.mainFrame && frame !== event.sender.mainFrame) return false;',
         ],
-        ['src/ts/ipc/registerHandlers.ts', "return event.senderFrame?.url ?? event.sender?.getURL?.() ?? '<unknown>';"],
-        ['src/ts/ipc/registerHandlers.ts', 'webContents.send = (channel: string, ...args: unknown[]) =>'],
-        ['src/ts/preloadApi.ts', 'api[method] = () => ipcRenderer.send(channel);'],
+        [
+            'src/ts/shells/electron/registerHandlers.ts',
+            "return event.senderFrame?.url ?? event.sender?.getURL?.() ?? '<unknown>';",
+        ],
+        ['src/ts/shells/electron/registerHandlers.ts', 'webContents.send = (channel: string, ...args: unknown[]) =>'],
+        ['src/ts/shells/electron/preloadApi.ts', 'api[method] = () => ipcRenderer.send(channel);'],
     ];
 
     interface Directive {
@@ -339,8 +342,8 @@ describe('ipcMain registration', () => {
     const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
     const path = jest.requireActual<typeof import('node:path')>('node:path');
     const root = path.join(__dirname, '..');
-    const REGISTER_HANDLERS = 'src/ts/ipc/registerHandlers.ts';
-    const ENTRY = 'src/ts/index.ts';
+    const REGISTER_HANDLERS = 'src/ts/shells/electron/registerHandlers.ts';
+    const ENTRY = 'src/ts/shells/electron/index.ts';
     const callsOf = (method: 'handle' | 'on'): Array<readonly [string, string]> =>
         fs
             .globSync('src/ts/**/*.{ts,tsx}', { cwd: root })
@@ -432,8 +435,8 @@ describe('stylesheet sources', () => {
     test('THEMES lists exactly the themes the installed daisyui ships', () => {
         const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
         const path = jest.requireActual<typeof import('node:path')>('node:path');
-        const { THEMES } = jest.requireActual<typeof import('../src/ts/settings/uiDefaults')>(
-            '../src/ts/settings/uiDefaults',
+        const { THEMES } = jest.requireActual<typeof import('../src/ts/core/settings/uiDefaults')>(
+            '../src/ts/core/settings/uiDefaults',
         );
         const themeDir = path.join(__dirname, '..', 'node_modules', 'daisyui', 'theme');
         const shipped = fs
@@ -617,8 +620,8 @@ describe('renderer button colours', () => {
 });
 
 // The layering plan keeps the platform code out of the renderer bundles: the renderer chain lives in
-// src/ts/autovote/chain.ts (controller.ts composes it) and the native services arrive as an injected background host
-// (src/ts/bridge/capacitorBackgroundHost.ts) that only the Capacitor page imports. An indirect import could
+// src/ts/core/autovote/chain.ts (controller.ts composes it) and the native services arrive as an injected background host
+// (src/ts/shells/capacitor/bridge/capacitorBackgroundHost.ts) that only the Capacitor page imports. An indirect import could
 // route around a source-text scan, so the evidence is esbuild's own module graph: the four renderer bundles
 // are rebuilt in-process with the build script's exact options and every input file is checked.
 describe('renderer bundle graphs', () => {
@@ -631,10 +634,10 @@ describe('renderer bundle graphs', () => {
     // legitimately reach the platform code and are not checked.
     const CHECKED_ENTRIES = ['app', 'login', 'logs', 'web'] as const;
     const FORBIDDEN_EXACT = [
-        'src/ts/platform/port.ts',
-        'src/ts/services/NativeAutovoteBridge.ts',
-        'src/ts/services/ForegroundServiceController.ts',
-        'src/ts/services/AndroidUpdateInstaller.ts',
+        'src/ts/core/platform/port.ts',
+        'src/ts/shells/capacitor/NativeAutovoteBridge.ts',
+        'src/ts/shells/capacitor/ForegroundServiceController.ts',
+        'src/ts/shells/capacitor/AndroidUpdateInstaller.ts',
     ];
     const FORBIDDEN_DIR = 'src/ts/platforms/';
 
@@ -709,13 +712,13 @@ describe('renderer bundle graphs', () => {
 
     test('the capacitor bundle is the sanctioned route to the platform port and the native bridge', async () => {
         // The Capacitor page legitimately reaches both through
-        // src/ts/bridge/capacitorBackgroundHost.ts. Their presence — built
+        // src/ts/shells/capacitor/bridge/capacitorBackgroundHost.ts. Their presence — built
         // with the same options and read through the same normalisation — is
         // the positive control that the forbidden-path check sees real
         // module graphs, not an empty match set.
         const { inputs } = await buildGraph('capacitor');
-        expect(inputs).toContain('src/ts/platform/port.ts');
-        expect(inputs).toContain('src/ts/services/NativeAutovoteBridge.ts');
+        expect(inputs).toContain('src/ts/core/platform/port.ts');
+        expect(inputs).toContain('src/ts/shells/capacitor/NativeAutovoteBridge.ts');
     }, 120_000);
 });
 
@@ -735,15 +738,15 @@ describe('shell platform module load-time chains', () => {
     const root = path.join(__dirname, '..');
 
     const SHELL_PLATFORM_ENTRIES = [
-        'src/ts/index/platform.ts',
-        'src/ts/cli/platform.ts',
-        'src/ts/web/platform.ts',
-        'src/ts/bridge/capacitorPlatform.ts',
-        'src/ts/headless/platform.ts',
+        'src/ts/shells/electron/platform.ts',
+        'src/ts/shells/cli/platform.ts',
+        'src/ts/shells/web/platform.ts',
+        'src/ts/shells/capacitor/platform.ts',
+        'src/ts/shells/headless/platform.ts',
         'scripts/lib/platform.ts',
     ];
-    const LOGGER_ENTRY = 'src/ts/logger.ts';
-    const isLoggerModule = (file: string): boolean => file === LOGGER_ENTRY || file.startsWith('src/ts/logger/');
+    const LOGGER_ENTRY = 'src/ts/core/logger.ts';
+    const isLoggerModule = (file: string): boolean => file === LOGGER_ENTRY || file.startsWith('src/ts/core/logger/');
 
     // Bundles one entry in-process and walks its metafile graph over
     // import-statement edges only, answering every reached file normalised to
@@ -798,7 +801,7 @@ describe('shell platform module load-time chains', () => {
             // assertion requires each shell platform module to import the
             // port statically, so a module that installs another way fails
             // it on purpose.
-            if (!chain.includes('src/ts/platform/port.ts')) portMisses.push(entry);
+            if (!chain.includes('src/ts/core/platform/port.ts')) portMisses.push(entry);
             offenders.push(...chain.filter(isLoggerModule).map((file) => `${entry}: ${file}`));
         }
         expect(portMisses).toEqual([]);
@@ -806,12 +809,12 @@ describe('shell platform module load-time chains', () => {
     }, 120_000);
 
     test('the guard is honest: the Electron entry does reach the logger, and the check names it', async () => {
-        // The mechanism control: src/ts/index.ts imports the settings facade
+        // The mechanism control: src/ts/shells/electron/index.ts imports the settings facade
         // statically, and the facade reaches the logger — the same-shaped
         // graph that broke the main bundle. Its presence here, named by the
         // same filter the guard fails on, proves the walk and the check see
         // real logger modules.
-        const chain = await loadTimeChain('src/ts/index.ts');
+        const chain = await loadTimeChain('src/ts/shells/electron/index.ts');
         expect(chain).toContain(LOGGER_ENTRY);
         expect(chain.filter(isLoggerModule)).toContain(LOGGER_ENTRY);
     }, 120_000);

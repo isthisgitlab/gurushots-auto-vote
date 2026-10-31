@@ -1,5 +1,5 @@
-import type * as lifecycleModule from '../../src/ts/windows/lifecycle';
-import type * as settingsModule from '../../src/ts/settings';
+import type * as lifecycleModule from '../../src/ts/shells/electron/windows/lifecycle';
+import type * as settingsModule from '../../src/ts/core/settings';
 import { invalid } from '../helpers/invalid';
 // Mock electron so the lazy require inside ensureExit resolves to a
 // controllable app object instead of Jest's node-env path string.
@@ -12,7 +12,7 @@ jest.mock('electron', () => ({
 }));
 
 // Mock logger
-jest.mock('../../src/ts/logger', () => ({
+jest.mock('../../src/ts/core/logger', () => ({
     withCategory: jest.fn(() => ({
         info: jest.fn(),
         debug: jest.fn(),
@@ -22,7 +22,7 @@ jest.mock('../../src/ts/logger', () => ({
 }));
 
 const { focusExistingWindow, clearTokenOnQuit, FORCE_EXIT_GRACE_MS } =
-    require('../../src/ts/windows/lifecycle') as typeof lifecycleModule;
+    require('../../src/ts/shells/electron/windows/lifecycle') as typeof lifecycleModule;
 
 describe('ensureExit', () => {
     let ensureExit: typeof lifecycleModule.ensureExit;
@@ -32,7 +32,7 @@ describe('ensureExit', () => {
         // The module keeps its pending timer in module-level state; a fresh
         // require per test keeps that state from bleeding across tests.
         jest.resetModules();
-        ({ ensureExit } = require('../../src/ts/windows/lifecycle') as typeof lifecycleModule);
+        ({ ensureExit } = require('../../src/ts/shells/electron/windows/lifecycle') as typeof lifecycleModule);
         jest.useFakeTimers();
         processExitSpy = jest.spyOn(process, 'exit').mockImplementation(invalid(() => {}));
         mockApp.exit.mockReset();

@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { useIpcQuery } from './useIpcQuery';
 import * as ipc from './ipc';
 
-import type { WindowApi } from '../../types/ipc';
+import type { WindowApi } from '../../core/types/ipc';
 import type { IpcQueryTools } from './useIpcQuery';
 
 type ScenariosResult = Awaited<ReturnType<WindowApi['getScenarios']>>;

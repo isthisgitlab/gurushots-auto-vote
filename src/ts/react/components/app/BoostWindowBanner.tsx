@@ -1,12 +1,12 @@
-import type { Challenge } from '../../../types/gurushots';
+import type { Challenge } from '../../../core/types/gurushots';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { formatDuration } from '@/utils/formatters';
-import { openBoostWindows } from '../../../voting/boostWindow';
+import { openBoostWindows } from '../../../core/voting/boostWindow';
 import { isMinimalCardChallenge } from '@/utils/challengeAlerts';
 import { useTick } from '@/hooks/useTick';
 import { ChallengeAlertPanel } from './ChallengeChips';
 
-import type { Translate } from '../../../translations/translator';
+import type { Translate } from '../../../core/translations/translator';
 
 const countdownDetail = (t: Translate) => (c: { remaining: number | null }) =>
     c.remaining != null && (

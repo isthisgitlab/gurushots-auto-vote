@@ -12,7 +12,7 @@ import packageJson from '../package.json';
 import { runIfMain } from './lib/run-if-main';
 import { ensureVisionModel } from './fetch-vision-model';
 import { NODE_LICENSE_VERSION } from './build-notices';
-import { digestVisionRuntime } from '../src/ts/services/visionCliAssets';
+import { digestVisionRuntime } from '../src/ts/shells/cli/visionCliAssets';
 
 const { version } = packageJson;
 
@@ -56,7 +56,7 @@ function ensureDir(p: string) {
 async function bundleCli() {
     console.log('🔨 Bundling CLI with esbuild...');
     await build({
-        entryPoints: [path.join(ROOT, 'src', 'ts', 'cli', 'cli.ts')],
+        entryPoints: [path.join(ROOT, 'src', 'ts', 'shells', 'cli', 'cli.ts')],
         bundle: true,
         platform: 'node',
         target: 'node26',
@@ -137,7 +137,7 @@ function generateSeaBlob(nodeBinary = process.execPath, { lite = false } = {}) {
     };
     // Embed the semantic-matching word-vector lexicon as a SEA asset so the
     // single binary can resolve it via node:sea.getAsset() — it is a runtime
-    // asset (loaded by src/ts/services/semantic/assets.ts), never bundled into
+    // asset (loaded by src/ts/core/services/semantic/assets.ts), never bundled into
     // cli-bundled.js, so the JS-bundle budget is unaffected.
     const lexiconAsset = path.join(ROOT, 'src', 'assets', 'semantic-vectors.json');
     if (fs.existsSync(lexiconAsset)) {

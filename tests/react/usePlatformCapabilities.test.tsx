@@ -1,6 +1,6 @@
 import { renderHook } from '@testing-library/preact';
 import { isNativePlatform, usePlatformCapabilities } from '@/api/usePlatformCapabilities';
-import { markPlatformKind } from '../../src/ts/platform/kind';
+import { markPlatformKind } from '../../src/ts/core/platform/kind';
 import { resetPlatformKind } from '../helpers/platformKind';
 
 afterEach(resetPlatformKind);

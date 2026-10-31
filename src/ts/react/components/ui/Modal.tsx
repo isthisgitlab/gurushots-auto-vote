@@ -1,5 +1,5 @@
 import { useLayoutEffect, useCallback, useRef, useId, createPortal } from 'react';
-import { rendererTranslator } from '../../../translations/renderer';
+import { rendererTranslator } from '../../../core/translations/renderer';
 import { StrokeIcon, ICON_PATHS } from './StrokeIcon';
 import type { ComponentChildren } from 'preact';
 

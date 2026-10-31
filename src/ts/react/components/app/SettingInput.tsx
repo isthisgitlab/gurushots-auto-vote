@@ -11,13 +11,13 @@ import { useScenarios } from '@/api/useScenarios';
 export { SCHEDULED_FILL_MAX_ENTRIES } from './TimeSettingFields';
 
 import type { ComponentChildren, ComponentType, TargetedEvent } from 'preact';
-import type { SerializableSchemaEntry } from '../../../ipc/settings.handlers';
+import type { SerializableSchemaEntry } from '../../../core/ipc/settings.handlers';
 import type {
     SettingChangeHandler,
     SettingFieldProps,
     SettingResetHandler,
     Translate,
-} from '../../../types/settingsEditor';
+} from '../../../core/types/settingsEditor';
 
 // Setting types rendered as several controls (each with its own aria-label)
 // rather than one: their caption names a role="group" wrapper instead of

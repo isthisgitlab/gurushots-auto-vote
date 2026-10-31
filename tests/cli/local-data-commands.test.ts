@@ -3,9 +3,9 @@
  * what it removed (or why nothing was), and licenses prints the notices or says why not.
  */
 
-jest.mock('../../src/ts/settings/localData', () => ({ wipeLocalData: jest.fn() }));
-jest.mock('../../src/ts/thirdPartyNotices', () => ({ loadThirdPartyNotices: jest.fn() }));
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/settings/localData', () => ({ wipeLocalData: jest.fn() }));
+jest.mock('../../src/ts/core/thirdPartyNotices', () => ({ loadThirdPartyNotices: jest.fn() }));
+jest.mock('../../src/ts/core/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn() };
     return {
         withCategory: jest.fn(() => cat),
@@ -16,11 +16,11 @@ jest.mock('../../src/ts/logger', () => {
     };
 });
 
-import type * as localDataCommandsModule from '../../src/ts/cli/commands/localData';
-import type * as commandTableModule from '../../src/ts/cli/commandTable';
-import loggerModule = require('../../src/ts/logger');
-import localDataModule = require('../../src/ts/settings/localData');
-import noticesModule = require('../../src/ts/thirdPartyNotices');
+import type * as localDataCommandsModule from '../../src/ts/shells/cli/commands/localData';
+import type * as commandTableModule from '../../src/ts/shells/cli/commandTable';
+import loggerModule = require('../../src/ts/core/logger');
+import localDataModule = require('../../src/ts/core/settings/localData');
+import noticesModule = require('../../src/ts/core/thirdPartyNotices');
 import { invalid } from '../helpers/invalid';
 
 const logger = jest.mocked(loggerModule);
@@ -29,8 +29,9 @@ const cat = invalid<{
 }>(loggerModule).__cat;
 const localData = jest.mocked(localDataModule);
 const notices = jest.mocked(noticesModule);
-const { resetDataCmd, licensesCmd } = require('../../src/ts/cli/commands/localData') as typeof localDataCommandsModule;
-const { COMMANDS } = require('../../src/ts/cli/commandTable') as typeof commandTableModule;
+const { resetDataCmd, licensesCmd } =
+    require('../../src/ts/shells/cli/commands/localData') as typeof localDataCommandsModule;
+const { COMMANDS } = require('../../src/ts/shells/cli/commandTable') as typeof commandTableModule;
 
 beforeEach(() => jest.clearAllMocks());
 

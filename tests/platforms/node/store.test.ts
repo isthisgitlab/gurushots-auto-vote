@@ -32,8 +32,8 @@ const fileNode = jest.mocked(settingsFileNodeModule);
 
 import { createNodeStorage } from '../../../src/ts/platforms/node/store';
 
-import type { SettingsStoreRef } from '../../../src/ts/platform/port';
-import type { WriteIfAbsentResult } from '../../../src/ts/settings/storageTypes';
+import type { SettingsStoreRef } from '../../../src/ts/core/platform/port';
+import type { WriteIfAbsentResult } from '../../../src/ts/core/settings/storageTypes';
 
 const ref = (file: string, sweep: SettingsStoreRef['sweep'] = 'none'): SettingsStoreRef => ({
     prefKey: 'gs_test',

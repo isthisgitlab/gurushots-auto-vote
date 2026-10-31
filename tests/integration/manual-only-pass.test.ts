@@ -7,10 +7,10 @@
 
 const mockLogs: Array<{ level: string; msg: string; args: unknown[] }> = [];
 
-jest.mock('../../src/ts/settings');
-jest.mock('../../src/ts/settings/storage', () => ({
+jest.mock('../../src/ts/core/settings');
+jest.mock('../../src/ts/core/settings/storage', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/settings/storage')>('../../src/ts/settings/storage'),
+    ...jest.requireActual<typeof import('../../src/ts/core/settings/storage')>('../../src/ts/core/settings/storage'),
     createJsonStore: () => ({
         readRaw: () => null,
         writeRaw: () => {},
@@ -18,7 +18,7 @@ jest.mock('../../src/ts/settings/storage', () => ({
         initializeAsync: async () => {},
     }),
 }));
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const category = new Proxy(
         {},
         {
@@ -42,33 +42,35 @@ jest.mock('../../src/ts/logger', () => {
     // Anything else the pass reaches for on the logger is a no-op.
     return new Proxy(named, { get: (target, key) => (key in target ? target[key as keyof typeof target] : () => {}) });
 });
-jest.mock('../../src/ts/voting/cancellation', () => ({
+jest.mock('../../src/ts/core/voting/cancellation', () => ({
     isCancelled: jest.fn(() => false),
     setCancelled: jest.fn(),
     reset: jest.fn(),
 }));
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import cancellationModule = require('../../src/ts/voting/cancellation');
+import cancellationModule = require('../../src/ts/core/voting/cancellation');
 const cancellation = jest.mocked(cancellationModule);
-import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
-import type * as currencyAutoStoreModule from '../../src/ts/currencyAutoStore';
+import type * as votingOrchestratorModule from '../../src/ts/core/services/votingOrchestrator';
+import type * as currencyAutoStoreModule from '../../src/ts/core/currencyAutoStore';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-import type * as mockStrategyModule from '../../src/ts/mock/strategy';
-import type * as newEntryTrackerModule from '../../src/ts/services/newEntryTracker';
-import type * as manualVoteModule from '../../src/ts/services/manualVote';
-import type { Challenge } from '../../src/ts/types/gurushots';
-import type { MissionNeeds } from '../../src/ts/services/missions';
-import type { VotingPassDeps } from '../../src/ts/types/votingPass';
+import type * as mockStrategyModule from '../../src/ts/core/mock/strategy';
+import type * as newEntryTrackerModule from '../../src/ts/core/services/newEntryTracker';
+import type * as manualVoteModule from '../../src/ts/core/services/manualVote';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
+import type { MissionNeeds } from '../../src/ts/core/services/missions';
+import type { VotingPassDeps } from '../../src/ts/core/types/votingPass';
 import { invalid } from '../helpers/invalid';
 const { runVotingPass, resetManualOnlyLog, resetMissionVoteLog } =
-    require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule;
-const { createMemoryAutoSpendLedger } = require('../../src/ts/currencyAutoStore') as typeof currencyAutoStoreModule;
+    require('../../src/ts/core/services/votingOrchestrator') as typeof votingOrchestratorModule;
+const { createMemoryAutoSpendLedger } =
+    require('../../src/ts/core/currencyAutoStore') as typeof currencyAutoStoreModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
-const { createMockStrategy } = require('../../src/ts/mock/strategy') as typeof mockStrategyModule;
-const { createMemoryEntryTracker } = require('../../src/ts/services/newEntryTracker') as typeof newEntryTrackerModule;
-const { voteAllChallengesManual } = require('../../src/ts/services/manualVote') as typeof manualVoteModule;
+const { createMockStrategy } = require('../../src/ts/core/mock/strategy') as typeof mockStrategyModule;
+const { createMemoryEntryTracker } =
+    require('../../src/ts/core/services/newEntryTracker') as typeof newEntryTrackerModule;
+const { voteAllChallengesManual } = require('../../src/ts/core/services/manualVote') as typeof manualVoteModule;
 
 const NOW = Math.floor(Date.now() / 1000);
 const MANUAL_ID = 7007;
@@ -396,7 +398,7 @@ describe('the scoped Run', () => {
         const calls: Call[] = [];
         const { deps } = passDeps(calls, [dueChallenge(MANUAL_ID)]);
         const { BaseMiddleware } =
-            require('../../src/ts/services/BaseMiddleware') as typeof import('../../src/ts/services/BaseMiddleware');
+            require('../../src/ts/core/services/BaseMiddleware') as typeof import('../../src/ts/core/services/BaseMiddleware');
         const token = 'tok';
         const middleware = new BaseMiddleware(
             invalid({ fetchChallengesAndVote: (_token: string, id: string | number | null) => run(deps, id) }),
@@ -416,7 +418,7 @@ describe('the scoped Run', () => {
         const calls: Call[] = [];
         const { deps } = passDeps(calls, [dueChallenge(MANUAL_ID)]);
         const { BaseMiddleware } =
-            require('../../src/ts/services/BaseMiddleware') as typeof import('../../src/ts/services/BaseMiddleware');
+            require('../../src/ts/core/services/BaseMiddleware') as typeof import('../../src/ts/core/services/BaseMiddleware');
         const middleware = new BaseMiddleware(
             invalid({ fetchChallengesAndVote: (_token: string, id: string | number | null) => run(deps, id) }),
         );

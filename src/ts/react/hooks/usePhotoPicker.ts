@@ -12,10 +12,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSuggestPhotos } from '@/api/useSuggestPhotos';
 import { useLibraryListing } from '@/hooks/useLibraryListing';
 import { usePhotoStatsLoader } from '@/hooks/usePhotoStatsLoader';
-import { MAX_SUGGEST_EXCLUDE } from '../../settings/limits';
+import { MAX_SUGGEST_EXCLUDE } from '../../core/settings/limits';
 
 import type { LibraryPhoto } from '@/hooks/useLibraryListing';
-import type { LibraryUsage } from '../../types/photoPicker';
+import type { LibraryUsage } from '../../core/types/photoPicker';
 
 /** What Auto ranked: the photos best first, the member that owns them, and whether stats were partly skipped. */
 export type Suggested = { photos: LibraryPhoto[]; rankOffset: number; memberId: string | null; statsLimited: boolean };

@@ -4,11 +4,11 @@
  */
 
 import fsModule = require('node:fs');
-import logger = require('../../src/ts/logger');
-import type * as currencyAutoStoreModule from '../../src/ts/currencyAutoStore';
+import logger = require('../../src/ts/core/logger');
+import type * as currencyAutoStoreModule from '../../src/ts/core/currencyAutoStore';
 const { createAutoSpendLedger, createMemoryAutoSpendLedger } =
-    require('../../src/ts/currencyAutoStore') as typeof currencyAutoStoreModule;
-import type { AutoSpendRecord } from '../../src/ts/types/stores';
+    require('../../src/ts/core/currencyAutoStore') as typeof currencyAutoStoreModule;
+import type { AutoSpendRecord } from '../../src/ts/core/types/stores';
 import { invalid } from '../helpers/invalid';
 import { isNumber, isRecordOf, isShape, parseJsonAs } from '../helpers/parseJson';
 import { installHeadlessTestPlatform, installWebviewTestPlatform } from '../helpers/platform';
@@ -352,7 +352,7 @@ describe('flushing the ledger on teardown', () => {
         jest.mocked(logger.withCategory).mockReturnValueOnce(invalid({ error }));
         let flushPendingWrites!: () => Promise<void>;
         jest.isolateModules(() => {
-            jest.doMock('../../src/ts/settings/storage', () => ({
+            jest.doMock('../../src/ts/core/settings/storage', () => ({
                 createJsonStore: jest.fn(() => ({
                     readRaw: () => null,
                     writeRaw: jest.fn(),
@@ -362,10 +362,10 @@ describe('flushing the ledger on teardown', () => {
                     }),
                 })),
             }));
-            flushPendingWrites = (require('../../src/ts/currencyAutoStore') as typeof currencyAutoStoreModule)
+            flushPendingWrites = (require('../../src/ts/core/currencyAutoStore') as typeof currencyAutoStoreModule)
                 .flushAutoSpendWrites;
         });
-        jest.dontMock('../../src/ts/settings/storage');
+        jest.dontMock('../../src/ts/core/settings/storage');
         await expect(flushPendingWrites()).resolves.toBeUndefined();
         expect(error).toHaveBeenCalledWith('auto-spend writes were not persisted', null);
     });
@@ -379,9 +379,9 @@ describe('whether the ledger of the real store can be trusted', () => {
         delete g.AndroidHeadlessStore;
     });
     const load = () => {
-        let ledger!: typeof import('../../src/ts/currencyAutoStore').autoSpendLedger;
+        let ledger!: typeof import('../../src/ts/core/currencyAutoStore').autoSpendLedger;
         jest.isolateModules(() => {
-            ledger = (require('../../src/ts/currencyAutoStore') as typeof currencyAutoStoreModule).autoSpendLedger;
+            ledger = (require('../../src/ts/core/currencyAutoStore') as typeof currencyAutoStoreModule).autoSpendLedger;
         });
         return ledger;
     };

@@ -1,5 +1,5 @@
-import type { GuiLogEntry } from '../../../logger';
-import { sentenceCaseLogMessage, splitIcon } from '../../../format/logSafe';
+import type { GuiLogEntry } from '../../../core/logger';
+import { sentenceCaseLogMessage, splitIcon } from '../../../core/format/logSafe';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { localizeLogMessage } from './localizeLogMessage';
 /**

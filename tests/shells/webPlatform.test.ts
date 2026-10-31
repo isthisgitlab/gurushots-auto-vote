@@ -7,16 +7,16 @@
  * captured object, not the slot.
  */
 
-import { platform } from '../../src/ts/platform/port';
+import { platform } from '../../src/ts/core/platform/port';
 import { clearInstalledPlatform } from '../helpers/platform';
 
-import type { Platform } from '../../src/ts/platform/port';
+import type { Platform } from '../../src/ts/core/platform/port';
 
 // Requiring the module installs the platform; the slot is cleared first,
 // because the setup file installed the node test platform before this file
 // loaded.
 clearInstalledPlatform();
-const webPlatform = require('../../src/ts/web/platform') as typeof import('../../src/ts/web/platform');
+const webPlatform = require('../../src/ts/shells/web/platform') as typeof import('../../src/ts/shells/web/platform');
 const installed: Platform = platform();
 
 describe('the web shell platform module', () => {
@@ -60,7 +60,7 @@ describe('the web shell platform module', () => {
 // module's import chain is the port and the family builder only — the
 // install must run before the logger loads.
 describe('loading the web shell platform module loads no heavy module', () => {
-    const HEAVY = ['../../src/ts/logger'];
+    const HEAVY = ['../../src/ts/core/logger'];
     let mockLoaded: string[];
 
     beforeEach(() => {
@@ -80,7 +80,7 @@ describe('loading the web shell platform module loads no heavy module', () => {
                     return {};
                 });
             }
-            require('../../src/ts/web/platform');
+            require('../../src/ts/shells/web/platform');
             expect(mockLoaded).toEqual([]);
             expect(platform()).toBeDefined();
         });

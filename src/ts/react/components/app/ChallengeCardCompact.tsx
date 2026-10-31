@@ -1,7 +1,7 @@
 import type { ComponentChildren } from 'preact';
-import type { Challenge } from '../../../types/gurushots';
-import type { RankedChallenge } from '../../../types/rendererUtils';
-import type { EntryPins } from '../../../types/settings';
+import type { Challenge } from '../../../core/types/gurushots';
+import type { RankedChallenge } from '../../../core/types/rendererUtils';
+import type { EntryPins } from '../../../core/types/settings';
 import type { ChallengeCardView } from './ChallengeCard';
 import type { ChallengeBadgeRowProps } from './ChallengeBadgeRow';
 import type { DeadlineAction } from './DeadlineTimeline';
@@ -16,7 +16,7 @@ import { Countdown } from './Countdown';
 import type { TimeRemaining } from './Countdown';
 import { DeadlineTimeline } from './DeadlineTimeline';
 import { ScenarioStatusLine } from './ScenarioStatusLine';
-import { livePinKindOf, unusablePins } from '../../../voting/entryPins';
+import { livePinKindOf, unusablePins } from '../../../core/voting/entryPins';
 import type * as useScenarioStatusModule from '@/api/useScenarioStatus';
 
 /**

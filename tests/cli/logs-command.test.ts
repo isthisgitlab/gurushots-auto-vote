@@ -6,9 +6,9 @@
  */
 
 jest.mock('fs');
-jest.mock('../../src/ts/services/semantic/diagnostics', () => ({ diagnostics: { read: jest.fn() } }));
+jest.mock('../../src/ts/core/services/semantic/diagnostics', () => ({ diagnostics: { read: jest.fn() } }));
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const infoMock = jest.fn();
     const errorMock = jest.fn();
     const printMock = jest.fn();
@@ -28,19 +28,21 @@ jest.mock('../../src/ts/logger', () => {
 
 import { invalid } from '../helpers/invalid';
 import { StringDecoder } from 'node:string_decoder';
-import { MAX_MESSAGE_LENGTH } from '../../src/ts/logger/write';
+import { MAX_MESSAGE_LENGTH } from '../../src/ts/core/logger/write';
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
-import loggerModule = require('../../src/ts/logger');
+import loggerModule = require('../../src/ts/core/logger');
 const logger = jest.mocked(
     invalid<typeof loggerModule & { __infoMock: jest.Mock<void, [string]>; __printMock: jest.Mock<void, [string]> }>(
         loggerModule,
     ),
 );
-import type * as diagnosticsModule from '../../src/ts/services/semantic/diagnostics';
-import type * as logsModule from '../../src/ts/cli/commands/logs';
-import type * as logsFollowModule from '../../src/ts/cli/commands/logsFollow';
-const { diagnostics } = jest.mocked(require('../../src/ts/services/semantic/diagnostics') as typeof diagnosticsModule);
+import type * as diagnosticsModule from '../../src/ts/core/services/semantic/diagnostics';
+import type * as logsModule from '../../src/ts/shells/cli/commands/logs';
+import type * as logsFollowModule from '../../src/ts/shells/cli/commands/logsFollow';
+const { diagnostics } = jest.mocked(
+    require('../../src/ts/core/services/semantic/diagnostics') as typeof diagnosticsModule,
+);
 
 // The mock behind jest.mock('fs') carries every call the follower reads with
 // but readSync and fstatSync, and it carries no fs constants either —
@@ -58,9 +60,9 @@ if (fsAuto.fstatSync === undefined) {
     fsAuto.fstatSync = jest.fn<fsModule.Stats, [number]>();
 }
 
-const { latestLogFile, showLogs } = require('../../src/ts/cli/commands/logs') as typeof logsModule;
+const { latestLogFile, showLogs } = require('../../src/ts/shells/cli/commands/logs') as typeof logsModule;
 const { FOLLOW_READ_CHUNK_BYTES, followLogs, followStep } =
-    require('../../src/ts/cli/commands/logsFollow') as typeof logsFollowModule;
+    require('../../src/ts/shells/cli/commands/logsFollow') as typeof logsFollowModule;
 
 describe('CLI logs command', () => {
     beforeEach(() => jest.clearAllMocks());

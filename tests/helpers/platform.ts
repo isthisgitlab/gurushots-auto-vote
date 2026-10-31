@@ -16,9 +16,9 @@
 import { createHeadlessPlatform } from '../../src/ts/platforms/headless';
 import { createNodePlatform } from '../../src/ts/platforms/node';
 import { createWebviewPlatform } from '../../src/ts/platforms/webview';
-import { installPlatform, resetPlatformForTests } from '../../src/ts/platform/port';
+import { installPlatform, resetPlatformForTests } from '../../src/ts/core/platform/port';
 
-import type { Platform, PlatformWindows } from '../../src/ts/platform/port';
+import type { Platform, PlatformWindows } from '../../src/ts/core/platform/port';
 
 // The temporary directory the node platform resolves paths.userData() into:
 // created once per test file, removed by removeNodeTestUserDataDir (the setup

@@ -20,7 +20,7 @@ import { ChallengeSettingsGroup } from './ChallengeSettingsGroup';
 import { challengeSettingHints } from './SettingHints';
 import * as ipc from '@/api/ipc';
 
-import type { Challenge } from '../../../types/gurushots';
+import type { Challenge } from '../../../core/types/gurushots';
 import type { TabDescriptor } from '@/components/ui/Tabs';
 import type { SettingsBand, SettingsTabId } from '@/utils/groupSettings';
 

@@ -5,7 +5,7 @@
  * first, before any app module.
  */
 
-import { installPlatform } from '../../src/ts/platform/port';
+import { installPlatform } from '../../src/ts/core/platform/port';
 import { createNodePlatform } from '../../src/ts/platforms/node';
 
 // No windows: a script runs no UI to broadcast to or relaunch.

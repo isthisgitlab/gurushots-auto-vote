@@ -5,14 +5,14 @@
  * log behavior.
  */
 
-import type * as loggerModule from '../src/ts/logger';
-import type * as challengeIntegrityModule from '../src/ts/challengeIntegrity';
-import type { ActiveChallengesResponse } from '../src/ts/types/gurushots';
-import { APP_SET_CHALLENGE_FIELDS } from '../src/ts/challengeIntegrity';
+import type * as loggerModule from '../src/ts/core/logger';
+import type * as challengeIntegrityModule from '../src/ts/core/challengeIntegrity';
+import type { ActiveChallengesResponse } from '../src/ts/core/types/gurushots';
+import { APP_SET_CHALLENGE_FIELDS } from '../src/ts/core/challengeIntegrity';
 import { invalid } from './helpers/invalid';
 
 const { normalizeActiveChallenges, challengeIssues, challengeWarnings, __resetForTests } =
-    require('../src/ts/challengeIntegrity') as typeof challengeIntegrityModule;
+    require('../src/ts/core/challengeIntegrity') as typeof challengeIntegrityModule;
 
 type LoggerMock = typeof loggerModule & {
     __mockDebugFn: jest.MockedFunction<loggerModule.CategoryLogger['debug']>;
@@ -21,7 +21,7 @@ type LoggerMock = typeof loggerModule & {
 };
 
 // Mock the logger module
-jest.mock('../src/ts/logger', () => {
+jest.mock('../src/ts/core/logger', () => {
     const mockDebugFn = jest.fn();
     const mockWarningFn = jest.fn();
     const mockWarningTFn = jest.fn();
@@ -73,7 +73,7 @@ const validChallenge = (overrides: Record<string, unknown> = {}): Record<string,
     ...overrides,
 });
 
-const logger: LoggerMock = invalid(require('../src/ts/logger'));
+const logger: LoggerMock = invalid(require('../src/ts/core/logger'));
 
 beforeEach(() => {
     jest.clearAllMocks();

@@ -7,9 +7,9 @@
  * against the cap).
  */
 
-import { RESERVED_PROFILE_NAMES, normalizeProfileName } from '../../settings/limits';
+import { RESERVED_PROFILE_NAMES, normalizeProfileName } from '../../core/settings/limits';
 
-import type { Translate } from '../../translations/translator';
+import type { Translate } from '../../core/translations/translator';
 
 export { normalizeProfileName };
 

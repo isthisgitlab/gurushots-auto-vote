@@ -18,7 +18,7 @@ import os = require('node:os');
 import pathModule = require('node:path');
 const path = jest.mocked(pathModule);
 import type * as cleanup_logsModule from '../../scripts/cleanup-logs';
-import { platform } from '../../src/ts/platform/port';
+import { platform } from '../../src/ts/core/platform/port';
 import { clearInstalledPlatform, installTestPlatform } from '../helpers/platform';
 
 let mockUserDataPath = '';

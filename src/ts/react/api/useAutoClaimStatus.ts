@@ -1,7 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import { useIpcQuery } from './useIpcQuery';
 
-import type { WindowApi } from '../../types/ipc';
+import type { WindowApi } from '../../core/types/ipc';
 
 /**
  * The auto-claim status the handler reports on success.

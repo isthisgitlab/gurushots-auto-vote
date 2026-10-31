@@ -5,30 +5,30 @@
  * newer request replacing a queued one, a minimum gap between walks.
  */
 
-jest.mock('../../src/ts/settings');
-jest.mock('../../src/ts/apiFactory');
-jest.mock('../../src/ts/services/auth');
-jest.mock('../../src/ts/services/autoFill');
+jest.mock('../../src/ts/core/settings');
+jest.mock('../../src/ts/core/apiFactory');
+jest.mock('../../src/ts/core/services/auth');
+jest.mock('../../src/ts/core/services/autoFill');
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import apiFactoryModule = require('../../src/ts/apiFactory');
+import apiFactoryModule = require('../../src/ts/core/apiFactory');
 const apiFactory = jest.mocked(apiFactoryModule);
-import authModule = require('../../src/ts/services/auth');
+import authModule = require('../../src/ts/core/services/auth');
 const auth = jest.mocked(authModule);
-import autoFillModule = require('../../src/ts/services/autoFill');
+import autoFillModule = require('../../src/ts/core/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
-import type * as libraryModule from '../../src/ts/ipc/actions/library';
-import type * as libraryCacheModule from '../../src/ts/services/libraryCache';
-import type { LibraryPhoto } from '../../src/ts/types/gurushots';
+import type * as libraryModule from '../../src/ts/core/ipc/actions/library';
+import type * as libraryCacheModule from '../../src/ts/core/services/libraryCache';
+import type { LibraryPhoto } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 import { logCategories } from '../helpers/logCategories';
-import { LIBRARY_BATCH_PHOTOS } from '../../src/ts/settings/limits';
+import { LIBRARY_BATCH_PHOTOS } from '../../src/ts/core/settings/limits';
 
 const { handleGetLibraryPhotos, hasWonChallenge, __resetLibraryThrottle, MIN_WALK_INTERVAL_MS } =
-    require('../../src/ts/ipc/actions/library') as typeof libraryModule;
+    require('../../src/ts/core/ipc/actions/library') as typeof libraryModule;
 const { clearLibraryCache, dropContext, LIBRARY_FRESH_MS, readLatest } =
-    require('../../src/ts/services/libraryCache') as typeof libraryCacheModule;
+    require('../../src/ts/core/services/libraryCache') as typeof libraryCacheModule;
 
 // The handler is invoked the way ipcMain does: the event first.
 const call = (...args: unknown[]) =>

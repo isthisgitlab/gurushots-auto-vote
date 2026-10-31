@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useIpcQuery } from './useIpcQuery';
 
-import type { WindowApi } from '../../types/ipc';
-import type { RendererSettings, SettingValueOf } from '../../types/settings';
+import type { WindowApi } from '../../core/types/ipc';
+import type { RendererSettings, SettingValueOf } from '../../core/types/settings';
 
 export type EnvironmentInfo = Awaited<ReturnType<WindowApi['getEnvironmentInfo']>>;
 

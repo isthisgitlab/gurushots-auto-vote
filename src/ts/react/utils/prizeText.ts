@@ -5,9 +5,9 @@
  * the Discover row's prize summary.
  */
 
-import type { Translate } from '../../translations/translator';
+import type { Translate } from '../../core/translations/translator';
 
-import type { Prize } from '../../types/gurushots';
+import type { Prize } from '../../core/types/gurushots';
 
 /** The translated name of a prize's type; a type GuruShots starts sending is never shown as its raw code. */
 const prizeTypeName = (type: string | undefined, t: Translate): string => {

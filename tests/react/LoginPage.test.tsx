@@ -10,12 +10,12 @@ import { invalid } from '../helpers/invalid';
 import { pickOption } from './helpers/test-utils';
 import { act } from '@testing-library/preact';
 import { fireSettingsChanged } from './helpers/setup';
-import { CURRENT_NOTICE_VERSION } from '../../src/ts/noticeVersion';
+import { CURRENT_NOTICE_VERSION } from '../../src/ts/core/noticeVersion';
 import { resetPlatformKind } from '../helpers/platformKind';
-import { markPlatformKind } from '../../src/ts/platform/kind';
+import { markPlatformKind } from '../../src/ts/core/platform/kind';
 
-import type { RendererGlobals } from '../../src/ts/types/capacitor';
-import type { WindowApi } from '../../src/ts/types/ipc';
+import type { RendererGlobals } from '../../src/ts/core/types/capacitor';
+import type { WindowApi } from '../../src/ts/core/types/ipc';
 import type * as LoginModule from '@/pages/Login';
 
 const API_METHODS = ['getSettings', 'getSetting', 'getEnvironmentInfo', 'authenticate', 'setSetting', 'login'] as const;

@@ -8,16 +8,16 @@
  * upcoming join rows stay inline.
  */
 
-import type * as challengesModule from '../../src/ts/mock/challenges';
-import type * as votingModule from '../../src/ts/mock/voting';
-import type * as joinModule from '../../src/ts/mock/endpoints/join';
+import type * as challengesModule from '../../src/ts/core/mock/challenges';
+import type * as votingModule from '../../src/ts/core/mock/voting';
+import type * as joinModule from '../../src/ts/core/mock/endpoints/join';
 
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
-const { generateMockChallenges } = require('../../src/ts/mock/challenges') as typeof challengesModule;
-const { generateMockVoteImages } = require('../../src/ts/mock/voting') as typeof votingModule;
-const { getMemberChallenges } = require('../../src/ts/mock/endpoints/join') as typeof joinModule;
+const { generateMockChallenges } = require('../../src/ts/core/mock/challenges') as typeof challengesModule;
+const { generateMockVoteImages } = require('../../src/ts/core/mock/voting') as typeof votingModule;
+const { getMemberChallenges } = require('../../src/ts/core/mock/endpoints/join') as typeof joinModule;
 
 const PINNED_NOW_MS = Date.UTC(2026, 0, 15, 12, 0, 0);
 

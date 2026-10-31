@@ -1,4 +1,4 @@
-import type { BackgroundHost } from '../../autovote/controller';
+import type { BackgroundHost } from '../../core/autovote/controller';
 
 /**
  * A background host that does nothing: Electron and the web shell have no

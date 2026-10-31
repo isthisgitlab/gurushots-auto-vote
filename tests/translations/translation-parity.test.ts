@@ -4,14 +4,14 @@
  * does NOT crash at runtime — t() silently falls back to English — so nothing
  * but this test catches the drift.
  */
-import english = require('../../src/ts/translations/english');
-import latvian = require('../../src/ts/translations/latvian');
+import english = require('../../src/ts/core/translations/english');
+import latvian = require('../../src/ts/core/translations/latvian');
 import type * as pathModule from 'node:path';
 import type * as fsModule from 'node:fs';
-import type * as translatorModule from '../../src/ts/translations/translator';
-import type { TranslateVars } from '../../src/ts/translations/translator';
+import type * as translatorModule from '../../src/ts/core/translations/translator';
+import type { TranslateVars } from '../../src/ts/core/translations/translator';
 import { invalid } from '../helpers/invalid';
-const { createTranslator } = require('../../src/ts/translations/translator') as typeof translatorModule;
+const { createTranslator } = require('../../src/ts/core/translations/translator') as typeof translatorModule;
 
 /** CLDR plural categories, as the `_<category>` key suffixes of a plural group. */
 const PLURAL_SUFFIXES = ['zero', 'one', 'two', 'few', 'many', 'other'];

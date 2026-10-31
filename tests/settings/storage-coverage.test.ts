@@ -17,8 +17,8 @@
 
 import type * as node_fsModule from 'node:fs';
 import type * as node_pathModule from 'node:path';
-import type * as loggerModule from '../../src/ts/logger';
-import type * as storageModule from '../../src/ts/settings/storage';
+import type * as loggerModule from '../../src/ts/core/logger';
+import type * as storageModule from '../../src/ts/core/settings/storage';
 import type { GetOptions, GetResult, SetOptions } from '@capacitor/preferences';
 import type { App } from 'electron';
 import { invalid } from '../helpers/invalid';
@@ -101,7 +101,7 @@ const loadStorage = (
         const actualPath = jest.requireActual<typeof node_pathModule>('node:path');
         path.dirname.mockImplementation(actualPath.dirname);
         path.join.mockImplementation(actualPath.join);
-        const logger = jest.mocked(require('../../src/ts/logger') as typeof loggerModule);
+        const logger = jest.mocked(require('../../src/ts/core/logger') as typeof loggerModule);
         const categoryLogger = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), warning: jest.fn() };
         logger.withCategory.mockReturnValue(invalid(categoryLogger));
         // The family's Electron check reads the version flag; the electron
@@ -119,7 +119,7 @@ const loadStorage = (
             paths.getUserDataDir = (appName: string) => `/home/u/.config/${appName}`;
             installTestPlatform({ paths });
         }
-        const mod = require('../../src/ts/settings/storage') as typeof storageModule;
+        const mod = require('../../src/ts/core/settings/storage') as typeof storageModule;
         await fn({ mod, fs, categoryLogger, electronFactory });
         restoreNodeTestPlatform();
         delete (process.versions as { electron?: string }).electron;

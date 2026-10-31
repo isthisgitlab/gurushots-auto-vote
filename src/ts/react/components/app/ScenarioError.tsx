@@ -3,7 +3,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import * as ipc from '@/api/ipc';
 import { scenarioIssueText, scenarioPathText } from '@/utils/scenarioIssueText';
 
-import type { ScenarioIssue } from '../../../settings/scenarioSchema';
+import type { ScenarioIssue } from '../../../core/settings/scenarioSchema';
 
 /**
  * A failed scenario request: the translation key of what happened, the key of

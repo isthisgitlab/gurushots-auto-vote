@@ -12,8 +12,8 @@
  * to a real settings method, and returns the documented fallback on error.
  */
 
-jest.mock('../../src/ts/settings');
-jest.mock('../../src/ts/apiFactory', () => ({
+jest.mock('../../src/ts/core/settings');
+jest.mock('../../src/ts/core/apiFactory', () => ({
     refreshApi: jest.fn(),
     getApiStrategy: jest.fn(),
     getMiddleware: jest.fn(),
@@ -22,16 +22,16 @@ jest.mock('../../src/ts/apiFactory', () => ({
 import { invalid } from '../helpers/invalid';
 import { installTestPlatform } from '../helpers/platform';
 
-import type { PlatformWindows } from '../../src/ts/platform/port';
+import type { PlatformWindows } from '../../src/ts/core/platform/port';
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
 // A successful mutation on a broadcast channel announces through the
 // installed platform's windows, whose broadcast re-reads the settings — the
 // tests that assert on the announcement override this.
 settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: '' }, app: {} });
-import type * as settings_handlersModule from '../../src/ts/ipc/settings.handlers';
-const { buildHandlers } = require('../../src/ts/ipc/settings.handlers') as typeof settings_handlersModule;
+import type * as settings_handlersModule from '../../src/ts/core/ipc/settings.handlers';
+const { buildHandlers } = require('../../src/ts/core/ipc/settings.handlers') as typeof settings_handlersModule;
 
 // Installs the platform with jest.fn windows and returns them: the thin
 // handlers announce writes through platform().windows, so a test asserts on
@@ -50,7 +50,7 @@ const installWindows = (): PlatformWindows => {
 type MockTable = Record<string, jest.Mock<unknown, unknown[]>>;
 type HandlerTable = Record<string, (...args: unknown[]) => unknown>;
 
-// Mirror of the thinRows() rows in src/ts/ipc/settings.handlers.ts.
+// Mirror of the thinRows() rows in src/ts/core/ipc/settings.handlers.ts.
 // Kept hand-authored on purpose: if a row changes there, this test must
 // be updated too — that's the contract.
 const EXPECTED_THIN_HANDLERS: [string, string, string | boolean | null][] = [
@@ -259,7 +259,7 @@ describe('settings.handlers challenge id arguments', () => {
     });
 
     test('a refused id is logged as a refused request, not an error', async () => {
-        const logger = jest.requireMock<{ withCategory: jest.Mock<unknown, [string]> }>('../../src/ts/logger');
+        const logger = jest.requireMock<{ withCategory: jest.Mock<unknown, [string]> }>('../../src/ts/core/logger');
         invalid<MockTable>(settings).setChallengeOverride = jest.fn();
 
         await invalid<HandlerTable>(buildHandlers())['set-challenge-override']({}, 'exposure', '', 55);

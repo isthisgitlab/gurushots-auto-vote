@@ -3,7 +3,7 @@ import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { useConfirmedAction } from '@/hooks/useConfirmedAction';
 import * as ipc from '@/api/ipc';
 
-import type { Challenge } from '../../../types/gurushots';
+import type { Challenge } from '../../../core/types/gurushots';
 
 // The text of each answer that resets nothing; a call that failed outright reads as the general one.
 const problemOf = (error: string | undefined, everyChallenge: boolean): string => {

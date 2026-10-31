@@ -9,7 +9,7 @@ import { valuesEqual } from '@/utils/valuesEqual';
 import { SettingInput } from '../SettingInput';
 import { ScenarioError, issuesOf } from '../ScenarioError';
 import { ConditionList, ActionList } from './ItemEditors';
-import { REPEAT_MODES, LIMIT_KEYS } from '../../../../scenarios/vocabulary';
+import { REPEAT_MODES, LIMIT_KEYS } from '../../../../core/scenarios/vocabulary';
 import {
     setIn,
     moveItem,
@@ -18,12 +18,12 @@ import {
     removePhase,
     newRule,
     isEditableDraft,
-} from '../../../../scenarios/builderModel';
+} from '../../../../core/scenarios/builderModel';
 
 import type { ComponentChildren, TargetedKeyboardEvent } from 'preact';
-import type { WindowApi } from '../../../../types/ipc';
-import type { ScenarioDraft, ScenarioDraftPhase, ScenarioDraftRule } from '../../../../types/scenarioBuilder';
-import type { RendererSchema } from '../../../../types/settingsEditor';
+import type { WindowApi } from '../../../../core/types/ipc';
+import type { ScenarioDraft, ScenarioDraftPhase, ScenarioDraftRule } from '../../../../core/types/scenarioBuilder';
+import type { RendererSchema } from '../../../../core/types/settingsEditor';
 import type { ScenarioErrorInfo } from '../ScenarioError';
 
 /**

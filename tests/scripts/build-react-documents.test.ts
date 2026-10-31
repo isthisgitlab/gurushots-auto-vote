@@ -17,8 +17,8 @@ import {
     headlessHtml,
     webHtml,
 } from '../../scripts/build-react';
-import { NOTICES_ASSET_NAME as LOADER_NOTICES_ASSET_NAME } from '../../src/ts/thirdPartyNotices';
-import { buildPhotoUrl } from '../../src/ts/format/photoUrl';
+import { NOTICES_ASSET_NAME as LOADER_NOTICES_ASSET_NAME } from '../../src/ts/core/thirdPartyNotices';
+import { buildPhotoUrl } from '../../src/ts/core/format/photoUrl';
 
 // tests/setup.ts mocks fs globally; the documents are read from disk for real.
 const fs = jest.requireActual<typeof import('node:fs')>('node:fs');

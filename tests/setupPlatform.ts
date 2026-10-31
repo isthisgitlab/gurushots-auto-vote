@@ -15,7 +15,7 @@
 
 import * as os from 'node:os';
 
-import { platform } from '../src/ts/platform/port';
+import { platform } from '../src/ts/core/platform/port';
 import { installTestPlatform, removeNodeTestUserDataDir, restoreNodeTestPlatform } from './helpers/platform';
 
 installTestPlatform();

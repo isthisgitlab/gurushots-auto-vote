@@ -7,7 +7,7 @@
  * mock so every return value is explicit.
  */
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const calls: { level: string; msg: unknown }[] = [];
     const rec = (level: string) => (msg: unknown) => calls.push({ level, msg });
     const cat = { info: rec('info'), error: rec('error'), success: rec('success') };
@@ -20,7 +20,7 @@ jest.mock('../../src/ts/logger', () => {
     };
 });
 
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     // Tests replace entries on this object; the marker makes it the very
     // namespace commands/settings.ts imports rather than a copy.
     __esModule: true,
@@ -48,11 +48,11 @@ jest.mock('../../src/ts/settings', () => ({
 }));
 
 import { invalid } from '../helpers/invalid';
-import loggerModule = require('../../src/ts/logger');
+import loggerModule = require('../../src/ts/core/logger');
 const logger = jest.mocked(invalid<typeof loggerModule & { __calls: { level: string; msg: unknown }[] }>(loggerModule));
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import cmd = require('../../src/ts/cli/commands/settings');
+import cmd = require('../../src/ts/shells/cli/commands/settings');
 
 const msgs = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
 // The app and sign-in names `set` accepts: the keys of the default configuration.

@@ -5,11 +5,11 @@
  * the guard must refuse them.
  */
 
-import type * as librarySortModule from '../src/ts/librarySort';
+import type * as librarySortModule from '../src/ts/core/librarySort';
 import { invalid } from './helpers/invalid';
 
 const { LIBRARY_ORDERS, isLibraryOrder, isLoadedSort, orderByUploadDate } =
-    require('../src/ts/librarySort') as typeof librarySortModule;
+    require('../src/ts/core/librarySort') as typeof librarySortModule;
 
 describe('LIBRARY_ORDERS', () => {
     test.each([

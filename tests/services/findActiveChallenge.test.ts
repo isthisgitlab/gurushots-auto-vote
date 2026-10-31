@@ -5,11 +5,11 @@
  * replaced silently missed string ids and accepted garbage suffixes.
  */
 
-import type * as findActiveChallengeModule from '../../src/ts/services/findActiveChallenge';
-import type { ActiveChallengesResponse } from '../../src/ts/types/gurushots';
+import type * as findActiveChallengeModule from '../../src/ts/core/services/findActiveChallenge';
+import type { ActiveChallengesResponse } from '../../src/ts/core/types/gurushots';
 
 const { findActiveChallenge, findActionableChallenge } =
-    require('../../src/ts/services/findActiveChallenge') as typeof findActiveChallengeModule;
+    require('../../src/ts/core/services/findActiveChallenge') as typeof findActiveChallengeModule;
 import { invalid } from '../helpers/invalid';
 
 describe('findActiveChallenge', () => {

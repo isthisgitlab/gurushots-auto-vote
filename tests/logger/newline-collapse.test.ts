@@ -7,10 +7,10 @@
  * originating call site remembered to sanitize.
  */
 
-import type * as LoggerModule from '../../src/ts/logger';
+import type * as LoggerModule from '../../src/ts/core/logger';
 
 const { info, getRecentLogs }: typeof LoggerModule =
-    jest.requireActual<typeof import('../../src/ts/logger')>('../../src/ts/logger');
+    jest.requireActual<typeof import('../../src/ts/core/logger')>('../../src/ts/core/logger');
 
 const lastEntry = () => {
     const entries = getRecentLogs();

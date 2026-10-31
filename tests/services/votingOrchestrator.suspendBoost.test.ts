@@ -4,13 +4,13 @@
  * finish before the sleep (a new photo submit).
  */
 
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     getEffectiveSetting: jest.fn(() => false),
     getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
     consumeChosenPhotos: jest.fn(() => false),
 }));
 
-jest.mock('../../src/ts/services/VotingLogic', () => ({
+jest.mock('../../src/ts/core/services/VotingLogic', () => ({
     resolvePin: jest.fn(() => ({ state: 'none' })),
     isWithinEmergencyWindow: jest.fn(() => false),
     resolveBoostFillNewMode: jest.fn(() => 'no'),
@@ -26,31 +26,31 @@ jest.mock('../../src/ts/services/VotingLogic', () => ({
     getBoostHoldUntil: jest.fn(() => null),
 }));
 
-jest.mock('../../src/ts/services/autoFill', () => ({
+jest.mock('../../src/ts/core/services/autoFill', () => ({
     submitNewEntryForAction: jest.fn(async () => ({ ok: false, reason: 'none' })),
     submitPinnedEntry: jest.fn(async () => ({ ok: false, imageId: null, reason: 'none' })),
     reflectNewEntry: jest.fn(),
     reflectEntryFlag: jest.fn(),
 }));
 
-import logger = require('../../src/ts/logger');
-import settingsModule = require('../../src/ts/settings');
+import logger = require('../../src/ts/core/logger');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import votingLogicModule = require('../../src/ts/services/VotingLogic');
+import votingLogicModule = require('../../src/ts/core/services/VotingLogic');
 const votingLogic = jest.mocked(votingLogicModule);
-import autoFillModule = require('../../src/ts/services/autoFill');
+import autoFillModule = require('../../src/ts/core/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
-import type * as boostModule from '../../src/ts/services/votingOrchestrator/suspendBoostRunner';
+import type * as boostModule from '../../src/ts/core/services/votingOrchestrator/suspendBoostRunner';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import { renderLogTemplate } from '../helpers/logTemplate';
-import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
-import type { Challenge } from '../../src/ts/types/gurushots';
-import type { VotingPassApi } from '../../src/ts/types/votingPass';
+import type * as entryAgeStoreModule from '../../src/ts/core/entryAgeStore';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
+import type { VotingPassApi } from '../../src/ts/core/types/votingPass';
 import { invalid } from '../helpers/invalid';
 const { runSuspendBoosts } =
-    require('../../src/ts/services/votingOrchestrator/suspendBoostRunner') as typeof boostModule;
+    require('../../src/ts/core/services/votingOrchestrator/suspendBoostRunner') as typeof boostModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
-const { createMemoryEntryAgeLedger } = require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
+const { createMemoryEntryAgeLedger } = require('../../src/ts/core/entryAgeStore') as typeof entryAgeStoreModule;
 
 const NOW = Math.floor(Date.now() / 1000);
 
@@ -389,7 +389,7 @@ describe('runSuspendBoosts — skips and overrides', () => {
 
         beforeEach(() => {
             const { getBoostHoldUntil } = jest.requireActual<typeof votingLogicModule>(
-                '../../src/ts/services/VotingLogic',
+                '../../src/ts/core/services/VotingLogic',
             );
             votingLogic.getBoostHoldUntil.mockImplementation(getBoostHoldUntil);
             settings.getEffectiveSetting.mockImplementation((key) =>

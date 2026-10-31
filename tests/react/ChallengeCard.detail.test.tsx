@@ -14,14 +14,14 @@ import { formatEndTime } from '@/utils/formatters';
 import { LEVEL_BADGE_CLASS, LEVEL_PROGRESS_CLASS } from '@/utils/levelBadge';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import type { EntryBadge as RealEntryBadge } from '@/components/app/EntryBadge';
-import type { Challenge, MemberTurbo, RankingTotal } from '../../src/ts/types/gurushots';
-import type { WindowApi } from '../../src/ts/types/ipc';
+import type { Challenge, MemberTurbo, RankingTotal } from '../../src/ts/core/types/gurushots';
+import type { WindowApi } from '../../src/ts/core/types/ipc';
 import { invalid } from '../helpers/invalid';
 import { parseJson, parseJsonObject } from '../helpers/parseJson';
 import { mockTranslator } from './helpers/setup';
-import { app, errors } from '../../src/ts/translations/english';
-import { createTranslator } from '../../src/ts/translations/translator';
-import type { Translate } from '../../src/ts/translations/translator';
+import { app, errors } from '../../src/ts/core/translations/english';
+import { createTranslator } from '../../src/ts/core/translations/translator';
+import type { Translate } from '../../src/ts/core/translations/translator';
 
 // The real English strings (plural groups included), placeholders filled like the real t fills them.
 const realEnglish: Translate = (() => {

@@ -9,7 +9,7 @@ import { useChallengeOverrides } from '@/hooks/useChallengeOverrides';
 import { mockApi } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
 import { titleRuleInfo } from './helpers/titleRules';
-import type { RendererSchema } from '../../src/ts/types/settingsEditor';
+import type { RendererSchema } from '../../src/ts/core/types/settingsEditor';
 
 const props = () => ({
     isOpen: true,

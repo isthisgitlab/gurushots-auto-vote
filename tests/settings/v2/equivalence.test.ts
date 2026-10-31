@@ -12,8 +12,8 @@
  * `V2_SEEDS=7,100-140 pnpm jest tests/settings/v2/equivalence`. A failure names the seed.
  */
 
-import { TOP_LEVEL_ONLY_KEYS } from '../../../src/ts/settings/importV1/convert';
-import { V1_SETTINGS_SCHEMA } from '../../../src/ts/settings/importV1/schema';
+import { TOP_LEVEL_ONLY_KEYS } from '../../../src/ts/core/settings/importV1/convert';
+import { V1_SETTINGS_SCHEMA } from '../../../src/ts/core/settings/importV1/schema';
 import { createV1Oracle } from '../../helpers/v1Oracle';
 import { FIXTURES } from './fixtures';
 import { liveFromV1Raw, liveKey, releaseLive } from './liveAdapter';

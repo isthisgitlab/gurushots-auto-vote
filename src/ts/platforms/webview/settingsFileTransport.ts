@@ -25,23 +25,28 @@ import {
 } from './settingsFileProtocol';
 import { saveThroughCas, type CasWrite } from './writeBehind';
 
-import type { PlatformCas, SettingsFileTransport, SettingsFileWiring, SettingsStoreRef } from '../../platform/port';
-import type { DroppedSaveOps } from '../../settings/saveDropped';
-import type { QueuedWriteOutcome } from '../../settings/storageTypes';
+import type {
+    PlatformCas,
+    SettingsFileTransport,
+    SettingsFileWiring,
+    SettingsStoreRef,
+} from '../../core/platform/port';
+import type { DroppedSaveOps } from '../../core/settings/saveDropped';
+import type { QueuedWriteOutcome } from '../../core/settings/storageTypes';
 import type { SettingsFileState } from './settingsFileProtocol';
 
-type LoggerModule = typeof import('../../logger');
-type StorageModule = typeof import('../../settings/storage');
+type LoggerModule = typeof import('../../core/logger');
+type StorageModule = typeof import('../../core/settings/storage');
 
 // See store.ts's header: the wrapped modules, reached at call time.
-const logger = (): LoggerModule => require('../../logger') as LoggerModule;
+const logger = (): LoggerModule => require('../../core/logger') as LoggerModule;
 // Lazy for both reasons store.ts's header names: this file sits in the shell
 // platform modules' static chain and the settings graph reaches the logger,
 // which reads platform() at load — the install must run first — and a graph
 // loaded in the Jest setup's registry would beat a test file's own mocks.
 // The public storage facade carries CORRUPT_SUFFIX (its wipe inventory names
 // the same keys); the facade's internals are private to it.
-const storage = (): StorageModule => require('../../settings/storage') as StorageModule;
+const storage = (): StorageModule => require('../../core/settings/storage') as StorageModule;
 
 // Saves the text the app window changed (`data`, made from `base`, the cache before the change): only if
 // Preferences still holds what was last known of it, else the change is made again on what the background service

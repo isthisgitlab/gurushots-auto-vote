@@ -4,10 +4,10 @@
  * literal union so a setting read is typed per key.
  */
 
-import type { SettingKey, SettingValues } from '../../src/ts/settings/schema';
-import type * as schemaModule from '../../src/ts/settings/schema';
+import type { SettingKey, SettingValues } from '../../src/ts/core/settings/schema';
+import type * as schemaModule from '../../src/ts/core/settings/schema';
 
-const { SETTINGS_SCHEMA } = require('../../src/ts/settings/schema') as typeof schemaModule;
+const { SETTINGS_SCHEMA } = require('../../src/ts/core/settings/schema') as typeof schemaModule;
 
 type IsLiteralUnion<K> = string extends K ? false : true;
 const settingKeyIsLiteralUnion: IsLiteralUnion<SettingKey> = true;

@@ -12,7 +12,7 @@ import { DeleteLocalDataModal } from './DeleteLocalDataModal';
 
 import type { ImportReport } from '@/api/useImportReport';
 import type { SettingFilterTexts } from '@/utils/matchesSettingFilter';
-import type { Translate } from '../../../translations/translator';
+import type { Translate } from '../../../core/translations/translator';
 
 /**
  * What the import of settings.json left unresolved, read-only: when it ran and the references that

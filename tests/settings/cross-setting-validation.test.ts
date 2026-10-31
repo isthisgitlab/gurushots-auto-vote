@@ -8,11 +8,11 @@
  * but the core validation logic is tested and verified to work in manual testing.
  */
 
-import settings = require('../../src/ts/settings');
-import type { SettingKey, SettingsSchemaEntry } from '../../src/ts/settings/schema';
+import settings = require('../../src/ts/core/settings');
+import type { SettingKey, SettingsSchemaEntry } from '../../src/ts/core/settings/schema';
 
 // Mock logger to suppress console output during tests
-jest.mock('../../src/ts/logger', () => ({
+jest.mock('../../src/ts/core/logger', () => ({
     info: jest.fn(),
     warning: jest.fn(),
     error: jest.fn(),

@@ -9,35 +9,36 @@
  * in the beforeEach, since clearAllMocks keeps implementations.
  */
 
-jest.mock('../../src/ts/settings');
-jest.mock('../../src/ts/services/currencyActions', () => ({
+jest.mock('../../src/ts/core/settings');
+jest.mock('../../src/ts/core/services/currencyActions', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/services/currencyActions')>(
-        '../../src/ts/services/currencyActions',
+    ...jest.requireActual<typeof import('../../src/ts/core/services/currencyActions')>(
+        '../../src/ts/core/services/currencyActions',
     ),
     previewSwap: jest.fn(),
     fillExposure: jest.fn(),
 }));
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import currencyActionsModule = require('../../src/ts/services/currencyActions');
+import currencyActionsModule = require('../../src/ts/core/services/currencyActions');
 const currencyActions = jest.mocked(currencyActionsModule);
-import type * as loggerModule from '../../src/ts/logger';
-import type * as currencyAutoModule from '../../src/ts/services/currencyAuto';
-import type * as currencyAutoStoreModule from '../../src/ts/currencyAutoStore';
-import type { CurrencyPassDeps } from '../../src/ts/services/currencyAuto';
+import type * as loggerModule from '../../src/ts/core/logger';
+import type * as currencyAutoModule from '../../src/ts/core/services/currencyAuto';
+import type * as currencyAutoStoreModule from '../../src/ts/core/currencyAutoStore';
+import type { CurrencyPassDeps } from '../../src/ts/core/services/currencyAuto';
 import type {
     Challenge,
     MemberBoost,
     MemberRanking,
     RankingEntry,
     RankingExposure,
-} from '../../src/ts/types/gurushots';
+} from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
-const { runAutoSwap, runAutoExposureFill } = require('../../src/ts/services/currencyAuto') as typeof currencyAutoModule;
+const { runAutoSwap, runAutoExposureFill } =
+    require('../../src/ts/core/services/currencyAuto') as typeof currencyAutoModule;
 const { createMemoryAutoSpendLedger, createAutoSpendLedger } =
-    require('../../src/ts/currencyAutoStore') as typeof currencyAutoStoreModule;
+    require('../../src/ts/core/currencyAutoStore') as typeof currencyAutoStoreModule;
 
 const NOW = 1_000_000;
 const H = 3600;
@@ -163,7 +164,7 @@ beforeEach(() => {
 // T-methods render onto the same fns).
 const logged = (level: 'info' | 'warning'): string[] =>
     jest
-        .mocked(require('../../src/ts/logger') as typeof loggerModule)
+        .mocked(require('../../src/ts/core/logger') as typeof loggerModule)
         .withCategory.mock.results.flatMap((result) =>
             jest.mocked((result.value as loggerModule.CategoryLogger)[level]).mock.calls.map((call) => String(call[0])),
         );

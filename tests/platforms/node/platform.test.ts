@@ -15,7 +15,7 @@ const mockLock = {
     APP_LOCK_FILE_NAME: 'desktop-app.lock',
 };
 
-jest.mock('../../../src/ts/logger/context', () => ({
+jest.mock('../../../src/ts/core/logger/context', () => ({
     __esModule: true,
     get startedViaCli() {
         return mockContextFlags.startedViaCli;
@@ -28,11 +28,11 @@ jest.mock('../../../src/ts/platforms/node/paths', () => ({
     ),
     isElectron: () => mockContextFlags.isElectron,
 }));
-jest.mock('../../../src/ts/settings/cliSessionLock', () => mockLock);
+jest.mock('../../../src/ts/platforms/node/cliSessionLock', () => mockLock);
 
 import { createNodePlatform } from '../../../src/ts/platforms/node';
 
-import type { PlatformWindows } from '../../../src/ts/platform/port';
+import type { PlatformWindows } from '../../../src/ts/core/platform/port';
 
 // The CLI's windows: the explicit no-ops its shell module passes (a desktop
 // command run has no windows to broadcast to or relaunch).

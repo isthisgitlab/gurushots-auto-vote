@@ -3,13 +3,13 @@
  * recorded time on each fetched entry. Bookkeeping never changes a result.
  */
 
-import logger = require('../../src/ts/logger');
-import type * as entryTimesModule from '../../src/ts/services/entryTimes';
-import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
-import type * as settingsModule from '../../src/ts/settings';
-import type { ActionResult, ActiveChallengesResponse, Challenge } from '../../src/ts/types/gurushots';
-import type { EntryAgeLedger } from '../../src/ts/types/stores';
-import type { ThroughResult } from '../../src/ts/types/stores';
+import logger = require('../../src/ts/core/logger');
+import type * as entryTimesModule from '../../src/ts/core/services/entryTimes';
+import type * as entryAgeStoreModule from '../../src/ts/core/entryAgeStore';
+import type * as settingsModule from '../../src/ts/core/settings';
+import type { ActionResult, ActiveChallengesResponse, Challenge } from '../../src/ts/core/types/gurushots';
+import type { EntryAgeLedger } from '../../src/ts/core/types/stores';
+import type { ThroughResult } from '../../src/ts/core/types/stores';
 import { invalid } from '../helpers/invalid';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import { isNumber, isRecordOf, isShape, isString, nullable, parseJsonAs } from '../helpers/parseJson';
@@ -17,15 +17,16 @@ import { isNumber, isRecordOf, isShape, isString, nullable, parseJsonAs } from '
 // The facade rides along real (a partial factory: its exports must be
 // replaceable for the consumeChosenPhotos spy), so the wrapped submits drive
 // the real consumption over the store planted below.
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/settings')>('../../src/ts/settings'),
+    ...jest.requireActual<typeof import('../../src/ts/core/settings')>('../../src/ts/core/settings'),
 }));
 
-const { annotateEntryTimes, withEntryTimes } = require('../../src/ts/services/entryTimes') as typeof entryTimesModule;
+const { annotateEntryTimes, withEntryTimes } =
+    require('../../src/ts/core/services/entryTimes') as typeof entryTimesModule;
 const { createMemoryEntryAgeLedger, createEntryAgeLedger } =
-    require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
-const settings = require('../../src/ts/settings') as typeof settingsModule;
+    require('../../src/ts/core/entryAgeStore') as typeof entryAgeStoreModule;
+const settings = require('../../src/ts/core/settings') as typeof settingsModule;
 
 const NOW = 1_800_000_000;
 

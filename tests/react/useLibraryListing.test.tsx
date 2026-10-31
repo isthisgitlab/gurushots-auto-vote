@@ -11,9 +11,9 @@ import { useCurrentMember } from '@/hooks/currentMember';
 import { useLibraryListing } from '@/hooks/useLibraryListing';
 import { mockApi } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
-import { MAX_WON_IDS } from '../../src/ts/settings/limits';
+import { MAX_WON_IDS } from '../../src/ts/core/settings/limits';
 
-import type { WindowApi } from '../../src/ts/types/ipc';
+import type { WindowApi } from '../../src/ts/core/types/ipc';
 
 type Answer = Awaited<ReturnType<WindowApi['getLibraryPhotos']>>;
 type Listing = Extract<Answer, { success: true }>;

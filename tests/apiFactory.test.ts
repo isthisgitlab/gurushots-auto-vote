@@ -4,19 +4,19 @@
  * Covers strategy selection (mock vs real), middleware caching, and refresh.
  */
 
-jest.mock('../src/ts/settings', () => ({
+jest.mock('../src/ts/core/settings', () => ({
     loadSettings: jest.fn(),
 }));
 
-jest.mock('../src/ts/services/BaseMiddleware', () => ({
+jest.mock('../src/ts/core/services/BaseMiddleware', () => ({
     BaseMiddleware: jest.fn().mockImplementation((strategy: unknown) => ({
         strategy,
         mockMiddlewareInstance: true,
     })),
 }));
 
-jest.mock('../src/ts/api/login', () => ({ authenticate: jest.fn() }));
-jest.mock('../src/ts/strategies/real', () => ({
+jest.mock('../src/ts/core/api/login', () => ({ authenticate: jest.fn() }));
+jest.mock('../src/ts/core/strategies/real', () => ({
     fetchChallengesAndVote: jest.fn(),
     applyBoostsOnSuspend: jest.fn(),
     getActiveChallenges: jest.fn(),
@@ -26,18 +26,18 @@ jest.mock('../src/ts/strategies/real', () => ({
     submitToChallenge: jest.fn(),
     swapPhoto: jest.fn(),
 }));
-jest.mock('../src/ts/api/voting', () => ({ getVoteImages: jest.fn(), submitVotes: jest.fn() }));
-jest.mock('../src/ts/api/boost', () => ({ applyBoostToEntry: jest.fn() }));
-jest.mock('../src/ts/api/turbo', () => ({ applyTurbo: jest.fn() }));
-jest.mock('../src/ts/api/submissions', () => ({
+jest.mock('../src/ts/core/api/voting', () => ({ getVoteImages: jest.fn(), submitVotes: jest.fn() }));
+jest.mock('../src/ts/core/api/boost', () => ({ applyBoostToEntry: jest.fn() }));
+jest.mock('../src/ts/core/api/turbo', () => ({ applyTurbo: jest.fn() }));
+jest.mock('../src/ts/core/api/submissions', () => ({
     getEligiblePhotos: jest.fn(),
     getImageData: jest.fn(),
 }));
-jest.mock('../src/ts/api/currency', () => ({
+jest.mock('../src/ts/core/api/currency', () => ({
     keyUnlock: jest.fn(),
     exposureAutofill: jest.fn(),
 }));
-jest.mock('../src/ts/mock', () => ({
+jest.mock('../src/ts/core/mock', () => ({
     mockApiClient: {
         authenticate: jest.fn(),
         fetchChallengesAndVote: jest.fn(),
@@ -68,7 +68,7 @@ jest.mock('../src/ts/mock', () => ({
     mockEntryAgeLedger: { pinSubmitFailed: jest.fn(() => false) },
 }));
 
-jest.mock('../src/ts/logger', () => {
+jest.mock('../src/ts/core/logger', () => {
     const mock = {
         info: jest.fn(),
         error: jest.fn(),
@@ -98,22 +98,24 @@ jest.mock('../src/ts/logger', () => {
 });
 
 const { getApiStrategy, getMiddleware, refreshApi, getEntryAgeLedger } =
-    require('../src/ts/apiFactory') as typeof apiFactoryModule;
-const { entryAgeLedger } = require('../src/ts/entryAgeStore') as typeof import('../src/ts/entryAgeStore');
+    require('../src/ts/core/apiFactory') as typeof apiFactoryModule;
+const { entryAgeLedger } = require('../src/ts/core/entryAgeStore') as typeof import('../src/ts/core/entryAgeStore');
 // The raw surfaces are not exported — the explicit override returns the
 // module-level singletons, so identity assertions still hold.
 const realApi = getApiStrategy({ mock: false });
 const mockApi = getApiStrategy({ mock: true });
-import settingsModule = require('../src/ts/settings');
+import settingsModule = require('../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-const { BaseMiddleware } = jest.mocked(require('../src/ts/services/BaseMiddleware') as typeof BaseMiddlewareModule);
-import mockLoggerModule = require('../src/ts/logger');
+const { BaseMiddleware } = jest.mocked(
+    require('../src/ts/core/services/BaseMiddleware') as typeof BaseMiddlewareModule,
+);
+import mockLoggerModule = require('../src/ts/core/logger');
 const mockLogger = jest.mocked(mockLoggerModule);
-import type * as apiFactoryModule from '../src/ts/apiFactory';
-import type { CategoryLogger } from '../src/ts/logger';
-import type * as BaseMiddlewareModule from '../src/ts/services/BaseMiddleware';
-import type * as mockModule from '../src/ts/mock';
-import type * as realStrategyModule from '../src/ts/strategies/real';
+import type * as apiFactoryModule from '../src/ts/core/apiFactory';
+import type { CategoryLogger } from '../src/ts/core/logger';
+import type * as BaseMiddlewareModule from '../src/ts/core/services/BaseMiddleware';
+import type * as mockModule from '../src/ts/core/mock';
+import type * as realStrategyModule from '../src/ts/core/strategies/real';
 import { invalid } from './helpers/invalid';
 
 describe('apiFactory', () => {
@@ -167,7 +169,7 @@ describe('apiFactory', () => {
         });
 
         test('the real surface submits and swaps through the strategy, which records the time the photo went in', () => {
-            const real = jest.mocked(require('../src/ts/strategies/real') as typeof realStrategyModule);
+            const real = jest.mocked(require('../src/ts/core/strategies/real') as typeof realStrategyModule);
             expect(realApi.submitToChallenge).toBe(real.submitToChallenge);
             expect(realApi.swapPhoto).toBe(real.swapPhoto);
         });
@@ -268,7 +270,7 @@ describe('apiFactory', () => {
 
     describe('getEntryAgeLedger', () => {
         test('mock mode reads the mock surface in-memory ledger, real mode the persisted one', () => {
-            const { mockEntryAgeLedger } = jest.mocked(require('../src/ts/mock') as typeof mockModule);
+            const { mockEntryAgeLedger } = jest.mocked(require('../src/ts/core/mock') as typeof mockModule);
             settings.loadSettings.mockReturnValueOnce(invalid({ app: { mock: true }, auth: { token: 'tok' } }));
             expect(getEntryAgeLedger()).toBe(mockEntryAgeLedger);
             settings.loadSettings.mockReturnValueOnce(invalid({ app: { mock: false }, auth: { token: 'tok' } }));
@@ -278,7 +280,7 @@ describe('apiFactory', () => {
 
     describe('mock surface debug wrapper', () => {
         test('logs the mock label and forwards args/result to the wrapped client', async () => {
-            const { mockApiClient } = jest.mocked(require('../src/ts/mock') as typeof mockModule);
+            const { mockApiClient } = jest.mocked(require('../src/ts/core/mock') as typeof mockModule);
             mockApiClient.authenticate.mockResolvedValueOnce(invalid('token-xyz'));
             const result = await mockApi.authenticate('user@example.com', 'pw');
             expect(result).toBe('token-xyz');

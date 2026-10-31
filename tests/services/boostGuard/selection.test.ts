@@ -3,8 +3,8 @@
  * imminent-boost selection that the quit dialog and the sleep boost share.
  */
 
-import type * as selectionModule from '../../../src/ts/services/boostGuard/selection';
-import type { Challenge } from '../../../src/ts/types/gurushots';
+import type * as selectionModule from '../../../src/ts/core/services/boostGuard/selection';
+import type { Challenge } from '../../../src/ts/core/types/gurushots';
 import { invalid } from '../../helpers/invalid';
 
 const NOW = 1_000_000;
@@ -20,7 +20,7 @@ let selection: typeof selectionModule;
 beforeEach(() => {
     // Module-level state (the remembered list) must not leak across tests.
     jest.resetModules();
-    selection = require('../../../src/ts/services/boostGuard/selection') as typeof selection;
+    selection = require('../../../src/ts/core/services/boostGuard/selection') as typeof selection;
 });
 
 describe('remembered list — suspend selection', () => {

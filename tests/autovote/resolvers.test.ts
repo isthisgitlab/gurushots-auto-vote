@@ -1,5 +1,5 @@
 /**
- * The autovote controller's IPC resolvers (src/ts/autovote/resolvers.ts) over a
+ * The autovote controller's IPC resolvers (src/ts/core/autovote/resolvers.ts) over a
  * hand-built host — the cases autovoteScheduler.test.tsx and
  * tests/ui/autovote-threshold-scheduling.test.ts used to carry. Each resolver
  * batches its per-challenge keys over getEffectiveSetting and applies the same
@@ -7,12 +7,12 @@
  * factory resolvers over the real computeNextCycleDelayMs.
  */
 
-import type * as resolversModule from '../../src/ts/autovote/resolvers';
-import type { Challenge } from '../../src/ts/types/gurushots';
-import { computeNextCycleDelayMs } from '../../src/ts/scheduling/thresholdWindow';
+import type * as resolversModule from '../../src/ts/core/autovote/resolvers';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
+import { computeNextCycleDelayMs } from '../../src/ts/core/scheduling/thresholdWindow';
 import { invalid } from '../helpers/invalid';
 
-const { createResolvers } = require('../../src/ts/autovote/resolvers') as typeof resolversModule;
+const { createResolvers } = require('../../src/ts/core/autovote/resolvers') as typeof resolversModule;
 
 describe('autovote resolvers', () => {
     let host: Parameters<typeof createResolvers>[0];

@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { useLatestRef } from './useLatestRef';
 
 import type { JoinOutcome } from '@/components/app/DiscoverSection';
-import type { OpenChallenge } from '../../types/gurushots';
+import type { OpenChallenge } from '../../core/types/gurushots';
 
 type Price = { cost: number; list: OpenChallenge[] };
 

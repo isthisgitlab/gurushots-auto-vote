@@ -6,7 +6,7 @@
  * member, so Electron / CLI builds never resolve @capacitor/core.
  */
 
-import { finalizeAdapterResponse } from '../../api/api-client';
+import { finalizeAdapterResponse } from '../../core/api/api-client';
 
 import type { AxiosAdapter } from 'axios';
 

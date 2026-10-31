@@ -1,13 +1,13 @@
 /**
- * Native application menu (src/ts/ui/applicationMenu.ts): template shape per
+ * Native application menu (src/ts/shells/electron/ui/applicationMenu.ts): template shape per
  * platform, translation lookup, and the Help-menu click actions (update check,
  * logs window, about dialog). Electron and AutoUpdater are mocked.
  */
 
 import type { BrowserWindowConstructorOptions, MessageBoxOptions } from 'electron';
-import type * as LoggerModule from '../../src/ts/logger';
-import type * as MenuModule from '../../src/ts/ui/applicationMenu';
-import type * as StateModule from '../../src/ts/index/state';
+import type * as LoggerModule from '../../src/ts/core/logger';
+import type * as MenuModule from '../../src/ts/shells/electron/ui/applicationMenu';
+import type * as StateModule from '../../src/ts/shells/electron/index/state';
 import { invalid } from '../helpers/invalid';
 
 /** The mocked electron's view of a menu template entry (what the tests read back). */
@@ -78,11 +78,11 @@ jest.mock('electron', () => {
 // The menu reads the Node translation manager's current language; a test
 // swaps `translate` to simulate a language switch.
 const mockTranslation = { translate: (k: string): string => k };
-jest.mock('../../src/ts/translations/index', () => ({
+jest.mock('../../src/ts/core/translations/index', () => ({
     translationManager: { t: (k: string) => mockTranslation.translate(k) },
 }));
 
-jest.mock('../../src/ts/services/AutoUpdater', () => ({
+jest.mock('../../src/ts/shells/electron/AutoUpdater', () => ({
     AutoUpdater: jest.fn().mockImplementation((win) => {
         mockAutoUpdaterCtor(win);
         return { checkForUpdates: mockAutoUpdaterCheck };
@@ -90,7 +90,7 @@ jest.mock('../../src/ts/services/AutoUpdater', () => ({
 }));
 
 const mockRestrictToLogsChannels = jest.fn<void, [object]>();
-jest.mock('../../src/ts/ipc/registerHandlers', () => ({
+jest.mock('../../src/ts/shells/electron/registerHandlers', () => ({
     restrictToLogsChannels: (webContents: object) => mockRestrictToLogsChannels(webContents),
 }));
 
@@ -111,9 +111,9 @@ const listedWindow = (destroyed = false) =>
 function loadMenu() {
     jest.resetModules();
     electron = require('electron') as typeof electron;
-    logger = jest.mocked(require('../../src/ts/logger') as typeof LoggerModule);
-    menuModule = require('../../src/ts/ui/applicationMenu') as typeof menuModule;
-    appState = (require('../../src/ts/index/state') as typeof StateModule).appState;
+    logger = jest.mocked(require('../../src/ts/core/logger') as typeof LoggerModule);
+    menuModule = require('../../src/ts/shells/electron/ui/applicationMenu') as typeof menuModule;
+    appState = (require('../../src/ts/shells/electron/index/state') as typeof StateModule).appState;
 }
 
 function builtTemplate() {

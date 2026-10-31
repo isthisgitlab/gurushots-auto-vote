@@ -8,7 +8,7 @@ import { SAVE_ERROR_ID } from '@/components/ui/ModalActionRow';
 import { SettingResetButton } from './SettingResetButton';
 import { PhotoChooserModal } from './PhotoChooserModal';
 
-import type { SettingFieldProps } from '../../../types/settingsEditor';
+import type { SettingFieldProps } from '../../../core/types/settingsEditor';
 
 // Edge length requested from the photo CDN for a chip; it renders at 32px.
 const THUMB_PX = 64;

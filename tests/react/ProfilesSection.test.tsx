@@ -12,8 +12,8 @@ import { invalid } from '../helpers/invalid';
 
 import type { SettingsNav } from '@/contexts/SettingsNavContext';
 import type { SettingsTabId } from '@/utils/groupSettings';
-import type { RendererSchema } from '../../src/ts/types/settingsEditor';
-import type { ChallengeValues } from '../../src/ts/types/settings';
+import type { RendererSchema } from '../../src/ts/core/types/settingsEditor';
+import type { ChallengeValues } from '../../src/ts/core/types/settings';
 
 // `extra` sits in a group whose tier is unknown: it renders in the trailing
 // unlabelled band and stands in for a stored key with no cell of its own.
