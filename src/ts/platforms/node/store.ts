@@ -42,8 +42,10 @@ const readStoreFile = (file: string): string | null => {
 const setAsideStamp = (): string => new Date().toISOString().replace(/[:.]/g, '-');
 
 const createNodeStorage = (): PlatformStorage => {
-    // The stale-temp sweep of an atomic store's file: once per file path, before the first read or write
-    // (jsonStore's and settingsFileMethods' sweepOnce). Reached at call time with the wrapped helpers.
+    // The stale-temp sweep of a store's file, once per file path: before the
+    // first read or write for a `read-write` store (jsonStore's sweepOnce),
+    // before the first write only for a `write` store (the settings file's).
+    // Reached at call time with the wrapped helpers.
     const swept = new Set<string>();
     const sweepOnce = (file: string): void => {
         if (swept.has(file)) return;
@@ -52,11 +54,13 @@ const createNodeStorage = (): PlatformStorage => {
     };
     return {
         readRaw: (store) => {
-            if (store.atomic) sweepOnce(store.filePath());
+            // read-write is the createJsonStore rule: the sweep runs before the first read too. The settings
+            // file's rule (`write`) never sweeps on a read.
+            if (store.sweep === 'read-write') sweepOnce(store.filePath());
             return readStoreFile(store.filePath());
         },
         writeRaw: (store, data, atomic) => {
-            if (store.atomic) sweepOnce(store.filePath());
+            if (store.sweep !== 'none') sweepOnce(store.filePath());
             const write = atomic ? atomicWrite().writeAtomicOwnerOnly : ownerOnlyWrite().writeOwnerOnly;
             write(store.filePath(), data);
         },

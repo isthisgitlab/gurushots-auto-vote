@@ -19,10 +19,13 @@ import type { Platform, PlatformWindows } from '../../src/ts/platform/port';
 
 // The temporary directory the node platform resolves paths.userData() into:
 // created once per test file, removed by removeNodeTestUserDataDir (the setup
-// file's afterAll).
+// file's afterAll). A call after the removal throws instead of creating a
+// directory nothing would remove.
 let userDataDir: string | null = null;
+let userDataDirRemoved = false;
 
 const nodeTestUserDataDir = (): string => {
+    if (userDataDirRemoved) throw new Error('the test user-data directory was already removed');
     if (userDataDir === null) {
         const realFs = jest.requireActual('node:fs') as typeof import('node:fs');
         const realOs = jest.requireActual('node:os') as typeof import('node:os');
@@ -40,6 +43,7 @@ const removeNodeTestUserDataDir = (): void => {
         force: true,
     });
     userDataDir = null;
+    userDataDirRemoved = true;
 };
 
 // The test windows: nothing to broadcast to or relaunch from a test run — the
@@ -119,5 +123,6 @@ export {
     installWebviewTestPlatform,
     installHeadlessTestPlatform,
     clearInstalledPlatform,
+    nodeTestUserDataDir,
     removeNodeTestUserDataDir,
 };

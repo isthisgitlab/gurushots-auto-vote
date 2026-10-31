@@ -13,8 +13,9 @@
  * reason: building the platform must not load the logger's module graph.
  *
  * The members the node platforms have none of — the Capacitor HTTP adapter,
- * the native Android services — are null; the windows are no-ops (a desktop
- * has no windows to broadcast to from here).
+ * the native Android services — are null; each shell passes its windows in
+ * (Electron's broadcast and relaunch, the web server's, or the CLI's
+ * explicit no-ops).
  */
 
 import { createNodeAssets } from './assets';

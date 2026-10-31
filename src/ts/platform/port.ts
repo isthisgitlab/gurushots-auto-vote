@@ -22,15 +22,16 @@ import type { ThroughResult } from '../types/stores';
 /**
  * The two names one store's data is kept under: the Preferences / native-bridge
  * key (the Capacitor and Android headless transports), and the file's full
- * path, read at call time (the fs transport). `atomic` is the store's
- * createJsonStore option: an atomic store's file is swept for the temp files
- * an earlier crash left beside it, once per file path, before the first read
- * or write.
+ * path, read at call time (the fs transport). `sweep` is when the store's
+ * file is swept for the temp files an earlier crash left beside it, once per
+ * file path: `read-write` is the createJsonStore rule — before the first read
+ * or write; `write` is the settings-file rule — before the first write only,
+ * never on a read; `none` never sweeps.
  */
 export type SettingsStoreRef = {
     prefKey: string;
     filePath: () => string;
-    atomic: boolean;
+    sweep: 'none' | 'read-write' | 'write';
 };
 
 /**
@@ -57,12 +58,13 @@ export type PlatformCas = (key: string, expected: string | null, data: string) =
 export type PlatformStorage = {
     /**
      * The stored text of one store (readRaw / readHere), or null when nothing is stored. Includes the stale-temp
-     * sweep of an atomic store's file, once per file path, before the read.
+     * sweep of the store's file, once per file path before the read, for a `read-write` sweep store.
      */
     readRaw: (store: SettingsStoreRef) => string | null;
     /**
      * Saves the text of one store; `atomic` replaces the file by temp file and rename (createJsonStore `atomic`).
-     * Includes the stale-temp sweep of an atomic store's file, once per file path, before the write.
+     * Includes the stale-temp sweep of the store's file, once per file path before the write, for a `read-write`
+     * or `write` sweep store.
      */
     writeRaw: (store: SettingsStoreRef, data: string, atomic: boolean) => void;
     /** Saves only if nothing is stored yet (the import write); answers the text that is already there (`exists`). */

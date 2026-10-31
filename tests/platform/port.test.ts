@@ -5,7 +5,13 @@
  * globalThis — a fresh module instance after jest.resetModules still sees it.
  */
 
-import { buildNodeTestPlatform, clearInstalledPlatform, installTestPlatform } from '../helpers/platform';
+import {
+    buildNodeTestPlatform,
+    clearInstalledPlatform,
+    installTestPlatform,
+    nodeTestUserDataDir,
+    removeNodeTestUserDataDir,
+} from '../helpers/platform';
 import { installPlatform, platform } from '../../src/ts/platform/port';
 
 import type { ElectronPlatform } from '../../src/ts/platform/port';
@@ -54,5 +60,12 @@ describe('the platform port', () => {
         });
         expect(electron.wipe.clearSession).not.toBeNull();
         expect(typeof electron.windows.broadcastSettingsChanged).toBe('function');
+    });
+
+    // Last in the file: nothing after it may resolve the node test platform's
+    // user data, and the afterEach reinstall only builds the platform.
+    test('a removed test user-data directory is not silently recreated', () => {
+        removeNodeTestUserDataDir();
+        expect(() => nodeTestUserDataDir()).toThrow('the test user-data directory was already removed');
     });
 });

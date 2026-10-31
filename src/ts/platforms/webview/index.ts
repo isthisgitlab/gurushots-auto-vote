@@ -31,7 +31,13 @@ import type { Platform, PlatformCas, PlatformNative, PlatformWindows, PlatformWi
 
 /** The parts the shell module passes in: the native members and the windows, all required. */
 type WebviewNativeParts = {
-    /** The native compare-and-write of one Preferences key, null while the storage transport is a placeholder. */
+    /**
+     * The native compare-and-write of one Preferences key, null where the
+     * shell has none. Not read until Phase 3 step 7 — the storage transport
+     * is a placeholder until then (store.ts) — and required now so a shell
+     * that forgets it fails to compile; step 7 wires it into the storage it
+     * restores.
+     */
     cas: PlatformCas | null;
     /** The native plugin's wipe (AutoVoteBackground wipeLocalData). */
     nativeWipe: PlatformWipe['nativeWipe'];

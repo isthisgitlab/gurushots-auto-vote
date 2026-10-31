@@ -54,6 +54,10 @@ const parts = (over: Partial<WebviewParts> = {}): WebviewParts => ({
     ...over,
 });
 
+beforeEach(() => {
+    mockValues.clear();
+});
+
 describe('the webview platform', () => {
     test('the adapter is the CapacitorHttp one, resolved on read', () => {
         const p = createWebviewPlatform(parts());

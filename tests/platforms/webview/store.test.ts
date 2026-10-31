@@ -8,7 +8,7 @@ import { createWebviewStorage } from '../../../src/ts/platforms/webview/store';
 
 import type { SettingsStoreRef } from '../../../src/ts/platform/port';
 
-const store: SettingsStoreRef = { prefKey: 'gs_test', filePath: () => '/data/gs_test.json', atomic: false };
+const store: SettingsStoreRef = { prefKey: 'gs_test', filePath: () => '/data/gs_test.json', sweep: 'none' };
 const storage = createWebviewStorage();
 const NOT_MOVED = 'webview storage moves behind the port in Phase 3 step 7';
 

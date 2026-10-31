@@ -17,6 +17,13 @@ type AppPathsModule = typeof import('../../appPaths');
 const runtime = (): RuntimeModule => require('../../runtime') as RuntimeModule;
 const appPaths = (): AppPathsModule => require('../../appPaths') as AppPathsModule;
 
+// The fs read of one asset under src/assets of the app root.
+const readAssetFile = (relativePath: string): string =>
+    (require('node:fs') as typeof import('node:fs')).readFileSync(
+        appPaths().appPath('src', 'assets', relativePath),
+        'utf8',
+    );
+
 // The SEA-or-fs read of one asset under src/assets.
 const readAssetText = (relativePath: string): string => {
     try {
@@ -25,10 +32,7 @@ const readAssetText = (relativePath: string): string => {
     } catch {
         // node:sea unavailable or not a SEA build — fall through to the fs read.
     }
-    return (require('node:fs') as typeof import('node:fs')).readFileSync(
-        appPaths().appPath('src', 'assets', relativePath),
-        'utf8',
-    );
+    return readAssetFile(relativePath);
 };
 
 const createNodeAssets = (): PlatformAssets => ({
@@ -49,8 +53,7 @@ const createNodeAssets = (): PlatformAssets => ({
         } catch {
             // The asset read or its parse failed — fall through to the fs read.
         }
-        const fs = require('node:fs') as typeof import('node:fs');
-        const parsed: unknown = JSON.parse(fs.readFileSync(appPaths().appPath('src', 'assets', relativePath), 'utf8'));
+        const parsed: unknown = JSON.parse(readAssetFile(relativePath));
         return parsed;
     },
     visionModel: {
