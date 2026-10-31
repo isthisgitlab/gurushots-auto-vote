@@ -8,7 +8,6 @@
 
 import type * as bridgeModule from '../../src/ts/bridge/capacitor';
 import type * as settingsModule from '../../src/ts/settings';
-import type * as settingsHandlersModule from '../../src/ts/ipc/settings.handlers';
 import type * as updateCheckerModule from '../../src/ts/services/UpdateChecker';
 import type * as installerModule from '../../src/ts/services/AndroidUpdateInstaller';
 import type * as logHandlersModule from '../../src/ts/ipc/log.handlers';
@@ -21,12 +20,8 @@ import { invalid } from '../helpers/invalid';
 import { resetPlatformKind } from '../helpers/platformKind';
 import { platformKind } from '../../src/ts/platform/kind';
 
-let mockSettingsDeps: Parameters<typeof settingsHandlersModule.buildHandlers>[0] | null = null;
 jest.mock('../../src/ts/ipc/settings.handlers', () => ({
-    buildHandlers: (deps: Parameters<typeof settingsHandlersModule.buildHandlers>[0]) => {
-        mockSettingsDeps = deps;
-        return { 'get-settings': jest.fn(async () => ({ theme: 'dark' })) };
-    },
+    buildHandlers: () => ({ 'get-settings': jest.fn(async () => ({ theme: 'dark' })) }),
 }));
 jest.mock('../../src/ts/ipc/voting.handlers', () => ({
     buildHandlers: () => ({ 'gui-vote': jest.fn(async (_event) => ({ success: true, via: 'gui-vote' })) }),
@@ -189,7 +184,10 @@ describe('Capacitor bridge', () => {
             const onChange = jest.fn();
             api.onSettingsChanged(onChange);
 
-            mockSettingsDeps!.broadcastSettingsChange!({ language: 'lv' });
+            // The write announcements reach this channel through the
+            // installed platform's windows (capacitorPlatform), which emit
+            // here; the pub/sub delivery is what the bridge owns.
+            bridge.emit('settings-changed', { language: 'lv' });
 
             expect(onChange).toHaveBeenCalledWith({ language: 'lv' });
         });
@@ -427,15 +425,6 @@ describe('Capacitor bridge', () => {
 
             globalThis.location = invalid(undefined);
             await expect(api.reloadWindow()).resolves.toEqual({ success: true });
-        });
-
-        test('once all local data is deleted the WebView reloads into the login screen', () => {
-            const reload = jest.fn();
-            globalThis.location = invalid({ reload });
-
-            mockSettingsDeps!.afterWipe!();
-
-            expect(reload).toHaveBeenCalledTimes(1);
         });
 
         test('refreshMenu is a successful no-op on mobile', async () => {

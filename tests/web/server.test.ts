@@ -16,9 +16,11 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { clearInstalledPlatform } from '../helpers/platform';
+import { platform } from '../../src/ts/platform/port';
+
+import type { Platform } from '../../src/ts/platform/port';
 
 import type * as serverModule from '../../src/ts/web/server';
-import type * as settingsHandlersModule from '../../src/ts/ipc/settings.handlers';
 import type * as authModule from '../../src/ts/services/auth';
 import type * as settingsModule from '../../src/ts/settings';
 import type * as randomizerModule from '../../src/ts/api/randomizer';
@@ -32,24 +34,26 @@ let mockSlowGate: Promise<void> | null = null;
 // The stored settings the server reads, per key: the clear tests set token and stayLoggedIn per test.
 // A wipe empties the stored configuration, so its handler empties this too (the token then reads '').
 let mockSettingValues: Record<string, string | boolean> = {};
-let mockSettingsDeps: Parameters<typeof settingsHandlersModule.buildHandlers>[0] | null = null;
+// The web platform the server module installs at load; its windows delegate
+// to the run the current createWebServer registered (setWebShellRun), so the
+// mock's wipe hand-over and the broadcast test drive this test's server the
+// way the production flow does. The platform slot itself cannot serve here:
+// the setup file's afterEach reinstalls the node test platform on it.
+let webPlatform: Platform;
 jest.mock('../../src/ts/ipc/settings.handlers', () => ({
-    buildHandlers: (deps: Parameters<typeof settingsHandlersModule.buildHandlers>[0]) => {
-        mockSettingsDeps = deps;
-        return {
-            'get-setting': async (_event: unknown, key: string, scope = 'global') => ({ key, scope }),
-            'slow-setting': async () => {
-                await mockSlowGate;
-                return 'slow';
-            },
-            'wipe-local-data': async () => {
-                if (!mockWipeSucceeds) return { success: false, error: 'busy' };
-                mockSettingsDeps?.afterWipe?.();
-                mockSettingValues = {};
-                return { success: true };
-            },
-        };
-    },
+    buildHandlers: () => ({
+        'get-setting': async (_event: unknown, key: string, scope = 'global') => ({ key, scope }),
+        'slow-setting': async () => {
+            await mockSlowGate;
+            return 'slow';
+        },
+        'wipe-local-data': async () => {
+            if (!mockWipeSucceeds) return { success: false, error: 'busy' };
+            webPlatform.windows.afterWipe();
+            mockSettingValues = {};
+            return { success: true };
+        },
+    }),
 }));
 jest.mock('../../src/ts/ipc/voting.handlers', () => ({
     buildHandlers: () => ({
@@ -106,6 +110,9 @@ jest.mock('../../src/ts/logger', () => ({
 
 clearInstalledPlatform();
 const { createWebServer, startWebServer } = require('../../src/ts/web/server') as typeof serverModule;
+// The server module imported its platform module first, so the install ran
+// before this read.
+webPlatform = platform();
 const auth = jest.mocked(require('../../src/ts/services/auth') as typeof authModule);
 const settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
 const randomizer = jest.mocked(require('../../src/ts/api/randomizer') as typeof randomizerModule);
@@ -620,7 +627,10 @@ describe('events', () => {
         expect(stream.frames[0]).toBe(': connected\n\n');
 
         emit('update-checking');
-        mockSettingsDeps!.broadcastSettingsChange!({ theme: 'dark' });
+        // The settings writes reach this channel through the web platform's
+        // windows (the run the beforeEach's createWebServer registered), the
+        // way a real handler announces one.
+        webPlatform.windows.broadcastSettingsChanged({ theme: 'dark' });
         await waitFor(() => stream.frames.join('').includes('settings-changed'));
         const all = stream.frames.join('');
         expect(all).toContain('event: update-checking\ndata: null\n\n');

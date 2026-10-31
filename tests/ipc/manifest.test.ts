@@ -69,7 +69,7 @@ const collectHandlerChannels = () => {
     const updateHandlers = require('../../src/ts/ipc/update.handlers') as typeof update_handlersModule;
 
     return [
-        ...Object.keys(settingsHandlers.buildHandlers({ broadcastSettingsChange: () => {} })),
+        ...Object.keys(settingsHandlers.buildHandlers()),
         ...Object.keys(votingHandlers.buildHandlers()),
         ...Object.keys(logHandlers.buildHandlers()),
         ...Object.keys(actionsHandlers.buildHandlers()),

@@ -74,15 +74,9 @@ const wrap =
 
 const buildAllHandlers = () => {
     // Every successful settings write (save-settings, set-setting and the
-    // mutating passthroughs) broadcasts through the local pub/sub so React's
-    // onSettingsChanged subscribers fire.
-    const settingsDeps = {
-        broadcastSettingsChange: (newSettings: object) => emit('settings-changed', newSettings),
-        // Everything local is gone: the WebView reloads into the login screen.
-        afterWipe: () => {
-            void reloadWindow();
-        },
-    };
+    // mutating passthroughs) broadcasts through the installed platform's
+    // windows (capacitorPlatform), which emits on the local pub/sub here so
+    // React's onSettingsChanged subscribers fire.
 
     // Update channels: check / skip / releases URL are the shared
     // GitHub-Releases channels (ipc/releaseUpdates). Download hands the APK
@@ -131,7 +125,7 @@ const buildAllHandlers = () => {
     } satisfies ShellUpdateHandlers;
 
     return {
-        ...settingsHandlers.buildHandlers(settingsDeps),
+        ...settingsHandlers.buildHandlers(),
         ...votingHandlers.buildHandlers(),
         ...logHandlers.buildHandlers(),
         ...actionsHandlers.buildHandlers(),

@@ -1,6 +1,8 @@
 /**
  * Tests for the hand-written (non-thin) channels in
- * settings.handlers.ts plus the Electron register() broadcast wiring.
+ * settings.handlers.ts plus the register() wiring of the installed platform's
+ * windows (the write announcements and the post-wipe hand-over; the Electron
+ * bodies are tests/shells/electronPlatform.test.ts).
  * The thin-handler rows are covered by settings.handlers.thin-table.test.ts.
  *
  * Every channel here has a documented error fallback the renderer relies on
@@ -8,18 +10,6 @@
  * must never throw across IPC.
  */
 
-const getAllWindowsMock = jest.fn<unknown[], []>(() => []);
-const relaunchMock = jest.fn<void, []>();
-const exitMock = jest.fn<void, [number]>();
-
-jest.mock('electron', () => ({
-    BrowserWindow: { getAllWindows: getAllWindowsMock },
-    app: { relaunch: relaunchMock, exit: exitMock },
-}));
-jest.mock('../../src/ts/runtime', () => ({
-    __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/runtime')>('../../src/ts/runtime'),
-}));
 jest.mock('../../src/ts/settings');
 jest.mock('../../src/ts/settings/localData', () => ({ wipeLocalData: jest.fn() }));
 jest.mock('../../src/ts/thirdPartyNotices', () => ({ loadThirdPartyNotices: jest.fn() }));
@@ -32,6 +22,9 @@ jest.mock('../../src/ts/apiFactory', () => ({
 
 import type { IpcMain } from 'electron';
 import { invalid } from '../helpers/invalid';
+import { installTestPlatform } from '../helpers/platform';
+
+import type { PlatformWindows } from '../../src/ts/platform/port';
 
 import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
@@ -44,13 +37,7 @@ const localData = jest.mocked(localDataModule);
 import noticesModule = require('../../src/ts/thirdPartyNotices');
 const notices = jest.mocked(noticesModule);
 import type * as settings_handlersModule from '../../src/ts/ipc/settings.handlers';
-import type * as runtimeModule from '../../src/ts/runtime';
-// settings.handlers captures BrowserWindow/app at load, gated on isElectron —
-// report Electron for that capture; the register() tests below need both.
-const runtime = require('../../src/ts/runtime') as typeof runtimeModule;
-const isElectronSpy = jest.spyOn(runtime, 'isElectron').mockReturnValue(true);
 const { buildHandlers, register } = require('../../src/ts/ipc/settings.handlers') as typeof settings_handlersModule;
-isElectronSpy.mockRestore();
 
 type ChannelImpl = Parameters<IpcMain['handle']>[1];
 
@@ -58,11 +45,28 @@ const boom = () => {
     throw new Error('boom');
 };
 
+// Installs the platform with jest.fn windows and returns them: the handlers
+// announce writes through platform().windows, so a test asserts on these.
+// installTestPlatform replaces the windows group whole; the setup file's
+// afterEach reinstalls the untouched node test platform.
+const installWindows = (): PlatformWindows => {
+    const windows: PlatformWindows = {
+        broadcastSettingsChanged: jest.fn<void, [object]>(),
+        afterWipe: jest.fn<void, []>(),
+    };
+    installTestPlatform({ windows });
+    return windows;
+};
+
 let handlers: ReturnType<typeof buildHandlers>;
 
 beforeEach(() => {
     jest.clearAllMocks();
     settings.getDefaultSettings = jest.fn().mockReturnValue({ app: { theme: 'light', boostTime: 3600 } });
+    // Every successful write now announces through the installed platform's
+    // windows, whose broadcast re-reads the settings — the default the tests
+    // that do not say otherwise announce.
+    settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: '' }, app: { theme: 'light' } });
     handlers = buildHandlers();
 });
 
@@ -141,12 +145,12 @@ describe('set-setting', () => {
     test.each(['auth', 'token', 'hasToken', 'apiHeaders', 'lastUsername'])(
         'refuses to write the %s key and does not broadcast',
         async (key) => {
-            const broadcastSettingsChange = jest.fn();
+            const windows = installWindows();
             settings.setSetting = jest.fn().mockReturnValue(true);
-            const h = buildHandlers({ broadcastSettingsChange });
+            const h = buildHandlers();
             await expect(h['set-setting']({}, key, 'planted')).resolves.toBe(false);
             expect(settings.setSetting).not.toHaveBeenCalled();
-            expect(broadcastSettingsChange).not.toHaveBeenCalled();
+            expect(windows.broadcastSettingsChanged).not.toHaveBeenCalled();
         },
     );
 
@@ -173,42 +177,42 @@ describe('set-setting', () => {
     });
 
     test('broadcasts the freshly loaded settings after a successful write', async () => {
-        const broadcastSettingsChange = jest.fn();
+        const windows = installWindows();
         settings.setSetting = jest.fn().mockReturnValue(true);
         settings.loadSettings = jest
             .fn()
             .mockReturnValue({ auth: { token: 'secret' }, app: { language: 'lv', theme: 'dark' } });
-        const h = buildHandlers({ broadcastSettingsChange });
+        const h = buildHandlers();
 
         await expect(h['set-setting']({}, 'language', 'lv')).resolves.toBe(true);
-        expect(broadcastSettingsChange).toHaveBeenCalledWith({
+        expect(windows.broadcastSettingsChanged).toHaveBeenCalledWith({
             app: { language: 'lv', theme: 'dark' },
             hasToken: true,
         });
     });
 
     test('does not broadcast a rejected write', async () => {
-        const broadcastSettingsChange = jest.fn();
+        const windows = installWindows();
         settings.setSetting = jest.fn().mockReturnValue(false);
-        const h = buildHandlers({ broadcastSettingsChange });
+        const h = buildHandlers();
 
         await expect(h['set-setting']({}, 'language', 'lv')).resolves.toBe(false);
-        expect(broadcastSettingsChange).not.toHaveBeenCalled();
+        expect(windows.broadcastSettingsChanged).not.toHaveBeenCalled();
     });
 });
 
 describe('save-settings', () => {
     test('saves, then broadcasts the stored settings without the token', async () => {
-        const broadcastSettingsChange = jest.fn();
+        const windows = installWindows();
         settings.saveAppSettings = jest.fn().mockReturnValue(true);
         settings.loadSettings = jest
             .fn()
             .mockReturnValue({ auth: { token: 'secret' }, app: { theme: 'dark', language: 'en' } });
-        const h = buildHandlers({ broadcastSettingsChange });
+        const h = buildHandlers();
 
         await expect(h['save-settings']({}, { theme: 'dark' })).resolves.toBe(true);
         expect(settings.saveAppSettings).toHaveBeenCalledWith({ theme: 'dark' });
-        expect(broadcastSettingsChange).toHaveBeenCalledWith({
+        expect(windows.broadcastSettingsChanged).toHaveBeenCalledWith({
             app: { theme: 'dark', language: 'en' },
             hasToken: true,
         });
@@ -242,28 +246,23 @@ describe('save-settings', () => {
     });
 
     test('strips token and hasToken from the payload before saving and from the broadcast', async () => {
-        const broadcastSettingsChange = jest.fn();
+        const windows = installWindows();
         settings.saveAppSettings = jest.fn().mockReturnValue(true);
         settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: 'stored' }, app: { theme: 'dark' } });
-        const h = buildHandlers({ broadcastSettingsChange });
+        const h = buildHandlers();
 
         await expect(h['save-settings']({}, { token: 'planted', hasToken: false, theme: 'dark' })).resolves.toBe(true);
         expect(settings.saveAppSettings).toHaveBeenCalledWith({ theme: 'dark' });
-        expect(broadcastSettingsChange).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
+        expect(windows.broadcastSettingsChanged).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
     });
 
     test('does not broadcast when the save fails', async () => {
-        const broadcastSettingsChange = jest.fn();
+        const windows = installWindows();
         settings.saveAppSettings = jest.fn().mockReturnValue(false);
-        const h = buildHandlers({ broadcastSettingsChange });
+        const h = buildHandlers();
 
         await expect(h['save-settings']({}, { theme: 'dark' })).resolves.toBe(false);
-        expect(broadcastSettingsChange).not.toHaveBeenCalled();
-    });
-
-    test('succeeds without a broadcaster (CLI / Capacitor shape)', async () => {
-        settings.saveAppSettings = jest.fn().mockReturnValue(true);
-        await expect(handlers['save-settings']({}, { theme: 'dark' })).resolves.toBe(true);
+        expect(windows.broadcastSettingsChanged).not.toHaveBeenCalled();
     });
 
     test.each([null, 'str', 5, undefined])('rejects non-object payload %p', async (bad) => {
@@ -499,15 +498,15 @@ describe('the recovery of the stored settings', () => {
     const answerOf = (): { success: true } => ({ success: true });
 
     test.each(channels)('%s runs %s, then announces the settings to every window', async (channel, method) => {
-        const broadcastSettingsChange = jest.fn();
+        const windows = installWindows();
         settings[method] = jest.fn().mockReturnValue(worked(method));
         settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: 't' }, app: { theme: 'dark' } });
-        const h = buildHandlers({ broadcastSettingsChange });
+        const h = buildHandlers();
 
         await expect(h[channel]()).resolves.toEqual(answerOf());
 
         expect(settings[method]).toHaveBeenCalledTimes(1);
-        expect(broadcastSettingsChange).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
+        expect(windows.broadcastSettingsChanged).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
     });
 
     test('start-fresh-settings says nothing was reset when a configuration was in place already', async () => {
@@ -519,9 +518,9 @@ describe('the recovery of the stored settings', () => {
     test.each(channels)(
         '%s answers the failure code when the action did not work, and announces nothing',
         async (channel, method) => {
-            const broadcastSettingsChange = jest.fn();
+            const windows = installWindows();
             settings[method] = jest.fn().mockReturnValue(didNot(method));
-            const h = buildHandlers({ broadcastSettingsChange });
+            const h = buildHandlers();
 
             // A report that could not be saved is not an import that failed.
             await expect(h[channel]()).resolves.toEqual({
@@ -529,7 +528,7 @@ describe('the recovery of the stored settings', () => {
                 error: channel === 'acknowledge-import-report' ? 'import-report-not-saved' : 'settings-import-failed',
             });
 
-            expect(broadcastSettingsChange).not.toHaveBeenCalled();
+            expect(windows.broadcastSettingsChanged).not.toHaveBeenCalled();
         },
     );
 
@@ -545,11 +544,6 @@ describe('the recovery of the stored settings', () => {
             success: false,
             error: 'Failed to recover the settings',
         });
-    });
-
-    test('works without a broadcaster (CLI / Capacitor shape)', async () => {
-        settings.retryImportDetailed = jest.fn().mockReturnValue({ ok: true });
-        await expect(handlers['retry-settings-import']()).resolves.toEqual({ success: true });
     });
 
     test('retry-settings-import says nothing was imported when a configuration was in place already', async () => {
@@ -635,35 +629,27 @@ describe('get-settings-recovery', () => {
 
 describe('a save the window gave up', () => {
     test('is announced like a settings change, with the settings as the window now has them', () => {
-        const broadcast = jest.fn();
+        const windows = installWindows();
         settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: 'secret' }, app: { theme: 'dark' } });
-        buildHandlers({ broadcastSettingsChange: broadcast });
+        buildHandlers();
 
         const [listener] = settings.onSettingsSaveDroppedChange.mock.calls.at(-1) ?? [];
         listener?.();
 
-        expect(broadcast).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
-    });
-
-    test('is not listened for where nothing is announced', () => {
-        settings.onSettingsSaveDroppedChange.mockClear();
-        settings.onSettingsRecoveryChange.mockClear();
-        buildHandlers();
-        expect(settings.onSettingsSaveDroppedChange).not.toHaveBeenCalled();
-        expect(settings.onSettingsRecoveryChange).not.toHaveBeenCalled();
+        expect(windows.broadcastSettingsChanged).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
     });
 });
 
 describe('a block a read cleared', () => {
     test('is announced like a settings change, so that a notice shown for it is read again', () => {
-        const broadcast = jest.fn();
+        const windows = installWindows();
         settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: 'secret' }, app: { theme: 'dark' } });
-        buildHandlers({ broadcastSettingsChange: broadcast });
+        buildHandlers();
 
         const [listener] = settings.onSettingsRecoveryChange.mock.calls.at(-1) ?? [];
         listener?.();
 
-        expect(broadcast).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
+        expect(windows.broadcastSettingsChanged).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
     });
 });
 
@@ -689,37 +675,37 @@ describe('get-third-party-notices', () => {
 
 describe('wipe-local-data', () => {
     test('wipes, then hands over to the shell', async () => {
-        const afterWipe = jest.fn();
+        const windows = installWindows();
         localData.wipeLocalData.mockResolvedValue({ success: true, removed: ['x'] });
-        await expect(buildHandlers({ afterWipe })['wipe-local-data']()).resolves.toEqual({ success: true });
-        expect(afterWipe).toHaveBeenCalledTimes(1);
+        await expect(buildHandlers()['wipe-local-data']()).resolves.toEqual({ success: true });
+        expect(windows.afterWipe).toHaveBeenCalledTimes(1);
     });
 
-    test('works without a shell hook (CLI shape)', async () => {
+    test('the hand-over without installed assertions is the platform no-op (CLI shape)', async () => {
         localData.wipeLocalData.mockResolvedValue({ success: true, removed: [] });
         await expect(handlers['wipe-local-data']()).resolves.toEqual({ success: true });
     });
 
     test('a refusal is passed on and the shell is not told to relaunch', async () => {
-        const afterWipe = jest.fn();
+        const windows = installWindows();
         localData.wipeLocalData.mockResolvedValue({ success: false, error: 'busy' });
-        await expect(buildHandlers({ afterWipe })['wipe-local-data']()).resolves.toEqual({
+        await expect(buildHandlers()['wipe-local-data']()).resolves.toEqual({
             success: false,
             error: 'busy',
         });
-        expect(afterWipe).not.toHaveBeenCalled();
+        expect(windows.afterWipe).not.toHaveBeenCalled();
     });
 
     test('a partial failure keeps the reload request for the window to act on', async () => {
-        const afterWipe = jest.fn();
+        const windows = installWindows();
         localData.wipeLocalData.mockResolvedValue({ success: false, error: 'x', removed: [], reload: true });
-        await expect(buildHandlers({ afterWipe })['wipe-local-data']()).resolves.toEqual({
+        await expect(buildHandlers()['wipe-local-data']()).resolves.toEqual({
             success: false,
             error: 'x',
             removed: [],
             reload: true,
         });
-        expect(afterWipe).not.toHaveBeenCalled();
+        expect(windows.afterWipe).not.toHaveBeenCalled();
     });
 
     test('never throws across IPC', async () => {
@@ -729,25 +715,32 @@ describe('wipe-local-data', () => {
 });
 
 describe('set-entry-pin', () => {
-    const pin = (broadcast?: jest.Mock<void, [object]>, ...args: [unknown, unknown, unknown]) =>
-        invalid<(event: unknown, ...a: unknown[]) => Promise<unknown>>(
-            buildHandlers({ broadcastSettingsChange: broadcast })['set-entry-pin'],
-        )({}, ...args);
+    // Builds the handler over a freshly installed platform whose windows the
+    // test asserts on, and calls it.
+    const pin = (...args: [unknown, unknown, unknown]) => {
+        const windows = installWindows();
+        const result = invalid<(event: unknown, ...a: unknown[]) => Promise<unknown>>(buildHandlers()['set-entry-pin'])(
+            {},
+            ...args,
+        );
+        return { windows, result };
+    };
 
     test('pins a photo, broadcasts the change and answers success', async () => {
-        const broadcast = jest.fn();
         jest.mocked(settings.setEntryPin).mockReturnValue('ok');
         jest.mocked(settings.loadSettings).mockReturnValue(
             invalid({ auth: { token: 'secret' }, app: { theme: 'dark' } }),
         );
-        await expect(pin(broadcast, 'boost', 100, 'img_a')).resolves.toEqual({ success: true });
+        const { windows, result } = pin('boost', 100, 'img_a');
+        await expect(result).resolves.toEqual({ success: true });
         expect(settings.setEntryPin).toHaveBeenCalledWith('boost', 100, 'img_a');
-        expect(broadcast).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
+        expect(windows.broadcastSettingsChanged).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
     });
 
-    test('clears a pin (imageId null) and works without a broadcast listener', async () => {
+    test('clears a pin (imageId null) and answers success', async () => {
         jest.mocked(settings.setEntryPin).mockReturnValue('ok');
-        await expect(pin(undefined, 'turbo', '100', null)).resolves.toEqual({ success: true });
+        const { result } = pin('turbo', '100', null);
+        await expect(result).resolves.toEqual({ success: true });
         expect(settings.setEntryPin).toHaveBeenCalledWith('turbo', '100', null);
     });
 
@@ -759,13 +752,13 @@ describe('set-entry-pin', () => {
         ['an image id that is not an id', 'boost', 100, {}],
         ['a blank image id', 'boost', 100, ''],
     ])('refuses %s without touching the settings or broadcasting', async (_name, kind, challengeId, imageId) => {
-        const broadcast = jest.fn();
-        await expect(pin(broadcast, kind, challengeId, imageId)).resolves.toEqual({
+        const { windows, result } = pin(kind, challengeId, imageId);
+        await expect(result).resolves.toEqual({
             success: false,
             error: 'invalid-args',
         });
         expect(settings.setEntryPin).not.toHaveBeenCalled();
-        expect(broadcast).not.toHaveBeenCalled();
+        expect(windows.broadcastSettingsChanged).not.toHaveBeenCalled();
     });
 
     test.each([
@@ -773,19 +766,20 @@ describe('set-entry-pin', () => {
         ['the pin cap', 'cap', 'pin-cap-reached'],
         ['a failed write', 'write-failed', 'pin-write-failed'],
     ] as const)('%s is its own error code, with no broadcast', async (_name, outcome, error) => {
-        const broadcast = jest.fn();
         jest.mocked(settings.setEntryPin).mockReturnValue(outcome);
-        await expect(pin(broadcast, 'boost', 100, 'img_a')).resolves.toEqual({ success: false, error });
-        expect(broadcast).not.toHaveBeenCalled();
+        const { windows, result } = pin('boost', 100, 'img_a');
+        await expect(result).resolves.toEqual({ success: false, error });
+        expect(windows.broadcastSettingsChanged).not.toHaveBeenCalled();
     });
 
     test('never throws across IPC', async () => {
         settings.setEntryPin = invalid(jest.fn(boom));
-        await expect(pin(undefined, 'boost', 100, 'img_a')).resolves.toEqual({ success: false, error: 'boom' });
+        const { result } = pin('boost', 100, 'img_a');
+        await expect(result).resolves.toEqual({ success: false, error: 'boom' });
     });
 });
 
-describe('register (Electron)', () => {
+describe('register', () => {
     const makeIpcMain = () => {
         const channels = new Map<string, ChannelImpl>();
         return { channels, handle: (channel: string, impl: ChannelImpl) => channels.set(channel, impl) };
@@ -797,10 +791,8 @@ describe('register (Electron)', () => {
         expect([...ipcMain.channels.keys()].sort()).toEqual(Object.keys(buildHandlers()).sort());
     });
 
-    test('broadcasts settings-changed to every open window after a successful save', async () => {
-        const winA = { isDestroyed: () => false, webContents: { send: jest.fn() } };
-        const winB = { isDestroyed: () => false, webContents: { send: jest.fn() } };
-        getAllWindowsMock.mockReturnValue([winA, winB]);
+    test('a successful save announces through the platform windows register built the handlers over', async () => {
+        const windows = installWindows();
         settings.saveAppSettings = jest.fn().mockReturnValue(true);
         jest.mocked(settings.loadSettings).mockReturnValue(
             invalid({ auth: { token: 'secret' }, app: { theme: 'dark' } }),
@@ -811,77 +803,18 @@ describe('register (Electron)', () => {
         const payload = { theme: 'dark' };
         await expect(ipcMain.channels.get('save-settings')!(invalid(undefined), payload)).resolves.toBe(true);
 
-        const sent = { app: { theme: 'dark' }, hasToken: true };
-        expect(winA.webContents.send).toHaveBeenCalledWith('settings-changed', sent);
-        expect(winB.webContents.send).toHaveBeenCalledWith('settings-changed', sent);
+        expect(windows.broadcastSettingsChanged).toHaveBeenCalledWith({ app: { theme: 'dark' }, hasToken: true });
     });
 
-    test('relaunches the app once the wipe has been answered', async () => {
-        jest.useFakeTimers();
-        try {
-            localData.wipeLocalData.mockResolvedValue({ success: true, removed: [] });
-            const ipcMain = makeIpcMain();
-            register(invalid(ipcMain));
-
-            await expect(ipcMain.channels.get('wipe-local-data')!(invalid(undefined))).resolves.toEqual({
-                success: true,
-            });
-            expect(relaunchMock).not.toHaveBeenCalled();
-            jest.advanceTimersByTime(200);
-            expect(relaunchMock).toHaveBeenCalledTimes(1);
-            expect(exitMock).toHaveBeenCalledWith(0);
-        } finally {
-            jest.useRealTimers();
-        }
-    });
-
-    test('skips a window destroyed mid-save and still reports the write as saved', async () => {
-        const closed = {
-            isDestroyed: () => true,
-            webContents: {
-                send: jest.fn(() => {
-                    throw new Error('Object has been destroyed');
-                }),
-            },
-        };
-        const open = { isDestroyed: () => false, webContents: { send: jest.fn() } };
-        getAllWindowsMock.mockReturnValue([closed, open]);
-        settings.saveAppSettings = jest.fn().mockReturnValue(true);
-        settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: '' }, app: { theme: 'dark' } });
+    test('a landed wipe hands over to the platform windows once the wipe has been answered', async () => {
+        const windows = installWindows();
+        localData.wipeLocalData.mockResolvedValue({ success: true, removed: [] });
         const ipcMain = makeIpcMain();
         register(invalid(ipcMain));
 
-        await expect(ipcMain.channels.get('save-settings')!(invalid(undefined), { theme: 'dark' })).resolves.toBe(true);
-
-        expect(closed.webContents.send).not.toHaveBeenCalled();
-        expect(open.webContents.send).toHaveBeenCalledWith('settings-changed', {
-            app: { theme: 'dark' },
-            hasToken: false,
+        await expect(ipcMain.channels.get('wipe-local-data')!(invalid(undefined))).resolves.toEqual({
+            success: true,
         });
-    });
-});
-
-describe('module load outside Electron', () => {
-    test('loads without requiring the electron package', () => {
-        // A fresh module graph whose electron mock throws if required. The
-        // factory-never-called assertion catches a regression that swallows
-        // the throw (try/catch). Kept last — resetModules drops the registry
-        // the top-level requires came from.
-        jest.resetModules();
-        const electronFactory = jest.fn<never, []>(() => {
-            throw new Error('electron must not be loaded outside Electron');
-        });
-        jest.doMock('electron', electronFactory);
-        const fresh = require('../../src/ts/runtime') as typeof runtimeModule;
-        const isElectronSpy = jest.spyOn(fresh, 'isElectron').mockReturnValue(false);
-        try {
-            expect(() => {
-                require('../../src/ts/ipc/settings.handlers');
-            }).not.toThrow();
-            expect(electronFactory).not.toHaveBeenCalled();
-        } finally {
-            jest.dontMock('electron');
-            isElectronSpy.mockRestore();
-        }
+        expect(windows.afterWipe).toHaveBeenCalledTimes(1);
     });
 });

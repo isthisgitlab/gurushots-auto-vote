@@ -20,11 +20,31 @@ jest.mock('../../src/ts/apiFactory', () => ({
 }));
 
 import { invalid } from '../helpers/invalid';
+import { installTestPlatform } from '../helpers/platform';
+
+import type { PlatformWindows } from '../../src/ts/platform/port';
 
 import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
+// A successful mutation on a broadcast channel announces through the
+// installed platform's windows, whose broadcast re-reads the settings — the
+// tests that assert on the announcement override this.
+settings.loadSettings = jest.fn().mockReturnValue({ auth: { token: '' }, app: {} });
 import type * as settings_handlersModule from '../../src/ts/ipc/settings.handlers';
 const { buildHandlers } = require('../../src/ts/ipc/settings.handlers') as typeof settings_handlersModule;
+
+// Installs the platform with jest.fn windows and returns them: the thin
+// handlers announce writes through platform().windows, so a test asserts on
+// these. installTestPlatform replaces the windows group whole; the setup
+// file's afterEach reinstalls the untouched node test platform.
+const installWindows = (): PlatformWindows => {
+    const windows: PlatformWindows = {
+        broadcastSettingsChanged: jest.fn<void, [object]>(),
+        afterWipe: jest.fn<void, []>(),
+    };
+    installTestPlatform({ windows });
+    return windows;
+};
 
 // The table addresses settings methods and handler channels by name.
 type MockTable = Record<string, jest.Mock<unknown, unknown[]>>;
@@ -125,14 +145,14 @@ describe('settings.handlers thin-handler rows', () => {
         const row = EXPECTED_THIN_HANDLERS.find(([candidate]) => candidate === channel);
         const method = row![1];
         const snapshot = { auth: { token: 'secret' }, defaults: { changed: true } };
-        const broadcastSettingsChange = jest.fn();
+        const windows = installWindows();
         invalid<MockTable>(settings)[method] = jest.fn().mockReturnValue(true);
         settings.loadSettings.mockReturnValue(invalid(snapshot));
 
-        const handlers = buildHandlers({ broadcastSettingsChange });
+        const handlers = buildHandlers();
         await invalid<HandlerTable>(handlers)[channel]({}, 'arg', 'arg');
 
-        expect(broadcastSettingsChange).toHaveBeenCalledWith({ defaults: { changed: true }, hasToken: true });
+        expect(windows.broadcastSettingsChanged).toHaveBeenCalledWith({ defaults: { changed: true }, hasToken: true });
     });
 });
 
@@ -152,13 +172,13 @@ describe('settings.handlers hidden setting keys', () => {
         ),
     )('"%s" refuses the hidden key %s without touching settings.%s', async (channel, method, key) => {
         invalid<MockTable>(settings)[method] = jest.fn().mockReturnValue(true);
-        const broadcastSettingsChange = jest.fn();
+        const windows = installWindows();
 
-        const result = await invalid<HandlerTable>(buildHandlers({ broadcastSettingsChange }))[channel]({}, key);
+        const result = await invalid<HandlerTable>(buildHandlers())[channel]({}, key);
 
         expect(result).toBe(false);
         expect(invalid<MockTable>(settings)[method]).not.toHaveBeenCalled();
-        expect(broadcastSettingsChange).not.toHaveBeenCalled();
+        expect(windows.broadcastSettingsChanged).not.toHaveBeenCalled();
     });
 
     test.each(KEY_CHANNELS)('"%s" still serves an ordinary key', async (channel, method) => {

@@ -11,7 +11,7 @@
  */
 
 import * as settings from '../settings';
-import * as runtime from '../runtime';
+import { platform } from '../platform/port';
 import { registerHandlers, type IpcHandlerMap } from './registerHandlers';
 import { errorResult } from './errorResult';
 import {
@@ -34,19 +34,6 @@ import type { IpcMain } from 'electron';
 import type { SettingsSchemaEntry } from '../settings/schema';
 import type { ConfigApp } from '../types/config';
 import type { EntryPinKind } from '../types/settings';
-import type * as electronModule from 'electron';
-
-// Lazy require: esbuild must not resolve electron when this module is bundled
-// into the Capacitor renderer; only register() uses BrowserWindow. Gated on
-// isElectron: outside Electron, require('electron') loads the npm package,
-// which downloads the Electron binary when it is missing.
-let BrowserWindow: typeof electronModule.BrowserWindow | null = null;
-let electronApp: typeof electronModule.app | null = null;
-if (runtime.isElectron()) {
-    const electron = require('electron') as typeof import('electron');
-    BrowserWindow = electron.BrowserWindow;
-    electronApp = electron.app;
-}
 
 /**
  * The renderer-facing projection of one schema entry (no validators).
@@ -67,10 +54,11 @@ export type SerializableSchemaEntry = Pick<
 > & { challengeOnly: boolean };
 
 /**
- * What a shell hands the settings handlers: where a write is announced, and what happens once
+ * The two window actions the handlers use, read from the shell's platform
+ * (`platform().windows`): where a write is announced, and what happens once
  * all local data has been deleted (relaunch to the login screen).
  */
-type SettingsHandlerOptions = { broadcastSettingsChange?: BroadcastSettingsChange; afterWipe?: () => void };
+type WindowActions = { broadcastSettingsChange: BroadcastSettingsChange; afterWipe: () => void };
 
 const handleGetSetting = async (key: string) => {
     try {
@@ -89,11 +77,7 @@ const handleGetSetting = async (key: string) => {
     }
 };
 
-const handleSetSetting = async (
-    broadcastSettingsChange: BroadcastSettingsChange | undefined,
-    key: string,
-    value: unknown,
-) => {
+const handleSetSetting = async (broadcastSettingsChange: BroadcastSettingsChange, key: string, value: unknown) => {
     try {
         if (typeof key !== 'string') {
             throw new Error('Invalid key type, expected string');
@@ -102,7 +86,7 @@ const handleSetSetting = async (
         // process's to write.
         if (isRendererHiddenKey(key) || isRendererReadOnlyKey(key)) return false;
         const result = settings.setSetting(key, value);
-        if (result && typeof broadcastSettingsChange === 'function') {
+        if (result) {
             broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
         }
         return result;
@@ -122,7 +106,7 @@ const PIN_FAILURE_CODE = {
 // Pins a photo for a challenge's Boost or Turbo, or clears the pin (imageId null). The renderer, the CLI and a
 // web-shell client all send anything, so every argument is checked before the facade (which validates again).
 const handleSetEntryPin = async (
-    broadcastSettingsChange: BroadcastSettingsChange | undefined,
+    broadcastSettingsChange: BroadcastSettingsChange,
     kind: EntryPinKind,
     challengeId: string | number,
     imageId: string | null,
@@ -133,9 +117,7 @@ const handleSetEntryPin = async (
     try {
         const outcome = settings.setEntryPin(kind, challengeId, imageId === null ? null : String(imageId));
         if (outcome !== 'ok') return { success: false as const, error: PIN_FAILURE_CODE[outcome] };
-        if (typeof broadcastSettingsChange === 'function') {
-            broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
-        }
+        broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
         return { success: true as const };
     } catch (error) {
         logger.withCategory('settings').error('Error handling set-entry-pin request:', error);
@@ -143,7 +125,7 @@ const handleSetEntryPin = async (
     }
 };
 
-const buildSettingsHandlers = ({ broadcastSettingsChange }: SettingsHandlerOptions) => ({
+const buildSettingsHandlers = ({ broadcastSettingsChange }: WindowActions) => ({
     'get-settings': async () => {
         try {
             return toRendererSettings(settings.loadSettings());
@@ -171,7 +153,7 @@ const buildSettingsHandlers = ({ broadcastSettingsChange }: SettingsHandlerOptio
             // Only the object shape is checked here; the facade validates each
             // key. The sign-in state and the derived hasToken are not renderer-writable.
             const result = settings.saveAppSettings(withoutRendererHiddenKeys(newSettings));
-            if (result && typeof broadcastSettingsChange === 'function') {
+            if (result) {
                 broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
             }
             return result;
@@ -254,7 +236,7 @@ const buildEnvironmentHandlers = () => ({
 // described in the log). The action answers whether it worked, and what else it has to tell, which a success carries.
 const detailedRecoveryAction =
     <R extends { ok: boolean }, F extends string = 'settings-import-failed'>(
-        broadcastSettingsChange: BroadcastSettingsChange | undefined,
+        broadcastSettingsChange: BroadcastSettingsChange,
         action: () => R | Promise<R>,
         label: string,
         failure: F = 'settings-import-failed' as F,
@@ -263,9 +245,7 @@ const detailedRecoveryAction =
         try {
             const { ok, ...details } = await action();
             if (!ok) return { success: false as const, error: failure };
-            if (typeof broadcastSettingsChange === 'function') {
-                broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
-            }
+            broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
             return { success: true as const, ...details };
         } catch (error) {
             logger.withCategory('settings').error(`Error handling the ${label} request:`, error);
@@ -275,13 +255,13 @@ const detailedRecoveryAction =
 
 // A recovery action that has nothing to tell beyond whether it worked.
 const recoveryAction = <F extends string = 'settings-import-failed'>(
-    broadcastSettingsChange: BroadcastSettingsChange | undefined,
+    broadcastSettingsChange: BroadcastSettingsChange,
     action: () => boolean | Promise<boolean>,
     label: string,
     failure?: F,
 ) => detailedRecoveryAction(broadcastSettingsChange, async () => ({ ok: await action() }), label, failure);
 
-const buildLocalDataHandlers = ({ afterWipe, broadcastSettingsChange }: SettingsHandlerOptions) => ({
+const buildLocalDataHandlers = ({ afterWipe, broadcastSettingsChange }: WindowActions) => ({
     // Why the stored settings are not in use or what a start found worth telling (config.json set aside as damaged,
     // config.json that cannot be read, a settings.json that could not be imported), or else that the window's last
     // change was not saved; null when none.
@@ -340,7 +320,7 @@ const buildLocalDataHandlers = ({ afterWipe, broadcastSettingsChange }: Settings
         try {
             const result = await wipeLocalData();
             if (!result.success) return result;
-            afterWipe?.();
+            afterWipe();
             return { success: true };
         } catch (error) {
             return errorResult(error, 'Failed to delete the local data');
@@ -396,50 +376,28 @@ const buildSchemaHandlers = () => ({
     },
 });
 
-const buildHandlers = (options: SettingsHandlerOptions = {}) => {
-    const { broadcastSettingsChange } = options;
+const buildHandlers = () => {
+    // The shell's windows, through the platform its entry installed: where a
+    // write is announced, and what runs once a wipe has succeeded.
+    const { broadcastSettingsChanged, afterWipe } = platform().windows;
+    const actions: WindowActions = { broadcastSettingsChange: broadcastSettingsChanged, afterWipe };
     // A save the window gave up (and the next one that lands) changes what get-settings-recovery answers, so the
-    // window re-reads on the same signal a settings change sends.
-    if (broadcastSettingsChange) {
-        const tell = () => broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
-        settings.onSettingsSaveDroppedChange(tell);
-        // So does a block a read clears: a state that had to wait came through, and the notice for it changes.
-        settings.onSettingsRecoveryChange(tell);
-    }
+    // window re-reads on the same signal a settings change sends. So does a block a read clears: a state that had
+    // to wait came through, and the notice for it changes.
+    const tell = () => broadcastSettingsChanged(toRendererSettings(settings.loadSettings()));
+    settings.onSettingsSaveDroppedChange(tell);
+    settings.onSettingsRecoveryChange(tell);
     const handlers = {
-        ...buildSettingsHandlers(options),
+        ...buildSettingsHandlers(actions),
         ...buildEnvironmentHandlers(),
-        ...buildLocalDataHandlers(options),
+        ...buildLocalDataHandlers(actions),
         ...buildSchemaHandlers(),
     } satisfies IpcHandlerMap;
-    return { ...handlers, ...buildThinHandlers(options) };
-};
-
-/**
- * Sends the new settings to every window. register() hands it to the handlers
- * as the shell's broadcast, and so does the Electron platform module — the
- * closures it replaces stood inside register().
- */
-const broadcastSettingsChanged: BroadcastSettingsChange = (newSettings) => {
-    // A window closing mid-save must not turn a landed write into a
-    // reported failure (a send to a destroyed window throws). register()
-    // only runs under Electron, where BrowserWindow resolved.
-    (BrowserWindow as typeof electronModule.BrowserWindow).getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('settings-changed', newSettings);
-    });
-};
-
-// The window is closed by the exit, so the reply to the wipe is let out first.
-const afterWipe = () => {
-    setTimeout(() => {
-        const app = electronApp as typeof electronModule.app;
-        app.relaunch();
-        app.exit(0);
-    }, 200);
+    return { ...handlers, ...buildThinHandlers(actions) };
 };
 
 const register = (ipcMain: IpcMain) => {
-    registerHandlers(ipcMain, buildHandlers({ broadcastSettingsChange: broadcastSettingsChanged, afterWipe }));
+    registerHandlers(ipcMain, buildHandlers());
 };
 
-export { register, buildHandlers, broadcastSettingsChanged, afterWipe };
+export { register, buildHandlers };

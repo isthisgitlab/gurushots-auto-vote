@@ -1,24 +1,20 @@
 /**
  * The Electron shell's platform: the node family with the shell's own members
- * — the settings broadcast and the post-wipe relaunch of ipc/settings.handlers,
- * and the wipe's session clear, which ElectronPlatform requires. Everything
- * else is the family's (paths.isPackaged reads app.isPackaged through the
- * guarded require). Installed when the module loads; index.ts imports it
- * first, before any core module. The wrapped modules are reached at call
- * time — the install must run before the logger loads — so this module's own
- * import chain is the port and the family builder only.
+ * — the settings broadcast and the post-wipe relaunch, and the wipe's session
+ * clear, which ElectronPlatform requires. Everything else is the family's
+ * (paths.isPackaged reads app.isPackaged through the guarded require).
+ * Installed when the module loads; index.ts imports it first, before any core
+ * module. The electron reads are reached at call time — the install must run
+ * before the logger loads — so this module's own import chain is the port and
+ * the family builder only.
  */
 
 import { installPlatform } from '../platform/port';
 import { createNodePlatform } from '../platforms/node';
 import { APP_PARTITION } from './session';
 
+import type { BroadcastSettingsChange } from '../ipc/settingsThinHandlers';
 import type { ElectronPlatform, PlatformWindows } from '../platform/port';
-
-type SettingsHandlersModule = typeof import('../ipc/settings.handlers');
-
-// The install must run before the logger loads.
-const settingsHandlers = (): SettingsHandlersModule => require('../ipc/settings.handlers') as SettingsHandlersModule;
 
 /** The electron session the app's windows use, for the wipe to clear its cookies, local storage and cache. */
 const appSession = () => (require('electron') as typeof import('electron')).session.fromPartition(APP_PARTITION);
@@ -36,11 +32,29 @@ const clearElectronSession = async (): Promise<void> => {
     }
 };
 
-/** The Electron windows: every live window's settings broadcast, and the relaunch. */
-const windows: PlatformWindows = {
-    broadcastSettingsChanged: (newSettings) => settingsHandlers().broadcastSettingsChanged(newSettings),
-    afterWipe: () => settingsHandlers().afterWipe(),
+/**
+ * Sends the new settings to every window — the handlers' broadcast through the platform's windows.
+ */
+const broadcastSettingsChanged: BroadcastSettingsChange = (newSettings) => {
+    // A window closing mid-save must not turn a landed write into a
+    // reported failure (a send to a destroyed window throws).
+    const { BrowserWindow } = require('electron') as typeof import('electron');
+    BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) win.webContents.send('settings-changed', newSettings);
+    });
 };
+
+// The window is closed by the exit, so the reply to the wipe is let out first.
+const afterWipe = () => {
+    setTimeout(() => {
+        const { app } = require('electron') as typeof import('electron');
+        app.relaunch();
+        app.exit(0);
+    }, 200);
+};
+
+/** The Electron windows: every live window's settings broadcast, and the relaunch. */
+const windows: PlatformWindows = { broadcastSettingsChanged, afterWipe };
 
 const electronPlatform = createNodePlatform(windows);
 // The Electron wipe also clears the app's browser session; ElectronPlatform requires it.

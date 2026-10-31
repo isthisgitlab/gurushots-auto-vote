@@ -81,9 +81,8 @@ type Emit = (channel: string, payload?: unknown) => void;
 /**
  * Every invoke channel the server answers, keyed by channel name.
  * @param emit - broadcasts an event to every connected browser
- * @param afterWipe - called once a "Delete all local data" has succeeded
  */
-const buildWebHandlers = (emit: Emit, { afterWipe }: { afterWipe?: () => void } = {}): Record<string, IpcHandler> => {
+const buildWebHandlers = (emit: Emit): Record<string, IpcHandler> => {
     const releaseUpdates = buildReleaseUpdateHandlers({ emit, assetSuffix: async () => null });
     // No updater ships with the web shell: can-auto-update is false, so the
     // renderer's download button opens the releases page instead.
@@ -100,10 +99,10 @@ const buildWebHandlers = (emit: Emit, { afterWipe }: { afterWipe?: () => void } 
     } satisfies ShellUpdateHandlers;
 
     return {
-        ...settingsHandlers.buildHandlers({
-            broadcastSettingsChange: (newSettings: object) => emit('settings-changed', newSettings),
-            afterWipe,
-        }),
+        // The settings handlers announce writes through the installed
+        // platform's windows (web/platform), which emit on this run's
+        // fan-out (setWebShellRun below).
+        ...settingsHandlers.buildHandlers(),
         ...votingHandlers.buildHandlers(),
         ...logHandlers.buildHandlers(),
         ...actionsHandlers.buildHandlers(),
@@ -324,7 +323,7 @@ const createWebServer = ({ distDir, token = newShellToken(), onLocalDataWiped }:
     const afterWipe = () => {
         wiped = true;
     };
-    const handlers = buildWebHandlers(emit, { afterWipe });
+    const handlers = buildWebHandlers(emit);
     // The platform's windows delegate to this run while it listens; the close
     // chain of a started server unregisters it again.
     setWebShellRun({ emit, afterWipe });

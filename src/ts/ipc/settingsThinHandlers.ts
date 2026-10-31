@@ -110,7 +110,7 @@ const CHANGE_BROADCAST_CHANNELS = new Set([
     'reset-all-settings',
 ]);
 
-const buildThinHandlers = ({ broadcastSettingsChange }: { broadcastSettingsChange?: BroadcastSettingsChange }) => {
+const buildThinHandlers = ({ broadcastSettingsChange }: { broadcastSettingsChange: BroadcastSettingsChange }) => {
     const handlers: Record<string, IpcHandler> = {};
     thinRows().forEach(([channel, lookup, fallback, verb]) => {
         const idArg = Object.hasOwn(CHALLENGE_ID_ARGS, channel) ? CHALLENGE_ID_ARGS[channel] : null;
@@ -129,7 +129,7 @@ const buildThinHandlers = ({ broadcastSettingsChange }: { broadcastSettingsChang
             }
             try {
                 const result = (lookup() as (...a: unknown[]) => unknown)(...args);
-                if (result && CHANGE_BROADCAST_CHANNELS.has(channel) && typeof broadcastSettingsChange === 'function') {
+                if (result && CHANGE_BROADCAST_CHANNELS.has(channel)) {
                     broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
                 }
                 return result;
