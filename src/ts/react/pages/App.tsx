@@ -446,13 +446,17 @@ function App({ backgroundHost = noopBackgroundHost }: { backgroundHost?: Backgro
 // mounting until after the bridge is installed and settings are
 // hydrated; everywhere else (Electron) auto-mounts. The background host
 // is the shell's choice: the no-op host here, the Capacitor bridges from
-// pages/Capacitor.tsx (via mountForToken).
-export const mountApp = (backgroundHost: BackgroundHost = noopBackgroundHost) => {
+// pages/Capacitor.tsx (via mountForToken). Returns the root it created
+// (null without a container) so the single-document shells can unmount
+// the previous tree — and dispose its autovote controller — on a swap.
+export const mountApp = (backgroundHost: BackgroundHost = noopBackgroundHost): ReturnType<typeof createRoot> | null => {
     const container = document.getElementById('root');
-    if (container) {
-        const root = createRoot(container);
-        root.render(<App backgroundHost={backgroundHost} />);
+    if (!container) {
+        return null;
     }
+    const root = createRoot(container);
+    root.render(<App backgroundHost={backgroundHost} />);
+    return root;
 };
 
 // Deferred via queueMicrotask: ESM hoists Capacitor.tsx's static
