@@ -79,8 +79,10 @@ const installed: ElectronPlatform = platform() as ElectronPlatform;
 
 // The modules the shell members wrap, reached at call time — the install
 // must run before the logger loads (whose own absence from the chain the
-// bundle check proves).
-const HEAVY = ['../../src/ts/ipc/settings.handlers', '../../src/ts/settings/localData'];
+// bundle check proves). The wipe's session clear is the shell's own body
+// (electron is reached at call time), so only the settings handlers are
+// wrapped modules.
+const HEAVY = ['../../src/ts/ipc/settings.handlers'];
 
 describe('the Electron shell platform module', () => {
     test('the broadcast sends the new settings to every live window, never a destroyed one', () => {
@@ -118,7 +120,7 @@ describe('the Electron shell platform module', () => {
         }
     });
 
-    test('paths ride on the runtime seam the family delegates to', () => {
+    test('paths.isPackaged reads the electron app the family guards', () => {
         expect(installed.paths.isPackaged()).toBe(true);
     });
 
@@ -141,7 +143,6 @@ describe('loading the Electron shell platform module defers the wrapped modules'
     let mockLoaded: string[];
     const mockBroadcast = jest.fn<void, [object]>();
     const mockAfterWipe = jest.fn<void, []>();
-    const mockClearSession = jest.fn<Promise<void>, []>();
 
     beforeEach(() => {
         mockLoaded = [];
@@ -167,27 +168,28 @@ describe('loading the Electron shell platform module defers the wrapped modules'
         });
     });
 
-    test('calling a member reaches the module it wraps', () => {
-        jest.isolateModules(() => {
+    test('calling a member reaches the module it wraps', async () => {
+        await jest.isolateModulesAsync(async () => {
             clearInstalledPlatform();
             jest.doMock('../../src/ts/ipc/settings.handlers', () => ({
                 __esModule: true,
                 broadcastSettingsChanged: mockBroadcast,
                 afterWipe: mockAfterWipe,
             }));
-            jest.doMock('../../src/ts/settings/localData', () => ({
-                __esModule: true,
-                clearElectronSession: mockClearSession,
-            }));
             require('../../src/ts/index/platform');
-            // The deferred require of each wrapped module is the next thing
-            // these members run, so each call lands in its mock.
+            // The deferred require of the wrapped module is the next thing
+            // these members run, so each call lands in its mock; the wipe's
+            // session clear is the shell's own body, reaching the electron
+            // session at call time (the registry's own electron mock
+            // instance, resolved inside the isolate).
+            const electronMock = require('electron') as FakeElectron;
             platform().windows.broadcastSettingsChanged({});
             platform().windows.afterWipe();
-            void platform().wipe.clearSession?.();
+            await expect(platform().wipe.clearSession?.()).resolves.toBeUndefined();
             expect(mockBroadcast).toHaveBeenCalledWith({});
             expect(mockAfterWipe).toHaveBeenCalledTimes(1);
-            expect(mockClearSession).toHaveBeenCalledTimes(1);
+            expect(electronMock.session.defaultSession.clearStorageData).toHaveBeenCalledTimes(1);
+            expect(electronMock.session.fromPartition).toHaveBeenCalledWith(APP_PARTITION);
         });
     });
 });

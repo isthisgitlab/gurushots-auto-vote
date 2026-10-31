@@ -77,16 +77,17 @@ const parts = webview.__recorded.parts as WebviewParts;
 
 // The modules the shell members wrap, reached at call time — the install
 // must run before the logger loads (whose own absence from the chain the
-// bundle check proves). The deferral suite stands FIRST: a jest.doMock
-// inside isolateModules only wins while the wrapped module has not been
-// instantiated in the outer registry (the tests below instantiate the
-// file-level bridge mock), and its afterEach re-registers that mock.
+// bundle check proves). The native wipe is the shell's own body now (the
+// plugin global is read at call time), so only the bridge and the native
+// services are wrapped modules. The deferral suite stands FIRST: a
+// jest.doMock inside isolateModules only wins while the wrapped module has
+// not been instantiated in the outer registry (the tests below instantiate
+// the file-level bridge mock), and its afterEach re-registers that mock.
 const HEAVY = [
     '../../src/ts/bridge/capacitor',
     '../../src/ts/services/NativeAutovoteBridge',
     '../../src/ts/services/ForegroundServiceController',
     '../../src/ts/services/AndroidUpdateInstaller',
-    '../../src/ts/settings/localData',
 ];
 
 describe('loading the Capacitor shell platform module defers the wrapped modules', () => {
@@ -134,18 +135,18 @@ describe('loading the Capacitor shell platform module defers the wrapped modules
                 __esModule: true,
                 isAvailable: () => true,
             }));
-            jest.doMock('../../src/ts/settings/localData', () => ({
-                __esModule: true,
-                nativeWipe: async (): Promise<{ ok: boolean }> => ({ ok: true }),
-            }));
             require('../../src/ts/bridge/capacitorPlatform');
             // The deferred require of each wrapped module is the next thing
-            // these members run, so each call lands in the doMock'ed module.
+            // these members run, so each call lands in the doMock'ed module;
+            // the native wipe is the shell's own body, reading the plugin
+            // global at call time.
             const bridgeMock = require('../../src/ts/bridge/capacitor') as {
                 emit: jest.Mock<void, [string, unknown]>;
                 reloadWindow: jest.Mock<Promise<{ success: boolean }>, []>;
             };
+            plugin.wipeLocalData.mockClear();
             void platform().wipe.nativeWipe();
+            expect(plugin.wipeLocalData).toHaveBeenCalledTimes(1);
             expect(platform().capabilities.backgroundServiceOwnsScenarios()).toBe(true);
             platform().windows.broadcastSettingsChanged({});
             expect(bridgeMock.emit).toHaveBeenCalledWith('settings-changed', {});

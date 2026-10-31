@@ -49,6 +49,11 @@ describe('the headless platform', () => {
         expect(wipe.removePreferenceKeys).toBeNull();
         expect(wipe.reloadAfterWipe).toBe(false);
         await expect(wipe.nativeWipe()).resolves.toBeNull();
+        // The desktop processes that hold the user-data markers never run here.
+        await expect(wipe.markers.isCliSessionActive()).resolves.toBe(false);
+        await expect(wipe.markers.isDesktopAppActive()).resolves.toBe(false);
+        await expect(wipe.markers.isWebServerActive()).resolves.toBe(false);
+        expect(wipe.markers.isMarkerFile('cli-session-1.lock')).toBe(false);
     });
 
     test('the capabilities name the service answers', () => {

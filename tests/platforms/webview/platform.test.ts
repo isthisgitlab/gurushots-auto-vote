@@ -112,6 +112,14 @@ describe('the webview platform', () => {
         expect(mockRemovePreferenceKeys).toHaveBeenCalledWith(['gs_k']);
     });
 
+    test('no user-data markers exist on a WebView: the desktop processes that hold them never run here', async () => {
+        const wipe = createWebviewPlatform(parts()).wipe;
+        await expect(wipe.markers.isCliSessionActive()).resolves.toBe(false);
+        await expect(wipe.markers.isDesktopAppActive()).resolves.toBe(false);
+        await expect(wipe.markers.isWebServerActive()).resolves.toBe(false);
+        expect(wipe.markers.isMarkerFile('cli-session-1.lock')).toBe(false);
+    });
+
     test('the capabilities name the app WebView answers', () => {
         const c = createWebviewPlatform(parts()).capabilities;
         expect(c.refreshMissionNeeds).toBe(false);

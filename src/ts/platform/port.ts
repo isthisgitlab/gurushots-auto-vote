@@ -135,6 +135,22 @@ export type PlatformAssets = {
     };
 };
 
+/**
+ * The user-data markers a running desktop process holds (a CLI session, the
+ * desktop app, the web server): whether another process holds one, and
+ * whether a name beside the stores is one of the marker files.
+ */
+export type PlatformWipeMarkers = {
+    /** Whether another process holds a CLI session marker. */
+    isCliSessionActive: () => Promise<boolean>;
+    /** Whether another process holds the desktop-app marker. */
+    isDesktopAppActive: () => Promise<boolean>;
+    /** Whether another process holds a web-server marker. */
+    isWebServerActive: () => Promise<boolean>;
+    /** Whether a name beside the stores is one of the marker files (the desktop-app lock included). */
+    isMarkerFile: (name: string) => boolean;
+};
+
 /** What deleting all local data reaches on this platform. */
 export type PlatformWipe = {
     /** Clears the windows' cookies, storage and cache; null where the platform has no session (required on ElectronPlatform). */
@@ -147,6 +163,8 @@ export type PlatformWipe = {
     listPreferenceKeys: (() => Promise<string[]>) | null;
     /** Removes the Preferences keys the stores persisted under; null where the stores are files. */
     removePreferenceKeys: ((keys: readonly string[]) => Promise<void>) | null;
+    /** The user-data markers a wipe must respect, and the marker names of the wipe's beside-scan. */
+    markers: PlatformWipeMarkers;
 };
 
 /**

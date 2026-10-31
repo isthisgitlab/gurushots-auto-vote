@@ -12,14 +12,15 @@
 
 import { installPlatform } from '../platform/port';
 import { createWebviewPlatform } from '../platforms/webview';
+import { isPlainObject } from '../plainObject';
 
+import type { CapacitorGlobals } from '../types/capacitor';
 import type { PlatformNative } from '../platform/port';
 
 type CapacitorBridgeModule = typeof import('./capacitor');
 type NativeAutovoteBridgeModule = typeof import('../services/NativeAutovoteBridge');
 type ForegroundServiceModule = typeof import('../services/ForegroundServiceController');
 type ApkInstallerModule = typeof import('../services/AndroidUpdateInstaller');
-type LocalDataModule = typeof import('../settings/localData');
 
 // The install must run before the logger loads.
 const capacitorBridge = (): CapacitorBridgeModule => require('./capacitor') as CapacitorBridgeModule;
@@ -31,16 +32,24 @@ const foregroundService = (): ForegroundServiceModule =>
     require('../services/ForegroundServiceController') as ForegroundServiceModule;
 // The install must run before the logger loads.
 const apkInstaller = (): ApkInstallerModule => require('../services/AndroidUpdateInstaller') as ApkInstallerModule;
-// The install must run before the logger loads.
-const localData = (): LocalDataModule => require('../settings/localData') as LocalDataModule;
+
+/**
+ * The native plugin's wipe (AutoVoteBackground.wipeLocalData), or null where the build has none. Asked on the wipe.
+ */
+const nativeWipe = async (): Promise<{ ok: boolean } | null> => {
+    const plugin = (globalThis as CapacitorGlobals).Capacitor?.Plugins?.AutoVoteBackground;
+    if (typeof plugin?.wipeLocalData !== 'function') return null;
+    const answer: unknown = await plugin.wipeLocalData();
+    return isPlainObject(answer) ? { ok: answer.ok === true } : { ok: false };
+};
 
 const capacitorPlatform = createWebviewPlatform({
     // The native compare-and-write of one Preferences key, through the
     // plugin (NativeAutovoteBridge).
     cas: (key: string, expected: string | null, data: string) =>
         nativeAutovoteBridge().compareAndWrite(key, expected, data),
-    // The AutoVoteBackground plugin's wipe of the native stores (localData's nativeWipe).
-    nativeWipe: () => localData().nativeWipe(),
+    // The AutoVoteBackground plugin's wipe of the native stores.
+    nativeWipe,
     native: {
         get autovote(): NativeAutovoteBridgeModule {
             return nativeAutovoteBridge();

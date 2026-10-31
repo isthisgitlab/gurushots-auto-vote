@@ -17,6 +17,14 @@ const createHeadlessWipe = (): PlatformWipe => ({
     reloadAfterWipe: false,
     listPreferenceKeys: null,
     removePreferenceKeys: null,
+    // No user-data markers here: the desktop processes that hold them never
+    // run in this service WebView, and its stores are the native bridge's.
+    markers: {
+        isCliSessionActive: async () => false,
+        isDesktopAppActive: async () => false,
+        isWebServerActive: async () => false,
+        isMarkerFile: () => false,
+    },
 });
 
 export { createHeadlessWipe };

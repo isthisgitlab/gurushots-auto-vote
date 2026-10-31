@@ -29,6 +29,16 @@ const createWebviewWipe = (): Omit<PlatformWipe, 'nativeWipe'> => ({
     removePreferenceKeys: async (keys) => {
         await capacitorPreferences().removePreferenceKeys(keys);
     },
+    // The user-data markers are files under the user-data directory, held by
+    // desktop processes (a CLI session, the web server, the desktop app); a
+    // WebView has no file system to hold or read them, so the checks answer no
+    // — as today's fail-soft reads do.
+    markers: {
+        isCliSessionActive: async () => false,
+        isDesktopAppActive: async () => false,
+        isWebServerActive: async () => false,
+        isMarkerFile: () => false,
+    },
 });
 
 export { createWebviewWipe };

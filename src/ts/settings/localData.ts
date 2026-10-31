@@ -9,12 +9,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as logger from '../logger';
-import * as runtime from '../runtime';
 import { errorMessage } from '../errorMessage';
-import { isPlainObject } from '../plainObject';
 import { platform } from '../platform/port';
 import * as cancellation from '../voting/cancellation';
-import { APP_PARTITION } from '../index/session';
 import { isVotingPassRunning } from '../voting/passActivity';
 import {
     CONFIG_KEY,
@@ -23,19 +20,8 @@ import {
     UNIMPORTABLE_SUFFIX,
     discardPendingWrites,
     getUserDataPath,
-    listPreferenceKeys,
-    removePreferenceKeys,
     resumeWrites,
 } from './storage';
-import {
-    MARKER_NAME_RE,
-    APP_LOCK_FILE_NAME,
-    isCliSessionActive,
-    isDesktopAppActive,
-    isWebServerActive,
-} from './cliSessionLock';
-
-import type { CapacitorGlobals } from '../types/capacitor';
 
 type LocalDataStore = { fileName: string; prefKey: string };
 
@@ -67,12 +53,11 @@ const LOCAL_DATA_DIRECTORIES = ['logs', 'vision'] as const;
 // The vision runtime of the CLI binary lives under this app name whatever the build (services/visionCliAssets.ts).
 const VISION_APP_NAME = 'gurushots-auto-vote';
 
-// Files that are not stores but sit beside them: the CLI session, web-server and desktop-app markers, and the lock files
-// of the join and scenario state and of the settings import; a lock file may have a ".stale-<token>" copy a takeover
-// left (a crash mid-way).
+// Files that are not stores but sit beside them: the lock files of the join and scenario state and of the settings
+// import (a lock file may have a ".stale-<token>" copy a takeover left), and the process markers the platform names
+// (a CLI session, a web server, the desktop app).
 const LOCK_FILE_RE = /^(?:statelock|joinlock)-.+\.lock(?:\.stale-.+)?$/;
-const isLockFile = (name: string) =>
-    LOCK_FILE_RE.test(name) || MARKER_NAME_RE.test(name) || name === APP_LOCK_FILE_NAME;
+const isLockFile = (name: string) => LOCK_FILE_RE.test(name) || platform().wipe.markers.isMarkerFile(name);
 
 // The legacy settings files existing installs still have (the one-time import's source and the copies older builds
 // kept): deleted before config.json, so a file that cannot be removed never brings a lost configuration's import back.
@@ -81,11 +66,6 @@ const CONFIG_FILE = 'config.json';
 
 // A Windows file that antivirus or an indexer holds for a moment is retried rather than left behind.
 const RM_OPTIONS = { recursive: true, force: true, maxRetries: 3, retryDelay: 100 } as const;
-
-/**
- * The electron session the app's windows use, for the wipe to clear its cookies, local storage and cache.
- */
-const appSession = () => (require('electron') as typeof import('electron')).session.fromPartition(APP_PARTITION);
 
 /** Why a wipe was refused: a live CLI process, the running desktop app or web server, or a voting pass in this process. */
 type WipeBusyCode = 'busy-pass' | 'busy-cli' | 'busy-app' | 'busy-web';
@@ -103,20 +83,6 @@ type WipeDeps = {
     busyReason: () => WipeBusyCode | null | Promise<WipeBusyCode | null>;
     /** Stops a voting pass that is under way. */
     stopScheduler: () => void;
-    /** Android: stops the background service and clears its native stores (resolves ok: whether it all went). */
-    wipeNative: () => Promise<{ ok: boolean } | null>;
-    /** Electron: clears the cookies, local storage and cache of the app's windows and of Electron's default session. */
-    clearSession: () => Promise<void>;
-};
-
-/**
- * The native plugin's wipe (AutoVoteBackground.wipeLocalData), or null where the build has none. Asked on Capacitor only.
- */
-const nativeWipe = async (): Promise<{ ok: boolean } | null> => {
-    const plugin = (globalThis as CapacitorGlobals).Capacitor?.Plugins?.AutoVoteBackground;
-    if (typeof plugin?.wipeLocalData !== 'function') return null;
-    const answer: unknown = await plugin.wipeLocalData();
-    return isPlainObject(answer) ? { ok: answer.ok === true } : { ok: false };
 };
 
 // A saved "auto-vote running" flag is only a wish to resume at next start: it is no activity, and does not block. The
@@ -124,33 +90,21 @@ const nativeWipe = async (): Promise<{ ok: boolean } | null> => {
 // that began during the wait is refused too.
 const liveBusyReason = async (): Promise<WipeBusyCode | null> => {
     // Together, so two old markers cost one wait, not two.
-    const [cli, app, web] = await Promise.all([isCliSessionActive(), isDesktopAppActive(), isWebServerActive()]);
+    const markers = platform().wipe.markers;
+    const [cli, app, web] = await Promise.all([
+        markers.isCliSessionActive(),
+        markers.isDesktopAppActive(),
+        markers.isWebServerActive(),
+    ]);
     if (cli) return 'busy-cli';
     if (app) return 'busy-app';
     if (web) return 'busy-web';
     return isVotingPassRunning() ? 'busy-pass' : null;
 };
 
-/**
- * Clears the cookies, local storage and cache of the app's windows' session and Electron's default session — the
- * wipe's clearSession on Electron (the Electron shell's platform module passes it, as does defaultDeps here). A no-op
- * outside Electron, where there is no session to clear.
- */
-const clearElectronSession = async (): Promise<void> => {
-    if (!runtime.isElectron()) return;
-    // The default session writes its cookies, storage and caches at the user-data root, beside the app's files.
-    const { session } = require('electron') as typeof import('electron');
-    for (const target of [appSession(), session.defaultSession]) {
-        await target.clearStorageData();
-        await target.clearCache();
-    }
-};
-
 const defaultDeps = (): WipeDeps => ({
     busyReason: liveBusyReason,
     stopScheduler: () => cancellation.setCancelled(true),
-    wipeNative: nativeWipe,
-    clearSession: clearElectronSession,
 });
 
 const vision = (dir: string) => path.join(dir, 'vision');
@@ -206,17 +160,16 @@ const wipeLocalData = async (overrides: Partial<WipeDeps> = {}): Promise<WipeRes
     log.warning('Deleting all local data');
     const removed: string[] = [];
     const failures: string[] = [];
+    const wipe = platform().wipe;
     try {
         deps.stopScheduler();
-        if (runtime.isCapacitor()) {
-            const native = await deps.wipeNative();
-            if (native !== null && !native.ok) failures.push('the background service data');
-        }
+        const native = await wipe.nativeWipe();
+        if (native !== null && !native.ok) failures.push('the background service data');
         await discardPendingWrites();
 
-        if (runtime.isCapacitor()) {
+        if (wipe.listPreferenceKeys !== null && wipe.removePreferenceKeys !== null) {
             // The set-aside and kept copies carry the time they were made: found by what exists, not by a fixed name.
-            const kept = await listPreferenceKeys();
+            const kept = await wipe.listPreferenceKeys();
             const copySuffixes = [CORRUPT_SUFFIX, UNIMPORTABLE_SUFFIX];
             const keys = [
                 ...new Set([
@@ -228,7 +181,7 @@ const wipeLocalData = async (overrides: Partial<WipeDeps> = {}): Promise<WipeRes
                     ),
                 ]),
             ];
-            await removePreferenceKeys(keys);
+            await wipe.removePreferenceKeys(keys);
             removed.push(...keys);
         } else {
             const userData = getUserDataPath();
@@ -247,7 +200,7 @@ const wipeLocalData = async (overrides: Partial<WipeDeps> = {}): Promise<WipeRes
                 }
             }
         }
-        await deps.clearSession();
+        if (wipe.clearSession !== null) await wipe.clearSession();
     } catch (err) {
         failures.push(errorMessage(err) ?? 'unknown error');
     }
@@ -259,11 +212,11 @@ const wipeLocalData = async (overrides: Partial<WipeDeps> = {}): Promise<WipeRes
             success: false,
             error: failures.join('; '),
             removed,
-            ...(runtime.isCapacitor() ? { reload: true as const } : {}),
+            ...(wipe.reloadAfterWipe ? { reload: true as const } : {}),
         };
     }
     return { success: true, removed };
 };
 
-export { LOCAL_DATA_STORES, LOCAL_DATA_DIRECTORIES, appSession, nativeWipe, clearElectronSession, wipeLocalData };
+export { LOCAL_DATA_STORES, LOCAL_DATA_DIRECTORIES, wipeLocalData };
 export type { LocalDataStore, WipeBusyCode, WipeResult, WipeDeps };

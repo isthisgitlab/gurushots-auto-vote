@@ -19,7 +19,6 @@
  */
 
 import { sweepStaleTemps } from './atomicWrite';
-import { listPreferenceKeys, removePreferenceKeys } from './capacitorPreferences';
 import { createJsonStore, discardStores, refuseWrites, resumeWrites, settleStores } from './jsonStore';
 import { rebaseConfigText } from './settingsMerge';
 import {
@@ -215,8 +214,6 @@ export {
     UNIMPORTABLE_SUFFIX,
     discardPendingWrites,
     resumeWrites,
-    listPreferenceKeys,
-    removePreferenceKeys,
     storage,
     legacyStorage,
     isSaveDropped,

@@ -7,6 +7,14 @@
 
 const mockContextFlags = { isElectron: false, startedViaCli: false };
 
+const mockLock = {
+    isCliSessionActive: jest.fn<Promise<boolean>, []>(async () => false),
+    isDesktopAppActive: jest.fn<Promise<boolean>, []>(async () => false),
+    isWebServerActive: jest.fn<Promise<boolean>, []>(async () => false),
+    MARKER_NAME_RE: /^(?:m-1|m-2)\.lock$/,
+    APP_LOCK_FILE_NAME: 'desktop-app.lock',
+};
+
 jest.mock('../../../src/ts/logger/context', () => ({
     __esModule: true,
     get startedViaCli() {
@@ -17,6 +25,7 @@ jest.mock('../../../src/ts/runtime', () => ({
     __esModule: true,
     isElectron: () => mockContextFlags.isElectron,
 }));
+jest.mock('../../../src/ts/settings/cliSessionLock', () => mockLock);
 
 import { createNodePlatform } from '../../../src/ts/platforms/node';
 
@@ -42,6 +51,18 @@ describe('the node platform', () => {
 
     test('the wipe finds no native plugin to ask, as localData answers without one', async () => {
         await expect(createNodePlatform(windows).wipe.nativeWipe()).resolves.toBeNull();
+    });
+
+    test("the user-data markers are the CLI-session lock module's to hold and read", async () => {
+        const wipe = createNodePlatform(windows).wipe;
+        mockLock.isCliSessionActive.mockResolvedValueOnce(true);
+        await expect(wipe.markers.isCliSessionActive()).resolves.toBe(true);
+        expect(mockLock.isCliSessionActive).toHaveBeenCalledTimes(1);
+        await expect(wipe.markers.isDesktopAppActive()).resolves.toBe(false);
+        await expect(wipe.markers.isWebServerActive()).resolves.toBe(false);
+        expect(wipe.markers.isMarkerFile('m-1.lock')).toBe(true);
+        expect(wipe.markers.isMarkerFile('desktop-app.lock')).toBe(true);
+        expect(wipe.markers.isMarkerFile('other.lock')).toBe(false);
     });
 
     test('the windows are the ones the shell passes', () => {

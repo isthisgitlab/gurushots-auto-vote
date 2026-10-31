@@ -13,12 +13,6 @@ jest.mock('node:fs', () => {
 });
 jest.unmock('path');
 jest.unmock('node:path');
-// A partial mock, so the Electron tests can spy isElectron (a real module's
-// exports are not spy-able as is).
-jest.mock('../../src/ts/runtime', () => ({
-    __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/runtime')>('../../src/ts/runtime'),
-}));
 jest.mock('../../src/ts/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
@@ -55,7 +49,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { APP_PARTITION } from '../../src/ts/index/session';
 import { buildNodeTestPlatform } from '../helpers/platform';
-import type * as runtimeModule from '../../src/ts/runtime';
+import type { ElectronPlatform, PlatformWipe } from '../../src/ts/platform/port';
 import type * as localDataModule from '../../src/ts/settings/localData';
 import type * as storageModule from '../../src/ts/settings/storage';
 import type * as settingsModule from '../../src/ts/settings';
@@ -154,7 +148,6 @@ describe('the local-data registry', () => {
 });
 
 type Ctx = {
-    runtime: typeof runtimeModule;
     localData: typeof localDataModule;
     storage: typeof storageModule;
     settings: typeof settingsModule;
@@ -173,20 +166,64 @@ describe('wipeLocalData', () => {
     let visionParent: string;
     let ctx: Ctx;
 
-    const load = () => {
+    /**
+     * The desktop (node family) platform: the wipe reads the user-data directory and the CLI vision directory
+     * through it, pointed at this test's directories. `wipeOverride` replaces members of the family's wipe — the
+     * deps override of a platform member.
+     */
+    const load = (wipeOverride?: Partial<PlatformWipe>) => {
         jest.isolateModules(() => {
-            // The wipe reads the user-data directory and the CLI vision directory
-            // through the platform: point both at this test's directories.
             const family =
                 require('../../src/ts/platforms/node/paths') as typeof import('../../src/ts/platforms/node/paths');
             const paths = family.createNodePaths();
             paths.userData = () => userData;
             paths.getUserDataDir = () => visionParent;
+            const base = buildNodeTestPlatform();
+            // Object.assign writes without reading the members it replaces (the logCleanup getter).
+            const installed = Object.assign(
+                base,
+                wipeOverride ? { paths, wipe: { ...base.wipe, ...wipeOverride } } : { paths },
+            );
             const port = require('../../src/ts/platform/port') as typeof import('../../src/ts/platform/port');
             port.resetPlatformForTests();
-            port.installPlatform(Object.assign(buildNodeTestPlatform(), { paths }));
+            port.installPlatform(installed);
             ctx = {
-                runtime: require('../../src/ts/runtime') as typeof runtimeModule,
+                localData: require('../../src/ts/settings/localData') as typeof localDataModule,
+                storage: require('../../src/ts/settings/storage') as typeof storageModule,
+                settings: require('../../src/ts/settings') as typeof settingsModule,
+                cancellation: require('../../src/ts/voting/cancellation') as typeof cancellationModule,
+                lock: require('../../src/ts/settings/cliSessionLock') as typeof lockModule,
+                passActivity: require('../../src/ts/voting/passActivity') as typeof passActivityModule,
+            };
+        });
+    };
+
+    /** The Electron shell's platform module: its wipe owns the session clear the moved assertion drives. */
+    const loadElectron = () => {
+        jest.isolateModules(() => {
+            const port = require('../../src/ts/platform/port') as typeof import('../../src/ts/platform/port');
+            port.resetPlatformForTests();
+            require('../../src/ts/index/platform');
+            const installed = port.platform() as ElectronPlatform;
+            installed.paths = { ...installed.paths, userData: () => userData, getUserDataDir: () => visionParent };
+            ctx = {
+                localData: require('../../src/ts/settings/localData') as typeof localDataModule,
+                storage: require('../../src/ts/settings/storage') as typeof storageModule,
+                settings: require('../../src/ts/settings') as typeof settingsModule,
+                cancellation: require('../../src/ts/voting/cancellation') as typeof cancellationModule,
+                lock: require('../../src/ts/settings/cliSessionLock') as typeof lockModule,
+                passActivity: require('../../src/ts/voting/passActivity') as typeof passActivityModule,
+            };
+        });
+    };
+
+    /** The Capacitor page's platform module: its wipe owns the native plugin read and the Preferences keys. */
+    const loadCapacitor = () => {
+        jest.isolateModules(() => {
+            const port = require('../../src/ts/platform/port') as typeof import('../../src/ts/platform/port');
+            port.resetPlatformForTests();
+            require('../../src/ts/bridge/capacitorPlatform');
+            ctx = {
                 localData: require('../../src/ts/settings/localData') as typeof localDataModule,
                 storage: require('../../src/ts/settings/storage') as typeof storageModule,
                 settings: require('../../src/ts/settings') as typeof settingsModule,
@@ -262,7 +299,7 @@ describe('wipeLocalData', () => {
                 fs.writeFileSync(path.join(userData, name), 'keep');
             }
 
-            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            const result = await ctx.localData.wipeLocalData();
 
             expect(result.success).toBe(true);
             expect(fs.readdirSync(userData).sort()).toEqual([
@@ -278,7 +315,7 @@ describe('wipeLocalData', () => {
             load();
             fillUserData();
 
-            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            const result = await ctx.localData.wipeLocalData();
 
             expect(result.success).toBe(true);
             expect(fs.readdirSync(userData)).toEqual(['Cookies']);
@@ -303,21 +340,22 @@ describe('wipeLocalData', () => {
         });
 
         test('nothing the wipe deleted is re-created by a write that comes after it (or was pending)', async () => {
-            load();
-            fillUserData();
-            const metadataStore = ctx.storage.createJsonStore({
-                fileName: 'metadata.json',
-                prefKey: 'gurushots-metadata',
-            });
-
-            await ctx.localData.wipeLocalData({
-                // Writes made while it runs and right after: settings, a store, a store's atomic write, the token write.
+            load({
+                // Writes made while it runs and right after: settings, a store, a store's atomic write, the token
+                // write — hooked at the wipe's last step.
                 clearSession: async () => {
                     expect(ctx.storage.storage.writeRaw('{"token":"late"}')).toBe(false);
                     metadataStore.writeRaw('{"late":1}');
                     expect(await metadataStore.updateThrough(() => '{"late":2}')).toBe('failed');
                 },
             });
+            fillUserData();
+            const metadataStore = ctx.storage.createJsonStore({
+                fileName: 'metadata.json',
+                prefKey: 'gurushots-metadata',
+            });
+
+            await ctx.localData.wipeLocalData();
             expect(ctx.settings.setSetting('token', 'later')).toBe(false);
             metadataStore.writeRaw('{"later":1}');
 
@@ -328,7 +366,7 @@ describe('wipeLocalData', () => {
             load();
             ctx.cancellation.reset();
 
-            await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            await ctx.localData.wipeLocalData();
 
             expect(ctx.cancellation.isCancelled()).toBe(true);
         });
@@ -342,7 +380,7 @@ describe('wipeLocalData', () => {
                 return (realReaddir as (...args: unknown[]) => unknown)(dir, ...rest);
             }) as typeof fs.readdirSync);
 
-            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            const result = await ctx.localData.wipeLocalData();
 
             expect(result.success).toBe(true);
             expect(fs.existsSync(path.join(userData, 'settings.json'))).toBe(false);
@@ -353,7 +391,7 @@ describe('wipeLocalData', () => {
 
         test('works on a directory that holds none of it', async () => {
             load();
-            await expect(ctx.localData.wipeLocalData({ clearSession: async () => {} })).resolves.toEqual({
+            await expect(ctx.localData.wipeLocalData()).resolves.toEqual({
                 success: true,
                 removed: [],
             });
@@ -369,7 +407,7 @@ describe('wipeLocalData', () => {
                 return realRm(target, options);
             }) as typeof fs.rmSync);
 
-            await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            await ctx.localData.wipeLocalData();
 
             const legacySettingsFiles = ['settings.json', 'settings.json.original', 'v2-import.json'];
             expect(order.slice(0, 3)).toEqual(legacySettingsFiles);
@@ -396,7 +434,7 @@ describe('wipeLocalData', () => {
                 return realRm(target, options);
             }) as typeof fs.rmSync);
 
-            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            const result = await ctx.localData.wipeLocalData();
 
             expect(result).toEqual({
                 success: false,
@@ -420,7 +458,7 @@ describe('wipeLocalData', () => {
                 return realRm(target, options);
             }) as typeof fs.rmSync);
 
-            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            const result = await ctx.localData.wipeLocalData();
 
             expect(result).toEqual({
                 success: false,
@@ -441,19 +479,19 @@ describe('wipeLocalData', () => {
             jest.spyOn(fs, 'rmSync').mockImplementationOnce(() => {
                 throw null;
             });
-            const first = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            const first = await ctx.localData.wipeLocalData();
             expect(first).toEqual({
                 success: false,
                 error: expect.stringContaining('(unknown error)'),
                 removed: expect.any(Array),
             });
 
-            load();
-            const second = await ctx.localData.wipeLocalData({
+            load({
                 clearSession: async () => {
                     throw new Error('session gone');
                 },
             });
+            const second = await ctx.localData.wipeLocalData();
             expect(second).toEqual({ success: false, error: 'session gone', removed: expect.any(Array) });
 
             load();
@@ -484,7 +522,7 @@ describe('wipeLocalData', () => {
             fillUserData();
             const endPass = ctx.passActivity.beginVotingPass();
 
-            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            const result = await ctx.localData.wipeLocalData();
             endPass();
 
             expect(result).toEqual({ success: false, error: 'busy-pass' });
@@ -496,7 +534,7 @@ describe('wipeLocalData', () => {
             fillUserData();
             markerOfAnotherProcess(CLI_MARKER);
 
-            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            const result = await ctx.localData.wipeLocalData();
 
             expect(result).toEqual({ success: false, error: 'busy-cli' });
             expectNothingTouched();
@@ -507,7 +545,7 @@ describe('wipeLocalData', () => {
             fillUserData();
             markerOfAnotherProcess('desktop-app.lock');
 
-            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            const result = await ctx.localData.wipeLocalData();
 
             expect(result).toEqual({ success: false, error: 'busy-app' });
             expectNothingTouched();
@@ -518,7 +556,7 @@ describe('wipeLocalData', () => {
             fillUserData();
             markerOfAnotherProcess('cli-session.lock');
 
-            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            const result = await ctx.localData.wipeLocalData();
 
             expect(result).toEqual({ success: false, error: 'busy-cli' });
             expectNothingTouched();
@@ -529,7 +567,7 @@ describe('wipeLocalData', () => {
             fillUserData();
             markerOfAnotherProcess(WEB_MARKER);
 
-            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            const result = await ctx.localData.wipeLocalData();
 
             expect(result).toEqual({ success: false, error: 'busy-web' });
             expectNothingTouched();
@@ -542,9 +580,9 @@ describe('wipeLocalData', () => {
             markerOfAnotherProcess('cli-session-4545.lock');
 
             fs.rmSync(path.join(userData, CLI_MARKER));
-            const oneLeft = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            const oneLeft = await ctx.localData.wipeLocalData();
             fs.rmSync(path.join(userData, 'cli-session-4545.lock'));
-            const noneLeft = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            const noneLeft = await ctx.localData.wipeLocalData();
 
             expect(oneLeft).toEqual({ success: false, error: 'busy-cli' });
             expect(noneLeft.success).toBe(true);
@@ -557,13 +595,13 @@ describe('wipeLocalData', () => {
             markerOfAnotherProcess(WEB_MARKER);
             const endPass = ctx.passActivity.beginVotingPass();
 
-            const all = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            const all = await ctx.localData.wipeLocalData();
             fs.rmSync(path.join(userData, CLI_MARKER));
-            const appAndRest = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            const appAndRest = await ctx.localData.wipeLocalData();
             fs.rmSync(path.join(userData, 'desktop-app.lock'));
-            const webAndPass = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            const webAndPass = await ctx.localData.wipeLocalData();
             fs.rmSync(path.join(userData, WEB_MARKER));
-            const onlyPass = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            const onlyPass = await ctx.localData.wipeLocalData();
             endPass();
 
             expect(all).toEqual({ success: false, error: 'busy-cli' });
@@ -581,7 +619,7 @@ describe('wipeLocalData', () => {
 
             jest.useFakeTimers();
             try {
-                const wipe = ctx.localData.wipeLocalData({ clearSession: async () => {} });
+                const wipe = ctx.localData.wipeLocalData();
                 // The old marker is read again after the settle wait; a pass begins meanwhile.
                 await jest.advanceTimersByTimeAsync(ctx.lock.SETTLE_MS - 1);
                 const endPass = ctx.passActivity.beginVotingPass();
@@ -599,7 +637,7 @@ describe('wipeLocalData', () => {
             fillUserData();
             fs.writeFileSync(path.join(userData, 'settings.json'), JSON.stringify({ autovoteRunning: true }));
 
-            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            const result = await ctx.localData.wipeLocalData();
 
             expect(result.success).toBe(true);
             expect(fs.existsSync(path.join(userData, 'metadata.json'))).toBe(false);
@@ -609,7 +647,7 @@ describe('wipeLocalData', () => {
             load();
             fs.writeFileSync(path.join(userData, CLI_MARKER), JSON.stringify({ pid: 2 ** 22 + 12345 }));
 
-            await expect(ctx.localData.wipeLocalData({ clearSession: async () => {} })).resolves.toEqual({
+            await expect(ctx.localData.wipeLocalData()).resolves.toEqual({
                 success: true,
                 removed: [path.join(userData, CLI_MARKER)],
             });
@@ -626,7 +664,7 @@ describe('wipeLocalData', () => {
 
             jest.useFakeTimers();
             try {
-                const wipe = ctx.localData.wipeLocalData({ clearSession: async () => {} });
+                const wipe = ctx.localData.wipeLocalData();
                 // Both old markers with a live process are read again after one settle wait (together), and are still old.
                 await jest.advanceTimersByTimeAsync(ctx.lock.SETTLE_MS);
                 // Judged left over (not removed by the first check), each marker goes with the rest of the data.
@@ -649,7 +687,7 @@ describe('wipeLocalData', () => {
 
             jest.useFakeTimers();
             try {
-                const wipe = ctx.localData.wipeLocalData({ clearSession: async () => {} });
+                const wipe = ctx.localData.wipeLocalData();
                 await jest.advanceTimersByTimeAsync(ctx.lock.TICK_MS);
                 const now = new Date();
                 fs.utimesSync(path.join(userData, CLI_MARKER), now, now);
@@ -663,8 +701,9 @@ describe('wipeLocalData', () => {
 
     describe('Electron', () => {
         test('clears the cookies, storage and cache of the session the windows use and of the default session', async () => {
-            load();
-            jest.spyOn(ctx.runtime, 'isElectron').mockReturnValue(true);
+            // The shell's platform: its wipe owns the session clear, so the
+            // wipe-local-data path fails here if it never reached it.
+            loadElectron();
 
             await ctx.localData.wipeLocalData();
 
@@ -677,8 +716,7 @@ describe('wipeLocalData', () => {
         });
 
         test('a default session that cannot be cleared fails the wipe', async () => {
-            load();
-            jest.spyOn(ctx.runtime, 'isElectron').mockReturnValue(true);
+            loadElectron();
             mockDefaultSession.clearStorageData.mockRejectedValueOnce(new Error('storage busy'));
 
             await expect(ctx.localData.wipeLocalData()).resolves.toEqual(
@@ -686,9 +724,8 @@ describe('wipeLocalData', () => {
             );
         });
 
-        test('outside Electron there is no session to clear', async () => {
+        test('on a platform without a session (the desktop families) there is no session to clear', async () => {
             load();
-            jest.spyOn(ctx.runtime, 'isElectron').mockReturnValue(false);
 
             await ctx.localData.wipeLocalData();
 
@@ -717,7 +754,7 @@ describe('wipeLocalData', () => {
                 'gurushots-settings_unimportable-2026-01-02T00-00-00-000Z',
             ];
             mockPreferences.keys.mockResolvedValueOnce({ keys: [...aside, 'someone-elses-key', 'gurushots-config'] });
-            load();
+            loadCapacitor();
 
             const result = await ctx.localData.wipeLocalData();
 
@@ -730,7 +767,7 @@ describe('wipeLocalData', () => {
         });
 
         test('asks the native plugin first, then removes every store key and the settings backup key', async () => {
-            load();
+            loadCapacitor();
 
             const result = await ctx.localData.wipeLocalData();
 
@@ -759,7 +796,7 @@ describe('wipeLocalData', () => {
         });
 
         test('writes still queued are given up, so nothing puts a value back after the keys are removed', async () => {
-            load();
+            loadCapacitor();
             let release: () => void = () => {};
             mockPreferences.set.mockImplementationOnce(() => new Promise<void>((resolve) => (release = resolve)));
             const store = ctx.storage.createJsonStore({ fileName: 'metadata.json', prefKey: 'gurushots-metadata' });
@@ -790,7 +827,7 @@ describe('wipeLocalData', () => {
         });
 
         test('a strict store whose last write did not persist does not fail the wipe', async () => {
-            load();
+            loadCapacitor();
             mockPreferences.set.mockRejectedValueOnce(new Error('not persisted'));
             const strict = ctx.storage.createJsonStore({ fileName: 'x.json', prefKey: 'gs_x', strict: true });
             strict.writeRaw('{"a":1}');
@@ -799,7 +836,7 @@ describe('wipeLocalData', () => {
         });
 
         test('a write-through still waiting its turn is given up as well, and changes nothing', async () => {
-            load();
+            loadCapacitor();
             let release: () => void = () => {};
             mockPreferences.set.mockImplementationOnce(() => new Promise<void>((resolve) => (release = resolve)));
             const store = ctx.storage.createJsonStore({ fileName: 'metadata.json', prefKey: 'gurushots-metadata' });
@@ -819,7 +856,7 @@ describe('wipeLocalData', () => {
         });
 
         test('a native wipe that did not go through fails the wipe, and the stores write again', async () => {
-            load();
+            loadCapacitor();
             wipeNative.mockResolvedValue({ ok: false });
 
             const result = await ctx.localData.wipeLocalData();
@@ -834,7 +871,7 @@ describe('wipeLocalData', () => {
         });
 
         test('a failed wipe asks the caller to reload the window, so the app never keeps running on emptied caches', async () => {
-            load();
+            loadCapacitor();
             wipeNative.mockResolvedValue({ ok: false });
 
             await expect(ctx.localData.wipeLocalData()).resolves.toEqual({
@@ -846,7 +883,7 @@ describe('wipeLocalData', () => {
         });
 
         test('a Preferences key that cannot be removed fails the wipe and asks for a reload too', async () => {
-            load();
+            loadCapacitor();
             mockPreferences.remove.mockRejectedValueOnce(new Error('preferences gone'));
 
             const result = await ctx.localData.wipeLocalData();
@@ -855,7 +892,7 @@ describe('wipeLocalData', () => {
         });
 
         test('a wipe that went through, or one that was refused, asks for no reload', async () => {
-            load();
+            loadCapacitor();
 
             const done = await ctx.localData.wipeLocalData();
             const refused = await ctx.localData.wipeLocalData({ busyReason: () => 'busy-app' });
@@ -865,14 +902,14 @@ describe('wipeLocalData', () => {
         });
 
         test('a build without the plugin carries on', async () => {
-            load();
+            loadCapacitor();
             g.Capacitor = { isNativePlatform: () => true, Plugins: {} };
 
             await expect(ctx.localData.wipeLocalData()).resolves.toEqual(expect.objectContaining({ success: true }));
         });
 
         test('an answer that is no object counts as not done', async () => {
-            load();
+            loadCapacitor();
             wipeNative.mockResolvedValue(undefined as unknown as { ok: boolean });
 
             await expect(ctx.localData.wipeLocalData()).resolves.toEqual({
@@ -884,7 +921,7 @@ describe('wipeLocalData', () => {
         });
 
         test('with no Capacitor plugins object at all there is nothing native to ask', async () => {
-            load();
+            loadCapacitor();
             g.Capacitor = { isNativePlatform: () => true };
 
             await expect(ctx.localData.wipeLocalData()).resolves.toEqual(expect.objectContaining({ success: true }));
