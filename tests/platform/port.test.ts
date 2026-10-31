@@ -8,7 +8,7 @@
 import { buildNodeTestPlatform, clearInstalledPlatform, installTestPlatform } from '../helpers/platform';
 import { installPlatform, platform } from '../../src/ts/platform/port';
 
-import type { ElectronPlatform } from '../../src/ts/platform/port';
+import type { ElectronPlatform, PlatformWindows } from '../../src/ts/platform/port';
 import type * as portModule from '../../src/ts/platform/port';
 
 describe('the platform port', () => {
@@ -45,12 +45,15 @@ describe('the platform port', () => {
         });
     });
 
-    test('the Electron platform shape takes the node family with a required clearSession', () => {
+    test('the Electron platform shape takes the node family with a required clearSession and windows', () => {
         const node = buildNodeTestPlatform();
         const electron: ElectronPlatform = {
             ...node,
             wipe: { ...node.wipe, clearSession: async () => undefined },
+            // The node family's no-op windows are real members; the spread reads them as nullable.
+            windows: node.windows as PlatformWindows,
         };
         expect(electron.wipe.clearSession).not.toBeNull();
+        expect(electron.windows).not.toBeNull();
     });
 });

@@ -39,7 +39,6 @@ import { platform } from '../../../src/ts/platform/port';
 import { createWebviewPlatform } from '../../../src/ts/platforms/webview';
 
 import type { AxiosAdapter, AxiosPromise } from 'axios';
-import type { CasAnswer } from '../../../src/ts/settings/storeTransport';
 import type { PlatformNative } from '../../../src/ts/platform/port';
 
 const apiClient = jest.mocked(
@@ -61,12 +60,10 @@ describe('the webview platform', () => {
         });
     });
 
-    test('the native compare-and-write and the native wipe arrive through the parts', () => {
-        const cas = jest.fn<Promise<CasAnswer> | null, [string, string | null, string]>();
+    test('the native wipe and the native services arrive through the parts', () => {
         const nativeWipe = jest.fn<Promise<{ ok: boolean } | null>, []>();
         const native: PlatformNative = { autovote: null, foregroundService: null, apkInstaller: null };
-        const p = createWebviewPlatform({ cas, nativeWipe, native });
-        expect(p.storage.cas).toBe(cas);
+        const p = createWebviewPlatform({ nativeWipe, native });
         expect(p.wipe.nativeWipe).toBe(nativeWipe);
         expect(p.native).toBe(native);
     });

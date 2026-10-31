@@ -47,32 +47,34 @@ afterEach(() => {
 });
 
 describe('readText', () => {
-    test('the CLI binary reads the embedded SEA asset', () => {
+    test('the CLI binary reads the embedded SEA asset', async () => {
         mockSea.isSea = () => true;
         mockSea.getAsset = (key, encoding) => `asset:${key}:${encoding}`;
-        expect(createNodeAssets().readText('THIRD_PARTY_NOTICES.txt')).toBe('asset:THIRD_PARTY_NOTICES.txt:utf8');
+        await expect(createNodeAssets().readText('THIRD_PARTY_NOTICES.txt')).resolves.toBe(
+            'asset:THIRD_PARTY_NOTICES.txt:utf8',
+        );
         expect(fs.readFileSync).not.toHaveBeenCalled();
     });
 
-    test('from source it reads the file under src/assets of the app root', () => {
+    test('from source it reads the file under src/assets of the app root', async () => {
         fs.readFileSync.mockReturnValue('FROM FILE');
-        expect(createNodeAssets().readText('THIRD_PARTY_NOTICES.txt')).toBe('FROM FILE');
+        await expect(createNodeAssets().readText('THIRD_PARTY_NOTICES.txt')).resolves.toBe('FROM FILE');
         expect(fs.readFileSync).toHaveBeenCalledWith('/app/src/assets/THIRD_PARTY_NOTICES.txt', 'utf8');
     });
 
-    test('an unusable node:sea falls back to the file', () => {
+    test('an unusable node:sea falls back to the file', async () => {
         mockSea.isSea = () => {
             throw new Error('no sea');
         };
         fs.readFileSync.mockReturnValue('FROM FILE');
-        expect(createNodeAssets().readText('semantic-vectors.json')).toBe('FROM FILE');
+        await expect(createNodeAssets().readText('semantic-vectors.json')).resolves.toBe('FROM FILE');
     });
 });
 
 describe('readJson', () => {
-    test('it parses the asset text', () => {
+    test('it parses the asset text', async () => {
         fs.readFileSync.mockReturnValue('{"a":1}');
-        expect(createNodeAssets().readJson('semantic-vectors.json')).toEqual({ a: 1 });
+        await expect(createNodeAssets().readJson('semantic-vectors.json')).resolves.toEqual({ a: 1 });
     });
 });
 

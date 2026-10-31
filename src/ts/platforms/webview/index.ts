@@ -6,10 +6,11 @@
  * installs it; the family itself never calls installPlatform.
  *
  * The members that need the shell's own code are left empty here and passed
- * in through `parts`: the native compare-and-write and the native services
- * call services/NativeAutovoteBridge.ts and its siblings (shell modules a
- * family cannot import), and the native wipe calls the AutoVoteBackground
- * plugin. There are no windows to reach from the WebView, so windows is null.
+ * in through `parts`: the native services call services/NativeAutovoteBridge.ts
+ * and its siblings (shell modules a family cannot import), and the native
+ * wipe calls the AutoVoteBackground plugin. The storage transport is a
+ * placeholder until Phase 3 step 7 (see store.ts), and takes no parts yet.
+ * There are no windows to reach from the WebView, so windows is null.
  *
  * The modules the family delegates to are reached at call time, never at
  * load: the node project's setup file loads the test helpers that import
@@ -25,12 +26,10 @@ import { createWebviewPaths } from './paths';
 import { createWebviewStorage } from './store';
 import { createWebviewWipe } from './wipe';
 
-import type { Platform, PlatformCas, PlatformNative, PlatformWipe } from '../../platform/port';
+import type { Platform, PlatformNative, PlatformWipe } from '../../platform/port';
 
 /** The parts the shell module passes in: the native members a family cannot build. */
 type WebviewNativeParts = {
-    /** The native compare-and-write of one Preferences key (NativeAutovoteBridge compareAndWrite). */
-    cas?: PlatformCas;
     /** The native plugin's wipe (AutoVoteBackground wipeLocalData). */
     nativeWipe?: PlatformWipe['nativeWipe'];
     /** The native services (the bridges and controllers the WebView page drives). */
@@ -72,7 +71,7 @@ const createWebviewPlatform = (parts: WebviewNativeParts = {}): Platform => ({
             return apiClient().getCapacitorHttpAdapter();
         },
     },
-    storage: createWebviewStorage(parts.cas ?? null),
+    storage: createWebviewStorage(),
     paths: createWebviewPaths(),
     assets: createWebviewAssets(),
     wipe: parts.nativeWipe ? { ...createWebviewWipe(), nativeWipe: parts.nativeWipe } : createWebviewWipe(),

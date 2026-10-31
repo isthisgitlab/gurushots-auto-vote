@@ -32,8 +32,10 @@ const readAssetText = (relativePath: string): string => {
 };
 
 const createNodeAssets = (): PlatformAssets => ({
-    readText: readAssetText,
-    readJson: (relativePath: string): unknown => {
+    // The port's reads are async on every family (the WebViews' fetch reads
+    // are), so the node family's synchronous reads are wrapped.
+    readText: async (relativePath: string): Promise<string> => readAssetText(relativePath),
+    readJson: async (relativePath: string): Promise<unknown> => {
         const parsed: unknown = JSON.parse(readAssetText(relativePath));
         return parsed;
     },

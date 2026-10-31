@@ -1,7 +1,8 @@
 /**
- * The headless family's assets member: the fetch readers of the WebView asset
- * branches and the vision model's location and device there. fetch is
- * stubbed the way the loaders' own tests stub it (thirdPartyNotices.test.ts).
+ * The headless family's assets member: the readJson composition over the
+ * shared fetchAsset reader (fetchAsset itself is proven in
+ * tests/platform/fetchAsset.test.ts) and the vision model's location and
+ * device there. fetch is stubbed the way the loaders' own tests stub it.
  */
 
 import { invalid } from '../../helpers/invalid';
@@ -11,26 +12,6 @@ const realFetch = globalThis.fetch;
 
 afterEach(() => {
     globalThis.fetch = realFetch;
-});
-
-describe('readText', () => {
-    test('it fetches the asset relative to the web root and answers its text', async () => {
-        globalThis.fetch = invalid<typeof fetch>(
-            jest.fn(async () => ({ ok: true, status: 200, text: async () => 'TEXT' })),
-        );
-        await expect(createHeadlessAssets().readText('semantic-vectors.json')).resolves.toBe('TEXT');
-        expect(globalThis.fetch).toHaveBeenCalledWith('semantic-vectors.json');
-    });
-
-    test('a response that is not ok throws', async () => {
-        globalThis.fetch = invalid<typeof fetch>(jest.fn(async () => ({ ok: false, status: 500 })));
-        await expect(createHeadlessAssets().readText('missing.txt')).rejects.toThrow('HTTP 500');
-    });
-
-    test('a fetch without a response throws', async () => {
-        globalThis.fetch = invalid<typeof fetch>(jest.fn(async () => undefined));
-        await expect(createHeadlessAssets().readText('missing.txt')).rejects.toThrow('no response');
-    });
 });
 
 describe('readJson', () => {

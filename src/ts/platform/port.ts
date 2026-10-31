@@ -104,13 +104,10 @@ export type PlatformPaths = {
 
 /** The runtime assets the app reads (the lexicon, the notices, the vision model). */
 export type PlatformAssets = {
-    /**
-     * The asset's text; throws when it cannot be read — rejects where the
-     * platform reads it through fetch (the WebViews' reads are async).
-     */
-    readText: (relativePath: string) => string | Promise<string>;
-    /** The asset's parsed JSON, unchecked — its reader validates (buildTable), the caller narrows the `unknown`. */
-    readJson: (relativePath: string) => unknown;
+    /** The asset's text; rejects when it cannot be read. */
+    readText: (relativePath: string) => Promise<string>;
+    /** The asset's parsed JSON — its reader validates (buildTable), the caller awaits and narrows the `unknown`. */
+    readJson: (relativePath: string) => Promise<unknown>;
     /** The local vision model: where it lives, and the device inference runs on. */
     visionModel: { location: () => string; device: 'wasm' | 'cpu' };
 };
@@ -181,9 +178,10 @@ export interface Platform {
     capabilities: PlatformCapabilities;
 }
 
-/** The Electron platform: it has a session, so the wipe's clearSession is required. */
+/** The Electron platform: it has a session, so the wipe's clearSession is required, and its windows are real. */
 export interface ElectronPlatform extends Platform {
     wipe: Omit<PlatformWipe, 'clearSession'> & { clearSession: () => Promise<void> };
+    windows: PlatformWindows;
 }
 
 /** The globalThis slot the installed platform lives in; a Symbol.for key survives jest.resetModules / isolateModules. */

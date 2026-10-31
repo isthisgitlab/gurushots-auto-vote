@@ -1,7 +1,8 @@
 /**
- * The webview family's assets member: the fetch readers of the WebView asset
- * branches and the vision model's location and device there. fetch is
- * stubbed the way the loaders' own tests stub it (thirdPartyNotices.test.ts).
+ * The webview family's assets member: the readJson composition over the
+ * shared fetchAsset reader (fetchAsset itself is proven in
+ * tests/platform/fetchAsset.test.ts) and the vision model's location and
+ * device there. fetch is stubbed the way the loaders' own tests stub it.
  */
 
 import { invalid } from '../../helpers/invalid';
@@ -11,26 +12,6 @@ const realFetch = globalThis.fetch;
 
 afterEach(() => {
     globalThis.fetch = realFetch;
-});
-
-describe('readText', () => {
-    test('it fetches the asset relative to the web root and answers its text', async () => {
-        globalThis.fetch = invalid<typeof fetch>(
-            jest.fn(async () => ({ ok: true, status: 200, text: async () => 'TEXT' })),
-        );
-        await expect(createWebviewAssets().readText('THIRD_PARTY_NOTICES.txt')).resolves.toBe('TEXT');
-        expect(globalThis.fetch).toHaveBeenCalledWith('THIRD_PARTY_NOTICES.txt');
-    });
-
-    test('a response that is not ok throws', async () => {
-        globalThis.fetch = invalid<typeof fetch>(jest.fn(async () => ({ ok: false, status: 404 })));
-        await expect(createWebviewAssets().readText('missing.txt')).rejects.toThrow('HTTP 404');
-    });
-
-    test('a fetch without a response throws', async () => {
-        globalThis.fetch = invalid<typeof fetch>(jest.fn(async () => undefined));
-        await expect(createWebviewAssets().readText('missing.txt')).rejects.toThrow('no response');
-    });
 });
 
 describe('readJson', () => {
