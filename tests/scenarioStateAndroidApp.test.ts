@@ -37,11 +37,8 @@ jest.mock('../src/ts/logger', () => {
 
 import type * as scenarioStateStoreModule from '../src/ts/scenarioStateStore';
 import type { AndroidHeadlessStore } from '../src/ts/types/settings';
+import { installHeadlessTestPlatform, installTestPlatform, installWebviewTestPlatform } from './helpers/platform';
 import { parseJsonObject } from './helpers/parseJson';
-
-const g = globalThis as typeof globalThis & {
-    Capacitor?: { isNativePlatform: () => boolean; getPlatform: () => string };
-};
 
 const STATE = 'gs_scenario_state';
 const RESETS = 'gs_scenario_resets';
@@ -62,10 +59,9 @@ const boot = async (files: Record<string, string> = {}) => {
 const file = (map: Record<string, unknown>) => JSON.stringify(map);
 
 beforeEach(() => {
-    g.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android' };
+    installWebviewTestPlatform();
 });
 afterEach(() => {
-    delete g.Capacitor;
     failing.clear();
     mockPrefGet.mockImplementation(readOne);
     stored.clear();
@@ -204,7 +200,7 @@ describe('a start-up read that failed', () => {
     );
 
     test('is nothing to a platform that reads its files itself', async () => {
-        delete g.Capacitor;
+        installTestPlatform();
         failing.add(`read:${STATE}`);
         await boot();
         expect(store.scenarioStateLoaded()).toBe(true);
@@ -213,7 +209,6 @@ describe('a start-up read that failed', () => {
 
 describe('the background service', () => {
     const h = globalThis as typeof globalThis & {
-        __GS_HEADLESS__?: boolean;
         AndroidHeadlessStore?: AndroidHeadlessStore;
     };
     const saved = new Map<string, string>();
@@ -234,14 +229,12 @@ describe('the background service', () => {
         return writeKey;
     };
     const service = () => {
-        delete g.Capacitor;
-        h.__GS_HEADLESS__ = true;
+        installHeadlessTestPlatform();
         jest.isolateModules(() => {
             store = require('../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
         });
     };
     afterEach(() => {
-        delete h.__GS_HEADLESS__;
         delete h.AndroidHeadlessStore;
         saved.clear();
     });

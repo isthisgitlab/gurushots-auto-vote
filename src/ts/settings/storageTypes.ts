@@ -1,8 +1,7 @@
 /**
- * The types `createSettingsFile` (storage.ts) and its helpers (settingsFileMethods.ts, settingsFileCapacitor.ts)
- * pass around: the options a settings file is created with, and the results of its writes and quarantine. The
- * per-file state and its write-protocol transitions live in settingsFileProtocol.ts. Type-only module — no runtime
- * code.
+ * The types `createSettingsFile` (storage.ts) passes around: the options a settings file is created with, and the
+ * results of its writes and quarantine. The per-file state and its write-protocol transitions live in the webview
+ * family's settingsFileProtocol.ts. Type-only module — no runtime code.
  */
 
 /**

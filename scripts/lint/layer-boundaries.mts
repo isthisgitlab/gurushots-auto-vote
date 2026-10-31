@@ -86,10 +86,7 @@ export const LAYER_TABLE: ReadonlyArray<{ target: string; layer: string }> = [
     { target: 'src/ts/headless/', layer: 'shell:headless' },
     // Platforms: one runtime each, below every shell.
     { target: 'src/ts/appPaths.ts', layer: 'platform:node' },
-    { target: 'src/ts/settings/settingsFileNode.ts', layer: 'platform:node' },
     { target: 'src/ts/settings/cliSessionLock.ts', layer: 'platform:node' },
-    { target: 'src/ts/settings/capacitorPreferences.ts', layer: 'platform:webview' },
-    { target: 'src/ts/settings/settingsFileCapacitor.ts', layer: 'platform:webview' },
     // The renderer tree, below every shell, above core.
     { target: 'src/ts/react/', layer: 'react' },
 ];

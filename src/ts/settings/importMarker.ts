@@ -9,7 +9,7 @@
  */
 
 import * as logger from '../logger';
-import * as runtime from '../runtime';
+import { platform } from '../platform/port';
 import { fileErrorMessage } from '../errorMessage';
 import { isPlainObject } from '../plainObject';
 import { underSettingsLock } from './settingsLock';
@@ -64,7 +64,7 @@ const MARKER_PENDING =
  * for the whole wait. Where the platform has no file lock (Android) the native compare-and-write decides.
  */
 const underMarkerLock = <T>(run: () => T, busy: T): T =>
-    runtime.isCapacitor() || runtime.isHeadlessService() ? run() : underSettingsLock(MARKER_LOCK_WAIT_MS, run, busy);
+    platform().storage.lockPolicy === 'none' ? run() : underSettingsLock(MARKER_LOCK_WAIT_MS, run, busy);
 
 /**
  * Whether the import has run (or had nothing to import) on this device: the marker holds `importedAt` (or, from a

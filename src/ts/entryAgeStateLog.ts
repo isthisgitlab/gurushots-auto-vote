@@ -24,7 +24,7 @@
 
 import type { EntryAgeRecord, RawJsonStore } from './types/stores';
 import * as logger from './logger';
-import { throughStore } from './settings/storeTransport';
+import { throughStore } from './settings/storage';
 import { isPlainObject } from './plainObject';
 import { errorKind } from './errorMessage';
 import { parseUntrustedJsonObject } from './parseUntrustedJson';

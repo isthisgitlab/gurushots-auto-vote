@@ -23,7 +23,7 @@ const mockPlugin = {
 const mockListPreferenceKeys = jest.fn(async () => [...mockValues.keys()]);
 const mockRemovePreferenceKeys = jest.fn(async () => undefined);
 
-jest.mock('../../../src/ts/settings/capacitorPreferences', () => ({
+jest.mock('../../../src/ts/platforms/webview/capacitorPreferences', () => ({
     __esModule: true,
     getCapacitorPreferences: () => mockPlugin,
     listPreferenceKeys: () => mockListPreferenceKeys(),

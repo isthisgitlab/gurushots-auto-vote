@@ -23,11 +23,12 @@ jest.mock(
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 import type * as storageModule from '../../src/ts/settings/storage';
-import type * as storeTransportModule from '../../src/ts/settings/storeTransport';
 import * as logger from '../../src/ts/logger';
 import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
 import type { AutoVoteBackgroundPlugin } from '../../src/ts/types/capacitor';
-import { installWebviewTestPlatform } from '../helpers/platform';
+import { createHeadlessStorage } from '../../src/ts/platforms/headless/store';
+import { createWebviewStorage } from '../../src/ts/platforms/webview/store';
+import { installHeadlessTestPlatform, installTestPlatform, installWebviewTestPlatform } from '../helpers/platform';
 import { invalid } from '../helpers/invalid';
 
 // A store's file sits beside the settings file (jsonStore joins
@@ -303,7 +304,7 @@ describe('createJsonStore', () => {
         let store: ReturnType<typeof storageModule.createJsonStore>;
 
         beforeEach(() => {
-            g.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android' };
+            installWebviewTestPlatform();
             mockPrefGet.mockResolvedValue({ value: '{"persisted":true}' });
             const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
             store = createJsonStore({ fileName: 'metadata.json', prefKey: 'gurushots-metadata' });
@@ -573,19 +574,19 @@ describe('createJsonStore', () => {
             });
 
             test('that failed is not a queued write: a flush does not tell of it, now or every time after', async () => {
-                const { isCacheKnown } = require('../../src/ts/settings/storeTransport') as typeof storeTransportModule;
+                const known = () => createWebviewStorage(null).loaded('gs_scenario_resets');
                 const strict = strictStore();
-                expect(isCacheKnown('gs_scenario_resets')).toBe(false);
+                expect(known()).toBe(false);
                 mockPrefSet.mockRejectedValueOnce(new Error('disk full'));
                 await expect(strict.updateThrough(() => 'x')).resolves.toBe('failed');
                 await expect(strict.flushPendingWrites()).resolves.toBeUndefined();
-                expect(isCacheKnown('gs_scenario_resets')).toBe(false);
+                expect(known()).toBe(false);
                 await strict.updateThrough(() => '{"a":1}');
-                expect(isCacheKnown('gs_scenario_resets')).toBe(true);
+                expect(known()).toBe(true);
             });
 
             test('off the app window is written before it answers, failed when that write throws, aborted when it declines', async () => {
-                delete g.Capacitor;
+                installTestPlatform();
                 fs.existsSync.mockReturnValue(false);
                 const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
                 const file = createJsonStore({ fileName: 'scenarioResets.json', prefKey: 'gs_scenario_resets' });
@@ -609,7 +610,7 @@ describe('createJsonStore', () => {
                 expect(strict.updateNow(() => '{"asked":1}')).toBeNull();
                 expect(mockPrefSet).not.toHaveBeenCalled();
 
-                delete g.Capacitor;
+                installTestPlatform();
                 fs.existsSync.mockReturnValue(false);
                 const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
                 const file = createJsonStore({ fileName: 'scenarioResets.json', prefKey: 'gs_scenario_resets' });
@@ -622,7 +623,7 @@ describe('createJsonStore', () => {
             });
 
             test('updateNow written on a file another process changed meanwhile makes the change again on that, so neither is erased', () => {
-                delete g.Capacitor;
+                installTestPlatform();
                 fs.existsSync.mockReturnValue(true);
                 const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
                 const file = createJsonStore({ fileName: 'v2-import.json', prefKey: 'gs_v2_import' });
@@ -645,7 +646,7 @@ describe('createJsonStore', () => {
             });
 
             test('updateNow gives up, and says so, on a file that keeps changing under it', () => {
-                delete g.Capacitor;
+                installTestPlatform();
                 fs.existsSync.mockReturnValue(true);
                 const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
                 const file = createJsonStore({ fileName: 'v2-import.json', prefKey: 'gs_v2_import' });
@@ -659,8 +660,7 @@ describe('createJsonStore', () => {
             });
 
             test('updateNow in the background service is the native compare-and-write where the key is shared', () => {
-                delete g.Capacitor;
-                g.__GS_HEADLESS__ = true;
+                installHeadlessTestPlatform();
                 const compareAndWriteKey = jest.fn(() => true);
                 g.AndroidHeadlessStore = invalid<AndroidHeadlessStore>({
                     readKey: () => '{"a":1}',
@@ -682,7 +682,7 @@ describe('createJsonStore', () => {
             test('updateNow fails where writes are refused (local data is being deleted)', async () => {
                 const { discardPendingWrites, resumeWrites } =
                     require('../../src/ts/settings/storage') as typeof storageModule;
-                delete g.Capacitor;
+                installTestPlatform();
                 const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
                 const file = createJsonStore({ fileName: 'scenarioResets.json', prefKey: 'gs_scenario_resets' });
                 await discardPendingWrites();
@@ -695,7 +695,7 @@ describe('createJsonStore', () => {
             test('a listener registered with onDiscard is told when the stores are discarded (local data deleted)', async () => {
                 const { discardPendingWrites, resumeWrites } =
                     require('../../src/ts/settings/storage') as typeof storageModule;
-                delete g.Capacitor;
+                installTestPlatform();
                 const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
                 const file = createJsonStore({ fileName: 'entryAges.json', prefKey: 'gs_entry_ages' });
                 const told = jest.fn();
@@ -718,7 +718,7 @@ describe('createJsonStore', () => {
             });
 
             test('peekStored is the plain read elsewhere', async () => {
-                delete g.Capacitor;
+                installTestPlatform();
                 fs.existsSync.mockReturnValue(true);
                 fs.readFileSync.mockReturnValue('{"a":1}');
                 const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
@@ -1056,10 +1056,7 @@ describe('createJsonStore', () => {
         });
 
         describe('whether the cache holds something known', () => {
-            const known = () =>
-                (require('../../src/ts/settings/storeTransport') as typeof storeTransportModule).isCacheKnown(
-                    'gs_scenario_state',
-                );
+            const known = () => createWebviewStorage(null).loaded('gs_scenario_state');
             const strictStore = () => {
                 const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
                 return createJsonStore({ fileName: 'scenarioState.json', prefKey: 'gs_scenario_state', strict: true });
@@ -1146,7 +1143,7 @@ describe('createJsonStore', () => {
         let store: ReturnType<typeof storageModule.createJsonStore>;
 
         beforeEach(() => {
-            g.__GS_HEADLESS__ = true;
+            installHeadlessTestPlatform();
             const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
             store = createJsonStore({ fileName: 'metadata.json', prefKey: 'gurushots-metadata' });
         });
@@ -1177,8 +1174,7 @@ describe('createJsonStore', () => {
             };
 
             describe('a read that failed', () => {
-                const { headlessReadFailed } =
-                    require('../../src/ts/settings/storeTransport') as typeof storeTransportModule;
+                const readFailed = (prefKey: string) => !createHeadlessStorage().loaded(prefKey);
                 const readingBridge = (readKey: (key: string) => string | null) => {
                     (globalThis as typeof globalThis & { AndroidHeadlessStore?: unknown }).AndroidHeadlessStore = {
                         read: () => null,
@@ -1191,15 +1187,15 @@ describe('createJsonStore', () => {
                     const strict = strictStore();
                     readingBridge(() => null);
                     expect(strict.readRaw()).toBeNull();
-                    expect(headlessReadFailed('gs_scenario_state')).toBe(false);
+                    expect(readFailed('gs_scenario_state')).toBe(false);
                     readingBridge(() => {
                         throw new Error('bridge down');
                     });
                     expect(strict.readRaw()).toBeNull();
-                    expect(headlessReadFailed('gs_scenario_state')).toBe(true);
+                    expect(readFailed('gs_scenario_state')).toBe(true);
                     readingBridge(() => '{"a":1}');
                     expect(strict.readRaw()).toBe('{"a":1}');
-                    expect(headlessReadFailed('gs_scenario_state')).toBe(false);
+                    expect(readFailed('gs_scenario_state')).toBe(false);
                 });
 
                 test('is logged when it first fails, not on every read after it', () => {
@@ -1225,9 +1221,9 @@ describe('createJsonStore', () => {
                     const strict = strictStore();
                     strict.writeRaw = jest.fn();
                     expect(strict.readRaw()).toBeNull();
-                    expect(headlessReadFailed('gs_scenario_state')).toBe(true);
+                    expect(readFailed('gs_scenario_state')).toBe(true);
                     expect(store.readRaw()).toBeNull();
-                    expect(headlessReadFailed('gurushots-metadata')).toBe(false);
+                    expect(readFailed('gurushots-metadata')).toBe(false);
                 });
             });
 
@@ -1303,11 +1299,13 @@ describe('a store the app window shares with the background service (shared)', (
         let storage!: Storage;
         jest.isolateModules(() => {
             storage = require('../../src/ts/settings/storage') as Storage;
-            // The shared store's saves reach the plugin through the platform's native member: a bridge loaded here
-            // is fresh per window, so it reads the plugin global this test set.
+            // The shared store's saves reach the plugin through the family's compare-and-write part: a bridge loaded
+            // here is fresh per window, so it reads the plugin global this test set.
             const autovote =
                 require('../../src/ts/services/NativeAutovoteBridge') as typeof import('../../src/ts/services/NativeAutovoteBridge');
-            installWebviewTestPlatform({ native: { autovote, foregroundService: null, apkInstaller: null } });
+            installWebviewTestPlatform({
+                storage: createWebviewStorage((key, expected, data) => autovote.compareAndWrite(key, expected, data)),
+            });
         });
         return storage.createJsonStore({
             fileName: 'joinState.json',
@@ -1432,8 +1430,16 @@ describe('a store the app window shares with the background service (shared)', (
         await expect(store.refreshAsync()).resolves.toBe(true);
         mockPrefGet.mockRejectedValueOnce(new Error('bridge down'));
         await expect(store.refreshAsync()).resolves.toBe(false);
-        delete g.Capacitor;
-        await expect(store.refreshAsync()).resolves.toBe(true);
+        // Off the app window the read is the file itself, so a refresh is a no-op that read.
+        installTestPlatform();
+        fs.existsSync.mockReturnValue(false);
+        const file = (require('../../src/ts/settings/storage') as Storage).createJsonStore({
+            fileName: 'joinState.json',
+            prefKey: 'gs_join_state',
+            strict: true,
+            shared: true,
+        });
+        await expect(file.refreshAsync()).resolves.toBe(true);
     });
 
     describe('in the service’s own context', () => {
@@ -1458,7 +1464,7 @@ describe('a store the app window shares with the background service (shared)', (
             return { state, compareAndWriteKey };
         };
         const asService = () => {
-            g.__GS_HEADLESS__ = true;
+            installHeadlessTestPlatform();
             let storage!: Storage;
             jest.isolateModules(() => {
                 storage = require('../../src/ts/settings/storage') as Storage;
@@ -1545,7 +1551,7 @@ describe('a store the app window shares with the background service (shared)', (
         test('a store that is not shared writes through the bridge as before', async () => {
             const writeKey = jest.fn(() => true);
             bridge(null, { writeKey });
-            g.__GS_HEADLESS__ = true;
+            installHeadlessTestPlatform();
             let storage!: Storage;
             jest.isolateModules(() => {
                 storage = require('../../src/ts/settings/storage') as Storage;

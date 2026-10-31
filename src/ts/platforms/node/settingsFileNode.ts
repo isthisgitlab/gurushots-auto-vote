@@ -1,18 +1,17 @@
 /**
- * The Node half of `createSettingsFile` (storage.ts): the fs branches of a settings file's methods, for the
- * Electron/CLI transport where the configuration is a plain file beside the user-data directory. The helpers take the
- * file path and touch only what they are given; every writer keeps going through `writeAtomicOwnerOnly`, which keeps
- * the file owner-only. Nothing here imports storage.ts, so a test's `jest.mock('settings/storage')` still rules over
- * every caller.
+ * The fs branches of a settings file, for the Electron/CLI transport where the configuration is a plain file beside
+ * the user-data directory (the node family's storage). The helpers take the file path and touch only what they are
+ * given; every writer keeps going through `writeAtomicOwnerOnly`, which keeps the file owner-only. Nothing here
+ * imports storage.ts, so a test's `jest.mock('settings/storage')` still rules over every caller.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { errorMessage } from '../errorMessage';
+import { errorMessage } from '../../errorMessage';
 import { writeAtomicOwnerOnly } from './atomicWrite';
 
-import type { QuarantineResult, WriteIfAbsentResult } from './storageTypes';
+import type { QuarantineResult, WriteIfAbsentResult } from '../../settings/storageTypes';
 
 /**
  * Whether an unusable copy of the file was set aside earlier: a `<file>.corrupt-<time>` entry beside it. The read

@@ -1,10 +1,15 @@
 /**
- * The Android service's native store, in memory, for tests that drive the settings through the headless seam
- * (`__GS_HEADLESS__` + `AndroidHeadlessStore`). `value` is the configuration text (`gurushots-config`, through the
- * bridge's dedicated `read` / `write`: a write saves only while the key still holds what the latest read answered);
- * `legacy` is the 1.x `settings.json` text; `keys` holds every other store (the import marker, the title pins).
- * Assigning to `value` or `legacy` changes what the next read sees.
+ * The Android service's native store, in memory, for tests that drive the settings through the headless seam. It
+ * installs the headless test platform — the storage branches are its family's transports now, and the store below is
+ * the `AndroidHeadlessStore` global the transports read at call time. The platform is installed when this module
+ * loads, too: most suites import the settings facade (or the store modules) at file level, and those loads build
+ * their transports over whatever platform stands then. `value` is the configuration text (`gurushots-config`,
+ * through the bridge's dedicated `read` / `write`: a write saves only while the key still holds what the latest read
+ * answered); `legacy` is the 1.x `settings.json` text; `keys` holds every other store (the import marker, the title
+ * pins). Assigning to `value` or `legacy` changes what the next read sees.
  */
+
+import { installHeadlessTestPlatform, restoreNodeTestPlatform } from './platform';
 
 import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
 
@@ -80,6 +85,7 @@ const installHeadlessStore = (initial: { config?: string | null; legacy?: string
     };
     headless.__GS_HEADLESS__ = true;
     headless.AndroidHeadlessStore = store;
+    installHeadlessTestPlatform();
     return store;
 };
 
@@ -87,7 +93,12 @@ const installHeadlessStore = (initial: { config?: string | null; legacy?: string
 const removeHeadlessStore = () => {
     delete headless.__GS_HEADLESS__;
     delete headless.AndroidHeadlessStore;
+    restoreNodeTestPlatform();
 };
 
 export type { MemoryStore };
 export { installHeadlessStore, removeHeadlessStore };
+
+// The headless platform stands from the moment the helper is imported: the hoisted imports of a suite run before
+// its `import settings = require(...)` loads, and the transports the facade builds then are this family's.
+installHeadlessTestPlatform();

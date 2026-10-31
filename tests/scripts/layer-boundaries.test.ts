@@ -83,10 +83,10 @@ const VALID: ReadonlyArray<readonly [string, string]> = [
     ["export { open } from './windowsBridge';", CORE],
     // platform:<x> reaches core, its own platform, and every package — a forbidden one included.
     ["import '../services/votingOrchestrator';", file('src/ts/appPaths.ts')],
-    ["import './settings/settingsFileNode';", file('src/ts/appPaths.ts')],
-    ["import './settingsFileCapacitor';", file('src/ts/settings/capacitorPreferences.ts')],
+    ["import './atomicWrite';", file('src/ts/platforms/node/store.ts')],
+    ["import './capacitorPreferences';", file('src/ts/platforms/webview/store.ts')],
     ["import 'electron';", file('src/ts/appPaths.ts')],
-    ["import '@capacitor/preferences';", file('src/ts/settings/settingsFileCapacitor.ts')],
+    ["import '@capacitor/preferences';", file('src/ts/platforms/webview/capacitorPreferences.ts')],
     // shell:<x> reaches core, any platform, react, itself, and every package.
     ["import '../services/votingOrchestrator';", file('src/ts/windows/quitGuard.ts')],
     ["import '../appPaths';", file('src/ts/windows/quitGuard.ts')],
@@ -95,7 +95,7 @@ const VALID: ReadonlyArray<readonly [string, string]> = [
     ["import 'electron';", file('src/ts/index.ts')],
     ["import '../services/votingOrchestrator';", file('src/ts/scheduling/runScheduler.ts')],
     ["import '../react/api/ipc';", file('src/ts/bridge/web.ts')],
-    ["import '../settings/capacitorPreferences';", file('src/ts/web/server.ts')],
+    ["import '../platforms/webview/capacitorPreferences';", file('src/ts/web/server.ts')],
     ["import '../react/pages/Web';", file('src/ts/bridge/web.ts')],
     ["import './plainObject';", file('src/ts/localStores.ts')],
     ["import '../logger';", file('src/ts/headless/index.ts')],
@@ -157,11 +157,7 @@ const INVALID: ReadonlyArray<readonly [string, string, ...string[]]> = [
     // core reaches nothing but core.
     ["import '../react/api/ipc';", CORE, crossing('core', 'react', '../react/api/ipc')],
     ["import '../appPaths';", CORE, crossing('core', 'platform:node', '../appPaths')],
-    [
-        "import '../settings/capacitorPreferences';",
-        CORE,
-        crossing('core', 'platform:webview', '../settings/capacitorPreferences'),
-    ],
+    ["import '../platforms/webview/store';", CORE, crossing('core', 'platform:webview', '../platforms/webview/store')],
     ["import '../cli/cli';", CORE, crossing('core', 'shell:cli', '../cli/cli')],
     ["import '../bridge/web';", CORE, crossing('core', 'shell:web', '../bridge/web')],
     ["import '../localStores';", CORE, crossing('core', 'shell:capacitor', '../localStores')],
@@ -204,16 +200,16 @@ const INVALID: ReadonlyArray<readonly [string, string, ...string[]]> = [
     ],
     // platform:<x> reaches core and itself only.
     [
-        "import './settings/settingsFileCapacitor';",
-        file('src/ts/appPaths.ts'),
-        crossing('platform:node', 'platform:webview', './settings/settingsFileCapacitor'),
+        "import '../webview/store';",
+        file('src/ts/platforms/node/store.ts'),
+        crossing('platform:node', 'platform:webview', '../webview/store'),
     ],
     ["import './react/api/ipc';", file('src/ts/appPaths.ts'), crossing('platform:node', 'react', './react/api/ipc')],
     // …and never a shell: the settings file a platform owns cannot reach a shell module.
     [
-        "import '../services/NativeAutovoteBridge';",
-        file('src/ts/settings/capacitorPreferences.ts'),
-        crossing('platform:webview', 'shell:capacitor', '../services/NativeAutovoteBridge'),
+        "import '../../services/NativeAutovoteBridge';",
+        file('src/ts/platforms/webview/capacitorPreferences.ts'),
+        crossing('platform:webview', 'shell:capacitor', '../../services/NativeAutovoteBridge'),
     ],
     // The platforms/<x>/ row takes the segment after the prefix.
     [
@@ -372,8 +368,8 @@ describe('under Oxlint', () => {
                 ['react/pages', "import './Web';", [crossing('react', 'shell:web', './Web')]],
                 [
                     'platforms/node',
-                    "import '../../settings/capacitorPreferences';",
-                    [crossing('platform:node', 'platform:webview', '../../settings/capacitorPreferences')],
+                    "import '../webview/store';",
+                    [crossing('platform:node', 'platform:webview', '../webview/store')],
                 ],
                 ['platforms/node', "import 'electron';", []],
                 [

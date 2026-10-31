@@ -1,18 +1,16 @@
 /**
  * The generic platform-aware JSON store (createJsonStore) the app's other stores are made with, and the switch that
- * makes every one of them refuse writes while local data is deleted.
+ * makes every one of them refuse writes while local data is deleted. The platform work — the cache, the queue and the
+ * native bridge of each family — is the JsonStoreTransport the platform's storage member builds per store
+ * (src/ts/platform/port.ts); this wrapper keeps the refuse-writes registry, the discard listeners and the public store
+ * surface, and never tests which family it has.
  */
 
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as logger from '../logger';
-import * as runtime from '../runtime';
-import { sweepStaleTemps, writeAtomicOwnerOnly } from './atomicWrite';
-import { getCapacitorPreferences } from './capacitorPreferences';
-import { writeOwnerOnly } from './ownerOnlyWrite';
-import { createWriteBehind, headlessUpdate, readHeadlessKey, writeHeadlessKey } from './storeTransport';
+import { installedPlatform, platform } from '../platform/port';
 import { getSettingsPath } from './userDataPaths';
-import { platform } from '../platform/port';
+import type { JsonStoreTransport, SettingsStoreRef } from '../platform/port';
 import type { ThroughResult } from '../types/stores';
 
 // Set by refuseWrites until resumeWrites: every store refuses writes, so nothing is created again while
@@ -52,7 +50,8 @@ const WRITE_ATTEMPTS = 3;
  * is written only if the store still holds what it was made from (read again just before the write): when another
  * process changed it meanwhile, the change is made again on that. This narrows the window in which a concurrent write
  * is overwritten and does not close it: the second read and the write are two steps, so a caller that must not lose a
- * change holds the settings lock around the whole.
+ * change holds the settings lock around the whole. The node and headless families run it over their own read/write
+ * operations (a desktop's write is made when this returns; the service's through its bridge).
  */
 const writeNow = (
     prefKey: string,
@@ -104,109 +103,45 @@ const createJsonStore = ({
     /** the Android service writes this key too: `updateThrough` saves by the native compare-and-write, so no change is erased */
     shared?: boolean;
 }) => {
-    let initialized = false;
-    let cachedJson: string | null = null;
-    const cache = {
-        get: () => cachedJson,
-        set: (value: string | null) => {
-            cachedJson = value;
-        },
-    };
-    const writes = createWriteBehind(
+    // `read-write` is the atomic store's sweep rule: the temp files an earlier crash left beside the file are swept
+    // before the first read or write, once per file path. A store that is not atomic never sweeps.
+    const ref: SettingsStoreRef = {
         prefKey,
-        strict,
-        getCapacitorPreferences,
-        cache,
-        // The native compare-and-write of the platform (the app WebView's bridge); a platform without one saves
-        // straight to Preferences, as the bridge's own no-plugin answer did.
-        shared
-            ? (expected, data) => platform().native.autovote?.compareAndWrite(prefKey, expected, data) ?? null
-            : undefined,
-    );
-    let swept = false;
-    const discardListeners: Array<() => void> = [];
-
-    const filePath = () => path.join(path.dirname(getSettingsPath()), fileName);
-    // The first read or write of an atomic store's file clears the temp files an earlier crash left beside it.
-    const sweepOnce = () => {
-        if (!atomic || swept) return;
-        swept = true;
-        sweepStaleTemps(filePath());
+        filePath: () => path.join(path.dirname(getSettingsPath()), fileName),
+        sweep: atomic ? 'read-write' : 'none',
     };
+    // The transport is built as the store is created, where a platform stands. A module imported where none is
+    // installed (a renderer bundle reaches these stores, and no port is installed there) builds it on the store's
+    // first use.
+    let transport: JsonStoreTransport | null = null;
+    const of = (): JsonStoreTransport => (transport ??= platform().storage.jsonStore(ref, { strict, shared }));
+    const installed = installedPlatform();
+    if (installed) transport = installed.storage.jsonStore(ref, { strict, shared });
+    const discardListeners: Array<() => void> = [];
 
     const store = {
         /**
          * Raw JSON string, or null when never written.
          */
-        readRaw: (): string | null => {
-            if (runtime.isHeadlessService()) {
-                return readHeadlessKey(prefKey, cachedJson, strict);
-            }
-            if (runtime.isCapacitor()) {
-                return cachedJson;
-            }
-            sweepOnce();
-            const p = filePath();
-            if (!fs.existsSync(p)) return null;
-            return fs.readFileSync(p, 'utf8');
-        },
+        readRaw: (): string | null => of().readRaw(),
         /**
          * Sync on Electron/CLI; cache + ordered write-behind on Capacitor; native keyed bridge on headless.
          */
         writeRaw: (data: string) => {
             if (writesRefused) return;
-            if (runtime.isHeadlessService()) {
-                // Only a write that is confirmed is read back: a failed first write leaves nothing to read.
-                writeHeadlessKey(prefKey, data, strict);
-                cachedJson = data;
-                return;
-            }
-            if (runtime.isCapacitor()) {
-                cachedJson = data;
-                writes.queue(data);
-                return;
-            }
-            sweepOnce();
-            (atomic ? writeAtomicOwnerOnly : writeOwnerOnly)(filePath(), data);
+            of().writeRaw(data);
         },
         /** Hydrate the Capacitor cache once at boot. No-op elsewhere. */
-        initializeAsync: async () => {
-            if (!runtime.isCapacitor() || runtime.isHeadlessService() || initialized) return;
-            try {
-                const { value } = await getCapacitorPreferences().get({ key: prefKey });
-                cachedJson = value;
-                writes.confirm(0);
-            } catch (err) {
-                logger.withCategory('settings').error(`Capacitor ${prefKey} read failed:`, err);
-                cachedJson = null;
-            } finally {
-                initialized = true;
-            }
-        },
+        initializeAsync: () => of().hydrate(),
         /**
-         * Re-read the Capacitor preference into the cache — for a store the
-         * Android background service (a separate JS context) also writes.
-         * Waits for this context's own queued writes first, so none is lost.
-         * No-op off the Capacitor app WebView.
+         * Re-read what is stored into the cache — for a store the Android
+         * background service (a separate JS context) also writes. Waits for this context's own queued writes first,
+         * so none is lost. No-op off the Capacitor app WebView.
          *
          * @returns false when the read failed (the cache is as it was); a decision that must not rest on a stale cache
          *   (a paid one) refuses then
          */
-        refreshAsync: async (): Promise<boolean> => {
-            if (!runtime.isCapacitor() || runtime.isHeadlessService()) return true;
-            const { at, done } = writes.drained();
-            await done;
-            try {
-                const { value } = await getCapacitorPreferences().get({ key: prefKey });
-                cachedJson = value;
-                writes.confirm(at);
-                initialized = true;
-                return true;
-            } catch (err) {
-                logger.withCategory('settings').error(`Capacitor ${prefKey} refresh failed:`, err);
-                return false;
-            }
-        },
+        refreshAsync: () => of().reread(),
         /**
          * `updateThrough` where the store is read and written in one step (a desktop, the background service): the
          * write is made when this returns, and its outcome is the answer. Null where the write is only queued (the
@@ -214,29 +149,26 @@ const createJsonStore = ({
          */
         updateNow: (update: (current: string | null) => string | null): ThroughResult | null => {
             if (writesRefused) return 'failed';
-            if (runtime.isHeadlessService() && shared) return headlessUpdate(prefKey, update);
-            return runtime.isCapacitor() && !runtime.isHeadlessService() ? null : writeNow(prefKey, store, update);
+            return of().updateNow(update);
         },
         /** Writes a value made from the current one that nothing reads before it is saved (see RawJsonStore). */
         updateThrough: (update: (current: string | null) => string | null): Promise<ThroughResult> => {
-            const now = store.updateNow(update);
-            return now === null ? writes.updateThrough(update) : Promise.resolve(now);
+            if (writesRefused) return Promise.resolve('failed');
+            const now = of().updateNow(update);
+            return now === null ? of().updateThrough(update) : Promise.resolve(now);
         },
         /**
          * What is stored now, where the cache of the Android app window may be behind it (the background service
          * writes the key too): read from Preferences, the cache left as it is. The same as `readRaw` elsewhere.
          */
-        peekStored: async (): Promise<string | null> =>
-            runtime.isCapacitor() && !runtime.isHeadlessService()
-                ? (await getCapacitorPreferences().get({ key: prefKey })).value
-                : store.readRaw(),
+        peekStored: () => of().peekStored(),
         /**
          * Await to guarantee the write-behind queue has drained. A `strict` store rejects when a write since the last
          * flush did not persist, so a caller that waits for it can tell.
          */
-        flushPendingWrites: () => writes.flush(),
+        flushPendingWrites: () => of().flush(),
         /** fs path (Electron/CLI) — for debug/info surfaces. */
-        getFilePath: filePath,
+        getFilePath: ref.filePath,
         /** Calls `listener` whenever the store is discarded (local data deleted), for a ledger holding changes in memory. */
         onDiscard: (listener: () => void) => {
             discardListeners.push(listener);
@@ -244,14 +176,16 @@ const createJsonStore = ({
     };
     createdStores.push({
         discard: () => {
-            writes.discard();
-            cachedJson = null;
+            of().discard();
             for (const listener of discardListeners) listener();
         },
         // A flush that reports a write which did not persist is of no interest to a store being deleted.
-        settled: () => writes.flush().catch(() => undefined),
+        settled: () =>
+            of()
+                .flush()
+                .catch(() => undefined),
     });
     return store;
 };
 
-export { areWritesRefused, createJsonStore, discardStores, refuseWrites, resumeWrites, settleStores };
+export { areWritesRefused, createJsonStore, discardStores, refuseWrites, resumeWrites, settleStores, writeNow };

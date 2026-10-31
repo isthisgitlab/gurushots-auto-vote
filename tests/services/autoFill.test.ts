@@ -27,6 +27,8 @@ jest.mock('../../src/ts/services/semantic/lexicon', () => ({
 // suite never touches the real user-data directory.
 let statsStoreData: unknown = null;
 jest.mock('../../src/ts/settings/storage', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/settings/storage')>('../../src/ts/settings/storage'),
     createJsonStore: () => ({
         readRaw: () => statsStoreData,
         writeRaw: (data: unknown) => {

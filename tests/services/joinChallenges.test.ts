@@ -92,7 +92,8 @@ import type { RawJsonStore } from '../../src/ts/types/stores';
 import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
 import type { RuleMatchChallenge } from '../../src/ts/types/settings';
 import { invalid } from '../helpers/invalid';
-import { installWebviewTestPlatform } from '../helpers/platform';
+import { createWebviewStorage } from '../../src/ts/platforms/webview/store';
+import { installHeadlessTestPlatform, installWebviewTestPlatform } from '../helpers/platform';
 import { isPlainObject } from '../../src/ts/plainObject';
 import {
     clearUnlocked,
@@ -4036,7 +4037,7 @@ describe('on the background service, whose claims go through the native bridge',
     };
     // One service session: the store as a freshly started service builds it.
     const session = () => {
-        h.__GS_HEADLESS__ = true;
+        installHeadlessTestPlatform();
         let store!: RawJsonStore;
         jest.isolateModules(() => {
             store = (require('../../src/ts/joinStateStore') as typeof import('../../src/ts/joinStateStore'))
@@ -4045,7 +4046,6 @@ describe('on the background service, whose claims go through the native bridge',
         return store;
     };
     afterEach(() => {
-        delete h.__GS_HEADLESS__;
         delete h.AndroidHeadlessStore;
         sharedPrefs.clear();
     });
@@ -4128,12 +4128,15 @@ describe('on the app window, where the background service writes the same claims
         if (native?.state.value) sharedPrefs.set('gs_join_state', native.state.value);
         let mod!: JoinStateModule;
         jest.isolateModules(() => {
-            mod = require('../../src/ts/joinStateStore') as JoinStateModule;
-            // The shared store's saves reach the plugin through the platform's native member: a bridge loaded here
-            // is fresh per window, so it reads the plugin global this test set.
+            // The shared store's saves reach the plugin through the family's compare-and-write part: a bridge loaded
+            // here is fresh per window, so it reads the plugin global this test set. The platform stands before the
+            // module loads: the transports it builds are the family's.
             const autovote =
                 require('../../src/ts/services/NativeAutovoteBridge') as typeof import('../../src/ts/services/NativeAutovoteBridge');
-            installWebviewTestPlatform({ native: { autovote, foregroundService: null, apkInstaller: null } });
+            installWebviewTestPlatform({
+                storage: createWebviewStorage((key, expected, data) => autovote.compareAndWrite(key, expected, data)),
+            });
+            mod = require('../../src/ts/joinStateStore') as JoinStateModule;
         });
         await mod.initializeJoinStateAsync();
         const deps = (over: Partial<JoinDeps> = {}) =>

@@ -27,8 +27,19 @@ import type * as storageModule from '../../src/ts/settings/storage';
 import type * as jsonStoreModule from '../../src/ts/settings/jsonStore';
 import loggerModule = require('../../src/ts/logger');
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
-import { installWebviewTestPlatform } from '../helpers/platform';
+import { installHeadlessTestPlatform, installWebviewTestPlatform } from '../helpers/platform';
+import { createWebviewStorage } from '../../src/ts/platforms/webview/store';
 import { invalid } from '../helpers/invalid';
+
+/** A fresh storage module over the service's bridge: its transport is the headless family's. */
+const loadHeadlessStorage = () => {
+    let mod: typeof storageModule | undefined;
+    jest.isolateModules(() => {
+        installHeadlessTestPlatform();
+        mod = require('../../src/ts/settings/storage') as typeof storageModule;
+    });
+    return mod!;
+};
 
 const g = globalThis as typeof globalThis & {
     Capacitor?: { isNativePlatform: () => boolean; Plugins?: Record<string, unknown> };
@@ -38,12 +49,13 @@ const cat = invalid<{ __cat: { error: jest.Mock<void, [string, ...unknown[]]> } 
 const loadStorage = () => {
     let mod: typeof storageModule | undefined;
     jest.isolateModules(() => {
-        mod = require('../../src/ts/settings/storage') as typeof storageModule;
-        // The window's saves reach the plugin through the platform's native member: a bridge loaded here is fresh
-        // per load, so it reads the plugin global this test set (the headless suites never reach the member).
+        // The platform stands before the module loads: the transports it builds are the family's.
         const autovote =
             require('../../src/ts/services/NativeAutovoteBridge') as typeof import('../../src/ts/services/NativeAutovoteBridge');
-        installWebviewTestPlatform({ native: { autovote, foregroundService: null, apkInstaller: null } });
+        installWebviewTestPlatform({
+            storage: createWebviewStorage((key, expected, data) => autovote.compareAndWrite(key, expected, data)),
+        });
+        mod = require('../../src/ts/settings/storage') as typeof storageModule;
     });
     return mod!;
 };
@@ -57,7 +69,7 @@ afterEach(() => {
 describe('writeIfAbsent in the Android background service', () => {
     test('saves when the native store holds nothing', () => {
         const store = installHeadlessStore();
-        const { storage } = loadStorage();
+        const { storage } = loadHeadlessStorage();
         storage.readRaw();
 
         expect(storage.writeIfAbsent('{"v":1}')).toEqual({ outcome: 'saved' });
@@ -65,15 +77,15 @@ describe('writeIfAbsent in the Android background service', () => {
     });
 
     test('with no bridge there is nothing to refuse it', () => {
-        (globalThis as { __GS_HEADLESS__?: boolean }).__GS_HEADLESS__ = true;
-        const { storage } = loadStorage();
+        installHeadlessTestPlatform();
+        const { storage } = loadHeadlessStorage();
 
         expect(storage.writeIfAbsent('{"v":1}')).toEqual({ outcome: 'saved' });
     });
 
     test('loses to the app window that saved first, and answers what it saved', () => {
         const store = installHeadlessStore();
-        const { storage } = loadStorage();
+        const { storage } = loadHeadlessStorage();
         storage.readRaw();
         store.value = '{"v":"window"}'; // the window's import lands after this context last read
 
@@ -86,7 +98,7 @@ describe('writeIfAbsent in the Android background service', () => {
     test('a refusal with nothing stored is a failure, said in the log', () => {
         const store = installHeadlessStore();
         store.write.mockReturnValue(false);
-        const { storage } = loadStorage();
+        const { storage } = loadHeadlessStorage();
 
         expect(storage.writeIfAbsent('{"v":1}')).toEqual({ outcome: 'failed' });
         expect(cat.error).toHaveBeenCalledWith('Headless store refused the settings write (refused)', null);
@@ -97,7 +109,7 @@ describe('writeIfAbsent in the Android background service', () => {
         store.write.mockImplementation(() => {
             throw new Error('commit failed');
         });
-        const { storage } = loadStorage();
+        const { storage } = loadHeadlessStorage();
 
         expect(storage.writeIfAbsent('{"v":1}')).toEqual({ outcome: 'failed' });
         expect(cat.error).toHaveBeenCalledWith('Headless store write failed:', expect.any(Error));
@@ -150,7 +162,7 @@ describe('writeIfAbsent in the Android app window', () => {
 describe('settings.json in the Android background service (keyed access)', () => {
     test('is read and written key by key, a write saving only while the key holds what the last read answered', () => {
         const store = installHeadlessStore({ legacy: '{"theme":"dark"}' });
-        const { legacyStorage } = loadStorage();
+        const { legacyStorage } = loadHeadlessStorage();
 
         expect(legacyStorage.readRaw()).toBe('{"theme":"dark"}');
         expect(legacyStorage.writeRaw('{"theme":"light"}')).toBe(true);
@@ -159,7 +171,7 @@ describe('settings.json in the Android background service (keyed access)', () =>
 
     test('a blob the other writer changed since the read is overwritten whole: nothing of it is merged in', () => {
         const store = installHeadlessStore({ legacy: '{"theme":"dark","language":"en"}' });
-        const { legacyStorage } = loadStorage();
+        const { legacyStorage } = loadHeadlessStorage();
         legacyStorage.readRaw();
         store.legacy = '{"theme":"dark","language":"lv"}';
 
@@ -169,7 +181,7 @@ describe('settings.json in the Android background service (keyed access)', () =>
 
     test('a write the store keeps declining is a failed write, said in the log', () => {
         const store = installHeadlessStore({ legacy: '{"theme":"dark"}' });
-        const { legacyStorage } = loadStorage();
+        const { legacyStorage } = loadHeadlessStorage();
         legacyStorage.readRaw();
         store.compareAndWriteKey = () => false;
 
@@ -179,7 +191,7 @@ describe('settings.json in the Android background service (keyed access)', () =>
 
     test('a blob that was not there when read is written as a change of nothing', () => {
         const store = installHeadlessStore();
-        const { legacyStorage } = loadStorage();
+        const { legacyStorage } = loadHeadlessStorage();
         expect(legacyStorage.readRaw()).toBeNull();
 
         expect(legacyStorage.writeRaw('{"a":1}')).toBe(true);
@@ -190,7 +202,7 @@ describe('settings.json in the Android background service (keyed access)', () =>
         const store = installHeadlessStore();
         delete store.readKey;
         delete store.compareAndWriteKey;
-        const { legacyStorage } = loadStorage();
+        const { legacyStorage } = loadHeadlessStorage();
 
         expect(() => legacyStorage.readRaw()).toThrow('no bridge to read the settings through');
     });

@@ -11,14 +11,14 @@
 
 import type { PlatformWipe } from '../../platform/port';
 
-type CapacitorPreferencesModule = typeof import('../../settings/capacitorPreferences');
+type CapacitorPreferencesModule = typeof import('./capacitorPreferences');
 
 // Reached at call time: the setup file loads the helpers that import this
 // family, so an import-time module graph lands in the setup's registry before
 // a test file registers its own mocks, and the test's factory would lose to
 // the cached module (platforms/node/index.ts states the reason in full).
 const capacitorPreferences = (): CapacitorPreferencesModule =>
-    require('../../settings/capacitorPreferences') as CapacitorPreferencesModule;
+    require('./capacitorPreferences') as CapacitorPreferencesModule;
 
 const createWebviewWipe = (): Omit<PlatformWipe, 'nativeWipe'> => ({
     clearSession: null,

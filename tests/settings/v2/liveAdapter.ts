@@ -13,6 +13,7 @@
  */
 
 import { V1_KEY_RENAMES } from '../../../src/ts/settings/importV1';
+import { installHeadlessTestPlatform, restoreNodeTestPlatform } from '../../helpers/platform';
 import { invalid } from '../../helpers/invalid';
 
 import type * as joinModule from '../../../src/ts/services/joinChallenges/settingsResolution';
@@ -94,6 +95,9 @@ const loadModules = (): Modules => {
     }));
     let modules: Modules | null = null;
     jest.isolateModules(() => {
+        // The live reader is the background service's: its storage transport is the headless family's, over the
+        // AndroidHeadlessStore global the reader points at this blob with.
+        installHeadlessTestPlatform();
         modules = {
             settings: require('../../../src/ts/settings') as typeof settingsModule,
             join: require('../../../src/ts/services/joinChallenges/settingsResolution') as typeof joinModule,
@@ -110,6 +114,7 @@ const loadModules = (): Modules => {
 const releaseLive = () => {
     delete headless.__GS_HEADLESS__;
     delete headless.AndroidHeadlessStore;
+    restoreNodeTestPlatform();
     jest.useRealTimers();
 };
 

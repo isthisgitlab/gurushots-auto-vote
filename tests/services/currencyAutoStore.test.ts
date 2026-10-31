@@ -11,7 +11,7 @@ const { createAutoSpendLedger, createMemoryAutoSpendLedger } =
 import type { AutoSpendRecord } from '../../src/ts/types/stores';
 import { invalid } from '../helpers/invalid';
 import { isNumber, isRecordOf, isShape, parseJsonAs } from '../helpers/parseJson';
-import { installWebviewTestPlatform } from '../helpers/platform';
+import { installHeadlessTestPlatform, installWebviewTestPlatform } from '../helpers/platform';
 
 const rawStore = (initial: string | null) => {
     let raw = initial;
@@ -373,13 +373,9 @@ describe('flushing the ledger on teardown', () => {
 
 describe('whether the ledger of the real store can be trusted', () => {
     const g = globalThis as typeof globalThis & {
-        Capacitor?: unknown;
-        __GS_HEADLESS__?: boolean;
         AndroidHeadlessStore?: unknown;
     };
     afterEach(() => {
-        delete g.Capacitor;
-        delete g.__GS_HEADLESS__;
         delete g.AndroidHeadlessStore;
     });
     const load = () => {
@@ -391,7 +387,7 @@ describe('whether the ledger of the real store can be trusted', () => {
     };
 
     test('on the service a read that threw is not a count of none', async () => {
-        g.__GS_HEADLESS__ = true;
+        installHeadlessTestPlatform();
         g.AndroidHeadlessStore = {
             read: () => null,
             write: jest.fn(),
@@ -407,7 +403,7 @@ describe('whether the ledger of the real store can be trusted', () => {
     });
 
     test('on the service a write the bridge refused is not a reserved fill', async () => {
-        g.__GS_HEADLESS__ = true;
+        installHeadlessTestPlatform();
         g.AndroidHeadlessStore = {
             read: () => null,
             write: jest.fn(),
@@ -427,7 +423,7 @@ describe('whether the ledger of the real store can be trusted', () => {
             stored = data;
             return true;
         });
-        g.__GS_HEADLESS__ = true;
+        installHeadlessTestPlatform();
         // The window saves a fill of its own between the service's read of the key and its save.
         let reads = 0;
         g.AndroidHeadlessStore = {
@@ -450,7 +446,7 @@ describe('whether the ledger of the real store can be trusted', () => {
     });
 
     test('in the app window a cache that was never filled is not a count of none', () => {
-        g.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android' };
+        installWebviewTestPlatform();
         const ledger = load();
         expect(ledger.fills(1)).toBe(Number.POSITIVE_INFINITY);
     });

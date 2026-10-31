@@ -13,6 +13,8 @@ let storeData: string | null = null;
 const mockInitializeAsync = jest.fn(async () => {});
 const mockFlushPendingWrites = jest.fn(async () => {});
 jest.mock('../../src/ts/settings/storage', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/settings/storage')>('../../src/ts/settings/storage'),
     createJsonStore: () => ({
         readRaw: () => storeData,
         writeRaw: (data: string) => {

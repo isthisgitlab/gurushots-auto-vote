@@ -28,11 +28,10 @@ import type * as storageModule from '../../src/ts/settings/storage';
 import type * as settingsModule from '../../src/ts/settings';
 import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
 import loggerModule = require('../../src/ts/logger');
+import { installHeadlessTestPlatform, installWebviewTestPlatform } from '../helpers/platform';
 import { invalid } from '../helpers/invalid';
 
 const g = globalThis as typeof globalThis & {
-    Capacitor?: { isNativePlatform: () => boolean };
-    __GS_HEADLESS__?: boolean;
     AndroidHeadlessStore?: AndroidHeadlessStore;
 };
 // The Preferences key an unusable value is kept under: the key, the suffix and the time it was set aside.
@@ -48,16 +47,17 @@ const loadStorage = () => {
 };
 
 afterEach(() => {
-    delete g.Capacitor;
-    delete g.__GS_HEADLESS__;
     delete g.AndroidHeadlessStore;
     jest.clearAllMocks();
     mockPreferences.keys.mockResolvedValue({ keys: [] });
 });
 
 describe('a settings write in the Android background service', () => {
+    beforeEach(() => {
+        installHeadlessTestPlatform();
+    });
+
     const withBridge = (write: AndroidHeadlessStore['write']) => {
-        g.__GS_HEADLESS__ = true;
         g.AndroidHeadlessStore = { read: () => null, write };
     };
 
@@ -83,7 +83,6 @@ describe('a settings write in the Android background service', () => {
         ['refused', ' (refused)'],
         ['', ''],
     ] as const)('a refusal the bridge explains (%j) says why in the log', (refusal, suffix) => {
-        g.__GS_HEADLESS__ = true;
         g.AndroidHeadlessStore = {
             read: () => null,
             write: jest.fn(() => false as unknown as void),
@@ -106,7 +105,6 @@ describe('a settings write in the Android background service', () => {
     });
 
     test('with no bridge there is nothing to refuse the write', () => {
-        g.__GS_HEADLESS__ = true;
         const { storage } = loadStorage();
 
         expect(storage.writeRaw('{}')).toBe(true);
@@ -128,7 +126,6 @@ describe('a settings write in the Android background service', () => {
     });
 
     test('cannot set an unusable value aside, so it reports a failure', () => {
-        g.__GS_HEADLESS__ = true;
         const { storage } = loadStorage();
 
         expect(storage.quarantineRaw('{broken')).toEqual({
@@ -138,14 +135,13 @@ describe('a settings write in the Android background service', () => {
     });
 
     test('the location of the settings is the preference key', () => {
-        g.__GS_HEADLESS__ = true;
         expect(loadStorage().storage.location()).toBe('gurushots-config');
     });
 });
 
 describe('an unusable settings value in the Android app (Preferences)', () => {
     beforeEach(() => {
-        g.Capacitor = { isNativePlatform: () => true };
+        installWebviewTestPlatform();
     });
 
     test('is copied to the _corrupt key, removed from its own, and the cache is emptied', async () => {

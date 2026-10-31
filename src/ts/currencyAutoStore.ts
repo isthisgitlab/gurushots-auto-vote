@@ -26,7 +26,7 @@ import * as logger from './logger';
 import { createJsonStore } from './settings/storage';
 import { isPlainObject } from './plainObject';
 import { fileErrorMessage } from './errorMessage';
-import { storeLoaded, throughStore } from './settings/storeTransport';
+import { throughStore } from './settings/storage';
 import { createMemoryRawJsonStore } from './parseUntrustedJson';
 import { platform } from './platform/port';
 
@@ -100,7 +100,7 @@ const parseRecords = (raw: string | null): Record<string, unknown> | null => {
  * means the count is unknown, and no fill is spent against it — nor is it written over, so what is there stays for
  * whoever can read it. A record older than the age a challenge lives to does not count.
  *
- * @param isLoaded - whether the store holds what is saved (see storeLoaded)
+ * @param isLoaded - whether the store holds what is saved (see the storage member's loaded in platform/port.ts)
  * @param recovery - what the user can do about a ledger that cannot be trusted, said in the log
  */
 const createAutoSpendLedger = (
@@ -246,7 +246,11 @@ const createAutoSpendLedger = (
 /** Ledger over an in-memory store — mock mode, tests. */
 const createMemoryAutoSpendLedger = () => createAutoSpendLedger(createMemoryRawJsonStore());
 
-const autoSpendLedger = createAutoSpendLedger(autoSpendStore, () => storeLoaded(AUTO_SPEND_KEY), recoveryStep);
+const autoSpendLedger = createAutoSpendLedger(
+    autoSpendStore,
+    () => platform().storage.loaded(AUTO_SPEND_KEY),
+    recoveryStep,
+);
 
 export const initializeAutoSpendAsync = autoSpendStore.initializeAsync;
 // The window flushes on teardown without waiting on the answer: a write that did not persist is logged here, not left

@@ -158,3 +158,11 @@ export interface AndroidHeadlessStore {
      */
     compareAndWriteKey?(key: string, expected: string, data: string): boolean;
 }
+
+/**
+ * The native side of one settings key: read it (the text the next write is a change of), and save a change of it.
+ * One settings key reached through the bridge's keyed calls (`readKey` / `compareAndWriteKey`) takes this shape, with
+ * the semantics of the dedicated `read` / `write` pair: a write saves only while the key still holds what the latest
+ * read of it answered.
+ */
+export type HeadlessSettingsBridge = Pick<AndroidHeadlessStore, 'read' | 'write' | 'lastWriteRefusal'>;

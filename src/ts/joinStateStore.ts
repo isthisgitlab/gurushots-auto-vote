@@ -22,10 +22,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { randomBytes } from 'node:crypto';
-import * as runtime from './runtime';
+import { platform } from './platform/port';
 import * as logger from './logger';
 import { createJsonStore, getSettingsPath } from './settings/storage';
-import { storeLoaded } from './settings/storeTransport';
 import { errorMessage } from './errorMessage';
 import { isPlainObject } from './plainObject';
 import { sanitizeLogString } from './logger/sanitize';
@@ -49,11 +48,13 @@ const joinStateStore = {
     ...joinStateFile,
     readRaw: (): string | null => {
         const raw = joinStateFile.readRaw();
-        if (!storeLoaded(JOIN_STATE_KEY)) throw new Error('the saved claims have not loaded');
+        if (!platform().storage.loaded(JOIN_STATE_KEY)) throw new Error('the saved claims have not loaded');
         return raw;
     },
     updateThrough: (update: (current: string | null) => string | null) =>
-        storeLoaded(JOIN_STATE_KEY) ? joinStateFile.updateThrough(update) : Promise.resolve('failed' as const),
+        platform().storage.loaded(JOIN_STATE_KEY)
+            ? joinStateFile.updateThrough(update)
+            : Promise.resolve('failed' as const),
 };
 
 // A held lock whose file has not been touched for this long is treated as stale (its owner crashed) and taken over.
@@ -262,9 +263,10 @@ const acquireUnlockLock = (
     id: string | number,
     { category = 'join', internal = false }: { category?: 'join' | 'scenario' | 'settings'; internal?: boolean } = {},
 ): UnlockLock => {
-    // Only the real-fs platforms (Electron/CLI) can run two processes against one
-    // account; on Android the claims are changed by the native compare-and-write instead (see joinStateFile).
-    if (runtime.isCapacitor() || runtime.isHeadlessService()) return NO_LOCK;
+    // Only the platforms with a file lock (`lockPolicy: 'file'` — the real-fs platforms, Electron/CLI) can run two
+    // processes against one account; on Android the claims are changed by the native compare-and-write instead
+    // (see joinStateFile).
+    if (platform().storage.lockPolicy === 'none') return NO_LOCK;
 
     const lockPath = lockPathFor(id, internal);
     const token = `${process.pid}-${randomBytes(8).toString('hex')}`;

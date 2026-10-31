@@ -1,88 +1,130 @@
 /**
- * The node family's storage member: the fs transport of the JSON stores
- * (Electron, CLI, the web server). Every member is the body the storage
- * branches select on a desktop — a plain read at the store's file path, the
- * owner-only or atomic write, and the file's corrupt backup. There is no
- * hydrate, no queue and no native bridge, so those members answer null or
- * their no-op, the way the branches do off Capacitor and headless.
+ * The node family's storage member: the fs transport of the generic JSON
+ * stores and the settings files (Electron, CLI, the web server). `jsonStore`
+ * and `settingsFile` build one transport object per store over the real file
+ * system: the plain read at the store's file path, the owner-only or atomic
+ * write, the stale-temp sweep of the file, and its corrupt backup. There is
+ * no cache, no queue and no native bridge, so a change is made and saved in
+ * one step (core's writeNow over this transport's own operations), reads
+ * cannot fail, and the hydrate and flush members are no-ops: the file is
+ * what is stored.
  *
  * Everything wrapped is reached at call time: the node project's setup file
  * loads the test helpers that import this family, so a module graph loaded at
  * import time would land in the setup's registry — the tests/setup.ts
  * fs/path mocks included — before a test file registers its own, and the
  * test's factory would lose to the cached module (platforms/node/index.ts
- * states the reason in full). The wrapped settings-side write helpers
- * (settings/atomicWrite, settings/ownerOnlyWrite, settings/settingsFileNode)
- * are part of that graph, and Phase 3 moves their bodies into this family
- * and retires the indirection.
+ * states the reason in full).
  */
 
-import type { PlatformStorage } from '../../platform/port';
+import type {
+    JsonStoreTransport,
+    PlatformStorage,
+    SettingsFileTransport,
+    SettingsFileWiring,
+    SettingsStoreRef,
+} from '../../platform/port';
 
-type AtomicWriteModule = typeof import('../../settings/atomicWrite');
-type OwnerOnlyWriteModule = typeof import('../../settings/ownerOnlyWrite');
-type SettingsFileNodeModule = typeof import('../../settings/settingsFileNode');
+type AtomicWriteModule = typeof import('./atomicWrite');
+type OwnerOnlyWriteModule = typeof import('./ownerOnlyWrite');
+type SettingsFileNodeModule = typeof import('./settingsFileNode');
+type JsonStoreModule = typeof import('../../settings/jsonStore');
 type FsModule = typeof import('node:fs');
 
 // See the header: the wrapped modules, reached at call time.
-const atomicWrite = (): AtomicWriteModule => require('../../settings/atomicWrite') as AtomicWriteModule;
-const ownerOnlyWrite = (): OwnerOnlyWriteModule => require('../../settings/ownerOnlyWrite') as OwnerOnlyWriteModule;
-const settingsFileNode = (): SettingsFileNodeModule =>
-    require('../../settings/settingsFileNode') as SettingsFileNodeModule;
+const atomicWrite = (): AtomicWriteModule => require('./atomicWrite') as AtomicWriteModule;
+const ownerOnlyWrite = (): OwnerOnlyWriteModule => require('./ownerOnlyWrite') as OwnerOnlyWriteModule;
+const settingsFileNode = (): SettingsFileNodeModule => require('./settingsFileNode') as SettingsFileNodeModule;
+const jsonStore = (): JsonStoreModule => require('../../settings/jsonStore') as JsonStoreModule;
 const nodeFs = (): FsModule => require('node:fs') as FsModule;
 
-// The plain read of one store file (jsonStore readRaw / settingsFileMethods readHere on a desktop).
+// The plain read of one store file (jsonStore readRaw / the settings file's readHere on a desktop).
 const readStoreFile = (file: string): string | null => {
     const fs = nodeFs();
     if (!fs.existsSync(file)) return null;
     return fs.readFileSync(file, 'utf8');
 };
 
-// The time a value was set aside, as part of the name it is kept under (settingsFileMethods setAsideStamp).
+// The time a value was set aside, as part of the name it is kept under.
 const setAsideStamp = (): string => new Date().toISOString().replace(/[:.]/g, '-');
 
-const createNodeStorage = (): PlatformStorage => {
-    // The stale-temp sweep of a store's file, once per file path: before the
-    // first read or write for a `read-write` store (jsonStore's sweepOnce),
-    // before the first write only for a `write` store (the settings file's).
-    // Reached at call time with the wrapped helpers.
+// The stale-temp sweep of a store's file, once per file path: before the first read or write for a `read-write`
+// store (the atomic createJsonStore rule — only an atomic store sweeps), before the first write only for a
+// `write` store (the settings file's rule, never on a read).
+const sweeper = () => {
     const swept = new Set<string>();
-    const sweepOnce = (file: string): void => {
+    return (file: string): void => {
         if (swept.has(file)) return;
         swept.add(file);
         atomicWrite().sweepStaleTemps(file);
     };
+};
+
+// The generic JSON store's fs transport. `flags` carries the headless-side
+// strictness and sharing, which have no fs answer: a write that fails throws,
+// and two processes take the settings file lock.
+const jsonStoreTransport = (
+    ref: SettingsStoreRef,
+    _flags: { strict: boolean; shared: boolean },
+): JsonStoreTransport => {
+    // The sweep and the atomic replacement ride the same fact: `read-write` is the atomic store's sweep rule.
+    const atomic = ref.sweep === 'read-write';
+    const sweepOnce = sweeper();
+    const readRaw = (): string | null => {
+        if (atomic) sweepOnce(ref.filePath());
+        return readStoreFile(ref.filePath());
+    };
+    const writeRaw = (data: string): void => {
+        if (ref.sweep !== 'none') sweepOnce(ref.filePath());
+        const write = atomic ? atomicWrite().writeAtomicOwnerOnly : ownerOnlyWrite().writeOwnerOnly;
+        write(ref.filePath(), data);
+    };
     return {
-        readRaw: (store) => {
-            // read-write is the createJsonStore rule: the sweep runs before the first read too. The settings
-            // file's rule (`write`) never sweeps on a read.
-            if (store.sweep === 'read-write') sweepOnce(store.filePath());
-            return readStoreFile(store.filePath());
-        },
-        writeRaw: (store, data, atomic) => {
-            if (store.sweep !== 'none') sweepOnce(store.filePath());
-            const write = atomic ? atomicWrite().writeAtomicOwnerOnly : ownerOnlyWrite().writeOwnerOnly;
-            write(store.filePath(), data);
-        },
-        writeIfAbsent: (store, data) => settingsFileNode().writeIfAbsentOnDisk(store.filePath(), data),
-        location: (store) => store.filePath(),
-        hasQuarantined: (store) => settingsFileNode().hasQuarantinedOnDisk(store.filePath),
-        quarantineRaw: (store, _raw) => {
-            const file = store.filePath();
-            return settingsFileNode().renameToCorruptBackup(file, `${file}.corrupt-${setAsideStamp()}`);
-        },
-        // A desktop read is the file itself: no boot hydration, no re-read, no read that can fail, no
-        // queue to flush, and no native bridge or compare-and-write to reach.
-        storedKey: null,
-        preferences: null,
-        headlessStore: () => undefined,
-        cas: null,
-        sharedUpdate: null,
-        readFailed: () => false,
-        loaded: () => true,
-        flushed: async () => undefined,
-        lockPolicy: 'file',
+        readRaw,
+        writeRaw,
+        hydrate: async () => undefined,
+        reread: async () => true,
+        updateNow: (update) => jsonStore().writeNow(ref.prefKey, { readRaw, writeRaw }, update),
+        updateThrough: async (update) => jsonStore().writeNow(ref.prefKey, { readRaw, writeRaw }, update),
+        peekStored: async () => readRaw(),
+        flush: async () => undefined,
+        discard: () => undefined,
     };
 };
+
+// The settings file's fs transport. `wiring` carries the Android-side rebase,
+// bridge choice and dropped-save reporting, which a plain file has no use for.
+const settingsFileTransport = (ref: SettingsStoreRef, _wiring: SettingsFileWiring): SettingsFileTransport => {
+    const sweepOnce = sweeper();
+    return {
+        readRaw: () => readStoreFile(ref.filePath()),
+        write: (data) => {
+            sweepOnce(ref.filePath());
+            atomicWrite().writeAtomicOwnerOnly(ref.filePath(), data);
+            return { ok: true };
+        },
+        writeIfAbsent: (data) => settingsFileNode().writeIfAbsentOnDisk(ref.filePath(), data),
+        location: () => ref.filePath(),
+        isLoaded: () => true,
+        isPersisted: () => true,
+        hasQuarantined: () => settingsFileNode().hasQuarantinedOnDisk(ref.filePath),
+        quarantineRaw: (_raw) => {
+            const file = ref.filePath();
+            return settingsFileNode().renameToCorruptBackup(file, `${file}.corrupt-${setAsideStamp()}`);
+        },
+        hydrate: async () => undefined,
+        flush: async () => undefined,
+        discard: async () => undefined,
+    };
+};
+
+const createNodeStorage = (): PlatformStorage => ({
+    jsonStore: jsonStoreTransport,
+    settingsFile: settingsFileTransport,
+    // A desktop read is the file itself: no read can fail, so a store that other work trusts always holds what is saved.
+    loaded: () => true,
+    // Two processes share the user-data directory, so a change is made under the settings file lock.
+    lockPolicy: 'file',
+});
 
 export { createNodeStorage };

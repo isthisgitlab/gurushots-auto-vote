@@ -13,6 +13,8 @@ import type { LibraryPhoto, MemberIdentity } from '../../src/ts/types/gurushots'
 import { invalid } from '../helpers/invalid';
 
 jest.mock('../../src/ts/settings/storage', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/settings/storage')>('../../src/ts/settings/storage'),
     createJsonStore: () => ({
         readRaw: () => null,
         writeRaw: () => {},

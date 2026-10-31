@@ -53,8 +53,8 @@
 
 import type { RawJsonStore, ScenarioEpoch, ScenarioState } from './types/stores';
 import * as logger from './logger';
+import { platform } from './platform/port';
 import { createJsonStore } from './settings/storage';
-import { storeLoaded } from './settings/storeTransport';
 import { fileErrorMessage } from './errorMessage';
 import { createMemoryRawJsonStore } from './parseUntrustedJson';
 import { acquireUnlockLock } from './joinStateStore';
@@ -88,7 +88,8 @@ const scenarioResetsStore = createJsonStore({
  * because nothing is saved, and a plan restarted from nothing could spend again. Everywhere else the stores are the
  * files themselves.
  */
-const scenarioStateLoaded = (): boolean => storeLoaded(STATE_KEY) && storeLoaded(RESETS_KEY);
+const scenarioStateLoaded = (): boolean =>
+    platform().storage.loaded(STATE_KEY) && platform().storage.loaded(RESETS_KEY);
 
 /**
  * A fresh record for a challenge entering `scenario` at its start phase.

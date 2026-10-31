@@ -1,17 +1,16 @@
 /**
- * The per-file state of a settings file (`createSettingsFile`, storage.ts, makes one per call) and the only module
- * its write protocol may be changed from: every assignment to `writeSerial`, `writeGeneration`, `cachedJson` and
- * `persistedJson` happens here, as one of the named transitions below, each doc comment stating the invariant it
- * maintains (two settings files exist, so none of the state may sit at module level). The consumers — the factory
- * bodies in storage.ts and the helpers in settingsFileMethods.ts, settingsFileCapacitor.ts and settingsFileNode.ts —
- * read the fields and change them only by calling a transition. The module is computation only: no IO, no imports at
- * all (in particular not storage.ts), so a test's `jest.mock('settings/storage')` keeps ruling over every consumer.
+ * The per-file state of a settings file (the webview family's storage makes one per `settingsFile` call) and the only
+ * module its write protocol may be changed from: every assignment to `writeSerial`, `writeGeneration`, `cachedJson`
+ * and `persistedJson` happens here, as one of the named transitions below, each doc comment stating the invariant it
+ * maintains (two settings files exist, so none of the state may sit at module level). The consumers — the webview
+ * family's store.ts — read the fields and change them only by calling a transition. The module is computation only:
+ * no IO, no imports at all (in particular not settings/storage), so a test's `jest.mock('settings/storage')` keeps
+ * ruling over every consumer.
  */
 
 /**
- * The per-file state `createSettingsFile` makes one of per call: the factory bodies and the helpers in
- * settingsFileMethods.ts / settingsFileCapacitor.ts take it as a parameter, and its write-protocol fields change
- * only through the transitions below.
+ * The per-file state the webview family makes one of per settings file: its `settingsFile` bodies take it as a
+ * parameter, and its write-protocol fields change only through the transitions below.
  */
 export type SettingsFileState = {
     /** Set by initializeAsync only; a write must not flip it, or hydration would be skipped. */
@@ -22,20 +21,16 @@ export type SettingsFileState = {
     hasBackupKey: boolean;
     /** What the app window knows Preferences to hold for the key: what it read, or saved last. */
     persistedJson: string | null;
-    /** The text the Android service's JS last read from the native store: the text its next write is a change of. */
-    headlessBase: string | null;
     /**
      * Serializes Capacitor write-behind so concurrent full-blob writes apply in issue order — an earlier write can
      * never resolve after a later one and clobber it. flush() awaits the tail so callers can guarantee durability
-     * (e.g. before the WebView is suspended). The chain itself stays in the factory body.
+     * (e.g. before the WebView is suspended). The chain itself stays in the transport body.
      */
     writeChain: Promise<void>;
     /** Bumped by discard: a queued write finds the number changed on its turn and puts nothing down. */
     writeGeneration: number;
     /** Bumped by every write and by moving the stored value aside: a write that finds it moved on is not the latest. */
     writeSerial: number;
-    /** Temp files an earlier crash left beside the file are swept on the first write. */
-    swept: boolean;
 };
 
 /**

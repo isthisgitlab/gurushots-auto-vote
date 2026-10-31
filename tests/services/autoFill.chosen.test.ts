@@ -23,6 +23,8 @@ jest.mock('../../src/ts/services/semantic/lexicon', () => ({
 }));
 // photoStats persists its cache through this store; keep it in memory.
 jest.mock('../../src/ts/settings/storage', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/settings/storage')>('../../src/ts/settings/storage'),
     createJsonStore: () => ({
         readRaw: () => null,
         writeRaw: () => {},

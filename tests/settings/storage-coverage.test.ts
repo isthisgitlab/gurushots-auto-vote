@@ -23,12 +23,12 @@ import type * as storageModule from '../../src/ts/settings/storage';
 import type { GetOptions, GetResult, SetOptions } from '@capacitor/preferences';
 import type { App } from 'electron';
 import { invalid } from '../helpers/invalid';
-import { installTestPlatform, restoreNodeTestPlatform } from '../helpers/platform';
-
-const g = globalThis as typeof globalThis & {
-    Capacitor?: { isNativePlatform: () => boolean; getPlatform: () => string };
-    __GS_HEADLESS__?: boolean;
-};
+import {
+    installHeadlessTestPlatform,
+    installTestPlatform,
+    installWebviewTestPlatform,
+    restoreNodeTestPlatform,
+} from '../helpers/platform';
 
 type ElectronAppDouble = Pick<App, 'getPath' | 'isPackaged'>;
 
@@ -82,10 +82,19 @@ const loadStorage = (
         electronApp = null,
         sourceCode = true,
         noElectron = false,
-    }: { electronApp?: ElectronAppDouble | null; sourceCode?: boolean; noElectron?: boolean } = {},
-    fn: (ctx: StorageCtx) => void,
-): void => {
-    jest.isolateModules(() => {
+        family = 'node',
+    }: {
+        electronApp?: ElectronAppDouble | null;
+        sourceCode?: boolean;
+        noElectron?: boolean;
+        /** The platform family the storage transport is built over (the desktop's, unless the case says otherwise). */
+        family?: 'node' | 'webview' | 'headless';
+    } = {},
+    fn: (ctx: StorageCtx) => Promise<void> | void,
+): Promise<void> => {
+    // Awaited inside the isolation: the family transports reach their wrapped modules (the logger included) at call
+    // time, and a continuation after the callback would resolve them outside this registry.
+    return jest.isolateModulesAsync(async () => {
         const electronFactory = jest.fn((): unknown => {
             if (noElectron) throw new Error('electron must not be loaded outside Electron');
             return electronApp ? { app: electronApp } : {};
@@ -102,13 +111,19 @@ const loadStorage = (
         logger.withCategory.mockReturnValue(invalid(categoryLogger));
         const runtime = require('../../src/ts/runtime') as typeof runtimeModule;
         jest.spyOn(runtime, 'isElectron').mockReturnValue(electronApp !== null);
-        const family =
-            require('../../src/ts/platforms/node/paths') as typeof import('../../src/ts/platforms/node/paths');
-        const paths = family.createNodePaths();
-        paths.getUserDataDir = (appName: string) => `/home/u/.config/${appName}`;
-        installTestPlatform({ paths });
+        if (family === 'webview') {
+            installWebviewTestPlatform();
+        } else if (family === 'headless') {
+            installHeadlessTestPlatform();
+        } else {
+            const pathsFamily =
+                require('../../src/ts/platforms/node/paths') as typeof import('../../src/ts/platforms/node/paths');
+            const paths = pathsFamily.createNodePaths();
+            paths.getUserDataDir = (appName: string) => `/home/u/.config/${appName}`;
+            installTestPlatform({ paths });
+        }
         const mod = require('../../src/ts/settings/storage') as typeof storageModule;
-        fn({ mod, fs, categoryLogger, runtime, electronFactory });
+        await fn({ mod, fs, categoryLogger, runtime, electronFactory });
         restoreNodeTestPlatform();
     });
 };
@@ -122,8 +137,6 @@ describe('settings storage — edge cases', () => {
     });
 
     afterEach(() => {
-        delete g.Capacitor;
-        delete g.__GS_HEADLESS__;
         jest.dontMock('electron');
         jest.dontMock('node:sea');
     });
@@ -145,11 +158,10 @@ describe('settings storage — edge cases', () => {
         });
 
         test('hydrates the cache once from Preferences on Capacitor', async () => {
-            g.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android' };
             mockPrefGet.mockImplementation(({ key }) =>
                 Promise.resolve({ value: key === 'gurushots-config' ? '{"token":"t"}' : null }),
             );
-            loadStorage({}, async ({ mod }) => {
+            loadStorage({ family: 'webview' }, async ({ mod }) => {
                 expect(mod.storage.readRaw()).toBeNull();
                 await mod.initializeAsync();
                 // The configuration and the 1.x settings file; the copies set aside are found among the keys.
@@ -170,9 +182,8 @@ describe('settings storage — edge cases', () => {
         });
 
         test('a Preferences read failure is logged, leaves an empty cache and still marks initialized', async () => {
-            g.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android' };
             mockPrefGet.mockRejectedValue(new Error('bridge down'));
-            loadStorage({}, async ({ mod, categoryLogger }) => {
+            loadStorage({ family: 'webview' }, async ({ mod, categoryLogger }) => {
                 await expect(mod.initializeAsync()).resolves.toBeUndefined();
                 expect(categoryLogger.error).toHaveBeenCalledWith(
                     'Capacitor preferences read failed:',
@@ -189,9 +200,8 @@ describe('settings storage — edge cases', () => {
 
     describe('createJsonStore.initializeAsync', () => {
         test('a Preferences read failure is logged with the store key and yields null', async () => {
-            g.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android' };
             mockPrefGet.mockRejectedValue(new Error('nope'));
-            loadStorage({}, async ({ mod, categoryLogger }) => {
+            loadStorage({ family: 'webview' }, async ({ mod, categoryLogger }) => {
                 const store = mod.createJsonStore({ fileName: 'x.json', prefKey: 'gurushots-x' });
 
                 await store.initializeAsync();
@@ -206,9 +216,7 @@ describe('settings storage — edge cases', () => {
         });
 
         test('is a no-op on the headless service even when Capacitor is present', async () => {
-            g.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android' };
-            g.__GS_HEADLESS__ = true;
-            loadStorage({}, async ({ mod }) => {
+            loadStorage({ family: 'headless' }, async ({ mod }) => {
                 const store = mod.createJsonStore({ fileName: 'x.json', prefKey: 'gurushots-x' });
                 await store.initializeAsync();
                 expect(mockPrefGet).not.toHaveBeenCalled();
@@ -521,13 +529,13 @@ describe('settings storage — edge cases', () => {
             });
         });
 
-        test('getEnvironmentInfo without Electron: built only when not running from source', () => {
-            loadStorage({}, ({ mod }) => {
+        test('getEnvironmentInfo without Electron: built only when not running from source', async () => {
+            await loadStorage({}, ({ mod }) => {
                 const fromSource = mod.getEnvironmentInfo();
                 expect(fromSource.isElectronPackaged).toBe(false);
                 expect(fromSource.isBuiltApp).toBe(false);
             });
-            loadStorage({ sourceCode: false }, ({ mod }) => {
+            await loadStorage({ sourceCode: false }, ({ mod }) => {
                 const built = mod.getEnvironmentInfo();
                 expect(built.isElectronPackaged).toBe(false);
                 expect(built.isBuiltApp).toBe(true);

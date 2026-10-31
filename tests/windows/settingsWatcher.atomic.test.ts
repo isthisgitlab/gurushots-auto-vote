@@ -29,12 +29,12 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type * as settingsWatcherModule from '../../src/ts/windows/settingsWatcher';
-import type * as atomicWriteModule from '../../src/ts/settings/atomicWrite';
+import type * as atomicWriteModule from '../../src/ts/platforms/node/atomicWrite';
 import { canWatchDirectory } from '../helpers/canWatchDirectory';
 import { invalid } from '../helpers/invalid';
 
 const { watchSettingsFile } = require('../../src/ts/windows/settingsWatcher') as typeof settingsWatcherModule;
-const { writeAtomicOwnerOnly } = require('../../src/ts/settings/atomicWrite') as typeof atomicWriteModule;
+const { writeAtomicOwnerOnly } = require('../../src/ts/platforms/node/atomicWrite') as typeof atomicWriteModule;
 
 const until = async (condition: () => boolean, ms = 4000) => {
     const deadline = Date.now() + ms;

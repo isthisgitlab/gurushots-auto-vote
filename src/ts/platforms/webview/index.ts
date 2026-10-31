@@ -9,9 +9,9 @@
  * every part is required, so a shell that forgets one fails to compile: the
  * native services call services/NativeAutovoteBridge.ts and its siblings
  * (shell modules a family cannot import), the native wipe calls the
- * AutoVoteBackground plugin, the compare-and-write goes to the native bridge,
+ * AutoVoteBackground plugin, the compare-and-write goes to the native bridge
+ * and is what the storage transport saves shared keys through (store.ts),
  * and the windows are the shell's broadcast and reload (bridge/capacitor.ts).
- * The storage transport is a placeholder until Phase 3 step 7 (see store.ts).
  *
  * The modules the family delegates to are reached at call time, never at
  * load: the node project's setup file loads the test helpers that import
@@ -33,10 +33,9 @@ import type { Platform, PlatformCas, PlatformNative, PlatformWindows, PlatformWi
 type WebviewNativeParts = {
     /**
      * The native compare-and-write of one Preferences key, null where the
-     * shell has none. Not read until Phase 3 step 7 — the storage transport
-     * is a placeholder until then (store.ts) — and required now so a shell
-     * that forgets it fails to compile; step 7 wires it into the storage it
-     * restores.
+     * shell has none. The storage transport saves shared keys through it
+     * (store.ts), and it is required so a shell that forgets it fails to
+     * compile.
      */
     cas: PlatformCas | null;
     /** The native plugin's wipe (AutoVoteBackground wipeLocalData). */
@@ -82,7 +81,7 @@ const createWebviewPlatform = (parts: WebviewNativeParts): Platform => ({
             return webviewHttp().getCapacitorHttpAdapter();
         },
     },
-    storage: createWebviewStorage(),
+    storage: createWebviewStorage(parts.cas),
     paths: createWebviewPaths(),
     assets: createWebviewAssets(),
     wipe: { ...createWebviewWipe(), nativeWipe: parts.nativeWipe },

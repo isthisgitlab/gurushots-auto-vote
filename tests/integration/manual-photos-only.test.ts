@@ -10,6 +10,8 @@
 
 jest.mock('../../src/ts/settings');
 jest.mock('../../src/ts/settings/storage', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/settings/storage')>('../../src/ts/settings/storage'),
     createJsonStore: () => ({
         readRaw: () => null,
         writeRaw: () => {},

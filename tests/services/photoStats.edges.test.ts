@@ -8,6 +8,8 @@
 // Store whose read/write behaviour each test controls.
 const store: { read: () => string | null; write: (data: string) => void } = { read: () => null, write: () => {} };
 jest.mock('../../src/ts/settings/storage', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/settings/storage')>('../../src/ts/settings/storage'),
     createJsonStore: () => ({
         readRaw: () => store.read(),
         writeRaw: (data: string) => store.write(data),

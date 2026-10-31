@@ -2,13 +2,13 @@
  * The Capacitor page's platform module: it installs the webview family with
  * the shell's plugin-backed parts when it loads. The family is mocked to
  * record the parts the module passes, so the parts are checked directly —
- * the installed storage is a throwing stub until Phase 3 step 7, so nothing
- * reaches it through the installed platform. The bridge is mocked; the
- * native services and the wipe are real: the parts must be the plugin-backed
- * code, and the plugin is a stub on the Capacitor global. The installed
- * object is captured once: the setup file's afterEach reinstalls the node
- * test platform on the port, so the tests read the captured object, not the
- * slot.
+ * the storage transport the family builds is real, and the compare-and-write
+ * part it saves shared keys through is one of the recorded parts. The bridge
+ * is mocked; the native services and the wipe are real: the parts must be the
+ * plugin-backed code, and the plugin is a stub on the Capacitor global. The
+ * installed object is captured once: the setup file's afterEach reinstalls
+ * the node test platform on the port, so the tests read the captured object,
+ * not the slot.
  */
 
 import { platform } from '../../src/ts/platform/port';

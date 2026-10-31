@@ -17,13 +17,11 @@
  */
 
 import type { AxiosAdapter } from 'axios';
-import type { PreferencesPlugin } from '@capacitor/preferences';
 import type { BroadcastSettingsChange } from '../ipc/settingsThinHandlers';
-import type { CasAnswer } from '../settings/storeTransport';
-import type { QuarantineResult, WriteIfAbsentResult } from '../settings/storageTypes';
+import type { DroppedSaveOps } from '../settings/saveDropped';
+import type { QuarantineResult, WriteIfAbsentResult, WriteResult } from '../settings/storageTypes';
 import type { AutoVoteStatus } from '../types/capacitor';
-import type { AndroidHeadlessStore } from '../types/settings';
-import type { ThroughResult } from '../types/stores';
+import type { CasAnswer, ThroughResult } from '../types/stores';
 import type { TransformersModule } from '../types/vision';
 
 /**
@@ -57,51 +55,88 @@ export type LockPolicy = 'file' | 'none';
 export type PlatformCas = (key: string, expected: string | null, data: string) => Promise<CasAnswer> | null;
 
 /**
+ * One generic JSON store's transport (what `createJsonStore` builds one of
+ * per store, from `platform().storage.jsonStore`): the read/write/hydrate
+ * operations of the platform family the store runs on. The core wrapper
+ * keeps the refuse-writes checks, the discard listeners and the public store
+ * surface; the family owns the cache, the queue and the native bridge.
+ */
+export type JsonStoreTransport = {
+    /** The stored text, or null when nothing is stored (the cache, the bridge read, or the file). */
+    readRaw(): string | null;
+    /** Saves the whole text (into the cache and the queue, the bridge, or the file). */
+    writeRaw(data: string): void;
+    /** Fills the cache from what is stored, once at boot; a no-op except on the app WebView. */
+    hydrate(): Promise<void>;
+    /** Reads what is stored into the cache again; true except on the app WebView, where false is a failed read. */
+    reread(): Promise<boolean>;
+    /** Makes and saves a change in one step; null where the write is only queued (the app WebView). */
+    updateNow(update: (current: string | null) => string | null): ThroughResult | null;
+    /** Writes a value made from the current one that nothing reads before it is saved. */
+    updateThrough(update: (current: string | null) => string | null): Promise<ThroughResult>;
+    /** What is stored now, any cache left as it is. */
+    peekStored(): Promise<string | null>;
+    /** Waits until the queued writes are done; the strict store's rejection semantics stay inside. */
+    flush(): Promise<void>;
+    /** Gives up every write still queued and empties the cache. */
+    discard(): void;
+};
+
+/**
+ * One settings file's transport (what `createSettingsFile` builds one of per
+ * file, from `platform().storage.settingsFile`): the operations of the
+ * platform family the file lives on. The core wrapper keeps the refuse-writes
+ * checks and the public surface; the family owns the per-file state, the
+ * write queue and the write protocol.
+ */
+export type SettingsFileTransport = {
+    /** The stored text, or null when nothing is stored. */
+    readRaw(): string | null;
+    /** Saves the whole text; `ok` false where the native store refused it, and `landed` where the save is queued. */
+    write(data: string): WriteResult;
+    /** Saves only if nothing is stored yet (the import write); answers the text that is already there (`exists`). */
+    writeIfAbsent(data: string): WriteIfAbsentResult;
+    /** Where the file lives, for a message: the file, or the key where there is no file. */
+    location(): string;
+    /** Whether what a read answers is what is stored (a cache that was never filled, or no bridge, says no). */
+    isLoaded(): boolean;
+    /** Whether what a read answers is stored (the app window's own queued writes say no until they land). */
+    isPersisted(): boolean;
+    /** Whether an unusable copy of the file was set aside earlier. */
+    hasQuarantined(): boolean;
+    /** Moves an unusable value aside under the backup name the transport keeps (`<file>.corrupt-<time>`). */
+    quarantineRaw(raw: string): QuarantineResult;
+    /** Fills the cache from what is stored, once at boot; a no-op except on the app WebView. */
+    hydrate(): Promise<void>;
+    /** Waits until the queued writes are done. */
+    flush(): Promise<void>;
+    /** Gives up every write still queued and empties the caches. */
+    discard(): Promise<void>;
+};
+
+/** The parts of `createSettingsFile`'s wiring a family's settings-file transport needs. */
+export type SettingsFileWiring = {
+    /** A change made again on the text the other Android context saved meanwhile (a plain overwrite for settings.json). */
+    rebase: (base: string | null, ours: string, theirs: string | null) => string;
+    /** The Android service reaches the key through the bridge's own read/write pair, not through the keyed calls. */
+    dedicatedBridge: boolean;
+    /** A given-up write of this file is reported to the window; null for a file whose saves are not reported. */
+    droppedSaves: DroppedSaveOps | null;
+};
+
+/**
  * The storage transport the store factories (createJsonStore,
- * createSettingsFile) build on. Every member is the body one branch of
- * jsonStore.ts / settingsFileMethods.ts / storeTransport.ts selects today;
- * a member is null where the platform's transport has no such step.
+ * createSettingsFile) build on: one operation-level transport object per
+ * store, built by the platform family. Core calls the same operations on
+ * every platform and never tests which family it has.
  */
 export type PlatformStorage = {
-    /**
-     * The stored text of one store (readRaw / readHere), or null when nothing is stored. Includes the stale-temp
-     * sweep of the store's file, once per file path before the read, for a `read-write` sweep store.
-     */
-    readRaw: (store: SettingsStoreRef) => string | null;
-    /**
-     * Saves the text of one store; `atomic` replaces the file by temp file and rename (createJsonStore `atomic`).
-     * Includes the stale-temp sweep of the store's file, once per file path before the write, for a `read-write`
-     * or `write` sweep store.
-     */
-    writeRaw: (store: SettingsStoreRef, data: string, atomic: boolean) => void;
-    /** Saves only if nothing is stored yet (the import write); answers the text that is already there (`exists`). */
-    writeIfAbsent: (store: SettingsStoreRef, data: string) => WriteIfAbsentResult;
-    /** Where the store's data lives, for a message: the file, or the key where there is no file. */
-    location: (store: SettingsStoreRef) => string;
-    /** Whether an unusable copy of the store was set aside earlier. */
-    hasQuarantined: (store: SettingsStoreRef) => boolean;
-    /** Moves an unusable value aside under the backup name the transport keeps (`<file>.corrupt-<time>`). */
-    quarantineRaw: (store: SettingsStoreRef, raw: string) => QuarantineResult;
-    /**
-     * The stored text of one key read through the plugin again, any cache left
-     * as it is — what initializeAsync hydrates from, refreshAsync re-reads and
-     * peekStored answers. Null where a read is the file itself.
-     */
-    storedKey: ((key: string) => Promise<string | null>) | null;
-    /** The Preferences plugin the stores persist through; null where there is none. */
-    preferences: (() => PreferencesPlugin) | null;
-    /** The native keyed store of the Android headless service; undefined where there is none. */
-    headlessStore: () => AndroidHeadlessStore | undefined;
-    /** The native compare-and-write; null where the platform has none. */
-    cas: PlatformCas | null;
-    /** A change of a shared key made in one step through the native compare-and-write; null elsewhere. */
-    sharedUpdate: ((key: string, update: (current: string | null) => string | null) => ThroughResult) | null;
-    /** Whether the latest read of a key through the bridge failed; false where reads cannot fail. */
-    readFailed: (key: string) => boolean;
-    /** Whether what a read answers is what is stored (storeLoaded); true where the store is the file itself. */
-    loaded: (key: string) => boolean;
-    /** Waits until the transport's queued writes are done (flushPendingWrites). */
-    flushed: () => Promise<void>;
+    /** Builds the transport of one generic JSON store (`createJsonStore`'s). */
+    jsonStore(ref: SettingsStoreRef, flags: { strict: boolean; shared: boolean }): JsonStoreTransport;
+    /** Builds the transport of one settings file (`createSettingsFile`'s). */
+    settingsFile(ref: SettingsStoreRef, wiring: SettingsFileWiring): SettingsFileTransport;
+    /** Whether a store that other work trusts holds what is saved (a read that failed says no once it was made). */
+    loaded(key: string): boolean;
     lockPolicy: LockPolicy;
 };
 
@@ -190,7 +225,7 @@ export type PlatformAutovote = {
     getStatus: () => Promise<AutoVoteStatus>;
     /** Whether the plugin is registered on this build. */
     isAvailable: () => boolean;
-    /** The native compare-and-write of one key — the call storage's `cas` member wraps. */
+    /** The native compare-and-write of one key — the webview family's storage transport saves shared keys through it. */
     compareAndWrite: PlatformCas;
 };
 
@@ -311,13 +346,21 @@ const installPlatform = (p: Platform): void => {
 };
 
 /**
+ * The installed platform, or null where none is: a core module that only
+ * holds a store (or builds one lazily) asks this where an entry has not
+ * installed anything yet — a renderer bundle imports them, and there the port
+ * stays empty by design.
+ */
+const installedPlatform = (): Platform | null => (globalThis as PlatformGlobals)[PLATFORM_SLOT] ?? null;
+
+/**
  * The installed platform. Throws when none is: a core module ran before the
  * entry point installed its platform, which is a real boundary, not a default
  * to fall back on.
  */
 const platform = (): Platform => {
-    const current = (globalThis as PlatformGlobals)[PLATFORM_SLOT];
-    if (current === undefined) {
+    const current = installedPlatform();
+    if (current === null) {
         throw new Error('No platform is installed: the entry point must import its platform module first');
     }
     return current;
@@ -331,4 +374,4 @@ const resetPlatformForTests = (): void => {
     delete (globalThis as PlatformGlobals)[PLATFORM_SLOT];
 };
 
-export { installPlatform, platform, resetPlatformForTests };
+export { installPlatform, installedPlatform, platform, resetPlatformForTests };

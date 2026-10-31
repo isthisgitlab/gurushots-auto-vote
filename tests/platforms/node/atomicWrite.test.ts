@@ -14,7 +14,7 @@ jest.unmock('node:path');
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { writeAtomicOwnerOnly } from '../../src/ts/settings/atomicWrite';
+import { writeAtomicOwnerOnly } from '../../../src/ts/platforms/node/atomicWrite';
 
 describe('writeAtomicOwnerOnly rename retry', () => {
     let root: string;

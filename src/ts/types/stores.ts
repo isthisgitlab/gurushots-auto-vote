@@ -9,6 +9,9 @@ import type { EntryEnteredTime } from './gurushots';
 /** What `updateThrough` came to: saved, left alone because `update` declined (answered null), or not saved. */
 export type ThroughResult = 'saved' | 'aborted' | 'failed';
 
+/** What the native compare-and-write answered: saved, or not because the key had changed (and what it holds). */
+export type CasAnswer = { saved: boolean; current: string | null };
+
 /**
  * The raw-JSON transport a ledger sits on: settings/storage.ts
  * createJsonStore(), or an in-memory fake (mock mode, tests).

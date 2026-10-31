@@ -25,6 +25,7 @@ import loggerModule = require('../src/ts/logger');
 const logger = jest.mocked(loggerModule);
 import type * as scenarioStateStoreModule from '../src/ts/scenarioStateStore';
 import type { CategoryLogger } from '../src/ts/logger';
+import { installHeadlessTestPlatform, installTestPlatform, installWebviewTestPlatform } from './helpers/platform';
 import { invalid } from './helpers/invalid';
 import { isNumber, isRecordOf, parseJsonAs, parseJsonObject } from './helpers/parseJson';
 
@@ -611,18 +612,13 @@ describe('a reset is not undone by what was running when it was made', () => {
 });
 
 describe('on Android a reset is asked for, never written into a file the service may have written since', () => {
-    const g = globalThis as typeof globalThis & { Capacitor?: unknown; __GS_HEADLESS__?: boolean };
-    afterEach(() => {
-        delete g.Capacitor;
-        delete g.__GS_HEADLESS__;
-    });
+    // The app window's ledger reads its requests through the webview family's transport; the service's through the
+    // headless one — the ledger asks the platform's lock policy on every read, so the context is installed per act.
     const asApp = () => {
-        g.Capacitor = { isNativePlatform: () => true };
-        delete g.__GS_HEADLESS__;
+        installWebviewTestPlatform();
     };
     const asService = () => {
-        delete g.Capacitor;
-        g.__GS_HEADLESS__ = true;
+        installHeadlessTestPlatform();
     };
     // The app's ledger and the background service's, over the one stored file and the one store of requests.
     const both = (main = rawStore(), asked = rawStore()) => ({
@@ -813,12 +809,8 @@ describe('on Android a reset is asked for, never written into a file the service
 });
 
 describe('a reset is saved before anything can read it', () => {
-    const g = globalThis as typeof globalThis & { Capacitor?: unknown };
     beforeEach(() => {
-        g.Capacitor = { isNativePlatform: () => true };
-    });
-    afterEach(() => {
-        delete g.Capacitor;
+        installWebviewTestPlatform();
     });
     // A store whose writes are saved before they show, and that can be made to refuse them.
     const throughStore = (initial: string | null = null) => {
@@ -914,7 +906,7 @@ describe('a reset is saved before anything can read it', () => {
     });
 
     test('of every challenge, asked for only while the file cannot be read, is not held up by a lock when the file reads', async () => {
-        delete g.Capacitor;
+        installTestPlatform();
         const file = rawStore(live);
         const held = jest.fn((_id: string) => ({ ok: false, release: () => {} }));
         const desktop = createStateLedger(file, held);
@@ -936,7 +928,7 @@ describe('a reset is saved before anything can read it', () => {
             file.raw = live;
             return { ok: true, release: () => {} };
         });
-        delete g.Capacitor;
+        installTestPlatform();
         const desktop = createStateLedger(file, acquire);
         await expect(desktop.removeAll(true)).resolves.toBe('readable');
         expect(file.writeRaw).not.toHaveBeenCalled();
@@ -966,7 +958,7 @@ describe('a reset is saved before anything can read it', () => {
     });
 
     test('on the desktop it is made on the file itself, and the requests are never read', async () => {
-        delete g.Capacitor;
+        installTestPlatform();
         const main = rawStore(live);
         const asked = throughStore();
         const desktop = createStateLedger(main, undefined, asked.store);

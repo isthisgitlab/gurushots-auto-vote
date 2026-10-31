@@ -13,13 +13,21 @@
  * Two files go through the same transport (`createSettingsFile`): the configuration (`storage`: read, saved, set
  * aside when it is unusable) and `settings.json` (`legacyStorage`: read for the one-time import).
  *
- * @capacitor/preferences is lazy-required only inside isCapacitor()
- * guards so non-Capacitor bundles never resolve it. The generic JSON store
+ * The platform work — the per-file state, the write queue and the write protocol of each family — is the
+ * SettingsFileTransport the platform's storage member builds per file (src/ts/platform/port.ts); this factory keeps
+ * the refuse-writes checks and the public surface, and never tests which family it has. The generic JSON store
  * other stores are made with lives in jsonStore.ts and is re-exported here.
  */
 
-import { sweepStaleTemps } from './atomicWrite';
-import { createJsonStore, discardStores, refuseWrites, resumeWrites, settleStores } from './jsonStore';
+import { installedPlatform, platform } from '../platform/port';
+import {
+    areWritesRefused,
+    createJsonStore,
+    discardStores,
+    refuseWrites,
+    resumeWrites,
+    settleStores,
+} from './jsonStore';
 import { rebaseConfigText } from './settingsMerge';
 import {
     getDefaultMockSetting,
@@ -39,35 +47,36 @@ import {
     resetSaveDropped,
     setSaveDropped,
 } from './saveDropped';
-import { CORRUPT_SUFFIX, failQueuedWrite, makeFileBridge, runQueuedWrite } from './settingsFileCapacitor';
-import {
-    discardMethod,
-    hasQuarantinedMethod,
-    initializeAsyncMethod,
-    isLoadedMethod,
-    isPersistedMethod,
-    locationMethod,
-    quarantineRawMethod,
-    readRawMethod,
-    writeIfAbsentMethod,
-    writeMethod,
-} from './settingsFileMethods';
-import { issueQueuedWrite } from './settingsFileProtocol';
 
+import type { SettingsFileTransport, SettingsStoreRef } from '../platform/port';
 import type { DroppedSaveOps } from './saveDropped';
-import type { SettingsFileState } from './settingsFileProtocol';
-import type {
-    QuarantineResult,
-    QueuedWriteOutcome,
-    SettingsFileOptions,
-    WriteIfAbsentResult,
-    WriteResult,
-} from './storageTypes';
+import type { RawJsonStore, ThroughResult } from '../types/stores';
+import type { QuarantineResult, SettingsFileOptions, WriteIfAbsentResult, WriteResult } from './storageTypes';
+
+/**
+ * Writes to `target` a text made from its current one, saved before anything can read it where that takes a moment (the
+ * Android app: see RawJsonStore.updateThrough); `update` answers null to write nothing.
+ */
+const throughStore = async (
+    target: RawJsonStore,
+    update: (current: string | null) => string | null,
+): Promise<ThroughResult> => {
+    if (target.updateThrough) return target.updateThrough(update);
+    const data = update(target.readRaw());
+    if (data === null) return 'aborted';
+    target.writeRaw(data);
+    return 'saved';
+};
 
 /** The Preferences key of the settings.json blob (what `settings.json` is on a desktop). */
 const LEGACY_SETTINGS_KEY = 'gurushots-settings';
 /** The Preferences key of the configuration (what `config.json` is on a desktop). */
 const CONFIG_KEY = 'gurushots-config';
+
+// The backup of an unparseable Capacitor value lives under its key plus this suffix and the time it was set aside (a
+// later one never replaces an earlier). Before the time was added it was the suffix alone. The webview family reads
+// it at call time for the backup-key naming.
+const CORRUPT_SUFFIX = '_corrupt';
 
 // A copy a `settings.json` that could not be imported was kept under by an older build: wiped with the rest.
 const UNIMPORTABLE_SUFFIX = '_unimportable';
@@ -75,72 +84,40 @@ const UNIMPORTABLE_SUFFIX = '_unimportable';
 const createSettingsFile = (options: SettingsFileOptions) => {
     const { fileName, prefKey, filePath, rebase, dedicatedBridge, reportsDroppedSaves } = options;
 
-    // The per-file state: one object per call. Its write-protocol fields (writeSerial, writeGeneration, cachedJson,
-    // persistedJson) change only through the transitions in settingsFileProtocol.ts; this body and the helpers the
-    // object is passed to (settingsFileCapacitor.ts, settingsFileMethods.ts, settingsFileNode.ts) read them and
-    // change them through those. Two settings files exist, so none of it may sit at module level.
-    const state: SettingsFileState = {
-        capacitorInitialized: false,
-        cachedJson: null,
-        hasBackupKey: false,
-        persistedJson: null,
-        headlessBase: null,
-        writeChain: Promise.resolve(),
-        writeGeneration: 0,
-        writeSerial: 0,
-        swept: false,
-    };
+    // The sweep policy of a settings file: the temp files an earlier crash left beside it are swept before the first
+    // write only, never on a read.
+    const ref: SettingsStoreRef = { prefKey, filePath, sweep: 'write' };
 
-    // The dropped-save reporting of this file (the configuration's only), handed to the Capacitor write helpers.
-    const droppedOps: DroppedSaveOps | null = reportsDroppedSaves
+    // The dropped-save reporting of this file (the configuration's only), handed to the family transport.
+    const droppedSaves: DroppedSaveOps | null = reportsDroppedSaves
         ? { getAfter: getDroppedAfter, markAfter: markDroppedAfter, setDropped: setSaveDropped, causeOf }
         : null;
 
-    // Temp files an earlier crash left beside the file are swept on the first write.
-    const sweepOnce = (file: string) => {
-        if (state.swept) return;
-        state.swept = true;
-        sweepStaleTemps(file);
-    };
+    // The transport is built as the file is created, where a platform stands. A module imported where none is
+    // installed (a renderer bundle reaches these files, and no port is installed there) builds it on the file's
+    // first use.
+    let transport: SettingsFileTransport | null = null;
+    const of = (): SettingsFileTransport =>
+        (transport ??= platform().storage.settingsFile(ref, { rebase, dedicatedBridge, droppedSaves }));
+    const installed = installedPlatform();
+    if (installed) transport = installed.storage.settingsFile(ref, { rebase, dedicatedBridge, droppedSaves });
 
-    const bridge = makeFileBridge(dedicatedBridge, prefKey);
-
-    // Queues the write of a change of the cache: after the writes before it, as a compare-and-write. The chain itself
-    // stays here; the bodies that run on a queued write's turn are runQueuedWrite and failQueuedWrite
-    // (settingsFileCapacitor.ts).
-    const queueCapacitorWrite = (
-        update: (stored: string | null) => string | null,
-        userChange: boolean,
-    ): Promise<QueuedWriteOutcome> => {
-        const issuedIn = state.writeGeneration;
-        const serial = issueQueuedWrite(state);
-        const ended = state.writeChain
-            .then(() => runQueuedWrite(state, prefKey, droppedOps, update, issuedIn, serial))
-            .catch((err: unknown) => failQueuedWrite(state, droppedOps, err, issuedIn, serial, userChange));
-        state.writeChain = ended.then(() => undefined);
-        return ended;
-    };
-
-    // Each method body takes the state and the explicit parts of the factory's wiring it needs (the queue and the
-    // bridge are the factory's).
     return {
-        readRaw: (): string | null => readRawMethod(state, bridge, filePath),
-        write: (data: string): WriteResult =>
-            writeMethod(state, bridge, rebase, queueCapacitorWrite, filePath, sweepOnce, data),
+        readRaw: (): string | null => of().readRaw(),
+        write: (data: string): WriteResult => (areWritesRefused() ? { ok: false } : of().write(data)),
         /** `write`, for the caller that has no use for `landed`. */
-        writeRaw: (data: string): boolean =>
-            writeMethod(state, bridge, rebase, queueCapacitorWrite, filePath, sweepOnce, data).ok,
+        writeRaw: (data: string): boolean => (areWritesRefused() ? false : of().write(data).ok),
         writeIfAbsent: (data: string): WriteIfAbsentResult =>
-            writeIfAbsentMethod(state, bridge, queueCapacitorWrite, filePath, data),
-        location: (): string => locationMethod(prefKey, filePath),
-        isLoaded: (): boolean => isLoadedMethod(state),
-        isPersisted: (): boolean => isPersistedMethod(state),
-        hasQuarantined: (): boolean => hasQuarantinedMethod(state, filePath),
-        quarantineRaw: (raw: string): QuarantineResult => quarantineRawMethod(state, prefKey, filePath, raw),
-        initializeAsync: async (): Promise<void> => initializeAsyncMethod(state, prefKey),
+            areWritesRefused() ? { outcome: 'failed' } : of().writeIfAbsent(data),
+        location: (): string => of().location(),
+        isLoaded: (): boolean => of().isLoaded(),
+        isPersisted: (): boolean => of().isPersisted(),
+        hasQuarantined: (): boolean => of().hasQuarantined(),
+        quarantineRaw: (raw: string): QuarantineResult => of().quarantineRaw(raw),
+        initializeAsync: async (): Promise<void> => of().hydrate(),
         /** The in-flight Capacitor write-behind chain (see flushPendingWrites). */
-        flush: () => state.writeChain,
-        discard: async (): Promise<void> => discardMethod(state),
+        flush: () => of().flush(),
+        discard: async (): Promise<void> => of().discard(),
         fileName,
         prefKey,
     };
@@ -228,4 +205,5 @@ export {
     getUserDataPath,
     getEnvironmentInfo,
     createJsonStore,
+    throughStore,
 };

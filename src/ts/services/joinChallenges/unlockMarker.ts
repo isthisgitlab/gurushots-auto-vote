@@ -13,7 +13,7 @@ import { sanitizeLogString } from '../../logger/sanitize';
 import { cat, lockFor } from './shared';
 import type { Claim, JoinDeps } from './shared';
 import type { ForgetStatus } from '../../types/join';
-import { throughStore } from '../../settings/storeTransport';
+import { throughStore } from '../../settings/storage';
 
 // The challenge id of a stored claim key. A claim is keyed by its challenge id; a stored key of the form
 // `<member id>:<challenge id>` is read as its challenge id, so such a record keeps protecting the challenge

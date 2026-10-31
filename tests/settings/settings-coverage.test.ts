@@ -745,6 +745,8 @@ describe('settings facade — edge cases', () => {
 
     describe('persistence failures (fs transport)', () => {
         let fs: jest.MockedObject<typeof node_fsModule>;
+        // A facade of this describe's own, loaded over the node platform: the file-level one is headless-bound.
+        let fsSettings: typeof settings;
         // A configuration as the facade last wrote it, so that a re-load performs no write of its own.
         const storedConfig = (obj: unknown) => {
             seed(obj);
@@ -759,6 +761,9 @@ describe('settings facade — edge cases', () => {
             fs.writeFileSync.mockImplementation(() => {
                 throw new Error('EROFS');
             });
+            jest.isolateModules(() => {
+                fsSettings = require('../../src/ts/settings') as typeof settings;
+            });
         };
 
         afterEach(() => {
@@ -770,14 +775,14 @@ describe('settings facade — edge cases', () => {
 
         test('resetAllSettings reports a failed save', () => {
             useFailingDisk(storedConfig({ defaults: { exposure: 70 } }));
-            expect(settings.resetAllSettings()).toBe(false);
+            expect(fsSettings.resetAllSettings()).toBe(false);
             expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
         });
 
         test('seedIntentProfiles reports the skipped profiles when every write fails', () => {
             const blob = storedConfig({});
             useFailingDisk(blob);
-            expect(settings.seedIntentProfiles()).toBe(false);
+            expect(fsSettings.seedIntentProfiles()).toBe(false);
             expect(cat.warning).toHaveBeenCalledWith(expect.stringContaining('Skipped seeding intent profile'));
         });
     });

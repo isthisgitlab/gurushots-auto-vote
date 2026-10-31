@@ -14,6 +14,8 @@ jest.mock('../../src/ts/services/auth');
 // In-memory stand-in for the cross-platform JSON store photoStats persists to.
 let storeData: string | null = null;
 jest.mock('../../src/ts/settings/storage', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/settings/storage')>('../../src/ts/settings/storage'),
     createJsonStore: () => ({
         readRaw: () => storeData,
         writeRaw: (data: string) => {

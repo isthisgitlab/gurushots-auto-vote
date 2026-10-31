@@ -246,13 +246,15 @@ describe('prototype-named keys', () => {
         test('an out-of-range value is said once, not on every read', () => {
             let warning: jest.Mock<void, [string, ...unknown[]]> | undefined;
             jest.isolateModules(() => {
+                // The store is installed before the facade loads: its transports are built over the platform that
+                // stands at load.
+                installHeadlessStore({ config: JSON.stringify({ app: { theme: 'dark', apiTimeout: 100000 } }) });
                 const isolated = require('../../src/ts/settings') as typeof settings;
                 warning = (
                     require('../../src/ts/logger') as unknown as {
                         __cat: { warning: jest.Mock<void, [string, ...unknown[]]> };
                     }
                 ).__cat.warning;
-                installHeadlessStore({ config: JSON.stringify({ app: { theme: 'dark', apiTimeout: 100000 } }) });
                 isolated.loadSettings();
                 isolated.loadSettings();
                 isolated.loadSettings();
@@ -280,10 +282,10 @@ describe('a schema entry without a validator', () => {
                         key === 'hollow' ? invalid({ type: 'number', perChallenge: false }) : actual.schemaEntry(key),
                 };
             });
-            const isolated = require('../../src/ts/settings') as typeof settings;
             installHeadlessStore({
                 config: JSON.stringify({ app: { theme: 'dark' }, defaults: { hollow: 1, exposure: 70 } }),
             });
+            const isolated = require('../../src/ts/settings') as typeof settings;
             loaded = isolated.loadSettings();
         });
         removeHeadlessStore();

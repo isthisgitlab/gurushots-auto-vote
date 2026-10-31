@@ -5,10 +5,10 @@
 
 import type { RawJsonStore, ScenarioEpoch, ScenarioState, SpendAction } from './types/stores';
 import * as logger from './logger';
-import * as runtime from './runtime';
+import { platform } from './platform/port';
 import { isPlainObject } from './plainObject';
 import { acquireWithin } from './lockWait';
-import { throughStore } from './settings/storeTransport';
+import { throughStore } from './settings/storage';
 
 /** A cross-process lock, as joinStateStore's acquireUnlockLock gives one. */
 type StateLock = { ok: boolean; release: () => void; unavailable?: true; held?: () => boolean };
@@ -384,7 +384,8 @@ const createStateFile = (
     let lastParsed: ParsedStateFile | undefined;
 
     const asRequests = (): RawJsonStore | undefined =>
-        runtime.isCapacitor() || runtime.isHeadlessService() ? requests : undefined;
+        // lockPolicy 'none' is the Android worlds, whose background service writes the requests ledger.
+        platform().storage.lockPolicy === 'none' ? requests : undefined;
 
     const read = (): ParsedStateFile => {
         const raw = store.readRaw();

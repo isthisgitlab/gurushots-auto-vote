@@ -14,6 +14,19 @@
  */
 export type SaveDroppedCause = 'conflict' | 'too-large' | 'storage' | 'logout-lost';
 
+/**
+ * A save that the other writer (the Android app window and its background service) beat on every attempt. Its `code`
+ * is the cause a given-up save is reported with (see {@link causeOf}).
+ */
+export class SaveConflictError extends Error {
+    readonly code = 'conflict';
+
+    constructor(message: string) {
+        super(message);
+        this.name = 'SaveConflictError';
+    }
+}
+
 let saveDropped = false;
 let droppedAfter = 0;
 // How many saves were given up in this process: each one is a notice of its own, so a repeat of the same cause is told
