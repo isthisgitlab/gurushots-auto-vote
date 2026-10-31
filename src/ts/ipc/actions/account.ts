@@ -10,7 +10,7 @@ import { rememberOpenChallenges } from '../../services/openChallengeCache';
 import { fetchUpcoming, mergeDiscoverLists } from '../../services/discoverChallenges';
 import { dropContext } from '../../services/libraryCache';
 import { getAutoClaimStatus } from '../../services/autoClaim';
-import { rememberChallenges } from '../../windows/quitGuard';
+import { rememberChallenges } from '../../services/boostGuard/selection';
 import { sanitizeForLog, refuseInvalidArgs } from './shared';
 import { isPlainObject } from '../../plainObject';
 

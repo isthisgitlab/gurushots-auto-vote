@@ -22,7 +22,7 @@ import type * as lifecycleModule from '../../src/ts/windows/lifecycle';
 import type * as settingsWatcherModule from '../../src/ts/windows/settingsWatcher';
 import type * as backgroundActivityModule from '../../src/ts/windows/backgroundActivity';
 import type * as quitGuardModule from '../../src/ts/windows/quitGuard';
-import type * as suspendBoostModule from '../../src/ts/windows/suspendBoost';
+import type * as suspendBoostModule from '../../src/ts/services/boostGuard/suspendBoost';
 import type * as applicationMenuModule from '../../src/ts/ui/applicationMenu';
 import type * as navigationGuardModule from '../../src/ts/index/navigationGuard';
 import type * as permissionsModule from '../../src/ts/index/permissions';
@@ -254,9 +254,9 @@ jest.mock('../../src/ts/windows/quitGuard', () => ({
     bypassQuitGuard: jest.fn(),
     resetQuitGuard: jest.fn(),
 }));
-jest.mock('../../src/ts/windows/suspendBoost', () => ({
+jest.mock('../../src/ts/services/boostGuard/suspendBoost', () => ({
     // The real helper, run against the mocked settings above.
-    autovoteSessionLive: jest.requireActual<typeof suspendBoostModule>('../../src/ts/windows/suspendBoost')
+    autovoteSessionLive: jest.requireActual<typeof suspendBoostModule>('../../src/ts/services/boostGuard/suspendBoost')
         .autovoteSessionLive,
     applyImminentBoostsOnSuspend: jest.fn(() => Promise.resolve()),
 }));
@@ -314,7 +314,7 @@ function load({ lock = true, whenReady }: { lock?: boolean; whenReady?: () => Pr
         watcher: require('../../src/ts/windows/settingsWatcher') as typeof settingsWatcherModule,
         bg: require('../../src/ts/windows/backgroundActivity') as typeof backgroundActivityModule,
         quitGuard: require('../../src/ts/windows/quitGuard') as typeof quitGuardModule,
-        suspendBoost: require('../../src/ts/windows/suspendBoost') as typeof suspendBoostModule,
+        suspendBoost: require('../../src/ts/services/boostGuard/suspendBoost') as typeof suspendBoostModule,
         menu: require('../../src/ts/ui/applicationMenu') as typeof applicationMenuModule,
         navigationGuard: require('../../src/ts/index/navigationGuard') as typeof navigationGuardModule,
         permissions: require('../../src/ts/index/permissions') as typeof permissionsModule,

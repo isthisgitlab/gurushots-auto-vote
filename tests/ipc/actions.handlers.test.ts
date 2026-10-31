@@ -16,7 +16,7 @@ jest.mock('../../src/ts/apiFactory');
 jest.mock('../../src/ts/services/auth');
 jest.mock('../../src/ts/services/VotingLogic');
 jest.mock('../../src/ts/services/autoFill');
-jest.mock('../../src/ts/windows/quitGuard', () => ({ rememberChallenges: jest.fn() }));
+jest.mock('../../src/ts/services/boostGuard/selection', () => ({ rememberChallenges: jest.fn() }));
 
 import type { IpcMain } from 'electron';
 import { invalid } from '../helpers/invalid';
@@ -47,13 +47,15 @@ const votingLogic = jest.mocked(votingLogicModule);
 import autoFillModule = require('../../src/ts/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
 import type { CategoryLogger } from '../../src/ts/logger';
-import type * as quitGuardModule from '../../src/ts/windows/quitGuard';
+import type * as quitGuardModule from '../../src/ts/services/boostGuard/selection';
 import type * as logCategoriesModule from '../helpers/logCategories';
 import type * as actions_handlersModule from '../../src/ts/ipc/actions.handlers';
 import type * as libraryCacheModule from '../../src/ts/services/libraryCache';
 import type * as discoverChallengesModule from '../../src/ts/services/discoverChallenges';
 import type * as autoClaimModule from '../../src/ts/services/autoClaim';
-const { rememberChallenges } = jest.mocked(require('../../src/ts/windows/quitGuard') as typeof quitGuardModule);
+const { rememberChallenges } = jest.mocked(
+    require('../../src/ts/services/boostGuard/selection') as typeof quitGuardModule,
+);
 const { logCategories } = require('../helpers/logCategories') as typeof logCategoriesModule;
 
 // The handler routes auth through the factory surfaces + the shared

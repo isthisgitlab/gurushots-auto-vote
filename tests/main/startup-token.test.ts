@@ -32,7 +32,7 @@ jest.mock('../../src/ts/services/AutoUpdater', () => ({
 }));
 jest.mock('../../src/ts/windows/lifecycle', () => ({ ensureExit: jest.fn() }));
 jest.mock('../../src/ts/windows/quitGuard', () => ({ bypassQuitGuard: jest.fn() }));
-jest.mock('../../src/ts/windows/suspendBoost', () => ({ applyImminentBoostsOnSuspend: jest.fn() }));
+jest.mock('../../src/ts/services/boostGuard/suspendBoost', () => ({ applyImminentBoostsOnSuspend: jest.fn() }));
 jest.mock('../../src/ts/ui/applicationMenu', () => ({ createApplicationMenu: jest.fn() }));
 jest.mock('../../src/ts/index/windows', () => ({ checkAutoLogin: jest.fn() }));
 jest.mock('../../src/ts/index/permissions', () => ({ installPermissionHandlers: jest.fn() }));

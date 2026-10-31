@@ -16,6 +16,7 @@ import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 const { buildChallenge: buildBaseChallenge } =
     require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
+import type * as selectionModule from '../../src/ts/services/boostGuard/selection';
 import type { Challenge, MemberBoost, MemberTurbo, RankingEntry } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 const { createMemoryEntryAgeLedger } = require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
@@ -470,7 +471,7 @@ describe('describeDeadlineActions — Manual Only', () => {
     });
 
     test('the quit guard (and so the sleep boost) selects no boost on the challenge', () => {
-        const guard = require('../../src/ts/windows/quitGuard') as typeof import('../../src/ts/windows/quitGuard');
+        const guard = require('../../src/ts/services/boostGuard/selection') as typeof selectionModule;
         const challenge = build({ boost: { state: 'AVAILABLE', timeout: CLOSE - 10 } });
         guard.rememberChallenges([challenge], false);
         try {
@@ -483,7 +484,7 @@ describe('describeDeadlineActions — Manual Only', () => {
             mockSettings({ manualPhotosOnly: true });
             expect(guard.imminentBoostChallenges(NOW, VotingLogic.describeDeadlineActions, 3600, null)).toEqual([]);
         } finally {
-            guard.resetQuitGuard();
+            guard.resetBoostSelection();
         }
     });
 

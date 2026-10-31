@@ -5,21 +5,21 @@
  * conflict — is the production rule, not a restatement of it.
  */
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import VotingLogic = require('../../src/ts/services/VotingLogic');
-import quitGuard = require('../../src/ts/windows/quitGuard');
-import logger = require('../../src/ts/logger');
-import type * as boostModule from '../../src/ts/services/votingOrchestrator/suspendBoostRunner';
-import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
-import type { MemberBoost, RankingEntry } from '../../src/ts/types/gurushots';
-import type { VotingPassApi } from '../../src/ts/types/votingPass';
-import { invalid } from '../helpers/invalid';
+import VotingLogic = require('../../../src/ts/services/VotingLogic');
+import quitGuard = require('../../../src/ts/services/boostGuard/selection');
+import logger = require('../../../src/ts/logger');
+import type * as boostModule from '../../../src/ts/services/votingOrchestrator/suspendBoostRunner';
+import type * as challengeFixturesModule from '../../helpers/challengeFixtures';
+const { buildChallenge } = require('../../helpers/challengeFixtures') as typeof challengeFixturesModule;
+import type { MemberBoost, RankingEntry } from '../../../src/ts/types/gurushots';
+import type { VotingPassApi } from '../../../src/ts/types/votingPass';
+import { invalid } from '../../helpers/invalid';
 const { runSuspendBoost } =
-    require('../../src/ts/services/votingOrchestrator/suspendBoostRunner') as typeof boostModule;
+    require('../../../src/ts/services/votingOrchestrator/suspendBoostRunner') as typeof boostModule;
 
-jest.mock('../../src/ts/settings');
+jest.mock('../../../src/ts/settings');
 
 const CLOSE = 1_000_000;
 const NOW = CLOSE - 3600;
@@ -67,7 +67,7 @@ const selectedIds = () =>
 
 beforeEach(() => {
     jest.clearAllMocks();
-    quitGuard.resetQuitGuard();
+    quitGuard.resetBoostSelection();
 });
 
 describe('imminentBoostChallenges with the real describeDeadlineActions', () => {
@@ -215,7 +215,8 @@ describe('imminentBoostChallenges with the real describeDeadlineActions', () => 
         // infoT renders through the real catalog onto the same fn, so the
         // assertion below keeps reading today's rendered line.
         const infoT = jest.fn((key: string, params: unknown[], data: unknown) => {
-            const { renderLogTemplate } = require('../helpers/logTemplate') as typeof import('../helpers/logTemplate');
+            const { renderLogTemplate } =
+                require('../../helpers/logTemplate') as typeof import('../../helpers/logTemplate');
             info(renderLogTemplate(key, params), data);
         });
         jest.mocked(logger.withCategory).mockImplementation(() => invalid({ info, infoT }));

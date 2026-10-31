@@ -14,12 +14,6 @@
  * the same instant the deadline timeline and notifications show, with the
  * autoBoost / Boost Time 0 = off / turbo-conflict gating already applied.
  *
- * The main process does not poll the API itself; it remembers the last
- * challenge list the renderer fetched through `get-active-challenges` (the
- * cadence chain and the list view both refresh through it). Window expiry is
- * checked against the wall clock at quit time; a boost applied since the last
- * fetch can prompt once more, which is the cheap side to err on.
- *
  * State is module-level for the same reason backgroundActivity's is: one main
  * process, one main window. `resetQuitGuard` runs when that window closes, so
  * a confirmation or a stale list never outlives the session it was about.
@@ -28,58 +22,22 @@
 import * as logger from '../logger';
 import * as votingLogic from '../services/VotingLogic';
 import { getEntryAgeLedger } from '../apiFactory';
-import { openBoostWindows } from '../voting/boostWindow';
 import { formatDuration } from '../format/duration';
+import { imminentBoostChallenges, QUIT_WARN_HORIZON_SEC, resetBoostSelection } from '../services/boostGuard/selection';
 
 import type { BrowserWindow, Dialog, MessageBoxOptions } from 'electron';
-import type { Challenge } from '../types/gurushots';
 import type { EntryAgeLedger } from '../types/stores';
 import type { Translate } from '../translations/translator';
+import type { DescribeDeadlineActions } from '../services/boostGuard/selection';
 
-/**
- * describeDeadlineActions' shape, as far as the guard reads it.
- */
-type DescribeDeadlineActions = (
-    challenge: Challenge,
-    now: number,
-    entryAges: EntryAgeLedger | null,
-) => { actions?: Array<{ action: string; dueAt: number | null }> } | null | undefined;
-
-const QUIT_WARN_HORIZON_SEC = 60 * 60;
-// Narrower than the quit prompt's: a sleep (even a 2-minute lid close) spends a
-// boost this much earlier than Boost Time, so only boosts due within 30 min go.
-const SUSPEND_BOOST_HORIZON_SEC = 30 * 60;
 // A bypass is for the quit already under way; if that quit never lands (a
 // cancelled OS shutdown, a failed update install) the guard comes back.
 const BYPASS_TTL_MS = 30_000;
 
-// Last successful challenge list from get-active-challenges, and the mock flag
-// it was fetched under (null until one has been).
-let lastChallenges: readonly Challenge[] = [];
-let lastChallengesMock: boolean | null = null;
 let bypassed = false;
 let bypassTimer: NodeJS.Timeout | null = null;
 // A second Cmd+Q while the dialog is up must not stack another dialog.
 let prompting = false;
-
-/**
- * @param challenges - the get-active-challenges list (ignored unless an array)
- * @param mock - the `mock` setting the list was fetched under
- */
-const rememberChallenges = (challenges: readonly Challenge[] | null | undefined, mock: boolean) => {
-    if (!Array.isArray(challenges)) return;
-    lastChallenges = challenges;
-    lastChallengesMock = mock;
-};
-
-/** The `mock` setting the remembered list was fetched under; null when there is none. */
-const rememberedChallengesMock = (): boolean | null => lastChallengesMock;
-
-/** Mark the remembered challenge's boost as used, so it no longer counts as pending; a fresh `rememberChallenges` list replaces the mark. */
-const markBoostApplied = (id: Challenge['id']) => {
-    const boost = lastChallenges.find((c) => c.id === id)?.member?.boost;
-    if (boost) boost.state = 'USED';
-};
 
 const clearBypass = () => {
     bypassed = false;
@@ -98,38 +56,9 @@ const bypassQuitGuard = () => {
 };
 
 const resetQuitGuard = () => {
-    lastChallenges = [];
-    lastChallengesMock = null;
+    resetBoostSelection();
     prompting = false;
     clearBypass();
-};
-
-/**
- * Open boost windows whose boost auto-vote would apply within the horizon,
- * soonest first.
- *
- * @param now - Unix seconds
- * @param horizonSec - only boosts due within this many seconds
- * @param entryAges - the ledger describeDeadlineActions honours the Boost-pinned-submit
- *   latch against; threaded so the guard reads the same ledger the runner writes
- */
-const imminentBoostChallenges = (
-    now: number,
-    describe: DescribeDeadlineActions,
-    horizonSec: number,
-    entryAges: EntryAgeLedger | null,
-): Array<{ challenge: Challenge; dueAt: number }> => {
-    const open = new Set(openBoostWindows(lastChallenges, now).map((w) => w.id));
-    return lastChallenges
-        .filter((c) => open.has(c.id))
-        .map((challenge) => ({
-            challenge,
-            dueAt: describe(challenge, now, entryAges)?.actions?.find((a) => a.action === 'boost')?.dueAt,
-        }))
-        .flatMap(({ challenge, dueAt }) =>
-            typeof dueAt === 'number' && dueAt - now <= horizonSec ? [{ challenge, dueAt }] : [],
-        )
-        .sort((a, b) => a.dueAt - b.dueAt);
 };
 
 const imminentBoosts = (
@@ -246,15 +175,4 @@ const holdQuitForOpenBoosts = (
     return true;
 };
 
-export {
-    rememberChallenges,
-    rememberedChallengesMock,
-    markBoostApplied,
-    imminentBoostChallenges,
-    bypassQuitGuard,
-    resetQuitGuard,
-    holdQuitForOpenBoosts,
-    QUIT_WARN_HORIZON_SEC,
-    SUSPEND_BOOST_HORIZON_SEC,
-    BYPASS_TTL_MS,
-};
+export { bypassQuitGuard, resetQuitGuard, holdQuitForOpenBoosts, BYPASS_TTL_MS };

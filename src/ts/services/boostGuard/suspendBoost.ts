@@ -35,19 +35,19 @@
  * as not confirmed.
  */
 
-import * as logger from '../logger';
-import * as settings from '../settings';
-import * as apiFactory from '../apiFactory';
-import * as votingLogic from '../services/VotingLogic';
-import { isInteger } from '../numbers';
-import { formatDuration } from '../format/duration';
-import { failureText } from '../format/logSafe';
+import * as logger from '../../logger';
+import * as settings from '../../settings';
+import * as apiFactory from '../../apiFactory';
+import * as votingLogic from '../../services/VotingLogic';
+import { isInteger } from '../../numbers';
+import { formatDuration } from '../../format/duration';
+import { failureText } from '../../format/logSafe';
 import {
     imminentBoostChallenges,
     markBoostApplied,
     rememberedChallengesMock,
     SUSPEND_BOOST_HORIZON_SEC,
-} from './quitGuard';
+} from './selection';
 
 // Two quick sleeps must not send duplicate POSTs while a batch is still pending.
 let running = false;

@@ -11,7 +11,7 @@ import * as logger from '../logger';
 import { AutoUpdater } from '../services/AutoUpdater';
 import { ensureExit } from '../windows/lifecycle';
 import { bypassQuitGuard } from '../windows/quitGuard';
-import { applyImminentBoostsOnSuspend } from '../windows/suspendBoost';
+import { applyImminentBoostsOnSuspend } from '../services/boostGuard/suspendBoost';
 import { failureText } from '../format/logSafe';
 import { createApplicationMenu } from '../ui/applicationMenu';
 import { appState } from './state';
@@ -98,7 +98,7 @@ const registerPowerHandlers = () => {
     powerMonitor.on('resume', refreshDesktopAppLock);
 
     // Sleep: a boost due soon goes out now, while the network is still up
-    // (best effort — see windows/suspendBoost.ts). Auto-vote state is read at event time.
+    // (best effort — see services/boostGuard/suspendBoost.ts). Auto-vote state is read at event time.
     powerMonitor.on('suspend', () => {
         applyImminentBoostsOnSuspend().catch((error: unknown) => {
             logger.withCategory('boost').error(`Boost on sleep could not run: ${failureText(error)}`, null);

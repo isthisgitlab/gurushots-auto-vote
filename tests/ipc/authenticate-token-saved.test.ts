@@ -6,7 +6,7 @@
 
 jest.mock('../../src/ts/settings');
 jest.mock('../../src/ts/apiFactory');
-jest.mock('../../src/ts/windows/quitGuard', () => ({ rememberChallenges: jest.fn() }));
+jest.mock('../../src/ts/services/boostGuard/selection', () => ({ rememberChallenges: jest.fn() }));
 
 import { invalid } from '../helpers/invalid';
 import { logCategories } from '../helpers/logCategories';

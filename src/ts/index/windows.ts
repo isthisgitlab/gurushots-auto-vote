@@ -5,7 +5,7 @@ import * as logger from '../logger';
 import { watchSettingsFile } from '../windows/settingsWatcher';
 import { syncBackgroundActivity } from '../windows/backgroundActivity';
 import { holdQuitForOpenBoosts, bypassQuitGuard, resetQuitGuard } from '../windows/quitGuard';
-import { autovoteSessionLive } from '../windows/suspendBoost';
+import { autovoteSessionLive } from '../services/boostGuard/suspendBoost';
 import { translationManager } from '../translations/index';
 import { appState } from './state';
 import { APP_PARTITION } from './session';
