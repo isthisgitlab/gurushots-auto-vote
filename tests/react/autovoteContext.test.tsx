@@ -223,6 +223,33 @@ describe('AutovoteContext', () => {
             expect(() => view!.unmount()).not.toThrow();
             view = null;
         });
+
+        it('a remount runs exactly one chain, and the fresh mount counts from zero', async () => {
+            makeStartable();
+            const first = renderProvider();
+            await act(async () => {
+                await ctx.start();
+            });
+            expect(ctx.cycles).toBe(1);
+            first.unmount();
+
+            // The fresh mount builds a fresh controller: its state is its own,
+            // not inherited from the unmounted provider.
+            renderProvider();
+            expect(ctx.cycles).toBe(0);
+            await act(async () => {
+                await ctx.start();
+            });
+            expect(ctx.cycles).toBe(1);
+
+            // Exactly one chain is alive across the remount: one cycle per
+            // cadence period — a leaked first chain would fire it twice.
+            await act(async () => {
+                await jest.advanceTimersByTimeAsync(5 * MIN + 1_000);
+            });
+            expect(window.api.runVotingCycle).toHaveBeenCalledTimes(3);
+            expect(ctx.cycles).toBe(2);
+        });
     });
 
     describe('autovote:running-changed', () => {
