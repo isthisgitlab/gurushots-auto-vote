@@ -243,7 +243,7 @@ const votingPassApi = () => pickEndpoints(realClient(), VOTING_PASS_ENDPOINTS);
 /**
  * Apply the boosts of the given challenges now, over the same endpoints and
  * entry-age ledger a voting pass uses (device going to sleep —
- * windows/suspendBoost.ts). Thin binder over the shared runSuspendBoosts.
+ * services/boostGuard/suspendBoost.ts). Thin binder over the shared runSuspendBoosts.
  */
 const applyBoostsOnSuspend = (challenges: readonly Challenge[], token: string, now?: number) =>
     runSuspendBoosts(challenges, token, { api: votingPassApi(), entryAges: entryAgeLedger }, now);

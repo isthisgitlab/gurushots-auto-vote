@@ -1,5 +1,5 @@
 /**
- * windows/suspendBoost: on device sleep, applies the boosts auto-vote would
+ * services/boostGuard/suspendBoost: on device sleep, applies the boosts auto-vote would
  * apply within 30 min, through the API strategy, and never throws.
  */
 

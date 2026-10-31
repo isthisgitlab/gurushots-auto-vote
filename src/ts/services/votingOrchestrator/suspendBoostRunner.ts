@@ -23,7 +23,7 @@ import type { BoostTarget } from './boostTargetLog';
 
 /**
  * The sleep-boost half of boost.ts: which entry a boost sent on device sleep
- * lands on (resolveSuspendBoostTarget) and the runners windows/suspendBoost
+ * lands on (resolveSuspendBoostTarget) and the runners services/boostGuard/suspendBoost
  * calls — runSuspendBoost for one selected challenge, runSuspendBoosts over
  * all of them. The boost helpers both halves share stay in boost.ts.
  */

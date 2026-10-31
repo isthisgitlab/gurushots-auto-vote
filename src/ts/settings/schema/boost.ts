@@ -90,7 +90,7 @@ export const boostSettings = {
         description: 'app.boostFreshEntryWaitDesc',
     },
     // Desktop app only: when the computer goes to sleep while auto-vote runs, a boost due
-    // within 30 min is sent right away (windows/suspendBoost.ts). Off keeps the boost at its
+    // within 30 min is sent right away (services/boostGuard/suspendBoost.ts). Off keeps the boost at its
     // set time.
     boostOnSleep: {
         type: 'boolean',
