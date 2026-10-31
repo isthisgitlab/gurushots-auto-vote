@@ -269,7 +269,8 @@ const installBridge = (): WindowApi => {
     // The renderer reads its platform from platform/kind, so the bridge marks
     // it here, where the Capacitor runtime's probe lives: calling the probe —
     // not just checking it exists — keeps a Capacitor web target unmarked, so
-    // it reads as the web shell, not the native app.
+    // it reads the default kind (electron) and gets the desktop capabilities,
+    // as it did before.
     if ((globalThis as CapacitorGlobals).Capacitor?.isNativePlatform?.() === true) {
         markPlatformKind('capacitor');
     }
