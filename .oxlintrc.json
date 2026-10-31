@@ -1,7 +1,11 @@
 {
     "$schema": "./node_modules/oxlint/configuration_schema.json",
     "plugins": ["eslint", "typescript", "react", "jsx-a11y", "unicorn"],
-    "jsPlugins": ["./scripts/lint/a11y-local.mts", "./scripts/lint/frame-guard.mts"],
+    "jsPlugins": [
+        "./scripts/lint/a11y-local.mts",
+        "./scripts/lint/frame-guard.mts",
+        "./scripts/lint/layer-boundaries.mts"
+    ],
     // Every category off: the rules below are listed explicitly, mirroring
     // eslint:recommended plus this project's rules, so an Oxlint upgrade never
     // enables new rules on its own.
@@ -234,6 +238,16 @@
             "files": ["src/ts/**/*.ts", "src/ts/**/*.tsx"],
             "rules": {
                 "frame-guard/no-unfiltered-frame-send": "error"
+            }
+        },
+        // Layer boundaries: core is shared, a platform isolates one runtime, a shell is
+        // one entry point; the table in scripts/lint/layer-boundaries.mts names each
+        // boundary. Warn, not error: today's code still crosses boundaries, and the
+        // warning count is the exit gate the layering phases must drive to zero.
+        {
+            "files": ["src/ts/**/*.ts", "src/ts/**/*.tsx"],
+            "rules": {
+                "layer-boundaries/no-cross-layer-import": "warn"
             }
         },
         // Renderer (Preact via preact/compat).

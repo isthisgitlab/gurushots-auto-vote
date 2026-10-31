@@ -332,6 +332,41 @@ describe('sends toward the Logs window', () => {
     });
 });
 
+// The layer-boundaries Oxlint rule (scripts/lint/layer-boundaries.mts) reports an import crossing a layer
+// boundary; the layering phases count these warnings as their exit gate, so the rule must stay switched on over
+// all of src/ts and at warn — erroring would fail today's code, a quieter level would hide the count.
+describe('layer boundaries', () => {
+    const RULE = 'layer-boundaries/no-cross-layer-import';
+    const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
+    const path = jest.requireActual<typeof import('node:path')>('node:path');
+    const root = path.join(__dirname, '..');
+    test('Oxlint runs the layer-boundaries rule over all of src/ts at warn, with no file exempt', () => {
+        const { execFileSync } = jest.requireActual<typeof import('node:child_process')>('node:child_process');
+        const printed: unknown = JSON.parse(
+            execFileSync(process.execPath, [path.join(root, 'node_modules/oxlint/bin/oxlint'), '--print-config'], {
+                cwd: root,
+                encoding: 'utf8',
+                timeout: 30_000,
+            }),
+        );
+        const config = isPlainObject(printed) ? printed : {};
+        expect(config.jsPlugins).toContain('./scripts/lint/layer-boundaries.mts');
+        expect(fs.existsSync(path.join(root, 'scripts/lint/layer-boundaries.mts'))).toBe(true);
+        const overrides: unknown[] = Array.isArray(config.overrides) ? config.overrides : [];
+        const enabling = overrides.filter(
+            (override) => isPlainObject(override) && isPlainObject(override.rules) && RULE in override.rules,
+        );
+        // One override switches the rule on; none later switches it off or narrows its files.
+        expect(enabling).toHaveLength(1);
+        expect(enabling[0]).toMatchObject({
+            files: ['src/ts/**/*.ts', 'src/ts/**/*.tsx'],
+            rules: { [RULE]: 'warn' },
+        });
+        // A file exemption would hide the crossings a later phase has to count.
+        expect(enabling[0]).not.toHaveProperty('excludeFiles');
+    });
+});
+
 describe('stylesheet sources', () => {
     // Tailwind generates only the classes it finds in its @source files, so a
     // glob that matches nothing (a renamed extension, a moved folder) silently
