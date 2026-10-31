@@ -69,6 +69,7 @@ const createHeadlessPaths = (): PlatformPaths => ({
     userData: getUserDataPath,
     getUserDataDir,
     isPackaged: () => false,
+    isElectronPackaged: () => false,
     isSourceCode: () => true,
     resourcesPath: () => {
         throw new Error('headless has no app-root path');

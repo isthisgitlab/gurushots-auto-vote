@@ -162,6 +162,7 @@ const createNodePaths = (): PlatformPaths => {
         },
         getUserDataDir,
         isPackaged,
+        isElectronPackaged: () => isElectron() && isPackaged(),
         isSourceCode,
         // The packaged-Electron branch of the vision model's location
         // (visionVerifier getModelLocation): from source, the resources are the

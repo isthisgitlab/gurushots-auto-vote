@@ -278,6 +278,21 @@ describe('isPackaged', () => {
     });
 });
 
+describe('isElectronPackaged', () => {
+    test('Electron: true only for a packaged app', () => {
+        withNodePaths({ electron: () => ({ app: { isPackaged: true } }) }, (paths) =>
+            expect(paths.isElectronPackaged()).toBe(true),
+        );
+        withNodePaths({ electron: () => ({ app: { isPackaged: false } }) }, (paths) =>
+            expect(paths.isElectronPackaged()).toBe(false),
+        );
+    });
+
+    test('plain Node is never the packaged Electron app', () => {
+        expect(createNodePaths().isElectronPackaged()).toBe(false);
+    });
+});
+
 describe('the app identity the family serves', () => {
     test('getAppName carries the -dev suffix when running from source', () => {
         installTestPlatform({ paths: createNodePaths() });

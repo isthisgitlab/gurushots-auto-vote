@@ -27,6 +27,9 @@ const createWebviewPaths = (): PlatformPaths => ({
         const cap = (globalThis as CapacitorGlobals).Capacitor;
         return cap != null && typeof cap.isNativePlatform === 'function' ? cap.isNativePlatform() : false;
     },
+    // Never Electron: the native runtime's packaged read (isPackaged above)
+    // is the device's, not the desktop app's.
+    isElectronPackaged: () => false,
     isSourceCode: () => true,
     resourcesPath: () => {
         throw new Error('webview has no app-root path');

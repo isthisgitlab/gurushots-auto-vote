@@ -148,6 +148,12 @@ export type PlatformPaths = {
     getUserDataDir: (appName: string) => string;
     /** Whether this is a packaged build (packaged Electron, a native runtime). */
     isPackaged: () => boolean;
+    /**
+     * Whether this is the packaged Electron app: Electron's packaged flag,
+     * false on every other family (the Android shells included, where the
+     * native runtime's own packaged read must not stand in for it).
+     */
+    isElectronPackaged: () => boolean;
     /** Whether the app runs from source rather than a packaged build. */
     isSourceCode: () => boolean;
     /** The directory read-only resources (the Electron resources path, the app root from source) live in. */

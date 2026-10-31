@@ -37,7 +37,7 @@ const launchedAt = Date.now();
 
 // Get current environment information
 const getEnvironmentInfo = () => {
-    const isElectronPackaged = platform().paths.isPackaged();
+    const isElectronPackaged = platform().paths.isElectronPackaged();
     const isBuiltApp = isElectronPackaged || !platform().paths.isSourceCode();
 
     return {
