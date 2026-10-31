@@ -1,0 +1,121 @@
+/**
+ * The node family's storage member: the fs transport of the JSON stores. The
+ * wrapped write helpers are reached at call time, so the module mocks stand;
+ * the reads run over the fs mock tests/setup.ts installs. The no-op members
+ * (no hydrate, no queue, no bridge) answer what the storage branches answer
+ * off Capacitor and headless.
+ */
+
+jest.mock('../../../src/ts/settings/atomicWrite', () => ({
+    __esModule: true,
+    writeAtomicOwnerOnly: jest.fn(),
+    sweepStaleTemps: jest.fn(),
+}));
+jest.mock('../../../src/ts/settings/ownerOnlyWrite', () => ({
+    __esModule: true,
+    writeOwnerOnly: jest.fn(),
+}));
+jest.mock('../../../src/ts/settings/settingsFileNode', () => ({
+    __esModule: true,
+    hasQuarantinedOnDisk: jest.fn(),
+    renameToCorruptBackup: jest.fn(),
+    writeIfAbsentOnDisk: jest.fn(),
+}));
+
+import fsModule = require('node:fs');
+const fs = jest.mocked(fsModule);
+import atomicWriteModule = require('../../../src/ts/settings/atomicWrite');
+const atomicWrite = jest.mocked(atomicWriteModule);
+import ownerOnlyWriteModule = require('../../../src/ts/settings/ownerOnlyWrite');
+const ownerOnly = jest.mocked(ownerOnlyWriteModule);
+import settingsFileNodeModule = require('../../../src/ts/settings/settingsFileNode');
+const fileNode = jest.mocked(settingsFileNodeModule);
+
+import { createNodeStorage } from '../../../src/ts/platforms/node/store';
+
+import type { SettingsStoreRef } from '../../../src/ts/platform/port';
+import type { WriteIfAbsentResult } from '../../../src/ts/settings/storageTypes';
+
+const store = (file: string): SettingsStoreRef => ({ prefKey: 'gs_test', filePath: () => file });
+const storage = createNodeStorage();
+
+describe('readRaw', () => {
+    test('it reads the store file', () => {
+        fs.existsSync.mockReturnValue(true);
+        fs.readFileSync.mockReturnValue('{"a":1}');
+        expect(storage.readRaw(store('/data/x.json'))).toBe('{"a":1}');
+        expect(fs.readFileSync).toHaveBeenCalledWith('/data/x.json', 'utf8');
+    });
+
+    test('it answers null for a store never written', () => {
+        fs.existsSync.mockReturnValue(false);
+        expect(storage.readRaw(store('/data/x.json'))).toBeNull();
+    });
+});
+
+describe('writeRaw', () => {
+    test('an atomic store is replaced by temp file and rename', () => {
+        storage.writeRaw(store('/data/x.json'), 'DATA', true);
+        expect(atomicWrite.writeAtomicOwnerOnly).toHaveBeenCalledWith('/data/x.json', 'DATA');
+        expect(ownerOnly.writeOwnerOnly).not.toHaveBeenCalled();
+    });
+
+    test('a store that is not atomic is written in place', () => {
+        storage.writeRaw(store('/data/x.json'), 'DATA', false);
+        expect(ownerOnly.writeOwnerOnly).toHaveBeenCalledWith('/data/x.json', 'DATA');
+    });
+});
+
+describe('the file-backed store methods', () => {
+    test('writeIfAbsent delegates to settingsFileNode', () => {
+        const saved: WriteIfAbsentResult = { outcome: 'saved' };
+        fileNode.writeIfAbsentOnDisk.mockReturnValue(saved);
+        expect(storage.writeIfAbsent(store('/data/x.json'), 'IMPORT')).toEqual(saved);
+        expect(fileNode.writeIfAbsentOnDisk).toHaveBeenCalledWith('/data/x.json', 'IMPORT');
+    });
+
+    test('location answers the file path', () => {
+        expect(storage.location(store('/data/x.json'))).toBe('/data/x.json');
+    });
+
+    test('hasQuarantined delegates to settingsFileNode', () => {
+        const ref = store('/data/x.json');
+        fileNode.hasQuarantinedOnDisk.mockReturnValue(true);
+        expect(storage.hasQuarantined(ref)).toBe(true);
+        expect(fileNode.hasQuarantinedOnDisk).toHaveBeenCalledWith(ref.filePath);
+    });
+
+    test('quarantineRaw renames the file to a corrupt backup named with the time it was set aside', () => {
+        const ref = store('/data/x.json');
+        const quarantined = { ok: true as const, path: '/data/x.json.corrupt-moved' };
+        fileNode.renameToCorruptBackup.mockReturnValue(quarantined);
+        expect(storage.quarantineRaw(ref, 'UNUSABLE')).toEqual(quarantined);
+        expect(fileNode.renameToCorruptBackup).toHaveBeenCalledWith(
+            '/data/x.json',
+            expect.stringMatching(/^\/data\/x\.json\.corrupt-\d{4}-\d{2}-\d{2}T/),
+        );
+    });
+});
+
+describe('the desktop no-ops', () => {
+    test('there is no plugin read, no hydration, no queue and no native bridge', () => {
+        expect(storage.storedKey).toBeNull();
+        expect(storage.preferences).toBeNull();
+        expect(storage.headlessStore()).toBeUndefined();
+        expect(storage.cas).toBeNull();
+        expect(storage.sharedUpdate).toBeNull();
+    });
+
+    test('a read cannot fail, and the file is what is stored', () => {
+        expect(storage.readFailed('gs_test')).toBe(false);
+        expect(storage.loaded('gs_test')).toBe(true);
+    });
+
+    test('flushed resolves at once', async () => {
+        await expect(storage.flushed()).resolves.toBeUndefined();
+    });
+
+    test('two processes share the directory, so the settings file lock decides', () => {
+        expect(storage.lockPolicy).toBe('file');
+    });
+});

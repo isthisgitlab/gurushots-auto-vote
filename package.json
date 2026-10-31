@@ -248,7 +248,8 @@
                     "<rootDir>/src/ts"
                 ],
                 "setupFilesAfterEnv": [
-                    "<rootDir>/tests/setup.ts"
+                    "<rootDir>/tests/setup.ts",
+                    "<rootDir>/tests/setupPlatform.ts"
                 ],
                 "testMatch": [
                     "**/__tests__/**/*.ts",
