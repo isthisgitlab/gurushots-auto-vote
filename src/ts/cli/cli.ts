@@ -26,7 +26,7 @@ import * as logger from '../logger';
 logger.withCategory('api').debug('CLI module loaded, starting initialization', null);
 
 import * as settings from '../settings';
-import { UserDataUnavailableError } from '../platforms/node/paths';
+import { UserDataUnavailableError } from '../platform/userDataUnavailable';
 import { fileErrorMessage } from '../errorMessage';
 import { initializeHeaders } from '../api/randomizer';
 import { COMMANDS, holdsSessionMarker } from './commandTable';

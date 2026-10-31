@@ -6,6 +6,8 @@
  * resolves the code it needs, and the value it answers, on each call.
  */
 
+import { UserDataUnavailableError } from '../../platform/userDataUnavailable';
+
 import type { PlatformPaths } from '../../platform/port';
 
 type AppPathsModule = typeof import('../../appPaths');
@@ -31,21 +33,6 @@ const nodeOs = (): OsModule => require('node:os') as OsModule;
  */
 const isElectron = () =>
     typeof process !== 'undefined' && process.versions != null && process.versions.electron != null;
-
-/**
- * The app's user-data directory does not exist and cannot be created. The message says what happened, why and what to
- * do next, so a shell can show it as it is.
- */
-class UserDataUnavailableError extends Error {
-    readonly path: string;
-    constructor(userDataPath: string, reason: string) {
-        super(
-            `The app's data folder ${userDataPath} does not exist and could not be created (${reason}). Settings and the login are not stored anywhere else, so nothing was started. Create the folder, or make its parent writable by this account, and run again.`,
-        );
-        this.name = 'UserDataUnavailableError';
-        this.path = userDataPath;
-    }
-}
 
 // The platform-native user data directory of one app name. The Windows branch falls back to the manual
 // AppData path when APPDATA isn't set (some shells/CI). The Capacitor stub of the WebView bundles is the

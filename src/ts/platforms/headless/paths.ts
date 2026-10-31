@@ -9,6 +9,8 @@
  * so they throw rather than invent one.
  */
 
+import { UserDataUnavailableError } from '../../platform/userDataUnavailable';
+
 import type { PlatformPaths } from '../../platform/port';
 
 type AppIdentityModule = typeof import('../../platform/appIdentity');
@@ -24,22 +26,6 @@ const appIdentity = (): AppIdentityModule => require('../../platform/appIdentity
 const nodeFs = (): FsModule => require('node:fs') as FsModule;
 const nodePath = (): PathModule => require('node:path') as PathModule;
 const nodeOs = (): OsModule => require('node:os') as OsModule;
-
-/**
- * The app's user-data directory does not exist and cannot be created. Same
- * error the node family throws: the service shares the message contract, and
- * families never import one another, so the class is declared here again.
- */
-class UserDataUnavailableError extends Error {
-    readonly path: string;
-    constructor(userDataPath: string, reason: string) {
-        super(
-            `The app's data folder ${userDataPath} does not exist and could not be created (${reason}). Settings and the login are not stored anywhere else, so nothing was started. Create the folder, or make its parent writable by this account, and run again.`,
-        );
-        this.name = 'UserDataUnavailableError';
-        this.path = userDataPath;
-    }
-}
 
 // The platform-native user data directory of one app name (runtime's OS
 // branch, minus the Capacitor stub — the service has no Capacitor runtime).
