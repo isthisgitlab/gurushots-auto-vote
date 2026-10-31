@@ -10,11 +10,11 @@ import * as logger from '../logger';
 import { generateRandomHeaders } from './randomizer';
 import { sleep } from '../timing';
 import * as settings from '../settings';
-import * as runtime from '../runtime';
+import { platform } from '../platform/port';
 import { ENDPOINTS, FORM_CONTENT_TYPE } from './constants';
 import { isPlainObject } from '../plainObject';
 
-import type { AxiosAdapter, AxiosRequestConfig, AxiosResponse } from 'axios';
+import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 import {
     describeFailure,
     failureVerdict,
@@ -31,161 +31,18 @@ import type { PostOutcome } from './postOutcome';
  */
 type RequestHeaders = Record<string, string | undefined>;
 
-/**
- * The native bridge globals of the Android headless-service WebView.
- */
-interface HeadlessHttpGlobals {
-    __gsResolveHeadlessHttp?: (id: number, resultJson: string) => void;
-    AndroidHeadlessHttp: {
-        request: (id: number, method: string, url: string, headersJson: string, body: string) => void;
-    };
-}
-
 // A custom axios adapter must enforce validateStatus itself — axios does not
 // post-process an adapter's resolved value — so non-2xx responses must reject
 // with the response attached. That's what lets makePostRequest's retry/backoff
 // classify 429/5xx as retryable and surface other 4xx (e.g. invalid token) as
 // terminal, instead of handing an error body back to callers as a "success".
-// Shared by both the Capacitor and headless adapters below.
+// The platform adapters (platforms/webview/http.ts, platforms/headless/http.ts)
+// end in it; the axios default adapter needs no help.
 const finalizeAdapterResponse = (response: AxiosResponse): AxiosResponse => {
     if (response.status >= 200 && response.status < 300) return response;
     const err = new Error(`Request failed with status code ${response.status}`) as Error & { response?: AxiosResponse };
     err.response = response;
     throw err;
-};
-
-// Capacitor adapter: routes axios requests through CapacitorHttp's native
-// OkHttp client (Android) so we can set headers that browser fetch can't
-// (host, user-agent, etc. — the iOS-spoof in randomizer.ts depends on it).
-// Lazy-loaded so Electron / CLI builds never resolve @capacitor/core.
-let capacitorAdapter: AxiosAdapter | null = null;
-const getCapacitorHttpAdapter = (): AxiosAdapter => {
-    if (capacitorAdapter) return capacitorAdapter;
-    const { CapacitorHttp } = require('@capacitor/core') as typeof import('@capacitor/core');
-    capacitorAdapter = async (config) => {
-        const response = await CapacitorHttp.request({
-            method: (config.method || 'get').toUpperCase(),
-            url: config.url as string,
-            headers: config.headers,
-            data: config.data as unknown,
-            connectTimeout: config.timeout,
-            readTimeout: config.timeout,
-            disableRedirects: true,
-        });
-        // Throwing here surfaces as a rejection from this async adapter, so a
-        // 429/5xx on the foreground path reaches the retry layer instead
-        // of being mistaken for a successful response.
-        return finalizeAdapterResponse({
-            data: response.data as unknown,
-            status: response.status,
-            statusText: '',
-            headers: response.headers || {},
-            config,
-        });
-    };
-    return capacitorAdapter;
-};
-
-// Headless background-service adapter: routes axios through a native
-// @JavascriptInterface (AndroidHeadlessHttp) backed by OkHttp, since the
-// bare service WebView has no Capacitor runtime / CapacitorHttp.
-//
-// Asynchronous by design: a synchronous bridge would block the WebView's
-// JS thread for the whole network round-trip. Instead `request` returns
-// immediately, native runs OkHttp off-thread, and posts the result back
-// by calling globalThis.__gsResolveHeadlessHttp(id, resultJson) — where
-// resultJson is a JSON string { status, body, headers }.
-let headlessReqSeq = 0;
-const headlessPending: Map<number, (resultJson: string) => void> = new Map();
-const headlessGlobals = globalThis as typeof globalThis & HeadlessHttpGlobals;
-const ensureHeadlessResolver = () => {
-    if (headlessGlobals.__gsResolveHeadlessHttp) return;
-    headlessGlobals.__gsResolveHeadlessHttp = (id, resultJson) => {
-        const cb = headlessPending.get(id);
-        if (cb) {
-            headlessPending.delete(id);
-            cb(resultJson);
-        }
-    };
-};
-
-type HeadlessResult = { error?: string; status: number; body: string; headers: Record<string, string> };
-
-/**
- * The native bridge's result JSON as a HeadlessResult. It is parsed as `unknown` and checked: a result with no
- * numeric status (and no `error`), or a body that is not a string, is rejected as malformed.
- */
-const parseHeadlessResult = (resultJson: string): HeadlessResult => {
-    const parsed: unknown = JSON.parse(resultJson);
-    if (!isPlainObject(parsed)) throw new Error('Malformed native HTTP result');
-    if (parsed.error) {
-        if (typeof parsed.error !== 'string') throw new Error('Malformed native HTTP result');
-        return { error: parsed.error, status: 0, body: '', headers: {} };
-    }
-    if (typeof parsed.status !== 'number' || !Number.isFinite(parsed.status) || typeof parsed.body !== 'string') {
-        throw new Error('Malformed native HTTP result');
-    }
-    const headers: Record<string, string> = {};
-    if (isPlainObject(parsed.headers)) {
-        for (const [name, value] of Object.entries(parsed.headers)) {
-            if (typeof value === 'string') headers[name] = value;
-        }
-    }
-    return { status: parsed.status, body: parsed.body, headers };
-};
-
-let headlessAdapter: AxiosAdapter | null = null;
-const getHeadlessHttpAdapter = (): AxiosAdapter => {
-    if (headlessAdapter) return headlessAdapter;
-    ensureHeadlessResolver();
-    headlessAdapter = (config) =>
-        new Promise((resolve, reject) => {
-            const id = ++headlessReqSeq;
-            headlessPending.set(id, (resultJson) => {
-                try {
-                    // The AndroidHeadlessHttp result contract (see the adapter note above).
-                    const parsed = parseHeadlessResult(resultJson);
-                    // A transport/network failure on the native side — reject so
-                    // the retry layer treats it as a (retryable) no-response error.
-                    if (parsed.error) {
-                        reject(new Error(parsed.error));
-                        return;
-                    }
-                    // The API returns JSON; parse the body so callers get an
-                    // object, matching CapacitorHttp/axios. Leave non-JSON as-is.
-                    let data: unknown = parsed.body;
-                    try {
-                        data = JSON.parse(parsed.body);
-                    } catch {
-                        /* non-JSON body — return the raw string */
-                    }
-                    const response = {
-                        data,
-                        status: parsed.status,
-                        statusText: '',
-                        headers: parsed.headers,
-                        config,
-                    };
-                    // finalizeAdapterResponse throws on non-2xx (with the
-                    // response attached) — that throw is caught by the
-                    // surrounding catch below and rejected, so the retry/backoff
-                    // layer classifies it; otherwise we resolve the 2xx response.
-                    const finalized = finalizeAdapterResponse(response);
-                    resolve(finalized);
-                } catch (err) {
-                    reject(err);
-                }
-            });
-            const body = typeof config.data === 'string' ? config.data : config.data ? JSON.stringify(config.data) : '';
-            headlessGlobals.AndroidHeadlessHttp.request(
-                id,
-                (config.method || 'get').toUpperCase(),
-                config.url as string,
-                JSON.stringify(config.headers || {}),
-                body,
-            );
-        });
-    return headlessAdapter;
 };
 
 // Endpoints whose response bodies carry account data (the login token and the member profile), other
@@ -242,11 +99,8 @@ const postConfig = (url: string, headers: RequestHeaders, data: string): AxiosRe
         // The API never redirects; following one would replay the x-token header at the target.
         maxRedirects: 0,
     };
-    if (runtime.isHeadlessService()) {
-        requestConfig.adapter = getHeadlessHttpAdapter();
-    } else if (runtime.isCapacitor()) {
-        requestConfig.adapter = getCapacitorHttpAdapter();
-    }
+    const adapter = platform().http.adapter;
+    if (adapter !== null) requestConfig.adapter = adapter;
     return requestConfig;
 };
 
@@ -392,11 +246,4 @@ const createCommonHeaders = (token: string | undefined): RequestHeaders => {
     return generateRandomHeaders(token);
 };
 
-export {
-    makePostRequest,
-    postOnce,
-    createCommonHeaders,
-    FORM_CONTENT_TYPE,
-    getCapacitorHttpAdapter,
-    getHeadlessHttpAdapter,
-};
+export { makePostRequest, postOnce, createCommonHeaders, FORM_CONTENT_TYPE, finalizeAdapterResponse };

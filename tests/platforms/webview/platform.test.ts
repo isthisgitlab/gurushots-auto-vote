@@ -1,14 +1,14 @@
 /**
  * The webview family as a whole: the platform createWebviewPlatform builds
  * with the parts the shell passes in — every part required. The adapter
- * builder is mocked at its core module, the plugin module at
+ * builder is mocked at its family http module, the plugin module at
  * settings/capacitorPreferences; the scenario rule is computed from the
  * native part the shell passes.
  */
 
 const mockAdapter = jest.fn<AxiosPromise, []>();
 
-jest.mock('../../../src/ts/api/api-client', () => ({
+jest.mock('../../../src/ts/platforms/webview/http', () => ({
     __esModule: true,
     getCapacitorHttpAdapter: jest.fn((): AxiosAdapter => mockAdapter),
 }));
@@ -38,8 +38,8 @@ import { createWebviewPlatform } from '../../../src/ts/platforms/webview';
 import type { AxiosAdapter, AxiosPromise } from 'axios';
 import type { PlatformNative } from '../../../src/ts/platform/port';
 
-const apiClient = jest.mocked(
-    require('../../../src/ts/api/api-client') as typeof import('../../../src/ts/api/api-client'),
+const webviewHttp = jest.mocked(
+    require('../../../src/ts/platforms/webview/http') as typeof import('../../../src/ts/platforms/webview/http'),
 );
 
 type WebviewParts = Parameters<typeof createWebviewPlatform>[0];
@@ -62,7 +62,7 @@ describe('the webview platform', () => {
     test('the adapter is the CapacitorHttp one, resolved on read', () => {
         const p = createWebviewPlatform(parts());
         expect(p.http.adapter).toBe(mockAdapter);
-        expect(apiClient.getCapacitorHttpAdapter).toHaveBeenCalled();
+        expect(webviewHttp.getCapacitorHttpAdapter).toHaveBeenCalled();
     });
 
     test('the native members are the nulls the parts pass, and the wipe finds no plugin', async () => {

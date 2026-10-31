@@ -47,9 +47,9 @@ type WebviewNativeParts = {
     windows: PlatformWindows;
 };
 
-type ApiClientModule = typeof import('../../api/api-client');
+type WebviewHttpModule = typeof import('./http');
 
-const apiClient = (): ApiClientModule => require('../../api/api-client') as ApiClientModule;
+const webviewHttp = (): WebviewHttpModule => require('./http') as WebviewHttpModule;
 
 const createWebviewCapabilities = (parts: WebviewNativeParts): Platform['capabilities'] => ({
     // The mission-needs refresh resolver is the headless cycle's; Snap plays
@@ -75,11 +75,11 @@ const createWebviewCapabilities = (parts: WebviewNativeParts): Platform['capabil
  * family's.
  */
 const createWebviewPlatform = (parts: WebviewNativeParts): Platform => ({
-    // The CapacitorHttp adapter of api-client.ts, resolved on read so building
+    // The CapacitorHttp adapter (./http), resolved on read so building
     // the platform loads no module graph.
     http: {
         get adapter() {
-            return apiClient().getCapacitorHttpAdapter();
+            return webviewHttp().getCapacitorHttpAdapter();
         },
     },
     storage: createWebviewStorage(),

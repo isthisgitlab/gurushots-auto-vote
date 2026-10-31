@@ -1,12 +1,12 @@
 /**
  * The headless family as a whole: the platform createHeadlessPlatform builds.
- * The adapter builder is mocked at its core module; the service is itself the
- * native side, so nothing is passed in.
+ * The adapter builder is mocked at its family http module; the service is
+ * itself the native side, so nothing is passed in.
  */
 
 const mockAdapter = jest.fn<AxiosPromise, []>();
 
-jest.mock('../../../src/ts/api/api-client', () => ({
+jest.mock('../../../src/ts/platforms/headless/http', () => ({
     __esModule: true,
     getHeadlessHttpAdapter: jest.fn((): AxiosAdapter => mockAdapter),
 }));
@@ -18,8 +18,8 @@ import { createHeadlessPlatform } from '../../../src/ts/platforms/headless';
 import type { AxiosAdapter, AxiosPromise } from 'axios';
 import type { PlatformWindows } from '../../../src/ts/platform/port';
 
-const apiClient = jest.mocked(
-    require('../../../src/ts/api/api-client') as typeof import('../../../src/ts/api/api-client'),
+const headlessHttp = jest.mocked(
+    require('../../../src/ts/platforms/headless/http') as typeof import('../../../src/ts/platforms/headless/http'),
 );
 
 // The service's windows: the explicit no-ops its shell module passes (a bare
@@ -33,7 +33,7 @@ describe('the headless platform', () => {
     test('the adapter is the AndroidHeadlessHttp one, resolved on read', () => {
         const p = createHeadlessPlatform(windows);
         expect(p.http.adapter).toBe(mockAdapter);
-        expect(apiClient.getHeadlessHttpAdapter).toHaveBeenCalled();
+        expect(headlessHttp.getHeadlessHttpAdapter).toHaveBeenCalled();
     });
 
     test('the service is itself the native side, and the windows are the no-ops the shell passes', () => {

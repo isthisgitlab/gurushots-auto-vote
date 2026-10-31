@@ -25,9 +25,9 @@ import { createHeadlessWipe } from './wipe';
 
 import type { Platform, PlatformWindows } from '../../platform/port';
 
-type ApiClientModule = typeof import('../../api/api-client');
+type HeadlessHttpModule = typeof import('./http');
 
-const apiClient = (): ApiClientModule => require('../../api/api-client') as ApiClientModule;
+const headlessHttp = (): HeadlessHttpModule => require('./http') as HeadlessHttpModule;
 
 const createHeadlessCapabilities = (): Platform['capabilities'] => ({
     // The headless cycle has no pass-scoped fetch, so the pass builds the
@@ -52,11 +52,11 @@ const createHeadlessCapabilities = (): Platform['capabilities'] => ({
  * service with no windows — the headless shell module passes them).
  */
 const createHeadlessPlatform = (windows: PlatformWindows): Platform => ({
-    // The AndroidHeadlessHttp adapter of api-client.ts, resolved on read so
+    // The AndroidHeadlessHttp adapter (./http), resolved on read so
     // building the platform loads no module graph.
     http: {
         get adapter() {
-            return apiClient().getHeadlessHttpAdapter();
+            return headlessHttp().getHeadlessHttpAdapter();
         },
     },
     storage: createHeadlessStorage(),
