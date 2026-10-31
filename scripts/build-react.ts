@@ -366,4 +366,7 @@ export {
     headlessHtml,
     webHtml,
     buildReact,
+    entryPoints,
+    commonOptions,
+    perEntryOptions,
 };

@@ -575,3 +575,52 @@ describe('renderer button colours', () => {
         expect(offenders).toEqual([]);
     });
 });
+
+// The layering plan keeps the platform code out of the renderer bundles: the renderer chain lives in
+// src/ts/autovote/controller.ts and the native services arrive as an injected background host
+// (src/ts/bridge/capacitorBackgroundHost.ts) that only the Capacitor page imports. An indirect import could
+// route around a source-text scan, so the evidence is esbuild's own module graph: the four renderer bundles
+// are rebuilt in-process with the build script's exact options and every input file is checked.
+describe('renderer bundle graphs', () => {
+    // tests/setup.ts mocks fs and path globally; esbuild's client resolves paths for real.
+    jest.unmock('fs');
+    jest.unmock('path');
+    const path = jest.requireActual<typeof import('node:path')>('node:path');
+    const root = path.join(__dirname, '..');
+    // The Electron pages and the web-shell entry. The Capacitor, headless and preload bundles may
+    // legitimately reach the platform code and are not checked.
+    const CHECKED_ENTRIES = ['app', 'login', 'logs', 'web'] as const;
+    const FORBIDDEN_EXACT = [
+        'src/ts/platform/port.ts',
+        'src/ts/services/NativeAutovoteBridge.ts',
+        'src/ts/services/ForegroundServiceController.ts',
+        'src/ts/services/AndroidUpdateInstaller.ts',
+    ];
+    const FORBIDDEN_DIR = 'src/ts/platforms/';
+
+    test('no renderer bundle pulls in the platform layer or the native services', async () => {
+        const esbuild = jest.requireActual<typeof import('esbuild')>('esbuild');
+        const { commonOptions, entryPoints, perEntryOptions } =
+            jest.requireActual<typeof import('../scripts/build-react')>('../scripts/build-react');
+        const offenders: string[] = [];
+        for (const name of CHECKED_ENTRIES) {
+            const result = await esbuild.build({
+                ...commonOptions,
+                ...perEntryOptions[name],
+                entryPoints: [entryPoints[name]],
+                metafile: true,
+                write: false,
+                logLevel: 'silent',
+                // The build script runs from the repository root: the metafile keys
+                // are relative to it and the alias map resolves from here.
+                absWorkingDir: root,
+            });
+            const { metafile } = result;
+            for (const input of Object.keys(metafile.inputs)) {
+                const rel = path.relative(root, path.resolve(root, input)).split(path.sep).join('/');
+                if (FORBIDDEN_EXACT.includes(rel) || rel.startsWith(FORBIDDEN_DIR)) offenders.push(`${name}: ${rel}`);
+            }
+        }
+        expect(offenders).toEqual([]);
+    }, 60_000);
+});
