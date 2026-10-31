@@ -11,6 +11,7 @@
  */
 
 import * as logger from '../logger';
+import { isCapacitorNative } from '../bridge/capacitorPresence';
 
 import type { AutoVoteBackgroundPlugin, AutoVoteStatus, CapacitorGlobals } from '../types/capacitor';
 import { errorMessage } from '../errorMessage';
@@ -19,13 +20,10 @@ let pluginInstance: AutoVoteBackgroundPlugin | null = null;
 // A build without the plugin is looked at on every call (claim changes ask too): it is said once.
 let warnedAbsent = false;
 const getPlugin = () => {
-    const cap = (globalThis as CapacitorGlobals).Capacitor;
-    // The Capacitor runtime's presence — the global is here and its platform
-    // probe is a function. The probe is not called, so a Capacitor web
-    // target (no native runtime) counts as absent.
-    if (cap == null || typeof cap.isNativePlatform !== 'function') return null;
+    if (!isCapacitorNative()) return null;
     if (pluginInstance) return pluginInstance;
     try {
+        const cap = (globalThis as CapacitorGlobals).Capacitor;
         pluginInstance = cap?.Plugins?.AutoVoteBackground || null;
         if (!pluginInstance && !warnedAbsent) {
             warnedAbsent = true;

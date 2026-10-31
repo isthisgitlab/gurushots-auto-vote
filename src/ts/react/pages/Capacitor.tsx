@@ -88,7 +88,7 @@ const clearLeftoverToken = async (): Promise<void> => {
 const bootstrap = async () => {
     // The bridge's Capacitor-global presence check (the global is here and
     // its platform probe is a function — the probe is not called, so a
-    // Capacitor web target counts as absent).
+    // Capacitor web target counts as present here too, as it always did).
     if (isCapacitorNative()) {
         installBridge();
         // The local stores hydrate through localStores (one list; see it): the settings come first, and seeding

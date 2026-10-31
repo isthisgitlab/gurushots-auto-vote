@@ -16,6 +16,7 @@
  */
 
 import * as logger from '../logger';
+import { isCapacitorNative } from '../bridge/capacitorPresence';
 import * as updateChecker from './UpdateChecker';
 import { errorMessage } from '../errorMessage';
 
@@ -35,14 +36,6 @@ const RELEASE_PAGE_OPENED = 'release-page-opened';
 const rejectionCode = (err: unknown): string | undefined => {
     const code = (err as { code?: unknown } | null | undefined)?.code;
     return typeof code === 'string' && code ? code : undefined;
-};
-
-// The Capacitor runtime's presence — the global is here and its platform
-// probe is a function. The probe is not called, so a Capacitor web target
-// (no native runtime) counts as absent.
-const isCapacitorNative = () => {
-    const cap = (globalThis as CapacitorGlobals).Capacitor;
-    return cap != null && typeof cap.isNativePlatform === 'function';
 };
 
 // The native plugin, when this build registered it. Accessed lazily (only

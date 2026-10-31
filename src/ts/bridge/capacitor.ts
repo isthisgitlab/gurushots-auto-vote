@@ -32,6 +32,7 @@ import { buildReleaseUpdateHandlers } from '../ipc/releaseUpdates';
 // preload.ts via the channel manifest so both shells derive identically.
 import { kebabToCamel, aliases, sendMethods, eventMethods } from '../ipc/manifest';
 import { markPlatformKind } from '../platform/kind';
+import { isCapacitorNative as sharedIsCapacitorNative } from './capacitorPresence';
 
 import { invokeHandler } from '../ipc/registerHandlers';
 import type { IpcHandler } from '../ipc/registerHandlers';
@@ -198,15 +199,11 @@ const reloadWindow = () => {
 };
 
 /**
- * The Capacitor runtime's presence — the global is here and its platform
- * probe is a function. The probe is not called, so a Capacitor web target
- * (no native runtime) counts as absent. The renderer pages take this through
- * the bridge: react/ carries no Capacitor-global reads of its own.
+ * The Capacitor runtime's presence, shared with the other shell modules —
+ * the renderer pages take it through the bridge: react/ carries no
+ * Capacitor-global reads of its own.
  */
-const isCapacitorNative = () => {
-    const cap = (globalThis as CapacitorGlobals).Capacitor;
-    return cap != null && typeof cap.isNativePlatform === 'function';
-};
+const isCapacitorNative = sharedIsCapacitorNative;
 
 const openExternalUrl = (url: unknown) => {
     // Same https-only scheme gate as the Electron handler (shared via
