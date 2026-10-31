@@ -12,8 +12,8 @@
  * land without the app seeing the reply — so a null result reads "not confirmed",
  * never "failed", and the next pass after wake shows what happened.
  *
- * Which challenges and when is the quit guard's remembered list and the boost
- * row of describeDeadlineActions (autoBoost / Boost Time 0 = off / turbo-conflict
+ * Which challenges and when is the boost selection in services/boostGuard/selection.ts
+ * and the boost row of describeDeadlineActions (autoBoost / Boost Time 0 = off / turbo-conflict
  * gating already applied). The boost itself is the voting pass's own decision
  * (services/votingOrchestrator/suspendBoostRunner.ts runSuspendBoost), reached through
  * the API strategy so mock mode never touches the real entry-age file. Its one
@@ -38,7 +38,7 @@
 import * as logger from '../../logger';
 import * as settings from '../../settings';
 import * as apiFactory from '../../apiFactory';
-import * as votingLogic from '../../services/VotingLogic';
+import * as votingLogic from '../VotingLogic';
 import { isInteger } from '../../numbers';
 import { formatDuration } from '../../format/duration';
 import { failureText } from '../../format/logSafe';

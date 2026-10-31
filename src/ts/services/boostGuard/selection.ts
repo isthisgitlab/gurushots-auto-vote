@@ -1,9 +1,13 @@
 /**
- * The main process does not poll the API itself; it remembers the last
- * challenge list the renderer fetched through `get-active-challenges` (the
- * cadence chain and the list view both refresh through it). Window expiry is
- * checked against the wall clock at quit time; a boost applied since the last
- * fetch can prompt once more, which is the cheap side to err on.
+ * What every shell shares here: the last challenge list `get-active-challenges`
+ * returned (the cadence chain and the list view both refresh through it), the
+ * `mock` flag it was fetched under, and the imminent-boost selection derived
+ * from that list, which the Electron quit dialog and the sleep boost share.
+ * The Electron main process does not poll the API itself and remembers what the
+ * renderer fetched; the CLI and Capacitor load this module through
+ * `ipc/actions/account.ts` as well. Window expiry is checked against the wall
+ * clock at read time; a boost applied since the last fetch can count once
+ * more, which is the cheap side to err on.
  */
 
 import { openBoostWindows } from '../../voting/boostWindow';
@@ -49,7 +53,7 @@ const markBoostApplied = (id: Challenge['id']) => {
     if (boost) boost.state = 'USED';
 };
 
-/** Clear the remembered list and its mock flag — the values `resetQuitGuard` resets with the rest of the guard's state. */
+/** Clear the remembered list and its mock flag. */
 const resetBoostSelection = () => {
     lastChallenges = [];
     lastChallengesMock = null;

@@ -794,7 +794,8 @@ repeated six times is one that gets forgotten at one of them.
   retried. On
   Electron it clears the storage and cache of the app's windows and of Electron's default session (its files sit at
   the user-data root). After a successful wipe Electron and Android relaunch; the web shell's server stops, so its text says to
-  start `pnpm web` again (`usePlatformCapabilities().relaunchesAfterWipe`, read from the flag the web bridge sets).
+  start `pnpm web` again (`usePlatformCapabilities().relaunchesAfterWipe`, read from the platform kind the web
+  bridge marks).
 - Write-behind is **ordered** (writes chain onto a promise) and `flushPendingWrites()` awaits durability
   before session invalidation. On Capacitor, `initializeAsync()` must be awaited before the first sync
   read — **each store hydrates independently**, so a new store must be wired into the Capacitor bootstrap
@@ -802,7 +803,8 @@ repeated six times is one that gets forgotten at one of them.
   alongside settings + metadata; skipping it would double-charge a paid retry on Android.
 - Platform detection has two sides: **node-side** via `runtime.ts` (`isCapacitor()`, `isHeadlessService()`,
   `getPlatform()`, `getAppUserDataPath()` — the single path resolver shared with the logger); **renderer-
-  side** via `globalThis.Capacitor?.isNativePlatform?.() === true` inline, to keep node out of the browser
+  side** via `platformKind()` (`platform/kind.ts`), marked by the bridges (the Capacitor bridge only when
+  `Capacitor.isNativePlatform()` is true), to keep node out of the browser
   bundle.
 - **The Electron main process runs from a bundle.** `scripts/build-main.ts` bundles `src/ts/index.ts` into
   `out/main/app.js` with a linked source map, loaded by the `out/main/index.js` stub (package.json `main`)

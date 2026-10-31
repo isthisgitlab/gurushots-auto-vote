@@ -8,14 +8,17 @@
  * runtime runs. The table below is the one place a boundary is written — a layering phase moves a file by editing
  * it there — and counts these warnings as its exit gate.
  *
- * Type-only imports are skipped: the build erases them, so they carry no runtime edge. The rule reads
+ * A type-only declaration is skipped only when the build erases it whole — `import type …`, `export type … from`,
+ * `export type * from`: those carry no runtime edge. An inline `type` inside the braces is not erased: with
+ * `verbatimModuleSyntax`, `import { type A } from 'm'` keeps the statement (`import {} from 'm'`), which still loads
+ * `m` at runtime — so it is checked like any runtime edge. The rule reads
  * `context.filename`, so it knows the layer of the file it is linting without touching the file system.
  *
  * Loaded through `jsPlugins` in .oxlintrc.json; the rule API is ESLint's.
  */
 
-// The slice of the ESTree AST this rule reads. `specifiers`, `callee` and `arguments` are the fields of the
-// declarations and calls it visits, which both parsers Oxlint and Prettier always hand over as present;
+// The slice of the ESTree AST this rule reads. `callee` and `arguments` are the fields of the calls it visits,
+// which both parsers Oxlint and Prettier always hand over as present;
 // `source` is present on an import and `null` on an export of a local declaration.
 interface Node {
     type: string;
@@ -24,7 +27,6 @@ interface Node {
     importKind?: string;
     exportKind?: string;
     source?: Node | null;
-    specifiers: Node[];
     callee: Node;
     arguments: Node[];
 }
@@ -37,10 +39,14 @@ interface RuleContext {
 // The layer table: the first row whose target matches the file's path, read from `src/ts/` on, names the file's
 // layer; no match means `core`. A target ending in `/` is a directory row — it matches the directory itself and
 // everything under it, the trailing slash keeping `src/ts/cliX/` out of `src/ts/cli/` — and a `<x>` in its layer
-// takes the path segment after the prefix (`src/ts/platforms/node/store.ts` is `platform:node`). A file row also
-// matches without its `.ts`/`.tsx` extension, the way an extensionless import specifier resolves.
+// takes the path segment after the prefix (`src/ts/platforms/node/store.ts` is `platform:node`); a file directly
+// inside the directory has no segment, so `<x>` becomes the empty one (`src/ts/platforms/index.ts` is
+// `platform:`). A file row also matches without its `.ts`/`.tsx` extension, the way an extensionless import
+// specifier resolves.
 export const LAYER_TABLE: ReadonlyArray<{ target: string; layer: string }> = [
     { target: 'src/ts/core/', layer: 'core' },
+    // `src/ts/platform/` (singular) is the core port and has no row, so it is `core`; `src/ts/platforms/<x>/`
+    // (plural) holds one platform's implementation.
     { target: 'src/ts/platforms/', layer: 'platform:<x>' },
     { target: 'src/ts/shells/', layer: 'shell:<x>' },
     // The Electron shell: the main process, its windows and their preloads.
@@ -86,10 +92,12 @@ export const LAYER_TABLE: ReadonlyArray<{ target: string; layer: string }> = [
     { target: 'src/ts/react/', layer: 'react' },
 ];
 
-// The part of a path from `src/ts/` on, `\` normalized to `/`: null when the path does not name an app file.
+// The part of a path from `src/ts/` on, `\` normalized to `/`: null when the path does not name an app file. The
+// cut is the last `src/ts/` in the path, so a checkout sitting under a parent path that itself contains `src/ts/`
+// still classifies by the repository's own `src/ts/`; a relative filename that starts with `src/ts/` cuts at 0.
 const underSrcTs = (filename: string): string | null => {
     const path = filename.replaceAll('\\', '/');
-    const at = path.indexOf('src/ts/');
+    const at = path.lastIndexOf('src/ts/');
     return at === -1 ? null : path.slice(at);
 };
 
@@ -98,7 +106,12 @@ const layerOfCut = (path: string): string => {
     for (const { target, layer } of LAYER_TABLE) {
         if (target.endsWith('/')) {
             if (path !== target.slice(0, -1) && !path.startsWith(target)) continue;
-            return layer.includes('<x>') ? layer.replace('<x>', () => path.slice(target.length).split('/')[0]) : layer;
+            if (!layer.includes('<x>')) return layer;
+            // A file directly inside the pattern directory has no platform of its own — no segment follows the
+            // prefix — so `<x>` becomes the empty segment, and every import between it and a named platform or
+            // shell is reported.
+            const rest = path.slice(target.length);
+            return layer.replace('<x>', () => (rest.includes('/') ? rest.split('/')[0] : ''));
         }
         if (path === target || path === target.replace(/\.tsx?$/, '')) return layer;
     }
@@ -139,14 +152,6 @@ const mayImport = (from: string, to: string): boolean => {
     return false;
 };
 
-// Whether an import/export specifier is erased by the build: `import { type A }` or `export { type A }`.
-const isTypeSpecifier = (specifier: Node): boolean =>
-    specifier.importKind === 'type' || specifier.exportKind === 'type';
-
-// Whether the build erases the specifier list whole: a non-empty list of type-only specifiers. Zero specifiers is
-// a side-effect import — a runtime edge, checked.
-const isErasedImport = (specifiers: Node[]): boolean => specifiers.length > 0 && specifiers.every(isTypeSpecifier);
-
 const noCrossLayerImport = {
     meta: {
         type: 'problem',
@@ -161,26 +166,31 @@ const noCrossLayerImport = {
         const check = (specifier: Node | null | undefined): void => {
             if (specifier == null || specifier.type !== 'Literal' || typeof specifier.value !== 'string') return;
             const text = specifier.value;
-            // A relative specifier names a file of this app; anything else is a package specifier.
+            // A relative specifier names a file of this app, and so does the renderer alias `@/`, which tsconfig
+            // maps to `src/ts/react/*`; anything else is a package specifier.
             const to =
                 text.startsWith('./') || text.startsWith('../')
                     ? layerOfTarget(resolveRelative(from, text))
-                    : isForbiddenPackage(text)
-                      ? 'forbidden-package'
-                      : null;
+                    : text.startsWith('@/')
+                      ? layerOfTarget(`src/ts/react/${text.slice(2)}`)
+                      : isForbiddenPackage(text)
+                        ? 'forbidden-package'
+                        : null;
             // Outside `src/ts/` (an asset in a parent directory), or an allowed package: no boundary to cross.
             if (to === null || mayImport(fromLayer, to)) return;
             context.report({ node: specifier, message: `layer-boundaries: ${fromLayer} → ${to} (${text})` });
         };
         return {
             ImportDeclaration(node: Node) {
+                // `import type …` is erased by the build whole. An inline `type` in the braces is not: with
+                // `verbatimModuleSyntax` the statement stays as `import {} from 'm'`, a runtime edge like any
+                // other import.
                 if (node.importKind === 'type') return;
-                if (isErasedImport(node.specifiers)) return;
                 check(node.source);
             },
             ExportNamedDeclaration(node: Node) {
+                // `export type … from` is erased by the build whole; an inline `type` in the braces is not.
                 if (node.exportKind === 'type') return;
-                if (isErasedImport(node.specifiers)) return;
                 check(node.source);
             },
             ExportAllDeclaration(node: Node) {

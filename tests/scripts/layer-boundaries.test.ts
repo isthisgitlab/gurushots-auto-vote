@@ -108,13 +108,16 @@ const VALID: ReadonlyArray<readonly [string, string]> = [
     ["import '../../react/api/ipc';", file('src/ts/shells/web/main.ts')],
     // The core row of the table.
     ["import './store';", file('src/ts/core/store.ts')],
-    // Type-only imports are erased by the build, however they are spelled, even to a forbidden target.
+    // A type-only import is skipped only when the build erases it whole — the declaration-level forms, even to a
+    // forbidden target. `typeof import()` is never a module edge.
     ["import type { app } from 'electron';", CORE],
-    ["import { type app, type BrowserWindow } from 'electron';", CORE],
     ["export type { app } from 'electron';", CORE],
-    ["export { type app } from 'electron';", CORE],
     ["export type * from 'electron';", CORE],
     ["type T = typeof import('electron');", CORE],
+    // The renderer alias `@/` (tsconfig maps it to `src/ts/react/*`): react reaching itself.
+    ["import '@/hooks/x';", file('src/ts/react/App.tsx')],
+    // `src/ts/platform/` (singular) has no row: the core port is plain core.
+    ["import '../plainObject';", file('src/ts/platform/kind.ts')],
     // A file outside src/ts is nobody's layer and not checked.
     ["import 'electron';", file('scripts/build-main.ts')],
     ["import '../src/ts/windows/quitGuard';", file('scripts/build-main.ts')],
@@ -172,6 +175,27 @@ const INVALID: ReadonlyArray<readonly [string, string, ...string[]]> = [
     ["export { editor } from 'electron';", CORE, crossing('core', 'forbidden-package', 'electron')],
     // One value specifier among type-only ones is a runtime edge.
     ["import { type app, BrowserWindow } from 'electron';", CORE, crossing('core', 'forbidden-package', 'electron')],
+    // Inline `type` specifiers are not erased: with verbatimModuleSyntax the statement stays, a runtime edge.
+    [
+        "import { type app, type BrowserWindow } from 'electron';",
+        CORE,
+        crossing('core', 'forbidden-package', 'electron'),
+    ],
+    ["export { type app } from 'electron';", CORE, crossing('core', 'forbidden-package', 'electron')],
+    // The renderer alias `@/` resolves into `src/ts/react/`: react never reaches a shell.
+    ["import '@/pages/Web';", file('src/ts/react/PhotoCard.tsx'), crossing('react', 'shell:web', '@/pages/Web')],
+    // A checkout under a parent path that itself contains `src/ts/` cuts at the repository's own `src/ts/`.
+    [
+        "import '../react/api/ipc';",
+        '/home/u/src/ts/checkout/src/ts/services/x.ts',
+        crossing('core', 'react', '../react/api/ipc'),
+    ],
+    // A file directly inside a pattern directory has no platform of its own: the captured segment is the empty one.
+    [
+        "import './node/store';",
+        file('src/ts/platforms/index.ts'),
+        crossing('platform:', 'platform:node', './node/store'),
+    ],
     // platform:<x> reaches core and itself only.
     [
         "import './settings/settingsFileCapacitor';",
@@ -298,9 +322,17 @@ describe('under Oxlint', () => {
                     [crossing('core', 'shell:electron', '../../windows/quitGuard')],
                 ],
                 ['services', "import type { app } from 'electron';", []],
-                ['services', "import { type app, type BrowserWindow } from 'electron';", []],
+                [
+                    'services',
+                    "import { type app, type BrowserWindow } from 'electron';",
+                    [crossing('core', 'forbidden-package', 'electron')],
+                ],
                 ['services', "export type { app } from 'electron';", []],
-                ['services', "export { type app } from 'electron';", []],
+                [
+                    'services',
+                    "export { type app } from 'electron';",
+                    [crossing('core', 'forbidden-package', 'electron')],
+                ],
                 ['services', "type T = typeof import('electron');", []],
                 ['services', "export * from 'electron';", [crossing('core', 'forbidden-package', 'electron')]],
                 ['services', "export type * from 'electron';", []],
@@ -337,6 +369,16 @@ describe('under Oxlint', () => {
                 ],
                 ['shells/web', "import '../../react/api/ipc';", []],
                 ['shells/web', "import '../cli/main';", [crossing('shell:web', 'shell:cli', '../cli/main')]],
+                ['react', "import '@/pages/Web';", [crossing('react', 'shell:web', '@/pages/Web')]],
+                ['react', "import '@/hooks/x';", []],
+                // A parent path that itself contains `src/ts/`: the cut is the repository's own, the last one.
+                [
+                    'checkout/src/ts/services',
+                    "import '../react/api/ipc';",
+                    [crossing('core', 'react', '../react/api/ipc')],
+                ],
+                ['platforms', "import './node/store';", [crossing('platform:', 'platform:node', './node/store')]],
+                ['platform', "import '../plainObject';", []],
             ];
             const config = path.join(dir, 'oxlintrc.json');
             fs.writeFileSync(

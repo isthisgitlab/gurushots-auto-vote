@@ -30,7 +30,8 @@ jest.mock('../../src/ts/ipc/settings.handlers', () => ({
 jest.mock('../../src/ts/ipc/voting.handlers', () => ({
     buildHandlers: () => ({ 'gui-vote': jest.fn(async (_event) => ({ success: true, via: 'gui-vote' })) }),
 }));
-jest.mock('../../src/ts/ipc/log.handlers', () => ({ buildHandlers: () => ({}) }));
+const mockLogBuildHandlers = jest.fn(() => ({}));
+jest.mock('../../src/ts/ipc/log.handlers', () => ({ buildHandlers: mockLogBuildHandlers }));
 jest.mock('../../src/ts/ipc/actions.handlers', () => ({
     buildHandlers: () => ({
         'apply-boost-to-entry': jest.fn(async (_event: unknown, id: string | number) => ({ success: true, id })),
@@ -129,6 +130,17 @@ describe('Capacitor bridge', () => {
             bridge.installBridge();
 
             expect(platformKind()).toBe('electron');
+        });
+
+        test('marks the kind before a later install step throws, so a failed install still reads capacitor', () => {
+            g.Capacitor = { isNativePlatform: () => true };
+            mockLogBuildHandlers.mockImplementationOnce(() => {
+                throw new Error('log handlers unavailable');
+            });
+
+            expect(() => bridge.installBridge()).toThrow('log handlers unavailable');
+
+            expect(platformKind()).toBe('capacitor');
         });
 
         test('a failing intent-profile seed is logged and does not throw', () => {

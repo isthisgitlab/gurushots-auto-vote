@@ -243,6 +243,16 @@ const seedBridgeProfiles = (): void => {
 };
 
 const installBridge = (): WindowApi => {
+    // The renderer reads its platform from platform/kind, so the bridge marks it
+    // here, where the Capacitor runtime's probe lives, as the first statement:
+    // if a later install step throws, the `.catch` fallback in the renderer
+    // still mounts the app against a kind that reads capacitor. Calling the
+    // probe — not just checking it exists — keeps a Capacitor web target
+    // unmarked, so it reads the default kind (electron) and gets the desktop
+    // capabilities, as it did before.
+    if ((globalThis as CapacitorGlobals).Capacitor?.isNativePlatform?.() === true) {
+        markPlatformKind('capacitor');
+    }
     const api: BridgeApi = {};
     addHandlerMethods(api);
     addSendMethods(api);
@@ -266,14 +276,6 @@ const installBridge = (): WindowApi => {
     // manifest, so the checker cannot follow it to WindowApi; the handlers it
     // maps are the same modules WindowApi is derived from.
     (globalThis as typeof globalThis & { api?: object }).api = api;
-    // The renderer reads its platform from platform/kind, so the bridge marks
-    // it here, where the Capacitor runtime's probe lives: calling the probe —
-    // not just checking it exists — keeps a Capacitor web target unmarked, so
-    // it reads the default kind (electron) and gets the desktop capabilities,
-    // as it did before.
-    if ((globalThis as CapacitorGlobals).Capacitor?.isNativePlatform?.() === true) {
-        markPlatformKind('capacitor');
-    }
     return api as WindowApi;
 };
 
