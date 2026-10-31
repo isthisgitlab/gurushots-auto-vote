@@ -10,7 +10,7 @@
  * failures name the entry.
  */
 
-import { clearInstalledPlatform } from '../helpers/platform';
+import { clearInstalledPlatform, restoreNodeTestPlatform } from '../helpers/platform';
 
 const SHELL_PLATFORM_ENTRIES = [
     'src/ts/index/platform.ts',
@@ -66,8 +66,11 @@ describe('the shell platform modules load with the port clear and the logger moc
     });
 
     // The recording doMock must never outlive its isolate (it would answer
-    // later loads with silent stubs).
+    // later loads with silent stubs), and the isolated loads cleared the
+    // slot and installed shell platforms on it: both are restored here, so
+    // nothing this file cleared or registered leaks past it.
     afterEach(() => {
         jest.dontMock('../../src/ts/logger');
+        restoreNodeTestPlatform();
     });
 });
