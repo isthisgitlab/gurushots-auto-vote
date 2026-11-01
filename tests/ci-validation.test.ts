@@ -262,7 +262,7 @@ describe('sends toward the Logs window', () => {
             'src/ts/shells/remote/bridge/peer.ts',
             'for (const held of heldSends.splice(0)) void transport.send(held.message, to);',
         ],
-        ['src/ts/shells/remote/bridge/peer.ts', 'void transport.send(announce, peerId);'],
+        ['src/ts/shells/remote/bridge/peer.ts', 'void transport.send(announce, peerId).catch(() => undefined);'],
         ['src/ts/shells/remote/bridge/peer.ts', 'void transport.send(message, hostPeerId).catch(() => {'],
         ['src/ts/shells/remote/loader.tsx', 'void transport.send(announce, peerId);'],
     ];

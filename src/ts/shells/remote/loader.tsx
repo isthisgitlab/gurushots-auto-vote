@@ -14,7 +14,7 @@
 import './platform';
 
 import { createRoot } from 'react-dom/client';
-import { createTrysteroTransport } from '../../core/remote/trystero';
+import { createTrysteroTransport, isConnectionFailureJoinError } from '../../core/remote/trystero';
 import { setRemoteConnectionState } from '../../core/remote/connectionState';
 import { takePairingKey } from '../../core/remote/pairingKey';
 import { parsePeerMessage, PROTOCOL_VERSION } from '../../core/remote/protocol';
@@ -52,15 +52,16 @@ void (async () => {
     }
     let done = false;
     const transport = await createTrysteroTransport({ key });
-    const finishWith = (version: string | null): void => {
+    const settleNotice = (state: 'offline' | 'network'): void => {
         if (done) return;
         done = true;
-        if (version === null) {
-            void transport.leave();
-            setRemoteConnectionState('offline');
-            renderNotice();
-            return;
-        }
+        void transport.leave();
+        setRemoteConnectionState(state);
+        renderNotice();
+    };
+    const finishWith = (version: string): void => {
+        if (done) return;
+        done = true;
         void versionIsPublished(version).then((published) => {
             if (!published) {
                 void transport.leave();
@@ -86,7 +87,12 @@ void (async () => {
         if (message === null || message.t !== 'hello' || !message.host) return;
         finishWith(message.version);
     });
-    globalThis.setTimeout(() => finishWith(null), LOADER_TIMEOUT_MS);
+    // A desktop the relays found but WebRTC could not reach is the try-Wi-Fi case; every other
+    // join failure (wrong password, handshake timeout) reads as offline-or-reset.
+    transport.onJoinError(({ error }) => {
+        settleNotice(isConnectionFailureJoinError(error) ? 'network' : 'offline');
+    });
+    globalThis.setTimeout(() => settleNotice('offline'), LOADER_TIMEOUT_MS);
 })().catch(() => {
     setRemoteConnectionState('offline');
     renderNotice();

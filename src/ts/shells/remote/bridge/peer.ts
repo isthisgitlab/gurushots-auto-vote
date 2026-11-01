@@ -36,6 +36,10 @@ import type { RemoteTransport } from '../../../core/remote/relays';
 /** The app version this page was built from; the host's `hello` version is compared against it. */
 const PAGE_VERSION: string = pkg.version;
 
+/** How often the phone re-announces itself until the desktop answers. The first announce can
+ * be lost on the relay path (seen end-to-end), so the hello repeats until the host speaks. */
+export const HELLO_RETRY_MS = 3_000;
+
 type PendingInvoke = {
     resolve: (result: unknown) => void;
     reject: (error: Error) => void;
@@ -65,6 +69,16 @@ const installPeerBridge = (transport: RemoteTransport): void => {
     /** Whether the desktop has ever completed a hello in this page's life. Only before that
      * first connect may a non-spend invoke be held; after a loss nothing queues. */
     let everConnected = false;
+    /** The peers seen via onPeerJoin but not yet answered; the hello repeat targets them. */
+    const unannounced = new Set<string>();
+    let helloTimer: ReturnType<typeof setInterval> | null = null;
+
+    const stopHelloRepeat = (): void => {
+        if (helloTimer !== null) {
+            globalThis.clearInterval(helloTimer);
+            helloTimer = null;
+        }
+    };
 
     const dispatchEvent = (channel: string, payload: unknown): void => {
         for (const listener of listeners.get(channel) ?? []) listener(payload);
@@ -78,6 +92,7 @@ const installPeerBridge = (transport: RemoteTransport): void => {
 
     /** Settle every pending invoke once. A spend may have run: unclear, never a failure. */
     const settlePendingForLostConnection = (): void => {
+        stopHelloRepeat();
         hostPeerId = null;
         for (const [, invoke] of pending) {
             if (invoke.spend) invoke.resolve(lostSpendAnswer());
@@ -100,12 +115,18 @@ const installPeerBridge = (transport: RemoteTransport): void => {
             case 'hello': {
                 if (!message.host) return; // a fellow phone announcing itself, not the desktop
                 if (message.version !== PAGE_VERSION || message.protocolVersion !== PROTOCOL_VERSION) {
+                    // The mismatch is terminal for this connection: the phone says to update
+                    // and the hello repeat stops — an old page must not re-announce forever.
+                    stopHelloRepeat();
+                    unannounced.clear();
                     setRemoteConnectionState('update');
                     return;
                 }
                 if (hostPeerId === null) {
                     hostPeerId = peerId;
                     everConnected = true;
+                    unannounced.clear();
+                    stopHelloRepeat();
                     setRemoteConnectionState('connected');
                     flushHeld(hostPeerId);
                 }
@@ -137,12 +158,25 @@ const installPeerBridge = (transport: RemoteTransport): void => {
         protocolVersion: PROTOCOL_VERSION,
         host: false,
     };
+    // The first announce can vanish on the relay path (seen end-to-end: the host logs the
+    // peer but no hello ever arrives), so the phone repeats it until the desktop answers.
+    const announceTo = (peerId: string): void => {
+        // oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- a peer-connection message over the pairing transport, never a frame send
+        void transport.send(announce, peerId).catch(() => undefined);
+    };
+    const repeatHello = (): void => {
+        if (helloTimer !== null || hostPeerId !== null) return;
+        helloTimer = globalThis.setInterval(() => {
+            for (const peerId of unannounced) announceTo(peerId);
+        }, HELLO_RETRY_MS);
+    };
     transport.onPeerJoin((peerId) => {
-        // oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- the phone announces itself to the peer over the pairing transport, never a frame send
-        void transport.send(announce, peerId);
+        unannounced.add(peerId);
+        announceTo(peerId);
+        repeatHello();
     });
-
     transport.onPeerLeave((peerId) => {
+        unannounced.delete(peerId);
         if (hostPeerId !== null && peerId !== hostPeerId) return;
         settlePendingForLostConnection();
     });

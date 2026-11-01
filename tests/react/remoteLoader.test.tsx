@@ -16,6 +16,8 @@ jest.mock('../../src/ts/core/remote/trystero', () => ({
         if (current instanceof Error) throw current;
         return current as TransportStub;
     }),
+    isConnectionFailureJoinError: (error: string): boolean =>
+        error.startsWith('could not connect to peer') && error.includes('after exchanging SDP'),
 }));
 jest.mock('../../src/ts/shells/remote/bridge/peer', () => ({ PAGE_VERSION: '9.9.9' }));
 import { PROTOCOL_VERSION } from '../../src/ts/core/remote/protocol';
@@ -132,6 +134,37 @@ describe('the /remote/ loader', () => {
         await flush();
         expect(assigned).toEqual([]);
         expect(fetchCalls).toEqual([]);
+    });
+
+    test('a join failure after the SDP exchange says to try Wi-Fi', async () => {
+        loadLoader();
+        await flush();
+        const transport = transportStub.current as TransportStub;
+        transport.emitJoin('host');
+        await flush();
+        transport.emitJoinError(
+            'could not connect to peer 3b6a after exchanging SDP; configure TURN servers with turnConfig or rtcConfig.iceServers',
+        );
+        await flush();
+        expect(transport.left).toBe(true);
+        expect(assigned).toEqual([]);
+        expect(document.getElementById('root')?.textContent).toContain('try Wi-Fi');
+        // The timeout racing a join error that already settled changes nothing.
+        await jest.advanceTimersByTimeAsync(15_000);
+        expect(document.getElementById('root')?.textContent).toContain('try Wi-Fi');
+    });
+
+    test('another join failure reads as offline-or-reset', async () => {
+        loadLoader();
+        await flush();
+        const transport = transportStub.current as TransportStub;
+        transport.emitJoin('host');
+        await flush();
+        transport.emitJoinError('handshake timed out after 14000ms');
+        await flush();
+        expect(transport.left).toBe(true);
+        expect(assigned).toEqual([]);
+        expect(document.getElementById('root')?.textContent).toContain('offline, or this link was reset');
     });
 
     test('no key in the link says to scan the QR code', async () => {

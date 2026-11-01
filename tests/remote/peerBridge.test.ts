@@ -6,7 +6,12 @@
  * tells a fellow phone from the desktop.
  */
 
-import { installPeerBridge, LOCAL_CHANNELS, PAGE_VERSION } from '../../src/ts/shells/remote/bridge/peer';
+import {
+    HELLO_RETRY_MS,
+    installPeerBridge,
+    LOCAL_CHANNELS,
+    PAGE_VERSION,
+} from '../../src/ts/shells/remote/bridge/peer';
 import { PROTOCOL_VERSION } from '../../src/ts/core/remote/protocol';
 import { TransportStub } from '../helpers/remoteTransport';
 import { remoteConnectionState, setRemoteConnectionState } from '../../src/ts/core/remote/connectionState';
@@ -263,6 +268,34 @@ describe('installPeerBridge (the phone bridge)', () => {
         await expect(pending).resolves.toEqual(backlog);
     });
 
+    test('the hello repeats until the desktop answers, then stops', async () => {
+        jest.useFakeTimers();
+        try {
+            const hostReceived: unknown[] = [];
+            host.onMessage((_peerId, raw) => hostReceived.push(raw));
+            // The first announce is dropped on the wire: pushed locally, never delivered.
+            phone.failNextSendOnce();
+            phone.emitJoin('host');
+            await Promise.resolve();
+            expect(hostReceived).toHaveLength(0);
+
+            // The retry lands.
+            jest.advanceTimersByTime(HELLO_RETRY_MS);
+            await Promise.resolve();
+            expect(hostReceived.length).toBeGreaterThanOrEqual(1);
+
+            // The desktop answers: the repeat stops.
+            phone.receiveFromPeer(hostHello, 'host');
+            expect(remoteConnectionState()).toBe('connected');
+            const after = hostReceived.length;
+            jest.advanceTimersByTime(HELLO_RETRY_MS * 3);
+            await Promise.resolve();
+            expect(hostReceived.length).toBe(after);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
     test('a host bye settles the pending invokes and reads offline', async () => {
         connect();
         const pending = api.getSettings() as Promise<unknown>;
@@ -282,9 +315,25 @@ describe('installPeerBridge (the phone bridge)', () => {
         expect(remoteConnectionState()).toBe('connected');
     });
 
-    test('a desktop of another version says to update', () => {
-        phone.emitJoin('host');
-        phone.receiveFromPeer({ t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, host: true }, 'host');
+    test('a desktop of another version says to update and the hello repeat stops', async () => {
+        jest.useFakeTimers();
+        try {
+            const hostReceived: unknown[] = [];
+            host.onMessage((_peerId, raw) => hostReceived.push(raw));
+            phone.emitJoin('host');
+            await Promise.resolve();
+            phone.receiveFromPeer(
+                { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, host: true },
+                'host',
+            );
+            expect(remoteConnectionState()).toBe('update');
+            const after = hostReceived.length;
+            jest.advanceTimersByTime(HELLO_RETRY_MS * 3);
+            await Promise.resolve();
+            expect(hostReceived.length).toBe(after);
+        } finally {
+            jest.useRealTimers();
+        }
         expect(remoteConnectionState()).toBe('update');
     });
 
