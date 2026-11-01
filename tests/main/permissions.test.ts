@@ -1,6 +1,7 @@
 /**
- * src/ts/shells/electron/index/permissions.ts — notifications from the app's own file: pages
- * are the only permission granted, on both the default and the app-window
+ * src/ts/shells/electron/index/permissions.ts — notifications and
+ * clipboard-sanitized-write from the app's own file: pages are the only
+ * permissions granted, on both the default and the app-window
  * (in-memory) session. The page is judged on webContents.getURL(), never on the origin a
  * check reports (always `file:///` for a file: page).
  */
@@ -82,6 +83,14 @@ describe.each([
         expect(cat.warning).not.toHaveBeenCalled();
     });
 
+    it('grants a clipboard-sanitized-write request from a file: page', () => {
+        const callback = jest.fn();
+        session().request!(page(FILE_PAGE), 'clipboard-sanitized-write', callback);
+
+        expect(callback).toHaveBeenCalledWith(true);
+        expect(cat.warning).not.toHaveBeenCalled();
+    });
+
     it.each(['media', 'geolocation', 'clipboard-read', 'openExternal'])(
         'denies a %s request and logs it',
         (permission) => {
@@ -107,9 +116,30 @@ describe.each([
         );
     });
 
+    it('denies a clipboard-sanitized-write request from a remote page and logs it', () => {
+        const callback = jest.fn();
+        session().request!(page('https://evil.example/'), 'clipboard-sanitized-write', callback);
+
+        expect(callback).toHaveBeenCalledWith(false);
+        expect(cat.warning).toHaveBeenCalledWith(
+            "Denied permission request 'clipboard-sanitized-write' from https://evil.example/",
+            null,
+        );
+    });
+
     it('allows a notifications check from a file: page whatever origin is reported', () => {
         expect(session().check!(page(FILE_PAGE), 'notifications', 'file:///')).toBe(true);
         expect(cat.warning).not.toHaveBeenCalled();
+    });
+
+    it('allows a clipboard-sanitized-write check from a file: page', () => {
+        expect(session().check!(page(FILE_PAGE), 'clipboard-sanitized-write', 'file:///')).toBe(true);
+        expect(cat.warning).not.toHaveBeenCalled();
+    });
+
+    it('denies a clipboard-read check from a file: page and logs it', () => {
+        expect(session().check!(page(FILE_PAGE), 'clipboard-read', 'file:///')).toBe(false);
+        expect(cat.warning).toHaveBeenCalledWith(`Denied permission check 'clipboard-read' from ${FILE_PAGE}`, null);
     });
 
     it('does not judge a check on its requesting origin', () => {
@@ -120,5 +150,13 @@ describe.each([
     it('denies a check with no web contents and logs <unknown>', () => {
         expect(session().check!(null, 'notifications', 'file:///')).toBe(false);
         expect(cat.warning).toHaveBeenCalledWith("Denied permission check 'notifications' from <unknown>", null);
+    });
+
+    it('denies a clipboard-sanitized-write check with no web contents and logs <unknown>', () => {
+        expect(session().check!(null, 'clipboard-sanitized-write', 'file:///')).toBe(false);
+        expect(cat.warning).toHaveBeenCalledWith(
+            "Denied permission check 'clipboard-sanitized-write' from <unknown>",
+            null,
+        );
     });
 });

@@ -9,9 +9,10 @@ import type { Session, WebContents } from 'electron';
  *
  * Electron grants a permission request unless a handler says otherwise, so a
  * page that reached the shared app-window session (`APP_PARTITION`) would get camera,
- * geolocation and the rest. The only permission the app uses is notifications
- * (react/notifications/deadlineNotifier.ts), and only from its own `file:`
- * pages.
+ * geolocation and the rest. The app uses two permissions, notifications
+ * (react/notifications/deadlineNotifier.ts) and clipboard-sanitized-write (the
+ * Remote access "Copy link" button, react/components/app/RemoteAccessSection.tsx),
+ * both only from its own `file:` pages.
  *
  * The page is judged on `webContents.getURL()`, never on a check's
  * `requestingOrigin`: Electron reports a `file:` page's origin as `file:///`
@@ -19,7 +20,9 @@ import type { Session, WebContents } from 'electron';
  */
 
 const allows = (webContents: WebContents | null, permission: string): boolean =>
-    permission === 'notifications' && !!webContents && webContents.getURL().startsWith('file:');
+    (permission === 'notifications' || permission === 'clipboard-sanitized-write') &&
+    !!webContents &&
+    webContents.getURL().startsWith('file:');
 
 const deny = (kind: 'request' | 'check', webContents: WebContents | null, permission: string) => {
     logger
