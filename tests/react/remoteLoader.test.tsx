@@ -25,6 +25,7 @@ jest.mock('../../src/ts/shells/remote/phoneMode', () => ({
     installPhoneDisconnect: () => installPhoneDisconnect(),
 }));
 import { PROTOCOL_VERSION } from '../../src/ts/core/remote/protocol';
+import { HELLO_RETRY_MS } from '../../src/ts/core/remote/helloRepeat';
 // The platform module installs on load; the Jest setup has one installed already.
 jest.mock('../../src/ts/shells/remote/platform', () => ({}));
 // The shared React setup mocks the page translator; the loader's notice screen shows real text.
@@ -158,9 +159,8 @@ describe('the /remote/ loader', () => {
         expect(document.getElementById('root')?.textContent).toContain('try Wi-Fi');
     });
 
-    test('a dropped announce still connects once the retry-capable desktop answers', async () => {
-        // The loader send is catch-wrapped: a lost announce rejects quietly and the loader
-        // still navigates when the desktop's hello arrives (the desktop repeats its own).
+    test('a dropped first hello is repeated, and the second one gets the answer', async () => {
+        // The first announce vanishes on the relay path: the send is recorded and rejects quietly.
         const isolated = new TransportStub('loader');
         isolated.failNextSendOnce();
         transportStub.current = isolated;
@@ -169,14 +169,50 @@ describe('the /remote/ loader', () => {
         isolated.emitJoin('host');
         await flush();
         expect(isolated.sent).toHaveLength(1);
+
+        // The loader repeats the hello; this one reaches the desktop, which answers.
+        await jest.advanceTimersByTimeAsync(HELLO_RETRY_MS);
+        expect(isolated.sent).toHaveLength(2);
+        expect(isolated.sent.map(({ message }) => (message as { t: string }).t)).toEqual(['hello', 'hello']);
         isolated.receiveFromPeer(
             { t: 'hello', version: '9.9.9', protocolVersion: PROTOCOL_VERSION, host: true },
             'host',
         );
         await flush();
+
+        // The loader redirects and never shows offline, and the repeat has stopped.
         expect(assigned).toEqual(['./9.9.9/index.html#k=the-key']);
-        await flush();
+        expect(document.getElementById('root')?.textContent).toBe('');
+        await jest.advanceTimersByTimeAsync(HELLO_RETRY_MS * 3);
+        expect(isolated.sent).toHaveLength(2);
         expect(isolated.left).toBe(false);
+    });
+
+    test('the hello repeats to a waiting peer only until the loader settles on offline', async () => {
+        const transport = transportStub.current as TransportStub;
+        loadLoader();
+        await flush();
+        transport.emitJoin('host');
+        await flush();
+        await jest.advanceTimersByTimeAsync(HELLO_RETRY_MS * 2);
+        expect(transport.sent).toHaveLength(3);
+
+        await jest.advanceTimersByTimeAsync(15_000);
+        expect(document.getElementById('root')?.textContent).toContain('offline, or this link was reset');
+        const afterSettle = transport.sent.length;
+        await jest.advanceTimersByTimeAsync(HELLO_RETRY_MS * 3);
+        expect(transport.sent).toHaveLength(afterSettle);
+    });
+
+    test('a peer that left is no longer announced to', async () => {
+        const transport = transportStub.current as TransportStub;
+        loadLoader();
+        await flush();
+        transport.emitJoin('gone');
+        await flush();
+        transport.emitLeave('gone');
+        await jest.advanceTimersByTimeAsync(HELLO_RETRY_MS * 2);
+        expect(transport.sent).toHaveLength(1);
     });
 
     test('another join failure reads as offline-or-reset', async () => {

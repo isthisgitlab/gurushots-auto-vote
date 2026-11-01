@@ -26,6 +26,7 @@ import { parsePeerMessage, PROTOCOL_VERSION } from '../../../core/remote/protoco
 import type { HelloMessage } from '../../../core/remote/protocol';
 import { SPEND_REMOTE_CHANNELS } from '../../../core/remote/allowlist';
 import { setRemoteConnectionState } from '../../../core/remote/connectionState';
+import { createHelloRepeater } from '../../../core/remote/helloRepeat';
 import { isConnectionFailureJoinError } from '../../../core/remote/trystero';
 import { isSafeExternalUrl } from '../../../core/format/urlSafe';
 import { rendererTranslator } from '../../../core/translations/renderer';
@@ -35,10 +36,6 @@ import type { RemoteTransport } from '../../../core/remote/relays';
 
 /** The app version this page was built from; the host's `hello` version is compared against it. */
 const PAGE_VERSION: string = pkg.version;
-
-/** How often the phone re-announces itself until the desktop answers. The first announce can
- * be lost on the relay path (seen end-to-end), so the hello repeats until the host speaks. */
-export const HELLO_RETRY_MS = 3_000;
 
 type PendingInvoke = {
     resolve: (result: unknown) => void;
@@ -69,16 +66,16 @@ const installPeerBridge = (transport: RemoteTransport): void => {
     /** Whether the desktop has ever completed a hello in this page's life. Only before that
      * first connect may a non-spend invoke be held; after a loss nothing queues. */
     let everConnected = false;
-    /** The peers seen via onPeerJoin but not yet answered; the hello repeat targets them. */
-    const unannounced = new Set<string>();
-    let helloTimer: ReturnType<typeof setInterval> | null = null;
 
-    const stopHelloRepeat = (): void => {
-        if (helloTimer !== null) {
-            globalThis.clearInterval(helloTimer);
-            helloTimer = null;
-        }
+    // The phone's hello: its own app version, the protocol shape version, not the host. It repeats
+    // until the desktop answers (core/remote/helloRepeat.ts: the first one can vanish on the relays).
+    const announce: HelloMessage = {
+        t: 'hello',
+        version: PAGE_VERSION,
+        protocolVersion: PROTOCOL_VERSION,
+        host: false,
     };
+    const hello = createHelloRepeater({ transport, announce, active: () => hostPeerId === null });
 
     const dispatchEvent = (channel: string, payload: unknown): void => {
         for (const listener of listeners.get(channel) ?? []) listener(payload);
@@ -92,7 +89,7 @@ const installPeerBridge = (transport: RemoteTransport): void => {
 
     /** Settle every pending invoke once. A spend may have run: unclear, never a failure. */
     const settlePendingForLostConnection = (): void => {
-        stopHelloRepeat();
+        hello.stop();
         hostPeerId = null;
         for (const [, invoke] of pending) {
             if (invoke.spend) invoke.resolve(lostSpendAnswer());
@@ -117,16 +114,16 @@ const installPeerBridge = (transport: RemoteTransport): void => {
                 if (message.version !== PAGE_VERSION || message.protocolVersion !== PROTOCOL_VERSION) {
                     // The mismatch is terminal for this connection: the phone says to update
                     // and the hello repeat stops — an old page must not re-announce forever.
-                    stopHelloRepeat();
-                    unannounced.clear();
+                    hello.stop();
+                    hello.clear();
                     setRemoteConnectionState('update');
                     return;
                 }
                 if (hostPeerId === null) {
                     hostPeerId = peerId;
                     everConnected = true;
-                    unannounced.clear();
-                    stopHelloRepeat();
+                    hello.clear();
+                    hello.stop();
                     setRemoteConnectionState('connected');
                     flushHeld(hostPeerId);
                 }
@@ -151,32 +148,9 @@ const installPeerBridge = (transport: RemoteTransport): void => {
         }
     });
 
-    // The phone's hello: its own app version, the protocol shape version, not the host.
-    const announce: HelloMessage = {
-        t: 'hello',
-        version: PAGE_VERSION,
-        protocolVersion: PROTOCOL_VERSION,
-        host: false,
-    };
-    // The first announce can vanish on the relay path (seen end-to-end: the host logs the
-    // peer but no hello ever arrives), so the phone repeats it until the desktop answers.
-    const announceTo = (peerId: string): void => {
-        // oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- a peer-connection message over the pairing transport, never a frame send
-        void transport.send(announce, peerId).catch(() => undefined);
-    };
-    const repeatHello = (): void => {
-        if (helloTimer !== null || hostPeerId !== null) return;
-        helloTimer = globalThis.setInterval(() => {
-            for (const peerId of unannounced) announceTo(peerId);
-        }, HELLO_RETRY_MS);
-    };
-    transport.onPeerJoin((peerId) => {
-        unannounced.add(peerId);
-        announceTo(peerId);
-        repeatHello();
-    });
+    transport.onPeerJoin((peerId) => hello.join(peerId));
     transport.onPeerLeave((peerId) => {
-        unannounced.delete(peerId);
+        hello.leave(peerId);
         if (hostPeerId !== null && peerId !== hostPeerId) return;
         settlePendingForLostConnection();
     });

@@ -16,6 +16,7 @@ import './platform';
 import { createRoot } from 'react-dom/client';
 import { createTrysteroTransport, isConnectionFailureJoinError } from '../../core/remote/trystero';
 import { setRemoteConnectionState } from '../../core/remote/connectionState';
+import { createHelloRepeater } from '../../core/remote/helloRepeat';
 import { takePairingKey } from '../../core/remote/pairingKey';
 import { parsePeerMessage, PROTOCOL_VERSION } from '../../core/remote/protocol';
 
@@ -63,9 +64,18 @@ void (async () => {
     installPhoneDisconnect();
     let done = false;
     const transport = await createTrysteroTransport({ key });
+    const announce: HelloMessage = {
+        t: 'hello',
+        version: PAGE_VERSION,
+        protocolVersion: PROTOCOL_VERSION,
+        host: false,
+    };
+    // The first hello can be lost on the relay path, so it repeats until the loader settles.
+    const hello = createHelloRepeater({ transport, announce, active: () => !done });
     const settleNotice = (state: 'offline' | 'network'): void => {
         if (done) return;
         done = true;
+        hello.stop();
         void transport.leave();
         setRemoteConnectionState(state);
         renderNotice();
@@ -73,6 +83,7 @@ void (async () => {
     const finishWith = (version: string): void => {
         if (done) return;
         done = true;
+        hello.stop();
         void versionIsPublished(version).then((published) => {
             if (!published) {
                 void transport.leave();
@@ -83,16 +94,8 @@ void (async () => {
             globalThis.location.assign(`${versionPage(version)}${globalThis.location.hash}`);
         });
     };
-    const announce: HelloMessage = {
-        t: 'hello',
-        version: PAGE_VERSION,
-        protocolVersion: PROTOCOL_VERSION,
-        host: false,
-    };
-    transport.onPeerJoin((peerId) => {
-        // oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- the loader announces itself to the peer over the pairing transport, never a frame send
-        void transport.send(announce, peerId).catch(() => undefined);
-    });
+    transport.onPeerJoin((peerId) => hello.join(peerId));
+    transport.onPeerLeave((peerId) => hello.leave(peerId));
     transport.onMessage((_peerId, raw) => {
         const message = parsePeerMessage(raw);
         if (message === null || message.t !== 'hello' || !message.host) return;

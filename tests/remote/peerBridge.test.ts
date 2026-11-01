@@ -6,12 +6,8 @@
  * tells a fellow phone from the desktop.
  */
 
-import {
-    HELLO_RETRY_MS,
-    installPeerBridge,
-    LOCAL_CHANNELS,
-    PAGE_VERSION,
-} from '../../src/ts/shells/remote/bridge/peer';
+import { installPeerBridge, LOCAL_CHANNELS, PAGE_VERSION } from '../../src/ts/shells/remote/bridge/peer';
+import { HELLO_RETRY_MS } from '../../src/ts/core/remote/helloRepeat';
 import { PROTOCOL_VERSION } from '../../src/ts/core/remote/protocol';
 import { TransportStub } from '../helpers/remoteTransport';
 import { remoteConnectionState, setRemoteConnectionState } from '../../src/ts/core/remote/connectionState';
