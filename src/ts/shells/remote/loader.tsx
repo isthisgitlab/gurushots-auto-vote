@@ -104,20 +104,27 @@ void (async () => {
     transport.onPeerLeave((peerId) => {
         hello.leave(peerId);
     });
-    transport.onMessage((_peerId, raw) => {
+    /** The peers that announced themselves as fellow phones: their failures are not the desktop's. */
+    const phones = new Set<string>();
+    transport.onMessage((peerId, raw) => {
         const message = parsePeerMessage(raw);
+        if (message === null || message.t !== 'hello') return;
+        if (!message.host) {
+            phones.add(peerId);
+            return;
+        }
         // A version that is not a release version is no desktop's answer: nothing builds a path from it.
-        if (message === null || message.t !== 'hello' || !message.host || !isReleaseVersion(message.version)) return;
+        if (!isReleaseVersion(message.version)) return;
         finishWith(message.version);
     });
     /** Whether a peer failed its connection on the SDP exchange before anyone answered — the timeout then reports the try-Wi-Fi case. */
     let connectionFailure = false;
     transport.onJoinError(({ error, peerId }) => {
-        // A peer whose join failed never joined, so it says nothing about the desktop: that peer may
-        // still connect. The loader settles on the desktop's hello or on the timeout, never on a
-        // failed fellow peer.
+        // A join error never settles the wait: a peer that failed its join was never a candidate, so
+        // the desktop may still connect, and a fellow phone's failure must not settle it either — the
+        // timeout speaks. The try-Wi-Fi mark is only for a peer that can still be the desktop.
         hello.leave(peerId);
-        if (isConnectionFailureJoinError(error)) connectionFailure = true;
+        if (isConnectionFailureJoinError(error) && !phones.has(peerId)) connectionFailure = true;
     });
     globalThis.setTimeout(() => settleNotice(connectionFailure ? 'network' : 'offline'), HOST_ANSWER_TIMEOUT_MS);
 })().catch(() => {

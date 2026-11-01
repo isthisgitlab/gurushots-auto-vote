@@ -194,13 +194,20 @@ describe('parsePeerMessage', () => {
         expect(parsePeerMessage({ t: 'result', id: 1, ok: false, error: 'x'.repeat(600) })).toBeNull();
     });
 
-    test('a failure result may carry the too-large marker, and keeps it when it does', () => {
-        expect(parsePeerMessage({ t: 'result', id: 1, ok: false, error: 'too big', tooLarge: true })).toEqual({
+    test('a failure result may carry the send-failure reason, and keeps it when it does', () => {
+        expect(parsePeerMessage({ t: 'result', id: 1, ok: false, error: 'too big', reason: 'too-large' })).toEqual({
             t: 'result',
             id: 1,
             ok: false,
             error: 'too big',
-            tooLarge: true,
+            reason: 'too-large',
+        });
+        expect(parsePeerMessage({ t: 'result', id: 1, ok: false, error: 'lost', reason: 'unsendable' })).toEqual({
+            t: 'result',
+            id: 1,
+            ok: false,
+            error: 'lost',
+            reason: 'unsendable',
         });
         expect(parsePeerMessage({ t: 'result', id: 1, ok: false, error: 'plain' })).toEqual({
             t: 'result',
@@ -211,10 +218,14 @@ describe('parsePeerMessage', () => {
     });
 
     test.each([
-        ['tooLarge: false', false],
-        ["tooLarge: 'yes'", 'yes'],
-    ])('a failure result with %s is not one of the shapes', (_label, tooLarge) => {
-        expect(parsePeerMessage({ t: 'result', id: 1, ok: false, error: 'plain', tooLarge })).toBeNull();
+        ["reason: 'nope'", 'nope'],
+        ['reason: true', true],
+    ])('a failure result with %s is not one of the shapes', (_label, reason) => {
+        expect(parsePeerMessage({ t: 'result', id: 1, ok: false, error: 'plain', reason })).toBeNull();
+    });
+
+    test('a failure result with the old too-large boolean marker is not one of the shapes', () => {
+        expect(parsePeerMessage({ t: 'result', id: 1, ok: false, error: 'plain', tooLarge: true })).toBeNull();
     });
 
     test('restoreInvokeArgs puts the JSON-lost undefined arguments back', () => {

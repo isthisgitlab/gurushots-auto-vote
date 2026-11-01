@@ -212,8 +212,8 @@ export const createRemoteHost = (deps: RemoteHostDeps): RemoteHost => {
         await sendTo(
             peerId,
             limit === 'unserializable'
-                ? { t: 'result', id, ok: false, error: REMOTE_RESULT_UNSENDABLE }
-                : { t: 'result', id, ok: false, error: REMOTE_RESULT_TOO_LARGE, tooLarge: true },
+                ? { t: 'result', id, ok: false, error: REMOTE_RESULT_UNSENDABLE, reason: 'unsendable' }
+                : { t: 'result', id, ok: false, error: REMOTE_RESULT_TOO_LARGE, reason: 'too-large' },
         );
     };
 

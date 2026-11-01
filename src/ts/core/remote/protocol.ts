@@ -51,10 +51,10 @@ export type HelloMessage = {
 };
 /** Phone → host: one window.api invoke. `undefinedAt` restores JSON-lost `undefined` arguments (see bridge/web.ts). */
 export type InvokeMessage = { t: 'invoke'; id: number; channel: string; args: unknown[]; undefinedAt?: number[] };
-/** Host → phone: the answer to one invoke. `ok: false` carries the handler's error text; `tooLarge` marks the answer that did not fit. */
+/** Host → phone: the answer to one invoke. `ok: false` carries the handler's error text; `reason` marks the send failure that kept the answer from the phone. */
 export type ResultMessage =
     | { t: 'result'; id: number; ok: true; result?: unknown }
-    | { t: 'result'; id: number; ok: false; error: string; tooLarge?: true };
+    | { t: 'result'; id: number; ok: false; error: string; reason?: 'too-large' | 'unsendable' };
 /** Host → phone: one window.api event (settings-changed, update-*, log-message). */
 export type EventMessage = { t: 'event'; channel: string; payload: unknown };
 /** Host → phone: the desktop controller's state, on every change. */
@@ -182,12 +182,14 @@ export const parsePeerMessage = (raw: unknown): PeerMessage | null => {
         case 'result':
             if (!isInteger(raw.id) || raw.id < 0 || typeof raw.ok !== 'boolean') return null;
             if (raw.ok) return { t: 'result', id: raw.id, ok: true, result: raw.result };
-            // `tooLarge` is the too-large marker: absent, or `true` — anything else is not one of the shapes.
-            if (raw.tooLarge !== undefined && raw.tooLarge !== true) return null;
+            // `reason` is the send-failure marker: absent, 'too-large' or 'unsendable' — anything else is
+            // not one of the shapes, and neither is the retired `tooLarge` boolean an older build sent.
+            if (raw.tooLarge !== undefined) return null;
+            if (raw.reason !== undefined && raw.reason !== 'too-large' && raw.reason !== 'unsendable') return null;
             return isBoundedString(raw.error)
-                ? raw.tooLarge === true
-                    ? { t: 'result', id: raw.id, ok: false, error: raw.error, tooLarge: true }
-                    : { t: 'result', id: raw.id, ok: false, error: raw.error }
+                ? raw.reason === undefined
+                    ? { t: 'result', id: raw.id, ok: false, error: raw.error }
+                    : { t: 'result', id: raw.id, ok: false, error: raw.error, reason: raw.reason }
                 : null;
         case 'event':
             return isBoundedString(raw.channel) && 'payload' in raw

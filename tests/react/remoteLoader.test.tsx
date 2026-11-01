@@ -73,10 +73,10 @@ describe('the /remote/ loader', () => {
         replaceSpy = jest.spyOn(window.location, 'replace').mockImplementation((url: string | URL) => {
             navigated.push(String(url));
         });
-        g.fetch = jest.fn(async (input: unknown) => {
+        g.fetch = jest.fn<Promise<Response>, Parameters<typeof fetch>>(async (input) => {
             fetchCalls.push(String(input));
             return { ok: headOk } as Response;
-        }) as unknown as typeof fetch;
+        });
         headOk = true;
         document.body.innerHTML = '<div id="root"></div>';
     });
@@ -152,6 +152,23 @@ describe('the /remote/ loader', () => {
         await flush();
         expect(navigated).toEqual([]);
         expect(fetchCalls).toEqual([]);
+    });
+
+    test('a message that is not a hello, and an unparsable one, change nothing', async () => {
+        loadLoader();
+        await flush();
+        const transport = transportStub.current as TransportStub;
+        transport.emitJoin('host');
+        await flush();
+        // A parseable peer message of another shape, and one that does not parse at all:
+        // both are dropped, and the wait for the desktop's hello goes on.
+        transport.receiveFromPeer({ t: 'result', id: 0, ok: false, error: 'x' }, 'host');
+        transport.receiveFromPeer('not a protocol message', 'host');
+        await flush();
+        expect(transport.left).toBe(false);
+        expect(navigated).toEqual([]);
+        expect(fetchCalls).toEqual([]);
+        expect(document.getElementById('root')?.textContent).toContain('Connecting to your computer');
     });
 
     test('a join failure after the SDP exchange says to try Wi-Fi when the wait runs out', async () => {
@@ -490,6 +507,33 @@ describe('the /remote/ loader', () => {
         );
         await flush();
         expect(navigated).toEqual(['./1.2.3/index.html#k=the-key']);
+    });
+
+    test("an announced fellow phone's SDP failure does not say try Wi-Fi when the wait runs out", async () => {
+        loadLoader();
+        await flush();
+        const transport = transportStub.current as TransportStub;
+        transport.emitJoin('fellow');
+        await flush();
+        // The fellow announces itself as no desktop: its own connection trouble on cellular is not
+        // the desktop's failing connection, so it must not become the try-Wi-Fi notice.
+        transport.receiveFromPeer(
+            { t: 'hello', version: PAGE_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            'fellow',
+        );
+        await flush();
+        transport.emitJoinError(
+            'could not connect to peer 3b6a after exchanging SDP; configure TURN servers with turnConfig or rtcConfig.iceServers',
+            'fellow',
+        );
+        await flush();
+        expect(transport.left).toBe(false);
+
+        await jest.advanceTimersByTimeAsync(HOST_ANSWER_TIMEOUT_MS);
+        expect(transport.left).toBe(true);
+        const text = document.getElementById('root')?.textContent ?? '';
+        expect(text).toContain('offline, or this link was reset');
+        expect(text).not.toContain('try Wi-Fi');
     });
 
     test('a Latvian browser gets the Latvian notice', async () => {

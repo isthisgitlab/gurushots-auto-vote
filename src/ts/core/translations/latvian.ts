@@ -122,7 +122,7 @@ export const errors: typeof english.errors = {
     remoteRefused: 'Šo veic datorā.',
     remoteResultTooLarge:
         'Rezultāts ir pārāk liels, lai to nosūtītu uz telefonu. Veic šo darbību datorā vai pieprasi mazāk vienā reizē.',
-    remoteAnswerUnsendable: 'Datora atbildi neizdevās nosūtīt.',
+    remoteAnswerUnsendable: 'Datora atbildi neizdevās nosūtīt. Veic šo darbību datorā.',
     remoteNotConnected: 'Nav savienojuma ar datoru. Savienojums atjaunojas pats, kad datorā ir atvērta lietotne.',
 };
 // First-run onboarding
@@ -1731,7 +1731,7 @@ export const app: LatvianApp = {
     remoteNetwork: 'Neizdevās izveidot savienojumu šajā tīklā — mēģini Wi-Fi',
     remoteUpdateNeeded: 'Atjaunini lietotni datorā',
     remoteUpdateThis: 'Atjaunini šo lietotni',
-    remotePageUnpublished: 'Tavas datora versijas lapa vēl nav publicēta — mēģini vēlāk vēlreiz.',
+    remotePageUnpublished: 'Tava datora versijas lapa vēl nav publicēta — mēģini vēlāk vēlreiz.',
     remoteFull: 'Ir savienoti pārāk daudz telefonu — aizver lietotni citā telefonā un mēģini vēlreiz.',
     remoteFullShort: 'Pārāk daudz telefonu',
     remoteChangeFailed:

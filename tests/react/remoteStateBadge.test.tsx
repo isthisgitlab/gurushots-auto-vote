@@ -1,7 +1,8 @@
 /**
  * The phone's connection badge and the standalone notice screen: the badge
  * follows the connection state, the offline state adds the full
- * offline-or-reset explanation, the first connect offers Add to Home Screen
+ * offline-or-reset explanation and the full state its too-many-phones
+ * sentence as banners, the first connect offers Add to Home Screen
  * once per session, and the notice screen names the same states.
  */
 
@@ -49,6 +50,15 @@ describe('RemoteStateBadge', () => {
         });
         expect(container.textContent).toContain('app.remoteOfflineShort');
         expect(screen.getByRole('alert').textContent).toBe('app.remoteOfflineDetail');
+    });
+
+    test('full adds the too-many-phones sentence as a banner', () => {
+        const { container } = render(<RemoteStateBadge />);
+        act(() => {
+            setRemoteConnectionState('full');
+        });
+        expect(container.textContent).toContain('app.remoteFullShort');
+        expect(screen.getByRole('alert').textContent).toBe('app.remoteFull');
     });
 
     test('a sessionStorage that throws still connects, offering nothing', () => {

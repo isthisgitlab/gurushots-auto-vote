@@ -22,6 +22,7 @@ import {
     REMOTE_RESULT_UNSENDABLE,
 } from '../../src/ts/core/remote/protocol';
 import { SPEND_REMOTE_CHANNELS } from '../../src/ts/core/remote/allowlist';
+import { invalid } from '../helpers/invalid';
 import {
     useDesktopRemoteHost,
     setActiveRemoteHost,
@@ -581,17 +582,23 @@ describe('createRemoteHost (failures answer the phone)', () => {
             id: 1,
             ok: false,
             error: REMOTE_RESULT_TOO_LARGE,
-            tooLarge: true,
+            reason: 'too-large',
         });
         expect(resultOf(transport, 2)).toMatchObject({ ok: true });
     });
 
-    test('a result JSON cannot serialize is answered unsendable, without the too-large marker', async () => {
+    test('a result JSON cannot serialize is answered unsendable, with the unsendable reason', async () => {
         const harness = makeHarness({ invoke: async () => ({ big: BigInt(1) }) });
         const transport = await connectPhone(harness);
         transport.receiveFromPeer({ t: 'invoke', id: 3, channel: 'get-bankroll', args: [] }, 'p1');
         await flush();
-        expect(resultOf(transport, 3)).toEqual({ t: 'result', id: 3, ok: false, error: REMOTE_RESULT_UNSENDABLE });
+        expect(resultOf(transport, 3)).toEqual({
+            t: 'result',
+            id: 3,
+            ok: false,
+            error: REMOTE_RESULT_UNSENDABLE,
+            reason: 'unsendable',
+        });
     });
 
     test('a spend channel whose result is over the limit carries the too-large marker (the phone answers "unclear")', async () => {
@@ -610,7 +617,7 @@ describe('createRemoteHost (failures answer the phone)', () => {
             id: 4,
             ok: false,
             error: REMOTE_RESULT_TOO_LARGE,
-            tooLarge: true,
+            reason: 'too-large',
         });
     });
 
@@ -1031,14 +1038,18 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
 
     test('event methods whose mock answers no unsubscribe fall back to a no-op', async () => {
         mockRemoteAccessAnswer.current = enabledLink('k1');
-        const saved = (window.api as unknown as { onSettingsChanged?: unknown }).onSettingsChanged;
-        (window.api as unknown as { onSettingsChanged: unknown }).onSettingsChanged = () => undefined;
+        const saved = mockApi.onSettingsChanged;
+        // A subscribe typed to the real signature that answers no unsubscribe
+        // (an undefined at runtime): the host's fallback must wrap it in a no-op.
+        mockApi.onSettingsChanged = jest.fn<() => void, [(...args: never[]) => void]>(() =>
+            invalid<() => void>(undefined),
+        );
         try {
             render(<Probe />);
             await flush();
             expect(mockAdapterTransports).toHaveLength(1);
         } finally {
-            (window.api as unknown as { onSettingsChanged: unknown }).onSettingsChanged = saved;
+            mockApi.onSettingsChanged = saved;
         }
     });
 

@@ -23,12 +23,7 @@
 
 import { invokeChannels, aliases, eventMethods, kebabToCamel } from '../../../core/ipc/manifest';
 import { markPlatformKind } from '../../../core/platform/kind';
-import {
-    PAGE_VERSION,
-    PROTOCOL_VERSION,
-    REMOTE_RESULT_UNSENDABLE,
-    parsePeerMessage,
-} from '../../../core/remote/protocol';
+import { PAGE_VERSION, PROTOCOL_VERSION, parsePeerMessage } from '../../../core/remote/protocol';
 import { SPEND_REMOTE_CHANNELS } from '../../../core/remote/allowlist';
 import { REMOTE_REFUSAL_PREFIX } from '../../../core/remote/dispatch';
 import {
@@ -86,6 +81,8 @@ const installPeerBridge = (transport: RemoteTransport, loaderTarget: string): vo
     let everConnected = false;
     /** The peers seen and not yet known to be the desktop or gone: any of them may still answer. */
     const waiting = new Set<string>();
+    /** The peers that announced themselves as fellow phones. */
+    const phones = new Set<string>();
 
     // The phone's hello: its own app version, the protocol shape version, not the host. It repeats
     // until the desktop answers (core/remote/helloRepeat.ts: the first one can vanish on the relays).
@@ -122,10 +119,11 @@ const installPeerBridge = (transport: RemoteTransport, loaderTarget: string): vo
     };
 
     /**
-     * Whether the loss of this peer (it left, or its connection failed) ends the session. The desktop's
-     * own loss does; before the desktop has answered, the loss of a joined peer that has not announced
-     * itself as a fellow phone does not unless it was the last candidate still pending — a join failure
-     * only ever names a peer that never joined, so a candidate that failed was the page's last hope.
+     * Whether this join failure ends the session. This rule serves the join-error path only: a
+     * leave of a peer that announced itself as a fellow phone is handled on the leave path before
+     * any such rule is reached. A join failure only ever names a peer that never joined, so the
+     * named peer is never in `waiting`; before the desktop has answered, the failure ends the
+     * session only when no candidate is left — that peer was the page's last hope.
      */
     const endsSession = (peerId: string): boolean => {
         hello.leave(peerId);
@@ -149,7 +147,9 @@ const installPeerBridge = (transport: RemoteTransport, loaderTarget: string): vo
         switch (message.t) {
             case 'hello': {
                 if (!message.host) {
-                    // A fellow phone is no candidate for the desktop, so its later failure says nothing about this page's wait.
+                    // A fellow phone is no candidate for the desktop, so its later failure says nothing
+                    // about this page's wait — and its connection failure is not the desktop's.
+                    phones.add(peerId);
                     waiting.delete(peerId);
                     return;
                 }
@@ -174,6 +174,7 @@ const installPeerBridge = (transport: RemoteTransport, loaderTarget: string): vo
                     setRemoteHostPeerId(peerId);
                     everConnected = true;
                     waiting.clear();
+                    phones.clear();
                     hello.clear();
                     hello.stop();
                     setRemoteConnectionState('connected');
@@ -191,12 +192,12 @@ const installPeerBridge = (transport: RemoteTransport, loaderTarget: string): vo
                     // A channel the desktop does not serve a phone: the answer a handler would give, in the
                     // phone's language, not the protocol's text.
                     invoke.resolve({ success: false, error: rendererTranslator.t('errors.remoteRefused') });
-                } else if (message.error === REMOTE_RESULT_UNSENDABLE) {
+                } else if (message.reason === 'unsendable') {
                     // The invoke ran; its answer just could not come back. A spend may have landed:
                     // unclear, never a plain failure.
                     if (invoke.spend) invoke.resolve(lostSpendAnswer());
                     else invoke.reject(new Error(rendererTranslator.t('errors.remoteAnswerUnsendable')));
-                } else if (message.tooLarge === true) {
+                } else if (message.reason === 'too-large') {
                     if (invoke.spend) invoke.resolve(lostSpendAnswer());
                     else invoke.reject(new Error(rendererTranslator.t('errors.remoteResultTooLarge')));
                 } else invoke.reject(new Error(message.error));
@@ -232,15 +233,23 @@ const installPeerBridge = (transport: RemoteTransport, loaderTarget: string): vo
         hello.join(peerId);
     });
     transport.onPeerLeave((peerId) => {
-        if (endsSession(peerId)) settlePendingForLostConnection();
+        // Only the desktop's own leave ends the session. Before the desktop has answered, the leave
+        // of a peer that already announced itself as a fellow phone — or of a stranger that never
+        // joined — ends nothing: the desktop may still connect.
+        const fromTheDesktop = peerId === hostPeerId || (hostPeerId === null && waiting.has(peerId));
+        hello.leave(peerId);
+        waiting.delete(peerId);
+        if (fromTheDesktop && (hostPeerId !== null || waiting.size === 0)) settlePendingForLostConnection();
     });
 
     transport.onJoinError(({ error, peerId }) => {
         // Only the "peers saw each other but WebRTC could not connect" error is the try-Wi-Fi
-        // state; a wrong password or a handshake failure looks like an offline-or-reset desktop.
+        // state, and only for a peer that can still be the desktop — a fellow phone's failed join
+        // says nothing about the desktop's reachability. A wrong password or a handshake failure
+        // looks like an offline-or-reset desktop.
         if (!endsSession(peerId)) return;
         settlePendingForLostConnection();
-        setRemoteConnectionState(isConnectionFailureJoinError(error) ? 'network' : 'offline');
+        setRemoteConnectionState(isConnectionFailureJoinError(error) && !phones.has(peerId) ? 'network' : 'offline');
     });
 
     // Nobody answered in time: the desktop is offline (or the link was reset). The hello repeat keeps

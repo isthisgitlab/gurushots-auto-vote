@@ -8,7 +8,7 @@ import type { RemoteConnectionState } from '../../../core/remote/connectionState
 /** The sessionStorage flag that offers "Add to Home Screen" once per session. */
 const HOME_HINT_FLAG = 'remote-add-home-hint';
 
-/** The badge label of each connection state (the long offline detail renders in the banner, the long full and unpublished sentences in the notice screen). */
+/** The badge label of each connection state (the long offline detail and full sentence render in banners, the long unpublished sentence in the notice screen). */
 const STATE_LABEL_KEYS: Record<RemoteConnectionState, string> = {
     connecting: 'app.remoteConnecting',
     connected: 'app.remoteConnected',
@@ -39,9 +39,9 @@ const firstVisit = (): boolean => {
 };
 
 /**
- * The phone's connection badge: what the pairing connection is doing, translated. While the
- * desktop is unreachable it adds the full offline-or-reset explanation as a banner, and on
- * the session's first connect it offers "Add to Home Screen" once.
+ * The phone's connection badge: what the pairing connection is doing, translated. The offline
+ * state adds the full offline-or-reset explanation and the full state the too-many-phones
+ * sentence as banners, and on the session's first connect it offers "Add to Home Screen" once.
  */
 export function RemoteStateBadge() {
     const { t } = useTranslation();
@@ -69,6 +69,11 @@ export function RemoteStateBadge() {
             {state === 'offline' && (
                 <div className="alert alert-warning text-sm fixed bottom-0 inset-x-0 z-50 rounded-none" role="alert">
                     <span>{t('app.remoteOfflineDetail')}</span>
+                </div>
+            )}
+            {state === 'full' && (
+                <div className="alert alert-warning text-sm fixed bottom-0 inset-x-0 z-50 rounded-none" role="alert">
+                    <span>{t('app.remoteFull')}</span>
                 </div>
             )}
             {hintShown && state === 'connected' && (

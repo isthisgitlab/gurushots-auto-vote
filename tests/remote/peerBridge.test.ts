@@ -231,11 +231,11 @@ describe('installPeerBridge (the phone bridge)', () => {
         connect();
         const { invokeChannels, kebabToCamel } =
             require('../../src/ts/core/ipc/manifest') as typeof import('../../src/ts/core/ipc/manifest');
-        const methods = api as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
         for (const channel of invokeChannels) {
             if (LOCAL_CHANNELS.has(channel)) continue;
             phone.sent.length = 0;
-            const pending = methods[kebabToCamel(channel)]() as Promise<unknown>;
+            const send = api[kebabToCamel(channel)] as () => Promise<unknown>;
+            const pending = send();
             const sent = phone.sent.find(({ message }) => (message as { t: string }).t === 'invoke');
             expect((sent?.message as { channel: string } | undefined)?.channel).toBe(channel);
             phone.receiveFromPeer(
@@ -539,6 +539,16 @@ describe('installPeerBridge: which peer counts', () => {
         expect(remoteConnectionState()).toBe('network');
     });
 
+    test("an announced fellow phone's SDP failure reads offline, not try Wi-Fi", () => {
+        // The fellow announces itself as no desktop, so it leaves the candidate set; with the desktop
+        // still pending, its own connection trouble on cellular says nothing about the desktop's
+        // reachability — it is no "try Wi-Fi" case.
+        phone.emitJoin('fellow');
+        phone.receiveFromPeer(fellowHello, 'fellow');
+        phone.emitJoinError(SDP_FAILURE, 'fellow');
+        expect(remoteConnectionState()).toBe('offline');
+    });
+
     test('a fellow phone leaving before the desktop answers keeps waiting; the last peer leaving reads offline', async () => {
         const hostReceived: unknown[] = [];
         host.onMessage((_peerId, raw) => hostReceived.push(raw));
@@ -562,6 +572,30 @@ describe('installPeerBridge: which peer counts', () => {
         phone.emitJoin('host');
         phone.emitLeave('host');
         expect(remoteConnectionState()).toBe('offline');
+    });
+
+    test("an announced fellow phone's leave ends nothing; the desktop still connects and resolves the held invoke", async () => {
+        phone.emitJoin('fellow');
+        const pending = api.getSettings() as Promise<unknown>;
+        const settled = jest.fn();
+        void pending.then(settled, settled);
+        // The fellow announces itself as no desktop: it is out of the candidate set from here on.
+        phone.receiveFromPeer(fellowHello, 'fellow');
+        phone.emitLeave('fellow');
+        await flushAsync();
+        // The leave is a fellow phone's, not the desktop's: the wait goes on, the held invoke stays.
+        expect(settled).not.toHaveBeenCalled();
+        expect(remoteConnectionState()).toBe('connecting');
+
+        // The desktop arrives, the held invoke goes out, and its answer resolves it.
+        phone.receiveFromPeer(hostHello, 'host');
+        expect(remoteConnectionState()).toBe('connected');
+        const sent = phone.sent.find(({ message }) => (message as { t: string }).t === 'invoke');
+        phone.receiveFromPeer(
+            { t: 'result', id: (sent?.message as { id: number } | undefined)?.id, ok: true, result: 1 },
+            'host',
+        );
+        await expect(pending).resolves.toBe(1);
     });
 
     test('no answer within the wait reads offline, and a desktop that answers later still connects', async () => {
@@ -607,7 +641,7 @@ describe('installPeerBridge: which peer counts', () => {
         phone.receiveFromPeer(hostHello, 'host');
         const pending = api.getSettings() as Promise<unknown>;
         phone.receiveFromPeer(
-            { t: 'result', id: invokeId(), ok: false, error: REMOTE_RESULT_TOO_LARGE, tooLarge: true },
+            { t: 'result', id: invokeId(), ok: false, error: REMOTE_RESULT_TOO_LARGE, reason: 'too-large' },
             'host',
         );
         await expect(pending).rejects.toThrow(/too large/);
@@ -619,7 +653,7 @@ describe('installPeerBridge: which peer counts', () => {
         phone.receiveFromPeer(hostHello, 'host');
         const pending = api.applyTurbo('c1', 'e1') as Promise<unknown>;
         phone.receiveFromPeer(
-            { t: 'result', id: invokeId(), ok: false, error: REMOTE_RESULT_TOO_LARGE, tooLarge: true },
+            { t: 'result', id: invokeId(), ok: false, error: REMOTE_RESULT_TOO_LARGE, reason: 'too-large' },
             'host',
         );
         await expect(pending).resolves.toEqual({
@@ -633,13 +667,19 @@ describe('installPeerBridge: which peer counts', () => {
         phone.receiveFromPeer(hostHello, 'host');
         // A read: nothing ran that a retry could repeat, so the failure text is right.
         const pending = api.getSettings() as Promise<unknown>;
-        phone.receiveFromPeer({ t: 'result', id: invokeId(), ok: false, error: REMOTE_RESULT_UNSENDABLE }, 'host');
-        await expect(pending).rejects.toThrow("The computer's answer could not be sent.");
+        phone.receiveFromPeer(
+            { t: 'result', id: invokeId(), ok: false, error: REMOTE_RESULT_UNSENDABLE, reason: 'unsendable' },
+            'host',
+        );
+        await expect(pending).rejects.toThrow("The computer's answer could not be sent. Do this on the computer.");
 
         // A spend: the desktop may have run it before the answer failed to go out — unclear, never a failure.
         phone.sent.length = 0;
         const spend = api.joinChallenge('c1', true) as Promise<unknown>;
-        phone.receiveFromPeer({ t: 'result', id: invokeId(), ok: false, error: REMOTE_RESULT_UNSENDABLE }, 'host');
+        phone.receiveFromPeer(
+            { t: 'result', id: invokeId(), ok: false, error: REMOTE_RESULT_UNSENDABLE, reason: 'unsendable' },
+            'host',
+        );
         await expect(spend).resolves.toEqual({
             success: false,
             error: expect.stringContaining('before retrying'),

@@ -119,7 +119,7 @@ export const errors = {
     remoteRefused: 'This is done on the computer.',
     remoteResultTooLarge:
         'The result is too large to send to your phone. Do this on the computer, or ask for less at a time.',
-    remoteAnswerUnsendable: "The computer's answer could not be sent.",
+    remoteAnswerUnsendable: "The computer's answer could not be sent. Do this on the computer.",
     remoteNotConnected:
         'Not connected to your computer. It reconnects by itself when the app is open on your computer.',
 };
