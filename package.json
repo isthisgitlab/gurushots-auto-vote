@@ -220,6 +220,9 @@
             "gatekeeperAssess": false,
             "hardenedRuntime": false,
             "identity": null,
+            "extendInfo": {
+                "NSLocalNetworkUsageDescription": "Remote access connects your phone directly to this app over the network."
+            },
             "artifactName": "GuruShotsAutoVote-v${version}-${arch}.${ext}"
         },
         "win": {
