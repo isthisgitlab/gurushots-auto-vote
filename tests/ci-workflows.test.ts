@@ -21,6 +21,7 @@ interface Step {
     id?: string;
     env?: Record<string, string>;
     with?: Record<string, unknown>;
+    'working-directory'?: string;
 }
 
 interface Job {
@@ -423,6 +424,61 @@ describe('version bump type', () => {
         ['a body [minor] does not either', 'Fix a bug\n\nNotes: [minor]'],
     ])('%s', (_label, message) => {
         expect(bumpFor(message)).toBe('BUMP_TYPE=patch');
+    });
+});
+
+describe('Pages', () => {
+    const pages = load('.github/workflows/pages.yml');
+
+    test('is dispatched only — it has no push or schedule trigger', () => {
+        const parsed: unknown = parse(text('.github/workflows/pages.yml'));
+        if (!isPlainObject(parsed)) throw new Error('pages.yml is not a mapping');
+        const triggers = isPlainObject(parsed.on) ? Object.keys(parsed.on) : null;
+        expect(triggers).toEqual(['workflow_dispatch']);
+    });
+
+    test('a release dispatches the rebuild for master and develop alike, always via master', () => {
+        const trigger = stepNamed(build.jobs['create-release'], 'Trigger Pages rebuild');
+        expect(trigger.if).toBe("github.ref_name == 'master' || github.ref_name == 'develop'");
+        // The Pages environment deploys from master only, so the dispatch must too.
+        expect(trigger.run).toContain('gh workflow run pages.yml --ref master');
+        expect(trigger.run).not.toContain('--ref develop');
+    });
+
+    test('the remote page is checked out from develop without persisted credentials', () => {
+        const checkout = stepNamed(pages.jobs.build, 'Checkout develop for the remote page');
+        expect(checkout.uses).toMatch(SHA_PIN);
+        expect(checkout.with?.ref).toBe('develop');
+        expect(checkout.with?.path).toBe('remote-src');
+        expect(checkout.with?.['persist-credentials']).toBe(false);
+    });
+
+    test('the remote page is built inside remote-src', () => {
+        const remote = stepNamed(pages.jobs.build, 'Build the remote page from develop');
+        expect(remote['working-directory']).toBe('remote-src');
+        expect(remote.run).toContain('pnpm install --frozen-lockfile');
+        expect(remote.run).toContain('pnpm build:site');
+    });
+
+    test('the job fails when the remote page loader is missing', () => {
+        const guard = stepNamed(pages.jobs.build, 'Require the remote page loader');
+        expect(guard.run).toContain('remote-src/dist-site/remote/index.html');
+        expect(guard.run).toContain('exit 1');
+    });
+
+    test('the develop build replaces the remote tree the artifact uploads', () => {
+        const publish = stepNamed(pages.jobs.build, 'Publish the remote page from develop');
+        expect(publish.run).toContain('rm -rf dist-site/remote');
+        expect(publish.run).toContain('cp -R remote-src/dist-site/remote dist-site/remote');
+        expect(stepNamed(pages.jobs.build, 'Upload Pages artifact').with?.path).toBe('dist-site');
+    });
+
+    test('every build:site step lifts the GitHub API rate limit with a GITHUB_TOKEN', () => {
+        const builders = pages.jobs.build.steps.filter((step) => step.run?.includes('pnpm build:site'));
+        expect(builders).toHaveLength(2);
+        for (const step of builders) {
+            expect(step.env?.GITHUB_TOKEN).toBe('${{ secrets.GITHUB_TOKEN }}');
+        }
     });
 });
 

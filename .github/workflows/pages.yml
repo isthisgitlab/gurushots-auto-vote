@@ -1,7 +1,10 @@
 name: Pages
 
 # Builds the README (+ linked docs) into a branded static site and publishes it
-# to GitHub Pages. Requires a one-time repo setting:
+# to GitHub Pages. The docs come from master; the /remote/ tree (the phone page
+# and its version pages) is always built from develop, where the remote-access
+# code lives. The workflow is dispatched after every release, stable (master)
+# and beta (develop) alike. Requires a one-time repo setting:
 # Settings → Pages → Build and deployment → Source = "GitHub Actions".
 on:
     # No push trigger: Pages must never go live before a release succeeds.
@@ -41,8 +44,46 @@ jobs:
             - name: Setup build environment
               uses: ./.github/actions/setup-build
 
+            # build-site/remote.ts reads GITHUB_TOKEN to lift the GitHub API's
+            # anonymous rate limit.
             - name: Build site
               run: pnpm build:site
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            # The /remote/ tree always comes from develop — that is where the
+            # remote-access code lives (master has none); the docs above stay on
+            # the master checkout.
+            - name: Checkout develop for the remote page
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+              with:
+                  ref: develop
+                  path: remote-src
+                  persist-credentials: false
+
+            # The composite action installs at the repo root only, so this
+            # install runs directly; Node/pnpm are already set up above.
+            - name: Build the remote page from develop
+              working-directory: remote-src
+              run: |
+                  pnpm install --frozen-lockfile
+                  pnpm build:site
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            # The loader is the pairing link's entry point — without it the
+            # link 404s, so a missing one must fail the job.
+            - name: Require the remote page loader
+              run: |
+                  [ -f remote-src/dist-site/remote/index.html ] || {
+                      echo "::error::remote-src/dist-site/remote/index.html is missing — develop's build:site produced no remote page loader."
+                      exit 1
+                  }
+
+            - name: Publish the remote page from develop
+              run: |
+                  rm -rf dist-site/remote
+                  cp -R remote-src/dist-site/remote dist-site/remote
 
             - name: Configure Pages
               uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
