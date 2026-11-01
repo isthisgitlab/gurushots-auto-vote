@@ -13,13 +13,21 @@
 import { isPlainObject } from '../plainObject';
 import { isInteger } from '../numbers';
 
+import * as pkg from '../../../../package.json';
+
 import type { AutovoteState } from '../autovote/state';
+
+/** The app version this build carries; `hello` announces it and the phone page compares the desktop's against it. */
+export const PAGE_VERSION: string = pkg.version;
 
 /** The protocol shape version. A peer whose PROTOCOL_VERSION differs is not spoken to. */
 export const PROTOCOL_VERSION = 1 as const;
 
 /** Longest serialized message a peer may send; anything over it is dropped unlooked at. */
 export const MAX_PEER_MESSAGE_BYTES = 2 * 1024 * 1024;
+
+/** The error a host answers when an invoke's result is over MAX_PEER_MESSAGE_BYTES; the phone shows its own translated text for it. */
+export const REMOTE_RESULT_TOO_LARGE = 'The result is too large to send to the phone.';
 
 /** Longest one string field of a message may be (versions, channel names, error texts). */
 export const MAX_PEER_FIELD_LENGTH = 512;
@@ -30,19 +38,29 @@ export type AutovoteCommandName = 'start' | 'stop' | 'rearm';
  * phone speaks first; only the desktop's reply carries `host: true`, which is how a phone
  * tells it from a fellow phone. A peer whose `protocolVersion` differs from ours is told to
  * update, the same as an app-version mismatch. */
-export type HelloMessage = { t: 'hello'; version: string; protocolVersion: number; host: boolean };
+export type HelloMessage = {
+    t: 'hello';
+    version: string;
+    protocolVersion: number;
+    host: boolean;
+    /** `'loader'` marks the /remote/ loader, which only asks the desktop's version: it takes no peer slot and no snapshot. */
+    role?: 'loader';
+};
 /** Phone → host: one window.api invoke. `undefinedAt` restores JSON-lost `undefined` arguments (see bridge/web.ts). */
 export type InvokeMessage = { t: 'invoke'; id: number; channel: string; args: unknown[]; undefinedAt?: number[] };
 /** Host → phone: the answer to one invoke. `ok: false` carries the handler's error text. */
-export type ResultMessage = { t: 'result'; id: number; ok: boolean; result?: unknown; error?: string };
+export type ResultMessage =
+    | { t: 'result'; id: number; ok: true; result?: unknown }
+    | { t: 'result'; id: number; ok: false; error: string };
 /** Host → phone: one window.api event (settings-changed, update-*, log-message). */
 export type EventMessage = { t: 'event'; channel: string; payload: unknown };
 /** Host → phone: the desktop controller's state, on every change. */
 export type AutovoteStateMessage = { t: 'autovote-state'; state: AutovoteState };
 /** Phone → host: start/stop/rearm the desktop's own controller. */
 export type AutovoteCommandMessage = { t: 'autovote-command'; command: AutovoteCommandName };
-/** Both directions: the sender leaves (a refused peer, the host shutting down). */
-export type ByeMessage = { t: 'bye' };
+/** Both directions: the sender leaves (a refused peer, the host shutting down). `reason: 'full'` is the
+ * host turning a phone away because the peer limit is reached — not an offline desktop. */
+export type ByeMessage = { t: 'bye'; reason?: 'full' };
 
 export type PeerMessage =
     | HelloMessage
@@ -73,24 +91,76 @@ const isAutovoteState = (value: unknown): value is AutovoteState =>
         value.statusClass === 'badge-error') &&
     (value.error === null || typeof value.error === 'string');
 
+/**
+ * A release version as the `hello` carries it (`1.2.3`, `1.2.3-beta.4`): the only shape the loader
+ * builds a page path from, so nothing a peer sends can name another place on the site.
+ */
+const RELEASE_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?$/;
+
+/** Whether `version` is a release version, safe to put into a page path. */
+export const isReleaseVersion = (version: string): boolean => RELEASE_VERSION_PATTERN.test(version);
+
+/**
+ * Orders two release versions: the number core first, then a pre-release below its release and
+ * pre-releases among themselves by their dotted identifiers (numbers as numbers).
+ */
+export const compareReleaseVersions = (a: string, b: string): -1 | 0 | 1 => {
+    const split = (version: string): { core: number[]; pre: string[] | null } => {
+        const [core, ...pre] = version.split('-');
+        return { core: core.split('.').map(Number), pre: pre.length === 0 ? null : pre.join('-').split('.') };
+    };
+    const left = split(a);
+    const right = split(b);
+    for (let i = 0; i < 3; i++) {
+        if (left.core[i] !== right.core[i]) return left.core[i] < right.core[i] ? -1 : 1;
+    }
+    if (left.pre === null || right.pre === null) {
+        return left.pre === right.pre ? 0 : left.pre === null ? 1 : -1;
+    }
+    for (let i = 0; i < Math.max(left.pre.length, right.pre.length); i++) {
+        const x = left.pre[i];
+        const y = right.pre[i];
+        if (x === undefined || y === undefined) return x === undefined ? -1 : 1;
+        if (x === y) continue;
+        const bothNumeric = /^\d+$/.test(x) && /^\d+$/.test(y);
+        if (bothNumeric) return Number(x) < Number(y) ? -1 : 1;
+        return x < y ? -1 : 1;
+    }
+    return 0;
+};
+
+/** Whether a message fits the size a peer accepts; a payload JSON cannot serialize counts as too large. */
+export const isWithinPeerMessageLimit = (message: unknown): boolean => {
+    try {
+        return (JSON.stringify(message)?.length ?? 0) <= MAX_PEER_MESSAGE_BYTES;
+    } catch {
+        return false;
+    }
+};
+
 /** Whether a raw payload is one of the protocol messages, within the size and field bounds. */
 export const parsePeerMessage = (raw: unknown): PeerMessage | null => {
     if (!isPlainObject(raw)) return null;
-    let size: number;
-    try {
-        size = JSON.stringify(raw)?.length ?? 0;
-    } catch {
-        return null;
-    }
-    if (size > MAX_PEER_MESSAGE_BYTES) return null;
+    if (!isWithinPeerMessageLimit(raw)) return null;
     switch (raw.t) {
-        case 'hello':
-            return typeof raw.host === 'boolean' &&
-                isBoundedString(raw.version) &&
-                isInteger(raw.protocolVersion) &&
-                raw.protocolVersion >= 1
-                ? { t: 'hello', version: raw.version, protocolVersion: raw.protocolVersion, host: raw.host }
-                : null;
+        case 'hello': {
+            if (raw.role !== undefined && raw.role !== 'loader') return null;
+            if (
+                typeof raw.host !== 'boolean' ||
+                !isBoundedString(raw.version) ||
+                !isInteger(raw.protocolVersion) ||
+                raw.protocolVersion < 1
+            ) {
+                return null;
+            }
+            const hello: HelloMessage = {
+                t: 'hello',
+                version: raw.version,
+                protocolVersion: raw.protocolVersion,
+                host: raw.host,
+            };
+            return raw.role === undefined ? hello : { ...hello, role: raw.role };
+        }
         case 'invoke':
             if (!isInteger(raw.id) || raw.id < 0 || !isBoundedString(raw.channel) || !Array.isArray(raw.args)) {
                 return null;
@@ -114,7 +184,8 @@ export const parsePeerMessage = (raw: unknown): PeerMessage | null => {
                 ? { t: 'autovote-command', command: raw.command }
                 : null;
         case 'bye':
-            return { t: 'bye' };
+            if (raw.reason === undefined) return { t: 'bye' };
+            return raw.reason === 'full' ? { t: 'bye', reason: 'full' } : null;
         default:
             return null;
     }

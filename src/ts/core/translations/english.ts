@@ -116,6 +116,10 @@ export const errors = {
         'That is not a pairing link. Paste the whole link from the Remote access section on your computer — it ends in #k=…',
     remoteEnterFailed: 'Could not switch to remote mode. This app stays in its normal mode — try again.',
     remoteDisconnectFailed: 'Could not disconnect. This page stays connected to your computer — try again.',
+    remoteRefused: 'This is done on the computer.',
+    remoteResultTooLarge:
+        'The result is too large to send to your phone. Do this on the computer, or ask for less at a time.',
+    remoteNotConnected: 'Not connected to your computer',
 };
 // First-run onboarding
 export const onboarding = {
@@ -1701,6 +1705,16 @@ export const app = {
         'Your computer is offline, or this link was reset. If the app is open on your computer, scan its QR code again.',
     remoteNetwork: "Couldn't connect on this network — try Wi-Fi",
     remoteUpdateNeeded: 'Update the app on your computer',
+    remoteUpdateThis: 'Update this app',
+    remoteFull: 'Too many phones are connected — close the app on another phone, then try again.',
+    remoteChangeFailed:
+        "Remote access was not changed. The setting could not be saved on this computer. Try again; if it keeps failing, check that the app's data folder can be written to.",
+    remoteResetFailed:
+        "The pairing was not reset, so the old link still works. The new key could not be saved on this computer. Try again; if it keeps failing, check that the app's data folder can be written to.",
+    remoteResetTitle: 'Reset pairing?',
+    remoteResetConfirm:
+        'Every paired phone is disconnected and the old link stops working. Scan the new QR code on each phone to pair it again.',
+    remoteResetWorking: 'Resetting…',
     remoteNoKey: 'Scan the QR code on your computer to pair',
     remoteAddToHomeScreen: 'Add this page to your Home Screen to keep the link at hand.',
     // The Android app's remote mode: the paste entry ("Control my computer") and the leave from it

@@ -49,8 +49,10 @@ export type RemoteTransport = {
      * Subscribe to join failures: a peer that was seen but whose connection could not be
      * established. The `error` text comes from the transport; `isConnectionFailureJoinError`
      * (core/remote/trystero.ts) tells a connection failure apart from a refused handshake.
+     * `peerId` is the peer the failure is about: a fellow phone's failed connection says
+     * nothing about the desktop's.
      */
-    onJoinError: (handler: (details: { error: string }) => void) => () => void;
+    onJoinError: (handler: (details: { error: string; peerId: string }) => void) => () => void;
     /** Leave the room and close every connection. */
     leave: () => Promise<void>;
 };

@@ -12,8 +12,6 @@
  * Dependency-free: the desktop host and the tests share it.
  */
 
-import { eventMethods, sendMethods } from '../ipc/manifest';
-
 /** Why a channel is refused to a remote peer. */
 export type RemoteRefusal = { kind: 'refused'; reason: string };
 /** The host answers the channel itself; it never reaches `window.api`. */
@@ -24,7 +22,7 @@ export type RemoteAllowed = { kind: 'allowed' };
 export type RemoteChannelClass = RemoteRefusal | RemoteHostAnswered | RemoteAllowed;
 
 /** The manifest channels a remote peer may invoke, exactly as they are allowed. */
-const ALLOWED = [
+export const ALLOWED = [
     'acknowledge-import-report',
     'apply-boost-to-entry',
     'apply-challenge-profile',
@@ -110,17 +108,21 @@ const ALLOWED = [
 ] as const;
 
 /** The refused channels, each with the reason the refusal names. */
-const REFUSED: Record<string, string> = {
+export const REFUSED: Record<string, string> = {
     // Account: the sign-in stays on the desktop.
     authenticate: 'Signing in is done on the computer.',
-    [sendMethods.logout]: 'Logging out is done on the computer.',
-    [sendMethods.login]: 'Signing in is done on the computer.',
-    // Events flow host → phone only; a peer never sends them.
-    ...Object.fromEntries(
-        Object.values(eventMethods).map(
-            (channel) => [channel, 'Events flow from the computer to the phone only.'] as const,
-        ),
-    ),
+    logout: 'Logging out is done on the computer.',
+    'login-success': 'Signing in is done on the computer.',
+    // Events flow host → phone only; a peer never sends them. Each is listed by name, so a new
+    // event channel fails tests/remote/allowlist.test.ts until it is classified here.
+    'update-checking': 'Events flow from the computer to the phone only.',
+    'update-available': 'Events flow from the computer to the phone only.',
+    'update-not-available': 'Events flow from the computer to the phone only.',
+    'update-download-progress': 'Events flow from the computer to the phone only.',
+    'update-downloaded': 'Events flow from the computer to the phone only.',
+    'update-error': 'Events flow from the computer to the phone only.',
+    'log-message': 'Events flow from the computer to the phone only.',
+    'settings-changed': 'Events flow from the computer to the phone only.',
     // Local data and log files: a leaked link must not wipe anything, and the phone writes no
     // lines into the desktop's logs — the host logs remote activity itself.
     'wipe-local-data': 'Local data is deleted on the computer.',
@@ -145,6 +147,7 @@ const REFUSED: Record<string, string> = {
     'get-remote-access': 'The pairing key never travels over the pairing connection.',
     'set-remote-access': 'Remote access is switched on the computer.',
     'reset-remote-pairing': 'The pairing key never travels over the pairing connection.',
+    'log-remote-info': "The phone writes no lines into the computer's log files.",
     // Destructive resets and imports: a leaked link must not be able to wipe the configuration
     // with no undo.
     'reset-all-settings': 'Settings are reset on the computer.',
@@ -153,11 +156,15 @@ const REFUSED: Record<string, string> = {
     'reset-all-global-defaults': 'Global defaults are reset on the computer.',
     'reset-all-scenario-state': 'Scenario state is reset on the computer.',
     'import-scenario': 'Scenarios are imported on the computer.',
-    'cleanup-stale-metadata': 'Metadata cleanup runs on the computer.',
 };
 
-/** The channels the host answers itself; they are never forwarded to `window.api`. */
-const HOST_ANSWERED = ['start-log-stream', 'stop-log-stream'] as const;
+/**
+ * The channels the host answers itself; they are never forwarded to `window.api`. The log stream
+ * is the host's own to count. `cleanup-stale-metadata` is answered with success and nothing is
+ * done: the phone's challenge list calls it after every refresh, and a refusal would read as a
+ * failed refresh, but a phone must never trigger a cleanup on the desktop's metadata.
+ */
+export const HOST_ANSWERED = ['start-log-stream', 'stop-log-stream', 'cleanup-stale-metadata'] as const;
 
 /** The manifest channels a remote peer may invoke. */
 export const ALLOWED_REMOTE_CHANNELS: ReadonlySet<string> = new Set(ALLOWED);
@@ -177,9 +184,11 @@ export const classifyRemoteChannel = (channel: string): RemoteChannelClass => {
  * The invoke channels whose handler can spend account currency (a `postOnce` request in
  * `api/join.ts` — the coins of a join — `api/currency.ts` — key, swap and fill — or
  * `api/turbo.ts` — the snap-vote submission of a turbo game), plus the
- * `apply-turbo-to-entry` alias of the turbo spend. When the connection drops while one of
- * these is in flight, the phone answers "unclear — check before retrying" instead of a
- * failure, the same rule the transport's `postOnce` follows.
+ * `apply-turbo-to-entry` alias of the turbo spend. The two voting-pass channels
+ * (`run-voting-cycle-for-challenge`, `vote-all-challenges-manual`) are here too: a pass can run
+ * auto-spends. When the connection drops while one of these is in flight, the phone answers
+ * "unclear — check before retrying" instead of a failure, the same rule the transport's
+ * `postOnce` follows.
  */
 export const SPEND_REMOTE_CHANNELS: ReadonlySet<string> = new Set([
     'join-challenge',
@@ -189,6 +198,8 @@ export const SPEND_REMOTE_CHANNELS: ReadonlySet<string> = new Set([
     'fill-exposure',
     'apply-turbo-to-entry',
     'play-auto-turbo',
+    'run-voting-cycle-for-challenge',
+    'vote-all-challenges-manual',
 ]);
 
 /**

@@ -49,7 +49,7 @@ describe('dispatchRemoteInvoke', () => {
         'reset-all-global-defaults',
         'reset-all-scenario-state',
         'import-scenario',
-        'cleanup-stale-metadata',
+        'log-remote-info',
         'get-log-file',
         'get-error-log-file',
         'get-api-log-file',
@@ -64,12 +64,15 @@ describe('dispatchRemoteInvoke', () => {
         }
     });
 
-    test.each(['start-log-stream', 'stop-log-stream'])('refuses the host-answered %s in dispatch', async (channel) => {
-        const deps = depsWith();
-        const outcome = await dispatchRemoteInvoke(channel, [], deps);
-        expect(deps.calls).toEqual([]);
-        expect(outcome.kind).toBe('refused');
-    });
+    test.each(['start-log-stream', 'stop-log-stream', 'cleanup-stale-metadata'])(
+        'refuses the host-answered %s in dispatch',
+        async (channel) => {
+            const deps = depsWith();
+            const outcome = await dispatchRemoteInvoke(channel, [], deps);
+            expect(deps.calls).toEqual([]);
+            expect(outcome.kind).toBe('refused');
+        },
+    );
 
     test('a channel that is not in the manifest is refused', async () => {
         const deps = depsWith();

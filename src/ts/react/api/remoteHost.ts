@@ -19,17 +19,20 @@ import { useEffect } from 'react';
 import { dispatchRemoteInvoke, REMOTE_REFUSAL_PREFIX } from '../../core/remote/dispatch';
 import { classifyRemoteChannel } from '../../core/remote/allowlist';
 import {
+    isWithinPeerMessageLimit,
     parsePeerMessage,
     restoreInvokeArgs,
     MAX_PEER_FIELD_LENGTH,
+    PAGE_VERSION,
     PROTOCOL_VERSION,
+    REMOTE_RESULT_TOO_LARGE,
 } from '../../core/remote/protocol';
 import { platformKind } from '../../core/platform/kind';
-import { kebabToCamel, eventMethods } from '../../core/ipc/manifest';
+import { aliases, kebabToCamel, eventMethods } from '../../core/ipc/manifest';
+import { errorMessage } from '../../core/errorMessage';
 import { createTrysteroTransport } from '../../core/remote/trystero';
 import { rendererTranslator } from '../../core/translations/renderer';
 import { deliverElectronNotification } from '../notifications/deadlineNotifier';
-import * as pkg from '../../../../package.json';
 import * as ipc from './ipc';
 
 import type { RemoteTransport, RemoteTransportFactory } from '../../core/remote/relays';
@@ -55,8 +58,8 @@ export type RemoteHostDeps = {
     onLogMessage: (handler: (entry: unknown) => void) => () => void;
     /** Desktop notice when a new phone connects; the caller translates (the deadline notifier's delivery path). */
     notify: () => void;
-    /** Best-effort renderer logging (the desktop's own Logs window shows these). */
-    logDebug: (message: string) => void;
+    /** Best-effort renderer logging at INFO (the desktop's own Logs window and log files show these). */
+    logInfo: (message: string) => void;
     /** The app version `hello` announces (package.json's version). */
     version: string;
 };
@@ -90,7 +93,27 @@ const FORWARDED_EVENT_CHANNELS = new Set([
 const clippedId = (value: string): string => value.slice(0, MAX_PEER_FIELD_LENGTH);
 
 /** The app version `hello` announces: package.json at bundle time (esbuild inlines the file). */
-export const appVersion = (): string => pkg.version;
+export const appVersion = (): string => PAGE_VERSION;
+
+/** A short, single-line error text for a phone: bounded to what a `result` message accepts. */
+const shortError = (error: unknown): string => {
+    const text = (errorMessage(error) ?? '').replace(/\s+/g, ' ').trim();
+    return (text.length > 0 ? text : 'The computer could not run this.').slice(0, MAX_PEER_FIELD_LENGTH);
+};
+
+/** The window.api method that serves a manifest channel: an alias target keeps its own method name. */
+const METHOD_BY_ALIAS_CHANNEL = new Map<string, string>(
+    Object.entries(aliases).map(([method, channel]) => [channel, method]),
+);
+const methodForChannel = (channel: string): string => METHOD_BY_ALIAS_CHANNEL.get(channel) ?? kebabToCamel(channel);
+
+/** The desktop's window.api, called by manifest channel. A channel without a method rejects. */
+const callWindowApi = async (channel: string, args: unknown[]): Promise<unknown> => {
+    const api: Record<string, ((...callArgs: never[]) => unknown) | undefined> = window.api;
+    const method = api[methodForChannel(channel)];
+    if (typeof method !== 'function') throw new Error(`No window.api method serves ${channel}`);
+    return method.apply(window.api, args as never[]);
+};
 
 export const createRemoteHost = (deps: RemoteHostDeps): RemoteHost => {
     let transport: RemoteTransport | null = null;
@@ -116,18 +139,35 @@ export const createRemoteHost = (deps: RemoteHostDeps): RemoteHost => {
         }
     };
 
+    /** Ends the desktop's one log stream. A failure is nobody's to answer: the stream ends with the window anyway. */
+    const releaseLogStream = async (): Promise<void> => {
+        try {
+            await deps.invoke('stop-log-stream', []);
+        } catch {
+            // see above
+        }
+    };
+
     const dropPeer = (peerId: string): void => {
         if (!peers.delete(peerId)) return;
-        logPeers.delete(peerId);
-        if (logPeers.size === 0) void deps.invoke('stop-log-stream', []);
-        deps.logDebug(`Remote peer left: ${clippedId(peerId)}`);
+        if (logPeers.delete(peerId) && logPeers.size === 0) void releaseLogStream();
+        deps.logInfo(`Remote peer left: ${clippedId(peerId)}`);
         notifyCount();
     };
 
+    /** The host's own `hello`: its version and protocol, nothing else. */
+    const sendHostHello = (peerId: string): Promise<void> =>
+        sendTo(peerId, { t: 'hello', version: deps.version, protocolVersion: PROTOCOL_VERSION, host: true });
+
     const sendSnapshot = async (peerId: string): Promise<void> => {
-        await sendTo(peerId, { t: 'hello', version: deps.version, protocolVersion: PROTOCOL_VERSION, host: true });
-        const settings = await deps.invoke('get-settings', []);
-        await sendTo(peerId, { t: 'event', channel: 'settings-changed', payload: settings });
+        await sendHostHello(peerId);
+        try {
+            const settings = await deps.invoke('get-settings', []);
+            await sendTo(peerId, { t: 'event', channel: 'settings-changed', payload: settings });
+        } catch {
+            // The phone reads the settings itself through its own invokes, each answered or failed on its own.
+            deps.logInfo('Remote invoke failed: get-settings');
+        }
         await sendTo(peerId, { t: 'autovote-state', state: deps.getAutovoteState() });
     };
 
@@ -143,25 +183,59 @@ export const createRemoteHost = (deps: RemoteHostDeps): RemoteHost => {
             const lastStopped = !wants && logPeers.size === 0;
             if (firstWanted || lastStopped) {
                 await deps.invoke(wants ? 'start-log-stream' : 'stop-log-stream', []);
-                deps.logDebug(`Phones receiving the log stream: ${logPeers.size}`);
+                deps.logInfo(`Phones receiving the log stream: ${logPeers.size}`);
             }
         }
         await sendTo(peerId, { t: 'result', id, ok: true, result: { success: true } });
     };
 
+    const answerHostChannel = async (peerId: string, id: number, channel: string): Promise<void> => {
+        if (channel === 'cleanup-stale-metadata') {
+            // Answered with success and nothing is done: the phone never triggers a cleanup here.
+            await sendTo(peerId, { t: 'result', id, ok: true, result: { success: true } });
+            return;
+        }
+        await answerLogStreamChannel(peerId, id, channel === 'start-log-stream');
+    };
+
+    /** Sends one invoke's answer; a result too large for a peer to accept becomes a failure the phone can see. */
+    const sendResult = async (peerId: string, id: number, channel: string, result: unknown): Promise<void> => {
+        const answer = { t: 'result', id, ok: true, result };
+        if (isWithinPeerMessageLimit(answer)) {
+            await sendTo(peerId, answer);
+            return;
+        }
+        deps.logInfo(`Remote invoke failed: ${clippedId(channel)}`);
+        await sendTo(peerId, { t: 'result', id, ok: false, error: REMOTE_RESULT_TOO_LARGE });
+    };
+
     const answerInvoke = async (peerId: string, id: number, channel: string, args: unknown[]): Promise<void> => {
-        const classified = classifyRemoteChannel(channel);
-        if (classified.kind === 'host') {
-            await answerLogStreamChannel(peerId, id, channel === 'start-log-stream');
-            return;
+        try {
+            if (classifyRemoteChannel(channel).kind === 'host') {
+                await answerHostChannel(peerId, id, channel);
+                return;
+            }
+            const outcome = await dispatchRemoteInvoke(channel, args, { invoke: deps.invoke });
+            if (outcome.kind === 'refused') {
+                deps.logInfo(`Remote invoke refused: ${clippedId(channel)}`);
+                await sendTo(peerId, { t: 'result', id, ok: false, error: outcome.error });
+                return;
+            }
+            await sendResult(peerId, id, channel, outcome.result);
+        } catch (error) {
+            // Every failure answers the phone: an unanswered invoke would hang there until the connection drops.
+            deps.logInfo(`Remote invoke failed: ${clippedId(channel)}`);
+            await sendTo(peerId, { t: 'result', id, ok: false, error: shortError(error) });
         }
-        const outcome = await dispatchRemoteInvoke(channel, args, { invoke: deps.invoke });
-        if (outcome.kind === 'refused') {
-            deps.logDebug(`Remote invoke refused: ${clippedId(channel)}`);
-            await sendTo(peerId, { t: 'result', id, ok: false, error: outcome.error });
-            return;
+    };
+
+    /** Runs a phone's start/stop/rearm; a failure is logged, the controller's own state tells the phone. */
+    const runCommand = async (command: AutovoteCommandName): Promise<void> => {
+        try {
+            await deps.runAutovoteCommand(command);
+        } catch {
+            deps.logInfo(`Remote auto-vote command failed: ${command}`);
         }
-        await sendTo(peerId, { t: 'result', id, ok: true, result: outcome.result });
     };
 
     const handleMessage = (peerId: string, raw: unknown): void => {
@@ -169,25 +243,25 @@ export const createRemoteHost = (deps: RemoteHostDeps): RemoteHost => {
         if (message === null) return;
         switch (message.t) {
             case 'hello': {
-                if (message.version !== deps.version || message.protocolVersion !== PROTOCOL_VERSION) {
-                    // Either mismatch is told, not served: the phone says to update.
-                    void sendTo(peerId, {
-                        t: 'hello',
-                        version: deps.version,
-                        protocolVersion: PROTOCOL_VERSION,
-                        host: true,
-                    });
+                if (
+                    message.role === 'loader' ||
+                    message.version !== deps.version ||
+                    message.protocolVersion !== PROTOCOL_VERSION
+                ) {
+                    // The loader only asks the version, and a mismatch is told, not served: neither gets a
+                    // snapshot, a peer slot, a count or a desktop notice.
+                    void sendHostHello(peerId);
                     return;
                 }
                 if (!peers.has(peerId) && peers.size >= MAX_REMOTE_PEERS) {
-                    deps.logDebug(`Remote peer refused: at most ${MAX_REMOTE_PEERS} phones can be connected`);
-                    void sendTo(peerId, { t: 'bye' });
+                    deps.logInfo(`Remote peer refused: at most ${MAX_REMOTE_PEERS} phones can be connected`);
+                    void sendTo(peerId, { t: 'bye', reason: 'full' });
                     return;
                 }
                 const isNew = !peers.has(peerId);
                 peers.add(peerId);
                 if (isNew) {
-                    deps.logDebug(`Remote peer connected: ${clippedId(peerId)}`);
+                    deps.logInfo(`Remote peer connected: ${clippedId(peerId)}`);
                     notifyCount();
                     deps.notify();
                 }
@@ -206,14 +280,14 @@ export const createRemoteHost = (deps: RemoteHostDeps): RemoteHost => {
                 }
                 // The channel name only, never the arguments: an invoke's arguments can name
                 // anything, and the log is not the place for them.
-                deps.logDebug(`Remote invoke: ${clippedId(message.channel)}`);
+                deps.logInfo(`Remote invoke: ${clippedId(message.channel)}`);
                 void answerInvoke(peerId, message.id, message.channel, restoreInvokeArgs(message));
                 return;
             }
             case 'autovote-command': {
                 if (!peers.has(peerId)) return;
-                deps.logDebug(`Remote auto-vote command: ${message.command}`);
-                void deps.runAutovoteCommand(message.command);
+                deps.logInfo(`Remote auto-vote command: ${message.command}`);
+                void runCommand(message.command);
                 return;
             }
             case 'bye': {
@@ -232,7 +306,7 @@ export const createRemoteHost = (deps: RemoteHostDeps): RemoteHost => {
                 next.onMessage(handleMessage),
                 next.onPeerJoin((peerId) => {
                     // Nothing is sent before the phone's hello; the join is only logged.
-                    deps.logDebug(`Remote peer seen: ${clippedId(peerId)}`);
+                    deps.logInfo(`Remote peer seen: ${clippedId(peerId)}`);
                 }),
                 next.onPeerLeave(dropPeer),
             );
@@ -254,7 +328,7 @@ export const createRemoteHost = (deps: RemoteHostDeps): RemoteHost => {
             };
             globalThis.addEventListener('pagehide', onUnload);
             unsubs.push(() => globalThis.removeEventListener('pagehide', onUnload));
-            deps.logDebug('Remote access host started');
+            deps.logInfo('Remote access host started');
             return true;
         },
         stop: async () => {
@@ -262,10 +336,12 @@ export const createRemoteHost = (deps: RemoteHostDeps): RemoteHost => {
             const leaving = transport;
             transport = null;
             for (const unsub of unsubs.splice(0)) unsub();
+            const heldLogStream = logPeers.size > 0;
             peers.clear();
             logPeers.clear();
             notifyCount();
-            deps.logDebug('Remote access host stopped');
+            deps.logInfo('Remote access host stopped');
+            if (heldLogStream) void releaseLogStream();
             await leaving.leave();
         },
         isActive: () => transport !== null,
@@ -335,6 +411,8 @@ export const useDesktopRemoteHost = (controller: AutovoteController): void => {
         let disposed = false;
         let host: RemoteHost | null = null;
         let currentKey: string | null = null;
+        /** Bumped by every sync that changes the room, so a join still in flight can tell it was overtaken. */
+        let generation = 0;
         const takeDown = async (): Promise<void> => {
             if (host === null) return;
             const leaving = host;
@@ -356,21 +434,14 @@ export const useDesktopRemoteHost = (controller: AutovoteController): void => {
                     ? (new URLSearchParams(answer.link.slice(answer.link.indexOf('#') + 1)).get('k') ?? null)
                     : null;
             if (disposed) return;
-            if (key === null) {
-                await takeDown();
-                return;
-            }
-            if (host !== null && key === currentKey) return;
+            if (key !== null && host !== null && key === currentKey) return;
+            const mine = ++generation;
             await takeDown();
+            if (key === null || disposed || mine !== generation) return;
             currentKey = key;
             const joined = createRemoteHost({
                 createTransport: (options) => createTrysteroTransport(options),
-                invoke: (channel, args) =>
-                    Promise.resolve(
-                        (window.api as unknown as Record<string, (...callArgs: unknown[]) => unknown>)[
-                            kebabToCamel(channel)
-                        ](...args),
-                    ),
+                invoke: callWindowApi,
                 getAutovoteState: () => controller.getState(),
                 runAutovoteCommand: (command) =>
                     command === 'start'
@@ -405,15 +476,18 @@ export const useDesktopRemoteHost = (controller: AutovoteController): void => {
                         title: rendererTranslator.t('app.title'),
                         body: rendererTranslator.t('app.remoteConnectedNotice'),
                     }),
-                logDebug: (message) => void ipc.logRendererDebug(message),
+                logInfo: (message) => void ipc.logRemoteInfo(message),
                 version: appVersion(),
             });
             // The instance is kept locally: a cleanup that ran while the room was being joined
             // has already nulled `host`, and this join must still be taken down.
             host = joined;
             await joined.start(key);
-            if (disposed) {
-                setActiveRemoteHost(null);
+            if (disposed || mine !== generation) {
+                // Switched off, re-keyed or unmounted while the room was being joined: the join that just
+                // completed must not stay in the room. A newer sync owns the registration, so only an
+                // unmount clears it.
+                if (disposed) setActiveRemoteHost(null);
                 await joined.stop();
                 return;
             }

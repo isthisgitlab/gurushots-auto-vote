@@ -93,7 +93,7 @@ describe('Capacitor bridge', () => {
 
     describe('installation', () => {
         test('the remote-access pairing channels answer not-applicable on Android', async () => {
-            for (const method of ['getRemoteAccess', 'setRemoteAccess', 'resetRemotePairing']) {
+            for (const method of ['getRemoteAccess', 'setRemoteAccess', 'resetRemotePairing', 'logRemoteInfo']) {
                 await expect(
                     (api as unknown as Record<string, () => Promise<{ success: boolean; error: string }>>)[method](),
                 ).resolves.toEqual({

@@ -189,6 +189,8 @@ export const logMessages = {
     m3dba9b77678f: '    {0}: {1}',
     m3e29630bfae6: 'Atbloķēt Boost izaicinājumā "{0}" ar atslēgu.',
     m3e7a92c4b518: '{0} Boost gaida piesprausto foto (tā nav izaicinājumā) — Boost netiek piemērots',
+    m3e895e926060:
+        'Failu remote-access.json neizdevās nolasīt; to aizstās jauna savienošanas atslēga, tāpēc pārī savienotajiem telefoniem būs jāskenē vēlreiz.',
     m3ed0187a6dad: '📝 Manuālās iesniegšanas pieprasījums: izaicinājums={0}, režīms={1}',
     m3ef824a95305: 'Nevar nolasīt swap-back uzskaiti: {0}',
     m3f0ad2e947e2: 'Kļūda, nolasot {0} žurnālu',
@@ -589,6 +591,7 @@ export const logMessages = {
     mbc6e77b1369c: 'Izslēdzot lietotni, neizdevās notīrīt pieteikšanās tokenu',
     mbc71809b66a3: 'photoStats: neizdevās saglabāt statistikas kešatmiņu: {0}',
     mbc9486589b7a: '  • {0} — {1}',
+    mbd07dee6dc9c: 'Attālinātā automātiskās balsošanas komanda neizdevās: {0}',
     mbd5abf0c729c: 'Lejupielādēšanai nav pieejams atjauninājums',
     mbdf55b6dc188: 'API pieprasījums neizdevās',
     mbe2fb89a8aec: 'Neizdevās saglabāt izlaižamās versijas migrāciju; patur iepriekšējo vērtību',
@@ -601,6 +604,8 @@ export const logMessages = {
     mc18b6131a302: '🚀 Pieprasījums izmantot Boost foto: izaicinājums={0}, foto={1}',
     mc1d9181546d2: 'Neizdevās atjaunināt izaicinājuma {0} testa metadatus',
     mc23272e50110: 'Veido starpprogrammatūru ar {0} stratēģiju',
+    mc253a5897437:
+        'Argumentu --remote-link-origin ignorē iepakotajā būvējumā; savienošanas saite izmanto publicētās lapas.',
     mc2689515c535: 'Pilna informācija par galvenās funkcijas kļūdu:',
     mc30be3473e80: 'Nav balsošanas foto, atgriež kļūdu',
     mc3272028233f: 'saveChallengeProfile noraidīts: sasniegts profilu skaita ierobežojums {0}',
@@ -664,6 +669,7 @@ export const logMessages = {
     md5b6bfa1bf6f: 'setTitleRules paredz masīvu',
     md5e4ff0306a8: 'Nākamais cikls pēc {0} min (mērķis: {1} min starp sākumiem; diapazons: {2}–{3})',
     md61dcf3f9bca: 'Vizuālā pārbaude mainīja izvēlēto foto secību izaicinājumam {0}: {1} → {2}',
+    md6af919c9ea1: 'Attālinātais izsaukums neizdevās: {0}',
     md6c21aec2887: 'Kļūda, notīrot izlaižamo versiju:',
     md6c34dbb267e: 'Kļūda, atiestatot visus uzstādījumus',
     md6f5c27802fe: 'Neizdevās instalēt APK ierīcē; atver lejupielādi pārlūkā',
@@ -673,6 +679,8 @@ export const logMessages = {
     md78e8a76a84e: '=== GuruShots Auto Voter — CLI pieteikšanās ===',
     md8cef55d7c97: 'Kļūda, atjauninot metadatus izaicinājumam {0}:',
     md91f3e947cc9: '⏰ Pēdējās minūtes intervāls — nākamais cikls pēc {0} min',
+    md9719d554e6f:
+        'Argumentu --remote-link-origin ignorē: tiek pieņemts tikai http://localhost:<ports> vai http://127.0.0.1:<ports>.',
     md99c0b138489: '{0} Vēl nav foto, kam izmantot Boost — Boost izlaists',
     md9e5746c8f94: 'metadata.{0} nav galīgs skaitlis; izmanto {1}',
     md9eea27255b5: '{0} Izlaiž balsošanu — {1}',

@@ -14,7 +14,12 @@ import type { RemoteHostDeps } from '../../src/ts/react/api/remoteHost';
 import type { AutovoteState } from '../../src/ts/core/autovote/state';
 import { render, act } from '@testing-library/preact';
 import { fireSettingsChanged } from './helpers/setup';
-import { PROTOCOL_VERSION } from '../../src/ts/core/remote/protocol';
+import {
+    MAX_PEER_FIELD_LENGTH,
+    MAX_PEER_MESSAGE_BYTES,
+    PROTOCOL_VERSION,
+    REMOTE_RESULT_TOO_LARGE,
+} from '../../src/ts/core/remote/protocol';
 import {
     useDesktopRemoteHost,
     setActiveRemoteHost,
@@ -92,7 +97,7 @@ const makeHarness = (overrides: Partial<RemoteHostDeps> = {}): Harness => {
         notify: () => {
             deps.notifications += 1;
         },
-        logDebug: () => undefined,
+        logInfo: () => undefined,
         version: HOST_VERSION,
         ...overrides,
     };
@@ -307,6 +312,8 @@ describe('createRemoteHost', () => {
         const byes = sentBy(transport).filter(({ message }) => (message as { t: string }).t === 'bye');
         expect(byes).toHaveLength(1);
         expect(byes[0].target).toBe(`p${MAX_REMOTE_PEERS}`);
+        // The reason says the desktop is full, not gone.
+        expect(byes[0].message).toEqual({ t: 'bye', reason: 'full' });
     });
 
     test('a peer leave drops it, and its log want with it', async () => {
@@ -352,7 +359,7 @@ describe('createRemoteHost', () => {
     test('the pairing key appears in no log line and no peer message', async () => {
         const KEY = 'super-secret-pairing-key';
         const logs: string[] = [];
-        const { host, deps } = makeHarness({ logDebug: (message) => logs.push(message) });
+        const { host, deps } = makeHarness({ logInfo: (message) => logs.push(message) });
         await host.start(KEY);
         const transport = deps.transports[0];
         transport.emitJoin('p1');
@@ -484,6 +491,321 @@ describe('createRemoteHost (refusals, bye, events, unload)', () => {
         await host.stop();
         // The pagehide listener is gone: a second pagehide does nothing.
         globalThis.dispatchEvent(new Event('pagehide'));
+    });
+});
+
+describe('createRemoteHost (failures answer the phone)', () => {
+    const connectPhone = async (harness: Harness, peer = 'p1'): Promise<TransportStub> => {
+        await harness.host.start('k');
+        const transport = harness.deps.transports[0];
+        transport.emitJoin(peer);
+        transport.receiveFromPeer(
+            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            peer,
+        );
+        await flush();
+        transport.sent.length = 0;
+        return transport;
+    };
+
+    const resultOf = (transport: TransportStub, id: number) =>
+        transport.sent
+            .map(({ message }) => message as Record<string, unknown>)
+            .find((m) => m.t === 'result' && m.id === id);
+
+    test('an invoke whose handler rejects is answered ok:false with a short error, not left hanging', async () => {
+        const harness = makeHarness({
+            invoke: async (channel) => {
+                if (channel === 'get-bankroll') throw new Error('GuruShots said no');
+                return { success: true };
+            },
+        });
+        const transport = await connectPhone(harness);
+        transport.receiveFromPeer({ t: 'invoke', id: 5, channel: 'get-bankroll', args: [] }, 'p1');
+        await flush();
+        expect(resultOf(transport, 5)).toEqual({ t: 'result', id: 5, ok: false, error: 'GuruShots said no' });
+    });
+
+    test('the error is one bounded line, and a rejection with no message still says something', async () => {
+        const harness = makeHarness({
+            invoke: async (channel) => {
+                if (channel === 'get-bankroll') throw new Error(`first line\n  second ${'x'.repeat(2000)}`);
+                return Promise.reject(null);
+            },
+        });
+        const transport = await connectPhone(harness);
+        transport.receiveFromPeer({ t: 'invoke', id: 6, channel: 'get-bankroll', args: [] }, 'p1');
+        transport.receiveFromPeer({ t: 'invoke', id: 7, channel: 'get-settings', args: [] }, 'p1');
+        await flush();
+        const long = resultOf(transport, 6) as { error: string };
+        expect(long.error.startsWith('first line second xxx')).toBe(true);
+        expect(long.error).not.toContain('\n');
+        expect(long.error.length).toBe(MAX_PEER_FIELD_LENGTH);
+        expect(resultOf(transport, 7)).toEqual({
+            t: 'result',
+            id: 7,
+            ok: false,
+            error: 'The computer could not run this.',
+        });
+    });
+
+    test('a failing log-stream start is answered too', async () => {
+        const harness = makeHarness({
+            invoke: async (channel) => {
+                if (channel === 'start-log-stream') throw new Error('no stream');
+                return { success: true };
+            },
+        });
+        const transport = await connectPhone(harness);
+        transport.receiveFromPeer({ t: 'invoke', id: 8, channel: 'start-log-stream', args: [] }, 'p1');
+        await flush();
+        expect(resultOf(transport, 8)).toEqual({ t: 'result', id: 8, ok: false, error: 'no stream' });
+    });
+
+    test('a result over the message limit is answered ok:false "too large"; one under it goes through', async () => {
+        const harness = makeHarness({
+            invoke: async (channel) => {
+                if (channel === 'get-library-photos') return 'x'.repeat(MAX_PEER_MESSAGE_BYTES);
+                if (channel === 'get-bankroll') return { coins: 'y'.repeat(1000) };
+                return { success: true };
+            },
+        });
+        const transport = await connectPhone(harness);
+        transport.receiveFromPeer({ t: 'invoke', id: 1, channel: 'get-library-photos', args: [] }, 'p1');
+        transport.receiveFromPeer({ t: 'invoke', id: 2, channel: 'get-bankroll', args: [] }, 'p1');
+        await flush();
+        expect(resultOf(transport, 1)).toEqual({ t: 'result', id: 1, ok: false, error: REMOTE_RESULT_TOO_LARGE });
+        expect(resultOf(transport, 2)).toMatchObject({ ok: true });
+    });
+
+    test('a result JSON cannot serialize is a failure too, not a throw', async () => {
+        const harness = makeHarness({ invoke: async () => ({ big: BigInt(1) }) });
+        const transport = await connectPhone(harness);
+        transport.receiveFromPeer({ t: 'invoke', id: 3, channel: 'get-bankroll', args: [] }, 'p1');
+        await flush();
+        expect(resultOf(transport, 3)).toEqual({ t: 'result', id: 3, ok: false, error: REMOTE_RESULT_TOO_LARGE });
+    });
+
+    test('cleanup-stale-metadata is answered with success and nothing reaches the desktop', async () => {
+        const harness = makeHarness();
+        const transport = await connectPhone(harness);
+        harness.deps.invokeLog.length = 0;
+        transport.receiveFromPeer({ t: 'invoke', id: 9, channel: 'cleanup-stale-metadata', args: [['1', '2']] }, 'p1');
+        await flush();
+        expect(resultOf(transport, 9)).toEqual({ t: 'result', id: 9, ok: true, result: { success: true } });
+        expect(harness.deps.invokeLog).toEqual([]);
+    });
+
+    test('a snapshot whose settings read fails still announces the host and relays the state', async () => {
+        const logs: string[] = [];
+        const harness = makeHarness({
+            invoke: async () => {
+                throw new Error('unreadable');
+            },
+            logInfo: (message) => logs.push(message),
+        });
+        await harness.host.start('k');
+        const transport = harness.deps.transports[0];
+        transport.emitJoin('p1');
+        transport.receiveFromPeer(
+            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            'p1',
+        );
+        await flush();
+        expect(transport.sent.map(({ message }) => (message as { t: string }).t)).toEqual(['hello', 'autovote-state']);
+        expect(logs).toContain('Remote invoke failed: get-settings');
+    });
+
+    test('an auto-vote command that rejects is logged and does not escape', async () => {
+        const logs: string[] = [];
+        const harness = makeHarness({
+            runAutovoteCommand: () => Promise.reject(new Error('timer broke')),
+            logInfo: (message) => logs.push(message),
+        });
+        const transport = await connectPhone(harness);
+        transport.receiveFromPeer({ t: 'autovote-command', command: 'start' }, 'p1');
+        await flush();
+        expect(logs).toContain('Remote auto-vote command failed: start');
+    });
+
+    test('stopping the host while it holds the log stream releases it', async () => {
+        const harness = makeHarness();
+        const transport = await connectPhone(harness);
+        transport.receiveFromPeer({ t: 'invoke', id: 1, channel: 'start-log-stream', args: [] }, 'p1');
+        await flush();
+        harness.deps.invokeLog.length = 0;
+        await harness.host.stop();
+        expect(harness.deps.invokeLog).toEqual([{ channel: 'stop-log-stream', args: [] }]);
+        expect(transport.left).toBe(true);
+    });
+
+    test('stopping the host without a log stream calls nothing, and a failing release is not an error', async () => {
+        const quiet = makeHarness();
+        await connectPhone(quiet);
+        quiet.deps.invokeLog.length = 0;
+        await quiet.host.stop();
+        expect(quiet.deps.invokeLog).toEqual([]);
+
+        const failing = makeHarness({
+            invoke: async (channel) => {
+                if (channel === 'stop-log-stream') throw new Error('gone');
+                return { success: true };
+            },
+        });
+        const transport = await connectPhone(failing);
+        transport.receiveFromPeer({ t: 'invoke', id: 2, channel: 'start-log-stream', args: [] }, 'p1');
+        await flush();
+        await expect(failing.host.stop()).resolves.toBeUndefined();
+        expect(transport.left).toBe(true);
+        // And the last log phone leaving with a failing release is quiet too.
+        const leaving = makeHarness({
+            invoke: async (channel) => {
+                if (channel === 'stop-log-stream') throw new Error('gone');
+                return { success: true };
+            },
+        });
+        const t2 = await connectPhone(leaving);
+        t2.receiveFromPeer({ t: 'invoke', id: 3, channel: 'start-log-stream', args: [] }, 'p1');
+        await flush();
+        t2.emitLeave('p1');
+        await flush();
+        expect(leaving.host.connectedCount()).toBe(0);
+    });
+
+    test('a leave of a phone that wanted no logs does not touch the log stream', async () => {
+        const harness = makeHarness();
+        const transport = await connectPhone(harness);
+        harness.deps.invokeLog.length = 0;
+        transport.emitLeave('p1');
+        await flush();
+        expect(harness.deps.invokeLog).toEqual([]);
+    });
+});
+
+describe('createRemoteHost (the loader is not a phone)', () => {
+    const loaderHello = (version: string) => ({
+        t: 'hello',
+        version,
+        protocolVersion: PROTOCOL_VERSION,
+        host: false,
+        role: 'loader',
+    });
+
+    test.each([HOST_VERSION, '1.0.0'])(
+        'a loader hello (version %s) is answered with the version only: no snapshot, no slot, no count, no notice',
+        async (loaderVersion) => {
+            const { host, deps } = makeHarness();
+            await host.start('k');
+            const transport = deps.transports[0];
+            transport.emitJoin('loader');
+            const changes: number[] = [];
+            host.onCountChange(() => changes.push(host.connectedCount()));
+            transport.receiveFromPeer(loaderHello(loaderVersion), 'loader');
+            await flush();
+            expect(sentBy(transport).map(({ message, target }) => ({ message, target }))).toEqual([
+                {
+                    message: { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: true },
+                    target: 'loader',
+                },
+            ]);
+            expect(host.connectedCount()).toBe(0);
+            expect(changes).toEqual([]);
+            expect(deps.notifications).toBe(0);
+            expect(deps.invokeLog).toEqual([]);
+        },
+    );
+
+    test('a loader is answered even when every phone slot is taken, and takes none', async () => {
+        const { host, deps } = makeHarness();
+        await host.start('k');
+        const transport = deps.transports[0];
+        for (let i = 0; i < MAX_REMOTE_PEERS; i++) {
+            transport.emitJoin(`p${i}`);
+            transport.receiveFromPeer(
+                { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+                `p${i}`,
+            );
+        }
+        await flush();
+        transport.sent.length = 0;
+        transport.receiveFromPeer(loaderHello(HOST_VERSION), 'loader');
+        await flush();
+        expect(sentBy(transport)).toHaveLength(1);
+        expect((sentBy(transport)[0].message as { t: string }).t).toBe('hello');
+        expect(host.connectedCount()).toBe(MAX_REMOTE_PEERS);
+    });
+
+    test('an invoke from a loader is refused: it never said hello as a phone', async () => {
+        const { host, deps } = makeHarness();
+        await host.start('k');
+        const transport = deps.transports[0];
+        transport.receiveFromPeer(loaderHello(HOST_VERSION), 'loader');
+        transport.receiveFromPeer({ t: 'invoke', id: 1, channel: 'get-settings', args: [] }, 'loader');
+        await flush();
+        expect(deps.invokeLog).toEqual([]);
+    });
+});
+
+describe('createRemoteHost (activity is logged at INFO, never with a key or arguments)', () => {
+    test('peer connect, invoke, refusal, command, refusal for a full house and leave each leave a line', async () => {
+        const logs: string[] = [];
+        const { host, deps } = makeHarness({ logInfo: (message) => logs.push(message) });
+        await host.start('the-key');
+        const transport = deps.transports[0];
+        transport.emitJoin('p1');
+        transport.receiveFromPeer(
+            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            'p1',
+        );
+        transport.receiveFromPeer({ t: 'invoke', id: 1, channel: 'get-settings', args: [{ secret: 'arg' }] }, 'p1');
+        transport.receiveFromPeer({ t: 'invoke', id: 2, channel: 'wipe-local-data', args: [] }, 'p1');
+        transport.receiveFromPeer({ t: 'autovote-command', command: 'start' }, 'p1');
+        for (let i = 2; i < MAX_REMOTE_PEERS + 2; i++) {
+            transport.receiveFromPeer(
+                { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+                `p${i}`,
+            );
+        }
+        transport.emitLeave('p1');
+        await flush();
+        await host.stop();
+
+        expect(logs).toEqual(
+            expect.arrayContaining([
+                'Remote access host started',
+                'Remote peer seen: p1',
+                'Remote peer connected: p1',
+                'Remote invoke: get-settings',
+                'Remote invoke refused: wipe-local-data',
+                'Remote auto-vote command: start',
+                `Remote peer refused: at most ${MAX_REMOTE_PEERS} phones can be connected`,
+                'Remote peer left: p1',
+                'Remote access host stopped',
+            ]),
+        );
+        expect(logs.join('\n')).not.toContain('the-key');
+        expect(logs.join('\n')).not.toContain('arg');
+    });
+
+    test('the failure lines name the channel only', async () => {
+        const logs: string[] = [];
+        const { host, deps } = makeHarness({
+            invoke: async () => {
+                throw new Error('secret detail');
+            },
+            logInfo: (message) => logs.push(message),
+        });
+        await host.start('k');
+        const transport = deps.transports[0];
+        transport.emitJoin('p1');
+        transport.receiveFromPeer(
+            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            'p1',
+        );
+        transport.receiveFromPeer({ t: 'invoke', id: 1, channel: 'get-bankroll', args: [] }, 'p1');
+        await flush();
+        expect(logs).toContain('Remote invoke failed: get-bankroll');
+        expect(logs.join('\n')).not.toContain('secret detail');
     });
 });
 
@@ -789,6 +1111,196 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
             await flush();
         }
         expect(deps.commands).toEqual(['start', 'stop', 'rearm']);
+    });
+
+    describe('the window.api method that serves a channel', () => {
+        const connectPhone = async (): Promise<TransportStub> => {
+            mockRemoteAccessAnswer.current = enabledLink('k1');
+            render(<Probe />);
+            await flush();
+            const transport = mockAdapterTransports[0];
+            transport.emitJoin('p1');
+            transport.receiveFromPeer(
+                { t: 'hello', version: appVersion(), protocolVersion: PROTOCOL_VERSION, host: false },
+                'p1',
+            );
+            await flush();
+            transport.sent.length = 0;
+            return transport;
+        };
+        const answerTo = (transport: TransportStub, id: number) =>
+            transport.sent
+                .map(({ message }) => message as Record<string, unknown>)
+                .find((m) => m.t === 'result' && m.id === id);
+
+        test('the turbo alias channel reaches applyTurbo, not a method named after the channel', async () => {
+            const api = window.api as unknown as Record<
+                string,
+                jest.MockedFunction<(...args: unknown[]) => Promise<unknown>>
+            >;
+            api.applyTurbo.mockClear();
+            api.applyTurbo.mockResolvedValueOnce({ success: true, turbo: 'applied' });
+            const transport = await connectPhone();
+            transport.receiveFromPeer(
+                { t: 'invoke', id: 11, channel: 'apply-turbo-to-entry', args: ['c1', 'e1'] },
+                'p1',
+            );
+            await flush();
+            expect(api.applyTurbo).toHaveBeenCalledWith('c1', 'e1');
+            expect(answerTo(transport, 11)).toEqual({
+                t: 'result',
+                id: 11,
+                ok: true,
+                result: { success: true, turbo: 'applied' },
+            });
+        });
+
+        test('the other alias (boost) and a plain channel keep their methods', async () => {
+            const api = window.api as unknown as Record<
+                string,
+                jest.MockedFunction<(...args: unknown[]) => Promise<unknown>>
+            >;
+            api.applyBoost.mockClear();
+            const transport = await connectPhone();
+            transport.receiveFromPeer(
+                { t: 'invoke', id: 12, channel: 'apply-boost-to-entry', args: ['c1', 'e1'] },
+                'p1',
+            );
+            await flush();
+            expect(api.applyBoost).toHaveBeenCalledWith('c1', 'e1');
+        });
+
+        test('a channel the window has no method for is answered ok:false, not left hanging', async () => {
+            const api = window.api as unknown as Record<string, unknown>;
+            const saved = api.getBankroll;
+            delete api.getBankroll;
+            try {
+                const transport = await connectPhone();
+                transport.receiveFromPeer({ t: 'invoke', id: 13, channel: 'get-bankroll', args: [] }, 'p1');
+                await flush();
+                expect(answerTo(transport, 13)).toEqual({
+                    t: 'result',
+                    id: 13,
+                    ok: false,
+                    error: 'No window.api method serves get-bankroll',
+                });
+            } finally {
+                api.getBankroll = saved;
+            }
+        });
+    });
+
+    describe('overlapping syncs never leave a host in the room', () => {
+        /** Holds every join until the test opens the gate; the room objects are recorded as they open. */
+        const holdJoins = () => {
+            const gates: Array<() => void> = [];
+            const adapterModule = jest.requireMock('../../src/ts/core/remote/trystero') as {
+                createTrysteroTransport: jest.MockedFunction<
+                    (typeof import('../../src/ts/core/remote/trystero'))['createTrysteroTransport']
+                >;
+            };
+            const createSpy = adapterModule.createTrysteroTransport;
+            const defaultImpl = createSpy.getMockImplementation();
+            createSpy.mockImplementation(async () => {
+                await new Promise<void>((resolve) => gates.push(resolve));
+                const transport = new TransportStub(`adapter-${mockAdapterTransports.length}`);
+                mockAdapterTransports.push(transport);
+                return transport;
+            });
+            return {
+                open: async () => {
+                    gates.splice(0).forEach((open) => open());
+                    await flush();
+                    await flush();
+                },
+                restore: () => createSpy.mockImplementation(defaultImpl),
+            };
+        };
+
+        test('switched on and off again before the join resolves: the room is left and nothing stays registered', async () => {
+            const held = holdJoins();
+            try {
+                mockRemoteAccessAnswer.current = enabledLink('k1');
+                render(<Probe />);
+                await flush();
+                expect(mockAdapterTransports).toHaveLength(0);
+
+                mockRemoteAccessAnswer.current = {
+                    success: true,
+                    enabled: false,
+                    link: 'https://pages/remote/#k=k1',
+                    qrDataUrl: '',
+                };
+                window.dispatchEvent(new CustomEvent('remote-access:changed'));
+                await flush();
+                await held.open();
+
+                expect(mockAdapterTransports).toHaveLength(1);
+                expect(mockAdapterTransports[0].left).toBe(true);
+                expect(remoteConnectionCount()).toBe(0);
+                // Nobody is hearing the room any more.
+                mockAdapterTransports[0].emitJoin('p1');
+                mockAdapterTransports[0].receiveFromPeer(
+                    { t: 'hello', version: appVersion(), protocolVersion: PROTOCOL_VERSION, host: false },
+                    'p1',
+                );
+                await flush();
+                expect(remoteConnectionCount()).toBe(0);
+            } finally {
+                held.restore();
+            }
+        });
+
+        test('re-keyed while the first join is in flight: the old room is left, the new one is the host', async () => {
+            const held = holdJoins();
+            try {
+                mockRemoteAccessAnswer.current = enabledLink('k1');
+                render(<Probe />);
+                await flush();
+                mockRemoteAccessAnswer.current = enabledLink('k2');
+                window.dispatchEvent(new CustomEvent('remote-access:changed'));
+                await flush();
+                await held.open();
+                await held.open();
+
+                expect(mockAdapterTransports).toHaveLength(2);
+                expect(mockAdapterTransports[0].left).toBe(true);
+                expect(mockAdapterTransports[1].left).toBe(false);
+                mockAdapterTransports[1].emitJoin('p1');
+                mockAdapterTransports[1].receiveFromPeer(
+                    { t: 'hello', version: appVersion(), protocolVersion: PROTOCOL_VERSION, host: false },
+                    'p1',
+                );
+                await flush();
+                expect(remoteConnectionCount()).toBe(1);
+            } finally {
+                held.restore();
+            }
+        });
+
+        test('the same pairing announced again while the join is in flight keeps that join', async () => {
+            const held = holdJoins();
+            try {
+                mockRemoteAccessAnswer.current = enabledLink('k1');
+                render(<Probe />);
+                await flush();
+                window.dispatchEvent(new CustomEvent('remote-access:changed'));
+                await flush();
+                await held.open();
+
+                expect(mockAdapterTransports).toHaveLength(1);
+                expect(mockAdapterTransports[0].left).toBe(false);
+                mockAdapterTransports[0].emitJoin('p1');
+                mockAdapterTransports[0].receiveFromPeer(
+                    { t: 'hello', version: appVersion(), protocolVersion: PROTOCOL_VERSION, host: false },
+                    'p1',
+                );
+                await flush();
+                expect(remoteConnectionCount()).toBe(1);
+            } finally {
+                held.restore();
+            }
+        });
     });
 
     test('the badge store serves the active host count and relays the controller state', async () => {

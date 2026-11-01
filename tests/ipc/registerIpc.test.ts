@@ -70,7 +70,7 @@ describe('registerIpc', () => {
         const saved = process.argv;
         process.argv = ['app', '--remote-link-origin=http://127.0.0.1:8080'];
         try {
-            expect(() => registerIpc(invalid({ handle: () => undefined } as unknown as IpcMain), deps)).not.toThrow();
+            expect(() => registerIpc(invalid<IpcMain>({ handle: () => undefined }), deps)).not.toThrow();
         } finally {
             process.argv = saved;
         }

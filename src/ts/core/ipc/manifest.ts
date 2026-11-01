@@ -135,6 +135,9 @@ const invokeChannels = [
     'get-remote-access',
     'set-remote-access',
     'reset-remote-pairing',
+    // The remote-access host's INFO log line (the renderer's `log-debug` is silent in a packaged build).
+    // Electron only; refused to a remote peer, "not applicable" on the web shell, the CLI and Capacitor.
+    'log-remote-info',
     // AutoUpdater
     'check-for-updates',
     'download-update',

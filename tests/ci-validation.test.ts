@@ -775,7 +775,6 @@ describe('shell platform module load-time chains', () => {
         'src/ts/shells/web/platform.ts',
         'src/ts/shells/capacitor/platform.ts',
         'src/ts/shells/headless/platform.ts',
-        'src/ts/shells/remote/platform.ts',
         'scripts/lib/platform.ts',
     ];
     const LOGGER_ENTRY = 'src/ts/core/logger.ts';

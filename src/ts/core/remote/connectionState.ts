@@ -13,8 +13,12 @@ export type RemoteConnectionState =
     | 'offline'
     /** peers saw each other but WebRTC could not connect on this network */
     | 'network'
-    /** the desktop runs an older app version than this page */
+    /** the desktop runs an older app version than this page, and the site no longer carries its page */
     | 'update'
+    /** the desktop runs a newer app version than this app carries a page for */
+    | 'update-this'
+    /** the desktop already has the most phones it takes */
+    | 'full'
     /** the page was opened without a pairing key in its link */
     | 'no-key';
 

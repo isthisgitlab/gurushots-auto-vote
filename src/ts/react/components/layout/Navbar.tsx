@@ -25,7 +25,8 @@ export function Navbar({
     const { t } = useTranslation();
     // The in-app Logs button is only for platforms without a menu to open the Logs window from (Android, the phone).
     const { inAppLogs: showLogs, showsLogout } = usePlatformCapabilities();
-    const desktop = platformKind() === 'electron';
+    const kind = platformKind();
+    const desktop = kind === 'electron';
     // The desktop's badge counts the paired phones while any is connected.
     const [remoteCount, setRemoteCount] = useState(remoteConnectionCount);
     useEffect(() => subscribeRemoteConnectionCount(() => setRemoteCount(remoteConnectionCount())), []);
@@ -40,7 +41,7 @@ export function Navbar({
                         {t('app.remoteConnectedCount', { count: String(remoteCount) })}
                     </span>
                 )}
-                {!desktop && <RemoteStateBadge />}
+                {kind === 'remote' && <RemoteStateBadge />}
             </div>
             <div className="navbar-end w-auto shrink-0 gap-2">
                 {/* The Android remote mode's leave: only while the phone shows the computer's app */}

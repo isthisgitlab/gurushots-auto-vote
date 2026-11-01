@@ -29,6 +29,19 @@ const PAIRING_KEY_PATTERN = /^[A-Za-z0-9_-]{43}$/;
  */
 const LOADER_PATH_PATTERN = /\/remote(?:\/(?:index\.html)?)?$/;
 
+/**
+ * The stable loader's address from a versioned page (`/remote/<version>/index.html`): the address bar
+ * shows `../#k=<key>`, so a bookmark or "Add to Home Screen" keeps a link that survives the next
+ * desktop update.
+ */
+export const loaderAddressBarUrl = (key: string): string => `../#k=${encodeURIComponent(key)}`;
+
+/**
+ * The same loader as a navigation target. It is addressed by file name: the Android app's local server
+ * answers a directory path with the app's own document, and the Pages site serves the same file.
+ */
+export const loaderNavigationUrl = (key: string): string => `../index.html#k=${encodeURIComponent(key)}`;
+
 /** Whether `value` reads as a pairing key (base64url, the desktop key's exact length). */
 export const isPairingKey = (value: string): boolean => PAIRING_KEY_PATTERN.test(value);
 

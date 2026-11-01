@@ -29,9 +29,9 @@ test('server channels and browser channels partition the manifest invoke surface
     expect([...served, ...browser].sort()).toEqual([...allInvokeChannels()].sort());
 });
 
-test('the remote-access pairing channels answer not-applicable in the web UI', async () => {
+test('the remote-access pairing and host-log channels answer not-applicable in the web UI', async () => {
     const handlers = buildWebHandlers(() => {});
-    for (const channel of ['get-remote-access', 'set-remote-access', 'reset-remote-pairing']) {
+    for (const channel of ['get-remote-access', 'set-remote-access', 'reset-remote-pairing', 'log-remote-info']) {
         await expect((handlers[channel] as (event: null, args: never[]) => unknown)(null, [])).resolves.toEqual({
             success: false,
             error: expect.stringContaining('Remote access is not available in the web UI'),

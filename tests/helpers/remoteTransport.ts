@@ -19,7 +19,7 @@ class TransportStub implements RemoteTransport {
     private readonly messageHandlers = new Set<Handler<[peerId: string, message: unknown]>>();
     private readonly joinHandlers = new Set<Handler<[peerId: string]>>();
     private readonly leaveHandlers = new Set<Handler<[peerId: string]>>();
-    private readonly joinErrorHandlers = new Set<Handler<[details: { error: string }]>>();
+    private readonly joinErrorHandlers = new Set<Handler<[details: { error: string; peerId: string }]>>();
 
     constructor(peerId: string) {
         this.peerId = peerId;
@@ -52,8 +52,9 @@ class TransportStub implements RemoteTransport {
         for (const handler of this.leaveHandlers) handler(peerId);
     }
 
-    emitJoinError(error: string): void {
-        for (const handler of this.joinErrorHandlers) handler({ error });
+    /** The failure is about `peerId` (the other end unless named) — a fellow phone's can be told apart from the desktop's. */
+    emitJoinError(error: string, peerId?: string): void {
+        for (const handler of this.joinErrorHandlers) handler({ error, peerId: peerId ?? this.other?.peerId ?? '' });
     }
 
     // The production sites carry a frame-guard disable comment; a test double needs no comment,
@@ -83,7 +84,7 @@ class TransportStub implements RemoteTransport {
         return () => this.leaveHandlers.delete(handler);
     }
 
-    onJoinError(handler: Handler<[details: { error: string }]>): () => void {
+    onJoinError(handler: Handler<[details: { error: string; peerId: string }]>): () => void {
         this.joinErrorHandlers.add(handler);
         return () => this.joinErrorHandlers.delete(handler);
     }

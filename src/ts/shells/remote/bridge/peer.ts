@@ -5,13 +5,15 @@
  *   - invoke methods send an `invoke` message to the desktop host and settle when its
  *     `result` arrives; the desktop enforces the remote allowlist;
  *   - open-external-url / reload-window / refresh-menu act in the phone (like
- *     BROWSER_CHANNELS in bridge/web.ts — the desktop window is not the phone's);
+ *     BROWSER_CHANNELS in bridge/web.ts — the desktop window is not the phone's), and the
+ *     log calls are answered here and never sent to the desktop;
  *   - event methods subscribe to a local pub/sub fed by the host's `event` messages;
  *   - the connection state (connecting / connected / offline / try Wi-Fi / update) is
  *     exposed for the page's header badge.
  *
  * The desktop host is told from a fellow phone by its `hello`: only the host's hello carries
- * `host: true`. When the connection is lost, in-flight invokes are settled once — a spend
+ * `host: true`. Results, events and a leave count only from that peer, and a fellow phone's
+ * leave or join failure never ends the session. When the connection is lost, in-flight invokes are settled once — a spend
  * channel answers "unclear — check before retrying" (the `postOnce` rule: the desktop may
  * have run it), every other channel reports a failure — and the pending set is emptied, so
  * nothing is ever replayed after a reconnect.
@@ -21,21 +23,23 @@
 
 import { invokeChannels, aliases, eventMethods, kebabToCamel } from '../../../core/ipc/manifest';
 import { markPlatformKind } from '../../../core/platform/kind';
-import { parsePeerMessage, PROTOCOL_VERSION } from '../../../core/remote/protocol';
-
-import type { HelloMessage } from '../../../core/remote/protocol';
+import {
+    PAGE_VERSION,
+    PROTOCOL_VERSION,
+    REMOTE_RESULT_TOO_LARGE,
+    parsePeerMessage,
+} from '../../../core/remote/protocol';
 import { SPEND_REMOTE_CHANNELS } from '../../../core/remote/allowlist';
-import { setRemoteConnectionState } from '../../../core/remote/connectionState';
-import { createHelloRepeater } from '../../../core/remote/helloRepeat';
+import { REMOTE_REFUSAL_PREFIX } from '../../../core/remote/dispatch';
+import { remoteConnectionState, setRemoteConnectionState } from '../../../core/remote/connectionState';
+import { HOST_ANSWER_TIMEOUT_MS, createHelloRepeater } from '../../../core/remote/helloRepeat';
+import { loaderNavigationUrl, takePairingKey } from '../../../core/remote/pairingKey';
 import { isConnectionFailureJoinError } from '../../../core/remote/trystero';
 import { isSafeExternalUrl } from '../../../core/format/urlSafe';
 import { rendererTranslator } from '../../../core/translations/renderer';
-import * as pkg from '../../../../../package.json';
 
+import type { HelloMessage } from '../../../core/remote/protocol';
 import type { RemoteTransport } from '../../../core/remote/relays';
-
-/** The app version this page was built from; the host's `hello` version is compared against it. */
-const PAGE_VERSION: string = pkg.version;
 
 type PendingInvoke = {
     resolve: (result: unknown) => void;
@@ -43,8 +47,17 @@ type PendingInvoke = {
     spend: boolean;
 };
 
-// Invoke channels the phone answers itself: the desktop window is not the phone's.
-const LOCAL_CHANNELS: ReadonlySet<string> = new Set(['open-external-url', 'reload-window', 'refresh-menu']);
+// Invoke channels the phone answers itself: the desktop window is not the phone's, and the phone writes
+// no lines into the desktop's logs (the host is refusing them anyway).
+const LOCAL_CHANNELS: ReadonlySet<string> = new Set([
+    'open-external-url',
+    'reload-window',
+    'refresh-menu',
+    'log-debug',
+    'log-warning',
+    'log-error',
+    'log-api',
+]);
 
 export { LOCAL_CHANNELS };
 
@@ -66,6 +79,8 @@ const installPeerBridge = (transport: RemoteTransport): void => {
     /** Whether the desktop has ever completed a hello in this page's life. Only before that
      * first connect may a non-spend invoke be held; after a loss nothing queues. */
     let everConnected = false;
+    /** The peers seen and not yet known to be the desktop or gone: any of them may still answer. */
+    const waiting = new Set<string>();
 
     // The phone's hello: its own app version, the protocol shape version, not the host. It repeats
     // until the desktop answers (core/remote/helloRepeat.ts: the first one can vanish on the relays).
@@ -100,6 +115,23 @@ const installPeerBridge = (transport: RemoteTransport): void => {
         setRemoteConnectionState('offline');
     };
 
+    /**
+     * Whether the loss of this peer (it left, or its connection failed) ends the session. The desktop's
+     * own loss does; before the desktop has answered, the loss of a fellow phone does not unless it was
+     * the last peer still pending.
+     */
+    const endsSession = (peerId: string): boolean => {
+        hello.leave(peerId);
+        waiting.delete(peerId);
+        return hostPeerId === null ? waiting.size === 0 : peerId === hostPeerId;
+    };
+
+    /** This page does not match the desktop's version: the loader finds the page that does. */
+    const goToLoader = (): void => {
+        const key = takePairingKey();
+        if (key !== null) globalThis.location.replace(loaderNavigationUrl(key));
+    };
+
     const flushHeld = (to: string): void => {
         // oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- a peer-connection message over the pairing transport, never a frame send
         for (const held of heldSends.splice(0)) void transport.send(held.message, to);
@@ -111,9 +143,17 @@ const installPeerBridge = (transport: RemoteTransport): void => {
         switch (message.t) {
             case 'hello': {
                 if (!message.host) return; // a fellow phone announcing itself, not the desktop
-                if (message.version !== PAGE_VERSION || message.protocolVersion !== PROTOCOL_VERSION) {
-                    // The mismatch is terminal for this connection: the phone says to update
-                    // and the hello repeat stops — an old page must not re-announce forever.
+                if (message.version !== PAGE_VERSION) {
+                    // The desktop runs another version: the stable loader finds the page that matches it
+                    // (or says which side to update), so no notice shows here.
+                    hello.stop();
+                    hello.clear();
+                    goToLoader();
+                    return;
+                }
+                if (message.protocolVersion !== PROTOCOL_VERSION) {
+                    // The same version with another protocol shape (a build in development): terminal for this
+                    // connection — the phone says to update and the hello repeat stops.
                     hello.stop();
                     hello.clear();
                     setRemoteConnectionState('update');
@@ -122,6 +162,7 @@ const installPeerBridge = (transport: RemoteTransport): void => {
                 if (hostPeerId === null) {
                     hostPeerId = peerId;
                     everConnected = true;
+                    waiting.clear();
                     hello.clear();
                     hello.stop();
                     setRemoteConnectionState('connected');
@@ -130,37 +171,63 @@ const installPeerBridge = (transport: RemoteTransport): void => {
                 return;
             }
             case 'result': {
+                if (peerId !== hostPeerId) return;
                 const invoke = pending.get(message.id);
                 if (!invoke) return;
                 pending.delete(message.id);
                 if (message.ok) invoke.resolve(message.result);
-                else invoke.reject(new Error(message.error));
+                else if (message.error.startsWith(REMOTE_REFUSAL_PREFIX)) {
+                    // A channel the desktop does not serve a phone: the answer a handler would give, in the
+                    // phone's language, not the protocol's text.
+                    invoke.resolve({ success: false, error: rendererTranslator.t('errors.remoteRefused') });
+                } else if (message.error === REMOTE_RESULT_TOO_LARGE) {
+                    invoke.reject(new Error(rendererTranslator.t('errors.remoteResultTooLarge')));
+                } else invoke.reject(new Error(message.error));
                 return;
             }
             case 'event': {
+                if (peerId !== hostPeerId) return;
                 dispatchEvent(message.channel, message.payload);
                 return;
             }
             case 'bye': {
+                if (hostPeerId === null && message.reason === 'full') {
+                    // The desktop already has the most phones it takes — it is there, not offline. Only the
+                    // desktop sends this, and it speaks before its hello is ever answered, so the sender is
+                    // not yet known as the host.
+                    hello.stop();
+                    hello.clear();
+                    setRemoteConnectionState('full');
+                    return;
+                }
+                if (peerId !== hostPeerId) return;
                 settlePendingForLostConnection();
                 return;
             }
         }
     });
 
-    transport.onPeerJoin((peerId) => hello.join(peerId));
+    transport.onPeerJoin((peerId) => {
+        waiting.add(peerId);
+        hello.join(peerId);
+    });
     transport.onPeerLeave((peerId) => {
-        hello.leave(peerId);
-        if (hostPeerId !== null && peerId !== hostPeerId) return;
-        settlePendingForLostConnection();
+        if (endsSession(peerId)) settlePendingForLostConnection();
     });
 
-    transport.onJoinError(({ error }) => {
+    transport.onJoinError(({ error, peerId }) => {
         // Only the "peers saw each other but WebRTC could not connect" error is the try-Wi-Fi
         // state; a wrong password or a handshake failure looks like an offline-or-reset desktop.
+        if (!endsSession(peerId)) return;
         settlePendingForLostConnection();
         setRemoteConnectionState(isConnectionFailureJoinError(error) ? 'network' : 'offline');
     });
+
+    // Nobody answered in time: the desktop is offline (or the link was reset). The hello repeat keeps
+    // running, so a desktop that answers later still moves the page to connected.
+    globalThis.setTimeout(() => {
+        if (hostPeerId === null && remoteConnectionState() === 'connecting') setRemoteConnectionState('offline');
+    }, HOST_ANSWER_TIMEOUT_MS);
 
     const sendInvoke = (channel: string, args: unknown[]): Promise<unknown> => {
         const id = nextId++;
@@ -203,6 +270,10 @@ const installPeerBridge = (transport: RemoteTransport): void => {
     for (const channel of invokeChannels.filter((name) => !LOCAL_CHANNELS.has(name))) {
         api[kebabToCamel(channel)] = (...args: unknown[]) => sendInvoke(channel, args);
     }
+    // The log calls end here: a phone's lines would only be refused by the desktop.
+    for (const channel of ['log-debug', 'log-warning', 'log-error', 'log-api']) {
+        api[kebabToCamel(channel)] = () => Promise.resolve({ success: true });
+    }
     for (const [method, channel] of Object.entries(aliases)) {
         api[method] = (...args: unknown[]) => sendInvoke(channel, args);
     }
@@ -238,4 +309,4 @@ const installPeerBridge = (transport: RemoteTransport): void => {
     (globalThis as typeof globalThis & { api?: object }).api = api;
 };
 
-export { installPeerBridge, PAGE_VERSION };
+export { installPeerBridge };

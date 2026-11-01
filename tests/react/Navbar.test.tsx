@@ -3,11 +3,19 @@
  * (Android) platform, since Electron opens the Logs window from its menu. The
  * test mock's t() returns the key, so the button's title is 'logs.title'.
  */
+import { render as rawRender } from '@testing-library/preact';
 import { fireEvent, render, screen } from './helpers/test-utils';
 import { resetPlatformKind } from '../helpers/platformKind';
 import { markPlatformKind } from '../../src/ts/core/platform/kind';
 import { PROTOCOL_VERSION } from '../../src/ts/core/remote/protocol';
+import { setRemoteConnectionState } from '../../src/ts/core/remote/connectionState';
 import { Navbar } from '@/components/layout/Navbar';
+import { TranslationProvider } from '@/contexts/TranslationContext';
+import { AutovoteProvider } from '@/contexts/AutovoteContext';
+import { TransportStub } from '../helpers/remoteTransport';
+
+import type { ComponentChildren } from 'preact';
+import type { RemoteTransport } from '../../src/ts/core/remote/relays';
 
 describe('Navbar', () => {
     afterEach(resetPlatformKind);
@@ -27,7 +35,7 @@ describe('Navbar', () => {
             onForwardedEvent: () => (): void => undefined,
             onLogMessage: () => () => undefined,
             notify: () => undefined,
-            logDebug: () => undefined,
+            logInfo: () => undefined,
             version: '1.14.2',
         });
         await host.start('k');
@@ -60,6 +68,30 @@ describe('Navbar', () => {
         await host.stop();
         setActiveRemoteHost(null);
         view.unmount();
+    });
+
+    test.each([
+        ['web', false],
+        ['capacitor', false],
+        ['electron', false],
+        ['remote', true],
+    ] as const)('the phone connection badge on the %s kind is present: %s', (kind, present) => {
+        setRemoteConnectionState('connecting');
+        markPlatformKind(kind);
+        // The remote kind's provider builds its controller over the pairing transport.
+        const wrapper = ({ children }: { children?: ComponentChildren }) => (
+            <TranslationProvider>
+                <AutovoteProvider remoteTransport={TransportStub.pair()[1] as RemoteTransport}>
+                    {children}
+                </AutovoteProvider>
+            </TranslationProvider>
+        );
+        const navbar = <Navbar isMock={false} onLogsClick={() => {}} onSettingsClick={() => {}} onLogout={() => {}} />;
+        // The shared render fixes its wrapper; the remote kind brings its own provider with the pairing transport.
+        if (kind === 'remote') rawRender(navbar, { wrapper });
+        else render(navbar);
+        // "Connecting to your computer…" would otherwise sit in the header of a browser tab or the Android app.
+        expect(screen.queryByText('app.remoteConnecting') !== null).toBe(present);
     });
 
     test('hides the Logs button off Capacitor', () => {

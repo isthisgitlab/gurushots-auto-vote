@@ -120,10 +120,57 @@ describe('the desktop pairing store', () => {
         expect(packagedWarns).toHaveLength(1);
     });
 
-    test('a damaged store file starts over with a fresh key, not a throw', () => {
+    test.each(['http://localhost:8080', 'http://127.0.0.1:3000', 'http://localhost:1'])(
+        'the dev launcher argument accepts the local origin %s',
+        (origin) => {
+            const { pairing, warns } = newPairing(userData, [`--remote-link-origin=${origin}`]);
+            expect(pairing.accessInfo().link).toBe(`${origin}/remote/#k=${pairing.state().key}`);
+            expect(warns).toEqual([]);
+        },
+    );
+
+    test.each([
+        'https://evil.example',
+        'http://evil.example:8080',
+        'https://localhost:8080',
+        'http://localhost',
+        'http://localhost:8080/',
+        'http://localhost:8080/path',
+        'http://localhost:8080@evil.example',
+        'http://localhost.evil.example:8080',
+        'http://[::1]:8080',
+        'http://localhost:123456',
+        'javascript:alert(1)',
+    ])('the dev launcher argument refuses %s, says so, and the link keeps the published pages', (origin) => {
+        const { pairing, warns } = newPairing(userData, [`--remote-link-origin=${origin}`]);
+        expect(pairing.accessInfo().link).toMatch(/^https:\/\/isthisgitlab\.github\.io/);
+        expect(warns).toEqual([expect.stringContaining('only http://localhost:<port> or http://127.0.0.1:<port>')]);
+    });
+
+    test('a damaged store file starts over with a fresh key, not a throw, and says so first', () => {
         fs.writeFileSync(path.join(userData, 'remote-access.json'), '{broken');
-        const { pairing } = newPairing(userData);
+        const { pairing, warns } = newPairing(userData);
         expect(pairing.state().key).toMatch(/^[A-Za-z0-9_-]{43}$/);
+        expect(warns).toEqual([expect.stringContaining('remote-access.json could not be read')]);
+        // The new key is stored: a second read is a plain read, with nothing more to say.
+        pairing.state();
+        expect(warns).toHaveLength(1);
+        // And the warning never carries a key.
+        expect(warns.join(' ')).not.toContain(pairing.state().key);
+    });
+
+    test('a stored file of the wrong shape is warned about before setEnabled replaces it', () => {
+        fs.writeFileSync(path.join(userData, 'remote-access.json'), '{"enabled": true}');
+        const { pairing, warns } = newPairing(userData);
+        expect(pairing.setEnabled(true)).toBe(true);
+        expect(warns).toEqual([expect.stringContaining('remote-access.json could not be read')]);
+    });
+
+    test('a missing store file is first use: nothing to warn about', () => {
+        const { pairing, warns } = newPairing(userData);
+        pairing.state();
+        pairing.setEnabled(true);
+        expect(warns).toEqual([]);
     });
 
     test('a stored file of the wrong shape is read as absent, and an empty dev origin is no origin', () => {
@@ -152,6 +199,14 @@ describe('the desktop pairing store', () => {
         const key = pairing.resetKey();
         expect(key).toMatch(/^[A-Za-z0-9_-]{43}$/);
         expect(pairing.state()).toEqual({ enabled: false, key });
+    });
+
+    test('resetKey answers null when the new key could not be saved, and the old key stays', () => {
+        const { pairing, jsonStore } = newPairing(userData);
+        const first = pairing.state().key;
+        jsonStore.refuseWrites();
+        expect(pairing.resetKey()).toBeNull();
+        expect(pairing.state().key).toBe(first);
     });
 
     test('setEnabled answers false when the write did not land', () => {

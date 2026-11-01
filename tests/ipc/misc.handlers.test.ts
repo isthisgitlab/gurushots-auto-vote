@@ -21,7 +21,12 @@ const mockTranslationManager = { loadLanguageFromSettings: jest.fn() };
 jest.mock('../../src/ts/core/translations/index', () => ({ translationManager: mockTranslationManager }));
 jest.mock('../../src/ts/core/logger', () => {
     const cat = { warning: jest.fn(), error: jest.fn(), info: jest.fn() };
-    return { withCategory: jest.fn(() => cat) };
+    return {
+        withCategory: jest.fn(() => cat),
+        setContext: jest.fn(),
+        clearContext: jest.fn(),
+        sanitizeLogString: jest.fn((message: unknown, max: number) => String(message).slice(0, max)),
+    };
 });
 
 const { buildHandlers } = require('../../src/ts/shells/electron/misc.handlers') as typeof misc_handlersModule;
@@ -283,5 +288,42 @@ describe('misc.handlers remote-access pairing channels', () => {
             getLoginWindow: () => null,
         });
         await expect(failing['reset-remote-pairing']()).resolves.toEqual({ success: false, error: 'busy' });
+    });
+
+    test('reset-remote-pairing answers failure when the new key could not be saved', async () => {
+        const handlers = buildHandlers({
+            remote: { ...remoteStubDynamic, resetKey: () => null },
+            getMainWindow: () => null,
+            getLoginWindow: () => null,
+        });
+        await expect(handlers['reset-remote-pairing']()).resolves.toEqual({ success: false });
+    });
+
+    test('log-remote-info writes the host line at INFO under the GUI context, bounded, and refuses a non-string', async () => {
+        const logger = require('../../src/ts/core/logger') as typeof import('../../src/ts/core/logger');
+        const info = jest.mocked(logger.withCategory('ui').info);
+        info.mockClear();
+        const handlers = buildHandlers({
+            remote: remoteStubDynamic,
+            getMainWindow: () => null,
+            getLoginWindow: () => null,
+        });
+        await expect(handlers['log-remote-info']({}, 'Remote peer connected: abc')).resolves.toEqual({
+            success: true,
+        });
+        expect(info).toHaveBeenCalledWith('Remote peer connected: abc');
+        expect(logger.setContext).toHaveBeenCalledWith('GUI');
+        expect(logger.clearContext).toHaveBeenCalled();
+
+        info.mockClear();
+        await handlers['log-remote-info']({}, 'x'.repeat(5000));
+        expect((info.mock.calls[0][0] as string).length).toBe(1024);
+
+        info.mockClear();
+        await expect(handlers['log-remote-info']({}, invalid<string>(42))).resolves.toEqual({
+            success: false,
+            error: 'The message must be a string',
+        });
+        expect(info).not.toHaveBeenCalled();
     });
 });

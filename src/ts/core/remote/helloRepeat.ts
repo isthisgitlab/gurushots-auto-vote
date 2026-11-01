@@ -12,6 +12,12 @@ import type { RemoteTransport } from './relays';
 /** How often the phone re-announces itself until the desktop answers. */
 export const HELLO_RETRY_MS = 3_000;
 
+/**
+ * How long a page waits for the desktop's hello before it reports the desktop absent. It must outlast
+ * a relay round trip on a slow mobile network, so it is generous on purpose.
+ */
+export const HOST_ANSWER_TIMEOUT_MS = 15_000;
+
 export type HelloRepeater = {
     /** A peer joined: announce to it now and, while the wait is on, again every HELLO_RETRY_MS. */
     join: (peerId: string) => void;

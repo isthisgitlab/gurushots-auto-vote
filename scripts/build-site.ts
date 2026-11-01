@@ -17,7 +17,9 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { errorMessage } from '../src/ts/core/errorMessage';
 import { runIfMain } from './lib/run-if-main';
+import { NOTICES_ASSET_NAME } from '../src/ts/core/thirdPartyNotices';
 import type { Tokens } from 'marked';
 
 const root = path.join(__dirname, '..');
@@ -34,6 +36,8 @@ export const REMOTE_PAGE_ZIP = 'remote-page.zip';
 export const REMOTE_CHECKSUM_FILE = 'remote-page.zip.sha256';
 /** How many past releases' phone pages the site keeps. */
 export const REMOTE_RELEASE_COUNT = 10;
+/** How many releases the listing asks for: headroom, since pre-releases are filtered out before the cut. */
+const REMOTE_RELEASE_FETCH_COUNT = 30;
 const SITE_DESCRIPTION =
     'Automated voting for GuruShots challenges — a shared engine shipped as a desktop GUI, a CLI, and an Android app.';
 
@@ -305,7 +309,8 @@ const main = async ({
     rootDir = root,
     out = outDir,
     layoutFile = layoutPath,
-    // The remote tree's outer effects; absent (the tests) skips the release downloads.
+    // The remote tree's outer effects (the release listing and downloads); absent, the real GitHub
+    // fetchers run — the tests inject theirs.
     remoteSite,
 }: {
     rootDir?: string;
@@ -366,6 +371,7 @@ const main = async ({
 /** One GitHub release as the releases API answers it, trimmed to what the site build reads. */
 export type RemoteRelease = {
     tag_name: string;
+    prerelease?: boolean;
     assets: Array<{ name: string; browser_download_url: string }>;
 };
 
@@ -381,10 +387,17 @@ export type RemoteSiteDeps = {
     unzip?: (zipPath: string, dir: string) => Promise<void>;
 };
 
-/** The default GitHub releases listing: the newest REMOTE_RELEASE_COUNT releases. */
+/**
+ * The default GitHub releases listing: the newest releases, pre-releases included (the caller filters).
+ * A `GITHUB_TOKEN` in the environment (the CI script's, not app configuration) lifts the API's anonymous rate limit.
+ */
 export const listReleasesFromGitHub = async (): Promise<RemoteRelease[]> => {
-    const response = await fetch(`${RELEASES_API}?per_page=${REMOTE_RELEASE_COUNT}`, {
-        headers: { 'User-Agent': 'gurushots-auto-vote-site-build' },
+    const token = process.env.GITHUB_TOKEN;
+    const response = await fetch(`${RELEASES_API}?per_page=${REMOTE_RELEASE_FETCH_COUNT}`, {
+        headers: {
+            'User-Agent': 'gurushots-auto-vote-site-build',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
     });
     if (!response.ok) throw new Error(`releases listing failed (${response.status})`);
     return (await response.json()) as RemoteRelease[];
@@ -423,6 +436,9 @@ const buildRemoteSite = async (out: string, version: string, deps: RemoteSiteDep
         const target = ensureOut();
         fs.copyFileSync(loaderHtml, path.join(target, 'index.html'));
         fs.copyFileSync(loaderBundle, path.join(target, 'remoteLoader-bundle.js'));
+        // The loader bundles third-party code too, so its directory carries the notices, like each version's.
+        const notices = path.join(dist, NOTICES_ASSET_NAME);
+        if (fs.existsSync(notices)) fs.copyFileSync(notices, path.join(target, NOTICES_ASSET_NAME));
         console.log('✓ remote/index.html (the /remote/ loader)');
     } else {
         console.log('⏭️  remote/ loader: build:react has not produced it yet');
@@ -455,8 +471,17 @@ const buildRemoteSite = async (out: string, version: string, deps: RemoteSiteDep
     const listReleases = deps.listReleases ?? listReleasesFromGitHub;
     const download = deps.downloadFile ?? downloadFromGitHub;
     const unzip = deps.unzip ?? unzipWithCli;
-    const releases = await listReleases();
-    for (const release of releases.slice(0, REMOTE_RELEASE_COUNT)) {
+    let releases: RemoteRelease[] = [];
+    try {
+        releases = await listReleases();
+    } catch (error) {
+        // A rate limit or an outage must not fail the whole site: it builds with this version only.
+        console.warn(
+            `⚠️  Could not list the releases (${errorMessage(error) ?? 'no reason given'}) — building without older versions`,
+        );
+    }
+    const stable = releases.filter((release) => release.prerelease !== true);
+    for (const release of stable.slice(0, REMOTE_RELEASE_COUNT)) {
         const releaseVersion = release.tag_name.replace(/^v/, '');
         if (releaseVersion === version) continue;
         const zip = release.assets.find((asset) => asset.name === REMOTE_PAGE_ZIP);

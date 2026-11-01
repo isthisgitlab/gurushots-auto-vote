@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettingsNav } from '@/contexts/SettingsNavContext';
 import { matchesFilterTexts } from '@/utils/matchesSettingFilter';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { useConfirmedAction } from '@/hooks/useConfirmedAction';
 import { callOrNull, getRemoteAccess, resetRemotePairing, setRemoteAccess } from '@/api/ipc';
 
 import type { SettingFilterTexts } from '@/utils/matchesSettingFilter';
@@ -23,6 +25,10 @@ const REMOTE_ACCESS_DESCRIPTION_KEYS = [
     'app.remoteNote3',
 ];
 
+/** What a failed save leaves on screen (translation keys): what happened, why, what next. */
+const CHANGE_FAILED_KEY = 'app.remoteChangeFailed';
+const RESET_FAILED_KEY = 'app.remoteResetFailed';
+
 /** The searchable texts of the section, like the hand-written cells have. */
 export const remoteAccessTexts = (t: Translate): SettingFilterTexts => ({
     names: REMOTE_ACCESS_NAME_KEYS.map((key) => t(key)),
@@ -41,6 +47,9 @@ export function RemoteAccessSection({ showAll }: { showAll?: boolean }) {
     const [revealed, setRevealed] = useState(false);
     const [copied, setCopied] = useState(false);
     const [busy, setBusy] = useState(false);
+    const [problem, setProblem] = useState<string | null>(null);
+    const [confirmingReset, setConfirmingReset] = useState(false);
+    const reset = useConfirmedAction(confirmingReset ? true : null);
 
     const refresh = useCallback(async (): Promise<void> => {
         const answer = await callOrNull(() => getRemoteAccess());
@@ -56,25 +65,33 @@ export function RemoteAccessSection({ showAll }: { showAll?: boolean }) {
     const change = async (enabled: boolean): Promise<void> => {
         setBusy(true);
         try {
-            await setRemoteAccess(enabled);
+            const answer = await callOrNull(() => setRemoteAccess(enabled));
+            const saved = answer?.success === true;
+            setProblem(saved ? null : CHANGE_FAILED_KEY);
+            if (saved && !enabled) {
+                // Off hides the code and forgets that the link was copied.
+                setRevealed(false);
+                setCopied(false);
+            }
+            // The toggle shows what is stored, so it reads again even when the save failed.
             await refresh();
-            announcePairingChange();
+            if (saved) announcePairingChange();
         } finally {
             setBusy(false);
         }
     };
 
-    const reset = async (): Promise<void> => {
-        setBusy(true);
-        try {
-            await resetRemotePairing();
+    const confirmReset = (): Promise<void> =>
+        reset.run(async () => {
+            const answer = await callOrNull(() => resetRemotePairing());
+            if (answer?.success !== true) return RESET_FAILED_KEY;
             setRevealed(false);
+            setCopied(false);
+            setConfirmingReset(false);
             await refresh();
             announcePairingChange();
-        } finally {
-            setBusy(false);
-        }
-    };
+            return null;
+        });
 
     const copy = async (link: string): Promise<void> => {
         try {
@@ -106,7 +123,33 @@ export function RemoteAccessSection({ showAll }: { showAll?: boolean }) {
                 <span className="text-xs text-base-content/70" role="status">
                     {(info?.enabled ?? false) ? t('app.remoteStatusOn') : t('app.remoteStatusOff')}
                 </span>
+                {/* Offered while access is off too: a link that leaked stays valid until it is reset */}
+                <button
+                    type="button"
+                    className="btn btn-error btn-sm"
+                    disabled={busy || info === null}
+                    onClick={() => setConfirmingReset(true)}
+                >
+                    {t('app.remoteResetPairing')}
+                </button>
             </div>
+            {problem !== null && (
+                <div className="alert alert-error text-sm mb-3" role="alert">
+                    <span>{t(problem)}</span>
+                </div>
+            )}
+            <ConfirmModal
+                isOpen={confirmingReset}
+                title={t('app.remoteResetTitle')}
+                working={reset.working}
+                problem={reset.problem}
+                onClose={() => setConfirmingReset(false)}
+                onConfirm={() => void confirmReset()}
+                confirmLabel="app.remoteResetPairing"
+                workingLabel="app.remoteResetWorking"
+            >
+                <p>{t('app.remoteResetConfirm')}</p>
+            </ConfirmModal>
             {info !== null && info.enabled && (
                 <div className="mb-3">
                     {!revealed ? (
@@ -134,16 +177,11 @@ export function RemoteAccessSection({ showAll }: { showAll?: boolean }) {
                                     </button>
                                     <button
                                         type="button"
-                                        className="btn btn-error btn-sm"
-                                        disabled={busy}
-                                        onClick={() => void reset()}
-                                    >
-                                        {t('app.remoteResetPairing')}
-                                    </button>
-                                    <button
-                                        type="button"
                                         className="btn btn-ghost btn-sm"
-                                        onClick={() => setRevealed(false)}
+                                        onClick={() => {
+                                            setRevealed(false);
+                                            setCopied(false);
+                                        }}
                                     >
                                         {t('app.remoteHide')}
                                     </button>

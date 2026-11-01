@@ -653,7 +653,7 @@ jobs:
                   retention-days: 1
 
     attest:
-        needs: [build, build-cli-arm, sign-android, version-bump]
+        needs: [build, build-cli-arm, sign-android, version-bump, remote-page]
         runs-on: ubuntu-latest
         timeout-minutes: 10
         if: github.event_name == 'push'
@@ -694,9 +694,10 @@ jobs:
                       artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}linux-arm-builds/gurucli-v*-linux-arm
                       artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}linux-arm-builds/gurucli-v*-linux-arm-lite
                       artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}android-builds/GuruShotsAutoVote-v*.apk
+                      artifacts/remote-page/remote-page.zip
 
     create-release:
-        needs: [build, build-cli-arm, sign-android, version-bump, attest]
+        needs: [build, build-cli-arm, sign-android, version-bump, remote-page, attest]
         runs-on: ubuntu-latest
         timeout-minutes: 15
         if: github.event_name == 'push'

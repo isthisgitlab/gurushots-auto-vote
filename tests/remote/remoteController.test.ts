@@ -8,6 +8,7 @@
 import { createRemoteAutovoteController } from '../../src/ts/core/autovote/remote';
 import { TransportStub } from '../helpers/remoteTransport';
 import { initialState } from '../../src/ts/core/autovote/state';
+import { setRemoteConnectionState } from '../../src/ts/core/remote/connectionState';
 
 import type { AutovoteState } from '../../src/ts/core/autovote/state';
 
@@ -19,6 +20,7 @@ describe('createRemoteAutovoteController', () => {
     let controller: ReturnType<typeof createRemoteAutovoteController>;
 
     beforeEach(() => {
+        setRemoteConnectionState('connected');
         [, phone] = TransportStub.pair();
         refreshes = 0;
         controller = createRemoteAutovoteController({
@@ -31,6 +33,39 @@ describe('createRemoteAutovoteController', () => {
 
     afterEach(() => {
         controller.dispose();
+        setRemoteConnectionState('connecting');
+    });
+
+    test.each(['connecting', 'offline', 'network', 'update', 'update-this', 'full', 'no-key'] as const)(
+        'start, stop and rearm while %s send nothing and say the phone is not connected',
+        async (connection) => {
+            setRemoteConnectionState(connection);
+            for (const method of ['start', 'stop', 'rearmSchedule'] as const) {
+                controller.dispose();
+                controller = createRemoteAutovoteController({
+                    transport: phone,
+                    getOnChallengesRefresh: () => undefined,
+                });
+                await controller[method]();
+                expect(controller.getState()).toMatchObject({
+                    status: 'Error',
+                    statusClass: 'badge-error',
+                    error: 'Not connected to your computer',
+                });
+                controller.dispose();
+            }
+            expect(phone.sent).toHaveLength(0);
+        },
+    );
+
+    test('the not-connected error notifies the listeners and the next relayed state replaces it', async () => {
+        setRemoteConnectionState('offline');
+        const seen: string[] = [];
+        controller.subscribe(() => seen.push(controller.getState().status));
+        await controller.start();
+        expect(seen).toEqual(['Error']);
+        phone.receiveFromPeer({ t: 'autovote-state', state: stateOf({ running: true, status: 'Running' }) }, 'host');
+        expect(controller.getState().error).toBeNull();
     });
 
     test('start and stop send autovote-command and never run anything locally', async () => {

@@ -10,6 +10,7 @@ import { render } from './helpers/test-utils';
 import { RemoteStateBadge } from '@/components/app/RemoteStateBadge';
 import { RemoteNoticeScreen } from '@/components/app/RemoteNoticeScreen';
 import { setRemoteConnectionState, remoteConnectionState } from '../../src/ts/core/remote/connectionState';
+import { installPhoneRemoteMode } from '../../src/ts/core/remote/phoneMode';
 
 describe('RemoteStateBadge', () => {
     beforeEach(() => {
@@ -28,6 +29,8 @@ describe('RemoteStateBadge', () => {
         ['offline', 'app.remoteOfflineShort', 'badge-error'],
         ['network', 'app.remoteNetwork', 'badge-error'],
         ['update', 'app.remoteUpdateNeeded', 'badge-warning'],
+        ['update-this', 'app.remoteUpdateThis', 'badge-warning'],
+        ['full', 'app.remoteFull', 'badge-error'],
         ['no-key', 'app.remoteNoKey', 'badge-error'],
     ] as const)('%s shows its label and tone', (state, key, tone) => {
         setRemoteConnectionState(state);
@@ -76,6 +79,47 @@ describe('RemoteStateBadge', () => {
         }
     });
 
+    describe('Add to Home Screen is not offered where the page is already installed', () => {
+        const realMatchMedia = window.matchMedia;
+
+        afterEach(() => {
+            window.matchMedia = realMatchMedia;
+            delete (window.navigator as { standalone?: boolean }).standalone;
+            installPhoneRemoteMode({});
+        });
+
+        const connectFresh = (): void => {
+            render(<RemoteStateBadge />);
+            act(() => {
+                setRemoteConnectionState('connected');
+            });
+        };
+
+        test('a Home Screen app (display-mode: standalone) gets no offer', () => {
+            window.matchMedia = ((query: string) => ({ matches: query === '(display-mode: standalone)' })) as never;
+            connectFresh();
+            expect(screen.queryByText('app.remoteAddToHomeScreen')).toBeNull();
+        });
+
+        test('an iPhone Home Screen app (navigator.standalone) gets no offer', () => {
+            Object.defineProperty(window.navigator, 'standalone', { value: true, configurable: true });
+            connectFresh();
+            expect(screen.queryByText('app.remoteAddToHomeScreen')).toBeNull();
+        });
+
+        test("the Android app's remote mode gets no offer", () => {
+            installPhoneRemoteMode({ disconnect: async () => undefined });
+            connectFresh();
+            expect(screen.queryByText('app.remoteAddToHomeScreen')).toBeNull();
+        });
+
+        test('a browser tab still gets the offer', () => {
+            window.matchMedia = ((query: string) => ({ matches: query === '(display-mode: browser)' })) as never;
+            connectFresh();
+            expect(screen.getByText('app.remoteAddToHomeScreen')).toBeDefined();
+        });
+    });
+
     test('the Add to Home Screen offer appears once per session on the first connect', () => {
         const first = render(<RemoteStateBadge />);
         expect(screen.queryByRole('status')?.textContent).not.toContain('app.remoteAddToHomeScreen');
@@ -109,6 +153,8 @@ describe('RemoteNoticeScreen', () => {
         ['offline', 'app.remoteOfflineDetail'],
         ['network', 'app.remoteNetwork'],
         ['update', 'app.remoteUpdateNeeded'],
+        ['update-this', 'app.remoteUpdateThis'],
+        ['full', 'app.remoteFull'],
         ['connecting', 'app.remoteConnecting'],
     ] as const)('%s names the state', (state, key) => {
         setRemoteConnectionState(state);

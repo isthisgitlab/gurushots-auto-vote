@@ -119,6 +119,10 @@ export const errors: typeof english.errors = {
         'Šī nav savienošanas saite. Ielīmē visu saiti no datora sadaļas „Attālinātā piekļuve” — tā beidzas ar #k=…',
     remoteEnterFailed: 'Neizdevās pārslēgties uz attālināto vadību. Lietotne paliek parastajā režīmā — mēģini vēlreiz.',
     remoteDisconnectFailed: 'Neizdevās atvienoties. Šī lapa paliek savienota ar datoru — mēģini vēlreiz.',
+    remoteRefused: 'Šo veic datorā.',
+    remoteResultTooLarge:
+        'Rezultāts ir pārāk liels, lai to nosūtītu uz telefonu. Veic šo darbību datorā vai pieprasi mazāk vienā reizē.',
+    remoteNotConnected: 'Nav savienojuma ar datoru',
 };
 // First-run onboarding
 export const onboarding: typeof english.onboarding = {
@@ -1712,7 +1716,7 @@ export const app: LatvianApp = {
     remoteResetPairing: 'Atiestatīt savienošanu pārī',
     remoteQrAlt: 'QR kods ar savienošanas saiti',
     remoteNote1:
-        'Jebkurš, kam ir šī saite, var vadīt šo lietotni. Turi to privātu; "Atiestatīt savienošanu pārī" atvieno visus tālruņus.',
+        'Jebkurš, kam ir šī saite, var vadīt šo lietotni. Turi to privātu; „Atiestatīt savienošanu pārī” atvieno visus telefonus.',
     remoteNote2:
         'Datoram jābūt ieslēgtam un šim logam atvērtam; aizverot logu, apstājas gan balsošana, gan attālinātā piekļuve.',
     remoteNote3: 'Kamēr tā ir ieslēgta, izmanto saiti Android lietotnes pašas balsošanas vietā.',
@@ -1725,6 +1729,16 @@ export const app: LatvianApp = {
         'Tavs dators ir bez savienojuma, vai arī šī saite tika atiestatīta. Ja lietotne datorā ir atvērta, skenē tās QR kodu vēlreiz.',
     remoteNetwork: 'Neizdevās izveidot savienojumu šajā tīklā — mēģini Wi-Fi',
     remoteUpdateNeeded: 'Atjaunini lietotni datorā',
+    remoteUpdateThis: 'Atjaunini šo lietotni',
+    remoteFull: 'Ir savienoti pārāk daudz telefonu — aizver lietotni citā telefonā un mēģini vēlreiz.',
+    remoteChangeFailed:
+        'Attālinātā piekļuve netika mainīta. Iestatījumu neizdevās saglabāt šajā datorā. Mēģini vēlreiz; ja tas atkārtojas, pārbaudi, vai lietotnes datu mapē var rakstīt.',
+    remoteResetFailed:
+        'Savienošana pārī netika atiestatīta, tāpēc vecā saite joprojām darbojas. Jauno atslēgu neizdevās saglabāt šajā datorā. Mēģini vēlreiz; ja tas atkārtojas, pārbaudi, vai lietotnes datu mapē var rakstīt.',
+    remoteResetTitle: 'Atiestatīt savienošanu pārī?',
+    remoteResetConfirm:
+        'Visi savienotie telefoni tiks atvienoti, un vecā saite pārstās darboties. Katrā telefonā skenē jauno QR kodu, lai to savienotu no jauna.',
+    remoteResetWorking: 'Atiestata…',
     remoteNoKey: 'Skenē datorā redzamo QR kodu, lai savienotu',
     remoteAddToHomeScreen: 'Pievieno šo lapu sākuma ekrānam, lai saite vienmēr būtu pa rokai.',
     // The Android app's remote mode: the paste entry ("Control my computer") and the leave from it

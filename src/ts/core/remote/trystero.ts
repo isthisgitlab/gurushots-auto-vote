@@ -1,16 +1,11 @@
-/* istanbul ignore file -- a real join needs WebRTC, a WebSocket pool and ICE negotiation, which
-   cannot run under Jest; the tests inject an in-memory transport and cover this module's
-   constants and classifier, so only the join wiring itself stays uncovered. */
-
 /**
  * The one trystero adapter: joins the Nostr-signalled WebRTC room a pairing key names and
  * exposes it as a RemoteTransport (core/remote/relays.ts). This is the only module that
- * imports `trystero`, and the only remote module Jest does not fully cover — a real
- * RTCPeerConnection, WebSocket pool and ICE negotiation cannot run under Jest, so the unit
- * tests inject an in-memory transport instead and leave this adapter's join/leave wiring to
- * it. Everything it decides (the relay and STUN lists, the room identity, the error
- * classification) is pinned by tests that read this file's constants and call its pure
- * classifier.
+ * imports `trystero`, and the only remote module whose join wiring Jest does not cover — a
+ * real RTCPeerConnection, WebSocket pool and ICE negotiation cannot run under Jest, so the
+ * unit tests inject an in-memory transport instead and leave `createTrysteroTransport` to it.
+ * Everything else here (the relay and STUN lists, the room identity, the error
+ * classification) is plain code that tests read and call.
  *
  * Loaded only on the `electron` and `remote` kinds (the desktop host and the phone page), so
  * the web and capacitor bundles externalize it (scripts/build-react.ts) and never grow by it.
@@ -51,65 +46,69 @@ export const roomIdForKey = async (key: string): Promise<string> => {
 export const isConnectionFailureJoinError = (error: string): boolean =>
     error.startsWith('could not connect to peer') && error.includes('after exchanging SDP');
 
-/** Builds the transport: joins the room and wires its callbacks to the fan-out listeners. */
-export const createTrysteroTransport: RemoteTransportFactory = async (options) => {
-    // Loaded at call time so a module import of this file never loads the library (the tests
-    // import the classifier; the web and capacitor bundles carry this file but never call it).
-    const { joinRoom } = (await import('trystero')) as typeof import('trystero');
-    const roomId = await roomIdForKey(options.key);
+/**
+ * Builds the transport: joins the room and wires its callbacks to the fan-out listeners.
+ */
+export const createTrysteroTransport: RemoteTransportFactory =
+    /* istanbul ignore next -- a real join needs WebRTC, a WebSocket pool and ICE negotiation, which cannot run under Jest */
+    async (options) => {
+        // Loaded at call time so a module import of this file never loads the library (the tests
+        // import the classifier; the web and capacitor bundles carry this file but never call it).
+        const { joinRoom } = (await import('trystero')) as typeof import('trystero');
+        const roomId = await roomIdForKey(options.key);
 
-    const messageHandlers = new Set<(peerId: string, message: unknown) => void>();
-    const joinHandlers = new Set<(peerId: string) => void>();
-    const leaveHandlers = new Set<(peerId: string) => void>();
-    const joinErrorHandlers = new Set<(details: { error: string }) => void>();
+        const messageHandlers = new Set<(peerId: string, message: unknown) => void>();
+        const joinHandlers = new Set<(peerId: string) => void>();
+        const leaveHandlers = new Set<(peerId: string) => void>();
+        const joinErrorHandlers = new Set<(details: { error: string; peerId: string }) => void>();
 
-    const room: Room = joinRoom(
-        {
-            appId: TRYSTERO_APP_ID,
-            relayConfig: { urls: [...NOSTR_RELAY_URLS] },
-            password: options.key,
-            rtcConfig: { iceServers: RTC_ICE_SERVERS },
-        },
-        roomId,
-        {
-            onJoinError: (details: JoinError) => {
-                for (const handler of joinErrorHandlers) handler({ error: details.error });
+        const room: Room = joinRoom(
+            {
+                appId: TRYSTERO_APP_ID,
+                relayConfig: { urls: [...NOSTR_RELAY_URLS] },
+                password: options.key,
+                rtcConfig: { iceServers: RTC_ICE_SERVERS },
             },
-        },
-    );
+            roomId,
+            {
+                onJoinError: (details: JoinError) => {
+                    for (const handler of joinErrorHandlers) handler({ error: details.error, peerId: details.peerId });
+                },
+            },
+        );
 
-    // oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- trystero's message action to the pairing peers, never a frame send
-    const { send: sendRaw } = room.makeAction<JsonValue>(TRYSTERO_ACTION_NAMESPACE, {
-        onMessage: (data, context) => {
-            for (const handler of messageHandlers) handler(context.peerId, data);
-        },
-    });
+        // oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- trystero's message action to the pairing peers, never a frame send
+        const { send: sendRaw } = room.makeAction<JsonValue>(TRYSTERO_ACTION_NAMESPACE, {
+            onMessage: (data, context) => {
+                for (const handler of messageHandlers) handler(context.peerId, data);
+            },
+        });
 
-    room.onPeerJoin = (peerId) => {
-        for (const handler of joinHandlers) handler(peerId);
-    };
-    room.onPeerLeave = (peerId) => {
-        for (const handler of leaveHandlers) handler(peerId);
-    };
+        room.onPeerJoin = (peerId) => {
+            for (const handler of joinHandlers) handler(peerId);
+        };
+        room.onPeerLeave = (peerId) => {
+            for (const handler of leaveHandlers) handler(peerId);
+        };
 
-    return {
-        send: (message, target) => sendRaw(message as JsonValue, target === undefined ? {} : { target }),
-        onMessage: (handler) => {
-            messageHandlers.add(handler);
-            return () => messageHandlers.delete(handler);
-        },
-        onPeerJoin: (handler) => {
-            joinHandlers.add(handler);
-            return () => joinHandlers.delete(handler);
-        },
-        onPeerLeave: (handler) => {
-            leaveHandlers.add(handler);
-            return () => leaveHandlers.delete(handler);
-        },
-        onJoinError: (handler) => {
-            joinErrorHandlers.add(handler);
-            return () => joinErrorHandlers.delete(handler);
-        },
-        leave: () => room.leave(),
+        return {
+            send: (message, target) => sendRaw(message as JsonValue, target === undefined ? {} : { target }),
+            onMessage: (handler) => {
+                messageHandlers.add(handler);
+                return () => messageHandlers.delete(handler);
+            },
+            onPeerJoin: (handler) => {
+                joinHandlers.add(handler);
+                return () => joinHandlers.delete(handler);
+            },
+            onPeerLeave: (handler) => {
+                leaveHandlers.add(handler);
+                return () => leaveHandlers.delete(handler);
+            },
+            onJoinError: (handler) => {
+                joinErrorHandlers.add(handler);
+                return () => joinErrorHandlers.delete(handler);
+            },
+            leave: () => room.leave(),
+        };
     };
-};

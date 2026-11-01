@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { remoteConnectionState, subscribeRemoteConnectionState } from '../../../core/remote/connectionState';
+import { phoneRemoteMode } from '../../../core/remote/phoneMode';
 
 import type { RemoteConnectionState } from '../../../core/remote/connectionState';
 
@@ -14,10 +15,19 @@ const STATE_LABEL_KEYS: Record<RemoteConnectionState, string> = {
     offline: 'app.remoteOfflineShort',
     network: 'app.remoteNetwork',
     update: 'app.remoteUpdateNeeded',
+    'update-this': 'app.remoteUpdateThis',
+    full: 'app.remoteFull',
     'no-key': 'app.remoteNoKey',
 };
 
+/** Whether the page already runs as an installed Home Screen app (Android/Chrome display mode, or iOS standalone). */
+const runsAsInstalledApp = (): boolean =>
+    globalThis.matchMedia?.('(display-mode: standalone)').matches === true ||
+    (globalThis.navigator as Navigator & { standalone?: boolean }).standalone === true;
+
 const firstVisit = (): boolean => {
+    // Already on the Home Screen, or inside the Android app (its Disconnect is installed): nothing to add.
+    if (runsAsInstalledApp() || phoneRemoteMode()?.disconnect !== undefined) return false;
     try {
         if (globalThis.sessionStorage?.getItem(HOME_HINT_FLAG) === '1') return false;
         globalThis.sessionStorage?.setItem(HOME_HINT_FLAG, '1');
@@ -36,7 +46,7 @@ export function RemoteStateBadge() {
     const { t } = useTranslation();
     const [state, setState] = useState<RemoteConnectionState>(remoteConnectionState);
     const [hintShown, setHintShown] = useState(false);
-    useEffect(() => subscribeRemoteConnectionState(setState), []);
+    useLayoutEffect(() => subscribeRemoteConnectionState(setState), []);
     useEffect(() => {
         if (state === 'connected' && firstVisit()) setHintShown(true);
     }, [state]);
@@ -46,7 +56,7 @@ export function RemoteStateBadge() {
             ? 'badge-success'
             : state === 'connecting'
               ? 'badge-ghost'
-              : state === 'update'
+              : state === 'update' || state === 'update-this'
                 ? 'badge-warning'
                 : 'badge-error';
 

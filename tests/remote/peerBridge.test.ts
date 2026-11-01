@@ -6,9 +6,9 @@
  * tells a fellow phone from the desktop.
  */
 
-import { installPeerBridge, LOCAL_CHANNELS, PAGE_VERSION } from '../../src/ts/shells/remote/bridge/peer';
-import { HELLO_RETRY_MS } from '../../src/ts/core/remote/helloRepeat';
-import { PROTOCOL_VERSION } from '../../src/ts/core/remote/protocol';
+import { installPeerBridge, LOCAL_CHANNELS } from '../../src/ts/shells/remote/bridge/peer';
+import { HELLO_RETRY_MS, HOST_ANSWER_TIMEOUT_MS } from '../../src/ts/core/remote/helloRepeat';
+import { PAGE_VERSION, PROTOCOL_VERSION, REMOTE_RESULT_TOO_LARGE } from '../../src/ts/core/remote/protocol';
 import { TransportStub } from '../helpers/remoteTransport';
 import { remoteConnectionState, setRemoteConnectionState } from '../../src/ts/core/remote/connectionState';
 
@@ -24,6 +24,9 @@ describe('installPeerBridge (the phone bridge)', () => {
     let api: Record<string, (...args: unknown[]) => unknown>;
 
     beforeEach(() => {
+        // The bridge arms a wait timer when it installs, and the hello repeat is an interval: under fake
+        // timers neither outlives the test.
+        jest.useFakeTimers();
         setRemoteConnectionState('connecting');
         [host, phone] = TransportStub.pair('host', 'phone');
         installPeerBridge(phone);
@@ -31,6 +34,7 @@ describe('installPeerBridge (the phone bridge)', () => {
     });
 
     afterEach(() => {
+        jest.useRealTimers();
         setRemoteConnectionState('connecting');
         delete (globalThis as { __autovotePlatformKind?: string }).__autovotePlatformKind;
     });
@@ -311,26 +315,68 @@ describe('installPeerBridge (the phone bridge)', () => {
         expect(remoteConnectionState()).toBe('connected');
     });
 
-    test('a desktop of another version says to update and the hello repeat stops', async () => {
-        jest.useFakeTimers();
-        try {
-            const hostReceived: unknown[] = [];
-            host.onMessage((_peerId, raw) => hostReceived.push(raw));
+    describe('a desktop of another version', () => {
+        let replaced: string[];
+        const realLocation = (globalThis as { location?: unknown }).location;
+
+        beforeEach(() => {
+            replaced = [];
+            (globalThis as { location?: unknown }).location = {
+                hash: '#k=the-key',
+                replace: (url: string) => replaced.push(url),
+            };
+        });
+
+        afterEach(() => {
+            (globalThis as { location?: unknown }).location = realLocation;
+        });
+
+        test('sends the tab to the stable loader, shows no notice, and the hello repeat stops', async () => {
+            jest.useFakeTimers();
+            try {
+                const hostReceived: unknown[] = [];
+                host.onMessage((_peerId, raw) => hostReceived.push(raw));
+                phone.emitJoin('host');
+                await Promise.resolve();
+                phone.receiveFromPeer(
+                    { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, host: true },
+                    'host',
+                );
+                // The loader is addressed by file name (the Android app's local server answers a directory path
+                // with the app's own document), the key rides in the fragment.
+                expect(replaced).toEqual(['../index.html#k=the-key']);
+                expect(remoteConnectionState()).toBe('connecting');
+                const after = hostReceived.length;
+                jest.advanceTimersByTime(HELLO_RETRY_MS * 3);
+                await Promise.resolve();
+                expect(hostReceived.length).toBe(after);
+            } finally {
+                jest.useRealTimers();
+            }
+        });
+
+        test('the same version with another protocol shape says to update the app on the computer', () => {
             phone.emitJoin('host');
-            await Promise.resolve();
+            phone.receiveFromPeer(
+                { t: 'hello', version: PAGE_VERSION, protocolVersion: PROTOCOL_VERSION + 1, host: true },
+                'host',
+            );
+            expect(replaced).toEqual([]);
+            expect(remoteConnectionState()).toBe('update');
+        });
+
+        test('without a key to carry, the tab stays where it is', () => {
+            (globalThis as { location?: unknown }).location = {
+                hash: '',
+                replace: (url: string) => replaced.push(url),
+            };
+            (globalThis as { sessionStorage?: Storage }).sessionStorage?.clear();
             phone.receiveFromPeer(
                 { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, host: true },
                 'host',
             );
-            expect(remoteConnectionState()).toBe('update');
-            const after = hostReceived.length;
-            jest.advanceTimersByTime(HELLO_RETRY_MS * 3);
-            await Promise.resolve();
-            expect(hostReceived.length).toBe(after);
-        } finally {
-            jest.useRealTimers();
-        }
-        expect(remoteConnectionState()).toBe('update');
+            expect(replaced).toEqual([]);
+        });
     });
 
     test('a join failure on the SDP exchange says to try Wi-Fi; a wrong password reads as offline', () => {
@@ -382,5 +428,201 @@ describe('installPeerBridge (the phone bridge)', () => {
     test('logout is refused in the phone: the account lives on the desktop', async () => {
         await expect(api.logout()).rejects.toThrow(/computer/);
         expect(() => api.login()).toThrow(/computer/);
+    });
+});
+
+describe('installPeerBridge: which peer counts', () => {
+    let host: TransportStub;
+    let phone: TransportStub;
+    let api: Record<string, (...args: unknown[]) => unknown>;
+    const SDP_FAILURE = 'could not connect to peer abc after exchanging SDP; configure TURN servers';
+
+    beforeEach(() => {
+        jest.useFakeTimers();
+        setRemoteConnectionState('connecting');
+        [host, phone] = TransportStub.pair('host', 'phone');
+        installPeerBridge(phone);
+        api = (globalThis as { api?: Record<string, (...args: unknown[]) => unknown> }).api ?? {};
+    });
+
+    afterEach(() => {
+        jest.useRealTimers();
+        setRemoteConnectionState('connecting');
+        delete (globalThis as { __autovotePlatformKind?: string }).__autovotePlatformKind;
+    });
+
+    const invokeId = (): number => {
+        const sent = phone.sent.find(({ message }) => (message as { t: string }).t === 'invoke');
+        return (sent?.message as { id: number } | undefined)?.id ?? -1;
+    };
+
+    test('a result, an event and a bye from a fellow phone are ignored', async () => {
+        phone.emitJoin('host');
+        phone.emitJoin('fellow');
+        phone.receiveFromPeer(hostHello, 'host');
+        const pending = api.getSettings() as Promise<unknown>;
+        const id = invokeId();
+        const seen: unknown[] = [];
+        api.onSettingsChanged((payload: unknown) => seen.push(payload));
+
+        phone.receiveFromPeer({ t: 'result', id, ok: true, result: 'forged' }, 'fellow');
+        phone.receiveFromPeer({ t: 'event', channel: 'settings-changed', payload: { forged: true } }, 'fellow');
+        phone.receiveFromPeer({ t: 'bye' }, 'fellow');
+        expect(seen).toEqual([]);
+        expect(remoteConnectionState()).toBe('connected');
+
+        phone.receiveFromPeer({ t: 'result', id, ok: true, result: 'real' }, 'host');
+        await expect(pending).resolves.toBe('real');
+    });
+
+    test("a fellow phone's join error after the desktop answered keeps the session up", async () => {
+        phone.emitJoin('host');
+        phone.emitJoin('fellow');
+        phone.receiveFromPeer(hostHello, 'host');
+        const pending = api.getSettings() as Promise<unknown>;
+        phone.emitJoinError(SDP_FAILURE, 'fellow');
+        expect(remoteConnectionState()).toBe('connected');
+        phone.receiveFromPeer({ t: 'result', id: invokeId(), ok: true, result: 1 }, 'host');
+        await expect(pending).resolves.toBe(1);
+    });
+
+    test("the desktop's own join error after it answered ends the session", async () => {
+        phone.emitJoin('host');
+        phone.receiveFromPeer(hostHello, 'host');
+        const pending = api.getSettings() as Promise<unknown>;
+        phone.emitJoinError(SDP_FAILURE, 'host');
+        await expect(pending).rejects.toThrow(/dropped/);
+        expect(remoteConnectionState()).toBe('network');
+    });
+
+    test("a fellow phone's join error before the desktop answers keeps waiting and keeps announcing", async () => {
+        const hostReceived: unknown[] = [];
+        host.onMessage((_peerId, raw) => hostReceived.push(raw));
+        phone.emitJoin('host');
+        phone.emitJoin('fellow');
+        phone.emitJoinError(SDP_FAILURE, 'fellow');
+        expect(remoteConnectionState()).toBe('connecting');
+
+        // The announce to the desktop still repeats, and its answer still connects.
+        const before = hostReceived.length;
+        jest.advanceTimersByTime(HELLO_RETRY_MS);
+        await Promise.resolve();
+        expect(hostReceived.length).toBeGreaterThan(before);
+        phone.receiveFromPeer(hostHello, 'host');
+        expect(remoteConnectionState()).toBe('connected');
+    });
+
+    test('the last pending peer failing before the desktop answers reads as the connection failing', () => {
+        phone.emitJoin('host');
+        phone.emitJoin('fellow');
+        phone.emitJoinError(SDP_FAILURE, 'fellow');
+        phone.emitJoinError(SDP_FAILURE, 'host');
+        expect(remoteConnectionState()).toBe('network');
+    });
+
+    test('a fellow phone leaving before the desktop answers keeps waiting; the last peer leaving reads offline', async () => {
+        const hostReceived: unknown[] = [];
+        host.onMessage((_peerId, raw) => hostReceived.push(raw));
+        phone.emitJoin('host');
+        phone.emitJoin('fellow');
+        phone.emitLeave('fellow');
+        expect(remoteConnectionState()).toBe('connecting');
+        const before = hostReceived.length;
+        jest.advanceTimersByTime(HELLO_RETRY_MS);
+        await Promise.resolve();
+        expect(hostReceived.length).toBeGreaterThan(before);
+        phone.receiveFromPeer(hostHello, 'host');
+        expect(remoteConnectionState()).toBe('connected');
+
+        // And once connected, the desktop's own leave is what ends it.
+        phone.emitLeave('host');
+        expect(remoteConnectionState()).toBe('offline');
+    });
+
+    test('a leave before the desktop answered, with nobody left, reads offline', () => {
+        phone.emitJoin('host');
+        phone.emitLeave('host');
+        expect(remoteConnectionState()).toBe('offline');
+    });
+
+    test('no answer within the wait reads offline, and a desktop that answers later still connects', async () => {
+        const hostReceived: unknown[] = [];
+        host.onMessage((_peerId, raw) => hostReceived.push(raw));
+        phone.emitJoin('host');
+        jest.advanceTimersByTime(HOST_ANSWER_TIMEOUT_MS);
+        expect(remoteConnectionState()).toBe('offline');
+        // The repeat keeps running through the offline state.
+        const before = hostReceived.length;
+        jest.advanceTimersByTime(HELLO_RETRY_MS);
+        await Promise.resolve();
+        expect(hostReceived.length).toBeGreaterThan(before);
+        phone.receiveFromPeer(hostHello, 'host');
+        expect(remoteConnectionState()).toBe('connected');
+    });
+
+    test('the wait runs out only on a page that is still connecting', () => {
+        phone.emitJoin('host');
+        phone.receiveFromPeer(hostHello, 'host');
+        jest.advanceTimersByTime(HOST_ANSWER_TIMEOUT_MS);
+        expect(remoteConnectionState()).toBe('connected');
+    });
+
+    test("a refused channel resolves as a handler failure in the phone's language, not as the protocol text", async () => {
+        phone.emitJoin('host');
+        phone.receiveFromPeer(hostHello, 'host');
+        const pending = api.wipeLocalData() as Promise<unknown>;
+        phone.receiveFromPeer(
+            {
+                t: 'result',
+                id: invokeId(),
+                ok: false,
+                error: 'Refused remotely: Local data is deleted on the computer.',
+            },
+            'host',
+        );
+        await expect(pending).resolves.toEqual({ success: false, error: 'This is done on the computer.' });
+    });
+
+    test('a result too large for the phone rejects with its own text', async () => {
+        phone.emitJoin('host');
+        phone.receiveFromPeer(hostHello, 'host');
+        const pending = api.getSettings() as Promise<unknown>;
+        phone.receiveFromPeer({ t: 'result', id: invokeId(), ok: false, error: REMOTE_RESULT_TOO_LARGE }, 'host');
+        await expect(pending).rejects.toThrow(/too large/);
+    });
+
+    test('a desktop that is full says so; it is not an offline computer, and the announce stops', async () => {
+        const hostReceived: unknown[] = [];
+        host.onMessage((_peerId, raw) => hostReceived.push(raw));
+        phone.emitJoin('host');
+        await Promise.resolve();
+        phone.receiveFromPeer({ t: 'bye', reason: 'full' }, 'host');
+        expect(remoteConnectionState()).toBe('full');
+        const after = hostReceived.length;
+        jest.advanceTimersByTime(HELLO_RETRY_MS * 3);
+        await Promise.resolve();
+        expect(hostReceived.length).toBe(after);
+        // The wait running out does not overwrite it.
+        jest.advanceTimersByTime(HOST_ANSWER_TIMEOUT_MS);
+        expect(remoteConnectionState()).toBe('full');
+    });
+
+    test('a bye without a reason from a peer that is not the desktop changes nothing', () => {
+        phone.emitJoin('host');
+        phone.receiveFromPeer({ t: 'bye' }, 'fellow');
+        expect(remoteConnectionState()).toBe('connecting');
+    });
+
+    test('the log calls end in the phone: answered, never sent to the desktop', async () => {
+        phone.emitJoin('host');
+        phone.receiveFromPeer(hostHello, 'host');
+        phone.sent.length = 0;
+        for (const method of ['logDebug', 'logWarning', 'logError', 'logApi']) {
+            await expect(api[method]('line')).resolves.toEqual({ success: true });
+        }
+        expect(phone.sent).toHaveLength(0);
+        for (const channel of ['log-debug', 'log-warning', 'log-error', 'log-api']) {
+            expect(LOCAL_CHANNELS.has(channel)).toBe(true);
+        }
     });
 });

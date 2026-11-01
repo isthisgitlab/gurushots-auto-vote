@@ -11,6 +11,7 @@ import { AutovoteProvider, useAutovote } from '@/contexts/AutovoteContext';
 import { TransportStub } from '../helpers/remoteTransport';
 import { markPlatformKind } from '../../src/ts/core/platform/kind';
 import { resetPlatformKind } from '../helpers/platformKind';
+import { setRemoteConnectionState } from '../../src/ts/core/remote/connectionState';
 
 import type { RemoteTransport } from '../../src/ts/core/remote/relays';
 
@@ -61,6 +62,7 @@ describe('AutovoteProvider on the remote kind', () => {
 
     afterEach(() => {
         resetPlatformKind();
+        setRemoteConnectionState('connecting');
     });
 
     test('it builds the remote controller, never the local one', () => {
@@ -86,6 +88,7 @@ describe('AutovoteProvider on the remote kind', () => {
     });
 
     test('start, stop and rearm reach the desktop as autovote-command messages', async () => {
+        setRemoteConnectionState('connected');
         render(
             <AutovoteProvider remoteTransport={phone as RemoteTransport}>
                 <Probe />

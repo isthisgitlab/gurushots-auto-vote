@@ -499,7 +499,7 @@
     "qrcode-generator": {
         "license": "MIT",
         "texts": ["MIT"],
-        "copyright": ["Copyright (c) 2016 Kazuhiko Arase"]
+        "copyright": ["Copyright (c) 2009 Kazuhiko Arase"]
     },
     "sax": {
         "license": "BlueOak-1.0.0",

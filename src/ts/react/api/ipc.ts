@@ -52,7 +52,10 @@ const dropLogOutcome = (): void => undefined;
  *
  * @param method - bridge log method name
  */
-function logBestEffort(method: 'logError' | 'logWarning' | 'logDebug', message: string): Promise<void> {
+function logBestEffort(
+    method: 'logError' | 'logWarning' | 'logDebug' | 'logRemoteInfo',
+    message: string,
+): Promise<void> {
     try {
         // The renderer sends the message only; the handler's `data` is optional at runtime.
         const api = window.api as Partial<BridgeCalls<typeof method>> | undefined;
@@ -82,6 +85,8 @@ export const logRendererError = (message: string): Promise<void> => logBestEffor
 export const logRendererWarning = (message: string): Promise<void> => logBestEffort('logWarning', message);
 /** @returns resolves once the line is handed off; never rejects */
 export const logRendererDebug = (message: string): Promise<void> => logBestEffort('logDebug', message);
+/** The remote-access host's INFO line (the desktop's `log-debug` is silent in a packaged build). @returns resolves once the line is handed off; never rejects */
+export const logRemoteInfo = (message: string): Promise<void> => logBestEffort('logRemoteInfo', message);
 
 // Settings
 export const getSettings = forward('getSettings');

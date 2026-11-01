@@ -19,15 +19,23 @@ jest.mock('../../src/ts/core/remote/trystero', () => ({
     isConnectionFailureJoinError: (error: string): boolean =>
         error.startsWith('could not connect to peer') && error.includes('after exchanging SDP'),
 }));
-jest.mock('../../src/ts/shells/remote/bridge/peer', () => ({ PAGE_VERSION: '9.9.9' }));
 const installPhoneDisconnect = jest.fn<void, []>();
+const androidApp: { current: boolean } = { current: false };
 jest.mock('../../src/ts/shells/remote/phoneMode', () => ({
-    installPhoneDisconnect: () => installPhoneDisconnect(),
+    // Inside the Android app the real one installs Disconnect; here the flag stands for that.
+    installPhoneDisconnect: () => {
+        installPhoneDisconnect();
+        if (androidApp.current) {
+            jest.requireActual<typeof import('../../src/ts/core/remote/phoneMode')>(
+                '../../src/ts/core/remote/phoneMode',
+            ).installPhoneRemoteMode({ disconnect: async () => undefined });
+        }
+    },
 }));
-import { PROTOCOL_VERSION } from '../../src/ts/core/remote/protocol';
-import { HELLO_RETRY_MS } from '../../src/ts/core/remote/helloRepeat';
-// The platform module installs on load; the Jest setup has one installed already.
-jest.mock('../../src/ts/shells/remote/platform', () => ({}));
+import { PAGE_VERSION, PROTOCOL_VERSION } from '../../src/ts/core/remote/protocol';
+import { installPhoneRemoteMode } from '../../src/ts/core/remote/phoneMode';
+import { rendererTranslator } from '../../src/ts/core/translations/renderer';
+import { HELLO_RETRY_MS, HOST_ANSWER_TIMEOUT_MS } from '../../src/ts/core/remote/helloRepeat';
 // The shared React setup mocks the page translator; the loader's notice screen shows real text.
 jest.mock('../../src/ts/core/translations/renderer', () => ({
     rendererTranslator: jest.requireActual<typeof import('../../src/ts/core/translations/renderer')>(
@@ -36,9 +44,9 @@ jest.mock('../../src/ts/core/translations/renderer', () => ({
 }));
 
 const g = globalThis as { fetch?: unknown };
-const assigned: string[] = [];
+const navigated: string[] = [];
 let fetchCalls: string[];
-let assignSpy: jest.SpiedFunction<(url: string | URL) => void>;
+let replaceSpy: jest.SpiedFunction<(url: string | URL) => void>;
 
 const loadLoader = (): void => {
     jest.isolateModules(() => {
@@ -46,8 +54,10 @@ const loadLoader = (): void => {
     });
 };
 
+// Preact schedules the screen's state-driven re-render on a timer, which the fake clock holds back: run what is due now.
 const flush = async (): Promise<void> => {
     for (let i = 0; i < 10; i++) await Promise.resolve();
+    await jest.advanceTimersByTimeAsync(0);
 };
 
 describe('the /remote/ loader', () => {
@@ -55,13 +65,13 @@ describe('the /remote/ loader', () => {
 
     beforeEach(() => {
         jest.useFakeTimers();
-        assigned.length = 0;
+        navigated.length = 0;
         fetchCalls = [];
         transportStub.current = TransportStub.pair('host', 'loader')[1];
         // happy-dom owns window.location: set the hash on it and spy on the navigation.
         window.location.hash = '#k=the-key';
-        assignSpy = jest.spyOn(window.location, 'assign').mockImplementation((url: string | URL) => {
-            assigned.push(String(url));
+        replaceSpy = jest.spyOn(window.location, 'replace').mockImplementation((url: string | URL) => {
+            navigated.push(String(url));
         });
         g.fetch = jest.fn(async (input: unknown) => {
             fetchCalls.push(String(input));
@@ -73,10 +83,13 @@ describe('the /remote/ loader', () => {
 
     afterEach(() => {
         jest.useRealTimers();
-        assignSpy.mockRestore();
+        replaceSpy.mockRestore();
         delete g.fetch;
         window.sessionStorage.clear();
         window.location.hash = '';
+        androidApp.current = false;
+        installPhoneRemoteMode({});
+        rendererTranslator.setCurrentLanguage('en');
     });
 
     test('a hello names the version and the loader moves to its page, fragment kept', async () => {
@@ -95,7 +108,7 @@ describe('the /remote/ loader', () => {
         );
         await flush();
         expect(fetchCalls).toEqual(['./1.2.3/index.html']);
-        expect(assigned).toEqual(['./1.2.3/index.html#k=the-key']);
+        expect(navigated).toEqual(['./1.2.3/index.html#k=the-key']);
     });
 
     test("a version the site does not carry says to update (the probe names the page file, as the app's local server needs)", async () => {
@@ -110,7 +123,7 @@ describe('the /remote/ loader', () => {
             'host',
         );
         await flush();
-        expect(assigned).toEqual([]);
+        expect(navigated).toEqual([]);
         expect(transport.left).toBe(true);
         expect(document.getElementById('root')?.textContent).toContain('Update the app on your computer');
     });
@@ -119,7 +132,7 @@ describe('the /remote/ loader', () => {
         loadLoader();
         await flush();
         await jest.advanceTimersByTimeAsync(15_000);
-        expect(assigned).toEqual([]);
+        expect(navigated).toEqual([]);
         expect((transportStub.current as TransportStub).left).toBe(true);
         expect(document.getElementById('root')?.textContent).toContain(
             'Your computer is offline, or this link was reset',
@@ -137,7 +150,7 @@ describe('the /remote/ loader', () => {
             'fellow-phone',
         );
         await flush();
-        expect(assigned).toEqual([]);
+        expect(navigated).toEqual([]);
         expect(fetchCalls).toEqual([]);
     });
 
@@ -152,7 +165,7 @@ describe('the /remote/ loader', () => {
         );
         await flush();
         expect(transport.left).toBe(true);
-        expect(assigned).toEqual([]);
+        expect(navigated).toEqual([]);
         expect(document.getElementById('root')?.textContent).toContain('try Wi-Fi');
         // The timeout racing a join error that already settled changes nothing.
         await jest.advanceTimersByTimeAsync(15_000);
@@ -181,8 +194,8 @@ describe('the /remote/ loader', () => {
         await flush();
 
         // The loader redirects and never shows offline, and the repeat has stopped.
-        expect(assigned).toEqual(['./9.9.9/index.html#k=the-key']);
-        expect(document.getElementById('root')?.textContent).toBe('');
+        expect(navigated).toEqual(['./9.9.9/index.html#k=the-key']);
+        expect(document.getElementById('root')?.textContent).not.toContain('offline');
         await jest.advanceTimersByTimeAsync(HELLO_RETRY_MS * 3);
         expect(isolated.sent).toHaveLength(2);
         expect(isolated.left).toBe(false);
@@ -224,7 +237,7 @@ describe('the /remote/ loader', () => {
         transport.emitJoinError('handshake timed out after 14000ms');
         await flush();
         expect(transport.left).toBe(true);
-        expect(assigned).toEqual([]);
+        expect(navigated).toEqual([]);
         expect(document.getElementById('root')?.textContent).toContain('offline, or this link was reset');
     });
 
@@ -241,7 +254,7 @@ describe('the /remote/ loader', () => {
         loadLoader();
         await flush();
         expect(installPhoneDisconnect).not.toHaveBeenCalled();
-        expect(assigned).toEqual([]);
+        expect(navigated).toEqual([]);
         expect(document.getElementById('root')?.textContent).toContain('Scan the QR code on your computer to pair');
     });
 
@@ -269,7 +282,7 @@ describe('the /remote/ loader', () => {
             'host',
         );
         await flush();
-        expect(assigned).toEqual(['./1.2.3/index.html#k=the-key']);
+        expect(navigated).toEqual(['./1.2.3/index.html#k=the-key']);
     });
 
     test('a version probe that cannot run navigates anyway; a room that refuses us says offline', async () => {
@@ -286,7 +299,7 @@ describe('the /remote/ loader', () => {
             'host',
         );
         await flush();
-        expect(assigned).toEqual(['./1.2.3/index.html#k=the-key']);
+        expect(navigated).toEqual(['./1.2.3/index.html#k=the-key']);
     });
 
     test('a transport that cannot be built says the computer is offline', async () => {
@@ -294,5 +307,135 @@ describe('the /remote/ loader', () => {
         loadLoader();
         await flush();
         expect(document.getElementById('root')?.textContent).toContain('offline, or this link was reset');
+    });
+
+    test('the notice screen shows from the first moment, before the room is joined', async () => {
+        loadLoader();
+        // Not even the transport has been awaited yet.
+        expect(document.getElementById('root')?.textContent).toContain('Connecting to your computer');
+        await flush();
+        expect(document.getElementById('root')?.textContent).toContain('Connecting to your computer');
+    });
+
+    test('inside the Android app Disconnect shows while connecting, because it is installed before the first render', async () => {
+        androidApp.current = true;
+        loadLoader();
+        expect(document.getElementById('root')?.textContent).toContain('Connecting to your computer');
+        expect(document.querySelector('button')?.textContent).toBe('Disconnect');
+    });
+
+    test('a browser tab shows no Disconnect while connecting', async () => {
+        loadLoader();
+        expect(document.querySelector('button')).toBeNull();
+    });
+
+    test('the loader announces itself as the loader, so the desktop gives it no phone slot', async () => {
+        loadLoader();
+        await flush();
+        const transport = transportStub.current as TransportStub;
+        transport.emitJoin('host');
+        await flush();
+        const hello = transport.sent.find(({ message }) => (message as { t: string }).t === 'hello');
+        expect(hello?.message).toEqual({
+            t: 'hello',
+            version: PAGE_VERSION,
+            protocolVersion: PROTOCOL_VERSION,
+            host: false,
+            role: 'loader',
+        });
+    });
+
+    test.each(['../../etc/passwd', '1.2', '1.2.3/../x', 'latest', '1.2.3 ', '<script>', '1.2.3-'])(
+        'a hello whose version %p is not a release version is ignored, and nothing is probed or navigated',
+        async (version) => {
+            loadLoader();
+            await flush();
+            const transport = transportStub.current as TransportStub;
+            transport.emitJoin('host');
+            await flush();
+            transport.receiveFromPeer({ t: 'hello', version, protocolVersion: PROTOCOL_VERSION, host: true }, 'host');
+            await flush();
+            expect(fetchCalls).toEqual([]);
+            expect(navigated).toEqual([]);
+            // A real answer still gets through afterwards.
+            transport.receiveFromPeer(
+                { t: 'hello', version: '1.2.3-beta.4', protocolVersion: PROTOCOL_VERSION, host: true },
+                'host',
+            );
+            await flush();
+            expect(navigated).toEqual(['./1.2.3-beta.4/index.html#k=the-key']);
+        },
+    );
+
+    test('a desktop newer than every page this app carries says to update this app', async () => {
+        headOk = false;
+        loadLoader();
+        await flush();
+        const transport = transportStub.current as TransportStub;
+        transport.emitJoin('host');
+        await flush();
+        transport.receiveFromPeer(
+            { t: 'hello', version: '999.0.0', protocolVersion: PROTOCOL_VERSION, host: true },
+            'host',
+        );
+        await flush();
+        expect(navigated).toEqual([]);
+        expect(document.getElementById('root')?.textContent).toContain('Update this app');
+        expect(document.getElementById('root')?.textContent).not.toContain('on your computer');
+    });
+
+    test("a fellow phone's failed connection does not end the wait while the desktop is still pending", async () => {
+        loadLoader();
+        await flush();
+        const transport = transportStub.current as TransportStub;
+        transport.emitJoin('host');
+        transport.emitJoin('fellow');
+        await flush();
+        transport.emitJoinError('handshake timed out after 14000ms', 'fellow');
+        await flush();
+        expect(transport.left).toBe(false);
+        expect(document.getElementById('root')?.textContent).toContain('Connecting to your computer');
+
+        // The announce to the desktop keeps repeating, and its answer still moves the loader on.
+        const before = transport.sent.length;
+        await jest.advanceTimersByTimeAsync(HELLO_RETRY_MS);
+        expect(transport.sent.length).toBeGreaterThan(before);
+        expect(transport.sent.at(-1)?.target).toBe('host');
+        transport.receiveFromPeer(
+            { t: 'hello', version: '1.2.3', protocolVersion: PROTOCOL_VERSION, host: true },
+            'host',
+        );
+        await flush();
+        expect(navigated).toEqual(['./1.2.3/index.html#k=the-key']);
+    });
+
+    test('the last pending peer failing settles the loader', async () => {
+        loadLoader();
+        await flush();
+        const transport = transportStub.current as TransportStub;
+        transport.emitJoin('host');
+        transport.emitJoin('fellow');
+        await flush();
+        transport.emitJoinError('handshake timed out after 14000ms', 'fellow');
+        transport.emitJoinError('handshake timed out after 14000ms', 'host');
+        await flush();
+        expect(transport.left).toBe(true);
+        expect(document.getElementById('root')?.textContent).toContain('offline, or this link was reset');
+        // Waiting out the timer after that changes nothing.
+        await jest.advanceTimersByTimeAsync(HOST_ANSWER_TIMEOUT_MS);
+        expect(document.getElementById('root')?.textContent).toContain('offline, or this link was reset');
+    });
+
+    test('a Latvian browser gets the Latvian notice', async () => {
+        const language = Object.getOwnPropertyDescriptor(window.navigator, 'language');
+        Object.defineProperty(window.navigator, 'language', { value: 'lv-LV', configurable: true });
+        try {
+            loadLoader();
+            await flush();
+            expect(document.getElementById('root')?.textContent).toContain('Izveido savienojumu ar tavu datoru');
+        } finally {
+            if (language) Object.defineProperty(window.navigator, 'language', language);
+            else delete (window.navigator as { language?: string }).language;
+        }
     });
 });

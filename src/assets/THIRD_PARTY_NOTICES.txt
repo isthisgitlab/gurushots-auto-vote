@@ -522,7 +522,7 @@ proxy-from-env 2.1.0
 
 qrcode-generator 2.0.4
   License: MIT
-  Copyright (c) 2016 Kazuhiko Arase
+  Copyright (c) 2009 Kazuhiko Arase
 
 sax 1.6.1
   License: BlueOak-1.0.0

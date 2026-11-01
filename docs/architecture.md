@@ -963,7 +963,8 @@ repeated six times is one that gets forgotten at one of them.
   `connect-src 'self'`: the renderer makes no fetch/XHR to a remote host (all network calls run in the
   main process). `app.html` — the main window, where the remote-access host runs — adds the pinned Nostr
   relay hosts to `connect-src`, and the remote documents (`remote.html`, `remote-loader.html`) carry a strict
-  policy whose `connect-src` is exactly those relays; a test pins both lists to the shared constant
+  policy whose `connect-src` is exactly those relays plus `'self'` (the loader's `HEAD` probe for the version's
+  page); a test pins both lists to the shared constant
   (`core/remote/relays.ts`). The Android pages (the Capacitor page and `headless.html`) run network code in the WebView,
   so their `connect-src` also allows `https://api.github.com` and the photo CDN, and their `script-src`
   adds `'wasm-unsafe-eval'` for the vision runtime.
@@ -977,7 +978,7 @@ never appears in relay traffic. A paired phone drives the desktop through one ex
 (`core/remote/allowlist.ts`): every manifest channel is classified as allowed, refused with a pinned reason, or
 answered in the host — account sign-in/out, the local-data wipe, the log-file reads, update download/install,
 window control, destructive resets and the pairing channels themselves are refused, `autovoteRunning` is refused
-per key on every write path while auto-vote runs, and `get-environment-info` is answered with the user-data path
+per key on every write path whatever the running state is, and `get-environment-info` is answered with the user-data path
 (which holds the OS username) removed. At most 3 phones are connected at once; the log stream is the host's own,
 served while at least one phone wants it.
 
@@ -993,8 +994,28 @@ served while at least one phone wants it.
   compromised Pages deploy (or a compromised `pages.yml` run) could ship JavaScript that sends paired keys
   elsewhere. Mitigation: Pages publishes only after a green release (`workflow_dispatch` from `build.yml`), the
   site builds are reproducible from the repo, and the Android remote mode loads the bundled page, not
-  the Pages copy. Copies of the link stay in the browser's history (and Chrome's history sync) and in the QR
+  the Pages copy. Copies of the link stay in the clipboard after Copy link, in bookmarks and the Home Screen icon,
+  in the tab's session storage, in the browser's history (which a browser may sync to its account) and in the QR
   scanner's history — that is the same permanence the key's design accepts.
+- **Log lines relayed to a paired phone can hold local paths.** A phone that opens its log view receives the
+  desktop's log entries as they are written, and an entry can name a local path that contains the OS username.
+  That is within what the link's holder may see; the pairing key itself, the link and invoke arguments are never
+  logged. The host writes its own activity at INFO (peer connect, leave and refusal, each invoke's channel name,
+  each auto-vote command), so it shows in a packaged build's log files.
+- **The loader and the versioned page keep the saved link stable.** The versioned page replaces the address bar with
+  the stable loader address (`../#k=<key>`, same origin) through `history.replaceState`, so a bookmark or Home Screen
+  icon saved from it survives the next desktop update; a versioned page that hears a `hello` with another version
+  sends the tab to the loader (`location.replace`) instead of showing a notice. The loader refuses a `hello`
+  whose version is not a release version before it builds a path from it, and navigates with `location.replace`.
+  Results, events and a leave count only from the peer that said `hello` as the desktop; a fellow phone's leave
+  or failed connection never ends a working session.
+- **The loader is not a phone.** Its `hello` carries `role: 'loader'`; the host answers it with its version only —
+  no snapshot, no peer slot, no count, no desktop notice. A fourth phone is turned away with `bye` carrying
+  `reason: 'full'`, which the phone reads as "too many phones are connected", not as an offline computer.
+- **Reset pairing is confirmed and loud.** The Settings section asks first, and offers the reset while Remote
+  access is off too (a leaked link stays valid until it is reset). When the new key could not be saved, the
+  handler answers `success: false` and the section says so — the old link still works — instead of showing a
+  reset that did not happen.
 - **The Android app's remote mode** (`shells/capacitor/remoteMode.ts`, `shells/remote/phoneMode.ts`): the
   login screen and Settings → Application Settings offer "Control my computer", a paste field for the pairing
   link (the phone's camera opens the link in the browser instead of scanning in-app). Entering stops

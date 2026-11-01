@@ -196,6 +196,17 @@ describe('Android signing', () => {
         expect(upload.with?.name).toBe('remote-page');
         expect(String(upload.with?.path)).toContain('remote-page.zip.sha256');
     });
+
+    test('the release and the attestation wait for the phone page, and the attestation signs its zip', () => {
+        // Without the dependency a failed remote-page job would not hold the release back, and the
+        // download in create-release would race the upload.
+        expect(needsOf(build.jobs['create-release'])).toContain('remote-page');
+        expect(needsOf(build.jobs.attest)).toContain('remote-page');
+        const subjects = String(stepNamed(build.jobs.attest, 'Attest build provenance').with?.['subject-path']);
+        expect(subjects).toContain('artifacts/remote-page/remote-page.zip');
+        // Only the zip is a subject: its checksum file is data about it, like the updater manifests.
+        expect(subjects).not.toContain('remote-page.zip.sha256');
+    });
 });
 
 describe('release job', () => {

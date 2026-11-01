@@ -107,6 +107,7 @@ const buildWebHandlers = (emit: Emit): Record<string, IpcHandler> => {
         'get-remote-access': notApplicable('the pairing lives'),
         'set-remote-access': notApplicable('it is switched on'),
         'reset-remote-pairing': notApplicable('the pairing is reset'),
+        'log-remote-info': notApplicable('the remote host logs'),
     };
 
     return {

@@ -6,10 +6,15 @@
 
 import {
     MAX_PEER_MESSAGE_BYTES,
+    PAGE_VERSION,
     PROTOCOL_VERSION,
+    compareReleaseVersions,
+    isReleaseVersion,
+    isWithinPeerMessageLimit,
     parsePeerMessage,
     restoreInvokeArgs,
 } from '../../src/ts/core/remote/protocol';
+import * as pkg from '../../package.json';
 
 import type {
     AutovoteCommandMessage,
@@ -261,5 +266,89 @@ describe('isConnectionFailureJoinError (the try-Wi-Fi classifier)', () => {
 
     test('an error that merely mentions the words in another order is not', () => {
         expect(isConnectionFailureJoinError('after exchanging SDP it could not connect to peer x')).toBe(false);
+    });
+});
+
+describe('the loader role and the full bye', () => {
+    test("a hello may carry role 'loader', and only that role", () => {
+        const loader = { t: 'hello', version: '1.2.3', protocolVersion: PROTOCOL_VERSION, host: false, role: 'loader' };
+        expect(parsePeerMessage(loader)).toEqual(loader);
+        expect(parsePeerMessage({ ...loader, role: 'admin' })).toBeNull();
+        expect(parsePeerMessage({ ...loader, role: 1 })).toBeNull();
+        // Without a role it is a phone's hello, unchanged.
+        const phone = { t: 'hello', version: '1.2.3', protocolVersion: PROTOCOL_VERSION, host: false };
+        expect(parsePeerMessage(phone)).toEqual(phone);
+    });
+
+    test("a bye may carry reason 'full', and only that reason", () => {
+        expect(parsePeerMessage({ t: 'bye' })).toEqual({ t: 'bye' });
+        expect(parsePeerMessage({ t: 'bye', reason: 'full' })).toEqual({ t: 'bye', reason: 'full' });
+        expect(parsePeerMessage({ t: 'bye', reason: 'because' })).toBeNull();
+        expect(parsePeerMessage({ t: 'bye', reason: null })).toBeNull();
+    });
+});
+
+describe('isWithinPeerMessageLimit', () => {
+    test('a message within the limit passes, one over it does not', () => {
+        expect(isWithinPeerMessageLimit({ t: 'result', id: 1, ok: true, result: 'x' })).toBe(true);
+        expect(
+            isWithinPeerMessageLimit({ t: 'result', id: 1, ok: true, result: 'x'.repeat(MAX_PEER_MESSAGE_BYTES) }),
+        ).toBe(false);
+    });
+
+    test('a value JSON cannot serialize counts as too large, and undefined as empty', () => {
+        expect(isWithinPeerMessageLimit({ big: BigInt(1) })).toBe(false);
+        expect(isWithinPeerMessageLimit(undefined)).toBe(true);
+    });
+});
+
+describe('release versions', () => {
+    test('PAGE_VERSION is the package version', () => {
+        expect(PAGE_VERSION).toBe(pkg.version);
+        expect(isReleaseVersion(PAGE_VERSION)).toBe(true);
+    });
+
+    test.each(['1.2.3', '0.0.1', '10.20.30', '1.2.3-beta', '1.2.3-beta.4', '1.2.3-rc.1.2'])(
+        '%s is a release version',
+        (v) => {
+            expect(isReleaseVersion(v)).toBe(true);
+        },
+    );
+
+    test.each([
+        '',
+        '1.2',
+        '1.2.3.4',
+        'v1.2.3',
+        '1.2.3-',
+        '1.2.3-beta..4',
+        '../1.2.3',
+        '1.2.3/x',
+        ' 1.2.3',
+        '1.2.3\n',
+        'latest',
+    ])('%p is not a release version', (v) => {
+        expect(isReleaseVersion(v)).toBe(false);
+    });
+
+    test.each([
+        ['1.2.3', '1.2.3', 0],
+        ['1.2.4', '1.2.3', 1],
+        ['1.2.3', '1.2.4', -1],
+        ['1.10.0', '1.9.9', 1],
+        ['2.0.0', '1.99.99', 1],
+        ['0.9.0', '1.0.0', -1],
+        ['1.2.3', '1.2.3-beta', 1],
+        ['1.2.3-beta', '1.2.3', -1],
+        ['1.2.3-beta', '1.2.3-beta', 0],
+        ['1.2.3-beta.2', '1.2.3-beta.10', -1],
+        ['1.2.3-beta.10', '1.2.3-beta.2', 1],
+        ['1.2.3-alpha', '1.2.3-beta', -1],
+        ['1.2.3-beta', '1.2.3-alpha', 1],
+        ['1.2.3-beta', '1.2.3-beta.1', -1],
+        ['1.2.3-beta.1', '1.2.3-beta', 1],
+        ['1.2.3-1', '1.2.3-alpha', -1],
+    ] as Array<[string, string, number]>)('compares %s with %s as %i', (a, b, expected) => {
+        expect(compareReleaseVersions(a, b)).toBe(expected);
     });
 });

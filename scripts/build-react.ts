@@ -409,7 +409,8 @@ const copyRemoteVersionDir = (): void => {
         const source = path.join(distDir, name);
         if (fs.existsSync(source)) {
             fs.copyFileSync(source, path.join(target, name));
-            if (name === 'styles.css') fs.copyFileSync(source, path.join(loaderDir, name));
+            // The loader is a published document too: its stylesheet and the notices sit beside it.
+            fs.copyFileSync(source, path.join(loaderDir, name));
         } else console.log(`⏭️  remote/${version}: ${name} not built yet — run build:css / build:notices for it`);
     }
     console.log(`✓ Staged the remote page under dist/remote/${version}/`);

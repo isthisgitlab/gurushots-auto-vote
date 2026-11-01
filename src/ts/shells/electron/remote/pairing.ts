@@ -5,8 +5,9 @@
  *
  * The key is 32 random bytes in base64url, made once and kept until "Reset pairing" replaces
  * it. The pairing link is `<pages origin>/remote/#k=<key>` — a dev-only launcher argument
- * (`--remote-link-origin=<origin>`, ignored in a packaged build) points it at a local site
- * build for end-to-end checks. The key and the link are never logged and never sent over the
+ * (`--remote-link-origin=<origin>`, ignored in a packaged build and accepted only for
+ * `http://localhost:<port>` or `http://127.0.0.1:<port>`) points it at a local site build for
+ * end-to-end checks. The key and the link are never logged and never sent over the
  * peer connection; the QR code is made here in the main process as a `data:image/svg+xml`
  * URL for an `<img>`.
  */
@@ -40,8 +41,8 @@ export type RemotePairing = {
     state: () => RemoteAccessState;
     /** Switch the feature on or off. */
     setEnabled: (enabled: boolean) => boolean;
-    /** Replace the key, so every paired phone must scan again; answers the new one. */
-    resetKey: () => string;
+    /** Replace the key, so every paired phone must scan again; answers the new one, or null when it could not be saved. */
+    resetKey: () => string | null;
     /** `{enabled, link, qrDataUrl}` for the get-remote-access channel. */
     accessInfo: () => { enabled: boolean; link: string; qrDataUrl: string };
 };
@@ -61,10 +62,15 @@ const isRemoteAccessState = (value: unknown): value is RemoteAccessState =>
 
 const newKey = (): string => crypto.randomBytes(KEY_BYTES).toString('base64url');
 
+/** The dev-only link origins: this machine's own site build, with a port. */
+const DEV_LINK_ORIGIN_PATTERN = /^http:\/\/(?:localhost|127\.0\.0\.1):\d{1,5}$/;
+
 /**
  * The dev-only pairing-link origin: `--remote-link-origin=<origin>` points the QR link at a
  * local site build for end-to-end checks. In a packaged build the argument is ignored with a
- * log line — it is a development aid, not configuration.
+ * log line — it is a development aid, not configuration. Only a local origin
+ * (`http://localhost:<port>`, `http://127.0.0.1:<port>`) is accepted: the QR code must never point at
+ * a site the developer does not run.
  */
 const readDevLinkOrigin = (deps: RemotePairingDeps): string | null => {
     const given = deps.argv.find((arg) => arg.startsWith('--remote-link-origin='));
@@ -74,7 +80,13 @@ const readDevLinkOrigin = (deps: RemotePairingDeps): string | null => {
         deps.warn('Ignoring --remote-link-origin in a packaged build; the pairing link uses the published pages.');
         return null;
     }
-    return origin.length > 0 ? origin : null;
+    if (!DEV_LINK_ORIGIN_PATTERN.test(origin)) {
+        deps.warn(
+            'Ignoring --remote-link-origin: only http://localhost:<port> or http://127.0.0.1:<port> is accepted.',
+        );
+        return null;
+    }
+    return origin;
 };
 
 const createRemotePairing = (deps: RemotePairingDeps): RemotePairing => {
@@ -92,8 +104,19 @@ const createRemotePairing = (deps: RemotePairingDeps): RemotePairing => {
         }
     };
 
+    /** Like parseState, but a file that exists and cannot be read is said before a new key replaces it. */
+    const parseStateOrWarn = (raw: string | null): RemoteAccessState | null => {
+        const parsed = parseState(raw);
+        if (parsed === null && raw !== null) {
+            deps.warn(
+                'remote-access.json could not be read; a new pairing key replaces it, so paired phones must scan again.',
+            );
+        }
+        return parsed;
+    };
+
     const readState = (): RemoteAccessState => {
-        const stored = parseState(store.readRaw());
+        const stored = parseStateOrWarn(store.readRaw());
         if (stored !== null) return stored;
         // First use (or a file the wipe left half of): make the key once and keep it.
         const fresh: RemoteAccessState = { enabled: false, key: newKey() };
@@ -115,7 +138,7 @@ const createRemotePairing = (deps: RemotePairingDeps): RemotePairing => {
         state: readState,
         setEnabled: (enabled) => {
             const result: ThroughResult | null = store.updateNow((raw) => {
-                const current = parseState(raw);
+                const current = parseStateOrWarn(raw);
                 const next: RemoteAccessState = current !== null ? { ...current, enabled } : { enabled, key: newKey() };
                 return JSON.stringify(next);
             });
@@ -123,11 +146,11 @@ const createRemotePairing = (deps: RemotePairingDeps): RemotePairing => {
         },
         resetKey: () => {
             const key = newKey();
-            store.updateNow((raw) => {
+            const result: ThroughResult | null = store.updateNow((raw) => {
                 const enabled = parseState(raw)?.enabled ?? false;
                 return JSON.stringify({ enabled, key } satisfies RemoteAccessState);
             });
-            return key;
+            return result === 'saved' ? key : null;
         },
         accessInfo: () => {
             const { enabled, key } = readState();

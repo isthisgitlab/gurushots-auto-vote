@@ -9,8 +9,10 @@
  * `createAutovoteController` — the remote shell has no window.api-backed voting loop.
  */
 
-import { initialState } from './state';
+import { ACTIONS, autovoteReducer, initialState } from './state';
+import { remoteConnectionState } from '../remote/connectionState';
 import { parsePeerMessage } from '../remote/protocol';
+import { rendererTranslator } from '../translations/renderer';
 
 import type { RemoteTransport } from '../remote/relays';
 import type { AutovoteState } from './state';
@@ -35,6 +37,16 @@ export const createRemoteAutovoteController = (deps: RemoteAutovoteDeps): Autovo
 
     const sendCommand = async (command: 'start' | 'stop' | 'rearm'): Promise<void> => {
         if (disposed) return;
+        if (remoteConnectionState() !== 'connected') {
+            // The command would reach nobody. Say so on the status instead of resolving as if it ran.
+            apply(
+                autovoteReducer(state, {
+                    type: ACTIONS.SET_ERROR,
+                    payload: rendererTranslator.t('errors.remoteNotConnected'),
+                }),
+            );
+            return;
+        }
         // oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- a peer-connection message over the pairing transport, never a frame send
         await deps.transport.send({ t: 'autovote-command', command });
     };

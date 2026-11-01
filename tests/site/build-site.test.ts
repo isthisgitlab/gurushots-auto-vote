@@ -56,6 +56,7 @@ import os = require('node:os');
 import nodePathModule = require('node:path');
 const nodePath = jest.mocked(nodePathModule);
 import type * as marked_gfm_heading_idModule from 'marked-gfm-heading-id';
+import { invalid } from '../helpers/invalid';
 import type * as build_siteModule from '../../scripts/build-site';
 const { resetHeadings } = jest.mocked(require('marked-gfm-heading-id') as typeof marked_gfm_heading_idModule);
 
@@ -76,6 +77,12 @@ const {
     main,
     runCli,
 } = require('../../scripts/build-site') as typeof build_siteModule;
+
+/** A fetch whose every call answers the given response shape (only the fields the build reads). */
+const respondWith = (response: unknown): typeof fetch =>
+    invalid<typeof fetch>(jest.fn(async () => invalid<Response>(response)));
+/** A releases listing with nothing in it: the build stays network-free. */
+const emptyReleasesFetch = (): typeof fetch => respondWith({ ok: true, status: 200, json: async () => [] });
 
 const pageBySrc = (src: string) => PAGES.find((p) => p.src === src);
 
@@ -252,14 +259,7 @@ describe('main with every default', () => {
         const exitSpy2 = jest.spyOn(process, 'exit').mockImplementation((code) => {
             throw new Error(`exit ${code}`);
         });
-        globalThis.fetch = jest.fn(
-            async () =>
-                ({
-                    ok: true,
-                    status: 200,
-                    json: async () => [],
-                }) as unknown as Response,
-        ) as unknown as typeof fetch;
+        globalThis.fetch = emptyReleasesFetch();
         try {
             // The defaults are the real repo paths: main() renders the real site (build output,
             // gitignored) exactly as `pnpm build:site` would — real release listing included,
@@ -297,8 +297,9 @@ describe('buildRemoteSite (the /remote/ tree)', () => {
         write(nodePath.join('dist', 'remote', version, 'remote-bundle.js'), '// page');
     };
 
-    const release = (version: string, withZip: boolean) => ({
+    const release = (version: string, withZip: boolean, prerelease = false) => ({
         tag_name: `v${version}`,
+        prerelease,
         assets: withZip
             ? [
                   { name: 'remote-page.zip', browser_download_url: `https://example.com/${version}.zip` },
@@ -354,6 +355,91 @@ describe('buildRemoteSite (the /remote/ tree)', () => {
         expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('no remote-page.zip attached yet'));
     });
 
+    test('pre-releases are filtered out before the last releases are chosen', async () => {
+        seedDist('9.9.9');
+        // Twelve pre-releases ahead of twelve stable releases: the cut of ten counts stable ones only.
+        const releases = [
+            ...Array.from({ length: 12 }, (_, i) => release(`9.9.${100 + i}-beta.1`, true, true)),
+            ...Array.from({ length: 12 }, (_, i) => release(`9.8.${i}`, true)),
+        ];
+        const downloaded: string[] = [];
+        await buildRemoteSite(out, '9.9.9', {
+            dist,
+            listReleases: async () => releases,
+            downloadFile: async (url: string) => {
+                downloaded.push(url);
+                return Buffer.from('x');
+            },
+            unzip: async () => {
+                throw new Error('must not run');
+            },
+        });
+        expect(downloaded.some((url) => url.includes('beta'))).toBe(false);
+        // Ten stable releases are tried (a zip and its checksum each), the other two are beyond the cut.
+        expect(downloaded).toHaveLength(20);
+        expect(downloaded.some((url) => url.includes('9.8.9.'))).toBe(true);
+        expect(downloaded.some((url) => url.includes('9.8.10.') || url.includes('9.8.11.'))).toBe(false);
+    });
+
+    test('a pre-release is never unpacked, however recent', async () => {
+        seedDist('9.9.9');
+        await buildRemoteSite(out, '9.9.9', {
+            dist,
+            listReleases: async () => [release('9.9.10-beta.1', true, true)],
+            downloadFile: async () => {
+                throw new Error('must not download');
+            },
+        });
+        expect(fs.existsSync(nodePath.join(out, 'remote', '9.9.10-beta.1'))).toBe(false);
+    });
+
+    test('a failed release listing (a rate limit) warns and the site builds without older versions', async () => {
+        seedDist('9.9.9');
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+        await expect(
+            buildRemoteSite(out, '9.9.9', {
+                dist,
+                listReleases: async () => {
+                    throw new Error('releases listing failed (403)');
+                },
+            }),
+        ).resolves.toBeUndefined();
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('releases listing failed (403)'));
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('building without older versions'));
+        expect(fs.readdirSync(nodePath.join(out, 'remote')).sort()).toEqual([
+            '9.9.9',
+            'index.html',
+            'remoteLoader-bundle.js',
+            'styles.css',
+        ]);
+    });
+
+    test('a listing that fails without a reason is still said', async () => {
+        seedDist('9.9.9');
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+        await buildRemoteSite(out, '9.9.9', {
+            dist,
+            listReleases: () => Promise.reject(null),
+        });
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('no reason given'));
+    });
+
+    test('the third-party notices sit beside the loader, and nothing is invented when the build has none', async () => {
+        seedDist('9.9.9');
+        write(nodePath.join('dist', 'THIRD_PARTY_NOTICES.txt'), 'NOTICES');
+        await buildRemoteSite(out, '9.9.9', { dist, listReleases: async () => [] });
+        expect(fs.readFileSync(nodePath.join(out, 'remote', 'THIRD_PARTY_NOTICES.txt'), 'utf8')).toBe('NOTICES');
+
+        const bare = fs.mkdtempSync(nodePath.join(os.tmpdir(), 'build-site-remote-bare-'));
+        try {
+            fs.rmSync(nodePath.join(dist, 'THIRD_PARTY_NOTICES.txt'));
+            await buildRemoteSite(bare, '9.9.9', { dist, listReleases: async () => [] });
+            expect(fs.existsSync(nodePath.join(bare, 'remote', 'THIRD_PARTY_NOTICES.txt'))).toBe(false);
+        } finally {
+            fs.rmSync(bare, { recursive: true, force: true });
+        }
+    });
+
     test('a zip whose checksum does not match is refused', async () => {
         seedDist('9.9.9');
         await buildRemoteSite(out, '9.9.9', {
@@ -370,14 +456,7 @@ describe('buildRemoteSite (the /remote/ tree)', () => {
     });
 
     test('without the local build nothing remote is created, and the empty release list downloads nothing', async () => {
-        globalThis.fetch = jest.fn(
-            async () =>
-                ({
-                    ok: true,
-                    status: 200,
-                    json: async () => [],
-                }) as unknown as Response,
-        ) as unknown as typeof fetch;
+        globalThis.fetch = emptyReleasesFetch();
         try {
             await buildRemoteSite(out, '9.9.9', { dist });
             expect(fs.existsSync(nodePath.join(out, 'remote'))).toBe(false);
@@ -393,14 +472,7 @@ describe('buildRemoteSite (the /remote/ tree)', () => {
         // main() with no remoteSite option: every destructuring default runs (rootDir, out,
         // layoutFile, remoteSite) — the repo's real dist/ and the real (stubbed here) GitHub
         // listing. The temp tree carries the files the rest of main() reads.
-        globalThis.fetch = jest.fn(
-            async () =>
-                ({
-                    ok: true,
-                    status: 200,
-                    json: async () => [],
-                }) as unknown as Response,
-        ) as unknown as typeof fetch;
+        globalThis.fetch = emptyReleasesFetch();
         write('src/assets/logo.png', 'PNG');
         write('package.json', JSON.stringify({ version: '9.9.9' }));
         write('layout.html', '<main>{{content}}</main>');
@@ -453,7 +525,7 @@ describe('buildRemoteSite (the /remote/ tree)', () => {
                           `${nodeCrypto.createHash('sha256').update(fs.readFileSync(zipPath)).digest('hex')}  remote-page.zip\n`,
                       ),
             // The real unzip dep (the default) runs here.
-            unzip: undefined as unknown as (zipPath: string, dir: string) => Promise<void>,
+            unzip: invalid<(zipPath: string, dir: string) => Promise<void>>(undefined),
         });
         expect(fs.readFileSync(nodePath.join(target, 'index.html'), 'utf8')).toContain('paged');
         fs.rmSync(zipDir, { recursive: true, force: true });
@@ -705,38 +777,63 @@ describe('the GitHub fetchers (the real remote-site deps)', () => {
         jest.restoreAllMocks();
     });
 
-    test('the releases listing reads the pinned page count and refuses a failed response', async () => {
+    test('the releases listing asks for headroom beyond the kept ten, sends no token it was not given, and refuses a failed response', async () => {
         const fetchMock = jest.fn(
             async () => ({ ok: true, status: 200, json: async () => [{ tag_name: 'v1.0.0' }] }) as Response,
         );
         globalThis.fetch = fetchMock as typeof fetch;
+        const token = process.env.GITHUB_TOKEN;
+        delete process.env.GITHUB_TOKEN;
         try {
             await expect(listReleasesFromGitHub()).resolves.toEqual([{ tag_name: 'v1.0.0' }]);
             expect(fetchMock).toHaveBeenCalledWith(
-                expect.stringContaining('per_page=10'),
+                expect.stringContaining('per_page=30'),
                 expect.objectContaining({ headers: { 'User-Agent': 'gurushots-auto-vote-site-build' } }),
             );
 
-            globalThis.fetch = jest.fn(async () => ({ ok: false, status: 403 })) as unknown as typeof fetch;
+            globalThis.fetch = respondWith({ ok: false, status: 403 });
             await expect(listReleasesFromGitHub()).rejects.toThrow('releases listing failed (403)');
         } finally {
             delete (globalThis as { fetch?: unknown }).fetch;
+            if (token !== undefined) process.env.GITHUB_TOKEN = token;
+        }
+    });
+
+    test('a GITHUB_TOKEN in the environment authorizes the listing, and only the listing', async () => {
+        const fetchMock = jest.fn(async () => ({ ok: true, status: 200, json: async () => [] }) as Response);
+        globalThis.fetch = fetchMock as typeof fetch;
+        const token = process.env.GITHUB_TOKEN;
+        process.env.GITHUB_TOKEN = 'ghs_test_token';
+        try {
+            await listReleasesFromGitHub();
+            expect(fetchMock).toHaveBeenCalledWith(
+                expect.any(String),
+                expect.objectContaining({
+                    headers: { 'User-Agent': 'gurushots-auto-vote-site-build', Authorization: 'Bearer ghs_test_token' },
+                }),
+            );
+            // An asset download is a plain request to the release's CDN; the token is the API's.
+            fetchMock.mockClear();
+            fetchMock.mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                arrayBuffer: async () => new ArrayBuffer(1),
+            } as Response);
+            await downloadFromGitHub('https://example.com/x');
+            expect(JSON.stringify(fetchMock.mock.calls)).not.toContain('ghs_test_token');
+        } finally {
+            delete (globalThis as { fetch?: unknown }).fetch;
+            if (token === undefined) delete process.env.GITHUB_TOKEN;
+            else process.env.GITHUB_TOKEN = token;
         }
     });
 
     test('the asset download answers the bytes and refuses a failed response', async () => {
-        globalThis.fetch = jest.fn(
-            async () =>
-                ({
-                    ok: true,
-                    status: 200,
-                    arrayBuffer: async () => new ArrayBuffer(3),
-                }) as unknown as Response,
-        ) as unknown as typeof fetch;
+        globalThis.fetch = respondWith({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(3) });
         try {
             await expect(downloadFromGitHub('https://example.com/x')).resolves.toEqual(Buffer.alloc(3));
 
-            globalThis.fetch = jest.fn(async () => ({ ok: false, status: 404 })) as unknown as typeof fetch;
+            globalThis.fetch = respondWith({ ok: false, status: 404 });
             await expect(downloadFromGitHub('https://example.com/x')).rejects.toThrow(
                 'download failed for https://example.com/x (404)',
             );

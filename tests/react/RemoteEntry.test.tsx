@@ -13,8 +13,6 @@ const flush = async () => {
     for (let i = 0; i < 20; i += 1) await Promise.resolve();
 };
 
-jest.mock('../../src/ts/shells/remote/platform', () => ({}));
-
 describe('Remote entry', () => {
     let saved: boolean | undefined;
 
@@ -48,7 +46,6 @@ describe('Remote entry', () => {
         }));
         jest.doMock(`${SRC}/shells/remote/bridge/peer`, () => ({
             installPeerBridge: m.installed,
-            PAGE_VERSION: '9.9.9',
         }));
         jest.doMock(`${SRC}/shells/remote/phoneMode`, () => ({ installPhoneDisconnect: m.installDisconnect }));
         jest.doMock(`${SRC}/react/pages/App`, () => ({
@@ -74,6 +71,32 @@ describe('Remote entry', () => {
         expect(m.installDisconnect.mock.invocationCallOrder[0]).toBeLessThan(m.installed.mock.invocationCallOrder[0]);
         // App.tsx's own auto-mount stayed deferred.
         expect((globalThis as RendererGlobals).__capacitorBootstrap).toBe(true);
+    });
+
+    test('the address bar shows the stable loader address, so a bookmark survives the next desktop update', async () => {
+        const replaceState = jest.spyOn(window.history, 'replaceState');
+        try {
+            const m = load({ marker: 'remote-transport' });
+            await flush();
+            expect(replaceState).toHaveBeenCalledWith(null, '', '../#k=the-key');
+            // Before anything connects or mounts: the very first thing a saved link sees is the stable one.
+            expect(replaceState.mock.invocationCallOrder[0]).toBeLessThan(m.installed.mock.invocationCallOrder[0]);
+        } finally {
+            replaceState.mockRestore();
+        }
+    });
+
+    test('a key kept only by the tab (a reload with no fragment) still puts the loader address in the bar', async () => {
+        window.sessionStorage.setItem('remote-pairing-key', 'tab-key');
+        window.location.hash = '';
+        const replaceState = jest.spyOn(window.history, 'replaceState');
+        try {
+            load({ marker: 'remote-transport' });
+            await flush();
+            expect(replaceState).toHaveBeenCalledWith(null, '', '../#k=tab-key');
+        } finally {
+            replaceState.mockRestore();
+        }
     });
 
     test('without a key it shows the QR notice and mounts nothing', async () => {

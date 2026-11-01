@@ -152,9 +152,14 @@ describe('scripts/build-react.ts', () => {
                 realPath.join(remoteDir, 'index.html'),
                 expect.stringContaining('remoteLoader-bundle.js'),
             );
-            for (const name of ['remoteLoader-bundle.js', 'styles.css']) {
+            // The loader is published too, so the third-party notices sit beside it as beside each version's page.
+            for (const name of ['remoteLoader-bundle.js', 'styles.css', 'THIRD_PARTY_NOTICES.txt']) {
                 expect(fs.copyFileSync).toHaveBeenCalledWith(realPath.join(DIST, name), realPath.join(remoteDir, name));
             }
+            expect(fs.copyFileSync).toHaveBeenCalledWith(
+                realPath.join(DIST, 'THIRD_PARTY_NOTICES.txt'),
+                realPath.join(remoteDir, '9.9.9', 'THIRD_PARTY_NOTICES.txt'),
+            );
             expect(fs.copyFileSync).toHaveBeenCalledWith(
                 realPath.join(DIST, 'styles.css'),
                 realPath.join(remoteDir, '9.9.9', 'styles.css'),

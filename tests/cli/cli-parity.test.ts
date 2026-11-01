@@ -216,6 +216,7 @@ const CLI_PARITY: Record<InvokeChannel, ParityEntry> = {
     'reset-remote-pairing': {
         reason: 'The pairing QR and link belong to the desktop app; the CLI does not pair a phone.',
     },
+    'log-remote-info': { reason: 'The remote-access host runs in the desktop app; the CLI has none to log.' },
 
     // Alias target (api.applyTurbo; the channel is deliberately not in invokeChannels)
     'apply-turbo-to-entry': { commands: ['turbo'], flag: '--image' },
