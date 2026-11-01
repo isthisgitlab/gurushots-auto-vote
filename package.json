@@ -24,7 +24,7 @@
         "build:react": "node --import tsx scripts/build-react.ts",
         "build:prep": "pnpm run build:css && pnpm run build:lexicon && pnpm run build:react && pnpm run build:main",
         "build:prep:lite": "pnpm run build:css && pnpm run build:lexicon && node --import tsx scripts/build-react.ts --lite && pnpm run build:main",
-        "build:site": "pnpm run build:site:html && pnpm run build:site:css",
+        "build:site": "pnpm run build:react && pnpm run build:site:html && pnpm run build:site:css",
         "build:site:html": "node --import tsx scripts/build-site.ts",
         "build:site:css": "tailwindcss -i ./scripts/site/site.css -o ./dist-site/styles.css --minify",
         "build:android": "cross-env NODE_ENV=production pnpm run build:prep && pnpm exec cap sync android && cd android && ./gradlew assembleRelease",
@@ -113,7 +113,9 @@
         "axios": "^1.21.0",
         "electron-updater": "^6.8.11",
         "preact": "^11.1.1",
+        "qrcode-generator": "2.0.4",
         "tar": "^7.5.22",
+        "trystero": "0.26.0",
         "zod": "^4.6.7"
     },
     "devDependencies": {

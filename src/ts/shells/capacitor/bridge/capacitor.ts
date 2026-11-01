@@ -125,6 +125,18 @@ const buildAllHandlers = () => {
         'can-auto-update': async () => ({ success: true, canAutoUpdate: true }),
     } satisfies ShellUpdateHandlers;
 
+    // The remote-access pairing is the desktop app's own; the Android app gets its remote
+    // mode from the bundled remote page, not from a QR code of its own.
+    const notApplicable = (what: string) => async () => ({
+        success: false,
+        error: `Remote access pairing is not available in the Android app (${what} in the desktop app)`,
+    });
+    const remotePairingStubs = {
+        'get-remote-access': notApplicable('the pairing lives'),
+        'set-remote-access': notApplicable('it is switched on'),
+        'reset-remote-pairing': notApplicable('the pairing is reset'),
+    };
+
     return {
         ...settingsHandlers.buildHandlers(),
         ...votingHandlers.buildHandlers(),
@@ -134,6 +146,7 @@ const buildAllHandlers = () => {
         ...currencyHandlers.buildHandlers(),
         ...scenariosHandlers.buildHandlers(),
         ...updateStubs,
+        ...remotePairingStubs,
     };
 };
 

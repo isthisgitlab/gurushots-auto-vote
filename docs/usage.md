@@ -476,6 +476,8 @@ A `config.json.corrupt-<timestamp>` cannot be read as settings, so a logout leav
 
 **Third-party licenses.** **Settings → Application Settings → About and data → Third-party licenses** (CLI: `licenses`) lists the open-source software and data the app includes, with their licenses.
 
+**Remote access.** The pairing state of Remote access (Settings → Application Settings → Remote access) lives in its own file, `remote-access.json`, in the same app data folder: whether the feature is on and the permanent pairing key behind the QR code and link. "Delete all local data" removes it, and **Reset pairing** in the Remote access section makes a new key (the old one stops working at once). On the phone, the pairing key lives only in the link itself — in the bookmark or Home Screen icon you saved, and for the current tab in its session storage. Delete the bookmark or Home Screen icon to remove that copy; closing the tab removes the session copy.
+
 Logging out removes the login token from your settings; the other settings, logs and caches stay. The settings files older versions left behind (`settings.json`, the copy of it kept as `settings.json.original`) are not touched by a logout, so the last login of an upgraded install may still be in them; deleting the files, or "Delete all local data", removes it. On Android those files are the app-storage keys `gurushots-settings` and `gurushots-settings_original`, which a logout also leaves alone: only "Delete all local data", or clearing the app's storage in the system settings, removes the login they keep. The exception is what the app keeps only in memory, such as the copy of your photo library the choosers use: it is never written to disk, and is dropped when you log out or switch accounts.
 
 ## 🔍 Troubleshooting

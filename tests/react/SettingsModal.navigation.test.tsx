@@ -6,7 +6,11 @@
  * still counts): an inactive or filtered-out tab and panel carry the `hidden` attribute.
  */
 
+import { render as renderWithProviders } from '@testing-library/preact';
 import { act, fireEvent, render, screen, waitFor } from './helpers/test-utils';
+import { TranslationProvider } from '@/contexts/TranslationContext';
+import { AutovoteProvider } from '@/contexts/AutovoteContext';
+import { TransportStub } from '../helpers/remoteTransport';
 import { SettingsModal } from '@/components/app/SettingsModal';
 import { TALL_MODAL_BOX_HEIGHT } from '@/components/ui/Modal';
 import { SettingsSectionPanel } from '@/components/app/SettingsSectionPanel';
@@ -14,7 +18,22 @@ import { SETTINGS_NAV_SCROLL_PADDING } from '@/components/app/SettingsNavBar';
 import { settingsPanelId, settingsTabId, useSettingsNav } from '@/contexts/SettingsNavContext';
 import { selectTab } from '../helpers/selectTab';
 import { fireSettingsChanged, mockApi } from './helpers/setup';
+import { markPlatformKind } from '../../src/ts/core/platform/kind';
+import { resetPlatformKind } from '../helpers/platformKind';
 import { invalid } from '../helpers/invalid';
+
+// On the remote kind the provider mounts the real host; keep it on an in-memory transport.
+jest.mock('../../src/ts/core/remote/trystero', () => ({
+    createTrysteroTransport: jest.fn(async () => ({
+        send: async () => undefined,
+        onMessage: () => () => undefined,
+        onPeerJoin: () => () => undefined,
+        onPeerLeave: () => () => undefined,
+        onJoinError: () => () => undefined,
+        leave: async () => undefined,
+    })),
+    isConnectionFailureJoinError: () => false,
+}));
 
 const APP_SETTINGS = { theme: 'light', language: 'en', timezone: 'Europe/Riga' };
 
@@ -306,6 +325,29 @@ describe('SettingsModal — filter', () => {
         expect(isHidden(cellOf('setting-retries'))).toBe(true);
         expect(document.getElementById(settingsPanelId('tier-extra'))!.hasAttribute('hidden')).toBe(true);
         expect(document.getElementById('setting-badges')).not.toBeNull();
+    });
+
+    test("a remote screen's modal filters without the Remote access section texts", async () => {
+        markPlatformKind('remote');
+        try {
+            // The remote kind's provider fails closed without the pairing transport, so the
+            // modal mounts the way the remote page mounts it: over a transport.
+            const [, phone] = TransportStub.pair();
+            renderWithProviders(
+                <TranslationProvider>
+                    <AutovoteProvider remoteTransport={phone}>
+                        <SettingsModal isOpen onClose={() => undefined} />
+                    </AutovoteProvider>
+                </TranslationProvider>,
+            );
+            await waitFor(() => expect(document.getElementById('setting-exposure')).not.toBeNull());
+            typeFilter('app.remoteToggleLabel');
+            // Without the section's texts in the filter, the query matches no tab.
+            expect(tabNames()).toEqual([]);
+            expect(document.getElementById(settingsPanelId('application'))!.hasAttribute('hidden')).toBe(true);
+        } finally {
+            resetPlatformKind();
+        }
     });
 
     test('matches a description', async () => {

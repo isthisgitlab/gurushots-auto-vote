@@ -11,6 +11,53 @@ import { Navbar } from '@/components/layout/Navbar';
 describe('Navbar', () => {
     afterEach(resetPlatformKind);
 
+    test('the desktop badge appears only while a phone is connected', async () => {
+        const { act } = await import('@testing-library/preact');
+        const { createRemoteHost, setActiveRemoteHost } = await import('../../src/ts/react/api/remoteHost');
+        const { TransportStub } = await import('../helpers/remoteTransport');
+        const { initialState } = await import('../../src/ts/core/autovote/state');
+
+        const transport = new TransportStub('badge-host');
+        const host = createRemoteHost({
+            createTransport: async () => transport,
+            invoke: async () => ({ app: {} }),
+            getAutovoteState: () => initialState,
+            runAutovoteCommand: (): Promise<void> => Promise.resolve(),
+            onForwardedEvent: () => (): void => undefined,
+            onLogMessage: () => () => undefined,
+            notify: () => undefined,
+            logDebug: () => undefined,
+            version: '1.14.2',
+        });
+        await host.start('k');
+        setActiveRemoteHost(host);
+        const view = render(
+            <Navbar isMock={false} onLogsClick={() => {}} onSettingsClick={() => {}} onLogout={() => {}} />,
+        );
+        expect(screen.queryByText('app.remoteConnectedCount')).toBeNull();
+
+        act(() => {
+            transport.emitJoin('p1');
+            transport.receiveFromPeer({ t: 'hello', version: '1.14.2', host: false }, 'p1');
+        });
+        await act(async () => {
+            for (let i = 0; i < 10; i++) await Promise.resolve();
+        });
+        expect(screen.getByText('app.remoteConnectedCount')).toBeDefined();
+
+        act(() => {
+            transport.emitLeave('p1');
+        });
+        await act(async () => {
+            for (let i = 0; i < 10; i++) await Promise.resolve();
+        });
+        expect(screen.queryByText('app.remoteConnectedCount')).toBeNull();
+
+        await host.stop();
+        setActiveRemoteHost(null);
+        view.unmount();
+    });
+
     test('hides the Logs button off Capacitor', () => {
         render(<Navbar isMock={false} onLogsClick={() => {}} onSettingsClick={() => {}} onLogout={() => {}} />);
         expect(screen.queryByTitle('logs.title')).toBeNull();

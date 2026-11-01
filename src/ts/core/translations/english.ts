@@ -109,6 +109,9 @@ export const errors = {
         'Part of the app stopped working. The details were saved to the logs. Reload the app to continue; if it keeps happening, the logs show what failed.',
     votingFailed:
         'The last voting cycle failed. GuruShots did not answer or refused a request. Auto-vote tries again on its next cycle; the logs have the details.',
+    remoteSpendUnclear:
+        'The connection dropped while this was running, so the result is unknown. Check the result on your computer before retrying.',
+    remoteConnectionLost: 'The connection to your computer dropped.',
 };
 // First-run onboarding
 export const onboarding = {
@@ -1670,6 +1673,32 @@ export const app = {
     noticeAcknowledgedVersion: 'Acknowledged Notice Version',
     noticeAcknowledgedVersionDesc:
         'Internal — the version of the "unofficial app" notice you acknowledged; the notice is shown again when its text changes materially',
+    // Remote access (the desktop is what gets paired to; the phone shows the states)
+    remoteAccess: 'Remote access',
+    remoteAccessDesc: 'Control this app from your phone with one permanent link. It is off by default.',
+    remoteToggleLabel: 'Allow control from your phone',
+    remoteStatusOn: 'On — a phone with the link can control this app',
+    remoteStatusOff: 'Off',
+    remoteShow: 'Show',
+    remoteHide: 'Hide',
+    remoteCopyLink: 'Copy link',
+    remoteLinkCopied: 'Link copied',
+    remoteResetPairing: 'Reset pairing',
+    remoteQrAlt: 'QR code with the pairing link',
+    remoteNote1: 'Anyone with this link can control this app. Keep it private; Reset pairing disconnects every phone.',
+    remoteNote2: 'Your computer must be on with this window open; closing the window stops voting and remote access.',
+    remoteNote3: "Use the link instead of the Android app's own voting while this is on.",
+    remoteConnectedCount: 'Remote: {count} connected',
+    remoteConnectedNotice: 'A phone connected to control this app.',
+    remoteConnecting: 'Connecting to your computer…',
+    remoteConnected: 'Connected',
+    remoteOfflineShort: 'Offline or reset',
+    remoteOfflineDetail:
+        'Your computer is offline, or this link was reset. If the app is open on your computer, scan its QR code again.',
+    remoteNetwork: "Couldn't connect on this network — try Wi-Fi",
+    remoteUpdateNeeded: 'Update the app on your computer',
+    remoteNoKey: 'Scan the QR code on your computer to pair',
+    remoteAddToHomeScreen: 'Add this page to your Home Screen to keep the link at hand.',
 };
 // Logs page specific
 export const logs = {

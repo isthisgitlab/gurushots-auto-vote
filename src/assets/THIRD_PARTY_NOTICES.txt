@@ -26,7 +26,7 @@ The desktop app is built on Electron. Electron's license (MIT) and the license l
 Chromium components it contains ship with the app as LICENSE.electron.txt and
 LICENSES.chromium.html in its resources directory.
 
-3. npm packages (124)
+3. npm packages (129)
 ---------------------
 
 Shipped in the desktop app, the CLI binaries and the Android app, or compiled into their bundles.
@@ -210,6 +210,10 @@ Shipped in the desktop app, the CLI binaries and the Android app, or compiled in
   License: ISC
   Copyright (c) Isaac Z. Schlueter and Contributors
 
+@noble/secp256k1 3.2.0
+  License: MIT
+  Copyright (c) 2019 Paul Miller (https://paulmillr.com)
+
 @preact/signals-core 1.14.5
   License: MIT
   Copyright (c) 2022-present Preact Team
@@ -253,6 +257,14 @@ Shipped in the desktop app, the CLI binaries and the Android app, or compiled in
 @protobufjs/utf8 1.1.2
   License: BSD-3-Clause
   Copyright (c) 2016, Daniel Wirtz
+
+@trystero-p2p/core 0.26.0
+  License: MIT
+  Copyright (c) 2021 Dan Motzenbecker
+
+@trystero-p2p/nostr 0.26.0
+  License: MIT
+  Copyright (c) 2021 Dan Motzenbecker
 
 @types/node 26.6.6
   License: MIT
@@ -508,6 +520,10 @@ proxy-from-env 2.1.0
   License: MIT
   Copyright (C) 2016-2018 Rob Wu <rob@robwu.nl>
 
+qrcode-generator 2.0.4
+  License: MIT
+  Copyright (c) 2016 Kazuhiko Arase
+
 sax 1.6.1
   License: BlueOak-1.0.0
   Copyright Isaac Z. Schlueter
@@ -543,6 +559,10 @@ tar 7.5.22
 tiny-typed-emitter 2.1.0
   License: MIT
   Copyright (c) 2020 Zurab Benashvili (binier) <zura.bena@gmail.com>
+
+trystero 0.26.0
+  License: MIT
+  Copyright (c) 2021 Dan Motzenbecker
 
 tslib 2.9.1
   License: 0BSD

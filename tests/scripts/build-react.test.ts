@@ -26,6 +26,9 @@ const mockFs = {
     cpSync: jest.fn(),
     readdirSync: jest.fn().mockReturnValue([]),
     rmSync: jest.fn(),
+    // The staged remote version directory reads package.json's version; a
+    // version-less default still exercises the copy calls.
+    readFileSync: jest.fn<ReturnType<typeof JSON.stringify>, []>().mockReturnValue('{"version":"9.9.9"}'),
 };
 jest.mock('esbuild', () => mockEsbuild);
 jest.mock('fs', () => mockFs);
@@ -43,7 +46,18 @@ const DIST = realPath.join(ROOT, 'dist');
 const LEXICON = realPath.join(ROOT, 'src', 'assets', 'semantic-vectors.json');
 const NOTICES = realPath.join(ROOT, 'src', 'assets', 'THIRD_PARTY_NOTICES.txt');
 const LOGO = realPath.join(ROOT, 'src', 'assets', 'logo.png');
-const ENTRY_NAMES = ['login', 'app', 'logs', 'capacitor', 'web', 'headless', 'preload', 'preloadLogs'];
+const ENTRY_NAMES = [
+    'login',
+    'app',
+    'logs',
+    'capacitor',
+    'web',
+    'remote',
+    'remoteLoader',
+    'headless',
+    'preload',
+    'preloadLogs',
+];
 
 const flush = async () => {
     for (let i = 0; i < 20; i++) {
@@ -102,7 +116,10 @@ describe('scripts/build-react.ts', () => {
         test('writes the HTML shells, copies the lexicon and builds every entry', async () => {
             await run([], 'production');
 
-            expect(fs.mkdirSync).not.toHaveBeenCalled();
+            // prepareDist assumes dist/ exists; only the staged remote version directory
+            // creates one.
+            expect(fs.mkdirSync).toHaveBeenCalledTimes(1);
+            expect(fs.mkdirSync).toHaveBeenCalledWith(realPath.join(DIST, 'remote', '9.9.9'), { recursive: true });
             expect(fs.writeFileSync).toHaveBeenCalledWith(
                 realPath.join(DIST, 'index.html'),
                 expect.stringContaining('capacitor-bundle.js'),
@@ -148,7 +165,7 @@ describe('scripts/build-react.ts', () => {
             expect(webOpts.external).toEqual(expect.arrayContaining(['node:fs', '@capacitor/core']));
 
             // Preload is a CJS node bundle with only electron external.
-            const preloadOpts = esbuild.build.mock.calls[6][0];
+            const preloadOpts = esbuild.build.mock.calls[8][0];
             expect(preloadOpts).toMatchObject({
                 platform: 'node',
                 format: 'cjs',
@@ -158,7 +175,7 @@ describe('scripts/build-react.ts', () => {
 
             expect(logged()).toContain('Building React bundles...');
             // The Logs window's reduced preload is built the same way.
-            expect(esbuild.build.mock.calls[7][0]).toMatchObject({
+            expect(esbuild.build.mock.calls[9][0]).toMatchObject({
                 entryPoints: [expect.stringMatching(/preloadLogs\.ts$/)],
                 outfile: expect.stringMatching(/preloadLogs-bundle\.js$/),
                 platform: 'node',
@@ -167,7 +184,7 @@ describe('scripts/build-react.ts', () => {
                 banner: {},
             });
 
-            expect(logged()).toContain('React build completed! (8 bundles)');
+            expect(logged()).toContain('React build completed! (10 bundles)');
             expect(exitSpy).not.toHaveBeenCalled();
         });
 
@@ -205,7 +222,7 @@ describe('scripts/build-react.ts', () => {
             expect(opts.sourcemap).toBe(true);
             expect(opts.define!['process.env.NODE_ENV']).toBe('"development"');
             expect(logged()).toContain('Skipping logs');
-            expect(logged()).toContain('(7 bundles)');
+            expect(logged()).toContain('(9 bundles)');
         });
 
         test('warns when no entry point exists', async () => {

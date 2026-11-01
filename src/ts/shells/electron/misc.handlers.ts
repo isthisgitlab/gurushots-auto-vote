@@ -1,7 +1,8 @@
 /**
  * Small one-off IPC handlers: open-external-url, reload-window,
- * refresh-menu. They don't share much beyond living in the same
- * "miscellaneous UI plumbing" bucket.
+ * refresh-menu, and the remote-access pairing channels (the store itself
+ * lives in remote/pairing.ts and arrives injected, so tests build the
+ * handlers without it).
  */
 
 import { shell } from 'electron';
@@ -13,14 +14,17 @@ import { isSafeExternalUrl } from '../../core/format/urlSafe';
 
 import type { BrowserWindow } from 'electron';
 import type { IpcHandlerMap } from '../../core/ipc/invokeHandler';
+import type { RemotePairing } from './remote/pairing';
 
 interface MiscHandlerDeps {
     getMainWindow: () => BrowserWindow | null;
     getLoginWindow: () => BrowserWindow | null;
+    /** The desktop's pairing store (shells/electron/remote/pairing.ts). */
+    remote: Pick<RemotePairing, 'accessInfo' | 'setEnabled' | 'resetKey'>;
 }
 
 const buildHandlers = (deps: MiscHandlerDeps) => {
-    const { getMainWindow, getLoginWindow } = deps;
+    const { getMainWindow, getLoginWindow, remote } = deps;
 
     return {
         'open-external-url': async (event: unknown, url: string) => {
@@ -71,6 +75,38 @@ const buildHandlers = (deps: MiscHandlerDeps) => {
             } catch (error) {
                 logger.withCategory('ui').error('Error refreshing menu:', error);
                 return errorResult(error, 'Failed to refresh menu');
+            }
+        },
+
+        // The remote-access pairing channels. The link and QR code carry the pairing key, so
+        // neither is ever logged and the answers go only to the window that asked.
+        'get-remote-access': async () => {
+            try {
+                return { success: true as const, ...remote.accessInfo() };
+            } catch (error) {
+                logger.withCategory('ui').error('Error reading remote access state:', error);
+                return errorResult(error, 'Failed to read the remote access state');
+            }
+        },
+
+        'set-remote-access': async (_event: unknown, enabled: boolean) => {
+            try {
+                if (typeof enabled !== 'boolean') {
+                    return { success: false as const, error: 'Enabled must be a boolean' };
+                }
+                return { success: remote.setEnabled(enabled) };
+            } catch (error) {
+                logger.withCategory('ui').error('Error setting remote access:', error);
+                return errorResult(error, 'Failed to change remote access');
+            }
+        },
+
+        'reset-remote-pairing': async () => {
+            try {
+                return { success: remote.resetKey().length > 0 };
+            } catch (error) {
+                logger.withCategory('ui').error('Error resetting the remote pairing key:', error);
+                return errorResult(error, 'Failed to reset the pairing key');
             }
         },
     } satisfies IpcHandlerMap;

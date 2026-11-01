@@ -15,10 +15,13 @@ import {
     baseCsp,
     capacitorIndexHtml,
     headlessHtml,
+    remoteHtml,
+    remoteLoaderHtml,
     webHtml,
 } from '../../scripts/build-react';
 import { NOTICES_ASSET_NAME as LOADER_NOTICES_ASSET_NAME } from '../../src/ts/core/thirdPartyNotices';
 import { buildPhotoUrl } from '../../src/ts/core/format/photoUrl';
+import { NOSTR_RELAY_URLS } from '../../src/ts/core/remote/relays';
 
 // tests/setup.ts mocks fs globally; the documents are read from disk for real.
 const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
@@ -26,15 +29,30 @@ const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
 const HTML_DIR = path.join(__dirname, '..', '..', 'src', 'html');
 const electronPages = fs.readdirSync(HTML_DIR).filter((name) => name.endsWith('.html'));
 
-const documents: Array<{ name: string; html: string; kind: 'desktop' | 'android' }> = [
+type DocumentKind = 'desktop' | 'desktop-relays' | 'android' | 'remote';
+/** The connect-src each kind is held to: the Android pages run network code in the WebView,
+ * the desktop app page reaches the pairing relays from the renderer, the remote documents
+ * exist for that pairing, and every other page talks to nobody. */
+const CONNECT_SRC: Record<DocumentKind, string[]> = {
+    android: ["'self'", 'https://api.github.com', PHOTO_HOST],
+    desktop: ["'self'"],
+    'desktop-relays': ["'self'", ...NOSTR_RELAY_URLS],
+    remote: ["'self'", ...NOSTR_RELAY_URLS],
+};
+
+const documents: Array<{ name: string; html: string; kind: DocumentKind }> = [
     ...electronPages.map((name) => ({
         name: `src/html/${name}`,
         html: fs.readFileSync(path.join(HTML_DIR, name), 'utf8'),
-        kind: 'desktop' as const,
+        // The main window hosts the remote-access host, so it reaches the pairing relays;
+        // the login and Logs windows keep the base policy.
+        kind: (name === 'app.html' ? 'desktop-relays' : 'desktop') as DocumentKind,
     })),
     { name: 'dist/index.html', html: capacitorIndexHtml, kind: 'android' },
     { name: 'dist/headless.html', html: headlessHtml, kind: 'android' },
     { name: 'dist/web.html', html: webHtml, kind: 'desktop' },
+    { name: 'dist/remote.html', html: remoteHtml, kind: 'remote' },
+    { name: 'dist/remote-loader.html', html: remoteLoaderHtml, kind: 'remote' },
 ];
 
 const cspOf = (html: string): Map<string, string[]> => {
@@ -86,16 +104,30 @@ describe('generated HTML documents', () => {
         });
 
         test('keeps connect-src to the hosts the document talks to', () => {
-            expect(csp.get('connect-src')).toEqual(
-                kind === 'android' ? ["'self'", 'https://api.github.com', PHOTO_HOST] : ["'self'"],
-            );
+            expect(csp.get('connect-src')).toEqual(CONNECT_SRC[kind]);
+        });
+
+        test('the remote documents reach exactly the pinned pairing relays', () => {
+            if (kind !== 'remote') return;
+            expect(csp.get('connect-src')).toEqual(["'self'", ...NOSTR_RELAY_URLS]);
         });
     });
 
-    test('the Electron pages and the web shell share the base policy', () => {
+    test('app.html carries the base policy plus the relay hosts, the other desktop pages the base policy', () => {
         const base = baseCsp();
+        const withRelays = baseCsp({ 'connect-src': ["'self'", ...NOSTR_RELAY_URLS] });
+        for (const { name, html, kind } of documents) {
+            if (kind === 'desktop-relays') expect(html).toContain(`content="${withRelays}"`);
+            else if (kind === 'desktop') expect(html).toContain(`content="${base}"`);
+            else if (name === 'src/html/app.html') expect(html).toContain(`content="${withRelays}"`);
+        }
+    });
+
+    test('app.html and the remote documents name exactly the relays the pairing joins', () => {
         for (const { html, kind } of documents) {
-            if (kind === 'desktop') expect(html).toContain(`content="${base}"`);
+            if (kind !== 'desktop-relays' && kind !== 'remote') continue;
+            const connectSrc = cspOf(html).get('connect-src') ?? [];
+            expect(connectSrc.filter((source) => source.startsWith('wss://'))).toEqual([...NOSTR_RELAY_URLS]);
         }
     });
 

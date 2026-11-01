@@ -26,11 +26,20 @@ jest.mock('../../src/ts/core/logger', () => {
 
 const { buildHandlers } = require('../../src/ts/shells/electron/misc.handlers') as typeof misc_handlersModule;
 
+// The pairing store stands in for the one registerIpc builds from remote/pairing.ts.
+const remoteStub = {
+    accessInfo: () => ({ enabled: false, link: '', qrDataUrl: '' }),
+    setEnabled: () => true,
+    resetKey: () => 'k',
+};
+
 describe('misc.handlers open-external-url scheme gate', () => {
     let handler: (event: unknown, url: string) => Promise<{ success: boolean; error?: string }>;
     beforeEach(() => {
         openExternalMock.mockClear();
-        handler = buildHandlers({ getMainWindow: jest.fn(), getLoginWindow: jest.fn() })['open-external-url'];
+        handler = buildHandlers({ remote: remoteStub, getMainWindow: jest.fn(), getLoginWindow: jest.fn() })[
+            'open-external-url'
+        ];
     });
 
     test('opens a well-formed https URL', async () => {
@@ -75,7 +84,11 @@ describe('misc.handlers reload-window', () => {
     test('reloads the main window when it is alive', async () => {
         const main = win();
         const login = win();
-        const handlers = buildHandlers({ getMainWindow: () => invalid(main), getLoginWindow: () => invalid(login) });
+        const handlers = buildHandlers({
+            remote: remoteStub,
+            getMainWindow: () => invalid(main),
+            getLoginWindow: () => invalid(login),
+        });
         await expect(handlers['reload-window']()).resolves.toEqual({ success: true });
         expect(main.reload).toHaveBeenCalledTimes(1);
         expect(login.reload).not.toHaveBeenCalled();
@@ -87,7 +100,11 @@ describe('misc.handlers reload-window', () => {
     ])('falls back to the login window when the main window is %s', async (_label, mainState) => {
         const main = mainState === null ? null : win(true);
         const login = win();
-        const handlers = buildHandlers({ getMainWindow: () => invalid(main), getLoginWindow: () => invalid(login) });
+        const handlers = buildHandlers({
+            remote: remoteStub,
+            getMainWindow: () => invalid(main),
+            getLoginWindow: () => invalid(login),
+        });
         await expect(handlers['reload-window']()).resolves.toEqual({ success: true });
         expect(login.reload).toHaveBeenCalledTimes(1);
         if (main) expect(main.reload).not.toHaveBeenCalled();
@@ -95,7 +112,11 @@ describe('misc.handlers reload-window', () => {
 
     test('reports failure when no live window exists', async () => {
         const login = win(true);
-        const handlers = buildHandlers({ getMainWindow: () => null, getLoginWindow: () => invalid(login) });
+        const handlers = buildHandlers({
+            remote: remoteStub,
+            getMainWindow: () => null,
+            getLoginWindow: () => invalid(login),
+        });
         await expect(handlers['reload-window']()).resolves.toEqual({
             success: false,
             error: 'No active window to reload',
@@ -108,7 +129,11 @@ describe('misc.handlers reload-window', () => {
         main.reload.mockImplementation(() => {
             throw new Error('crashed');
         });
-        const handlers = buildHandlers({ getMainWindow: () => invalid(main), getLoginWindow: () => null });
+        const handlers = buildHandlers({
+            remote: remoteStub,
+            getMainWindow: () => invalid(main),
+            getLoginWindow: () => null,
+        });
         await expect(handlers['reload-window']()).resolves.toEqual({ success: false, error: 'crashed' });
     });
 
@@ -117,7 +142,11 @@ describe('misc.handlers reload-window', () => {
         main.reload.mockImplementation(() => {
             throw null;
         });
-        const handlers = buildHandlers({ getMainWindow: () => invalid(main), getLoginWindow: () => null });
+        const handlers = buildHandlers({
+            remote: remoteStub,
+            getMainWindow: () => invalid(main),
+            getLoginWindow: () => null,
+        });
         await expect(handlers['reload-window']()).resolves.toEqual({
             success: false,
             error: 'Failed to reload window',
@@ -138,7 +167,7 @@ describe('misc.handlers refresh-menu', () => {
 
     test('reloads the language from settings before rebuilding the menu', async () => {
         loadLanguageFromSettings.mockResolvedValue(undefined);
-        const handlers = buildHandlers({ getMainWindow: jest.fn(), getLoginWindow: jest.fn() });
+        const handlers = buildHandlers({ remote: remoteStub, getMainWindow: jest.fn(), getLoginWindow: jest.fn() });
 
         await expect(handlers['refresh-menu']()).resolves.toEqual({ success: true });
         expect(loadLanguageFromSettings).toHaveBeenCalledTimes(1);
@@ -150,7 +179,7 @@ describe('misc.handlers refresh-menu', () => {
 
     test('does not rebuild the menu when the language load fails', async () => {
         loadLanguageFromSettings.mockRejectedValue(new Error('io'));
-        const handlers = buildHandlers({ getMainWindow: jest.fn(), getLoginWindow: jest.fn() });
+        const handlers = buildHandlers({ remote: remoteStub, getMainWindow: jest.fn(), getLoginWindow: jest.fn() });
 
         await expect(handlers['refresh-menu']()).resolves.toEqual({ success: false, error: 'io' });
         expect(updateMenuTranslations).not.toHaveBeenCalled();
@@ -158,8 +187,101 @@ describe('misc.handlers refresh-menu', () => {
 
     test('falls back to a fixed message when the language load rejects with null', async () => {
         loadLanguageFromSettings.mockRejectedValue(null);
-        const handlers = buildHandlers({ getMainWindow: jest.fn(), getLoginWindow: jest.fn() });
+        const handlers = buildHandlers({ remote: remoteStub, getMainWindow: jest.fn(), getLoginWindow: jest.fn() });
 
         await expect(handlers['refresh-menu']()).resolves.toEqual({ success: false, error: 'Failed to refresh menu' });
+    });
+});
+
+describe('misc.handlers remote-access pairing channels', () => {
+    const remoteStubDynamic = {
+        accessInfo: jest.fn(() => ({
+            enabled: true,
+            link: 'https://pages/remote/#k=k',
+            qrDataUrl: 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=',
+        })),
+        setEnabled: jest.fn(() => true),
+        resetKey: jest.fn(() => 'new-key'),
+    };
+
+    beforeEach(() => {
+        remoteStubDynamic.accessInfo.mockClear();
+        remoteStubDynamic.setEnabled.mockClear().mockReturnValue(true);
+        remoteStubDynamic.resetKey.mockClear();
+    });
+
+    test('get-remote-access answers the pairing info and never throws on a store failure', async () => {
+        const ok = buildHandlers({
+            remote: remoteStubDynamic,
+            getMainWindow: () => null,
+            getLoginWindow: () => null,
+        })['get-remote-access'];
+        await expect(ok()).resolves.toEqual({
+            success: true,
+            enabled: true,
+            link: 'https://pages/remote/#k=k',
+            qrDataUrl: 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=',
+        });
+
+        remoteStubDynamic.accessInfo.mockImplementationOnce(() => {
+            throw new Error('store gone');
+        });
+        const failing = buildHandlers({
+            remote: remoteStubDynamic,
+            getMainWindow: () => null,
+            getLoginWindow: () => null,
+        })['get-remote-access'];
+        await expect(failing()).resolves.toEqual({ success: false, error: 'store gone' });
+    });
+
+    test('set-remote-access forwards the boolean and refuses anything else', async () => {
+        const handlers = buildHandlers({
+            remote: remoteStubDynamic,
+            getMainWindow: () => null,
+            getLoginWindow: () => null,
+        });
+        await expect(handlers['set-remote-access']({}, true)).resolves.toEqual({ success: true });
+        expect(remoteStubDynamic.setEnabled).toHaveBeenCalledWith(true);
+        await expect(handlers['set-remote-access']({}, false)).resolves.toEqual({ success: true });
+        await expect(handlers['set-remote-access']({}, invalid('yes'))).resolves.toEqual({
+            success: false,
+            error: 'Enabled must be a boolean',
+        });
+        remoteStubDynamic.setEnabled.mockReturnValueOnce(false);
+        await expect(handlers['set-remote-access']({}, true)).resolves.toEqual({ success: false });
+
+        const failing = buildHandlers({
+            remote: {
+                ...remoteStubDynamic,
+                setEnabled: () => {
+                    throw new Error('busy');
+                },
+            },
+            getMainWindow: () => null,
+            getLoginWindow: () => null,
+        });
+        await expect(failing['set-remote-access']({}, true)).resolves.toEqual({ success: false, error: 'busy' });
+    });
+
+    test('reset-remote-pairing rotates the key and answers failure when the store broke', async () => {
+        const handlers = buildHandlers({
+            remote: remoteStubDynamic,
+            getMainWindow: () => null,
+            getLoginWindow: () => null,
+        });
+        await expect(handlers['reset-remote-pairing']()).resolves.toEqual({ success: true });
+        expect(remoteStubDynamic.resetKey).toHaveBeenCalled();
+
+        const failing = buildHandlers({
+            remote: {
+                ...remoteStubDynamic,
+                resetKey: () => {
+                    throw new Error('busy');
+                },
+            },
+            getMainWindow: () => null,
+            getLoginWindow: () => null,
+        });
+        await expect(failing['reset-remote-pairing']()).resolves.toEqual({ success: false, error: 'busy' });
     });
 });

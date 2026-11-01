@@ -104,6 +104,11 @@
         "texts": ["ISC"],
         "copyright": ["Copyright (c) Isaac Z. Schlueter and Contributors"]
     },
+    "@noble/secp256k1": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2019 Paul Miller (https://paulmillr.com)"]
+    },
     "@preact/signals": {
         "license": "MIT",
         "texts": ["MIT"],
@@ -158,6 +163,16 @@
         "license": "BSD-3-Clause",
         "texts": ["BSD-3-Clause-protobufjs"],
         "copyright": ["Copyright (c) 2016, Daniel Wirtz"]
+    },
+    "@trystero-p2p/core": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2021 Dan Motzenbecker"]
+    },
+    "@trystero-p2p/nostr": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2021 Dan Motzenbecker"]
     },
     "@types/node": {
         "license": "MIT",
@@ -481,6 +496,11 @@
         "texts": ["MIT"],
         "copyright": ["Copyright (C) 2016-2018 Rob Wu <rob@robwu.nl>"]
     },
+    "qrcode-generator": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2016 Kazuhiko Arase"]
+    },
     "sax": {
         "license": "BlueOak-1.0.0",
         "texts": ["BlueOak-1.0.0"],
@@ -520,6 +540,11 @@
         "license": "MIT",
         "texts": ["MIT"],
         "copyright": ["Copyright (c) 2020 Zurab Benashvili (binier) <zura.bena@gmail.com>"]
+    },
+    "trystero": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) 2021 Dan Motzenbecker"]
     },
     "tslib": {
         "license": "0BSD",

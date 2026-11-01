@@ -4,7 +4,7 @@
  * importing the bridge.
  */
 
-export type PlatformKind = 'electron' | 'web' | 'capacitor';
+export type PlatformKind = 'electron' | 'web' | 'capacitor' | 'remote';
 
 type PlatformGlobals = typeof globalThis & { __autovotePlatformKind?: PlatformKind };
 

@@ -92,6 +92,17 @@ describe('Capacitor bridge', () => {
     });
 
     describe('installation', () => {
+        test('the remote-access pairing channels answer not-applicable on Android', async () => {
+            for (const method of ['getRemoteAccess', 'setRemoteAccess', 'resetRemotePairing']) {
+                await expect(
+                    (api as unknown as Record<string, () => Promise<{ success: boolean; error: string }>>)[method](),
+                ).resolves.toEqual({
+                    success: false,
+                    error: expect.stringContaining('Remote access pairing is not available in the Android app'),
+                });
+            }
+        });
+
         test('exposes the api on globalThis and adapts (event, ...args) handlers to (...args)', async () => {
             expect(g.api).toBe(api);
             // Installing reads and writes no setting: the stored ones are not hydrated yet (see seedBridgeProfiles).

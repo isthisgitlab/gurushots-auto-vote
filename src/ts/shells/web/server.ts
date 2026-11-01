@@ -98,6 +98,17 @@ const buildWebHandlers = (emit: Emit): Record<string, IpcHandler> => {
         'can-auto-update': async () => ({ success: true, canAutoUpdate: false }),
     } satisfies ShellUpdateHandlers;
 
+    // The remote-access pairing is the desktop app's own; the web shell has no QR code to show.
+    const notApplicable = (what: string) => async () => ({
+        success: false,
+        error: `Remote access is not available in the web UI (${what} happens in the desktop app)`,
+    });
+    const remotePairingHandlers = {
+        'get-remote-access': notApplicable('the pairing lives'),
+        'set-remote-access': notApplicable('it is switched on'),
+        'reset-remote-pairing': notApplicable('the pairing is reset'),
+    };
+
     return {
         // The settings handlers announce writes through the installed
         // platform's windows (web/platform), which emit on this run's
@@ -110,6 +121,7 @@ const buildWebHandlers = (emit: Emit): Record<string, IpcHandler> => {
         ...currencyHandlers.buildHandlers(),
         ...scenariosHandlers.buildHandlers(),
         ...updateHandlers,
+        ...remotePairingHandlers,
     };
 };
 

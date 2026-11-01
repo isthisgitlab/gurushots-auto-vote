@@ -45,6 +45,8 @@ const LOCAL_DATA_STORES: readonly LocalDataStore[] = [
     { fileName: 'photo-stats.json', prefKey: 'gurushots-photo-stats' },
     { fileName: 'lexicon-diagnostics.json', prefKey: 'gs_lexicon_diagnostics' },
     { fileName: 'swapBacks.json', prefKey: 'gs_swap_backs' },
+    // The remote-access pairing state: whether the feature is on and the permanent pairing key.
+    { fileName: 'remote-access.json', prefKey: 'gs_remote_access' },
 ];
 
 // The directories (under the user-data directory) the app fills: its logs, and the CLI's extracted vision runtime.

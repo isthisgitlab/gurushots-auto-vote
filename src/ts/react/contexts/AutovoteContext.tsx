@@ -1,15 +1,19 @@
 import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createAutovoteController } from '../../core/autovote/controller';
+import { createRemoteAutovoteController } from '../../core/autovote/remote';
 import { noopBackgroundHost } from './noopBackgroundHost';
 import { createDeadlineNotifier, deliverElectronNotification } from '../notifications/deadlineNotifier';
 import { createRendererScenarioNotifier } from '../notifications/scenarioNotifier';
 import { useLatestRef } from '../hooks/useLatestRef';
 import { rendererTranslator } from '../../core/translations/renderer';
+import { platformKind } from '../../core/platform/kind';
+import { pushAutovoteStateToActiveHost, useDesktopRemoteHost } from '../api/remoteHost';
 import * as ipc from '../api/ipc';
 import { isNativePlatform } from '../api/usePlatformCapabilities';
 import { dateLocale } from '../utils/formatters';
 
 import type { ComponentChildren } from 'preact';
+import type { RemoteTransport } from '../../core/remote/relays';
 import type { AutovoteController, AutovoteHost, BackgroundHost, CycleNotifier } from '../../core/autovote/controller';
 import type { AutovoteState } from '../../core/autovote/state';
 
@@ -61,7 +65,9 @@ function createRendererDeadlineNotifier(): CycleNotifier | null {
  * cadence chain): it builds the controller's host once per mount — the bridge
  * IPC, the page translator and locale formatting, the platform-picked
  * deadline notifier, and the injected background host — subscribes React to
- * the controller's state, and renders.
+ * the controller's state, and renders. On the `remote` kind it builds the
+ * relayed remote controller instead (never the local one), and on the
+ * `electron` kind it mounts the remote-access host while the feature is on.
  */
 export function AutovoteProvider({
     children,
@@ -69,20 +75,25 @@ export function AutovoteProvider({
     // Read once per mount, when the host is built: a prop identity change
     // later in the mount's life does not reach the controller.
     backgroundHost = noopBackgroundHost,
+    // The phone's pairing transport, passed by the remote page; the remote
+    // kind fails closed without it.
+    remoteTransport,
 }: {
     children?: ComponentChildren;
     onChallengesRefresh?: () => unknown;
     backgroundHost?: BackgroundHost;
+    remoteTransport?: RemoteTransport;
 }) {
     // The controller reads the latest refresh identity on each use, so a new
     // identity never re-arms the chain.
     const refreshRef = useLatestRef(onChallengesRefresh);
+    const remote = platformKind() === 'remote';
 
     // Built once per mount. The deadline notifier is created once (a fresh
     // instance each render would never dedupe): it holds the fired-key Set +
     // re-entrancy guard across cycles.
     const hostRef = useRef<AutovoteHost | null>(null);
-    if (hostRef.current === null) {
+    if (!remote && hostRef.current === null) {
         hostRef.current = {
             runVotingCycle: ipc.runVotingCycle,
             getSettings: ipc.getSettings,
@@ -109,10 +120,21 @@ export function AutovoteProvider({
     }
 
     // One controller per mount, created at render time; the effect below
-    // resumes it on mount and disposes it in the cleanup.
+    // resumes it on mount and disposes it in the cleanup. The remote kind
+    // builds the relayed controller — never the local one, so a phone can
+    // never run a second voting timer. Fails closed: the remote page always
+    // passes the transport its bridge runs on.
+    if (remote && remoteTransport === undefined) {
+        throw new Error('The remote renderer must be mounted with its pairing transport');
+    }
     const controllerRef = useRef<AutovoteController | null>(null);
     if (controllerRef.current === null) {
-        controllerRef.current = createAutovoteController(hostRef.current);
+        controllerRef.current = remote
+            ? createRemoteAutovoteController({
+                  transport: remoteTransport as RemoteTransport,
+                  getOnChallengesRefresh: () => refreshRef.current,
+              })
+            : createAutovoteController(hostRef.current as AutovoteHost);
     }
     const controller = controllerRef.current;
 
@@ -133,6 +155,13 @@ export function AutovoteProvider({
     useEffect(() => {
         window.dispatchEvent(new CustomEvent('autovote:running-changed', { detail: state.running }));
     }, [state.running]);
+
+    // The desktop's remote host relays every state change to the paired phones.
+    useEffect(() => {
+        pushAutovoteStateToActiveHost(state);
+    }, [state]);
+
+    useDesktopRemoteHost(controller);
 
     // The mount-time auto-resume, once per mount; dispose() cancels the
     // timers and any pending resume, and never touches persisted state.

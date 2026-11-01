@@ -42,6 +42,8 @@ import { TitleTagRulesEditor } from './TitleTagRulesEditor';
 import { ScenariosSection } from './ScenariosSection';
 import { ProfilesSection } from './ProfilesSection';
 import { AboutDataSection, aboutDataTexts } from './AboutDataSection';
+import { RemoteAccessSection, remoteAccessTexts } from './RemoteAccessSection';
+import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 
 import type { ImportReport } from '@/api/useImportReport';
 import type { SettingsBand, SettingsSection, SettingsTab, SettingsTabId } from '@/utils/groupSettings';
@@ -235,6 +237,7 @@ function useSettingsModalFilter({
     defaultsBands,
     defaultsTabs,
     importReport,
+    showsRemoteAccess,
 }: {
     t: Translate;
     sections: readonly SettingsTab[];
@@ -242,6 +245,7 @@ function useSettingsModalFilter({
     defaultsBands: readonly SettingsBand[];
     defaultsTabs: readonly SettingsTab[];
     importReport: ImportReport | null;
+    showsRemoteAccess: boolean;
 }) {
     // Every text the filter searches in one tab: the tab's own title, and the names and
     // descriptions of everything it renders.
@@ -252,6 +256,7 @@ function useSettingsModalFilter({
                 ...applicationCellTexts(t),
                 ...appGroups.flatMap((group) => groupFilterTexts(t, group)),
                 aboutDataTexts(t, importReport !== null),
+                ...(showsRemoteAccess ? [remoteAccessTexts(t)] : []),
             ];
         }
         if (id === 'titleRules') return [{ names: [t(SETTINGS_SECTION_TITLES.titleRules)], descriptions: [] }];
@@ -288,6 +293,7 @@ function useSettingsModalFilter({
 export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
     const { t, language, setLanguage } = useTranslation();
     const { rearmSchedule } = useAutovote();
+    const { showsRemoteAccessSection } = usePlatformCapabilities();
     const { settings, updateSetting, refetch: refetchSettings } = useSettings();
     const { schema, defaults, groups, tiers, refetch: refetchSchema, loading: schemaLoading } = useSettingsSchema();
 
@@ -325,7 +331,15 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
     // reopening fetches fresh data.
     const { data: importReport } = useImportReport({ enabled: isOpen });
 
-    const filter = useSettingsModalFilter({ t, sections, appGroups, defaultsBands, defaultsTabs, importReport });
+    const filter = useSettingsModalFilter({
+        t,
+        sections,
+        appGroups,
+        defaultsBands,
+        defaultsTabs,
+        importReport,
+        showsRemoteAccess: showsRemoteAccessSection,
+    });
 
     const timezoneInput = useCustomTimezoneInput({ isOpen, uiValues, handleUiChange });
     const titleRules = useTitleRules(isOpen);
@@ -404,6 +418,7 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                                 />
                             ))}
                             <AboutDataSection report={importReport} showAll={filter.appShowAll} />
+                            {showsRemoteAccessSection && <RemoteAccessSection showAll={filter.appShowAll} />}
                         </ApplicationSettingsSection>
                         {defaultsBands.map((band, index) => {
                             const tab = defaultsTabs[index];

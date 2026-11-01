@@ -250,6 +250,27 @@ describe('sends toward the Logs window', () => {
         ],
         ['src/ts/shells/electron/registerHandlers.ts', 'webContents.send = (channel: string, ...args: unknown[]) =>'],
         ['src/ts/shells/electron/preloadApi.ts', 'api[method] = () => ipcRenderer.send(channel);'],
+        // The remote pairing transport is a WebRTC data channel, not a frame; every .send on
+        // it is a protocol message to the paired peer.
+        ['src/ts/core/autovote/remote.ts', "await deps.transport.send({ t: 'autovote-command', command });"],
+        [
+            'src/ts/core/remote/trystero.ts',
+            'const { send: sendRaw } = room.makeAction<JsonValue>(TRYSTERO_ACTION_NAMESPACE, {',
+        ],
+        ['src/ts/react/api/remoteHost.ts', 'await transport.send(message, peerId);'],
+        [
+            'src/ts/shells/remote/bridge/peer.ts',
+            'for (const held of heldSends.splice(0)) void transport.send(held.message, hostPeerId);',
+        ],
+        [
+            'src/ts/shells/remote/bridge/peer.ts',
+            "void transport.send({ t: 'hello', version: PAGE_VERSION, host: false }, peerId);",
+        ],
+        ['src/ts/shells/remote/bridge/peer.ts', 'void transport.send(message, hostPeerId).catch(() => {'],
+        [
+            'src/ts/shells/remote/loader.tsx',
+            "void transport.send({ t: 'hello', version: PAGE_VERSION, host: false }, peerId);",
+        ],
     ];
 
     interface Directive {
@@ -760,6 +781,7 @@ describe('shell platform module load-time chains', () => {
         'src/ts/shells/web/platform.ts',
         'src/ts/shells/capacitor/platform.ts',
         'src/ts/shells/headless/platform.ts',
+        'src/ts/shells/remote/platform.ts',
         'scripts/lib/platform.ts',
     ];
     const LOGGER_ENTRY = 'src/ts/core/logger.ts';

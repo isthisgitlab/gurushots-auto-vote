@@ -14,15 +14,26 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import crypto from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { runIfMain } from './lib/run-if-main';
 import type { Tokens } from 'marked';
 
 const root = path.join(__dirname, '..');
 const outDir = path.join(root, 'dist-site');
 const layoutPath = path.join(__dirname, 'site', 'layout.html');
+const distDir = path.join(root, 'dist');
 
 const REPO = 'isthisgitlab/gurushots-auto-vote';
 const GITHUB_BLOB = `https://github.com/${REPO}/blob/master`;
+const RELEASES_API = `https://api.github.com/repos/${REPO}/releases`;
+
+/** The release asset names of the phone page and its checksum file (build.yml attaches both). */
+export const REMOTE_PAGE_ZIP = 'remote-page.zip';
+export const REMOTE_CHECKSUM_FILE = 'remote-page.zip.sha256';
+/** How many past releases' phone pages the site keeps. */
+export const REMOTE_RELEASE_COUNT = 10;
 const SITE_DESCRIPTION =
     'Automated voting for GuruShots challenges — a shared engine shipped as a desktop GUI, a CLI, and an Android app.';
 
@@ -290,7 +301,18 @@ const copyLocalImages = (images: Iterable<string>, rootDir: string, out: string)
     }
 };
 
-const main = async ({ rootDir = root, out = outDir, layoutFile = layoutPath } = {}) => {
+const main = async ({
+    rootDir = root,
+    out = outDir,
+    layoutFile = layoutPath,
+    // The remote tree's outer effects; absent (the tests) skips the release downloads.
+    remoteSite,
+}: {
+    rootDir?: string;
+    out?: string;
+    layoutFile?: string;
+    remoteSite?: RemoteSiteDeps;
+} = {}) => {
     const { renderPage, localImages } = await createMarkdownRenderer();
 
     const logoSrc = path.join(rootDir, 'src', 'assets', 'logo.png');
@@ -337,10 +359,128 @@ const main = async ({ rootDir = root, out = outDir, layoutFile = layoutPath } = 
 
     fs.copyFileSync(logoSrc, path.join(out, 'logo.png'));
     console.log(`✓ copied logo.png\n✓ rendered ${PAGES.length} page(s) to dist-site/ for v${version}`);
+
+    await buildRemoteSite(out, version, remoteSite);
+};
+
+/** One GitHub release as the releases API answers it, trimmed to what the site build reads. */
+export type RemoteRelease = {
+    tag_name: string;
+    assets: Array<{ name: string; browser_download_url: string }>;
+};
+
+/** The injected outer effects of the remote-page tree build; each defaults to the real thing. */
+export type RemoteSiteDeps = {
+    /** The repo's dist/ with the local build's remote bundles. */
+    dist?: string;
+    /** The GitHub releases listing (network). */
+    listReleases?: () => Promise<RemoteRelease[]>;
+    /** One release asset (network). */
+    downloadFile?: (url: string) => Promise<Buffer>;
+    /** Extracts a zip into a directory (the `unzip` CLI). */
+    unzip?: (zipPath: string, dir: string) => Promise<void>;
+};
+
+/** The default GitHub releases listing: the newest REMOTE_RELEASE_COUNT releases. */
+export const listReleasesFromGitHub = async (): Promise<RemoteRelease[]> => {
+    const response = await fetch(`${RELEASES_API}?per_page=${REMOTE_RELEASE_COUNT}`, {
+        headers: { 'User-Agent': 'gurushots-auto-vote-site-build' },
+    });
+    if (!response.ok) throw new Error(`releases listing failed (${response.status})`);
+    return (await response.json()) as RemoteRelease[];
+};
+
+export const downloadFromGitHub = async (url: string): Promise<Buffer> => {
+    const response = await fetch(url, { headers: { 'User-Agent': 'gurushots-auto-vote-site-build' } });
+    if (!response.ok) throw new Error(`download failed for ${url} (${response.status})`);
+    return Buffer.from(await response.arrayBuffer());
+};
+
+const unzipWithCli = async (zipPath: string, dir: string): Promise<void> => {
+    execFileSync('unzip', ['-o', zipPath, '-d', dir], { stdio: 'pipe' });
+};
+
+/**
+ * Fills `dist-site/remote/`: the thin loader at `remote/index.html`, the local build's page
+ * under `remote/<version>/`, and the older versions unpacked from the last releases'
+ * `remote-page.zip` assets (each verified against its release's checksum file). A release
+ * without the zip yet — true of every release so far — is skipped with a log, and the
+ * current version is never downloaded (the local build is that version).
+ */
+const buildRemoteSite = async (out: string, version: string, deps: RemoteSiteDeps = {}): Promise<void> => {
+    const dist = deps.dist ?? distDir;
+    // The directory appears only once something is copied into it.
+    const remoteOut = path.join(out, 'remote');
+    const ensureOut = (): string => {
+        fs.mkdirSync(remoteOut, { recursive: true });
+        return remoteOut;
+    };
+
+    // The thin, stable loader: the pairing link opens this, whatever version the desktop runs.
+    const loaderHtml = path.join(dist, 'remote-loader.html');
+    const loaderBundle = path.join(dist, 'remoteLoader-bundle.js');
+    if (fs.existsSync(loaderHtml) && fs.existsSync(loaderBundle)) {
+        const target = ensureOut();
+        fs.copyFileSync(loaderHtml, path.join(target, 'index.html'));
+        fs.copyFileSync(loaderBundle, path.join(target, 'remoteLoader-bundle.js'));
+        console.log('✓ remote/index.html (the /remote/ loader)');
+    } else {
+        console.log('⏭️  remote/ loader: build:react has not produced it yet');
+    }
+
+    // The current version's page: the local build is that version.
+    const localVersionDir = path.join(dist, 'remote', version);
+    if (fs.existsSync(localVersionDir)) {
+        fs.cpSync(localVersionDir, path.join(ensureOut(), version), { recursive: true });
+        console.log(`✓ remote/${version}/ (the local build)`);
+    } else {
+        console.log(`⏭️  remote/${version}/: build:react has not staged it yet`);
+    }
+
+    // The older versions: the zips the last releases attach, each checksum-verified. A caller
+    // that injects no releases listing (the tests) skips the downloads.
+    const download = deps.downloadFile ?? downloadFromGitHub;
+    const unzip = deps.unzip ?? unzipWithCli;
+    if (deps.listReleases === undefined) {
+        console.log('⏭️  older remote versions: no releases listing given — skipping the downloads');
+        return;
+    }
+    const releases = await deps.listReleases();
+    for (const release of releases.slice(0, REMOTE_RELEASE_COUNT)) {
+        const releaseVersion = release.tag_name.replace(/^v/, '');
+        if (releaseVersion === version) continue;
+        const zip = release.assets.find((asset) => asset.name === REMOTE_PAGE_ZIP);
+        const checksum = release.assets.find((asset) => asset.name === REMOTE_CHECKSUM_FILE);
+        if (!zip || !checksum) {
+            console.log(`⏭️  ${release.tag_name}: no ${REMOTE_PAGE_ZIP} attached yet — skipping`);
+            continue;
+        }
+        const target = path.join(ensureOut(), releaseVersion);
+        if (fs.existsSync(target)) continue;
+        const [zipBytes, checksumBytes] = await Promise.all([
+            download(zip.browser_download_url),
+            download(checksum.browser_download_url),
+        ]);
+        const expected = checksumBytes.toString('utf8').trim().split(/\s+/)[0];
+        const actual = crypto.createHash('sha256').update(zipBytes).digest('hex');
+        if (actual !== expected) {
+            console.error(`✗ ${release.tag_name}: ${REMOTE_PAGE_ZIP} does not match its checksum — skipping it`);
+            continue;
+        }
+        const zipPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'remote-page-')), REMOTE_PAGE_ZIP);
+        try {
+            fs.writeFileSync(zipPath, zipBytes);
+            fs.mkdirSync(target, { recursive: true });
+            await unzip(zipPath, target);
+        } finally {
+            fs.rmSync(path.dirname(zipPath), { recursive: true, force: true });
+        }
+        console.log(`✓ remote/${releaseVersion}/ (from ${release.tag_name}, checksum verified)`);
+    }
 };
 
 const runCli = () =>
-    main().catch((err) => {
+    main({ remoteSite: { listReleases: listReleasesFromGitHub } }).catch((err) => {
         console.error(err);
         process.exit(1);
     });
@@ -356,6 +496,7 @@ export {
     badgeSvg,
     render,
     buildNav,
+    buildRemoteSite,
     PAGES,
     BADGES,
     main,

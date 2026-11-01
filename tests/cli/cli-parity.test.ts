@@ -206,6 +206,17 @@ const CLI_PARITY: Record<InvokeChannel, ParityEntry> = {
     'start-log-stream': { reason: 'Window feed; the CLI uses logs / logs --follow over the files.' },
     'stop-log-stream': { reason: 'Window feed; the CLI uses logs / logs --follow over the files.' },
 
+    // Remote access pairing
+    'get-remote-access': {
+        reason: 'The pairing QR and link belong to the desktop app; the CLI does not pair a phone.',
+    },
+    'set-remote-access': {
+        reason: 'The pairing QR and link belong to the desktop app; the CLI does not pair a phone.',
+    },
+    'reset-remote-pairing': {
+        reason: 'The pairing QR and link belong to the desktop app; the CLI does not pair a phone.',
+    },
+
     // Alias target (api.applyTurbo; the channel is deliberately not in invokeChannels)
     'apply-turbo-to-entry': { commands: ['turbo'], flag: '--image' },
 };

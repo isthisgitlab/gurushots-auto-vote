@@ -18,6 +18,7 @@ const SHELL_PLATFORM_ENTRIES = [
     'src/ts/shells/web/platform.ts',
     'src/ts/shells/capacitor/platform.ts',
     'src/ts/shells/headless/platform.ts',
+    'src/ts/shells/remote/platform.ts',
     'scripts/lib/platform.ts',
 ] as const;
 
@@ -25,6 +26,16 @@ const SHELL_PLATFORM_ENTRIES = [
 const requirePathOf = (entry: string): string => `../../${entry.replace(/\.ts$/, '')}`;
 
 describe('the shell platform modules load with the port clear and the logger mocked', () => {
+    test("the remote platform's no-op windows run", () => {
+        jest.isolateModules(() => {
+            clearInstalledPlatform();
+            require('../../src/ts/shells/remote/platform');
+            const port = require('../../src/ts/core/platform/port') as typeof import('../../src/ts/core/platform/port');
+            port.platform().windows.broadcastSettingsChanged({});
+            port.platform().windows.afterWipe();
+        });
+    });
+
     test('each installs, throws to nobody, and never loads the logger', () => {
         const failures: string[] = [];
         for (const entry of SHELL_PLATFORM_ENTRIES) {

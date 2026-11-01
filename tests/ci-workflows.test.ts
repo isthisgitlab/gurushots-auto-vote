@@ -181,6 +181,21 @@ describe('Android signing', () => {
         const files = String(stepNamed(build.jobs['create-release'], 'Create Release').with?.files);
         expect(files).toContain('android-builds/GuruShotsAutoVote-v*.apk');
     });
+
+    test('the release ships the phone page and its checksum from the remote-page job', () => {
+        const files = String(stepNamed(build.jobs['create-release'], 'Create Release').with?.files);
+        expect(files).toContain('artifacts/remote-page/remote-page.zip');
+        expect(files).toContain('artifacts/remote-page/remote-page.zip.sha256');
+        // The zip carries the release's version directory, built from the bumped package.
+        const job = build.jobs['remote-page'];
+        expect(job.steps.some((step) => step.run?.includes('pnpm build:react'))).toBe(true);
+        const zipping = stepNamed(job, 'Zip the remote page with its checksum').run ?? '';
+        expect(zipping).toContain('remote-page.zip');
+        expect(zipping).toContain('sha256sum remote-page.zip > remote-page.zip.sha256');
+        const upload = stepNamed(job, 'Upload remote page artifact');
+        expect(upload.with?.name).toBe('remote-page');
+        expect(String(upload.with?.path)).toContain('remote-page.zip.sha256');
+    });
 });
 
 describe('release job', () => {

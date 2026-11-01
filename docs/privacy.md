@@ -12,12 +12,14 @@ The site is hosted on **GitHub Pages**. GitHub serves every page and may log vis
 
 - It sets **no cookies**.
 - It uses **no analytics, trackers or advertising**.
-- It loads **nothing from other sites**: the pages, styles, scripts, logo and badges all come from this site, with no third-party fonts, images or scripts.
+- The pages, styles, scripts, logo and badges all come from this site, with no third-party fonts, images or scripts — with one exception: the **remote-control page** (`/remote/`, only when you open a pairing link) connects to the public Nostr relays the pairing runs over (`wss://nos.lol`, `wss://relay.primal.net`, `wss://relay.snort.social`, `wss://nostr.mom`, `wss://offchain.pub`) and to STUN servers (`stun:stun.cloudflare.com:3478`, `stun:stun.l.google.com:19302`). The relays see encrypted signalling and your phone's IP address; the paired computer sees your phone's IP. The page never sends the pairing key to the relays in plain text — it is used as the encryption password, and the QR code on your computer is the only place the full link exists.
 - It asks browsers to send **no referrer**, so a link to another site does not carry the address of the page you came from.
 
 ## What stays in your browser
 
-Only if you click the light/dark **theme toggle**, the site saves your choice (`theme`: `light` or `dark`) in your browser's local storage so the next page opens in the same theme. Nothing else is stored, and it is never sent anywhere. Until you click the toggle, the site follows your system's theme and stores nothing. Clearing the site's data in your browser removes the choice.
+Only if you click the light/dark **theme toggle**, the site saves your choice (`theme`: `light` or `dark`) in your browser's local storage so the next page opens in the same theme. Until you click the toggle, the site follows your system's theme and stores nothing. Clearing the site's data in your browser removes the choice.
+
+If you open a **remote-control pairing link**, the pairing key is kept in that tab's session storage (gone when you close the tab) and stays in the link itself — so a bookmark or a Home Screen icon keeps working. Neither copy is sent anywhere by the site; the key travels only over the encrypted pairing connection to your own computer. Delete the bookmark or Home Screen icon to remove the key.
 
 ## Links to other sites
 

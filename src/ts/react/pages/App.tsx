@@ -1,6 +1,7 @@
 import type { Challenge } from '../../core/types/gurushots';
 import type { RendererGlobals } from '../../core/types/capacitor';
 import type { BackgroundHost } from '../../core/autovote/controller';
+import type { RemoteTransport } from '../../core/remote/relays';
 import { createRoot } from 'react-dom/client';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { TranslationProvider, useTranslation } from '@/contexts/TranslationContext';
@@ -392,11 +393,21 @@ function AppContent() {
 /**
  * App with Autovote provider (needs challenges refetch callback)
  */
-function AppWithAutovote({ backgroundHost }: { backgroundHost: BackgroundHost }) {
+function AppWithAutovote({
+    backgroundHost,
+    remoteTransport,
+}: {
+    backgroundHost: BackgroundHost;
+    remoteTransport?: RemoteTransport;
+}) {
     const { refetch } = useChallenges();
 
     return (
-        <AutovoteProvider onChallengesRefresh={refetch} backgroundHost={backgroundHost}>
+        <AutovoteProvider
+            onChallengesRefresh={refetch}
+            backgroundHost={backgroundHost}
+            remoteTransport={remoteTransport}
+        >
             <AppContent />
         </AutovoteProvider>
     );
@@ -405,7 +416,13 @@ function AppWithAutovote({ backgroundHost }: { backgroundHost: BackgroundHost })
 /**
  * App with Challenges provider
  */
-function AppWithChallenges({ backgroundHost }: { backgroundHost: BackgroundHost }) {
+function AppWithChallenges({
+    backgroundHost,
+    remoteTransport,
+}: {
+    backgroundHost: BackgroundHost;
+    remoteTransport?: RemoteTransport;
+}) {
     const [autovoteRunning, setAutovoteRunning] = useState(false);
 
     // AutovoteProvider dispatches 'autovote:running-changed' whenever its
@@ -423,7 +440,7 @@ function AppWithChallenges({ backgroundHost }: { backgroundHost: BackgroundHost 
 
     return (
         <ChallengesProvider autovoteRunning={autovoteRunning}>
-            <AppWithAutovote backgroundHost={backgroundHost} />
+            <AppWithAutovote backgroundHost={backgroundHost} remoteTransport={remoteTransport} />
         </ChallengesProvider>
     );
 }
@@ -431,11 +448,17 @@ function AppWithChallenges({ backgroundHost }: { backgroundHost: BackgroundHost 
 /**
  * Main App component with all providers
  */
-function App({ backgroundHost = noopBackgroundHost }: { backgroundHost?: BackgroundHost }) {
+function App({
+    backgroundHost = noopBackgroundHost,
+    remoteTransport,
+}: {
+    backgroundHost?: BackgroundHost;
+    remoteTransport?: RemoteTransport;
+}) {
     return (
         <TranslationProvider>
             <UpdateProvider>
-                <AppWithChallenges backgroundHost={backgroundHost} />
+                <AppWithChallenges backgroundHost={backgroundHost} remoteTransport={remoteTransport} />
             </UpdateProvider>
         </TranslationProvider>
     );
@@ -449,13 +472,16 @@ function App({ backgroundHost = noopBackgroundHost }: { backgroundHost?: Backgro
 // shells/capacitor/page.tsx (via mountForToken). Returns the root it created
 // (null without a container) so the single-document shells can unmount
 // the previous tree — and dispose its autovote controller — on a swap.
-export const mountApp = (backgroundHost: BackgroundHost = noopBackgroundHost): ReturnType<typeof createRoot> | null => {
+export const mountApp = (
+    backgroundHost: BackgroundHost = noopBackgroundHost,
+    remoteTransport?: RemoteTransport,
+): ReturnType<typeof createRoot> | null => {
     const container = document.getElementById('root');
     if (!container) {
         return null;
     }
     const root = createRoot(container);
-    root.render(<App backgroundHost={backgroundHost} />);
+    root.render(<App backgroundHost={backgroundHost} remoteTransport={remoteTransport} />);
     return root;
 };
 

@@ -56,6 +56,13 @@ const {
     allInvokeChannels,
 } = require('../../src/ts/core/ipc/manifest') as typeof manifestModule;
 
+// The pairing store stands in for the one registerIpc builds from remote/pairing.ts.
+const remoteStub = {
+    accessInfo: () => ({ enabled: false, link: '', qrDataUrl: '' }),
+    setEnabled: () => true,
+    resetKey: () => 'k',
+};
+
 const collectHandlerChannels = () => {
     const settingsHandlers = require('../../src/ts/core/ipc/settings.handlers') as typeof settings_handlersModule;
     const votingHandlers = require('../../src/ts/core/ipc/voting.handlers') as typeof voting_handlersModule;
@@ -76,7 +83,9 @@ const collectHandlerChannels = () => {
         ...Object.keys(computationsHandlers.buildHandlers()),
         ...Object.keys(currencyHandlers.buildHandlers()),
         ...Object.keys(scenariosHandlers.buildHandlers()),
-        ...Object.keys(miscHandlers.buildHandlers({ getMainWindow: () => null, getLoginWindow: () => null })),
+        ...Object.keys(
+            miscHandlers.buildHandlers({ remote: remoteStub, getMainWindow: () => null, getLoginWindow: () => null }),
+        ),
         ...Object.keys(
             updateHandlers.buildHandlers({
                 getAutoUpdater: () => null,

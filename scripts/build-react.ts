@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import { removeVisionWebAssets, stageVisionWebAssets } from './fetch-vision-model';
 import { NODE_BUILTINS, SHIM_BANNER } from './lib/browser-shims';
 import { runIfMain } from './lib/run-if-main';
+import { NOSTR_RELAY_URLS } from '../src/ts/core/remote/relays';
 
 // Every remote image the renderer draws comes from the photo CDN (format/photoUrl.ts);
 // no API-supplied avatar or cover URL is ever put in an <img>.
@@ -46,6 +47,13 @@ const androidCsp = baseCsp({
     'connect-src': ["'self'", GITHUB_API_HOST, PHOTO_HOST],
 });
 
+// The remote page documents (the phone page and the loader): the pairing runs WebRTC signalling
+// straight from the page, so connect-src carries exactly the pinned Nostr relays — the same list
+// core/remote/relays.ts joins the room with. Everything else stays as strict as the desktop pages.
+const remoteCsp = baseCsp({
+    'connect-src': ["'self'", ...NOSTR_RELAY_URLS],
+});
+
 const reactDir = path.join(__dirname, '..', 'src', 'ts', 'react');
 const shellsDir = path.join(__dirname, '..', 'src', 'ts', 'shells');
 const distDir = path.join(__dirname, '..', 'dist');
@@ -58,6 +66,10 @@ const entryPoints = {
     capacitor: path.join(shellsDir, 'capacitor', 'page.tsx'),
     // Browser entry served by the web shell (`pnpm web`, src/ts/shells/web/server.ts).
     web: path.join(shellsDir, 'web', 'page.tsx'),
+    // Remote phone page (the Pages site's /remote/<version>/ and the Android remote mode).
+    remote: path.join(shellsDir, 'remote', 'page.tsx'),
+    // The thin /remote/ loader: reads the desktop's version from hello, then moves on.
+    remoteLoader: path.join(shellsDir, 'remote', 'loader.tsx'),
     // Android background service entry — runs in a bare WebView (no
     // Capacitor runtime) owned by AutoVoteService. Not a React page.
     headless: path.join(shellsDir, 'headless', 'index.ts'),
@@ -121,6 +133,27 @@ const webHtml = rendererHtml({
     viewport: 'width=device-width, initial-scale=1.0',
     csp: baseCsp(),
     bundle: 'web-bundle.js',
+});
+
+// Remote phone page document (dist/remote.html; the Pages build and the Android webDir
+// carry it under remote/<version>/ as index.html). viewport-fit=cover like the Android
+// page: it runs in phone browsers with display cutouts.
+const remoteHtml = rendererHtml({
+    htmlAttrs: 'data-theme="light" lang="en"',
+    viewport: 'width=device-width, initial-scale=1.0, viewport-fit=cover',
+    themeColor: '#960018',
+    csp: remoteCsp,
+    bundle: 'remote-bundle.js',
+});
+
+// The /remote/ loader document (dist/remote-loader.html; the site build puts it at
+// remote/index.html).
+const remoteLoaderHtml = rendererHtml({
+    htmlAttrs: 'data-theme="light" lang="en"',
+    viewport: 'width=device-width, initial-scale=1.0, viewport-fit=cover',
+    themeColor: '#960018',
+    csp: remoteCsp,
+    bundle: 'remoteLoader-bundle.js',
 });
 
 // Headless background document. Loaded by AutoVoteService in a bare
@@ -198,6 +231,12 @@ const CAPACITOR_EXTERNALS = [
     '@capacitor/preferences',
     '@capawesome-team/capacitor-android-foreground-service',
 ];
+// The remote host is reachable from AutovoteContext, which the web and capacitor bundles
+// both include, so esbuild would inline the trystero chain into them. On those kinds the
+// host never runs, so the external is never awaited: externalize the whole trystero package
+// chain and the two bundles stay their current size. The electron and remote entries bundle
+// it — they are the two kinds that actually join the pairing room.
+const TRYSTERO_EXTERNALS = ['trystero', '@trystero-p2p/nostr', '@trystero-p2p/core'];
 const REQUIRE_SHIM = { js: SHIM_BANNER };
 const perEntryOptions: Record<EntryName, BuildOptions> = {
     // Electron entries: externalize Capacitor packages too. Their
@@ -209,9 +248,15 @@ const perEntryOptions: Record<EntryName, BuildOptions> = {
     // Capacitor entry: bundle the Capacitor plugin packages so the
     // native bridge proxies (Preferences.set,
     // ForegroundService.startForegroundService, ...) actually work.
-    capacitor: { external: RENDERER_EXTERNALS, banner: REQUIRE_SHIM },
+    capacitor: { external: [...RENDERER_EXTERNALS, ...TRYSTERO_EXTERNALS], banner: REQUIRE_SHIM },
     // Web entry: a browser tab behind the web shell, never Capacitor.
-    web: { external: [...RENDERER_EXTERNALS, ...CAPACITOR_EXTERNALS], banner: REQUIRE_SHIM },
+    web: {
+        external: [...RENDERER_EXTERNALS, ...CAPACITOR_EXTERNALS, ...TRYSTERO_EXTERNALS],
+        banner: REQUIRE_SHIM,
+    },
+    // Remote phone page and loader: they join the pairing room, so trystero is bundled.
+    remote: { external: [...RENDERER_EXTERNALS, ...CAPACITOR_EXTERNALS], banner: REQUIRE_SHIM },
+    remoteLoader: { external: [...RENDERER_EXTERNALS, ...CAPACITOR_EXTERNALS], banner: REQUIRE_SHIM },
     // Headless background entry: like the Electron entries, externalize
     // Capacitor packages — the headless cycle never touches them (it
     // uses the native AndroidHeadless* @JavascriptInterfaces), so the
@@ -240,6 +285,9 @@ const prepareDist = async () => {
     fs.writeFileSync(path.join(distDir, HEADLESS_FLAG_FILE), HEADLESS_FLAG_SOURCE);
     // Web shell document (served by src/ts/shells/web/server.ts).
     fs.writeFileSync(path.join(distDir, 'web.html'), webHtml);
+    // Remote phone page + loader documents.
+    fs.writeFileSync(path.join(distDir, 'remote.html'), remoteHtml);
+    fs.writeFileSync(path.join(distDir, 'remote-loader.html'), remoteLoaderHtml);
     // The app icon next to it: the server answers the browser's /favicon.ico
     // with this file. The same committed logo the Electron and Android builds
     // use as their icon.
@@ -340,6 +388,25 @@ const buildEntries = async () => {
     }
 };
 
+// The remote page under dist/remote/<version>/ (HTML, bundle, CSS, notices): Capacitor's
+// webDir carries it into the APK, so the Android remote mode (slice 2) loads its bundled
+// page without the network. Run after the bundles are built, never in watch mode.
+const copyRemoteVersionDir = (): void => {
+    const { version } = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')) as {
+        version: string;
+    };
+    const target = path.join(distDir, 'remote', version);
+    fs.mkdirSync(target, { recursive: true });
+    fs.copyFileSync(path.join(distDir, 'remote.html'), path.join(target, 'index.html'));
+    fs.copyFileSync(path.join(distDir, 'remote-bundle.js'), path.join(target, 'remote-bundle.js'));
+    for (const name of ['styles.css', NOTICES_ASSET_NAME]) {
+        const source = path.join(distDir, name);
+        if (fs.existsSync(source)) fs.copyFileSync(source, path.join(target, name));
+        else console.log(`⏭️  remote/${version}: ${name} not built yet — run build:css / build:notices for it`);
+    }
+    console.log(`✓ Staged the remote page under dist/remote/${version}/`);
+};
+
 async function buildReact() {
     console.log(`🔨 Building ${isLite ? 'lite ' : ''}React bundles${isWatch ? ' (watch mode)' : ''}...`);
 
@@ -347,7 +414,10 @@ async function buildReact() {
 
     try {
         if (isWatch) await watchEntries();
-        else await buildEntries();
+        else {
+            await buildEntries();
+            copyRemoteVersionDir();
+        }
     } catch (error) {
         console.error('❌ Build failed:', error);
         process.exit(1);
@@ -363,9 +433,13 @@ export {
     HEADLESS_FLAG_SOURCE,
     baseCsp,
     androidCsp,
+    remoteCsp,
     capacitorIndexHtml,
     headlessHtml,
     webHtml,
+    remoteHtml,
+    remoteLoaderHtml,
+    copyRemoteVersionDir,
     buildReact,
     entryPoints,
     commonOptions,

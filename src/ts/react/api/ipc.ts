@@ -170,6 +170,11 @@ export const stopLogStream = forward('stopLogStream');
 export const getLogBacklog = forward('getLogBacklog');
 export const onLogMessage = forward('onLogMessage');
 
+// Remote access pairing (the desktop app is what gets paired to)
+export const getRemoteAccess = forward('getRemoteAccess');
+export const setRemoteAccess = forward('setRemoteAccess');
+export const resetRemotePairing = forward('resetRemotePairing');
+
 /**
  * Subscribe to settings-changed. Returns the unsubscribe function, or
  * `undefined` on a host without the event.

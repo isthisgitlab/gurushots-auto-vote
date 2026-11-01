@@ -10,6 +10,8 @@
         "src/ts/react/pages/Logs.tsx",
         "src/ts/shells/capacitor/page.tsx",
         "src/ts/shells/web/page.tsx",
+        "src/ts/shells/remote/page.tsx",
+        "src/ts/shells/remote/loader.tsx",
         "scripts/*.ts",
         "scripts/afterPack.mts",
         "src/ts/core/types/globals.ts",

@@ -129,6 +129,12 @@ const invokeChannels = [
     'simulate-scenario',
     'reload-window',
     'refresh-menu',
+    // Remote access pairing (shells/electron/remote/pairing.ts). Answered for the main window
+    // only; refused to the Logs window, refused to a remote peer, "not applicable" on the web
+    // shell, the CLI and Capacitor.
+    'get-remote-access',
+    'set-remote-access',
+    'reset-remote-pairing',
     // AutoUpdater
     'check-for-updates',
     'download-update',

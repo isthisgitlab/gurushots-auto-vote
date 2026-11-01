@@ -748,6 +748,13 @@ repeated six times is one that gets forgotten at one of them.
   equivalence harness (`v2/equivalence.test.ts`) ask the oracle and the live code the same questions for every fixture
   and seeded random file, with `v2/golden.test.ts` pinning the oracle's own answers (`__golden__/oracle.json`); the
   import itself is covered by `importV1/` and `config-import.test.ts`.
+- **The remote-access pairing store (`remote-access.json`, `gs_remote_access` on Android) sits beside the
+  configuration, not in it.** A `createJsonStore` file the desktop's pairing channels answer from
+  (`shells/electron/remote/pairing.ts`): `{enabled, key}`, where `key` is 32 random bytes in base64url — the
+  permanent credential behind the pairing link and its QR code. No settings channel, export or profile can read it
+  or switch it; a remote peer is refused all three pairing channels, so the key never travels over the pairing
+  connection. The QR code is drawn in the main process (`qrcode-generator`, exact-pinned) as a `data:image/svg+xml`
+  URL; the key and the link are never logged.
 - **The title pins and the import marker are shared stores (`createJsonStore({ shared: true })`).** The Android
   service writes them too, so every change is made against what is stored when the write is made — never the app
   window's cache written whole: `updateThrough` (the window) re-reads and saves by the native compare-and-write, made
@@ -952,11 +959,45 @@ repeated six times is one that gets forgotten at one of them.
   web contents is denied. Every denial is logged.
 - **CSP**: every renderer page carries a policy with `object-src 'none'`, `form-action 'none'` and
   `img-src 'self' data: https://photos.gurushots.com`, and a build test fails on a missing policy or an inline
-  script. The Electron pages (`app.html`, `login.html`, `logs.html`) and the web shell page use
+  script. The Electron pages (`login.html`, `logs.html`) and the web shell page use
   `connect-src 'self'`: the renderer makes no fetch/XHR to a remote host (all network calls run in the
-  main process). The Android pages (the Capacitor page and `headless.html`) run network code in the WebView,
+  main process). `app.html` — the main window, where the remote-access host runs — adds the pinned Nostr
+  relay hosts to `connect-src`, and the remote documents (`remote.html`, `remote-loader.html`) carry a strict
+  policy whose `connect-src` is exactly those relays; a test pins both lists to the shared constant
+  (`core/remote/relays.ts`). The Android pages (the Capacitor page and `headless.html`) run network code in the WebView,
   so their `connect-src` also allows `https://api.github.com` and the photo CDN, and their `script-src`
   adds `'wasm-unsafe-eval'` for the vision runtime.
+
+### Remote access (the pairing surface)
+
+When Remote access is on (off by default), the desktop main window's renderer joins a WebRTC room signalled
+over the public Nostr relays through Trystero (exact-pinned at 0.26.0; the one adapter is `core/remote/trystero.ts`),
+with the pairing key as the room's AES-GCM password and the room id derived as SHA-256 of it, so the key itself
+never appears in relay traffic. A paired phone drives the desktop through one explicit allowlist
+(`core/remote/allowlist.ts`): every manifest channel is classified as allowed, refused with a pinned reason, or
+answered in the host — account sign-in/out, the local-data wipe, the log-file reads, update download/install,
+window control, destructive resets and the pairing channels themselves are refused, `autovoteRunning` is refused
+per key on every write path while auto-vote runs, and `get-environment-info` is answered with the user-data path
+(which holds the OS username) removed. At most 3 phones are connected at once; the log stream is the host's own,
+served while at least one phone wants it.
+
+- **The key is the only credential.** Whoever holds the full link (or scans the QR code) can control the app
+  within the allowlist; there is no second factor. The key is permanent by design: no expiry and no per-device
+  revocation — **Reset pairing** (a new key, every paired phone must scan again) is the only revocation.
+- **The relays see encrypted signalling and both IP addresses.** WebRTC also contacts STUN servers to learn each
+  side's public address (`stun:stun.cloudflare.com:3478`, `stun:stun.l.google.com:19302`, pinned through the
+  join's `rtcConfig.iceServers`; CSP does not govern that), and the two peers see each other's IP. There is no
+  TURN relay, so some carrier networks cannot establish a connection at all — the phone shows "try Wi-Fi" for
+  that case and the offline-or-reset text for the others.
+- **The phone page is served from this project's GitHub Pages and reads the key from the URL fragment.** A
+  compromised Pages deploy (or a compromised `pages.yml` run) could ship JavaScript that sends paired keys
+  elsewhere. Mitigation: Pages publishes only after a green release (`workflow_dispatch` from `build.yml`), the
+  site builds are reproducible from the repo, and the Android remote mode (slice 2) loads the bundled page, not
+  the Pages copy. Copies of the link stay in the browser's history (and Chrome's history sync) and in the QR
+  scanner's history — that is the same permanence the key's design accepts.
+- On a lost connection an in-flight invoke on a spend channel (`core/remote/allowlist.ts`, the `postOnce`
+  spenders) is answered "unclear — check before retrying", never a clean failure; every other channel reports
+  the failure. In-flight invokes are never queued or replayed after a reconnect.
 - The settings file `config.json` is written
   mode `0o600` (by the node platform's transport, `platforms/node/atomicWrite.ts`) — but **only at creation. A pre-existing or backup-restored file keeps whatever mode it already
   had** (the source says as much); don't state 0600 as an always-guarantee. The renderer never receives the `auth`

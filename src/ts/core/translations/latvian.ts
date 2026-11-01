@@ -112,6 +112,9 @@ export const errors: typeof english.errors = {
         'Daļa lietotnes pārstāja darboties. Informācija ir saglabāta žurnālos. Pārlādē lietotni, lai turpinātu; ja tas atkārtojas, žurnālos redzams, kas neizdevās.',
     votingFailed:
         'Pēdējais balsošanas cikls neizdevās. GuruShots neatbildēja vai noraidīja pieprasījumu. Automātiskā balsošana mēģinās vēlreiz nākamajā ciklā; sīkāka informācija ir žurnālos.',
+    remoteSpendUnclear:
+        'Savienojums pārtrūka darbības laikā, tāpēc rezultāts nav zināms. Pirms atkārto, pārbaudi rezultātu datorā.',
+    remoteConnectionLost: 'Savienojums ar datoru pārtrūka.',
 };
 // First-run onboarding
 export const onboarding: typeof english.onboarding = {
@@ -1692,6 +1695,34 @@ export const app: LatvianApp = {
     noticeAcknowledgedVersion: 'Apstiprinātā paziņojuma versija',
     noticeAcknowledgedVersionDesc:
         'Iekšējs — tā paziņojuma versija, ko apstiprināji (lietotne nav saistīta ar GuruShots); paziņojums tiek rādīts vēlreiz, ja tā teksts būtiski mainās',
+    // Attālinātā piekļuve (dators ir tas, ko savieno pārī; telefons redz stāvokļus)
+    remoteAccess: 'Attālinātā piekļuve',
+    remoteAccessDesc: 'Vadi šo lietotni no telefona ar vienu pastāvīgu saiti. Pēc noklusējuma tā ir izslēgta.',
+    remoteToggleLabel: 'Atļaut vadību no telefona',
+    remoteStatusOn: 'Ieslēgta — telefons ar saiti var vadīt šo lietotni',
+    remoteStatusOff: 'Izslēgta',
+    remoteShow: 'Rādīt',
+    remoteHide: 'Paslēpt',
+    remoteCopyLink: 'Kopēt saiti',
+    remoteLinkCopied: 'Saite nokopēta',
+    remoteResetPairing: 'Atiestatīt savienošanu pārī',
+    remoteQrAlt: 'QR kods ar savienošanas saiti',
+    remoteNote1:
+        'Jebkurš, kam ir šī saite, var vadīt šo lietotni. Turi to privātu; "Atiestatīt savienošanu pārī" atvieno visus tālruņus.',
+    remoteNote2:
+        'Datoram jābūt ieslēgtam un šim logam atvērtam; aizverot logu, apstājas gan balsošana, gan attālinātā piekļuve.',
+    remoteNote3: 'Kamēr tā ir ieslēgta, izmanto saiti Android lietotnes pašas balsošanas vietā.',
+    remoteConnectedCount: 'Attālināti savienoti: {count}',
+    remoteConnectedNotice: 'Telefons ir savienots, lai vadītu šo lietotni.',
+    remoteConnecting: 'Izveido savienojumu ar tavu datoru…',
+    remoteConnected: 'Savienots',
+    remoteOfflineShort: 'Bez savienojuma vai atiestatīts',
+    remoteOfflineDetail:
+        'Tavs dators ir bez savienojuma, vai arī šī saite tika atiestatīta. Ja lietotne datorā ir atvērta, skenē tās QR kodu vēlreiz.',
+    remoteNetwork: 'Neizdevās izveidot savienojumu šajā tīklā — mēģini Wi-Fi',
+    remoteUpdateNeeded: 'Atjaunini lietotni datorā',
+    remoteNoKey: 'Skenē datorā redzamo QR kodu, lai savienotu',
+    remoteAddToHomeScreen: 'Pievieno šo lapu sākuma ekrānam, lai saite vienmēr būtu pa rokai.',
 };
 // Logs page specific
 export const logs: typeof english.logs = {

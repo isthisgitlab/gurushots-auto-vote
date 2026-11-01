@@ -16,7 +16,7 @@ import type * as voting_handlersModule from '../../src/ts/core/ipc/voting.handle
 import type { IpcMain } from 'electron';
 import { invalid } from '../helpers/invalid';
 
-jest.mock('electron', () => ({ shell: { openExternal: jest.fn() } }));
+jest.mock('electron', () => ({ app: { isPackaged: true }, shell: { openExternal: jest.fn() } }));
 jest.mock('../../src/ts/shells/electron/AutoUpdater', () => ({ AutoUpdater: jest.fn() }));
 jest.mock('../../src/ts/shells/electron/ui/applicationMenu', () => ({ updateMenuTranslations: jest.fn() }));
 
@@ -38,6 +38,13 @@ const deps = {
     misc: { getMainWindow: () => null, getLoginWindow: () => null },
 };
 
+// The pairing store stands in for the one registerIpc builds from remote/pairing.ts.
+const remoteStub = {
+    accessInfo: () => ({ enabled: false, link: '', qrDataUrl: '' }),
+    setEnabled: () => true,
+    resetKey: () => 'k',
+};
+
 describe('registerIpc', () => {
     test('registers the channels of every handler module, in module order', () => {
         const channels = new Map<string, ChannelImpl>();
@@ -46,7 +53,7 @@ describe('registerIpc', () => {
         const expected = [
             logIpc.buildHandlers(),
             updateIpc.buildHandlers(deps.update),
-            miscIpc.buildHandlers(deps.misc),
+            miscIpc.buildHandlers({ ...deps.misc, remote: remoteStub }),
             settingsIpc.buildHandlers(),
             votingIpc.buildHandlers(),
             actionsIpc.buildHandlers(),
@@ -55,6 +62,18 @@ describe('registerIpc', () => {
             scenariosIpc.buildHandlers(),
         ].flatMap((handlers) => Object.keys(handlers));
         expect([...channels.keys()]).toEqual(expected);
+    });
+
+    test('the pairing store reads the launcher arguments and ignores the dev origin when packaged', () => {
+        // The pairing store is built while the misc handlers register; with the dev-only
+        // launcher argument present, its `isPackaged` and `warn` seams both run.
+        const saved = process.argv;
+        process.argv = ['app', '--remote-link-origin=http://127.0.0.1:8080'];
+        try {
+            expect(() => registerIpc(invalid({ handle: () => undefined } as unknown as IpcMain), deps)).not.toThrow();
+        } finally {
+            process.argv = saved;
+        }
     });
 
     test('installs the log fan-out hook on the global the logger reads', () => {

@@ -12,12 +12,14 @@ Vietne tiek mitināta **GitHub Pages**. GitHub piegādā katru lapu un var reģi
 
 - Tā **neiestata sīkdatnes**.
 - Tā **neizmanto analītiku, izsekotājus vai reklāmu**.
-- Tā **neielādē neko no citām vietnēm**: lapas, stili, skripti, logotips un nozīmītes nāk no šīs vietnes, bez trešo pušu fontiem, attēliem vai skriptiem.
+- Lapas, stili, skripti, logotips un nozīmītes nāk no šīs vietnes, bez trešo pušu fontiem, attēliem vai skriptiem — ar vienu izņēmumu: **attālinātās vadības lapa** (`/remote/`, tikai atverot savienošanas saiti) veido savienojumu ar publiskajiem Nostr retranslatoriem, pa kuriem notiek savienošana (`wss://nos.lol`, `wss://relay.primal.net`, `wss://relay.snort.social`, `wss://nostr.mom`, `wss://offchain.pub`), un STUN serveriem (`stun:stun.cloudflare.com:3478`, `stun:stun.l.google.com:19302`). Retranslatori redz šifrētu signālu apmaiņu un telefona IP adresi; savienotais dators redz telefona IP. Lapa nekad nesūta savienošanas atslēgu retranslatoriem atklātā tekstā — tā tiek lietota kā šifrēšanas parole, un pilnā saite ir tikai datorā redzamajā QR kodā.
 - Tā lūdz pārlūkus **nesūtīt atsauces adresi** (referrer), tāpēc, atverot saiti uz citu vietni, tai netiek paziņots, no kuras lapas atnācāt.
 
 ## Kas paliek jūsu pārlūkā
 
-Tikai tad, ja noklikšķināt uz gaišās/tumšās **tēmas pārslēdzēja**, vietne saglabā jūsu izvēli (`theme`: `light` vai `dark`) pārlūka lokālajā krātuvē, lai nākamā lapa atvērtos tajā pašā tēmā. Nekas cits netiek saglabāts, un tas nekur netiek sūtīts. Kamēr neesat nospieduši pārslēdzēju, vietne seko jūsu sistēmas tēmai un neko nesaglabā. Ja pārlūkā notīrāt vietnes datus, izvēle tiek izdzēsta.
+Tikai tad, ja noklikšķināt uz gaišās/tumšās **tēmas pārslēdzēja**, vietne saglabā jūsu izvēli (`theme`: `light` vai `dark`) pārlūka lokālajā krātuvē, lai nākamā lapa atvērtos tajā pašā tēmā. Kamēr neesat nospieduši pārslēdzēju, vietne seko jūsu sistēmas tēmai un neko nesaglabā. Ja pārlūkā notīrāt vietnes datus, izvēle tiek izdzēsta.
+
+Ja atverat **attālinātās vadības savienošanas saiti**, savienošanas atslēga tiek saglabāta šīs cilnes sesijas krātuvē (pazūd, aizverot cilni), un paliek pašā saitē — tāpēc grāmatzīme vai sākuma ekrāna ikona turpina strādāt. Vietne nevienu no šīm kopijām nekur nesūta; atslēga ceļo tikai caur šifrēto savienojumu uz jūsu pašu datoru. Lai to noņemtu, izdzēsiet grāmatzīmi vai sākuma ekrāna ikonu.
 
 ## Saites uz citām vietnēm
 
