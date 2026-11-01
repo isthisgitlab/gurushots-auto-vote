@@ -1732,7 +1732,7 @@ export const app: LatvianApp = {
     remoteUpdateNeeded: 'Atjaunini lietotni datorā',
     remoteUpdateThis: 'Atjaunini šo lietotni',
     remotePageUnpublished: 'Tava datora versijas lapa vēl nav publicēta — mēģini vēlāk vēlreiz.',
-    remoteFull: 'Ir savienoti pārāk daudz telefonu — aizver lietotni citā telefonā un mēģini vēlreiz.',
+    remoteFull: 'Ir savienoti pārāk daudz telefonu — aizver lietotni citā telefonā, pēc tam pārlādē šo lapu.',
     remoteFullShort: 'Pārāk daudz telefonu',
     remoteChangeFailed:
         'Attālinātā piekļuve netika mainīta. Iestatījumu neizdevās saglabāt šajā datorā. Mēģini vēlreiz; ja tas atkārtojas, pārbaudi, vai lietotnes datu mapē var rakstīt.',

@@ -257,14 +257,14 @@ describe('sends toward the Logs window', () => {
             'src/ts/core/remote/trystero.ts',
             'const { send: sendRaw } = room.makeAction<JsonValue>(TRYSTERO_ACTION_NAMESPACE, {',
         ],
-        ['src/ts/react/api/remoteHost.ts', 'await transport.send(message, peerId);'],
+        ['src/ts/react/api/remoteHostPeers.ts', 'await transport.send(message, peerId);'],
         [
-            'src/ts/shells/remote/bridge/peer.ts',
+            'src/ts/shells/remote/bridge/invokes.ts',
             'for (const held of heldSends.splice(0)) void transport.send(held.message, to);',
         ],
         // The phone's repeated hello (the loader and the peer bridge share it).
         ['src/ts/core/remote/helloRepeat.ts', 'void transport.send(announce, peerId).catch(() => undefined);'],
-        ['src/ts/shells/remote/bridge/peer.ts', 'void transport.send(message, hostPeerId).catch(() => {'],
+        ['src/ts/shells/remote/bridge/invokes.ts', 'void transport.send(message, hostPeerId).catch(() => {'],
     ];
 
     interface Directive {

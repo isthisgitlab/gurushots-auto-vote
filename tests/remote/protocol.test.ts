@@ -224,10 +224,6 @@ describe('parsePeerMessage', () => {
         expect(parsePeerMessage({ t: 'result', id: 1, ok: false, error: 'plain', reason })).toBeNull();
     });
 
-    test('a failure result with the old too-large boolean marker is not one of the shapes', () => {
-        expect(parsePeerMessage({ t: 'result', id: 1, ok: false, error: 'plain', tooLarge: true })).toBeNull();
-    });
-
     test('restoreInvokeArgs puts the JSON-lost undefined arguments back', () => {
         const message: InvokeMessage = {
             t: 'invoke',

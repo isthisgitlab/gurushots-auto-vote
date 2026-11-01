@@ -1709,7 +1709,7 @@ export const app = {
     remoteUpdateNeeded: 'Update the app on your computer',
     remoteUpdateThis: 'Update this app',
     remotePageUnpublished: "The page for your computer's version is not published yet — try again later.",
-    remoteFull: 'Too many phones are connected — close the app on another phone, then try again.',
+    remoteFull: 'Too many phones are connected — close the app on another phone, then reload this page.',
     remoteFullShort: 'Too many phones',
     remoteChangeFailed:
         "Remote access was not changed. The setting could not be saved on this computer. Try again; if it keeps failing, check that the app's data folder can be written to.",

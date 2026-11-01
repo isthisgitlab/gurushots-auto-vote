@@ -183,8 +183,7 @@ export const parsePeerMessage = (raw: unknown): PeerMessage | null => {
             if (!isInteger(raw.id) || raw.id < 0 || typeof raw.ok !== 'boolean') return null;
             if (raw.ok) return { t: 'result', id: raw.id, ok: true, result: raw.result };
             // `reason` is the send-failure marker: absent, 'too-large' or 'unsendable' — anything else is
-            // not one of the shapes, and neither is the retired `tooLarge` boolean an older build sent.
-            if (raw.tooLarge !== undefined) return null;
+            // not one of the shapes.
             if (raw.reason !== undefined && raw.reason !== 'too-large' && raw.reason !== 'unsendable') return null;
             return isBoundedString(raw.error)
                 ? raw.reason === undefined

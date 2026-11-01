@@ -539,14 +539,14 @@ describe('installPeerBridge: which peer counts', () => {
         expect(remoteConnectionState()).toBe('network');
     });
 
-    test("an announced fellow phone's SDP failure reads offline, not try Wi-Fi", () => {
-        // The fellow announces itself as no desktop, so it leaves the candidate set; with the desktop
-        // still pending, its own connection trouble on cellular says nothing about the desktop's
-        // reachability — it is no "try Wi-Fi" case.
+    test("an announced fellow phone's SDP failure ends nothing", () => {
+        // The fellow announces itself as no desktop, so it leaves the candidate set; its own
+        // connection trouble on cellular says nothing about the desktop's reachability, and the
+        // wait for the desktop goes on.
         phone.emitJoin('fellow');
         phone.receiveFromPeer(fellowHello, 'fellow');
         phone.emitJoinError(SDP_FAILURE, 'fellow');
-        expect(remoteConnectionState()).toBe('offline');
+        expect(remoteConnectionState()).toBe('connecting');
     });
 
     test('a fellow phone leaving before the desktop answers keeps waiting; the last peer leaving reads offline', async () => {
@@ -586,6 +586,39 @@ describe('installPeerBridge: which peer counts', () => {
         // The leave is a fellow phone's, not the desktop's: the wait goes on, the held invoke stays.
         expect(settled).not.toHaveBeenCalled();
         expect(remoteConnectionState()).toBe('connecting');
+
+        // The desktop arrives, the held invoke goes out, and its answer resolves it.
+        phone.receiveFromPeer(hostHello, 'host');
+        expect(remoteConnectionState()).toBe('connected');
+        const sent = phone.sent.find(({ message }) => (message as { t: string }).t === 'invoke');
+        phone.receiveFromPeer(
+            { t: 'result', id: (sent?.message as { id: number } | undefined)?.id, ok: true, result: 1 },
+            'host',
+        );
+        await expect(pending).resolves.toBe(1);
+    });
+
+    test("an announced fellow phone's SDP failure ends nothing; the desktop still connects and resolves the held invoke", async () => {
+        const hostReceived: unknown[] = [];
+        host.onMessage((_peerId, raw) => hostReceived.push(raw));
+        phone.emitJoin('host');
+        phone.emitJoin('fellow');
+        const pending = api.getSettings() as Promise<unknown>;
+        const settled = jest.fn();
+        void pending.then(settled, settled);
+        // The fellow announces itself as no desktop: it is out of the candidate set from here on.
+        phone.receiveFromPeer(fellowHello, 'fellow');
+        phone.emitJoinError(SDP_FAILURE, 'fellow');
+        await flushAsync();
+        // The failure is a fellow phone's, not the desktop's: the wait goes on, the held invoke stays.
+        expect(settled).not.toHaveBeenCalled();
+        expect(remoteConnectionState()).toBe('connecting');
+
+        // The announce to the desktop still repeats.
+        const before = hostReceived.length;
+        jest.advanceTimersByTime(HELLO_RETRY_MS);
+        await Promise.resolve();
+        expect(hostReceived.length).toBeGreaterThan(before);
 
         // The desktop arrives, the held invoke goes out, and its answer resolves it.
         phone.receiveFromPeer(hostHello, 'host');
@@ -692,6 +725,26 @@ describe('installPeerBridge: which peer counts', () => {
         phone.emitJoin('host');
         await Promise.resolve();
         phone.receiveFromPeer({ t: 'bye', reason: 'full' }, 'host');
+        expect(remoteConnectionState()).toBe('full');
+        const after = hostReceived.length;
+        jest.advanceTimersByTime(HELLO_RETRY_MS * 3);
+        await Promise.resolve();
+        expect(hostReceived.length).toBe(after);
+        // The wait running out does not overwrite it.
+        jest.advanceTimersByTime(HOST_ANSWER_TIMEOUT_MS);
+        expect(remoteConnectionState()).toBe('full');
+    });
+
+    test('a full bye fails a held invoke plainly instead of leaving it pending forever', async () => {
+        const hostReceived: unknown[] = [];
+        host.onMessage((_peerId, raw) => hostReceived.push(raw));
+        phone.emitJoin('host');
+        await Promise.resolve();
+        // The invoke was created before the desktop answered: on the full bye it was never sent,
+        // so it fails plainly instead of hanging forever.
+        const pending = api.getSettings() as Promise<unknown>;
+        phone.receiveFromPeer({ t: 'bye', reason: 'full' }, 'host');
+        await expect(pending).rejects.toThrow('The connection to your computer dropped.');
         expect(remoteConnectionState()).toBe('full');
         const after = hostReceived.length;
         jest.advanceTimersByTime(HELLO_RETRY_MS * 3);
