@@ -12,17 +12,21 @@ import type { Session, WebContents } from 'electron';
  * geolocation and the rest. The app uses two permissions, notifications
  * (react/notifications/deadlineNotifier.ts) and clipboard-sanitized-write (the
  * Remote access "Copy link" button, react/components/app/RemoteAccessSection.tsx),
- * both only from its own `file:` pages.
+ * both only from its own `file:` pages. A `media` check (never a request) from those pages
+ * is also allowed: Chromium asks it before a peer connection, and without it WebRTC hides the
+ * machine's local addresses behind `.local` names the remote-access phone cannot resolve, so the
+ * pairing never connects. Camera and microphone stay denied — they go through the request handler.
  *
  * The page is judged on `webContents.getURL()`, never on a check's
  * `requestingOrigin`: Electron reports a `file:` page's origin as `file:///`
  * regardless of which file it is.
  */
 
-const allows = (webContents: WebContents | null, permission: string): boolean =>
-    (permission === 'notifications' || permission === 'clipboard-sanitized-write') &&
-    !!webContents &&
-    webContents.getURL().startsWith('file:');
+const REQUESTABLE = new Set(['notifications', 'clipboard-sanitized-write']);
+const CHECKABLE = new Set([...REQUESTABLE, 'media']);
+
+const allows = (granted: Set<string>, webContents: WebContents | null, permission: string): boolean =>
+    granted.has(permission) && !!webContents && webContents.getURL().startsWith('file:');
 
 const deny = (kind: 'request' | 'check', webContents: WebContents | null, permission: string) => {
     logger
@@ -32,12 +36,12 @@ const deny = (kind: 'request' | 'check', webContents: WebContents | null, permis
 
 const lockDown = (target: Session) => {
     target.setPermissionRequestHandler((webContents, permission, callback) => {
-        const allowed = allows(webContents, permission);
+        const allowed = allows(REQUESTABLE, webContents, permission);
         if (!allowed) deny('request', webContents, permission);
         callback(allowed);
     });
     target.setPermissionCheckHandler((webContents, permission) => {
-        const allowed = allows(webContents, permission);
+        const allowed = allows(CHECKABLE, webContents, permission);
         if (!allowed) deny('check', webContents, permission);
         return allowed;
     });

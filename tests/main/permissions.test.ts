@@ -144,7 +144,18 @@ describe.each([
 
     it('does not judge a check on its requesting origin', () => {
         expect(session().check!(page('https://evil.example/'), 'notifications', 'file:///')).toBe(false);
-        expect(session().check!(page(FILE_PAGE), 'media', 'file:///')).toBe(false);
+        expect(session().check!(page(FILE_PAGE), 'geolocation', 'file:///')).toBe(false);
+    });
+
+    it('allows a media check from a file: page, so WebRTC exposes the local addresses remote access needs', () => {
+        expect(session().check!(page(FILE_PAGE), 'media', 'file:///')).toBe(true);
+        expect(cat.warning).not.toHaveBeenCalled();
+    });
+
+    it('denies a media check from a remote page and with no web contents', () => {
+        expect(session().check!(page('https://evil.example/'), 'media', 'file:///')).toBe(false);
+        expect(session().check!(null, 'media', 'file:///')).toBe(false);
+        expect(cat.warning).toHaveBeenCalledWith("Denied permission check 'media' from https://evil.example/", null);
     });
 
     it('denies a check with no web contents and logs <unknown>', () => {
