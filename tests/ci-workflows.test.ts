@@ -439,12 +439,13 @@ describe('Pages', () => {
         expect(triggers).toEqual(['workflow_dispatch']);
     });
 
-    test('a release dispatches the rebuild for master and develop alike, always on develop', () => {
+    test('a release dispatches the rebuild on the branch that was released', () => {
         const trigger = stepNamed(build.jobs['create-release'], 'Trigger Pages rebuild');
         expect(trigger.if).toBe("github.ref_name == 'master' || github.ref_name == 'develop'");
-        // Pages runs on develop only.
-        expect(trigger.run).toContain('gh workflow run pages.yml --ref develop');
-        expect(trigger.run).not.toContain('--ref master');
+        // The ref travels through the step's env, never interpolated into the script.
+        expect(trigger.run).toContain('gh workflow run pages.yml --ref "$REF"');
+        expect(trigger.run).not.toContain('${{');
+        expect(trigger.env?.REF).toBe('${{ github.ref_name }}');
     });
 
     test('the build job runs on ubuntu-latest with time for two installs and two site builds', () => {
@@ -452,17 +453,18 @@ describe('Pages', () => {
         expect(pages.jobs.build['timeout-minutes']).toBe(30);
     });
 
-    test('the /remote/ build resolves the newest develop release tag first', () => {
-        const tag = stepNamed(pages.jobs.build, 'Resolve the released develop tag');
+    test('the /remote/ build resolves the newest release tag of the dispatched branch first', () => {
+        const tag = stepNamed(pages.jobs.build, 'Resolve the released tag');
         expect(tag.id).toBe('remote-tag');
         const run = tag.run ?? '';
         // The whole script avoids expression interpolation — the repository name
         // travels through the step's REPO env instead, so bash never evaluates a ${{ }}.
         expect(run.startsWith('set -euo pipefail')).toBe(true);
         expect(run).not.toContain('${{');
-        expect(run).toContain('"repos/$REPO/contents/package.json?ref=develop"');
+        expect(run).toContain('"repos/$REPO/contents/package.json?ref=$BRANCH"');
+        expect(tag.env?.BRANCH).toBe('${{ github.ref_name }}');
         expect(run).toContain('jq -r .version');
-        // develop's package.json version only changes in the release bump commit,
+        // The branch's package.json version only changes in the release bump commit,
         // so the version check plus a published-release check pin the newest release.
         expect(run).toContain('[[ ! "$version" =~ ^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]');
         // Only the release view's stdout is discarded: gh's own stderr (auth,
@@ -479,7 +481,7 @@ describe('Pages', () => {
     });
 
     test('the remote page is checked out from the resolved release tag without persisted credentials', () => {
-        const checkout = stepNamed(pages.jobs.build, 'Checkout the released develop code for the remote page');
+        const checkout = stepNamed(pages.jobs.build, 'Checkout the released code for the remote page');
         expect(checkout.uses).toMatch(SHA_PIN);
         expect(checkout.with?.ref).toBe('${{ steps.remote-tag.outputs.tag }}');
         expect(checkout.with?.path).toBe('remote-src');
@@ -495,12 +497,12 @@ describe('Pages', () => {
         const job = pages.jobs.build;
         const order = [
             'Build site',
-            'Resolve the released develop tag',
-            'Checkout the released develop code for the remote page',
+            'Resolve the released tag',
+            'Checkout the released code for the remote page',
             'Install the remote page dependencies',
             'Build the remote page',
             'Require the remote page loader',
-            'Publish the remote page from develop',
+            'Publish the remote page from the release',
         ].map((name) => indexOfStep(job, name));
         expect(order).toEqual([...order].sort((a, b) => a - b));
     });
@@ -521,7 +523,7 @@ describe('Pages', () => {
     });
 
     test('the develop build replaces the remote tree the artifact uploads', () => {
-        const publish = stepNamed(pages.jobs.build, 'Publish the remote page from develop');
+        const publish = stepNamed(pages.jobs.build, 'Publish the remote page from the release');
         expect(publish.run).toContain('rm -rf dist-site/remote');
         expect(publish.run).toContain('cp -R remote-src/dist-site/remote dist-site/remote');
         expect(stepNamed(pages.jobs.build, 'Upload Pages artifact').with?.path).toBe('dist-site');
@@ -539,8 +541,8 @@ describe('Pages', () => {
         expect(stepNamed(pages.jobs.build, 'Install the remote page dependencies').env?.GITHUB_TOKEN).toBeUndefined();
     });
 
-    describe('the released develop tag script runs', () => {
-        const script = stepNamed(pages.jobs.build, 'Resolve the released develop tag').run ?? '';
+    describe('the released tag script runs', () => {
+        const script = stepNamed(pages.jobs.build, 'Resolve the released tag').run ?? '';
 
         interface TagResolution {
             status: number;
@@ -565,6 +567,7 @@ describe('Pages', () => {
                         'case "$1" in',
                         '    api)',
                         '        [ "$STUB_API_FAIL" = 1 ] && exit 1',
+                        '        case "$2" in *"?ref=$BRANCH") ;; *) echo "wrong ref: $2" >&2; exit 65 ;; esac',
                         '        printf \'{"version":"%s"}\\n\' "$STUB_VERSION"',
                         '        ;;',
                         '    release)',
@@ -591,6 +594,7 @@ describe('Pages', () => {
                             PATH: `${bin}:${process.env.PATH ?? ''}`,
                             GITHUB_OUTPUT: output,
                             REPO: 'owner/repo',
+                            BRANCH: 'master',
                             GH_TOKEN: 'stub-token',
                             ...stub,
                         },

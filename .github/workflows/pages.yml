@@ -1,12 +1,12 @@
 name: Pages
 
 # Builds the README (+ linked docs) into a branded static site and publishes it
-# to GitHub Pages from develop: the docs come from the develop checkout, and the
-# /remote/ tree (the phone page and its version pages) from the newest develop
-# release tag. The workflow is dispatched on develop after every release.
-# Requires one-time repo settings: Settings → Pages → Build and deployment →
-# Source = "GitHub Actions", and develop in the github-pages environment's
-# allowed deployment branches.
+# to GitHub Pages from the branch it is dispatched on: build.yml dispatches it on
+# the branch that was just released (master or develop). The docs come from that
+# branch's checkout, and the /remote/ tree (the phone page and its version pages)
+# from that branch's newest release tag. Requires one-time repo settings:
+# Settings → Pages → Build and deployment → Source = "GitHub Actions", and
+# master and develop in the github-pages environment's allowed deployment branches.
 on:
     # No push trigger: Pages must never go live before a release succeeds.
     # build.yml's create-release job dispatches this workflow only after a
@@ -55,34 +55,35 @@ jobs:
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-            # The /remote/ tree is built from the newest develop release tag, not
-            # the develop checkout above, so unreleased commits never reach it.
+            # The /remote/ tree is built from this branch's newest release tag, not
+            # the checkout above, so unreleased commits never reach it.
             #
-            # tag v<develop's package.json version> is the newest develop release:
+            # tag v<this branch's package.json version> is its newest release:
             # that version changes only in the release job's bump commit, so a
             # published release for it must exist. Building from the tag instead
-            # of develop HEAD keeps unreleased commits off Pages.
-            - name: Resolve the released develop tag
+            # of the branch head keeps unreleased commits off Pages.
+            - name: Resolve the released tag
               id: remote-tag
               run: |
                   set -euo pipefail
-                  version=$(gh api "repos/$REPO/contents/package.json?ref=develop" -H 'Accept: application/vnd.github.raw+json' | jq -r .version)
+                  version=$(gh api "repos/$REPO/contents/package.json?ref=$BRANCH" -H 'Accept: application/vnd.github.raw+json' | jq -r .version)
                   if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
-                      echo "::error::develop's package.json version '$version' is not a valid version — cannot resolve a release tag."
+                      echo "::error::$BRANCH's package.json version '$version' is not a valid version — cannot resolve a release tag."
                       exit 1
                   fi
                   # Only stdout is discarded: gh's own stderr (auth, network, rate
                   # limit, not found) stays in the log.
                   if ! gh release view "v$version" --repo "$REPO" > /dev/null; then
-                      echo "::error::no published release for tag v$version — the /remote/ tree is built from released code only. If develop's version bump was pushed but publishing failed, re-run the release job (create-release) in build.yml."
+                      echo "::error::no published release for tag v$version — the /remote/ tree is built from released code only. If $BRANCH's version bump was pushed but publishing failed, re-run the release job (create-release) in build.yml."
                       exit 1
                   fi
                   echo "tag=v$version" >> "$GITHUB_OUTPUT"
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   REPO: ${{ github.repository }}
+                  BRANCH: ${{ github.ref_name }}
 
-            - name: Checkout the released develop code for the remote page
+            - name: Checkout the released code for the remote page
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
               with:
                   ref: ${{ steps.remote-tag.outputs.tag }}
@@ -109,11 +110,11 @@ jobs:
             - name: Require the remote page loader
               run: |
                   [ -f remote-src/dist-site/remote/index.html ] || {
-                      echo "::error::remote-src/dist-site/remote/index.html is missing — develop's build:site produced no remote page loader."
+                      echo "::error::remote-src/dist-site/remote/index.html is missing — the release's build:site produced no remote page loader."
                       exit 1
                   }
 
-            - name: Publish the remote page from develop
+            - name: Publish the remote page from the release
               run: |
                   rm -rf dist-site/remote
                   cp -R remote-src/dist-site/remote dist-site/remote

@@ -881,17 +881,18 @@ jobs:
             # (The bump commit above carries [skip ci] so build.yml doesn't
             # re-fire on its own push; workflow_dispatch is not a push, so
             # dispatching pages.yml here doesn't re-trigger build.yml either —
-            # no loop.) Fired after every release; Pages always runs on develop,
-            # which builds the docs from develop and the /remote/ tree from the
-            # newest develop release tag. A dispatch hiccup must not fail the
-            # job — the release is already published — so warn instead of erroring.
+            # no loop.) Fired after every release, on the branch that was released:
+            # pages.yml builds the docs from that branch and the /remote/ tree from
+            # its newest release tag. A dispatch hiccup must not fail the job — the
+            # release is already published — so warn instead of erroring.
             - name: Trigger Pages rebuild
               if: github.ref_name == 'master' || github.ref_name == 'develop'
               # The release and bump are already published by the time we get here,
               # so a dispatch hiccup must not fail the whole job — surface a warning
               # instead so a maintainer can re-run pages.yml from the Actions tab.
               run: |
-                  gh workflow run pages.yml --ref develop \
+                  gh workflow run pages.yml --ref "$REF" \
                     || echo "::warning::Pages dispatch failed — re-run pages.yml manually from the Actions tab to refresh the site."
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  REF: ${{ github.ref_name }}
