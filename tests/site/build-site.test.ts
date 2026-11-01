@@ -265,9 +265,14 @@ describe('main with every default', () => {
         try {
             // The defaults are the real repo paths: main() renders the real site (build output,
             // gitignored) exactly as `pnpm build:site` would — real release listing included,
-            // stubbed here to an empty one so the test stays network-free.
+            // stubbed here to an empty one so the test stays network-free. Whether the repo's dist/
+            // holds a renderer build depends on the machine (CI tests before building), so only the
+            // remote step having run off the default dist is asserted, never its output.
             await main();
-            expect(fs.existsSync(nodePath.join(root, 'dist-site', 'remote'))).toBe(true);
+            expect(fs.existsSync(nodePath.join(root, 'dist-site', 'index.html'))).toBe(true);
+            expect(logSpy2).toHaveBeenCalledWith(
+                expect.stringMatching(/^(✓ remote\/index\.html|⏭️ {2}remote\/ loader)/),
+            );
         } finally {
             delete (globalThis as { fetch?: unknown }).fetch;
             exitSpy2.mockRestore();
@@ -470,6 +475,13 @@ describe('buildRemoteSite (the /remote/ tree)', () => {
         }
     });
 
+    test('a stylesheet without the local version page lands at the loader root only', async () => {
+        write(nodePath.join('dist', 'styles.css'), 'body{}');
+        await buildRemoteSite(out, '9.9.9', { dist, listReleases: async () => [] });
+        expect(fs.readFileSync(nodePath.join(out, 'remote', 'styles.css'), 'utf8')).toBe('body{}');
+        expect(fs.existsSync(nodePath.join(out, 'remote', '9.9.9'))).toBe(false);
+    });
+
     test('a zip whose checksum does not match is refused', async () => {
         seedDist('9.9.9');
         await buildRemoteSite(out, '9.9.9', {
@@ -510,7 +522,11 @@ describe('buildRemoteSite (the /remote/ tree)', () => {
         for (const page of PAGES) write(page.src, `# ${page.src}`);
         try {
             await main({ rootDir: tmp, out, layoutFile: nodePath.join(tmp, 'layout.html') });
-            expect(fs.existsSync(nodePath.join(out, 'remote'))).toBe(true);
+            // The repo's dist/ may or may not hold a renderer build (CI tests before building).
+            expect(fs.existsSync(nodePath.join(out, 'index.html'))).toBe(true);
+            expect(logSpy).toHaveBeenCalledWith(
+                expect.stringMatching(/^(✓ remote\/index\.html|⏭️ {2}remote\/ loader)/),
+            );
         } finally {
             delete (globalThis as { fetch?: unknown }).fetch;
         }
