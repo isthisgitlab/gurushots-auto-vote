@@ -80,7 +80,7 @@ void (async () => {
     };
     transport.onPeerJoin((peerId) => {
         // oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- the loader announces itself to the peer over the pairing transport, never a frame send
-        void transport.send(announce, peerId);
+        void transport.send(announce, peerId).catch(() => undefined);
     });
     transport.onMessage((_peerId, raw) => {
         const message = parsePeerMessage(raw);

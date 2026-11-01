@@ -154,6 +154,27 @@ describe('the /remote/ loader', () => {
         expect(document.getElementById('root')?.textContent).toContain('try Wi-Fi');
     });
 
+    test('a dropped announce still connects once the retry-capable desktop answers', async () => {
+        // The loader send is catch-wrapped: a lost announce rejects quietly and the loader
+        // still navigates when the desktop's hello arrives (the desktop repeats its own).
+        const isolated = new TransportStub('loader');
+        isolated.failNextSendOnce();
+        transportStub.current = isolated;
+        loadLoader();
+        await flush();
+        isolated.emitJoin('host');
+        await flush();
+        expect(isolated.sent).toHaveLength(1);
+        isolated.receiveFromPeer(
+            { t: 'hello', version: '9.9.9', protocolVersion: PROTOCOL_VERSION, host: true },
+            'host',
+        );
+        await flush();
+        expect(assigned).toEqual(['./9.9.9/#k=the-key']);
+        await flush();
+        expect(isolated.left).toBe(false);
+    });
+
     test('another join failure reads as offline-or-reset', async () => {
         loadLoader();
         await flush();
