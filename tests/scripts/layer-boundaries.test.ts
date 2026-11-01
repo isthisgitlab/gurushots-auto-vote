@@ -465,7 +465,9 @@ describe('under Oxlint', () => {
             const diagnostics = isPlainObject(output) && Array.isArray(output.diagnostics) ? output.diagnostics : [];
             for (const diagnostic of diagnostics) {
                 const { filename, message } = invalid<{ filename: string; message: string }>(diagnostic);
-                const name = path.relative(dir, filename);
+                // Oxlint prints a filename relative to its working directory where it can (Linux /tmp) and absolute
+                // where it cannot (macOS, whose temp dir sits behind a symlink): resolve it against that directory.
+                const name = path.relative(dir, path.resolve(dir, filename));
                 found.set(name, (found.get(name) ?? new Set<string>()).add(message));
             }
             cases.forEach(([, code, messages], index) => {
