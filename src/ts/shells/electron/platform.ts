@@ -5,8 +5,9 @@
  * (paths.isPackaged reads app.isPackaged through the guarded require).
  * Installed when the module loads; index.ts imports it first, before any core
  * module. The electron reads are reached at call time — the install must run
- * before the logger loads — so this module's own import chain is the port and
- * the family builder only.
+ * before the logger loads — so this module's own static imports are the port,
+ * the family builder, and `index/session.ts` (the leaf whose own logger
+ * access is a call-time `require`).
  */
 
 import { installPlatform } from '../../core/platform/port';

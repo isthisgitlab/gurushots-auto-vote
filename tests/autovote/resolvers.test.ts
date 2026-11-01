@@ -1,10 +1,9 @@
 /**
  * The autovote controller's IPC resolvers (src/ts/core/autovote/resolvers.ts) over a
- * hand-built host — the cases autovoteScheduler.test.tsx and
- * tests/ui/autovote-threshold-scheduling.test.ts used to carry. Each resolver
- * batches its per-challenge keys over getEffectiveSetting and applies the same
- * enablement gate as the Node resolvers; the decision cases compose the
- * factory resolvers over the real computeNextCycleDelayMs.
+ * hand-built host. Each resolver batches its per-challenge keys over
+ * getEffectiveSetting and applies the same enablement gate as the Node
+ * resolvers; the decision cases compose the factory resolvers over the real
+ * computeNextCycleDelayMs.
  */
 
 import type * as resolversModule from '../../src/ts/core/autovote/resolvers';

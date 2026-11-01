@@ -10,7 +10,7 @@
  *     out of the address bar: a header on POSTs, a query parameter on the
  *     event stream (EventSource sets no headers);
  *   - event methods subscribe to one shared EventSource on /api/events;
- *   - login / logout are local mount swaps (pages/Web.tsx listens through
+ *   - login / logout are local mount swaps (shells/web/page.tsx listens through
  *     onShellEvent); logout clears the token on the server first.
  *
  * open-external-url, reload-window and refresh-menu act in the browser — the

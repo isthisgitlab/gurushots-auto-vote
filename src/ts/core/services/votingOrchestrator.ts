@@ -60,7 +60,7 @@ import { runScenarioStep } from './scenarioRunner';
 import * as cancellation from '../voting/cancellation';
 import { beginVotingPass, isVotingPassRunning } from '../voting/passActivity';
 import { failureText } from '../format/logSafe';
-import { errorKind } from '../errorMessage';
+import { errorKind, errorMessage } from '../errorMessage';
 import { consumeChosenPhotos } from '../settings';
 import { isMarkedChallenge } from '../challengeMarks';
 import { getEntries } from './autoFill/challengeState';
@@ -83,7 +83,6 @@ import {
 import type { Challenge } from '../types/gurushots';
 import type { VotingPassDeps, VotingPassResult } from '../types/votingPass';
 import type { PassContext } from './votingOrchestrator/context';
-import { errorMessage } from '../errorMessage';
 
 /**
  * Failed-pass exit before any challenge is processed: log on the challenges

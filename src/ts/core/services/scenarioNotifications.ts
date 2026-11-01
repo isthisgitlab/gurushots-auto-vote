@@ -2,7 +2,7 @@
  * OS notifications for user-defined scenarios: the notices a scenario's
  * `notify` action (and a halt) leave in the challenge's scenario state
  * outbox (services/scenarioRunner.ts), delivered by the host's per-cycle
- * notifier — the CLI scheduler (services/notify/nodeNotify.ts) and the
+ * notifier — the CLI scheduler (shells/cli/nodeNotify.ts) and the
  * desktop renderer (react/notifications/scenarioNotifier.ts), alongside the
  * deadline notifications and through the same transports.
  *

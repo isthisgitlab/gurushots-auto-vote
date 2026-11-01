@@ -50,7 +50,7 @@ const LOCAL_DATA_STORES: readonly LocalDataStore[] = [
 // The directories (under the user-data directory) the app fills: its logs, and the CLI's extracted vision runtime.
 const LOCAL_DATA_DIRECTORIES = ['logs', 'vision'] as const;
 
-// The vision runtime of the CLI binary lives under this app name whatever the build (services/visionCliAssets.ts).
+// The vision runtime of the CLI binary lives under this app name whatever the build (shells/cli/visionCliAssets.ts).
 const VISION_APP_NAME = 'gurushots-auto-vote';
 
 // Files that are not stores but sit beside them: the lock files of the join and scenario state and of the settings

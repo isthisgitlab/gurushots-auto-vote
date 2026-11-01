@@ -6,7 +6,7 @@
  * Thin dispatcher: parses argv, routes to a command module, and owns
  * process-level concerns (init, exit codes, unhandled error handlers).
  * Every command that loads the settings (all but help, licenses and reset-data) holds the CLI session marker while it
- * runs (settings/cliSessionLock.ts).
+ * runs (platforms/node/cliSessionLock.ts).
  * The command table (name → handler) is cli/commandTable.ts, built from the
  * handler factories in cli/commandKit.ts; `help` text is cli/help.ts.
  * The actual command logic lives in:

@@ -261,7 +261,7 @@ const installBridge = (): WindowApi => {
 
     // Route logger fan-out into the in-process emitter so the Logs page
     // (useLogStream → onLogMessage) receives live entries. Electron does
-    // the equivalent in log.handlers.register() by setting
+    // the equivalent in shells/electron/registerIpc.ts by setting
     // global.sendLogToGUI; the WebView has no `global`, so use globalThis.
     (globalThis as typeof globalThis & { sendLogToGUI?: GuiLogSink }).sendLogToGUI = (entry) =>
         emit('log-message', entry);

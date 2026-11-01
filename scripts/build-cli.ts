@@ -112,7 +112,7 @@ async function prepareVisionRuntime() {
     pruneVisionRuntime(path.join(deployDir, 'node_modules', '.pnpm'));
     fs.cpSync(modelDir, path.join(deployDir, 'vision-model'), { recursive: true });
     // The binary embeds this digest of the runtime's code; loading the extracted
-    // copy recomputes it (services/visionCliAssets.ts).
+    // copy recomputes it (shells/cli/visionCliAssets.ts).
     fs.writeFileSync(path.join(BUILD_DIR, 'vision-runtime.code.sha256'), digestVisionRuntime(deployDir));
     const archive = path.join(BUILD_DIR, 'vision-runtime.tar.gz');
     // COPYFILE_DISABLE: macOS tar would otherwise add `._*` AppleDouble entries for

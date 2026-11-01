@@ -4,7 +4,7 @@
  *
  *   - Electron: preload.ts generates contextBridge methods from this list; the Logs
  *     window's preloadLogs.ts generates only the logsWindow* subset.
- *   - Capacitor: bridge/capacitor.ts derives its in-process bridge from the
+ *   - Capacitor: shells/capacitor/bridge/capacitor.ts derives its in-process bridge from the
  *     same names (it implements a subset of channels plus its own update
  *     stubs, but aliases/sends/events come from here).
  *

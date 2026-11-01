@@ -12,8 +12,8 @@ const hasNoCredentials = (parsed: URL): boolean => parsed.username === '' && par
  * Shared external-URL safety gate.
  *
  * Lives here (dependency-free, next to logSafe) so BOTH platform bridges share
- * one definition: the Electron `open-external-url` handler (ipc/misc.handlers.ts)
- * and the Capacitor `openExternalUrl` bridge (bridge/capacitor.ts). Separate
+ * one definition: the Electron `open-external-url` handler (shells/electron/misc.handlers.ts)
+ * and the Capacitor `openExternalUrl` bridge (shells/capacitor/bridge/capacitor.ts). Separate
  * copies would let the two platforms silently diverge on a security control —
  * a caller passing API-sourced data through the Android path could get a
  * weaker guarantee (file:, intent:, javascript:, app-scheme handlers) than on

@@ -118,7 +118,7 @@ describe('sends toward the Logs window', () => {
     const typescript = require('prettier/plugins/typescript') as typeof import('prettier/plugins/typescript');
     const root = path.join(__dirname, '..');
     const srcFiles = (): string[] => fs.globSync('src/ts/**/*.{ts,tsx}', { cwd: root });
-    // restrictToLogsChannels (ipc/registerHandlers.ts) filters only `webContents.send`; the frame-guard Oxlint rule
+    // restrictToLogsChannels (shells/electron/registerHandlers.ts) filters only `webContents.send`; the frame-guard Oxlint rule
     // (scripts/lint/frame-guard.mts) keeps every other route to a window out of src/ts. Switching it off, or widening
     // its exemptions, has to show up here.
     test('Oxlint runs the frame-guard rule over all of src/ts with no file exempt', () => {
@@ -336,8 +336,10 @@ describe('sends toward the Logs window', () => {
 });
 
 // Every channel an ipcMain call registers must pass the sender-frame check. registerHandlers wraps each handle
-// channel in it, so no other file may call ipcMain.handle; the two send-style channels the Electron entry registers
-// with ipcMain.on carry no reply and apply the same checks by hand, each at its own guarded site.
+// channel in it, so no other file may call ipcMain.handle, and no other registration method (handleOnce, once,
+// addListener, prependListener, prependOnceListener) may appear anywhere under src/ts — each would add a channel
+// or listener that never passes that check; the two send-style channels the Electron entry registers with
+// ipcMain.on carry no reply and apply the same checks by hand, each at its own guarded site.
 describe('ipcMain registration', () => {
     const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
     const path = jest.requireActual<typeof import('node:path')>('node:path');
@@ -372,6 +374,21 @@ describe('ipcMain registration', () => {
             expect(guard).toContain('isTrustedSender(event)');
             expect(guard).toContain(`isChannelAllowedForSender(event, '${channel}')`);
         }
+    });
+
+    test('no other ipcMain registration method appears anywhere in src/ts', () => {
+        const FORBIDDEN = ['handleOnce', 'once', 'addListener', 'prependListener', 'prependOnceListener'];
+        const offenders = fs
+            .globSync('src/ts/**/*.{ts,tsx}', { cwd: root })
+            .sort()
+            .flatMap((file) =>
+                [
+                    ...fs
+                        .readFileSync(path.join(root, file), 'utf8')
+                        .matchAll(new RegExp(`\\bipcMain\\.(?:${FORBIDDEN.join('|')})\\(`, 'g')),
+                ].map((match) => `${file}: ${match[0]}`),
+            );
+        expect(offenders).toEqual([]);
     });
 });
 

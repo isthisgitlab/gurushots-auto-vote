@@ -122,8 +122,10 @@ const saveThroughCas = async (
 /** The mutable side of one key's write-behind: what the queued writes and the reads coordinate through. */
 type WriteBehindState = {
     issued: number;
+    // Bumped by `discard`: a queued write from before it finds the number changed on its turn and puts nothing down.
     generation: number;
     lastFailed: boolean;
+    // The latest value queued or written through (null until one is), and the one a queued write puts down.
     intended: string | null;
     queuedText: string;
 };
@@ -223,7 +225,7 @@ const createWriteBehind = (
     let latest: Promise<WriteOutcome> = Promise.resolve({ ok: true });
     let queued = 0;
     let flushedAt = 0;
-    // The latest value queued or written through (null until one is), and the one a queued write puts down.
+    // Records a write's value in memory: `intended` and `queuedText` take it together.
     const intend = (text: string) => {
         state.intended = text;
         state.queuedText = text;

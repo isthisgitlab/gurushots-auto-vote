@@ -78,7 +78,7 @@ export const autoSubmitSettings = {
         description: 'app.protectUncertainAutoSubmitsDesc',
     },
     // A stored single autoFillIntervalMinutes value is migrated into this list
-    // in settings/migrations/autoSubmitSchedule.ts (`_autoFillScheduleMigratedV1`). Default: 2 @ 30m,
+    // in settings/importV1/migrations.ts (`_autoFillScheduleMigratedV1`). Default: 2 @ 30m,
     // 3 @ 20m, 4 @ 10m before close.
     autoSubmitSchedule: {
         type: 'schedule',

@@ -93,6 +93,7 @@ const VALID: ReadonlyArray<readonly [string, string]> = [
     ["import '../../../react/api/ipc';", file('src/ts/shells/electron/windows/quitGuard.ts')],
     ["import './lifecycle';", file('src/ts/shells/electron/windows/quitGuard.ts')],
     ["import 'electron';", file('src/ts/shells/electron/index.ts')],
+    ["import 'electron/main';", file('src/ts/shells/electron/index.ts')],
     ["import '../../core/services/votingOrchestrator';", file('src/ts/shells/cli/runScheduler.ts')],
     ["import '../../../react/api/ipc';", file('src/ts/shells/web/bridge/web.ts')],
     ["import '../../platforms/webview/capacitorPreferences';", file('src/ts/shells/web/server.ts')],
@@ -158,6 +159,8 @@ const INVALID: ReadonlyArray<readonly [string, string, ...string[]]> = [
     ],
     // core reaches nothing but core.
     ["import '../../react/api/ipc';", CORE, crossing('core', 'react', '../../react/api/ipc')],
+    // The renderer alias `@/` maps to react: a core file taking it crosses into react all the same.
+    ["import '@/api/ipc';", CORE, crossing('core', 'react', '@/api/ipc')],
     ["import '../../appPaths';", CORE, crossing('core', 'platform:node', '../../appPaths')],
     [
         "import '../../platforms/webview/store';",
@@ -175,6 +178,7 @@ const INVALID: ReadonlyArray<readonly [string, string, ...string[]]> = [
     // A forbidden package is a crossing on its own, in every import form — the side-effect form included.
     ["import 'electron';", CORE, crossing('core', 'forbidden-package', 'electron')],
     ["import 'electron-log';", CORE, crossing('core', 'forbidden-package', 'electron-log')],
+    ["import 'electron/main';", CORE, crossing('core', 'forbidden-package', 'electron/main')],
     ["import '@capacitor/app';", CORE, crossing('core', 'forbidden-package', '@capacitor/app')],
     [
         "import '@capawesome-team/capacitor-background-task';",
@@ -348,6 +352,9 @@ describe('under Oxlint', () => {
                 ['core/services', "import 'zod';", []],
                 // A side-effect import of a forbidden target: zero specifiers, and still a runtime edge.
                 ['core/services', "import 'electron';", [crossing('core', 'forbidden-package', 'electron')]],
+                // A package subpath reads as the same forbidden package.
+                ['core/services', "import 'electron/main';", [crossing('core', 'forbidden-package', 'electron/main')]],
+                ['shells/electron/index', "import 'electron/main';", []],
                 [
                     'core/ipc/actions',
                     "import '../../../shells/electron/windows/quitGuard';",

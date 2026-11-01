@@ -1,5 +1,5 @@
 /**
- * Web entry (pages/Web.tsx) — at module load installs the fetch/SSE bridge,
+ * Web entry (shells/web/page.tsx) — at module load installs the fetch/SSE bridge,
  * mounts Login or App from whether the server holds a token, and re-mounts on
  * login-success / logout. Each test loads the module in an isolated registry
  * with its collaborators doMock'ed.

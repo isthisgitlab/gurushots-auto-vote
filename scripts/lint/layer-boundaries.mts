@@ -106,6 +106,7 @@ const resolveRelative = (from: string, specifier: string): string => {
 // crossing in itself. Every other package specifier is shared ground.
 const isForbiddenPackage = (specifier: string): boolean =>
     specifier === 'electron' ||
+    specifier.startsWith('electron/') ||
     specifier.startsWith('electron-') ||
     specifier.startsWith('@capacitor/') ||
     specifier.startsWith('@capawesome-team/');

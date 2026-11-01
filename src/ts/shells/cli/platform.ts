@@ -7,7 +7,8 @@
  * shell with no windows. Installed when the module loads; cli.ts imports it
  * first, before any core module. The wrapped modules are reached at call
  * time — the install must run before the logger loads — so this module's own
- * import chain is the port and the family builder only.
+ * static imports are the port, the family builder, and the `node:path`
+ * builtin.
  */
 
 import * as path from 'node:path';

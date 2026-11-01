@@ -50,7 +50,7 @@ const requireUpdater = ({
 };
 
 const buildUpdateFlowHandlers = (deps: UpdateHandlerDeps) => ({
-    // Typed as the summary both shells return (bridge/capacitor.ts implements it too).
+    // Typed as the summary both shells return (shells/capacitor/bridge/capacitor.ts implements it too).
     'check-for-updates': async (): Promise<
         { success: true; updateInfo: UpdateSummary | null } | { success: false; error: string }
     > => {
@@ -64,7 +64,7 @@ const buildUpdateFlowHandlers = (deps: UpdateHandlerDeps) => ({
     },
 
     // Typed as the result both shells return: the Android shell's failure also carries a refusal `code`
-    // (bridge/capacitor.ts implements it).
+    // (shells/capacitor/bridge/capacitor.ts implements it).
     'download-update': async (): Promise<
         { success: true } | { success: false; error: string; code?: string; fallbackUrl?: string }
     > => {

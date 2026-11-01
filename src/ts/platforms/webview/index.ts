@@ -7,11 +7,11 @@
  *
  * The members that need the shell's own code are passed in through `parts` —
  * every part is required, so a shell that forgets one fails to compile: the
- * native services call services/NativeAutovoteBridge.ts and its siblings
+ * native services call shells/capacitor/NativeAutovoteBridge.ts and its siblings
  * (shell modules a family cannot import), the native wipe calls the
  * AutoVoteBackground plugin, the compare-and-write goes to the native bridge
  * and is what the storage transport saves shared keys through (store.ts),
- * and the windows are the shell's broadcast and reload (bridge/capacitor.ts).
+ * and the windows are the shell's broadcast and reload (shells/capacitor/bridge/capacitor.ts).
  *
  * The modules the family delegates to are reached at call time, never at
  * load: the node project's setup file loads the test helpers that import

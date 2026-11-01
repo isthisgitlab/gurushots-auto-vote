@@ -114,7 +114,7 @@ const openFirstWindow = async () => {
 
     // Initialize global AutoUpdater instance. Deliberately constructed
     // WITHOUT a window — unlike the windowed constructions in
-    // ipc/update.handlers.ts and ui/applicationMenu.ts — because the
+    // update.handlers.ts and ui/applicationMenu.ts — because the
     // startup check below runs before any window exists (pre-window so
     // an update prompt can't race the main window's challenge load and
     // double-load challenges).

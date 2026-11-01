@@ -163,7 +163,7 @@
                                 "message": "consoleSink is the logger's unredacted console path — only src/ts/core/logger/ may import it; log through the logger."
                             },
                             {
-                                "regex": "settings/(challengeFacts|challengeOverrides|chosenPhotosClear|defaults|formatOneMirror|importMarker|importReport|importV1|importedRecord|jsonStore|legacyImport|loadValidation|logValue|migrations|openChallenges|persistence|profileStore|profiles|reset|ruleResolution|saveDropped|scenarioLookup|scenarioOverlay|scenarioSchema|scenarios|settingsLock|settingsMerge|signInFingerprint|staleChallengeCleanup|storageTypes|titlePins|titleRuleSanitize|titleRules|userDataPaths)(/[^/]+)?(\\.js)?$",
+                                "regex": "settings/(challengeFacts|challengeOverrides|defaults|entryPins|formatOneTimezone|importMarker|importReport|importV1|importedRecord|jsonStore|legacyImport|loadValidation|logValue|openChallenges|persistence|profileStore|profiles|reset|ruleResolution|saveDropped|scenarioLookup|scenarioOverlay|scenarioSchema|scenarios|settingsLock|settingsMerge|staleChallengeCleanup|storageTypes|titlePins|titleRuleSanitize|titleRules|userDataPaths)(/[^/]+)?(\\.js)?$",
                                 "message": "Settings internals are private to the facade — import settings.ts instead.",
                                 "allowTypeImports": true
                             },
@@ -252,7 +252,7 @@
         },
         // Renderer (Preact via preact/compat).
         // - no-restricted-imports: the React tree must never import Node-only,
-        //   process-spawning code — services/notify/nodeNotify.js requires
+        //   process-spawning code — shells/cli/nodeNotify.js requires
         //   node:child_process, and bundling it would ship a shell-spawning path into
         //   the WebView/Electron renderer. Renderer notifications go through
         //   react/notifications/deadlineNotifier.js. It repeats the settings-facade
@@ -293,7 +293,7 @@
                                 "message": "consoleSink is the logger's unredacted console path — only src/ts/core/logger/ may import it; log through the logger."
                             },
                             {
-                                "regex": "settings/(challengeFacts|challengeOverrides|chosenPhotosClear|defaults|formatOneMirror|importMarker|importReport|importV1|importedRecord|jsonStore|legacyImport|loadValidation|logValue|migrations|openChallenges|persistence|profileStore|profiles|reset|ruleResolution|saveDropped|scenarioLookup|scenarioOverlay|scenarioSchema|scenarios|settingsLock|settingsMerge|signInFingerprint|staleChallengeCleanup|storageTypes|titlePins|titleRuleSanitize|titleRules|userDataPaths)(/[^/]+)?(\\.js)?$",
+                                "regex": "settings/(challengeFacts|challengeOverrides|defaults|entryPins|formatOneTimezone|importMarker|importReport|importV1|importedRecord|jsonStore|legacyImport|loadValidation|logValue|openChallenges|persistence|profileStore|profiles|reset|ruleResolution|saveDropped|scenarioLookup|scenarioOverlay|scenarioSchema|scenarios|settingsLock|settingsMerge|staleChallengeCleanup|storageTypes|titlePins|titleRuleSanitize|titleRules|userDataPaths)(/[^/]+)?(\\.js)?$",
                                 "message": "Settings internals are private to the facade — import settings.ts instead.",
                                 "allowTypeImports": true
                             },

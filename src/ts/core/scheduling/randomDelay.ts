@@ -1,6 +1,6 @@
 /**
  * Shared between the React renderer (`AutovoteContext.tsx`) and the
- * CLI scheduler (`cli/cli.ts`) so the same min/max range produces the
+ * CLI scheduler (`shells/cli/cli.ts`) so the same min/max range produces the
  * same distribution on both surfaces. Pure function — no logger, no
  * settings I/O — so it stays bundle-friendly for both runtimes.
  *

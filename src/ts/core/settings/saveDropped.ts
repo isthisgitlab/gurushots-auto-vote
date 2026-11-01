@@ -90,8 +90,9 @@ export const resetSaveDropped = (): void => {
 };
 
 /**
- * What a Capacitor write needs from this module to report a given-up save; passed to the write helpers in
- * settingsFileCapacitor.ts by `createSettingsFile` (files whose saves are not reported get `null`).
+ * What a Capacitor write needs from this module to report a given-up save; passed to the write helpers in the
+ * WebView settings-file transport (platforms/webview/settingsFileTransport.ts) by `createSettingsFile` (files whose
+ * saves are not reported get `null`).
  */
 export type DroppedSaveOps = {
     getAfter: typeof getDroppedAfter;

@@ -44,6 +44,8 @@ const CASES: Case[] = [
     ['core/logger', "import './consoleSink';", []],
     // Settings internals are private to the facade: every layer but the facade's own files is held to it.
     ...everywhere("import 'x/core/settings/jsonStore';", RESTRICTED_IMPORT, ['core/settings']),
+    ...everywhere("import 'x/core/settings/entryPins';", RESTRICTED_IMPORT, ['core/settings']),
+    ...everywhere("import 'x/core/settings/formatOneTimezone';", RESTRICTED_IMPORT, ['core/settings']),
     ...everywhere("import 'x/core/settings/schema';", RESTRICTED_IMPORT, SOURCE_DIRS),
     ...everywhere("import 'x/core/settings/schema/groups';", RESTRICTED_IMPORT, ['core/settings']),
     // The Node-only notifier spawns a process: the renderer tree must not import it, whichever way it is spelled.

@@ -5,9 +5,11 @@
  * the WebView page drives, the AutoVoteBackground wipe, and the bridge's
  * compare-and-write. The windows are the bridge's in-process settings emit
  * and the post-wipe reload. The wrapped modules are reached at call time —
- * the install must run before the logger loads — so this module's own import
- * chain is the port and the family builder only. Installed when the module
- * loads; shells/capacitor/page.tsx imports it first, before any other import.
+ * the install must run before the logger loads — so this module's own static
+ * imports are the port, the family builder, and dependency-free core modules
+ * that reach neither the logger nor `platform()` (`core/plainObject`).
+ * Installed when the module loads; shells/capacitor/page.tsx imports it
+ * first, before any other import.
  */
 
 import { installPlatform } from '../../core/platform/port';

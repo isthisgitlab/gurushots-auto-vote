@@ -584,7 +584,7 @@ repeated six times is one that gets forgotten at one of them.
   (`maxDurationMin`), because substituting or honouring those would both be fail-_closed_ and could stop
   voting for good. Both catches **log**: the orchestrator has a per-challenge catch that reports the errors
   it sees, so a silent swallow here would be the least visible failure in the pass.
-- **Sleep-boost guards** (`services/boostGuard/suspendBoost.ts`, `windows/quitGuard.ts`): the remembered challenge list carries
+- **Sleep-boost guards** (`services/boostGuard/suspendBoost.ts`, `shells/electron/windows/quitGuard.ts`): the remembered challenge list carries
   the `mock` flag it was fetched under, and the sleep path acts only when it matches the current mode (mock mode
   also uses the in-memory entry-age ledger, never the real file), so a real list is never boosted from mock mode
   or the reverse. A module-level re-entrancy flag stops two quick sleeps from sending twice and is released in
@@ -647,7 +647,8 @@ repeated six times is one that gets forgotten at one of them.
   runs on. The transports live in the platform families: sync fs at `userData/<fileName>` (mode `0o600`, atomic
   writes) in `platforms/node/` (`store.ts`, `settingsFileNode.ts`, `atomicWrite.ts`, `ownerOnlyWrite.ts`) for Electron,
   the CLI and the web server; a hydrate-once cache with an ordered async write-behind to `@capacitor/preferences`
-  in `platforms/webview/` (`store.ts`, `writeBehind.ts`, `capacitorPreferences.ts`); and the native keyed
+  in `platforms/webview/` (`store.ts`, `writeBehind.ts`, `capacitorPreferences.ts`, and the settings-file transport
+  in `settingsFileTransport.ts`); and the native keyed
   preference bridge (`AndroidHeadlessStore`) on the Android headless service in `platforms/headless/store.ts`. The
   write-protocol state behind the WebView's settings-file transport (the write serials and the cached and stored
   texts) changes in one place only, `platforms/webview/settingsFileProtocol.ts`: the transport bodies read it and make every
@@ -1257,7 +1258,8 @@ platform before the logger — and therefore the rest of core — loads**. Each 
 (`shells/electron/index.ts`, `shells/cli/cli.ts`, `shells/web/server.ts`, `shells/capacitor/page.tsx`,
 `shells/headless/index.ts`). The rule for such a module:
 
-- Its static imports are the port and its family builder, plus type-only imports, node builtins, and (Electron only)
+- Its static imports are the port and its family builder, plus type-only imports, node builtins, dependency-free
+  core modules that reach neither the logger nor `platform()` (`core/plainObject`, for example), and (Electron only)
   `shells/electron/index/session.ts`, a leaf whose own logger access is a call-time `require`.
 - Everything else — the shell's native services, the bridge, the vision assets, `electron` — is reached at **call
   time** with a lazy `require('./x') as typeof import('./x')` inside the member that needs it, never at load.

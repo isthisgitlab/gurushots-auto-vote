@@ -231,13 +231,13 @@ ipcMain.on('logout', (event) => {
 
 // gui-vote, run-voting-cycle, vote-all-challenges-manual, vote-on-challenge,
 // vote-on-challenge-manual, should-cancel-voting, set-cancel-voting all
-// live in ipc/voting.handlers.ts.
+// live in core/ipc/voting.handlers.ts.
 
-// Logger handlers live in ipc/log.handlers.ts.
-// open-external-url, reload-window, refresh-menu live in ipc/misc.handlers.ts.
+// Logger handlers live in core/ipc/log.handlers.ts.
+// open-external-url, reload-window, refresh-menu live in shells/electron/misc.handlers.ts.
 // authenticate, get-active-challenges, play-auto-turbo, apply-turbo-to-entry,
-// apply-boost-to-entry live in ipc/actions.handlers.ts.
+// apply-boost-to-entry live in core/ipc/actions.handlers.ts.
 
-// AutoUpdater IPC handlers live in ipc/update.handlers.ts.
+// AutoUpdater IPC handlers live in shells/electron/update.handlers.ts.
 
-// Log streaming + log file IPC handlers live in ipc/log.handlers.ts.
+// Log streaming + log file IPC handlers live in core/ipc/log.handlers.ts.
