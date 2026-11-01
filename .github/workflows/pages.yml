@@ -2,9 +2,9 @@ name: Pages
 
 # Builds the README (+ linked docs) into a branded static site and publishes it
 # to GitHub Pages. The docs come from master; the /remote/ tree (the phone page
-# and its version pages) is always built from develop, where the remote-access
-# code lives. The workflow is dispatched after every release, stable (master)
-# and beta (develop) alike. Requires a one-time repo setting:
+# and its version pages) is built from the newest develop release tag, where
+# the remote-access code lives. The workflow is dispatched after every release,
+# stable (master) and beta (develop) alike. Requires a one-time repo setting:
 # Settings → Pages → Build and deployment → Source = "GitHub Actions".
 on:
     # No push trigger: Pages must never go live before a release succeeds.
@@ -31,8 +31,8 @@ env:
 
 jobs:
     build:
-        runs-on: ubuntu-slim
-        timeout-minutes: 15
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
         # configure-pages/upload-pages-artifact only need read here — the
         # deploy job below carries pages:write + id-token:write.
         permissions:
@@ -40,34 +40,68 @@ jobs:
         steps:
             - name: Checkout code
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+              with:
+                  persist-credentials: false
 
             - name: Setup build environment
               uses: ./.github/actions/setup-build
 
-            # build-site/remote.ts reads GITHUB_TOKEN to lift the GitHub API's
-            # anonymous rate limit.
+            # build-site lists releases through the GitHub API once master
+            # carries the remote-access code; the token lifts the anonymous
+            # rate limit. The step runs master's own code — only the
+            # dependency install steps run without the token.
             - name: Build site
               run: pnpm build:site
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-            # The /remote/ tree always comes from develop — that is where the
-            # remote-access code lives (master has none); the docs above stay on
-            # the master checkout.
-            - name: Checkout develop for the remote page
+            # The /remote/ tree is built from the newest develop release tag —
+            # that is where the remote-access code lives (master has none); the
+            # docs above stay on the master checkout.
+            #
+            # tag v<develop's package.json version> is the newest develop release:
+            # that version changes only in the release job's bump commit, so a
+            # published release for it must exist. Building from the tag instead
+            # of develop HEAD keeps unreleased commits off Pages.
+            - name: Resolve the released develop tag
+              id: remote-tag
+              run: |
+                  set -euo pipefail
+                  version=$(gh api "repos/$REPO/contents/package.json?ref=develop" -H 'Accept: application/vnd.github.raw+json' | jq -r .version)
+                  if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+                      echo "::error::develop's package.json version '$version' is not a valid version — cannot resolve a release tag."
+                      exit 1
+                  fi
+                  # Only stdout is discarded: gh's own stderr (auth, network, rate
+                  # limit, not found) stays in the log.
+                  if ! gh release view "v$version" --repo "$REPO" > /dev/null; then
+                      echo "::error::no published release for tag v$version — the /remote/ tree is built from released code only. If develop's version bump was pushed but publishing failed, re-run the release job (create-release) in build.yml."
+                      exit 1
+                  fi
+                  echo "tag=v$version" >> "$GITHUB_OUTPUT"
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  REPO: ${{ github.repository }}
+
+            - name: Checkout the released develop code for the remote page
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
               with:
-                  ref: develop
+                  ref: ${{ steps.remote-tag.outputs.tag }}
                   path: remote-src
                   persist-credentials: false
 
             # The composite action installs at the repo root only, so this
             # install runs directly; Node/pnpm are already set up above.
-            - name: Build the remote page from develop
+            - name: Install the remote page dependencies
               working-directory: remote-src
-              run: |
-                  pnpm install --frozen-lockfile
-                  pnpm build:site
+              run: pnpm install --frozen-lockfile
+
+            # build-site/remote.ts reads GITHUB_TOKEN to lift the GitHub API's
+            # anonymous rate limit; the install above deliberately runs without
+            # it so its lifecycle scripts never see a token.
+            - name: Build the remote page
+              working-directory: remote-src
+              run: pnpm build:site
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

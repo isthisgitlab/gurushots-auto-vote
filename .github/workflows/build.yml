@@ -884,9 +884,9 @@ jobs:
             # no loop.) Fired after stable (master) and beta (develop) releases
             # alike; the dispatch itself always targets master — the Pages
             # environment deploys from master only — and pages.yml builds the
-            # docs from master and the /remote/ tree from develop. A dispatch
-            # hiccup must not fail the job — the release is already published —
-            # so warn instead of erroring.
+            # docs from master and the /remote/ tree from the newest develop
+            # release tag. A dispatch hiccup must not fail the job — the release
+            # is already published — so warn instead of erroring.
             - name: Trigger Pages rebuild
               if: github.ref_name == 'master' || github.ref_name == 'develop'
               # The release and bump are already published by the time we get here,
