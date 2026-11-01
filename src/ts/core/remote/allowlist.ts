@@ -175,7 +175,8 @@ export const classifyRemoteChannel = (channel: string): RemoteChannelClass => {
 
 /**
  * The invoke channels whose handler can spend account currency (a `postOnce` request in
- * `api/join.ts` — the coins of a join — or `api/currency.ts` — key, swap and fill), plus the
+ * `api/join.ts` — the coins of a join — `api/currency.ts` — key, swap and fill — or
+ * `api/turbo.ts` — the snap-vote submission of a turbo game), plus the
  * `apply-turbo-to-entry` alias of the turbo spend. When the connection drops while one of
  * these is in flight, the phone answers "unclear — check before retrying" instead of a
  * failure, the same rule the transport's `postOnce` follows.
@@ -187,12 +188,13 @@ export const SPEND_REMOTE_CHANNELS: ReadonlySet<string> = new Set([
     'swap-back-entry-photo',
     'fill-exposure',
     'apply-turbo-to-entry',
+    'play-auto-turbo',
 ]);
 
 /**
- * The setting key a remote peer may never write while auto-vote is running, on any write
- * path: the flag itself. Start and stop go through `autovote-command`, so there is still
- * exactly one timer.
+ * The setting key a remote peer may never write on any write path, whatever the running
+ * state: the flag itself. Start and stop go through `autovote-command`, so there is still
+ * exactly one timer and a phone can never arm the desktop's auto-resume by hand.
  */
 export const AUTOVOTE_RUNNING_KEY = 'autovoteRunning';
 

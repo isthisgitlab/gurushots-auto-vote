@@ -437,15 +437,25 @@ const buildRemoteSite = async (out: string, version: string, deps: RemoteSiteDep
         console.log(`⏭️  remote/${version}/: build:react has not staged it yet`);
     }
 
-    // The older versions: the zips the last releases attach, each checksum-verified. A caller
-    // that injects no releases listing (the tests) skips the downloads.
+    // The app stylesheet for both documents: build:site runs build:css first, so dist/styles.css
+    // is this run's product — copied deterministically, never a leftover.
+    const appCss = path.join(dist, 'styles.css');
+    if (fs.existsSync(appCss)) {
+        fs.copyFileSync(appCss, path.join(ensureOut(), 'styles.css'));
+        if (fs.existsSync(path.join(ensureOut(), version))) {
+            fs.copyFileSync(appCss, path.join(ensureOut(), version, 'styles.css'));
+        }
+        console.log('✓ remote/styles.css (the app stylesheet, loader root and current version)');
+    } else {
+        console.log('⏭️  remote/styles.css: build:css has not produced it yet');
+    }
+
+    // The older versions: the zips the last releases attach, each checksum-verified. The
+    // defaults are the real GitHub fetchers; the tests inject theirs.
+    const listReleases = deps.listReleases ?? listReleasesFromGitHub;
     const download = deps.downloadFile ?? downloadFromGitHub;
     const unzip = deps.unzip ?? unzipWithCli;
-    if (deps.listReleases === undefined) {
-        console.log('⏭️  older remote versions: no releases listing given — skipping the downloads');
-        return;
-    }
-    const releases = await deps.listReleases();
+    const releases = await listReleases();
     for (const release of releases.slice(0, REMOTE_RELEASE_COUNT)) {
         const releaseVersion = release.tag_name.replace(/^v/, '');
         if (releaseVersion === version) continue;

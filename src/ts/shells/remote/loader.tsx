@@ -17,7 +17,9 @@ import { createRoot } from 'react-dom/client';
 import { createTrysteroTransport } from '../../core/remote/trystero';
 import { setRemoteConnectionState } from '../../core/remote/connectionState';
 import { takePairingKey } from '../../core/remote/pairingKey';
-import { parsePeerMessage } from '../../core/remote/protocol';
+import { parsePeerMessage, PROTOCOL_VERSION } from '../../core/remote/protocol';
+
+import type { HelloMessage } from '../../core/remote/protocol';
 import { RemoteNoticeScreen } from '../../react/components/app/RemoteNoticeScreen';
 import { PAGE_VERSION } from './bridge/peer';
 
@@ -36,7 +38,6 @@ const versionIsPublished = async (version: string): Promise<boolean> => {
 
 const renderNotice = (): void => {
     const root = document.getElementById('root');
-    /* istanbul ignore if -- the loader document always carries the root element */
     if (!root) return;
     root.replaceChildren();
     createRoot(root).render(<RemoteNoticeScreen />);
@@ -70,9 +71,15 @@ void (async () => {
             globalThis.location.assign(`./${encodeURIComponent(version)}/${globalThis.location.hash}`);
         });
     };
+    const announce: HelloMessage = {
+        t: 'hello',
+        version: PAGE_VERSION,
+        protocolVersion: PROTOCOL_VERSION,
+        host: false,
+    };
     transport.onPeerJoin((peerId) => {
         // oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- the loader announces itself to the peer over the pairing transport, never a frame send
-        void transport.send({ t: 'hello', version: PAGE_VERSION, host: false }, peerId);
+        void transport.send(announce, peerId);
     });
     transport.onMessage((_peerId, raw) => {
         const message = parsePeerMessage(raw);

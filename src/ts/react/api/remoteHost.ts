@@ -18,12 +18,18 @@
 import { useEffect } from 'react';
 import { dispatchRemoteInvoke, REMOTE_REFUSAL_PREFIX } from '../../core/remote/dispatch';
 import { classifyRemoteChannel } from '../../core/remote/allowlist';
-import { parsePeerMessage, restoreInvokeArgs, MAX_PEER_FIELD_LENGTH } from '../../core/remote/protocol';
+import {
+    parsePeerMessage,
+    restoreInvokeArgs,
+    MAX_PEER_FIELD_LENGTH,
+    PROTOCOL_VERSION,
+} from '../../core/remote/protocol';
 import { platformKind } from '../../core/platform/kind';
 import { kebabToCamel, eventMethods } from '../../core/ipc/manifest';
 import { createTrysteroTransport } from '../../core/remote/trystero';
 import { rendererTranslator } from '../../core/translations/renderer';
 import { deliverElectronNotification } from '../notifications/deadlineNotifier';
+import * as pkg from '../../../../package.json';
 import * as ipc from './ipc';
 
 import type { RemoteTransport, RemoteTransportFactory } from '../../core/remote/relays';
@@ -84,13 +90,7 @@ const FORWARDED_EVENT_CHANNELS = new Set([
 const clippedId = (value: string): string => value.slice(0, MAX_PEER_FIELD_LENGTH);
 
 /** The app version `hello` announces: package.json at bundle time (esbuild inlines the file). */
-export const appVersion = (): string => {
-    try {
-        return (require('../../../../package.json') as typeof import('../../../../package.json')).version;
-    } catch /* istanbul ignore next -- only where package.json is not loadable; the honest mismatch beats a wrong version */ {
-        return '0.0.0';
-    }
-};
+export const appVersion = (): string => pkg.version;
 
 export const createRemoteHost = (deps: RemoteHostDeps): RemoteHost => {
     let transport: RemoteTransport | null = null;
@@ -125,7 +125,7 @@ export const createRemoteHost = (deps: RemoteHostDeps): RemoteHost => {
     };
 
     const sendSnapshot = async (peerId: string): Promise<void> => {
-        await sendTo(peerId, { t: 'hello', version: deps.version, host: true });
+        await sendTo(peerId, { t: 'hello', version: deps.version, protocolVersion: PROTOCOL_VERSION, host: true });
         const settings = await deps.invoke('get-settings', []);
         await sendTo(peerId, { t: 'event', channel: 'settings-changed', payload: settings });
         await sendTo(peerId, { t: 'autovote-state', state: deps.getAutovoteState() });
@@ -155,10 +155,7 @@ export const createRemoteHost = (deps: RemoteHostDeps): RemoteHost => {
             await answerLogStreamChannel(peerId, id, channel === 'start-log-stream');
             return;
         }
-        const outcome = await dispatchRemoteInvoke(channel, args, {
-            invoke: deps.invoke,
-            isAutovoteRunning: () => deps.getAutovoteState().running,
-        });
+        const outcome = await dispatchRemoteInvoke(channel, args, { invoke: deps.invoke });
         if (outcome.kind === 'refused') {
             deps.logDebug(`Remote invoke refused: ${clippedId(channel)}`);
             await sendTo(peerId, { t: 'result', id, ok: false, error: outcome.error });
@@ -172,9 +169,14 @@ export const createRemoteHost = (deps: RemoteHostDeps): RemoteHost => {
         if (message === null) return;
         switch (message.t) {
             case 'hello': {
-                if (message.version !== deps.version) {
-                    // The version mismatch is told, not served: the phone says to update.
-                    void sendTo(peerId, { t: 'hello', version: deps.version, host: true });
+                if (message.version !== deps.version || message.protocolVersion !== PROTOCOL_VERSION) {
+                    // Either mismatch is told, not served: the phone says to update.
+                    void sendTo(peerId, {
+                        t: 'hello',
+                        version: deps.version,
+                        protocolVersion: PROTOCOL_VERSION,
+                        host: true,
+                    });
                     return;
                 }
                 if (!peers.has(peerId) && peers.size >= MAX_REMOTE_PEERS) {
@@ -218,9 +220,6 @@ export const createRemoteHost = (deps: RemoteHostDeps): RemoteHost => {
                 dropPeer(peerId);
                 return;
             }
-            /* istanbul ignore next -- parsePeerMessage only returns the seven shapes, each with its case */
-            default:
-                return;
         }
     };
 
@@ -389,8 +388,6 @@ export const useDesktopRemoteHost = (controller: AutovoteController): void => {
                     const unsubscribe = api[METHOD_BY_EVENT_CHANNEL[channel]]((...eventArgs: never[]) =>
                         handler(eventArgs[0]),
                     );
-                    // eslint-disable-next-line no-console
-                    console.log('PROBE400', channel, METHOD_BY_EVENT_CHANNEL[channel], typeof unsubscribe);
                     return typeof unsubscribe === 'function' ? unsubscribe : () => undefined;
                 },
                 onLogMessage: (handler) => {

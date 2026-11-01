@@ -21,7 +21,9 @@
 
 import { invokeChannels, aliases, eventMethods, kebabToCamel } from '../../../core/ipc/manifest';
 import { markPlatformKind } from '../../../core/platform/kind';
-import { parsePeerMessage } from '../../../core/remote/protocol';
+import { parsePeerMessage, PROTOCOL_VERSION } from '../../../core/remote/protocol';
+
+import type { HelloMessage } from '../../../core/remote/protocol';
 import { SPEND_REMOTE_CHANNELS } from '../../../core/remote/allowlist';
 import { setRemoteConnectionState } from '../../../core/remote/connectionState';
 import { isConnectionFailureJoinError } from '../../../core/remote/trystero';
@@ -60,6 +62,9 @@ const installPeerBridge = (transport: RemoteTransport): void => {
     const listeners = new Map<string, Set<Listener>>();
     let nextId = 0;
     let hostPeerId: string | null = null;
+    /** Whether the desktop has ever completed a hello in this page's life. Only before that
+     * first connect may a non-spend invoke be held; after a loss nothing queues. */
+    let everConnected = false;
 
     const dispatchEvent = (channel: string, payload: unknown): void => {
         for (const listener of listeners.get(channel) ?? []) listener(payload);
@@ -83,12 +88,9 @@ const installPeerBridge = (transport: RemoteTransport): void => {
         setRemoteConnectionState('offline');
     };
 
-    const flushHeld = (): void => {
-        // The only call site runs right after `hostPeerId` is set; the guard keeps it total.
-        /* istanbul ignore if -- unreachable through the single call site */
-        if (hostPeerId === null) return;
+    const flushHeld = (to: string): void => {
         // oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- a peer-connection message over the pairing transport, never a frame send
-        for (const held of heldSends.splice(0)) void transport.send(held.message, hostPeerId);
+        for (const held of heldSends.splice(0)) void transport.send(held.message, to);
     };
 
     transport.onMessage((peerId, raw) => {
@@ -97,14 +99,15 @@ const installPeerBridge = (transport: RemoteTransport): void => {
         switch (message.t) {
             case 'hello': {
                 if (!message.host) return; // a fellow phone announcing itself, not the desktop
-                if (message.version !== PAGE_VERSION) {
+                if (message.version !== PAGE_VERSION || message.protocolVersion !== PROTOCOL_VERSION) {
                     setRemoteConnectionState('update');
                     return;
                 }
                 if (hostPeerId === null) {
                     hostPeerId = peerId;
+                    everConnected = true;
                     setRemoteConnectionState('connected');
-                    flushHeld();
+                    flushHeld(hostPeerId);
                 }
                 return;
             }
@@ -124,15 +127,19 @@ const installPeerBridge = (transport: RemoteTransport): void => {
                 settlePendingForLostConnection();
                 return;
             }
-            /* istanbul ignore next -- parsePeerMessage only returns the seven shapes, each with its case */
-            default:
-                return;
         }
     });
 
+    // The phone's hello: its own app version, the protocol shape version, not the host.
+    const announce: HelloMessage = {
+        t: 'hello',
+        version: PAGE_VERSION,
+        protocolVersion: PROTOCOL_VERSION,
+        host: false,
+    };
     transport.onPeerJoin((peerId) => {
         // oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- the phone announces itself to the peer over the pairing transport, never a frame send
-        void transport.send({ t: 'hello', version: PAGE_VERSION, host: false }, peerId);
+        void transport.send(announce, peerId);
     });
 
     transport.onPeerLeave((peerId) => {
@@ -161,6 +168,13 @@ const installPeerBridge = (transport: RemoteTransport): void => {
         return new Promise((resolve, reject) => {
             pending.set(id, { resolve, reject, spend });
             if (hostPeerId === null) {
+                if (spend || everConnected) {
+                    // A spend is never queued: it was not sent, so this is a plain failure,
+                    // not an unclear one. After a loss nothing queues into the reconnect.
+                    pending.delete(id);
+                    reject(new Error(rendererTranslator.t('errors.remoteConnectionLost')));
+                    return;
+                }
                 // The desktop has not said hello yet: hold the send, flush it on connect.
                 heldSends.push({ id, message });
                 return;

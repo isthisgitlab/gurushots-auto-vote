@@ -260,17 +260,11 @@ describe('sends toward the Logs window', () => {
         ['src/ts/react/api/remoteHost.ts', 'await transport.send(message, peerId);'],
         [
             'src/ts/shells/remote/bridge/peer.ts',
-            'for (const held of heldSends.splice(0)) void transport.send(held.message, hostPeerId);',
+            'for (const held of heldSends.splice(0)) void transport.send(held.message, to);',
         ],
-        [
-            'src/ts/shells/remote/bridge/peer.ts',
-            "void transport.send({ t: 'hello', version: PAGE_VERSION, host: false }, peerId);",
-        ],
+        ['src/ts/shells/remote/bridge/peer.ts', 'void transport.send(announce, peerId);'],
         ['src/ts/shells/remote/bridge/peer.ts', 'void transport.send(message, hostPeerId).catch(() => {'],
-        [
-            'src/ts/shells/remote/loader.tsx',
-            "void transport.send({ t: 'hello', version: PAGE_VERSION, host: false }, peerId);",
-        ],
+        ['src/ts/shells/remote/loader.tsx', 'void transport.send(announce, peerId);'],
     ];
 
     interface Directive {

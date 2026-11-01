@@ -47,9 +47,19 @@ describe('parsePeerMessage', () => {
         expect(PROTOCOL_VERSION).toBe(1);
     });
 
+    test('the hello carries the protocol version, and a mismatching one still parses', () => {
+        const other: HelloMessage = { t: 'hello', version: '1.2.3', protocolVersion: 99, host: false };
+        expect(parsePeerMessage(other)).toEqual(other);
+    });
+
     test('accepts every message shape', () => {
-        const hello: HelloMessage = { t: 'hello', version: '1.2.3', host: true };
-        expect(parsePeerMessage(hello)).toEqual({ t: 'hello', version: '1.2.3', host: true });
+        const hello: HelloMessage = { t: 'hello', version: '1.2.3', protocolVersion: PROTOCOL_VERSION, host: true };
+        expect(parsePeerMessage(hello)).toEqual({
+            t: 'hello',
+            version: '1.2.3',
+            protocolVersion: PROTOCOL_VERSION,
+            host: true,
+        });
         const invoke: InvokeMessage = { t: 'invoke', id: 0, channel: 'get-settings', args: [1, null] };
         expect(parsePeerMessage(invoke)).toEqual({
             t: 'invoke',
@@ -127,6 +137,9 @@ describe('parsePeerMessage', () => {
         ['hello: version not a string', { t: 'hello', version: 4, host: true }],
         ['hello: empty version', { t: 'hello', version: '', host: false }],
         ['hello: host flag missing', { t: 'hello', version: '1.2.3' }],
+        ['hello: protocolVersion missing', { t: 'hello', version: '1.2.3', host: true }],
+        ['hello: protocolVersion not a number', { t: 'hello', version: '1.2.3', protocolVersion: '1', host: true }],
+        ['hello: protocolVersion below one', { t: 'hello', version: '1.2.3', protocolVersion: 0, host: true }],
         ['invoke: id not an integer', { t: 'invoke', id: 1.5, channel: 'a', args: [] }],
         ['invoke: negative id', { t: 'invoke', id: -1, channel: 'a', args: [] }],
         ['invoke: channel not a string', { t: 'invoke', id: 1, channel: 3, args: [] }],
@@ -156,8 +169,19 @@ describe('parsePeerMessage', () => {
     test('a payload that serializes to nothing is judged by its fields, at size zero', () => {
         // The transport delivers JSON.parse output, so a toJSON stub cannot arrive over the
         // wire; an in-memory caller passing one is measured as size zero and read as usual.
-        const toJSONless = { t: 'hello', version: '1.2.3', host: true, toJSON: () => undefined };
-        expect(parsePeerMessage(toJSONless)).toEqual({ t: 'hello', version: '1.2.3', host: true });
+        const toJSONless = {
+            t: 'hello',
+            version: '1.2.3',
+            protocolVersion: PROTOCOL_VERSION,
+            host: true,
+            toJSON: () => undefined,
+        };
+        expect(parsePeerMessage(toJSONless)).toEqual({
+            t: 'hello',
+            version: '1.2.3',
+            protocolVersion: PROTOCOL_VERSION,
+            host: true,
+        });
     });
 
     test('a result failure whose error text is over the field bound is refused', () => {

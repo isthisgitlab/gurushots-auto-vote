@@ -76,12 +76,9 @@ export function RemoteAccessSection({ showAll }: { showAll?: boolean }) {
         }
     };
 
-    const copy = async (): Promise<void> => {
-        // The Copy button renders only while `info` is set; the guard keeps the handler total.
-        /* istanbul ignore if -- unreachable through the rendered UI */
-        if (info === null) return;
+    const copy = async (link: string): Promise<void> => {
         try {
-            await navigator.clipboard.writeText(info.link);
+            await navigator.clipboard.writeText(link);
             setCopied(true);
         } catch {
             // A browser that refuses the clipboard keeps the link readable next to the button.
@@ -110,7 +107,7 @@ export function RemoteAccessSection({ showAll }: { showAll?: boolean }) {
                     {(info?.enabled ?? false) ? t('app.remoteStatusOn') : t('app.remoteStatusOff')}
                 </span>
             </div>
-            {(info?.enabled ?? false) && (
+            {info !== null && info.enabled && (
                 <div className="mb-3">
                     {!revealed ? (
                         <button type="button" className="btn btn-outline btn-sm" onClick={() => setRevealed(true)}>
@@ -131,7 +128,7 @@ export function RemoteAccessSection({ showAll }: { showAll?: boolean }) {
                                     <button
                                         type="button"
                                         className="btn btn-outline btn-sm"
-                                        onClick={() => void copy()}
+                                        onClick={() => void copy(info.link)}
                                     >
                                         {copied ? t('app.remoteLinkCopied') : t('app.remoteCopyLink')}
                                     </button>

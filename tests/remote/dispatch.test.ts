@@ -18,7 +18,6 @@ const depsWith = (overrides: Partial<RemoteDispatchDeps> = {}): RemoteDispatchDe
             calls.push(channel);
             return { success: true, channel };
         }) satisfies RemoteInvoke,
-        isAutovoteRunning: () => false,
         ...overrides,
     };
 };
@@ -79,42 +78,53 @@ describe('dispatchRemoteInvoke', () => {
         expect(outcome.kind).toBe('refused');
     });
 
-    describe('autovoteRunning is refused per key on every write path', () => {
-        const running = { isAutovoteRunning: () => true };
-
+    describe('autovoteRunning is refused per key on every write path, whatever the running state', () => {
         test.each([
             ['set-setting', [AUTOVOTE_RUNNING_KEY, true]],
             ['reset-setting', [AUTOVOTE_RUNNING_KEY, null]],
             ['set-global-default', [AUTOVOTE_RUNNING_KEY, true]],
             ['reset-global-default', [AUTOVOTE_RUNNING_KEY]],
         ])('%s refuses the key while auto-vote runs', async (channel, args) => {
-            const deps = depsWith(running);
+            const deps = depsWith();
             const outcome = await dispatchRemoteInvoke(channel, args, deps);
             expect(deps.calls).toEqual([]);
             expect(outcome.kind).toBe('refused');
-            if (outcome.kind === 'refused') expect(outcome.error).toContain('Stop auto-vote first');
+            if (outcome.kind === 'refused') expect(outcome.error).toContain('auto-vote switch is not a setting');
         });
 
-        test('save-settings refuses an update that carries the key', async () => {
-            const deps = depsWith(running);
-            const outcome = await dispatchRemoteInvoke('save-settings', [{ [AUTOVOTE_RUNNING_KEY]: false }], deps);
+        test.each([
+            ['set-setting', [AUTOVOTE_RUNNING_KEY, true]],
+            ['reset-setting', [AUTOVOTE_RUNNING_KEY, null]],
+            ['set-global-default', [AUTOVOTE_RUNNING_KEY, true]],
+            ['reset-global-default', [AUTOVOTE_RUNNING_KEY]],
+        ])('%s refuses the key while auto-vote is STOPPED too', async (channel, args) => {
+            const deps = depsWith();
+            const outcome = await dispatchRemoteInvoke(channel, args, deps);
             expect(deps.calls).toEqual([]);
             expect(outcome.kind).toBe('refused');
+            if (outcome.kind === 'refused') expect(outcome.error).toContain('auto-vote switch is not a setting');
         });
 
-        test('the same writes pass while auto-vote is stopped', async () => {
-            const deps = depsWith();
-            await dispatchRemoteInvoke('set-setting', [AUTOVOTE_RUNNING_KEY, true], deps);
-            await dispatchRemoteInvoke('save-settings', [{ [AUTOVOTE_RUNNING_KEY]: false }], deps);
-            await dispatchRemoteInvoke('reset-setting', [AUTOVOTE_RUNNING_KEY, null], deps);
-            expect(deps.calls).toEqual(['set-setting', 'save-settings', 'reset-setting']);
+        test('save-settings refuses an update that carries the key, stopped or running', async () => {
+            for (const deps of [depsWith(), depsWith()]) {
+                const outcome = await dispatchRemoteInvoke('save-settings', [{ [AUTOVOTE_RUNNING_KEY]: false }], deps);
+                expect(deps.calls).toEqual([]);
+                expect(outcome.kind).toBe('refused');
+            }
         });
 
-        test('other keys write while auto-vote runs', async () => {
-            const deps = depsWith(running);
-            const outcome = await dispatchRemoteInvoke('set-setting', ['boostTime', 0], deps);
-            expect(deps.calls).toEqual(['set-setting']);
-            expect(outcome.kind).toBe('result');
+        test('other keys still write in both states', async () => {
+            for (const deps of [depsWith(), depsWith()]) {
+                const outcome = await dispatchRemoteInvoke('set-setting', ['boostTime', 0], deps);
+                expect(deps.calls).toEqual(['set-setting']);
+                expect(outcome.kind).toBe('result');
+            }
+        });
+
+        test('the refusal does not tell the phone to stop auto-vote: start and stop are its own controls', async () => {
+            const outcome = await dispatchRemoteInvoke('set-setting', [AUTOVOTE_RUNNING_KEY, true], depsWith());
+            expect(outcome.kind).toBe('refused');
+            if (outcome.kind === 'refused') expect(outcome.error).not.toContain('Stop auto-vote first');
         });
     });
 

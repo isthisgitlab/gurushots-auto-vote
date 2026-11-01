@@ -28,7 +28,6 @@ import type { RendererGlobals } from '../../core/types/capacitor';
 
 const renderNotice = (): void => {
     const root = document.getElementById('root');
-    /* istanbul ignore if -- the remote document always carries the root element */
     if (!root) return;
     root.replaceChildren();
     createRoot(root).render(<RemoteNoticeScreen />);

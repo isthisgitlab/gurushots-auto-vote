@@ -26,9 +26,11 @@ export const MAX_PEER_FIELD_LENGTH = 512;
 
 export type AutovoteCommandName = 'start' | 'stop' | 'rearm';
 
-/** Both directions: announces the sender's app version. The phone speaks first; only the
- * desktop's reply carries `host: true`, which is how a phone tells it from a fellow phone. */
-export type HelloMessage = { t: 'hello'; version: string; host: boolean };
+/** Both directions: announces the sender's app version and its protocol shape version. The
+ * phone speaks first; only the desktop's reply carries `host: true`, which is how a phone
+ * tells it from a fellow phone. A peer whose `protocolVersion` differs from ours is told to
+ * update, the same as an app-version mismatch. */
+export type HelloMessage = { t: 'hello'; version: string; protocolVersion: number; host: boolean };
 /** Phone → host: one window.api invoke. `undefinedAt` restores JSON-lost `undefined` arguments (see bridge/web.ts). */
 export type InvokeMessage = { t: 'invoke'; id: number; channel: string; args: unknown[]; undefinedAt?: number[] };
 /** Host → phone: the answer to one invoke. `ok: false` carries the handler's error text. */
@@ -83,8 +85,11 @@ export const parsePeerMessage = (raw: unknown): PeerMessage | null => {
     if (size > MAX_PEER_MESSAGE_BYTES) return null;
     switch (raw.t) {
         case 'hello':
-            return typeof raw.host === 'boolean' && isBoundedString(raw.version)
-                ? { t: 'hello', version: raw.version, host: raw.host }
+            return typeof raw.host === 'boolean' &&
+                isBoundedString(raw.version) &&
+                isInteger(raw.protocolVersion) &&
+                raw.protocolVersion >= 1
+                ? { t: 'hello', version: raw.version, protocolVersion: raw.protocolVersion, host: raw.host }
                 : null;
         case 'invoke':
             if (!isInteger(raw.id) || raw.id < 0 || !isBoundedString(raw.channel) || !Array.isArray(raw.args)) {

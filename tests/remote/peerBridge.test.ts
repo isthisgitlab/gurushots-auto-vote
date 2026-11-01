@@ -6,12 +6,12 @@
  * tells a fellow phone from the desktop.
  */
 
-import { installPeerBridge, LOCAL_CHANNELS } from '../../src/ts/shells/remote/bridge/peer';
+import { installPeerBridge, LOCAL_CHANNELS, PAGE_VERSION } from '../../src/ts/shells/remote/bridge/peer';
+import { PROTOCOL_VERSION } from '../../src/ts/core/remote/protocol';
 import { TransportStub } from '../helpers/remoteTransport';
-import { PAGE_VERSION } from '../../src/ts/shells/remote/bridge/peer';
 import { remoteConnectionState, setRemoteConnectionState } from '../../src/ts/core/remote/connectionState';
 
-const hostHello = { t: 'hello', version: PAGE_VERSION, host: true };
+const hostHello = { t: 'hello', version: PAGE_VERSION, protocolVersion: PROTOCOL_VERSION, host: true };
 
 const flushAsync = async (): Promise<void> => {
     for (let i = 0; i < 20; i++) await Promise.resolve();
@@ -226,6 +226,43 @@ describe('installPeerBridge (the phone bridge)', () => {
         }
     });
 
+    test('a spend issued while the desktop has never said hello fails at once and never sends later', async () => {
+        phone.emitJoin('host');
+        // Never sent: a plain failure, not the unclear answer of a lost in-flight reply.
+        await expect(api.keyUnlockBoost('c1', true)).rejects.toThrow(/dropped/);
+        // The desktop arrives: nothing queued fires.
+        phone.sent.length = 0;
+        phone.receiveFromPeer(hostHello, 'host');
+        expect(phone.sent.every(({ message }) => (message as { t: string }).t === 'hello')).toBe(true);
+    });
+
+    test('a non-spend issued after a connection loss fails immediately instead of queuing', async () => {
+        connect();
+        phone.emitLeave('host');
+        const pending = api.getSettings() as Promise<unknown>;
+        await expect(pending).rejects.toThrow(/dropped/);
+        // The desktop comes back: still no queued invoke.
+        phone.sent.length = 0;
+        connect();
+        expect(phone.sent.every(({ message }) => (message as { t: string }).t === 'hello')).toBe(true);
+    });
+
+    test('the phone log view pulls its backlog over the bridge through the allowed get-log-backlog', async () => {
+        connect();
+        const backlog = [
+            { seq: 1, level: 'INFO', message: 'first' },
+            { seq: 2, level: 'WARN', message: 'second' },
+        ];
+        const pending = api.getLogBacklog() as Promise<unknown>;
+        const sent = phone.sent.find(({ message }) => (message as { t: string }).t === 'invoke');
+        expect((sent?.message as { channel: string } | undefined)?.channel).toBe('get-log-backlog');
+        phone.receiveFromPeer(
+            { t: 'result', id: (sent?.message as { id: number } | undefined)?.id, ok: true, result: backlog },
+            'host',
+        );
+        await expect(pending).resolves.toEqual(backlog);
+    });
+
     test('a host bye settles the pending invokes and reads offline', async () => {
         connect();
         const pending = api.getSettings() as Promise<unknown>;
@@ -236,7 +273,10 @@ describe('installPeerBridge (the phone bridge)', () => {
 
     test('only the desktop hello (host: true) connects; a fellow phone does not', () => {
         phone.emitJoin('host');
-        phone.receiveFromPeer({ t: 'hello', version: PAGE_VERSION, host: false }, 'fellow-phone');
+        phone.receiveFromPeer(
+            { t: 'hello', version: PAGE_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            'fellow-phone',
+        );
         expect(remoteConnectionState()).toBe('connecting');
         phone.receiveFromPeer(hostHello, 'host');
         expect(remoteConnectionState()).toBe('connected');
@@ -244,7 +284,7 @@ describe('installPeerBridge (the phone bridge)', () => {
 
     test('a desktop of another version says to update', () => {
         phone.emitJoin('host');
-        phone.receiveFromPeer({ t: 'hello', version: '0.0.1', host: true }, 'host');
+        phone.receiveFromPeer({ t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, host: true }, 'host');
         expect(remoteConnectionState()).toBe('update');
     });
 

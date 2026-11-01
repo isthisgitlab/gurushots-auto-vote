@@ -18,6 +18,7 @@ jest.mock('../../src/ts/core/remote/trystero', () => ({
     }),
 }));
 jest.mock('../../src/ts/shells/remote/bridge/peer', () => ({ PAGE_VERSION: '9.9.9' }));
+import { PROTOCOL_VERSION } from '../../src/ts/core/remote/protocol';
 // The platform module installs on load; the Jest setup has one installed already.
 jest.mock('../../src/ts/shells/remote/platform', () => ({}));
 // The shared React setup mocks the page translator; the loader's notice screen shows real text.
@@ -81,7 +82,10 @@ describe('the /remote/ loader', () => {
         const hello = transport.sent.find(({ message }) => (message as { t: string }).t === 'hello');
         expect(hello?.target).toBe('host');
 
-        transport.receiveFromPeer({ t: 'hello', version: '1.2.3', host: true }, 'host');
+        transport.receiveFromPeer(
+            { t: 'hello', version: '1.2.3', protocolVersion: PROTOCOL_VERSION, host: true },
+            'host',
+        );
         await flush();
         expect(fetchCalls).toEqual(['./1.2.3/']);
         expect(assigned).toEqual(['./1.2.3/#k=the-key']);
@@ -94,7 +98,10 @@ describe('the /remote/ loader', () => {
         const transport = transportStub.current as TransportStub;
         transport.emitJoin('host');
         await flush();
-        transport.receiveFromPeer({ t: 'hello', version: '0.9.0', host: true }, 'host');
+        transport.receiveFromPeer(
+            { t: 'hello', version: '0.9.0', protocolVersion: PROTOCOL_VERSION, host: true },
+            'host',
+        );
         await flush();
         expect(assigned).toEqual([]);
         expect(transport.left).toBe(true);
@@ -118,7 +125,10 @@ describe('the /remote/ loader', () => {
         const transport = transportStub.current as TransportStub;
         transport.emitJoin('host');
         await flush();
-        transport.receiveFromPeer({ t: 'hello', version: '0.0.1', host: false }, 'fellow-phone');
+        transport.receiveFromPeer(
+            { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, host: false },
+            'fellow-phone',
+        );
         await flush();
         expect(assigned).toEqual([]);
         expect(fetchCalls).toEqual([]);
@@ -132,15 +142,29 @@ describe('the /remote/ loader', () => {
         expect(document.getElementById('root')?.textContent).toContain('Scan the QR code on your computer to pair');
     });
 
+    test('a document without the root element renders nothing', async () => {
+        document.body.innerHTML = '';
+        window.location.hash = '';
+        loadLoader();
+        await flush();
+        expect(document.getElementById('root')).toBeNull();
+    });
+
     test('a second hello after the navigation started changes nothing', async () => {
         loadLoader();
         await flush();
         const transport = transportStub.current as TransportStub;
         transport.emitJoin('host');
         await flush();
-        transport.receiveFromPeer({ t: 'hello', version: '1.2.3', host: true }, 'host');
+        transport.receiveFromPeer(
+            { t: 'hello', version: '1.2.3', protocolVersion: PROTOCOL_VERSION, host: true },
+            'host',
+        );
         await flush();
-        transport.receiveFromPeer({ t: 'hello', version: '9.9.9', host: true }, 'host');
+        transport.receiveFromPeer(
+            { t: 'hello', version: '9.9.9', protocolVersion: PROTOCOL_VERSION, host: true },
+            'host',
+        );
         await flush();
         expect(assigned).toEqual(['./1.2.3/#k=the-key']);
     });
@@ -154,7 +178,10 @@ describe('the /remote/ loader', () => {
         const transport = transportStub.current as TransportStub;
         transport.emitJoin('host');
         await flush();
-        transport.receiveFromPeer({ t: 'hello', version: '1.2.3', host: true }, 'host');
+        transport.receiveFromPeer(
+            { t: 'hello', version: '1.2.3', protocolVersion: PROTOCOL_VERSION, host: true },
+            'host',
+        );
         await flush();
         expect(assigned).toEqual(['./1.2.3/#k=the-key']);
     });

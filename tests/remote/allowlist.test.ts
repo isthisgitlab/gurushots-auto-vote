@@ -107,6 +107,7 @@ describe('the spend channels', () => {
             'swap-back-entry-photo',
             'fill-exposure',
             'apply-turbo-to-entry',
+            'play-auto-turbo',
         ]) {
             expect(SPEND_REMOTE_CHANNELS.has(channel)).toBe(true);
         }

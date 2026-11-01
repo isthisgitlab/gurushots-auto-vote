@@ -80,6 +80,16 @@ describe('Remote entry', () => {
         expect(document.getElementById('root')?.textContent).toBe('app.remoteNoKey');
     });
 
+    test('a document without the root element renders nothing and mounts nothing', async () => {
+        document.body.innerHTML = '';
+        window.location.hash = '';
+        const m = load({ marker: 'remote-transport' });
+        await flush();
+        expect(m.installed).not.toHaveBeenCalled();
+        expect(m.mounted).toEqual([]);
+        expect(document.getElementById('root')).toBeNull();
+    });
+
     test('a transport that cannot be built leaves the offline-or-reset state', async () => {
         const m = load(new Error('no webrtc'));
         await flush();

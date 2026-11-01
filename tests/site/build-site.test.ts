@@ -252,12 +252,22 @@ describe('main with every default', () => {
         const exitSpy2 = jest.spyOn(process, 'exit').mockImplementation((code) => {
             throw new Error(`exit ${code}`);
         });
+        globalThis.fetch = jest.fn(
+            async () =>
+                ({
+                    ok: true,
+                    status: 200,
+                    json: async () => [],
+                }) as unknown as Response,
+        ) as unknown as typeof fetch;
         try {
             // The defaults are the real repo paths: main() renders the real site (build output,
-            // gitignored) exactly as `pnpm build:site` would, minus the release downloads.
+            // gitignored) exactly as `pnpm build:site` would — real release listing included,
+            // stubbed here to an empty one so the test stays network-free.
             await main();
             expect(fs.existsSync(nodePath.join(root, 'dist-site', 'remote'))).toBe(true);
         } finally {
+            delete (globalThis as { fetch?: unknown }).fetch;
             exitSpy2.mockRestore();
             logSpy2.mockRestore();
             errorSpy2.mockRestore();
@@ -282,6 +292,7 @@ describe('buildRemoteSite (the /remote/ tree)', () => {
     const seedDist = (version: string): void => {
         write(nodePath.join('dist', 'remote-loader.html'), '<!doctype html><title>loader</title>');
         write(nodePath.join('dist', 'remoteLoader-bundle.js'), '// loader');
+        write(nodePath.join('dist', 'styles.css'), 'body{}');
         write(nodePath.join('dist', 'remote', version, 'index.html'), `<html>v${version}</html>`);
         write(nodePath.join('dist', 'remote', version, 'remote-bundle.js'), '// page');
     };
@@ -332,7 +343,11 @@ describe('buildRemoteSite (the /remote/ tree)', () => {
             '9.9.9',
             'index.html',
             'remoteLoader-bundle.js',
+            'styles.css',
         ]);
+        // The app stylesheet lands in the loader root and the current version dir.
+        expect(fs.readFileSync(nodePath.join(out, 'remote', 'styles.css'), 'utf8')).toBe('body{}');
+        expect(fs.readFileSync(nodePath.join(out, 'remote', '9.9.9', 'styles.css'), 'utf8')).toBe('body{}');
         expect(fs.readFileSync(nodePath.join(out, 'remote', 'index.html'), 'utf8')).toContain('loader');
         expect(fs.readFileSync(nodePath.join(out, 'remote', '9.9.9', 'index.html'), 'utf8')).toContain('v9.9.9');
         expect(fs.readFileSync(nodePath.join(out, 'remote', '9.9.8', 'index.html'), 'utf8')).toContain('v9.9.8');
@@ -354,27 +369,49 @@ describe('buildRemoteSite (the /remote/ tree)', () => {
         expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('does not match its checksum'));
     });
 
-    test('without the local build nothing remote is created, and without releases no download runs', async () => {
-        await buildRemoteSite(out, '9.9.9', { dist });
-        expect(fs.existsSync(nodePath.join(out, 'remote'))).toBe(false);
-        expect(logSpy).toHaveBeenCalledWith('⏭️  remote/ loader: build:react has not produced it yet');
-        expect(logSpy).toHaveBeenCalledWith('⏭️  remote/9.9.9/: build:react has not staged it yet');
-        expect(logSpy).toHaveBeenCalledWith(
-            '⏭️  older remote versions: no releases listing given — skipping the downloads',
-        );
+    test('without the local build nothing remote is created, and the empty release list downloads nothing', async () => {
+        globalThis.fetch = jest.fn(
+            async () =>
+                ({
+                    ok: true,
+                    status: 200,
+                    json: async () => [],
+                }) as unknown as Response,
+        ) as unknown as typeof fetch;
+        try {
+            await buildRemoteSite(out, '9.9.9', { dist });
+            expect(fs.existsSync(nodePath.join(out, 'remote'))).toBe(false);
+            expect(logSpy).toHaveBeenCalledWith('⏭️  remote/ loader: build:react has not produced it yet');
+            expect(logSpy).toHaveBeenCalledWith('⏭️  remote/9.9.9/: build:react has not staged it yet');
+            expect(logSpy).toHaveBeenCalledWith('⏭️  remote/styles.css: build:css has not produced it yet');
+        } finally {
+            delete (globalThis as { fetch?: unknown }).fetch;
+        }
     });
 
-    test('main without remoteSite skips the downloads, and the default dist is the repo one', async () => {
-        // main() with no remoteSite option: the destructuring default (absent) and the
-        // buildRemoteSite default dist (the repo's real dist/) both run. The temp tree needs
-        // the files the rest of main() reads (logo, layout, pages).
+    test('main without remoteSite uses the real defaults: the repo dist and the real release listing', async () => {
+        // main() with no remoteSite option: every destructuring default runs (rootDir, out,
+        // layoutFile, remoteSite) — the repo's real dist/ and the real (stubbed here) GitHub
+        // listing. The temp tree carries the files the rest of main() reads.
+        globalThis.fetch = jest.fn(
+            async () =>
+                ({
+                    ok: true,
+                    status: 200,
+                    json: async () => [],
+                }) as unknown as Response,
+        ) as unknown as typeof fetch;
         write('src/assets/logo.png', 'PNG');
         write('package.json', JSON.stringify({ version: '9.9.9' }));
         write('layout.html', '<main>{{content}}</main>');
         // main() renders every PAGES entry; seed each one it walks.
         for (const page of PAGES) write(page.src, `# ${page.src}`);
-        await main({ rootDir: tmp, out, layoutFile: nodePath.join(tmp, 'layout.html') });
-        expect(fs.existsSync(nodePath.join(out, 'remote'))).toBe(true);
+        try {
+            await main({ rootDir: tmp, out, layoutFile: nodePath.join(tmp, 'layout.html') });
+            expect(fs.existsSync(nodePath.join(out, 'remote'))).toBe(true);
+        } finally {
+            delete (globalThis as { fetch?: unknown }).fetch;
+        }
     });
 
     test('a release whose version directory already exists is not unpacked twice', async () => {
@@ -449,8 +486,9 @@ describe('main (full render into a temp tree)', () => {
         rootDir: tmp,
         out,
         layoutFile: nodePath.join(tmp, 'layout.html'),
-        // The remote tree reads the repo's dist/ in production; the tests keep it out.
-        remoteSite: { dist: nodePath.join(tmp, 'missing-dist') },
+        // The remote tree reads the repo's dist/ in production; the tests keep it out and
+        // answer an empty release list so nothing is downloaded.
+        remoteSite: { dist: nodePath.join(tmp, 'missing-dist'), listReleases: async () => [] },
     });
 
     beforeEach(() => {

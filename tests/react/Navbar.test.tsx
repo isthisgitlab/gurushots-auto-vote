@@ -6,6 +6,7 @@
 import { fireEvent, render, screen } from './helpers/test-utils';
 import { resetPlatformKind } from '../helpers/platformKind';
 import { markPlatformKind } from '../../src/ts/core/platform/kind';
+import { PROTOCOL_VERSION } from '../../src/ts/core/remote/protocol';
 import { Navbar } from '@/components/layout/Navbar';
 
 describe('Navbar', () => {
@@ -38,7 +39,10 @@ describe('Navbar', () => {
 
         act(() => {
             transport.emitJoin('p1');
-            transport.receiveFromPeer({ t: 'hello', version: '1.14.2', host: false }, 'p1');
+            transport.receiveFromPeer(
+                { t: 'hello', version: '1.14.2', protocolVersion: PROTOCOL_VERSION, host: false },
+                'p1',
+            );
         });
         await act(async () => {
             for (let i = 0; i < 10; i++) await Promise.resolve();

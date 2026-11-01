@@ -47,8 +47,8 @@ export type RemoteTransport = {
     onPeerLeave: (handler: (peerId: string) => void) => () => void;
     /**
      * Subscribe to join failures: a peer that was seen but whose connection could not be
-     * established. The `error` text comes from the transport; `meansConnectionFailure`
-     * (protocol.ts) tells a connection failure apart from a refused handshake.
+     * established. The `error` text comes from the transport; `isConnectionFailureJoinError`
+     * (core/remote/trystero.ts) tells a connection failure apart from a refused handshake.
      */
     onJoinError: (handler: (details: { error: string }) => void) => () => void;
     /** Leave the room and close every connection. */

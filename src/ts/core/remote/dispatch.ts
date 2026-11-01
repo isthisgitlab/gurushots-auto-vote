@@ -1,7 +1,9 @@
 /**
  * The remote dispatch: what happens to one invoke message a paired phone sent. It refuses
  * unclassified and refused channels (with the allowlist's reason), refuses the
- * `autovoteRunning` key on every write path while auto-vote runs, strips the user-data path
+ * `autovoteRunning` key on every write path whatever the running state is (start and stop go
+ * through `autovote-command`, so a phone can never flip the auto-resume flag by hand), strips
+ * the user-data path
  * out of `get-environment-info`'s answer, and only then hands the call to the injected
  * invoke (the desktop host's `window.api`).
  *
@@ -16,8 +18,6 @@ export type RemoteInvoke = (channel: string, args: unknown[]) => Promise<unknown
 export type RemoteDispatchDeps = {
     /** The desktop's window.api, as untyped callables (the renderer arguments are the handler's own concern). */
     invoke: RemoteInvoke;
-    /** Whether the desktop's autovote controller is running right now. */
-    isAutovoteRunning: () => boolean;
 };
 
 export type RemoteDispatchResult = { kind: 'refused'; error: string } | { kind: 'result'; result: unknown };
@@ -33,13 +33,11 @@ export const withoutUserDataPath = (result: unknown): unknown => {
     return rest;
 };
 
-/** Whether this write, on this channel with these arguments, may pass while auto-vote runs. */
-const isAllowedWhileRunning = (channel: string, args: unknown[], running: boolean): true | string => {
-    if (!running) return true;
-    const refusedWhileRunning = 'Stop auto-vote first — the Start and Stop controls on the phone do that.';
+/** Whether this write, on this channel with these arguments, may pass at all. */
+const isAllowedWrite = (channel: string, args: unknown[]): true | string => {
     const keyAt = KEYED_WRITE_CHANNELS[channel];
     if (keyAt !== undefined && args[keyAt] === AUTOVOTE_RUNNING_KEY) {
-        return refusedWhileRunning;
+        return 'The auto-vote switch is not a setting — use the Start and Stop controls.';
     }
     if (
         channel === 'save-settings' &&
@@ -47,7 +45,7 @@ const isAllowedWhileRunning = (channel: string, args: unknown[], running: boolea
         typeof args[0] === 'object' &&
         AUTOVOTE_RUNNING_KEY in (args[0] as object)
     ) {
-        return refusedWhileRunning;
+        return 'The auto-vote switch is not a setting — use the Start and Stop controls.';
     }
     return true;
 };
@@ -70,9 +68,9 @@ export const dispatchRemoteInvoke = async (
     if (classified.kind === 'host') {
         return { kind: 'refused', error: `${REMOTE_REFUSAL_PREFIX}: the host answers this channel itself.` };
     }
-    const allowedWhileRunning = isAllowedWhileRunning(channel, args, deps.isAutovoteRunning());
-    if (allowedWhileRunning !== true) {
-        return { kind: 'refused', error: `${REMOTE_REFUSAL_PREFIX}: ${allowedWhileRunning}` };
+    const allowedWrite = isAllowedWrite(channel, args);
+    if (allowedWrite !== true) {
+        return { kind: 'refused', error: `${REMOTE_REFUSAL_PREFIX}: ${allowedWrite}` };
     }
     const result = await deps.invoke(channel, args);
     return { kind: 'result', result: channel === 'get-environment-info' ? withoutUserDataPath(result) : result };
