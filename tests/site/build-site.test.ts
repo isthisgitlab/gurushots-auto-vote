@@ -250,34 +250,26 @@ describe('render', () => {
 });
 
 describe('main with every default', () => {
-    const root = nodePath.join(__dirname, '..', '..');
-
-    test('the parameter defaults are the repo paths, evaluated before any output', async () => {
-        // main() with no arguments: every destructuring default (rootDir, out, layoutFile,
-        // remoteSite) evaluates. The temp tree has no logo, so main stops at the logo check —
-        // exactly where runCli's booby-trap test stops it — and nothing is written.
-        const logSpy2 = jest.spyOn(console, 'log').mockImplementation(() => {});
-        const errorSpy2 = jest.spyOn(console, 'error').mockImplementation(() => {});
-        const exitSpy2 = jest.spyOn(process, 'exit').mockImplementation((code) => {
-            throw new Error(`exit ${code}`);
-        });
-        globalThis.fetch = emptyReleasesFetch();
+    test('main() with no argument object resolves the repo paths and never touches the real dist-site/', async () => {
+        // The `= {}` default of main's parameter object: no other test calls main() bare. main() reads
+        // the real repo (logo, layout, package.json), then its first write — clearing the output dir —
+        // hits a booby trap that throws, so the real dist-site/ is never written. The paths the reads
+        // and the trapped write receive pin the rootDir, layoutFile and out defaults.
+        const root = nodePath.join(__dirname, '..', '..');
+        const readSpy = jest.spyOn(fs, 'readFileSync');
+        const traps = (['rmSync', 'mkdirSync', 'writeFileSync', 'copyFileSync'] as const).map((fn) =>
+            jest.spyOn(fs, fn).mockImplementation(() => {
+                throw new Error(`unexpected fs.${fn}`);
+            }),
+        );
         try {
-            // The defaults are the real repo paths: main() renders the real site (build output,
-            // gitignored) exactly as `pnpm build:site` would — real release listing included,
-            // stubbed here to an empty one so the test stays network-free. Whether the repo's dist/
-            // holds a renderer build depends on the machine (CI tests before building), so only the
-            // remote step having run off the default dist is asserted, never its output.
-            await main();
-            expect(fs.existsSync(nodePath.join(root, 'dist-site', 'index.html'))).toBe(true);
-            expect(logSpy2).toHaveBeenCalledWith(
-                expect.stringMatching(/^(✓ remote\/index\.html|⏭️ {2}remote\/ loader)/),
-            );
+            await expect(main()).rejects.toThrow('unexpected fs.rmSync');
+            expect(readSpy).toHaveBeenCalledWith(nodePath.join(root, 'scripts', 'site', 'layout.html'), 'utf8');
+            expect(readSpy).toHaveBeenCalledWith(nodePath.join(root, 'package.json'), 'utf8');
+            expect(traps[0]).toHaveBeenCalledWith(nodePath.join(root, 'dist-site'), { recursive: true, force: true });
         } finally {
-            delete (globalThis as { fetch?: unknown }).fetch;
-            exitSpy2.mockRestore();
-            logSpy2.mockRestore();
-            errorSpy2.mockRestore();
+            for (const trap of traps) trap.mockRestore();
+            readSpy.mockRestore();
         }
     });
 });
@@ -520,12 +512,16 @@ describe('buildRemoteSite (the /remote/ tree)', () => {
         write('layout.html', '<main>{{content}}</main>');
         // main() renders every PAGES entry; seed each one it walks.
         for (const page of PAGES) write(page.src, `# ${page.src}`);
+        // Whether the repo's dist/ holds a renderer build depends on the machine (CI tests before
+        // building), so the default is pinned by the path the remote step looks up, not by its output.
+        const existsSpy = jest.spyOn(fs, 'existsSync');
         try {
             await main({ rootDir: tmp, out, layoutFile: nodePath.join(tmp, 'layout.html') });
-            // The repo's dist/ may or may not hold a renderer build (CI tests before building).
-            expect(fs.existsSync(nodePath.join(out, 'index.html'))).toBe(true);
-            expect(logSpy).toHaveBeenCalledWith(
-                expect.stringMatching(/^(✓ remote\/index\.html|⏭️ {2}remote\/ loader)/),
+            const repoDist = nodePath.join(__dirname, '..', '..', 'dist');
+            expect(existsSpy).toHaveBeenCalledWith(nodePath.join(repoDist, 'remote-loader.html'));
+            expect(globalThis.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('api.github.com/repos/'),
+                expect.anything(),
             );
         } finally {
             delete (globalThis as { fetch?: unknown }).fetch;
