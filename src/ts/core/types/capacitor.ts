@@ -67,6 +67,13 @@ export type CapacitorGlobals = typeof globalThis & {
         Plugins?: CapacitorPlugins;
         /** The runtime's platform probe: false on a Capacitor web target. */
         isNativePlatform?: () => boolean;
+        /**
+         * The native bridge's own call into a plugin, present in every document the app's local server
+         * serves (the native bridge script is injected into each `.html`), whether or not that document's
+         * bundle registered the plugin in JS — the Android remote mode's remote page reads and clears the
+         * stored pairing key this way.
+         */
+        nativePromise?: (plugin: string, method: string, options: object) => Promise<unknown>;
     };
 };
 

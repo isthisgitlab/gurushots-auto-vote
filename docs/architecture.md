@@ -992,9 +992,22 @@ served while at least one phone wants it.
 - **The phone page is served from this project's GitHub Pages and reads the key from the URL fragment.** A
   compromised Pages deploy (or a compromised `pages.yml` run) could ship JavaScript that sends paired keys
   elsewhere. Mitigation: Pages publishes only after a green release (`workflow_dispatch` from `build.yml`), the
-  site builds are reproducible from the repo, and the Android remote mode (slice 2) loads the bundled page, not
+  site builds are reproducible from the repo, and the Android remote mode loads the bundled page, not
   the Pages copy. Copies of the link stay in the browser's history (and Chrome's history sync) and in the QR
   scanner's history — that is the same permanence the key's design accepts.
+- **The Android app's remote mode** (`shells/capacitor/remoteMode.ts`, `shells/remote/phoneMode.ts`): the
+  login screen and Settings → Application Settings offer "Control my computer", a paste field for the pairing
+  link (the phone's camera opens the link in the browser instead of scanning in-app). Entering stops
+  `AutoVoteService`, writes `autovoteRunning=false` and flushes it, stores the key under `gs_remote_access`
+  (in `LOCAL_DATA_STORES`, so the wipe clears it) and loads `/remote/index.html` from the APK. The startup entry
+  reads that key before anything mounts, so a relaunch stays in remote mode and `AutovoteProvider` never mounts
+  over the Capacitor bridge. The local server answers a directory path with the app's own document, so every
+  bundled page is addressed by its file name (`/remote/<version>/index.html`), and the bundled loader takes the
+  version from `hello` like the Pages one; a version the APK does not carry reads "Update the app on your
+  computer". Both documents reach Preferences through the native bridge's `nativePromise`
+  (`core/remote/phoneKeyStore.ts`), because the remote bundles register no Capacitor plugin. **Disconnect**
+  (Navbar and the loader's notice screens) clears the key and reloads the app's own document, in normal mode
+  with local voting off.
 - On a lost connection an in-flight invoke on a spend channel (`core/remote/allowlist.ts`, the `postOnce`
   spenders) is answered "unclear — check before retrying", never a clean failure; every other channel reports
   the failure. In-flight invokes are never queued or replayed after a reconnect.

@@ -37,6 +37,7 @@ describe('Remote entry', () => {
         const m = {
             transport: { marker: 'remote-transport' },
             installed: jest.fn(),
+            installDisconnect: jest.fn(),
             mounted: [] as unknown[],
         };
         jest.doMock(`${SRC}/core/remote/trystero`, () => ({
@@ -49,6 +50,7 @@ describe('Remote entry', () => {
             installPeerBridge: m.installed,
             PAGE_VERSION: '9.9.9',
         }));
+        jest.doMock(`${SRC}/shells/remote/phoneMode`, () => ({ installPhoneDisconnect: m.installDisconnect }));
         jest.doMock(`${SRC}/react/pages/App`, () => ({
             mountApp: jest.fn((_host: unknown, remoteTransport?: unknown) => {
                 m.mounted.push(remoteTransport);
@@ -67,6 +69,9 @@ describe('Remote entry', () => {
         await flush();
         expect(m.installed).toHaveBeenCalledWith(m.transport);
         expect(m.mounted).toEqual([m.transport]);
+        // The Android app's Disconnect is offered before the app mounts (it installs nothing in a browser tab).
+        expect(m.installDisconnect).toHaveBeenCalledTimes(1);
+        expect(m.installDisconnect.mock.invocationCallOrder[0]).toBeLessThan(m.installed.mock.invocationCallOrder[0]);
         // App.tsx's own auto-mount stayed deferred.
         expect((globalThis as RendererGlobals).__capacitorBootstrap).toBe(true);
     });
@@ -76,6 +81,7 @@ describe('Remote entry', () => {
         const m = load({ marker: 'remote-transport' });
         await flush();
         expect(m.installed).not.toHaveBeenCalled();
+        expect(m.installDisconnect).not.toHaveBeenCalled();
         expect(m.mounted).toEqual([]);
         expect(document.getElementById('root')?.textContent).toBe('app.remoteNoKey');
     });

@@ -5,6 +5,7 @@ import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import { platformKind } from '../../../core/platform/kind';
 import { remoteConnectionCount, subscribeRemoteConnectionCount } from '../../api/remoteHost';
 import { RemoteStateBadge } from '@/components/app/RemoteStateBadge';
+import { RemoteDisconnectButton } from '@/components/app/RemoteDisconnectButton';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 
 /**
@@ -42,6 +43,8 @@ export function Navbar({
                 {!desktop && <RemoteStateBadge />}
             </div>
             <div className="navbar-end w-auto shrink-0 gap-2">
+                {/* The Android remote mode's leave: only while the phone shows the computer's app */}
+                <RemoteDisconnectButton t={t} className="btn btn-outline btn-sm max-sm:min-h-10" />
                 <button
                     type="button"
                     className="btn btn-primary btn-sm max-sm:min-h-10"

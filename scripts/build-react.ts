@@ -399,10 +399,18 @@ const copyRemoteVersionDir = (): void => {
     fs.mkdirSync(target, { recursive: true });
     fs.copyFileSync(path.join(distDir, 'remote.html'), path.join(target, 'index.html'));
     fs.copyFileSync(path.join(distDir, 'remote-bundle.js'), path.join(target, 'remote-bundle.js'));
+    // The loader inside the same tree: the Android remote mode opens `/remote/index.html#k=<key>`
+    // (the app's local server routes an extension-less path to the app's own document, so the
+    // loader is always addressed by file name), and the versions it moves on to sit below it.
+    const loaderDir = path.join(distDir, 'remote');
+    fs.writeFileSync(path.join(loaderDir, 'index.html'), remoteLoaderHtml);
+    fs.copyFileSync(path.join(distDir, 'remoteLoader-bundle.js'), path.join(loaderDir, 'remoteLoader-bundle.js'));
     for (const name of ['styles.css', NOTICES_ASSET_NAME]) {
         const source = path.join(distDir, name);
-        if (fs.existsSync(source)) fs.copyFileSync(source, path.join(target, name));
-        else console.log(`⏭️  remote/${version}: ${name} not built yet — run build:css / build:notices for it`);
+        if (fs.existsSync(source)) {
+            fs.copyFileSync(source, path.join(target, name));
+            if (name === 'styles.css') fs.copyFileSync(source, path.join(loaderDir, name));
+        } else console.log(`⏭️  remote/${version}: ${name} not built yet — run build:css / build:notices for it`);
     }
     console.log(`✓ Staged the remote page under dist/remote/${version}/`);
 };

@@ -140,6 +140,26 @@ describe('scripts/build-react.ts', () => {
             expect(fs.copyFileSync).toHaveBeenCalledWith(NOTICES, realPath.join(DIST, 'THIRD_PARTY_NOTICES.txt'));
             expect(fs.copyFileSync).toHaveBeenCalledWith(LOGO, realPath.join(DIST, 'favicon.png'));
 
+            // The remote page tree the APK carries: the versioned page and, beside it, the loader the
+            // Android remote mode opens by file name (the app's local server answers a directory path
+            // with the app's own document), with its bundle and the app stylesheet.
+            const remoteDir = realPath.join(DIST, 'remote');
+            expect(fs.copyFileSync).toHaveBeenCalledWith(
+                realPath.join(DIST, 'remote.html'),
+                realPath.join(remoteDir, '9.9.9', 'index.html'),
+            );
+            expect(fs.writeFileSync).toHaveBeenCalledWith(
+                realPath.join(remoteDir, 'index.html'),
+                expect.stringContaining('remoteLoader-bundle.js'),
+            );
+            for (const name of ['remoteLoader-bundle.js', 'styles.css']) {
+                expect(fs.copyFileSync).toHaveBeenCalledWith(realPath.join(DIST, name), realPath.join(remoteDir, name));
+            }
+            expect(fs.copyFileSync).toHaveBeenCalledWith(
+                realPath.join(DIST, 'styles.css'),
+                realPath.join(remoteDir, '9.9.9', 'styles.css'),
+            );
+
             expect(esbuild.build).toHaveBeenCalledTimes(ENTRY_NAMES.length);
             const outfiles = esbuild.build.mock.calls.map(([opts]) => realPath.basename(opts.outfile!));
             expect(outfiles).toEqual(ENTRY_NAMES.map((n) => `${n}-bundle.js`));

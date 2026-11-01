@@ -169,6 +169,7 @@ export const logMessages = {
     m3574fb89525c: '  API Timeout: {0}s',
     m35f7861bd6c9: '  🔑 Keys:  {0}',
     m366776868bdc: 'Remote peer connected: {0}',
+    m36d3d50aec34: 'Stored remote-access key could not be read; the app starts in normal mode',
     m37e3cfd5e337: '{0} Insufficient images to reach {1}% exposure (only {2} available)',
     m3812399fa99f: 'Error handling set-setting request for key "{0}":',
     m3a0e8532ed26: 'mergeTitlePins: pin cap of {0} reached — not pinning challenge {1}',

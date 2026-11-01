@@ -4,6 +4,9 @@
  * fires) and settings.initializeAsync has hydrated the in-memory
  * cache from @capacitor/preferences. Then loads App and mounts it.
  *
+ * The Android remote mode is decided first: a stored pairing key hands the
+ * WebView to the bundled remote page and nothing mounts here.
+ *
  * dist/index.html (Capacitor's WebView entry) loads the bundle this
  * file produces, not app-bundle.js. Electron is unaffected; it never
  * loads this entry.
@@ -26,6 +29,7 @@ import { flushLocalStores, initializeLocalStores } from './localStores';
 import { withCategory } from '../../core/logger';
 import { clearTokenUnlessStayingLoggedIn } from '../../core/services/auth';
 import { getStatus } from './NativeAutovoteBridge';
+import { installRemoteModeEntry, loadBundledRemoteLoader, readStoredPairingKey } from './remoteMode';
 import { mountForToken } from '../../react/pages/mountForToken';
 
 // Mount Login or App based on whether we have a token. App gets the real
@@ -90,7 +94,18 @@ const bootstrap = async () => {
     // its platform probe is a function — the probe is not called, so a
     // Capacitor web target counts as present here too, as it always did).
     if (isCapacitorNative()) {
+        // Remote mode is decided before anything of the normal app runs: a stored
+        // pairing key hands this WebView to the bundled remote page, and this
+        // document mounts nothing (AutovoteProvider never mounts in remote mode).
+        const remoteKey = await readStoredPairingKey();
+        if (remoteKey !== null) {
+            loadBundledRemoteLoader(remoteKey);
+            return;
+        }
         installBridge();
+        // The paste entry exists from the app's first render; the remote mode's own
+        // document installs its Disconnect on the remote shell's side.
+        installRemoteModeEntry();
         // The local stores hydrate through localStores (one list; see it): the settings come first, and seeding
         // reads and writes the settings, so the bridge's profiles are seeded between that and the other stores;
         // the mount waits for all of them.

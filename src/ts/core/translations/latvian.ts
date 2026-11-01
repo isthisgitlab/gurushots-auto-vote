@@ -115,6 +115,10 @@ export const errors: typeof english.errors = {
     remoteSpendUnclear:
         'Savienojums pārtrūka darbības laikā, tāpēc rezultāts nav zināms. Pirms atkārto, pārbaudi rezultātu datorā.',
     remoteConnectionLost: 'Savienojums ar datoru pārtrūka.',
+    remoteBadLink:
+        'Šī nav savienošanas saite. Ielīmē visu saiti no datora sadaļas „Attālinātā piekļuve” — tā beidzas ar #k=…',
+    remoteEnterFailed: 'Neizdevās pārslēgties uz attālināto vadību. Lietotne paliek parastajā režīmā — mēģini vēlreiz.',
+    remoteDisconnectFailed: 'Neizdevās atvienoties. Šī lapa paliek savienota ar datoru — mēģini vēlreiz.',
 };
 // First-run onboarding
 export const onboarding: typeof english.onboarding = {
@@ -1723,6 +1727,14 @@ export const app: LatvianApp = {
     remoteUpdateNeeded: 'Atjaunini lietotni datorā',
     remoteNoKey: 'Skenē datorā redzamo QR kodu, lai savienotu',
     remoteAddToHomeScreen: 'Pievieno šo lapu sākuma ekrānam, lai saite vienmēr būtu pa rokai.',
+    // The Android app's remote mode: the paste entry ("Control my computer") and the leave from it
+    remoteControlEntry: 'Vadīt manu datoru',
+    remoteControlEntryDesc: 'Ar savienošanas saiti vadi no šejienes lietotni, kas darbojas tavā datorā.',
+    remoteControlTitle: 'Vadīt datoru',
+    remoteControlLinkLabel: 'Savienošanas saite',
+    remoteControlHint: 'Ielīmē visu saiti no datora sadaļas „Attālinātā piekļuve”',
+    remoteControlConnect: 'Savienot',
+    remoteDisconnect: 'Atvienoties',
 };
 // Logs page specific
 export const logs: typeof english.logs = {

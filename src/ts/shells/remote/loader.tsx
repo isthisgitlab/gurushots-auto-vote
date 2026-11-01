@@ -1,7 +1,7 @@
 /**
  * Remote loader entry — the thin, stable document the pairing link opens (`/remote/`). It
  * joins the pairing room, reads the desktop's app version from its `hello`, and moves on to
- * the matching `/remote/<version>/` page (the link's fragment is kept, so the key travels
+ * the matching `/remote/<version>/index.html` page (the link's fragment is kept, so the key travels
  * with it). An older desktop always gets a matching phone page this way, and the pairing
  * link itself never changes.
  *
@@ -22,14 +22,22 @@ import { parsePeerMessage, PROTOCOL_VERSION } from '../../core/remote/protocol';
 import type { HelloMessage } from '../../core/remote/protocol';
 import { RemoteNoticeScreen } from '../../react/components/app/RemoteNoticeScreen';
 import { PAGE_VERSION } from './bridge/peer';
+import { installPhoneDisconnect } from './phoneMode';
 
 /** How long the loader waits for the desktop's hello before it reports the desktop absent. */
 export const LOADER_TIMEOUT_MS = 15_000;
 
-/** Whether the site publishes the version's page (`/remote/<version>/`). */
+/**
+ * The version's page by file name: the Android app's local server answers a directory path with
+ * its own document, so a versioned page is always addressed as its `index.html` (the Pages site
+ * serves the same file).
+ */
+const versionPage = (version: string): string => `./${encodeURIComponent(version)}/index.html`;
+
+/** Whether the site (or the APK) carries the version's page. */
 const versionIsPublished = async (version: string): Promise<boolean> => {
     try {
-        const probe = await fetch(`./${encodeURIComponent(version)}/`, { method: 'HEAD' });
+        const probe = await fetch(versionPage(version), { method: 'HEAD' });
         return probe.ok;
     } catch {
         return true; // the probe itself could not run; let the versioned page speak for itself
@@ -50,6 +58,9 @@ void (async () => {
         renderNotice();
         return;
     }
+    // Inside the Android app's WebView the notice screens carry Disconnect too: the app opens
+    // here on every launch until the user leaves remote mode.
+    installPhoneDisconnect();
     let done = false;
     const transport = await createTrysteroTransport({ key });
     const settleNotice = (state: 'offline' | 'network'): void => {
@@ -69,7 +80,7 @@ void (async () => {
                 renderNotice();
                 return;
             }
-            globalThis.location.assign(`./${encodeURIComponent(version)}/${globalThis.location.hash}`);
+            globalThis.location.assign(`${versionPage(version)}${globalThis.location.hash}`);
         });
     };
     const announce: HelloMessage = {

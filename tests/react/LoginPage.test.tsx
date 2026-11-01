@@ -13,6 +13,7 @@ import { fireSettingsChanged } from './helpers/setup';
 import { CURRENT_NOTICE_VERSION } from '../../src/ts/core/noticeVersion';
 import { resetPlatformKind } from '../helpers/platformKind';
 import { markPlatformKind } from '../../src/ts/core/platform/kind';
+import { installPhoneRemoteMode } from '../../src/ts/core/remote/phoneMode';
 
 import type { RendererGlobals } from '../../src/ts/core/types/capacitor';
 import type { WindowApi } from '../../src/ts/core/types/ipc';
@@ -48,6 +49,21 @@ describe('Login page', () => {
         document.body.innerHTML = '';
         delete (globalThis as RendererGlobals).__capacitorBootstrap;
         resetPlatformKind();
+    });
+
+    test('the Android app\'s "Control my computer" entry is on the login screen only where its entry installed it', async () => {
+        installPhoneRemoteMode({});
+        const without = await renderReady();
+        expect(screen.queryByText('app.remoteControlEntry')).toBeNull();
+        without.unmount();
+
+        installPhoneRemoteMode({ enter: jest.fn().mockResolvedValue({ success: true }) });
+        try {
+            await renderReady();
+            expect(screen.getByText('app.remoteControlEntry')).toBeTruthy();
+        } finally {
+            installPhoneRemoteMode({});
+        }
     });
 
     const renderReady = async () => {

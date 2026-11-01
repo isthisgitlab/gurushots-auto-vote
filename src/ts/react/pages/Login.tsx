@@ -8,6 +8,7 @@ import { LoginForm } from '@/components/login/LoginForm';
 import { LanguageSwitcher } from '@/components/login/LanguageSwitcher';
 import { SettingsToggles } from '@/components/login/SettingsToggles';
 import { ModeInfoText } from '@/components/login/ModeInfoText';
+import { RemoteControlEntry } from '@/components/app/RemoteControlEntry';
 import { PageLoader } from '@/components/ui/LoadingSpinner';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { useDocumentTheme } from '@/hooks/useDocumentTheme';
@@ -204,6 +205,9 @@ function LoginPageContent({ startupError }: { startupError?: string }) {
 
                     {/* Mode Info Text */}
                     <ModeInfoText isMock={mockMode} />
+
+                    {/* Control my computer — the Android remote mode's paste entry (installed by the Capacitor entry only) */}
+                    <RemoteControlEntry />
                 </div>
             </div>
 

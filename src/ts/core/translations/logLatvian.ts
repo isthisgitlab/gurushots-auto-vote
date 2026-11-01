@@ -174,6 +174,7 @@ export const logMessages = {
     m3574fb89525c: '  API noildze: {0} s',
     m35f7861bd6c9: '  🔑 Atslēgas: {0}',
     m366776868bdc: 'Attālinātais dalībnieks pievienojās: {0}',
+    m36d3d50aec34: 'Saglabāto attālinātās piekļuves atslēgu nevarēja nolasīt; lietotne startē parastajā režīmā',
     m37e3cfd5e337: '{0} Nepietiek foto, lai sasniegtu {1} % redzamību (pieejami tikai {2})',
     m3812399fa99f: 'Kļūda, apstrādājot set-setting pieprasījumu uzstādījumam "{0}":',
     m3a0e8532ed26:

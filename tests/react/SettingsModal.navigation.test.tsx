@@ -20,6 +20,7 @@ import { selectTab } from '../helpers/selectTab';
 import { fireSettingsChanged, mockApi } from './helpers/setup';
 import { markPlatformKind } from '../../src/ts/core/platform/kind';
 import { resetPlatformKind } from '../helpers/platformKind';
+import { installPhoneRemoteMode } from '../../src/ts/core/remote/phoneMode';
 import { invalid } from '../helpers/invalid';
 
 // On the remote kind the provider mounts the real host; keep it on an in-memory transport.
@@ -347,6 +348,19 @@ describe('SettingsModal — filter', () => {
             expect(document.getElementById(settingsPanelId('application'))!.hasAttribute('hidden')).toBe(true);
         } finally {
             resetPlatformKind();
+        }
+    });
+
+    test("the Android app's Control my computer entry is in the Application panel and found by its name", async () => {
+        installPhoneRemoteMode({ enter: jest.fn().mockResolvedValue({ success: true }) });
+        try {
+            await openSettings();
+            expect(screen.getByText('app.remoteControlEntry')).toBeTruthy();
+            typeFilter('app.remoteControlEntry');
+            expect(tabNames()).toEqual(['app.applicationSettings']);
+            expect(isHidden(screen.getByText('app.remoteControlEntry').closest('.mb-4'))).toBe(false);
+        } finally {
+            installPhoneRemoteMode({});
         }
     });
 

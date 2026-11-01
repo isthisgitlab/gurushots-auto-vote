@@ -788,6 +788,9 @@ describe('wipeLocalData', () => {
                     'gs_scenario_state',
                     'gs_join_state',
                     'gurushots-metadata',
+                    // The Android remote mode's stored pairing key (shells/capacitor/remoteMode.ts): after a
+                    // wipe the next launch finds no key and starts the normal mode.
+                    'gs_remote_access',
                 ]),
             );
             expect(removedKeys).toHaveLength(ctx.localData.LOCAL_DATA_STORES.length * 2);

@@ -43,7 +43,9 @@ import { ScenariosSection } from './ScenariosSection';
 import { ProfilesSection } from './ProfilesSection';
 import { AboutDataSection, aboutDataTexts } from './AboutDataSection';
 import { RemoteAccessSection, remoteAccessTexts } from './RemoteAccessSection';
+import { RemoteControlEntry, remoteControlTexts } from './RemoteControlEntry';
 import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
+import { phoneRemoteMode } from '../../../core/remote/phoneMode';
 
 import type { ImportReport } from '@/api/useImportReport';
 import type { SettingsBand, SettingsSection, SettingsTab, SettingsTabId } from '@/utils/groupSettings';
@@ -257,6 +259,8 @@ function useSettingsModalFilter({
                 ...appGroups.flatMap((group) => groupFilterTexts(t, group)),
                 aboutDataTexts(t, importReport !== null),
                 ...(showsRemoteAccess ? [remoteAccessTexts(t)] : []),
+                // The Android app's "Control my computer" entry, found like a section when installed.
+                ...(phoneRemoteMode()?.enter !== undefined ? [remoteControlTexts(t)] : []),
             ];
         }
         if (id === 'titleRules') return [{ names: [t(SETTINGS_SECTION_TITLES.titleRules)], descriptions: [] }];
@@ -419,6 +423,8 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                             ))}
                             <AboutDataSection report={importReport} showAll={filter.appShowAll} />
                             {showsRemoteAccessSection && <RemoteAccessSection showAll={filter.appShowAll} />}
+                            {/* The Android app's paste entry; it renders nothing where its shell did not install it */}
+                            <RemoteControlEntry showAll={filter.appShowAll} />
                         </ApplicationSettingsSection>
                         {defaultsBands.map((band, index) => {
                             const tab = defaultsTabs[index];

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { remoteConnectionState, subscribeRemoteConnectionState } from '../../../core/remote/connectionState';
 import { rendererTranslator } from '../../../core/translations/renderer';
+import { RemoteDisconnectButton } from './RemoteDisconnectButton';
 
 /**
  * The full-screen state the phone page shows when the app itself cannot be shown: no key in
@@ -25,6 +26,8 @@ export function RemoteNoticeScreen() {
         <main className="min-h-screen flex items-center justify-center p-6">
             <div className="alert alert-warning text-sm" role="status">
                 <span>{rendererTranslator.t(labelKey)}</span>
+                {/* On the Android remote mode the notice must still leave: the app opens here until it does */}
+                <RemoteDisconnectButton t={(key) => rendererTranslator.t(key)} className="btn btn-outline btn-sm" />
             </div>
         </main>
     );

@@ -112,6 +112,10 @@ export const errors = {
     remoteSpendUnclear:
         'The connection dropped while this was running, so the result is unknown. Check the result on your computer before retrying.',
     remoteConnectionLost: 'The connection to your computer dropped.',
+    remoteBadLink:
+        'That is not a pairing link. Paste the whole link from the Remote access section on your computer — it ends in #k=…',
+    remoteEnterFailed: 'Could not switch to remote mode. This app stays in its normal mode — try again.',
+    remoteDisconnectFailed: 'Could not disconnect. This page stays connected to your computer — try again.',
 };
 // First-run onboarding
 export const onboarding = {
@@ -1699,6 +1703,14 @@ export const app = {
     remoteUpdateNeeded: 'Update the app on your computer',
     remoteNoKey: 'Scan the QR code on your computer to pair',
     remoteAddToHomeScreen: 'Add this page to your Home Screen to keep the link at hand.',
+    // The Android app's remote mode: the paste entry ("Control my computer") and the leave from it
+    remoteControlEntry: 'Control my computer',
+    remoteControlEntryDesc: 'Control this app on your computer from here with its pairing link.',
+    remoteControlTitle: 'Control your computer',
+    remoteControlLinkLabel: 'Pairing link',
+    remoteControlHint: 'Paste the whole link from the Remote access section on your computer',
+    remoteControlConnect: 'Connect',
+    remoteDisconnect: 'Disconnect',
 };
 // Logs page specific
 export const logs = {

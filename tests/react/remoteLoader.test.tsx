@@ -20,6 +20,10 @@ jest.mock('../../src/ts/core/remote/trystero', () => ({
         error.startsWith('could not connect to peer') && error.includes('after exchanging SDP'),
 }));
 jest.mock('../../src/ts/shells/remote/bridge/peer', () => ({ PAGE_VERSION: '9.9.9' }));
+const installPhoneDisconnect = jest.fn<void, []>();
+jest.mock('../../src/ts/shells/remote/phoneMode', () => ({
+    installPhoneDisconnect: () => installPhoneDisconnect(),
+}));
 import { PROTOCOL_VERSION } from '../../src/ts/core/remote/protocol';
 // The platform module installs on load; the Jest setup has one installed already.
 jest.mock('../../src/ts/shells/remote/platform', () => ({}));
@@ -89,11 +93,11 @@ describe('the /remote/ loader', () => {
             'host',
         );
         await flush();
-        expect(fetchCalls).toEqual(['./1.2.3/']);
-        expect(assigned).toEqual(['./1.2.3/#k=the-key']);
+        expect(fetchCalls).toEqual(['./1.2.3/index.html']);
+        expect(assigned).toEqual(['./1.2.3/index.html#k=the-key']);
     });
 
-    test('a version the site does not publish says to update', async () => {
+    test("a version the site does not carry says to update (the probe names the page file, as the app's local server needs)", async () => {
         headOk = false;
         loadLoader();
         await flush();
@@ -170,7 +174,7 @@ describe('the /remote/ loader', () => {
             'host',
         );
         await flush();
-        expect(assigned).toEqual(['./9.9.9/#k=the-key']);
+        expect(assigned).toEqual(['./9.9.9/index.html#k=the-key']);
         await flush();
         expect(isolated.left).toBe(false);
     });
@@ -188,10 +192,19 @@ describe('the /remote/ loader', () => {
         expect(document.getElementById('root')?.textContent).toContain('offline, or this link was reset');
     });
 
-    test('no key in the link says to scan the QR code', async () => {
-        window.location.hash = '';
+    test("the Android app's Disconnect is installed once there is a key, before the connection is tried", async () => {
+        installPhoneDisconnect.mockClear();
         loadLoader();
         await flush();
+        expect(installPhoneDisconnect).toHaveBeenCalledTimes(1);
+    });
+
+    test('no key in the link says to scan the QR code', async () => {
+        window.location.hash = '';
+        installPhoneDisconnect.mockClear();
+        loadLoader();
+        await flush();
+        expect(installPhoneDisconnect).not.toHaveBeenCalled();
         expect(assigned).toEqual([]);
         expect(document.getElementById('root')?.textContent).toContain('Scan the QR code on your computer to pair');
     });
@@ -220,7 +233,7 @@ describe('the /remote/ loader', () => {
             'host',
         );
         await flush();
-        expect(assigned).toEqual(['./1.2.3/#k=the-key']);
+        expect(assigned).toEqual(['./1.2.3/index.html#k=the-key']);
     });
 
     test('a version probe that cannot run navigates anyway; a room that refuses us says offline', async () => {
@@ -237,7 +250,7 @@ describe('the /remote/ loader', () => {
             'host',
         );
         await flush();
-        expect(assigned).toEqual(['./1.2.3/#k=the-key']);
+        expect(assigned).toEqual(['./1.2.3/index.html#k=the-key']);
     });
 
     test('a transport that cannot be built says the computer is offline', async () => {

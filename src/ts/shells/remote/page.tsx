@@ -20,6 +20,7 @@ import { createTrysteroTransport } from '../../core/remote/trystero';
 import { setRemoteConnectionState } from '../../core/remote/connectionState';
 import { takePairingKey } from '../../core/remote/pairingKey';
 import { installPeerBridge } from './bridge/peer';
+import { installPhoneDisconnect } from './phoneMode';
 import { mountApp } from '../../react/pages/App';
 import { RemoteNoticeScreen } from '../../react/components/app/RemoteNoticeScreen';
 import { noopBackgroundHost } from '../../react/contexts/noopBackgroundHost';
@@ -40,6 +41,9 @@ void (async () => {
         renderNotice();
         return;
     }
+    // Inside the Android app's WebView the page also installs its Disconnect,
+    // so the Navbar can leave remote mode back to the app's normal mode.
+    installPhoneDisconnect();
     const transport = await createTrysteroTransport({ key });
     installPeerBridge(transport);
     // The remote controller rides the same transport; AutovoteProvider builds it from the
