@@ -343,7 +343,8 @@ describe('under Oxlint', () => {
     const root = path.join(__dirname, '..', '..');
 
     test('reports exactly what the in-process walk reports', () => {
-        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'layer-boundaries-'));
+        // The real path, so Oxlint prints relative filenames here on macOS as it does on CI's Linux.
+        const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'layer-boundaries-')));
         try {
             // Each case: the file's directory under `src/ts/`, its snippet, the crossings expected in it. The
             // pattern-row directories need not exist anywhere else — the test creates what it lints.
@@ -465,8 +466,9 @@ describe('under Oxlint', () => {
             const diagnostics = isPlainObject(output) && Array.isArray(output.diagnostics) ? output.diagnostics : [];
             for (const diagnostic of diagnostics) {
                 const { filename, message } = invalid<{ filename: string; message: string }>(diagnostic);
-                // Oxlint prints a filename relative to its working directory where it can (Linux /tmp) and absolute
-                // where it cannot (macOS, whose temp dir sits behind a symlink): resolve it against that directory.
+                // Oxlint prints a filename relative to its working directory when the linted path lies under it, and
+                // absolute when a symlink in the path keeps them apart. `dir` is a real path, so only the relative form
+                // reaches here; resolving against `dir` keeps the key right for the absolute one too.
                 const name = path.relative(dir, path.resolve(dir, filename));
                 found.set(name, (found.get(name) ?? new Set<string>()).add(message));
             }
