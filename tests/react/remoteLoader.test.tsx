@@ -154,21 +154,22 @@ describe('the /remote/ loader', () => {
         expect(fetchCalls).toEqual([]);
     });
 
-    test('a join failure after the SDP exchange says to try Wi-Fi', async () => {
+    test('a join failure after the SDP exchange says to try Wi-Fi when the wait runs out', async () => {
         loadLoader();
         await flush();
         const transport = transportStub.current as TransportStub;
-        transport.emitJoin('host');
-        await flush();
+        // The failing peer never joined, so the desktop may still connect: the wait goes on.
         transport.emitJoinError(
             'could not connect to peer 3b6a after exchanging SDP; configure TURN servers with turnConfig or rtcConfig.iceServers',
+            'host',
         );
         await flush();
-        expect(transport.left).toBe(true);
+        expect(transport.left).toBe(false);
         expect(navigated).toEqual([]);
-        expect(document.getElementById('root')?.textContent).toContain('try Wi-Fi');
-        // The timeout racing a join error that already settled changes nothing.
-        await jest.advanceTimersByTimeAsync(15_000);
+        expect(document.getElementById('root')?.textContent).toContain('Connecting to your computer');
+
+        await jest.advanceTimersByTimeAsync(HOST_ANSWER_TIMEOUT_MS);
+        expect(transport.left).toBe(true);
         expect(document.getElementById('root')?.textContent).toContain('try Wi-Fi');
     });
 
@@ -228,16 +229,17 @@ describe('the /remote/ loader', () => {
         expect(transport.sent).toHaveLength(1);
     });
 
-    test('another join failure reads as offline-or-reset', async () => {
+    test('another join failure reads as offline-or-reset when the wait runs out', async () => {
         loadLoader();
         await flush();
         const transport = transportStub.current as TransportStub;
-        transport.emitJoin('host');
+        transport.emitJoinError('handshake timed out after 14000ms', 'host');
         await flush();
-        transport.emitJoinError('handshake timed out after 14000ms');
-        await flush();
-        expect(transport.left).toBe(true);
+        expect(transport.left).toBe(false);
         expect(navigated).toEqual([]);
+
+        await jest.advanceTimersByTimeAsync(HOST_ANSWER_TIMEOUT_MS);
+        expect(transport.left).toBe(true);
         expect(document.getElementById('root')?.textContent).toContain('offline, or this link was reset');
     });
 
@@ -300,6 +302,29 @@ describe('the /remote/ loader', () => {
         );
         await flush();
         expect(navigated).toEqual(['./1.2.3/index.html#k=the-key']);
+    });
+
+    test('the wait running out while the version probe is still pending changes nothing', async () => {
+        loadLoader();
+        await flush();
+        const transport = transportStub.current as TransportStub;
+        transport.emitJoin('host');
+        await flush();
+        // The desktop's answer starts the version probe; this probe never comes back.
+        g.fetch = () => new Promise<Response>(() => undefined);
+        transport.receiveFromPeer(
+            { t: 'hello', version: '1.2.3', protocolVersion: PROTOCOL_VERSION, host: true },
+            'host',
+        );
+        await flush();
+        expect(navigated).toEqual([]);
+
+        // The wait runs out mid-probe: the loader has already settled on the hello, so the
+        // timeout's settle finds it done and returns without leaving or changing the notice.
+        await jest.advanceTimersByTimeAsync(HOST_ANSWER_TIMEOUT_MS);
+        expect(transport.left).toBe(false);
+        expect(document.getElementById('root')?.textContent).toContain('Connecting to your computer');
+        // The dangling probe is dropped with the fetch mock in the harness's afterEach.
     });
 
     test('a transport that cannot be built says the computer is offline', async () => {
@@ -367,7 +392,27 @@ describe('the /remote/ loader', () => {
         },
     );
 
-    test('a desktop newer than every page this app carries says to update this app', async () => {
+    test('a desktop newer than every page the site carries says the page is not published yet', async () => {
+        headOk = false;
+        loadLoader();
+        await flush();
+        const transport = transportStub.current as TransportStub;
+        transport.emitJoin('host');
+        await flush();
+        transport.receiveFromPeer(
+            { t: 'hello', version: '999.0.0', protocolVersion: PROTOCOL_VERSION, host: true },
+            'host',
+        );
+        await flush();
+        expect(navigated).toEqual([]);
+        // A browser tab cannot update an app: the site just has not published the version's page yet.
+        expect(transport.left).toBe(true);
+        expect(document.getElementById('root')?.textContent).toContain('not published yet');
+        expect(document.getElementById('root')?.textContent).not.toContain('on your computer');
+    });
+
+    test('inside the Android app a desktop newer than every page it carries says to update this app', async () => {
+        androidApp.current = true;
         headOk = false;
         loadLoader();
         await flush();
@@ -381,7 +426,6 @@ describe('the /remote/ loader', () => {
         await flush();
         expect(navigated).toEqual([]);
         expect(document.getElementById('root')?.textContent).toContain('Update this app');
-        expect(document.getElementById('root')?.textContent).not.toContain('on your computer');
     });
 
     test("a fellow phone's failed connection does not end the wait while the desktop is still pending", async () => {
@@ -389,8 +433,9 @@ describe('the /remote/ loader', () => {
         await flush();
         const transport = transportStub.current as TransportStub;
         transport.emitJoin('host');
-        transport.emitJoin('fellow');
         await flush();
+        // The fellow phone never joined: trystero reports its failed attempt with its id, and it was
+        // never a candidate for the desktop.
         transport.emitJoinError('handshake timed out after 14000ms', 'fellow');
         await flush();
         expect(transport.left).toBe(false);
@@ -409,21 +454,42 @@ describe('the /remote/ loader', () => {
         expect(navigated).toEqual(['./1.2.3/index.html#k=the-key']);
     });
 
-    test('the last pending peer failing settles the loader', async () => {
+    test('join errors never settle the loader on their own; the wait running out does', async () => {
         loadLoader();
         await flush();
         const transport = transportStub.current as TransportStub;
-        transport.emitJoin('host');
-        transport.emitJoin('fellow');
-        await flush();
+        // No peer ever joined: neither failure says anything about the desktop, which may still connect.
         transport.emitJoinError('handshake timed out after 14000ms', 'fellow');
         transport.emitJoinError('handshake timed out after 14000ms', 'host');
         await flush();
+        expect(transport.left).toBe(false);
+        expect(document.getElementById('root')?.textContent).toContain('Connecting to your computer');
+
+        await jest.advanceTimersByTimeAsync(HOST_ANSWER_TIMEOUT_MS);
         expect(transport.left).toBe(true);
         expect(document.getElementById('root')?.textContent).toContain('offline, or this link was reset');
-        // Waiting out the timer after that changes nothing.
-        await jest.advanceTimersByTimeAsync(HOST_ANSWER_TIMEOUT_MS);
-        expect(document.getElementById('root')?.textContent).toContain('offline, or this link was reset');
+    });
+
+    test("a fellow phone's join error before the desktop's peer has joined keeps the loader waiting", async () => {
+        loadLoader();
+        await flush();
+        const transport = transportStub.current as TransportStub;
+        transport.emitJoinError('handshake timed out after 14000ms', 'fellow');
+        await flush();
+        // Nobody has joined, so the failure says nothing about the desktop: the wait goes on.
+        expect(transport.left).toBe(false);
+        expect(document.getElementById('root')?.textContent).toContain('Connecting to your computer');
+
+        // The desktop then joins, the announce reaches it, and its answer moves the loader on.
+        transport.emitJoin('host');
+        await flush();
+        expect(transport.sent.some(({ target }) => target === 'host')).toBe(true);
+        transport.receiveFromPeer(
+            { t: 'hello', version: '1.2.3', protocolVersion: PROTOCOL_VERSION, host: true },
+            'host',
+        );
+        await flush();
+        expect(navigated).toEqual(['./1.2.3/index.html#k=the-key']);
     });
 
     test('a Latvian browser gets the Latvian notice', async () => {

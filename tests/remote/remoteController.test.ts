@@ -8,7 +8,7 @@
 import { createRemoteAutovoteController } from '../../src/ts/core/autovote/remote';
 import { TransportStub } from '../helpers/remoteTransport';
 import { initialState } from '../../src/ts/core/autovote/state';
-import { setRemoteConnectionState } from '../../src/ts/core/remote/connectionState';
+import { setRemoteConnectionState, setRemoteHostPeerId } from '../../src/ts/core/remote/connectionState';
 
 import type { AutovoteState } from '../../src/ts/core/autovote/state';
 
@@ -21,6 +21,7 @@ describe('createRemoteAutovoteController', () => {
 
     beforeEach(() => {
         setRemoteConnectionState('connected');
+        setRemoteHostPeerId('host');
         [, phone] = TransportStub.pair();
         refreshes = 0;
         controller = createRemoteAutovoteController({
@@ -34,6 +35,7 @@ describe('createRemoteAutovoteController', () => {
     afterEach(() => {
         controller.dispose();
         setRemoteConnectionState('connecting');
+        setRemoteHostPeerId(null);
     });
 
     test.each(['connecting', 'offline', 'network', 'update', 'update-this', 'full', 'no-key'] as const)(
@@ -50,7 +52,7 @@ describe('createRemoteAutovoteController', () => {
                 expect(controller.getState()).toMatchObject({
                     status: 'Error',
                     statusClass: 'badge-error',
-                    error: 'Not connected to your computer',
+                    error: 'Not connected to your computer. It reconnects by itself when the app is open on your computer.',
                 });
                 controller.dispose();
             }
@@ -88,6 +90,12 @@ describe('createRemoteAutovoteController', () => {
         phone.receiveFromPeer({ t: 'autovote-state', state: stateOf({ running: true, cycles: 1 }) }, 'host');
         expect(controller.getState().running).toBe(true);
         expect(seen).toHaveLength(1);
+    });
+
+    test('an autovote-state from a fellow phone changes nothing: only the host relays state', () => {
+        phone.receiveFromPeer({ t: 'autovote-state', state: stateOf({ running: true, cycles: 1 }) }, 'fellow');
+        expect(controller.getState()).toEqual(initialState);
+        expect(refreshes).toBe(0);
     });
 
     test('a relayed cycle change triggers the challenge refresh', () => {

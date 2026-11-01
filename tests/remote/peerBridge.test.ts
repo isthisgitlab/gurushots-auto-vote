@@ -8,11 +8,25 @@
 
 import { installPeerBridge, LOCAL_CHANNELS } from '../../src/ts/shells/remote/bridge/peer';
 import { HELLO_RETRY_MS, HOST_ANSWER_TIMEOUT_MS } from '../../src/ts/core/remote/helloRepeat';
-import { PAGE_VERSION, PROTOCOL_VERSION, REMOTE_RESULT_TOO_LARGE } from '../../src/ts/core/remote/protocol';
+import {
+    PAGE_VERSION,
+    PROTOCOL_VERSION,
+    REMOTE_RESULT_TOO_LARGE,
+    REMOTE_RESULT_UNSENDABLE,
+} from '../../src/ts/core/remote/protocol';
 import { TransportStub } from '../helpers/remoteTransport';
-import { remoteConnectionState, setRemoteConnectionState } from '../../src/ts/core/remote/connectionState';
+import {
+    remoteConnectionState,
+    remoteHostPeerId,
+    setRemoteConnectionState,
+    setRemoteHostPeerId,
+} from '../../src/ts/core/remote/connectionState';
 
 const hostHello = { t: 'hello', version: PAGE_VERSION, protocolVersion: PROTOCOL_VERSION, host: true };
+const fellowHello = { t: 'hello', version: PAGE_VERSION, protocolVersion: PROTOCOL_VERSION, host: false };
+
+// The page hands the bridge the loader it must go to on a version mismatch; the harness gives it one fixed target.
+const LOADER_TARGET = 'https://site.test/remote/index.html#k=the-key';
 
 const flushAsync = async (): Promise<void> => {
     for (let i = 0; i < 20; i++) await Promise.resolve();
@@ -29,13 +43,14 @@ describe('installPeerBridge (the phone bridge)', () => {
         jest.useFakeTimers();
         setRemoteConnectionState('connecting');
         [host, phone] = TransportStub.pair('host', 'phone');
-        installPeerBridge(phone);
+        installPeerBridge(phone, LOADER_TARGET);
         api = (globalThis as { api?: Record<string, (...args: unknown[]) => unknown> }).api ?? {};
     });
 
     afterEach(() => {
         jest.useRealTimers();
         setRemoteConnectionState('connecting');
+        setRemoteHostPeerId(null);
         delete (globalThis as { __autovotePlatformKind?: string }).__autovotePlatformKind;
     });
 
@@ -304,6 +319,13 @@ describe('installPeerBridge (the phone bridge)', () => {
         expect(remoteConnectionState()).toBe('offline');
     });
 
+    test("the desktop's peer id is published for the remote controller and cleared on a loss", () => {
+        connect();
+        expect(remoteHostPeerId()).toBe('host');
+        phone.emitLeave('host');
+        expect(remoteHostPeerId()).toBe(null);
+    });
+
     test('only the desktop hello (host: true) connects; a fellow phone does not', () => {
         phone.emitJoin('host');
         phone.receiveFromPeer(
@@ -342,9 +364,9 @@ describe('installPeerBridge (the phone bridge)', () => {
                     { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, host: true },
                     'host',
                 );
-                // The loader is addressed by file name (the Android app's local server answers a directory path
-                // with the app's own document), the key rides in the fragment.
-                expect(replaced).toEqual(['../index.html#k=the-key']);
+                // The loader target is whatever the page handed the bridge (the page resolves it from
+                // its own address); the key already rode in it.
+                expect(replaced).toEqual([LOADER_TARGET]);
                 expect(remoteConnectionState()).toBe('connecting');
                 const after = hostReceived.length;
                 jest.advanceTimersByTime(HELLO_RETRY_MS * 3);
@@ -363,19 +385,6 @@ describe('installPeerBridge (the phone bridge)', () => {
             );
             expect(replaced).toEqual([]);
             expect(remoteConnectionState()).toBe('update');
-        });
-
-        test('without a key to carry, the tab stays where it is', () => {
-            (globalThis as { location?: unknown }).location = {
-                hash: '',
-                replace: (url: string) => replaced.push(url),
-            };
-            (globalThis as { sessionStorage?: Storage }).sessionStorage?.clear();
-            phone.receiveFromPeer(
-                { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, host: true },
-                'host',
-            );
-            expect(replaced).toEqual([]);
         });
     });
 
@@ -441,13 +450,14 @@ describe('installPeerBridge: which peer counts', () => {
         jest.useFakeTimers();
         setRemoteConnectionState('connecting');
         [host, phone] = TransportStub.pair('host', 'phone');
-        installPeerBridge(phone);
+        installPeerBridge(phone, LOADER_TARGET);
         api = (globalThis as { api?: Record<string, (...args: unknown[]) => unknown> }).api ?? {};
     });
 
     afterEach(() => {
         jest.useRealTimers();
         setRemoteConnectionState('connecting');
+        setRemoteHostPeerId(null);
         delete (globalThis as { __autovotePlatformKind?: string }).__autovotePlatformKind;
     });
 
@@ -477,29 +487,36 @@ describe('installPeerBridge: which peer counts', () => {
 
     test("a fellow phone's join error after the desktop answered keeps the session up", async () => {
         phone.emitJoin('host');
-        phone.emitJoin('fellow');
         phone.receiveFromPeer(hostHello, 'host');
         const pending = api.getSettings() as Promise<unknown>;
+        // The fellow phone never joined: trystero reports its failed attempt with its id, and it was
+        // never a candidate for the desktop.
         phone.emitJoinError(SDP_FAILURE, 'fellow');
         expect(remoteConnectionState()).toBe('connected');
         phone.receiveFromPeer({ t: 'result', id: invokeId(), ok: true, result: 1 }, 'host');
         await expect(pending).resolves.toBe(1);
     });
 
-    test("the desktop's own join error after it answered ends the session", async () => {
-        phone.emitJoin('host');
+    test('a join error for a stranger does not end a connected session, even with a fellow phone around', async () => {
+        // The desktop is connected; a fellow phone joins and announces itself as no desktop; then a
+        // stranger's join attempt fails. trystero reports the failure with the stranger's id — a peer
+        // that never joined was never a candidate, so the session stays up.
+        phone.emitJoin('fellow');
         phone.receiveFromPeer(hostHello, 'host');
+        phone.receiveFromPeer(fellowHello, 'fellow');
+        expect(remoteConnectionState()).toBe('connected');
         const pending = api.getSettings() as Promise<unknown>;
-        phone.emitJoinError(SDP_FAILURE, 'host');
-        await expect(pending).rejects.toThrow(/dropped/);
-        expect(remoteConnectionState()).toBe('network');
+        phone.emitJoinError(SDP_FAILURE, 'stranger');
+        expect(remoteConnectionState()).toBe('connected');
+        phone.receiveFromPeer({ t: 'result', id: invokeId(), ok: true, result: 1 }, 'host');
+        await expect(pending).resolves.toBe(1);
     });
 
     test("a fellow phone's join error before the desktop answers keeps waiting and keeps announcing", async () => {
         const hostReceived: unknown[] = [];
         host.onMessage((_peerId, raw) => hostReceived.push(raw));
         phone.emitJoin('host');
-        phone.emitJoin('fellow');
+        // The fellow phone never joined: trystero reports its failed attempt with its id.
         phone.emitJoinError(SDP_FAILURE, 'fellow');
         expect(remoteConnectionState()).toBe('connecting');
 
@@ -512,10 +529,12 @@ describe('installPeerBridge: which peer counts', () => {
         expect(remoteConnectionState()).toBe('connected');
     });
 
-    test('the last pending peer failing before the desktop answers reads as the connection failing', () => {
-        phone.emitJoin('host');
+    test('a desktop SDP failure with no candidate left before the first connect reads as the connection failing', () => {
+        // A second phone is open in the room: it joins and announces itself as no desktop, so it is
+        // no candidate. The desktop peer never joins; its join attempt fails instead. With nobody
+        // left who could still be the desktop, the page reads the connection as failing.
         phone.emitJoin('fellow');
-        phone.emitJoinError(SDP_FAILURE, 'fellow');
+        phone.receiveFromPeer(fellowHello, 'fellow');
         phone.emitJoinError(SDP_FAILURE, 'host');
         expect(remoteConnectionState()).toBe('network');
     });
@@ -587,8 +606,44 @@ describe('installPeerBridge: which peer counts', () => {
         phone.emitJoin('host');
         phone.receiveFromPeer(hostHello, 'host');
         const pending = api.getSettings() as Promise<unknown>;
-        phone.receiveFromPeer({ t: 'result', id: invokeId(), ok: false, error: REMOTE_RESULT_TOO_LARGE }, 'host');
+        phone.receiveFromPeer(
+            { t: 'result', id: invokeId(), ok: false, error: REMOTE_RESULT_TOO_LARGE, tooLarge: true },
+            'host',
+        );
         await expect(pending).rejects.toThrow(/too large/);
+    });
+
+    test('a result too large on a spend channel answers unclear instead of failing', async () => {
+        // The invoke already ran on the desktop — only its answer was too big. A retry could spend twice.
+        phone.emitJoin('host');
+        phone.receiveFromPeer(hostHello, 'host');
+        const pending = api.applyTurbo('c1', 'e1') as Promise<unknown>;
+        phone.receiveFromPeer(
+            { t: 'result', id: invokeId(), ok: false, error: REMOTE_RESULT_TOO_LARGE, tooLarge: true },
+            'host',
+        );
+        await expect(pending).resolves.toEqual({
+            success: false,
+            error: expect.stringContaining('before retrying'),
+        });
+    });
+
+    test('an unsendable result rejects with its own text on a read channel and answers unclear on a spend', async () => {
+        phone.emitJoin('host');
+        phone.receiveFromPeer(hostHello, 'host');
+        // A read: nothing ran that a retry could repeat, so the failure text is right.
+        const pending = api.getSettings() as Promise<unknown>;
+        phone.receiveFromPeer({ t: 'result', id: invokeId(), ok: false, error: REMOTE_RESULT_UNSENDABLE }, 'host');
+        await expect(pending).rejects.toThrow("The computer's answer could not be sent.");
+
+        // A spend: the desktop may have run it before the answer failed to go out — unclear, never a failure.
+        phone.sent.length = 0;
+        const spend = api.joinChallenge('c1', true) as Promise<unknown>;
+        phone.receiveFromPeer({ t: 'result', id: invokeId(), ok: false, error: REMOTE_RESULT_UNSENDABLE }, 'host');
+        await expect(spend).resolves.toEqual({
+            success: false,
+            error: expect.stringContaining('before retrying'),
+        });
     });
 
     test('a desktop that is full says so; it is not an offline computer, and the announce stops', async () => {
@@ -611,6 +666,20 @@ describe('installPeerBridge: which peer counts', () => {
         phone.emitJoin('host');
         phone.receiveFromPeer({ t: 'bye' }, 'fellow');
         expect(remoteConnectionState()).toBe('connecting');
+    });
+
+    test('a full bye from a peer that never joined changes nothing, and the announce keeps repeating', async () => {
+        const hostReceived: unknown[] = [];
+        host.onMessage((_peerId, raw) => hostReceived.push(raw));
+        phone.emitJoin('host');
+        await Promise.resolve();
+        // Any peer in the room could send this; only a joined candidate (or the known desktop) counts.
+        phone.receiveFromPeer({ t: 'bye', reason: 'full' }, 'stranger');
+        expect(remoteConnectionState()).toBe('connecting');
+        const after = hostReceived.length;
+        jest.advanceTimersByTime(HELLO_RETRY_MS);
+        await Promise.resolve();
+        expect(hostReceived.length).toBeGreaterThan(after);
     });
 
     test('the log calls end in the phone: answered, never sent to the desktop', async () => {

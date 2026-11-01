@@ -11,11 +11,23 @@ import { AutovoteProvider, useAutovote } from '@/contexts/AutovoteContext';
 import { TransportStub } from '../helpers/remoteTransport';
 import { markPlatformKind } from '../../src/ts/core/platform/kind';
 import { resetPlatformKind } from '../helpers/platformKind';
-import { setRemoteConnectionState } from '../../src/ts/core/remote/connectionState';
+import { setRemoteConnectionState, setRemoteHostPeerId } from '../../src/ts/core/remote/connectionState';
 
 import type { RemoteTransport } from '../../src/ts/core/remote/relays';
 
 const captured: { local: number; remote: number } = { local: 0, remote: 0 };
+
+/** The state one relayed cycle change carries. */
+const relayedState = {
+    running: true,
+    cycles: 1,
+    lastRun: null,
+    nextRunAt: null,
+    pendingStartAt: null,
+    status: 'Running' as const,
+    statusClass: 'badge-success' as const,
+    error: null,
+};
 
 jest.mock('../../src/ts/core/autovote/controller', () => {
     const actual = jest.requireActual<typeof import('../../src/ts/core/autovote/controller')>(
@@ -63,6 +75,7 @@ describe('AutovoteProvider on the remote kind', () => {
     afterEach(() => {
         resetPlatformKind();
         setRemoteConnectionState('connecting');
+        setRemoteHostPeerId(null);
     });
 
     test('it builds the remote controller, never the local one', () => {
@@ -117,22 +130,35 @@ describe('AutovoteProvider on the remote kind', () => {
                 <Probe />
             </AutovoteProvider>,
         );
-        const state = {
-            running: true,
-            cycles: 1,
-            lastRun: null,
-            nextRunAt: null,
-            pendingStartAt: null,
-            status: 'Running' as const,
-            statusClass: 'badge-success' as const,
-            error: null,
-        };
+        setRemoteHostPeerId('host');
         await act(async () => {
-            phone.receiveFromPeer({ t: 'autovote-state', state }, 'host');
+            phone.receiveFromPeer({ t: 'autovote-state', state: relayedState }, 'host');
             await Promise.resolve();
         });
         expect(refreshes).toBe(1);
         expect(latest?.running).toBe(true);
         expect(latest?.cycles).toBe(1);
+    });
+
+    test('an autovote-state from a fellow phone changes nothing: only the host relays state', async () => {
+        let refreshes = 0;
+        render(
+            <AutovoteProvider
+                remoteTransport={phone as RemoteTransport}
+                onChallengesRefresh={() => {
+                    refreshes += 1;
+                }}
+            >
+                <Probe />
+            </AutovoteProvider>,
+        );
+        setRemoteHostPeerId('host');
+        await act(async () => {
+            phone.receiveFromPeer({ t: 'autovote-state', state: relayedState }, 'fellow');
+            await Promise.resolve();
+        });
+        expect(refreshes).toBe(0);
+        expect(latest?.running).toBe(false);
+        expect(latest?.cycles).toBe(0);
     });
 });

@@ -2,6 +2,11 @@
  * The phone's pairing connection state, as a tiny store: the peer bridge (shells/remote)
  * writes it, and the page's React components read it — react may not import a shell, so the
  * state lives here, in core. Dependency-free.
+ *
+ * The same module keeps the desktop's peer id (`setRemoteHostPeerId` / `remoteHostPeerId`):
+ * the store and the reader live here, and its one writer is the phone's peer bridge
+ * (`shells/remote/bridge/peer.ts`), which sets it on the first host `hello` and clears it
+ * when the connection is lost. It carries no listeners — nothing re-renders on it.
  */
 
 export type RemoteConnectionState =
@@ -17,6 +22,8 @@ export type RemoteConnectionState =
     | 'update'
     /** the desktop runs a newer app version than this app carries a page for */
     | 'update-this'
+    /** the desktop runs a newer version than this site publishes a page for, and this page is a browser tab (inside the Android app the state is `update-this`) */
+    | 'unpublished'
     /** the desktop already has the most phones it takes */
     | 'full'
     /** the page was opened without a pairing key in its link */
@@ -40,3 +47,13 @@ export const subscribeRemoteConnectionState = (listener: (state: RemoteConnectio
     listeners.add(listener);
     return () => listeners.delete(listener);
 };
+
+let hostPeerId: string | null = null;
+
+/** The peer id of the desktop, as its `hello` named it. The phone's peer bridge writes it: set on the first host hello, cleared when the connection is lost. */
+export const setRemoteHostPeerId = (peerId: string | null): void => {
+    hostPeerId = peerId;
+};
+
+/** The peer id of the connected desktop, or null while no desktop is connected. */
+export const remoteHostPeerId = (): string | null => hostPeerId;

@@ -26,14 +26,17 @@ import { markPlatformKind } from '../../../core/platform/kind';
 import {
     PAGE_VERSION,
     PROTOCOL_VERSION,
-    REMOTE_RESULT_TOO_LARGE,
+    REMOTE_RESULT_UNSENDABLE,
     parsePeerMessage,
 } from '../../../core/remote/protocol';
 import { SPEND_REMOTE_CHANNELS } from '../../../core/remote/allowlist';
 import { REMOTE_REFUSAL_PREFIX } from '../../../core/remote/dispatch';
-import { remoteConnectionState, setRemoteConnectionState } from '../../../core/remote/connectionState';
+import {
+    remoteConnectionState,
+    setRemoteConnectionState,
+    setRemoteHostPeerId,
+} from '../../../core/remote/connectionState';
 import { HOST_ANSWER_TIMEOUT_MS, createHelloRepeater } from '../../../core/remote/helloRepeat';
-import { loaderNavigationUrl, takePairingKey } from '../../../core/remote/pairingKey';
 import { isConnectionFailureJoinError } from '../../../core/remote/trystero';
 import { isSafeExternalUrl } from '../../../core/format/urlSafe';
 import { rendererTranslator } from '../../../core/translations/renderer';
@@ -66,9 +69,11 @@ type Listener = (payload: unknown) => void;
 /**
  * Installs the bridge: marks the platform kind (synchronously, before anything mounts),
  * generates the window.api surface, and drives the connection state machine (the state lives
- * in core/remote/connectionState.ts, where the page's React reads it).
+ * in core/remote/connectionState.ts, where the page's React reads it). `loaderTarget` is the
+ * absolute loader address the page resolved from its own location — the one place a version
+ * mismatch sends the tab to.
  */
-const installPeerBridge = (transport: RemoteTransport): void => {
+const installPeerBridge = (transport: RemoteTransport, loaderTarget: string): void => {
     markPlatformKind('remote');
 
     const pending = new Map<number, PendingInvoke>();
@@ -106,6 +111,7 @@ const installPeerBridge = (transport: RemoteTransport): void => {
     const settlePendingForLostConnection = (): void => {
         hello.stop();
         hostPeerId = null;
+        setRemoteHostPeerId(null);
         for (const [, invoke] of pending) {
             if (invoke.spend) invoke.resolve(lostSpendAnswer());
             else invoke.reject(lostFailure());
@@ -117,8 +123,9 @@ const installPeerBridge = (transport: RemoteTransport): void => {
 
     /**
      * Whether the loss of this peer (it left, or its connection failed) ends the session. The desktop's
-     * own loss does; before the desktop has answered, the loss of a fellow phone does not unless it was
-     * the last peer still pending.
+     * own loss does; before the desktop has answered, the loss of a joined peer that has not announced
+     * itself as a fellow phone does not unless it was the last candidate still pending — a join failure
+     * only ever names a peer that never joined, so a candidate that failed was the page's last hope.
      */
     const endsSession = (peerId: string): boolean => {
         hello.leave(peerId);
@@ -126,10 +133,9 @@ const installPeerBridge = (transport: RemoteTransport): void => {
         return hostPeerId === null ? waiting.size === 0 : peerId === hostPeerId;
     };
 
-    /** This page does not match the desktop's version: the loader finds the page that does. */
+    /** This page does not match the desktop's version: the loader the page named finds the one that does. */
     const goToLoader = (): void => {
-        const key = takePairingKey();
-        if (key !== null) globalThis.location.replace(loaderNavigationUrl(key));
+        globalThis.location.replace(loaderTarget);
     };
 
     const flushHeld = (to: string): void => {
@@ -142,7 +148,11 @@ const installPeerBridge = (transport: RemoteTransport): void => {
         if (message === null) return;
         switch (message.t) {
             case 'hello': {
-                if (!message.host) return; // a fellow phone announcing itself, not the desktop
+                if (!message.host) {
+                    // A fellow phone is no candidate for the desktop, so its later failure says nothing about this page's wait.
+                    waiting.delete(peerId);
+                    return;
+                }
                 if (message.version !== PAGE_VERSION) {
                     // The desktop runs another version: the stable loader finds the page that matches it
                     // (or says which side to update), so no notice shows here.
@@ -161,6 +171,7 @@ const installPeerBridge = (transport: RemoteTransport): void => {
                 }
                 if (hostPeerId === null) {
                     hostPeerId = peerId;
+                    setRemoteHostPeerId(peerId);
                     everConnected = true;
                     waiting.clear();
                     hello.clear();
@@ -180,8 +191,14 @@ const installPeerBridge = (transport: RemoteTransport): void => {
                     // A channel the desktop does not serve a phone: the answer a handler would give, in the
                     // phone's language, not the protocol's text.
                     invoke.resolve({ success: false, error: rendererTranslator.t('errors.remoteRefused') });
-                } else if (message.error === REMOTE_RESULT_TOO_LARGE) {
-                    invoke.reject(new Error(rendererTranslator.t('errors.remoteResultTooLarge')));
+                } else if (message.error === REMOTE_RESULT_UNSENDABLE) {
+                    // The invoke ran; its answer just could not come back. A spend may have landed:
+                    // unclear, never a plain failure.
+                    if (invoke.spend) invoke.resolve(lostSpendAnswer());
+                    else invoke.reject(new Error(rendererTranslator.t('errors.remoteAnswerUnsendable')));
+                } else if (message.tooLarge === true) {
+                    if (invoke.spend) invoke.resolve(lostSpendAnswer());
+                    else invoke.reject(new Error(rendererTranslator.t('errors.remoteResultTooLarge')));
                 } else invoke.reject(new Error(message.error));
                 return;
             }
@@ -191,6 +208,10 @@ const installPeerBridge = (transport: RemoteTransport): void => {
                 return;
             }
             case 'bye': {
+                // Every bye counts only from the desktop: the known host, or — before it has answered —
+                // a joined peer that may still be it. Any other peer's bye changes nothing.
+                const fromTheDesktop = peerId === hostPeerId || (hostPeerId === null && waiting.has(peerId));
+                if (!fromTheDesktop) return;
                 if (hostPeerId === null && message.reason === 'full') {
                     // The desktop already has the most phones it takes — it is there, not offline. Only the
                     // desktop sends this, and it speaks before its hello is ever answered, so the sender is
@@ -200,7 +221,6 @@ const installPeerBridge = (transport: RemoteTransport): void => {
                     setRemoteConnectionState('full');
                     return;
                 }
-                if (peerId !== hostPeerId) return;
                 settlePendingForLostConnection();
                 return;
             }

@@ -8,7 +8,7 @@ import type { RemoteConnectionState } from '../../../core/remote/connectionState
 /** The sessionStorage flag that offers "Add to Home Screen" once per session. */
 const HOME_HINT_FLAG = 'remote-add-home-hint';
 
-/** The badge label of each connection state (the long offline detail renders in the banner). */
+/** The badge label of each connection state (the long offline detail renders in the banner, the long full and unpublished sentences in the notice screen). */
 const STATE_LABEL_KEYS: Record<RemoteConnectionState, string> = {
     connecting: 'app.remoteConnecting',
     connected: 'app.remoteConnected',
@@ -16,7 +16,8 @@ const STATE_LABEL_KEYS: Record<RemoteConnectionState, string> = {
     network: 'app.remoteNetwork',
     update: 'app.remoteUpdateNeeded',
     'update-this': 'app.remoteUpdateThis',
-    full: 'app.remoteFull',
+    unpublished: 'app.remotePageUnpublished',
+    full: 'app.remoteFullShort',
     'no-key': 'app.remoteNoKey',
 };
 
@@ -56,7 +57,7 @@ export function RemoteStateBadge() {
             ? 'badge-success'
             : state === 'connecting'
               ? 'badge-ghost'
-              : state === 'update' || state === 'update-this'
+              : state === 'update' || state === 'update-this' || state === 'unpublished'
                 ? 'badge-warning'
                 : 'badge-error';
 

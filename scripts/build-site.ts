@@ -18,6 +18,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { errorMessage } from '../src/ts/core/errorMessage';
+import { compareReleaseVersions, isReleaseVersion } from '../src/ts/core/remote/protocol';
 import { runIfMain } from './lib/run-if-main';
 import { NOTICES_ASSET_NAME } from '../src/ts/core/thirdPartyNotices';
 import type { Tokens } from 'marked';
@@ -36,7 +37,7 @@ export const REMOTE_PAGE_ZIP = 'remote-page.zip';
 export const REMOTE_CHECKSUM_FILE = 'remote-page.zip.sha256';
 /** How many past releases' phone pages the site keeps. */
 export const REMOTE_RELEASE_COUNT = 10;
-/** How many releases the listing asks for: headroom, since pre-releases are filtered out before the cut. */
+/** How many releases the listing asks for: headroom, since pre-releases older than the newest stable are filtered out before the cut. */
 const REMOTE_RELEASE_FETCH_COUNT = 30;
 const SITE_DESCRIPTION =
     'Automated voting for GuruShots challenges — a shared engine shipped as a desktop GUI, a CLI, and an Android app.';
@@ -414,6 +415,32 @@ const unzipWithCli = async (zipPath: string, dir: string): Promise<void> => {
 };
 
 /**
+ * The releases whose phone page the site keeps: every stable release, plus each pre-release
+ * whose version is newer than the newest stable (a beta-channel desktop must find its page),
+ * newest first, at most REMOTE_RELEASE_COUNT in total.
+ */
+export const selectRemotePageReleases = (releases: RemoteRelease[]): RemoteRelease[] => {
+    const versionOf = (release: RemoteRelease): string => release.tag_name.replace(/^v/, '');
+    const newestStable = releases
+        .filter((release) => release.prerelease !== true)
+        .map(versionOf)
+        .filter(isReleaseVersion)
+        .reduce<string | null>(
+            (best, version) => (best !== null && compareReleaseVersions(best, version) >= 0 ? best : version),
+            null,
+        );
+    return releases
+        .filter(
+            (release) =>
+                release.prerelease !== true ||
+                (newestStable !== null &&
+                    isReleaseVersion(versionOf(release)) &&
+                    compareReleaseVersions(versionOf(release), newestStable) > 0),
+        )
+        .slice(0, REMOTE_RELEASE_COUNT);
+};
+
+/**
  * Fills `dist-site/remote/`: the thin loader at `remote/index.html`, the local build's page
  * under `remote/<version>/`, and the older versions unpacked from the last releases'
  * `remote-page.zip` assets (each verified against its release's checksum file). A release
@@ -471,17 +498,18 @@ const buildRemoteSite = async (out: string, version: string, deps: RemoteSiteDep
     const listReleases = deps.listReleases ?? listReleasesFromGitHub;
     const download = deps.downloadFile ?? downloadFromGitHub;
     const unzip = deps.unzip ?? unzipWithCli;
-    let releases: RemoteRelease[] = [];
+    let releases: RemoteRelease[];
     try {
         releases = await listReleases();
     } catch (error) {
-        // A rate limit or an outage must not fail the whole site: it builds with this version only.
-        console.warn(
-            `⚠️  Could not list the releases (${errorMessage(error) ?? 'no reason given'}) — building without older versions`,
+        // A deploy that silently drops every older version page is worse than a failed deploy,
+        // which keeps the live site.
+        throw new Error(
+            `could not list the releases for the older phone pages: ${errorMessage(error) ?? 'no reason given'}`,
+            { cause: error },
         );
     }
-    const stable = releases.filter((release) => release.prerelease !== true);
-    for (const release of stable.slice(0, REMOTE_RELEASE_COUNT)) {
+    for (const release of selectRemotePageReleases(releases)) {
         const releaseVersion = release.tag_name.replace(/^v/, '');
         if (releaseVersion === version) continue;
         const zip = release.assets.find((asset) => asset.name === REMOTE_PAGE_ZIP);

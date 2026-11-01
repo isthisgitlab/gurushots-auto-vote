@@ -29,6 +29,9 @@ export const MAX_PEER_MESSAGE_BYTES = 2 * 1024 * 1024;
 /** The error a host answers when an invoke's result is over MAX_PEER_MESSAGE_BYTES; the phone shows its own translated text for it. */
 export const REMOTE_RESULT_TOO_LARGE = 'The result is too large to send to the phone.';
 
+/** The error a host answers when an invoke's result cannot be serialized at all; the phone shows its own translated text for it. */
+export const REMOTE_RESULT_UNSENDABLE = "The computer's answer could not be sent.";
+
 /** Longest one string field of a message may be (versions, channel names, error texts). */
 export const MAX_PEER_FIELD_LENGTH = 512;
 
@@ -48,10 +51,10 @@ export type HelloMessage = {
 };
 /** Phone → host: one window.api invoke. `undefinedAt` restores JSON-lost `undefined` arguments (see bridge/web.ts). */
 export type InvokeMessage = { t: 'invoke'; id: number; channel: string; args: unknown[]; undefinedAt?: number[] };
-/** Host → phone: the answer to one invoke. `ok: false` carries the handler's error text. */
+/** Host → phone: the answer to one invoke. `ok: false` carries the handler's error text; `tooLarge` marks the answer that did not fit. */
 export type ResultMessage =
     | { t: 'result'; id: number; ok: true; result?: unknown }
-    | { t: 'result'; id: number; ok: false; error: string };
+    | { t: 'result'; id: number; ok: false; error: string; tooLarge?: true };
 /** Host → phone: one window.api event (settings-changed, update-*, log-message). */
 export type EventMessage = { t: 'event'; channel: string; payload: unknown };
 /** Host → phone: the desktop controller's state, on every change. */
@@ -129,14 +132,21 @@ export const compareReleaseVersions = (a: string, b: string): -1 | 0 | 1 => {
     return 0;
 };
 
-/** Whether a message fits the size a peer accepts; a payload JSON cannot serialize counts as too large. */
-export const isWithinPeerMessageLimit = (message: unknown): boolean => {
+/** Why a message can or cannot travel to a peer: it fits, it is over the byte limit, or JSON cannot serialize it at all. */
+export type PeerSendability = 'within' | 'too-large' | 'unserializable';
+
+export const checkPeerMessageLimit = (message: unknown): PeerSendability => {
+    let serialized: string;
     try {
-        return (JSON.stringify(message)?.length ?? 0) <= MAX_PEER_MESSAGE_BYTES;
+        serialized = JSON.stringify(message) ?? '';
     } catch {
-        return false;
+        return 'unserializable';
     }
+    return serialized.length <= MAX_PEER_MESSAGE_BYTES ? 'within' : 'too-large';
 };
+
+/** Whether a message fits the size a peer accepts; a payload JSON cannot serialize does not fit. */
+export const isWithinPeerMessageLimit = (message: unknown): boolean => checkPeerMessageLimit(message) === 'within';
 
 /** Whether a raw payload is one of the protocol messages, within the size and field bounds. */
 export const parsePeerMessage = (raw: unknown): PeerMessage | null => {
@@ -172,7 +182,13 @@ export const parsePeerMessage = (raw: unknown): PeerMessage | null => {
         case 'result':
             if (!isInteger(raw.id) || raw.id < 0 || typeof raw.ok !== 'boolean') return null;
             if (raw.ok) return { t: 'result', id: raw.id, ok: true, result: raw.result };
-            return isBoundedString(raw.error) ? { t: 'result', id: raw.id, ok: false, error: raw.error } : null;
+            // `tooLarge` is the too-large marker: absent, or `true` — anything else is not one of the shapes.
+            if (raw.tooLarge !== undefined && raw.tooLarge !== true) return null;
+            return isBoundedString(raw.error)
+                ? raw.tooLarge === true
+                    ? { t: 'result', id: raw.id, ok: false, error: raw.error, tooLarge: true }
+                    : { t: 'result', id: raw.id, ok: false, error: raw.error }
+                : null;
         case 'event':
             return isBoundedString(raw.channel) && 'payload' in raw
                 ? { t: 'event', channel: raw.channel, payload: raw.payload }

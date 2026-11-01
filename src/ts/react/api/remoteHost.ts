@@ -19,13 +19,14 @@ import { useEffect } from 'react';
 import { dispatchRemoteInvoke, REMOTE_REFUSAL_PREFIX } from '../../core/remote/dispatch';
 import { classifyRemoteChannel } from '../../core/remote/allowlist';
 import {
-    isWithinPeerMessageLimit,
+    checkPeerMessageLimit,
     parsePeerMessage,
     restoreInvokeArgs,
     MAX_PEER_FIELD_LENGTH,
     PAGE_VERSION,
     PROTOCOL_VERSION,
     REMOTE_RESULT_TOO_LARGE,
+    REMOTE_RESULT_UNSENDABLE,
 } from '../../core/remote/protocol';
 import { platformKind } from '../../core/platform/kind';
 import { aliases, kebabToCamel, eventMethods } from '../../core/ipc/manifest';
@@ -198,15 +199,22 @@ export const createRemoteHost = (deps: RemoteHostDeps): RemoteHost => {
         await answerLogStreamChannel(peerId, id, channel === 'start-log-stream');
     };
 
-    /** Sends one invoke's answer; a result too large for a peer to accept becomes a failure the phone can see. */
+    /** Sends one invoke's answer. A result the phone cannot receive (over the message limit, or not
+     * serializable at all) becomes a marked failure the phone maps by channel kind. */
     const sendResult = async (peerId: string, id: number, channel: string, result: unknown): Promise<void> => {
         const answer = { t: 'result', id, ok: true, result };
-        if (isWithinPeerMessageLimit(answer)) {
+        const limit = checkPeerMessageLimit(answer);
+        if (limit === 'within') {
             await sendTo(peerId, answer);
             return;
         }
         deps.logInfo(`Remote invoke failed: ${clippedId(channel)}`);
-        await sendTo(peerId, { t: 'result', id, ok: false, error: REMOTE_RESULT_TOO_LARGE });
+        await sendTo(
+            peerId,
+            limit === 'unserializable'
+                ? { t: 'result', id, ok: false, error: REMOTE_RESULT_UNSENDABLE }
+                : { t: 'result', id, ok: false, error: REMOTE_RESULT_TOO_LARGE, tooLarge: true },
+        );
     };
 
     const answerInvoke = async (peerId: string, id: number, channel: string, args: unknown[]): Promise<void> => {

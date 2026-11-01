@@ -10,7 +10,7 @@
  */
 
 import { ACTIONS, autovoteReducer, initialState } from './state';
-import { remoteConnectionState } from '../remote/connectionState';
+import { remoteConnectionState, remoteHostPeerId } from '../remote/connectionState';
 import { parsePeerMessage } from '../remote/protocol';
 import { rendererTranslator } from '../translations/renderer';
 
@@ -51,9 +51,10 @@ export const createRemoteAutovoteController = (deps: RemoteAutovoteDeps): Autovo
         await deps.transport.send({ t: 'autovote-command', command });
     };
 
-    const unsubscribeMessage = deps.transport.onMessage((_peerId, raw) => {
+    const unsubscribeMessage = deps.transport.onMessage((peerId, raw) => {
         const message = parsePeerMessage(raw);
-        if (message === null || message.t !== 'autovote-state') return;
+        // Only the desktop's own state: a fellow phone in the pairing room must not forge it.
+        if (message === null || message.t !== 'autovote-state' || peerId !== remoteHostPeerId()) return;
         const previousCycles = state.cycles;
         apply(message.state);
         // A relayed state that shows a cycle the phone has not seen: the desktop ran one more

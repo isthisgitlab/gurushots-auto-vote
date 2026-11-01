@@ -13,13 +13,15 @@ import type { RemoteTransport } from '../../src/ts/core/remote/relays';
 import type { RemoteHostDeps } from '../../src/ts/react/api/remoteHost';
 import type { AutovoteState } from '../../src/ts/core/autovote/state';
 import { render, act } from '@testing-library/preact';
-import { fireSettingsChanged } from './helpers/setup';
+import { fireSettingsChanged, mockApi } from './helpers/setup';
 import {
     MAX_PEER_FIELD_LENGTH,
     MAX_PEER_MESSAGE_BYTES,
     PROTOCOL_VERSION,
     REMOTE_RESULT_TOO_LARGE,
+    REMOTE_RESULT_UNSENDABLE,
 } from '../../src/ts/core/remote/protocol';
+import { SPEND_REMOTE_CHANNELS } from '../../src/ts/core/remote/allowlist';
 import {
     useDesktopRemoteHost,
     setActiveRemoteHost,
@@ -574,16 +576,42 @@ describe('createRemoteHost (failures answer the phone)', () => {
         transport.receiveFromPeer({ t: 'invoke', id: 1, channel: 'get-library-photos', args: [] }, 'p1');
         transport.receiveFromPeer({ t: 'invoke', id: 2, channel: 'get-bankroll', args: [] }, 'p1');
         await flush();
-        expect(resultOf(transport, 1)).toEqual({ t: 'result', id: 1, ok: false, error: REMOTE_RESULT_TOO_LARGE });
+        expect(resultOf(transport, 1)).toEqual({
+            t: 'result',
+            id: 1,
+            ok: false,
+            error: REMOTE_RESULT_TOO_LARGE,
+            tooLarge: true,
+        });
         expect(resultOf(transport, 2)).toMatchObject({ ok: true });
     });
 
-    test('a result JSON cannot serialize is a failure too, not a throw', async () => {
+    test('a result JSON cannot serialize is answered unsendable, without the too-large marker', async () => {
         const harness = makeHarness({ invoke: async () => ({ big: BigInt(1) }) });
         const transport = await connectPhone(harness);
         transport.receiveFromPeer({ t: 'invoke', id: 3, channel: 'get-bankroll', args: [] }, 'p1');
         await flush();
-        expect(resultOf(transport, 3)).toEqual({ t: 'result', id: 3, ok: false, error: REMOTE_RESULT_TOO_LARGE });
+        expect(resultOf(transport, 3)).toEqual({ t: 'result', id: 3, ok: false, error: REMOTE_RESULT_UNSENDABLE });
+    });
+
+    test('a spend channel whose result is over the limit carries the too-large marker (the phone answers "unclear")', async () => {
+        // `fill-exposure` is one of the spend channels: the phone maps its too-large answer to
+        // "unclear — check before retrying", the same rule a lost in-flight spend follows.
+        expect(SPEND_REMOTE_CHANNELS.has('fill-exposure')).toBe(true);
+        const harness = makeHarness({
+            invoke: async (channel) =>
+                channel === 'fill-exposure' ? 'x'.repeat(MAX_PEER_MESSAGE_BYTES) : { success: true },
+        });
+        const transport = await connectPhone(harness);
+        transport.receiveFromPeer({ t: 'invoke', id: 4, channel: 'fill-exposure', args: ['c1'] }, 'p1');
+        await flush();
+        expect(resultOf(transport, 4)).toEqual({
+            t: 'result',
+            id: 4,
+            ok: false,
+            error: REMOTE_RESULT_TOO_LARGE,
+            tooLarge: true,
+        });
     });
 
     test('cleanup-stale-metadata is answered with success and nothing reaches the desktop', async () => {
@@ -1134,46 +1162,37 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
                 .find((m) => m.t === 'result' && m.id === id);
 
         test('the turbo alias channel reaches applyTurbo, not a method named after the channel', async () => {
-            const api = window.api as unknown as Record<
-                string,
-                jest.MockedFunction<(...args: unknown[]) => Promise<unknown>>
-            >;
-            api.applyTurbo.mockClear();
-            api.applyTurbo.mockResolvedValueOnce({ success: true, turbo: 'applied' });
+            mockApi.applyTurbo.mockClear();
+            mockApi.applyTurbo.mockResolvedValueOnce({ success: true, message: 'turbo applied' });
             const transport = await connectPhone();
             transport.receiveFromPeer(
                 { t: 'invoke', id: 11, channel: 'apply-turbo-to-entry', args: ['c1', 'e1'] },
                 'p1',
             );
             await flush();
-            expect(api.applyTurbo).toHaveBeenCalledWith('c1', 'e1');
+            expect(mockApi.applyTurbo).toHaveBeenCalledWith('c1', 'e1');
             expect(answerTo(transport, 11)).toEqual({
                 t: 'result',
                 id: 11,
                 ok: true,
-                result: { success: true, turbo: 'applied' },
+                result: { success: true, message: 'turbo applied' },
             });
         });
 
         test('the other alias (boost) and a plain channel keep their methods', async () => {
-            const api = window.api as unknown as Record<
-                string,
-                jest.MockedFunction<(...args: unknown[]) => Promise<unknown>>
-            >;
-            api.applyBoost.mockClear();
+            mockApi.applyBoost.mockClear();
             const transport = await connectPhone();
             transport.receiveFromPeer(
                 { t: 'invoke', id: 12, channel: 'apply-boost-to-entry', args: ['c1', 'e1'] },
                 'p1',
             );
             await flush();
-            expect(api.applyBoost).toHaveBeenCalledWith('c1', 'e1');
+            expect(mockApi.applyBoost).toHaveBeenCalledWith('c1', 'e1');
         });
 
         test('a channel the window has no method for is answered ok:false, not left hanging', async () => {
-            const api = window.api as unknown as Record<string, unknown>;
-            const saved = api.getBankroll;
-            delete api.getBankroll;
+            const saved = mockApi.getBankroll;
+            Reflect.deleteProperty(mockApi, 'getBankroll');
             try {
                 const transport = await connectPhone();
                 transport.receiveFromPeer({ t: 'invoke', id: 13, channel: 'get-bankroll', args: [] }, 'p1');
@@ -1185,7 +1204,7 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
                     error: 'No window.api method serves get-bankroll',
                 });
             } finally {
-                api.getBankroll = saved;
+                mockApi.getBankroll = saved;
             }
         });
     });

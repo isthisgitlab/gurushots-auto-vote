@@ -30,7 +30,8 @@ describe('RemoteStateBadge', () => {
         ['network', 'app.remoteNetwork', 'badge-error'],
         ['update', 'app.remoteUpdateNeeded', 'badge-warning'],
         ['update-this', 'app.remoteUpdateThis', 'badge-warning'],
-        ['full', 'app.remoteFull', 'badge-error'],
+        ['unpublished', 'app.remotePageUnpublished', 'badge-warning'],
+        ['full', 'app.remoteFullShort', 'badge-error'],
         ['no-key', 'app.remoteNoKey', 'badge-error'],
     ] as const)('%s shows its label and tone', (state, key, tone) => {
         setRemoteConnectionState(state);
@@ -154,6 +155,7 @@ describe('RemoteNoticeScreen', () => {
         ['network', 'app.remoteNetwork'],
         ['update', 'app.remoteUpdateNeeded'],
         ['update-this', 'app.remoteUpdateThis'],
+        ['unpublished', 'app.remotePageUnpublished'],
         ['full', 'app.remoteFull'],
         ['connecting', 'app.remoteConnecting'],
     ] as const)('%s names the state', (state, key) => {

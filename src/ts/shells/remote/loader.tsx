@@ -7,7 +7,8 @@
  *
  * The notice screen shows from the first moment ("Connecting to your computer…"), not once the
  * room is joined. A version whose page the site no longer publishes says which side to update:
- * the app on the computer when the desktop is older than this page, this app when it is newer. A
+ * the app on the computer when the desktop is older than this page; when the desktop is newer,
+ * the Android app says to update this app and a browser tab says the page is not published yet. A
  * room where no desktop answers says the computer is offline, or this link was reset. The
  * timeout must outlast a relay round trip on a slow mobile network — it is generous on purpose.
  *
@@ -27,6 +28,7 @@ import {
     parsePeerMessage,
 } from '../../core/remote/protocol';
 import { mountRemoteNotice } from '../../react/components/app/RemoteNoticeScreen';
+import { phoneRemoteMode } from '../../core/remote/phoneMode';
 import { installPhoneDisconnect } from './phoneMode';
 
 import type { HelloMessage } from '../../core/remote/protocol';
@@ -71,8 +73,6 @@ void (async () => {
     };
     // The first hello can be lost on the relay path, so it repeats until the loader settles.
     const hello = createHelloRepeater({ transport, announce, active: () => !done });
-    /** The peers seen and not yet gone: any of them may still be the desktop. */
-    const waiting = new Set<string>();
     const settleNotice = (state: 'offline' | 'network'): void => {
         if (done) return;
         done = true;
@@ -87,19 +87,21 @@ void (async () => {
         void versionIsPublished(version).then((published) => {
             if (!published) {
                 void transport.leave();
-                // The desktop is newer than every page this site (or this app) carries: this side updates.
-                setRemoteConnectionState(compareReleaseVersions(version, PAGE_VERSION) > 0 ? 'update-this' : 'update');
+                const newerThanPage = compareReleaseVersions(version, PAGE_VERSION) > 0;
+                // Inside the Android app the bundled page is simply older than the desktop: update this
+                // app. In a browser the site just has not published that version's page yet: try later.
+                setRemoteConnectionState(
+                    newerThanPage ? (phoneRemoteMode() === null ? 'unpublished' : 'update-this') : 'update',
+                );
                 return;
             }
             globalThis.location.replace(`${versionPage(version)}${globalThis.location.hash}`);
         });
     };
     transport.onPeerJoin((peerId) => {
-        waiting.add(peerId);
         hello.join(peerId);
     });
     transport.onPeerLeave((peerId) => {
-        waiting.delete(peerId);
         hello.leave(peerId);
     });
     transport.onMessage((_peerId, raw) => {
@@ -108,16 +110,16 @@ void (async () => {
         if (message === null || message.t !== 'hello' || !message.host || !isReleaseVersion(message.version)) return;
         finishWith(message.version);
     });
-    // A desktop the relays found but WebRTC could not reach is the try-Wi-Fi case; every other
-    // join failure (wrong password, handshake timeout) reads as offline-or-reset. A fellow phone's
-    // failed connection says nothing about the desktop: the loader settles only when no peer is left.
+    /** Whether a peer failed its connection on the SDP exchange before anyone answered — the timeout then reports the try-Wi-Fi case. */
+    let connectionFailure = false;
     transport.onJoinError(({ error, peerId }) => {
-        waiting.delete(peerId);
+        // A peer whose join failed never joined, so it says nothing about the desktop: that peer may
+        // still connect. The loader settles on the desktop's hello or on the timeout, never on a
+        // failed fellow peer.
         hello.leave(peerId);
-        if (waiting.size > 0) return;
-        settleNotice(isConnectionFailureJoinError(error) ? 'network' : 'offline');
+        if (isConnectionFailureJoinError(error)) connectionFailure = true;
     });
-    globalThis.setTimeout(() => settleNotice('offline'), HOST_ANSWER_TIMEOUT_MS);
+    globalThis.setTimeout(() => settleNotice(connectionFailure ? 'network' : 'offline'), HOST_ANSWER_TIMEOUT_MS);
 })().catch(() => {
     setRemoteConnectionState('offline');
     mountRemoteNotice();

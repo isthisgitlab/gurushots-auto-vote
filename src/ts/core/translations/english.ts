@@ -119,7 +119,9 @@ export const errors = {
     remoteRefused: 'This is done on the computer.',
     remoteResultTooLarge:
         'The result is too large to send to your phone. Do this on the computer, or ask for less at a time.',
-    remoteNotConnected: 'Not connected to your computer',
+    remoteAnswerUnsendable: "The computer's answer could not be sent.",
+    remoteNotConnected:
+        'Not connected to your computer. It reconnects by itself when the app is open on your computer.',
 };
 // First-run onboarding
 export const onboarding = {
@@ -1706,7 +1708,9 @@ export const app = {
     remoteNetwork: "Couldn't connect on this network — try Wi-Fi",
     remoteUpdateNeeded: 'Update the app on your computer',
     remoteUpdateThis: 'Update this app',
+    remotePageUnpublished: "The page for your computer's version is not published yet — try again later.",
     remoteFull: 'Too many phones are connected — close the app on another phone, then try again.',
+    remoteFullShort: 'Too many phones',
     remoteChangeFailed:
         "Remote access was not changed. The setting could not be saved on this computer. Try again; if it keeps failing, check that the app's data folder can be written to.",
     remoteResetFailed:

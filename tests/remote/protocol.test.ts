@@ -8,6 +8,7 @@ import {
     MAX_PEER_MESSAGE_BYTES,
     PAGE_VERSION,
     PROTOCOL_VERSION,
+    checkPeerMessageLimit,
     compareReleaseVersions,
     isReleaseVersion,
     isWithinPeerMessageLimit,
@@ -193,6 +194,29 @@ describe('parsePeerMessage', () => {
         expect(parsePeerMessage({ t: 'result', id: 1, ok: false, error: 'x'.repeat(600) })).toBeNull();
     });
 
+    test('a failure result may carry the too-large marker, and keeps it when it does', () => {
+        expect(parsePeerMessage({ t: 'result', id: 1, ok: false, error: 'too big', tooLarge: true })).toEqual({
+            t: 'result',
+            id: 1,
+            ok: false,
+            error: 'too big',
+            tooLarge: true,
+        });
+        expect(parsePeerMessage({ t: 'result', id: 1, ok: false, error: 'plain' })).toEqual({
+            t: 'result',
+            id: 1,
+            ok: false,
+            error: 'plain',
+        });
+    });
+
+    test.each([
+        ['tooLarge: false', false],
+        ["tooLarge: 'yes'", 'yes'],
+    ])('a failure result with %s is not one of the shapes', (_label, tooLarge) => {
+        expect(parsePeerMessage({ t: 'result', id: 1, ok: false, error: 'plain', tooLarge })).toBeNull();
+    });
+
     test('restoreInvokeArgs puts the JSON-lost undefined arguments back', () => {
         const message: InvokeMessage = {
             t: 'invoke',
@@ -296,9 +320,24 @@ describe('isWithinPeerMessageLimit', () => {
         ).toBe(false);
     });
 
-    test('a value JSON cannot serialize counts as too large, and undefined as empty', () => {
+    test('a value JSON cannot serialize does not fit, and undefined does', () => {
         expect(isWithinPeerMessageLimit({ big: BigInt(1) })).toBe(false);
         expect(isWithinPeerMessageLimit(undefined)).toBe(true);
+    });
+});
+
+describe('checkPeerMessageLimit', () => {
+    test('a small message is within', () => {
+        expect(checkPeerMessageLimit({ t: 'result', id: 1, ok: true, result: 'x' })).toBe('within');
+    });
+
+    test('a message over the byte limit is too large', () => {
+        expect(checkPeerMessageLimit({ big: 'x'.repeat(MAX_PEER_MESSAGE_BYTES + 1) })).toBe('too-large');
+    });
+
+    test('a value JSON cannot serialize is unserializable, and undefined serializes to empty', () => {
+        expect(checkPeerMessageLimit({ n: 10n })).toBe('unserializable');
+        expect(checkPeerMessageLimit(undefined)).toBe('within');
     });
 });
 

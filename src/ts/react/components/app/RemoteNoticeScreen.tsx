@@ -24,11 +24,13 @@ export function RemoteNoticeScreen() {
                 ? 'app.remoteUpdateNeeded'
                 : state === 'update-this'
                   ? 'app.remoteUpdateThis'
-                  : state === 'full'
-                    ? 'app.remoteFull'
-                    : state === 'offline'
-                      ? 'app.remoteOfflineDetail'
-                      : 'app.remoteConnecting';
+                  : state === 'unpublished'
+                    ? 'app.remotePageUnpublished'
+                    : state === 'full'
+                      ? 'app.remoteFull'
+                      : state === 'offline'
+                        ? 'app.remoteOfflineDetail'
+                        : 'app.remoteConnecting';
     return (
         <main className="min-h-screen flex items-center justify-center p-6">
             <div className="alert alert-warning text-sm" role="status">

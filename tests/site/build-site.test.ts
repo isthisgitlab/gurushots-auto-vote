@@ -72,6 +72,8 @@ const {
     PAGES,
     BADGES,
     buildRemoteSite,
+    selectRemotePageReleases,
+    REMOTE_RELEASE_COUNT,
     listReleasesFromGitHub,
     downloadFromGitHub,
     main,
@@ -355,58 +357,27 @@ describe('buildRemoteSite (the /remote/ tree)', () => {
         expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('no remote-page.zip attached yet'));
     });
 
-    test('pre-releases are filtered out before the last releases are chosen', async () => {
+    test('a pre-release newer than the newest stable is kept and unpacked; an older one is dropped', async () => {
         seedDist('9.9.9');
-        // Twelve pre-releases ahead of twelve stable releases: the cut of ten counts stable ones only.
-        const releases = [
-            ...Array.from({ length: 12 }, (_, i) => release(`9.9.${100 + i}-beta.1`, true, true)),
-            ...Array.from({ length: 12 }, (_, i) => release(`9.8.${i}`, true)),
-        ];
-        const downloaded: string[] = [];
+        const zipBytes = Buffer.from('zip');
+        const sha256 = (data: Buffer) => nodeCrypto.createHash('sha256').update(data).digest('hex');
         await buildRemoteSite(out, '9.9.9', {
             dist,
-            listReleases: async () => releases,
-            downloadFile: async (url: string) => {
-                downloaded.push(url);
-                return Buffer.from('x');
-            },
-            unzip: async () => {
-                throw new Error('must not run');
-            },
-        });
-        expect(downloaded.some((url) => url.includes('beta'))).toBe(false);
-        // Ten stable releases are tried (a zip and its checksum each), the other two are beyond the cut.
-        expect(downloaded).toHaveLength(20);
-        expect(downloaded.some((url) => url.includes('9.8.9.'))).toBe(true);
-        expect(downloaded.some((url) => url.includes('9.8.10.') || url.includes('9.8.11.'))).toBe(false);
-    });
-
-    test('a pre-release is never unpacked, however recent', async () => {
-        seedDist('9.9.9');
-        await buildRemoteSite(out, '9.9.9', {
-            dist,
-            listReleases: async () => [release('9.9.10-beta.1', true, true)],
-            downloadFile: async () => {
-                throw new Error('must not download');
+            listReleases: async () => [
+                release('9.9.10-beta.1', true, true), // newer than the newest stable: kept
+                release('9.9.9', true), // the current version: never downloaded
+                release('9.9.8-beta.2', true, true), // older than the newest stable: dropped
+                release('9.9.8', true),
+            ],
+            downloadFile: async (url: string) =>
+                url.endsWith('.zip') ? zipBytes : Buffer.from(`${sha256(zipBytes)}  remote-page.zip\n`),
+            unzip: async (_zip, dir) => {
+                fs.writeFileSync(nodePath.join(dir, 'index.html'), `<html>v${nodePath.basename(dir)}</html>`);
             },
         });
-        expect(fs.existsSync(nodePath.join(out, 'remote', '9.9.10-beta.1'))).toBe(false);
-    });
-
-    test('a failed release listing (a rate limit) warns and the site builds without older versions', async () => {
-        seedDist('9.9.9');
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-        await expect(
-            buildRemoteSite(out, '9.9.9', {
-                dist,
-                listReleases: async () => {
-                    throw new Error('releases listing failed (403)');
-                },
-            }),
-        ).resolves.toBeUndefined();
-        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('releases listing failed (403)'));
-        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('building without older versions'));
         expect(fs.readdirSync(nodePath.join(out, 'remote')).sort()).toEqual([
+            '9.9.10-beta.1',
+            '9.9.8',
             '9.9.9',
             'index.html',
             'remoteLoader-bundle.js',
@@ -414,14 +385,73 @@ describe('buildRemoteSite (the /remote/ tree)', () => {
         ]);
     });
 
-    test('a listing that fails without a reason is still said', async () => {
+    test('a pre-release older than the newest stable is never unpacked, however big its zip', async () => {
         seedDist('9.9.9');
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
         await buildRemoteSite(out, '9.9.9', {
             dist,
-            listReleases: () => Promise.reject(null),
+            listReleases: async () => [release('9.9.9', true), release('9.9.8-beta.2', true, true)],
+            downloadFile: async () => {
+                throw new Error('must not download');
+            },
         });
-        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('no reason given'));
+        expect(fs.existsSync(nodePath.join(out, 'remote', '9.9.8-beta.2'))).toBe(false);
+    });
+
+    test('the limit still holds with betas present: at most REMOTE_RELEASE_COUNT pages, betas included in the count', async () => {
+        seedDist('9.9.9');
+        const releases = [
+            ...Array.from({ length: REMOTE_RELEASE_COUNT - 2 }, (_, i) => release(`9.9.${100 + i}-beta.1`, true, true)),
+            ...Array.from({ length: 6 }, (_, i) => release(`9.8.${i}`, true)),
+        ];
+        const downloaded: string[] = [];
+        const zipBytes = Buffer.from('zip');
+        const sha256 = (data: Buffer) => nodeCrypto.createHash('sha256').update(data).digest('hex');
+        await buildRemoteSite(out, '9.9.9', {
+            dist,
+            listReleases: async () => releases,
+            downloadFile: async (url: string) => {
+                downloaded.push(url);
+                return url.endsWith('.zip') ? zipBytes : Buffer.from(`${sha256(zipBytes)}  remote-page.zip\n`);
+            },
+            unzip: async (_zip, dir) => {
+                fs.writeFileSync(nodePath.join(dir, 'index.html'), `<html>v${nodePath.basename(dir)}</html>`);
+            },
+        });
+        // REMOTE_RELEASE_COUNT + 4 kept candidates (8 betas, 6 stables) cut to ten, betas first:
+        // each of the ten is tried as a zip and its checksum, the last four stables are beyond the cut.
+        expect(downloaded).toHaveLength(REMOTE_RELEASE_COUNT * 2);
+        expect(downloaded.some((url) => url.includes('beta'))).toBe(true);
+        expect(downloaded.some((url) => url.includes('9.8.2.'))).toBe(false);
+        expect(fs.readdirSync(nodePath.join(out, 'remote')).sort()).toEqual(
+            [
+                ...Array.from({ length: REMOTE_RELEASE_COUNT - 2 }, (_, i) => `9.9.${100 + i}-beta.1`),
+                '9.8.0',
+                '9.8.1',
+                '9.9.9',
+                'index.html',
+                'remoteLoader-bundle.js',
+                'styles.css',
+            ].sort(),
+        );
+    });
+
+    test('a failed release listing (a rate limit) fails the site build', async () => {
+        seedDist('9.9.9');
+        await expect(
+            buildRemoteSite(out, '9.9.9', {
+                dist,
+                listReleases: async () => {
+                    throw new Error('releases listing failed (403)');
+                },
+            }),
+        ).rejects.toThrow('could not list the releases for the older phone pages: releases listing failed (403)');
+    });
+
+    test('a listing that fails without a reason is still said', async () => {
+        seedDist('9.9.9');
+        await expect(buildRemoteSite(out, '9.9.9', { dist, listReleases: () => Promise.reject(null) })).rejects.toThrow(
+            'could not list the releases for the older phone pages: no reason given',
+        );
     });
 
     test('the third-party notices sit beside the loader, and nothing is invented when the build has none', async () => {
@@ -529,6 +559,42 @@ describe('buildRemoteSite (the /remote/ tree)', () => {
         });
         expect(fs.readFileSync(nodePath.join(target, 'index.html'), 'utf8')).toContain('paged');
         fs.rmSync(zipDir, { recursive: true, force: true });
+    });
+});
+
+describe('selectRemotePageReleases', () => {
+    const rel = (tag: string, prerelease = false) => ({ tag_name: tag, prerelease, assets: [] });
+
+    test('keeps the stable releases in order and caps the total at REMOTE_RELEASE_COUNT', () => {
+        const releases = [
+            rel('v9.9.1'),
+            rel('v9.9.2'), // out of order on purpose: the newest stable wins wherever it sits
+            ...Array.from({ length: REMOTE_RELEASE_COUNT }, (_, i) => rel(`v9.8.${20 - i}`)),
+        ];
+        expect(selectRemotePageReleases(releases).map((r) => r.tag_name)).toEqual([
+            'v9.9.1',
+            'v9.9.2',
+            ...Array.from({ length: REMOTE_RELEASE_COUNT - 2 }, (_, i) => `v9.8.${20 - i}`),
+        ]);
+    });
+
+    test('keeps a pre-release newer than the newest stable and drops older and malformed ones', () => {
+        const releases = [
+            rel('v9.9.10-beta.1', true), // newer than the newest stable: kept
+            rel('v9.9.9'),
+            rel('not-a-version', true), // no release version to compare: dropped
+            rel('v9.9.8-beta.2', true), // older than the newest stable: dropped
+            rel('v9.9.8'),
+        ];
+        expect(selectRemotePageReleases(releases).map((r) => r.tag_name)).toEqual([
+            'v9.9.10-beta.1',
+            'v9.9.9',
+            'v9.9.8',
+        ]);
+    });
+
+    test('drops every pre-release when the listing has no stable release', () => {
+        expect(selectRemotePageReleases([rel('v9.9.10-beta.1', true), rel('v9.9.9-beta.3', true)])).toEqual([]);
     });
 });
 

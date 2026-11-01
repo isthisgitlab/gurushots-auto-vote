@@ -2,8 +2,14 @@
  * Remote entry (shells/remote/page.tsx) — with a pairing key it joins the
  * room, installs the peer bridge and mounts the app over the relayed
  * transport; without one it shows the QR notice and mounts nothing; a
- * transport that cannot be built leaves the offline state showing.
+ * transport that cannot be built leaves the offline state showing. The
+ * end-to-end redirect test loads the real bridge, so the address-bar rewrite
+ * composes with the loader redirect the bridge performs.
  */
+
+import { TransportStub } from '../helpers/remoteTransport';
+import { installPhoneRemoteMode } from '../../src/ts/core/remote/phoneMode';
+import { PROTOCOL_VERSION } from '../../src/ts/core/remote/protocol';
 
 import type { RendererGlobals } from '../../src/ts/core/types/capacitor';
 
@@ -29,9 +35,12 @@ describe('Remote entry', () => {
         document.body.innerHTML = '';
         window.location.hash = '';
         window.sessionStorage.clear();
+        // The end-to-end test loads the real bridge: it marks the platform kind and installs window.api.
+        delete (globalThis as { api?: unknown }).api;
+        delete (globalThis as { __autovotePlatformKind?: string }).__autovotePlatformKind;
     });
 
-    const load = (transport: object | Error) => {
+    const load = (transport: object | Error, android = false) => {
         const m = {
             transport: { marker: 'remote-transport' },
             installed: jest.fn(),
@@ -47,7 +56,46 @@ describe('Remote entry', () => {
         jest.doMock(`${SRC}/shells/remote/bridge/peer`, () => ({
             installPeerBridge: m.installed,
         }));
-        jest.doMock(`${SRC}/shells/remote/phoneMode`, () => ({ installPhoneDisconnect: m.installDisconnect }));
+        jest.doMock(`${SRC}/shells/remote/phoneMode`, () => ({
+            installPhoneDisconnect: () => {
+                m.installDisconnect();
+                if (android) {
+                    // Inside the app the real install puts the Disconnect entry into the very
+                    // phone-mode module this isolated page's imports bound to.
+                    jest.requireActual<typeof import('../../src/ts/core/remote/phoneMode')>(
+                        '../../src/ts/core/remote/phoneMode',
+                    ).installPhoneRemoteMode({ disconnect: async () => undefined });
+                }
+            },
+        }));
+        jest.doMock(`${SRC}/react/pages/App`, () => ({
+            mountApp: jest.fn((_host: unknown, remoteTransport?: unknown) => {
+                m.mounted.push(remoteTransport);
+                return null;
+            }),
+        }));
+        jest.doMock(`${SRC}/react/contexts/noopBackgroundHost`, () => ({ noopBackgroundHost: { marker: 'noop' } }));
+        jest.isolateModules(() => {
+            require(`${SRC}/shells/remote/page`);
+        });
+        return m;
+    };
+
+    /** The real peer bridge: only the transport, the app mount and the background host stand in. */
+    const loadWithRealBridge = (transport: TransportStub) => {
+        const m = {
+            transport,
+            mounted: [] as unknown[],
+        };
+        // The `load` harness's mocks of these two are still registered; this loader needs the real ones.
+        jest.dontMock(`${SRC}/shells/remote/bridge/peer`);
+        jest.dontMock(`${SRC}/shells/remote/phoneMode`);
+        jest.doMock(`${SRC}/core/remote/trystero`, () => ({
+            createTrysteroTransport: jest.fn(async () => m.transport),
+            isConnectionFailureJoinError: jest.requireActual<typeof import('../../src/ts/core/remote/trystero')>(
+                '../../src/ts/core/remote/trystero',
+            ).isConnectionFailureJoinError,
+        }));
         jest.doMock(`${SRC}/react/pages/App`, () => ({
             mountApp: jest.fn((_host: unknown, remoteTransport?: unknown) => {
                 m.mounted.push(remoteTransport);
@@ -64,13 +112,29 @@ describe('Remote entry', () => {
     test('with a key it joins the room, installs the bridge and mounts the app over the transport', async () => {
         const m = load({ marker: 'remote-transport' });
         await flush();
-        expect(m.installed).toHaveBeenCalledWith(m.transport);
+        // The second argument is the loader target the bridge goes to on a version mismatch.
+        expect(m.installed).toHaveBeenCalledWith(m.transport, expect.any(String));
         expect(m.mounted).toEqual([m.transport]);
         // The Android app's Disconnect is offered before the app mounts (it installs nothing in a browser tab).
         expect(m.installDisconnect).toHaveBeenCalledTimes(1);
         expect(m.installDisconnect.mock.invocationCallOrder[0]).toBeLessThan(m.installed.mock.invocationCallOrder[0]);
         // App.tsx's own auto-mount stayed deferred.
         expect((globalThis as RendererGlobals).__capacitorBootstrap).toBe(true);
+    });
+
+    test('inside the Android app the address bar keeps the versioned page (a reload there cannot reach the loader)', async () => {
+        const replaceState = jest.spyOn(window.history, 'replaceState');
+        try {
+            installPhoneRemoteMode({ disconnect: async () => undefined });
+            const m = load({ marker: 'remote-transport' }, true);
+            await flush();
+            expect(replaceState).not.toHaveBeenCalled();
+            // The redirect still has a loader to go to.
+            expect(m.installed).toHaveBeenCalledWith(m.transport, expect.any(String));
+        } finally {
+            replaceState.mockRestore();
+            installPhoneRemoteMode({});
+        }
     });
 
     test('the address bar shows the stable loader address, so a bookmark survives the next desktop update', async () => {
@@ -125,5 +189,33 @@ describe('Remote entry', () => {
         expect(m.installed).not.toHaveBeenCalled();
         expect(m.mounted).toEqual([]);
         expect(document.getElementById('root')?.textContent).toBe('app.remoteOfflineDetail');
+    });
+
+    test('a version mismatch reached from a versioned page goes to the loader beside it, not the site root', async () => {
+        // The document sits at the versioned page; the entry then rewrites the address bar to the
+        // loader directory, so only a target resolved before that rewrite still reaches the loader.
+        window.history.pushState(null, '', '/remote/1.2.3/index.html#k=the-key');
+        const transport = new TransportStub('phone');
+        loadWithRealBridge(transport);
+        await flush();
+        const replaced: string[] = [];
+        const replaceSpy = jest.spyOn(window.location, 'replace').mockImplementation((url: string | URL) => {
+            replaced.push(String(url));
+        });
+        try {
+            transport.emitJoin('host');
+            await flush();
+            transport.receiveFromPeer(
+                { t: 'hello', version: '9.9.9', protocolVersion: PROTOCOL_VERSION, host: true },
+                'host',
+            );
+            await flush();
+            const target = replaced[0];
+            expect(target).toBeDefined();
+            expect(new URL(target ?? '', window.location.href).pathname.endsWith('/remote/index.html')).toBe(true);
+        } finally {
+            replaceSpy.mockRestore();
+            window.history.replaceState(null, '', '/');
+        }
     });
 });
