@@ -1,11 +1,12 @@
 name: Pages
 
 # Builds the README (+ linked docs) into a branded static site and publishes it
-# to GitHub Pages. The docs come from master; the /remote/ tree (the phone page
-# and its version pages) is built from the newest develop release tag, where
-# the remote-access code lives. The workflow is dispatched after every release,
-# stable (master) and beta (develop) alike. Requires a one-time repo setting:
-# Settings → Pages → Build and deployment → Source = "GitHub Actions".
+# to GitHub Pages from develop: the docs come from the develop checkout, and the
+# /remote/ tree (the phone page and its version pages) from the newest develop
+# release tag. The workflow is dispatched on develop after every release.
+# Requires one-time repo settings: Settings → Pages → Build and deployment →
+# Source = "GitHub Actions", and develop in the github-pages environment's
+# allowed deployment branches.
 on:
     # No push trigger: Pages must never go live before a release succeeds.
     # build.yml's create-release job dispatches this workflow only after a
@@ -46,18 +47,16 @@ jobs:
             - name: Setup build environment
               uses: ./.github/actions/setup-build
 
-            # build-site lists releases through the GitHub API once master
-            # carries the remote-access code; the token lifts the anonymous
-            # rate limit. The step runs master's own code — only the
-            # dependency install steps run without the token.
+            # build-site lists releases through the GitHub API; the token lifts
+            # the anonymous rate limit. Only the dependency install steps run
+            # without it.
             - name: Build site
               run: pnpm build:site
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-            # The /remote/ tree is built from the newest develop release tag —
-            # that is where the remote-access code lives (master has none); the
-            # docs above stay on the master checkout.
+            # The /remote/ tree is built from the newest develop release tag, not
+            # the develop checkout above, so unreleased commits never reach it.
             #
             # tag v<develop's package.json version> is the newest develop release:
             # that version changes only in the release job's bump commit, so a

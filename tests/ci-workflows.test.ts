@@ -439,12 +439,12 @@ describe('Pages', () => {
         expect(triggers).toEqual(['workflow_dispatch']);
     });
 
-    test('a release dispatches the rebuild for master and develop alike, always via master', () => {
+    test('a release dispatches the rebuild for master and develop alike, always on develop', () => {
         const trigger = stepNamed(build.jobs['create-release'], 'Trigger Pages rebuild');
         expect(trigger.if).toBe("github.ref_name == 'master' || github.ref_name == 'develop'");
-        // The Pages environment deploys from master only, so the dispatch must too.
-        expect(trigger.run).toContain('gh workflow run pages.yml --ref master');
-        expect(trigger.run).not.toContain('--ref develop');
+        // Pages runs on develop only.
+        expect(trigger.run).toContain('gh workflow run pages.yml --ref develop');
+        expect(trigger.run).not.toContain('--ref master');
     });
 
     test('the build job runs on ubuntu-latest with time for two installs and two site builds', () => {
@@ -486,7 +486,7 @@ describe('Pages', () => {
         expect(checkout.with?.['persist-credentials']).toBe(false);
     });
 
-    test('the master checkout does not persist credentials either', () => {
+    test('the docs checkout does not persist credentials either', () => {
         const checkout = stepNamed(pages.jobs.build, 'Checkout code');
         expect(checkout.with?.['persist-credentials']).toBe(false);
     });
