@@ -1749,6 +1749,54 @@ describe('swap ranking and the chosen photos settings', () => {
         expect(ids(backward.result)).toEqual(['car', 'dog']);
     });
 
+    test('in order with enforcement and Submit Only on, the first usable chosen photo in list order is picked and no other photo', async () => {
+        const first = await rank(
+            { chosen: ['dog', 'car'], inOrder: true, only: true },
+            { enforceChosenOnly: true, wantCount: 1 },
+        );
+        expect(ids(first.result)).toEqual(['dog']);
+        // The first photo of the list is refused: the next usable one in list order takes its place.
+        const skipped = await rank({ chosen: ['dog', 'car'], inOrder: true, only: true }, { enforceChosenOnly: true }, [
+            photo('theme-a'),
+            photo('dog', ['Dog'], { permission: { allowed: false, message: 'full' } }),
+            car,
+        ]);
+        expect(ids(skipped.result)).toEqual(['car']);
+        // More slots than usable chosen photos: nothing from outside the list tops the pick up.
+        const topUp = await rank(
+            { chosen: ['dog', 'car'], inOrder: true, only: true },
+            { enforceChosenOnly: true, wantCount: 4 },
+        );
+        expect(ids(topUp.result)).toEqual(['dog', 'car']);
+    });
+
+    test('the walk asks for the swap usage, and its memo leaves the submit memo empty', async () => {
+        const { result, deps } = await rank({ chosen: ['car'] }, { wantCount: 2 });
+        expect(ids(result)).toEqual(['car', 'theme-a']);
+        expect(deps.getEligiblePhotosWalk).toHaveBeenCalledWith(
+            'c1',
+            'tok',
+            expect.objectContaining({ usage: 'swap' }),
+        );
+        const lookup = async (usage?: 'swap') =>
+            (
+                await resolveMissingChosen({
+                    challenge: makeChallenge(),
+                    token: 'tok',
+                    ids: ['car'],
+                    eligible: [],
+                    wantCount: 1,
+                    allowWalk: false,
+                    deps: { logger: makeLog().logger },
+                    label: 'autoSubmit',
+                    usage,
+                })
+            ).map((found) => found.id);
+        // The swap memo remembers the photo; the submit memo knows nothing of it.
+        expect(await lookup('swap')).toEqual(['car']);
+        expect(await lookup()).toEqual([]);
+    });
+
     test('an excluded chosen photo in the themed results does not stop the walk from finding the next one', async () => {
         // "dog" is the swapped-out chosen photo and is in the themed results; "car" is not.
         const { result, deps } = await rank(

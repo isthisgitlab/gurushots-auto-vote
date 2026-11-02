@@ -320,7 +320,7 @@ const previewSwap = async (
     if (!best) {
         if (ranked.noChosenLeft) {
             cat(logger).info(
-                `swap: Submit Only Chosen Photos is on and no chosen photo is left for ${logger.challengeTag(challenge)}`,
+                `swap: Submit Only Chosen Photos is on and no chosen photo is left for ${logger.challengeTag(challenge)}. Add photos to Chosen Photos or turn Submit Only off`,
                 null,
             );
             return { ok: false, outcome: CURRENCY_OUTCOME.noAlternative };

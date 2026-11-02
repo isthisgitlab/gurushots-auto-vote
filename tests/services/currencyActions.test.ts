@@ -336,8 +336,44 @@ describe('previewSwap and the Chosen Photos settings', () => {
         );
         expect(result).toEqual({ ok: false, outcome: 'no-alternative' });
         expect(lines).toEqual([
-            'swap: Submit Only Chosen Photos is on and no chosen photo is left for [Challenge 555]',
+            'swap: Submit Only Chosen Photos is on and no chosen photo is left for [Challenge 555]. Add photos to Chosen Photos or turn Submit Only off',
         ]);
+    });
+
+    test('enforceChosenOnly with chosen photos unentered but none usable → no-alternative and the Submit Only line', async () => {
+        const refused = { ...photo('mine', 1), permission: { allowed: false, message: null } };
+        const strategy = stubStrategy({ library: [...library(), refused] });
+        strategy.getEligiblePhotosWalk.mockResolvedValue({ items: [refused], truncated: false, nextStart: 1 });
+        const { recording, lines } = recordingLogger();
+        const result = await previewSwap(
+            555,
+            'old',
+            'tok',
+            { strategy, logger: recording, settings: chosenSettings({ chosen: ['mine'], only: true }) },
+            { enforceChosenOnly: true },
+        );
+        expect(result).toEqual({ ok: false, outcome: 'no-alternative' });
+        expect(lines).toContain(
+            'swap: Submit Only Chosen Photos is on and no chosen photo is left for [Challenge 555]. Add photos to Chosen Photos or turn Submit Only off',
+        );
+        // An empty pick ends before the visual check, which has nothing to reorder.
+        expect(lines.filter((line) => line.startsWith('Visual check'))).toEqual([]);
+    });
+
+    test('the automatic swap never brings back a swapped-out chosen photo, so it ends without a walk', async () => {
+        const strategy = stubStrategy({ library: [...library(), photo('swapped-before', 1)] });
+        const { recording, lines } = recordingLogger();
+        const result = await previewSwap(
+            555,
+            'old',
+            'tok',
+            { strategy, logger: recording, settings: chosenSettings({ chosen: ['swapped-before'], only: true }) },
+            { enforceChosenOnly: true, excludeSwapped: true },
+        );
+        expect(result).toEqual({ ok: false, outcome: 'no-alternative' });
+        expect(lines).toHaveLength(1);
+        expect(strategy.getEligiblePhotos).not.toHaveBeenCalled();
+        expect(strategy.getEligiblePhotosWalk).not.toHaveBeenCalled();
     });
 
     test('without enforceChosenOnly the same settings still give a suggestion', async () => {

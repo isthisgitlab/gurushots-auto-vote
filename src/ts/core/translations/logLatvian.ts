@@ -475,7 +475,7 @@ export const logMessages = {
         '{0} Foto {1} vēl nav nogaidījis „Gaidīt pirms Boost jaunam foto”, taču ierīce pāriet miega režīmā — izmanto Boost uzreiz',
     m9c0887b4c739: 'swap: izaicinājumam {0} nav pieejams cits foto',
     m9c08a1e5d2f7:
-        'swap: ir ieslēgts „Iesniegt tikai izvēlētos foto”, un izaicinājumam {0} nav palicis neviens izvēlētais foto',
+        'swap: ir ieslēgts „Iesniegt tikai izvēlētos foto”, un izaicinājumam {0} nav palicis neviens izvēlētais foto. Pievieno foto sarakstam „Izvēlētie foto” vai izslēdz „Iesniegt tikai izvēlētos foto”',
     m9c096cf8314f: 'scheduledFillTime {0} pielāgots pašreizējiem ierobežojumiem: {1}',
     m9c120fa00e9e: '📸 Saņemti balsošanas foto: {0}',
     m9c1936f40d35: 'Manuālā iesniegšana: GuruShots neatbildēja uz iesniegšanu izaicinājumam {0}',

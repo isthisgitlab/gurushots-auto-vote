@@ -165,10 +165,10 @@ describe('Latvian log messages', () => {
 
     test('translates the swap line for Submit Only Chosen Photos with no chosen photo left', () => {
         const tag = '[Challenge 42: Sunset]';
-        const english = `swap: Submit Only Chosen Photos is on and no chosen photo is left for ${tag}`;
+        const english = `swap: Submit Only Chosen Photos is on and no chosen photo is left for ${tag}. Add photos to Chosen Photos or turn Submit Only off`;
         for (const message of [`ℹ️ ${english}`, `ℹ️ ${sentenceCaseLogMessage(english)}`]) {
             expect(localizeLogMessage(message)).toBe(
-                'ℹ️ swap: ir ieslēgts „Iesniegt tikai izvēlētos foto”, un izaicinājumam [Izaicinājums 42: Sunset] nav palicis neviens izvēlētais foto',
+                'ℹ️ swap: ir ieslēgts „Iesniegt tikai izvēlētos foto”, un izaicinājumam [Izaicinājums 42: Sunset] nav palicis neviens izvēlētais foto. Pievieno foto sarakstam „Izvēlētie foto” vai izslēdz „Iesniegt tikai izvēlētos foto”',
             );
         }
     });

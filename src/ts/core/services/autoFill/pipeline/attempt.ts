@@ -15,12 +15,11 @@ import { errorMessage } from '../../../errorMessage';
 import { loadFillCandidates, scoreFillCandidates } from './scoring';
 import { recordUncertainSubmission, verifyFillPick } from './verify';
 
-// The paths that honour Submit Only Chosen Photos. Emergency fill exists so no
-// slot is left empty at the buzzer and manual fill is explicit user intent, so
-// neither does; both still rank the chosen photos first. The photo suggestions
-// rank the way the scheduled fill picks, so they honour it too, except the swap picker's (`ignoreOnly`).
-// A swap ranking honours it only when its caller enforces it: the automatic and scenario swaps do,
-// the manual Swap suggestion and the swap picker's Auto pass `ignoreOnly`.
+// The paths that honour Submit Only Chosen Photos: the scheduled fill paths and the photo
+// suggestions. Emergency fill exists so no slot is left empty at the buzzer and manual fill is
+// explicit user intent, so neither does; both still rank the chosen photos first.
+// A swap ranking honours it only when its caller enforces it. The automatic swap and a scenario
+// swap step do. The manual Swap suggestion and the swap picker's Auto pass `ignoreOnly`.
 const ONLY_LABELS: ReadonlySet<string> = new Set(['autoSubmit', 'fillNew', 'suggest', 'swap']);
 
 /**
@@ -55,7 +54,7 @@ const planChosen = ({ label, challenge, deps, ignoreOnly = false, onlyIds }: Pla
     const pinned = onlyIds !== undefined;
     const enforceOnly = !pinned && settings.only && ONLY_LABELS.has(label) && !ignoreOnly;
     const entered = enteredIds(challenge);
-    const chosen: ChosenPick | null =
+    const chosen: (ChosenPick & { excludeIds: ReadonlySet<string> }) | null =
         settings.ids.length > 0
             ? { ids: settings.ids, only: pinned || enforceOnly, inOrder: settings.inOrder, excludeIds: entered }
             : null;
