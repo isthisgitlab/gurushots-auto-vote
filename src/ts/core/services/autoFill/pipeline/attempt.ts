@@ -54,7 +54,7 @@ const planChosen = ({ label, challenge, deps, ignoreOnly = false, onlyIds }: Pla
     const pinned = onlyIds !== undefined;
     const enforceOnly = !pinned && settings.only && ONLY_LABELS.has(label) && !ignoreOnly;
     const entered = enteredIds(challenge);
-    const chosen: (ChosenPick & { excludeIds: ReadonlySet<string> }) | null =
+    const chosen: ChosenPick | null =
         settings.ids.length > 0
             ? { ids: settings.ids, only: pinned || enforceOnly, inOrder: settings.inOrder, excludeIds: entered }
             : null;

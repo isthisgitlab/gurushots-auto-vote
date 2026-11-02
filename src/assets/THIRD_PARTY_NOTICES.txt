@@ -532,7 +532,7 @@ semver 7.7.4
   License: ISC
   Copyright (c) Isaac Z. Schlueter and Contributors
 
-semver 7.8.5
+semver 7.8.6
   License: ISC
   Copyright (c) Isaac Z. Schlueter and Contributors
 

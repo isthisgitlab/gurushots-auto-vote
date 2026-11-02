@@ -63,7 +63,7 @@ const rankCandidatesForChallenge = async (
     const { enforceOnly } = plan;
     const { inOrder } = plan.settings;
     const unentered = plan.unentered.filter((id) => !excludeIds.has(id));
-    const chosen = plan.chosen && { ...plan.chosen, excludeIds: new Set([...plan.chosen.excludeIds, ...excludeIds]) };
+    const chosen = plan.chosen && { ...plan.chosen, excludeIds };
     const none: RankResult = { status: 'ranked', picked: [], noChosenLeft: true };
     if (enforceOnly && unentered.length === 0) return none;
 
