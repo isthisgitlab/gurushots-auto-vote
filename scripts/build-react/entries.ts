@@ -95,7 +95,17 @@ const CAPACITOR_EXTERNALS = [
 // host never runs, so the external is never awaited: externalize the whole trystero package
 // chain and the two bundles stay their current size. The electron and remote entries bundle
 // it — they are the two kinds that actually join the pairing room.
-const TRYSTERO_EXTERNALS = ['trystero', '@trystero-p2p/nostr', '@trystero-p2p/core'];
+// The relay modules trystero.ts loads at call time go the same way (esbuild matches the wildcard
+// against the import specifier, `./relayCodec` and so on).
+const TRYSTERO_EXTERNALS = [
+    'trystero',
+    '@trystero-p2p/nostr',
+    '@trystero-p2p/core',
+    '*/relayCodec',
+    '*/relayLink',
+    '*/relaySockets',
+    '*/hybridTransport',
+];
 const REQUIRE_SHIM = { js: SHIM_BANNER };
 const perEntryOptions: Record<EntryName, BuildOptions> = {
     // Electron entries: externalize Capacitor packages too. Their

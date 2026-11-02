@@ -27,10 +27,15 @@ export type ConnectionWatch = {
 export type ConnectionWatchApi = {
     /** Settles every pending invoke once and reads offline — the bye path drives this too. */
     readonly settlePendingForLostConnection: () => void;
+    /** Settles every pending invoke once and reads connecting again, with the offline wait running; the desktop at `peerId` is asked to say hello. */
+    readonly reconnect: (peerId: string) => void;
 };
 
-/** Settle every pending invoke once — the connection is lost. A spend may have run: unclear, never a failure. */
-const settlePendingForLostConnection = (watch: ConnectionWatch): void => {
+/**
+ * Settle every pending invoke once — the connection is lost. A spend may have run: unclear, never a
+ * failure. `next` is what the page reads afterwards: offline, or connecting while a rejoin is awaited.
+ */
+const settlePendingForLostConnection = (watch: ConnectionWatch, next: 'offline' | 'connecting' = 'offline'): void => {
     const { ctx, hello, pipeline } = watch;
     hello.stop();
     ctx.hostPeerId = null;
@@ -41,7 +46,7 @@ const settlePendingForLostConnection = (watch: ConnectionWatch): void => {
     }
     ctx.pending.clear();
     ctx.heldSends.length = 0;
-    setRemoteConnectionState('offline');
+    setRemoteConnectionState(next);
 };
 
 /**
@@ -61,6 +66,30 @@ const endsSession = (watch: ConnectionWatch, peerId: string): boolean => {
     return ctx.hostPeerId === null ? ctx.waiting.size === 0 : peerId === ctx.hostPeerId;
 };
 
+/**
+ * Reads the desktop absent if none has joined (or rejoined) in time. Reading it absent does not stop
+ * the page connecting later: at the first connect the hello repeat is still running, so a desktop that
+ * answers late moves the page to connected; after a leave the repeat was stopped (the loss settle stops
+ * it), and the desktop's next join starts it again. On the `reconnect` path the loss settle stops the repeat
+ * too, and `hello.join` starts it again at once.
+ */
+const waitForDesktop = (watch: ConnectionWatch): void => {
+    const { ctx } = watch;
+    if (ctx.offlineWait !== null) globalThis.clearTimeout(ctx.offlineWait);
+    ctx.offlineWait = globalThis.setTimeout(() => {
+        ctx.offlineWait = null;
+        if (ctx.hostPeerId === null && remoteConnectionState() === 'connecting') setRemoteConnectionState('offline');
+    }, HOST_ANSWER_TIMEOUT_MS);
+};
+
+/** The desktop forgot this phone (it answered "say hello first"): what was in flight is settled, and the page asks to be taken back. */
+const reconnect = (watch: ConnectionWatch, peerId: string): void => {
+    settlePendingForLostConnection(watch, 'connecting');
+    watch.ctx.waiting.add(peerId);
+    watch.hello.join(peerId);
+    waitForDesktop(watch);
+};
+
 const onPeerLeave = (watch: ConnectionWatch, peerId: string): void => {
     const { ctx, hello } = watch;
     // Only the desktop's own leave ends the session. Before the desktop has answered, the leave
@@ -69,7 +98,12 @@ const onPeerLeave = (watch: ConnectionWatch, peerId: string): void => {
     const fromTheDesktop = peerId === ctx.hostPeerId || (ctx.hostPeerId === null && ctx.waiting.has(peerId));
     hello.leave(peerId);
     ctx.waiting.delete(peerId);
-    if (fromTheDesktop && (ctx.hostPeerId !== null || ctx.waiting.size === 0)) settlePendingForLostConnection(watch);
+    if (fromTheDesktop && (ctx.hostPeerId !== null || ctx.waiting.size === 0)) {
+        // A phone tab in the background has its timers throttled, so the desktop can drop it for silence and
+        // take it back a moment later: the page reads connecting, and offline only if no desktop returns in time.
+        settlePendingForLostConnection(watch, 'connecting');
+        waitForDesktop(watch);
+    }
 };
 
 const onJoinError = (watch: ConnectionWatch, error: string, peerId: string): void => {
@@ -79,7 +113,10 @@ const onJoinError = (watch: ConnectionWatch, error: string, peerId: string): voi
     // failure looks like an offline-or-reset desktop.
     if (!endsSession(watch, peerId)) return;
     settlePendingForLostConnection(watch);
-    setRemoteConnectionState(isConnectionFailureJoinError(error) ? 'network' : 'offline');
+    // The hybrid transport forwards a join error only when the relays reached nobody either; a browser
+    // that cannot run the relay fallback at all is told to update, not to try Wi-Fi.
+    const relayRuns = watch.ctx.transport.relayAvailable?.() ?? true;
+    setRemoteConnectionState(isConnectionFailureJoinError(error) ? (relayRuns ? 'network' : 'old-browser') : 'offline');
 };
 
 export const watchConnection = (watch: ConnectionWatch): ConnectionWatchApi => {
@@ -91,11 +128,11 @@ export const watchConnection = (watch: ConnectionWatch): ConnectionWatchApi => {
     ctx.transport.onPeerLeave((peerId) => onPeerLeave(watch, peerId));
     ctx.transport.onJoinError(({ error, peerId }) => onJoinError(watch, error, peerId));
 
-    // Nobody answered in time: the desktop is offline (or the link was reset). The hello repeat keeps
-    // running, so a desktop that answers later still moves the page to connected.
-    globalThis.setTimeout(() => {
-        if (ctx.hostPeerId === null && remoteConnectionState() === 'connecting') setRemoteConnectionState('offline');
-    }, HOST_ANSWER_TIMEOUT_MS);
+    // Nobody answered in time: the desktop is offline (or the link was reset).
+    waitForDesktop(watch);
 
-    return { settlePendingForLostConnection: () => settlePendingForLostConnection(watch) };
+    return {
+        settlePendingForLostConnection: () => settlePendingForLostConnection(watch),
+        reconnect: (peerId) => reconnect(watch, peerId),
+    };
 };

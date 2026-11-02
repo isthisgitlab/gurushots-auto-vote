@@ -5,7 +5,7 @@
  * refused, and a `bye` drops the peer.
  */
 
-import { REMOTE_REFUSAL_PREFIX } from '../../core/remote/dispatch';
+import { REMOTE_SAY_HELLO_FIRST } from '../../core/remote/dispatch';
 import { parsePeerMessage, PROTOCOL_VERSION, restoreInvokeArgs } from '../../core/remote/protocol';
 
 import { MAX_REMOTE_PEERS } from './remoteHostCreate';
@@ -38,7 +38,10 @@ export const handleMessage = (ctx: HostContext, peerId: string, raw: unknown): v
             if (isNew) {
                 ctx.deps.logInfo(`Remote peer connected: ${clippedId(peerId)}`);
                 notifyCount(ctx);
-                ctx.deps.notify();
+                if (!ctx.notified.has(peerId)) {
+                    ctx.notified.add(peerId);
+                    ctx.deps.notify();
+                }
             }
             void sendSnapshot(ctx, peerId);
             return;
@@ -49,7 +52,7 @@ export const handleMessage = (ctx: HostContext, peerId: string, raw: unknown): v
                     t: 'result',
                     id: message.id,
                     ok: false,
-                    error: `${REMOTE_REFUSAL_PREFIX}: say hello first.`,
+                    error: REMOTE_SAY_HELLO_FIRST,
                 });
                 return;
             }

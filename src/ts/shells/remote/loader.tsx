@@ -19,6 +19,7 @@
 import { createTrysteroTransport, isConnectionFailureJoinError } from '../../core/remote/trystero';
 import { setRemoteConnectionState } from '../../core/remote/connectionState';
 import { HOST_ANSWER_TIMEOUT_MS, createHelloRepeater } from '../../core/remote/helloRepeat';
+import { watchPageLifecycle } from '../../core/remote/pageLifecycle';
 import { takePairingKey } from '../../core/remote/pairingKey';
 import {
     PAGE_VERSION,
@@ -62,7 +63,7 @@ void (async () => {
     installPhoneDisconnect();
     mountRemoteNotice();
     let done = false;
-    const transport = await createTrysteroTransport({ key });
+    const transport = await createTrysteroTransport({ key, role: 'phone' });
     // The loader only asks the desktop's version: `role: 'loader'` keeps it out of the desktop's phone count.
     const announce: HelloMessage = {
         t: 'hello',
@@ -73,7 +74,7 @@ void (async () => {
     };
     // The first hello can be lost on the relay path, so it repeats until the loader settles.
     const hello = createHelloRepeater({ transport, announce, active: () => !done });
-    const settleNotice = (state: 'offline' | 'network'): void => {
+    const settleNotice = (state: 'offline' | 'network' | 'old-browser'): void => {
         if (done) return;
         done = true;
         hello.stop();
@@ -126,7 +127,15 @@ void (async () => {
         hello.leave(peerId);
         if (isConnectionFailureJoinError(error) && !phones.has(peerId)) connectionFailure = true;
     });
-    globalThis.setTimeout(() => settleNotice(connectionFailure ? 'network' : 'offline'), HOST_ANSWER_TIMEOUT_MS);
+    // A page that goes away for good leaves the room, so the desktop does not wait on a ghost.
+    watchPageLifecycle(transport);
+    globalThis.setTimeout(() => {
+        // Nobody answered. A browser that cannot run the relay fallback is told to update — it only has the
+        // direct path, which is what most networks block. The loader's own wait ends before a join
+        // error is forwarded (~35 s), so `network` is rarely reached here; the versioned page's bridge reads it.
+        const relayRuns = transport.relayAvailable?.() ?? true;
+        settleNotice(!relayRuns ? 'old-browser' : connectionFailure ? 'network' : 'offline');
+    }, HOST_ANSWER_TIMEOUT_MS);
 })().catch(() => {
     setRemoteConnectionState('offline');
     mountRemoteNotice();

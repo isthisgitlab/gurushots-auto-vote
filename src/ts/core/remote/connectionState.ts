@@ -9,6 +9,8 @@
  * when the connection is lost. It carries no listeners — nothing re-renders on it.
  */
 
+import type { RemotePath } from './relays';
+
 export type RemoteConnectionState =
     /** joining the room, nothing heard from the desktop yet */
     | 'connecting'
@@ -16,8 +18,10 @@ export type RemoteConnectionState =
     | 'connected'
     /** the desktop is gone, or the link was reset */
     | 'offline'
-    /** peers saw each other but WebRTC could not connect on this network */
+    /** peers saw each other but WebRTC could not connect on this network, and the relays reached nobody */
     | 'network'
+    /** like `network`, but this browser has no `CompressionStream`, so the relay fallback could not even run */
+    | 'old-browser'
     /** the desktop runs an older app version than this page, and the site no longer carries its page */
     | 'update'
     /** the desktop runs a newer app version than this app carries a page for */
@@ -57,3 +61,13 @@ export const setRemoteHostPeerId = (peerId: string | null): void => {
 
 /** The peer id of the connected desktop, or null while no desktop is connected. */
 export const remoteHostPeerId = (): string | null => hostPeerId;
+
+let hostPath: RemotePath = 'direct';
+
+/** Which path the connected desktop is reached over. The peer bridge writes it just before it reads `connected`. */
+export const setRemoteHostPath = (path: RemotePath): void => {
+    hostPath = path;
+};
+
+/** The path the connected desktop is reached over (`direct` until a desktop has connected). */
+export const remoteHostPath = (): RemotePath => hostPath;

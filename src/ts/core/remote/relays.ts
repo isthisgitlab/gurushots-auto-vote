@@ -10,13 +10,18 @@
  * in-memory transport without real WebRTC.
  */
 
-/** The public Nostr relays the pairing signalling runs over, in priority order. */
+/**
+ * The public Nostr relays the pairing signalling and the relay fallback run over, in priority
+ * order. Each one accepts our anonymous ephemeral events up to `RELAY_EVENT_MAX_BYTES`
+ * (core/remote/relayCodec.ts) and delivers them to subscribers; a relay that drops ephemeral
+ * events (relay.snort.social), refuses unknown pubkeys (offchain.pub) or bans an IP after a few
+ * rate limits (relay.damus.io) cannot carry either.
+ */
 export const NOSTR_RELAY_URLS = [
     'wss://nos.lol',
     'wss://relay.primal.net',
-    'wss://relay.snort.social',
     'wss://nostr.mom',
-    'wss://offchain.pub',
+    'wss://nostr.oxtr.dev',
 ] as const;
 
 /** The STUN servers WebRTC contacts to learn each side's public address (CSP does not govern these). */
@@ -30,6 +35,9 @@ export const REMOTE_PAGES_PATH = '/remote/';
 
 /** Trystero's application id: rooms of other apps never collide with ours. */
 export const TRYSTERO_APP_ID = 'com.isthisgitlab.gurushotsautovote';
+
+/** The path a peer is reached over: a direct WebRTC connection, or the Nostr relay fallback. */
+export type RemotePath = 'direct' | 'relay';
 
 /**
  * One live peer connection. `message` is a protocol message (core/remote/protocol.ts) already
@@ -55,7 +63,17 @@ export type RemoteTransport = {
     onJoinError: (handler: (details: { error: string; peerId: string }) => void) => () => void;
     /** Leave the room and close every connection. */
     leave: () => Promise<void>;
+    /**
+     * Which path a joined peer is reached over (null for a peer that is not joined). Only the
+     * hybrid transport answers it; a transport without it is one direct path.
+     */
+    peerPath?: (peerId: string) => RemotePath | null;
+    /** Whether the relay fallback can run at all here (false in a browser without `CompressionStream`). Only the hybrid transport answers it. */
+    relayAvailable?: () => boolean;
 };
 
-/** Builds one transport over the room the pairing key names (the trystero adapter in production). */
-export type RemoteTransportFactory = (options: { key: string }) => Promise<RemoteTransport>;
+/**
+ * Builds one transport over the room the pairing key names (the trystero adapter in production).
+ * `role` is the side of the pairing the transport is for: the desktop host, or a phone page.
+ */
+export type RemoteTransportFactory = (options: { key: string; role: 'host' | 'phone' }) => Promise<RemoteTransport>;

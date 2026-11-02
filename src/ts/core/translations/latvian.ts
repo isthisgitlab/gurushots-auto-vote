@@ -1722,9 +1722,14 @@ export const app: LatvianApp = {
         'Datoram jābūt ieslēgtam un šim logam atvērtam; aizverot logu, apstājas gan balsošana, gan attālinātā piekļuve.',
     remoteNote3: 'Kamēr tā ir ieslēgta, izmanto saiti Android lietotnes pašas balsošanas vietā.',
     remoteConnectedCount: 'Attālināti savienoti: {count}',
+    remoteConnectedCountRelay: 'Attālināti savienoti: {count} ({relay} caur retranslatoriem)',
     remoteConnectedNotice: 'Telefons ir savienots, lai vadītu šo lietotni.',
     remoteConnecting: 'Izveido savienojumu ar tavu datoru…',
     remoteConnected: 'Savienots',
+    remoteConnectedRelay: 'Savienots (caur retranslatoriem — lēnāk)',
+    remoteOldBrowser:
+        'Neizdevās sasniegt tavu datoru. Ja lietotne tajā ir atvērta, šis pārlūks var būt pārāk vecs attālinātai piekļuvei šajā tīklā — atjaunini to.',
+    remoteOldBrowserShort: 'Pārlūks par vecu',
     remoteOfflineShort: 'Bez savienojuma vai atiestatīts',
     remoteOfflineDetail:
         'Tavs dators ir bez savienojuma, vai arī šī saite tika atiestatīta. Ja lietotne datorā ir atvērta, skenē tās QR kodu vēlreiz.',

@@ -6,8 +6,8 @@
  */
 
 import { PAGE_VERSION, PROTOCOL_VERSION, parsePeerMessage } from '../../../core/remote/protocol';
-import { REMOTE_REFUSAL_PREFIX } from '../../../core/remote/dispatch';
-import { setRemoteConnectionState, setRemoteHostPeerId } from '../../../core/remote/connectionState';
+import { REMOTE_REFUSAL_PREFIX, REMOTE_SAY_HELLO_FIRST } from '../../../core/remote/dispatch';
+import { setRemoteConnectionState, setRemoteHostPath, setRemoteHostPeerId } from '../../../core/remote/connectionState';
 import { rendererTranslator } from '../../../core/translations/renderer';
 
 import type { HelloRepeater } from '../../../core/remote/helloRepeat';
@@ -24,6 +24,8 @@ export type MessageWatch = {
     readonly settlePendingForLostConnection: () => void;
     /** The absolute loader address a version mismatch sends the tab to. */
     readonly loaderTarget: string;
+    /** Settles what is in flight and asks the desktop at `peerId` to take this phone back — owned by connection.ts. */
+    readonly reconnect: (peerId: string) => void;
 };
 
 const dispatchEvent = (ctx: PeerBridgeContext, channel: string, payload: unknown): void => {
@@ -63,6 +65,7 @@ const handleHello = (message: HelloMessage, peerId: string, watch: MessageWatch)
     if (ctx.hostPeerId === null) {
         ctx.hostPeerId = peerId;
         setRemoteHostPeerId(peerId);
+        setRemoteHostPath(ctx.transport.peerPath?.(peerId) ?? 'direct');
         ctx.everConnected = true;
         ctx.waiting.clear();
         ctx.phones.clear();
@@ -76,6 +79,13 @@ const handleHello = (message: HelloMessage, peerId: string, watch: MessageWatch)
 const handleResult = (message: ResultMessage, peerId: string, watch: MessageWatch): void => {
     const { ctx, pipeline } = watch;
     if (peerId !== ctx.hostPeerId) return;
+    if (!message.ok && message.error === REMOTE_SAY_HELLO_FIRST) {
+        // The desktop dropped this phone without the phone knowing (its bye was lost): the connection was lost, so
+        // every invoke in flight is settled as for a lost connection — a spend may have run on the desktop
+        // before the drop, and is unclear — and the phone says hello again to be taken back.
+        watch.reconnect(peerId);
+        return;
+    }
     const invoke = ctx.pending.get(message.id);
     if (!invoke) return;
     ctx.pending.delete(message.id);

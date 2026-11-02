@@ -34,6 +34,9 @@ export const subscribeRemoteConnectionCount = (listener: () => void): (() => voi
 /** The connected-phone count the badge shows; 0 when no host runs. */
 export const remoteConnectionCount = (): number => (activeHost === null ? 0 : activeHost.connectedCount());
 
+/** How many of the connected phones are reached only over the relay fallback; 0 when no host runs. */
+export const remoteRelayCount = (): number => (activeHost === null ? 0 : activeHost.relayCount());
+
 /** Relays the controller's state to the paired phones through the running host, if any. */
 export const pushAutovoteStateToActiveHost = (state: AutovoteState): void => {
     activeHost?.pushAutovoteState(state);

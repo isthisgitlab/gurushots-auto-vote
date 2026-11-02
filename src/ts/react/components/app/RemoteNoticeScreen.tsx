@@ -20,17 +20,19 @@ export function RemoteNoticeScreen() {
             ? 'app.remoteNoKey'
             : state === 'network'
               ? 'app.remoteNetwork'
-              : state === 'update'
-                ? 'app.remoteUpdateNeeded'
-                : state === 'update-this'
-                  ? 'app.remoteUpdateThis'
-                  : state === 'unpublished'
-                    ? 'app.remotePageUnpublished'
-                    : state === 'full'
-                      ? 'app.remoteFull'
-                      : state === 'offline'
-                        ? 'app.remoteOfflineDetail'
-                        : 'app.remoteConnecting';
+              : state === 'old-browser'
+                ? 'app.remoteOldBrowser'
+                : state === 'update'
+                  ? 'app.remoteUpdateNeeded'
+                  : state === 'update-this'
+                    ? 'app.remoteUpdateThis'
+                    : state === 'unpublished'
+                      ? 'app.remotePageUnpublished'
+                      : state === 'full'
+                        ? 'app.remoteFull'
+                        : state === 'offline'
+                          ? 'app.remoteOfflineDetail'
+                          : 'app.remoteConnecting';
     return (
         <main className="min-h-screen flex items-center justify-center p-6">
             <div className="alert alert-warning text-sm" role="status">

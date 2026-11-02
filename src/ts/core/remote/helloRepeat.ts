@@ -21,6 +21,8 @@ export const HOST_ANSWER_TIMEOUT_MS = 15_000;
 export type HelloRepeater = {
     /** A peer joined: announce to it now and, while the wait is on, again every HELLO_RETRY_MS. */
     join: (peerId: string) => void;
+    /** Announces to one peer once, with no repeat and no wait for an answer (the desktop forgot this phone). */
+    announceOnce: (peerId: string) => void;
     /** A peer left: it is no longer announced to. */
     leave: (peerId: string) => void;
     /** Forgets every peer still waiting for an announce (the timer is left to `stop`). */
@@ -64,6 +66,7 @@ export const createHelloRepeater = (options: {
                 for (const waiting of unannounced) announceTo(waiting);
             }, HELLO_RETRY_MS);
         },
+        announceOnce: announceTo,
         leave: (peerId) => {
             unannounced.delete(peerId);
         },

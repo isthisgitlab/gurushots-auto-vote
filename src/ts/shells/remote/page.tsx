@@ -51,7 +51,7 @@ void (async () => {
     if (phoneRemoteMode() === null) {
         globalThis.history.replaceState(null, '', loaderAddressBarUrl(key));
     }
-    const transport = await createTrysteroTransport({ key });
+    const transport = await createTrysteroTransport({ key, role: 'phone' });
     installPeerBridge(transport, loaderTarget);
     // The remote controller rides the same transport; AutovoteProvider builds it from the
     // platform kind the bridge just marked.

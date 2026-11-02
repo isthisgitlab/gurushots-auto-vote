@@ -20,6 +20,58 @@ import type { RemoteTransport } from '../../src/ts/core/remote/relays';
 describe('Navbar', () => {
     afterEach(resetPlatformKind);
 
+    test('the desktop badge says how many connected phones are reached over the relays', async () => {
+        const { act } = await import('@testing-library/preact');
+        const { createRemoteHost, setActiveRemoteHost } = await import('../../src/ts/react/api/remoteHost');
+        const { TransportStub } = await import('../helpers/remoteTransport');
+        const { initialState } = await import('../../src/ts/core/autovote/state');
+
+        const transport = new TransportStub('badge-host');
+        const relayPeers = new Set(['relayed']);
+        Object.assign(transport, { peerPath: (peerId: string) => (relayPeers.has(peerId) ? 'relay' : 'direct') });
+        const host = createRemoteHost({
+            createTransport: async () => transport,
+            invoke: async () => ({ app: {} }),
+            getAutovoteState: () => initialState,
+            runAutovoteCommand: (): Promise<void> => Promise.resolve(),
+            onForwardedEvent: () => (): void => undefined,
+            onLogMessage: () => () => undefined,
+            notify: () => undefined,
+            logInfo: () => undefined,
+            version: '1.14.2',
+        });
+        await host.start('k');
+        setActiveRemoteHost(host);
+        const view = render(
+            <Navbar isMock={false} onLogsClick={() => {}} onSettingsClick={() => {}} onLogout={() => {}} />,
+        );
+        const hello = { t: 'hello', version: '1.14.2', protocolVersion: PROTOCOL_VERSION, host: false };
+        const settle = async (): Promise<void> => {
+            await act(async () => {
+                for (let i = 0; i < 10; i++) await Promise.resolve();
+            });
+        };
+
+        act(() => {
+            transport.emitJoin('direct-phone');
+            transport.receiveFromPeer(hello, 'direct-phone');
+        });
+        await settle();
+        expect(screen.getByText('app.remoteConnectedCount')).toBeDefined(); // nobody on the relays yet
+
+        act(() => {
+            transport.emitJoin('relayed');
+            transport.receiveFromPeer(hello, 'relayed');
+        });
+        await settle();
+        expect(screen.getByText('app.remoteConnectedCountRelay')).toBeDefined();
+        expect(screen.queryByText('app.remoteConnectedCount')).toBeNull();
+
+        await host.stop();
+        setActiveRemoteHost(null);
+        view.unmount();
+    });
+
     test('the desktop badge appears only while a phone is connected', async () => {
         const { act } = await import('@testing-library/preact');
         const { createRemoteHost, setActiveRemoteHost } = await import('../../src/ts/react/api/remoteHost');

@@ -8,12 +8,14 @@
  * classification) is plain code that tests read and call.
  *
  * Loaded only on the `electron` and `remote` kinds (the desktop host and the phone page), so
- * the web and capacitor bundles externalize it (scripts/build-react.ts) and never grow by it.
+ * the web and capacitor bundles externalize the library and the relay modules this file loads at
+ * call time (scripts/build-react/entries.ts), so they never grow by them.
  */
 
 import { NOSTR_RELAY_URLS, STUN_SERVER_URLS, TRYSTERO_APP_ID } from './relays';
 
-import type { RemoteTransportFactory } from './relays';
+import type { RemoteTransport, RemoteTransportFactory } from './relays';
+import type { SocketLike } from './relaySockets';
 import type { JoinError, JsonValue, Room } from 'trystero';
 
 /** Trystero's one protocol namespace: every remote message rides it. */
@@ -46,27 +48,20 @@ export const roomIdForKey = async (key: string): Promise<string> => {
 export const isConnectionFailureJoinError = (error: string): boolean =>
     error.startsWith('could not connect to peer') && error.includes('after exchanging SDP');
 
-/**
- * Builds the transport: joins the room and wires its callbacks to the fan-out listeners.
- */
-export const createTrysteroTransport: RemoteTransportFactory =
+/** Joins the WebRTC room (signalled over the Nostr relays) and exposes it as the direct path of the transport. */
+const joinDirect =
     /* istanbul ignore next -- a real join needs WebRTC, a WebSocket pool and ICE negotiation, which cannot run under Jest */
-    async (options) => {
-        // Loaded at call time so a module import of this file never loads the library (the tests
-        // import the classifier; the web and capacitor bundles carry this file but never call it).
-        const { joinRoom } = (await import('trystero')) as typeof import('trystero');
-        const roomId = await roomIdForKey(options.key);
-
+    (trystero: typeof import('trystero'), key: string, roomId: string): RemoteTransport => {
         const messageHandlers = new Set<(peerId: string, message: unknown) => void>();
         const joinHandlers = new Set<(peerId: string) => void>();
         const leaveHandlers = new Set<(peerId: string) => void>();
         const joinErrorHandlers = new Set<(details: { error: string; peerId: string }) => void>();
 
-        const room: Room = joinRoom(
+        const room: Room = trystero.joinRoom(
             {
                 appId: TRYSTERO_APP_ID,
                 relayConfig: { urls: [...NOSTR_RELAY_URLS] },
-                password: options.key,
+                password: key,
                 rtcConfig: { iceServers: RTC_ICE_SERVERS },
             },
             roomId,
@@ -111,4 +106,55 @@ export const createTrysteroTransport: RemoteTransportFactory =
             },
             leave: () => room.leave(),
         };
+    };
+
+/**
+ * The relay fallback over the pairing key: our own WebSockets to the relays, signed with
+ * trystero's `createEvent` and `subscribe` and carrying trystero's `selfId`, so a peer has the
+ * same id on both paths. Null where the browser lacks `CompressionStream` (iOS Safari before
+ * 16.4): only the relay path is off then.
+ */
+const buildRelayLink =
+    /* istanbul ignore next -- opens real WebSockets to public relays, which cannot run under Jest */
+    async (
+        trystero: typeof import('trystero'),
+        key: string,
+        roomId: string,
+        role: 'host' | 'phone',
+    ): Promise<RemoteTransport | null> => {
+        if (typeof CompressionStream === 'undefined') return null;
+        const [{ createRelayCodec }, { createRelayLink, relayTopic }, { createRelaySockets, listeningLimit }] =
+            await Promise.all([import('./relayCodec'), import('./relayLink'), import('./relaySockets')]);
+        return createRelayLink({
+            io: createRelaySockets({
+                urls: NOSTR_RELAY_URLS,
+                createSocket: (url) => new WebSocket(url) as SocketLike,
+                createEvent: trystero.createEvent,
+                subscribeFrame: trystero.subscribe,
+                // The host listens on every relay; a phone on a few, to spare mobile data.
+                maxListening: listeningLimit(role, NOSTR_RELAY_URLS.length),
+            }),
+            codec: createRelayCodec(key),
+            topic: await relayTopic(roomId),
+            selfId: trystero.selfId,
+            role,
+        });
+    };
+
+/**
+ * Builds the transport: the WebRTC room and the relay link behind one hybrid transport
+ * (core/remote/hybridTransport.ts).
+ */
+export const createTrysteroTransport: RemoteTransportFactory =
+    /* istanbul ignore next -- a real join needs WebRTC, a WebSocket pool and ICE negotiation, which cannot run under Jest */
+    async (options) => {
+        // Loaded at call time so a module import of this file never loads the library (the tests
+        // import the classifier; the web and capacitor bundles carry this file but never call it).
+        const trystero = (await import('trystero')) as typeof import('trystero');
+        const roomId = await roomIdForKey(options.key);
+        const { createHybridTransport } = await import('./hybridTransport');
+        return createHybridTransport({
+            direct: joinDirect(trystero, options.key, roomId),
+            relay: await buildRelayLink(trystero, options.key, roomId, options.role),
+        });
     };

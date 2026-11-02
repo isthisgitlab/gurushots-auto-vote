@@ -962,7 +962,8 @@ repeated six times is one that gets forgotten at one of them.
   script. The Electron pages (`login.html`, `logs.html`) and the web shell page use
   `connect-src 'self'`: the renderer makes no fetch/XHR to a remote host (all network calls run in the
   main process). `app.html` — the main window, where the remote-access host runs — adds the pinned Nostr
-  relay hosts to `connect-src`, and the remote documents (`remote.html`, `remote-loader.html`) carry a strict
+  relay hosts (`wss://nos.lol`, `wss://relay.primal.net`, `wss://nostr.mom`,
+  `wss://nostr.oxtr.dev`) to `connect-src`, and the remote documents (`remote.html`, `remote-loader.html`) carry a strict
   policy whose `connect-src` is exactly those relays plus `'self'` (the loader's `HEAD` probe for the version's
   page); a test pins both lists to the shared constant
   (`core/remote/relays.ts`). The Android pages (the Capacitor page and `headless.html`) run network code in the WebView,
@@ -988,8 +989,69 @@ served while at least one phone wants it.
 - **The relays see encrypted signalling and both IP addresses.** WebRTC also contacts STUN servers to learn each
   side's public address (`stun:stun.cloudflare.com:3478`, `stun:stun.l.google.com:19302`, pinned through the
   join's `rtcConfig.iceServers`; CSP does not govern that), and the two peers see each other's IP. There is no
-  TURN relay, so some carrier networks cannot establish a connection at all — the phone shows "try Wi-Fi" for
-  that case and the offline-or-reset text for the others.
+  TURN relay, so some carrier networks cannot establish a direct connection at all — the relay fallback below
+  carries the same messages then. The versioned page's badge shows "try Wi-Fi" only when neither path reaches the
+  desktop: trystero reports the SDP failure after about 23 s and the hybrid transport holds it back 12 s more
+  while the relays may still reach the peer, so the text appears after about 35 s (and "your browser is too old"
+  instead when the browser has no `CompressionStream`, so only the direct path exists). The loader gives up after
+  15 s with the offline-or-reset text, or, in such a browser, "too old"; the loader's own "try Wi-Fi" is reached
+  only when the failure is reported inside those 15 s.
+- **The relay fallback** (`core/remote/relayLink.ts` and its siblings, behind `core/remote/hybridTransport.ts`).
+  When WebRTC cannot connect, the same protocol messages travel as Nostr ephemeral events on a topic of their own
+  (SHA-256 of the app id, `relay` and the room id), over WebSockets the link opens itself
+  (`relaySockets.ts`, apart from trystero's). A message is gzipped once, split into parts and each part sealed with
+  AES-GCM under a key HKDF-derived from the pairing key (fresh random IV per part); an event stays under
+  `RELAY_EVENT_MAX_BYTES` (48 000 bytes, pinned by a live publish to every listed relay). WebRTC stays preferred: a
+  peer that joins over WebRTC within a 3 s grace period of its relay join is `direct` (a WebRTC join error ends
+  the wait at once), otherwise `relay`, and keeps that path until it leaves. The desktop host listens on every
+  relay; a phone listens on up to 3, and a phone that knows no desktop yet announces itself on each
+  relay that opens, so the first presence reaches a relay the host listens on. What this adds to what the relays can see:
+    - They now also carry the app's encrypted data. They see its timing and approximate sizes, keep the
+      events at least briefly, and any relay can record them.
+    - They see the same pubkey for the signalling and the data (trystero's one key), so they can link the two.
+    - Anyone who records the traffic and later gets the pairing key can decrypt it: there is no forward secrecy
+      on this path. **Reset pairing** ends that for later traffic.
+    - Every paired phone holds the same key, so each is equally trusted and can pose as another.
+    - Junk sent to the topic can delay the path: the link decrypts at most 50 events a second and drops the rest
+      unread, so junk can starve real frames. Accepted for a fallback path.
+    - A replayed presence can make a short-lived ghost peer (gone after 25 s of silence, and a presence of another
+      epoch replaces a live peer only if it is newer than anything accepted from it); it has no data effect.
+    - What a replayed event can and cannot do. Whoever records events cannot read them, but can hand one back
+      while it is under 300 s old. A replay cannot cross a restart of the receiver (data and acks are bound to the
+      receiver's random epoch) or of the sender (a presence or frame of another epoch replaces a live peer only if
+      it is newer than anything accepted from it), cannot be delivered twice (replays are remembered for 600 s: per
+      finished data message `(sender, message)` — not per part, so a message whose partial was evicted still
+      completes when its sender sends it again — and per part for presence, ack and bye frames; a replay of a
+      finished message is only acknowledged again), and cannot retire a live stream. Data streams are ordered per
+      `(sender, stream)`: a sender draws a fresh stream id when it starts sending to a peer and again after it
+      forgets the peer, and the receiver keeps each stream's inbox across the peer's removal and re-admission, so a
+      one-sided drop causes no stall and no reset. A stream id that is new to the receiver replaces the sender's
+      live stream only if it comes from the epoch the sender was admitted with and its frame is newer than
+      anything accepted on the live stream — a sender draws a new stream only after its older frames, so a replay
+      of an older stream always carries an older timestamp. Any other new stream is born retired, and a frame of a
+      retired stream is ignored and not acknowledged, so its sender gives up through its normal resend path.
+      The rule trusts the sender's own timestamps, so it has a known limit. If a sender's clock steps back by more
+      than the time since its last accepted frame (a manual change, a resync), its next stream carries a timestamp
+      older than the live stream's newest and is born retired: nothing of it is delivered or acknowledged, and the
+      sender gives up after its resends, sends a `bye` and tries again on yet another stream. This heals once the
+      sender's clock has caught up with the live stream's newest timestamp, which takes at most as long as the step
+      itself, and a step of more than five minutes cannot happen on this path at all, because a frame more than
+      300 s from the receiver's clock is refused whatever its stream (the relay path needs clocks within five
+      minutes of each other). Replacing an idle live stream instead would shorten that wait, but would let a
+      replayed frame of an older stream retire a live one again, so the link does not. What a replay can still do:
+      make a short-lived ghost peer, or deliver a frame of the live stream that had not arrived yet (which the
+      sender would have delivered anyway). The table is bounded, not exact: at most 32 streams a sender, dropped
+      lazily after 600 s unused.
+    - The phone listens on up to 3 relays, on any network, so it may download each message up to 3 times, one copy
+      per relay; the app processes it once. The sockets drop a copy by the SHA-256 of its content before anything
+      is decrypted (never by the relay's event id, which a relay could stamp on a forged event to block the real
+      ones), remembering at most 4096 contents for 60 s and computing at most 64 digests at a time, and drop the
+      link's own echoes by pubkey. The desktop listens on every relay.
+    - Both paths sign with one pubkey from one IP, so a relay's rate limit or block by pubkey hits both; the
+      link's send budget (8 events a second) keeps that unlikely. A relay that answers one of the link's events
+      `OK false` with a `rate-limited:`, `blocked:`, `banned:`, `restricted:`, `pow:` or `auth-required:` reason
+      gets no more of them for 60 s, doubling on each new refusal up to 15 min (an `OK true` resets it); its
+      socket and subscription stay.
 - **The phone page is served from this project's GitHub Pages and reads the key from the URL fragment.** A
   compromised Pages deploy (or a compromised `pages.yml` run) could ship JavaScript that sends paired keys
   elsewhere. Mitigation: Pages publishes only after a green release (`workflow_dispatch` from `build.yml`), the

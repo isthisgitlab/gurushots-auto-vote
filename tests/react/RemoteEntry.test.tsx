@@ -46,9 +46,11 @@ describe('Remote entry', () => {
             installed: jest.fn(),
             installDisconnect: jest.fn(),
             mounted: [] as unknown[],
+            created: [] as unknown[],
         };
         jest.doMock(`${SRC}/core/remote/trystero`, () => ({
-            createTrysteroTransport: jest.fn(async () => {
+            createTrysteroTransport: jest.fn(async (options: unknown) => {
+                m.created.push(options);
                 if (transport instanceof Error) throw transport;
                 return m.transport;
             }),
@@ -112,6 +114,8 @@ describe('Remote entry', () => {
     test('with a key it joins the room, installs the bridge and mounts the app over the transport', async () => {
         const m = load({ marker: 'remote-transport' });
         await flush();
+        // The transport is built for the phone side of the pairing.
+        expect(m.created).toEqual([{ key: expect.any(String), role: 'phone' }]);
         // The second argument is the loader target the bridge goes to on a version mismatch.
         expect(m.installed).toHaveBeenCalledWith(m.transport, expect.any(String));
         expect(m.mounted).toEqual([m.transport]);

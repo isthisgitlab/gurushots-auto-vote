@@ -100,6 +100,18 @@ describe('createHelloRepeater', () => {
         expect(sent).toEqual([{ message: announce, target: 'a' }]);
     });
 
+    test('announceOnce says hello to one peer, with no repeat and no waiting set; a lost send is swallowed', async () => {
+        const repeater = make();
+        repeater.announceOnce('p1');
+        expect(sent).toEqual([{ message: announce, target: 'p1' }]);
+        jest.advanceTimersByTime(HELLO_RETRY_MS * 3);
+        expect(sent).toHaveLength(1);
+        sendFails = true;
+        repeater.announceOnce('p1');
+        await Promise.resolve();
+        expect(sent).toHaveLength(2);
+    });
+
     test('a send the relay lost is swallowed, and the repeat goes on', async () => {
         sendFails = true;
         const hello = make();

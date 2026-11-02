@@ -190,6 +190,72 @@ describe('the /remote/ loader', () => {
         expect(document.getElementById('root')?.textContent).toContain('try Wi-Fi');
     });
 
+    test('a browser that cannot run the relay fallback is told to update, not to try Wi-Fi', async () => {
+        loadLoader();
+        await flush();
+        const transport = transportStub.current as TransportStub;
+        Object.assign(transport, { relayAvailable: () => false });
+        transport.emitJoinError('could not connect to peer 3b6a after exchanging SDP', 'host');
+        await jest.advanceTimersByTimeAsync(HOST_ANSWER_TIMEOUT_MS);
+        expect(document.getElementById('root')?.textContent).toContain('too old');
+        expect(document.getElementById('root')?.textContent).not.toContain('try Wi-Fi');
+    });
+
+    test('a browser without the relay fallback that heard nobody is told to update when the wait runs out, not that the computer is offline', async () => {
+        loadLoader();
+        await flush();
+        const transport = transportStub.current as TransportStub;
+        Object.assign(transport, { relayAvailable: () => false });
+        transport.emitJoin('host');
+        await jest.advanceTimersByTimeAsync(HOST_ANSWER_TIMEOUT_MS - 1);
+        expect(document.getElementById('root')?.textContent).toContain('Connecting');
+        await jest.advanceTimersByTimeAsync(1);
+        expect(document.getElementById('root')?.textContent).toContain('too old');
+        expect(document.getElementById('root')?.textContent).not.toContain('offline');
+    });
+
+    test('where the relay fallback runs, nobody answering still says offline', async () => {
+        loadLoader();
+        await flush();
+        const transport = transportStub.current as TransportStub;
+        Object.assign(transport, { relayAvailable: () => true });
+        await jest.advanceTimersByTimeAsync(HOST_ANSWER_TIMEOUT_MS);
+        expect(document.getElementById('root')?.textContent).not.toContain('too old');
+        expect(transport.left).toBe(true);
+    });
+
+    test('where the relay fallback runs the same failure still says try Wi-Fi', async () => {
+        loadLoader();
+        await flush();
+        const transport = transportStub.current as TransportStub;
+        Object.assign(transport, { relayAvailable: () => true });
+        transport.emitJoinError('could not connect to peer 3b6a after exchanging SDP', 'host');
+        await jest.advanceTimersByTimeAsync(HOST_ANSWER_TIMEOUT_MS);
+        expect(document.getElementById('root')?.textContent).toContain('try Wi-Fi');
+    });
+
+    test('asks for the transport as a phone, leaves it when the page goes away for good, and keeps it when the page is only cached', async () => {
+        const trystero =
+            require('../../src/ts/core/remote/trystero') as typeof import('../../src/ts/core/remote/trystero');
+        loadLoader();
+        await flush();
+        const transport = transportStub.current as TransportStub;
+        expect(jest.mocked(trystero.createTrysteroTransport)).toHaveBeenLastCalledWith({
+            key: 'the-key',
+            role: 'phone',
+        });
+        const pagehide = (persisted: boolean): void => {
+            const event = new Event('pagehide');
+            Object.assign(event, { persisted });
+            window.dispatchEvent(event);
+        };
+        window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true })); // a restore changes nothing here
+        pagehide(true);
+        expect(transport.left).toBe(false);
+        pagehide(false);
+        expect(transport.left).toBe(true);
+    });
+
     test('a dropped first hello is repeated, and the second one gets the answer', async () => {
         // The first announce vanishes on the relay path: the send is recorded and rejects quietly.
         const isolated = new TransportStub('loader');

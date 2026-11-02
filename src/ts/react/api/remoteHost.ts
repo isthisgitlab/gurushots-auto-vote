@@ -23,6 +23,7 @@ export type { RemoteHostDeps } from './remoteHostCreate';
 export {
     pushAutovoteStateToActiveHost,
     remoteConnectionCount,
+    remoteRelayCount,
     setActiveRemoteHost,
     subscribeRemoteConnectionCount,
 } from './remoteHostBadge';

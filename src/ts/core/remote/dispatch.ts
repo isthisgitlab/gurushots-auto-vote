@@ -25,6 +25,9 @@ export type RemoteDispatchResult = { kind: 'refused'; error: string } | { kind: 
 /** The prefix every remote refusal carries, so the phone's UI can tell it from a handler error. */
 export const REMOTE_REFUSAL_PREFIX = 'Refused remotely';
 
+/** What the host answers an invoke from a phone it has no hello from; the phone then says hello again. */
+export const REMOTE_SAY_HELLO_FIRST = `${REMOTE_REFUSAL_PREFIX}: say hello first.`;
+
 /** The answer of `get-environment-info` with the user-data path (it holds the OS username) removed. */
 export const withoutUserDataPath = (result: unknown): unknown => {
     if (result === null || typeof result !== 'object' || Array.isArray(result)) return result;

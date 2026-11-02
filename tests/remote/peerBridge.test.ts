@@ -14,11 +14,14 @@ import {
     REMOTE_RESULT_TOO_LARGE,
     REMOTE_RESULT_UNSENDABLE,
 } from '../../src/ts/core/remote/protocol';
+import { REMOTE_SAY_HELLO_FIRST } from '../../src/ts/core/remote/dispatch';
 import { TransportStub } from '../helpers/remoteTransport';
 import {
     remoteConnectionState,
+    remoteHostPath,
     remoteHostPeerId,
     setRemoteConnectionState,
+    setRemoteHostPath,
     setRemoteHostPeerId,
 } from '../../src/ts/core/remote/connectionState';
 
@@ -27,6 +30,28 @@ const fellowHello = { t: 'hello', version: PAGE_VERSION, protocolVersion: PROTOC
 
 // The page hands the bridge the loader it must go to on a version mismatch; the harness gives it one fixed target.
 const LOADER_TARGET = 'https://site.test/remote/index.html#k=the-key';
+
+// The bridge listens for the page lifecycle; the node test environment has no window, so a stub takes
+// the listeners and the tests fire them.
+type PageEvent = { persisted: boolean };
+let pageListeners: Map<string, Array<(event: PageEvent) => void>>;
+const firePage = (type: 'pagehide' | 'pageshow', persisted: boolean): void => {
+    for (const handler of pageListeners.get(type) ?? []) handler({ persisted });
+};
+beforeEach(() => {
+    pageListeners = new Map();
+    Object.defineProperty(globalThis, 'addEventListener', {
+        configurable: true,
+        writable: true,
+        value: (type: string, handler: (event: PageEvent) => void) => {
+            pageListeners.set(type, [...(pageListeners.get(type) ?? []), handler]);
+        },
+    });
+});
+afterEach(() => {
+    delete (globalThis as { addEventListener?: unknown }).addEventListener;
+    setRemoteHostPath('direct');
+});
 
 const flushAsync = async (): Promise<void> => {
     for (let i = 0; i < 20; i++) await Promise.resolve();
@@ -108,11 +133,91 @@ describe('installPeerBridge (the phone bridge)', () => {
         expect(answer.error).toContain('before retrying');
     });
 
+    test('a lost bye: the desktop answering "say hello first" settles a spend in flight as unclear, and asks to be taken back', async () => {
+        connect();
+        const spend = api.keyUnlockBoost('c1', true) as Promise<unknown>;
+        const other = api.getSettings() as Promise<unknown>;
+        const spendSent = phone.sent.find(
+            ({ message }) => (message as { channel?: string }).channel === 'key-unlock-boost',
+        );
+        const spendId = (spendSent?.message as { id: number } | undefined)?.id;
+        phone.sent.length = 0;
+        // The host forgot this phone (its bye was lost) and refuses the spend with the hello-first text.
+        phone.receiveFromPeer({ t: 'result', id: spendId, ok: false, error: REMOTE_SAY_HELLO_FIRST }, 'host');
+        const answer = (await spend) as { success: boolean; error: string };
+        expect(answer.success).toBe(false);
+        expect(answer.error).toContain('before retrying'); // unclear, not "This is done on the computer"
+        await expect(other).rejects.toThrow(/dropped/);
+        expect(remoteConnectionState()).toBe('connecting');
+        // The phone asks to be taken back, and the hello repeats until the desktop answers.
+        expect(
+            phone.sent.filter(({ message }) => (message as { t: string }).t === 'hello').map((s) => s.target),
+        ).toEqual(['host']);
+        jest.advanceTimersByTime(HELLO_RETRY_MS);
+        await Promise.resolve();
+        expect(phone.sent.filter(({ message }) => (message as { t: string }).t === 'hello')).toHaveLength(2);
+        phone.receiveFromPeer(hostHello, 'host');
+        expect(remoteConnectionState()).toBe('connected');
+        jest.advanceTimersByTime(HOST_ANSWER_TIMEOUT_MS * 2);
+        expect(remoteConnectionState()).toBe('connected');
+    });
+
+    test('a normal refusal settles only its own invoke: the others stay pending and the page stays connected', async () => {
+        connect();
+        const refused = api.getSettings() as Promise<unknown>;
+        const waiting = api.getSettings() as Promise<unknown>;
+        const settled = jest.fn();
+        void waiting.then(settled, settled);
+        const ids = phone.sent
+            .filter(({ message }) => (message as { t: string }).t === 'invoke')
+            .map(({ message }) => (message as { id: number }).id);
+        phone.sent.length = 0;
+        phone.receiveFromPeer({ t: 'result', id: ids[0], ok: false, error: 'Refused remotely: nope.' }, 'host');
+        await expect(refused).resolves.toMatchObject({ success: false });
+        await flushAsync();
+        expect(settled).not.toHaveBeenCalled();
+        expect(remoteConnectionState()).toBe('connected');
+        // Nothing else happens: no hello is sent again, and no reconnect wait starts.
+        expect(phone.sent).toEqual([]);
+        jest.advanceTimersByTime(HELLO_RETRY_MS);
+        await flushAsync();
+        expect(phone.sent).toEqual([]);
+    });
+
     test('a non-spend invoke lost on disconnect reports a failure', async () => {
         connect();
         const pending = api.getSettings() as Promise<unknown>;
         phone.emitLeave('host');
         await expect(pending).rejects.toThrow(/dropped/);
+        // A leave is not the end: a tab in the background can be dropped and taken back. It reads connecting
+        // until the wait runs out.
+        expect(remoteConnectionState()).toBe('connecting');
+        jest.advanceTimersByTime(HOST_ANSWER_TIMEOUT_MS);
+        expect(remoteConnectionState()).toBe('offline');
+    });
+
+    test('a desktop that leaves and returns within the wait reads connecting and then connected, never offline', async () => {
+        connect();
+        phone.emitLeave('host');
+        expect(remoteConnectionState()).toBe('connecting');
+        jest.advanceTimersByTime(HOST_ANSWER_TIMEOUT_MS - 1_000);
+        expect(remoteConnectionState()).toBe('connecting');
+        phone.emitJoin('host');
+        phone.receiveFromPeer(hostHello, 'host');
+        expect(remoteConnectionState()).toBe('connected');
+        jest.advanceTimersByTime(HOST_ANSWER_TIMEOUT_MS * 2);
+        expect(remoteConnectionState()).toBe('connected');
+    });
+
+    test('a second leave restarts the wait rather than stacking another', () => {
+        connect();
+        phone.emitLeave('host');
+        jest.advanceTimersByTime(HOST_ANSWER_TIMEOUT_MS - 1_000);
+        phone.emitJoin('host');
+        phone.emitLeave('host');
+        jest.advanceTimersByTime(HOST_ANSWER_TIMEOUT_MS - 1_000);
+        expect(remoteConnectionState()).toBe('connecting');
+        jest.advanceTimersByTime(1_000);
         expect(remoteConnectionState()).toBe('offline');
     });
 
@@ -563,14 +668,18 @@ describe('installPeerBridge: which peer counts', () => {
         phone.receiveFromPeer(hostHello, 'host');
         expect(remoteConnectionState()).toBe('connected');
 
-        // And once connected, the desktop's own leave is what ends it.
+        // And once connected, the desktop's own leave is what ends it (after the wait for a return).
         phone.emitLeave('host');
+        expect(remoteConnectionState()).toBe('connecting');
+        jest.advanceTimersByTime(HOST_ANSWER_TIMEOUT_MS);
         expect(remoteConnectionState()).toBe('offline');
     });
 
-    test('a leave before the desktop answered, with nobody left, reads offline', () => {
+    test('a leave before the desktop answered, with nobody left, waits and then reads offline', () => {
         phone.emitJoin('host');
         phone.emitLeave('host');
+        expect(remoteConnectionState()).toBe('connecting');
+        jest.advanceTimersByTime(HOST_ANSWER_TIMEOUT_MS);
         expect(remoteConnectionState()).toBe('offline');
     });
 
@@ -786,5 +895,90 @@ describe('installPeerBridge: which peer counts', () => {
         for (const channel of ['log-debug', 'log-warning', 'log-error', 'log-api']) {
             expect(LOCAL_CHANNELS.has(channel)).toBe(true);
         }
+    });
+});
+
+describe('installPeerBridge: the relay path, hello again and the page lifecycle', () => {
+    let phone: TransportStub;
+    const SDP_FAILURE = 'could not connect to peer abc after exchanging SDP; configure TURN servers';
+    const helloTo = (target: string): number =>
+        phone.sent.filter(({ message, target: to }) => (message as { t: string }).t === 'hello' && to === target)
+            .length;
+
+    beforeEach(() => {
+        jest.useFakeTimers();
+        setRemoteConnectionState('connecting');
+        [, phone] = TransportStub.pair('host', 'phone');
+    });
+
+    afterEach(() => {
+        jest.useRealTimers();
+        setRemoteConnectionState('connecting');
+        setRemoteHostPeerId(null);
+        delete (globalThis as { __autovotePlatformKind?: string }).__autovotePlatformKind;
+    });
+
+    const install = (): void => {
+        installPeerBridge(phone, LOADER_TARGET);
+    };
+
+    const connect = (): void => {
+        phone.emitJoin('host');
+        phone.receiveFromPeer(hostHello, 'host');
+    };
+
+    test('a desktop reached over the relays reads the relay path by the time it reads connected', () => {
+        Object.assign(phone, { peerPath: (peerId: string) => (peerId === 'host' ? 'relay' : null) });
+        install();
+        const paths: string[] = [];
+        phone.emitJoin('host');
+        phone.receiveFromPeer(hostHello, 'host');
+        paths.push(remoteHostPath());
+        expect(remoteConnectionState()).toBe('connected');
+        expect(paths).toEqual(['relay']);
+    });
+
+    test('a transport that does not name paths is a direct one', () => {
+        setRemoteHostPath('relay');
+        install();
+        connect();
+        expect(remoteHostPath()).toBe('direct');
+    });
+
+    test('a connection failure reads try Wi-Fi where the relay fallback runs, and update-your-browser where it cannot', () => {
+        Object.assign(phone, { relayAvailable: () => true });
+        install();
+        phone.emitJoinError(SDP_FAILURE, 'host');
+        expect(remoteConnectionState()).toBe('network');
+    });
+
+    test('a connection failure with no relay fallback in this browser says the browser is too old', () => {
+        Object.assign(phone, { relayAvailable: () => false });
+        install();
+        phone.emitJoinError(SDP_FAILURE, 'host');
+        expect(remoteConnectionState()).toBe('old-browser');
+        setRemoteConnectionState('connecting');
+        phone.emitJoinError('incorrect room password when decrypting offer', 'host');
+        expect(remoteConnectionState()).toBe('offline'); // only the connection failure is the browser's
+    });
+
+    test('a page that goes away for good leaves the transport; one kept for the back/forward cache does not', () => {
+        install();
+        firePage('pagehide', true);
+        expect(phone.left).toBe(false);
+        firePage('pagehide', false);
+        expect(phone.left).toBe(true);
+    });
+
+    test('a page restored from the back/forward cache says hello to the desktop again', () => {
+        install();
+        firePage('pageshow', true); // before any desktop has answered: the hello repeat is already running
+        expect(helloTo('host')).toBe(0);
+        connect();
+        const before = helloTo('host');
+        firePage('pageshow', false); // an ordinary page show
+        expect(helloTo('host')).toBe(before);
+        firePage('pageshow', true);
+        expect(helloTo('host')).toBe(before + 1);
     });
 });

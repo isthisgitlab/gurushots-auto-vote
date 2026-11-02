@@ -50,6 +50,8 @@ export type RemoteHost = {
     isActive: () => boolean;
     /** How many phones are validated and connected. */
     connectedCount: () => number;
+    /** How many of those are reached only over the relay fallback. */
+    relayCount: () => number;
     /** Subscribe to connected-count changes (the header badge); answers the unsubscribe. */
     onCountChange: (listener: () => void) => () => void;
     /** Relay the controller's state; called by the owner on every state change. */
@@ -82,6 +84,7 @@ export const createRemoteHost = (deps: RemoteHostDeps): RemoteHost => {
         deps,
         transport: null,
         peers: new Set<string>(),
+        notified: new Set<string>(),
         logPeers: new Set<string>(),
         countListeners: new Set<() => void>(),
     };
@@ -90,13 +93,13 @@ export const createRemoteHost = (deps: RemoteHostDeps): RemoteHost => {
     return {
         start: async (key) => {
             if (ctx.transport !== null) return false;
-            const next = await deps.createTransport({ key });
+            const next = await deps.createTransport({ key, role: 'host' });
             ctx.transport = next;
             unsubs.push(
                 next.onMessage((peerId, raw) => handleMessage(ctx, peerId, raw)),
                 next.onPeerJoin((peerId) => {
-                    // Nothing is sent before the phone's hello; the join is only logged.
-                    deps.logInfo(`Remote peer seen: ${clippedId(peerId)}`);
+                    // Nothing is sent before the phone's hello; the join is only logged, with the path it came over.
+                    deps.logInfo(`Remote peer seen: ${clippedId(peerId)} (${next.peerPath?.(peerId) ?? 'direct'})`);
                 }),
                 next.onPeerLeave((peerId) => dropPeer(ctx, peerId)),
             );
@@ -128,6 +131,7 @@ export const createRemoteHost = (deps: RemoteHostDeps): RemoteHost => {
             for (const unsub of unsubs.splice(0)) unsub();
             const heldLogStream = ctx.logPeers.size > 0;
             ctx.peers.clear();
+            ctx.notified.clear();
             ctx.logPeers.clear();
             notifyCount(ctx);
             deps.logInfo('Remote access host stopped');
@@ -136,6 +140,7 @@ export const createRemoteHost = (deps: RemoteHostDeps): RemoteHost => {
         },
         isActive: () => ctx.transport !== null,
         connectedCount: () => ctx.peers.size,
+        relayCount: () => [...ctx.peers].filter((peerId) => ctx.transport?.peerPath?.(peerId) === 'relay').length,
         onCountChange: (listener) => {
             ctx.countListeners.add(listener);
             return () => ctx.countListeners.delete(listener);

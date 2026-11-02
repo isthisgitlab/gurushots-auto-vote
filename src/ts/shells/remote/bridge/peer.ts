@@ -28,6 +28,7 @@
 import { markPlatformKind } from '../../../core/platform/kind';
 import { PAGE_VERSION, PROTOCOL_VERSION } from '../../../core/remote/protocol';
 import { createHelloRepeater } from '../../../core/remote/helloRepeat';
+import { watchPageLifecycle } from '../../../core/remote/pageLifecycle';
 
 import type { HelloMessage } from '../../../core/remote/protocol';
 import type { RemoteTransport } from '../../../core/remote/relays';
@@ -63,8 +64,12 @@ const installPeerBridge = (transport: RemoteTransport, loaderTarget: string): vo
     const hello = createHelloRepeater({ transport, announce, active: () => ctx.hostPeerId === null });
 
     const pipeline = createInvokePipeline(ctx);
-    const { settlePendingForLostConnection } = watchConnection({ ctx, hello, pipeline });
-    watchPeerMessages({ ctx, hello, pipeline, settlePendingForLostConnection, loaderTarget });
+    const { settlePendingForLostConnection, reconnect } = watchConnection({ ctx, hello, pipeline });
+    watchPeerMessages({ ctx, hello, pipeline, settlePendingForLostConnection, reconnect, loaderTarget });
+    // The desktop may have forgotten this phone while the page was frozen in the back/forward cache: one hello.
+    watchPageLifecycle(transport, () => {
+        if (ctx.hostPeerId !== null) hello.announceOnce(ctx.hostPeerId);
+    });
     installApiSurface(ctx, pipeline.sendInvoke);
 };
 

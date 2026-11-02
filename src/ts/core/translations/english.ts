@@ -1699,9 +1699,14 @@ export const app = {
     remoteNote2: 'Your computer must be on with this window open; closing the window stops voting and remote access.',
     remoteNote3: "Use the link instead of the Android app's own voting while this is on.",
     remoteConnectedCount: 'Remote: {count} connected',
+    remoteConnectedCountRelay: 'Remote: {count} connected ({relay} via relays)',
     remoteConnectedNotice: 'A phone connected to control this app.',
     remoteConnecting: 'Connecting to your computer…',
     remoteConnected: 'Connected',
+    remoteConnectedRelay: 'Connected (via relays — slower)',
+    remoteOldBrowser:
+        "Couldn't reach your computer. If the app is open on it, this browser may be too old for remote access over this network — update it.",
+    remoteOldBrowserShort: 'Browser too old',
     remoteOfflineShort: 'Offline or reset',
     remoteOfflineDetail:
         'Your computer is offline, or this link was reset. If the app is open on your computer, scan its QR code again.',

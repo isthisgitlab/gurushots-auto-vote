@@ -17,6 +17,8 @@ export type HostContext = {
     transport: RemoteTransport | null;
     /** The peers that said hello with a matching version — the only ones anything is sent to. */
     readonly peers: Set<string>;
+    /** The peer ids the desktop has already shown "A phone connected" for in this host session: a phone that drops and returns (a background tab) does not notify again. */
+    readonly notified: Set<string>;
     /** The subset of peers that want the log stream. */
     readonly logPeers: Set<string>;
     /** The connected-count listeners (the header badge). */

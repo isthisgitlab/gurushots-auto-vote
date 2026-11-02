@@ -12,7 +12,7 @@ import { initialState } from '../../src/ts/core/autovote/state';
 import type { RemoteTransport } from '../../src/ts/core/remote/relays';
 import type { RemoteHostDeps } from '../../src/ts/react/api/remoteHost';
 import type { AutovoteState } from '../../src/ts/core/autovote/state';
-import { render, act } from '@testing-library/preact';
+import { render, act, cleanup } from '@testing-library/preact';
 import { fireSettingsChanged, mockApi } from './helpers/setup';
 import {
     MAX_PEER_FIELD_LENGTH,
@@ -28,13 +28,18 @@ import {
     setActiveRemoteHost,
     subscribeRemoteConnectionCount,
     remoteConnectionCount,
+    remoteRelayCount,
     pushAutovoteStateToActiveHost,
     appVersion,
 } from '../../src/ts/react/api/remoteHost';
 import type { AutovoteController } from '../../src/ts/core/autovote/types';
 
 const mockRemoteAccessAnswer: { current: unknown } = { current: undefined };
-const mockAdapterTransports: TransportStub[] = [];
+/** The adapter mock's transport, with the pairing key the host asked for: a test counts only the transports made for its own key. */
+class KeyedTransport extends TransportStub {
+    key = '';
+}
+const mockAdapterTransports: KeyedTransport[] = [];
 
 // The provider's hook reaches the bridge through the ipc wrappers and the trystero adapter;
 // both are mocked here.
@@ -44,8 +49,9 @@ jest.mock('@/api/ipc', () => ({
     getRemoteAccess: () => mockRemoteAccessAnswer.current,
 }));
 jest.mock('../../src/ts/core/remote/trystero', () => ({
-    createTrysteroTransport: jest.fn(async () => {
-        const transport = new TransportStub(`adapter-${mockAdapterTransports.length}`);
+    createTrysteroTransport: jest.fn(async (options: { key: string }) => {
+        const transport = new KeyedTransport(`adapter-${mockAdapterTransports.length}`);
+        transport.key = options.key;
         mockAdapterTransports.push(transport);
         return transport;
     }),
@@ -115,6 +121,82 @@ const sentBy = (transport: TransportStub) => transport.sent;
 const flush = async (): Promise<void> => {
     for (let i = 0; i < 10; i++) await Promise.resolve();
 };
+
+describe('createRemoteHost: the path a phone is reached over', () => {
+    const hello = { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false };
+
+    test('the host asks for a transport as the host, and logs each join with its path', async () => {
+        const created: Array<{ key: string; role: string }> = [];
+        const logs: string[] = [];
+        const transport = new TransportStub('host-x');
+        Object.assign(transport, { peerPath: (peerId: string) => (peerId === 'p-relay' ? 'relay' : 'direct') });
+        const { host } = makeHarness({
+            createTransport: async (options) => {
+                created.push(options);
+                return transport;
+            },
+            logInfo: (message) => logs.push(message),
+        });
+        await host.start('the-key');
+        expect(created).toEqual([{ key: 'the-key', role: 'host' }]);
+        transport.emitJoin('p-relay');
+        transport.emitJoin('p-direct');
+        expect(logs).toEqual(
+            expect.arrayContaining(['Remote peer seen: p-relay (relay)', 'Remote peer seen: p-direct (direct)']),
+        );
+        expect(logs.join('\n')).not.toContain('the-key');
+    });
+
+    test('"A phone connected" shows once per peer id and host session: a phone that drops and returns does not notify again', async () => {
+        const transport = new TransportStub('host-x');
+        const { host, deps } = makeHarness({ createTransport: async () => transport });
+        await host.start('k');
+        transport.receiveFromPeer(hello, 'p1');
+        await flush();
+        expect(deps.notifications).toBe(1);
+        transport.emitLeave('p1'); // a background tab dropped for silence
+        transport.receiveFromPeer(hello, 'p1');
+        await flush();
+        expect(host.connectedCount()).toBe(1);
+        expect(deps.notifications).toBe(1);
+        transport.receiveFromPeer(hello, 'p2'); // another phone does notify
+        await flush();
+        expect(deps.notifications).toBe(2);
+        await host.stop(); // a new host session starts over
+        await host.start('k');
+        transport.receiveFromPeer(hello, 'p1');
+        await flush();
+        expect(deps.notifications).toBe(3);
+    });
+
+    test('counts the connected phones that are reached only over the relays', async () => {
+        const transport = new TransportStub('host-x');
+        const relayed = new Set(['r1', 'r2']);
+        Object.assign(transport, { peerPath: (peerId: string) => (relayed.has(peerId) ? 'relay' : 'direct') });
+        const { host } = makeHarness({ createTransport: async () => transport });
+        expect(host.relayCount()).toBe(0); // not started
+        await host.start('k');
+        for (const peerId of ['r1', 'd1', 'r2']) transport.receiveFromPeer(hello, peerId);
+        await flush();
+        expect(host.connectedCount()).toBe(3);
+        expect(host.relayCount()).toBe(2);
+        transport.emitLeave('r1');
+        expect(host.relayCount()).toBe(1);
+        setActiveRemoteHost(host);
+        expect(remoteRelayCount()).toBe(1);
+        setActiveRemoteHost(null);
+        expect(remoteRelayCount()).toBe(0);
+    });
+
+    test('a transport that names no paths counts no relay phones', async () => {
+        const transport = new TransportStub('host-x');
+        const { host } = makeHarness({ createTransport: async () => transport });
+        await host.start('k');
+        transport.receiveFromPeer(hello, 'p1');
+        await flush();
+        expect(host.relayCount()).toBe(0);
+    });
+});
 
 describe('createRemoteHost', () => {
     test('start joins the room once; a second start answers false', async () => {
@@ -808,7 +890,7 @@ describe('createRemoteHost (activity is logged at INFO, never with a key or argu
         expect(logs).toEqual(
             expect.arrayContaining([
                 'Remote access host started',
-                'Remote peer seen: p1',
+                'Remote peer seen: p1 (direct)',
                 'Remote peer connected: p1',
                 'Remote invoke: get-settings',
                 'Remote invoke refused: wipe-local-data',
@@ -857,56 +939,74 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
         return null;
     };
 
+    // Every test pairs under a key of its own, and counts only the transports made for that key: a join that
+    // outlives its test (an unmounted Probe's start chain finishing late) cannot be mistaken for this test's.
+    let testKey = '';
+    let testCounter = 0;
+    /** The pairing key a test names `name` pairs with. */
+    const keyFor = (name: string): string => `${testKey}-${name}`;
+    /** The transports the host made for this test's keys. */
+    const mine = (): KeyedTransport[] =>
+        mockAdapterTransports.filter((transport) => transport.key.startsWith(`${testKey}-`));
+
     const enabledLink = (key: string): unknown => ({
         success: true,
         enabled: true,
-        link: `https://pages/remote/#k=${key}`,
+        link: `https://pages/remote/#k=${keyFor(key)}`,
         qrDataUrl: '',
     });
 
     beforeEach(() => {
+        testKey = `test${++testCounter}`;
         mockAdapterTransports.length = 0;
         mockRemoteAccessAnswer.current = undefined;
     });
 
     afterEach(async () => {
+        // Unmount every Probe now, and let the async start and stop chains they began settle before the next
+        // test resets the shared state they write to. The 50 ms is a margin, not the isolation: the per-test
+        // key and the `mine()` filter are what keep a late join of an earlier test out of this one's counts.
+        cleanup();
+        await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+        });
+        await flush();
         setActiveRemoteHost(null);
+        mockAdapterTransports.length = 0;
+        mockRemoteAccessAnswer.current = undefined;
     });
 
     test('while the pairing is enabled the host joins the room and runs commands on its controller', async () => {
         mockRemoteAccessAnswer.current = enabledLink('k1');
         render(<Probe />);
         await flush();
-        expect(mockAdapterTransports).toHaveLength(1);
+        expect(mine()).toHaveLength(1);
         expect(remoteConnectionCount()).toBe(0);
 
-        mockAdapterTransports[0].emitJoin('p1');
-        mockAdapterTransports[0].receiveFromPeer(
+        mine()[0].emitJoin('p1');
+        mine()[0].receiveFromPeer(
             { t: 'hello', version: appVersion(), protocolVersion: PROTOCOL_VERSION, host: false },
             'p1',
         );
         await flush();
         expect(remoteConnectionCount()).toBe(1);
 
-        mockAdapterTransports[0].receiveFromPeer({ t: 'autovote-command', command: 'start' }, 'p1');
+        mine()[0].receiveFromPeer({ t: 'autovote-command', command: 'start' }, 'p1');
         await flush();
         expect(controller.start).toHaveBeenCalled();
 
         // A phone-side invoke rides the bridge: the host calls window.api and answers.
-        mockAdapterTransports[0].sent.length = 0;
-        mockAdapterTransports[0].receiveFromPeer(
-            { t: 'invoke', id: 7, channel: 'get-active-challenges', args: [] },
-            'p1',
-        );
+        mine()[0].sent.length = 0;
+        mine()[0].receiveFromPeer({ t: 'invoke', id: 7, channel: 'get-active-challenges', args: [] }, 'p1');
         await flush();
-        const answer = mockAdapterTransports[0].sent.find(({ message }) => (message as { t: string }).t === 'result');
+        const answer = mine()[0].sent.find(({ message }) => (message as { t: string }).t === 'result');
         expect((answer?.message as { id: number } | undefined)?.id).toBe(7);
 
         // A forwarded event with a payload crosses the (handler, args) wrapper.
-        mockAdapterTransports[0].sent.length = 0;
+        mine()[0].sent.length = 0;
         fireSettingsChanged({ app: { language: 'en' } });
         await flush();
-        const forwarded = mockAdapterTransports[0].sent.filter(
+        const forwarded = mine()[0].sent.filter(
             ({ message }) => (message as { t: string; channel?: string }).t === 'event',
         );
         expect(forwarded.at(-1)?.message).toEqual({
@@ -920,20 +1020,20 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
         mockRemoteAccessAnswer.current = enabledLink('k1');
         render(<Probe />);
         await flush();
-        expect(mockAdapterTransports).toHaveLength(1);
+        expect(mine()).toHaveLength(1);
 
         mockRemoteAccessAnswer.current = enabledLink('k2');
         window.dispatchEvent(new CustomEvent('remote-access:changed'));
         await flush();
         await flush();
-        expect(mockAdapterTransports[0].left).toBe(true);
-        expect(mockAdapterTransports).toHaveLength(2);
+        expect(mine()[0].left).toBe(true);
+        expect(mine()).toHaveLength(2);
 
         mockRemoteAccessAnswer.current = { success: false };
         window.dispatchEvent(new CustomEvent('remote-access:changed'));
         await flush();
         await flush();
-        expect(mockAdapterTransports[1].left).toBe(true);
+        expect(mine()[1].left).toBe(true);
         expect(remoteConnectionCount()).toBe(0);
     });
 
@@ -941,13 +1041,13 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
         mockRemoteAccessAnswer.current = enabledLink('k1');
         const view = render(<Probe />);
         await flush();
-        expect(mockAdapterTransports[0].left).toBe(false);
+        expect(mine()[0].left).toBe(false);
         view.unmount();
         // preact flushes effect cleanups on its own schedule, not on microtasks.
         await act(async () => {
             await new Promise((resolve) => setTimeout(resolve, 20));
         });
-        expect(mockAdapterTransports[0].left).toBe(true);
+        expect(mine()[0].left).toBe(true);
         expect(remoteConnectionCount()).toBe(0);
     });
 
@@ -961,14 +1061,14 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
         render(<Probe />);
         await flush();
         // No `k` parameter in the link: nothing to join.
-        expect(mockAdapterTransports).toHaveLength(0);
+        expect(mine()).toHaveLength(0);
     });
 
     test('the hook forwards stop and rearm to its controller, and tolerates unsubscribe-less event mocks', async () => {
         mockRemoteAccessAnswer.current = enabledLink('k1');
         render(<Probe />);
         await flush();
-        const transport = mockAdapterTransports[0];
+        const transport = mine()[0];
         transport.emitJoin('p1');
         transport.receiveFromPeer(
             { t: 'hello', version: appVersion(), protocolVersion: PROTOCOL_VERSION, host: false },
@@ -996,7 +1096,7 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
         try {
             const view = render(<Probe />);
             await flush();
-            expect(mockAdapterTransports).toHaveLength(0);
+            expect(mine()).toHaveLength(0);
             view.unmount();
             await act(async () => {
                 await new Promise((resolve) => setTimeout(resolve, 20));
@@ -1006,7 +1106,7 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
             await act(async () => {
                 await new Promise((resolve) => setTimeout(resolve, 20));
             });
-            expect(mockAdapterTransports).toHaveLength(0);
+            expect(mine()).toHaveLength(0);
             expect(remoteConnectionCount()).toBe(0);
         } finally {
             ipcMock.getRemoteAccess = saved;
@@ -1047,7 +1147,7 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
         try {
             render(<Probe />);
             await flush();
-            expect(mockAdapterTransports).toHaveLength(1);
+            expect(mine()).toHaveLength(1);
         } finally {
             mockApi.onSettingsChanged = saved;
         }
@@ -1068,16 +1168,17 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
         };
         const createSpy = adapterModule.createTrysteroTransport;
         const defaultImpl = createSpy.getMockImplementation();
-        createSpy.mockImplementation(async () => {
+        createSpy.mockImplementation(async (options) => {
             await gate;
-            const transport = new TransportStub(`adapter-${mockAdapterTransports.length}`);
+            const transport = new KeyedTransport(`adapter-${mockAdapterTransports.length}`);
+            transport.key = options.key;
             mockAdapterTransports.push(transport);
             return transport;
         });
         try {
             const view = render(<Probe />);
             await flush();
-            expect(mockAdapterTransports).toHaveLength(0);
+            expect(mine()).toHaveLength(0);
             view.unmount();
             await act(async () => {
                 await new Promise((resolve) => setTimeout(resolve, 20));
@@ -1088,8 +1189,8 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
                 await new Promise((resolve) => setTimeout(resolve, 20));
             });
             await flush();
-            expect(mockAdapterTransports).toHaveLength(1);
-            expect(mockAdapterTransports[0].left).toBe(true);
+            expect(mine()).toHaveLength(1);
+            expect(mine()[0].left).toBe(true);
             expect(remoteConnectionCount()).toBe(0);
         } finally {
             createSpy.mockImplementation(defaultImpl);
@@ -1157,7 +1258,7 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
             mockRemoteAccessAnswer.current = enabledLink('k1');
             render(<Probe />);
             await flush();
-            const transport = mockAdapterTransports[0];
+            const transport = mine()[0];
             transport.emitJoin('p1');
             transport.receiveFromPeer(
                 { t: 'hello', version: appVersion(), protocolVersion: PROTOCOL_VERSION, host: false },
@@ -1231,9 +1332,10 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
             };
             const createSpy = adapterModule.createTrysteroTransport;
             const defaultImpl = createSpy.getMockImplementation();
-            createSpy.mockImplementation(async () => {
+            createSpy.mockImplementation(async (options) => {
                 await new Promise<void>((resolve) => gates.push(resolve));
-                const transport = new TransportStub(`adapter-${mockAdapterTransports.length}`);
+                const transport = new KeyedTransport(`adapter-${mockAdapterTransports.length}`);
+                transport.key = options.key;
                 mockAdapterTransports.push(transport);
                 return transport;
             });
@@ -1253,7 +1355,7 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
                 mockRemoteAccessAnswer.current = enabledLink('k1');
                 render(<Probe />);
                 await flush();
-                expect(mockAdapterTransports).toHaveLength(0);
+                expect(mine()).toHaveLength(0);
 
                 mockRemoteAccessAnswer.current = {
                     success: true,
@@ -1265,12 +1367,12 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
                 await flush();
                 await held.open();
 
-                expect(mockAdapterTransports).toHaveLength(1);
-                expect(mockAdapterTransports[0].left).toBe(true);
+                expect(mine()).toHaveLength(1);
+                expect(mine()[0].left).toBe(true);
                 expect(remoteConnectionCount()).toBe(0);
                 // Nobody is hearing the room any more.
-                mockAdapterTransports[0].emitJoin('p1');
-                mockAdapterTransports[0].receiveFromPeer(
+                mine()[0].emitJoin('p1');
+                mine()[0].receiveFromPeer(
                     { t: 'hello', version: appVersion(), protocolVersion: PROTOCOL_VERSION, host: false },
                     'p1',
                 );
@@ -1293,11 +1395,11 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
                 await held.open();
                 await held.open();
 
-                expect(mockAdapterTransports).toHaveLength(2);
-                expect(mockAdapterTransports[0].left).toBe(true);
-                expect(mockAdapterTransports[1].left).toBe(false);
-                mockAdapterTransports[1].emitJoin('p1');
-                mockAdapterTransports[1].receiveFromPeer(
+                expect(mine()).toHaveLength(2);
+                expect(mine()[0].left).toBe(true);
+                expect(mine()[1].left).toBe(false);
+                mine()[1].emitJoin('p1');
+                mine()[1].receiveFromPeer(
                     { t: 'hello', version: appVersion(), protocolVersion: PROTOCOL_VERSION, host: false },
                     'p1',
                 );
@@ -1318,10 +1420,10 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
                 await flush();
                 await held.open();
 
-                expect(mockAdapterTransports).toHaveLength(1);
-                expect(mockAdapterTransports[0].left).toBe(false);
-                mockAdapterTransports[0].emitJoin('p1');
-                mockAdapterTransports[0].receiveFromPeer(
+                expect(mine()).toHaveLength(1);
+                expect(mine()[0].left).toBe(false);
+                mine()[0].emitJoin('p1');
+                mine()[0].receiveFromPeer(
                     { t: 'hello', version: appVersion(), protocolVersion: PROTOCOL_VERSION, host: false },
                     'p1',
                 );
@@ -1342,8 +1444,8 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
         render(<Probe />);
         await flush();
         seen.length = 0;
-        mockAdapterTransports[0].emitJoin('p1');
-        mockAdapterTransports[0].receiveFromPeer(
+        mine()[0].emitJoin('p1');
+        mine()[0].receiveFromPeer(
             { t: 'hello', version: appVersion(), protocolVersion: PROTOCOL_VERSION, host: false },
             'p1',
         );
@@ -1353,8 +1455,8 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
         const state = { ...initialState, running: true, cycles: 4 };
         pushAutovoteStateToActiveHost(state);
         await flush();
-        const relayed = mockAdapterTransports[0].sent
-            .filter(({ message }) => (message as { t: string }).t === 'autovote-state')
+        const relayed = mine()[0]
+            .sent.filter(({ message }) => (message as { t: string }).t === 'autovote-state')
             .at(-1);
         expect((relayed?.message as { state: unknown } | undefined)?.state).toEqual(state);
         unsubscribe();

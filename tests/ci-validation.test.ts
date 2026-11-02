@@ -265,6 +265,13 @@ describe('sends toward the Logs window', () => {
         // The phone's repeated hello (the loader and the peer bridge share it).
         ['src/ts/core/remote/helloRepeat.ts', 'void transport.send(announce, peerId).catch(() => undefined);'],
         ['src/ts/shells/remote/bridge/invokes.ts', 'void transport.send(message, hostPeerId).catch(() => {'],
+        // The relay fallback: its own WebSockets to public Nostr relays, and the hybrid transport's choice of path.
+        ['src/ts/core/remote/relaySockets.ts', 'relay.socket.send(options.subscribeFrame(RELAY_SUB_ID, topic));'],
+        ['src/ts/core/remote/relaySockets.ts', 'for (const relay of open) relay.socket.send(event);'],
+        [
+            'src/ts/core/remote/hybridTransport.ts',
+            "return (path === 'direct' ? direct : (relay as RemoteTransport)).send(message, target);",
+        ],
     ];
 
     interface Directive {

@@ -269,9 +269,8 @@ describe("the trystero adapter's pinned facts", () => {
         expect(NOSTR_RELAY_URLS).toEqual([
             'wss://nos.lol',
             'wss://relay.primal.net',
-            'wss://relay.snort.social',
             'wss://nostr.mom',
-            'wss://offchain.pub',
+            'wss://nostr.oxtr.dev',
         ]);
     });
 });

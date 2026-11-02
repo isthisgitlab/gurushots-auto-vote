@@ -3,7 +3,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { openDonatePage } from '@/api/donate';
 import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import { platformKind } from '../../../core/platform/kind';
-import { remoteConnectionCount, subscribeRemoteConnectionCount } from '../../api/remoteHost';
+import { remoteConnectionCount, remoteRelayCount, subscribeRemoteConnectionCount } from '../../api/remoteHost';
 import { RemoteStateBadge } from '@/components/app/RemoteStateBadge';
 import { RemoteDisconnectButton } from '@/components/app/RemoteDisconnectButton';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
@@ -29,7 +29,15 @@ export function Navbar({
     const desktop = kind === 'electron';
     // The desktop's badge counts the paired phones while any is connected.
     const [remoteCount, setRemoteCount] = useState(remoteConnectionCount);
-    useEffect(() => subscribeRemoteConnectionCount(() => setRemoteCount(remoteConnectionCount())), []);
+    const [remoteRelay, setRemoteRelay] = useState(remoteRelayCount);
+    useEffect(
+        () =>
+            subscribeRemoteConnectionCount(() => {
+                setRemoteCount(remoteConnectionCount());
+                setRemoteRelay(remoteRelayCount());
+            }),
+        [],
+    );
 
     return (
         <div className="navbar bg-base-100 shadow-md mb-4">
@@ -38,7 +46,12 @@ export function Navbar({
                 {isMock && <span className="badge badge-warning badge-sm whitespace-nowrap">{t('app.mockMode')}</span>}
                 {desktop && remoteCount > 0 && (
                     <span className="badge badge-secondary badge-sm whitespace-nowrap">
-                        {t('app.remoteConnectedCount', { count: String(remoteCount) })}
+                        {remoteRelay > 0
+                            ? t('app.remoteConnectedCountRelay', {
+                                  count: String(remoteCount),
+                                  relay: String(remoteRelay),
+                              })
+                            : t('app.remoteConnectedCount', { count: String(remoteCount) })}
                     </span>
                 )}
                 {kind === 'remote' && <RemoteStateBadge />}

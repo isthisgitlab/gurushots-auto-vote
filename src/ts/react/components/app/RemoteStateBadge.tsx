@@ -1,6 +1,10 @@
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
-import { remoteConnectionState, subscribeRemoteConnectionState } from '../../../core/remote/connectionState';
+import {
+    remoteConnectionState,
+    remoteHostPath,
+    subscribeRemoteConnectionState,
+} from '../../../core/remote/connectionState';
 import { phoneRemoteMode } from '../../../core/remote/phoneMode';
 
 import type { RemoteConnectionState } from '../../../core/remote/connectionState';
@@ -14,6 +18,7 @@ const STATE_LABEL_KEYS: Record<RemoteConnectionState, string> = {
     connected: 'app.remoteConnected',
     offline: 'app.remoteOfflineShort',
     network: 'app.remoteNetwork',
+    'old-browser': 'app.remoteOldBrowserShort',
     update: 'app.remoteUpdateNeeded',
     'update-this': 'app.remoteUpdateThis',
     unpublished: 'app.remotePageUnpublished',
@@ -64,7 +69,11 @@ export function RemoteStateBadge() {
     return (
         <>
             <span className={`badge ${tone} badge-sm whitespace-nowrap`} role="status">
-                {t(STATE_LABEL_KEYS[state])}
+                {t(
+                    state === 'connected' && remoteHostPath() === 'relay'
+                        ? 'app.remoteConnectedRelay'
+                        : STATE_LABEL_KEYS[state],
+                )}
             </span>
             {state === 'offline' && (
                 <div className="alert alert-warning text-sm fixed bottom-0 inset-x-0 z-50 rounded-none" role="alert">

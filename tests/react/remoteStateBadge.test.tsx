@@ -10,7 +10,11 @@ import { act, screen, fireEvent } from '@testing-library/preact';
 import { render } from './helpers/test-utils';
 import { RemoteStateBadge } from '@/components/app/RemoteStateBadge';
 import { RemoteNoticeScreen } from '@/components/app/RemoteNoticeScreen';
-import { setRemoteConnectionState, remoteConnectionState } from '../../src/ts/core/remote/connectionState';
+import {
+    remoteConnectionState,
+    setRemoteConnectionState,
+    setRemoteHostPath,
+} from '../../src/ts/core/remote/connectionState';
 import { installPhoneRemoteMode } from '../../src/ts/core/remote/phoneMode';
 
 describe('RemoteStateBadge', () => {
@@ -29,6 +33,7 @@ describe('RemoteStateBadge', () => {
         ['connected', 'app.remoteConnected', 'badge-success'],
         ['offline', 'app.remoteOfflineShort', 'badge-error'],
         ['network', 'app.remoteNetwork', 'badge-error'],
+        ['old-browser', 'app.remoteOldBrowserShort', 'badge-error'],
         ['update', 'app.remoteUpdateNeeded', 'badge-warning'],
         ['update-this', 'app.remoteUpdateThis', 'badge-warning'],
         ['unpublished', 'app.remotePageUnpublished', 'badge-warning'],
@@ -40,6 +45,18 @@ describe('RemoteStateBadge', () => {
         const badge = container.querySelector('[role="status"]');
         expect(badge?.textContent).toBe(key);
         expect(badge?.className).toContain(tone);
+    });
+
+    test('connected over the relays says so; connected directly does not', () => {
+        setRemoteConnectionState('connected');
+        setRemoteHostPath('relay');
+        const relayed = render(<RemoteStateBadge />);
+        expect(relayed.container.querySelector('[role="status"]')?.textContent).toBe('app.remoteConnectedRelay');
+        relayed.unmount();
+        setRemoteHostPath('direct');
+        const direct = render(<RemoteStateBadge />);
+        expect(direct.container.querySelector('[role="status"]')?.textContent).toBe('app.remoteConnected');
+        setRemoteHostPath('direct');
     });
 
     test('a state change reached a mounted badge, and offline adds the full explanation', () => {
@@ -163,6 +180,7 @@ describe('RemoteNoticeScreen', () => {
         ['no-key', 'app.remoteNoKey'],
         ['offline', 'app.remoteOfflineDetail'],
         ['network', 'app.remoteNetwork'],
+        ['old-browser', 'app.remoteOldBrowser'],
         ['update', 'app.remoteUpdateNeeded'],
         ['update-this', 'app.remoteUpdateThis'],
         ['unpublished', 'app.remotePageUnpublished'],
