@@ -53,26 +53,21 @@ export function useChallengeSettings(
         const reloadId = ++reloadIdRef.current;
         const current = () => mountedRef.current && reloadId === reloadIdRef.current;
         try {
-            const { schema } = (await ipc.getSettingsSchema()) || {};
-            if (!schema || !current()) return;
-            const perChallengeKeys = Object.entries(schema)
-                .filter(([, config]) => config.perChallenge)
-                .map(([key]) => key);
-            const overrideResults = await Promise.all(perChallengeKeys.map((key) => ipc.getChallengeOverride(key, id)));
-            if (!current()) return;
-            setHasCustomSettings(overrideResults.some((o) => o !== null));
+            // One read of the sparse override map (per-challenge keys only), not one per key.
+            const overrides = await ipc.getChallengeOverrides(id);
+            if (!overrides || !current()) return;
+            setHasCustomSettings(Object.values(overrides).some((o) => o !== null));
 
-            const [fillOn, manualOnly, compact, compactOverride] = await Promise.all([
+            const [fillOn, manualOnly, compact] = await Promise.all([
                 ipc.getEffectiveSetting('autoSubmit', id),
                 ipc.getEffectiveSetting('manualPhotosOnly', id),
                 ipc.getEffectiveSetting('compactCards', id),
-                ipc.getChallengeOverride('compactCards', id),
             ]);
             if (!current()) return;
             setAutoSubmitEnabled(fillOn === true);
             setManualPhotosOnly(manualOnly === true);
             setIsCompact(compact === true);
-            setHasCompactOverride(compactOverride !== null);
+            setHasCompactOverride((overrides.compactCards ?? null) !== null);
         } catch {
             // Leave the previous values in place; the parent context
             // re-runs this effect when settings-changed fires.

@@ -109,7 +109,7 @@ const deferred = <T,>() => {
 beforeEach(() => {
     window.api.getSettingsSchema = jest.fn().mockResolvedValue({ schema: {}, defaults: {} });
     window.api.getEffectiveSetting = jest.fn().mockResolvedValue(null);
-    window.api.getChallengeOverride = jest.fn().mockResolvedValue(null);
+    window.api.getChallengeOverrides = jest.fn().mockResolvedValue({});
     window.api.getDeadlineActions = jest.fn().mockResolvedValue({ success: true, actions: [], boostBlocked: false });
     window.api.getSwapBacks = jest.fn().mockResolvedValue({ success: true, items: [] });
     window.api.playAutoTurbo = jest.fn().mockResolvedValue({ success: true });
@@ -321,7 +321,7 @@ describe('header', () => {
         await waitFor(() => expect(window.api.getEffectiveSetting).toHaveBeenCalled());
         const toggle = screen.getByText('app.compact');
         expect(toggle.querySelector('svg')!.getAttribute('fill')).toBe('none');
-        window.api.getChallengeOverride = jest.fn(async (key) => (key === 'compactCards' ? false : null));
+        window.api.getChallengeOverrides = jest.fn().mockResolvedValue({ compactCards: false });
         fireEvent.click(toggle);
         await waitFor(() => expect(window.api.setChallengeOverride).toHaveBeenCalledWith('compactCards', '101', true));
         // The reload now sees an override, so the icon fills in.

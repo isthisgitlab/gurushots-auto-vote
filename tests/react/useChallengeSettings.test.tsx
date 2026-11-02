@@ -46,10 +46,9 @@ let effective: Record<string, unknown>;
 beforeEach(() => {
     overrides = {};
     effective = { autoSubmit: false, manualPhotosOnly: false, compactCards: false };
-    window.api.getSettingsSchema = jest.fn().mockResolvedValue({
-        schema: { boostTime: { perChallenge: true }, compactCards: { perChallenge: true }, theme: {} },
-    });
-    window.api.getChallengeOverride = jest.fn(async (key) => (key in overrides ? overrides[key] : null));
+    window.api.getSettingsSchema = jest.fn();
+    window.api.getChallengeOverride = jest.fn();
+    window.api.getChallengeOverrides = jest.fn(async () => ({ ...overrides }));
     window.api.getEffectiveSetting = jest.fn(async (key) => (key in overrides ? overrides[key] : effective[key]));
     window.api.setChallengeOverride = jest.fn(async (key, _id, value) => {
         overrides[key] = value;
@@ -69,9 +68,51 @@ test('seeds isCompact from initialCompact, then applies the IPC values', async (
     await waitFor(() =>
         expect(state()).toEqual({ custom: true, fill: true, manual: false, compact: false, override: false }),
     );
-    // Only perChallenge schema keys are probed, with a stringified id.
-    expect(window.api.getChallengeOverride).toHaveBeenCalledWith('boostTime', '42');
-    expect(window.api.getChallengeOverride).not.toHaveBeenCalledWith('theme', '42');
+    // The override map is read once, with a stringified id.
+    expect(window.api.getChallengeOverrides).toHaveBeenCalledTimes(1);
+    expect(window.api.getChallengeOverrides).toHaveBeenCalledWith('42');
+});
+
+test('a card makes zero schema reads and one overrides read, however many per-challenge keys exist', async () => {
+    overrides = { boostTime: 10, compactCards: true };
+    render(<Probe />);
+    await waitFor(() => expect(state().override).toBe(true));
+    expect(window.api.getSettingsSchema).not.toHaveBeenCalled();
+    expect(window.api.getChallengeOverride).not.toHaveBeenCalled();
+    expect(window.api.getChallengeOverrides).toHaveBeenCalledTimes(1);
+    // The three effective values stay separate reads.
+    expect(jest.mocked(window.api.getEffectiveSetting).mock.calls.map((c) => c[0])).toEqual([
+        'autoSubmit',
+        'manualPhotosOnly',
+        'compactCards',
+    ]);
+});
+
+test('an override map with only compactCards marks the compact override and custom settings', async () => {
+    overrides = { compactCards: false };
+    render(<Probe />);
+    await waitFor(() => expect(state().override).toBe(true));
+    expect(state().custom).toBe(true);
+});
+
+test('an empty override map, or one whose values are all null, has no custom settings and no compact override', async () => {
+    overrides = { boostTime: null, compactCards: null };
+    render(<Probe />);
+    await waitFor(() => expect(window.api.getEffectiveSetting).toHaveBeenCalled());
+    expect(state()).toEqual({ custom: false, fill: false, manual: false, compact: false, override: false });
+});
+
+test("a null override map (the handler's error answer) leaves the previous values in place", async () => {
+    overrides = { compactCards: true };
+    const { rerender } = render(<Probe version={0} />);
+    await waitFor(() => expect(state().override).toBe(true));
+
+    window.api.getChallengeOverrides = invalid(jest.fn().mockResolvedValue(null));
+    effective.compactCards = false;
+    rerender(<Probe version={1} />);
+    await waitFor(() => expect(window.api.getChallengeOverrides).toHaveBeenCalled());
+    expect(window.api.getEffectiveSetting).toHaveBeenCalledTimes(3);
+    expect(state()).toEqual({ custom: true, fill: false, manual: false, compact: true, override: true });
 });
 
 test('reads the effective Manual Only value', async () => {
@@ -110,17 +151,17 @@ test('a failed toggle leaves the UI unchanged', async () => {
     expect(state()).toEqual({ custom: false, fill: false, manual: false, compact: false, override: false });
 });
 
-test('a failed or empty schema read leaves the defaults', async () => {
-    window.api.getSettingsSchema = jest.fn().mockRejectedValue(new Error('boom'));
+test('a failed or null overrides read leaves the defaults', async () => {
+    window.api.getChallengeOverrides = jest.fn().mockRejectedValue(new Error('boom'));
     const { unmount } = render(<Probe initialCompact={true} />);
-    await waitFor(() => expect(window.api.getSettingsSchema).toHaveBeenCalled());
+    await waitFor(() => expect(window.api.getChallengeOverrides).toHaveBeenCalled());
     expect(state()).toEqual({ custom: false, fill: false, manual: false, compact: true, override: false });
     unmount();
 
-    window.api.getSettingsSchema = jest.fn().mockResolvedValue(null);
+    window.api.getChallengeOverrides = invalid(jest.fn().mockResolvedValue(null));
     render(<Probe />);
-    await waitFor(() => expect(window.api.getSettingsSchema).toHaveBeenCalled());
-    expect(window.api.getChallengeOverride).not.toHaveBeenCalled();
+    await waitFor(() => expect(window.api.getChallengeOverrides).toHaveBeenCalled());
+    expect(window.api.getEffectiveSetting).not.toHaveBeenCalled();
 });
 
 describe('unmount mid-reload drops the pending results', () => {
@@ -130,22 +171,13 @@ describe('unmount mid-reload drops the pending results', () => {
         return { promise, resolve };
     };
 
-    test('after the schema read', async () => {
+    test('after the overrides read', async () => {
         const d = deferred();
-        window.api.getSettingsSchema = invalid(jest.fn(() => d.promise));
+        window.api.getChallengeOverrides = invalid(jest.fn(() => d.promise));
         const { unmount } = render(<Probe />);
+        await waitFor(() => expect(window.api.getChallengeOverrides).toHaveBeenCalled());
         unmount();
-        await act(async () => d.resolve({ schema: { a: { perChallenge: true } } }));
-        expect(window.api.getChallengeOverride).not.toHaveBeenCalled();
-    });
-
-    test('after the override reads', async () => {
-        const d = deferred();
-        window.api.getChallengeOverride = jest.fn(() => d.promise);
-        const { unmount } = render(<Probe />);
-        await waitFor(() => expect(window.api.getChallengeOverride).toHaveBeenCalled());
-        unmount();
-        await act(async () => d.resolve(null));
+        await act(async () => d.resolve({ boostTime: 10 }));
         expect(window.api.getEffectiveSetting).not.toHaveBeenCalled();
     });
 
@@ -189,23 +221,21 @@ describe('useChallengeSettings — settingsVersion', () => {
     test('an older reload settling after a newer one does not overwrite its values', async () => {
         const first = deferred();
         let calls = 0;
-        window.api.getSettingsSchema = invalid(
+        window.api.getChallengeOverrides = invalid(
             jest.fn(() => {
                 calls += 1;
-                return calls === 1
-                    ? first.promise
-                    : Promise.resolve({ schema: { compactCards: { perChallenge: true } } });
+                return calls === 1 ? first.promise : Promise.resolve({ compactCards: true });
             }),
         );
         effective.compactCards = true;
         const { rerender } = render(<Probe version={0} />);
-        await waitFor(() => expect(window.api.getSettingsSchema).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(window.api.getChallengeOverrides).toHaveBeenCalledTimes(1));
 
         rerender(<Probe version={1} />);
         await waitFor(() => expect(state().compact).toBe(true));
 
         effective.compactCards = false;
-        await act(async () => first.resolve({ schema: { compactCards: { perChallenge: true } } }));
+        await act(async () => first.resolve({ compactCards: false }));
 
         expect(state().compact).toBe(true);
     });
