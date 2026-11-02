@@ -214,8 +214,8 @@ describe('the frames a peer sends the relay link', () => {
     });
 
     describe('a message being unpacked while the link changes', () => {
-        const deferUnpack = (): { finish: (item: { message: unknown } | null) => void } => {
-            const handle = { finish: (_item: { message: unknown } | null): void => undefined };
+        const deferUnpack = (): { finish: (item: { message: unknown; size: number } | null) => void } => {
+            const handle = { finish: (_item: { message: unknown; size: number } | null): void => undefined };
             hostCodec.unpack = () =>
                 new Promise((resolve) => {
                     handle.finish = resolve;
@@ -227,7 +227,7 @@ describe('the frames a peer sends the relay link', () => {
             const unpacking = deferUnpack();
             await send({ msgId: msgId(50), seq: 3 }, message({ n: 3 })); // behind a gap: a live inbox would arm a timer
             await host.leave();
-            unpacking.finish({ message: { n: 3 } });
+            unpacking.finish({ message: { n: 3 }, size: 0 });
             await settle(0);
             expect(messages).toEqual([]);
             expect(jest.getTimerCount()).toBe(0);
@@ -238,7 +238,7 @@ describe('the frames a peer sends the relay link', () => {
             await send({ msgId: msgId(60), seq: 0 }, message({ n: 0 }));
             await send({ kind: 'bye', to: '', toEpoch: '', msgId: msgId(61) }); // the link removes the sender
             expect(leaves).toEqual(['raw-id']);
-            unpacking.finish({ message: { n: 0 } });
+            unpacking.finish({ message: { n: 0 }, size: 0 });
             await settle(0);
             await settle(GAP_HOLD_MS * 3);
             expect(messages).toEqual([]);
@@ -314,7 +314,7 @@ describe('the frames a peer sends the relay link', () => {
         });
 
         test("the epoch race: an old instance's message that finishes unpacking after the restarted instance's first one cannot retire the live stream", async () => {
-            const unpacks: Array<(item: { message: unknown } | null) => void> = [];
+            const unpacks: Array<(item: { message: unknown; size: number } | null) => void> = [];
             hostCodec.unpack = () =>
                 new Promise((resolve) => {
                     unpacks.push(resolve);
@@ -326,13 +326,13 @@ describe('the frames a peer sends the relay link', () => {
             await send({ epoch: NEW_EPOCH, kind: 'presence', to: '', toEpoch: '', msgId: msgId(431) }); // the sender restarted
             const restarted = (n: number) => ({ epoch: NEW_EPOCH, stream: NEW_STREAM, msgId: msgId(432 + n), seq: n });
             await send(restarted(0), message({ fresh: 0 })); // its first message: unpacking too
-            unpacks[1]({ message: { fresh: 0 } });
+            unpacks[1]({ message: { fresh: 0 }, size: 0 });
             await settle(0);
-            unpacks[0]({ message: { old: 0 } }); // the old one finishes last
+            unpacks[0]({ message: { old: 0 }, size: 0 }); // the old one finishes last
             await settle(0);
             expect(messages).toEqual([{ fresh: 0 }]);
             await send(restarted(1), message({ fresh: 1 }));
-            unpacks[2]({ message: { fresh: 1 } });
+            unpacks[2]({ message: { fresh: 1 }, size: 0 });
             await settle(0);
             expect(messages).toEqual([{ fresh: 0 }, { fresh: 1 }]); // the live stream survived
         });

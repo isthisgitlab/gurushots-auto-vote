@@ -12,7 +12,7 @@ import { initialState } from '../../src/ts/core/autovote/state';
 import type { RemoteTransport } from '../../src/ts/core/remote/relays';
 import type { RemoteHostDeps } from '../../src/ts/react/api/remoteHost';
 import type { AutovoteState } from '../../src/ts/core/autovote/state';
-import { render, act, cleanup } from '@testing-library/preact';
+import { render, act, cleanup, waitFor } from '@testing-library/preact';
 import { fireSettingsChanged, mockApi } from './helpers/setup';
 import {
     MAX_PEER_FIELD_LENGTH,
@@ -1043,11 +1043,8 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
         await flush();
         expect(mine()[0].left).toBe(false);
         view.unmount();
-        // preact flushes effect cleanups on its own schedule, not on microtasks.
-        await act(async () => {
-            await new Promise((resolve) => setTimeout(resolve, 20));
-        });
-        expect(mine()[0].left).toBe(true);
+        // preact flushes effect cleanups on its own schedule, not on microtasks: wait for the room to be left.
+        await waitFor(() => expect(mine()[0].left).toBe(true));
         expect(remoteConnectionCount()).toBe(0);
     });
 
@@ -1179,18 +1176,14 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
             const view = render(<Probe />);
             await flush();
             expect(mine()).toHaveLength(0);
-            view.unmount();
+            // Unmounting inside act runs the effect cleanups before the join is let go.
             await act(async () => {
-                await new Promise((resolve) => setTimeout(resolve, 20));
+                view.unmount();
             });
             (release as () => void)();
             await flush();
-            await act(async () => {
-                await new Promise((resolve) => setTimeout(resolve, 20));
-            });
-            await flush();
-            expect(mine()).toHaveLength(1);
-            expect(mine()[0].left).toBe(true);
+            await waitFor(() => expect(mine()).toHaveLength(1));
+            await waitFor(() => expect(mine()[0].left).toBe(true));
             expect(remoteConnectionCount()).toBe(0);
         } finally {
             createSpy.mockImplementation(defaultImpl);

@@ -5,13 +5,16 @@
  * and its timers) both work on this context.
  */
 
-import { toHex } from './relayCodec';
+import { batchFits } from './relayBatchCodec';
+import { toHex } from './relayWire';
 import { createReassembler } from './relayInbox';
 
 import type { FrameHeader, RelayCodec } from './relayCodec';
+import type { Batch } from './relayBatchCodec';
 import type { Reassembler } from './relayInbox';
+import type { InflateQueue } from './relayInflate';
 import type { StreamTable } from './relayStreams';
-import type { EmitFrame, OutFrame, Outbox } from './relayOutbox';
+import type { EmitBatch, EmitFrame, OutFrame, Outbox } from './relayOutbox';
 import type { SeenSet, TokenBucket } from './relayGuards';
 
 /** The link's two roles: the phone announces itself, the desktop host only answers. */
@@ -42,6 +45,8 @@ export type Peer = {
     readonly reassembler: Reassembler;
     /** Finished message ids → when they were last acknowledged. */
     readonly completed: Map<string, number>;
+    /** Whether the peer's latest presence advertised batch events (or it sent one): only then is it sent any. A new epoch starts without it. */
+    batch: boolean;
 };
 
 export type LinkContext = {
@@ -50,6 +55,8 @@ export type LinkContext = {
     readonly topic: string;
     readonly selfId: string;
     readonly role: LinkRole;
+    /** Whether this link sends and reads batch events and says so in its presence; off, it behaves as the first release of the link did. */
+    readonly batching: boolean;
     readonly now: () => number;
     readonly random: (length: number) => Uint8Array;
     /** Random per link instance, announced in every frame: a frame made for an earlier instance never matches. */
@@ -61,6 +68,10 @@ export type LinkContext = {
     readonly owedPresence: Set<string>;
     readonly seen: SeenSet;
     readonly decryptBudget: TokenBucket;
+    /** How many data messages may finish a second: each is unzipped and parsed, and one batch event can finish up to 64 of them for one decrypt. */
+    readonly finishedBudget: TokenBucket;
+    /** Where a finished message waits to be unzipped and parsed: at most a few run at once. */
+    readonly inflater: InflateQueue;
     readonly outbox: Outbox;
     readonly messageHandlers: Set<(peerId: string, message: unknown) => void>;
     readonly joinHandlers: Set<(peerId: string) => void>;
@@ -86,6 +97,8 @@ const controlFrame = (
         part: 0,
         parts: 1,
         kind,
+        // Presence tells the receiver this link reads batch events; an older link ignores the flag.
+        ...(kind === 'presence' && ctx.batching ? { batch: true as const } : {}),
     },
     part: NO_BYTES,
 });
@@ -104,6 +117,19 @@ export const emitFrame = (ctx: LinkContext, frame: EmitFrame): Promise<void> => 
         });
 };
 
+/** A batch's trip out: sealed and published. A failure is nobody's to answer: its parts are sent again until acknowledged, its acks when the message arrives again. */
+export const emitBatch = (ctx: LinkContext, { to, toEpoch, acks, frames }: EmitBatch): Promise<void> => {
+    const batch: Batch = {
+        header: { v: 2, id: toHex(ctx.random(16)), from: ctx.selfId, to, toEpoch, epoch: ctx.epoch, ts: ctx.now() },
+        acks,
+        frames,
+    };
+    return ctx.codec
+        .sealBatch(batch)
+        .then((content) => ctx.io.publish(ctx.topic, content))
+        .catch(() => undefined);
+};
+
 /**
  * A relay socket opened. The presence frames that found no relay open are sent again, once each.
  * A phone that knows no peer yet announces itself on every open too: the desktop may listen on
@@ -120,8 +146,15 @@ export const sendPresenceOnOpen = (ctx: LinkContext): void => {
 export const sendPresence = (ctx: LinkContext, peer: Peer | null): void =>
     ctx.outbox.sendControl(controlFrame(ctx, 'presence', peer));
 
+/** Whether the peer is sent batch events: this link batches, the peer said it reads them, and a batch between the two can be made (see `batchFits`). */
+export const canBatch = (ctx: LinkContext, peerId: string): boolean =>
+    ctx.batching && ctx.peers.get(peerId)?.batch === true && batchFits(ctx.selfId, peerId);
+
+/** An ack rides in a batch to a peer that reads them, and leaves as its own frame to any other. */
 export const sendAck = (ctx: LinkContext, peer: Peer, msgId: string): void =>
-    ctx.outbox.sendControl(controlFrame(ctx, 'ack', peer, msgId));
+    canBatch(ctx, peer.id)
+        ? ctx.outbox.sendBatchedAck(peer.id, peer.epoch, msgId)
+        : ctx.outbox.sendControl(controlFrame(ctx, 'ack', peer, msgId));
 
 /** A link `bye` to one peer. */
 export const sendBye = (ctx: LinkContext, peer: Peer): void => ctx.outbox.sendControl(controlFrame(ctx, 'bye', peer));
@@ -139,6 +172,7 @@ const createPeer = (ctx: LinkContext, id: string, epoch: string, ts: number): Pe
     newestTs: ts,
     reassembler: createReassembler(),
     completed: new Map(),
+    batch: false,
 });
 
 /** Ends a peer: forgets its streams and unacknowledged messages and reports the leave. `bye` tells the peer too. */
@@ -157,7 +191,10 @@ export const removePeer = (ctx: LinkContext, peer: Peer, bye: boolean): void => 
  * only if it is newer than anything accepted from that peer, so a replayed older one changes nothing
  * (null).
  */
-export const admitPeer = (ctx: LinkContext, header: FrameHeader): { peer: Peer; isNew: boolean } | null => {
+export const admitPeer = (
+    ctx: LinkContext,
+    header: Pick<FrameHeader, 'from' | 'epoch' | 'ts'>,
+): { peer: Peer; isNew: boolean } | null => {
     const known = ctx.peers.get(header.from);
     if (known?.epoch === header.epoch) {
         known.lastSeen = ctx.now();

@@ -1001,57 +1001,154 @@ served while at least one phone wants it.
   (SHA-256 of the app id, `relay` and the room id), over WebSockets the link opens itself
   (`relaySockets.ts`, apart from trystero's). A message is gzipped once, split into parts and each part sealed with
   AES-GCM under a key HKDF-derived from the pairing key (fresh random IV per part); an event stays under
-  `RELAY_EVENT_MAX_BYTES` (48 000 bytes, pinned by a live publish to every listed relay). WebRTC stays preferred: a
-  peer that joins over WebRTC within a 3 s grace period of its relay join is `direct` (a WebRTC join error ends
-  the wait at once), otherwise `relay`, and keeps that path until it leaves. The desktop host listens on every
-  relay; a phone listens on up to 3, and a phone that knows no desktop yet announces itself on each
-  relay that opens, so the first presence reaches a relay the host listens on. What this adds to what the relays can see:
-    - They now also carry the app's encrypted data. They see its timing and approximate sizes, keep the
-      events at least briefly, and any relay can record them.
-    - They see the same pubkey for the signalling and the data (trystero's one key), so they can link the two.
-    - Anyone who records the traffic and later gets the pairing key can decrypt it: there is no forward secrecy
-      on this path. **Reset pairing** ends that for later traffic.
-    - Every paired phone holds the same key, so each is equally trusted and can pose as another.
-    - Junk sent to the topic can delay the path: the link decrypts at most 50 events a second and drops the rest
-      unread, so junk can starve real frames. Accepted for a fallback path.
-    - A replayed presence can make a short-lived ghost peer (gone after 25 s of silence, and a presence of another
-      epoch replaces a live peer only if it is newer than anything accepted from it); it has no data effect.
-    - What a replayed event can and cannot do. Whoever records events cannot read them, but can hand one back
-      while it is under 300 s old. A replay cannot cross a restart of the receiver (data and acks are bound to the
-      receiver's random epoch) or of the sender (a presence or frame of another epoch replaces a live peer only if
-      it is newer than anything accepted from it), cannot be delivered twice (replays are remembered for 600 s: per
-      finished data message `(sender, message)` — not per part, so a message whose partial was evicted still
-      completes when its sender sends it again — and per part for presence, ack and bye frames; a replay of a
-      finished message is only acknowledged again), and cannot retire a live stream. Data streams are ordered per
-      `(sender, stream)`: a sender draws a fresh stream id when it starts sending to a peer and again after it
-      forgets the peer, and the receiver keeps each stream's inbox across the peer's removal and re-admission, so a
-      one-sided drop causes no stall and no reset. A stream id that is new to the receiver replaces the sender's
-      live stream only if it comes from the epoch the sender was admitted with and its frame is newer than
-      anything accepted on the live stream — a sender draws a new stream only after its older frames, so a replay
-      of an older stream always carries an older timestamp. Any other new stream is born retired, and a frame of a
-      retired stream is ignored and not acknowledged, so its sender gives up through its normal resend path.
-      The rule trusts the sender's own timestamps, so it has a known limit. If a sender's clock steps back by more
-      than the time since its last accepted frame (a manual change, a resync), its next stream carries a timestamp
-      older than the live stream's newest and is born retired: nothing of it is delivered or acknowledged, and the
-      sender gives up after its resends, sends a `bye` and tries again on yet another stream. This heals once the
-      sender's clock has caught up with the live stream's newest timestamp, which takes at most as long as the step
-      itself, and a step of more than five minutes cannot happen on this path at all, because a frame more than
-      300 s from the receiver's clock is refused whatever its stream (the relay path needs clocks within five
-      minutes of each other). Replacing an idle live stream instead would shorten that wait, but would let a
-      replayed frame of an older stream retire a live one again, so the link does not. What a replay can still do:
-      make a short-lived ghost peer, or deliver a frame of the live stream that had not arrived yet (which the
-      sender would have delivered anyway). The table is bounded, not exact: at most 32 streams a sender, dropped
-      lazily after 600 s unused.
-    - The phone listens on up to 3 relays, on any network, so it may download each message up to 3 times, one copy
-      per relay; the app processes it once. The sockets drop a copy by the SHA-256 of its content before anything
-      is decrypted (never by the relay's event id, which a relay could stamp on a forged event to block the real
-      ones), remembering at most 4096 contents for 60 s and computing at most 64 digests at a time, and drop the
-      link's own echoes by pubkey. The desktop listens on every relay.
-    - Both paths sign with one pubkey from one IP, so a relay's rate limit or block by pubkey hits both; the
-      link's send budget (8 events a second) keeps that unlikely. A relay that answers one of the link's events
-      `OK false` with a `rate-limited:`, `blocked:`, `banned:`, `restricted:`, `pow:` or `auth-required:` reason
-      gets no more of them for 60 s, doubling on each new refusal up to 15 min (an `OK true` resets it); its
-      socket and subscription stay.
+  `RELAY_EVENT_MAX_BYTES` (48 000 bytes, pinned by a live publish to every listed relay). The link sends at most 8
+  events a second (a burst of 1), so to a peer that reads them it carries many messages in one event, a **batch**
+  (`v: 2`):
+    - **Format.** One sealed event for one receiver: a random 128-bit `id` of its own, the sender's `from` and `epoch`,
+      the receiver's `to` and `toEpoch`, and `ts`, carried once; then the ids of the messages it acknowledges (raw,
+      16 bytes each) and data parts that carry no sender fields. Acks stay per message, keyed by `msgId`: the replay
+      key, the re-ack rule and the stream rules are the frame's, there is no cumulative ack, and a lost middle message
+      is sent again alone. An ack waits up to 50 ms (`ACK_LINGER_MS`) for data to leave with, and leaves alone after
+      that. Acks take batch slots ahead of data.
+    - **Limits and budgets.**
+        - Each part keeps the per-frame limits (`RELAY_HEADER_MAX_BYTES` on its header, `RELAY_PART_BYTES` on its
+          bytes). A batch holds at most `RELAY_BATCH_MAX_FRAMES` (64) parts and acks together; a receiver drops one
+          with more, or one whose layout or any inner header is malformed, whole.
+        - The sender counts a batch's header in its real UTF-8 bytes (escapes included). A batch between two ids is
+          made only when its header is within `RELAY_HEADER_MAX_BYTES` **and** one full part with its own header fits
+          beside it (`batchFits`: the room is the event's plaintext less the header, and a part costs
+          `RELAY_BATCH_FRAME_BYTES` plus `RELAY_PART_BYTES`). Ids of ordinary length, and even 64 ASCII characters
+          each, pass; ids of many multi-byte or escaped characters may not. A peer for which it fails is sent single
+          frames, and a batch that finds nothing that fits sends its head part as a frame.
+        - At most 512 acks are owed to a peer at a time, the oldest dropped past that (a lost ack only makes its sender
+          send the message again, and the duplicate is acknowledged again).
+        - One decrypt can finish up to 64 messages, so each data message that finishes, in a batch or in a frame, is
+          charged to a budget of 200 a second (burst 512) before it is unzipped and parsed; over it the message is
+          dropped unread, neither remembered nor acknowledged, and its sender sends it again. The burst is sized for one
+          full startup of the phone's page: an account with 30 or more challenges sends 330 or more invokes at once,
+          and 512 is one second of full batches (8 events of 64), so a startup is never dropped and resent after the
+          4 s resend wait.
+        - Two limits, stated plainly. The finished-message budget (200 a second) and the inflate queue are per link, not
+          per peer: a key holder that floods without stopping can make the other phones' messages drop. Their senders
+          give up after `MAX_RESENDS` resends (about 12 s) and the phones reconnect; a flood shorter than that only
+          delays them. This is accepted, because every key holder is already equally trusted. And at 200 finished
+          messages a second, the sustained inflate work a key holder can cause is about 4 times that of single frames
+          (which the 50 events a second decrypt cap holds to 50 messages a second); it is still bounded by
+          `MAX_CONCURRENT_INFLATES` at any moment.
+        - A finished message waits in a queue before it is unzipped and parsed (`relayInflate.ts`), so the memory one
+          burst can hold is bounded whatever its size: at most 4 concurrent inflations of up to
+          `MAX_PEER_MESSAGE_BYTES` each, plus their decode and parse copies, and at most 512 waiting messages
+          (`MAX_QUEUED_INFLATES`; the waiting compressed parts are bounded by the burst of 512). Messages wait in order
+          and are not dropped, except that a message arriving with the queue full is dropped unread (after the budget
+          is asked) — neither remembered nor acknowledged, so its sender sends it again.
+        - The ordered inbox holds up to 128 finished messages behind a gap (`MAX_HELD_MESSAGES`, two full batches), so
+          a lost batch leaves the batch after it, and one more, waiting for its resend instead of delivering the later
+          messages out of order; past 128 the gap is skipped at once. That bounds one stream at 128 ×
+          `MAX_PEER_MESSAGE_BYTES` (256 MiB serialized). A sender has at most one live stream: a new stream retires the
+          old one, and a retired inbox is closed and holds nothing. Only the table entries count toward the 32 a sender
+          may have, so the most one sender holds behind gaps is one stream's 256 MiB, not 32 times that.
+        - The memory the inboxes hold is bounded in bytes for the whole link: at most `MAX_HELD_BYTES` (64 MiB),
+          counted as the inflated size of each message (what gunzip produced; the gzipped size is not used), across
+          every stream and sender. It counts both the messages held behind gaps and the messages parked for a sender
+          that is away. When a message brings the total over the cap, parked messages go first: the suspended inbox with
+          the most parked bytes loses its oldest parked messages, until the total is under the cap. If it is still over,
+          the inbox holding the most bytes behind a gap skips its gap, and so on: the later messages of that stream are
+          delivered ahead of the missing ones, as the count limit does. A message delivered, skipped or dropped no
+          longer counts. A parked message was never acknowledged: the ack goes only to a sender that is
+          still joined, and a message parks only while its sender is away. A dropped parked message is neither
+          acknowledged nor remembered (its replay key is forgotten), so if the sender comes back with the same epoch it
+          sends the message again, as it does any message it holds unacknowledged, and that copy is delivered once.
+          This recovers it only while the sender is still resending (`MAX_RESENDS` tries, about 12 s): a sender that
+          gave up before it returned, or never returns, loses the message, and so does one that comes back with a new
+          epoch, whose old streams are retired anyway. That loss is accepted for a sender that left. Bytes held behind a gap by a suspended inbox cannot be given
+          up, so the total can stay over the cap while nothing is left that can be dropped or skipped; it comes back
+          under as those senders return or their streams are dropped (600 s unused). Parsed objects in memory are larger
+          than their serialized size, so 64 MiB bounds the serialized bytes, not the memory itself. Only a paired key
+          holder can send messages that large, and every key holder is already equally trusted.
+        - The other memory that waits before a message reaches an inbox, with its bound from the constants (upper bounds
+          from the counts: the 50 events a second the link decrypts also limit how fast any of it can fill, which is why a
+          real burst stays far below them). A reassembled message is gzipped, at most `RELAY_MAX_PARTS` ×
+          `RELAY_PART_BYTES` = 100 × 35 137 = 3 513 700 bytes (3.35 MiB). The messages waiting in the inflate queue are
+          up to `MAX_QUEUED_INFLATES` (512) of them, so up to 512 × 3 513 700 = 1 799 014 400 bytes (1.68 GiB) of gzipped
+          bytes, besides the 4 being unzipped (each up to 2 MiB inflated, plus the copies of decode and parse). The
+          unfinished messages a peer has partly received are up to `MAX_PARTIAL_MESSAGES` (8) per peer, so up to
+          8 × 3 513 700 = 28 109 600 bytes (26.8 MiB) a peer. The relay link itself does not cap how many peers it
+          tracks (the host refuses a fourth phone at the protocol level, in the host, not in the link), so the link total
+          for partial messages grows with the number of peers a key holder makes up, each with its own 8 partials.
+        - The replay memory is bounded so that no live entry is ever evicted. An entry lives 600 s, and every entry
+          comes from a budgeted source: each decrypted event adds at most one key (a batch key or one frame key), and
+          each finished data message adds one. A batch's acks add no key. So the memory never holds more than
+          (50 events + 200 messages a second) × 600 s, plus the two burst allowances (50 and 512), which is 150 562
+          entries, under its cap of 262 144; the cap only bounds memory and is never reached by live entries, so a
+          recorded batch or message handed back within its window is always still remembered.
+    - **Receive checks.** A batch passes the checks a frame passes, once for the whole event: one that is not for the
+      receiver (its `to`, `toEpoch` or `ts`) is dropped whole. Then the replay memory is asked for the batch `id`
+      (`batch|from|id`): one seen before is dropped whole, before it can admit a peer that has left or refresh one that
+      is silent, and the id is remembered once the batch is accepted. A message sent again travels in a batch with an
+      id of its own, so its duplicate is still acknowledged again. A message that finishes is first checked for being
+      in progress (a copy of a message queued or being unzipped is not queued again and is delivered once), then the
+      budget and the queue are asked, and only then is any stream or inbox state touched, so a message that is dropped
+      changes none. The message is remembered and acknowledged only after its unzip and parse have finished, never
+      before, and not at all if the link was left meanwhile (leaving also drops the queue); the ack goes to the peer
+      that is joined under that id now when it is the same sender instance, so a peer that left and came back during
+      the unzip still hears it.
+    - **Compatibility with beta.3.** Presence and bye stay single `v: 1` frames, and a presence carries the capability
+      flag `batch`, which the old header check ignores since it reads only the fields it names. A link sends batches
+      only to a peer whose latest presence carried the flag (or that sent a batch), and a peer that joins again with a
+      new epoch starts without it, so every other peer is sent single frames, and both kinds are read by a new link.
+      Acks owed to a peer that has since withdrawn the flag leave as ack frames.
+    - **Paths and what the relays see.** WebRTC stays preferred: a
+      peer that joins over WebRTC within a 3 s grace period of its relay join is `direct` (a WebRTC join error ends
+      the wait at once), otherwise `relay`, and keeps that path until it leaves. The desktop host listens on every
+      relay; a phone listens on up to 3, and a phone that knows no desktop yet announces itself on each
+      relay that opens, so the first presence reaches a relay the host listens on. What this adds to what the relays can see:
+        - They now also carry the app's encrypted data. They see its timing and approximate sizes, keep the
+          events at least briefly, and any relay can record them.
+        - They see the same pubkey for the signalling and the data (trystero's one key), so they can link the two.
+        - Anyone who records the traffic and later gets the pairing key can decrypt it: there is no forward secrecy
+          on this path. **Reset pairing** ends that for later traffic.
+        - Every paired phone holds the same key, so each is equally trusted and can pose as another.
+        - Junk sent to the topic can delay the path: the link decrypts at most 50 events a second and drops the rest
+          unread, so junk can starve real frames. Accepted for a fallback path.
+        - A replayed presence can make a short-lived ghost peer (gone after 25 s of silence, and a presence of another
+          epoch replaces a live peer only if it is newer than anything accepted from it); it has no data effect.
+        - What a replayed event can and cannot do. Whoever records events cannot read them, but can hand one back
+          while it is under 300 s old. A replay cannot cross a restart of the receiver (data and acks are bound to the
+          receiver's random epoch) or of the sender (a presence or frame of another epoch replaces a live peer only if
+          it is newer than anything accepted from it), cannot be delivered twice (replays are remembered for 600 s: per
+          finished data message `(sender, message)` — not per part, so a message whose partial was evicted still
+          completes when its sender sends it again — per part for presence, ack and bye frames, and per batch id for batches;
+          a replay of a finished message is only acknowledged again; the memory is capped at 262 144 entries, the oldest
+          going first, a cap the budgets keep live entries well under: see **Limits and budgets**), and cannot retire a live stream. Data streams are ordered per
+          `(sender, stream)`: a sender draws a fresh stream id when it starts sending to a peer and again after it
+          forgets the peer, and the receiver keeps each stream's inbox across the peer's removal and re-admission, so a
+          one-sided drop causes no stall and no reset. A stream id that is new to the receiver replaces the sender's
+          live stream only if it comes from the epoch the sender was admitted with and its frame is newer than
+          anything accepted on the live stream — a sender draws a new stream only after its older frames, so a replay
+          of an older stream always carries an older timestamp. Any other new stream is born retired, and a frame of a
+          retired stream is ignored and not acknowledged, so its sender gives up through its normal resend path.
+          The rule trusts the sender's own timestamps, so it has a known limit. If a sender's clock steps back by more
+          than the time since its last accepted frame (a manual change, a resync), its next stream carries a timestamp
+          older than the live stream's newest and is born retired: nothing of it is delivered or acknowledged, and the
+          sender gives up after its resends, sends a `bye` and tries again on yet another stream. This heals once the
+          sender's clock has caught up with the live stream's newest timestamp, which takes at most as long as the step
+          itself, and a step of more than five minutes cannot happen on this path at all, because a frame more than
+          300 s from the receiver's clock is refused whatever its stream (the relay path needs clocks within five
+          minutes of each other). Replacing an idle live stream instead would shorten that wait, but would let a
+          replayed frame of an older stream retire a live one again, so the link does not. What a replay can still do:
+          make a short-lived ghost peer, or deliver a frame of the live stream that had not arrived yet (which the
+          sender would have delivered anyway). The table is bounded, not exact: at most 32 streams a sender, dropped
+          lazily after 600 s unused.
+        - The phone listens on up to 3 relays, on any network, so it may download each message up to 3 times, one copy
+          per relay; the app processes it once. The sockets drop a copy by the SHA-256 of its content before anything
+          is decrypted (never by the relay's event id, which a relay could stamp on a forged event to block the real
+          ones), remembering at most 4096 contents for 60 s and computing at most 64 digests at a time, and drop the
+          link's own echoes by pubkey. The desktop listens on every relay.
+        - Both paths sign with one pubkey from one IP, so a relay's rate limit or block by pubkey hits both; the
+          link's send budget (8 events a second) keeps that unlikely. A relay that answers one of the link's events
+          `OK false` with a `rate-limited:`, `blocked:`, `banned:`, `restricted:`, `pow:` or `auth-required:` reason
+          gets no more of them for 60 s, doubling on each new refusal up to 15 min (an `OK true` resets it); its
+          socket and subscription stay.
 - **The phone page is served from this project's GitHub Pages and reads the key from the URL fragment.** A
   compromised Pages deploy (or a compromised `pages.yml` run) could ship JavaScript that sends paired keys
   elsewhere. Mitigation: Pages publishes only after a green release (`workflow_dispatch` from `build.yml`), the

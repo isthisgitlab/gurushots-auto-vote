@@ -7,7 +7,7 @@
 
 import { sha256Hex } from '../helpers/sha256';
 import { PEER_SILENCE_MS, PRESENCE_MS, createRelayLink, relayTopic } from '../../src/ts/core/remote/relayLink';
-import { RELAY_MAX_PARTS, RELAY_PART_BYTES } from '../../src/ts/core/remote/relayCodec';
+import { RELAY_MAX_PARTS, RELAY_PART_BYTES } from '../../src/ts/core/remote/relayWire';
 import { RESEND_MS } from '../../src/ts/core/remote/relayOutbox';
 import { TRYSTERO_APP_ID } from '../../src/ts/core/remote/relays';
 import { TOPIC, createBus, flush, publishedMessages, stubCodec } from '../helpers/relayBus';
@@ -27,10 +27,16 @@ type Side = {
 
 let endpointCount = 0;
 
+/** Whether the links under test batch; the shared-behaviour cases run in both modes. */
+let batching = false;
+
+/** Every event published, frames and batches alike. */
+const events = (bus: Bus): number => bus.published.length + bus.batches.length;
+
 const side = (bus: Bus, role: LinkRole, selfId: string): Side => {
     const io = bus.endpoint();
     const codec = stubCodec();
-    const transport = createRelayLink({ io, codec, topic: TOPIC, selfId, role });
+    const transport = createRelayLink({ io, codec, topic: TOPIC, selfId, role, batching });
     const recorded: Side = { transport, codec, io, joins: [], leaves: [], messages: [], index: endpointCount++ };
     transport.onPeerJoin((peerId) => recorded.joins.push(peerId));
     transport.onPeerLeave((peerId) => recorded.leaves.push(peerId));
@@ -46,8 +52,9 @@ const run = async (ms: number, step = 100): Promise<void> => {
     }
 };
 
+/** The frames of a kind an endpoint published, whether each travelled alone or inside a batch event. */
 const ofKind = (bus: Bus, endpoint: number, kind: string): Published[] =>
-    bus.published.filter((frame) => frame.endpoint === endpoint && frame.header.kind === kind);
+    bus.items.filter((frame) => frame.endpoint === endpoint && frame.header.kind === kind);
 
 describe('relayTopic', () => {
     test('is the SHA-256 hex of the app id, relay and the room id', async () => {
@@ -56,9 +63,10 @@ describe('relayTopic', () => {
     });
 });
 
-describe('the relay link', () => {
+describe.each([false, true])('the relay link (batching %s)', (mode) => {
     let bus: Bus;
     beforeEach(() => {
+        batching = mode;
         jest.useFakeTimers();
         jest.setSystemTime(1_700_000_000_000);
         bus = createBus();
@@ -84,7 +92,7 @@ describe('the relay link', () => {
         test('the phone repeats presence every 8 s; an idle host sends nothing at all', async () => {
             const lonelyHost = side(bus, 'host', 'host-id');
             await run(60_000, 1_000);
-            expect(bus.published).toHaveLength(0);
+            expect(events(bus)).toBe(0);
             const phone = side(bus, 'phone', 'phone-id');
             await run(PRESENCE_MS * 3, 500);
             const phonePresence = ofKind(bus, phone.index, 'presence').filter((frame) => frame.header.to === '');
@@ -135,7 +143,7 @@ describe('the relay link', () => {
             bus.failPublish = true;
             const phone = side(bus, 'phone', 'phone-id');
             await run(300);
-            expect(bus.published).toHaveLength(0);
+            expect(events(bus)).toBe(0);
             bus.failPublish = false;
             phone.io.open();
             await run(600);
@@ -170,7 +178,7 @@ describe('the relay link', () => {
             host.io.open();
             host.io.open();
             await run(300);
-            expect(bus.published).toHaveLength(0);
+            expect(events(bus)).toBe(0);
         });
 
         test('an answer presence that found no relay open is sent when one opens', async () => {
@@ -256,11 +264,24 @@ describe('the relay link', () => {
             bus.failPublish = false;
             phone.io.open();
             await run(300);
-            expect(bus.published).toHaveLength(0);
+            expect(events(bus)).toBe(0);
         });
     });
 
     describe('messages', () => {
+        test('data and acks travel inside batch events when the links batch, and as frames when they do not', async () => {
+            const { host, phone } = await pair();
+            await host.transport.send({ t: 'one' }, 'phone-id');
+            await run(1_000);
+            expect(phone.messages).toEqual([['host-id', { t: 'one' }]]);
+            expect(bus.batches.length > 0).toBe(mode);
+            expect(bus.published.some((frame) => frame.header.kind === 'data' || frame.header.kind === 'ack')).toBe(
+                !mode,
+            );
+            expect(ofKind(bus, host.index, 'data')).toHaveLength(1);
+            expect(ofKind(bus, phone.index, 'ack')).toHaveLength(1);
+        });
+
         test('a message goes each way, is acknowledged and is not sent again', async () => {
             const { host, phone } = await pair();
             await host.transport.send({ t: 'hello', n: 1 }, 'phone-id');
@@ -351,7 +372,9 @@ describe('the relay link', () => {
             expect(ofKind(bus, host.index, 'data')).toHaveLength(2);
         });
 
-        test('a resend that crosses the original is delivered once (the seen-set)', async () => {
+        // What stops the second copy differs by mode: a frame is stopped by the seen-set (its data key), a batch event
+        // by the batch key, before any of its messages is looked at.
+        test(`an event handed back twice is delivered once (${mode ? 'the batch key' : 'the seen-set'})`, async () => {
             const { host, phone } = await pair();
             await host.transport.send({ t: 'once' }, 'phone-id');
             await run(300);
@@ -434,7 +457,7 @@ describe('the relay link', () => {
         test('a link with no peers leaves without a bye', async () => {
             const lonely = side(bus, 'host', 'host-id');
             await lonely.transport.leave();
-            expect(bus.published).toHaveLength(0);
+            expect(events(bus)).toBe(0);
             expect(lonely.io.closed).toBe(true);
         });
 

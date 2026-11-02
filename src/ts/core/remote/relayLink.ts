@@ -12,10 +12,28 @@
  * cap — accepted for a fallback path. Dependency-light and DOM-free.
  */
 
-import { RELAY_MAX_PARTS, RELAY_PART_BYTES, cryptoRandom, splitBytes, toHex } from './relayCodec';
+import { cryptoRandom, splitBytes } from './relayCodec';
+import { batchBudgetBytes } from './relayBatchCodec';
+import { RELAY_MAX_PARTS, RELAY_PART_BYTES, toHex } from './relayWire';
 import { createSeenSet, createTokenBucket } from './relayGuards';
-import { DECRYPT_FRAMES_PER_SECOND, REPLAY_MEMORY_MS, handleContent } from './relayLinkFrames';
-import { broadcastByeFrame, emitFrame, removePeer, sendPresenceOnOpen, sendPresence } from './relayLinkState';
+import {
+    DECRYPT_FRAMES_PER_SECOND,
+    FINISHED_MESSAGES_BURST,
+    FINISHED_MESSAGES_PER_SECOND,
+    REPLAY_MEMORY_MAX_ENTRIES,
+    REPLAY_MEMORY_MS,
+    handleContent,
+} from './relayLinkFrames';
+import {
+    broadcastByeFrame,
+    canBatch,
+    emitBatch,
+    emitFrame,
+    removePeer,
+    sendPresenceOnOpen,
+    sendPresence,
+} from './relayLinkState';
+import { createInflateQueue } from './relayInflate';
 import { createOutbox } from './relayOutbox';
 import { createStreamTable } from './relayStreams';
 import { isPlainObject } from '../plainObject';
@@ -50,6 +68,8 @@ export type RelayLinkOptions = {
     topic: string;
     selfId: string;
     role: LinkRole;
+    /** Whether the link sends batch events to peers that read them and says so in its presence; default true. Off, it is the link as it was before batches. */
+    batching?: boolean;
     now?: () => number;
     random?: (length: number) => Uint8Array;
 };
@@ -123,6 +143,7 @@ export const createRelayLink = (options: RelayLinkOptions): RemoteTransport => {
     const random = options.random ?? cryptoRandom;
     const ctx: LinkContext = {
         ...options,
+        batching: options.batching ?? true,
         now,
         random,
         epoch: toHex(random(16)),
@@ -131,12 +152,17 @@ export const createRelayLink = (options: RelayLinkOptions): RemoteTransport => {
             for (const handler of ctx.messageHandlers) handler(from, message);
         }, now),
         owedPresence: new Set(),
-        seen: createSeenSet(REPLAY_MEMORY_MS, now),
+        seen: createSeenSet(REPLAY_MEMORY_MS, now, REPLAY_MEMORY_MAX_ENTRIES),
         decryptBudget: createTokenBucket(DECRYPT_FRAMES_PER_SECOND, DECRYPT_FRAMES_PER_SECOND, now),
+        finishedBudget: createTokenBucket(FINISHED_MESSAGES_PER_SECOND, FINISHED_MESSAGES_BURST, now),
+        inflater: createInflateQueue(),
         outbox: createOutbox({
             now,
             random,
             emit: (frame) => void emitFrame(ctx, frame),
+            emitBatch: (batch) => void emitBatch(ctx, batch),
+            canBatch: (peerId) => canBatch(ctx, peerId),
+            batchBudgetBytes: (peerId) => batchBudgetBytes(ctx.selfId, peerId),
             // An unacknowledged message ends the peer, and the peer is told. A peer that left took its
             // messages with it (`forgetPeer`), so a message that gives up always has its peer here.
             giveUp: (peerId) => removePeer(ctx, ctx.peers.get(peerId) as Peer, true),
@@ -181,6 +207,7 @@ export const createRelayLink = (options: RelayLinkOptions): RemoteTransport => {
             unsubscribe();
             unsubscribeOpen();
             ctx.outbox.close();
+            ctx.inflater.close();
             ctx.streams.close();
             ctx.peers.clear();
             ctx.io.close();

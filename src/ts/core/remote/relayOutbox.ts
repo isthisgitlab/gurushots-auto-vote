@@ -2,14 +2,18 @@
  * The sending half of the relay link: every frame leaves through one token bucket (the send
  * budget), control frames (presence, ack, bye) before data, and a data message is sent again
  * until the receiver acknowledges it. Under backlog the messages that carry log lines go
- * first. It seals and publishes nothing itself — `emit` does — so tests drive it with a clock
- * and fake timers alone.
+ * first. To a peer that reads batch events, one budget token pays for a whole event: the data
+ * parts queued for the peer and the acks owed to it leave together, and an ack waits a moment
+ * for data to ride with. It seals and publishes nothing itself — `emit` and `emitBatch` do — so
+ * tests drive it with a clock and fake timers alone.
  */
 
-import { toHex } from './relayCodec';
+import { RELAY_BATCH_ACK_BYTES, RELAY_BATCH_FRAME_BYTES, RELAY_BATCH_MAX_FRAMES } from './relayBatchCodec';
+import { toHex } from './relayWire';
 import { createTokenBucket } from './relayGuards';
 
 import type { FrameHeader } from './relayCodec';
+import type { BatchFrame } from './relayBatchCodec';
 import type { TokenBucket } from './relayGuards';
 
 /** At most this many events leave the link per second (it stays well under the per-pubkey rate limits public relays apply). */
@@ -20,6 +24,15 @@ export const RESEND_MS = 4_000;
 
 /** How many times a message is sent again before the peer is given up on. */
 export const MAX_RESENDS = 3;
+
+/** How long an ack waits for data to ride with before it leaves alone. */
+export const ACK_LINGER_MS = 50;
+
+/** At most this many acks are owed to one peer at a time; past it the oldest is dropped (its sender sends the message again, and the duplicate is acknowledged again). */
+export const MAX_OWED_ACKS = 512;
+
+/** At most this many owed acks of a peer that stopped reading batches are sent as frames; the rest are dropped. */
+export const MAX_RELEASED_ACKS = 8;
 
 /** Past this many queued frames the link is backlogged: queued log messages are dropped and new ones refused. */
 export const BACKLOG_FRAMES = 16;
@@ -34,6 +47,9 @@ export type OutFrame = { draft: FrameDraft; part: Uint8Array };
 
 /** A frame as it leaves the budget: its draft with the stream and sequence number the outbox gave it. */
 export type EmitFrame = { draft: FrameDraft & { seq: number; stream: string }; part: Uint8Array };
+
+/** A batch as it leaves the budget: the receiver it is for, the ids it acknowledges and the data parts with their stream and sequence numbers. */
+export type EmitBatch = { to: string; toEpoch: string; acks: string[]; frames: BatchFrame[] };
 
 type OutMessage = {
     readonly msgId: string;
@@ -58,6 +74,12 @@ export type OutboxDeps = {
     random: (length: number) => Uint8Array;
     /** Seals and publishes one frame; the outbox does not wait for it. */
     emit: (frame: EmitFrame) => void;
+    /** Seals and publishes one batch event; the outbox does not wait for it. */
+    emitBatch: (batch: EmitBatch) => void;
+    /** Whether the peer is sent batch events. */
+    canBatch: (peerId: string) => boolean;
+    /** The bytes a batch to the peer may hold besides its base (see `batchBudgetBytes`). */
+    batchBudgetBytes: (peerId: string) => number;
     /** A message was never acknowledged: the peer is given up on. */
     giveUp: (peerId: string) => void;
 };
@@ -67,6 +89,8 @@ export type Outbox = {
     sendControl: (frame: OutFrame) => void;
     /** Queues a message's frames; `droppable` marks one that carries log lines. Throws when the queue is full. */
     sendMessage: (peerId: string, msgId: string, frames: OutFrame[], droppable: boolean) => void;
+    /** Owes the peer an ack for the message, in a batch: it leaves with the next data for the peer, or alone after ACK_LINGER_MS. */
+    sendBatchedAck: (peerId: string, toEpoch: string, msgId: string) => void;
     /** The peer acknowledged the message. */
     ack: (peerId: string, msgId: string) => void;
     /** Forgets everything still queued or unacknowledged for the peer. */
@@ -81,6 +105,8 @@ type OutboxState = {
     readonly messages: Map<string, OutMessage>;
     /** Each peer's current stream: its id and the next sequence number. A peer that is forgotten gets a new stream, starting at 0. */
     readonly streams: Map<string, { id: string; next: number }>;
+    /** The acks owed to each peer in a batch, with the epoch they are for and when the oldest was owed. */
+    readonly acks: Map<string, { toEpoch: string; ids: string[]; since: number }>;
     control: Job[];
     data: Job[];
     pumpTimer: ReturnType<typeof setTimeout> | null;
@@ -115,31 +141,115 @@ const takePlace = (state: OutboxState, peerId: string): { seq: number; stream: s
     return { seq: stream.next++, stream: stream.id };
 };
 
+/** What the next event is: a control frame, a batch for one peer, one data frame alone, or nothing until `ms` have passed. */
+type Pick = { kind: 'control' | 'single' } | { kind: 'batch'; peerId: string } | { kind: 'wait'; ms: number } | null;
+
+/**
+ * Acks owed to a peer that no longer reads batches (its latest presence withdrew the flag) leave as single ack frames,
+ * at most MAX_RELEASED_ACKS of them (the newest): the control queue goes ahead of all data, so a long list of owed
+ * acks must not fill it. The rest are dropped; a lost ack only makes its sender send the message again.
+ */
+const releaseOwedAcks = (state: OutboxState): void => {
+    for (const [peerId, owed] of state.acks) {
+        if (state.deps.canBatch(peerId)) continue;
+        for (const msgId of owed.ids.slice(-MAX_RELEASED_ACKS)) {
+            const draft = { to: peerId, toEpoch: owed.toEpoch, msgId, part: 0, parts: 1, kind: 'ack' as const };
+            state.control.push({ out: { draft, part: new Uint8Array(0) }, message: null });
+        }
+        state.acks.delete(peerId);
+    }
+};
+
+const pickNext = (state: OutboxState): Pick => {
+    releaseOwedAcks(state);
+    if (state.control.length > 0) return { kind: 'control' };
+    let wait = Infinity;
+    for (const [peerId, owed] of state.acks) {
+        const age = state.deps.now() - owed.since;
+        if (age >= ACK_LINGER_MS) return { kind: 'batch', peerId };
+        wait = Math.min(wait, ACK_LINGER_MS - age);
+    }
+    const head = state.data[0];
+    if (head !== undefined) {
+        const peerId = head.out.draft.to;
+        return state.deps.canBatch(peerId) ? { kind: 'batch', peerId } : { kind: 'single' };
+    }
+    return wait === Infinity ? null : { kind: 'wait', ms: wait };
+};
+
+/** A frame of a message leaves: it takes its place on the first, and the resend timer starts when the last has left. */
+const sentFrame = (state: OutboxState, job: Job): { seq: number; stream: string } => {
+    const { message } = job;
+    if (message === null) return { seq: 0, stream: '' };
+    const place = (message.place ??= takePlace(state, message.peerId));
+    message.started = true;
+    message.remaining -= 1;
+    if (message.remaining === 0) message.timer = globalThis.setTimeout(() => resendOrGiveUp(state, message), RESEND_MS);
+    return place;
+};
+
+/**
+ * Takes what one batch event for the peer holds: its owed acks first, then its queued data parts in order, while
+ * the event has room. Null when nothing fits and no ack is owed: the caller then sends the head as a single frame.
+ * The link never reaches this (`canBatch` requires `batchFits` over the same budget, which leaves room for a full
+ * part); it is a guard for the contract of the injected `canBatch` and `batchBudgetBytes`, so one that disagrees
+ * costs a frame, not a throw on every pump.
+ */
+const takeBatch = (state: OutboxState, peerId: string): EmitBatch | null => {
+    const owed = state.acks.get(peerId);
+    let slots = RELAY_BATCH_MAX_FRAMES;
+    let budget = state.deps.batchBudgetBytes(peerId);
+    const acks = owed?.ids.splice(0, slots) ?? [];
+    if (owed?.ids.length === 0) state.acks.delete(peerId);
+    slots -= acks.length;
+    budget -= acks.length * RELAY_BATCH_ACK_BYTES;
+    const taken: Job[] = [];
+    for (const job of state.data) {
+        if (job.out.draft.to !== peerId) continue;
+        const cost = RELAY_BATCH_FRAME_BYTES + job.out.part.length;
+        if (slots === 0 || cost > budget) break;
+        taken.push(job);
+        slots -= 1;
+        budget -= cost;
+    }
+    if (owed === undefined && taken.length === 0) return null;
+    const toEpoch = owed?.toEpoch ?? taken[0].out.draft.toEpoch;
+    const leaving = new Set(taken);
+    state.data = state.data.filter((job) => !leaving.has(job));
+    const frames = taken.map((job): BatchFrame => {
+        const { msgId, part, parts } = job.out.draft;
+        return { msgId, part, parts, ...sentFrame(state, job), bytes: job.out.part };
+    });
+    return { to: peerId, toEpoch, acks, frames };
+};
+
 function pump(state: OutboxState): void {
     state.pumpTimer = null;
     for (;;) {
-        const job = state.control[0] ?? state.data[0];
-        if (job === undefined) return;
+        const next = pickNext(state);
+        if (next === null) return;
+        if (next.kind === 'wait') {
+            state.pumpTimer = globalThis.setTimeout(() => pump(state), next.ms);
+            return;
+        }
         if (!state.bucket.tryTake()) {
             state.pumpTimer = globalThis.setTimeout(() => pump(state), state.bucket.msUntilToken());
             return;
         }
-        if (state.control[0] === job) state.control.shift();
-        else state.data.shift();
-        const { message } = job;
-        const place = message === null ? { seq: 0, stream: '' } : (message.place ??= takePlace(state, message.peerId));
-        state.deps.emit({ draft: { ...job.out.draft, ...place }, part: job.out.part });
-        if (message === null) continue;
-        message.started = true;
-        message.remaining -= 1;
-        // The resend timer starts only once the last part has left the budget.
-        if (message.remaining === 0)
-            message.timer = globalThis.setTimeout(() => resendOrGiveUp(state, message), RESEND_MS);
+        const batch = next.kind === 'batch' ? takeBatch(state, next.peerId) : null;
+        if (batch !== null) {
+            state.deps.emitBatch(batch);
+            continue;
+        }
+        const job = (next.kind === 'control' ? state.control : state.data).shift() as Job; // a batch that took nothing sends the head alone
+        state.deps.emit({ draft: { ...job.out.draft, ...sentFrame(state, job) }, part: job.out.part });
     }
 }
 
+/** Looks at the queues now: anything that is waiting on a timer is looked at again, since what arrived may change what leaves. */
 function kick(state: OutboxState): void {
-    if (state.pumpTimer === null) pump(state);
+    if (state.pumpTimer !== null) globalThis.clearTimeout(state.pumpTimer);
+    pump(state);
 }
 
 const queued = (state: OutboxState): number => state.control.length + state.data.length;
@@ -177,6 +287,7 @@ const sendMessage = (
 const closeOutbox = (state: OutboxState): void => {
     for (const message of state.messages.values()) removeMessage(state, message);
     state.streams.clear();
+    state.acks.clear();
     state.control = [];
     state.data = [];
     if (state.pumpTimer !== null) globalThis.clearTimeout(state.pumpTimer);
@@ -189,6 +300,7 @@ export const createOutbox = (deps: OutboxDeps): Outbox => {
         bucket: createTokenBucket(SEND_EVENTS_PER_SECOND, 1, deps.now),
         messages: new Map(),
         streams: new Map(),
+        acks: new Map(),
         control: [],
         data: [],
         pumpTimer: null,
@@ -200,12 +312,22 @@ export const createOutbox = (deps: OutboxDeps): Outbox => {
             kick(state);
         },
         sendMessage: (peerId, msgId, frames, droppable) => sendMessage(state, peerId, msgId, frames, droppable),
+        sendBatchedAck: (peerId, toEpoch, msgId) => {
+            const owed = state.acks.get(peerId);
+            if (owed === undefined) state.acks.set(peerId, { toEpoch, ids: [msgId], since: deps.now() });
+            else {
+                owed.ids.push(msgId);
+                if (owed.ids.length > MAX_OWED_ACKS) owed.ids.shift();
+            }
+            kick(state);
+        },
         ack: (peerId, msgId) => {
             const message = state.messages.get(msgId);
             if (message?.peerId === peerId) removeMessage(state, message);
         },
         forgetPeer: (peerId) => {
             state.streams.delete(peerId);
+            state.acks.delete(peerId);
             for (const message of state.messages.values()) {
                 if (message.peerId === peerId) removeMessage(state, message);
             }

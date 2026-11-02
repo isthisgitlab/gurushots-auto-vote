@@ -56,4 +56,18 @@ describe('createSeenSet', () => {
         expect(seen.has('b')).toBe(false);
         expect(seen.has('a')).toBe(true);
     });
+
+    test('delete forgets a key at once, ignores one that is not held, and leaves the others', () => {
+        let at = 0;
+        const seen = createSeenSet(1_000, () => at);
+        seen.add('a');
+        seen.add('b');
+        seen.delete('a');
+        seen.delete('never');
+        expect(seen.has('a')).toBe(false);
+        expect(seen.has('b')).toBe(true);
+        seen.add('a'); // remembered again from now
+        at = 999;
+        expect(seen.has('a')).toBe(true);
+    });
 });

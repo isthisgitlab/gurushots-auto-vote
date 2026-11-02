@@ -10,7 +10,7 @@
  * pubkey hits both; the link's send budget keeps that unlikely.
  */
 
-import { RELAY_CONTENT_MAX_BYTES, toHex } from './relayCodec';
+import { RELAY_CONTENT_MAX_BYTES, toHex } from './relayWire';
 import { createSeenSet } from './relayGuards';
 import { isPlainObject } from '../plainObject';
 

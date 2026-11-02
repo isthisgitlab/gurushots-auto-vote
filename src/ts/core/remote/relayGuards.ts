@@ -37,6 +37,8 @@ export const createTokenBucket = (perSecond: number, burst: number, now: () => n
 export type SeenSet = {
     has: (key: string) => boolean;
     add: (key: string) => void;
+    /** Forgets a key at once (it is then not a replay); a key that is not held is ignored. */
+    delete: (key: string) => void;
 };
 
 /**
@@ -63,6 +65,9 @@ export const createSeenSet = (ttlMs: number, now: () => number, maxEntries = Inf
             expiries.delete(key);
             expiries.set(key, now() + ttlMs);
             if (expiries.size > maxEntries) expiries.delete(expiries.keys().next().value as string);
+        },
+        delete: (key) => {
+            expiries.delete(key);
         },
     };
 };

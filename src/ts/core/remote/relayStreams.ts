@@ -18,11 +18,12 @@
  *
  * Memory is bounded, not exact. An entry is dropped once it has been unused for 600 s, but that is
  * checked lazily, on the next `inboxFor` call, so an idle table keeps what it has. A sender has at
- * most 32 entries (the least recently used goes first), and an inbox holds at most 32 finished
- * messages behind a gap and a few parked while the sender is away: about 32 × 33 messages a sender.
+ * most 32 entries (the least recently used goes first), and an inbox holds at most 128 finished
+ * messages behind a gap and a few parked while the sender is away: about 32 × 129 messages a sender. The
+ * bytes held behind gaps and parked are capped for the whole table too (MAX_HELD_BYTES, relayInbox.ts).
  */
 
-import { createOrderedInbox } from './relayInbox';
+import { createHeldBudget, createOrderedInbox } from './relayInbox';
 
 import type { OrderedInbox } from './relayInbox';
 
@@ -60,6 +61,8 @@ export type StreamTable = {
     /** The sender left: its live stream pauses, what it holds stays held. */
     suspend: (from: string) => void;
     close: () => void;
+    /** The inflated bytes held behind gaps and parked now, over every inbox of the link. */
+    heldBytes: () => number;
 };
 
 export const createStreamTable = (
@@ -77,8 +80,10 @@ export const createStreamTable = (
     const epochs = new Map<string, string>();
     const keyOf = (from: string, stream: string): string => `${from}|${stream}`;
     let closed = false;
+    /** The bytes every inbox of the link holds, held behind gaps and parked together: capped, so one link holds a bounded amount (see MAX_HELD_BYTES). */
+    const budget = createHeldBudget();
     /** What `inboxFor` answers after `close`: closed from the start, so nothing reaches `deliver`. */
-    const inert = createOrderedInbox(deliver.bind(null, ''));
+    const inert = createOrderedInbox(deliver.bind(null, ''), budget);
     inert.close();
 
     const drop = (key: string, entry: Entry): void => {
@@ -119,7 +124,7 @@ export const createStreamTable = (
                 entry = {
                     from,
                     epoch,
-                    inbox: createOrderedInbox((message) => deliver(from, message)),
+                    inbox: createOrderedInbox((message) => deliver(from, message), budget),
                     usedAt: now(),
                     newestTs: ts,
                     retired: false,
@@ -143,6 +148,7 @@ export const createStreamTable = (
         suspend: (from) => {
             for (const entry of entries.values()) if (entry.from === from && !entry.retired) entry.inbox.suspend();
         },
+        heldBytes: budget.held,
         close: () => {
             closed = true;
             epochs.clear();

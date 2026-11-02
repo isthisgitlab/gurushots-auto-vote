@@ -4,7 +4,7 @@
  * capped backoff, and only its own subscription's frames.
  */
 
-import { RELAY_CONTENT_MAX_BYTES } from '../../src/ts/core/remote/relayCodec';
+import { RELAY_CONTENT_MAX_BYTES } from '../../src/ts/core/remote/relayWire';
 import {
     COOLDOWN_BASE_MS,
     COPY_MEMORY_MS,
