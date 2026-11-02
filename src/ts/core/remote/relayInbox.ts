@@ -42,7 +42,7 @@ export const createReassembler = (): Reassembler => {
                     stream: header.stream,
                     seq: header.seq,
                     parts: header.parts,
-                    pieces: new Array<Uint8Array | undefined>(header.parts),
+                    pieces: Array.from<Uint8Array | undefined>({ length: header.parts }),
                     have: 0,
                 };
                 partials.set(header.msgId, partial);

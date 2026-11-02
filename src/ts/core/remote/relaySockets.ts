@@ -14,6 +14,7 @@ import { RELAY_CONTENT_MAX_BYTES, toHex } from './relayCodec';
 import { createSeenSet } from './relayGuards';
 import { isPlainObject } from '../plainObject';
 
+import type { SeenSet } from './relayGuards';
 import type { RelayIo } from './relayLinkState';
 
 /** The WebSocket surface the sockets use; the browser's `WebSocket` satisfies it. */
@@ -99,153 +100,183 @@ type Relay = {
 
 const isOpen = (relay: Relay): relay is Relay & { socket: SocketLike } => relay.socket?.readyState === OPEN;
 
-export const createRelaySockets = (options: RelaySocketsOptions): RelayIo => {
-    const relays: Relay[] = options.urls.map((url) => ({
-        url,
-        socket: null,
-        subscribed: false,
-        refused: false,
-        delay: RECONNECT_BASE_MS,
-        timer: null,
-        coolUntil: 0,
-        cooldown: COOLDOWN_BASE_MS,
-    }));
-    const now = options.now ?? Date.now;
-    const maxListening = options.maxListening ?? MAX_SUBSCRIBED_RELAYS;
+/** What the sockets' functions share: the relays, the listeners and the memory of what was delivered. */
+type SocketsState = {
+    readonly options: RelaySocketsOptions;
+    readonly relays: Relay[];
+    readonly now: () => number;
+    readonly maxListening: number;
+    readonly hashOf: (text: string) => Promise<string>;
+    readonly copies: SeenSet;
+    readonly handlers: Set<(content: string) => void>;
+    readonly openHandlers: Set<() => void>;
     /** The pubkey our events are signed with (trystero's, one per page), read off the first one we sign: the relay echoes our own events back. */
-    let ownPubkey: string | null = null;
-    const hashOf = options.hash ?? sha256Hex;
+    ownPubkey: string | null;
     /** How many content digests are being computed right now. */
-    let digesting = 0;
-    const copies = createSeenSet(COPY_MEMORY_MS, now, MAX_REMEMBERED_COPIES);
-    const handlers = new Set<(content: string) => void>();
-    const openHandlers = new Set<() => void>();
-    let topic: string | null = null;
-    let closed = false;
+    digesting: number;
+    topic: string | null;
+    closed: boolean;
+};
 
-    /** Listens on the first open relays, up to the limit. */
-    const rebalance = (): void => {
-        if (topic === null) return;
-        let listening = relays.filter((relay) => relay.subscribed).length;
-        for (const relay of relays) {
-            if (listening >= maxListening) return;
-            if (!isOpen(relay) || relay.subscribed || relay.refused) continue;
-            // oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- a WebSocket to a public relay, never a window frame
-            relay.socket.send(options.subscribeFrame(RELAY_SUB_ID, topic));
-            relay.subscribed = true;
-            listening += 1;
+/** Listens on the first open relays, up to the limit. */
+const rebalance = (state: SocketsState): void => {
+    const { options, topic } = state;
+    if (topic === null) return;
+    let listening = state.relays.filter((relay) => relay.subscribed).length;
+    for (const relay of state.relays) {
+        if (listening >= state.maxListening) return;
+        if (!isOpen(relay) || relay.subscribed || relay.refused) continue;
+        // oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- a WebSocket to a public relay, never a window frame
+        relay.socket.send(options.subscribeFrame(RELAY_SUB_ID, topic));
+        relay.subscribed = true;
+        listening += 1;
+    }
+};
+
+/** Hands the content to the listeners unless a copy of it was handed over lately. */
+const deliverOnce = async (state: SocketsState, content: string): Promise<void> => {
+    try {
+        const digest = await state.hashOf(content);
+        if (state.copies.has(digest)) return;
+        state.copies.add(digest);
+        for (const handler of state.handlers) handler(content);
+    } catch {
+        // The digest failed (no `crypto.subtle`, say): the event is dropped, and the sender's resend or another relay's copy recovers it.
+    } finally {
+        state.digesting -= 1;
+    }
+};
+
+/** An `EVENT` frame on our subscription: the content is handed on unless it is our own echo, a copy, or past the digest cap. */
+const receiveEvent = (state: SocketsState, body: unknown): void => {
+    if (!isPlainObject(body) || typeof body.content !== 'string') return;
+    if (body.content.length > RELAY_CONTENT_MAX_BYTES) return;
+    // Our own echo is dropped before anything is decrypted, and so is a second relay's copy of an
+    // event, so the decrypt budget goes to events from others. A copy is told by the SHA-256 of its
+    // content, never by the relay's `id`: a relay could stamp a real event's id on a forged one and
+    // so block the real copies. The content is remembered only once it has passed the echo check.
+    if (body.pubkey === state.ownPubkey) return;
+    // The digests in flight are bounded too: past the cap an event is dropped unread.
+    if (state.digesting >= MAX_PENDING_DIGESTS) return;
+    state.digesting += 1;
+    void deliverOnce(state, body.content);
+};
+
+const receive = (state: SocketsState, relay: Relay, data: unknown): void => {
+    if (typeof data !== 'string') return;
+    let frame: unknown;
+    try {
+        frame = JSON.parse(data);
+    } catch {
+        return;
+    }
+    if (!Array.isArray(frame)) return;
+    const [type, id, body, reason] = frame;
+    if (type === 'EVENT' && id === RELAY_SUB_ID) {
+        receiveEvent(state, body);
+    } else if (type === 'OK' && body === true) {
+        relay.coolUntil = 0;
+        relay.cooldown = COOLDOWN_BASE_MS;
+    } else if (type === 'OK' && body === false) {
+        const why = typeof reason === 'string' ? reason : '';
+        state.options.onRefused?.(relay.url, why);
+        // A reply that arrives during a cooldown answers an event sent before it began: the same refusal, not a new one.
+        if (COOLDOWN_REASON.test(why) && state.now() >= relay.coolUntil) {
+            relay.coolUntil = state.now() + relay.cooldown;
+            relay.cooldown = Math.min(relay.cooldown * 2, COOLDOWN_MAX_MS);
         }
+    } else if (type === 'CLOSED' && id === RELAY_SUB_ID) {
+        state.options.onRefused?.(relay.url, typeof body === 'string' ? body : '');
+        relay.subscribed = false;
+        relay.refused = true;
+        rebalance(state);
+    }
+};
+
+const connect = (state: SocketsState, relay: Relay): void => {
+    relay.timer = null;
+    const socket = state.options.createSocket(relay.url);
+    relay.socket = socket;
+    socket.onopen = () => {
+        relay.delay = RECONNECT_BASE_MS;
+        rebalance(state);
+        for (const handler of state.openHandlers) handler();
     };
-
-    /** Hands the content to the listeners unless a copy of it was handed over lately. */
-    const deliverOnce = async (content: string): Promise<void> => {
-        try {
-            const digest = await hashOf(content);
-            if (copies.has(digest)) return;
-            copies.add(digest);
-            for (const handler of handlers) handler(content);
-        } catch {
-            // The digest failed (no `crypto.subtle`, say): the event is dropped, and the sender's resend or another relay's copy recovers it.
-        } finally {
-            digesting -= 1;
-        }
+    socket.onmessage = (event) => receive(state, relay, event.data);
+    socket.onclose = () => {
+        relay.socket = null;
+        relay.subscribed = false;
+        relay.refused = false;
+        if (state.closed) return;
+        rebalance(state);
+        relay.timer = globalThis.setTimeout(() => connect(state, relay), relay.delay);
+        relay.delay = Math.min(relay.delay * 2, RECONNECT_MAX_MS);
     };
+};
 
-    const receive = (relay: Relay, data: unknown): void => {
-        if (typeof data !== 'string') return;
-        let frame: unknown;
-        try {
-            frame = JSON.parse(data);
-        } catch {
-            return;
-        }
-        if (!Array.isArray(frame)) return;
-        const [type, id, body, reason] = frame;
-        if (type === 'EVENT' && id === RELAY_SUB_ID) {
-            if (!isPlainObject(body) || typeof body.content !== 'string') return;
-            if (body.content.length > RELAY_CONTENT_MAX_BYTES) return;
-            // Our own echo is dropped before anything is decrypted, and so is a second relay's copy of an
-            // event, so the decrypt budget goes to events from others. A copy is told by the SHA-256 of its
-            // content, never by the relay's `id`: a relay could stamp a real event's id on a forged one and
-            // so block the real copies. The content is remembered only once it has passed the echo check.
-            if (body.pubkey === ownPubkey) return;
-            // The digests in flight are bounded too: past the cap an event is dropped unread.
-            if (digesting >= MAX_PENDING_DIGESTS) return;
-            digesting += 1;
-            void deliverOnce(body.content);
-        } else if (type === 'OK' && body === true) {
-            relay.coolUntil = 0;
-            relay.cooldown = COOLDOWN_BASE_MS;
-        } else if (type === 'OK' && body === false) {
-            const why = typeof reason === 'string' ? reason : '';
-            options.onRefused?.(relay.url, why);
-            // A reply that arrives during a cooldown answers an event sent before it began: the same refusal, not a new one.
-            if (COOLDOWN_REASON.test(why) && now() >= relay.coolUntil) {
-                relay.coolUntil = now() + relay.cooldown;
-                relay.cooldown = Math.min(relay.cooldown * 2, COOLDOWN_MAX_MS);
-            }
-        } else if (type === 'CLOSED' && id === RELAY_SUB_ID) {
-            options.onRefused?.(relay.url, typeof body === 'string' ? body : '');
-            relay.subscribed = false;
-            relay.refused = true;
-            rebalance();
-        }
-    };
+const publish = async (state: SocketsState, eventTopic: string, content: string): Promise<void> => {
+    const event = await state.options.createEvent(eventTopic, content);
+    state.ownPubkey ??= EVENT_PUBKEY.exec(event)?.[1] ?? null;
+    // A relay in cooldown keeps its socket and its subscription; it just gets no events of ours.
+    const open = state.relays.filter(
+        (relay): relay is Relay & { socket: SocketLike } => isOpen(relay) && state.now() >= relay.coolUntil,
+    );
+    if (state.closed || open.length === 0) throw new Error('No relay is connected.');
+    // oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- a WebSocket to a public relay, never a window frame
+    for (const relay of open) relay.socket.send(event);
+};
 
-    const connect = (relay: Relay): void => {
+const closeSockets = (state: SocketsState): void => {
+    state.closed = true;
+    for (const relay of state.relays) {
+        if (relay.timer !== null) globalThis.clearTimeout(relay.timer);
         relay.timer = null;
-        const socket = options.createSocket(relay.url);
-        relay.socket = socket;
-        socket.onopen = () => {
-            relay.delay = RECONNECT_BASE_MS;
-            rebalance();
-            for (const handler of openHandlers) handler();
-        };
-        socket.onmessage = (event) => receive(relay, event.data);
-        socket.onclose = () => {
-            relay.socket = null;
-            relay.subscribed = false;
-            relay.refused = false;
-            if (closed) return;
-            rebalance();
-            relay.timer = globalThis.setTimeout(() => connect(relay), relay.delay);
-            relay.delay = Math.min(relay.delay * 2, RECONNECT_MAX_MS);
-        };
+        relay.socket?.close();
+    }
+};
+
+export const createRelaySockets = (options: RelaySocketsOptions): RelayIo => {
+    const now = options.now ?? Date.now;
+    const state: SocketsState = {
+        options,
+        relays: options.urls.map((url) => ({
+            url,
+            socket: null,
+            subscribed: false,
+            refused: false,
+            delay: RECONNECT_BASE_MS,
+            timer: null,
+            coolUntil: 0,
+            cooldown: COOLDOWN_BASE_MS,
+        })),
+        now,
+        maxListening: options.maxListening ?? MAX_SUBSCRIBED_RELAYS,
+        hashOf: options.hash ?? sha256Hex,
+        copies: createSeenSet(COPY_MEMORY_MS, now, MAX_REMEMBERED_COPIES),
+        handlers: new Set(),
+        openHandlers: new Set(),
+        ownPubkey: null,
+        digesting: 0,
+        topic: null,
+        closed: false,
     };
 
-    for (const relay of relays) connect(relay);
+    for (const relay of state.relays) connect(state, relay);
 
     return {
-        publish: async (eventTopic, content) => {
-            const event = await options.createEvent(eventTopic, content);
-            ownPubkey ??= EVENT_PUBKEY.exec(event)?.[1] ?? null;
-            // A relay in cooldown keeps its socket and its subscription; it just gets no events of ours.
-            const open = relays.filter(
-                (relay): relay is Relay & { socket: SocketLike } => isOpen(relay) && now() >= relay.coolUntil,
-            );
-            if (closed || open.length === 0) throw new Error('No relay is connected.');
-            // oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- a WebSocket to a public relay, never a window frame
-            for (const relay of open) relay.socket.send(event);
-        },
+        publish: (eventTopic, content) => publish(state, eventTopic, content),
         onEvent: (handler) => {
-            handlers.add(handler);
-            return () => handlers.delete(handler);
+            state.handlers.add(handler);
+            return () => state.handlers.delete(handler);
         },
         onOpen: (handler) => {
-            openHandlers.add(handler);
-            return () => openHandlers.delete(handler);
+            state.openHandlers.add(handler);
+            return () => state.openHandlers.delete(handler);
         },
         subscribe: (next) => {
-            topic = next;
-            rebalance();
+            state.topic = next;
+            rebalance(state);
         },
-        close: () => {
-            closed = true;
-            for (const relay of relays) {
-                if (relay.timer !== null) globalThis.clearTimeout(relay.timer);
-                relay.timer = null;
-                relay.socket?.close();
-            }
-        },
+        close: () => closeSockets(state),
     };
 };

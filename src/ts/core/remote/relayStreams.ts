@@ -146,7 +146,7 @@ export const createStreamTable = (
         close: () => {
             closed = true;
             epochs.clear();
-            for (const [key, entry] of [...entries]) drop(key, entry);
+            for (const [key, entry] of entries) drop(key, entry);
         },
     };
 };

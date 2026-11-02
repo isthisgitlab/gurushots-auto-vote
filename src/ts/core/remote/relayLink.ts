@@ -88,7 +88,7 @@ const createTimers = (ctx: LinkContext): { sync: () => void; stop: () => void } 
     let sweep: ReturnType<typeof setInterval> | null = null;
     let presence: ReturnType<typeof setInterval> | null = null;
     const sweepSilent = (): void => {
-        for (const peer of [...ctx.peers.values()]) {
+        for (const peer of ctx.peers.values()) {
             // The host tells a silent phone it was dropped, so the phone does not keep talking to nobody.
             if (ctx.now() - peer.lastSeen > PEER_SILENCE_MS) removePeer(ctx, peer, ctx.role === 'host');
         }

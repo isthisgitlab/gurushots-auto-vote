@@ -40,121 +40,153 @@ const handlerSet =
         return () => set.delete(handler);
     };
 
-export const createHybridTransport = ({ direct, relay }: HybridOptions): RemoteTransport => {
+/** What the two paths share: the peers joined, the paths that reach each, the held timers and the listeners. */
+type HybridState = {
+    readonly direct: RemoteTransport;
+    readonly relay: RemoteTransport | null;
     /** The joined peers and the path each was joined on. */
-    const paths = new Map<string, RemotePath>();
-    const directUp = new Set<string>();
-    const relayUp = new Set<string>();
-    const graceTimers = new Map<string, ReturnType<typeof setTimeout>>();
-    const errorTimers = new Map<string, ReturnType<typeof setTimeout>>();
-    const messageHandlers = new Set<(peerId: string, message: unknown) => void>();
-    const joinHandlers = new Set<(peerId: string) => void>();
-    const leaveHandlers = new Set<(peerId: string) => void>();
-    const errorHandlers = new Set<(details: JoinErrorDetails) => void>();
+    readonly paths: Map<string, RemotePath>;
+    readonly directUp: Set<string>;
+    readonly relayUp: Set<string>;
+    readonly graceTimers: Map<string, ReturnType<typeof setTimeout>>;
+    readonly errorTimers: Map<string, ReturnType<typeof setTimeout>>;
+    readonly messageHandlers: Set<(peerId: string, message: unknown) => void>;
+    readonly joinHandlers: Set<(peerId: string) => void>;
+    readonly leaveHandlers: Set<(peerId: string) => void>;
+    readonly errorHandlers: Set<(details: JoinErrorDetails) => void>;
+};
 
-    const stopTimer = (timers: Map<string, ReturnType<typeof setTimeout>>, peerId: string): void => {
-        const timer = timers.get(peerId);
-        if (timer !== undefined) globalThis.clearTimeout(timer);
-        timers.delete(peerId);
-    };
+const stopTimer = (timers: Map<string, ReturnType<typeof setTimeout>>, peerId: string): void => {
+    const timer = timers.get(peerId);
+    if (timer !== undefined) globalThis.clearTimeout(timer);
+    timers.delete(peerId);
+};
 
-    const join = (peerId: string, path: RemotePath): void => {
-        stopTimer(graceTimers, peerId);
-        stopTimer(errorTimers, peerId); // reachable after all: a held join error is dropped
-        paths.set(peerId, path);
-        for (const handler of joinHandlers) handler(peerId);
-    };
+const join = (state: HybridState, peerId: string, path: RemotePath): void => {
+    stopTimer(state.graceTimers, peerId);
+    stopTimer(state.errorTimers, peerId); // reachable after all: a held join error is dropped
+    state.paths.set(peerId, path);
+    for (const handler of state.joinHandlers) handler(peerId);
+};
 
-    const leave = (peerId: string): void => {
-        paths.delete(peerId);
-        for (const handler of leaveHandlers) handler(peerId);
-    };
+const leave = (state: HybridState, peerId: string): void => {
+    state.paths.delete(peerId);
+    for (const handler of state.leaveHandlers) handler(peerId);
+};
 
-    /** A peer's path ended; if the other path still reaches it, it joins on that one. */
-    const lose = (peerId: string, path: RemotePath): void => {
-        if (paths.get(peerId) !== path) return;
-        leave(peerId);
-        if ((path === 'direct' ? relayUp : directUp).has(peerId)) join(peerId, path === 'direct' ? 'relay' : 'direct');
-    };
+/** A peer's path ended; if the other path still reaches it, it joins on that one. */
+const lose = (state: HybridState, peerId: string, path: RemotePath): void => {
+    if (state.paths.get(peerId) !== path) return;
+    leave(state, peerId);
+    if ((path === 'direct' ? state.relayUp : state.directUp).has(peerId))
+        join(state, peerId, path === 'direct' ? 'relay' : 'direct');
+};
 
-    /** A message from a peer not joined yet (a relay peer still in its grace period) is proof enough: it joins on the path it spoke on. */
-    const deliver = (peerId: string, message: unknown, path: RemotePath): void => {
-        if (!paths.has(peerId)) join(peerId, path);
-        for (const handler of messageHandlers) handler(peerId, message);
-    };
+/** A message from a peer not joined yet (a relay peer still in its grace period) is proof enough: it joins on the path it spoke on. */
+const deliver = (state: HybridState, peerId: string, message: unknown, path: RemotePath): void => {
+    if (!state.paths.has(peerId)) join(state, peerId, path);
+    for (const handler of state.messageHandlers) handler(peerId, message);
+};
 
+const onDirectJoinError = (state: HybridState, details: JoinErrorDetails): void => {
+    const { peerId } = details;
+    if (state.graceTimers.has(peerId)) {
+        // WebRTC gave up on a peer the relay link already reaches: no reason to wait out the grace period.
+        join(state, peerId, 'relay');
+        return;
+    }
+    if (state.paths.has(peerId) || state.relayUp.has(peerId)) return; // reachable another way: the failure is no news
+    if (state.relay === null) {
+        for (const handler of state.errorHandlers) handler(details);
+        return;
+    }
+    if (state.errorTimers.has(peerId)) return;
+    state.errorTimers.set(
+        peerId,
+        // A join (on either path) cancels this timer, so a held error that fires is for a peer nobody reached.
+        globalThis.setTimeout(() => {
+            state.errorTimers.delete(peerId);
+            for (const handler of state.errorHandlers) handler(details);
+        }, JOIN_ERROR_HOLD_MS),
+    );
+};
+
+const wireDirect = (state: HybridState): void => {
+    const { direct } = state;
     direct.onPeerJoin((peerId) => {
-        directUp.add(peerId);
-        if (!paths.has(peerId)) join(peerId, 'direct');
+        state.directUp.add(peerId);
+        if (!state.paths.has(peerId)) join(state, peerId, 'direct');
     });
     direct.onPeerLeave((peerId) => {
-        directUp.delete(peerId);
-        lose(peerId, 'direct');
+        state.directUp.delete(peerId);
+        lose(state, peerId, 'direct');
     });
-    direct.onMessage((peerId, message) => deliver(peerId, message, 'direct'));
-    direct.onJoinError((details) => {
-        const { peerId } = details;
-        if (graceTimers.has(peerId)) {
-            // WebRTC gave up on a peer the relay link already reaches: no reason to wait out the grace period.
-            join(peerId, 'relay');
-            return;
-        }
-        if (paths.has(peerId) || relayUp.has(peerId)) return; // reachable another way: the failure is no news
-        if (relay === null) {
-            for (const handler of errorHandlers) handler(details);
-            return;
-        }
-        if (errorTimers.has(peerId)) return;
-        errorTimers.set(
-            peerId,
-            // A join (on either path) cancels this timer, so a held error that fires is for a peer nobody reached.
-            globalThis.setTimeout(() => {
-                errorTimers.delete(peerId);
-                for (const handler of errorHandlers) handler(details);
-            }, JOIN_ERROR_HOLD_MS),
-        );
-    });
+    direct.onMessage((peerId, message) => deliver(state, peerId, message, 'direct'));
+    direct.onJoinError((details) => onDirectJoinError(state, details));
+};
 
+const wireRelay = (state: HybridState): void => {
+    const { relay } = state;
     relay?.onPeerJoin((peerId) => {
-        relayUp.add(peerId);
-        stopTimer(errorTimers, peerId); // the relay link reaches the peer after all: a held join error is dropped
-        if (paths.has(peerId) || graceTimers.has(peerId)) return;
-        graceTimers.set(
+        state.relayUp.add(peerId);
+        stopTimer(state.errorTimers, peerId); // the relay link reaches the peer after all: a held join error is dropped
+        if (state.paths.has(peerId) || state.graceTimers.has(peerId)) return;
+        state.graceTimers.set(
             peerId,
             // Any join cancels this timer, so when it fires WebRTC did not join the peer in time.
             globalThis.setTimeout(() => {
-                graceTimers.delete(peerId);
-                join(peerId, 'relay');
+                state.graceTimers.delete(peerId);
+                join(state, peerId, 'relay');
             }, RELAY_GRACE_MS),
         );
     });
     relay?.onPeerLeave((peerId) => {
-        relayUp.delete(peerId);
-        stopTimer(graceTimers, peerId);
-        lose(peerId, 'relay');
+        state.relayUp.delete(peerId);
+        stopTimer(state.graceTimers, peerId);
+        lose(state, peerId, 'relay');
     });
-    relay?.onMessage((peerId, message) => deliver(peerId, message, 'relay'));
+    relay?.onMessage((peerId, message) => deliver(state, peerId, message, 'relay'));
+};
+
+const sendTo = (state: HybridState, message: unknown, target: string | undefined): Promise<void> => {
+    const { direct, relay } = state;
+    const path = target === undefined ? undefined : state.paths.get(target);
+    if (target === undefined || path === undefined) return Promise.reject(new Error('That peer is not connected.'));
+    // A peer's path is never `relay` without a relay link: only its events join a peer there.
+    // oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- a peer-connection message over the pairing transport, never a frame send
+    return (path === 'direct' ? direct : (relay as RemoteTransport)).send(message, target);
+};
+
+export const createHybridTransport = ({ direct, relay }: HybridOptions): RemoteTransport => {
+    const state: HybridState = {
+        direct,
+        relay,
+        paths: new Map(),
+        directUp: new Set(),
+        relayUp: new Set(),
+        graceTimers: new Map(),
+        errorTimers: new Map(),
+        messageHandlers: new Set(),
+        joinHandlers: new Set(),
+        leaveHandlers: new Set(),
+        errorHandlers: new Set(),
+    };
+    wireDirect(state);
+    wireRelay(state);
 
     return {
-        send: (message, target) => {
-            const path = target === undefined ? undefined : paths.get(target);
-            if (target === undefined || path === undefined)
-                return Promise.reject(new Error('That peer is not connected.'));
-            // A peer's path is never `relay` without a relay link: only its events join a peer there.
-            // oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- a peer-connection message over the pairing transport, never a frame send
-            return (path === 'direct' ? direct : (relay as RemoteTransport)).send(message, target);
-        },
-        onMessage: handlerSet(messageHandlers),
-        onPeerJoin: handlerSet(joinHandlers),
-        onPeerLeave: handlerSet(leaveHandlers),
-        onJoinError: handlerSet(errorHandlers),
+        send: (message, target) => sendTo(state, message, target),
+        onMessage: handlerSet(state.messageHandlers),
+        onPeerJoin: handlerSet(state.joinHandlers),
+        onPeerLeave: handlerSet(state.leaveHandlers),
+        onJoinError: handlerSet(state.errorHandlers),
         leave: async () => {
-            for (const timers of [graceTimers, errorTimers]) {
-                for (const peerId of [...timers.keys()]) stopTimer(timers, peerId);
+            for (const timers of [state.graceTimers, state.errorTimers]) {
+                for (const peerId of timers.keys()) stopTimer(timers, peerId);
             }
             await Promise.all([relay?.leave(), direct.leave()]);
         },
-        peerPath: (peerId) => paths.get(peerId) ?? null,
+        peerPath: (peerId) => state.paths.get(peerId) ?? null,
         relayAvailable: () => relay !== null,
     };
 };
