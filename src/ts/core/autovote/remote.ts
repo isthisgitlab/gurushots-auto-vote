@@ -35,20 +35,29 @@ export const createRemoteAutovoteController = (deps: RemoteAutovoteDeps): Autovo
         for (const listener of listeners) listener();
     };
 
+    const notConnected = (): void =>
+        // The command would reach nobody. Say so on the status instead of resolving as if it ran.
+        apply(
+            autovoteReducer(state, {
+                type: ACTIONS.SET_ERROR,
+                payload: rendererTranslator.t('errors.remoteNotConnected'),
+            }),
+        );
+
     const sendCommand = async (command: 'start' | 'stop' | 'rearm'): Promise<void> => {
         if (disposed) return;
         if (remoteConnectionState() !== 'connected') {
-            // The command would reach nobody. Say so on the status instead of resolving as if it ran.
-            apply(
-                autovoteReducer(state, {
-                    type: ACTIONS.SET_ERROR,
-                    payload: rendererTranslator.t('errors.remoteNotConnected'),
-                }),
-            );
+            notConnected();
             return;
         }
-        // oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- a peer-connection message over the pairing transport, never a frame send
-        await deps.transport.send({ t: 'autovote-command', command });
+        try {
+            // The hybrid transport takes no send without a target: the desktop it is connected to.
+            // oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- a peer-connection message over the pairing transport, never a frame send
+            await deps.transport.send({ t: 'autovote-command', command }, remoteHostPeerId() ?? undefined);
+        } catch {
+            // The host left between the connected check and the send.
+            notConnected();
+        }
     };
 
     const unsubscribeMessage = deps.transport.onMessage((peerId, raw) => {

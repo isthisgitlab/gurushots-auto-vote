@@ -6,6 +6,7 @@
  */
 
 import { createRemoteAutovoteController } from '../../src/ts/core/autovote/remote';
+import { RELAY_GRACE_MS, createHybridTransport } from '../../src/ts/core/remote/hybridTransport';
 import { TransportStub } from '../helpers/remoteTransport';
 import { initialState } from '../../src/ts/core/autovote/state';
 import { setRemoteConnectionState, setRemoteHostPeerId } from '../../src/ts/core/remote/connectionState';
@@ -82,6 +83,70 @@ describe('createRemoteAutovoteController', () => {
         ]);
         // The state is untouched: the desktop's relay is the only input.
         expect(controller.getState()).toEqual(initialState);
+    });
+
+    test('start sends the command to the desktop the phone is connected to', async () => {
+        await controller.start();
+        expect(phone.sent).toEqual([{ message: { t: 'autovote-command', command: 'start' }, target: 'host' }]);
+    });
+
+    test('a send that fails says the phone is not connected instead of rejecting', async () => {
+        phone.failNextSendOnce();
+        await expect(controller.start()).resolves.toBeUndefined();
+        expect(controller.getState()).toMatchObject({
+            status: 'Error',
+            statusClass: 'badge-error',
+            error: 'Not connected to your computer. It reconnects by itself when the app is open on your computer.',
+        });
+    });
+
+    describe('over the hybrid transport, which takes no send without a target', () => {
+        let hostDirect: TransportStub;
+        let hostRelay: TransportStub;
+        let phoneDirect: TransportStub;
+        let phoneRelay: TransportStub;
+        let received: Array<{ via: string; peerId: string; message: unknown }>;
+
+        beforeEach(() => {
+            jest.useFakeTimers();
+            [hostDirect, phoneDirect] = TransportStub.pair('host', 'phone');
+            [hostRelay, phoneRelay] = TransportStub.pair('host', 'phone');
+            received = [];
+            hostDirect.onMessage((peerId, message) => received.push({ via: 'direct', peerId, message }));
+            hostRelay.onMessage((peerId, message) => received.push({ via: 'relay', peerId, message }));
+            controller.dispose();
+            controller = createRemoteAutovoteController({
+                transport: createHybridTransport({ direct: phoneDirect, relay: phoneRelay }),
+                getOnChallengesRefresh: () => undefined,
+            });
+        });
+
+        afterEach(() => jest.useRealTimers());
+
+        test('Start reaches the desktop over the direct path', async () => {
+            phoneDirect.emitJoin('host');
+            await controller.start();
+            expect(received).toEqual([
+                { via: 'direct', peerId: 'phone', message: { t: 'autovote-command', command: 'start' } },
+            ]);
+            expect(controller.getState()).toEqual(initialState);
+        });
+
+        test('Start reaches the desktop over the relay path', async () => {
+            phoneRelay.emitJoin('host');
+            jest.advanceTimersByTime(RELAY_GRACE_MS);
+            await controller.start();
+            expect(received).toEqual([
+                { via: 'relay', peerId: 'phone', message: { t: 'autovote-command', command: 'start' } },
+            ]);
+            expect(controller.getState()).toEqual(initialState);
+        });
+
+        test('Start while the transport has no path to the desktop shows the not-connected error', async () => {
+            await controller.start();
+            expect(received).toEqual([]);
+            expect(controller.getState().error).toContain('Not connected to your computer');
+        });
     });
 
     test('the relayed state becomes the controller state and notifies the listeners', () => {
