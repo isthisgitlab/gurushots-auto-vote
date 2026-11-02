@@ -188,6 +188,70 @@ describe('createRemoteHost: the path a phone is reached over', () => {
         expect(remoteRelayCount()).toBe(0);
     });
 
+    describe('a phone that moves from the relay to WebRTC', () => {
+        const connect = async (peerIds: string[]) => {
+            const transport = new TransportStub('host-x');
+            const relayed = new Set(peerIds);
+            Object.assign(transport, { peerPath: (peerId: string) => (relayed.has(peerId) ? 'relay' : 'direct') });
+            const made = makeHarness({ createTransport: async () => transport });
+            await made.host.start('k');
+            for (const peerId of peerIds) transport.receiveFromPeer(hello, peerId);
+            await flush();
+            return { ...made, transport, relayed };
+        };
+
+        test('is sent the current auto-vote state and nothing else, and the relay count is read again', async () => {
+            const { host, transport, relayed, deps } = await connect(['p1']);
+            const counts: number[] = [];
+            host.onCountChange(() => counts.push(host.relayCount()));
+            expect(host.relayCount()).toBe(1);
+            transport.sent.length = 0;
+            deps.getAutovoteState = () => ({ ...initialState, running: true, cycles: 5 });
+            relayed.delete('p1'); // the transport now reaches it over WebRTC
+            transport.emitPathChange('p1', 'direct');
+            await flush();
+            // Only the state: no hello, no settings-changed event, so the phone refetches nothing.
+            expect(sentBy(transport).map(({ message }) => (message as { t: string }).t)).toEqual(['autovote-state']);
+            expect(sentBy(transport)[0]).toMatchObject({
+                target: 'p1',
+                message: { state: { running: true, cycles: 5 }, hostRun: expect.any(String), n: expect.any(Number) },
+            });
+            expect(counts).toEqual([0]);
+            expect(host.relayCount()).toBe(0);
+        });
+
+        test('a phone that has not said hello yet is sent nothing: its snapshot will be complete', async () => {
+            const { host, transport } = await connect([]);
+            const counts: number[] = [];
+            host.onCountChange(() => counts.push(host.connectedCount()));
+            transport.emitJoin('late');
+            transport.emitPathChange('late', 'direct');
+            await flush();
+            expect(sentBy(transport)).toEqual([]);
+            expect(counts).toEqual([]);
+        });
+
+        test('is not listened for once the host has stopped', async () => {
+            const { host, transport } = await connect(['p1']);
+            await host.stop();
+            transport.sent.length = 0;
+            transport.emitPathChange('p1', 'direct');
+            await flush();
+            expect(sentBy(transport)).toEqual([]);
+        });
+
+        test('a transport that has no path changes (one direct path) is hosted as before', async () => {
+            const transport = new TransportStub('host-x');
+            Object.defineProperty(transport, 'onPathChange', { value: undefined });
+            const { host } = makeHarness({ createTransport: async () => transport });
+            await host.start('k');
+            transport.receiveFromPeer(hello, 'p1');
+            await flush();
+            expect(host.connectedCount()).toBe(1);
+            await host.stop();
+        });
+    });
+
     test('a transport that names no paths counts no relay phones', async () => {
         const transport = new TransportStub('host-x');
         const { host } = makeHarness({ createTransport: async () => transport });
@@ -438,7 +502,57 @@ describe('createRemoteHost', () => {
         host.pushAutovoteState(state);
         await flush();
         expect(sentBy(transport)).toHaveLength(1);
-        expect(sentBy(transport)[0].message).toEqual({ t: 'autovote-state', state });
+        expect(sentBy(transport)[0].message).toEqual({
+            t: 'autovote-state',
+            state,
+            hostRun: expect.stringMatching(/^[0-9a-f]{16}$/),
+            n: expect.any(Number),
+        });
+    });
+
+    test("every autovote-state carries this run's id and a count that only grows, the same count to every phone of one push", async () => {
+        const { host, deps } = makeHarness();
+        await host.start('k');
+        const transport = deps.transports[0];
+        for (const peerId of ['p1', 'p2']) {
+            transport.emitJoin(peerId);
+            transport.receiveFromPeer(
+                { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+                peerId,
+            );
+        }
+        await flush();
+        const stamps = (): Array<{ to: string | undefined; hostRun: string; n: number }> =>
+            sentBy(transport)
+                .filter(({ message }) => (message as { t: string }).t === 'autovote-state')
+                .map(({ message, target }) => {
+                    const { hostRun, n } = message as { hostRun: string; n: number };
+                    return { to: target, hostRun, n };
+                });
+        transport.sent.length = 0;
+        host.pushAutovoteState({ ...initialState, cycles: 1 });
+        host.pushAutovoteState({ ...initialState, cycles: 2 });
+        await flush();
+        const pushed = stamps();
+        expect(pushed.map(({ to }) => to)).toEqual(['p1', 'p2', 'p1', 'p2']);
+        expect(new Set(pushed.map(({ hostRun }) => hostRun)).size).toBe(1);
+        expect(pushed[0].n).toBe(pushed[1].n); // one push, one count
+        expect(pushed[2].n).toBe(pushed[0].n + 1);
+        // The next host of the same renderer goes on counting: a phone that stayed keeps its comparison.
+        const next = makeHarness();
+        await next.host.start('k');
+        const nextTransport = next.deps.transports[0];
+        nextTransport.emitJoin('p1');
+        nextTransport.receiveFromPeer(
+            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            'p1',
+        );
+        await flush();
+        const snapshotState = sentBy(nextTransport).find(
+            ({ message }) => (message as { t: string }).t === 'autovote-state',
+        );
+        const snapshotStamp = snapshotState?.message as { n: number } | undefined;
+        expect(snapshotStamp?.n ?? -1).toBeGreaterThan(pushed[3].n);
     });
 
     test('the pairing key appears in no log line and no peer message', async () => {

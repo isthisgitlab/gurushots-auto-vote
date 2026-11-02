@@ -4,6 +4,7 @@ import {
     remoteConnectionState,
     remoteHostPath,
     subscribeRemoteConnectionState,
+    subscribeRemoteHostPath,
 } from '../../../core/remote/connectionState';
 import { phoneRemoteMode } from '../../../core/remote/phoneMode';
 
@@ -52,7 +53,10 @@ export function RemoteStateBadge() {
     const { t } = useTranslation();
     const [state, setState] = useState<RemoteConnectionState>(remoteConnectionState);
     const [hintShown, setHintShown] = useState(false);
+    const [path, setPath] = useState(remoteHostPath);
     useLayoutEffect(() => subscribeRemoteConnectionState(setState), []);
+    // The desktop can move from the relay to WebRTC while connected: the badge follows.
+    useLayoutEffect(() => subscribeRemoteHostPath(setPath), []);
     useEffect(() => {
         if (state === 'connected' && firstVisit()) setHintShown(true);
     }, [state]);
@@ -69,11 +73,7 @@ export function RemoteStateBadge() {
     return (
         <>
             <span className={`badge ${tone} badge-sm whitespace-nowrap`} role="status">
-                {t(
-                    state === 'connected' && remoteHostPath() === 'relay'
-                        ? 'app.remoteConnectedRelay'
-                        : STATE_LABEL_KEYS[state],
-                )}
+                {t(state === 'connected' && path === 'relay' ? 'app.remoteConnectedRelay' : STATE_LABEL_KEYS[state])}
             </span>
             {state === 'offline' && (
                 <div className="alert alert-warning text-sm fixed bottom-0 inset-x-0 z-50 rounded-none" role="alert">

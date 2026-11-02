@@ -1097,11 +1097,65 @@ served while at least one phone wants it.
       only to a peer whose latest presence carried the flag (or that sent a batch), and a peer that joins again with a
       new epoch starts without it, so every other peer is sent single frames, and both kinds are read by a new link.
       Acks owed to a peer that has since withdrawn the flag leave as ack frames.
-    - **Paths and what the relays see.** WebRTC stays preferred: a
-      peer that joins over WebRTC within a 3 s grace period of its relay join is `direct` (a WebRTC join error ends
-      the wait at once), otherwise `relay`, and keeps that path until it leaves. The desktop host listens on every
-      relay; a phone listens on up to 3, and a phone that knows no desktop yet announces itself on each
-      relay that opens, so the first presence reaches a relay the host listens on. What this adds to what the relays can see:
+    - **Paths and what the relays see.** A peer joins on whichever path reaches it first, with no wait. WebRTC is
+      the preferred path: a peer on the relay that WebRTC then reaches moves to `direct` **in place**, with no leave and
+      no join (an upgrade; the transport tells `onPathChange`, the phone's badge follows and the desktop's relay count
+      is read again). What happens to the messages the relay link still holds for that peer depends on which way they
+      go, and `createHybridTransport`'s `role` says (`host` on the desktop, `phone` on the phone):
+        - **The desktop moves what has not started and copies what is safe.** It sends results, events and states.
+          At the upgrade it moves every message the relay link has queued and not started to WebRTC, in order (they
+          have no sequence number yet, so the relay stream has no gap), and a message that finishes packing later
+          goes to WebRTC too (the link's redirect, ended by a leave or `stopRedirect`). A message the relay link
+          **has started** and not had acknowledged stays where it is and keeps being sent again, so the relay
+          stream has no gap and a message sent on the relay later is not held for the gap timer. It is also sent over
+          WebRTC when a second copy is harmless: a `hello`, a `result` (the phone ignores a result for an invoke that
+          is not pending, and never reconnects for one) and an `autovote-state` (stamped; an older count is
+          ignored), which is what `isSafeToSendTwice` (`protocol.ts`) answers. An **event** that started
+          (`settings-changed`, `log-message`, `update-*`) is not copied, because a repeat would make the phone
+          refetch or show a log line twice: it finishes on the relay, and reaches the phone once. The relay link giving
+          up on a peer that is `direct` is **never a leave on the desktop**: the results were copied, and dropping the
+          phone would stop its pushes with no notice. The cost is accepted: an event that started on the relay and
+          whose acknowledgement never comes is lost.
+        - **The phone drains, then switches, and holds its sends meanwhile.** It sends invokes and commands, for which
+          a duplicate is not harmless (a spend could run twice) and whose order matters (two writes to one setting).
+          So the peer stays on the relay for **sending** while the relay link has a message to it in flight (waiting
+          to be packed in the link's send chain, being packed, or started and not acknowledged; `inFlight`), and
+          sends made meanwhile are **held** in the hybrid transport, in order, and not given to the relay link: the
+          send resolves at once, as a queued relay send does, and the drain ends once what is in flight is
+          acknowledged however fast the page sends. When nothing is in flight (`whenIdle`) the messages the link
+          queued and did not start are taken back (`takeUnsent`) and sent over WebRTC in order, then the held ones, and
+          then `onPathChange` is told. The held sends are capped at the relay queue's size (`MAX_QUEUED_FRAMES`): a
+          send past the cap is refused as the relay queue refuses one. **WebRTC lost during the drain is a leave,
+          then a join on the relay**, and so is the relay link giving up during the drain: the desktop upgraded at
+          once and may have answered over WebRTC, so nothing the phone sent on the relay can be taken as answered. The
+          leave settles everything in flight (a spend as unclear), and the held sends are dropped, because the invokes
+          they were made for are settled by it; the phone then says hello again. A held `autovote-command` is lost
+          when the relay link gives up during the drain, the same as a command queued on the relay and lost through
+          `forgetPeer`: it is not sent again, and the leave puts the phone back to connecting. A drop
+          of WebRTC during the drain settles everything the same way, instead of leaving it held. A relay link that gives up on a `direct` peer
+          with messages it sent never acknowledged is a leave then a join on the phone as well. After `leave`
+          nothing is moved, sent or announced, and the path events of either transport are ignored.
+
+        **Desktop events can arrive out of order across an upgrade.** An event that started on the relay is not
+        copied, and events made after the upgrade go over WebRTC at once, so a later `settings-changed`, `update-*` or
+        `log-message` can overtake an earlier one that is still finishing on the relay. For `settings-changed` that
+        can show: `TranslationContext` applies `payload.app.language` straight from the payload, so if the language is
+        changed twice right around an upgrade, the phone can show the older one until the next change. This is
+        accepted: the window is the relay's few seconds around a path change, and the next change corrects it.
+
+        The two rules differ because a duplicate toward the phone is harmless for those three kinds and not for an
+        event, and a duplicate or reordering toward the desktop is never harmless. In both, a message handed over
+        whose WebRTC send fails is a WebRTC loss for that peer (a leave, then a join on the relay if it still reaches
+        the peer), never swallowed. A leave settles only the end where it happens: each end learns of the loss from its
+        own path events, so each settles its own invoke state. On an upgrade the desktop also sends the phone only the
+        current `autovote-state` (and only if the phone has said hello): not `settings-changed`, so the phone refetches
+        nothing. The way down is still a leave and then a join: a WebRTC drop on a peer the relay still reaches (a
+        downgrade), and on the phone the relay link giving up on a peer that is `direct` now while messages it had sent
+        on the relay were never acknowledged (the leave event carries that count): an invoke sent on the relay may
+        never have arrived, and only a leave
+        settles it, a spend as unclear. The desktop host listens on every
+        relay; a phone listens on up to 3, and a phone that knows no desktop yet announces itself on each
+        relay that opens, so the first presence reaches a relay the host listens on. What this adds to what the relays can see:
         - They now also carry the app's encrypted data. They see its timing and approximate sizes, keep the
           events at least briefly, and any relay can record them.
         - They see the same pubkey for the signalling and the data (trystero's one key), so they can link the two.
@@ -1149,6 +1203,7 @@ served while at least one phone wants it.
           `OK false` with a `rate-limited:`, `blocked:`, `banned:`, `restricted:`, `pow:` or `auth-required:` reason
           gets no more of them for 60 s, doubling on each new refusal up to 15 min (an `OK true` resets it); its
           socket and subscription stay.
+
 - **The phone page is served from this project's GitHub Pages and reads the key from the URL fragment.** A
   compromised Pages deploy (or a compromised `pages.yml` run) could ship JavaScript that sends paired keys
   elsewhere. Mitigation: Pages publishes only after a green release (`workflow_dispatch` from `build.yml`), the
@@ -1168,6 +1223,30 @@ served while at least one phone wants it.
   whose version is not a release version before it builds a path from it, and navigates with `location.replace`.
   Results, events and a leave count only from the peer that said `hello` as the desktop; a fellow phone's leave
   or failed connection never ends a working session.
+- **The loader goes straight to the kept version.** The phone keeps the desktop version it last reached in
+  `localStorage` under `gs-remote-desktop-version` (`core/remote/desktopVersion.ts`), as `<fingerprint>:<version>`.
+  The fingerprint is the first 16 hex digits of the SHA-256 of the pairing room's id (itself the SHA-256 of the key),
+  so a value kept for another pairing is not trusted, and the store never holds the pairing key. The fingerprint is a stable 64-bit id of the pairing, and the value sits in the `localStorage` of
+  `isthisgitlab.github.io`, which every page on that origin can read: another site there learns the id, and cannot get the
+  key or the room id from it (it is a truncated hash of a hash). It is written only from
+  a `hello` with `host: true` whose version passes `isReleaseVersion`, by three writers: the loader when it reads the
+  version, a versioned page that accepts the desktop, and a versioned page that hears another version (it keeps that one
+  before it sends the tab to the loader). On load the loader goes to that version's page **only when** the value passes
+  `isReleaseVersion` and carries the current key's fingerprint, the same published check the loader uses after a
+  `hello` passes (one `HEAD` request for the page file, no transport; inside the Android app it asks the app's local
+  server), and this tab has not already gone straight to that version: before it navigates, the loader writes a
+  `sessionStorage` mark, "skipped to V". Otherwise it clears the stored value and runs the whole flow, with its
+  `update`, `unpublished` and `update-this` notices. The mark is the loop guard: a page that keeps nothing on a mismatch
+  (beta.3 and older pages) sends the tab back with the stored value unchanged, the loader finds its own mark and
+  runs the whole flow, and the worst case is one extra connect; a page that accepts the desktop clears the mark, so a
+  reload of the loader in that tab goes straight on again. **Disconnect** (Navbar and the loader's notice
+  screens) clears the stored version as it clears the key.
+- **The desktop's auto-vote state is stamped.** Every `autovote-state` carries `hostRun` (a random id the desktop's
+  renderer drew when it started) and `n` (how many states it has stamped, only upward, across every host the
+  renderer makes). The phone ignores a state with the same `hostRun` and a lower `n` than one it applied, so a state
+  still draining on the relay cannot overwrite a newer one that went over WebRTC; a new `hostRun` (the desktop
+  restarted or reloaded) is always applied and starts the comparison again, and a state with no stamp (an older
+  desktop) is applied as it comes. An older phone ignores the extra fields.
 - **The loader is not a phone.** Its `hello` carries `role: 'loader'`; the host answers it with its version only —
   no snapshot, no peer slot, no count, no desktop notice. A fourth phone is turned away with `bye` carrying
   `reason: 'full'`, which the phone reads as "too many phones are connected", not as an offline computer.
@@ -1186,8 +1265,8 @@ served while at least one phone wants it.
   version from `hello` like the Pages one; a version the APK does not carry reads "Update the app on your
   computer". Both documents reach Preferences through the native bridge's `nativePromise`
   (`core/remote/phoneKeyStore.ts`), because the remote bundles register no Capacitor plugin. **Disconnect**
-  (Navbar and the loader's notice screens) clears the key and reloads the app's own document, in normal mode
-  with local voting off.
+  (Navbar and the loader's notice screens) clears the key and the kept desktop version and reloads the app's own
+  document, in normal mode with local voting off.
 - On a lost connection an in-flight invoke on a spend channel (`core/remote/allowlist.ts`, the `postOnce`
   spenders) is answered "unclear — check before retrying", never a clean failure; every other channel reports
   the failure. In-flight invokes are never queued or replayed after a reconnect.

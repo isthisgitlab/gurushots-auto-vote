@@ -40,6 +40,21 @@ describe('the remote page inside the Android app', () => {
         expect(assign).toHaveBeenCalledWith('/index.html');
     });
 
+    test('Disconnect also forgets the desktop version kept for the loader; a key that could not be cleared keeps it', async () => {
+        const removeItem = jest.fn<void, [string]>();
+        Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { removeItem } });
+        try {
+            nativePromise.mockRejectedValueOnce(new Error('prefs'));
+            await expect(load().disconnectFromComputer()).rejects.toThrow('prefs');
+            expect(removeItem).not.toHaveBeenCalled();
+            await load().disconnectFromComputer();
+            expect(removeItem).toHaveBeenCalledWith('gs-remote-desktop-version');
+            expect(assign).toHaveBeenCalledWith('/index.html');
+        } finally {
+            delete (globalThis as { localStorage?: unknown }).localStorage;
+        }
+    });
+
     test('a key that cannot be cleared leaves the page in remote mode', async () => {
         nativePromise.mockRejectedValue(new Error('prefs'));
         await expect(load().disconnectFromComputer()).rejects.toThrow('prefs');

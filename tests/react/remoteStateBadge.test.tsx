@@ -59,6 +59,22 @@ describe('RemoteStateBadge', () => {
         setRemoteHostPath('direct');
     });
 
+    test('a mounted badge follows the desktop moving from the relays to WebRTC, and back', () => {
+        setRemoteConnectionState('connected');
+        setRemoteHostPath('relay');
+        const { container } = render(<RemoteStateBadge />);
+        expect(container.querySelector('[role="status"]')?.textContent).toBe('app.remoteConnectedRelay');
+        act(() => {
+            setRemoteHostPath('direct');
+        });
+        expect(container.querySelector('[role="status"]')?.textContent).toBe('app.remoteConnected');
+        act(() => {
+            setRemoteHostPath('relay');
+        });
+        expect(container.querySelector('[role="status"]')?.textContent).toBe('app.remoteConnectedRelay');
+        setRemoteHostPath('direct');
+    });
+
     test('a state change reached a mounted badge, and offline adds the full explanation', () => {
         const { container } = render(<RemoteStateBadge />);
         expect(container.textContent).toContain('app.remoteConnecting');

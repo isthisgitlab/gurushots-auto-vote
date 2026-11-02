@@ -75,7 +75,13 @@ export type LinkContext = {
     readonly outbox: Outbox;
     readonly messageHandlers: Set<(peerId: string, message: unknown) => void>;
     readonly joinHandlers: Set<(peerId: string) => void>;
-    readonly leaveHandlers: Set<(peerId: string) => void>;
+    readonly leaveHandlers: Set<(peerId: string, unacked: number) => void>;
+    /** How many sends are waiting in the send chain or being packed for each peer: not queued yet, and in flight all the same. */
+    readonly sending: Map<string, number>;
+    /** Where a message for a peer goes when it finishes packing instead of the outbox, while the peer's messages are being moved to another path. */
+    readonly redirects: Map<string, (message: unknown) => void>;
+    /** The callbacks waiting for a peer to have nothing in flight; each is called once. */
+    readonly idleWaiters: Map<string, Set<() => void>>;
     /** Called whenever the peer table changes, so the timers that depend on it can start or stop. */
     onPeersChanged: () => void;
     closed: boolean;
@@ -146,6 +152,18 @@ export const sendPresenceOnOpen = (ctx: LinkContext): void => {
 export const sendPresence = (ctx: LinkContext, peer: Peer | null): void =>
     ctx.outbox.sendControl(controlFrame(ctx, 'presence', peer));
 
+/** How many messages to the peer are in flight: waiting to be packed, being packed, or started and not acknowledged. Messages queued and not started can still be taken back, so they are not in flight. */
+export const inFlight = (ctx: LinkContext, peerId: string): number =>
+    (ctx.sending.get(peerId) ?? 0) + ctx.outbox.startedMessages(peerId).length;
+
+/** Calls the callbacks waiting for the peer to be idle, if it is: called when a message was acknowledged or finished packing. */
+export const settleIfIdle = (ctx: LinkContext, peerId: string): void => {
+    const waiters = ctx.idleWaiters.get(peerId);
+    if (waiters === undefined || inFlight(ctx, peerId) !== 0) return;
+    ctx.idleWaiters.delete(peerId);
+    for (const callback of waiters) callback();
+};
+
 /** Whether the peer is sent batch events: this link batches, the peer said it reads them, and a batch between the two can be made (see `batchFits`). */
 export const canBatch = (ctx: LinkContext, peerId: string): boolean =>
     ctx.batching && ctx.peers.get(peerId)?.batch === true && batchFits(ctx.selfId, peerId);
@@ -176,12 +194,16 @@ const createPeer = (ctx: LinkContext, id: string, epoch: string, ts: number): Pe
 });
 
 /** Ends a peer: forgets its streams and unacknowledged messages and reports the leave. `bye` tells the peer too. */
-export const removePeer = (ctx: LinkContext, peer: Peer, bye: boolean): void => {
+export const removePeer = (ctx: LinkContext, peer: Peer, bye: boolean, lost = 0): void => {
     ctx.peers.delete(peer.id);
+    // A leave is a loss, reported by the leave event: nothing waits for the peer to be idle, and nothing is redirected for it.
+    ctx.redirects.delete(peer.id);
+    ctx.idleWaiters.delete(peer.id);
     ctx.streams.suspend(peer.id);
-    ctx.outbox.forgetPeer(peer.id);
+    // What was never acknowledged is told to the listeners: `lost` is a message the outbox gave up on just before, which it no longer holds.
+    const unacked = lost + ctx.outbox.forgetPeer(peer.id);
     if (bye) sendBye(ctx, peer);
-    for (const handler of ctx.leaveHandlers) handler(peer.id);
+    for (const handler of ctx.leaveHandlers) handler(peer.id, unacked);
     ctx.onPeersChanged();
 };
 

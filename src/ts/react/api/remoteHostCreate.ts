@@ -13,7 +13,7 @@ import type { RemoteTransportFactory } from '../../core/remote/relays';
 import type { eventMethods } from '../../core/ipc/manifest';
 import type { AutovoteCommandName } from '../../core/remote/protocol';
 import type { AutovoteState } from '../../core/autovote/state';
-import { clippedId, dropPeer, notifyCount, releaseLogStream, sendTo } from './remoteHostPeers';
+import { clippedId, dropPeer, notifyCount, releaseLogStream, sendTo, stampedAutovoteState } from './remoteHostPeers';
 import type { HostContext } from './remoteHostPeers';
 import { handleMessage } from './remoteHostMessages';
 
@@ -102,6 +102,14 @@ export const createRemoteHost = (deps: RemoteHostDeps): RemoteHost => {
                     deps.logInfo(`Remote peer seen: ${clippedId(peerId)} (${next.peerPath?.(peerId) ?? 'direct'})`);
                 }),
                 next.onPeerLeave((peerId) => dropPeer(ctx, peerId)),
+                // A phone that moved from the relay to WebRTC keeps its place: it is only told the current auto-vote
+                // state (what it missed or has still draining on the relay), and the badge's relay count is read again.
+                // Not the settings: nothing changed there, and a resend would make its renderer fetch everything again.
+                next.onPathChange?.((peerId) => {
+                    if (!ctx.peers.has(peerId)) return; // it has not said hello yet: the snapshot it gets then is complete
+                    void sendTo(ctx, peerId, stampedAutovoteState(deps.getAutovoteState()));
+                    notifyCount(ctx);
+                }) ?? (() => undefined),
             );
             for (const channel of FORWARDED_EVENT_CHANNELS) {
                 unsubs.push(
@@ -147,7 +155,8 @@ export const createRemoteHost = (deps: RemoteHostDeps): RemoteHost => {
         },
         pushAutovoteState: (state) => {
             if (ctx.transport === null || ctx.peers.size === 0) return;
-            for (const peerId of ctx.peers) void sendTo(ctx, peerId, { t: 'autovote-state', state });
+            const message = stampedAutovoteState(state);
+            for (const peerId of ctx.peers) void sendTo(ctx, peerId, message);
         },
     };
 };

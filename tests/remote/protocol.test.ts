@@ -12,6 +12,7 @@ import {
     compareReleaseVersions,
     isReleaseVersion,
     isWithinPeerMessageLimit,
+    isSafeToSendTwice,
     parsePeerMessage,
     restoreInvokeArgs,
 } from '../../src/ts/core/remote/protocol';
@@ -160,6 +161,30 @@ describe('parsePeerMessage', () => {
         ['autovote-command: unknown command', { t: 'autovote-command', command: 'restart' }],
     ])('refuses %s', (_label, raw) => {
         expect(parsePeerMessage(invalid(raw))).toBeNull();
+    });
+
+    describe('the stamp on an autovote-state', () => {
+        test('the desktop run and the count are kept as a pair', () => {
+            expect(parsePeerMessage({ t: 'autovote-state', state, hostRun: 'run-a', n: 7 })).toEqual({
+                t: 'autovote-state',
+                state,
+                hostRun: 'run-a',
+                n: 7,
+            });
+            expect(parsePeerMessage({ t: 'autovote-state', state, hostRun: 'run-a', n: 0 })).toMatchObject({ n: 0 });
+        });
+
+        test.each([
+            ['a run without a count', { hostRun: 'run-a' }],
+            ['a count without a run', { n: 3 }],
+            ['an empty run', { hostRun: '', n: 3 }],
+            ['a run that is not text', { hostRun: 5, n: 3 }],
+            ['a negative count', { hostRun: 'run-a', n: -1 }],
+            ['a fractional count', { hostRun: 'run-a', n: 1.5 }],
+            ['a count that is not a number', { hostRun: 'run-a', n: '3' }],
+        ])('%s is no stamp at all: the state itself is still read', (_name, extra) => {
+            expect(parsePeerMessage({ t: 'autovote-state', state, ...extra })).toEqual({ t: 'autovote-state', state });
+        });
     });
 
     test('a message over the size bound is refused', () => {
@@ -395,5 +420,30 @@ describe('release versions', () => {
         ['1.2.3-1', '1.2.3-alpha', -1],
     ] as Array<[string, string, number]>)('compares %s with %s as %i', (a, b, expected) => {
         expect(compareReleaseVersions(a, b)).toBe(expected);
+    });
+});
+
+describe('isSafeToSendTwice', () => {
+    test.each([
+        [{ t: 'hello', version: '1.2.3', protocolVersion: 1, host: true }],
+        [{ t: 'result', id: 1, ok: true, result: 'x' }],
+        [{ t: 'result', id: 1, ok: false, error: 'refused' }],
+        [{ t: 'autovote-state', state }],
+    ])('a %j may go out over both paths', (message) => {
+        expect(isSafeToSendTwice(message)).toBe(true);
+    });
+
+    test.each([
+        [{ t: 'event', channel: 'settings-changed', payload: {} }],
+        [{ t: 'event', channel: 'log-message', payload: { message: 'a line' } }],
+        [{ t: 'bye' }],
+        [{ t: 'invoke', id: 1, channel: 'get-setting', args: ['k'] }],
+    ])('a %j may not', (message) => {
+        expect(isSafeToSendTwice(message)).toBe(false);
+    });
+
+    test('a payload that is no protocol message may not', () => {
+        expect(isSafeToSendTwice('nonsense')).toBe(false);
+        expect(isSafeToSendTwice(null)).toBe(false);
     });
 });

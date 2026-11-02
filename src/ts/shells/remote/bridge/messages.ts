@@ -9,6 +9,7 @@ import { PAGE_VERSION, PROTOCOL_VERSION, parsePeerMessage } from '../../../core/
 import { REMOTE_REFUSAL_PREFIX, REMOTE_SAY_HELLO_FIRST } from '../../../core/remote/dispatch';
 import { setRemoteConnectionState, setRemoteHostPath, setRemoteHostPeerId } from '../../../core/remote/connectionState';
 import { rendererTranslator } from '../../../core/translations/renderer';
+import { clearSkipMark, storeDesktopVersion } from '../../../core/remote/desktopVersion';
 
 import type { HelloRepeater } from '../../../core/remote/helloRepeat';
 import type { ByeMessage, EventMessage, HelloMessage, ResultMessage } from '../../../core/remote/protocol';
@@ -47,11 +48,18 @@ const handleHello = (message: HelloMessage, peerId: string, watch: MessageWatch)
         return;
     }
     if (message.version !== PAGE_VERSION) {
+        // Once a desktop is accepted, only that peer can send this page away; before one is, the first desktop's
+        // hello decides (the round trip from a stale kept version needs it).
+        if (ctx.hostPeerId !== null && peerId !== ctx.hostPeerId) return;
         // The desktop runs another version: the stable loader finds the page that matches it
         // (or says which side to update), so no notice shows here.
         hello.stop();
         hello.clear();
-        goToLoader(watch.loaderTarget);
+        // The loader goes straight to the version this page remembers next time: the one the desktop runs. A write
+        // that fails is a shortcut lost, never a stranded tab.
+        void storeDesktopVersion(message.version)
+            .catch(() => undefined)
+            .then(() => goToLoader(watch.loaderTarget));
         return;
     }
     if (message.protocolVersion !== PROTOCOL_VERSION) {
@@ -65,6 +73,9 @@ const handleHello = (message: HelloMessage, peerId: string, watch: MessageWatch)
     if (ctx.hostPeerId === null) {
         ctx.hostPeerId = peerId;
         setRemoteHostPeerId(peerId);
+        // This page is the desktop's: remembered for the loader's next visit, and the loader's mark has done its work.
+        void storeDesktopVersion(message.version).catch(() => undefined);
+        clearSkipMark();
         setRemoteHostPath(ctx.transport.peerPath?.(peerId) ?? 'direct');
         ctx.everConnected = true;
         ctx.waiting.clear();
@@ -79,6 +90,9 @@ const handleHello = (message: HelloMessage, peerId: string, watch: MessageWatch)
 const handleResult = (message: ResultMessage, peerId: string, watch: MessageWatch): void => {
     const { ctx, pipeline } = watch;
     if (peerId !== ctx.hostPeerId) return;
+    // A result for an invoke that is not pending is a late copy (the relay link's, after WebRTC's) or a stray: it changes nothing.
+    const invoke = ctx.pending.get(message.id);
+    if (!invoke) return;
     if (!message.ok && message.error === REMOTE_SAY_HELLO_FIRST) {
         // The desktop dropped this phone without the phone knowing (its bye was lost): the connection was lost, so
         // every invoke in flight is settled as for a lost connection — a spend may have run on the desktop
@@ -86,8 +100,6 @@ const handleResult = (message: ResultMessage, peerId: string, watch: MessageWatc
         watch.reconnect(peerId);
         return;
     }
-    const invoke = ctx.pending.get(message.id);
-    if (!invoke) return;
     ctx.pending.delete(message.id);
     if (message.ok) invoke.resolve(message.result);
     else if (message.error.startsWith(REMOTE_REFUSAL_PREFIX)) {

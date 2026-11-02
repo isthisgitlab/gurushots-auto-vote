@@ -19,6 +19,35 @@ jest.mock('../../src/ts/core/remote/trystero', () => ({
     isConnectionFailureJoinError: (error: string): boolean =>
         error.startsWith('could not connect to peer') && error.includes('after exchanging SDP'),
 }));
+// The desktop version the loader keeps and the tab's loop guard are the store module's; here an in-memory stand-in
+// records what the loader asks of it (the real store has its own tests, and the round trips run in remotePathSkip).
+const versionStore = {
+    stored: null as string | null,
+    skipped: null as string | null,
+    storeCalls: [] as string[],
+    /** Makes the store's write fail, the way a browser that refuses storage does. */
+    storeFails: false,
+    cleared: 0,
+    asked: 0,
+};
+jest.mock('../../src/ts/core/remote/desktopVersion', () => ({
+    storedDesktopVersion: jest.fn(async () => {
+        versionStore.asked += 1;
+        return versionStore.stored;
+    }),
+    storeDesktopVersion: jest.fn(async (version: string) => {
+        versionStore.storeCalls.push(version);
+        if (versionStore.storeFails) throw new Error('storage refused');
+    }),
+    clearDesktopVersion: jest.fn(() => {
+        versionStore.cleared += 1;
+        versionStore.stored = null;
+    }),
+    skippedTo: jest.fn(() => versionStore.skipped),
+    markSkippedTo: jest.fn((version: string) => {
+        versionStore.skipped = version;
+    }),
+}));
 const installPhoneDisconnect = jest.fn<void, []>();
 const androidApp: { current: boolean } = { current: false };
 jest.mock('../../src/ts/shells/remote/phoneMode', () => ({
@@ -79,6 +108,12 @@ describe('the /remote/ loader', () => {
         });
         headOk = true;
         document.body.innerHTML = '<div id="root"></div>';
+        versionStore.stored = null;
+        versionStore.skipped = null;
+        versionStore.storeCalls = [];
+        versionStore.storeFails = false;
+        versionStore.cleared = 0;
+        versionStore.asked = 0;
     });
 
     afterEach(() => {
@@ -109,6 +144,137 @@ describe('the /remote/ loader', () => {
         await flush();
         expect(fetchCalls).toEqual(['./1.2.3/index.html']);
         expect(navigated).toEqual(['./1.2.3/index.html#k=the-key']);
+        // The version is kept for the next visit.
+        expect(versionStore.storeCalls).toEqual(['1.2.3']);
+    });
+
+    test('a store that refuses the write never strands the tab: it still moves on to the version page', async () => {
+        versionStore.storeFails = true;
+        loadLoader();
+        await flush();
+        const transport = transportStub.current as TransportStub;
+        transport.emitJoin('host');
+        await flush();
+        transport.receiveFromPeer(
+            { t: 'hello', version: '1.2.3', protocolVersion: PROTOCOL_VERSION, host: true },
+            'host',
+        );
+        await flush();
+        expect(versionStore.storeCalls).toEqual(['1.2.3']);
+        expect(navigated).toEqual(['./1.2.3/index.html#k=the-key']);
+    });
+
+    test('a version whose page the site does not carry is not kept for the next visit', async () => {
+        headOk = false;
+        loadLoader();
+        await flush();
+        const transport = transportStub.current as TransportStub;
+        transport.emitJoin('host');
+        await flush();
+        transport.receiveFromPeer(
+            { t: 'hello', version: '1.2.3', protocolVersion: PROTOCOL_VERSION, host: true },
+            'host',
+        );
+        await flush();
+        expect(navigated).toEqual([]);
+        expect(versionStore.storeCalls).toEqual([]);
+    });
+
+    describe('a return visit (a desktop version kept from the last one)', () => {
+        const createTransport = () => {
+            const trystero =
+                require('../../src/ts/core/remote/trystero') as typeof import('../../src/ts/core/remote/trystero');
+            return jest.mocked(trystero.createTrysteroTransport);
+        };
+
+        test("goes straight to the kept version's page after one HEAD request, with no transport, fragment kept, and marks the tab", async () => {
+            versionStore.stored = '2.0.0';
+            const before = createTransport().mock.calls.length;
+            loadLoader();
+            await flush();
+            expect(fetchCalls).toEqual(['./2.0.0/index.html']);
+            expect(navigated).toEqual(['./2.0.0/index.html#k=the-key']);
+            expect(versionStore.skipped).toBe('2.0.0');
+            expect(versionStore.cleared).toBe(0);
+            expect(createTransport().mock.calls.length).toBe(before); // nothing joined the room
+        });
+
+        test('a kept version whose page is not published is cleared, and the whole flow runs (and says what is wrong)', async () => {
+            versionStore.stored = '2.0.0';
+            headOk = false;
+            loadLoader();
+            await flush();
+            expect(navigated).toEqual([]);
+            expect(versionStore.cleared).toBe(1);
+            expect(versionStore.skipped).toBeNull();
+            // The normal flow joined the room and waits for the desktop's hello.
+            const transport = transportStub.current as TransportStub;
+            transport.emitJoin('host');
+            await flush();
+            transport.receiveFromPeer(
+                { t: 'hello', version: '2.0.0', protocolVersion: PROTOCOL_VERSION, host: true },
+                'host',
+            );
+            await flush();
+            // The desktop (2.0.0) is newer than this page and the site does not carry its page: said, not skipped over.
+            expect(document.getElementById('root')?.textContent).toContain('not published yet');
+        });
+
+        test('a version this tab already went straight to is not skipped to again: it is cleared and the whole flow runs', async () => {
+            versionStore.stored = '2.0.0';
+            versionStore.skipped = '2.0.0'; // its page sent the tab back
+            loadLoader();
+            await flush();
+            expect(fetchCalls).toEqual([]);
+            expect(navigated).toEqual([]);
+            expect(versionStore.cleared).toBe(1);
+            const transport = transportStub.current as TransportStub;
+            transport.emitJoin('host');
+            await flush();
+            transport.receiveFromPeer(
+                { t: 'hello', version: '3.0.0', protocolVersion: PROTOCOL_VERSION, host: true },
+                'host',
+            );
+            await flush();
+            expect(navigated).toEqual(['./3.0.0/index.html#k=the-key']);
+            expect(versionStore.storeCalls).toEqual(['3.0.0']);
+        });
+
+        test('a kept version differing from the one this tab went to is skipped to (the page it was kept by found a newer desktop)', async () => {
+            versionStore.stored = '3.0.0';
+            versionStore.skipped = '2.0.0';
+            loadLoader();
+            await flush();
+            expect(navigated).toEqual(['./3.0.0/index.html#k=the-key']);
+            expect(versionStore.skipped).toBe('3.0.0');
+        });
+
+        test('nothing kept: the whole flow runs, and nothing is cleared', async () => {
+            loadLoader();
+            await flush();
+            expect(versionStore.asked).toBe(1);
+            expect(versionStore.cleared).toBe(0);
+            expect(fetchCalls).toEqual([]);
+        });
+
+        test("inside the Android app the same check runs against the app's local server (the probe is the relative page file)", async () => {
+            androidApp.current = true;
+            versionStore.stored = '2.0.0';
+            loadLoader();
+            await flush();
+            expect(fetchCalls).toEqual(['./2.0.0/index.html']);
+            expect(navigated).toEqual(['./2.0.0/index.html#k=the-key']);
+        });
+
+        test('a probe that cannot run goes on to the page, as it does after a hello', async () => {
+            versionStore.stored = '2.0.0';
+            g.fetch = jest.fn(async () => {
+                throw new Error('offline');
+            });
+            loadLoader();
+            await flush();
+            expect(navigated).toEqual(['./2.0.0/index.html#k=the-key']);
+        });
     });
 
     test("a version the site does not carry says to update (the probe names the page file, as the app's local server needs)", async () => {

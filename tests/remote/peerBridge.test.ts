@@ -25,6 +25,21 @@ import {
     setRemoteHostPeerId,
 } from '../../src/ts/core/remote/connectionState';
 
+// What the page keeps for the loader's next visit is the store module's (the real one has its own tests, and the
+// round trips run in remotePathSkip.test.tsx): here a stand-in records what the bridge asks of it, in order.
+const versionCalls: string[] = [];
+/** Makes the store's write fail, the way a browser that refuses storage does. */
+let storeFails = false;
+jest.mock('../../src/ts/core/remote/desktopVersion', () => ({
+    storeDesktopVersion: jest.fn(async (version: string) => {
+        versionCalls.push(`store:${version}`);
+        if (storeFails) throw new Error('storage refused');
+    }),
+    clearSkipMark: jest.fn(() => {
+        versionCalls.push('clearSkipMark');
+    }),
+}));
+
 const hostHello = { t: 'hello', version: PAGE_VERSION, protocolVersion: PROTOCOL_VERSION, host: true };
 const fellowHello = { t: 'hello', version: PAGE_VERSION, protocolVersion: PROTOCOL_VERSION, host: false };
 
@@ -39,6 +54,8 @@ const firePage = (type: 'pagehide' | 'pageshow', persisted: boolean): void => {
     for (const handler of pageListeners.get(type) ?? []) handler({ persisted });
 };
 beforeEach(() => {
+    versionCalls.length = 0;
+    storeFails = false;
     pageListeners = new Map();
     Object.defineProperty(globalThis, 'addEventListener', {
         configurable: true,
@@ -160,6 +177,23 @@ describe('installPeerBridge (the phone bridge)', () => {
         expect(remoteConnectionState()).toBe('connected');
         jest.advanceTimersByTime(HOST_ANSWER_TIMEOUT_MS * 2);
         expect(remoteConnectionState()).toBe('connected');
+    });
+
+    test('a "say hello first" result, or any result, for an invoke that is not pending is ignored: no reconnect, the others stay pending', async () => {
+        connect();
+        const waiting = api.getSettings() as Promise<unknown>;
+        let settled = false;
+        void waiting.then(
+            () => (settled = true),
+            () => (settled = true),
+        );
+        phone.sent.length = 0;
+        phone.receiveFromPeer({ t: 'result', id: 9_999, ok: false, error: REMOTE_SAY_HELLO_FIRST }, 'host');
+        phone.receiveFromPeer({ t: 'result', id: 9_999, ok: true, result: 'late copy' }, 'host');
+        await Promise.resolve();
+        expect(settled).toBe(false);
+        expect(remoteConnectionState()).toBe('connected');
+        expect(phone.sent.filter(({ message }) => (message as { t: string }).t === 'hello')).toEqual([]);
     });
 
     test('a normal refusal settles only its own invoke: the others stay pending and the page stays connected', async () => {
@@ -470,7 +504,11 @@ describe('installPeerBridge (the phone bridge)', () => {
                     'host',
                 );
                 // The loader target is whatever the page handed the bridge (the page resolves it from
-                // its own address); the key already rode in it.
+                // its own address); the key already rode in it. The version is kept first, so the loader
+                // goes straight to the matching page next.
+                await Promise.resolve();
+                await Promise.resolve();
+                expect(versionCalls).toEqual(['store:0.0.1']);
                 expect(replaced).toEqual([LOADER_TARGET]);
                 expect(remoteConnectionState()).toBe('connecting');
                 const after = hostReceived.length;
@@ -482,6 +520,46 @@ describe('installPeerBridge (the phone bridge)', () => {
             }
         });
 
+        test('a store that refuses the write never strands the tab: it still goes to the loader', async () => {
+            storeFails = true;
+            phone.emitJoin('host');
+            phone.receiveFromPeer(
+                { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, host: true },
+                'host',
+            );
+            await flushAsync();
+            expect(versionCalls).toEqual(['store:0.0.1']);
+            expect(replaced).toEqual([LOADER_TARGET]);
+        });
+
+        test('once a desktop is accepted, the same peer announcing another version sends the tab to the loader', async () => {
+            phone.emitJoin('host');
+            phone.receiveFromPeer(hostHello, 'host');
+            versionCalls.length = 0;
+            phone.receiveFromPeer(
+                { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, host: true },
+                'host',
+            );
+            await flushAsync();
+            expect(versionCalls).toEqual(['store:0.0.1']);
+            expect(replaced).toEqual([LOADER_TARGET]);
+        });
+
+        test('once a desktop is accepted, another peer announcing another version changes nothing', async () => {
+            phone.emitJoin('host');
+            phone.receiveFromPeer(hostHello, 'host');
+            versionCalls.length = 0;
+            phone.emitJoin('other');
+            phone.receiveFromPeer(
+                { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, host: true },
+                'other',
+            );
+            await flushAsync();
+            expect(versionCalls).toEqual([]);
+            expect(replaced).toEqual([]);
+            expect(remoteConnectionState()).toBe('connected');
+        });
+
         test('the same version with another protocol shape says to update the app on the computer', () => {
             phone.emitJoin('host');
             phone.receiveFromPeer(
@@ -491,6 +569,29 @@ describe('installPeerBridge (the phone bridge)', () => {
             expect(replaced).toEqual([]);
             expect(remoteConnectionState()).toBe('update');
         });
+    });
+
+    test("the desktop of this page's version is kept for the loader's next visit, and the loader's mark is cleared; a second hello keeps nothing again", () => {
+        phone.emitJoin('host');
+        phone.receiveFromPeer(hostHello, 'host');
+        expect(versionCalls).toEqual([`store:${PAGE_VERSION}`, 'clearSkipMark']);
+        phone.receiveFromPeer(hostHello, 'host');
+        expect(versionCalls).toEqual([`store:${PAGE_VERSION}`, 'clearSkipMark']);
+    });
+
+    test('a store that refuses the write when the desktop is accepted changes nothing: the phone is connected', async () => {
+        storeFails = true;
+        phone.emitJoin('host');
+        phone.receiveFromPeer(hostHello, 'host');
+        await flushAsync();
+        expect(remoteConnectionState()).toBe('connected');
+        expect(versionCalls).toEqual([`store:${PAGE_VERSION}`, 'clearSkipMark']);
+    });
+
+    test("a fellow phone's hello keeps nothing", () => {
+        phone.emitJoin('other');
+        phone.receiveFromPeer(fellowHello, 'other');
+        expect(versionCalls).toEqual([]);
     });
 
     test('a join failure on the SDP exchange says to try Wi-Fi; a wrong password reads as offline', () => {
@@ -936,6 +1037,27 @@ describe('installPeerBridge: the relay path, hello again and the page lifecycle'
         paths.push(remoteHostPath());
         expect(remoteConnectionState()).toBe('connected');
         expect(paths).toEqual(['relay']);
+    });
+
+    test("the desktop moving to WebRTC in place changes the path and settles nothing; another peer's move changes nothing", async () => {
+        Object.assign(phone, { peerPath: () => 'relay' });
+        install();
+        connect();
+        expect(remoteHostPath()).toBe('relay');
+        const api = (globalThis as { api?: Record<string, (...args: unknown[]) => unknown> }).api ?? {};
+        const pending = api.getSettings() as Promise<unknown>;
+        let settled = false;
+        void pending.then(
+            () => (settled = true),
+            () => (settled = true),
+        );
+        phone.emitPathChange('someone-else', 'direct');
+        expect(remoteHostPath()).toBe('relay');
+        phone.emitPathChange('host', 'direct');
+        expect(remoteHostPath()).toBe('direct');
+        await Promise.resolve();
+        expect(settled).toBe(false);
+        expect(remoteConnectionState()).toBe('connected');
     });
 
     test('a transport that does not name paths is a direct one', () => {

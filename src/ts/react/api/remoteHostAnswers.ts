@@ -18,7 +18,7 @@ import {
 
 import type { AutovoteCommandName } from '../../core/remote/protocol';
 import type { HostContext } from './remoteHostPeers';
-import { clippedId, sendTo } from './remoteHostPeers';
+import { clippedId, sendTo, stampedAutovoteState } from './remoteHostPeers';
 
 /** A short, single-line error text for a phone: bounded to what a `result` message accepts. */
 const shortError = (error: unknown): string => {
@@ -39,7 +39,7 @@ export const sendSnapshot = async (ctx: HostContext, peerId: string): Promise<vo
         // The phone reads the settings itself through its own invokes, each answered or failed on its own.
         ctx.deps.logInfo('Remote invoke failed: get-settings');
     }
-    await sendTo(ctx, peerId, { t: 'autovote-state', state: ctx.deps.getAutovoteState() });
+    await sendTo(ctx, peerId, stampedAutovoteState(ctx.deps.getAutovoteState()));
 };
 
 export const answerLogStreamChannel = async (

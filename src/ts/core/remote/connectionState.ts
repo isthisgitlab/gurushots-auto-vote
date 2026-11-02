@@ -6,7 +6,7 @@
  * The same module keeps the desktop's peer id (`setRemoteHostPeerId` / `remoteHostPeerId`):
  * the store and the reader live here, and its one writer is the phone's peer bridge
  * (`shells/remote/bridge/peer.ts`), which sets it on the first host `hello` and clears it
- * when the connection is lost. It carries no listeners — nothing re-renders on it.
+ * when the connection is lost. Only the path has listeners (`subscribeRemoteHostPath`): it can change in place.
  */
 
 import type { RemotePath } from './relays';
@@ -63,10 +63,22 @@ export const setRemoteHostPeerId = (peerId: string | null): void => {
 export const remoteHostPeerId = (): string | null => hostPeerId;
 
 let hostPath: RemotePath = 'direct';
+const pathListeners = new Set<(path: RemotePath) => void>();
 
-/** Which path the connected desktop is reached over. The peer bridge writes it just before it reads `connected`. */
+/**
+ * Which path the connected desktop is reached over. The peer bridge writes it just before it reads `connected`,
+ * and again when the transport moves the desktop to another path in place (the relay to WebRTC).
+ */
 export const setRemoteHostPath = (path: RemotePath): void => {
+    if (hostPath === path) return;
     hostPath = path;
+    for (const listener of pathListeners) listener(path);
+};
+
+/** Subscribes to changes of the desktop's path; answers the unsubscribe. */
+export const subscribeRemoteHostPath = (listener: (path: RemotePath) => void): (() => void) => {
+    pathListeners.add(listener);
+    return () => pathListeners.delete(listener);
 };
 
 /** The path the connected desktop is reached over (`direct` until a desktop has connected). */

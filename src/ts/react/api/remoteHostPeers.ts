@@ -7,7 +7,9 @@
 
 import { MAX_PEER_FIELD_LENGTH } from '../../core/remote/protocol';
 
+import type { AutovoteStateMessage } from '../../core/remote/protocol';
 import type { RemoteTransport } from '../../core/remote/relays';
+import type { AutovoteState } from '../../core/autovote/state';
 import type { RemoteHostDeps } from './remoteHostCreate';
 
 /** What the host's helpers share: the deps, the room transport, and the peers. */
@@ -24,6 +26,22 @@ export type HostContext = {
     /** The connected-count listeners (the header badge). */
     readonly countListeners: Set<() => void>;
 };
+
+/** The random id this renderer drew when it started: a phone tells a restarted desktop by it. */
+const HOST_RUN = Array.from(globalThis.crypto.getRandomValues(new Uint8Array(8)), (byte) =>
+    byte.toString(16).padStart(2, '0'),
+).join('');
+
+/** How many autovote states this renderer has stamped: it only grows, across every host the renderer creates. */
+let statesStamped = 0;
+
+/** An `autovote-state` message stamped with this run and the next count, so a phone can drop a stale one. */
+export const stampedAutovoteState = (state: AutovoteState): AutovoteStateMessage => ({
+    t: 'autovote-state',
+    state,
+    hostRun: HOST_RUN,
+    n: statesStamped++,
+});
 
 /** A peer id clipped for a log line: ids are bounded like every other logged field. */
 export const clippedId = (value: string): string => value.slice(0, MAX_PEER_FIELD_LENGTH);

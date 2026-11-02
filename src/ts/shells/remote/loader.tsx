@@ -22,6 +22,13 @@ import { HOST_ANSWER_TIMEOUT_MS, createHelloRepeater } from '../../core/remote/h
 import { watchPageLifecycle } from '../../core/remote/pageLifecycle';
 import { takePairingKey } from '../../core/remote/pairingKey';
 import {
+    clearDesktopVersion,
+    markSkippedTo,
+    skippedTo,
+    storeDesktopVersion,
+    storedDesktopVersion,
+} from '../../core/remote/desktopVersion';
+import {
     PAGE_VERSION,
     PROTOCOL_VERSION,
     compareReleaseVersions,
@@ -62,6 +69,16 @@ void (async () => {
     // here on every launch until the user leaves remote mode. It is installed before the first render.
     installPhoneDisconnect();
     mountRemoteNotice();
+    // A return visit goes straight to the page of the version it last reached: no transport, one HEAD request. A
+    // version this tab already went straight to (its page sent the tab back, so the version was wrong or the page
+    // could not tell) or one whose page is not published runs the whole flow below, which says what is wrong.
+    const stored = await storedDesktopVersion(key);
+    if (stored !== null && skippedTo() !== stored && (await versionIsPublished(stored))) {
+        markSkippedTo(stored);
+        globalThis.location.replace(`${versionPage(stored)}${globalThis.location.hash}`);
+        return;
+    }
+    if (stored !== null) clearDesktopVersion();
     let done = false;
     const transport = await createTrysteroTransport({ key, role: 'phone' });
     // The loader only asks the desktop's version: `role: 'loader'` keeps it out of the desktop's phone count.
@@ -85,7 +102,7 @@ void (async () => {
         if (done) return;
         done = true;
         hello.stop();
-        void versionIsPublished(version).then((published) => {
+        void versionIsPublished(version).then(async (published) => {
             if (!published) {
                 void transport.leave();
                 const newerThanPage = compareReleaseVersions(version, PAGE_VERSION) > 0;
@@ -96,6 +113,8 @@ void (async () => {
                 );
                 return;
             }
+            // Kept for the next visit, only for a page that is there; a write that fails is a shortcut lost, never a stranded tab.
+            await storeDesktopVersion(version).catch(() => undefined);
             globalThis.location.replace(`${versionPage(version)}${globalThis.location.hash}`);
         });
     };

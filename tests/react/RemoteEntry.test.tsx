@@ -35,6 +35,7 @@ describe('Remote entry', () => {
         document.body.innerHTML = '';
         window.location.hash = '';
         window.sessionStorage.clear();
+        window.localStorage.clear();
         // The end-to-end test loads the real bridge: it marks the platform kind and installs window.api.
         delete (globalThis as { api?: unknown }).api;
         delete (globalThis as { __autovotePlatformKind?: string }).__autovotePlatformKind;
@@ -214,8 +215,14 @@ describe('Remote entry', () => {
                 'host',
             );
             await flush();
+            // The page keeps the desktop's version first (the real store hashes the pairing key, which takes a
+            // moment off the microtask queue), then moves the tab to the loader.
+            for (let waited = 0; waited < 100 && replaced.length === 0; waited += 1) {
+                await new Promise((resolve) => setTimeout(resolve, 10));
+            }
             const target = replaced[0];
             expect(target).toBeDefined();
+            expect(window.localStorage.getItem('gs-remote-desktop-version')).toMatch(/^[0-9a-f]{16}:9\.9\.9$/);
             expect(new URL(target ?? '', window.location.href).pathname.endsWith('/remote/index.html')).toBe(true);
         } finally {
             replaceSpy.mockRestore();

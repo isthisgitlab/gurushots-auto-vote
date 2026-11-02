@@ -51,8 +51,12 @@ export type RemoteTransport = {
     onMessage: (handler: (peerId: string, message: unknown) => void) => () => void;
     /** Subscribe to peer joins; answers the unsubscribe. */
     onPeerJoin: (handler: (peerId: string) => void) => () => void;
-    /** Subscribe to peer leaves; answers the unsubscribe. */
-    onPeerLeave: (handler: (peerId: string) => void) => () => void;
+    /**
+     * Subscribe to peer leaves; answers the unsubscribe. The relay link also says how many messages it had sent
+     * the peer that were never acknowledged (`unacked`): the hybrid transport uses it to tell a relay loss that
+     * leaves invokes hanging from one that does not.
+     */
+    onPeerLeave: (handler: (peerId: string, unacked?: number) => void) => () => void;
     /**
      * Subscribe to join failures: a peer that was seen but whose connection could not be
      * established. The `error` text comes from the transport; `isConnectionFailureJoinError`
@@ -70,6 +74,35 @@ export type RemoteTransport = {
     peerPath?: (peerId: string) => RemotePath | null;
     /** Whether the relay fallback can run at all here (false in a browser without `CompressionStream`). Only the hybrid transport answers it. */
     relayAvailable?: () => boolean;
+    /**
+     * Subscribe to a joined peer moving to another path without a leave or a join (a peer on the relay path that
+     * WebRTC then reached); answers the unsubscribe. Only the hybrid transport has it.
+     */
+    onPathChange?: (handler: (peerId: string, path: RemotePath) => void) => () => void;
+    /**
+     * Takes back the messages queued for a peer that have not started leaving, in the order they were queued, so
+     * they can go another way. Only the relay link has it.
+     */
+    takeUnsent?: (peerId: string) => unknown[];
+    /**
+     * The messages to a peer that have started leaving and are not acknowledged, in the order they were queued. They
+     * stay where they are and are sent again until acknowledged. Only the relay link has it.
+     */
+    startedMessages?: (peerId: string) => unknown[];
+    /**
+     * From now until the peer leaves or `stopRedirect` is called, a message to the peer that finishes packing goes to
+     * `late` instead of the queue. Only the relay link has it.
+     */
+    redirect?: (peerId: string, late: (message: unknown) => void) => void;
+    /** Ends the redirect: messages for the peer are queued on the link again. */
+    stopRedirect?: (peerId: string) => void;
+    /** How many messages to a peer are in flight on the link: waiting to be packed, being packed, or started and not acknowledged. */
+    inFlight?: (peerId: string) => number;
+    /**
+     * Calls `callback` once, when no message to the peer is in flight (at once if none is); answers a cancel function.
+     * The peer leaving drops the callback unheard: that is a loss, which the leave event reports.
+     */
+    whenIdle?: (peerId: string, callback: () => void) => () => void;
 };
 
 /**

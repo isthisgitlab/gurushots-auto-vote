@@ -275,6 +275,11 @@ describe('sends toward the Logs window', () => {
             'src/ts/core/remote/hybridTransport.ts',
             "return (path === 'direct' ? direct : (relay as RemoteTransport)).send(message, target);",
         ],
+        // An upgrade sends the messages the relay link handed over, and the late ones, over the WebRTC path the peer has moved to.
+        [
+            'src/ts/core/remote/hybridTransport.ts',
+            "state.direct.send(message, peerId).catch(() => lose(state, peerId, 'direct'));",
+        ],
     ];
 
     interface Directive {

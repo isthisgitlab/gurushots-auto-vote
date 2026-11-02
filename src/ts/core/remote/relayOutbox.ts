@@ -55,6 +55,8 @@ type OutMessage = {
     readonly msgId: string;
     readonly peerId: string;
     readonly frames: OutFrame[];
+    /** The message as the caller gave it: its frames hold packed gzip parts, so a message that moves to another path is sent from this. */
+    readonly original: unknown;
     readonly droppable: boolean;
     /** The message's stream and sequence number, taken when its first frame leaves: a message dropped before that never uses one, so the receiver sees no gap. */
     place: { seq: number; stream: string } | null;
@@ -82,19 +84,25 @@ export type OutboxDeps = {
     batchBudgetBytes: (peerId: string) => number;
     /** A message was never acknowledged: the peer is given up on. */
     giveUp: (peerId: string) => void;
+    /** A message of the peer was acknowledged and is no longer waited for. */
+    onAcked: (peerId: string) => void;
 };
 
 export type Outbox = {
     /** Queues a presence, ack or bye frame ahead of all data. */
     sendControl: (frame: OutFrame) => void;
-    /** Queues a message's frames; `droppable` marks one that carries log lines. Throws when the queue is full. */
-    sendMessage: (peerId: string, msgId: string, frames: OutFrame[], droppable: boolean) => void;
+    /** Queues a message's frames; `droppable` marks one that carries log lines; `original` is the message they were made from. Throws when the queue is full. */
+    sendMessage: (peerId: string, msgId: string, frames: OutFrame[], droppable: boolean, original: unknown) => void;
     /** Owes the peer an ack for the message, in a batch: it leaves with the next data for the peer, or alone after ACK_LINGER_MS. */
     sendBatchedAck: (peerId: string, toEpoch: string, msgId: string) => void;
     /** The peer acknowledged the message. */
     ack: (peerId: string, msgId: string) => void;
-    /** Forgets everything still queued or unacknowledged for the peer. */
-    forgetPeer: (peerId: string) => void;
+    /** Forgets everything still queued or unacknowledged for the peer; answers how many messages that was. */
+    forgetPeer: (peerId: string) => number;
+    /** Takes back the peer's messages none of whose frames has left, in the order they were queued; they are no longer queued here. */
+    takeUnstarted: (peerId: string) => unknown[];
+    /** The peer's messages that have started leaving and are not acknowledged yet, as the caller gave them, in the order they were queued; they stay queued and are sent again. */
+    startedMessages: (peerId: string) => unknown[];
     close: () => void;
 };
 
@@ -260,6 +268,7 @@ const sendMessage = (
     msgId: string,
     frames: OutFrame[],
     droppable: boolean,
+    original: unknown,
 ): void => {
     if (droppable && queued(state) >= BACKLOG_FRAMES) return; // backlog: log lines go first
     if (queued(state) + frames.length > MAX_QUEUED_FRAMES) throw new Error('relay send queue is full');
@@ -267,6 +276,7 @@ const sendMessage = (
         msgId,
         peerId,
         frames,
+        original,
         droppable,
         place: null,
         remaining: frames.length,
@@ -311,7 +321,8 @@ export const createOutbox = (deps: OutboxDeps): Outbox => {
             state.control.push({ out: frame, message: null });
             kick(state);
         },
-        sendMessage: (peerId, msgId, frames, droppable) => sendMessage(state, peerId, msgId, frames, droppable),
+        sendMessage: (peerId, msgId, frames, droppable, original) =>
+            sendMessage(state, peerId, msgId, frames, droppable, original),
         sendBatchedAck: (peerId, toEpoch, msgId) => {
             const owed = state.acks.get(peerId);
             if (owed === undefined) state.acks.set(peerId, { toEpoch, ids: [msgId], since: deps.now() });
@@ -323,14 +334,35 @@ export const createOutbox = (deps: OutboxDeps): Outbox => {
         },
         ack: (peerId, msgId) => {
             const message = state.messages.get(msgId);
-            if (message?.peerId === peerId) removeMessage(state, message);
+            if (message?.peerId !== peerId) return;
+            removeMessage(state, message);
+            deps.onAcked(peerId);
         },
         forgetPeer: (peerId) => {
             state.streams.delete(peerId);
             state.acks.delete(peerId);
+            let forgotten = 0;
             for (const message of state.messages.values()) {
-                if (message.peerId === peerId) removeMessage(state, message);
+                if (message.peerId !== peerId) continue;
+                removeMessage(state, message);
+                forgotten += 1;
             }
+            return forgotten;
+        },
+        startedMessages: (peerId) => {
+            const started: unknown[] = [];
+            for (const message of state.messages.values())
+                if (message.peerId === peerId && message.started) started.push(message.original);
+            return started;
+        },
+        takeUnstarted: (peerId) => {
+            const taken: unknown[] = [];
+            for (const message of state.messages.values()) {
+                if (message.peerId !== peerId || message.started) continue;
+                removeMessage(state, message);
+                taken.push(message.original);
+            }
+            return taken;
         },
         close: () => closeOutbox(state),
     };

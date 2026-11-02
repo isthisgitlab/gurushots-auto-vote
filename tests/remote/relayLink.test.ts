@@ -21,6 +21,8 @@ type Side = {
     io: ReturnType<Bus['endpoint']>;
     joins: string[];
     leaves: string[];
+    /** What each leave said about the messages it had sent the peer that were never acknowledged. */
+    unacked: Array<number | undefined>;
     messages: Array<[string, unknown]>;
     index: number;
 };
@@ -37,9 +39,21 @@ const side = (bus: Bus, role: LinkRole, selfId: string): Side => {
     const io = bus.endpoint();
     const codec = stubCodec();
     const transport = createRelayLink({ io, codec, topic: TOPIC, selfId, role, batching });
-    const recorded: Side = { transport, codec, io, joins: [], leaves: [], messages: [], index: endpointCount++ };
+    const recorded: Side = {
+        transport,
+        codec,
+        io,
+        joins: [],
+        leaves: [],
+        unacked: [],
+        messages: [],
+        index: endpointCount++,
+    };
     transport.onPeerJoin((peerId) => recorded.joins.push(peerId));
-    transport.onPeerLeave((peerId) => recorded.leaves.push(peerId));
+    transport.onPeerLeave((peerId, unacked) => {
+        recorded.leaves.push(peerId);
+        recorded.unacked.push(unacked);
+    });
     transport.onMessage((peerId, message) => recorded.messages.push([peerId, message]));
     return recorded;
 };
@@ -414,6 +428,270 @@ describe.each([false, true])('the relay link (batching %s)', (mode) => {
             expect(host.leaves).toContain('phone-id');
             expect(ofKind(bus, host.index, 'bye').filter((frame) => frame.header.to === 'phone-id')).toHaveLength(1);
             expect(phone.leaves).toContain('host-id'); // it heard the bye
+            // The leave says what was lost: the message it gave up on.
+            expect(host.unacked).toEqual([1]);
+        });
+
+        test('a leave says how many messages it had sent the peer that were never acknowledged', async () => {
+            const { host, phone } = await pair();
+            bus.filter = (frame) => frame.header.kind !== 'ack';
+            for (const n of [1, 2, 3]) await host.transport.send({ n }, 'phone-id');
+            await run(1_000, 250);
+            await phone.transport.leave(); // the peer says bye with all three still unacknowledged
+            await run(500, 250);
+            expect(host.leaves).toEqual(['phone-id']);
+            expect(host.unacked).toEqual([3]);
+        });
+
+        test('a leave with nothing outstanding says none', async () => {
+            const { host, phone } = await pair();
+            await host.transport.send({ t: 'one' }, 'phone-id');
+            await run(1_000, 250);
+            await phone.transport.leave();
+            await run(500, 250);
+            expect(host.unacked).toEqual([0]);
+        });
+    });
+
+    describe('taking back what has not started', () => {
+        test('the messages queued for a peer that have not started leaving come back, in order, and are never sent here', async () => {
+            const { host, phone } = await pair();
+            // The send budget lets a few leave at once; the rest wait behind it.
+            const sends = Array.from({ length: 20 }, (_v, n) => host.transport.send({ n }, 'phone-id'));
+            await Promise.all(sends);
+            await flush();
+            const back = host.transport.takeUnsent?.('phone-id') ?? [];
+            expect(back.length).toBeGreaterThan(0);
+            await run(RESEND_MS * 2, 250);
+            const delivered = phone.messages.map(([, message]) => message);
+            // What came back was never delivered here; what did arrive is the front of the order, and nothing is in both.
+            expect(delivered.length + back.length).toBe(20);
+            expect([...delivered, ...back]).toEqual(Array.from({ length: 20 }, (_v, n) => ({ n })));
+            expect(host.transport.takeUnsent?.('phone-id')).toEqual([]);
+        });
+    });
+
+    describe('what is in flight to a peer', () => {
+        /** Makes the host's next pack wait; answers the call that lets it finish. */
+        const holdPacking = (host: Side): (() => void) => {
+            let finish = (): void => undefined;
+            const pack = host.codec.pack;
+            host.codec.pack = async (message) => {
+                await new Promise<void>((resolve) => (finish = resolve));
+                return pack(message);
+            };
+            return () => finish();
+        };
+
+        test('a message counts from packing until its ack, and a callback waiting for none in flight is called by the ack', async () => {
+            const { host } = await pair();
+            expect(host.transport.inFlight?.('phone-id')).toBe(0);
+            const idle = jest.fn();
+            const cancelIdle = host.transport.whenIdle?.('phone-id', idle);
+            cancelIdle?.(); // nothing to cancel: it was called at once
+            expect(idle).toHaveBeenCalledTimes(1);
+            const finishPacking = holdPacking(host);
+            const sending = host.transport.send({ t: 'x' }, 'phone-id');
+            await flush();
+            expect(host.transport.inFlight?.('phone-id')).toBe(1); // being packed
+            bus.filter = (frame) => frame.header.kind !== 'ack';
+            finishPacking();
+            await sending;
+            await run(500, 250);
+            expect(host.transport.inFlight?.('phone-id')).toBe(1); // started, not acknowledged
+            const waiting = jest.fn();
+            host.transport.whenIdle?.('phone-id', waiting);
+            bus.filter = () => true;
+            await run(RESEND_MS + 1_000, 250); // the resend is acknowledged
+            expect(waiting).toHaveBeenCalledTimes(1);
+            expect(host.transport.inFlight?.('phone-id')).toBe(0);
+        });
+
+        test('a callback waits through the packing: it is called when the packed message is acknowledged, not when packing ends', async () => {
+            const { host } = await pair();
+            const finishPacking = holdPacking(host);
+            const sending = host.transport.send({ t: 'x' }, 'phone-id');
+            await flush();
+            const idle = jest.fn();
+            host.transport.whenIdle?.('phone-id', idle);
+            bus.filter = (frame) => frame.header.kind !== 'ack';
+            finishPacking();
+            await sending;
+            await run(500, 250);
+            expect(idle).not.toHaveBeenCalled(); // packed and started, not acknowledged
+            bus.filter = () => true;
+            await run(RESEND_MS + 1_000, 250);
+            expect(idle).toHaveBeenCalledTimes(1);
+        });
+
+        test('two callbacks waiting for the same peer are both called once it is idle, and a cancel after the call is harmless', async () => {
+            const { host } = await pair();
+            const finishPacking = holdPacking(host);
+            const sending = host.transport.send({ n: 1 }, 'phone-id');
+            await flush();
+            const first = jest.fn();
+            const second = jest.fn();
+            const stopFirst = host.transport.whenIdle?.('phone-id', first);
+            host.transport.whenIdle?.('phone-id', second);
+            finishPacking();
+            await sending;
+            await run(1_000, 250); // the message leaves and is acknowledged
+            expect(first).toHaveBeenCalledTimes(1);
+            expect(second).toHaveBeenCalledTimes(1);
+            stopFirst?.();
+            expect(host.transport.inFlight?.('phone-id')).toBe(0);
+        });
+
+        test('a cancelled callback is not called', async () => {
+            const { host } = await pair();
+            bus.filter = (frame) => frame.header.kind !== 'ack';
+            await host.transport.send({ t: 'x' }, 'phone-id');
+            await run(500, 250);
+            const idle = jest.fn();
+            const cancel = host.transport.whenIdle?.('phone-id', idle);
+            cancel?.();
+            bus.filter = () => true;
+            await run(RESEND_MS + 1_000, 250);
+            expect(idle).not.toHaveBeenCalled();
+        });
+
+        test('a peer that leaves drops the callback unheard: the leave reports the loss', async () => {
+            const { host, phone } = await pair();
+            bus.filter = (frame) => frame.header.kind !== 'ack';
+            await host.transport.send({ t: 'x' }, 'phone-id');
+            await run(500, 250);
+            const idle = jest.fn();
+            host.transport.whenIdle?.('phone-id', idle);
+            await phone.transport.leave();
+            await run(RESEND_MS + 1_000, 250);
+            expect(host.leaves).toEqual(['phone-id']);
+            expect(idle).not.toHaveBeenCalled();
+        });
+
+        test('a peer given up on says it lost the message the outbox no longer held', async () => {
+            const { host } = await pair();
+            bus.filter = (frame) => frame.header.kind !== 'ack';
+            await host.transport.send({ t: 'x' }, 'phone-id');
+            await run(RESEND_MS * 4 + 1_000, 250);
+            expect(host.unacked).toEqual([1]);
+        });
+    });
+
+    describe('started messages and the redirect', () => {
+        test('the started messages are answered in order and stay: they are resent until acknowledged, and delivered once', async () => {
+            const { host, phone } = await pair();
+            bus.filter = (frame) => frame.header.kind !== 'ack';
+            for (const n of [1, 2, 3]) await host.transport.send({ n }, 'phone-id');
+            await run(500, 250);
+            expect(host.transport.startedMessages?.('phone-id')).toEqual([{ n: 1 }, { n: 2 }, { n: 3 }]);
+            expect(host.transport.inFlight?.('phone-id')).toBe(3);
+            bus.filter = () => true;
+            await run(RESEND_MS + 1_000, 250); // the resends are acknowledged
+            expect(host.transport.startedMessages?.('phone-id')).toEqual([]);
+            expect(phone.messages.map(([, message]) => message)).toEqual([{ n: 1 }, { n: 2 }, { n: 3 }]);
+            expect(host.leaves).toEqual([]);
+        });
+
+        test('a message that finishes packing after a redirect goes to it instead of the queue, until the redirect stops', async () => {
+            const { host, phone } = await pair();
+            let finish = (): void => undefined;
+            const pack = host.codec.pack;
+            host.codec.pack = async (message) => {
+                await new Promise<void>((resolve) => (finish = resolve));
+                return pack(message);
+            };
+            const sending = host.transport.send({ t: 'slow' }, 'phone-id');
+            await flush();
+            const late: unknown[] = [];
+            host.transport.redirect?.('phone-id', (message) => late.push(message));
+            finish();
+            await sending;
+            expect(late).toEqual([{ t: 'slow' }]);
+            host.codec.pack = pack;
+            host.transport.stopRedirect?.('phone-id');
+            await host.transport.send({ t: 'queued again' }, 'phone-id');
+            await run(1_000, 250);
+            expect(late).toEqual([{ t: 'slow' }]);
+            expect(phone.messages.map(([, message]) => message)).toEqual([{ t: 'queued again' }]);
+        });
+
+        test('a peer that leaves ends the redirect: its next join queues messages again', async () => {
+            const { host, phone } = await pair();
+            const late: unknown[] = [];
+            host.transport.redirect?.('phone-id', (message) => late.push(message));
+            await phone.transport.leave();
+            await run(500, 250);
+            expect(host.leaves).toEqual(['phone-id']);
+            const again = side(bus, 'phone', 'phone-id');
+            await run(1_000, 250);
+            await host.transport.send({ t: 'after the rejoin' }, 'phone-id');
+            await run(1_000, 250);
+            expect(late).toEqual([]);
+            expect(again.messages.map(([, message]) => message)).toEqual([{ t: 'after the rejoin' }]);
+        });
+
+        test('a send waiting in the send chain counts as in flight, and a callback waits for it', async () => {
+            const { host } = await pair();
+            let finish: Array<() => void> = [];
+            const pack = host.codec.pack;
+            host.codec.pack = async (message) => {
+                await new Promise<void>((resolve) => finish.push(resolve));
+                return pack(message);
+            };
+            const first = host.transport.send({ n: 1 }, 'phone-id'); // being packed
+            const second = host.transport.send({ n: 2 }, 'phone-id'); // waiting behind it
+            await flush();
+            expect(host.transport.inFlight?.('phone-id')).toBe(2);
+            const idle = jest.fn();
+            host.transport.whenIdle?.('phone-id', idle);
+            finish.shift()?.();
+            await first;
+            await flush();
+            expect(host.transport.inFlight?.('phone-id')).toBeGreaterThanOrEqual(1);
+            expect(idle).not.toHaveBeenCalled();
+            finish.shift()?.();
+            finish = [];
+            await second;
+            await run(1_000, 250); // both leave and are acknowledged
+            expect(idle).toHaveBeenCalledTimes(1);
+            expect(host.transport.inFlight?.('phone-id')).toBe(0);
+        });
+
+        test('a send that fails still leaves the count right', async () => {
+            const { host } = await pair();
+            await expect(host.transport.send({ t: 'x' }, 'stranger')).rejects.toThrow('does not reach');
+            expect(host.transport.inFlight?.('stranger')).toBe(0);
+        });
+
+        test('leave clears the waiting callbacks and the redirects at once, before the bye is out', async () => {
+            const { host, phone } = await pair();
+            // The phone's ack is sealed late, and the host's bye too.
+            const gates: Array<() => void> = [];
+            const gated =
+                <A extends unknown[], R>(fn: (...args: A) => Promise<R>) =>
+                async (...args: A): Promise<R> => {
+                    await new Promise<void>((resolve) => gates.push(resolve));
+                    return fn(...args);
+                };
+            const phoneSeal = phone.codec.seal;
+            const phoneSealBatch = phone.codec.sealBatch;
+            phone.codec.seal = gated(phoneSeal);
+            phone.codec.sealBatch = gated(phoneSealBatch);
+            await host.transport.send({ t: 'x' }, 'phone-id');
+            await run(500, 250);
+            const idle = jest.fn();
+            host.transport.whenIdle?.('phone-id', idle);
+            host.transport.redirect?.('phone-id', () => undefined);
+            const hostSeal = host.codec.seal;
+            host.codec.seal = gated(hostSeal);
+            const leaving = host.transport.leave(); // the bye waits to be sealed
+            await flush();
+            phone.codec.seal = phoneSeal;
+            phone.codec.sealBatch = phoneSealBatch;
+            for (const open of gates.splice(0)) open(); // the ack and the bye go out now
+            await leaving;
+            await run(500, 250);
+            expect(idle).not.toHaveBeenCalled();
         });
     });
 

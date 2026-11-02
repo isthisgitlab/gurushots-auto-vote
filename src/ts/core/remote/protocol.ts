@@ -57,8 +57,14 @@ export type ResultMessage =
     | { t: 'result'; id: number; ok: false; error: string; reason?: 'too-large' | 'unsendable' };
 /** Host → phone: one window.api event (settings-changed, update-*, log-message). */
 export type EventMessage = { t: 'event'; channel: string; payload: unknown };
-/** Host → phone: the desktop controller's state, on every change. */
-export type AutovoteStateMessage = { t: 'autovote-state'; state: AutovoteState };
+/**
+ * Host → phone: the desktop controller's state, on every change. `hostRun` is a random id the desktop's
+ * renderer drew when it started, and `n` counts the states it has sent in that run, only upward: the phone
+ * ignores a state with the same `hostRun` and a lower `n` than one it applied, so a stale push still draining on
+ * the relay cannot overwrite a newer one. A new `hostRun` (the desktop restarted) is always applied. Both are
+ * absent from an older desktop's states, which are applied as they come.
+ */
+export type AutovoteStateMessage = { t: 'autovote-state'; state: AutovoteState; hostRun?: string; n?: number };
 /** Phone → host: start/stop/rearm the desktop's own controller. */
 export type AutovoteCommandMessage = { t: 'autovote-command'; command: AutovoteCommandName };
 /** Both directions: the sender leaves (a refused peer, the host shutting down). `reason: 'full'` is the
@@ -195,7 +201,11 @@ export const parsePeerMessage = (raw: unknown): PeerMessage | null => {
                 ? { t: 'event', channel: raw.channel, payload: raw.payload }
                 : null;
         case 'autovote-state':
-            return isAutovoteState(raw.state) ? { t: 'autovote-state', state: raw.state } : null;
+            if (!isAutovoteState(raw.state)) return null;
+            // The pair is read whole: a lone `hostRun` or `n` is no stamp at all.
+            return isBoundedString(raw.hostRun) && isInteger(raw.n) && raw.n >= 0
+                ? { t: 'autovote-state', state: raw.state, hostRun: raw.hostRun, n: raw.n }
+                : { t: 'autovote-state', state: raw.state };
         case 'autovote-command':
             return raw.command === 'start' || raw.command === 'stop' || raw.command === 'rearm'
                 ? { t: 'autovote-command', command: raw.command }
@@ -222,4 +232,14 @@ export const restoreInvokeArgs = (message: InvokeMessage): unknown[] => {
         if (index >= 0 && index < restored.length) restored[index] = undefined;
     }
     return restored;
+};
+
+/**
+ * Whether the desktop may send a message to the phone a second time, the relay link's copy and WebRTC's: a `hello` (a repeat
+ * changes nothing), a `result` (the phone ignores one for an invoke it already settled) and an `autovote-state` (stamped, so
+ * an older count is ignored). An event is not: a repeated `settings-changed` makes the phone refetch, and a log line shows twice.
+ */
+export const isSafeToSendTwice = (raw: unknown): boolean => {
+    const message = parsePeerMessage(raw);
+    return message !== null && (message.t === 'hello' || message.t === 'result' || message.t === 'autovote-state');
 };

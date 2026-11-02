@@ -6,7 +6,7 @@
  * leaves, join errors) and simulate a lost connection.
  */
 
-import type { RemoteTransport } from '../../src/ts/core/remote/relays';
+import type { RemotePath, RemoteTransport } from '../../src/ts/core/remote/relays';
 
 type Handler<T extends unknown[]> = (...args: T) => void;
 
@@ -18,7 +18,20 @@ class TransportStub implements RemoteTransport {
     private failNextSend = false;
     private readonly messageHandlers = new Set<Handler<[peerId: string, message: unknown]>>();
     private readonly joinHandlers = new Set<Handler<[peerId: string]>>();
-    private readonly leaveHandlers = new Set<Handler<[peerId: string]>>();
+    private readonly leaveHandlers = new Set<Handler<[peerId: string, unacked?: number]>>();
+    /** The messages the double has queued for a peer and not started sending (what the relay link would hand back). */
+    readonly unsent = new Map<string, unknown[]>();
+    /** The messages the double has started sending a peer that are not acknowledged (what `startedMessages` answers; they stay). */
+    readonly started = new Map<string, unknown[]>();
+    /** The peers `redirect` was called for, with the handler it was given for messages that finish packing later. */
+    readonly redirects = new Map<string, (message: unknown) => void>();
+    /** The peers `stopRedirect` was called for, in order. */
+    readonly stoppedRedirects: string[] = [];
+    /** How many messages the double says are in flight to each peer. */
+    readonly inFlightCounts = new Map<string, number>();
+    /** The callbacks `whenIdle` is holding for each peer; a cancel removes its callback. */
+    readonly idleWaiters = new Map<string, Set<() => void>>();
+    private readonly pathHandlers = new Set<Handler<[peerId: string, path: RemotePath]>>();
     private readonly joinErrorHandlers = new Set<Handler<[details: { error: string; peerId: string }]>>();
 
     constructor(peerId: string) {
@@ -48,8 +61,14 @@ class TransportStub implements RemoteTransport {
         for (const handler of this.joinHandlers) handler(peerId);
     }
 
-    emitLeave(peerId: string): void {
-        for (const handler of this.leaveHandlers) handler(peerId);
+    /** `unacked` is the relay link's count of messages it had sent the peer that were never acknowledged. */
+    emitLeave(peerId: string, unacked?: number): void {
+        for (const handler of this.leaveHandlers) handler(peerId, unacked);
+    }
+
+    /** The hybrid transport tells a joined peer moved to another path in place. */
+    emitPathChange(peerId: string, path: RemotePath): void {
+        for (const handler of this.pathHandlers) handler(peerId, path);
     }
 
     /** The failure is about `peerId` (the other end unless named) — a fellow phone's can be told apart from the desktop's. */
@@ -79,14 +98,61 @@ class TransportStub implements RemoteTransport {
         return () => this.joinHandlers.delete(handler);
     }
 
-    onPeerLeave(handler: Handler<[peerId: string]>): () => void {
+    onPeerLeave(handler: Handler<[peerId: string, unacked?: number]>): () => void {
         this.leaveHandlers.add(handler);
         return () => this.leaveHandlers.delete(handler);
+    }
+
+    onPathChange(handler: Handler<[peerId: string, path: RemotePath]>): () => void {
+        this.pathHandlers.add(handler);
+        return () => this.pathHandlers.delete(handler);
     }
 
     onJoinError(handler: Handler<[details: { error: string; peerId: string }]>): () => void {
         this.joinErrorHandlers.add(handler);
         return () => this.joinErrorHandlers.delete(handler);
+    }
+
+    startedMessages(peerId: string): unknown[] {
+        return this.started.get(peerId) ?? [];
+    }
+
+    redirect(peerId: string, late: (message: unknown) => void): void {
+        this.redirects.set(peerId, late);
+    }
+
+    stopRedirect(peerId: string): void {
+        this.stoppedRedirects.push(peerId);
+        this.redirects.delete(peerId);
+    }
+
+    inFlight(peerId: string): number {
+        return this.inFlightCounts.get(peerId) ?? 0;
+    }
+
+    whenIdle(peerId: string, callback: () => void): () => void {
+        if (this.inFlight(peerId) === 0) {
+            callback();
+            return () => undefined;
+        }
+        const waiters = this.idleWaiters.get(peerId) ?? new Set<() => void>();
+        waiters.add(callback);
+        this.idleWaiters.set(peerId, waiters);
+        return () => waiters.delete(callback);
+    }
+
+    /** Nothing is in flight to the peer any more: the callbacks still held are called. */
+    becomeIdle(peerId: string): void {
+        this.inFlightCounts.set(peerId, 0);
+        const waiters = [...(this.idleWaiters.get(peerId) ?? [])];
+        this.idleWaiters.delete(peerId);
+        for (const callback of waiters) callback();
+    }
+
+    takeUnsent(peerId: string): unknown[] {
+        const taken = this.unsent.get(peerId) ?? [];
+        this.unsent.delete(peerId);
+        return taken;
     }
 
     async leave(): Promise<void> {

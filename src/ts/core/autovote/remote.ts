@@ -29,6 +29,9 @@ export const createRemoteAutovoteController = (deps: RemoteAutovoteDeps): Autovo
     let state: AutovoteState = initialState;
     const listeners = new Set<() => void>();
     let disposed = false;
+    /** The desktop run and count of the newest state applied: an older count of the same run is a stale push, ignored. */
+    let appliedRun: string | null = null;
+    let appliedCount = -1;
 
     const apply = (next: AutovoteState): void => {
         state = next;
@@ -64,6 +67,12 @@ export const createRemoteAutovoteController = (deps: RemoteAutovoteDeps): Autovo
         const message = parsePeerMessage(raw);
         // Only the desktop's own state: a fellow phone in the pairing room must not forge it.
         if (message === null || message.t !== 'autovote-state' || peerId !== remoteHostPeerId()) return;
+        // A state still draining on the relay can arrive after a newer one that went over WebRTC: it must not replace
+        // it. A new run (the desktop restarted) always applies and starts the count again; a desktop that sends no
+        // stamp (an older one) is applied as it comes.
+        if (message.hostRun === appliedRun && message.n !== undefined && message.n < appliedCount) return;
+        appliedRun = message.hostRun ?? null;
+        appliedCount = message.n ?? -1;
         const previousCycles = state.cycles;
         apply(message.state);
         // A relayed state that shows a cycle the phone has not seen: the desktop ran one more

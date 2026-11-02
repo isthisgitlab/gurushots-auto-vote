@@ -29,7 +29,9 @@ import {
     canBatch,
     emitBatch,
     emitFrame,
+    inFlight,
     removePeer,
+    settleIfIdle,
     sendPresenceOnOpen,
     sendPresence,
 } from './relayLinkState';
@@ -96,7 +98,10 @@ const queueMessage = async (ctx: LinkContext, message: unknown, target: string):
             draft: { to: peer.id, toEpoch: peer.epoch, msgId, part: index, parts: parts.length, kind: 'data' as const },
             part,
         }));
-        ctx.outbox.sendMessage(peer.id, msgId, frames, isLogEvent(message));
+        // The peer's messages are moving to another path: this one, packed too late to be taken back, goes there too.
+        const redirect = ctx.redirects.get(peer.id);
+        if (redirect === undefined) ctx.outbox.sendMessage(peer.id, msgId, frames, isLogEvent(message), message);
+        else redirect(message);
     } catch (error) {
         if (ctx.peers.get(target) === peer) removePeer(ctx, peer, true);
         throw error;
@@ -165,8 +170,12 @@ export const createRelayLink = (options: RelayLinkOptions): RemoteTransport => {
             batchBudgetBytes: (peerId) => batchBudgetBytes(ctx.selfId, peerId),
             // An unacknowledged message ends the peer, and the peer is told. A peer that left took its
             // messages with it (`forgetPeer`), so a message that gives up always has its peer here.
-            giveUp: (peerId) => removePeer(ctx, ctx.peers.get(peerId) as Peer, true),
+            giveUp: (peerId) => removePeer(ctx, ctx.peers.get(peerId) as Peer, true, 1),
+            onAcked: (peerId) => settleIfIdle(ctx, peerId),
         }),
+        sending: new Map(),
+        redirects: new Map(),
+        idleWaiters: new Map(),
         messageHandlers: new Set(),
         joinHandlers: new Set(),
         leaveHandlers: new Set(),
@@ -190,17 +199,51 @@ export const createRelayLink = (options: RelayLinkOptions): RemoteTransport => {
     return {
         send: (message, target) => {
             if (target === undefined) return Promise.reject(new Error('The relay link sends to one peer at a time.'));
-            const queued = sends.then(() => queueMessage(ctx, message, target));
+            ctx.sending.set(target, (ctx.sending.get(target) ?? 0) + 1);
+            const queued = sends.then(async () => {
+                try {
+                    await queueMessage(ctx, message, target);
+                } finally {
+                    const waiting = (ctx.sending.get(target) as number) - 1;
+                    if (waiting === 0) ctx.sending.delete(target);
+                    else ctx.sending.set(target, waiting);
+                    settleIfIdle(ctx, target);
+                }
+            });
             sends = queued.catch(() => undefined);
             return queued;
         },
         onMessage: handlerSet(ctx.messageHandlers),
         onPeerJoin: handlerSet(ctx.joinHandlers),
         onPeerLeave: handlerSet(ctx.leaveHandlers),
+        takeUnsent: (peerId) => ctx.outbox.takeUnstarted(peerId),
+        startedMessages: (peerId) => ctx.outbox.startedMessages(peerId),
+        redirect: (peerId, late) => {
+            ctx.redirects.set(peerId, late);
+        },
+        stopRedirect: (peerId) => {
+            ctx.redirects.delete(peerId);
+        },
+        inFlight: (peerId) => inFlight(ctx, peerId),
+        whenIdle: (peerId, callback) => {
+            if (inFlight(ctx, peerId) === 0) {
+                callback();
+                return () => undefined;
+            }
+            const waiters = ctx.idleWaiters.get(peerId) ?? new Set<() => void>();
+            waiters.add(callback);
+            ctx.idleWaiters.set(peerId, waiters);
+            return () => {
+                waiters.delete(callback);
+            };
+        },
         // A relay link has no join failures: a peer is joined by its first authentic frame.
         onJoinError: () => () => undefined,
         leave: async () => {
             if (ctx.closed) return;
+            // Nothing waits for the link or is redirected by it once it is leaving, however long the bye takes.
+            ctx.idleWaiters.clear();
+            ctx.redirects.clear();
             if (ctx.peers.size > 0) await emitFrame(ctx, broadcastByeFrame(ctx));
             ctx.closed = true;
             timers.stop();

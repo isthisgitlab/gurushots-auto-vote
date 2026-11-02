@@ -12,6 +12,7 @@
  * call time (scripts/build-react/entries.ts), so they never grow by them.
  */
 
+import { isSafeToSendTwice } from './protocol';
 import { NOSTR_RELAY_URLS, STUN_SERVER_URLS, TRYSTERO_APP_ID } from './relays';
 
 import type { RemoteTransport, RemoteTransportFactory } from './relays';
@@ -156,5 +157,8 @@ export const createTrysteroTransport: RemoteTransportFactory =
         return createHybridTransport({
             direct: joinDirect(trystero, options.key, roomId),
             relay: await buildRelayLink(trystero, options.key, roomId, options.role),
+            role: options.role,
+            // The desktop sends a second copy of what the phone shrugs off; the phone sends invokes, which a duplicate would harm.
+            isSafeDuplicate: options.role === 'host' ? isSafeToSendTwice : undefined,
         });
     };

@@ -9,6 +9,7 @@
 import {
     remoteConnectionState,
     setRemoteConnectionState,
+    setRemoteHostPath,
     setRemoteHostPeerId,
 } from '../../../core/remote/connectionState';
 import { HOST_ANSWER_TIMEOUT_MS } from '../../../core/remote/helloRepeat';
@@ -126,6 +127,10 @@ export const watchConnection = (watch: ConnectionWatch): ConnectionWatchApi => {
         hello.join(peerId);
     });
     ctx.transport.onPeerLeave((peerId) => onPeerLeave(watch, peerId));
+    // The desktop moved from the relay to WebRTC with no leave: the badge's path follows, nothing is settled.
+    ctx.transport.onPathChange?.((peerId, path) => {
+        if (peerId === ctx.hostPeerId) setRemoteHostPath(path);
+    });
     ctx.transport.onJoinError(({ error, peerId }) => onJoinError(watch, error, peerId));
 
     // Nobody answered in time: the desktop is offline (or the link was reset).
