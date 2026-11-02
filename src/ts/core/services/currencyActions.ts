@@ -50,6 +50,7 @@ export interface CurrencyStrategy {
     swapPhoto: typeof currencyApi.swapPhoto;
     exposureAutofill: typeof currencyApi.exposureAutofill;
     getEligiblePhotos: typeof submissionsApi.getEligiblePhotos;
+    getEligiblePhotosWalk: typeof submissionsApi.getEligiblePhotosWalk;
     getImageData: typeof submissionsApi.getImageData;
     searchTagAutocomplete: typeof tagsApi.searchTagAutocomplete;
     getCurrentMemberProfile: typeof tagsApi.getCurrentMemberProfile;
@@ -231,10 +232,16 @@ const unlockBoostWithKey = async (
  *
  * Without `chosenId` it is the app's suggestion: the best-ranked candidate under
  * the same pipeline a fill uses, excluding every photo already entered and
- * `imageId` itself. A photo swapped out earlier stays a candidate unless
- * `excludeSwapped` is set — the automatic swap sets it, since it means "bring in
- * a fresh photo" and would otherwise flip a slot between the photo it just
- * swapped out and its replacement.
+ * `imageId` itself. The Chosen Photos rank first, and one the themed search does
+ * not return is looked up in the library. A photo swapped out earlier stays a
+ * candidate unless `excludeSwapped` is set — the automatic swap sets it, since it
+ * means "bring in a fresh photo" and would otherwise flip a slot between the photo
+ * it just swapped out and its replacement.
+ *
+ * `enforceChosenOnly` applies Submit Only Chosen Photos: the automatic swap and a
+ * scenario swap step set it, since they run without the user. With it on and no
+ * chosen photo left, the answer is `noAlternative` (nothing is spent). The manual
+ * Swap suggestion does not set it, so a button press still gets a photo.
  *
  * With `chosenId` the user picked the photo: nothing is ranked and no tag rule
  * applies, like the Pick… submit. Beyond the live checks, `imageId` still being
@@ -243,13 +250,18 @@ const unlockBoostWithKey = async (
  *
  * @param imageId - the entered photo to replace
  * @param options.chosenId - the library photo to swap in instead of a suggestion
+ * @param options.enforceChosenOnly - take only chosen photos when Submit Only Chosen Photos is on
  */
 const previewSwap = async (
     challengeId: string | number,
     imageId: string,
     token: string,
     { strategy, logger, settings }: { strategy: CurrencyStrategy; logger: Logger; settings: SettingsFacade },
-    { excludeSwapped = false, chosenId }: { excludeSwapped?: boolean; chosenId?: string } = {},
+    {
+        excludeSwapped = false,
+        chosenId,
+        enforceChosenOnly = false,
+    }: { excludeSwapped?: boolean; chosenId?: string; enforceChosenOnly?: boolean } = {},
 ): Promise<{ ok: false; outcome: string } | { ok: true; outcome: string; candidate: SwapCandidate }> => {
     const { blocked, challenge } = await checkLive('swap', challengeId, token, strategy);
     if (blocked) return { ok: false, outcome: blocked };
@@ -284,6 +296,7 @@ const previewSwap = async (
             settings,
             logger,
             getEligiblePhotos: strategy.getEligiblePhotos,
+            getEligiblePhotosWalk: strategy.getEligiblePhotosWalk,
             getImageData: strategy.getImageData,
             searchTagAutocomplete: strategy.searchTagAutocomplete,
             getCurrentMemberProfile: strategy.getCurrentMemberProfile,
@@ -296,6 +309,7 @@ const previewSwap = async (
             mustIncludeTags: settings.getEffectiveTagSetting('mustIncludeTags', challenge) ?? null,
             shouldIncludeTags: settings.getEffectiveTagSetting('shouldIncludeTags', challenge) ?? null,
             submitWithoutTagMatch: settings.getEffectiveSetting('submitWithoutTagMatch', id),
+            enforceChosenOnly,
         },
     );
     if (ranked.status !== 'ranked') {
@@ -304,6 +318,13 @@ const previewSwap = async (
     // The pipeline's picks are library photo records (id, and usually member_id).
     const best = ranked.picked[0] as { id: string | number; member_id?: string } | undefined;
     if (!best) {
+        if (ranked.noChosenLeft) {
+            cat(logger).info(
+                `swap: Submit Only Chosen Photos is on and no chosen photo is left for ${logger.challengeTag(challenge)}`,
+                null,
+            );
+            return { ok: false, outcome: CURRENCY_OUTCOME.noAlternative };
+        }
         cat(logger).info(`swap: no different photo available for ${logger.challengeTag(challenge)}`, null);
         return { ok: false, outcome: CURRENCY_OUTCOME.noAlternative };
     }

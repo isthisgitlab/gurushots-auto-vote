@@ -464,6 +464,7 @@ export const logMessages = {
     m9c0719be2c97:
         '{0} photo {1} has not finished "Wait Before Boosting a New Photo", but the device is going to sleep — boosting it now',
     m9c0887b4c739: 'swap: no different photo available for {0}',
+    m9c08a1e5d2f7: 'swap: Submit Only Chosen Photos is on and no chosen photo is left for {0}',
     m9c096cf8314f: 'Sanitized scheduledFillTime {0} to current bounds: {1}',
     m9c120fa00e9e: '📸 Vote images received: {0}',
     m9c1936f40d35: 'manualFill: submit got no answer for {0}',

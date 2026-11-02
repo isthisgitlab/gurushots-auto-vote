@@ -74,6 +74,7 @@ export const CURRENCY_ENDPOINTS = [
     'exposureAutofill',
     'getVoteImages',
     'getEligiblePhotos',
+    'getEligiblePhotosWalk',
     'getImageData',
     'searchTagAutocomplete',
     'getCurrentMemberProfile',
@@ -309,6 +310,7 @@ const runAutoSwap: (ctx: SwapCtx) => Promise<boolean> = guarded('swap', async (c
     const result = await lockedSpend('swap', challenge, async () => {
         const preview = await currencyActions.previewSwap(challenge.id, target.id, token, deps, {
             excludeSwapped: true,
+            enforceChosenOnly: true,
         });
         if (!preview?.ok) return preview;
         candidate = preview.candidate;

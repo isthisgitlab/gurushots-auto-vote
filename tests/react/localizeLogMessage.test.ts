@@ -163,6 +163,16 @@ describe('Latvian log messages', () => {
         }
     });
 
+    test('translates the swap line for Submit Only Chosen Photos with no chosen photo left', () => {
+        const tag = '[Challenge 42: Sunset]';
+        const english = `swap: Submit Only Chosen Photos is on and no chosen photo is left for ${tag}`;
+        for (const message of [`ℹ️ ${english}`, `ℹ️ ${sentenceCaseLogMessage(english)}`]) {
+            expect(localizeLogMessage(message)).toBe(
+                'ℹ️ swap: ir ieslēgts „Iesniegt tikai izvēlētos foto”, un izaicinājumam [Izaicinājums 42: Sunset] nav palicis neviens izvēlētais foto',
+            );
+        }
+    });
+
     test('translates generated photo ranking details', () => {
         const coverage =
             '; past-performance figures have been looked up for 1 of 2 of them so far, and the rest are looked up a batch per fill';
@@ -447,6 +457,7 @@ describe('forward template localization', () => {
             ['m21b1261f69f8', ['[Challenge 42: Sunset]']],
             ['mc93c515e28d4', ['[Challenge 42: Sunset]', 'e1']],
             ['m9c0719be2c97', ['[Challenge 42: Sunset]', 'e1']],
+            ['m9c08a1e5d2f7', ['[Challenge 42: Sunset]']],
             ['m3e7a92c4b518', ['[Challenge 42: Sunset]']],
             ['m6b04d81f7c23', ['[Challenge 42: Sunset]']],
             ['m9f25e7a3d681', ['[Challenge 42: Sunset]']],

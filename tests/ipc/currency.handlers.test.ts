@@ -212,6 +212,7 @@ describe('swap preview of a chosen photo', () => {
 
     test.each([[undefined], [null]])('%s means "not given": the ranked path', async (chosenId) => {
         expect((await chosen(chosenId)).success).toBe(true);
+        // The manual Swap suggestion never enforces Submit Only Chosen Photos: no options at all.
         expect(currencyActions.previewSwap).toHaveBeenCalledWith(10, 'old', 'tok', expect.any(Object), {});
     });
 

@@ -20,11 +20,11 @@ import { errorMessage } from '../../../errorMessage';
 
 /**
  * First half of the fill pipeline: fetch the candidate library for a challenge
- * and score it semantically. Shared by runFillAttempt and
+ * and score it semantically. Shared by runFillAttempt, the photo suggestions and
  * rankCandidatesForChallenge so a swap ranks photos exactly the way a fill
  * does. `walkedUnfiltered` says the fetch already read the whole unfiltered
- * library, which the chosen-photos lookup in runFillAttempt uses to know there
- * is nothing left to find; swap ignores it.
+ * library, which the chosen-photos lookup (addMissedChosen) uses to know there
+ * is nothing left to find.
  */
 const loadFillCandidates = async ({
     label,
@@ -95,7 +95,7 @@ const loadFillCandidates = async ({
  * names the chosen block for finalizePick, verifyFillPick and the logging, and
  * `orderedIds` is that block in the list's order. When the pick goes by that order
  * (`chosen.inOrder`) the chosen block is not ranked, so it is not enriched either.
- * Without `chosen` nothing differs from the ranking a swap uses.
+ * Without `chosen` the pool is ranked as one block, with no preference.
  */
 const scoreFillCandidates = async ({
     label,
@@ -109,7 +109,7 @@ const scoreFillCandidates = async ({
     mustIncludeTags,
     shouldIncludeTags,
     submitWithoutTagMatch,
-    chosen = null,
+    chosen,
 }: {
     label: string;
     challenge: Challenge;
@@ -122,7 +122,7 @@ const scoreFillCandidates = async ({
     mustIncludeTags: readonly string[] | null;
     shouldIncludeTags: readonly string[] | null;
     submitWithoutTagMatch: boolean | undefined;
-    chosen?: ChosenPick | null;
+    chosen: ChosenPick | null;
 }): Promise<{
     scored: ScoredCandidate[];
     contested: PickerPhoto[];

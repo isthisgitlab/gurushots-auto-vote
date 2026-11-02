@@ -77,7 +77,7 @@ const verifyFillPick = async (
     picked: string[],
     ignoreWords: IgnoreWords,
     deps: RankDeps,
-    chosenIds: ReadonlySet<string> | null = null,
+    chosenIds: ReadonlySet<string> | null,
     inOrder: boolean = false,
 ): Promise<VerifiedPick> => {
     if (!chosenIds || chosenIds.size === 0) return rankBlock(challenge, scored, eligible, picked, ignoreWords, deps);

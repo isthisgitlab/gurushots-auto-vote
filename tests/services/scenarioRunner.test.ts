@@ -1038,7 +1038,10 @@ describe('actions', () => {
         test('best: previews, swaps, reflects the entry, remembers and counts the spend', async () => {
             setup(swapRule({ rememberRemoved: 'held', rememberAdded: 'filler' }));
             const c = await run();
-            expect(currencyActions.previewSwap).toHaveBeenCalledWith(7, 'a', 'tok', expect.any(Object));
+            // A scenario swap runs without the user, so it takes only chosen photos under Submit Only.
+            expect(currencyActions.previewSwap).toHaveBeenCalledWith(7, 'a', 'tok', expect.any(Object), {
+                enforceChosenOnly: true,
+            });
             expect(currencyActions.swapEntry).toHaveBeenCalledWith(
                 7,
                 'a',

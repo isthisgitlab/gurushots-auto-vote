@@ -264,9 +264,11 @@ describe('runAutoSwap', () => {
     test('replaces the last entry by default and records it in the pass', async () => {
         const ctx = makeCtx();
         expect(await runAutoSwap(ctx)).toBe(true);
-        // Auto swap always brings in a fresh photo — never one swapped out before.
+        // Auto swap always brings in a fresh photo — never one swapped out before — and takes only chosen
+        // photos when Submit Only Chosen Photos is on.
         expect(currencyActions.previewSwap).toHaveBeenCalledWith(555, 'e2', 'tok', expect.any(Object), {
             excludeSwapped: true,
+            enforceChosenOnly: true,
         });
         expect(currencyActions.swapEntry).toHaveBeenCalledWith(
             555,

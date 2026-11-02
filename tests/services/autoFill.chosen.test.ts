@@ -1659,37 +1659,105 @@ describe('forgetChosenPhotosMemory (a logout)', () => {
     });
 });
 
-describe('swap ranking ignores the chosen photos settings', () => {
-    const rank = async (settings: SettingsSpec) => {
+describe('swap ranking and the chosen photos settings', () => {
+    const car = photo('car', ['Car']);
+    const dog = photo('dog', ['Dog']);
+    const rank = async (
+        settings: SettingsSpec,
+        opts: {
+            excludeIds?: string[];
+            enforceChosenOnly?: boolean;
+            wantCount?: number;
+            entries?: unknown[];
+            themed?: PickerPhoto[];
+        } = {},
+        walkItems: PickerPhoto[] = [photo('theme-a'), photo('theme-b'), car, dog],
+    ) => {
         forgetChosenPhotosMemory();
         const deps = makeDeps({
-            library: [
+            library: opts.themed ?? [
                 photo('theme-a', ['Pink'], { upload_date: 9300 }),
                 photo('theme-b', ['Pink'], { upload_date: 9200 }),
             ],
-            walkItems: [photo('theme-a'), photo('theme-b'), photo('car', ['Car'])],
+            walkItems,
             settings,
         });
-        const result = await rankCandidatesForChallenge(makeChallenge(), 'tok', deps, {
+        const result = await rankCandidatesForChallenge(makeChallenge({ entries: opts.entries }), 'tok', deps, {
             usage: 'swap',
-            wantCount: 3,
+            wantCount: opts.wantCount ?? 1,
+            excludeIds: new Set(opts.excludeIds ?? []),
+            enforceChosenOnly: opts.enforceChosenOnly,
         });
         return { result, deps };
     };
+    const ids = (result: Awaited<ReturnType<typeof rank>>['result']) =>
+        result.status === 'ranked' ? result.picked.map((p) => p.id) : result.status;
 
-    test('the output is identical with the settings set, and no library walk looks for a chosen photo', async () => {
-        const plain = await rank({});
-        const chosen = await rank({ chosen: ['car'], only: true });
-        expect(chosen.result).toEqual(plain.result);
-        expect(chosen.result).toEqual({
-            status: 'ranked',
-            picked: [expect.objectContaining({ id: 'theme-a' }), expect.objectContaining({ id: 'theme-b' })],
-        });
-        expect(chosen.deps.getEligiblePhotosWalk).not.toHaveBeenCalled();
-        // The settings are never even read.
-        const asked = chosen.deps.settings.getEffectiveSetting.mock.calls.map((call) => call[0]);
-        expect(asked).not.toContain('chosenPhotos');
-        expect(asked).not.toContain('chosenPhotosOnly');
+    test('without a chosen list the ranking is the plain one and no library walk runs', async () => {
+        const { result, deps } = await rank({}, { wantCount: 3 });
+        expect(result).toEqual({ status: 'ranked', picked: [expect.anything(), expect.anything()] });
+        expect(ids(result)).toEqual(['theme-a', 'theme-b']);
+        expect(deps.getEligiblePhotosWalk).not.toHaveBeenCalled();
+    });
+
+    test('a chosen photo ranks first, and is found by the library walk when the themed search misses it', async () => {
+        const { result, deps } = await rank({ chosen: ['car'] }, { wantCount: 2 });
+        expect(ids(result)).toEqual(['car', 'theme-a']);
+        expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(1);
+    });
+
+    test('with enforcement on and Submit Only on, only chosen photos are returned', async () => {
+        const { result } = await rank({ chosen: ['car'], only: true }, { enforceChosenOnly: true, wantCount: 3 });
+        expect(ids(result)).toEqual(['car']);
+    });
+
+    test('with enforcement on, Submit Only off still tops the pick up from the rest', async () => {
+        const { result } = await rank({ chosen: ['car'], only: false }, { enforceChosenOnly: true, wantCount: 2 });
+        expect(ids(result)).toEqual(['car', 'theme-a']);
+    });
+
+    test.each([
+        ['excluded', { excludeIds: ['car'] }],
+        ['entered', { entries: [{ id: 'existing' }, { id: 'car' }] }],
+    ])('with every chosen photo %s, the pick is empty and nothing is fetched or walked', async (_name, opts) => {
+        const { result, deps } = await rank({ chosen: ['car'], only: true }, { ...opts, enforceChosenOnly: true });
+        expect(result).toEqual({ status: 'ranked', picked: [], noChosenLeft: true });
+        expect(deps.getEligiblePhotos).not.toHaveBeenCalled();
+        expect(deps.getEligiblePhotosWalk).not.toHaveBeenCalled();
+    });
+
+    test('with enforcement on and no chosen photo usable, the pick is empty', async () => {
+        const { result } = await rank({ chosen: ['car'], only: true }, { enforceChosenOnly: true }, [
+            photo('theme-a'),
+            photo('car', ['Car'], { permission: { allowed: false, message: 'full' } }),
+        ]);
+        expect(result).toEqual({ status: 'ranked', picked: [], noChosenLeft: true });
+    });
+
+    test.each([
+        ['excluded', { excludeIds: ['car'] }],
+        ['entered', { entries: [{ id: 'existing' }, { id: 'car' }] }],
+    ])('without enforcement, Submit Only does not hold back a photo when the chosen one is %s', async (_name, opts) => {
+        const { result } = await rank({ chosen: ['car'], only: true }, { ...opts, wantCount: 2 });
+        expect(ids(result)).toEqual(['theme-a', 'theme-b']);
+    });
+
+    test('in order, the chosen photos come in the list order', async () => {
+        const forward = await rank({ chosen: ['dog', 'car'], inOrder: true }, { wantCount: 2 });
+        expect(ids(forward.result)).toEqual(['dog', 'car']);
+        const backward = await rank({ chosen: ['car', 'dog'], inOrder: true }, { wantCount: 2 });
+        expect(ids(backward.result)).toEqual(['car', 'dog']);
+    });
+
+    test('an excluded chosen photo in the themed results does not stop the walk from finding the next one', async () => {
+        // "dog" is the swapped-out chosen photo and is in the themed results; "car" is not.
+        const { result, deps } = await rank(
+            { chosen: ['dog', 'car'] },
+            { excludeIds: ['dog'], themed: [photo('theme-a'), photo('dog', ['Pink'])] },
+            [photo('theme-a'), car, photo('dog', ['Pink'])],
+        );
+        expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(1);
+        expect(ids(result)).toEqual(['car']);
     });
 });
 

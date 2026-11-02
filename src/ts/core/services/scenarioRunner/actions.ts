@@ -113,6 +113,7 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
                     target.id,
                     pass.token,
                     currencyDeps(ctx),
+                    { enforceChosenOnly: true },
                 );
                 if (!preview?.ok) return preview;
                 // An ok preview always carries its candidate.

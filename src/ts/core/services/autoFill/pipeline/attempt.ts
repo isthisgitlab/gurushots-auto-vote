@@ -18,15 +18,17 @@ import { recordUncertainSubmission, verifyFillPick } from './verify';
 // The paths that honour Submit Only Chosen Photos. Emergency fill exists so no
 // slot is left empty at the buzzer and manual fill is explicit user intent, so
 // neither does; both still rank the chosen photos first. The photo suggestions
-// rank the way the scheduled fill picks, so they honour it too, except the swap picker's (`ignoreOnly`): a swap
-// ignores Submit Only by design.
-const ONLY_LABELS: ReadonlySet<string> = new Set(['autoSubmit', 'fillNew', 'suggest']);
+// rank the way the scheduled fill picks, so they honour it too, except the swap picker's (`ignoreOnly`).
+// A swap ranking honours it only when its caller enforces it: the automatic and scenario swaps do,
+// the manual Swap suggestion and the swap picker's Auto pass `ignoreOnly`.
+const ONLY_LABELS: ReadonlySet<string> = new Set(['autoSubmit', 'fillNew', 'suggest', 'swap']);
 
 /**
  * The log prefix of a ranking that reads the Chosen Photos settings: a fill path, or the
- * submit-free photo suggestions (which is not a FillLabel, so runFillAttempt never takes it).
+ * submit-free rankings (the photo suggestions and the swap ranking), which are not a FillLabel,
+ * so runFillAttempt never takes them.
  */
-type ChosenLabel = FillLabel | 'suggest';
+type ChosenLabel = FillLabel | 'suggest' | 'swap';
 
 /** What the chosen-photo steps read: no submitter, so the suggestions cannot reach one. */
 type ChosenParams = { label: ChosenLabel; challenge: Challenge; token: string; deps: RankDeps };
@@ -180,7 +182,7 @@ const explainSubmission = async ({
  * missed is looked up once (see resolveMissingChosen), and with Submit Only on
  * a challenge with no usable chosen photo ends as `no-chosen` instead of being
  * topped up. They are NOT resolved in loadFillCandidates, which the swap
- * ranking shares and which must keep ranking exactly as it did.
+ * ranking shares: each caller reads them through planChosen.
  *
  * Hooks (each used by exactly one path; all optional):
  *   - probeStandDown({ eligible, semanticScores, chosen }) → truthy to stand down

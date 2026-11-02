@@ -75,6 +75,7 @@ const stubStrategy = ({
     getActiveChallenges: jest.fn().mockResolvedValue({ challenges: challenge ? [challenge] : [] }),
     getBankroll: jest.fn().mockResolvedValue(bankroll),
     getEligiblePhotos: jest.fn().mockResolvedValue(library),
+    getEligiblePhotosWalk: jest.fn().mockResolvedValue({ items: [], truncated: false, nextStart: 0 }),
     getImageData: jest.fn().mockResolvedValue(null),
     searchTagAutocomplete: jest.fn().mockResolvedValue([]),
     getCurrentMemberProfile: jest.fn().mockResolvedValue({ id: 'mem1', userName: 'u' }),
@@ -276,6 +277,115 @@ describe('previewSwap', () => {
             settings: noSettings,
         });
         expect(result.candidate).toEqual({ id: 'fresh', member_id: 'mem1' });
+    });
+});
+
+describe('previewSwap and the Chosen Photos settings', () => {
+    const chosenSettings = ({ chosen, only = false }: { chosen: string[]; only?: boolean }) =>
+        invalid<typeof settingsModule>({
+            getEffectiveTagSetting: () => undefined,
+            getEffectiveSetting: (key: string) => {
+                if (key === 'chosenPhotos') return chosen;
+                if (key === 'chosenPhotosOnly') return only;
+                return undefined;
+            },
+        });
+    const recordingLogger = () => {
+        const lines: string[] = [];
+        const cat = {
+            info: (message: string) => lines.push(message),
+            warning: () => {},
+            success: () => {},
+            error: () => {},
+            debug: () => {},
+        };
+        const recording = invalid<typeof logger>({
+            ...logger,
+            withCategory: () => cat,
+            challengeTag: () => '[Challenge 555]',
+        });
+        return { recording, lines };
+    };
+    const library = () => [photo('entered', 900), photo('old', 700), photo('fresh', 10)];
+
+    test('a chosen photo the themed search misses is found through the strategy library walk', async () => {
+        const strategy = stubStrategy({ library: library() });
+        strategy.getEligiblePhotosWalk.mockResolvedValue({ items: [photo('car', 1)], truncated: false, nextStart: 1 });
+        const result = await previewSwap(555, 'old', 'tok', {
+            strategy,
+            logger,
+            settings: chosenSettings({ chosen: ['car'] }),
+        });
+        expect(result).toEqual({ ok: true, outcome: 'ok', candidate: { id: 'car', member_id: 'mem1' } });
+        expect(strategy.getEligiblePhotosWalk).toHaveBeenCalledWith(
+            555,
+            'tok',
+            expect.objectContaining({ usage: 'swap' }),
+        );
+    });
+
+    test('enforceChosenOnly with Submit Only on and no chosen photo left → no-alternative and one log line', async () => {
+        const strategy = stubStrategy({ library: library() });
+        const { recording, lines } = recordingLogger();
+        const result = await previewSwap(
+            555,
+            'old',
+            'tok',
+            { strategy, logger: recording, settings: chosenSettings({ chosen: ['entered'], only: true }) },
+            { enforceChosenOnly: true },
+        );
+        expect(result).toEqual({ ok: false, outcome: 'no-alternative' });
+        expect(lines).toEqual([
+            'swap: Submit Only Chosen Photos is on and no chosen photo is left for [Challenge 555]',
+        ]);
+    });
+
+    test('without enforceChosenOnly the same settings still give a suggestion', async () => {
+        const strategy = stubStrategy({ library: library() });
+        const result = await previewSwap(555, 'old', 'tok', {
+            strategy,
+            logger,
+            settings: chosenSettings({ chosen: ['entered'], only: true }),
+        });
+        expect(result).toEqual({ ok: true, outcome: 'ok', candidate: { id: 'fresh', member_id: 'mem1' } });
+    });
+
+    test('enforceChosenOnly with Submit Only off does not hold a suggestion back', async () => {
+        const strategy = stubStrategy({ library: library() });
+        const result = await previewSwap(
+            555,
+            'old',
+            'tok',
+            { strategy, logger, settings: chosenSettings({ chosen: ['entered'] }) },
+            { enforceChosenOnly: true },
+        );
+        expect(result).toEqual({ ok: true, outcome: 'ok', candidate: { id: 'fresh', member_id: 'mem1' } });
+    });
+
+    test('enforceChosenOnly takes the chosen photo that is left', async () => {
+        const strategy = stubStrategy({ library: [...library(), photo('mine', 1)] });
+        const result = await previewSwap(
+            555,
+            'old',
+            'tok',
+            { strategy, logger, settings: chosenSettings({ chosen: ['mine'], only: true }) },
+            { enforceChosenOnly: true },
+        );
+        expect(result).toEqual({ ok: true, outcome: 'ok', candidate: { id: 'mine', member_id: 'mem1' } });
+    });
+
+    test('with a chosenId nothing is ranked, enforcement or not', async () => {
+        const strategy = stubStrategy({ library: library() });
+        const result = await previewSwap(
+            555,
+            'old',
+            'tok',
+            { strategy, logger, settings: chosenSettings({ chosen: ['entered'], only: true }) },
+            { chosenId: 'picked', enforceChosenOnly: true },
+        );
+        expect(result).toEqual({ ok: true, outcome: 'ok', candidate: { id: 'picked', member_id: 'mem1' } });
+        expect(strategy.getEligiblePhotos).not.toHaveBeenCalled();
+        expect(strategy.getEligiblePhotosWalk).not.toHaveBeenCalled();
     });
 });
 
