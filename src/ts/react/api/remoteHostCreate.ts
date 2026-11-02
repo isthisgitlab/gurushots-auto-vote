@@ -105,7 +105,8 @@ export const createRemoteHost = (deps: RemoteHostDeps): RemoteHost => {
                 // A phone that moved from the relay to WebRTC keeps its place: it is only told the current auto-vote
                 // state (what it missed or has still draining on the relay), and the badge's relay count is read again.
                 // Not the settings: nothing changed there, and a resend would make its renderer fetch everything again.
-                next.onPathChange?.((peerId) => {
+                next.onPathChange?.((peerId, path) => {
+                    deps.logInfo(`Remote peer path changed: ${clippedId(peerId)} (${path})`);
                     if (!ctx.peers.has(peerId)) return; // it has not said hello yet: the snapshot it gets then is complete
                     void sendTo(ctx, peerId, stampedAutovoteState(deps.getAutovoteState()));
                     notifyCount(ctx);

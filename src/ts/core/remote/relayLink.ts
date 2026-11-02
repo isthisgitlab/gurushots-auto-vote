@@ -91,6 +91,13 @@ const queueMessage = async (ctx: LinkContext, message: unknown, target: string):
     if (ctx.closed || peer === undefined) throw new Error('The relay link does not reach that peer.');
     try {
         const parts = splitBytes(await ctx.codec.pack(message), RELAY_PART_BYTES);
+        // The peer's messages are moving to another path: this one, packed too late to be taken back, goes there too,
+        // whether or not the relay link still has the peer (it may have given up on it meanwhile, and the other path still reaches it).
+        const redirect = ctx.redirects.get(peer.id);
+        if (redirect !== undefined) {
+            redirect(message);
+            return;
+        }
         if (parts.length > RELAY_MAX_PARTS) throw new Error('The message is too large for the relay link.');
         if (ctx.peers.get(target) !== peer) throw new Error('The peer left while the message was prepared.');
         const msgId = toHex(ctx.random(16));
@@ -98,10 +105,7 @@ const queueMessage = async (ctx: LinkContext, message: unknown, target: string):
             draft: { to: peer.id, toEpoch: peer.epoch, msgId, part: index, parts: parts.length, kind: 'data' as const },
             part,
         }));
-        // The peer's messages are moving to another path: this one, packed too late to be taken back, goes there too.
-        const redirect = ctx.redirects.get(peer.id);
-        if (redirect === undefined) ctx.outbox.sendMessage(peer.id, msgId, frames, isLogEvent(message), message);
-        else redirect(message);
+        ctx.outbox.sendMessage(peer.id, msgId, frames, isLogEvent(message), message);
     } catch (error) {
         if (ctx.peers.get(target) === peer) removePeer(ctx, peer, true);
         throw error;
@@ -143,7 +147,15 @@ const createTimers = (ctx: LinkContext): { sync: () => void; stop: () => void } 
     };
 };
 
-export const createRelayLink = (options: RelayLinkOptions): RemoteTransport => {
+const handlerSet =
+    <A extends unknown[]>(set: Set<(...args: A) => void>) =>
+    (handler: (...args: A) => void) => {
+        set.add(handler);
+        return () => set.delete(handler);
+    };
+
+/** The link's context over its options: the peer table, the streams, the budgets, the outbox and the handler sets. */
+const buildContext = (options: RelayLinkOptions, onPeersChanged: () => void): LinkContext => {
     const now = options.now ?? Date.now;
     const random = options.random ?? cryptoRandom;
     const ctx: LinkContext = {
@@ -179,40 +191,73 @@ export const createRelayLink = (options: RelayLinkOptions): RemoteTransport => {
         messageHandlers: new Set(),
         joinHandlers: new Set(),
         leaveHandlers: new Set(),
-        onPeersChanged: () => timers.sync(),
+        onPeersChanged,
         closed: false,
     };
+    return ctx;
+};
+
+/** The link's `send`: sends go through one chain, so two messages are numbered in the order they were sent however long each takes to compress. */
+const createSender = (ctx: LinkContext): RemoteTransport['send'] => {
+    let sends: Promise<unknown> = Promise.resolve();
+    return (message, target) => {
+        if (target === undefined) return Promise.reject(new Error('The relay link sends to one peer at a time.'));
+        ctx.sending.set(target, (ctx.sending.get(target) ?? 0) + 1);
+        const queued = sends.then(async () => {
+            try {
+                await queueMessage(ctx, message, target);
+            } finally {
+                const waiting = (ctx.sending.get(target) as number) - 1;
+                if (waiting === 0) ctx.sending.delete(target);
+                else ctx.sending.set(target, waiting);
+                settleIfIdle(ctx, target);
+            }
+        });
+        sends = queued.catch(() => undefined);
+        return queued;
+    };
+};
+
+/** Calls `callback` once the peer has nothing in flight (at once if it has none); answers a cancel. */
+const whenIdle = (ctx: LinkContext, peerId: string, callback: () => void): (() => void) => {
+    if (inFlight(ctx, peerId) === 0) {
+        callback();
+        return () => undefined;
+    }
+    const waiters = ctx.idleWaiters.get(peerId) ?? new Set<() => void>();
+    waiters.add(callback);
+    ctx.idleWaiters.set(peerId, waiters);
+    return () => {
+        waiters.delete(callback);
+    };
+};
+
+/** Says bye to every peer and closes the link; `stops` end the timers and the io subscriptions first, in order. */
+const leaveLink = async (ctx: LinkContext, stops: Array<() => void>): Promise<void> => {
+    if (ctx.closed) return;
+    // Nothing waits for the link or is redirected by it once it is leaving, however long the bye takes.
+    ctx.idleWaiters.clear();
+    ctx.redirects.clear();
+    if (ctx.peers.size > 0) await emitFrame(ctx, broadcastByeFrame(ctx));
+    ctx.closed = true;
+    for (const stop of stops) stop();
+    ctx.outbox.close();
+    ctx.inflater.close();
+    ctx.streams.close();
+    ctx.peers.clear();
+    ctx.io.close();
+};
+
+export const createRelayLink = (options: RelayLinkOptions): RemoteTransport => {
+    const ctx = buildContext(options, () => timers.sync());
     const timers = createTimers(ctx);
     const unsubscribe = ctx.io.onEvent((content) => void handleContent(ctx, content));
     // A presence sent before any relay socket was open is sent when the first one opens, not at the next 8 s tick.
     const unsubscribeOpen = ctx.io.onOpen(() => sendPresenceOnOpen(ctx));
     ctx.io.subscribe(ctx.topic);
-    /** Sends go through one chain, so two messages are numbered in the order they were sent however long each takes to compress. */
-    let sends: Promise<unknown> = Promise.resolve();
-    const handlerSet =
-        <A extends unknown[]>(set: Set<(...args: A) => void>) =>
-        (handler: (...args: A) => void) => {
-            set.add(handler);
-            return () => set.delete(handler);
-        };
 
     return {
-        send: (message, target) => {
-            if (target === undefined) return Promise.reject(new Error('The relay link sends to one peer at a time.'));
-            ctx.sending.set(target, (ctx.sending.get(target) ?? 0) + 1);
-            const queued = sends.then(async () => {
-                try {
-                    await queueMessage(ctx, message, target);
-                } finally {
-                    const waiting = (ctx.sending.get(target) as number) - 1;
-                    if (waiting === 0) ctx.sending.delete(target);
-                    else ctx.sending.set(target, waiting);
-                    settleIfIdle(ctx, target);
-                }
-            });
-            sends = queued.catch(() => undefined);
-            return queued;
-        },
+        send: createSender(ctx),
         onMessage: handlerSet(ctx.messageHandlers),
         onPeerJoin: handlerSet(ctx.joinHandlers),
         onPeerLeave: handlerSet(ctx.leaveHandlers),
@@ -225,35 +270,9 @@ export const createRelayLink = (options: RelayLinkOptions): RemoteTransport => {
             ctx.redirects.delete(peerId);
         },
         inFlight: (peerId) => inFlight(ctx, peerId),
-        whenIdle: (peerId, callback) => {
-            if (inFlight(ctx, peerId) === 0) {
-                callback();
-                return () => undefined;
-            }
-            const waiters = ctx.idleWaiters.get(peerId) ?? new Set<() => void>();
-            waiters.add(callback);
-            ctx.idleWaiters.set(peerId, waiters);
-            return () => {
-                waiters.delete(callback);
-            };
-        },
+        whenIdle: (peerId, callback) => whenIdle(ctx, peerId, callback),
         // A relay link has no join failures: a peer is joined by its first authentic frame.
         onJoinError: () => () => undefined,
-        leave: async () => {
-            if (ctx.closed) return;
-            // Nothing waits for the link or is redirected by it once it is leaving, however long the bye takes.
-            ctx.idleWaiters.clear();
-            ctx.redirects.clear();
-            if (ctx.peers.size > 0) await emitFrame(ctx, broadcastByeFrame(ctx));
-            ctx.closed = true;
-            timers.stop();
-            unsubscribe();
-            unsubscribeOpen();
-            ctx.outbox.close();
-            ctx.inflater.close();
-            ctx.streams.close();
-            ctx.peers.clear();
-            ctx.io.close();
-        },
+        leave: () => leaveLink(ctx, [timers.stop, unsubscribe, unsubscribeOpen]),
     };
 };

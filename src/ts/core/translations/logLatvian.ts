@@ -70,6 +70,7 @@ export const logMessages = {
     m17068264cef6: 'Autentificējas GuruShots',
     m1721f2224ea7: 'Neizdevās palaist:',
     m175837b996b9: 'Kļūda, atjauninot testa metadatus: {0}',
+    m176ea4f30fa5: 'Attālinātā dalībnieka savienojuma ceļš mainīts: {0}',
     m17b50fd455a7: 'Lietošana: join <id> [--yes]',
     m17ddf8c1b4a8: 'Lietotājs atcēla balsošanu',
     m17e4b9a30dc: 'balsošanas foto neizdevās nolasīt, atgriež null',

@@ -196,8 +196,8 @@ const createPeer = (ctx: LinkContext, id: string, epoch: string, ts: number): Pe
 /** Ends a peer: forgets its streams and unacknowledged messages and reports the leave. `bye` tells the peer too. */
 export const removePeer = (ctx: LinkContext, peer: Peer, bye: boolean, lost = 0): void => {
     ctx.peers.delete(peer.id);
-    // A leave is a loss, reported by the leave event: nothing waits for the peer to be idle, and nothing is redirected for it.
-    ctx.redirects.delete(peer.id);
+    // A leave is a loss, reported by the leave event: nothing waits for the peer to be idle. A redirect stays: the hybrid
+    // transport that set it ends it (`stopRedirect`) when it leaves or joins the peer, and the link's `leave` clears them all.
     ctx.idleWaiters.delete(peer.id);
     ctx.streams.suspend(peer.id);
     // What was never acknowledged is told to the listeners: `lost` is a message the outbox gave up on just before, which it no longer holds.

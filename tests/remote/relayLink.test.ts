@@ -615,19 +615,67 @@ describe.each([false, true])('the relay link (batching %s)', (mode) => {
             expect(phone.messages.map(([, message]) => message)).toEqual([{ t: 'queued again' }]);
         });
 
-        test('a peer that leaves ends the redirect: its next join queues messages again', async () => {
+        /** Makes the host's next pack wait; answers the call that lets it finish. */
+        const holdHostPacking = (host: Side): (() => void) => {
+            let finish = (): void => undefined;
+            const pack = host.codec.pack;
+            host.codec.pack = async (message) => {
+                await new Promise<void>((resolve) => (finish = resolve));
+                return pack(message);
+            };
+            return () => finish();
+        };
+
+        test('a redirect outlives the peer on the relay link: a message packed while the link gave up on the peer still reaches the redirect', async () => {
             const { host, phone } = await pair();
+            const finishPacking = holdHostPacking(host);
+            const sending = host.transport.send({ t: 'slow' }, 'phone-id');
+            await flush();
             const late: unknown[] = [];
             host.transport.redirect?.('phone-id', (message) => late.push(message));
-            await phone.transport.leave();
+            await phone.transport.leave(); // the host's link drops the peer while the message is being packed
             await run(500, 250);
             expect(host.leaves).toEqual(['phone-id']);
-            const again = side(bus, 'phone', 'phone-id');
-            await run(1_000, 250);
-            await host.transport.send({ t: 'after the rejoin' }, 'phone-id');
-            await run(1_000, 250);
+            finishPacking();
+            await sending; // not refused: the other path still reaches the peer
+            expect(late).toEqual([{ t: 'slow' }]);
+        });
+
+        test('without a redirect a message packed while the peer left is refused, and after stopRedirect too', async () => {
+            const { host, phone } = await pair();
+            const finishPacking = holdHostPacking(host);
+            const sending = host.transport.send({ t: 'slow' }, 'phone-id');
+            await flush();
+            host.transport.redirect?.('phone-id', () => undefined);
+            host.transport.stopRedirect?.('phone-id');
+            await phone.transport.leave();
+            await run(500, 250);
+            finishPacking();
+            await expect(sending).rejects.toThrow('left while');
+        });
+
+        test('a message too large for the relay link still goes to a redirect: the other path has no such limit', async () => {
+            const { host } = await pair();
+            const late: unknown[] = [];
+            host.transport.redirect?.('phone-id', (message) => late.push(message));
+            const big = { t: 'big', data: 'x'.repeat(RELAY_MAX_PARTS * RELAY_PART_BYTES * 2) };
+            host.codec.pack = async () => new Uint8Array((RELAY_MAX_PARTS + 1) * RELAY_PART_BYTES);
+            await host.transport.send(big, 'phone-id');
+            expect(late).toEqual([big]);
+            expect(host.leaves).toEqual([]); // nothing was given up on
+        });
+
+        test("the link's own leave clears every redirect: a message packed after it is refused, not redirected", async () => {
+            const { host } = await pair();
+            const finishPacking = holdHostPacking(host);
+            const sending = host.transport.send({ t: 'slow' }, 'phone-id');
+            await flush();
+            const late: unknown[] = [];
+            host.transport.redirect?.('phone-id', (message) => late.push(message));
+            await host.transport.leave();
+            finishPacking();
+            await expect(sending).rejects.toThrow();
             expect(late).toEqual([]);
-            expect(again.messages.map(([, message]) => message)).toEqual([{ t: 'after the rejoin' }]);
         });
 
         test('a send waiting in the send chain counts as in flight, and a callback waits for it', async () => {

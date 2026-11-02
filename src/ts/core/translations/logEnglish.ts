@@ -70,6 +70,7 @@ export const logMessages = {
     m17068264cef6: 'Authenticating with GuruShots',
     m1721f2224ea7: 'Startup failed:',
     m175837b996b9: 'Error updating mock metadata: {0}',
+    m176ea4f30fa5: 'Remote peer path changed: {0}',
     m17b50fd455a7: 'Usage: join <id> [--yes]',
     m17ddf8c1b4a8: 'Voting cancelled by user',
     m17e4b9a30dc: 'the vote images could not be read, returning null',

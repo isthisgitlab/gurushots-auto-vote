@@ -266,13 +266,42 @@ describe('the /remote/ loader', () => {
             expect(navigated).toEqual(['./2.0.0/index.html#k=the-key']);
         });
 
-        test('a probe that cannot run goes on to the page, as it does after a hello', async () => {
+        test('a probe that cannot run does not skip: the kept version is cleared and the whole flow runs, which says the computer is not reached', async () => {
             versionStore.stored = '2.0.0';
             g.fetch = jest.fn(async () => {
                 throw new Error('offline');
             });
             loadLoader();
             await flush();
+            expect(navigated).toEqual([]);
+            expect(versionStore.cleared).toBe(1);
+            expect(versionStore.skipped).toBeNull();
+            const transport = transportStub.current as TransportStub; // the room was joined
+            await jest.advanceTimersByTimeAsync(15_000);
+            expect(transport.left).toBe(true);
+            expect(document.getElementById('root')?.textContent).toContain(
+                'Your computer is offline, or this link was reset',
+            );
+        });
+
+        test('a probe that cannot run does not skip, and the desktop answering still takes the tab to its page (the hello rule)', async () => {
+            versionStore.stored = '2.0.0';
+            let probes = 0;
+            g.fetch = jest.fn(async () => {
+                probes += 1;
+                throw new Error('offline');
+            });
+            loadLoader();
+            await flush();
+            const transport = transportStub.current as TransportStub;
+            transport.emitJoin('host');
+            await flush();
+            transport.receiveFromPeer(
+                { t: 'hello', version: '2.0.0', protocolVersion: PROTOCOL_VERSION, host: true },
+                'host',
+            );
+            await flush();
+            expect(probes).toBe(2); // the return visit's, then the hello's
             expect(navigated).toEqual(['./2.0.0/index.html#k=the-key']);
         });
     });

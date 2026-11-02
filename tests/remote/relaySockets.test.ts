@@ -236,6 +236,8 @@ describe('createRelaySockets', () => {
             'restricted: x',
             'pow: x',
             'auth-required: x',
+            'rate limited', // nostr.oxtr.dev's exact reply: no prefix colon
+            'rate-limited',
         ])(
             'a "%s" refusal stops events to that relay, not to the others, and keeps its socket and subscription',
             async (reason) => {
@@ -247,6 +249,17 @@ describe('createRelaySockets', () => {
                 expect(publishedTo('wss://b', 'one')).toBe(true);
                 expect(latest('wss://a').closeCalled).toBe(false);
                 expect(reqs(latest('wss://a'))).toBe(1);
+            },
+        );
+
+        test.each(['invalid: bad signature', 'error: you were rate limited', 'duplicate: already have it'])(
+            'a "%s" refusal is not a cooldown: the relay keeps getting events',
+            async (reason) => {
+                io.subscribe(TOPIC);
+                openAll();
+                refuse('wss://a', reason);
+                await publish('one');
+                expect(publishedTo('wss://a', 'one')).toBe(true);
             },
         );
 

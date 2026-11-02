@@ -1060,7 +1060,10 @@ served while at least one phone wants it.
           sends the message again, as it does any message it holds unacknowledged, and that copy is delivered once.
           This recovers it only while the sender is still resending (`MAX_RESENDS` tries, about 12 s): a sender that
           gave up before it returned, or never returns, loses the message, and so does one that comes back with a new
-          epoch, whose old streams are retired anyway. That loss is accepted for a sender that left. Bytes held behind a gap by a suspended inbox cannot be given
+          epoch, whose old streams are retired anyway. That loss is accepted for a sender that left. The replay key of a dropped parked message is forgotten on purpose: if it
+          were kept, the returning sender's resend would be acknowledged as already delivered, and the message would be lost
+          silently. The cost is that for up to 300 s a relay can replay the original v1 frame, which makes a short ghost
+          join and delivers the message once; it takes a v1 sender and more than 64 MiB pushed through the inboxes. Bytes held behind a gap by a suspended inbox cannot be given
           up, so the total can stay over the cap while nothing is left that can be dropped or skipped; it comes back
           under as those senders return or their streams are dropped (600 s unused). Parsed objects in memory are larger
           than their serialized size, so 64 MiB bounds the serialized bytes, not the memory itself. Only a paired key
@@ -1096,7 +1099,7 @@ served while at least one phone wants it.
       flag `batch`, which the old header check ignores since it reads only the fields it names. A link sends batches
       only to a peer whose latest presence carried the flag (or that sent a batch), and a peer that joins again with a
       new epoch starts without it, so every other peer is sent single frames, and both kinds are read by a new link.
-      Acks owed to a peer that has since withdrawn the flag leave as ack frames.
+      Acks owed to a peer that has since withdrawn the flag leave as ack frames: at most `MAX_RELEASED_ACKS` (8, the newest) are sent that way and the rest are dropped (a lost ack only causes a resend).
     - **Paths and what the relays see.** A peer joins on whichever path reaches it first, with no wait. WebRTC is
       the preferred path: a peer on the relay that WebRTC then reaches moves to `direct` **in place**, with no leave and
       no join (an upgrade; the transport tells `onPathChange`, the phone's badge follows and the desktop's relay count
@@ -1165,7 +1168,12 @@ served while at least one phone wants it.
         - Junk sent to the topic can delay the path: the link decrypts at most 50 events a second and drops the rest
           unread, so junk can starve real frames. Accepted for a fallback path.
         - A replayed presence can make a short-lived ghost peer (gone after 25 s of silence, and a presence of another
-          epoch replaces a live peer only if it is newer than anything accepted from it); it has no data effect.
+          epoch replaces a live peer only if it is newer than anything accepted from it); it has no data effect. The
+          original v1 frame of a dropped parked message is different, because its replay key is forgotten on purpose (see
+          the inbox memory bound): for up to 300 s a relay can replay it, which makes a short ghost join and delivers the
+          message once, late. That is a data effect: it can be a message its sender already gave up on (an invoke the
+          phone reported as failed, for example). It is accepted: it needs a v1 sender, a relay that replays, and more
+          than 64 MiB pushed through the inboxes, and the message is still delivered at most once.
         - What a replayed event can and cannot do. Whoever records events cannot read them, but can hand one back
           while it is under 300 s old. A replay cannot cross a restart of the receiver (data and acks are bound to the
           receiver's random epoch) or of the sender (a presence or frame of another epoch replaces a live peer only if
@@ -1200,7 +1208,8 @@ served while at least one phone wants it.
           link's own echoes by pubkey. The desktop listens on every relay.
         - Both paths sign with one pubkey from one IP, so a relay's rate limit or block by pubkey hits both; the
           link's send budget (8 events a second) keeps that unlikely. A relay that answers one of the link's events
-          `OK false` with a `rate-limited:`, `blocked:`, `banned:`, `restricted:`, `pow:` or `auth-required:` reason
+          `OK false` with a `rate-limited:`, `blocked:`, `banned:`, `restricted:`, `pow:` or `auth-required:` reason,
+          or a plain `rate limited` / `rate-limited` at the start of the reason (nostr.oxtr.dev sends no prefix colon),
           gets no more of them for 60 s, doubling on each new refusal up to 15 min (an `OK true` resets it); its
           socket and subscription stay.
 
@@ -1234,13 +1243,14 @@ served while at least one phone wants it.
   before it sends the tab to the loader). On load the loader goes to that version's page **only when** the value passes
   `isReleaseVersion` and carries the current key's fingerprint, the same published check the loader uses after a
   `hello` passes (one `HEAD` request for the page file, no transport; inside the Android app it asks the app's local
-  server), and this tab has not already gone straight to that version: before it navigates, the loader writes a
+  server) except when the request cannot run at all: then a return visit does not skip, while the check after a `hello`
+  goes on to the page, and this tab has not already gone straight to that version: before it navigates, the loader writes a
   `sessionStorage` mark, "skipped to V". Otherwise it clears the stored value and runs the whole flow, with its
   `update`, `unpublished` and `update-this` notices. The mark is the loop guard: a page that keeps nothing on a mismatch
   (beta.3 and older pages) sends the tab back with the stored value unchanged, the loader finds its own mark and
   runs the whole flow, and the worst case is one extra connect; a page that accepts the desktop clears the mark, so a
   reload of the loader in that tab goes straight on again. **Disconnect** (Navbar and the loader's notice
-  screens) clears the stored version as it clears the key.
+  screens) clears the stored version as it clears the key. In a plain browser there is no Disconnect, so the stored version stays until a different pairing key is used or the site data is cleared.
 - **The desktop's auto-vote state is stamped.** Every `autovote-state` carries `hostRun` (a random id the desktop's
   renderer drew when it started) and `n` (how many states it has stamped, only upward, across every host the
   renderer makes). The phone ignores a state with the same `hostRun` and a lower `n` than one it applied, so a state

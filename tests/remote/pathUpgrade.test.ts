@@ -253,9 +253,8 @@ describe('a path changing under traffic', () => {
 
     test('an event that started on the relay at the upgrade is not copied: it finishes on the relay and reaches the phone exactly once', async () => {
         const seen: unknown[] = [];
-        (api.onSettingsChanged as unknown as (listener: (payload: unknown) => void) => void)((payload) =>
-            seen.push(payload),
-        );
+        // The bridge's subscription answers its unsubscribe function; the loose `Api` type calls it a promise.
+        void api.onSettingsChanged((payload: unknown) => seen.push(payload));
         bus.filter = (frame) => !(frame.header.kind === 'data' && frame.header.from === 'host');
         forwarded.get('settings-changed')?.({ mock: true });
         await run(500);
@@ -349,6 +348,60 @@ describe('a path changing under traffic', () => {
         const again = watch(api.getSetting('again'));
         await run(1_000, 250);
         expect(again).toEqual({ state: 'resolved', value: { echoed: 'again' } });
+    });
+
+    /** The desktop's relay link gives up on the phone: an event it sent is never acknowledged, so it is sent again three times and then given up on. */
+    const giveUpOnThePhone = async (): Promise<void> => {
+        bus.filter = (frame) => !(frame.header.kind === 'ack' && frame.header.from === 'phone');
+        forwarded.get('settings-changed')?.({ mock: true });
+        await run(300);
+    };
+    const hostGaveUp = (): boolean =>
+        bus.published.some((frame) => frame.header.kind === 'bye' && frame.header.from === 'host');
+
+    test('a desktop result still being packed at an upgrade reaches the phone over WebRTC though the relay link gives up on the phone meanwhile', async () => {
+        await giveUpOnThePhone();
+        // The phone asks; the desktop's answer is still being packed when WebRTC joins.
+        const pack = hostCodec.pack;
+        let finishPacking = (): void => undefined;
+        hostCodec.pack = async (message) => {
+            await new Promise<void>((resolve) => (finishPacking = resolve));
+            return pack(message);
+        };
+        const asked = watch(api.getSetting('r'));
+        await run(300);
+        expect(invoked.filter(({ channel }) => channel === 'get-setting').map(({ args }) => args[0])).toEqual(['r']);
+        connectWebRtc(); // the desktop upgrades: what finishes packing from now on goes over WebRTC
+        await run(RESEND_MS * 4 + 1_000, 250);
+        expect(hostGaveUp()).toBe(true); // the relay link gave up on the phone, which is no longer one of its peers
+        expect(asked.state).toBe('pending');
+        hostCodec.pack = pack;
+        finishPacking();
+        await run(1_000, 250);
+        expect(asked).toEqual({ state: 'resolved', value: { echoed: 'r' } });
+        expect(hostEvents).toEqual([]); // the desktop never dropped the phone
+    });
+
+    test('a redirect does not outlive its peer: after a relay give-up and a WebRTC loss, the same phone joining again over the relay is answered on the relay', async () => {
+        await giveUpOnThePhone();
+        connectWebRtc();
+        await run(RESEND_MS * 4 + 1_000, 250);
+        expect(hostGaveUp()).toBe(true);
+        // WebRTC is lost on both sides; nothing the desktop sends over it arrives any more.
+        hostDirect.send = async (message, target) => {
+            hostDirect.sent.push({ message, target });
+        };
+        hostDirect.sent.length = 0;
+        hostDirect.emitLeave('phone');
+        phoneDirect.emitLeave('host');
+        bus.filter = () => true;
+        await run(20_000, 250); // the phone's presence finds the desktop's relay link again, and it says hello
+        expect(remoteConnectionState()).toBe('connected');
+        expect(remoteHostPath()).toBe('relay');
+        const again = watch(api.getSetting('again'));
+        await run(1_500, 250);
+        expect(again).toEqual({ state: 'resolved', value: { echoed: 'again' } });
+        expect(hostDirect.sent.filter(({ message }) => (message as { t: string }).t === 'result')).toEqual([]);
     });
 
     test('a phone that sends faster than a relay round trip still reaches WebRTC: the drain ends once what was started is acknowledged', async () => {

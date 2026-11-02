@@ -59,8 +59,12 @@ export const RELAY_SUB_ID = 'gs-relay';
 export const COOLDOWN_BASE_MS = 60_000;
 export const COOLDOWN_MAX_MS = 900_000;
 
-/** The `OK false` reasons (NIP-01 machine-readable prefixes) that mean the relay does not want our events for now: publishing to it stops for a cooldown. */
-const COOLDOWN_REASON = /^(?:rate-limited|blocked|banned|restricted|pow|auth-required):/;
+/**
+ * The `OK false` reasons (NIP-01 machine-readable prefixes) that mean the relay does not want our events for now:
+ * publishing to it stops for a cooldown. Some relays (nostr.oxtr.dev) send a rate limit as plain "rate limited"
+ * with no prefix colon, so that form counts too, anchored at the start like the prefixes.
+ */
+const COOLDOWN_REASON = /^(?:(?:rate-limited|blocked|banned|restricted|pow|auth-required):|rate[- ]limited\b)/;
 
 /** How long the content of a delivered event is remembered, so the copy of it that a second relay delivers is not decrypted again. */
 export const COPY_MEMORY_MS = 60_000;

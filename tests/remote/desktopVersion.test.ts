@@ -130,6 +130,22 @@ describe('the desktop version kept for the loader', () => {
             expect(local.getItem(DESKTOP_VERSION_STORAGE)).toBeNull();
         });
 
+        test.each([
+            ['a word', 'latest'],
+            ['a path', '../x'],
+            ['a version with a suffix that is not a release suffix', '1.2.3 and more'],
+        ])(
+            "a value with this pairing key's real fingerprint and %s in place of the version is cleared and answers null",
+            async (_name, version) => {
+                await storeDesktopVersion('1.2.3');
+                const [fingerprint] = (local.getItem(DESKTOP_VERSION_STORAGE) ?? '').split(':');
+                expect(fingerprint).toMatch(/^[0-9a-f]{16}$/);
+                local.setItem(DESKTOP_VERSION_STORAGE, `${fingerprint}:${version}`);
+                await expect(storedDesktopVersion(KEY)).resolves.toBeNull();
+                expect(local.getItem(DESKTOP_VERSION_STORAGE)).toBeNull();
+            },
+        );
+
         test('a browser that refuses site data answers null', async () => {
             setGlobals({ localStorage: refusingStorage(), sessionStorage: refusingStorage() });
             await expect(storedDesktopVersion(KEY)).resolves.toBeNull();

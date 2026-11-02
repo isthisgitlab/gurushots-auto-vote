@@ -99,6 +99,7 @@ const stopTimer = (timers: Map<string, ReturnType<typeof setTimeout>>, peerId: s
 
 const join = (state: HybridState, peerId: string, path: RemotePath): void => {
     stopTimer(state.errorTimers, peerId); // reachable after all: a held join error is dropped
+    state.relay?.stopRedirect?.(peerId); // defensive: every way out of `direct` already ends the redirect in `leave`; a join never inherits one
     state.paths.set(peerId, path);
     for (const handler of state.joinHandlers) handler(peerId);
 };
@@ -126,6 +127,7 @@ const leave = (state: HybridState, peerId: string): void => {
  */
 const lose = (state: HybridState, peerId: string, path: RemotePath, unacked = 0): void => {
     const current = state.paths.get(peerId);
+    // The phone's relay-loss leave guards a relay link with no `whenIdle` (it upgrades at once, with messages in flight); the drain normally makes it unreachable.
     const phoneRelayLoss = state.role === 'phone' && path === 'relay' && current === 'direct' && unacked > 0;
     // WebRTC lost while the phone drains: the desktop answers over WebRTC from its upgrade on, so what the phone sent on the relay is unclear.
     const drainLoss = path === 'direct' && current === 'relay' && state.draining.has(peerId);
@@ -302,7 +304,7 @@ export const createHybridTransport = ({ direct, relay, role, isSafeDuplicate }: 
         leave: async () => {
             state.closed = true;
             for (const peerId of state.errorTimers.keys()) stopTimer(state.errorTimers, peerId);
-            for (const peerId of [...state.draining.keys()]) cancelDrain(state, peerId);
+            for (const peerId of state.draining.keys()) cancelDrain(state, peerId);
             state.holds.clear();
             await Promise.all([relay?.leave(), direct.leave()]);
         },

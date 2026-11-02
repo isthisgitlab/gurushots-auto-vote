@@ -189,9 +189,22 @@ describe('createHybridTransport', () => {
         test('the redirect ends when the peer leaves, so a message for a peer reached again is queued on the relay link', () => {
             relay.emitJoin('p');
             direct.emitJoin('p');
+            expect(relay.redirects.has('p')).toBe(true);
             direct.emitLeave('p');
-            expect(relay.stoppedRedirects).toEqual(['p']);
             expect(relay.redirects.has('p')).toBe(false);
+            expect(relay.stoppedRedirects.at(-1)).toBe('p');
+        });
+
+        test('the redirect also ends when the peer joins again: after the relay link gave up and WebRTC was lost, a stale redirect cannot swallow the messages of the same id coming back over the relay', () => {
+            relay.emitJoin('p');
+            direct.emitJoin('p');
+            relay.emitLeave('p', 2); // the desktop ignores it: the peer stays on WebRTC with the redirect
+            expect(relay.redirects.has('p')).toBe(true);
+            direct.emitLeave('p'); // WebRTC lost too: a leave, and nothing reaches the peer
+            relay.redirect('p', () => undefined); // a redirect left behind by an order of events nothing ended
+            relay.emitJoin('p'); // the same id comes back over the relay
+            expect(relay.redirects.has('p')).toBe(false);
+            expect(hybrid.peerPath?.('p')).toBe('relay');
         });
 
         test('a relay link that cannot hand messages back moves nothing', () => {

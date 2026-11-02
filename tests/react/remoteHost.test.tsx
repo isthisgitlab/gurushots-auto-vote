@@ -220,6 +220,23 @@ describe('createRemoteHost: the path a phone is reached over', () => {
             expect(host.relayCount()).toBe(0);
         });
 
+        test('is logged with the clipped peer id and the new path, whether or not the phone has said hello', async () => {
+            const logs: string[] = [];
+            const transport = new TransportStub('host-x');
+            const { host } = makeHarness({
+                createTransport: async () => transport,
+                logInfo: (message) => logs.push(message),
+            });
+            await host.start('k');
+            transport.receiveFromPeer(hello, 'p1');
+            await flush();
+            transport.emitPathChange('p1', 'direct');
+            transport.emitPathChange('x'.repeat(600), 'direct');
+            expect(logs).toContain('Remote peer path changed: p1 (direct)');
+            expect(logs.filter((line) => line.startsWith('Remote peer path changed: ')).length).toBe(2);
+            expect(logs).toContain(`Remote peer path changed: ${'x'.repeat(512)} (direct)`); // clipped to the field limit
+        });
+
         test('a phone that has not said hello yet is sent nothing: its snapshot will be complete', async () => {
             const { host, transport } = await connect([]);
             const counts: number[] = [];

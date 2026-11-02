@@ -48,13 +48,16 @@ import type { HelloMessage } from '../../core/remote/protocol';
  */
 const versionPage = (version: string): string => `./${encodeURIComponent(version)}/index.html`;
 
-/** Whether the site (or the APK) carries the version's page. */
-const versionIsPublished = async (version: string): Promise<boolean> => {
+/**
+ * Whether the site (or the APK) carries the version's page. `whenProbeFails` is the answer when the probe itself could not
+ * run: after a hello the versioned page speaks for itself (true); a return visit has not heard the desktop, so it does not skip (false).
+ */
+const versionIsPublished = async (version: string, whenProbeFails: boolean): Promise<boolean> => {
     try {
         const probe = await fetch(versionPage(version), { method: 'HEAD' });
         return probe.ok;
     } catch {
-        return true; // the probe itself could not run; let the versioned page speak for itself
+        return whenProbeFails;
     }
 };
 
@@ -71,9 +74,10 @@ void (async () => {
     mountRemoteNotice();
     // A return visit goes straight to the page of the version it last reached: no transport, one HEAD request. A
     // version this tab already went straight to (its page sent the tab back, so the version was wrong or the page
-    // could not tell) or one whose page is not published runs the whole flow below, which says what is wrong.
+    // could not tell), one whose page is not published, or a request that cannot run runs the whole flow below, which
+    // says what is wrong (the network notice, if the network is why).
     const stored = await storedDesktopVersion(key);
-    if (stored !== null && skippedTo() !== stored && (await versionIsPublished(stored))) {
+    if (stored !== null && skippedTo() !== stored && (await versionIsPublished(stored, false))) {
         markSkippedTo(stored);
         globalThis.location.replace(`${versionPage(stored)}${globalThis.location.hash}`);
         return;
@@ -102,7 +106,7 @@ void (async () => {
         if (done) return;
         done = true;
         hello.stop();
-        void versionIsPublished(version).then(async (published) => {
+        void versionIsPublished(version, true).then(async (published) => {
             if (!published) {
                 void transport.leave();
                 const newerThanPage = compareReleaseVersions(version, PAGE_VERSION) > 0;
