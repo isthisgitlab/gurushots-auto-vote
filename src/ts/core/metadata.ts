@@ -7,10 +7,10 @@ import { createJsonStore } from './settings/storage';
 // tag, so they use the shared helper directly instead of logger.challengeTag.
 import { oneLine as oneLineId } from './format/logSafe';
 import { isPlainObject } from './plainObject';
+import { isUnsafeChallengeKey } from './challengeKey';
 import {
     MAX_TRACKED_ENTRY_IDS,
     MAX_ENTRY_ID_LENGTH,
-    isUnsafeChallengeKey,
     entryIdsFailureReason,
     validateMetadata,
 } from './metadata/validation';

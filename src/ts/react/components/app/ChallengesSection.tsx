@@ -12,6 +12,8 @@ import { IconActionButton } from '@/components/ui/IconActionButton';
 import { InlineError } from '@/components/ui/InlineError';
 import { ResetIcon } from '@/components/ui/ResetButton';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
+import { LocalOnlyHint } from '@/components/ui/LocalOnlyHint';
+import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import * as ipc from '@/api/ipc';
 
 /**
@@ -104,6 +106,7 @@ export function ChallengesSection({
     onBankrollChanged?: () => void | Promise<void>;
 }) {
     const { t } = useTranslation();
+    const { viewPrefsLocal } = usePlatformCapabilities();
     const { challenges, loading, error, refetch } = useChallenges();
     const times = useTimers(challenges);
     // The message of the last failed Vote all / Run / layout toggle, shown below their row.
@@ -226,6 +229,7 @@ export function ChallengesSection({
                 <button
                     className="btn btn-outline btn-sm sm:ml-auto max-sm:min-h-10"
                     onClick={() => void toggleGlobalCompact()}
+                    aria-describedby={viewPrefsLocal ? 'challenges-compact-device-hint' : undefined}
                 >
                     <StrokeIcon
                         d={globalCompact ? ICON_PATHS.listCompact : ICON_PATHS.listDetailed}
@@ -233,6 +237,11 @@ export function ChallengesSection({
                     />
                     {globalCompact ? t('app.details') : t('app.compact')}
                 </button>
+                {/* The dense toolbar row takes no extra line: the remote page's hint is visually
+                    hidden, and the button points at it for assistive tech. It stays a sibling of
+                    the button — inside it the text would join the accessible name and then be
+                    announced a second time through aria-describedby. */}
+                {viewPrefsLocal && <LocalOnlyHint id="challenges-compact-device-hint" srOnly />}
             </div>
             {actionError && (
                 <InlineError className="-mt-2 mb-4" onDismiss={() => setActionError(null)}>

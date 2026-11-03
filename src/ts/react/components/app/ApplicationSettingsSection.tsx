@@ -6,6 +6,8 @@ import { SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
 import { ResetButton } from '@/components/ui/ResetButton';
 import { ThemeSelect } from '@/components/ui/ThemeSelect';
 import { ToneNote } from '@/components/ui/ToneNote';
+import { LocalOnlyHint } from '@/components/ui/LocalOnlyHint';
+import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import { BUILT_IN_TIMEZONES } from '../../../core/settings/uiDefaults';
 import { SettingLabel, numberRangeMessage, parseNumberInput } from './SettingInput';
 import { SettingsSectionPanel } from './SettingsSectionPanel';
@@ -334,7 +336,15 @@ function CustomTimezoneInput({ timezoneInput }: { timezoneInput: TimezoneInputSt
 }
 
 /**
- * A UI setting whose controls share one row, ending in the setting's reset.
+ * The device-hint id of a ResettableUiCell control: the hint element's id and the control's
+ * aria-describedby target.
+ */
+const deviceHintId = (inputId: string): string => `${inputId}-device-hint`;
+
+/**
+ * A UI setting whose controls share one row, ending in the setting's reset. Both of its users (Theme,
+ * Language) are view settings the remote page keeps on the device, so the cell carries the
+ * "Saved on this device only." hint under the row there.
  */
 function ResettableUiCell({
     inputId,
@@ -358,11 +368,13 @@ function ResettableUiCell({
                 {children}
                 <ResetButton label={resetLabel(t, labelKey)} onClick={onReset} />
             </div>
+            <LocalOnlyHint id={deviceHintId(inputId)} />
         </UiSettingCell>
     );
 }
 
 function ThemeSetting({ uiValues, handleUiChange, handleResetUi, rejectedKeys, showAll }: UiCellFormProps) {
+    const { viewPrefsLocal } = usePlatformCapabilities();
     return (
         <ResettableUiCell
             inputId="ui-theme"
@@ -372,6 +384,7 @@ function ThemeSetting({ uiValues, handleUiChange, handleResetUi, rejectedKeys, s
         >
             <ThemeSelect
                 id="ui-theme"
+                describedBy={viewPrefsLocal ? deviceHintId('ui-theme') : undefined}
                 value={uiValues.theme}
                 onChange={(theme) => handleUiChange('theme', theme)}
                 invalid={rejectedKeys.includes('theme')}
@@ -382,6 +395,7 @@ function ThemeSetting({ uiValues, handleUiChange, handleResetUi, rejectedKeys, s
 
 function LanguageSetting({ uiValues, handleUiChange, handleResetUi, showAll }: UiCellFormProps) {
     const { t } = useTranslation();
+    const { viewPrefsLocal } = usePlatformCapabilities();
     return (
         <ResettableUiCell
             inputId="ui-language"
@@ -392,6 +406,7 @@ function LanguageSetting({ uiValues, handleUiChange, handleResetUi, showAll }: U
             <select
                 id="ui-language"
                 className="select select-sm"
+                aria-describedby={viewPrefsLocal ? deviceHintId('ui-language') : undefined}
                 value={uiValues.language}
                 onChange={(e) => handleUiChange('language', e.currentTarget.value)}
             >

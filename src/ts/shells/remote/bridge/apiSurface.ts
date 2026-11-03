@@ -12,6 +12,7 @@ import { isSafeExternalUrl } from '../../../core/format/urlSafe';
 
 import type { PeerBridgeContext, Listener } from './context';
 import type { InvokePipeline } from './invokes';
+import type { ViewPrefs } from './viewPrefs';
 
 // Invoke channels the phone answers itself: the desktop window is not the phone's, and the phone writes
 // no lines into the desktop's logs (the host is refusing them anyway).
@@ -27,11 +28,22 @@ const LOCAL_CHANNELS: ReadonlySet<string> = new Set([
 
 export { LOCAL_CHANNELS };
 
-export const installApiSurface = (ctx: PeerBridgeContext, sendInvoke: InvokePipeline['sendInvoke']): void => {
+export const installApiSurface = (
+    ctx: PeerBridgeContext,
+    sendInvoke: InvokePipeline['sendInvoke'],
+    viewPrefs: ViewPrefs,
+): void => {
     const api: Record<string, (...args: never[]) => unknown> = {};
 
+    // The view-pref channels the phone answers itself (viewPrefs.route): theme, language and the
+    // compact flags stay on this device — a phone write never reaches the desktop's config.json,
+    // and a desktop change to them reaches the phone only as a seed. Every other channel and key
+    // forwards unchanged.
+    const invoke = (channel: string, args: unknown[]): Promise<unknown> =>
+        viewPrefs.route(channel, args) ?? sendInvoke(channel, args);
+
     for (const channel of invokeChannels.filter((name) => !LOCAL_CHANNELS.has(name))) {
-        api[kebabToCamel(channel)] = (...args: unknown[]) => sendInvoke(channel, args);
+        api[kebabToCamel(channel)] = (...args: unknown[]) => invoke(channel, args);
     }
     // The log calls end here: a phone's lines would only be refused by the desktop.
     for (const channel of ['log-debug', 'log-warning', 'log-error', 'log-api']) {

@@ -11,12 +11,15 @@ export function ThemeSelect({
     onChange,
     className = '',
     invalid = false,
+    describedBy,
 }: {
     id: string;
     value: string;
     onChange: (theme: string) => void;
     className?: string;
     invalid?: boolean;
+    /** An element id the select points at with aria-describedby (a hint beside it). */
+    describedBy?: string;
 }) {
     const { t } = useTranslation();
     return (
@@ -24,6 +27,7 @@ export function ThemeSelect({
             id={id}
             className={`select select-sm ${className}`}
             aria-invalid={invalid || undefined}
+            aria-describedby={describedBy}
             value={value}
             onChange={(e) => onChange(e.currentTarget.value)}
         >

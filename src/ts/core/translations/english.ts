@@ -1387,6 +1387,7 @@ export const app = {
         'Resets UI settings, challenge defaults, app preferences, window positions, timezones and sign-in preferences.\\n\\nKept: login token, update-check time, mock mode, API headers. This cannot be undone.',
     resetAllSuccess: 'All settings have been reset to their default values. The page will reload to apply changes.',
     save: 'Save',
+    savedOnThisDevice: 'Saved on this device only.',
     scrollToTop: 'Scroll to top',
     seconds: 'seconds',
     settings: 'Settings',

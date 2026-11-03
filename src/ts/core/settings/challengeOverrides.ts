@@ -16,7 +16,7 @@ import { scenarioPhaseSettings } from './scenarioOverlay';
 import { JOIN_KEPT_KEYS } from './staleChallengeCleanup';
 import { isActiveChallengeId, challengeTargetForId } from './challengeFacts';
 import { loggableSettingValue } from './logValue';
-import { isUnsafeChallengeKey } from '../metadata/validation';
+import { isUnsafeChallengeKey } from '../challengeKey';
 
 import type { ConfigV2 } from '../types/config';
 import type { ChallengeIdInput, ChallengeValues, SettingValueOf } from '../types/settings';

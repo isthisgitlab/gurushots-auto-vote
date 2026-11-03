@@ -38,6 +38,7 @@ import { createInvokePipeline } from './invokes';
 import { watchConnection } from './connection';
 import { watchPeerMessages } from './messages';
 import { installApiSurface, LOCAL_CHANNELS } from './apiSurface';
+import { createViewPrefs } from './viewPrefs';
 
 export { LOCAL_CHANNELS };
 
@@ -64,13 +65,16 @@ const installPeerBridge = (transport: RemoteTransport, loaderTarget: string): vo
     const hello = createHelloRepeater({ transport, announce, active: () => ctx.hostPeerId === null });
 
     const pipeline = createInvokePipeline(ctx);
+    // One view-prefs store per install: the routed window.api calls, the desktop's settings-changed
+    // events and the local events a phone write dispatches must reach the same instance.
+    const viewPrefs = createViewPrefs({ ctx, sendInvoke: pipeline.sendInvoke });
     const { settlePendingForLostConnection, reconnect } = watchConnection({ ctx, hello, pipeline });
-    watchPeerMessages({ ctx, hello, pipeline, settlePendingForLostConnection, reconnect, loaderTarget });
+    watchPeerMessages({ ctx, hello, pipeline, viewPrefs, settlePendingForLostConnection, reconnect, loaderTarget });
     // The desktop may have forgotten this phone while the page was frozen in the back/forward cache: one hello.
     watchPageLifecycle(transport, () => {
         if (ctx.hostPeerId !== null) hello.announceOnce(ctx.hostPeerId);
     });
-    installApiSurface(ctx, pipeline.sendInvoke);
+    installApiSurface(ctx, pipeline.sendInvoke, viewPrefs);
 };
 
 export { installPeerBridge };

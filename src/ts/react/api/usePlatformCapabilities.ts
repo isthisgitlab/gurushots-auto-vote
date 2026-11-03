@@ -32,6 +32,8 @@ export type PlatformCapabilities = {
     showsUpdateInstall: boolean;
     /** the Settings "Remote access" section exists here (the desktop app is what gets paired to) */
     showsRemoteAccessSection: boolean;
+    /** the view settings — theme, language, compactCards, compactCardActions — are stored on this device, not on the computer */
+    viewPrefsLocal: boolean;
 };
 
 /**
@@ -52,6 +54,7 @@ export function usePlatformCapabilities(): PlatformCapabilities {
             showsLocalDataWipe: !remote,
             showsUpdateInstall: !remote,
             showsRemoteAccessSection: platformKind() === 'electron',
+            viewPrefsLocal: remote,
         };
     }, []);
 }

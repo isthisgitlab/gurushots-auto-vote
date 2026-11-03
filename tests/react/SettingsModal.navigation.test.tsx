@@ -71,6 +71,20 @@ const SCHEMA = {
         description: 'Spend turbo on missions',
         group: 'gApp',
     },
+    compactCards: {
+        type: 'boolean',
+        default: false,
+        label: 'app.compactCards',
+        description: 'Show the challenge cards smaller',
+        group: 'gApp',
+    },
+    compactCardActions: {
+        type: 'boolean',
+        default: false,
+        label: 'app.compactCardActions',
+        description: 'Keep the action buttons on compact cards',
+        group: 'gApp',
+    },
 };
 
 const onClose = jest.fn();
@@ -117,7 +131,14 @@ beforeEach(() => {
     mockApi.getSettingsSchema.mockReset().mockResolvedValue(
         invalid({
             schema: SCHEMA,
-            defaults: { exposure: 70, retries: 3, badges: true, missionTurbo: false },
+            defaults: {
+                exposure: 70,
+                retries: 3,
+                badges: true,
+                missionTurbo: false,
+                compactCards: false,
+                compactCardActions: false,
+            },
             groups: [
                 { id: 'gCore', label: 'Core group', tier: 'core' },
                 { id: 'gExtra', label: 'Extra group', tier: 'extra' },
@@ -349,6 +370,40 @@ describe('SettingsModal — filter', () => {
         } finally {
             resetPlatformKind();
         }
+    });
+
+    test('a remote screen ties "Saved on this device only." to the theme, language and compact controls', async () => {
+        markPlatformKind('remote');
+        try {
+            const [, phone] = TransportStub.pair();
+            renderWithProviders(
+                <TranslationProvider>
+                    <AutovoteProvider remoteTransport={phone}>
+                        <SettingsModal isOpen onClose={() => undefined} />
+                    </AutovoteProvider>
+                </TranslationProvider>,
+            );
+            await waitFor(() => expect(document.getElementById('setting-compactCards')).not.toBeNull());
+            for (const id of ['ui-theme', 'ui-language', 'setting-compactCards', 'setting-compactCardActions']) {
+                const hintId = `${id}-device-hint`;
+                expect(document.getElementById(hintId)).not.toBeNull();
+                expect(document.getElementById(id)!.getAttribute('aria-describedby')).toBe(hintId);
+            }
+            // Exactly the gated rows carry it — the neighbouring mission row has none.
+            expect(document.getElementById('setting-missionTurbo')!.getAttribute('aria-describedby')).toBeNull();
+            expect(screen.getAllByText('app.savedOnThisDevice')).toHaveLength(4);
+        } finally {
+            resetPlatformKind();
+        }
+    });
+
+    test('a desktop screen shows no "Saved on this device only." hint', async () => {
+        await openSettings();
+        expect(screen.queryByText('app.savedOnThisDevice')).toBeNull();
+        expect(document.getElementById('ui-theme')!.getAttribute('aria-describedby')).toBeNull();
+        expect(document.getElementById('ui-language')!.getAttribute('aria-describedby')).toBeNull();
+        expect(document.getElementById('setting-compactCards')!.getAttribute('aria-describedby')).toBeNull();
+        expect(document.getElementById('setting-compactCards-device-hint')).toBeNull();
     });
 
     test("the Android app's Control my computer entry is in the Application panel and found by its name", async () => {

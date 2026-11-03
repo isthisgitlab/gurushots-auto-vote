@@ -7,6 +7,8 @@ import type { CustomizationSource } from '@/utils/customizationTone';
 import { getScheduleShift } from '../../../core/services/scheduleRemap';
 import { SettingHelp } from '@/components/ui/SettingHelp';
 import { ToneNote } from '@/components/ui/ToneNote';
+import { LocalOnlyHint, LOCAL_VIEW_PREF_KEYS } from '@/components/ui/LocalOnlyHint';
+import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import { SettingInput, SettingLabel } from './SettingInput';
 import { SettingHintList } from './SettingHints';
 
@@ -132,11 +134,19 @@ function ChallengeSettingCell({
     overriddenLabelKey?: string;
 }) {
     const { t } = useTranslation();
+    const { viewPrefsLocal } = usePlatformCapabilities();
     const hasOverride = key in form.overrides;
     const hasProfileValue = Object.prototype.hasOwnProperty.call(form.profileValues, key);
     const currentValue = hasOverride ? form.overrides[key] : form.inheritedOf(key);
     const scheduleShift = scheduleShiftOf(key, currentValue, challenge);
     const inputId = `challenge-setting-${key}`;
+    // The remote page keeps the view preferences on the device, so the compact row says so. A
+    // profile's values are desktop-owned (saving one writes the desktop's settings), which is the
+    // Profiles tab's overriddenLabelKey — there the hint would be false, so it never shows.
+    const deviceHint =
+        viewPrefsLocal && overriddenLabelKey === undefined && LOCAL_VIEW_PREF_KEYS.has(key)
+            ? `${inputId}-device-hint`
+            : undefined;
     // Only read when scheduleShift > 0, i.e. for a challenge with an integer
     // max_photo_submits ≥ 2 (see scheduleShiftOf).
     const shiftedChallenge = challenge as Challenge & { max_photo_submits: number };
@@ -164,7 +174,9 @@ function ChallengeSettingCell({
                 onChange={form.changeOverride}
                 onReset={applicable && hasOverride ? form.clearOverride : null}
                 disabled={!applicable}
+                describedBy={deviceHint}
             />
+            {deviceHint && <LocalOnlyHint id={deviceHint} />}
             {scheduleShift > 0 && (
                 <ToneNote tone="info" className="text-xs mt-1">
                     {t('app.autoSubmitScheduleShiftHint', {

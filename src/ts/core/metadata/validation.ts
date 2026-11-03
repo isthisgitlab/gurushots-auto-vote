@@ -3,6 +3,7 @@ import * as logger from '../logger';
 // one into a message. These carry a bare id rather than the full `[Challenge …]`
 // tag, so they use the shared helper directly instead of logger.challengeTag.
 import { oneLine as oneLineId } from '../format/logSafe';
+import { isUnsafeChallengeKey } from '../challengeKey';
 
 import type { ChallengeMetadataEntry, MetadataFile, UpdateCheckData } from '../types/stores';
 
@@ -16,14 +17,6 @@ import type { ChallengeMetadataEntry, MetadataFile, UpdateCheckData } from '../t
  */
 const MAX_TRACKED_ENTRY_IDS = 64;
 const MAX_ENTRY_ID_LENGTH = 64;
-
-/**
- * Reject the three keys that address Object.prototype instead of creating an own
- * property. Challenge ids are numeric in practice, so this never fires today — but
- * the id is remote-controlled and every write path here uses it as a bracket key.
- */
-const isUnsafeChallengeKey = (challengeId: string | number): boolean =>
-    challengeId === '__proto__' || challengeId === 'constructor' || challengeId === 'prototype';
 
 /**
  * Validate an entryIds snapshot.
@@ -257,4 +250,4 @@ const validateMetadata = (
     return { validatedMetadata, hasChanges: updateCheckChanged || entriesChanged };
 };
 
-export { MAX_TRACKED_ENTRY_IDS, MAX_ENTRY_ID_LENGTH, isUnsafeChallengeKey, entryIdsFailureReason, validateMetadata };
+export { MAX_TRACKED_ENTRY_IDS, MAX_ENTRY_ID_LENGTH, entryIdsFailureReason, validateMetadata };

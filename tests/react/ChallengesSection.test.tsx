@@ -7,10 +7,13 @@
 
 import { render, screen, fireEvent, act } from './helpers/test-utils';
 import { render as bareRender } from '@testing-library/preact';
+import { TranslationProvider } from '@/contexts/TranslationContext';
 import { ChallengesProvider, useChallenges } from '@/contexts/ChallengesContext';
 import { ChallengesSection } from '@/components/app/ChallengesSection';
 import { useActiveChallenges } from '@/api/useActiveChallenges';
 import { mockApi, fireSettingsChanged } from './helpers/setup';
+import { markPlatformKind } from '../../src/ts/core/platform/kind';
+import { resetPlatformKind } from '../helpers/platformKind';
 import type { ChallengeCard } from '@/components/app/ChallengeCard';
 import type { Challenge } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
@@ -227,6 +230,45 @@ describe('ChallengesProvider + ChallengesSection', () => {
             expect(screen.queryByText('app.voteAll')).toBeNull();
             expect(screen.queryByText('app.refresh')).toBeNull();
             expect(screen.getByText('app.compact')).toBeTruthy();
+        });
+
+        it('on the remote kind the compact toggle points at a visually hidden device hint', () => {
+            markPlatformKind('remote');
+            try {
+                // The section reads no autovote state, and the shared wrapper's AutovoteProvider
+                // refuses to mount on the remote kind without a pairing transport.
+                bareRender(
+                    <TranslationProvider>
+                        <ChallengesProvider autovoteRunning={false}>
+                            <ChallengesSection
+                                isLoggedIn
+                                autovoteRunning={false}
+                                timezone="UTC"
+                                onChallengeSettingsClick={jest.fn()}
+                            />
+                        </ChallengesProvider>
+                    </TranslationProvider>,
+                );
+                const toggle = screen.getByText('app.compact').closest('button')!;
+                expect(toggle.getAttribute('aria-describedby')).toBe('challenges-compact-device-hint');
+                // The hint is not part of the accessible name: inside the button its text would be
+                // announced with the name and then again through aria-describedby.
+                expect(toggle.textContent).not.toContain('app.savedOnThisDevice');
+                const hint = document.getElementById('challenges-compact-device-hint');
+                expect(hint).not.toBeNull();
+                expect(hint!.textContent).toBe('app.savedOnThisDevice');
+                expect(hint!.className).toContain('sr-only');
+                // A sibling of the button, not a child.
+                expect(hint!.closest('button')).toBeNull();
+            } finally {
+                resetPlatformKind();
+            }
+        });
+
+        it('off the remote kind the compact toggle carries no device hint', () => {
+            renderSection();
+            expect(screen.getByText('app.compact').closest('button')!.getAttribute('aria-describedby')).toBeNull();
+            expect(document.getElementById('challenges-compact-device-hint')).toBeNull();
         });
 
         it('Refresh refetches with cleanup', () => {

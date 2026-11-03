@@ -23,6 +23,7 @@ describe('platform capabilities', () => {
             showsLocalDataWipe: true,
             showsUpdateInstall: true,
             showsRemoteAccessSection: true,
+            viewPrefsLocal: false,
         });
     });
 
@@ -47,6 +48,7 @@ describe('platform capabilities', () => {
             showsLocalDataWipe: true,
             showsUpdateInstall: true,
             showsRemoteAccessSection: false,
+            viewPrefsLocal: false,
         });
         // Fixed for the life of the page: the same object on every render.
         const first = result.current;
@@ -67,6 +69,7 @@ describe('platform capabilities', () => {
             showsLocalDataWipe: false,
             showsUpdateInstall: false,
             showsRemoteAccessSection: false,
+            viewPrefsLocal: true,
         });
     });
 

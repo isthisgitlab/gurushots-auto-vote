@@ -10,7 +10,7 @@
 
 import * as logger from '../logger';
 import { oneLine } from '../format/logSafe';
-import { isUnsafeChallengeKey } from '../metadata/validation';
+import { isUnsafeChallengeKey } from '../challengeKey';
 import { isPlainObject } from '../plainObject';
 import { applyPinToRecord } from '../voting/entryPins';
 import { loadSettings, saveSettings } from './persistence';

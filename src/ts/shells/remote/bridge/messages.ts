@@ -15,6 +15,7 @@ import type { HelloRepeater } from '../../../core/remote/helloRepeat';
 import type { ByeMessage, EventMessage, HelloMessage, ResultMessage } from '../../../core/remote/protocol';
 import type { PeerBridgeContext } from './context';
 import type { InvokePipeline } from './invokes';
+import type { ViewPrefs } from './viewPrefs';
 
 /** What the message handlers share: the state, the hello repeat, the invoke pipeline and the loss settle. */
 export type MessageWatch = {
@@ -27,6 +28,8 @@ export type MessageWatch = {
     readonly loaderTarget: string;
     /** Settles what is in flight and asks the desktop at `peerId` to take this phone back — owned by connection.ts. */
     readonly reconnect: (peerId: string) => void;
+    /** The phone-local view settings: a desktop settings-changed payload is seeded and overlaid through it. */
+    readonly viewPrefs: ViewPrefs;
 };
 
 const dispatchEvent = (ctx: PeerBridgeContext, channel: string, payload: unknown): void => {
@@ -119,7 +122,11 @@ const handleResult = (message: ResultMessage, peerId: string, watch: MessageWatc
 
 const handleEvent = (message: EventMessage, peerId: string, watch: MessageWatch): void => {
     if (peerId !== watch.ctx.hostPeerId) return;
-    dispatchEvent(watch.ctx, message.channel, message.payload);
+    // The desktop's settings reach the phone's listeners with the phone's own four view keys in
+    // place (viewPrefs.ts): a desktop change to any of them never changes the phone.
+    const payload =
+        message.channel === 'settings-changed' ? watch.viewPrefs.ingestSettings(message.payload) : message.payload;
+    dispatchEvent(watch.ctx, message.channel, payload);
 };
 
 const handleBye = (message: ByeMessage, peerId: string, watch: MessageWatch): void => {

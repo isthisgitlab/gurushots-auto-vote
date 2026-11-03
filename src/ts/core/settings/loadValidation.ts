@@ -8,7 +8,7 @@ import { API_MAX_RETRIES_MAX, API_TIMEOUT_MAX_SEC, API_TIMEOUT_MIN_SEC } from '.
 import { getDefaultSettings } from './defaults';
 import { isPlainObject } from '../plainObject';
 import { oneLine } from '../format/logSafe';
-import { isUnsafeChallengeKey } from '../metadata/validation';
+import { isUnsafeChallengeKey } from '../challengeKey';
 
 import type { ConfigV2, ImportedV2 } from '../types/config';
 import type { AuthKey } from '../types/settings';

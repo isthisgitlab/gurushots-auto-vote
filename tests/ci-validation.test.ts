@@ -677,9 +677,9 @@ describe('renderer bundle graphs', () => {
     jest.unmock('path');
     const path = jest.requireActual<typeof import('node:path')>('node:path');
     const root = path.join(__dirname, '..');
-    // The Electron pages and the web-shell entry. The Capacitor, headless and preload bundles may
-    // legitimately reach the platform code and are not checked.
-    const CHECKED_ENTRIES = ['app', 'login', 'logs', 'web'] as const;
+    // The Electron pages, the web-shell entry and the remote phone page. The Capacitor, headless
+    // and preload bundles may legitimately reach the platform code and are not checked.
+    const CHECKED_ENTRIES = ['app', 'login', 'logs', 'web', 'remote'] as const;
     const FORBIDDEN_EXACT = [
         'src/ts/core/platform/port.ts',
         'src/ts/shells/capacitor/NativeAutovoteBridge.ts',
@@ -766,6 +766,30 @@ describe('renderer bundle graphs', () => {
         const { inputs } = await buildGraph('capacitor');
         expect(inputs).toContain('src/ts/core/platform/port.ts');
         expect(inputs).toContain('src/ts/shells/capacitor/NativeAutovoteBridge.ts');
+    }, 120_000);
+
+    test('the remote phone page bundle stays free of the logger and any Node-side chain', async () => {
+        // The remote page installs no platform (the logger reads platform() at load and would
+        // throw) and runs in the phone's browser, where no Node module exists. How a `node:`
+        // import can surface: the remote entry externalizes the Node built-ins
+        // (RENDERER_EXTERNALS), so an import of a covered builtin stays out of the metafile and
+        // would only fail at runtime ("require is not defined") — the node: filter below then
+        // never sees it. If a builtin ever loses its external entry, esbuild either resolves it
+        // into the graph (this check fails on the input) or fails the unresolved import at build
+        // time — esbuild.build below throws, and that failure is the gate too.
+        const { inputs, entryRel } = await buildGraph('remote');
+        // Positive control: the graph holds the bridge module this gate exists for, named by the
+        // same normalisation the forbidden check uses — if the metafile key format drifted, the
+        // filter below would silently pass on nothing.
+        expect(inputs).toContain('src/ts/shells/remote/bridge/apiSurface.ts');
+        expect(inputs).toContain(entryRel);
+        const offenders = inputs.filter(
+            (input) =>
+                input === 'src/ts/core/logger.ts' ||
+                input.startsWith('src/ts/core/logger/') ||
+                input.startsWith('node:'),
+        );
+        expect(offenders).toEqual([]);
     }, 120_000);
 });
 

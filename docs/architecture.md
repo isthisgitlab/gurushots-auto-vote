@@ -666,6 +666,9 @@ repeated six times is one that gets forgotten at one of them.
   import knew it, and the profile or scenario they name — or as the text an earlier build stored; whether the report
   was seen). Title pins stay in their own cache store. A load validates it and fills what it lacks
   over the defaults (`loadValidation.ts`); `persistence.ts` owns load and save, `storage.ts` the bytes through the platform's transport.
+  One exception: the paired remote phone page keeps its view preferences — theme, language, `compactCards` (the global
+  default and per-challenge own overrides) and `compactCardActions` — on the device itself, in `localStorage` under
+  `gs-remote-view-prefs`, while `config.json` stays the source of truth for everything else.
 - **`auth` never reaches a renderer.** `toRendererSettings` (`ipc/rendererSettings.ts`) takes the block out of what
   a window receives and answers only `hasToken`, derived from the stored token; `withoutRendererHiddenKeys` drops
   `auth`, `token`, `hasToken` and `apiHeaders` from a renderer's write, and `lastUsername`
@@ -1251,6 +1254,11 @@ served while at least one phone wants it.
   runs the whole flow, and the worst case is one extra connect; a page that accepts the desktop clears the mark, so a
   reload of the loader in that tab goes straight on again. **Disconnect** (Navbar and the loader's notice
   screens) clears the stored version as it clears the key. In a plain browser there is no Disconnect, so the stored version stays until a different pairing key is used or the site data is cleared.
+- **The phone's view preferences are kept in the page origin's `localStorage`.** The `gs-remote-view-prefs` key holds
+  only display values — theme, language, the compact flags and the challenge ids they name — on the device itself, as
+  the one exception to `config.json` being the only stored settings file. Other pages on the site's origin can read and
+  write `gs-remote-view-prefs`, but it holds no credential, and strict field checks on both read and write keep a
+  written value to a display change.
 - **The desktop's auto-vote state is stamped.** Every `autovote-state` carries `hostRun` (a random id the desktop's
   renderer drew when it started) and `n` (how many states it has stamped, only upward, across every host the
   renderer makes). The phone ignores a state with the same `hostRun` and a lower `n` than one it applied, so a state

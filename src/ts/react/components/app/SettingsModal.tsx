@@ -33,6 +33,7 @@ import { ModalActionRow } from '@/components/ui/ModalActionRow';
 import { STICKY_FOOTER_SCROLL_PADDING } from '@/components/ui/StickyModalFooter';
 import { SettingsTierIntro } from '@/components/ui/SettingsTierIntro';
 import { SettingHelp } from '@/components/ui/SettingHelp';
+import { LocalOnlyHint, LOCAL_VIEW_PREF_KEYS } from '@/components/ui/LocalOnlyHint';
 import { SettingInput, SettingLabel } from './SettingInput';
 import { SettingHintList, globalSettingHints } from './SettingHints';
 import { ApplicationSettingsSection, applicationCellTexts } from './ApplicationSettingsSection';
@@ -103,6 +104,7 @@ function SchemaSettingsGroup({
     rejectedKeys,
 }: { group: SettingsSection; showAll?: boolean } & SchemaFormProps) {
     const { t } = useTranslation();
+    const { viewPrefsLocal } = usePlatformCapabilities();
     const { query, namesOnly } = useSettingsNav();
     // The group's own heading matched (or the tab title did): the heading and every entry show.
     const labelShown = showAll || groupLabelMatchesFilter(t, group, query);
@@ -110,32 +112,40 @@ function SchemaSettingsGroup({
         <div className={`mb-4 ${showAll || groupMatchesFilter(t, group, query, namesOnly) ? '' : 'hidden'}`}>
             <h5 className="font-medium text-sm opacity-70 mb-2 mt-3">{t(group.label)}</h5>
             <div className={SETTINGS_GRID_CLASS}>
-                {group.entries.map(([key, config]) => (
-                    <div
-                        key={key}
-                        className={`${SETTING_CELL_CLASS} ${
-                            labelShown || entryMatchesFilter(t, config, query, namesOnly) ? '' : 'hidden'
-                        }`}
-                    >
-                        <SettingLabel inputId={`setting-${key}`} type={config.type} config={config}>
-                            <span className="font-medium">{t(config.label)}</span>
-                            {config.perChallenge && (
-                                <span className="badge badge-ghost badge-sm ml-2">{t('app.globalDefault')}</span>
-                            )}
-                        </SettingLabel>
-                        <p className="text-xs text-base-content/70 mb-2">{t(config.description)}</p>
-                        <SettingHelp helpKey={config.helpKey} />
-                        <SettingInput
-                            settingKey={key}
-                            config={config}
-                            value={formValues[key] ?? config.default}
-                            onChange={handleFormChange}
-                            onReset={handleResetGlobal}
-                            rejected={rejectedKeys.includes(key)}
-                        />
-                        <SettingHintList hints={hintsFor(key)} />
-                    </div>
-                ))}
+                {group.entries.map(([key, config]) => {
+                    // Only the view preferences the remote page keeps on the device get the hint, and
+                    // the control points at it only where the hint renders.
+                    const localHintId =
+                        viewPrefsLocal && LOCAL_VIEW_PREF_KEYS.has(key) ? `setting-${key}-device-hint` : undefined;
+                    return (
+                        <div
+                            key={key}
+                            className={`${SETTING_CELL_CLASS} ${
+                                labelShown || entryMatchesFilter(t, config, query, namesOnly) ? '' : 'hidden'
+                            }`}
+                        >
+                            <SettingLabel inputId={`setting-${key}`} type={config.type} config={config}>
+                                <span className="font-medium">{t(config.label)}</span>
+                                {config.perChallenge && (
+                                    <span className="badge badge-ghost badge-sm ml-2">{t('app.globalDefault')}</span>
+                                )}
+                            </SettingLabel>
+                            <p className="text-xs text-base-content/70 mb-2">{t(config.description)}</p>
+                            <SettingHelp helpKey={config.helpKey} />
+                            <SettingInput
+                                settingKey={key}
+                                config={config}
+                                value={formValues[key] ?? config.default}
+                                onChange={handleFormChange}
+                                onReset={handleResetGlobal}
+                                rejected={rejectedKeys.includes(key)}
+                                describedBy={localHintId}
+                            />
+                            {localHintId && <LocalOnlyHint id={localHintId} />}
+                            <SettingHintList hints={hintsFor(key)} />
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );

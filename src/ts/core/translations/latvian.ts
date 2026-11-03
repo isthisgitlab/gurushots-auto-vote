@@ -1402,6 +1402,7 @@ export const app: LatvianApp = {
         'Atiestatīs saskarnes uzstādījumus, izaicinājumu noklusējumus, preferences, laika joslas, pieteikšanās preferences.\\n\\nPaliek: tokens, atjauninājumu pārbaudes laiks, testa režīms. Nevar atsaukt.',
     resetAllSuccess: 'Visi uzstādījumi ir atiestatīti. Lapa tiks pārlādēta, lai izmaiņas stātos spēkā.',
     save: 'Saglabāt',
+    savedOnThisDevice: 'Saglabāts tikai šajā ierīcē.',
     scrollToTop: 'Uz augšu',
     seconds: 'sekunde(s)',
     settings: 'Uzstādījumi',
