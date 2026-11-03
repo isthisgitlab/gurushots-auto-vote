@@ -5,55 +5,40 @@
  * the phone does not reach the desktop; a desktop change to any of the four keys reaches
  * the phone only as a seed for keys that are still unset — a seed never overwrites, and a
  * failed desktop read passes through to the caller unchanged and stores nothing. An unset
- * global seeds itself through one forwarded read of the channel that answered it, and the
- * first effective read of an unseeded challenge rides with a read of the DESKTOP's global
- * default, so the rule/profile/phase classification compares against the desktop's own
- * baseline rather than the phone's.
+ * global seeds itself through one forwarded read of the channel that answered it.
  *
- * A challenge's compact value that comes from a desktop title rule, profile or scenario
- * phase is kept in `compactInherited`, not as an own override: only get-effective-setting
- * reads it, so the challenge does not show as customized and the card's first toggle
- * writes a real own override.
+ * Every challenge id is seeded by ONE combined single-flight seed: the overrides read, the
+ * effective read and the DESKTOP's global default are forwarded together and the storage
+ * decision runs from all three answers — a desktop own override becomes the phone's own, a
+ * value that differs from the desktop's baseline was set by a rule, profile or scenario
+ * phase and is inherited (kept in `compactInherited`, so only get-effective-setting reads
+ * it, the challenge does not show as customized, and the card's first toggle writes a real
+ * own override), and anything that fails or answers a non-boolean stores nothing, so the
+ * next read runs the seed again.
  *
  * One instance per bridge install (peer.ts hands it to apiSurface.ts and messages.ts), so
  * the routed window.api calls, the desktop's settings-changed events and the local events
- * a phone write dispatches all reach the same store. Loaded only by the remote renderer
- * entries, so it stays free of Node-side modules: the imports here are the dependency-free
- * core modules only. Every storage access is wrapped like core/remote/desktopVersion.ts —
- * a browser that refuses site data keeps the values in memory for the page's life.
+ * a phone write dispatches all reach the same store (viewPrefsStore.ts, overlaid by
+ * viewPrefsOverlay.ts). Loaded only by the remote renderer entries, so it stays free of
+ * Node-side modules: the imports are the dependency-free core modules only.
  */
 
 import { isPlainObject } from '../../../core/plainObject';
-import { isUnsafeChallengeKey } from '../../../core/challengeKey';
-import { THEMES } from '../../../core/settings/uiDefaults';
-import { isSupportedLanguage } from '../../../core/translations/translator';
+
+import { createViewPrefsStore, isBoolean, normalizeId, pruneOverrides, VIEW_PREFS_STORAGE } from './viewPrefsStore';
+import { overlaySettings } from './viewPrefsOverlay';
 
 import type { PeerBridgeContext } from './context';
 import type { InvokePipeline } from './invokes';
+import type { PrefKey, ViewPrefsStore } from './viewPrefsStore';
 
-/** The `localStorage` key the phone's view settings are kept under. */
-export const VIEW_PREFS_STORAGE = 'gs-remote-view-prefs';
+export { VIEW_PREFS_STORAGE };
 
 /** The event channel a phone write dispatches to the bridge's own listeners. */
 const SETTINGS_CHANNEL = 'settings-changed';
 
-/** The most entries either per-challenge map keeps; extra stored entries are dropped on read. */
-const MAP_CAP = 500;
-
-/** One of the four view keys a phone write or a seed stores. */
-type PrefKey = 'theme' | 'language' | 'compactCards' | 'compactCardActions';
-
-/** The stored shape: the four globals plus the two per-challenge maps. */
-type Stored = {
-    theme?: string;
-    language?: string;
-    compactCards?: boolean;
-    compactCardActions?: boolean;
-    /** The phone's OWN per-challenge overrides; `null` = seeded: no own override. */
-    compactOverrides: Record<string, boolean | null>;
-    /** A compact value a desktop rule, profile or scenario phase gave the challenge at seed time. */
-    compactInherited: Record<string, boolean>;
-};
+/** One forwarded read's settled outcome: the fulfilled value, or its rejection. */
+type SettledRead = { status: 'fulfilled'; value: unknown } | { status: 'rejected'; error: unknown };
 
 /** What the bridge's other pieces drive: the channel router and the desktop settings ingest. */
 export type ViewPrefs = {
@@ -70,13 +55,12 @@ export type ViewPrefs = {
     ingestSettings: (payload: unknown) => unknown;
 };
 
-const THEME_SET: ReadonlySet<string> = new Set(THEMES);
-
-const isBoolean = (value: unknown): value is boolean => typeof value === 'boolean';
-const isStoredOverride = (value: unknown): value is boolean | null => value === null || typeof value === 'boolean';
-
-/** What one seeding read settles with: the challenge's effective value and the desktop's global default. */
-type SeedAnswers = [unknown, unknown];
+/** What one seed settles with: the three forwarded reads, each its own settled outcome. */
+type SeedOutcome = {
+    overrides: SettledRead;
+    effective: SettledRead;
+    global: SettledRead;
+};
 
 export const createViewPrefs = ({
     ctx,
@@ -85,117 +69,21 @@ export const createViewPrefs = ({
     ctx: PeerBridgeContext;
     sendInvoke: InvokePipeline['sendInvoke'];
 }): ViewPrefs => {
-    /** Runs a storage action; a browser that refuses site data keeps nothing, which only costs the persistence. */
-    const attempt = <T>(action: () => T, fallback: T): T => {
-        try {
-            return action();
-        } catch {
-            return fallback;
-        }
-    };
-
-    /**
-     * Trimmed string form of a caller-supplied challenge id ('' when absent, or when it names an
-     * Object.prototype member rather than a challenge) — the only form a store map is keyed by.
-     */
-    const normalizeId = (challengeId: unknown): string => {
-        if (typeof challengeId !== 'string' && typeof challengeId !== 'number') return '';
-        const id = String(challengeId).trim();
-        return id === '' || isUnsafeChallengeKey(id) ? '' : id;
-    };
+    const prefsStore: ViewPrefsStore = createViewPrefsStore();
+    const { stored: store, persist, mapFull, putGlobal } = prefsStore;
 
     /** The last desktop settings object the bridge saw; null before the first one. */
     let lastDesktop: Record<string, unknown> | null = null;
 
-    /** The seeding reads in flight: one effective+global pair per id; concurrent invokes await the same promise. */
-    const seedingReads = new Map<string, Promise<SeedAnswers>>();
+    /** The seeds in flight: one combined three-read seed per id; concurrent invokes await the same promise. */
+    const seeds = new Map<string, Promise<SeedOutcome>>();
 
-    const emptyMaps = (): [Record<string, boolean | null>, Record<string, boolean>] => [
-        Object.create(null) as Record<string, boolean | null>,
-        Object.create(null) as Record<string, boolean>,
-    ];
-
-    /** Keeps the valid entries of a stored map, safe ids only, at most MAP_CAP of them. */
-    const readMap = <V>(value: unknown, keep: (entry: unknown) => entry is V): Record<string, V> => {
-        const map = Object.create(null) as Record<string, V>;
-        if (!isPlainObject(value)) return map;
-        let kept = 0;
-        for (const [key, entry] of Object.entries(value)) {
-            if (kept >= MAP_CAP) break;
-            const id = normalizeId(key);
-            if (id === '' || !keep(entry)) continue;
-            map[id] = entry;
-            kept += 1;
-        }
-        return map;
-    };
-
-    const emptyStored = (): Stored => {
-        const [compactOverrides, compactInherited] = emptyMaps();
-        return { compactOverrides, compactInherited };
-    };
-
-    /** Field-by-field: an invalid field is dropped and counts as unseeded. */
-    const parseStored = (raw: string): Stored => {
-        let parsed: unknown;
-        try {
-            parsed = JSON.parse(raw);
-        } catch {
-            return emptyStored();
-        }
-        if (!isPlainObject(parsed)) return emptyStored();
-        const stored = emptyStored();
-        if (typeof parsed.theme === 'string' && THEME_SET.has(parsed.theme)) stored.theme = parsed.theme;
-        if (isSupportedLanguage(parsed.language)) stored.language = parsed.language;
-        if (typeof parsed.compactCards === 'boolean') stored.compactCards = parsed.compactCards;
-        if (typeof parsed.compactCardActions === 'boolean') stored.compactCardActions = parsed.compactCardActions;
-        stored.compactOverrides = readMap(parsed.compactOverrides, isStoredOverride);
-        stored.compactInherited = readMap(parsed.compactInherited, isBoolean);
-        return stored;
-    };
-
-    // Parse once per page: the store lives in memory from here on, and each write updates
-    // memory first, then storage.
-    const storedRaw = attempt<string | null>(() => globalThis.localStorage?.getItem(VIEW_PREFS_STORAGE) ?? null, null);
-    const store: Stored = storedRaw === null ? emptyStored() : parseStored(storedRaw);
-
-    const persist = (): void => {
-        attempt(() => globalThis.localStorage?.setItem(VIEW_PREFS_STORAGE, JSON.stringify(store)), undefined);
-    };
-
-    const mapFull = (map: Record<string, unknown>): boolean => Object.keys(map).length >= MAP_CAP;
-
-    /**
-     * Validates and stores one of the four globals. A seed (overwrite: false) skips a key the
-     * phone already holds — a seed never overwrites, and a phone write made during a seed wins.
-     */
-    const putGlobal = (key: PrefKey, value: unknown, overwrite: boolean): boolean => {
-        if (!overwrite && store[key] !== undefined) return false;
-        if (key === 'theme') {
-            if (typeof value !== 'string' || !THEME_SET.has(value)) return false;
-            store.theme = value;
-        } else if (key === 'language') {
-            if (!isSupportedLanguage(value)) return false;
-            store.language = value;
-        } else if (key === 'compactCards') {
-            if (typeof value !== 'boolean') return false;
-            store.compactCards = value;
-        } else {
-            if (typeof value !== 'boolean') return false;
-            store.compactCardActions = value;
-        }
-        return true;
-    };
-
-    /**
-     * One of the four globals, seeded through the desktop on its first read: an unset key
+    /** One of the four globals, seeded through the desktop on its first read: an unset key
      * forwards once, the answer seeds it, and the stored value is answered — or the desktop's
-     * own answer when the seed stored nothing. A rejection or null answer passes through
-     * unchanged and stores nothing; a seeded key never forwards.
-     */
+     * own answer when the seed stored nothing. A seeded key never forwards. */
     const readGlobal = (key: PrefKey): Promise<unknown> => {
-        const stored = store[key];
-        if (stored !== undefined) return Promise.resolve(stored);
+        const held = store[key];
+        if (held !== undefined) return Promise.resolve(held);
         const channel = key === 'theme' || key === 'language' ? 'get-setting' : 'get-global-default';
         return sendInvoke(channel, [key]).then((answer) => {
             if (putGlobal(key, answer, false)) persist();
@@ -224,168 +112,164 @@ export const createViewPrefs = ({
         return id === '' ? false : storeOwn(id, null);
     };
 
-    /** Seeds a challenge's own-override slot from a desktop value; a seed never overwrites, and the cap skips silently. */
-    const seedOwn = (challengeId: unknown, desktopValue: unknown): boolean => {
-        const id = normalizeId(challengeId);
-        if (id === '' || Object.hasOwn(store.compactOverrides, id) || mapFull(store.compactOverrides)) return false;
-        store.compactOverrides[id] = isBoolean(desktopValue) ? desktopValue : null;
-        return true;
-    };
-
-    /** The phone's four keys over a desktop settings object: a copy, the desktop object untouched. */
-    const overlaySettings = (payload: Record<string, unknown>): unknown => {
-        const out: Record<string, unknown> = { ...payload };
-        if (store.theme !== undefined || store.language !== undefined) {
-            if (isPlainObject(payload.app)) {
-                const app: Record<string, unknown> = { ...payload.app };
-                if (store.theme !== undefined) app.theme = store.theme;
-                if (store.language !== undefined) app.language = store.language;
-                out.app = app;
-            }
-        }
-        if (store.compactCards !== undefined || store.compactCardActions !== undefined) {
-            if (isPlainObject(payload.defaults)) {
-                const defaults: Record<string, unknown> = { ...payload.defaults };
-                if (store.compactCards !== undefined) defaults.compactCards = store.compactCards;
-                if (store.compactCardActions !== undefined) defaults.compactCardActions = store.compactCardActions;
-                out.defaults = defaults;
-            }
-        }
-        if (isPlainObject(payload.challenges)) {
-            const challenges: Record<string, unknown> = { ...payload.challenges };
-            for (const [key, record] of Object.entries(payload.challenges)) {
-                const id = normalizeId(key);
-                if (id === '' || !isPlainObject(record)) continue;
-                const values = isPlainObject(record.values) ? record.values : undefined;
-                const own = Object.hasOwn(store.compactOverrides, id) ? store.compactOverrides[id] : undefined;
-                if (isBoolean(own)) {
-                    // The phone's own override shows; a container the desktop payload lacks is created for it.
-                    challenges[key] = { ...record, values: { ...(values ?? {}), compactCards: own } };
-                } else if (values !== undefined && Object.hasOwn(values, 'compactCards')) {
-                    // The phone has no own override: the key is left out — never `compactCards: null`,
-                    // which would count the challenge as customized.
-                    const next: Record<string, unknown> = { ...values };
-                    delete next.compactCards;
-                    challenges[key] = { ...record, values: next };
-                }
-            }
-            out.challenges = challenges;
-        }
-        return out;
+    /** Before any desktop object is known, the local event carries ONLY the keys the phone
+     * holds (`{ app: {} }` when neither is): the renderer skips an absent key and keeps its
+     * current value, while a `null` language would switch the phone to English. */
+    const localApp = (): Record<string, unknown> => {
+        const app: Record<string, unknown> = {};
+        if (store.theme !== undefined) app.theme = store.theme;
+        if (store.language !== undefined) app.language = store.language;
+        return app;
     };
 
     /** A phone write: the bridge's own listeners hear settings-changed with the phone's values in place. */
     const dispatchLocal = (): void => {
-        const payload =
-            lastDesktop === null
-                ? { app: { theme: store.theme ?? null, language: store.language ?? null } }
-                : overlaySettings(lastDesktop);
+        const payload = lastDesktop === null ? { app: localApp() } : overlaySettings(store, lastDesktop);
         for (const listener of ctx.listeners.get(SETTINGS_CHANNEL) ?? []) listener(payload);
     };
 
+    /** Settles one forwarded read so a rejection in it can never fail the seed as a whole. */
+    const settled = (read: Promise<unknown>): Promise<SettledRead> =>
+        read.then(
+            (value): SettledRead => ({ status: 'fulfilled', value }),
+            (error: unknown): SettledRead => ({ status: 'rejected', error }),
+        );
+
     /**
-     * Classifies a seeding read's answers. A value that differs from the DESKTOP's own global
-     * default — read in parallel with the effective value, never inferred from the phone's store —
-     * was set by a rule, a profile or a scenario phase, so it is inherited, not an own override;
-     * a value equal to the desktop baseline leaves only the null own-override seed. When either
-     * read fails or answers a non-boolean, nothing at all is stored, and the next read tries again.
+     * The seed's storage decision, run once all three reads have settled and consulted against
+     * the store at that moment, so a phone write made while the seed was in flight wins. A
+     * desktop own override (a boolean `compactCards` in the overrides answer) becomes the
+     * phone's OWN override; an answer without one classifies against the DESKTOP's global
+     * default — a different effective value was set by a rule, profile or scenario phase and
+     * is inherited, an equal one leaves only the null own-override seed; every other case —
+     * any rejection, a non-object overrides answer, a non-boolean effective or global answer —
+     * stores NOTHING, and the next read runs the seed again. A seed never overwrites: a held
+     * id is skipped entirely, and each map takes a new id only while a slot is free.
      */
-    const classify = (id: string, answer: unknown, desktopGlobal: unknown): void => {
-        if (!isBoolean(answer) || !isBoolean(desktopGlobal)) return;
-        let changed = false;
-        if (!Object.hasOwn(store.compactOverrides, id) && !mapFull(store.compactOverrides)) {
+    const storeSeed = (id: string, { overrides, effective, global }: SeedOutcome): boolean => {
+        if (Object.hasOwn(store.compactOverrides, id) || Object.hasOwn(store.compactInherited, id)) return false;
+        if (
+            overrides.status === 'fulfilled' &&
+            isPlainObject(overrides.value) &&
+            isBoolean(overrides.value.compactCards)
+        ) {
+            if (mapFull(store.compactOverrides)) return false;
+            store.compactOverrides[id] = overrides.value.compactCards;
+            return true;
+        }
+        if (
+            overrides.status === 'fulfilled' &&
+            isPlainObject(overrides.value) &&
+            effective.status === 'fulfilled' &&
+            isBoolean(effective.value) &&
+            global.status === 'fulfilled' &&
+            isBoolean(global.value)
+        ) {
+            const inherits = effective.value !== global.value;
+            // All or nothing: a rule value with no free inherited slot stores nothing, so the
+            // forwarded answer passes through instead of a none-seed that would lose it for good.
+            if (mapFull(store.compactOverrides) || (inherits && mapFull(store.compactInherited))) return false;
             store.compactOverrides[id] = null;
-            changed = true;
+            if (inherits) store.compactInherited[id] = effective.value;
+            return true;
         }
-        if (store.compactOverrides[id] === null && answer !== desktopGlobal) {
-            store.compactInherited[id] = answer;
-            changed = true;
-        }
-        if (changed) persist();
+        return false;
     };
 
     /**
-     * The answer an invoke that waited for the seeding read gets: the phone resolution
-     * (own override, then inherited, then the phone global), with the desktop's own answer
-     * as the fallback wherever the phone cannot resolve — a failed read, or a seeding pair
-     * that classified nothing.
+     * ONE combined single-flight seed per challenge id: the overrides read (the raw first
+     * argument), the effective read (the normalized id) and the DESKTOP's global default are
+     * forwarded together — sendInvoke directly, never route, since routing the global default
+     * would answer the phone's store — and the storage decision runs once all three have
+     * settled. Concurrent invokes await the same promise; a seed that stored nothing is
+     * dropped on settle, so the next read runs it again. The resolved seed keeps the three
+     * settled outcomes, so each channel can pass its own result through when nothing stored.
      */
-    const resolutionAfterSeed = (id: string, answer: unknown, desktopGlobal: unknown): unknown => {
-        const own = Object.hasOwn(store.compactOverrides, id) ? store.compactOverrides[id] : undefined;
-        if (isBoolean(own)) return own; // the phone's own override wins, even over the fresh answer
-        if (!isBoolean(answer) || !isBoolean(desktopGlobal)) return answer; // unclassified: the desktop answer passes
-        if (Object.hasOwn(store.compactInherited, id)) return store.compactInherited[id];
-        return store.compactCards ?? answer; // no inherited: the phone global applies; unseeded, the desktop answer passes
-    };
-
-    /**
-     * get-effective-setting('compactCards', id): the first read of an unseeded id forwards ONE
-     * seeding pair (single-flight per id — concurrent invokes await the same promise): the
-     * effective value and, in parallel, the DESKTOP's global default to classify against.
-     * Booleans seed the id; anything else passes through unchanged and stores nothing.
-     */
-    const seedingRead = (id: string): Promise<unknown> => {
-        const answerOf = ([effective, desktopGlobal]: SeedAnswers): unknown =>
-            resolutionAfterSeed(id, effective, desktopGlobal);
-        const inFlight = seedingReads.get(id);
-        if (inFlight !== undefined) return inFlight.then(answerOf);
-        // sendInvoke directly, never route: routing the global default would seed it too, and the
-        // classification needs the desktop's own baseline, not the phone's store.
-        const read = Promise.all([
-            sendInvoke('get-effective-setting', ['compactCards', id]),
-            sendInvoke('get-global-default', ['compactCards']),
-        ] as const).then(([effective, desktopGlobal]): SeedAnswers => {
-            classify(id, effective, desktopGlobal);
-            return [effective, desktopGlobal];
+    const seedChallenge = (rawId: unknown, id: string): Promise<SeedOutcome> => {
+        const inFlight = seeds.get(id);
+        if (inFlight !== undefined) return inFlight;
+        const read: Promise<SeedOutcome> = Promise.all([
+            settled(sendInvoke('get-challenge-overrides', [rawId])),
+            settled(sendInvoke('get-effective-setting', ['compactCards', id])),
+            settled(sendInvoke('get-global-default', ['compactCards'])),
+        ]).then(([overrides, effective, global]): SeedOutcome => {
+            const outcome: SeedOutcome = { overrides, effective, global };
+            if (storeSeed(id, outcome)) persist();
+            return outcome;
         });
-        seedingReads.set(id, read);
-        // The bookkeeping copy also absorbs the rejection, so it never reads as unhandled; the
+        seeds.set(id, read);
+        // The bookkeeping copy also absorbs any rejection, so it never reads as unhandled; the
         // map never replaces an in-flight entry, so the settled read's own slot is always the one to drop.
         const settle = (): void => {
-            seedingReads.delete(id);
+            seeds.delete(id);
         };
         read.then(settle, settle);
-        return read.then(answerOf);
+        return read;
     };
 
+    /** The local answer for one held id: the own override when boolean, else the inherited slot
+     * when present, else the phone global — seeded through readGlobal when unset (a forwarded
+     * read that is correct and expected). */
+    const heldResolution = (id: string, own: boolean | null): Promise<unknown> => {
+        if (isBoolean(own)) return Promise.resolve(own);
+        if (Object.hasOwn(store.compactInherited, id)) return Promise.resolve(store.compactInherited[id]);
+        return store.compactCards !== undefined ? Promise.resolve(store.compactCards) : readGlobal('compactCards');
+    };
+
+    /** The forwarded read's own settled outcome, passed to the caller as it arrived. */
+    const passSettled = (settledRead: SettledRead): Promise<unknown> =>
+        settledRead.status === 'fulfilled' ? Promise.resolve(settledRead.value) : Promise.reject(settledRead.error);
+
+    /** get-effective-setting('compactCards', id): a held id answers locally with no desktop
+     * call; an unheld one runs the seed first and answers locally when the seed held the id,
+     * or passes the forwarded effective answer through unchanged when the seed stored nothing. */
     const effectiveCompact = (args: unknown[]): Promise<unknown> => {
         const id = normalizeId(args[1]);
         if (id === '') return sendInvoke('get-effective-setting', args);
         const own = Object.hasOwn(store.compactOverrides, id) ? store.compactOverrides[id] : undefined;
-        if (isBoolean(own)) return Promise.resolve(own);
-        if (Object.hasOwn(store.compactInherited, id)) return Promise.resolve(store.compactInherited[id]);
-        if (own === null) {
-            // Already seeded as "no own override": the phone global applies — one forwarded read seeds it.
-            return store.compactCards !== undefined ? Promise.resolve(store.compactCards) : readGlobal('compactCards');
+        // An id held in either map (a restored store can hold only the inherited one) answers locally.
+        if (own !== undefined || Object.hasOwn(store.compactInherited, id)) {
+            return heldResolution(id, own ?? null);
         }
-        return seedingRead(id);
+        return seedChallenge(args[1], id).then((outcome) => {
+            const ownAfter = Object.hasOwn(store.compactOverrides, id) ? store.compactOverrides[id] : undefined;
+            if (ownAfter !== undefined) return heldResolution(id, ownAfter);
+            return passSettled(outcome.effective);
+        });
     };
 
-    /**
-     * get-challenge-overrides(id): forwarded; the answer seeds the id's own-override slot, and the
-     * phone's own value replaces `compactCards` — left out entirely when the phone has none.
-     */
-    const challengeOverridesRead = (challengeId: unknown): Promise<unknown> =>
-        sendInvoke('get-challenge-overrides', [challengeId]).then((result) => {
-            if (!isPlainObject(result)) return result;
-            const changed = seedOwn(challengeId, Object.hasOwn(result, 'compactCards') ? result.compactCards : null);
-            const id = normalizeId(challengeId);
-            const own =
-                id === '' || !Object.hasOwn(store.compactOverrides, id) ? undefined : store.compactOverrides[id];
-            const out: Record<string, unknown> = { ...result };
-            if (isBoolean(own)) out.compactCards = own;
-            else delete out.compactCards;
-            if (changed) persist();
-            return out;
-        });
+    /** The forwarded overrides answer as the phone sees it: the phone's own value in place — the key
+     * left out entirely when the phone has none (never `compactCards: null`, which would count the
+     * challenge as customized); a rejection or a non-object answer passes through unchanged. */
+    const withPhoneOwn = (id: string, result: unknown): unknown => {
+        if (!isPlainObject(result)) return result;
+        const own = Object.hasOwn(store.compactOverrides, id) ? store.compactOverrides[id] : undefined;
+        const out: Record<string, unknown> = { ...result };
+        if (isBoolean(own)) out.compactCards = own;
+        else delete out.compactCards;
+        return out;
+    };
 
-    /**
-     * replace-challenge-overrides(id, overrides, suppressed): the desktop keeps its own compactCards
-     * entry (the form's value is a phone-local display flag), and the phone stores the form's value
-     * only once the desktop accepted the replace — a failed or refused one leaves the phone value
-     * unchanged. A desktop edit between the read and the replace can be undone by it; that race is
-     * accepted for a display flag.
-     */
+    /** get-challenge-overrides(id): a held id (and one the phone cannot key, never seeded)
+     * forwards and answers the copy with the phone's own value in place; an unheld id runs the
+     * seed first and passes the forwarded answer through unchanged when the seed stored nothing.
+     * A rejected overrides read passes its rejection to the caller. */
+    const challengeOverridesRead = (challengeId: unknown): Promise<unknown> => {
+        const id = normalizeId(challengeId);
+        if (id === '' || Object.hasOwn(store.compactOverrides, id)) {
+            return sendInvoke('get-challenge-overrides', [challengeId]).then((result) => withPhoneOwn(id, result));
+        }
+        return seedChallenge(challengeId, id).then((outcome) => {
+            if (outcome.overrides.status === 'rejected') return Promise.reject(outcome.overrides.error);
+            if (Object.hasOwn(store.compactOverrides, id)) return withPhoneOwn(id, outcome.overrides.value);
+            return outcome.overrides.value; // the seed stored nothing: the forwarded answer passes unchanged
+        });
+    };
+
+    /** replace-challenge-overrides(id, overrides, suppressed): the desktop keeps its own
+     * compactCards entry (the form's value is a phone-local display flag), and the phone stores
+     * the form's value only once the desktop accepted the replace. A desktop edit between the
+     * read and the replace can be undone by it; that race is accepted for a display flag. */
     const replaceOverrides = (args: unknown[]): Promise<unknown> => {
         const id = normalizeId(args[0]);
         // An id the phone cannot key, or a form that is not an object, goes straight to the desktop:
@@ -400,61 +284,37 @@ export const createViewPrefs = ({
             return sendInvoke('replace-challenge-overrides', [args[0], composed, args[2]]).then((accepted) => {
                 if (accepted !== true) return accepted;
                 const formValue: boolean | null = isBoolean(overrides.compactCards) ? overrides.compactCards : null;
-                return storeOwn(id, formValue) ? true : false;
+                // The desktop accepted, so that is the answer — storeOwn runs for its side effect
+                // only, and a full map must not turn a save that succeeded into a reported failure.
+                storeOwn(id, formValue);
+                return true;
             });
         });
     };
 
-    /**
-     * get-settings-schema: forwarded; the two entries' defaults seed the globals, and the phone's
-     * values replace theirs in the copy the phone sees.
-     */
+    /** get-settings-schema: forwarded. The handler answers `{ schema, defaults, groups, tiers,
+     * profileLimits }`, where `defaults` carries the CURRENT global defaults — those seed the
+     * two globals and the phone's values replace theirs in the copy. The factory defaults in
+     * `schema` are never read or changed; a non-object `defaults` seeds nothing and passes. */
     const settingsSchemaRead = (): Promise<unknown> =>
         sendInvoke('get-settings-schema', []).then((result) => {
-            if (!isPlainObject(result)) return result;
+            if (!isPlainObject(result) || !isPlainObject(result.defaults)) return result;
             let changed = false;
             for (const key of ['compactCards', 'compactCardActions'] as const) {
-                const entry = result[key];
-                if (putGlobal(key, isPlainObject(entry) ? entry.default : undefined, false)) changed = true;
+                if (putGlobal(key, result.defaults[key], false)) changed = true;
             }
-            const out: Record<string, unknown> = { ...result };
+            const defaults: Record<string, unknown> = { ...result.defaults };
             for (const key of ['compactCards', 'compactCardActions'] as const) {
                 const value = store[key];
-                if (value === undefined || !isPlainObject(result[key])) continue;
-                out[key] = { ...result[key], default: value };
+                if (value !== undefined) defaults[key] = value;
             }
             if (changed) persist();
-            return out;
+            return { ...result, defaults };
         });
 
-    /**
-     * Drops the entries of challenges that are no longer active from both per-challenge maps
-     * (compactOverrides and compactInherited); an empty or invalid list prunes nothing.
-     */
-    const pruneOverrides = (activeIds: unknown): void => {
-        if (!Array.isArray(activeIds) || activeIds.length === 0) return;
-        const keep = new Set<string>();
-        for (const entry of activeIds) {
-            const id = normalizeId(entry);
-            if (id !== '') keep.add(id);
-        }
-        let changed = false;
-        for (const id of Object.keys(store.compactOverrides)) {
-            if (!keep.has(id)) {
-                delete store.compactOverrides[id];
-                changed = true;
-            }
-        }
-        for (const id of Object.keys(store.compactInherited)) {
-            if (!keep.has(id)) {
-                delete store.compactInherited[id];
-                changed = true;
-            }
-        }
-        if (changed) persist();
-    };
-
-    /** Remembers a desktop settings object, seeds the unset keys it carries, and answers the overlaid copy. */
+    /** Remembers a desktop settings object, seeds the four unset globals it carries, and answers
+     * the overlaid copy. Per-challenge ids are not seeded here: the combined seed per id runs
+     * on a challenge read instead. */
     const ingestSettings = (payload: unknown): unknown => {
         if (!isPlainObject(payload)) return payload;
         lastDesktop = payload;
@@ -467,16 +327,20 @@ export const createViewPrefs = ({
             changed = putGlobal('compactCards', payload.defaults.compactCards, false) || changed;
             changed = putGlobal('compactCardActions', payload.defaults.compactCardActions, false) || changed;
         }
-        if (isPlainObject(payload.challenges)) {
-            for (const [key, record] of Object.entries(payload.challenges)) {
-                const values = isPlainObject(record) && isPlainObject(record.values) ? record.values : undefined;
-                const desktop =
-                    values !== undefined && Object.hasOwn(values, 'compactCards') ? values.compactCards : null;
-                if (seedOwn(key, desktop)) changed = true;
-            }
-        }
         if (changed) persist();
-        return overlaySettings(payload);
+        return overlaySettings(store, payload);
+    };
+
+    /** The get/set case blocks of the two key families (`get-setting`/`set-setting` over theme
+     * and language, `get-global-default`/`set-global-default` over the compact keys) share one
+     * shape: a get reads the store, a set writes it and dispatches the local event. A foreign
+     * key never reaches this helper — its case answers `null` = forward. */
+    const keyFamilyRoute = (key: PrefKey, action: 'get' | 'set', value: unknown): Promise<unknown> => {
+        if (action === 'get') return readGlobal(key);
+        if (!putGlobal(key, value, true)) return Promise.resolve(false);
+        persist();
+        dispatchLocal();
+        return Promise.resolve(true);
     };
 
     // Forwarded on purpose, with no renderer caller today: set-challenge-overrides, reset-setting,
@@ -484,31 +348,17 @@ export const createViewPrefs = ({
     // a future caller of these writes or reads what the computer holds, not the phone's view keys.
     const route = (channel: string, args: unknown[]): Promise<unknown> | null => {
         switch (channel) {
-            case 'get-setting': {
-                const key = args[0];
-                if (key !== 'theme' && key !== 'language') return null;
-                return readGlobal(key);
-            }
+            case 'get-setting':
             case 'set-setting': {
                 const key = args[0];
                 if (key !== 'theme' && key !== 'language') return null;
-                if (!putGlobal(key, args[1], true)) return Promise.resolve(false);
-                persist();
-                dispatchLocal();
-                return Promise.resolve(true);
+                return keyFamilyRoute(key, channel === 'get-setting' ? 'get' : 'set', args[1]);
             }
-            case 'get-global-default': {
-                const key = args[0];
-                if (key !== 'compactCards' && key !== 'compactCardActions') return null;
-                return readGlobal(key);
-            }
+            case 'get-global-default':
             case 'set-global-default': {
                 const key = args[0];
                 if (key !== 'compactCards' && key !== 'compactCardActions') return null;
-                if (!putGlobal(key, args[1], true)) return Promise.resolve(false);
-                persist();
-                dispatchLocal();
-                return Promise.resolve(true);
+                return keyFamilyRoute(key, channel === 'get-global-default' ? 'get' : 'set', args[1]);
             }
             case 'get-effective-setting':
                 if (args[0] !== 'compactCards') return null;
@@ -538,7 +388,7 @@ export const createViewPrefs = ({
                 return settingsSchemaRead();
             case 'cleanup-stale-challenge-setting':
             case 'cleanup-stale-metadata':
-                pruneOverrides(args[0]);
+                if (pruneOverrides(store, args[0])) persist();
                 return null;
             default:
                 return null;

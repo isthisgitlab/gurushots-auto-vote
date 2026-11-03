@@ -1,12 +1,16 @@
 /**
  * The phone-local view settings (viewPrefs.ts): the four view keys are answered from the
  * device's localStorage and never reach sendInvoke for those keys, every desktop settings
- * object seeds only what is still unset, a desktop rule compact value is inherited rather
- * than an own override, storage that refuses or lies falls back to memory, and a phone write
- * dispatches the bridge's own settings-changed with the phone's values in place. The reads
- * and writes go through the same wrapper apiSurface installs, so a forwarded channel really
- * rides the send double. The last describe runs the flows through the installed peer bridge,
- * where the desktop's settings-changed events are overlaid before the listeners see them.
+ * object seeds only what is still unset, every challenge id is seeded by ONE combined
+ * single-flight seed that forwards the overrides, effective and desktop-global reads
+ * together and decides from all three answers — a desktop own override becomes the phone's
+ * own, a value differing from the desktop's baseline is inherited rather than an own
+ * override, and a failed or non-boolean read stores nothing and passes through — storage
+ * that refuses or lies falls back to memory, and a phone write dispatches the bridge's own
+ * settings-changed with the phone's values in place. The reads and writes go through the
+ * same wrapper apiSurface installs, so a forwarded channel really rides the send double.
+ * The last describe runs the flows through the installed peer bridge, where the desktop's
+ * settings-changed events are overlaid before the listeners see them.
  */
 
 import { createViewPrefs, VIEW_PREFS_STORAGE } from '../../../../src/ts/shells/remote/bridge/viewPrefs';
@@ -64,6 +68,15 @@ const storedOverrides = (): Record<string, unknown> => {
     const overrides = parsed.compactOverrides;
     if (!isPlainObject(overrides)) throw new Error('the persisted overrides map must be an object');
     return overrides;
+};
+
+/** The persisted store's inherited map, narrowed the same way. */
+const storedInherited = (): Record<string, unknown> => {
+    const parsed: unknown = JSON.parse(storedRaw() ?? '{}');
+    if (!isPlainObject(parsed)) throw new Error('the persisted store must be an object');
+    const inherited = parsed.compactInherited;
+    if (!isPlainObject(inherited)) throw new Error('the persisted inherited map must be an object');
+    return inherited;
 };
 
 afterEach(() => {
@@ -333,23 +346,28 @@ describe('the routed channels answer from the phone store', () => {
 // ---------------------------------------------------------------- seeding
 
 describe('seeding from every desktop source', () => {
-    test('get-settings seeds the unset keys and per-challenge slots; a seed never overwrites', async () => {
+    test('get-settings seeds the four unset globals; a snapshot never seeds per-challenge ids', async () => {
         const { invoke } = await makeSeeded({
             compactCards: true,
             challenges: { c1: { values: { compactCards: true } }, c2: {} },
         });
 
-        // Everything seeded: the reads answer from the store now.
+        // The globals seeded: the reads answer from the store now.
         await expect(invoke('get-setting', ['theme'])).resolves.toBe('light');
         await expect(invoke('get-setting', ['language'])).resolves.toBe('en');
         await expect(invoke('get-global-default', ['compactCards'])).resolves.toBe(true);
-        await expect(invoke('get-challenge-override', ['compactCards', 'c1'])).resolves.toBe(true);
-        // c2 had no own override on the desktop: seeded as none.
-        await expect(invoke('get-challenge-override', ['compactCards', 'c2'])).resolves.toBeNull();
+        // A challenge id is not seeded by a snapshot: get-challenge-override is a pure store read.
+        await expect(invoke('get-challenge-override', ['compactCards', 'c1'])).resolves.toBeNull();
     });
 
     test('a later desktop change to any of the four keys never reaches the phone', async () => {
-        const made = await makeSeeded({ compactCards: true, challenges: { c1: { values: { compactCards: true } } } });
+        const made = await makeSeeded({ compactCards: true });
+        // Seed c1 as the phone's own override before the later snapshot.
+        const c1 = made.invoke('get-challenge-overrides', ['c1']);
+        resolveFor(made.pending, 'get-challenge-overrides', { compactCards: true });
+        resolveFor(made.pending, 'get-effective-setting', true);
+        resolveFor(made.pending, 'get-global-default', true);
+        await expect(c1).resolves.toEqual({ compactCards: true });
         const changed = made.invoke('get-settings', []);
         resolveFor(
             made.pending,
@@ -373,15 +391,20 @@ describe('seeding from every desktop source', () => {
         await expect(made.invoke('get-challenge-override', ['compactCards', 'c1'])).resolves.toBe(true);
     });
 
-    test('the overlay leaves the desktop object untouched and drops its compactCards where the phone has none', async () => {
+    test('the overlay leaves the desktop object untouched: unseeded ids pass through, seeded-none ids drop the key', async () => {
         const made = await makeSeeded({
-            challenges: { c1: { values: { compactCards: true, voteTiming: 5 } }, c2: {} },
+            challenges: { c1: { values: { compactCards: true, voteTiming: 5 } } },
         });
-        // The desktop object itself was never written.
-        expect(made.sent).toHaveLength(1);
+        // Seed c2 as none before the second read; the desktop object itself was never written.
+        const c2 = made.invoke('get-challenge-overrides', ['c2']);
+        resolveFor(made.pending, 'get-challenge-overrides', { voteTiming: 5 });
+        resolveFor(made.pending, 'get-effective-setting', false);
+        resolveFor(made.pending, 'get-global-default', false);
+        await expect(c2).resolves.toEqual({ voteTiming: 5 });
+        expect(made.sent).toHaveLength(4); // the snapshot, then the seed's three reads
 
-        // A second read: c1 still carries the desktop's own override (the phone owns true too), but
-        // c2's desktop override arrived after the phone was seeded none — the key is left out, never null.
+        // A second read: unseeded c1 keeps the desktop's record exactly as it arrived, while
+        // seeded-none c2's desktop override is left out — never null.
         const again = made.invoke('get-settings', []);
         resolveFor(
             made.pending,
@@ -407,53 +430,75 @@ describe('seeding from every desktop source', () => {
         expect(overlaid.challenges.c1.values).toEqual({ compactCards: true });
     });
 
-    test('a payload with junk entries overlays the rest and seeds nothing for them', async () => {
+    test('a payload with junk entries overlays the rest and stores nothing for them', async () => {
         const made = makePrefs();
         const payload: unknown = JSON.parse(
             '{"challenges":{"__proto__":{"values":{"compactCards":true}},"c1":"junk","c2":{"values":{"voteTiming":5}}}}',
         );
         if (!isPlainObject(payload)) throw new Error('fixture must parse to an object');
         made.ingestSettings(payload);
-        // The unsafe id and the junk record seed nothing; c2 is seeded as none.
+        // A snapshot seeds no ids at all: the unsafe id and the junk record store nothing, and c2 stays unheld.
         await expect(made.invoke('get-challenge-override', ['compactCards', '__proto__'])).resolves.toBeNull();
         await expect(made.invoke('get-challenge-override', ['compactCards', 'c2'])).resolves.toBeNull();
     });
 
-    test('get-settings-schema seeds the two globals and the phone values replace theirs', async () => {
+    test('get-settings-schema seeds the two globals from defaults and the phone values replace theirs', async () => {
         const { invoke, sent, pending } = makePrefs();
         const read = invoke('get-settings-schema', []);
         expect(sent).toEqual([{ channel: 'get-settings-schema', args: [] }]);
         resolveFor(pending, 'get-settings-schema', {
-            compactCards: { type: 'boolean', default: true },
-            compactCardActions: { type: 'boolean', default: false },
-            voteTiming: { type: 'number', default: 60 },
+            schema: {
+                compactCards: { type: 'boolean', default: true },
+                compactCardActions: { type: 'boolean', default: false },
+                voteTiming: { type: 'number', default: 60 },
+            },
+            defaults: { compactCards: true, compactCardActions: false, voteTiming: 30 },
+            groups: ['display'],
+            tiers: [],
+            profileLimits: { maxChallengeProfiles: 5, maxProfileNameLength: 40 },
         });
-        const schema = (await read) as Record<string, { default: unknown }>;
-        expect(schema.compactCards).toEqual({ type: 'boolean', default: true });
-        expect(schema.compactCardActions).toEqual({ type: 'boolean', default: false });
+        const schema = (await read) as Record<string, unknown>;
+        // The factory defaults in `schema` pass through untouched; the answer overlays `defaults`.
+        expect(schema.schema).toMatchObject({ compactCards: { type: 'boolean', default: true } });
+        expect(schema.defaults).toMatchObject({ compactCards: true, compactCardActions: false });
 
-        // Seeded from the entries' defaults, and replaced in the copy once the phone holds its own.
+        // Seeded from the current defaults, and replaced in the copy once the phone holds its own.
         await expect(invoke('get-global-default', ['compactCards'])).resolves.toBe(true);
         await expect(invoke('get-global-default', ['compactCardActions'])).resolves.toBe(false);
         await expect(invoke('set-global-default', ['compactCards', false])).resolves.toBe(true);
         const changed = invoke('get-settings-schema', []);
         resolveFor(pending, 'get-settings-schema', {
-            compactCards: { type: 'boolean', default: true },
-            compactCardActions: { type: 'boolean', default: false },
+            schema: { compactCards: { type: 'boolean', default: true } },
+            defaults: { compactCards: true, compactCardActions: false },
         });
-        const schemaLater = (await changed) as Record<string, { default: unknown }>;
-        expect(schemaLater.compactCards.default).toBe(false); // the phone's value
-        expect(schemaLater.compactCardActions.default).toBe(false); // unchanged, the phone's equals the desktop's
+        const schemaLater = (await changed) as Record<string, unknown>;
+        expect(schemaLater.defaults).toEqual({ compactCards: false, compactCardActions: false }); // the phone's value first
     });
 
-    test('junk schema entries seed nothing and pass through; a seeded key is replaced, an unseeded one is not', async () => {
+    test('the phone global replaces the desktop current default even when the factory default differs', async () => {
+        // The phone global seeded false through a snapshot.
+        const made = await makeSeeded({ compactCards: false });
+        const read = made.invoke('get-settings-schema', []);
+        resolveFor(made.pending, 'get-settings-schema', {
+            schema: { compactCards: { type: 'boolean', default: true } },
+            defaults: { compactCards: true, compactCardActions: false },
+        });
+        const schema = (await read) as Record<string, unknown>;
+        expect(schema.defaults).toEqual({ compactCards: false, compactCardActions: false }); // the phone's compactCards, not the desktop's current
+        expect(schema.schema).toEqual({ compactCards: { type: 'boolean', default: true } }); // untouched
+    });
+
+    test('a schema answer without a defaults object seeds nothing; non-boolean defaults seed only themselves', async () => {
         const made = makePrefs();
+        const failed = made.invoke('get-settings-schema', []);
+        resolveFor(made.pending, 'get-settings-schema', null);
+        await expect(failed).resolves.toBeNull(); // not an object: passes through
         const junk = made.invoke('get-settings-schema', []);
         resolveFor(made.pending, 'get-settings-schema', {
-            compactCards: 'junk',
-            compactCardActions: { type: 'not-an-entry' },
+            schema: { compactCards: 'junk' },
+            defaults: 'junk',
         });
-        await expect(junk).resolves.toEqual({ compactCards: 'junk', compactCardActions: { type: 'not-an-entry' } });
+        await expect(junk).resolves.toEqual({ schema: { compactCards: 'junk' }, defaults: 'junk' });
         // Both keys are unseeded: each read forwards, and the desktop's null passes through unchanged.
         const cards = made.invoke('get-global-default', ['compactCards']);
         const actions = made.invoke('get-global-default', ['compactCardActions']);
@@ -462,23 +507,44 @@ describe('seeding from every desktop source', () => {
         await expect(cards).resolves.toBeNull();
         await expect(actions).resolves.toBeNull();
 
-        // Seed compactCards only, through a snapshot that lacks the other default.
-        made.ingestSettings({ defaults: { compactCards: false } });
+        // A non-boolean defaults entry seeds nothing; the boolean one seeds itself.
         const mixed = made.invoke('get-settings-schema', []);
         resolveFor(made.pending, 'get-settings-schema', {
-            compactCards: { type: 'boolean', default: true },
-            compactCardActions: { type: 'boolean', default: false },
+            schema: { compactCards: { type: 'boolean', default: true } },
+            defaults: { compactCards: 'junk', compactCardActions: true },
         });
-        const schema = (await mixed) as Record<string, { default: unknown }>;
-        expect(schema.compactCards.default).toBe(false); // the seeded phone value replaces it
-        expect(schema.compactCardActions).toEqual({ type: 'boolean', default: false }); // unseeded: passes through
+        await expect(mixed).resolves.toEqual({
+            schema: { compactCards: { type: 'boolean', default: true } },
+            defaults: { compactCards: 'junk', compactCardActions: true }, // unseeded compactCards passes
+        });
+        const cardsAgain = made.invoke('get-global-default', ['compactCards']);
+        resolveFor(made.pending, 'get-global-default', null);
+        await expect(cardsAgain).resolves.toBeNull(); // still unseeded
+        await expect(made.invoke('get-global-default', ['compactCardActions'])).resolves.toBe(true); // seeded, no forward
+
+        // Seed compactCards, through a snapshot that lacks the other default.
+        made.ingestSettings({ defaults: { compactCards: false } });
+        const overlaid = made.invoke('get-settings-schema', []);
+        resolveFor(made.pending, 'get-settings-schema', {
+            schema: { compactCards: { type: 'boolean', default: true } },
+            defaults: { compactCards: true, compactCardActions: false },
+            groups: ['display'],
+        });
+        const schema = (await overlaid) as Record<string, unknown>;
+        expect(schema.defaults).toEqual({ compactCards: false, compactCardActions: true }); // seeded false replaces; the phone's true stays
+        expect(schema.groups).toEqual(['display']); // the rest of the answer passes untouched
     });
 
-    test('get-challenge-overrides seeds the id and replaces compactCards with the phone own value', async () => {
-        const { invoke, sent, pending } = makePrefs();
+    test('get-challenge-overrides runs the seed and replaces compactCards with the phone own value', async () => {
+        const { invoke, sentFor, pending } = makePrefs();
         const read = invoke('get-challenge-overrides', [' c1 ']);
-        expect(sent).toEqual([{ channel: 'get-challenge-overrides', args: [' c1 '] }]);
+        // The raw first argument rides unchanged; the seed forwards the three reads exactly once.
+        expect(sentFor('get-challenge-overrides')).toBe(1);
+        expect(sentFor('get-effective-setting')).toBe(1);
+        expect(sentFor('get-global-default')).toBe(1);
         resolveFor(pending, 'get-challenge-overrides', { voteTiming: 5, compactCards: false });
+        resolveFor(pending, 'get-effective-setting', false);
+        resolveFor(pending, 'get-global-default', false);
         expect(await read).toEqual({ voteTiming: 5, compactCards: false });
         // Seeded from the desktop's own value, then echoed back as the phone's own.
         await expect(invoke('get-challenge-override', ['compactCards', 'c1'])).resolves.toBe(false);
@@ -489,16 +555,33 @@ describe('seeding from every desktop source', () => {
         expect(await changed).toEqual({ voteTiming: 5, compactCards: true });
     });
 
-    test('get-challenge-overrides leaves compactCards out when the phone has none, and passes a failed read through', async () => {
-        const { invoke, pending } = makePrefs();
+    test('get-challenge-overrides leaves compactCards out when seeded none, and a failed read stores nothing', async () => {
+        const { invoke, sentFor, pending } = makePrefs();
+        // A no-own, no-rule answer seeds the id as none: the phone's copy has no compactCards key.
         const none = invoke('get-challenge-overrides', ['c2']);
         resolveFor(pending, 'get-challenge-overrides', { voteTiming: 5 });
+        resolveFor(pending, 'get-effective-setting', false);
+        resolveFor(pending, 'get-global-default', false);
         expect(await none).toEqual({ voteTiming: 5 }); // no compactCards key at all — never null
 
         const failed = invoke('get-challenge-overrides', ['c3']);
-        resolveFor(pending, 'get-challenge-overrides', null);
-        expect(await failed).toBeNull();
+        resolveFor(pending, 'get-challenge-overrides', null); // a failed read: not an object
+        resolveFor(pending, 'get-effective-setting', false);
+        resolveFor(pending, 'get-global-default', false);
+        expect(await failed).toBeNull(); // passes through unchanged, nothing stored
         await expect(invoke('get-challenge-override', ['compactCards', 'c3'])).resolves.toBeNull();
+        // The next read seeds again — the failed seed stored nothing.
+        const retry = invoke('get-challenge-overrides', ['c3']);
+        expect(sentFor('get-challenge-overrides')).toBe(3); // c2's seed, the failed seed, the retry
+        resolveFor(pending, 'get-challenge-overrides', { voteTiming: 1 });
+        resolveFor(pending, 'get-effective-setting', false);
+        resolveFor(pending, 'get-global-default', false);
+        expect(await retry).toEqual({ voteTiming: 1 });
+
+        // A held id with a failed (non-object) answer passes it through unchanged too.
+        const heldFailed = invoke('get-challenge-overrides', ['c2']);
+        resolveFor(pending, 'get-challenge-overrides', null);
+        await expect(heldFailed).resolves.toBeNull();
     });
 
     test('an unsafe id on a forwarded overrides read seeds nothing and still lists the desktop map', async () => {
@@ -563,10 +646,13 @@ describe('seeding from every desktop source', () => {
         await expect(made.invoke('get-setting', ['theme'])).resolves.toBe('sunset'); // the write, not the seed
     });
 
-    test('seeding past the per-map cap skips the extra ids silently', async () => {
+    test('a seed past the per-map cap stores nothing and the forwarded answer passes through', async () => {
         const made = makePrefs(fullOverrideStorage(500));
-        made.ingestSettings({ challenges: { zz: {}, yy: {} } });
-        await expect(made.invoke('get-challenge-override', ['compactCards', 'zz'])).resolves.toBeNull();
+        const read = made.invoke('get-challenge-overrides', ['zz']);
+        resolveFor(made.pending, 'get-challenge-overrides', { compactCards: true });
+        resolveFor(made.pending, 'get-effective-setting', true);
+        resolveFor(made.pending, 'get-global-default', false);
+        await expect(read).resolves.toEqual({ compactCards: true }); // unchanged: no slot is free, nothing stored
         expect(Object.keys(storedOverrides())).toHaveLength(500);
     });
 });
@@ -577,20 +663,30 @@ describe('the inherited compact value', () => {
     test('a rule value differing from the desktop global is inherited, without showing as customized', async () => {
         const made = await makeSeeded({ compactCards: false });
         const { invoke, sentFor, pending } = made;
-        const effective = invoke('get-effective-setting', ['compactCards', 'c1']);
-        expect(sentFor('get-effective-setting')).toBe(1); // the seeding read rides with a desktop-global read
+        // The overrides read runs first and the seed forwards all three reads exactly once.
+        const overridesRead = invoke('get-challenge-overrides', ['c1']);
+        expect(sentFor('get-challenge-overrides')).toBe(1);
+        expect(sentFor('get-effective-setting')).toBe(1);
+        expect(sentFor('get-global-default')).toBe(1);
+        resolveFor(pending, 'get-challenge-overrides', {}); // no own override
+        resolveFor(pending, 'get-effective-setting', true); // a rule set true: differs from the desktop global
         resolveFor(pending, 'get-global-default', false); // the DESKTOP baseline
-        resolveFor(pending, 'get-effective-setting', true); // a rule set true: differs from that baseline
-        await expect(effective).resolves.toBe(true);
+        expect(await overridesRead).toEqual({}); // own null: no compactCards key
 
         // The store answer now comes without a desktop call, straight from the inherited slot.
         await expect(invoke('get-effective-setting', ['compactCards', 'c1'])).resolves.toBe(true);
         expect(sentFor('get-effective-setting')).toBe(1);
 
-        // Not an own override: no customized badge, and the read sent for it carries no key.
-        const overrides = invoke('get-challenge-overrides', ['c1']);
-        resolveFor(pending, 'get-challenge-overrides', {});
-        expect(await overrides).toEqual({});
+        // A later overrides read still shows no compactCards — inherited is not an own override.
+        const later = invoke('get-challenge-overrides', ['c1']);
+        resolveFor(pending, 'get-challenge-overrides', { compactCards: false });
+        await expect(later).resolves.toEqual({}); // the desktop's own key deleted
+
+        // A snapshot overlay for a seeded-none id without a desktop compactCards key changes nothing.
+        const snap = made.ingestSettings({
+            challenges: { c1: { values: { voteTiming: 9 } } },
+        }) as { challenges: Record<string, { values: Record<string, unknown> }> };
+        expect(snap.challenges.c1.values).toEqual({ voteTiming: 9 });
 
         // The card toggle writes a real own override.
         await expect(invoke('set-challenge-override', ['compactCards', 'c1', false])).resolves.toBe(true);
@@ -602,19 +698,25 @@ describe('the inherited compact value', () => {
     test('a no-rule challenge stays on the phone global even when it differs from the desktop global', async () => {
         const made = await makeSeeded({ compactCards: true }); // the phone global is true
         const { invoke, sentFor, pending } = made;
-        const effective = invoke('get-effective-setting', ['compactCards', 'c1']);
-        resolveFor(pending, 'get-global-default', false); // the desktop global is false; no rule: effective false too
-        resolveFor(pending, 'get-effective-setting', false);
-        await expect(effective).resolves.toBe(true); // the phone global applies, nothing was inherited
+        const overridesRead = invoke('get-challenge-overrides', ['c1']); // the seed's triple
+        resolveFor(pending, 'get-challenge-overrides', {});
+        resolveFor(pending, 'get-effective-setting', false); // the desktop global is false; no rule: effective false too
+        resolveFor(pending, 'get-global-default', false);
+        await expect(overridesRead).resolves.toEqual({});
         await expect(invoke('get-challenge-override', ['compactCards', 'c1'])).resolves.toBeNull(); // no badge
-        await expect(invoke('get-effective-setting', ['compactCards', 'c1'])).resolves.toBe(true);
-        expect(sentFor('get-effective-setting')).toBe(1); // answered from the store from here on
+        await expect(invoke('get-effective-setting', ['compactCards', 'c1'])).resolves.toBe(true); // the phone global applies
+        expect(sentFor('get-effective-setting')).toBe(1); // the seed's read only
+        // Also after the phone global changes: the challenge follows it, still with no desktop call.
+        await expect(invoke('set-global-default', ['compactCards', false])).resolves.toBe(true);
+        await expect(invoke('get-effective-setting', ['compactCards', 'c1'])).resolves.toBe(false);
+        expect(sentFor('get-effective-setting')).toBe(1);
     });
 
     test('a value equal to the desktop global stores only the none-seed, and later reads send nothing', async () => {
         const made = await makeSeeded({ compactCards: false });
         const { invoke, sentFor, pending } = made;
         const effective = invoke('get-effective-setting', ['compactCards', 'c1']);
+        resolveFor(pending, 'get-challenge-overrides', {});
         resolveFor(pending, 'get-global-default', false);
         resolveFor(pending, 'get-effective-setting', false); // equals the desktop global
         await expect(effective).resolves.toBe(false);
@@ -623,59 +725,135 @@ describe('the inherited compact value', () => {
         expect(sentFor('get-effective-setting')).toBe(1); // answered from the store
     });
 
+    test('effective read first with a desktop own override: the seed stores it as the phone OWN override', async () => {
+        const made = await makeSeeded({ compactCards: false });
+        const { invoke, pending } = made;
+        const effective = invoke('get-effective-setting', ['compactCards', 'c1']);
+        resolveFor(pending, 'get-challenge-overrides', { compactCards: true }); // the desktop's own override
+        resolveFor(pending, 'get-effective-setting', true); // differs from the desktop global — irrelevant: own wins
+        resolveFor(pending, 'get-global-default', false);
+        await expect(effective).resolves.toBe(true); // the phone's own override answers first
+        await expect(invoke('get-challenge-override', ['compactCards', 'c1'])).resolves.toBe(true); // OWN, not inherited
+        // Not inherited: without the own override the challenge is back on the phone global.
+        await expect(invoke('remove-challenge-override', ['compactCards', 'c1'])).resolves.toBe(true);
+        await expect(invoke('get-effective-setting', ['compactCards', 'c1'])).resolves.toBe(false);
+    });
+
     test('a real own override still shows as customized and answers first', async () => {
         const made = await makeSeeded({ compactCards: false });
         const { invoke, sentFor, pending } = made;
         const read = invoke('get-challenge-overrides', ['c1']);
         resolveFor(pending, 'get-challenge-overrides', { compactCards: true }); // the desktop's own override
+        resolveFor(pending, 'get-effective-setting', true); // the seed's triple rides with the first read
+        resolveFor(pending, 'get-global-default', false);
         expect(await read).toEqual({ compactCards: true });
         await expect(invoke('get-effective-setting', ['compactCards', 'c1'])).resolves.toBe(true);
-        expect(sentFor('get-effective-setting')).toBe(0); // the own override answers; no seeding read
+        expect(sentFor('get-effective-setting')).toBe(1); // only the seed's read; the own override answers
     });
 
-    test('the seeding read is single-flight: concurrent reads share one desktop call pair', async () => {
+    test('the seed is single-flight: concurrent reads on both channels share one triple', async () => {
         const made = await makeSeeded({ compactCards: false });
         const { invoke, sentFor, pending } = made;
         const first = invoke('get-effective-setting', ['compactCards', 'c1']);
-        const second = invoke('get-effective-setting', ['compactCards', 'c1']);
+        const second = invoke('get-challenge-overrides', ['c1']); // the other channel joins the same seed
+        resolveFor(pending, 'get-challenge-overrides', {});
         resolveFor(pending, 'get-global-default', false);
         resolveFor(pending, 'get-effective-setting', true);
         await flush();
         expect(sentFor('get-effective-setting')).toBe(1);
         expect(sentFor('get-global-default')).toBe(1);
+        expect(sentFor('get-challenge-overrides')).toBe(1);
         await expect(first).resolves.toBe(true);
-        await expect(second).resolves.toBe(true);
+        await expect(second).resolves.toEqual({}); // own null: no compactCards key
     });
 
     test('a failed or null desktop-global answer classifies nothing and passes the effective answer through', async () => {
         const made = await makeSeeded({ compactCards: true }); // the phone global is true — irrelevant to classification
         const { invoke, sentFor, pending } = made;
         const effective = invoke('get-effective-setting', ['compactCards', 'c1']);
+        resolveFor(pending, 'get-challenge-overrides', {});
         resolveFor(pending, 'get-global-default', null); // the desktop's failure fallback
         resolveFor(pending, 'get-effective-setting', false);
-        await expect(effective).resolves.toBe(false); // passes through: nothing was classified
+        await expect(effective).resolves.toBe(false); // the FORWARDED effective answer passes through
         await expect(invoke('get-challenge-override', ['compactCards', 'c1'])).resolves.toBeNull();
-        // The next read runs the whole pair again and classifies against the desktop baseline.
+        // The next read runs the whole triple again and classifies against the desktop baseline.
         const retry = invoke('get-effective-setting', ['compactCards', 'c1']);
+        resolveFor(pending, 'get-challenge-overrides', {});
         resolveFor(pending, 'get-global-default', false);
         resolveFor(pending, 'get-effective-setting', false); // equals the desktop global: no rule
         await expect(retry).resolves.toBe(true); // the phone global applies now
         expect(sentFor('get-effective-setting')).toBe(2);
     });
 
-    test('a failed or non-boolean seeding pair passes through and stores nothing; the next read tries again', async () => {
+    test('a failed read in each of the three forwarded reads stores nothing, and the next read seeds again', async () => {
+        const made = await makeSeeded({ compactCards: false });
+        const { invoke, sentFor, pending } = made;
+
+        // 1. The overrides read rejects: nothing is stored, and the effective answer passes through.
+        const first = invoke('get-effective-setting', ['compactCards', 'c1']);
+        rejectFor(pending, 'get-challenge-overrides', new Error('no answer'));
+        resolveFor(pending, 'get-effective-setting', true);
+        resolveFor(pending, 'get-global-default', false);
+        await expect(first).resolves.toBe(true);
+        await expect(invoke('get-challenge-override', ['compactCards', 'c1'])).resolves.toBeNull();
+
+        // 2. The effective read rejects: the rejection reaches the caller.
+        const second = invoke('get-effective-setting', ['compactCards', 'c1']);
+        resolveFor(pending, 'get-challenge-overrides', {});
+        rejectFor(pending, 'get-effective-setting', new Error('no answer'));
+        resolveFor(pending, 'get-global-default', false);
+        await expect(second).rejects.toThrow('no answer');
+
+        // 3. The global read rejects: nothing to classify against, nothing stored.
+        const third = invoke('get-effective-setting', ['compactCards', 'c1']);
+        resolveFor(pending, 'get-challenge-overrides', {});
+        resolveFor(pending, 'get-effective-setting', true);
+        rejectFor(pending, 'get-global-default', new Error('no answer'));
+        await expect(third).resolves.toBe(true);
+        expect(sentFor('get-effective-setting')).toBe(3); // every read ran its own seed again
+
+        // Now a clean seed classifies, and the store answers without a desktop call.
+        const fourth = invoke('get-effective-setting', ['compactCards', 'c1']);
+        resolveFor(pending, 'get-challenge-overrides', {});
+        resolveFor(pending, 'get-effective-setting', true);
+        resolveFor(pending, 'get-global-default', false);
+        await expect(fourth).resolves.toBe(true);
+        expect(sentFor('get-effective-setting')).toBe(4);
+    });
+
+    test('a rejected overrides read in the seed rejects the get-challenge-overrides caller', async () => {
+        const made = await makeSeeded({ compactCards: false });
+        const { invoke, pending } = made;
+        const read = invoke('get-challenge-overrides', ['c1']);
+        rejectFor(pending, 'get-challenge-overrides', new Error('no answer'));
+        resolveFor(pending, 'get-effective-setting', true);
+        resolveFor(pending, 'get-global-default', false);
+        await expect(read).rejects.toThrow('no answer'); // the forwarded rejection reaches the caller
+        await expect(invoke('get-challenge-override', ['compactCards', 'c1'])).resolves.toBeNull(); // nothing stored
+        // The next read seeds again, and its clean answer classifies.
+        const retry = invoke('get-challenge-overrides', ['c1']);
+        resolveFor(pending, 'get-challenge-overrides', { voteTiming: 5 });
+        resolveFor(pending, 'get-effective-setting', false);
+        resolveFor(pending, 'get-global-default', false);
+        await expect(retry).resolves.toEqual({ voteTiming: 5 }); // own null stored: no compactCards key
+    });
+
+    test('a failed or non-boolean read in the triple passes through and stores nothing; the next read tries again', async () => {
         const made = await makeSeeded({ compactCards: false });
         const { invoke, sentFor, pending } = made;
         const failed = invoke('get-effective-setting', ['compactCards', 'c1']);
         rejectFor(pending, 'get-effective-setting', new Error('no answer'));
-        rejectFor(pending, 'get-global-default', new Error('no answer'));
-        await expect(failed).rejects.toThrow('no answer');
+        resolveFor(pending, 'get-challenge-overrides', {});
+        resolveFor(pending, 'get-global-default', false);
+        await expect(failed).rejects.toThrow('no answer'); // the forwarded rejection propagates
         const junk = invoke('get-effective-setting', ['compactCards', 'c1']);
+        resolveFor(pending, 'get-challenge-overrides', {});
         resolveFor(pending, 'get-global-default', false);
         resolveFor(pending, 'get-effective-setting', null); // the desktop's failure fallback
         await expect(junk).resolves.toBeNull();
-        expect(sentFor('get-effective-setting')).toBe(2); // one seeding pair per try
+        expect(sentFor('get-effective-setting')).toBe(2); // one triple per try
         const third = invoke('get-effective-setting', ['compactCards', 'c1']);
+        resolveFor(pending, 'get-challenge-overrides', {});
         resolveFor(pending, 'get-global-default', false);
         resolveFor(pending, 'get-effective-setting', true);
         await expect(third).resolves.toBe(true);
@@ -694,17 +872,22 @@ describe('the inherited compact value', () => {
         await expect(foreign).resolves.toBe('desktop');
     });
 
-    test('a phone write during a seeding read wins the resolution', async () => {
+    test('a phone write during a seed wins, and the seed stores nothing over it', async () => {
         const made = await makeSeeded({ compactCards: false });
         const { invoke, pending } = made;
-        const effective = invoke('get-effective-setting', ['compactCards', 'c1']); // the seeding read is in flight
+        const effective = invoke('get-effective-setting', ['compactCards', 'c1']); // the seed is in flight
         await expect(invoke('set-challenge-override', ['compactCards', 'c1', false])).resolves.toBe(true);
-        resolveFor(pending, 'get-global-default', false);
+        resolveFor(pending, 'get-challenge-overrides', {});
         resolveFor(pending, 'get-effective-setting', true); // the desktop would answer true
+        resolveFor(pending, 'get-global-default', false);
         await expect(effective).resolves.toBe(false); // the phone's own write wins
+        // The write's value answers the overrides channel too.
+        const overridesRead = invoke('get-challenge-overrides', ['c1']);
+        resolveFor(pending, 'get-challenge-overrides', { voteTiming: 5 });
+        await expect(overridesRead).resolves.toEqual({ voteTiming: 5, compactCards: false });
     });
 
-    test('a seeding read refused by the per-map cap stores nothing and answers the phone global', async () => {
+    test('a seed refused by the per-map cap stores nothing and passes the forwarded answer through', async () => {
         const made = makePrefs(
             ((): Storage => {
                 const entries: Record<string, boolean | null> = {};
@@ -714,10 +897,56 @@ describe('the inherited compact value', () => {
         );
         const { invoke, pending } = made;
         const effective = invoke('get-effective-setting', ['compactCards', 'zz']);
-        resolveFor(pending, 'get-global-default', false);
+        resolveFor(pending, 'get-challenge-overrides', {});
         resolveFor(pending, 'get-effective-setting', true); // differs from the desktop baseline, but no slot is free
-        await expect(effective).resolves.toBe(false); // the phone global applies
+        resolveFor(pending, 'get-global-default', false);
+        await expect(effective).resolves.toBe(true); // the FORWARDED effective answer passes through
         expect(Object.keys(storedOverrides())).toHaveLength(500);
+    });
+
+    test('a rule-value seed past the compactInherited cap stores nothing and passes the forwarded answer', async () => {
+        const inherited: Record<string, boolean> = {};
+        for (let i = 0; i < 500; i++) inherited[`i${i}`] = true;
+        const made = makePrefs(
+            memoryStorageWith({ compactCards: false, compactOverrides: {}, compactInherited: inherited }),
+        );
+        const { invoke, pending } = made;
+        const effective = invoke('get-effective-setting', ['compactCards', 'zz']);
+        resolveFor(pending, 'get-challenge-overrides', {});
+        resolveFor(pending, 'get-effective-setting', true); // differs from the desktop baseline, but no inherited slot is free
+        resolveFor(pending, 'get-global-default', false);
+        await expect(effective).resolves.toBe(true); // the FORWARDED rule value passes through
+        expect(Object.keys(storedOverrides())).toHaveLength(0); // no none-seed that would lose the rule value
+        expect(Object.keys(storedInherited())).toHaveLength(500);
+    });
+
+    test('a no-rule seed with the compactInherited map full still stores the none-seed', async () => {
+        const inherited: Record<string, boolean> = {};
+        for (let i = 0; i < 500; i++) inherited[`i${i}`] = true;
+        const made = makePrefs(memoryStorageWith({ compactCards: true, compactInherited: inherited }));
+        const { invoke, pending } = made;
+        const effective = invoke('get-effective-setting', ['compactCards', 'zz']);
+        resolveFor(pending, 'get-challenge-overrides', {});
+        resolveFor(pending, 'get-effective-setting', false); // equals the desktop baseline: nothing to inherit
+        resolveFor(pending, 'get-global-default', false);
+        await expect(effective).resolves.toBe(true); // the phone global applies
+        await expect(invoke('get-challenge-override', ['compactCards', 'zz'])).resolves.toBeNull();
+        expect(Object.keys(storedOverrides())).toHaveLength(1);
+    });
+
+    test('a seed never overwrites an id the phone holds only as inherited', async () => {
+        const made = makePrefs(
+            memoryStorageWith({ compactCards: false, compactOverrides: {}, compactInherited: { c9: true } }),
+        );
+        const { invoke, pending } = made;
+        const read = invoke('get-challenge-overrides', ['c9']);
+        resolveFor(pending, 'get-challenge-overrides', { compactCards: false });
+        resolveFor(pending, 'get-effective-setting', false);
+        resolveFor(pending, 'get-global-default', false);
+        await expect(read).resolves.toEqual({ compactCards: false }); // the seed stored nothing: forwarded as is
+        expect(storedInherited()).toEqual({ c9: true });
+        expect(Object.keys(storedOverrides())).toHaveLength(0);
+        await expect(invoke('get-effective-setting', ['compactCards', 'c9'])).resolves.toBe(true);
     });
 });
 
@@ -803,15 +1032,16 @@ describe('replace-challenge-overrides keeps the desktop own value and stores onl
         await expect(invoke('get-challenge-override', ['compactCards', 'c1'])).resolves.toBeNull(); // none stored
     });
 
-    test('a replace accepted past the per-map cap stores nothing and answers false', async () => {
+    test('a replace accepted past the per-map cap answers true and stores nothing', async () => {
         const made = makePrefs(fullOverrideStorage(500));
         const { invoke, sent, pending } = made;
         const replace = invoke('replace-challenge-overrides', ['new-id', { compactCards: true }, false]);
         resolveFor(pending, 'get-challenge-overrides', {});
         await flush();
         resolveFor(pending, 'replace-challenge-overrides', true);
-        await expect(replace).resolves.toBe(false); // the cap refused the slot
+        await expect(replace).resolves.toBe(true); // the desktop accepted: that is the answer
         expect(sent).toHaveLength(2);
+        expect(Object.keys(storedOverrides())).toHaveLength(500); // nothing was stored
     });
 });
 
@@ -890,11 +1120,13 @@ describe('storage', () => {
         await expect(invoke('get-effective-setting', ['compactCards', 'c6'])).resolves.toBe(true); // inherited kept
         expect(sent.filter(({ channel }) => channel === 'get-effective-setting')).toHaveLength(0);
 
-        // The invalid inherited entry was dropped: c5 is unseeded, so its seeding pair forwards.
+        // The invalid inherited entry was dropped: c5 is unseeded, so the seed's three reads forward.
+        // The effective answer is the desktop's failure fallback, so nothing is stored and it passes through.
         const c5 = invoke('get-effective-setting', ['compactCards', 'c5']);
+        resolveFor(pending, 'get-challenge-overrides', {});
         resolveFor(pending, 'get-global-default', false);
-        resolveFor(pending, 'get-effective-setting', false);
-        await expect(c5).resolves.toBe(false); // passes through: nothing to resolve it from
+        resolveFor(pending, 'get-effective-setting', null);
+        await expect(c5).resolves.toBeNull(); // passes through: nothing to resolve it from
     });
 
     test('unsafe ids in a stored map are dropped', async () => {
@@ -961,12 +1193,15 @@ describe('storage', () => {
 // ---------------------------------------------------------------- the local event
 
 describe('the local event a phone write dispatches', () => {
-    test('before any desktop object is known it is the phone theme and language', async () => {
+    test('before any desktop object is known it carries only the keys the phone holds', async () => {
         const { invoke, seen } = makePrefs();
+        // A write with neither key held dispatches the empty app: the renderer keeps its values.
+        await expect(invoke('set-challenge-override', ['compactCards', 'c9', true])).resolves.toBe(true);
+        expect(seen[0]).toEqual({ app: {} });
         await expect(invoke('set-setting', ['theme', 'dark'])).resolves.toBe(true);
-        expect(seen).toEqual([{ app: { theme: 'dark', language: null } }]);
+        expect(seen[1]).toEqual({ app: { theme: 'dark' } }); // no language key — a null would switch it to English
         await expect(invoke('set-setting', ['language', 'lv'])).resolves.toBe(true);
-        expect(seen[1]).toEqual({ app: { theme: 'dark', language: 'lv' } });
+        expect(seen[2]).toEqual({ app: { theme: 'dark', language: 'lv' } });
     });
 
     test('with a desktop object known it is that object with the phone values overlaid', async () => {

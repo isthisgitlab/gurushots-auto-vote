@@ -768,6 +768,12 @@ describe('renderer bundle graphs', () => {
         expect(inputs).toContain('src/ts/shells/capacitor/NativeAutovoteBridge.ts');
     }, 120_000);
 
+    // One predicate, two callers: the real remote-bundle gate and its negative control must
+    // exercise the same check, so the control proves the gate can fail, not a copy of it.
+    // Inputs are root-relative slash paths, the same normalisation buildGraph produces.
+    const isForbiddenRemoteInput = (input: string): boolean =>
+        input === 'src/ts/core/logger.ts' || input.startsWith('src/ts/core/logger/') || input.startsWith('node:');
+
     test('the remote phone page bundle stays free of the logger and any Node-side chain', async () => {
         // The remote page installs no platform (the logger reads platform() at load and would
         // throw) and runs in the phone's browser, where no Node module exists. How a `node:`
@@ -783,14 +789,26 @@ describe('renderer bundle graphs', () => {
         // filter below would silently pass on nothing.
         expect(inputs).toContain('src/ts/shells/remote/bridge/apiSurface.ts');
         expect(inputs).toContain(entryRel);
-        const offenders = inputs.filter(
-            (input) =>
-                input === 'src/ts/core/logger.ts' ||
-                input.startsWith('src/ts/core/logger/') ||
-                input.startsWith('node:'),
-        );
+        const offenders = inputs.filter(isForbiddenRemoteInput);
         expect(offenders).toEqual([]);
     }, 120_000);
+
+    test('the remote-bundle forbidden-input check fails on a graph that carries the logger or a Node builtin', () => {
+        // A check whose failure branch is never exercised proves nothing: this negative control
+        // runs the SAME predicate the remote-bundle test uses over a synthetic graph and expects
+        // it to catch exactly the forbidden entries — one per predicate branch (the exact logger
+        // path, the logger directory prefix, the node: prefix) — while the sanctioned remote
+        // modules stay out of the offender list.
+        const SYNTHETIC_INPUTS = [
+            'src/ts/shells/remote/page.tsx',
+            'src/ts/shells/remote/bridge/apiSurface.ts',
+            'src/ts/core/logger.ts',
+            'src/ts/core/logger/context.ts',
+            'node:fs',
+        ] as const;
+        const offenders = SYNTHETIC_INPUTS.filter(isForbiddenRemoteInput);
+        expect(offenders).toEqual(['src/ts/core/logger.ts', 'src/ts/core/logger/context.ts', 'node:fs']);
+    });
 });
 
 // Every shell platform module must install before the logger loads: the

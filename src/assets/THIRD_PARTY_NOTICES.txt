@@ -548,7 +548,7 @@ supports-color 10.2.2
   License: MIT
   Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)
 
-tailwindcss 4.3.3
+tailwindcss 4.3.4
   License: MIT
   Copyright (c) Tailwind Labs, Inc.
 
