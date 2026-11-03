@@ -17,9 +17,18 @@ Vietne tiek mitināta **GitHub Pages**. GitHub piegādā katru lapu un var reģi
 
 ## Kas paliek jūsu pārlūkā
 
-Tikai tad, ja noklikšķināt uz gaišās/tumšās **tēmas pārslēdzēja**, vietne saglabā jūsu izvēli (`theme`: `light` vai `dark`) pārlūka lokālajā krātuvē, lai nākamā lapa atvērtos tajā pašā tēmā. Kamēr neesat nospieduši pārslēdzēju, vietne seko jūsu sistēmas tēmai un neko nesaglabā. Ja pārlūkā notīrāt vietnes datus, izvēle tiek izdzēsta.
+Vietnes lapās tikai tad, ja noklikšķināt uz gaišās/tumšās **tēmas pārslēdzēja**, vietne saglabā jūsu izvēli (`theme`: `light` vai `dark`) pārlūka lokālajā krātuvē, lai nākamā lapa atvērtos tajā pašā tēmā. Kamēr neesat nospieduši pārslēdzēju, šīs lapas seko jūsu sistēmas tēmai un neko nesaglabā. Ja pārlūkā notīrāt vietnes datus, izvēle tiek izdzēsta. Attālinātās vadības lapa (`/remote/`) aplūkota tālāk.
 
 Ja atverat **attālinātās vadības savienošanas saiti**, savienošanas atslēga tiek saglabāta šīs cilnes sesijas krātuvē (pazūd, aizverot cilni), un paliek pašā saitē — tāpēc grāmatzīme vai sākuma ekrāna ikona turpina strādāt. Vietne nevienu no šīm kopijām nekur nesūta; atslēga ceļo tikai caur šifrēto savienojumu uz jūsu pašu datoru. Lai to noņemtu, izdzēsiet grāmatzīmi vai sākuma ekrāna ikonu.
+
+**Attālinātās vadības lapa** (`/remote/`) papildus saglabā šos ierakstus, un tikai tad, ja atverat savienošanas saiti:
+
+- Lokālajā krātuvē, līdz pārlūkā notīrāt vietnes datus (grāmatzīmes vai sākuma ekrāna ikonas izdzēšana tos nenoņem):
+    - `gs-remote-view-prefs` — lapas tēma, valoda un kompaktais skats, arī atsevišķu izaicinājumu kompakto kartīšu izvēles. Tie paliek jūsu telefonā un netiek sūtīti uz datoru.
+    - `gs-remote-desktop-version` — īss kods, kas iegūts no savienošanas kanāla identifikatora, un darbvirsmas lietotnes versija, lai lapa varētu uzreiz atvērt šo versiju. Savienošanas atslēgu tas nekad nesatur.
+- Sesijas krātuvē, līdz aizverat cilni:
+    - `gs-remote-skipped-to` — darbvirsmas versija, uz kuru cilne jau pārgāja uzreiz, lai lapa nepārlēkātu starp divām versijām.
+    - `remote-add-home-hint` — karodziņš, lai ieteikumu pievienot lapu sākuma ekrānam piedāvātu vienu reizi cilnē.
 
 ## Saites uz citām vietnēm
 

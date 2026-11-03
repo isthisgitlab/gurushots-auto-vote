@@ -486,6 +486,7 @@ const COMMANDS_BLOCK = `Commands:
              With --challenge=<id>, exits 1 when the vote did not run (0 when it did).
   run      - Run one full auto-strategy cycle (boost / turbo / auto-submit / threshold-aware vote).
              Add --challenge=<id> to scope to a single challenge; on a Manual Only challenge it does nothing.
+             Afterwards it removes the per-challenge settings of challenges that are gone (not in mock mode).
   challenges - List the active challenges with their ids — the id every --challenge=<id> command needs.
              Add --challenge=<id> for one challenge in detail (its photo ids, to aim --image=<id> at).
              Alias: list
@@ -515,7 +516,8 @@ const COMMANDS_BLOCK = `Commands:
   fill-exposure - Spend a fill to top exposure up to 100%: fill-exposure --challenge=<id> [--yes]
              Currency actions spend nothing without --yes; they print the cost first.
   start    - Start continuous voting on a schedule (runs until stopped with Ctrl+C)
-  status   - Show current status and settings
+  status   - Show current status and settings, including the Auto-claim and Auto-join lines and, when signed in,
+             a Standing section: each challenge's rank, its benchmark gap and its team-match standing.
   bankroll - Show your currency balances (keys / swaps / fills / coins). Alias: coins
   discover - List open (un-joined) challenges you can join, and the upcoming ones starting
              within discoverUpcomingHours (24 by default; 0 = open only). An upcoming challenge
@@ -531,8 +533,9 @@ const COMMANDS_BLOCK = `Commands:
              coin budget.
   list-photos [--challenge=<id>] [--search=<tag>] [--sort=votes|newest|oldest] - List your photo ids, to choose
              them for auto-join / auto-submit. With --challenge each photo shows whether that challenge accepts
-             it. --sort orders the whole library on the server — votes (the default), newest or oldest (the
-             date the photo was added to your library) — and the whole listing comes out in that order.
+             it. --sort sets the order: votes (the default) is the order the server returns; newest or oldest (the
+             date the photo was added to your library) are requested from the server and the order is also
+             enforced on every photo read, so the whole listing comes out in that order.
              --search matches a tag exactly, and also lists the tags in your library that contain the term (3+
              characters), so a partial term still shows the full tag to search with.
              --stats also reads votes, views, likes and Guru picks for the listed photos — the first

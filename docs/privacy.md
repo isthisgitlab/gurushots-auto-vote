@@ -17,9 +17,18 @@ The site is hosted on **GitHub Pages**. GitHub serves every page and may log vis
 
 ## What stays in your browser
 
-Only if you click the light/dark **theme toggle**, the site saves your choice (`theme`: `light` or `dark`) in your browser's local storage so the next page opens in the same theme. Until you click the toggle, the site follows your system's theme and stores nothing. Clearing the site's data in your browser removes the choice.
+On the site's pages, only if you click the light/dark **theme toggle**, the site saves your choice (`theme`: `light` or `dark`) in your browser's local storage so the next page opens in the same theme. Until you click the toggle, those pages follow your system's theme and store nothing. Clearing the site's data in your browser removes the choice. The remote-control page (`/remote/`) is covered below.
 
 If you open a **remote-control pairing link**, the pairing key is kept in that tab's session storage (gone when you close the tab) and stays in the link itself — so a bookmark or a Home Screen icon keeps working. Neither copy is sent anywhere by the site; the key travels only over the encrypted pairing connection to your own computer. Delete the bookmark or Home Screen icon to remove the key.
+
+The **remote-control page** (`/remote/`) also keeps these items, and only when you open a pairing link:
+
+- In local storage, until you clear the site's data in your browser (deleting the bookmark or Home Screen icon does not remove them):
+    - `gs-remote-view-prefs` — the page's theme, language and compact view, including the compact-card choices for single challenges. It stays on your phone and is never sent to the computer.
+    - `gs-remote-desktop-version` — a short hash of the pairing room's id, plus the desktop app's version, so the page can open straight to that version. It never holds the pairing key.
+- In session storage, gone when you close the tab:
+    - `gs-remote-skipped-to` — the desktop version the tab already went straight to, so the page does not loop between two versions.
+    - `remote-add-home-hint` — a flag so the Add to Home Screen hint is offered once per tab.
 
 ## Links to other sites
 

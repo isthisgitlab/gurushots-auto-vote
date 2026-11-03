@@ -74,6 +74,7 @@ const COMMAND_ROWS: readonly CommandRow[] = [
         [
             '  run      - Run one full auto-strategy cycle (boost / turbo / auto-submit / threshold-aware vote).',
             '             Add --challenge=<id> to scope to a single challenge; on a Manual Only challenge it does nothing.',
+            '             Afterwards it removes the per-challenge settings of challenges that are gone (not in mock mode).',
         ],
         { usage: 'Usage: run [--challenge=<id>]' },
     ),
@@ -173,7 +174,10 @@ const COMMAND_ROWS: readonly CommandRow[] = [
         },
         ['  start    - Start continuous voting on a schedule (runs until stopped with Ctrl+C)'],
     ),
-    row('status', exitsZero(showStatus), ['  status   - Show current status and settings']),
+    row('status', exitsZero(showStatus), [
+        '  status   - Show current status and settings, including the Auto-claim and Auto-join lines and, when signed in,',
+        "             a Standing section: each challenge's rank, its benchmark gap and its team-match standing.",
+    ]),
     row(
         'bankroll',
         exitsZero(showBankroll),
@@ -214,8 +218,9 @@ const COMMAND_ROWS: readonly CommandRow[] = [
         [
             '  list-photos [--challenge=<id>] [--search=<tag>] [--sort=votes|newest|oldest] - List your photo ids, to choose',
             '             them for auto-join / auto-submit. With --challenge each photo shows whether that challenge accepts',
-            '             it. --sort orders the whole library on the server — votes (the default), newest or oldest (the',
-            '             date the photo was added to your library) — and the whole listing comes out in that order.',
+            '             it. --sort sets the order: votes (the default) is the order the server returns; newest or oldest (the',
+            '             date the photo was added to your library) are requested from the server and the order is also',
+            '             enforced on every photo read, so the whole listing comes out in that order.',
             '             --search matches a tag exactly, and also lists the tags in your library that contain the term (3+',
             '             characters), so a partial term still shows the full tag to search with.',
             '             --stats also reads votes, views, likes and Guru picks for the listed photos — the first',

@@ -32,6 +32,8 @@ If you hit a rate-limit error: stop every instance, wait 5–10 minutes, then st
 
 The desktop app enforces this for GUI instances: launching it a second time focuses the already-running window instead of starting a new copy. It does not detect the CLI, the web UI or the Android app running alongside the GUI — the warning above applies to those combinations.
 
+A phone paired through [Remote access](docs/usage.md#remote-access) is a remote for the one running desktop app, not a second instance. The Android app's own voting must stay off while it controls the computer: **Control my computer** stops it for as long as the phone controls the computer.
+
 ## 🚀 Features
 
 - **Automated voting** — votes your active challenges up to a configurable exposure target.
@@ -40,17 +42,19 @@ The desktop app enforces this for GUI instances: launching it a second time focu
 - **Final-window exposure** — a separate, usually lower exposure ceiling for a configurable window before close (default the final hour).
 - **Boost** — auto-applies boost near the deadline, on a chosen entry slot. A boost due within 30 min goes out right away when the computer goes to sleep (desktop app; turn it off with Boost Before Sleep), and quitting while one is due asks first.
 - **Turbo (earn + apply)** — auto-plays the mini-game to _earn_ turbo, then auto-_applies_ it to a chosen entry before the deadline.
-- **Auto-submit** — submits photos into empty entry slots near the deadline, staggered to avoid vote dilution, with tag filters, theme-aware photo selection double-checked by an on-device image model, and an emergency safety net.
+- **Auto-submit** — submits photos into empty entry slots near the deadline, staggered to avoid vote dilution, with tag filters, your own **Chosen Photos** (with **Submit Only Chosen Photos**, auto-submit and auto-join enter only those), theme-aware photo selection double-checked by an on-device image model, and an emergency safety net.
 - **Auto-join** — discovers open (un-joined) challenges and joins them automatically (off by default); once on it joins all of them by default, narrowed by an include/exclude challenge-type list or a challenge rule. Paid challenges are gated by per-challenge and per-cycle coin caps and never charged without a completed join. Manual joining is available too, via a collapsible "Discover" list in the GUI and the `discover`/`join` CLI commands.
-- **Missions** — optional help with GuruShots' rotating missions (all off by default): saves each challenge's turbo for a "Win Turbo" mission without losing any, joins challenges early during a "Join challenges" mission, spends fills during a "Use Fill" mission, and votes on your challenges during a "Vote on photos" mission.
+- **Missions** — optional help with GuruShots' rotating missions (all off by default): saves each challenge's turbo for a "Win Turbo" mission without losing any, joins challenges early during a "Join challenges" mission, spends fills during a "Use Fill" mission, applies an available boost during a "Use a boost" mission, and votes on your challenges during a "Vote on photos" mission.
 - **Bankroll display** — shows your keys / swaps / fills / coins next to the timer in the GUI and via the `bankroll` (alias `coins`) CLI command.
 - **Per-challenge overrides** — every voting setting has a global default that any individual challenge can override.
-- **Challenge rules** — rules that match challenges by title, challenge tag, type, photo count or length (so they survive GuruShots' per-rotation challenge-ID changes), in an order you choose; each can assign a settings profile, switch auto-join / auto-submit, set join timing, and add auto-submit tags.
+- **Challenge rules** — rules that match challenges by title, challenge tag, type, photo count, length or close time (so they survive GuruShots' per-rotation challenge-ID changes), in an order you choose; each can assign a settings profile, switch auto-join / auto-submit, set join timing, and add auto-submit tags.
+- **Profiles** — save a challenge's settings as a named profile (**Save current as profile**), edit it under Settings → Profiles, and apply it to a challenge or let a challenge rule assign it.
 - **Scenarios** — your own multi-day plans for a challenge: phases with their own settings, and rules that enter photos, swap, boost, play turbo, wait or notify you at the times and conditions you choose. Built in a visual editor (or as JSON), shared as files, and previewed with a what-if simulation before they spend anything.
 - **Desktop notifications** — optional warnings a few minutes before a boost, turbo or auto-submit, plus the messages your scenarios send.
 - **Three platforms** — Electron GUI, `gurucli` command line, and an Android app that votes with the phone locked.
+- **Remote access** — optional, off by default: control the running desktop app from a phone through a pairing link or QR code, with up to 3 phones at once. See [Remote access](docs/usage.md#remote-access).
 - **Resilient API layer** — configurable timeout plus automatic retry/backoff on transient failures.
-- **Quality-of-life** — light/dark themes, English/Latvian UI, timezone display, mock mode for safe testing, and built-in update notifications.
+- **Quality-of-life** — a theme picker with all DaisyUI themes, English/Latvian UI, timezone display, mock mode for safe testing, and built-in update notifications.
 
 ## 📥 Download & Install
 
@@ -195,7 +199,7 @@ With **Stay Logged In** off (the default) and auto-vote off, reopening the app a
 
 ### Web UI (from source)
 
-The same interface can run in an ordinary browser tab instead of the desktop window, which is handy for browser automation such as Playwright. It needs a source checkout with Node.js 26+ and pnpm:
+The same interface can run in an ordinary browser tab instead of the desktop window, which is handy for browser automation such as Playwright. It needs a source checkout with Node.js 26.12.1+ and pnpm:
 
 ```bash
 pnpm install
@@ -219,13 +223,15 @@ For GUI and CLI instructions, voting rules, settings, logs, and troubleshooting,
 - The web UI (`pnpm web`) listens only on this computer (localhost), refuses requests from other websites, and has no password of its own — instead each run generates a random token that every request must carry. Open the exact URL the command prints (it ends in `#t=<token>`); the tab keeps the token for as long as it stays open, so a reload works, but the bare address opened in a new tab is refused, as is any page left open from an earlier run (start `pnpm web` again and open its new URL). Never expose its port to a network.
 - The auto-submit image check runs locally with a bundled model; it only downloads your own photo thumbnails from GuruShots and sends nothing to any other service.
 - Desktop builds are not signed by a publisher, so updates are trusted on the strength of the project's GitHub releases. See [accepted limits](docs/architecture.md#10-security-renderer--main--state-the-limits-dont-over-promise).
+- **Verify a download** (GitHub CLI, signed in): `gh attestation verify <file> --repo isthisgitlab/gurushots-auto-vote --signer-workflow isthisgitlab/gurushots-auto-vote/.github/workflows/build.yml` checks that a binary or APK was built by this project's release workflow.
+- **Report a vulnerability** privately, as described in [`SECURITY.md`](SECURITY.md) — not in a public issue.
 - Third-party software and data the app includes, with their licenses: Settings → Application Settings → About and data, or `licenses` in the CLI.
 
 ## 📄 License & Support
 
 Licensed under the **Apache License 2.0**. Anyone who redistributes the code or a derived work must keep the attribution in [`NOTICE`](NOTICE), as the license requires.
 
-For help, check [Troubleshooting](docs/usage.md#-troubleshooting) first, then [open an issue](https://github.com/isthisgitlab/gurushots-auto-vote/issues).
+For help, check [Troubleshooting](docs/usage.md#-troubleshooting) first, then [open an issue](https://github.com/isthisgitlab/gurushots-auto-vote/issues). Security problems go to [`SECURITY.md`](SECURITY.md) instead, not to a public issue.
 
 If this tool is useful to you, you can support development:
 

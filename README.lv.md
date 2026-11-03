@@ -32,6 +32,8 @@ Ja saņemat pieprasījumu limita kļūdu, apturiet visus eksemplārus, pagaidiet
 
 Grafiskajai lietotnei to nodrošina pati darbvirsmas lietotne: ja palaižat to otrreiz, tiek aktivizēts jau atvērtais logs, nevis sākts jauns eksemplārs. Tā nekonstatē CLI, tīmekļa saskarni vai Android lietotni, ko darbina vienlaikus ar grafisko lietotni, — uz šīm kombinācijām attiecas augstāk minētais brīdinājums.
 
+Telefons, kas savienots pārī ar [attālināto piekļuvi](docs/usage.lv.md#attālinātā-piekļuve), ir tālvadības pults vienai strādājošai darbvirsmas lietotnei, nevis otrs eksemplārs. Android lietotnes pašas balsošanai jābūt izslēgtai, kamēr tā vada datoru: **Vadīt manu datoru** to aptur, kamēr telefons vada datoru.
+
 ## 🚀 Funkcijas
 
 - **Automātiska balsošana** — balso jūsu aktīvajos izaicinājumos, līdz sasniegts jūsu norādītais redzamības mērķis.
@@ -40,17 +42,19 @@ Grafiskajai lietotnei to nodrošina pati darbvirsmas lietotne: ja palaižat to o
 - **Beigu loga redzamība** — atsevišķi, parasti zemāki redzamības griesti uzstādāmam laika logam pirms beigām (pēc noklusējuma — pēdējā stunda).
 - **Boost** — tuvu termiņa beigām automātiski izmanto Boost foto, kas atrodas izvēlētajā vietā. Ja Boost jāizmanto 30 minūšu laikā, tas tiek izmantots uzreiz, kad dators pāriet miega režīmā (darbvirsmas lietotnē; izslēdzams ar Boost pirms miega), bet aizverot lietotni, kamēr Boost ir gaidāms, vispirms tiek jautāts.
 - **Turbo (iegūt + izmantot)** — automātiski spēlē minispēli, lai _iegūtu_ Turbo, un pēc tam pirms termiņa beigām automātiski to _izmanto_ izvēlētajam foto.
-- **Automātiskā iesniegšana** — tuvu termiņa beigām iesniedz foto tukšajās vietās ar laika atstarpēm, lai balsis nesadalītos starp vienlaikus iesniegtiem foto; tai ir tagu filtri, tēmai atbilstoša foto izvēle, ko vēlreiz pārbauda ierīcē darbināms attēlu atpazīšanas modelis, un ārkārtas drošības tīkls.
+- **Automātiskā iesniegšana** — tuvu termiņa beigām iesniedz foto tukšajās vietās ar laika atstarpēm, lai balsis nesadalītos starp vienlaikus iesniegtiem foto; tai ir tagu filtri, jūsu pašu **izvēlētie foto** (ar **Iesniegt tikai izvēlētos foto** automātiskā iesniegšana un pievienošanās ievieto tikai tos), tēmai atbilstoša foto izvēle, ko vēlreiz pārbauda ierīcē darbināms attēlu atpazīšanas modelis, un ārkārtas drošības tīkls.
 - **Automātiskā pievienošanās** — atrod atvērtos izaicinājumus, kuriem vēl neesat pievienojušies, un automātiski pievienojas tiem (pēc noklusējuma izslēgta). Kad tā ieslēgta, pēc noklusējuma lietotne pievienojas visiem izaicinājumiem; loku var sašaurināt ar izaicinājumu veidu iekļaušanas/izslēgšanas sarakstu vai izaicinājumu noteikumu. Maksas izaicinājumiem ir monētu limiti (vienam izaicinājumam un vienam ciklam), un monētas nekad netiek iztērētas, ja pievienošanās nav pabeigta. Pievienoties var arī manuāli — grafiskajā lietotnē sakļaujamajā sarakstā "Atrast izaicinājumus" un ar CLI komandām `discover`/`join`.
-- **Misijas** — pēc izvēles palīdz izpildīt GuruShots mainīgās misijas (visas šīs funkcijas pēc noklusējuma ir izslēgtas): pietaupa katra izaicinājuma Turbo "Win Turbo" misijai, nevienu nezaudējot, "Join challenges" misijas laikā pievienojas izaicinājumiem, negaidot automātiskās pievienošanās laiku, "Use Fill" misijas laikā izmanto uzpildes un "Vote on photos" misijas laikā balso jūsu izaicinājumos.
+- **Misijas** — pēc izvēles palīdz izpildīt GuruShots mainīgās misijas (visas šīs funkcijas pēc noklusējuma ir izslēgtas): pietaupa katra izaicinājuma Turbo "Win Turbo" misijai, nevienu nezaudējot, "Join challenges" misijas laikā pievienojas izaicinājumiem, negaidot automātiskās pievienošanās laiku, "Use Fill" misijas laikā izmanto uzpildes, "Use a boost" misijas laikā izmanto pieejamu Boost un "Vote on photos" misijas laikā balso jūsu izaicinājumos.
 - **Konta atlikums** — rāda jūsu atslēgas / apmaiņas / uzpildes / monētas grafiskajā lietotnē blakus laika atskaitei un ar CLI komandu `bankroll` (sinonīms `coins`).
 - **Uzstādījumi katram izaicinājumam** — katram balsošanas uzstādījumam ir globāla noklusējuma vērtība, ko jebkuram izaicinājumam var pielāgot atsevišķi.
-- **Izaicinājumu noteikumi** — noteikumi, kas atlasa izaicinājumus pēc nosaukuma, izaicinājuma taga, veida, foto skaita vai ilguma (tāpēc tie darbojas arī tad, kad GuruShots katrā rotācijā piešķir izaicinājumam jaunu ID), jūsu izvēlētā secībā; katrs noteikums var piešķirt uzstādījumu profilu, ieslēgt vai izslēgt automātisko pievienošanos / automātisko iesniegšanu, noteikt pievienošanās laiku un pievienot tagus automātiskajai iesniegšanai.
+- **Izaicinājumu noteikumi** — noteikumi, kas atlasa izaicinājumus pēc nosaukuma, izaicinājuma taga, veida, foto skaita, ilguma vai beigu laika (tāpēc tie darbojas arī tad, kad GuruShots katrā rotācijā piešķir izaicinājumam jaunu ID), jūsu izvēlētā secībā; katrs noteikums var piešķirt uzstādījumu profilu, ieslēgt vai izslēgt automātisko pievienošanos / automātisko iesniegšanu, noteikt pievienošanās laiku un pievienot tagus automātiskajai iesniegšanai.
+- **Profili** — saglabājiet izaicinājuma uzstādījumus kā nosauktu profilu (**Saglabāt pašreizējos kā profilu**), rediģējiet to sadaļā Uzstādījumi → Profili un piemērojiet izaicinājumam vai ļaujiet to piešķirt izaicinājumu noteikumam.
 - **Scenāriji** — jūsu pašu vairāku dienu plāni izaicinājumam: fāzes ar saviem uzstādījumiem un noteikumi, kas jūsu izvēlētos laikos un apstākļos iesniedz foto, apmaina foto, izmanto Boost, spēlē Turbo, gaida vai sūta jums paziņojumu. Scenārijus veido vizuālajā redaktorā (vai JSON formātā), kopīgo kā failus un, pirms tie kaut ko iztērē, pārbauda ar "kas būtu, ja" simulāciju.
 - **Darbvirsmas paziņojumi** — pēc izvēles brīdinājumi dažas minūtes pirms Boost, Turbo vai automātiskās iesniegšanas, kā arī jūsu scenāriju sūtītie ziņojumi.
 - **Trīs platformas** — Electron grafiskā lietotne, `gurucli` komandrinda un Android lietotne, kas balso arī tad, kad telefons ir bloķēts.
+- **Attālinātā piekļuve** — pēc izvēles (pēc noklusējuma izslēgta): vadiet datorā strādājošo lietotni no telefona ar savienošanas saiti vai QR kodu; vienlaikus var būt savienoti līdz 3 telefoniem. Skatiet [Attālinātā piekļuve](docs/usage.lv.md#attālinātā-piekļuve).
 - **Noturīgs API slānis** — uzstādāms pieprasījumu gaidīšanas laiks un automātiski atkārtoti mēģinājumi ar pieaugošu pauzi, ja rodas pārejošas kļūmes.
-- **Ērtības** — gaišā/tumšā tēma, angļu/latviešu saskarne, laiku rādīšana izvēlētajā laika joslā, testa režīms drošai izmēģināšanai un iebūvēti paziņojumi par atjauninājumiem.
+- **Ērtības** — tēmu izvēle ar visām DaisyUI tēmām, angļu/latviešu saskarne, laiku rādīšana izvēlētajā laika joslā, testa režīms drošai izmēģināšanai un iebūvēti paziņojumi par atjauninājumiem.
 
 ## 📥 Lejupielāde un instalācija
 
@@ -92,7 +96,7 @@ Android versija ir Capacitor apvalks ap to pašu React saskarni, un tai ir Kotli
 
 #### 🪶 Vieglie būvējumi (bez attēlu modeļa)
 
-Katra augstāk minētā lejupielāde pieejama arī kā **vieglais** (lite) būvējums bez attēlu atpazīšanas modeļa un tā izpildvides: macOS DMG izmērs samazinās no ~310 MB līdz ~130 MB, bet macOS CLI — no ~375 MB līdz ~140 MB. Viss pārējais darbojas tāpat — automātiskā iesniegšana izlaiž [vizuālo pārbaudi](docs/usage.lv.md#trūkstošo-foto-automātiskā-iesniegšana) un ranžē foto bez tās. Vieglajai grafiskajai lietotnei un vieglajai Android lietotnei tiek piedāvāti tikai vieglie atjauninājumi (vieglā darbvirsmas lietotne pirmsizlaiduma versijas izlaiž).
+Katra augstāk minētā lejupielāde pieejama arī kā **vieglais** (lite) būvējums bez attēlu atpazīšanas modeļa un tā izpildvides: macOS DMG izmērs samazinās no ~310 MB līdz ~130 MB, bet macOS CLI — no ~375 MB līdz ~140 MB. Viss pārējais darbojas tāpat — automātiskā iesniegšana izlaiž [vizuālo pārbaudi](docs/usage.lv.md#trūkstošo-foto-automātiskā-iesniegšana) un ranžē foto bez tās, bet Snap Turbo, kam vajadzīgs modelis, tiek spēlēts, uz katru fotoattēlu atbildot „Jā”, tikai tad, ja ieslēgts `snapYesWithoutModel`. Vieglajai grafiskajai lietotnei un vieglajai Android lietotnei tiek piedāvāti tikai vieglie atjauninājumi (vieglā darbvirsmas lietotne pirmsizlaiduma versijas izlaiž).
 
 | Platforma                            | Lejupielāde                                                                                                                                                                                    |
 | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -171,6 +175,8 @@ Android versija **nav pieejama Google Play** — to instalē, tieši lejupielād
 
 **Fona ierobežojumi:** ražotāju akumulatora pārvaldnieki tomēr var apturēt pakalpojumu (pievienojiet lietotni izņēmumiem tā, kā to paredz konkrētais ražotājs; saite ir lietotnes uzstādījumos). Pēdējās minūtes režīma 1 minūtes pārbaužu intervālam vajadzīga atļauja `SCHEDULE_EXACT_ALARM` (Android 13+ to piešķir automātiski, Android 12 — jāpiešķir manuāli).
 
+Ja **Saglabāt pieteikšanos** ir izslēgts (pēc noklusējuma) un automātiskā balsošana ir izslēgta, lietotni pēc tās apturēšanas atverot vēlreiz, tiek prasīts pieteikties. Ieslēgta automātiskā balsošana sesiju saglabā — tieši tas uztur fona balsošanu.
+
 ## 🎯 Ātrais sākums
 
 ### Grafiskā lietotne
@@ -193,7 +199,7 @@ Android versija **nav pieejama Google Play** — to instalē, tieši lejupielād
 
 ### Tīmekļa saskarne (no pirmkoda)
 
-Tādu pašu saskarni var atvērt parastā pārlūka cilnē, nevis darbvirsmas logā, — tas noder pārlūka automatizācijai, piemēram, ar Playwright. Tam vajadzīga pirmkoda kopija, Node.js 26 vai jaunāka versija un pnpm:
+Tādu pašu saskarni var atvērt parastā pārlūka cilnē, nevis darbvirsmas logā, — tas noder pārlūka automatizācijai, piemēram, ar Playwright. Tam vajadzīga pirmkoda kopija, Node.js 26.12.1 vai jaunāka versija un pnpm:
 
 ```bash
 pnpm install
@@ -217,13 +223,15 @@ Norādījumus par grafisko lietotni un CLI, balsošanas noteikumus, uzstādījum
 - Tīmekļa saskarne (`pnpm web`) ir pieejama tikai šajā datorā (localhost), noraida pieprasījumus no citām vietnēm un tai nav savas paroles — tā vietā katrā palaišanas reizē tiek izveidots nejaušs tokens, kas jānorāda katram pieprasījumam. Atveriet precīzu adresi, ko komanda izvada (tā beidzas ar `#t=<tokens>`); cilne tokenu glabā, kamēr ir atvērta, tāpēc pārlādēšana darbojas, bet adrese bez tokena, atvērta jaunā cilnē, tiek noraidīta, tāpat kā iepriekšējā palaišanas reizē atstāta lapa (palaidiet `pnpm web` vēlreiz un atveriet tā jauno adresi). Nekad nepadariet tās portu pieejamu tīklā.
 - Automātiskās iesniegšanas vizuālā pārbaude darbojas lokāli ar iebūvētu modeli; tā no GuruShots lejupielādē tikai jūsu pašu foto sīktēlus un neko nesūta citiem pakalpojumiem.
 - Darbvirsmas būvējumus neparaksta izdevējs, tāpēc atjauninājumiem uzticas, pamatojoties uz projekta GitHub izlaidumiem. Skatiet [pieņemtos ierobežojumus](docs/architecture.md#10-security-renderer--main--state-the-limits-dont-over-promise) (angliski).
+- **Lejupielādes pārbaude** (GitHub CLI, pieteicies): `gh attestation verify <file> --repo isthisgitlab/gurushots-auto-vote --signer-workflow isthisgitlab/gurushots-auto-vote/.github/workflows/build.yml` pārbauda, vai izpildfails vai APK ir sabūvēts ar šī projekta izlaiduma darbplūsmu.
+- **Ziņojiet par ievainojamību** privāti, kā aprakstīts failā [`SECURITY.md`](SECURITY.md) (angliski), — nevis publiskā problēmas pieteikumā.
 - Trešo pušu programmatūra un dati, ko lietotne iekļauj, ar to licencēm: Uzstādījumi → Lietotnes uzstādījumi → Par lietotni un datiem vai CLI komanda `licenses`.
 
 ## 📄 Licence un atbalsts
 
 Lietotne tiek izplatīta saskaņā ar **Apache 2.0 licenci**. Ikvienam, kas izplata kodu vai atvasinātu darbu, atbilstoši licencei jāsaglabā failā [`NOTICE`](NOTICE) norādītā atribūcija.
 
-Ja nepieciešama palīdzība, vispirms skatiet sadaļu [Problēmu risināšana](docs/usage.lv.md#-problēmu-risināšana), pēc tam [izveidojiet problēmas pieteikumu](https://github.com/isthisgitlab/gurushots-auto-vote/issues).
+Ja nepieciešama palīdzība, vispirms skatiet sadaļu [Problēmu risināšana](docs/usage.lv.md#-problēmu-risināšana), pēc tam [izveidojiet problēmas pieteikumu](https://github.com/isthisgitlab/gurushots-auto-vote/issues). Drošības problēmas ziņojiet saskaņā ar [`SECURITY.md`](SECURITY.md), nevis publiskā pieteikumā.
 
 Ja šis rīks jums noder, varat atbalstīt tā izstrādi:
 
