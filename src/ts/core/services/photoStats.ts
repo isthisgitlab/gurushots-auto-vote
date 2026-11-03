@@ -380,6 +380,7 @@ const createVotesLoader =
         const stats = new Map<string, VoteStat>();
         const unmeasured: PickerPhoto[] = [];
         for (const id of ids) {
+            // Every id asked for comes from the shortlist built from `scored`, so it is always found here.
             const entry = byId.get(id)!;
             if (entry.statsKnown) stats.set(id, { votes: entry.votes, statsKnown: true });
             else unmeasured.push(entry.photo);

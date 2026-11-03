@@ -451,7 +451,7 @@ Files are rotated daily (`<type>-YYYY-MM-DD.log`) and auto-pruned by age and siz
 
 From the CLI, tail any of them with `logs [--error|--api|--settings] [--lines=<n>]`. Credentials are redacted before anything is written to disk.
 
-The visual check logs under the `autoSubmit` category: `Visual check re-ranked picks for [Challenge …]` when it changed which photo gets submitted, and `Visual check unavailable for [Challenge …]` when the model couldn't run (the tag ranking was used instead). No line means it agreed with the ranking or abstained.
+The visual check logs under the `autoSubmit` category: `Visual check re-ranked picks for [Challenge …]` when it changed which photo gets submitted, and `Visual check unavailable for [Challenge …]` when the model couldn't run (the tag ranking was used instead). `Visual check kept pick order for [Challenge …]` means it ran and left the pick as it was, and `Visual check abstained …` or `Visual check skipped: …` means it could not judge the photos, so the tag ranking was kept.
 
 ## 🗑️ Where your data is stored / how to erase it
 

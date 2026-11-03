@@ -12,6 +12,9 @@ import type { FetchErrorResult, FillDeps, FillLogger, FillSettings } from '../..
 import type { LibraryPhoto, MemberIdentity } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
+type RankVisually = NonNullable<FillDeps['rankVisually']>;
+type ImageData = NonNullable<FillDeps['getImageData']>;
+
 jest.mock('../../src/ts/core/settings/storage', () => ({
     __esModule: true,
     ...jest.requireActual<typeof import('../../src/ts/core/settings/storage')>('../../src/ts/core/settings/storage'),
@@ -260,7 +263,9 @@ describe('rankCandidatesForChallenge', () => {
     test('a swap candidate goes through the same visual re-rank as a fill', async () => {
         const { logger } = makeCapturingLogger();
         const challenge = makeChallenge();
-        const rankVisually = jest.fn().mockResolvedValue(['leaves']);
+        const rankVisually = jest
+            .fn<ReturnType<RankVisually>, Parameters<RankVisually>>()
+            .mockResolvedValue(['leaves']);
         const result = await rankCandidatesForChallenge(challenge, 'tok', {
             settings: makeSettings(),
             logger,
@@ -287,17 +292,14 @@ describe('rankCandidatesForChallenge', () => {
 describe('rankCandidatesForChallenge — the votes the visual check weighs', () => {
     test('a swap ranking reads them with its own token, for the photos the check asks about', async () => {
         const { logger } = makeCapturingLogger();
-        const getImageData = jest.fn().mockResolvedValue({ votes: 321, views: 9, achievements: [] });
-        type Options = {
-            loadVotes: (ids: string[]) => Promise<Map<string, unknown>>;
-            jointInputs: ReadonlyMap<string, unknown>;
-        };
-        let answer: Map<string, unknown> | null = null;
-        let inputs: ReadonlyMap<string, unknown> | null = null;
-        const rankVisually = jest.fn(
-            async (_c: unknown, ids: string[], _e: unknown, want: number, options: Options) => {
-                inputs = options.jointInputs;
-                answer = await options.loadVotes(['leaves']);
+        const getImageData = jest
+            .fn<ReturnType<ImageData>, Parameters<ImageData>>()
+            .mockResolvedValue(invalid({ votes: 321, views: 9, achievements: [] }));
+        const seen: { answer?: Map<string, unknown>; inputs?: ReadonlyMap<string, unknown> } = {};
+        const rankVisually = jest.fn<ReturnType<RankVisually>, Parameters<RankVisually>>(
+            async (_c, ids, _e, want, options) => {
+                seen.inputs = options.jointInputs;
+                seen.answer = await options.loadVotes(['leaves']);
                 return ids.slice(0, want);
             },
         );
@@ -310,13 +312,13 @@ describe('rankCandidatesForChallenge — the votes the visual check weighs', () 
                 { ...allowedPhoto('leaves'), labels: ['Pink', 'Nature'] },
             ]),
             getImageData,
-            rankVisually: invalid(rankVisually),
+            rankVisually,
         });
         expect(result.status).toBe('ranked');
         expect(getImageData).toHaveBeenCalledTimes(1);
         expect(getImageData).toHaveBeenCalledWith('leaves', 'tok-swap');
-        expect(answer).toEqual(new Map([['leaves', { votes: 321, statsKnown: true }]]));
-        expect([...(inputs as unknown as ReadonlyMap<string, unknown>).keys()].sort()).toEqual(['island', 'leaves']);
+        expect(seen.answer).toEqual(new Map([['leaves', { votes: 321, statsKnown: true }]]));
+        expect([...(seen.inputs?.keys() ?? [])].sort()).toEqual(['island', 'leaves']);
     });
 });
 
