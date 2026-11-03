@@ -32,7 +32,7 @@ Ja saņemat pieprasījumu limita kļūdu, apturiet visus eksemplārus, pagaidiet
 
 Grafiskajai lietotnei to nodrošina pati darbvirsmas lietotne: ja palaižat to otrreiz, tiek aktivizēts jau atvērtais logs, nevis sākts jauns eksemplārs. Tā nekonstatē CLI, tīmekļa saskarni vai Android lietotni, ko darbina vienlaikus ar grafisko lietotni, — uz šīm kombinācijām attiecas augstāk minētais brīdinājums.
 
-Telefons, kas savienots pārī ar [attālināto piekļuvi](docs/usage.lv.md#attālinātā-piekļuve), ir tālvadības pults vienai strādājošai darbvirsmas lietotnei, nevis otrs eksemplārs. Android lietotnes pašas balsošanai jābūt izslēgtai, kamēr tā vada datoru: **Vadīt manu datoru** to aptur, kamēr telefons vada datoru.
+Telefons, kas savienots pārī ar [attālināto piekļuvi](docs/usage.lv.md#attālinātā-piekļuve), ir tālvadības pults vienai strādājošai darbvirsmas lietotnei, nevis otrs eksemplārs. Android lietotnes pašas balsošanai jābūt izslēgtai, kamēr tā vada datoru: **Vadīt manu datoru** to aptur, un pēc **Atvienoties** tā paliek izslēgta, līdz telefonā atkal ieslēdzat automātisko balsošanu.
 
 ## 🚀 Funkcijas
 

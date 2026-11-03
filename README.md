@@ -32,7 +32,7 @@ If you hit a rate-limit error: stop every instance, wait 5–10 minutes, then st
 
 The desktop app enforces this for GUI instances: launching it a second time focuses the already-running window instead of starting a new copy. It does not detect the CLI, the web UI or the Android app running alongside the GUI — the warning above applies to those combinations.
 
-A phone paired through [Remote access](docs/usage.md#remote-access) is a remote for the one running desktop app, not a second instance. The Android app's own voting must stay off while it controls the computer: **Control my computer** stops it for as long as the phone controls the computer.
+A phone paired through [Remote access](docs/usage.md#remote-access) is a remote for the one running desktop app, not a second instance. The Android app's own voting must stay off while it controls the computer: **Control my computer** stops it, and after **Disconnect** it stays off until you start auto-vote on the phone again.
 
 ## 🚀 Features
 

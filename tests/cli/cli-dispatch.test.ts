@@ -480,7 +480,7 @@ describe('the CLI session marker', () => {
 // lines joined with newlines, between the "Commands:" header and the blank line before "Examples:".
 const COMMANDS_BLOCK = `Commands:
   login    - Authenticate with GuruShots and save token
-  logout   - Clear the saved authentication token
+  logout   - Clear the saved authentication token and set mock mode back to its default (off in released builds)
   vote     - Run one manual voting cycle (votes to 100% regardless of settings; skips Manual Only challenges).
              Add --challenge=<id> to manually vote a single challenge, which works on a Manual Only one too.
              With --challenge=<id>, exits 1 when the vote did not run (0 when it did).

@@ -25,7 +25,7 @@ The **remote-control page** (`/remote/`) also keeps these items, and only when y
 
 - In local storage, until you clear the site's data in your browser (deleting the bookmark or Home Screen icon does not remove them):
     - `gs-remote-view-prefs` — the page's theme, language and compact view, including the compact-card choices for single challenges. It stays on your phone and is never sent to the computer.
-    - `gs-remote-desktop-version` — a short hash of the pairing room's id, plus the desktop app's version, so the page can open straight to that version. It never holds the pairing key.
+    - `gs-remote-desktop-version` — a short hash of the pairing room's id, plus the desktop app's version, so the page can open straight to that version. It never holds the pairing key. The page also removes it when it no longer fits, for example when you open a different pairing link, and **Disconnect** in the Android app removes it.
 - In session storage, gone when you close the tab:
     - `gs-remote-skipped-to` — the desktop version the tab already went straight to, so the page does not loop between two versions.
     - `remote-add-home-hint` — a flag so the Add to Home Screen hint is offered once per tab.

@@ -25,7 +25,7 @@ Ja atverat **attālinātās vadības savienošanas saiti**, savienošanas atslē
 
 - Lokālajā krātuvē, līdz pārlūkā notīrāt vietnes datus (grāmatzīmes vai sākuma ekrāna ikonas izdzēšana tos nenoņem):
     - `gs-remote-view-prefs` — lapas tēma, valoda un kompaktais skats, arī atsevišķu izaicinājumu kompakto kartīšu izvēles. Tie paliek jūsu telefonā un netiek sūtīti uz datoru.
-    - `gs-remote-desktop-version` — īss kods, kas iegūts no savienošanas kanāla identifikatora, un darbvirsmas lietotnes versija, lai lapa varētu uzreiz atvērt šo versiju. Savienošanas atslēgu tas nekad nesatur.
+    - `gs-remote-desktop-version` — īss kods, kas iegūts no savienošanas kanāla identifikatora, un darbvirsmas lietotnes versija, lai lapa varētu uzreiz atvērt šo versiju. Savienošanas atslēgu tas nekad nesatur. Lapa to izdzēš arī tad, kad tas vairs neder, piemēram, kad atverat citu savienošanas saiti, un to izdzēš Android lietotnes poga **Atvienoties**.
 - Sesijas krātuvē, līdz aizverat cilni:
     - `gs-remote-skipped-to` — darbvirsmas versija, uz kuru cilne jau pārgāja uzreiz, lai lapa nepārlēkātu starp divām versijām.
     - `remote-add-home-hint` — karodziņš, lai ieteikumu pievienot lapu sākuma ekrānam piedāvātu vienu reizi cilnē.

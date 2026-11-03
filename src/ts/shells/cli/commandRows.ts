@@ -57,7 +57,9 @@ const COMMAND_ROWS: readonly CommandRow[] = [
     row('login', async () => exitCodeOf(await handleLogin()), [
         '  login    - Authenticate with GuruShots and save token',
     ]),
-    row('logout', async () => exitCodeOf(await handleLogout()), ['  logout   - Clear the saved authentication token']),
+    row('logout', async () => exitCodeOf(await handleLogout()), [
+        '  logout   - Clear the saved authentication token and set mock mode back to its default (off in released builds)',
+    ]),
     row(
         'vote',
         runVote,
