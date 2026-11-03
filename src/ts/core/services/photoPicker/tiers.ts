@@ -3,15 +3,25 @@
  * comparison, the enrichment set, and the final sort that applies them. This
  * module owns the tier list.
  *
- * GOVERNING RULE: a theme match always beats popularity. Popularity signals
- * (achievements / votes / views / upload date) are last-resort tiebreaks that
- * apply ONLY among photos that all failed to match the theme. They must never
- * lift an off-theme photo above an on-theme one — a high-view sea photo losing
- * to a low-view farm photo in a farm challenge is the CORRECT outcome.
+ * GOVERNING RULE: a theme match always beats an off-theme photo. Popularity
+ * signals (achievements / votes / views / upload date) never lift an off-theme
+ * photo above an on-theme one — a high-view sea photo losing to a low-view
+ * farm photo in a farm challenge is the CORRECT outcome. Among photos that
+ * ALL failed to match the theme they are plain tiebreaks.
  *
  * The tier order below enforces that structurally: the match tiers are all
  * non-negative and are compared before the popularity tiers, so a photo with
  * any positive match cannot be outranked by a photo with none.
+ *
+ * The one place the tiers are not the last word: once the visual check
+ * (services/visionVerifier.ts) has accepted two or more photos, their theme
+ * strength, the model's fit and their votes are weighed TOGETHER
+ * (photoPicker/jointRank.ts), so a much more popular photo can beat a slightly
+ * stronger theme match. That score never crosses a gate: matched photos stay
+ * ahead of unmatched ones, a photo matching more Should Include Tags stays
+ * ahead of one matching fewer, and photos the model rejects stay behind the
+ * accepted ones. Without model scores (lite build, no visual subject, abstain,
+ * model error) the lexicographic order below is the final order.
  *
  * Ranking tiers (lexicographic, all desc):
  *   1. Should-match count — how many of the user's Should Include Tags hit.

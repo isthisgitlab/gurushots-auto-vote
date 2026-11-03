@@ -63,6 +63,16 @@ describe('Latvian log messages', () => {
         expect(localizeLogMessage('ℹ️ Invalid timestamp provided')).toBe('ℹ️ Norādīts nederīgs laika zīmogs');
     });
 
+    test('translates the visual check re-rank line (its slot values pass through as logged)', () => {
+        expect(
+            localizeLogMessage(
+                'ℹ️ Visual check re-ranked picks for [Challenge 137654: Everything Sports]: 9942aca1, 41d42b07 → 6f26a121, 41d42b07',
+            ),
+        ).toBe(
+            'ℹ️ Vizuālā pārbaude pārkārtoja izvēlētos foto izaicinājumam [Challenge 137654: Everything Sports]: 9942aca1, 41d42b07 → 6f26a121, 41d42b07',
+        );
+    });
+
     test('translates the Manual Only lines', () => {
         const tag = '[Challenge 42: Sunset]';
         expect(localizeLogMessage(`ℹ️ ${tag} Manual Only is on — nothing runs automatically`)).toBe(

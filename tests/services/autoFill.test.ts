@@ -3904,6 +3904,87 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         expect(Object.keys(photos).sort()).toEqual(['portfolio', 'soccer']);
     });
 
+    describe('the votes the visual check weighs', () => {
+        // One clear theme match and one off-theme photo: nothing is contested, so the pick itself looks no stats up
+        // and the only lookups are the ones the visual check's votes loader makes.
+        const soccerChallenge = () => abstractChallenge({ title: 'Soccer', url: 'soccer' });
+        const library = () => [
+            { ...libraryPhoto('goal', 10, 9000), labels: ['Soccer'] },
+            { ...libraryPhoto('farm', 10, 8000), labels: ['Barn'] },
+            { ...libraryPhoto('lake', 10, 7000), labels: ['Water'] },
+        ];
+        type LoaderOptions = {
+            loadVotes: (ids: string[]) => Promise<Map<string, { votes: number; statsKnown: boolean }>>;
+        };
+        const askingRanker = (ask: string[], answers: Array<Map<string, unknown>> = []) =>
+            jest.fn(async (_c: unknown, ids: string[], _e: unknown, want: number, options: LoaderOptions) => {
+                answers.push(await options.loadVotes(ask));
+                return ids.slice(0, want);
+            });
+
+        test('are read with the fill’s token, only for the photos the check asks about', async () => {
+            const getImageData = jest.fn(async (_id: string | number, _token: string) => ({
+                votes: 500,
+                views: 10,
+                achievements: [],
+            }));
+            const answers: Array<Map<string, unknown>> = [];
+            const result = await maybeAutoFillChallenge(soccerChallenge(), 'tok-fill', NOW, {
+                settings: makeSettings({ autoSubmit: true }),
+                logger: makeLogger(),
+                getEligiblePhotos: jest.fn().mockResolvedValue(library()),
+                getImageData,
+                submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
+                rankVisually: invalid(askingRanker(['goal', 'farm'], answers)),
+            });
+            expect(result).toBe('submitted');
+            expect(getImageData.mock.calls.map(([id, token]) => [String(id), token]).sort()).toEqual([
+                ['farm', 'tok-fill'],
+                ['goal', 'tok-fill'],
+            ]);
+            expect(answers[0]).toEqual(
+                new Map([
+                    ['goal', { votes: 500, statsKnown: true }],
+                    ['farm', { votes: 500, statsKnown: true }],
+                ]),
+            );
+        });
+
+        test('a mock-mode fill reads them but never persists them', async () => {
+            const getImageData = jest.fn(async () => ({ votes: 500, views: 10, achievements: [] }));
+            await maybeAutoFillChallenge(soccerChallenge(), 'tok', NOW, {
+                settings: invalid<jest.MockedObject<FillSettings>>({
+                    ...makeSettings({ autoSubmit: true }),
+                    getSetting: jest.fn((key: string) => key === 'mock'),
+                }),
+                logger: makeLogger(),
+                getEligiblePhotos: jest.fn().mockResolvedValue(library()),
+                getImageData,
+                submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
+                rankVisually: invalid(askingRanker(['goal', 'farm'])),
+            });
+            expect(getImageData).toHaveBeenCalled();
+            expect(statsStoreData).toBeNull();
+        });
+
+        test('draw on a budget of the fill’s own: a later challenge keeps its lookups for contested ties', async () => {
+            // Every lookup fails, which opens the fill's breaker after three; the voting pass's stays closed.
+            const failing = jest.fn(async () => null);
+            await maybeAutoFillChallenge(soccerChallenge(), 'tok', NOW, {
+                settings: makeSettings({ autoSubmit: true }),
+                logger: makeLogger(),
+                getEligiblePhotos: jest.fn().mockResolvedValue(library()),
+                getImageData: failing,
+                submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
+                rankVisually: invalid(askingRanker(['goal', 'farm', 'lake'])),
+            });
+            expect(failing).toHaveBeenCalledTimes(3);
+            const working = jest.fn(async () => ({ votes: 1, views: 1, achievements: [] }));
+            await photoStats.enrichCandidates([libraryPhoto('later', 1, 1)], 'tok', { getImageData: working });
+            expect(working).toHaveBeenCalledTimes(1);
+        });
+    });
+
     test('a fill with no settings module at all still persists stat lookups', async () => {
         // fillChallengeNow runs without settings; absence must read as real
         // mode, not as "never persist".

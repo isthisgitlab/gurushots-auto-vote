@@ -12,7 +12,8 @@ import {
     resolveMissingChosen,
     resolveSemanticScores,
 } from '../autoFill';
-import { pickPhotosForChallenge } from '../photoPicker';
+import { buildChosenCandidates, finalizePick, jointInputsOf } from '../photoPicker';
+import { createStatsBudget, createVotesLoader } from '../photoStats';
 import { rankVisually } from '../visionVerifier';
 import type { Challenge } from '../../types/gurushots';
 import type { PickerPhoto, TagOptions } from '../../types/photoPicker';
@@ -152,20 +153,23 @@ const pickJoinPhoto = async (
     // a join pick sees; auto-fill of already-joined challenges gets none.
     const suggestedIds = await suggestedIdsFor(challenge, token, deps);
     // A shortlist, not one photo, so the visual re-rank a fill applies can
-    // promote an on-theme alternative here too.
+    // promote an on-theme alternative here too. The scored entries are kept:
+    // the re-rank weighs their tier values together with the model's fit and the votes.
     // The candidates are library photo records, the shape the picker ranks.
-    const ranked = pickPhotosForChallenge(challenge, eligible as PickerPhoto[], VISUAL_SHORTLIST, {
+    const chosen =
+        chosenSettings.ids.length > 0
+            ? { ids: chosenSettings.ids, only: enforceOnly, inOrder: chosenSettings.inOrder }
+            : null;
+    const { scored, chosenIds, orderedIds } = buildChosenCandidates(challenge, eligible as PickerPhoto[], {
         mustIncludeTags,
         shouldIncludeTags,
         submitWithoutTagMatch,
         semanticScores,
         ignoreWords,
         suggestedIds,
-        chosen:
-            chosenSettings.ids.length > 0
-                ? { ids: chosenSettings.ids, only: enforceOnly, inOrder: chosenSettings.inOrder }
-                : null,
+        chosen,
     });
+    const ranked = finalizePick(scored, VISUAL_SHORTLIST, chosenIds, chosen?.inOrder ? orderedIds : null);
     if (!ranked || ranked.length === 0) {
         if (!enforceOnly) return { id: null, reason: 'no-photo' };
         // With Submit Only the pool held nothing but chosen photos.
@@ -175,8 +179,8 @@ const pickJoinPhoto = async (
     clearChosenSkip(challenge);
     // The picker ranks the chosen photos first; when any can be entered the
     // shortlist is those alone, so the re-rank can only choose between them.
-    const chosenIds = new Set(chosenSettings.ids);
-    const chosenRanked = ranked.filter((id) => chosenIds.has(String(id)));
+    const chosenSet = new Set(chosenSettings.ids);
+    const chosenRanked = ranked.filter((id) => chosenSet.has(String(id)));
     const shortlist = chosenRanked.length > 0 ? chosenRanked : ranked;
     // A single chosen photo has nothing to be re-ranked against, and one the user put in order is
     // not re-ranked: the first usable photo in the list is the pick.
@@ -186,6 +190,15 @@ const pickJoinPhoto = async (
     const [picked] = await (deps.rankVisually || rankVisually)(challenge, shortlist, eligible, 1, {
         logger,
         ignoreWords,
+        jointInputs: jointInputsOf(scored),
+        // The votes of the photos the model accepts, from this pick's own lookup budget so a join does not
+        // drain the voting pass's; mock ids never reach the real stats cache.
+        loadVotes: createVotesLoader(scored, token, {
+            getImageData: deps.getImageData,
+            logger,
+            statsBudget: createStatsBudget(),
+            persist: settings.getSetting('mock') !== true,
+        }),
     });
     return { id: picked, reason: 'picked' };
 };

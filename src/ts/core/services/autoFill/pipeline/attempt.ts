@@ -330,7 +330,17 @@ const runFillAttempt = async ({
         }
     }
 
-    const verified = await verifyFillPick(challenge, scored, eligible, picked, ignoreWords, deps, chosenIds, inOrder);
+    const verified = await verifyFillPick(
+        challenge,
+        token,
+        scored,
+        eligible,
+        picked,
+        ignoreWords,
+        deps,
+        chosenIds,
+        inOrder,
+    );
     picked = verified.picked;
 
     try {

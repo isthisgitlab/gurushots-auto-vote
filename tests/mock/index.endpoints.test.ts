@@ -779,6 +779,11 @@ describe('fetchChallengesAndVote — join pre-step', () => {
         );
     });
 
+    test('hands the join pass the mock photo-stats endpoint for the join pick’s votes lookup', async () => {
+        await mockApiClient.fetchChallengesAndVote('tok');
+        expect(runJoinPass.mock.calls.at(-1)![2].getImageData).toBe(mockApiClient.getImageData);
+    });
+
     test('a join pass that throws an Error is logged by message', async () => {
         runJoinPass.mockRejectedValueOnce(new Error('boom'));
         await mockApiClient.fetchChallengesAndVote('tok');

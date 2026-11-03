@@ -419,8 +419,16 @@ repeated six times is one that gets forgotten at one of them.
   stripped. Unlike the semantic theme vector, the description is safe here: SigLIP reads a sentence as a
   sentence rather than averaging its words, and it is averaged with the title prompt, not used alone.
 - **It only reorders and never empties a pick.** A photo's fit is the mean logit over the prompts; photos
-  more than `ln(10)` below the best fit move behind the rest, and tag/popularity order is kept inside both
-  groups. It **abstains** (original order) when the title has no visual subject, when no photo reaches
+  more than `ln(10)` below the best fit move behind the rest (the rejected ones by fit). Among the accepted
+  photos, when there are two or more, theme strength, vision fit and votes are weighed together
+  (`photoPicker/jointRank.ts`, equal weights, plus a 0.25 bonus for a GuruShots-suggested photo): a much more
+  popular photo can beat a slightly stronger theme match. The score runs only inside a gate group —
+  matched photos stay ahead of unmatched ones, and more Should Include Tags stay ahead of fewer — and never
+  crosses the accepted/rejected split or a Chosen Photos block. Votes are looked up for the accepted photos
+  only (`createVotesLoader` in `services/photoStats.ts`: stats already known are reused, the rest are fetched
+  under the fill's or the join pick's own `createStatsBudget()`, persisted unless mock mode); photos whose stats
+  are unknown count as neutral, never as zero votes. Exact ties keep the tag order. Without model scores
+  the tag/popularity order is kept as it was. It **abstains** (original order) when the title has no visual subject, when no photo reaches
   `ABSTAIN_LOGIT` for any prompt, or on any load/inference/URL failure. An abstain reports no visual
   evidence, so the uncertain-photo check falls back to the semantic/keyword evidence. Both thresholds were calibrated on
   16 live challenges (2026-09-24) — re-measure against real shortlists before moving them.

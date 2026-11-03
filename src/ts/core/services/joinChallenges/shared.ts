@@ -23,6 +23,8 @@ export interface JoinDeps {
     getEligiblePhotos: typeof submissionsApi.getEligiblePhotos;
     /** Without it, a chosen photo missing from the themed fetch is not looked for. */
     getEligiblePhotosWalk?: typeof submissionsApi.getEligiblePhotosWalk;
+    /** Without it, the votes of the photos the visual check accepts are unknown, and a join ranks without them. */
+    getImageData?: typeof submissionsApi.getImageData;
     searchTagAutocomplete?: typeof tagsApi.searchTagAutocomplete;
     getCurrentMemberProfile?: typeof tagsApi.getCurrentMemberProfile;
     /** The joined challenges, to count the turbos a turbo mission can still win (Join Early for Missions). */
@@ -61,6 +63,7 @@ export const JOIN_ENDPOINTS = [
     'submitToChallenge',
     'getEligiblePhotos',
     'getEligiblePhotosWalk',
+    'getImageData',
     'searchTagAutocomplete',
     'getCurrentMemberProfile',
     'getActiveChallenges',

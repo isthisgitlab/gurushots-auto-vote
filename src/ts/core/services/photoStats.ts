@@ -52,7 +52,10 @@ import {
 
 import type { PhotoStatsEntry } from './photoStats/cache';
 
-import type { PickerPhoto } from '../types/photoPicker';
+import { statsKnownOf, votesOf } from './photoPicker/tiers';
+
+import type { PickerPhoto, ScoredCandidate } from '../types/photoPicker';
+import type { VoteStat } from './photoPicker/jointRank';
 import type { FillLogger, RankDeps } from '../types/autoFill';
 
 // Newly fetched photos per fill. Cache hits do not count against this — a
@@ -362,6 +365,31 @@ const enrichCandidates = async (photos: PickerPhoto[], token: string, deps: Enri
     return applyResolved(photos, resolved);
 };
 
+/**
+ * The votes the joint ranking reads (photoPicker/jointRank.ts), for the photos the visual check accepted. A
+ * candidate already measured (the fill enriched its contested photos) answers from the scored entry; only the
+ * others are looked up, with `deps`' own budget. A photo that could not be measured is answered as stats-unknown,
+ * which the joint ranking reads as neutral — never as zero votes.
+ *
+ * @param scored - the candidates the pick was ranked from; every asked id is one of them
+ */
+const createVotesLoader =
+    (scored: readonly ScoredCandidate[], token: string, deps: EnrichDeps) =>
+    async (ids: readonly string[]): Promise<Map<string, VoteStat>> => {
+        const byId = new Map(scored.map((entry) => [String(entry.id), entry]));
+        const stats = new Map<string, VoteStat>();
+        const unmeasured: PickerPhoto[] = [];
+        for (const id of ids) {
+            const entry = byId.get(id)!;
+            if (entry.statsKnown) stats.set(id, { votes: entry.votes, statsKnown: true });
+            else unmeasured.push(entry.photo);
+        }
+        for (const photo of await enrichCandidates(unmeasured, token, deps)) {
+            stats.set(String(photo.id), { votes: votesOf(photo), statsKnown: statsKnownOf(photo) });
+        }
+        return stats;
+    };
+
 /** Test-only: drop the in-memory cache and per-pass budget state. */
 const __resetForTests = () => {
     __resetCacheForTests();
@@ -375,6 +403,7 @@ export {
     enrichCandidates,
     resetPassState,
     createStatsBudget,
+    createVotesLoader,
     statsBudgetTripped,
     MAX_ENRICH_PER_FILL,
     MAX_ENRICH_PER_PASS,

@@ -4,6 +4,7 @@
 
 import {
     finalizePick,
+    jointInputsOf,
     readChallengeTheme,
     buildThemeKeywords,
     scorePhoto,
@@ -14,6 +15,8 @@ import {
     startsWithLetter,
 } from '../../photoPicker';
 import * as lexicon from '../../semantic/lexicon';
+import { createStatsBudget, createVotesLoader } from '../../photoStats';
+import type { StatsBudget } from '../../photoStats';
 import { rankVisually } from '../../visionVerifier';
 import type { Challenge } from '../../../types/gurushots';
 import type { IgnoreWords, PickerPhoto, ScoredCandidate } from '../../../types/photoPicker';
@@ -25,14 +28,19 @@ type VerifiedPick = { picked: string[]; visualEvidence: Set<string> | null };
 
 // Visual re-rank of one ranked block (see services/visionVerifier.ts). The
 // picked ids lead the shortlist so a model that abstains returns exactly them;
-// the rest of the tag ranking follows as alternatives it may promote.
+// the rest of the tag ranking follows as alternatives it may promote. The
+// votes the joint ranking reads come from the block's own stats where they are
+// known, else from lookups under the fill's `statsBudget`; mock ids never
+// reach the real stats cache (the rule scoring.ts applies to its enrichment).
 const rankBlock = async (
     challenge: Challenge,
+    token: string,
     scored: ScoredCandidate[],
     eligible: PickerPhoto[],
     picked: string[],
     ignoreWords: IgnoreWords,
     deps: RankDeps,
+    statsBudget: StatsBudget,
 ): Promise<VerifiedPick> => {
     const ranked = finalizePick(scored, Math.max(12, picked.length));
     const selected = new Set(picked.map(String));
@@ -46,6 +54,13 @@ const rankBlock = async (
             onVisualEvidence: (acceptedIds) => {
                 visualEvidence = acceptedIds;
             },
+            jointInputs: jointInputsOf(scored),
+            loadVotes: createVotesLoader(scored, token, {
+                getImageData: deps.getImageData,
+                logger: deps.logger,
+                statsBudget,
+                persist: deps.settings?.getSetting?.('mock') !== true,
+            }),
         });
         return Array.isArray(result) && result.length === picked.length
             ? { picked: result, visualEvidence }
@@ -72,6 +87,7 @@ const rankBlock = async (
  */
 const verifyFillPick = async (
     challenge: Challenge,
+    token: string,
     scored: ScoredCandidate[],
     eligible: PickerPhoto[],
     picked: string[],
@@ -80,7 +96,12 @@ const verifyFillPick = async (
     chosenIds: ReadonlySet<string> | null,
     inOrder: boolean = false,
 ): Promise<VerifiedPick> => {
-    if (!chosenIds || chosenIds.size === 0) return rankBlock(challenge, scored, eligible, picked, ignoreWords, deps);
+    // One budget for the whole fill, so its votes lookups neither drain the voting pass's nor
+    // leave a later challenge short of lookups for its contested ties.
+    const statsBudget = createStatsBudget();
+    if (!chosenIds || chosenIds.size === 0) {
+        return rankBlock(challenge, token, scored, eligible, picked, ignoreWords, deps, statsBudget);
+    }
     const blocks = splitByChosen(scored, chosenIds);
     const results: VerifiedPick[] = [];
     for (const [block, isChosen] of [
@@ -91,7 +112,7 @@ const verifyFillPick = async (
         results.push(
             blockPicked.length === 0 || (isChosen && (inOrder || block.length <= blockPicked.length))
                 ? { picked: blockPicked, visualEvidence: null }
-                : await rankBlock(challenge, block, eligible, blockPicked, ignoreWords, deps),
+                : await rankBlock(challenge, token, block, eligible, blockPicked, ignoreWords, deps, statsBudget),
         );
     }
     // A chosen photo is never marked uncertain, so only the top-up block's

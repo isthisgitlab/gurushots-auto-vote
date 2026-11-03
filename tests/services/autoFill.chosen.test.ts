@@ -339,6 +339,7 @@ describe('chosen photos rank first', () => {
         );
         const verified = await verifyFillPick(
             challenge,
+            'token',
             scored,
             photos,
             ['c1', 'r1'],
@@ -377,7 +378,7 @@ describe('chosen photos rank first', () => {
         const { logger, lines } = makeLog();
         const deps = invalid<RankDeps & FillDeps>({ logger, rankVisually, entryAges: ledger });
         const picked = ['c1', 'r1', 'r2'];
-        const verified = await verifyFillPick(challenge, scored, [], picked, null, deps, chosenIds);
+        const verified = await verifyFillPick(challenge, 'token', scored, [], picked, null, deps, chosenIds);
         expect(rankVisually).toHaveBeenCalledTimes(2);
         expect(verified.visualEvidence).toBeNull();
         // The theme read inside awaits the lexicon, so the record call must be
@@ -441,6 +442,7 @@ describe('chosen photos rank first', () => {
             });
             const verified = await verifyFillPick(
                 challenge,
+                'token',
                 scored,
                 photos,
                 ['c3', 'r1'],
@@ -466,8 +468,8 @@ describe('chosen photos rank first', () => {
             ids.slice(0, want),
         );
         const deps = invalid<RankDeps>({ logger: makeLog().logger, rankVisually });
-        await verifyFillPick(challenge, scored, photos, ['a', 'b'], null, deps, new Set());
-        await verifyFillPick(challenge, scored, photos, ['a', 'b'], null, deps, null);
+        await verifyFillPick(challenge, 'token', scored, photos, ['a', 'b'], null, deps, new Set());
+        await verifyFillPick(challenge, 'token', scored, photos, ['a', 'b'], null, deps, null);
         expect(rankVisually).toHaveBeenCalledTimes(2);
     });
 

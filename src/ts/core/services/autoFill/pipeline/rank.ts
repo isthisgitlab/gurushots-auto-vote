@@ -112,6 +112,7 @@ const rankCandidatesForChallenge = async (
     const byId = new Map(eligible.map((photo) => [String(photo.id), photo]));
     const { picked: pickedIds } = await verifyFillPick(
         challenge,
+        token,
         scored,
         eligible,
         pick,

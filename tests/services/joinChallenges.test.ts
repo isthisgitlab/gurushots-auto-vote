@@ -52,7 +52,9 @@ jest.mock('../../src/ts/core/services/autoFill', () => ({
     resolveSemanticScores: jest.fn(async () => null),
 }));
 jest.mock('../../src/ts/core/services/photoPicker', () => ({
-    pickPhotosForChallenge: jest.fn(() => ['imgA']),
+    buildChosenCandidates: jest.fn(() => ({ scored: [], chosenIds: null, orderedIds: [] })),
+    finalizePick: jest.fn(() => ['imgA']),
+    jointInputsOf: jest.fn(() => new Map()),
 }));
 jest.mock('../../src/ts/core/services/visionVerifier', () => ({
     rankVisually: jest.fn(async (challenge: unknown, ids: string[], eligible: unknown, wantCount: number) =>
@@ -77,6 +79,7 @@ jest.mock('../../src/ts/core/settings', () => ({
     resolveRuleSettingGroup: jest.fn(() => null),
     hasRuleJoinOptIn: jest.fn(() => false),
     getChallengeOverride: jest.fn(() => null),
+    getSetting: jest.fn(() => false),
 }));
 
 import cancellationModule = require('../../src/ts/core/voting/cancellation');
@@ -201,7 +204,7 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
 beforeEach(() => {
     jest.clearAllMocks();
     cancellation.isCancelled.mockReturnValue(false);
-    photoPicker.pickPhotosForChallenge.mockReturnValue(['imgA']);
+    photoPicker.finalizePick.mockReturnValue(['imgA']);
     // Reset settings mocks to defaults so per-test overrides never leak.
     settings.getEffectiveTagSetting.mockReturnValue([]);
     settings.getTitleRules.mockReturnValue([]);
@@ -257,27 +260,29 @@ describe('performJoin — ordering & idempotency', () => {
     });
 
     test('joins with the visually re-ranked photo from a 12-photo shortlist', async () => {
-        photoPicker.pickPhotosForChallenge.mockReturnValue(['imgA', 'imgB']);
+        photoPicker.finalizePick.mockReturnValue(['imgA', 'imgB']);
         const rankVisually = jest.fn(async () => ['imgB']);
         const challenge = { id: 3, title: 'Glorious Green Leaves' };
         const deps = makeDeps({ rankVisually });
         const res = await performJoin(invalid(challenge), 'tok', deps, 0);
         expect(res.status).toBe('joined');
-        expect(photoPicker.pickPhotosForChallenge).toHaveBeenCalledWith(
+        expect(photoPicker.buildChosenCandidates).toHaveBeenCalledWith(
             challenge,
             expect.any(Array),
-            12,
             expect.any(Object),
         );
+        expect(photoPicker.finalizePick).toHaveBeenCalledWith(expect.any(Array), 12, null, null);
         expect(rankVisually).toHaveBeenCalledWith(challenge, ['imgA', 'imgB'], expect.any(Array), 1, {
             logger: expect.any(Object),
             ignoreWords: null,
+            jointInputs: expect.any(Map),
+            loadVotes: expect.any(Function),
         });
         expect(deps.submitToChallenge).toHaveBeenCalledWith(3, ['imgB'], 'tok');
     });
 
     test('no eligible photo → skip, NO coins spent', async () => {
-        photoPicker.pickPhotosForChallenge.mockReturnValue([]);
+        photoPicker.finalizePick.mockReturnValue([]);
         const deps = makeDeps();
         const res = await performJoin(invalid({ id: 1 }), 'tok', deps, 100);
         expect(res.status).toBe('skipped-no-photo');
@@ -2265,7 +2270,7 @@ describe('joinChallengeSingle — manual', () => {
                     // that failed would never have got that far), and the photo was never even looked for. The third is the
                     // one look of the pruning that follows.
                     expect(readRaw).toHaveBeenCalledTimes(3);
-                    expect(photoPicker.pickPhotosForChallenge).not.toHaveBeenCalled();
+                    expect(photoPicker.finalizePick).not.toHaveBeenCalled();
                     expect(deps.submitToChallenge).not.toHaveBeenCalled();
                 });
 
@@ -2279,7 +2284,7 @@ describe('joinChallengeSingle — manual', () => {
 
             describe('no eligible photo to submit', () => {
                 test('coins already spent: reported as pending, not "no coins were charged", and the marker stays', async () => {
-                    photoPicker.pickPhotosForChallenge.mockReturnValue([]);
+                    photoPicker.finalizePick.mockReturnValue([]);
                     const writeRaw = jest.fn();
                     const deps = retrying(MARKED, { joinStateStore: { readRaw: () => MARKED, writeRaw } });
                     const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true });
@@ -2290,7 +2295,7 @@ describe('joinChallengeSingle — manual', () => {
                 });
 
                 test('nothing spent yet: still "no eligible photo"', async () => {
-                    photoPicker.pickPhotosForChallenge.mockReturnValue([]);
+                    photoPicker.finalizePick.mockReturnValue([]);
                     const deps = retrying(null);
                     expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe(
                         'skipped-no-photo',
@@ -2298,7 +2303,7 @@ describe('joinChallengeSingle — manual', () => {
                 });
 
                 test('a free join with a stray marker is not turned into a charge that never happened', async () => {
-                    photoPicker.pickPhotosForChallenge.mockReturnValue([]);
+                    photoPicker.finalizePick.mockReturnValue([]);
                     const deps = makeDeps({ joinStateStore: { readRaw: () => MARKED, writeRaw: jest.fn() } });
                     expect((await performJoin(invalid({ id: 2 }), 'tok', deps, 0)).status).toBe('skipped-no-photo');
                 });
@@ -2480,7 +2485,7 @@ describe('unlock claims', () => {
         });
 
         test('with no photo to finish with, the unconfirmed payment is what the user is told, not "no photo"', async () => {
-            photoPicker.pickPhotosForChallenge.mockReturnValue([]);
+            photoPicker.finalizePick.mockReturnValue([]);
             const store = fileWith(unconfirmed());
             const deps = asking(store, 450);
             const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true });
@@ -3255,7 +3260,7 @@ describe('unlock claims', () => {
             expect(await join(deps)).toMatchObject({ status: 'failed-no-charge', reason: 'already-joined' });
             nothingDone(deps);
             // Refused before a photo is even chosen.
-            expect(photoPicker.pickPhotosForChallenge).not.toHaveBeenCalled();
+            expect(photoPicker.finalizePick).not.toHaveBeenCalled();
             expect(store.writeRaw).not.toHaveBeenCalled();
         });
 
@@ -3723,7 +3728,7 @@ describe('joinChallenges — edge paths', () => {
         });
 
         test('a picker returning nothing at all is "no photo"', async () => {
-            photoPicker.pickPhotosForChallenge.mockReturnValue(invalid(null));
+            photoPicker.finalizePick.mockReturnValue(invalid(null));
             expect((await performJoin(invalid({ id: 12 }), 'tok', makeDeps(), 0)).status).toBe('skipped-no-photo');
         });
     });
@@ -3816,7 +3821,7 @@ describe('joinChallenges — edge paths', () => {
         });
 
         test('a candidate with no eligible photo is reported and not counted as joined', async () => {
-            photoPicker.pickPhotosForChallenge.mockReturnValue([]);
+            photoPicker.finalizePick.mockReturnValue([]);
             const deps = makeDeps({ getMemberChallenges: openList([{ id: 1, join_coins: 0 }]) });
             expect(await runJoinPass('tok', Date.now(), deps)).toEqual({
                 ran: true,
@@ -3826,7 +3831,7 @@ describe('joinChallenges — edge paths', () => {
         });
 
         test('a thrown non-Error from a candidate join is logged by value', async () => {
-            photoPicker.pickPhotosForChallenge.mockImplementationOnce(() => {
+            photoPicker.finalizePick.mockImplementationOnce(() => {
                 throw 'picker boom';
             });
             const deps = makeDeps({ getMemberChallenges: openList([{ id: 1, join_coins: 0 }]) });
@@ -4306,7 +4311,7 @@ describe('on the app window, where the background service writes the same claims
         failingPrefReads.delete('gs_join_state');
         const w = await appWindow(withClaim);
         const retry = w.deps();
-        photoPicker.pickPhotosForChallenge.mockImplementationOnce(() => {
+        photoPicker.finalizePick.mockImplementationOnce(() => {
             failingPrefReads.add('gs_join_state');
             return ['imgA'];
         });

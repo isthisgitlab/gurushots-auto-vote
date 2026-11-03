@@ -32,7 +32,7 @@ jest.mock('../../src/ts/core/logger', () => {
 });
 
 import photoStats = require('../../src/ts/core/services/photoStats');
-import type { PickerPhoto } from '../../src/ts/core/types/photoPicker';
+import type { PickerPhoto, ScoredCandidate } from '../../src/ts/core/types/photoPicker';
 import type { RankDeps } from '../../src/ts/core/types/autoFill';
 import type { CategoryLogger } from '../../src/ts/core/logger';
 import { invalid } from '../helpers/invalid';
@@ -685,5 +685,96 @@ describe('photoStats.persistCache trims in place', () => {
         expect(persisted['late-one']).toBeDefined();
         expect(persisted['trim-one']).toBeDefined();
         expect(Object.keys(persisted).length).toBeLessThanOrEqual(MAX_CACHE_ENTRIES);
+    });
+});
+
+describe('photoStats.createVotesLoader', () => {
+    const { createVotesLoader } = photoStats;
+    const candidate = (id: string, extra: Partial<ScoredCandidate> = {}): ScoredCandidate =>
+        invalid<ScoredCandidate>({
+            id,
+            photo: photo(id),
+            statsKnown: false,
+            votes: 0,
+            ...extra,
+        });
+    const getImageDataOf = () =>
+        jest
+            .fn<ReturnType<GetImageData>, Parameters<GetImageData>>()
+            .mockImplementation(async (id) => payload(Number(String(id).replace(/\D/g, '')) * 100, 5));
+
+    beforeEach(() => {
+        storeData = null;
+        photoStats.__resetForTests();
+        resetPassState();
+        jest.clearAllMocks();
+    });
+
+    test('a photo already measured answers from its scored entry; only the others are looked up, with the token', async () => {
+        const getImageData = getImageDataOf();
+        const load = createVotesLoader(
+            [candidate('p1', { statsKnown: true, votes: 40 }), candidate('p2'), candidate('p3')],
+            'tok',
+            {
+                getImageData,
+                statsBudget: createStatsBudget(),
+            },
+        );
+        const votes = await load(['p1', 'p2', 'p3']);
+        expect(getImageData.mock.calls.map(([id, token]) => [String(id), token]).sort()).toEqual([
+            ['p2', 'tok'],
+            ['p3', 'tok'],
+        ]);
+        expect(votes).toEqual(
+            new Map([
+                ['p1', { votes: 40, statsKnown: true }],
+                ['p2', { votes: 200, statsKnown: true }],
+                ['p3', { votes: 300, statsKnown: true }],
+            ]),
+        );
+    });
+
+    test('everything already measured costs no request', async () => {
+        const getImageData = getImageDataOf();
+        const load = createVotesLoader([candidate('p1', { statsKnown: true, votes: 7 })], 'tok', {
+            getImageData,
+            statsBudget: createStatsBudget(),
+        });
+        expect(await load(['p1'])).toEqual(new Map([['p1', { votes: 7, statsKnown: true }]]));
+        expect(getImageData).not.toHaveBeenCalled();
+    });
+
+    test('a photo that cannot be measured is answered as stats-unknown, never as zero votes', async () => {
+        const getImageData = jest.fn<ReturnType<GetImageData>, Parameters<GetImageData>>().mockResolvedValue(null);
+        const load = createVotesLoader([candidate('p1')], 'tok', { getImageData, statsBudget: createStatsBudget() });
+        const votes = await load(['p1']);
+        expect(votes.get('p1')).toEqual({ votes: 0, statsKnown: false });
+    });
+
+    test('lookups spend the budget it was given, not the pass budget', async () => {
+        const getImageData = getImageDataOf();
+        const own = createStatsBudget(1);
+        const load = createVotesLoader([candidate('p1'), candidate('p2')], 'tok', { getImageData, statsBudget: own });
+        const votes = await load(['p1', 'p2']);
+        expect(own.fetched).toBe(1);
+        expect(getImageData).toHaveBeenCalledTimes(1);
+        expect([...votes.values()].map((stat) => stat.statsKnown).sort()).toEqual([false, true]);
+        // The pass's own budget still has all of its lookups: a later contested enrichment is not starved.
+        const pass = getImageDataOf();
+        await enrichCandidates([photo('later-1'), photo('later-2')], 'tok', { getImageData: pass });
+        expect(pass).toHaveBeenCalledTimes(2);
+    });
+
+    test('persist: false keeps the numbers out of the stats cache; the default writes them', async () => {
+        const getImageData = getImageDataOf();
+        const scored = [candidate('p1')];
+        await createVotesLoader(scored, 'tok', { getImageData, statsBudget: createStatsBudget(), persist: false })([
+            'p1',
+        ]);
+        expect(storeData).toBeNull();
+        await createVotesLoader(scored, 'tok', { getImageData, statsBudget: createStatsBudget() })(['p1']);
+        // Read again through a call: TypeScript has narrowed the variable to null after the check above.
+        const written = (): string | null => storeData;
+        expect(parseJsonAs(String(written()), isPhotoStatsFile).photos.p1).toBeDefined();
     });
 });

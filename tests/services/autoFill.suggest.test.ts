@@ -636,6 +636,26 @@ describe('suggestFillPhotos', () => {
             expect(result).toMatchObject({ statsLimited: false });
         });
 
+        test('the votes the visual check weighs are read with the run’s token', async () => {
+            const getImageData = jest.fn(async () => imageRecord(5, 50));
+            // One standout photo above the contested ones: the pick's own lookups never reach it.
+            const standout = photo('standout', ['Pink', 'Nature'], { upload_date: 1 });
+            const others = Array.from({ length: 7 }, (_, i) => photo(`q${i}`, ['Pink'], { upload_date: 9000 - i }));
+            const deps = makeDeps({ getImageData, photos: [standout, ...others] });
+            await suggestFillPhotos(makeChallenge(), 'tok-suggest', deps);
+            type Options = {
+                loadVotes: (ids: string[]) => Promise<Map<string, { votes: number; statsKnown: boolean }>>;
+            };
+            const options = deps.rankVisually.mock.calls[0][4] as Options;
+            // Forget what the pick's own lookups cached, so the loader has to ask.
+            photoStats.__resetForTests();
+            getImageData.mockClear();
+            const votes = await options.loadVotes(['standout']);
+            expect(votes).toEqual(new Map([['standout', { votes: 5, statsKnown: true }]]));
+            expect(getImageData).toHaveBeenCalledTimes(1);
+            expect(getImageData).toHaveBeenCalledWith('standout', 'tok-suggest');
+        });
+
         test('each run takes a fresh budget', async () => {
             const failing = jest.fn(async () => null);
             await suggestFillPhotos(makeChallenge(), 'tok', makeDeps({ getImageData: failing }));

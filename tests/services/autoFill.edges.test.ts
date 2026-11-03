@@ -284,6 +284,42 @@ describe('rankCandidatesForChallenge', () => {
     });
 });
 
+describe('rankCandidatesForChallenge — the votes the visual check weighs', () => {
+    test('a swap ranking reads them with its own token, for the photos the check asks about', async () => {
+        const { logger } = makeCapturingLogger();
+        const getImageData = jest.fn().mockResolvedValue({ votes: 321, views: 9, achievements: [] });
+        type Options = {
+            loadVotes: (ids: string[]) => Promise<Map<string, unknown>>;
+            jointInputs: ReadonlyMap<string, unknown>;
+        };
+        let answer: Map<string, unknown> | null = null;
+        let inputs: ReadonlyMap<string, unknown> | null = null;
+        const rankVisually = jest.fn(
+            async (_c: unknown, ids: string[], _e: unknown, want: number, options: Options) => {
+                inputs = options.jointInputs;
+                answer = await options.loadVotes(['leaves']);
+                return ids.slice(0, want);
+            },
+        );
+        const result = await rankCandidatesForChallenge(makeChallenge(), 'tok-swap', {
+            settings: makeSettings(),
+            logger,
+            // One clear theme match: nothing is contested, so only the visual check's own lookup reads stats.
+            getEligiblePhotos: jest.fn().mockResolvedValue([
+                { ...allowedPhoto('island'), labels: ['Sand'] },
+                { ...allowedPhoto('leaves'), labels: ['Pink', 'Nature'] },
+            ]),
+            getImageData,
+            rankVisually: invalid(rankVisually),
+        });
+        expect(result.status).toBe('ranked');
+        expect(getImageData).toHaveBeenCalledTimes(1);
+        expect(getImageData).toHaveBeenCalledWith('leaves', 'tok-swap');
+        expect(answer).toEqual(new Map([['leaves', { votes: 321, statsKnown: true }]]));
+        expect([...(inputs as unknown as ReadonlyMap<string, unknown>).keys()].sort()).toEqual(['island', 'leaves']);
+    });
+});
+
 describe('maybeEmergencyFillChallenge', () => {
     test('skips a challenge whose close_time is unreadable', async () => {
         const { logger } = makeCapturingLogger();

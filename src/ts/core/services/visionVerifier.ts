@@ -4,18 +4,24 @@
  * and the opening of its description — so no theme is hardcoded. The model is
  * downloaded and checksummed by the build, then shipped with the application.
  *
- * The check only reorders: photos the model finds clearly off-theme move
- * behind the ones it accepts, and the tag/popularity order is kept inside each
- * group. It never empties a pick. A challenge with no visual subject ("Guru of
- * The Week", "It's all About Balance"), a failed image fetch, or a failed
- * inference leaves the tag order untouched.
+ * The check only reorders, and never empties a pick. Photos the model finds
+ * clearly off-theme move behind the ones it accepts (the rejected ones in
+ * order of fit). Among the accepted photos the tag ranking, the model's fit and
+ * the photos' votes are weighed together (photoPicker/jointRank.ts) inside each
+ * gate group: matched photos stay ahead of unmatched ones and a photo matching
+ * more Should Include Tags stays ahead of one matching fewer. Votes come from
+ * the caller's `loadVotes` and only for the accepted photos; a failed lookup
+ * counts them all as unknown. A challenge with no visual subject ("Guru of The
+ * Week", "It's all About Balance"), a failed image fetch, or a failed
+ * inference leaves the tag order untouched, and no votes are looked up.
  */
 import { platform } from '../platform/port';
 import { entryPhotoUrl } from '../format/photoUrl';
 import { oneLine } from '../format/logSafe';
-import { stripTags, visualSubjectWords } from './photoPicker';
+import { OFF_THEME_MARGIN, jointOrder, stripTags, visualSubjectWords } from './photoPicker';
 import * as lexicon from './semantic/lexicon';
 
+import type { JointBreakdown, JointInput, VoteStat } from './photoPicker/jointRank';
 import type { ChallengeText, IgnoreWords, PickerPhoto } from '../types/photoPicker';
 import type { FillLogger } from '../types/autoFill';
 import type { SnapImage } from '../types/gurushots';
@@ -31,9 +37,6 @@ const MAX_IMAGES = 12;
 // "Exclusively for GuruShots" (-7.7) and "It's all About Balance" (-7.8) never
 // did, so those keep the tag order instead of an arbitrary visual one.
 const ABSTAIN_LOGIT = -6.5;
-// A photo scoring 10x less likely than the best match is off-theme (the aerial
-// island under "Green Leaves" sat ~7 logits below the leaf photos).
-const OFF_THEME_MARGIN = Math.log(10);
 // SigLIP reads 64 text tokens; two sentences of a description fit well within.
 const MAX_DESCRIPTION_CHARS = 200;
 // GuruShots appends the same rewards/sign-off text to every description.
@@ -133,20 +136,26 @@ const toLogit = (score: number | undefined): number => {
 };
 
 /**
- * Order shortlisted photos by visual fit. Each entry carries one logit per
- * prompt and a photo's fit is their mean: taking the best prompt instead let
- * fog, read by the title prompt as "smoke filled scenes", set a bar that
- * rejected the real smoke photo the description prompt preferred.
- *
- * @param scored - in tag/popularity order
- * @param onAccepted - told which photos fit; never called on an abstain, where
- *   the model could not judge the theme and so holds no evidence either way
- * @returns ids, accepted photos first; null to abstain
+ * What the joint ranking of the accepted photos reads: their tier values, a
+ * votes lookup that must not reject (rankVisually wraps the caller's), and where
+ * the per-photo terms go for the log.
  */
-const orderByVisualFit = (
-    scored: Array<{ id: string; logits: number[] }>,
-    onAccepted?: (ids: Set<string>) => void,
-): string[] | null => {
+interface JointContext {
+    inputs: ReadonlyMap<string, JointInput>;
+    loadVotes: (ids: string[]) => Promise<Map<string, VoteStat>>;
+    onBreakdown?: (breakdown: JointBreakdown) => void;
+}
+
+/**
+ * Each photo's fit — the mean of its per-prompt logits; taking the best prompt
+ * instead let fog, read by the title prompt as "smoke filled scenes", set a bar
+ * that rejected the real smoke photo the description prompt preferred — and the
+ * split at the floor, one OFF_THEME_MARGIN below the best fit.
+ *
+ * @param scored - in tag/popularity order; the accepted photos keep that order
+ * @returns null to abstain: no photo reaches ABSTAIN_LOGIT, so the model could not judge the theme
+ */
+const splitByFit = (scored: Array<{ id: string; logits: number[] }>) => {
     if (scored.length === 0) return null;
     const peak = Math.max(...scored.flatMap((item) => item.logits));
     if (peak < ABSTAIN_LOGIT) return null;
@@ -155,10 +164,61 @@ const orderByVisualFit = (
         fit: item.logits.reduce((sum, logit) => sum + logit, 0) / item.logits.length,
     }));
     const floor = Math.max(...fits.map((item) => item.fit)) - OFF_THEME_MARGIN;
-    const accepted = fits.filter((item) => item.fit >= floor);
-    const rejected = fits.filter((item) => item.fit < floor).sort((a, b) => b.fit - a.fit);
+    return {
+        accepted: fits.filter((item) => item.fit >= floor),
+        rejected: fits.filter((item) => item.fit < floor).sort((a, b) => b.fit - a.fit),
+        floor,
+    };
+};
+
+/**
+ * The accepted photos in joint order. Two or more are needed for there to be
+ * anything to weigh; votes are looked up for them alone.
+ */
+const jointAccepted = async (
+    accepted: Array<{ id: string; fit: number }>,
+    floor: number,
+    { inputs, loadVotes, onBreakdown }: JointContext,
+): Promise<string[]> => {
+    const votes = await loadVotes(accepted.map((item) => item.id));
+    const { ids, breakdown } = jointOrder(
+        accepted.map(({ id, fit }) => ({
+            id,
+            fit,
+            // The ids are the shortlist's, which the caller built the inputs from.
+            ...inputs.get(id)!,
+            votes: votes.get(id)?.votes ?? 0,
+            statsKnown: votes.get(id)?.statsKnown ?? false,
+        })),
+        { floor },
+    );
+    onBreakdown?.(breakdown);
+    return ids;
+};
+
+/**
+ * Order shortlisted photos by visual fit. Photos the model finds clearly
+ * off-theme go behind the accepted ones, by fit. With `joint` the accepted
+ * photos are ordered by theme, fit and votes together (see jointAccepted);
+ * without it they keep the incoming order.
+ *
+ * @param scored - in tag/popularity order
+ * @param onAccepted - told which photos fit; never called on an abstain, where
+ *   the model could not judge the theme and so holds no evidence either way
+ * @returns ids, accepted photos first; null to abstain
+ */
+const orderByVisualFit = async (
+    scored: Array<{ id: string; logits: number[] }>,
+    onAccepted?: (ids: Set<string>) => void,
+    joint?: JointContext,
+): Promise<string[] | null> => {
+    const split = splitByFit(scored);
+    if (!split) return null;
+    const { accepted, rejected, floor } = split;
     onAccepted?.(new Set(accepted.map((item) => item.id)));
-    return [...accepted, ...rejected].map((item) => item.id);
+    const acceptedIds =
+        joint && accepted.length >= 2 ? await jointAccepted(accepted, floor, joint) : accepted.map((item) => item.id);
+    return [...acceptedIds, ...rejected.map((item) => item.id)];
 };
 
 /**
@@ -166,6 +226,8 @@ const orderByVisualFit = (
  *
  * @param rankedIds - photo ids, best tag/popularity match first
  * @param eligible - photo records (id + member_id) for the ids
+ * @param jointInputs - the tier values of the ranked photos, by id (jointInputsOf)
+ * @param loadVotes - the votes of the photos the model accepted, asked only when it accepted two or more
  * @returns wantCount ids (fewer only if rankedIds is shorter)
  */
 const rankVisually = async (
@@ -177,7 +239,15 @@ const rankVisually = async (
         logger,
         ignoreWords = null,
         onVisualEvidence,
-    }: { logger: FillLogger; ignoreWords?: IgnoreWords; onVisualEvidence?: (acceptedIds: Set<string>) => void },
+        jointInputs,
+        loadVotes,
+    }: {
+        logger: FillLogger;
+        ignoreWords?: IgnoreWords;
+        onVisualEvidence?: (acceptedIds: Set<string>) => void;
+        jointInputs: ReadonlyMap<string, JointInput>;
+        loadVotes: (ids: string[]) => Promise<Map<string, VoteStat>>;
+    },
 ): Promise<string[]> => {
     const original = rankedIds.slice(0, wantCount);
     // The prompts tokenise the title in compound mode, which reads the
@@ -208,15 +278,33 @@ const rankVisually = async (
             if (!logits.every(Number.isFinite)) return keepOriginal('found invalid model scores');
             scored.push({ id, logits });
         }
-        const order = orderByVisualFit(scored, onVisualEvidence);
+        let breakdown: JointBreakdown = {};
+        const order = await orderByVisualFit(scored, onVisualEvidence, {
+            inputs: jointInputs,
+            // A votes lookup that fails must not lose the vision split: the photos count as unknown.
+            loadVotes: async (ids) => {
+                try {
+                    return await loadVotes(ids);
+                } catch (error) {
+                    log.debug(
+                        `Visual check could not read the votes for ${logger.challengeTag(challenge)}: ${errorMessage(error) || error}`,
+                        null,
+                    );
+                    return new Map();
+                }
+            },
+            onBreakdown: (terms) => {
+                breakdown = terms;
+            },
+        });
         const detail = { prompts, scores: scored };
         if (order === null) return keepOriginal('abstained', detail);
         const picked = [...order, ...rankedIds.slice(shortlist.length)].slice(0, wantCount);
         const changed = picked.some((id, index) => id !== original[index]);
         const outcome = changed
-            ? `reordered picks for ${logger.challengeTag(challenge)}: ${original.map(oneLine).join(', ')} → ${picked.map(oneLine).join(', ')}`
-            : `kept tag order for ${logger.challengeTag(challenge)}: no higher-fit replacement`;
-        log.info(`Visual check ${outcome}`, detail);
+            ? `re-ranked picks for ${logger.challengeTag(challenge)}: ${original.map(oneLine).join(', ')} → ${picked.map(oneLine).join(', ')}`
+            : `kept pick order for ${logger.challengeTag(challenge)}: no replacement ranked higher`;
+        log.info(`Visual check ${outcome}`, { ...detail, joint: breakdown });
         return picked;
     } catch (error) {
         log.warning(

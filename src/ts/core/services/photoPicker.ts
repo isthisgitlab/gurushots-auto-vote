@@ -32,6 +32,7 @@ import {
     splitByChosen,
     finalizePick,
 } from './photoPicker/tiers';
+import { OFF_THEME_MARGIN, jointInputsOf, jointOrder } from './photoPicker/jointRank';
 import {
     pickPhotosForChallenge,
     buildScoredCandidates,
@@ -49,6 +50,9 @@ export {
     splitByChosen,
     finalizePick,
     hasThemeMatch,
+    jointInputsOf,
+    jointOrder,
+    OFF_THEME_MARGIN,
     buildSearchTerms,
     detectLetterPrefix,
     withoutLetterPhrases,

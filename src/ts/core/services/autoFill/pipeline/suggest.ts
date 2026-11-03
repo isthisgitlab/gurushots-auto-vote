@@ -170,7 +170,17 @@ const suggestFillPhotos = async (
         return { status: noMatch ? 'no-match' : 'no-eligible' };
     }
 
-    const verified = await verifyFillPick(challenge, scored, pool, pickedIds, ignoreWords, runDeps, chosenIds, inOrder);
+    const verified = await verifyFillPick(
+        challenge,
+        token,
+        scored,
+        pool,
+        pickedIds,
+        ignoreWords,
+        runDeps,
+        chosenIds,
+        inOrder,
+    );
     const byId = new Map(pool.map((photo) => [String(photo.id), photo]));
     const photos = verified.picked
         .map((id) => byId.get(String(id)))

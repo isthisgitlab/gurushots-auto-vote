@@ -78,6 +78,7 @@ import type * as joinChallengesModule from '../../src/ts/core/services/joinChall
 import type * as apiClientModule from '../../src/ts/core/api/api-client';
 import type * as submissionsModule from '../../src/ts/core/api/submissions';
 import type * as autoFillModule from '../../src/ts/core/services/autoFill';
+import type * as photoStatsModule from '../../src/ts/core/services/photoStats';
 import type * as chosenPhotosModule from '../../src/ts/core/services/autoFill/chosenPhotos';
 import type { Challenge } from '../../src/ts/core/types/gurushots';
 import type { PickerPhoto } from '../../src/ts/core/types/photoPicker';
@@ -446,5 +447,82 @@ describe("GuruShots' suggested photos as a join-pick tiebreak", () => {
         expect(res.status).toBe('joined');
         expect(res.imageId).toMatch(/^auto-/);
         expect(lines.debug.some((m) => m.includes('could not read the suggested photos for 1: down'))).toBe(true);
+    });
+});
+
+describe('the votes a join weighs', () => {
+    const photoStats = require('../../src/ts/core/services/photoStats') as typeof photoStatsModule;
+    type ImageData = NonNullable<JoinDeps['getImageData']>;
+    const record = (votes: number): Awaited<ReturnType<ImageData>> => ({ votes, views: 1, achievements: [] });
+
+    /** A model that asks for the votes of everything it is shown, and keeps what it was told. */
+    const askingModel = (answers: Array<Map<string, { votes: number; statsKnown: boolean }>>) =>
+        vision.rankVisually.mockImplementation(async (_c, ids, _e, want, options) => {
+            answers.push(await options.loadVotes(ids));
+            return ids.slice(0, want);
+        });
+
+    beforeEach(() => {
+        photoStats.__resetForTests();
+    });
+
+    test('are read through getImageData with the join’s token, and handed to the visual check with the tier values', async () => {
+        withSettings({ submitWithoutTagMatch: true });
+        const answers: Array<Map<string, { votes: number; statsKnown: boolean }>> = [];
+        askingModel(answers);
+        const getImageData = jest.fn<ReturnType<ImageData>, Parameters<ImageData>>(async () => record(250));
+        const res = await performJoin(challenge(), 'tok-join', makeDeps(undefined, { getImageData }), 0);
+        expect(res.status).toBe('joined');
+        expect(getImageData).toHaveBeenCalledTimes(11);
+        for (const [, token] of getImageData.mock.calls) expect(token).toBe('tok-join');
+        expect(answers[0].get('auto-0')).toEqual({ votes: 250, statsKnown: true });
+        const options = vision.rankVisually.mock.calls[0][4];
+        expect([...options.jointInputs.keys()].sort()).toEqual(eleven.map((p) => String(p.id)).sort());
+        expect(options.jointInputs.get('auto-0')).toMatchObject({ themeMatch: true, suggested: false });
+    });
+
+    test('are unknown, not zero, when the join has no getImageData', async () => {
+        withSettings({ submitWithoutTagMatch: true });
+        const answers: Array<Map<string, { votes: number; statsKnown: boolean }>> = [];
+        askingModel(answers);
+        await performJoin(challenge(), 'tok', makeDeps(), 0);
+        expect(answers[0].get('auto-0')).toEqual({ votes: 0, statsKnown: false });
+    });
+
+    test('a join in mock mode reads them but its ids never reach the stats cache; a real join caches them', async () => {
+        withSettings({ submitWithoutTagMatch: true });
+        askingModel([]);
+        settings.getSetting.mockImplementation((key) => invalid(key === 'mock'));
+        const mockRead = jest.fn<ReturnType<ImageData>, Parameters<ImageData>>(async () => record(10));
+        await performJoin(challenge(), 'tok', makeDeps(undefined, { getImageData: mockRead }), 0);
+        expect(mockRead).toHaveBeenCalled();
+        // Nothing was cached: asking again still has to look the photo up.
+        const again = jest.fn<ReturnType<ImageData>, Parameters<ImageData>>(async () => record(10));
+        await photoStats.enrichCandidates([photo('auto-0', ['Pink'])], 'tok', { getImageData: again });
+        expect(again).toHaveBeenCalledTimes(1);
+
+        photoStats.__resetForTests();
+        settings.getSetting.mockReturnValue(invalid(''));
+        await performJoin(challenge(2), 'tok', makeDeps(undefined, { getImageData: mockRead }), 0);
+        const cached = jest.fn<ReturnType<ImageData>, Parameters<ImageData>>(async () => record(10));
+        await photoStats.enrichCandidates([photo('auto-0', ['Pink'])], 'tok', { getImageData: cached });
+        expect(cached).not.toHaveBeenCalled();
+    });
+
+    test('each pick has a lookup budget of its own: a failing endpoint stops after one chunk, and the pass keeps its lookups', async () => {
+        withSettings({ submitWithoutTagMatch: true });
+        askingModel([]);
+        const failing = jest.fn<ReturnType<ImageData>, Parameters<ImageData>>(async () => null);
+        await performJoin(challenge(), 'tok', makeDeps(undefined, { getImageData: failing }), 0);
+        // One chunk of five starts together; the breaker (three failures in a row) then stops the other six.
+        expect(failing).toHaveBeenCalledTimes(5);
+        // The voting pass's own budget and breaker are untouched, so a later challenge's contested ties still resolve.
+        const working = jest.fn<ReturnType<ImageData>, Parameters<ImageData>>(async () => record(5));
+        await photoStats.enrichCandidates([photo('later', ['Pink'])], 'tok', { getImageData: working });
+        expect(working).toHaveBeenCalledTimes(1);
+        // The next join starts from a fresh budget.
+        const next = jest.fn<ReturnType<ImageData>, Parameters<ImageData>>(async () => record(5));
+        await performJoin(challenge(3), 'tok', makeDeps(undefined, { getImageData: next }), 0);
+        expect(next).toHaveBeenCalled();
     });
 });

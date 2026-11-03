@@ -446,6 +446,8 @@ describe('joinChallenge', () => {
                 submitToChallenge: main.submitToChallenge,
                 getEligiblePhotos: submissions.getEligiblePhotos,
                 getEligiblePhotosWalk: submissions.getEligiblePhotosWalk,
+                // the join pick's votes lookup
+                getImageData: submissions.getImageData,
                 getCurrentMemberProfile: tags.getCurrentMemberProfile,
                 searchTagAutocomplete: tags.searchTagAutocomplete,
                 joinStateStore,
