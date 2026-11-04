@@ -242,6 +242,14 @@ export function TitleTagRulesEditor({
         <div className="space-y-3">
             {rules.length === 0 && <p className="text-sm text-base-content/70">{t('app.noTitleTagRules')}</p>}
 
+            {/* Delete announcements: always mounted, OUTSIDE the form block —
+            the form (header live region included) unmounts when the delete
+            clears the selection, and a live region freshly mounted with text
+            is not reliably announced. Cleared by the next list action. */}
+            <p aria-live="polite" className="text-xs">
+                {deletedNote ? t('app.titleRuleDeleted') : ''}
+            </p>
+
             {rules.length > 0 && (
                 <div className="flex items-center gap-2">
                     <select

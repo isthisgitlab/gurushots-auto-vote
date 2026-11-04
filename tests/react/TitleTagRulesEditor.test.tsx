@@ -479,7 +479,7 @@ describe('TitleTagRulesEditor', () => {
         expect(live.textContent).toBe('app.titleRulePositionOf');
     });
 
-    test('a confirmed delete moves focus to the dropdown', () => {
+    test('a confirmed delete moves focus to the dropdown and announces itself', () => {
         const value = [
             { title: 'A', mustIncludeTags: [], shouldIncludeTags: [] },
             { title: 'B', mustIncludeTags: [], shouldIncludeTags: [] },
@@ -491,6 +491,29 @@ describe('TitleTagRulesEditor', () => {
         fireEvent.click(screen.getByRole('button', { name: 'app.confirmDelete' })); // confirm
         // The confirm button unmounts with the form; the dropdown is the anchor.
         expect(document.activeElement).toBe(dropdown());
+        // The deletion is announced through the always-mounted live region —
+        // the form's own region unmounts with the selection it announced.
+        expect(screen.getByText('app.titleRuleDeleted').getAttribute('aria-live')).toBe('polite');
+        // The next list action clears it.
+        selectRule(1);
+        expect(screen.queryByText('app.titleRuleDeleted')).toBeNull();
+    });
+
+    test('the delete announcement survives the last-rule delete (its form region unmounts)', () => {
+        const Harness = () => {
+            const [rules, setRules] = useState<TitleRule[]>([
+                { title: 'A', mustIncludeTags: [], shouldIncludeTags: [] },
+            ]);
+            return <TitleTagRulesEditor value={rules} onChange={setRules} />;
+        };
+        renderEditor(<Harness />);
+        const remove = () => screen.getByRole('button', { name: 'app.removeTitleTagRule 1' });
+        fireEvent.click(remove()); // arm
+        fireEvent.click(screen.getByRole('button', { name: 'app.confirmDelete' })); // confirm
+        expect(screen.queryByLabelText('app.titleRuleSelectRule')).toBeNull();
+        // Still announced even though the whole form block (position region
+        // included) is gone.
+        expect(screen.getByText('app.titleRuleDeleted')).toBeTruthy();
     });
 
     test('a confirmed delete of the last rule moves focus to Add rule', () => {
