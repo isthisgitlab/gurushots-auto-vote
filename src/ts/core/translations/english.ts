@@ -1144,6 +1144,7 @@ export const app = {
         'This rule will be dropped or refused on save: it has no match condition, or matches without setting a profile, tags or overrides.',
     titleRuleSelectRule: 'Select rule to edit',
     titleRulePositionOf: 'Rule {n} of {m}',
+    titleRuleDeleted: 'Rule deleted.',
     titleRuleUntitled: '(untitled rule)',
     usingProfile: 'Using profile',
     fromRule: 'From rule: {title}',

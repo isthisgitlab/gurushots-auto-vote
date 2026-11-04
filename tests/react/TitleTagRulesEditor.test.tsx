@@ -285,8 +285,11 @@ describe('TitleTagRulesEditor', () => {
         ];
         renderEditor(<TitleTagRulesEditor value={value} onChange={onChange} />);
         fireEvent.click(screen.getByRole('button', { name: 'app.removeTitleTagRule 1' }));
-        // Armed on rule 1, its own ↓ clicked — no selection change in between,
-        // so moveRule's own disarm is what protects this path. (The editor is
+        // Armed on rule 1, its own ↓ clicked — no selection change in between.
+        // The disarm is layered here: moveRule's explicit call and the
+        // selection-change effect both fire (a mutation run confirmed the
+        // effect alone keeps this test green, so the test pins the behavior,
+        // not one mechanism). (The editor is
         // uncontrolled here — onChange records the swap without the parent
         // feeding it back, which is all this assertion needs.)
         fireEvent.click(screen.getByLabelText('app.titleRuleMoveDown 1'));

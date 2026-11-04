@@ -233,12 +233,14 @@ const sanitizeTitleRule = (
     const { titles, modes } = titleList;
     const title = titles[0] || '';
     // The display-only name: whitespace-collapsed (so the stored, displayed
-    // and logged forms agree — a pasted newline would otherwise span lines in
-    // log labels), dropped when empty, REJECTED over the same length bound as
-    // a title entry (reject, not truncate, so a typo cannot shrink a name
-    // silently). Computed before any label so the log never sees the raw
-    // renderer text, and an over-length rejection is labeled by the name-less
-    // fallback, never by the name being rejected.
+    // and logged forms agree — a newline reaches this code only from a
+    // hand-edited config.json or programmatic input, the text input strips
+    // them, but it would otherwise span lines in log labels), dropped when
+    // empty, REJECTED over the same length bound as a title entry (reject,
+    // not truncate, so a typo cannot shrink a name silently). Computed before
+    // any label so the log never sees the raw renderer text, and an
+    // over-length rejection is labeled by the name-less fallback, never by
+    // the name being rejected.
     const name = typeof rule?.name === 'string' ? rule.name.replace(/\s+/g, ' ').trim() : '';
     if (name.length > MAX_TITLE_LENGTH) return { valid: false, title: ruleLogLabel(rule, title, undefined) };
     const label = ruleLogLabel(rule, title, name || undefined);

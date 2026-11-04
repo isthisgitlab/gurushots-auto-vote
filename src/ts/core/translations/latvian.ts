@@ -1152,6 +1152,7 @@ export const app: LatvianApp = {
         'Šis noteikums saglabājot tiks atmests vai noraidīts: tam nav atbilstības nosacījuma, vai tas nepiestata ne profilu, ne tagus, ne citus uzstādījumus.',
     titleRuleSelectRule: 'Izvēlēties rediģējamo noteikumu',
     titleRulePositionOf: '{n}. noteikums no {m}',
+    titleRuleDeleted: 'Noteikums izdzēsts.',
     titleRuleUntitled: '(bez nosaukuma)',
     usingProfile: 'Izmanto profilu',
     fromRule: 'No noteikuma: {title}',

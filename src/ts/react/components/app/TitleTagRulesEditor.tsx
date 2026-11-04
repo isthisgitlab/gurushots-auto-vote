@@ -106,6 +106,10 @@ export function TitleTagRulesEditor({
     const [selected, setSelected] = useState<number | null>(null);
     // The two-step delete: armed (first press) then confirmed (second press).
     const [deleteArmed, setDeleteArmed] = useState(false);
+    // A confirmed delete announces itself through the live region until the
+    // next user action touches the list (a focus move alone is not reliably
+    // spoken by screen readers).
+    const [deletedNote, setDeletedNote] = useState(false);
     const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     // The dropdown survives every form change that keeps a rule, so it is the
     // focus anchor after a confirmed delete; the Add button anchors the
@@ -152,6 +156,7 @@ export function TitleTagRulesEditor({
 
     const pickRule = (raw: string) => {
         disarm();
+        setDeletedNote(false);
         setSelected(raw === '' ? null : Number(raw));
     };
 
@@ -161,12 +166,14 @@ export function TitleTagRulesEditor({
         const next = [...rules];
         [next[index], next[index + delta]] = [next[index + delta], next[index]];
         disarm();
+        setDeletedNote(false);
         setSelected(index + delta);
         onChange(next);
     };
 
     const sortDefault = () => {
         disarm();
+        setDeletedNote(false);
         // Sorting scrambles indices, so following the selected rule through
         // sortRulesByDefaultOrder is not worth the tracking: deselect.
         setSelected(null);
@@ -175,6 +182,7 @@ export function TitleTagRulesEditor({
 
     const addRule = () => {
         disarm();
+        setDeletedNote(false);
         setSelected(rules.length);
         onChange([...rules, { title: '', profile: '', mustIncludeTags: [], shouldIncludeTags: [] }]);
     };
@@ -188,8 +196,11 @@ export function TitleTagRulesEditor({
         // No ghost rule: the form goes back to "—", and focus follows to
         // whichever anchor survives this delete — the dropdown while other
         // rules remain, else the Add button (the dropdown unmounts with the
-        // last rule).
+        // last rule). The deletion itself is announced through the live
+        // region (`deletedNote` below), since a focus move alone is not
+        // reliably spoken.
         setSelected(null);
+        setDeletedNote(true);
         (rules.length > 1 ? selectRef : addRef).current?.focus();
         onChange(rules.filter((_, i) => i !== index));
     };
@@ -204,19 +215,24 @@ export function TitleTagRulesEditor({
     const selectedRule = selected !== null ? rules[selected] : undefined;
 
     // One polite live region: the picked rule's position announces on every
-    // selection/reorder change. An armed delete needs no separate announcement
-    // — the button's own label carries the confirm prompt right beside it.
-    const liveText =
-        selected === null
-            ? ''
-            : rules[selected] !== undefined
-              ? t('app.titleRulePositionOf', { n: selected + 1, m: rules.length })
-              : '';
+    // selection/reorder change; a confirmed delete announces itself until the
+    // next action, and an armed delete needs no separate announcement — the
+    // button's own label carries the confirm prompt right beside it.
+    const liveText = deletedNote
+        ? t('app.titleRuleDeleted')
+        : selected === null
+          ? ''
+          : rules[selected] !== undefined
+            ? t('app.titleRulePositionOf', { n: selected + 1, m: rules.length })
+            : '';
     // The drop warning mirrors the sanitizer's two drop paths — no match
     // condition at all, or conditions without any behaviour — for any rule
-    // that already carries user content, named or not. (A malformed
-    // condition, e.g. a typo'd close time, is REFUSED rather than dropped;
-    // the message says "dropped or refused" to cover both.)
+    // that already carries user content, named or not. "Refused" covers a
+    // rule that has a title (so the warning shows) alongside something the
+    // sanitizer refuses (a malformed condition, an over-length title/name):
+    // its save fails wholesale. A rule whose ONLY content is a malformed
+    // condition normalizes away here and reaches neither warning nor
+    // message — the save-time error alone reports that shape.
     const dropWarning =
         selectedRule !== undefined &&
         hasUserContent(selectedRule) &&
