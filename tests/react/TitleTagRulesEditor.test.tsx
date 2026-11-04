@@ -1,7 +1,9 @@
 /**
- * Component tests for TitleTagRulesEditor.tsx — the controlled list editor
- * for challenge rules in the global settings modal. The translation manager
- * mock returns each key verbatim, so labels/placeholders are the i18n keys.
+ * Component tests for TitleTagRulesEditor.tsx — the profiles-style dropdown +
+ * single-form editor for challenge rules in the global settings modal. The
+ * translation manager mock returns each key verbatim, so labels/placeholders
+ * are the i18n keys. The form appears only for a rule picked in the dropdown,
+ * so nearly every test selects one first (`renderEditor` does it by default).
  */
 
 import { useState } from 'react';
@@ -13,27 +15,156 @@ import { fillTemplate, mockTranslator } from './helpers/setup';
 import { app as englishApp } from '../../src/ts/core/translations/english';
 import { app as latvianApp } from '../../src/ts/core/translations/latvian';
 
+/** The dropdown the rule is picked in. */
+const dropdown = () => screen.getByLabelText<HTMLSelectElement>('app.titleRuleSelectRule');
+/** Pick the rule at `index` (0-based) in the dropdown. */
+const selectRule = (index: number) => fireEvent.change(dropdown(), { target: { value: String(index) } });
+
+/**
+ * Render the editor, then pick a rule so the form shows (the component's whole
+ * point). `select: null` skips the pick — for the empty state, where there is
+ * no dropdown at all. The guard queries by role, not by label key, so it also
+ * works under the real-strings translators below.
+ */
+const renderEditor = (ui: React.ReactElement, { select }: { select?: number | null } = { select: 0 }) => {
+    const view = render(ui);
+    const ruleDropdown = select !== null ? screen.queryByRole('combobox') : null;
+    if (ruleDropdown) fireEvent.change(ruleDropdown, { target: { value: String(select) } });
+    return view;
+};
+
 describe('TitleTagRulesEditor', () => {
     test('renders the empty-state hint when there are no rules', () => {
-        render(<TitleTagRulesEditor value={[]} onChange={jest.fn()} />);
+        renderEditor(<TitleTagRulesEditor value={[]} onChange={jest.fn()} />, { select: null });
         expect(screen.getByText('app.noTitleTagRules')).toBeTruthy();
+        expect(screen.queryByLabelText('app.titleRuleSelectRule')).toBeNull();
     });
 
-    test('"Add rule" appends an empty rule', () => {
-        const onChange = jest.fn();
-        render(<TitleTagRulesEditor value={[]} onChange={onChange} />);
+    test('with rules but nothing picked, only the dropdown shows', () => {
+        renderEditor(
+            <TitleTagRulesEditor
+                value={[{ title: 'A', mustIncludeTags: [], shouldIncludeTags: [] }]}
+                onChange={jest.fn()}
+            />,
+            { select: null },
+        );
+        expect(dropdown().value).toBe('');
+        expect(screen.queryByLabelText('app.titleTagRuleTitle 1')).toBeNull();
+        expect(screen.queryByRole('button', { name: /^app\.removeTitleTagRule/ })).toBeNull();
+    });
+
+    test('"Add rule" appends an empty rule and selects it', () => {
+        const Harness = () => {
+            const [rules, setRules] = useState<TitleRule[]>([]);
+            return <TitleTagRulesEditor value={rules} onChange={setRules} />;
+        };
+        renderEditor(<Harness />, { select: null });
         fireEvent.click(screen.getByRole('button', { name: 'app.addTitleTagRule' }));
-        expect(onChange).toHaveBeenCalledWith([{ title: '', profile: '', mustIncludeTags: [], shouldIncludeTags: [] }]);
+        // The new rule is the one the form shows (n = m = 1).
+        expect(dropdown().value).toBe('0');
+        expect(screen.getByLabelText<HTMLInputElement>('app.titleRuleName').value).toBe('');
+        expect(mockTranslator.t).toHaveBeenCalledWith('app.titleRulePositionOf', { n: 1, m: 1 }, 'en');
+    });
+
+    test('the dropdown labels each rule by its position and display name', () => {
+        const value = [
+            { name: 'Night owl', title: '', mustIncludeTags: [], shouldIncludeTags: [] },
+            { title: 'Hats', mustIncludeTags: [], shouldIncludeTags: [] },
+            { challengeTag: 'Exhibition', mustIncludeTags: [], shouldIncludeTags: [] },
+            { type: 'flash', mustIncludeTags: [], shouldIncludeTags: [] },
+            { closesAt: '17:10', closesAtTimes: ['17:10', '18:10'], mustIncludeTags: [], shouldIncludeTags: [] },
+            { mustIncludeTags: [], shouldIncludeTags: [] },
+        ];
+        renderEditor(<TitleTagRulesEditor value={value} onChange={jest.fn()} />, { select: null });
+        const labels = [...dropdown().options].map((option) => option.textContent);
+        expect(labels).toEqual([
+            '—',
+            '1. Night owl',
+            '2. Hats',
+            '3. Exhibition',
+            '4. flash',
+            '5. 17:10, 18:10',
+            '6. app.titleRuleUntitled',
+        ]);
+    });
+
+    test('a name with embedded whitespace renders collapsed in the dropdown', () => {
+        renderEditor(
+            <TitleTagRulesEditor
+                value={[{ name: 'Night\n  owl   run', title: '', mustIncludeTags: [], shouldIncludeTags: [] }]}
+                onChange={jest.fn()}
+            />,
+            { select: null },
+        );
+        expect(screen.getByRole('option', { name: '1. Night owl run' })).toBeTruthy();
+    });
+
+    test('a long close-times list is summarized: the first three, then an ellipsis', () => {
+        const times = Array.from({ length: 4 }, (_, i) => `${String(i + 17).padStart(2, '0')}:10`);
+        renderEditor(
+            <TitleTagRulesEditor
+                value={[{ closesAtTimes: times, mustIncludeTags: [], shouldIncludeTags: [] }]}
+                onChange={jest.fn()}
+            />,
+            { select: null },
+        );
+        expect(screen.getByRole('option', { name: '1. 17:10, 18:10, 19:10, …' })).toBeTruthy();
     });
 
     test('editing the title emits the updated rule', () => {
         const onChange = jest.fn();
         const value = [{ title: '', mustIncludeTags: [], shouldIncludeTags: [] }];
-        render(<TitleTagRulesEditor value={value} onChange={onChange} />);
+        renderEditor(<TitleTagRulesEditor value={value} onChange={onChange} />);
         fireEvent.change(screen.getByLabelText('app.titleTagRuleTitle 1'), { target: { value: "Let's See Hats" } });
         expect(onChange).toHaveBeenCalledWith([
             { title: "Let's See Hats", titles: ["Let's See Hats"], mustIncludeTags: [], shouldIncludeTags: [] },
         ]);
+    });
+
+    test('the Name input patches the rule and caps at the sanitizer bound', () => {
+        const onChange = jest.fn();
+        const value = [{ title: 'A', mustIncludeTags: [], shouldIncludeTags: [] }];
+        renderEditor(<TitleTagRulesEditor value={value} onChange={onChange} />);
+        const name = screen.getByLabelText('app.titleRuleName');
+        expect(name.getAttribute('maxlength')).toBe('200');
+        fireEvent.change(name, { target: { value: 'Night owl' } });
+        expect(onChange).toHaveBeenCalledWith([
+            { name: 'Night owl', title: 'A', mustIncludeTags: [], shouldIncludeTags: [] },
+        ]);
+    });
+
+    test('the Name hint names it display-only, and the field keeps a typed name on re-render', () => {
+        const value = [{ name: 'Night owl', title: 'A', mustIncludeTags: [], shouldIncludeTags: [] }];
+        renderEditor(<TitleTagRulesEditor value={value} onChange={jest.fn()} />);
+        expect(screen.getByText('app.titleRuleNameHint')).toBeTruthy();
+        expect(screen.getByLabelText<HTMLInputElement>('app.titleRuleName').value).toBe('Night owl');
+    });
+
+    test('a rule with a name but no condition and no behaviour warns at edit time', () => {
+        const onChange = jest.fn();
+        const { rerender } = renderEditor(
+            <TitleTagRulesEditor
+                value={[{ name: 'Night owl', mustIncludeTags: [], shouldIncludeTags: [] }]}
+                onChange={onChange}
+            />,
+        );
+        expect(screen.getByText('app.titleRuleNameOnlyWarning')).toBeTruthy();
+        // Still dropped (and still warned): a condition without any behaviour.
+        rerender(
+            <TitleTagRulesEditor
+                value={[{ name: 'Night owl', title: 'Hats', mustIncludeTags: [], shouldIncludeTags: [] }]}
+                onChange={onChange}
+            />,
+        );
+        expect(screen.getByText('app.titleRuleNameOnlyWarning')).toBeTruthy();
+        // A condition plus behaviour (tags) clears it.
+        rerender(
+            <TitleTagRulesEditor
+                value={[{ name: 'Night owl', title: 'Hats', mustIncludeTags: ['x'], shouldIncludeTags: [] }]}
+                onChange={onChange}
+            />,
+        );
+        expect(screen.queryByText('app.titleRuleNameOnlyWarning')).toBeNull();
     });
 
     test('a rule can assign a scenario inline, and a missing one stays visible', async () => {
@@ -42,7 +173,7 @@ describe('TitleTagRulesEditor', () => {
         );
         const onChange = jest.fn();
         const value = [{ title: 'A', mustIncludeTags: [], shouldIncludeTags: [] }];
-        const { rerender } = render(<TitleTagRulesEditor value={value} onChange={onChange} />);
+        const { rerender } = renderEditor(<TitleTagRulesEditor value={value} onChange={onChange} />);
         await waitFor(() => expect(screen.getByRole('option', { name: 'Plan' })).toBeTruthy());
         const pick = (name: string) => {
             const select = screen.getByLabelText<HTMLSelectElement>('app.scenario');
@@ -64,7 +195,7 @@ describe('TitleTagRulesEditor', () => {
     test('a rule can list several titles', () => {
         const onChange = jest.fn();
         const value = [{ title: 'A', mustIncludeTags: [], shouldIncludeTags: [] }];
-        render(<TitleTagRulesEditor value={value} onChange={onChange} />);
+        renderEditor(<TitleTagRulesEditor value={value} onChange={onChange} />);
         fireEvent.click(screen.getByText(/app\.addTitleRuleTitle/));
         expect(onChange).toHaveBeenLastCalledWith([
             { title: 'A', titles: ['A', ''], mustIncludeTags: [], shouldIncludeTags: [] },
@@ -74,7 +205,7 @@ describe('TitleTagRulesEditor', () => {
     test('stored titles render one input each and can be removed', () => {
         const onChange = jest.fn();
         const value = [{ title: 'A', titles: ['A', 'B'], mustIncludeTags: [], shouldIncludeTags: [] }];
-        render(<TitleTagRulesEditor value={value} onChange={onChange} />);
+        renderEditor(<TitleTagRulesEditor value={value} onChange={onChange} />);
         expect(screen.getByLabelText<HTMLInputElement>('app.titleTagRuleTitle 1').value).toBe('A');
         expect(screen.getByLabelText<HTMLInputElement>('app.titleTagRuleTitle 2').value).toBe('B');
         fireEvent.click(screen.getByLabelText('app.removeTitleRuleTitle 1'));
@@ -84,7 +215,7 @@ describe('TitleTagRulesEditor', () => {
     });
 
     test('a single title has no remove-title button', () => {
-        render(
+        renderEditor(
             <TitleTagRulesEditor
                 value={[{ title: 'A', mustIncludeTags: [], shouldIncludeTags: [] }]}
                 onChange={jest.fn()}
@@ -93,40 +224,231 @@ describe('TitleTagRulesEditor', () => {
         expect(screen.queryByLabelText('app.removeTitleRuleTitle 1')).toBeNull();
     });
 
-    test('removing a row emits the array without it', () => {
+    test('the selected rule is deleted in two steps, and delete clears the selection', () => {
         const onChange = jest.fn();
         const value = [
             { title: 'A', mustIncludeTags: ['x'], shouldIncludeTags: [] },
             { title: 'B', mustIncludeTags: ['y'], shouldIncludeTags: [] },
         ];
-        render(<TitleTagRulesEditor value={value} onChange={onChange} />);
-        const removeButtons = screen.getAllByRole('button', { name: /^app\.removeTitleTagRule \d+$/ });
-        expect(removeButtons[0].className).toContain('btn-error');
-        expect(removeButtons[0].className).not.toContain('btn-outline');
-        // Set apart from the reorder buttons, and named by its rule so the two are not the same control to a reader.
-        expect(removeButtons[0].className).toContain('ml-auto');
-        expect(removeButtons.map((button) => button.getAttribute('aria-label'))).toEqual([
-            'app.removeTitleTagRule 1',
-            'app.removeTitleTagRule 2',
-        ]);
-        fireEvent.click(removeButtons[0]);
+        renderEditor(<TitleTagRulesEditor value={value} onChange={onChange} />);
+        const remove = () => screen.getByRole('button', { name: 'app.removeTitleTagRule 1' });
+        expect(remove().className).not.toContain('btn-error');
+        fireEvent.click(remove());
+        // Armed: the button asks for confirmation (its text) instead of firing,
+        // while the stable aria-label keeps naming rule 1.
+        expect(remove().className).toContain('btn-error');
+        expect(remove().textContent).toBe('app.confirmDelete');
+        fireEvent.click(remove());
         expect(onChange).toHaveBeenCalledWith([{ title: 'B', mustIncludeTags: ['y'], shouldIncludeTags: [] }]);
+        // No ghost rule: the form goes back to "—".
+        expect(dropdown().value).toBe('');
+        expect(screen.queryByLabelText('app.titleTagRuleTitle 1')).toBeNull();
+        // "—" is selectable again.
+        fireEvent.change(dropdown(), { target: { value: '' } });
+        expect(dropdown().value).toBe('');
     });
 
-    test('editing the Must tags emits the parsed tag array (first TagsField in the row)', () => {
+    test('an armed delete is disarmed by switching the picked rule and deletes nothing', () => {
+        const onChange = jest.fn();
+        const value = [
+            { title: 'A', mustIncludeTags: [], shouldIncludeTags: [] },
+            { title: 'B', mustIncludeTags: [], shouldIncludeTags: [] },
+        ];
+        renderEditor(<TitleTagRulesEditor value={value} onChange={onChange} />);
+        fireEvent.click(screen.getByRole('button', { name: 'app.removeTitleTagRule 1' }));
+        selectRule(1);
+        expect(screen.getByRole('button', { name: 'app.removeTitleTagRule 2' }).className).not.toContain('btn-error');
+        fireEvent.click(screen.getByRole('button', { name: 'app.removeTitleTagRule 2' }));
+        // First press after the switch: armed again, nothing removed yet.
+        expect(onChange).not.toHaveBeenCalled();
+        expect(screen.getByRole('button', { name: 'app.removeTitleTagRule 2' }).className).toContain('btn-error');
+    });
+
+    test('an armed delete is disarmed by a reorder: the move fires, the delete does not', () => {
+        const onChange = jest.fn();
+        const value = [
+            { title: 'A', mustIncludeTags: [], shouldIncludeTags: [] },
+            { title: 'B', mustIncludeTags: [], shouldIncludeTags: [] },
+        ];
+        renderEditor(<TitleTagRulesEditor value={value} onChange={onChange} />);
+        fireEvent.click(screen.getByRole('button', { name: 'app.removeTitleTagRule 1' }));
+        // Move rule 2 up (↑, the other direction from the reorder-focus test).
+        selectRule(1);
+        fireEvent.click(screen.getByLabelText('app.titleRuleMoveUp 2'));
+        expect(onChange).toHaveBeenLastCalledWith([value[1], value[0]]);
+        // The selection followed the moved rule to position 1; the armed state did not.
+        fireEvent.click(screen.getByRole('button', { name: /^app\.removeTitleTagRule 1$/ }));
+        expect(onChange).not.toHaveBeenCalledWith([]);
+        expect(screen.getByRole('button', { name: /^app\.removeTitleTagRule 1$/ }).className).toContain('btn-error');
+    });
+
+    test('an armed delete is disarmed by Add rule; the next press re-arms', () => {
+        const Harness = () => {
+            const [rules, setRules] = useState<TitleRule[]>([
+                { title: 'A', mustIncludeTags: [], shouldIncludeTags: [] },
+            ]);
+            return <TitleTagRulesEditor value={rules} onChange={setRules} />;
+        };
+        renderEditor(<Harness />);
+        fireEvent.click(screen.getByRole('button', { name: 'app.removeTitleTagRule 1' }));
+        fireEvent.click(screen.getByRole('button', { name: 'app.addTitleTagRule' }));
+        expect(screen.getByLabelText<HTMLInputElement>('app.titleRuleName')).toBeTruthy();
+        // The appended rule is selected; the first press on its delete arms it.
+        fireEvent.click(screen.getByRole('button', { name: 'app.removeTitleTagRule 2' }));
+        expect(screen.getByRole('button', { name: 'app.removeTitleTagRule 2' }).className).toContain('btn-error');
+    });
+
+    test('an armed delete is disarmed by Sort default; picking a rule re-arms from scratch', () => {
+        const onChange = jest.fn();
+        const pics = { title: '', pics: 4, mustIncludeTags: [], shouldIncludeTags: [] };
+        const titled = { title: 'A', mustIncludeTags: [], shouldIncludeTags: [] };
+        renderEditor(<TitleTagRulesEditor value={[titled, pics]} onChange={onChange} />);
+        fireEvent.click(screen.getByRole('button', { name: 'app.removeTitleTagRule 1' }));
+        fireEvent.click(screen.getByText('app.titleRuleSortDefault'));
+        expect(onChange).toHaveBeenLastCalledWith([titled, pics]);
+        // Sort deselected: no form, no delete button at all.
+        expect(screen.queryByRole('button', { name: /app\.removeTitleTagRule/ })).toBeNull();
+        selectRule(1);
+        fireEvent.click(screen.getByRole('button', { name: 'app.removeTitleTagRule 2' }));
+        expect(onChange).not.toHaveBeenCalledWith([pics]);
+        expect(screen.getByRole('button', { name: 'app.removeTitleTagRule 2' }).className).toContain('btn-error');
+    });
+
+    test('an armed delete disarms itself after the confirm window', () => {
+        jest.useFakeTimers();
+        try {
+            const onChange = jest.fn();
+            renderEditor(
+                <TitleTagRulesEditor
+                    value={[{ title: 'A', mustIncludeTags: [], shouldIncludeTags: [] }]}
+                    onChange={onChange}
+                />,
+            );
+            const remove = () => screen.getByRole('button', { name: 'app.removeTitleTagRule 1' });
+            fireEvent.click(remove());
+            expect(remove().className).toContain('btn-error');
+            // Past the window the arm expires: the button is idle again.
+            jest.advanceTimersByTime(4000);
+            expect(remove().className).not.toContain('btn-error');
+            fireEvent.click(remove());
+            // Idle again: the press armed, it did not delete.
+            expect(onChange).not.toHaveBeenCalled();
+            expect(remove().className).toContain('btn-error');
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    test('a background refresh that shrinks the list normalizes the selection, and regrowing leaves no ghost', () => {
+        const value = Array.from({ length: 6 }, (_, i) => ({
+            title: `R${i}`,
+            mustIncludeTags: [],
+            shouldIncludeTags: [],
+        }));
+        const { rerender } = renderEditor(<TitleTagRulesEditor value={value} onChange={jest.fn()} />, { select: 5 });
+        expect(dropdown().value).toBe('5');
+        rerender(<TitleTagRulesEditor value={value.slice(0, 3)} onChange={jest.fn()} />);
+        // Out of range: the stored selection is reset, not merely clamped.
+        expect(dropdown().value).toBe('');
+        // Regrowing must not resurrect the stale index.
+        rerender(
+            <TitleTagRulesEditor
+                value={[...value, { title: 'R6', mustIncludeTags: [], shouldIncludeTags: [] }]}
+                onChange={jest.fn()}
+            />,
+        );
+        expect(dropdown().value).toBe('');
+        expect(screen.queryByLabelText('app.titleTagRuleTitle 1')).toBeNull();
+    });
+
+    test('the selection follows the rule through a reorder, and the header keeps focus', () => {
+        const value = [
+            { title: 'A', mustIncludeTags: [], shouldIncludeTags: [] },
+            { title: 'B', mustIncludeTags: [], shouldIncludeTags: [] },
+        ];
+        const Harness = () => {
+            const [rules, setRules] = useState<TitleRule[]>(value);
+            return <TitleTagRulesEditor value={rules} onChange={setRules} />;
+        };
+        renderEditor(<Harness />);
+        fireEvent.change(screen.getByLabelText('app.titleTagRuleTitle 1'), { target: { value: 'A2' } });
+        const moveDown = screen.getByLabelText('app.titleRuleMoveDown 1');
+        // happy-dom's synthetic click does not focus, so give the button focus
+        // the way a real click would have.
+        moveDown.focus();
+        fireEvent.click(moveDown);
+        // The emitted array is swapped; the form still edits rule "A2" — now at
+        // position 2.
+        expect(screen.getByLabelText<HTMLInputElement>('app.titleTagRuleTitle 1').value).toBe('A2');
+        expect(mockTranslator.t).toHaveBeenCalledWith('app.titleRulePositionOf', { n: 2, m: 2 }, 'en');
+        // The button was not remounted, so keyboard focus survived the move.
+        expect(document.activeElement).toBe(screen.getByLabelText('app.titleRuleMoveDown 2'));
+    });
+
+    test('the reorder arrows at the ends are disabled', () => {
+        const value = [
+            { title: 'A', mustIncludeTags: [], shouldIncludeTags: [] },
+            { title: 'B', mustIncludeTags: [], shouldIncludeTags: [] },
+        ];
+        renderEditor(<TitleTagRulesEditor value={value} onChange={jest.fn()} />);
+        expect(screen.getByLabelText<HTMLButtonElement>('app.titleRuleMoveUp 1').disabled).toBe(true);
+        expect(screen.getByLabelText<HTMLButtonElement>('app.titleRuleMoveDown 1').disabled).toBe(false);
+        selectRule(1);
+        expect(screen.getByLabelText<HTMLButtonElement>('app.titleRuleMoveUp 2').disabled).toBe(false);
+        expect(screen.getByLabelText<HTMLButtonElement>('app.titleRuleMoveDown 2').disabled).toBe(true);
+    });
+
+    test('the position text is a polite live region shared with the armed-delete prompt', () => {
+        renderEditor(
+            <TitleTagRulesEditor
+                value={[{ title: 'A', mustIncludeTags: [], shouldIncludeTags: [] }]}
+                onChange={jest.fn()}
+            />,
+        );
+        const live = screen.getByText('app.titleRulePositionOf');
+        expect(live.getAttribute('aria-live')).toBe('polite');
+        fireEvent.click(screen.getByRole('button', { name: /^app\.removeTitleTagRule/ }));
+        // The same region (the header is never remounted) announces the prompt.
+        expect(live.textContent).toBe('app.confirmDelete');
+    });
+
+    test('editing the Must tags emits the parsed tag array (first TagsField in the form)', () => {
         const onChange = jest.fn();
         const value = [{ title: 'A', mustIncludeTags: [], shouldIncludeTags: [] }];
-        render(<TitleTagRulesEditor value={value} onChange={onChange} />);
+        renderEditor(<TitleTagRulesEditor value={value} onChange={onChange} />);
         // Both TagsFields share the tags placeholder; Must is rendered first.
         const tagInputs = screen.getAllByPlaceholderText('app.tagsPlaceholder');
         fireEvent.change(tagInputs[0], { target: { value: 'hat, cap' } });
         expect(onChange).toHaveBeenCalledWith([{ title: 'A', mustIncludeTags: ['hat', 'cap'], shouldIncludeTags: [] }]);
     });
 
+    test('switching the picked rule re-reads the stateful fields: pending text does not leak', () => {
+        const value = [
+            { title: 'A', mustIncludeTags: ['keep-a'], shouldIncludeTags: [] },
+            { title: 'B', mustIncludeTags: ['keep-b'], shouldIncludeTags: [] },
+        ];
+        const Harness = () => {
+            const [rules, setRules] = useState<TitleRule[]>(value);
+            return <TitleTagRulesEditor value={rules} onChange={setRules} />;
+        };
+        renderEditor(<Harness />);
+        // Type into rule A's Must tags (the keystroke commits it to rule A).
+        fireEvent.change(screen.getAllByPlaceholderText('app.tagsPlaceholder')[0], {
+            target: { value: 'keep-a, typed' },
+        });
+        expect(screen.getAllByPlaceholderText<HTMLInputElement>('app.tagsPlaceholder')[0].value).toBe('keep-a, typed');
+        // Switch to rule B: its own tags show, not rule A's pending text.
+        selectRule(1);
+        expect(screen.getAllByPlaceholderText<HTMLInputElement>('app.tagsPlaceholder')[0].value).toBe('keep-b');
+        // And back to rule A: its committed text is intact.
+        selectRule(0);
+        expect(screen.getAllByPlaceholderText<HTMLInputElement>('app.tagsPlaceholder')[0].value).toBe('keep-a, typed');
+    });
+
     test('selecting a saved profile assigns it to the title rule', () => {
         const onChange = jest.fn();
         const value = [{ title: 'Portraits', mustIncludeTags: [], shouldIncludeTags: [] }];
-        render(
+        renderEditor(
             <TitleTagRulesEditor
                 value={value}
                 onChange={onChange}
@@ -157,32 +479,32 @@ describe('TitleTagRulesEditor', () => {
         };
 
         test('auto-join defaults to inherit when the rule does not set it', () => {
-            render(<TitleTagRulesEditor value={rowWith()} onChange={jest.fn()} />);
+            renderEditor(<TitleTagRulesEditor value={rowWith()} onChange={jest.fn()} />);
             expect(screen.getByLabelText<HTMLSelectElement>('app.titleRuleAutoJoin').value).toBe('');
         });
 
         test('an explicit false shows as Off, not as inherit', () => {
-            render(<TitleTagRulesEditor value={rowWith({ autoJoin: false })} onChange={jest.fn()} />);
+            renderEditor(<TitleTagRulesEditor value={rowWith({ autoJoin: false })} onChange={jest.fn()} />);
             expect(screen.getByLabelText<HTMLSelectElement>('app.titleRuleAutoJoin').value).toBe('off');
         });
 
         test('choosing On emits a real boolean', () => {
             const onChange = jest.fn();
-            render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+            renderEditor(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
             pick('app.titleRuleAutoJoin', 'on');
             expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ autoJoin: true })]);
         });
 
         test('choosing Off emits false, not inherit', () => {
             const onChange = jest.fn();
-            render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+            renderEditor(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
             pick('app.titleRuleAutoSubmit', 'off');
             expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ autoSubmit: false })]);
         });
 
         test('returning to Inherit emits the empty sentinel the sanitizer drops', () => {
             const onChange = jest.fn();
-            render(<TitleTagRulesEditor value={rowWith({ autoJoin: true })} onChange={onChange} />);
+            renderEditor(<TitleTagRulesEditor value={rowWith({ autoJoin: true })} onChange={onChange} />);
             pick('app.titleRuleAutoJoin', '');
             expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ autoJoin: '' })]);
         });
@@ -205,14 +527,14 @@ describe('TitleTagRulesEditor', () => {
             });
 
             test('a rule that sets nothing inherits, with no Clear', () => {
-                render(<TitleTagRulesEditor value={rowWith()} onChange={jest.fn()} />);
+                renderEditor(<TitleTagRulesEditor value={rowWith()} onChange={jest.fn()} />);
                 const group = screen.getByRole('group', { name: 'app.chosenPhotos' });
                 expect(group.textContent).toContain('app.titleRuleInherit');
                 expect(screen.queryByRole('button', { name: 'app.titleRuleInherit' })).toBeNull();
             });
 
             test("'' (a cleared draft) also reads as inherit", () => {
-                render(<TitleTagRulesEditor value={rowWith({ chosenPhotos: '' })} onChange={jest.fn()} />);
+                renderEditor(<TitleTagRulesEditor value={rowWith({ chosenPhotos: '' })} onChange={jest.fn()} />);
                 expect(screen.getByRole('group', { name: 'app.chosenPhotos' }).textContent).toContain(
                     'app.titleRuleInherit',
                 );
@@ -220,7 +542,7 @@ describe('TitleTagRulesEditor', () => {
 
             test('choosing photos stores the list on the rule', async () => {
                 const onChange = jest.fn();
-                render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+                renderEditor(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
                 fireEvent.click(screen.getByRole('button', { name: 'app.choosePhotos' }));
                 fireEvent.click(await screen.findByRole('button', { name: 'app.pickLoadPhotos' }));
                 fireEvent.click(await screen.findByRole('button', { name: 'app.photoChooserTileLabel' }));
@@ -234,7 +556,7 @@ describe('TitleTagRulesEditor', () => {
 
             test('an explicit empty list means none, and Inherit writes the empty sentinel', () => {
                 const onChange = jest.fn();
-                render(<TitleTagRulesEditor value={rowWith({ chosenPhotos: [] })} onChange={onChange} />);
+                renderEditor(<TitleTagRulesEditor value={rowWith({ chosenPhotos: [] })} onChange={onChange} />);
                 expect(screen.getByRole('group', { name: 'app.chosenPhotos' }).textContent).toContain('app.none');
                 fireEvent.click(screen.getByRole('button', { name: 'app.titleRuleInherit' }));
                 expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ chosenPhotos: '' })]);
@@ -242,7 +564,7 @@ describe('TitleTagRulesEditor', () => {
 
             test('Submit Only is a three-way select like the other inline overrides', () => {
                 const onChange = jest.fn();
-                render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+                renderEditor(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
                 expect(screen.getByLabelText<HTMLSelectElement>('app.chosenPhotosOnly').value).toBe('');
                 pick('app.chosenPhotosOnly', 'on');
                 expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ chosenPhotosOnly: true })]);
@@ -250,7 +572,7 @@ describe('TitleTagRulesEditor', () => {
 
             test('the pick-order flag is a three-way select too, with no reach warning', () => {
                 const onChange = jest.fn();
-                render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+                renderEditor(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
                 expect(screen.getByLabelText<HTMLSelectElement>('app.chosenPhotosInOrder').value).toBe('');
                 pick('app.chosenPhotosInOrder', 'on');
                 expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ chosenPhotosInOrder: true })]);
@@ -258,7 +580,7 @@ describe('TitleTagRulesEditor', () => {
 
             test('Manual Only offers inherit and on only: a rule never holds off', () => {
                 const onChange = jest.fn();
-                render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+                renderEditor(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
                 const select = screen.getByLabelText<HTMLSelectElement>('app.manualPhotosOnly');
                 expect([...select.options].map((option) => option.value)).toEqual(['', 'on']);
                 expect(select.value).toBe('');
@@ -269,12 +591,12 @@ describe('TitleTagRulesEditor', () => {
             });
 
             test('a stored false reads as inherit, not as an option the select lacks', () => {
-                render(<TitleTagRulesEditor value={rowWith({ manualPhotosOnly: false })} onChange={jest.fn()} />);
+                renderEditor(<TitleTagRulesEditor value={rowWith({ manualPhotosOnly: false })} onChange={jest.fn()} />);
                 expect(screen.getByLabelText<HTMLSelectElement>('app.manualPhotosOnly').value).toBe('');
             });
 
             test('Manual Only on a rule says what it does to the rule, directly under its own select', () => {
-                const { rerender } = render(
+                const { rerender } = renderEditor(
                     <TitleTagRulesEditor value={rowWith({ manualPhotosOnly: true })} onChange={jest.fn()} />,
                 );
                 const hint = screen.getByText('app.manualPhotosOnlyRuleHint');
@@ -290,7 +612,7 @@ describe('TitleTagRulesEditor', () => {
             });
 
             test('Submit Only on a rule warns that it reaches every matching challenge', () => {
-                const { rerender } = render(
+                const { rerender } = renderEditor(
                     <TitleTagRulesEditor value={rowWith({ chosenPhotosOnly: true })} onChange={jest.fn()} />,
                 );
                 expect(screen.getByText('app.chosenPhotosOnlyReachHint')).toBeTruthy();
@@ -301,14 +623,14 @@ describe('TitleTagRulesEditor', () => {
 
         test('the join window emits the hours typed', () => {
             const onChange = jest.fn();
-            render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+            renderEditor(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
             fireEvent.change(screen.getByLabelText('app.titleRuleJoinWindow app.hours'), { target: { value: '24' } });
             expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ autoJoinWithinHoursOfEnd: 24 })]);
         });
 
         test('the join window takes minutes and stores fractional hours', () => {
             const onChange = jest.fn();
-            render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+            renderEditor(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
             fireEvent.change(screen.getByLabelText('app.titleRuleJoinWindow app.minutes'), { target: { value: '30' } });
             expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ autoJoinWithinHoursOfEnd: 0.5 })]);
         });
@@ -316,7 +638,7 @@ describe('TitleTagRulesEditor', () => {
         test('clearing the join window emits inherit, NOT 0', () => {
             // 0 means "join on sight" — an empty field must not silently become it.
             const onChange = jest.fn();
-            render(<TitleTagRulesEditor value={rowWith({ autoJoinWithinHoursOfEnd: 24 })} onChange={onChange} />);
+            renderEditor(<TitleTagRulesEditor value={rowWith({ autoJoinWithinHoursOfEnd: 24 })} onChange={onChange} />);
             fireEvent.change(screen.getByLabelText('app.titleRuleJoinWindow app.hours'), { target: { value: '' } });
             expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ autoJoinWithinHoursOfEnd: 0 })]);
             fireEvent.change(screen.getByLabelText('app.titleRuleJoinWindow app.minutes'), { target: { value: '' } });
@@ -324,14 +646,14 @@ describe('TitleTagRulesEditor', () => {
         });
 
         test('an explicit 0 window renders as 0h 0m, not as an empty (inherit) pair', () => {
-            render(<TitleTagRulesEditor value={rowWith({ autoJoinWithinHoursOfEnd: 0 })} onChange={jest.fn()} />);
+            renderEditor(<TitleTagRulesEditor value={rowWith({ autoJoinWithinHoursOfEnd: 0 })} onChange={jest.fn()} />);
             expect(screen.getByLabelText<HTMLInputElement>('app.titleRuleJoinWindow app.hours').value).toBe('0');
             expect(screen.getByLabelText<HTMLInputElement>('app.titleRuleJoinWindow app.minutes').value).toBe('0');
         });
 
         test('the after-start field edits as hours + minutes and stores fractional hours', () => {
             const onChange = jest.fn();
-            render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+            renderEditor(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
             fireEvent.change(screen.getByLabelText('app.titleRuleJoinAfterStart app.hours'), {
                 target: { value: '2' },
             });
@@ -344,7 +666,9 @@ describe('TitleTagRulesEditor', () => {
 
         test('clearing the after-start field emits inherit, NOT 0', () => {
             const onChange = jest.fn();
-            render(<TitleTagRulesEditor value={rowWith({ autoJoinAfterHoursFromStart: 2.5 })} onChange={onChange} />);
+            renderEditor(
+                <TitleTagRulesEditor value={rowWith({ autoJoinAfterHoursFromStart: 2.5 })} onChange={onChange} />,
+            );
             fireEvent.change(screen.getByLabelText('app.titleRuleJoinAfterStart app.hours'), { target: { value: '' } });
             expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ autoJoinAfterHoursFromStart: 0.5 })]);
             fireEvent.change(screen.getByLabelText('app.titleRuleJoinAfterStart app.minutes'), {
@@ -354,14 +678,16 @@ describe('TitleTagRulesEditor', () => {
         });
 
         test('an explicit 0 after-start renders as 0h 0m, not as an empty (inherit) pair', () => {
-            render(<TitleTagRulesEditor value={rowWith({ autoJoinAfterHoursFromStart: 0 })} onChange={jest.fn()} />);
+            renderEditor(
+                <TitleTagRulesEditor value={rowWith({ autoJoinAfterHoursFromStart: 0 })} onChange={jest.fn()} />,
+            );
             expect(screen.getByLabelText<HTMLInputElement>('app.titleRuleJoinAfterStart app.hours').value).toBe('0');
             expect(screen.getByLabelText<HTMLInputElement>('app.titleRuleJoinAfterStart app.minutes').value).toBe('0');
         });
 
         test('the after-start hours entry caps at 720 hours', () => {
             const onChange = jest.fn();
-            render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+            renderEditor(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
             fireEvent.change(screen.getByLabelText('app.titleRuleJoinAfterStart app.hours'), {
                 target: { value: '721' },
             });
@@ -369,7 +695,7 @@ describe('TitleTagRulesEditor', () => {
         });
 
         test('the timing fields render in precedence order: after-start, percent, before-end', () => {
-            render(<TitleTagRulesEditor value={rowWith()} onChange={jest.fn()} />);
+            renderEditor(<TitleTagRulesEditor value={rowWith()} onChange={jest.fn()} />);
             const afterStart = screen.getByLabelText('app.titleRuleJoinAfterStart app.hours');
             const percent = screen.getByLabelText('app.titleRulePercentElapsed');
             const beforeEnd = screen.getByLabelText('app.titleRuleJoinWindow app.hours');
@@ -393,7 +719,7 @@ describe('TitleTagRulesEditor', () => {
                 expect(mockTranslator.t).toHaveBeenCalledWith('app.titleRuleJoinTimingHint', { '0': settingKey }, 'en');
 
             test('a single filled field above 0 names its setting', () => {
-                render(
+                renderEditor(
                     <TitleTagRulesEditor value={rowWith({ autoJoinAfterPercentElapsed: 75 })} onChange={jest.fn()} />,
                 );
                 expect(screen.getByText('app.titleRuleJoinTimingHint')).toBeTruthy();
@@ -401,7 +727,7 @@ describe('TitleTagRulesEditor', () => {
             });
 
             test('two filled fields name the first above 0 in precedence order', () => {
-                render(
+                renderEditor(
                     <TitleTagRulesEditor
                         value={rowWith({ autoJoinAfterPercentElapsed: 75, autoJoinWithinHoursOfEnd: 24 })}
                         onChange={jest.fn()}
@@ -412,7 +738,7 @@ describe('TitleTagRulesEditor', () => {
             });
 
             test('after-start wins over percent', () => {
-                render(
+                renderEditor(
                     <TitleTagRulesEditor
                         value={rowWith({ autoJoinAfterHoursFromStart: 5, autoJoinAfterPercentElapsed: 75 })}
                         onChange={jest.fn()}
@@ -422,7 +748,7 @@ describe('TitleTagRulesEditor', () => {
             });
 
             test('a zero-filled field is skipped even when it sits first', () => {
-                render(
+                renderEditor(
                     <TitleTagRulesEditor
                         value={rowWith({ autoJoinAfterHoursFromStart: 0, autoJoinAfterPercentElapsed: 75 })}
                         onChange={jest.fn()}
@@ -432,7 +758,7 @@ describe('TitleTagRulesEditor', () => {
             });
 
             test('a single filled 0 shows the zero hint, not a named field', () => {
-                render(
+                renderEditor(
                     <TitleTagRulesEditor value={rowWith({ autoJoinAfterPercentElapsed: 0 })} onChange={jest.fn()} />,
                 );
                 expect(screen.getByText('app.titleRuleJoinTimingZeroHint')).toBeTruthy();
@@ -440,7 +766,7 @@ describe('TitleTagRulesEditor', () => {
             });
 
             test('all filled fields at 0 show the zero hint, not a named field', () => {
-                render(
+                renderEditor(
                     <TitleTagRulesEditor
                         value={rowWith({ autoJoinAfterHoursFromStart: 0, autoJoinWithinHoursOfEnd: 0 })}
                         onChange={jest.fn()}
@@ -451,7 +777,7 @@ describe('TitleTagRulesEditor', () => {
             });
 
             test('no filled timing field shows no hint', () => {
-                render(<TitleTagRulesEditor value={rowWith()} onChange={jest.fn()} />);
+                renderEditor(<TitleTagRulesEditor value={rowWith()} onChange={jest.fn()} />);
                 expect(screen.queryByText('app.titleRuleJoinTimingHint')).toBeNull();
                 expect(screen.queryByText('app.titleRuleJoinTimingZeroHint')).toBeNull();
             });
@@ -473,7 +799,7 @@ describe('TitleTagRulesEditor', () => {
                 });
 
                 test('percent over before-end names the percent setting translated', () => {
-                    render(
+                    renderEditor(
                         <TitleTagRulesEditor
                             value={rowWith({ autoJoinAfterPercentElapsed: 75, autoJoinWithinHoursOfEnd: 24 })}
                             onChange={jest.fn()}
@@ -487,7 +813,7 @@ describe('TitleTagRulesEditor', () => {
                 });
 
                 test('after-start over percent names the after-start setting translated', () => {
-                    render(
+                    renderEditor(
                         <TitleTagRulesEditor
                             value={rowWith({ autoJoinAfterHoursFromStart: 5, autoJoinAfterPercentElapsed: 75 })}
                             onChange={jest.fn()}
@@ -501,7 +827,7 @@ describe('TitleTagRulesEditor', () => {
                 });
 
                 test('a single filled 0 shows the zero hint translated', () => {
-                    render(
+                    renderEditor(
                         <TitleTagRulesEditor
                             value={rowWith({ autoJoinAfterPercentElapsed: 0 })}
                             onChange={jest.fn()}
@@ -511,7 +837,7 @@ describe('TitleTagRulesEditor', () => {
                 });
 
                 test('all filled fields at 0 show the zero hint translated', () => {
-                    render(
+                    renderEditor(
                         <TitleTagRulesEditor
                             value={rowWith({ autoJoinAfterHoursFromStart: 0, autoJoinWithinHoursOfEnd: 0 })}
                             onChange={jest.fn()}
@@ -531,7 +857,7 @@ describe('TitleTagRulesEditor', () => {
 
         test('the time input patches closesAt, an empty value sends an empty string, and one row keeps no list', () => {
             const onChange = jest.fn();
-            const { rerender } = render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+            const { rerender } = renderEditor(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
             expect(input().value).toBe('');
             fireEvent.change(input(), { target: { value: '17:10' } });
             expect(onChange).toHaveBeenLastCalledWith([
@@ -545,7 +871,7 @@ describe('TitleTagRulesEditor', () => {
 
         test('Add time appends a blank row and starts the list; the first row stays in closesAt', () => {
             const onChange = jest.fn();
-            render(<TitleTagRulesEditor value={rowWith({ closesAt: '17:10' })} onChange={onChange} />);
+            renderEditor(<TitleTagRulesEditor value={rowWith({ closesAt: '17:10' })} onChange={onChange} />);
             fireEvent.click(addButton());
             expect(onChange).toHaveBeenLastCalledWith([
                 expect.objectContaining({ closesAt: '17:10', closesAtTimes: ['17:10', ''] }),
@@ -554,7 +880,7 @@ describe('TitleTagRulesEditor', () => {
 
         test('a stored list shows one row per time, editing one patches the list, and its first row mirrors into closesAt', () => {
             const onChange = jest.fn();
-            render(
+            renderEditor(
                 <TitleTagRulesEditor
                     value={rowWith({ closesAt: '17:10', closesAtTimes: ['17:10', '18:10'] })}
                     onChange={onChange}
@@ -573,7 +899,7 @@ describe('TitleTagRulesEditor', () => {
 
         test('Remove time drops that row, and cutting back to one leaves no stale list behind', () => {
             const onChange = jest.fn();
-            const { rerender } = render(
+            const { rerender } = renderEditor(
                 <TitleTagRulesEditor
                     value={rowWith({ closesAt: '17:10', closesAtTimes: ['17:10', '18:10', '19:10'] })}
                     onChange={onChange}
@@ -599,7 +925,7 @@ describe('TitleTagRulesEditor', () => {
         });
 
         test('each row is named by its place in the list: "Close time 1 of 2"', () => {
-            render(
+            renderEditor(
                 <TitleTagRulesEditor
                     value={rowWith({ closesAt: '17:10', closesAtTimes: ['17:10', '18:10'] })}
                     onChange={jest.fn()}
@@ -614,7 +940,7 @@ describe('TitleTagRulesEditor', () => {
                 const [rules, setRules] = useState<TitleRule[]>(start);
                 return <TitleTagRulesEditor value={rules} onChange={setRules} />;
             };
-            render(<Harness start={rowWith()} />);
+            renderEditor(<Harness start={rowWith()} />);
             fireEvent.click(addButton());
             expect([input(1).value, input(2).value]).toEqual(['', '']);
             fireEvent.change(input(2), { target: { value: '10:00' } });
@@ -632,7 +958,7 @@ describe('TitleTagRulesEditor', () => {
                 );
                 return <TitleTagRulesEditor value={rules} onChange={setRules} />;
             };
-            render(<Harness />);
+            renderEditor(<Harness />);
             fireEvent.click(screen.getByRole('button', { name: 'app.removeCloseTime 2' }));
             expect(document.activeElement).toBe(input(2));
             expect(input(2).value).toBe('11:00');
@@ -646,14 +972,14 @@ describe('TitleTagRulesEditor', () => {
                 const [rules, setRules] = useState<TitleRule[]>(rowWith({ closesAt: '7:10' }));
                 return <TitleTagRulesEditor value={rules} onChange={setRules} />;
             };
-            render(<Harness />);
+            renderEditor(<Harness />);
             fireEvent.click(screen.getByRole('button', { name: 'app.removeCloseTime 1' }));
             expect(document.activeElement).toBe(input(1));
         });
 
         test('Add time is held at 24 rows', () => {
             const times = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`);
-            const { rerender } = render(
+            const { rerender } = renderEditor(
                 <TitleTagRulesEditor
                     value={rowWith({ closesAt: times[0], closesAtTimes: times.slice(0, 23) })}
                     onChange={jest.fn()}
@@ -670,7 +996,7 @@ describe('TitleTagRulesEditor', () => {
         });
 
         test('a new blank row shows no error', () => {
-            render(
+            renderEditor(
                 <TitleTagRulesEditor
                     value={rowWith({ closesAt: '17:10', closesAtTimes: ['17:10', ''] })}
                     onChange={jest.fn()}
@@ -681,7 +1007,7 @@ describe('TitleTagRulesEditor', () => {
         });
 
         test('a stored value that is not a strict HH:MM is marked invalid; a valid or empty one is not', () => {
-            const { rerender } = render(
+            const { rerender } = renderEditor(
                 <TitleTagRulesEditor value={rowWith({ closesAt: '7:10' })} onChange={jest.fn()} />,
             );
             expect(input().classList.contains('input-error')).toBe(true);
@@ -699,7 +1025,7 @@ describe('TitleTagRulesEditor', () => {
         });
 
         test('only the invalid rows of a list say so: a bad time, a non-text entry, and a padded valid one is fine', () => {
-            render(
+            renderEditor(
                 <TitleTagRulesEditor
                     value={rowWith({
                         closesAt: '17:10',
@@ -719,7 +1045,7 @@ describe('TitleTagRulesEditor', () => {
 
         test('a lone invalid row can be removed, which clears both fields; a lone valid or blank row has no Remove', () => {
             const onChange = jest.fn();
-            const { rerender } = render(
+            const { rerender } = renderEditor(
                 <TitleTagRulesEditor value={rowWith({ closesAt: '7:10' })} onChange={onChange} />,
             );
             fireEvent.click(screen.getByRole('button', { name: 'app.removeCloseTime 1' }));
@@ -762,13 +1088,13 @@ describe('TitleTagRulesEditor', () => {
                 [true],
             ],
         ])('%s', (_name, over, values, invalids) => {
-            render(<TitleTagRulesEditor value={rowWith(over)} onChange={jest.fn()} />);
+            renderEditor(<TitleTagRulesEditor value={rowWith(over)} onChange={jest.fn()} />);
             expect(values.map((_, i) => input(i + 1).value)).toEqual(values);
             expect(values.map((_, i) => input(i + 1).classList.contains('input-error'))).toEqual(invalids);
         });
 
         test('only the first row of a malformed list is marked, and a null list is no list', () => {
-            const { rerender } = render(
+            const { rerender } = renderEditor(
                 <TitleTagRulesEditor value={rowWith({ closesAt: '17:10', closesAtTimes: 7 })} onChange={jest.fn()} />,
             );
             expect(screen.getAllByText('app.titleRuleClosesAtInvalid')).toHaveLength(1);
@@ -783,7 +1109,7 @@ describe('TitleTagRulesEditor', () => {
         });
 
         test('a rule that lists only several times (no closesAt) is a broad-spending rule when it auto-joins', () => {
-            render(
+            renderEditor(
                 <TitleTagRulesEditor
                     value={[
                         {
@@ -805,13 +1131,13 @@ describe('TitleTagRulesEditor', () => {
         const rowWith = (over = {}) => [{ title: 'abc', mustIncludeTags: [], shouldIncludeTags: [], ...over }];
 
         test('a rule with no match key shows as exact', () => {
-            render(<TitleTagRulesEditor value={rowWith()} onChange={jest.fn()} />);
+            renderEditor(<TitleTagRulesEditor value={rowWith()} onChange={jest.fn()} />);
             expect(screen.getByLabelText<HTMLSelectElement>('app.titleRuleMatch 1').value).toBe('exact');
         });
 
         test('choosing a mode emits it', () => {
             const onChange = jest.fn();
-            render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+            renderEditor(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
             const select = screen.getByLabelText<HTMLSelectElement>('app.titleRuleMatch 1');
             select.value = 'contains';
             select.dispatchEvent(new window.Event('change', { bubbles: true }));
@@ -819,7 +1145,7 @@ describe('TitleTagRulesEditor', () => {
         });
 
         test('the mode is offered only once the rule names a title; until then it shows exact', () => {
-            const { rerender } = render(
+            const { rerender } = renderEditor(
                 <TitleTagRulesEditor
                     value={rowWith({ title: '', titles: ['  '], match: 'contains', pics: 4 })}
                     onChange={jest.fn()}
@@ -834,14 +1160,14 @@ describe('TitleTagRulesEditor', () => {
         });
 
         test('a saved mode renders back', () => {
-            render(<TitleTagRulesEditor value={rowWith({ match: 'starts' })} onChange={jest.fn()} />);
+            renderEditor(<TitleTagRulesEditor value={rowWith({ match: 'starts' })} onChange={jest.fn()} />);
             expect(screen.getByLabelText<HTMLSelectElement>('app.titleRuleMatch 1').value).toBe('starts');
         });
 
         test('each title has its own mode and removing a title keeps modes aligned', () => {
             const onChange = jest.fn();
             const value = rowWith({ titles: ['Hats', 'Photo'], titleMatchModes: ['exact', 'starts'] });
-            render(<TitleTagRulesEditor value={value} onChange={onChange} />);
+            renderEditor(<TitleTagRulesEditor value={value} onChange={onChange} />);
             expect(screen.getByLabelText<HTMLSelectElement>('app.titleRuleMatch 1').value).toBe('exact');
             expect(screen.getByLabelText<HTMLSelectElement>('app.titleRuleMatch 2').value).toBe('starts');
             fireEvent.click(screen.getByLabelText('app.removeTitleRuleTitle 1'));
@@ -852,7 +1178,7 @@ describe('TitleTagRulesEditor', () => {
 
         test('changing the second title mode leaves the first title mode unchanged', () => {
             const onChange = jest.fn();
-            render(<TitleTagRulesEditor value={rowWith({ titles: ['Hats', 'Photo'] })} onChange={onChange} />);
+            renderEditor(<TitleTagRulesEditor value={rowWith({ titles: ['Hats', 'Photo'] })} onChange={onChange} />);
             const select = screen.getByLabelText<HTMLSelectElement>('app.titleRuleMatch 2');
             select.value = 'starts';
             select.dispatchEvent(new window.Event('change', { bubbles: true }));
@@ -863,7 +1189,7 @@ describe('TitleTagRulesEditor', () => {
 
         test('editing the challenge tag emits it', () => {
             const onChange = jest.fn();
-            render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+            renderEditor(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
             fireEvent.change(screen.getByLabelText('app.titleRuleChallengeTag'), {
                 target: { value: 'Exhibition' },
             });
@@ -873,13 +1199,13 @@ describe('TitleTagRulesEditor', () => {
         test('the challenge-tag field is distinct from the photo tag fields', () => {
             // Three tag-ish inputs in a row: challenge tag (its own labelled
             // field) plus Must/Should photo tags (the shared placeholder).
-            render(<TitleTagRulesEditor value={rowWith({ challengeTag: 'Turbo' })} onChange={jest.fn()} />);
+            renderEditor(<TitleTagRulesEditor value={rowWith({ challengeTag: 'Turbo' })} onChange={jest.fn()} />);
             expect(screen.getByLabelText<HTMLInputElement>('app.titleRuleChallengeTag').value).toBe('Turbo');
             expect(screen.getAllByPlaceholderText('app.tagsPlaceholder')).toHaveLength(2);
         });
 
         test('a tag-only rule renders with an empty title', () => {
-            render(
+            renderEditor(
                 <TitleTagRulesEditor
                     value={[{ challengeTag: 'Exhibition', mustIncludeTags: [], shouldIncludeTags: [] }]}
                     onChange={jest.fn()}
@@ -892,14 +1218,14 @@ describe('TitleTagRulesEditor', () => {
 
     describe('edge rows', () => {
         test('a non-array value renders the empty state instead of crashing', () => {
-            render(<TitleTagRulesEditor value={null} onChange={jest.fn()} />);
+            renderEditor(<TitleTagRulesEditor value={null} onChange={jest.fn()} />, { select: null });
             expect(screen.getByText('app.noTitleTagRules')).toBeTruthy();
         });
 
         test('editing the second of several titles leaves the first untouched', () => {
             const onChange = jest.fn();
             const value = [{ title: 'A', titles: ['A', 'B'], mustIncludeTags: [], shouldIncludeTags: [] }];
-            render(<TitleTagRulesEditor value={value} onChange={onChange} />);
+            renderEditor(<TitleTagRulesEditor value={value} onChange={onChange} />);
             fireEvent.change(screen.getByLabelText('app.titleTagRuleTitle 2'), { target: { value: 'C' } });
             expect(onChange).toHaveBeenLastCalledWith([
                 { title: 'A', titles: ['A', 'C'], mustIncludeTags: [], shouldIncludeTags: [] },
@@ -911,7 +1237,7 @@ describe('TitleTagRulesEditor', () => {
             const value = invalid<TitleRule[]>([
                 { title: 'x', titles: [null, 'B'], mustIncludeTags: [], shouldIncludeTags: [] },
             ]);
-            render(<TitleTagRulesEditor value={value} onChange={onChange} />);
+            renderEditor(<TitleTagRulesEditor value={value} onChange={onChange} />);
             fireEvent.click(screen.getByLabelText('app.removeTitleRuleTitle 2'));
             expect(onChange).toHaveBeenLastCalledWith([
                 { title: '', titles: [null], mustIncludeTags: [], shouldIncludeTags: [] },
@@ -924,10 +1250,10 @@ describe('TitleTagRulesEditor', () => {
                 { title: 'A', mustIncludeTags: [], shouldIncludeTags: [] },
                 { title: 'B', mustIncludeTags: [], shouldIncludeTags: [] },
             ];
-            render(<TitleTagRulesEditor value={value} onChange={onChange} />);
-            // Two TagsFields per row: [A.must, A.should, B.must, B.should].
+            renderEditor(<TitleTagRulesEditor value={value} onChange={onChange} />, { select: 1 });
+            // One rule in the form: [B.must, B.should].
             const tagInputs = screen.getAllByPlaceholderText('app.tagsPlaceholder');
-            fireEvent.change(tagInputs[3], { target: { value: 'sky' } });
+            fireEvent.change(tagInputs[1], { target: { value: 'sky' } });
             expect(onChange).toHaveBeenCalledWith([
                 { title: 'A', mustIncludeTags: [], shouldIncludeTags: [] },
                 { title: 'B', mustIncludeTags: [], shouldIncludeTags: ['sky'] },
@@ -949,7 +1275,7 @@ describe('TitleTagRulesEditor', () => {
 
         test('editing the challenge type emits it and the suggestions render', () => {
             const onChange = jest.fn();
-            const { container } = render(
+            const { container } = renderEditor(
                 <TitleTagRulesEditor value={[row()]} onChange={onChange} types={['default', 'flash']} />,
             );
             fireEvent.change(screen.getByLabelText('app.titleRuleType'), { target: { value: 'flash' } });
@@ -962,7 +1288,7 @@ describe('TitleTagRulesEditor', () => {
 
         test('the photo count emits a number, and Any emits the empty sentinel', () => {
             const onChange = jest.fn();
-            render(<TitleTagRulesEditor value={[row({ pics: 2 })]} onChange={onChange} />);
+            renderEditor(<TitleTagRulesEditor value={[row({ pics: 2 })]} onChange={onChange} />);
             expect(screen.getByLabelText<HTMLInputElement>('app.titleRulePics').value).toBe('2');
             pick('app.titleRulePics', '4');
             expect(onChange).toHaveBeenLastCalledWith([row({ pics: 4 })]);
@@ -972,7 +1298,7 @@ describe('TitleTagRulesEditor', () => {
 
         test('the runtime range emits numbers and an empty field emits "any"', () => {
             const onChange = jest.fn();
-            render(<TitleTagRulesEditor value={[row({ maxHours: 24 })]} onChange={onChange} />);
+            renderEditor(<TitleTagRulesEditor value={[row({ maxHours: 24 })]} onChange={onChange} />);
             expect(screen.getByLabelText<HTMLInputElement>('app.titleRuleMinHours').value).toBe('');
             expect(screen.getByLabelText<HTMLInputElement>('app.titleRuleMaxHours').value).toBe('24');
             fireEvent.change(screen.getByLabelText('app.titleRuleMinHours'), { target: { value: '168' } });
@@ -983,46 +1309,37 @@ describe('TitleTagRulesEditor', () => {
 
         test('the percent join anchor emits a number and caps at 99', () => {
             const onChange = jest.fn();
-            render(<TitleTagRulesEditor value={[row()]} onChange={onChange} />);
+            renderEditor(<TitleTagRulesEditor value={[row()]} onChange={onChange} />);
             const input = screen.getByLabelText('app.titleRulePercentElapsed');
             expect(input.getAttribute('max')).toBe('99');
             fireEvent.change(input, { target: { value: '75' } });
             expect(onChange).toHaveBeenLastCalledWith([row({ autoJoinAfterPercentElapsed: 75 })]);
         });
 
-        test('rules move up and down; the arrows at the ends are disabled', () => {
-            const onChange = jest.fn();
-            const value = [row({ pics: 4 }), row({ title: 'A' })];
-            render(<TitleTagRulesEditor value={value} onChange={onChange} />);
-            expect(screen.getByLabelText<HTMLButtonElement>('app.titleRuleMoveUp 1').disabled).toBe(true);
-            expect(screen.getByLabelText<HTMLButtonElement>('app.titleRuleMoveDown 2').disabled).toBe(true);
-            fireEvent.click(screen.getByLabelText('app.titleRuleMoveDown 1'));
-            expect(onChange).toHaveBeenLastCalledWith([value[1], value[0]]);
-            fireEvent.click(screen.getByLabelText('app.titleRuleMoveUp 2'));
-            expect(onChange).toHaveBeenLastCalledWith([value[1], value[0]]);
-        });
-
         test('the order hint and sort button appear only with several rules', () => {
-            const { rerender } = render(<TitleTagRulesEditor value={[row({ pics: 4 })]} onChange={jest.fn()} />);
+            const { rerender } = renderEditor(<TitleTagRulesEditor value={[row({ pics: 4 })]} onChange={jest.fn()} />);
             expect(screen.queryByText('app.titleRuleSortDefault')).toBeNull();
             expect(screen.queryByText('app.titleRuleOrderHint')).toBeNull();
             rerender(<TitleTagRulesEditor value={[row({ pics: 4 }), row({ title: 'A' })]} onChange={jest.fn()} />);
             expect(screen.getByText('app.titleRuleOrderHint')).toBeTruthy();
         });
 
-        test('sorting puts title rules first, then photos + runtime, photos, runtime', () => {
+        test('sorting puts title rules first, then photos + runtime, photos, runtime, and deselects', () => {
             const onChange = jest.fn();
             const runtime = row({ minHours: 168 });
             const pics = row({ pics: 4 });
             const both = row({ pics: 4, minHours: 168 });
             const titled = row({ title: 'Hats' });
-            render(<TitleTagRulesEditor value={[runtime, pics, both, titled]} onChange={onChange} />);
+            renderEditor(<TitleTagRulesEditor value={[runtime, pics, both, titled]} onChange={onChange} />);
             fireEvent.click(screen.getByText('app.titleRuleSortDefault'));
             expect(onChange).toHaveBeenCalledWith([titled, both, pics, runtime]);
+            // Sorting scrambles indices: the selection is reset, not re-pointed.
+            expect(dropdown().value).toBe('');
+            expect(screen.queryByLabelText('app.titleTagRuleTitle 1')).toBeNull();
         });
 
         test('a title-less rule that turns auto-join or auto-submit on shows the broad warning', () => {
-            const { rerender } = render(
+            const { rerender } = renderEditor(
                 <TitleTagRulesEditor value={[row({ pics: 4, autoJoin: true })]} onChange={jest.fn()} />,
             );
             expect(screen.getByText('app.titleRuleBroadWarning')).toBeTruthy();
@@ -1031,7 +1348,7 @@ describe('TitleTagRulesEditor', () => {
         });
 
         test('no broad warning for a titled rule, an Off value, or a rule with no condition yet', () => {
-            const { rerender } = render(
+            const { rerender } = renderEditor(
                 <TitleTagRulesEditor value={[row({ title: 'A', autoJoin: true })]} onChange={jest.fn()} />,
             );
             expect(screen.queryByText('app.titleRuleBroadWarning')).toBeNull();

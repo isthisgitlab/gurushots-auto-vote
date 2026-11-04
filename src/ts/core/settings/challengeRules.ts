@@ -63,6 +63,15 @@ const MAX_RULE_PICS = 10;
 // exhibitions) run ~516h; 2000h (~83 days) leaves generous headroom.
 const MAX_RULE_RUNTIME_HOURS = 2000;
 
+// Upper bound for a rule's user-authored text — its title entries and its
+// display-only name. Shared so the editor's inputs and the write-side
+// sanitizer enforce one bound (the sanitizer is the real gate).
+const MAX_TITLE_LENGTH = 200;
+
+// A rule's close times in a display line: the first few, so a long list stays
+// one short line.
+const MAX_DISPLAYED_CLOSE_TIMES = 3;
+
 // Stable match key for a title: trimmed + lowercased. The same challenge recurs
 // with the same title (but a new id) on each rotation.
 const normalizeTitle = (title: unknown): string => (typeof title === 'string' ? title.trim().toLowerCase() : '');
@@ -339,7 +348,38 @@ const compareDefaultOrder = (a: RuleLike, b: RuleLike): number => {
 const sortRulesByDefaultOrder = <R extends RuleLike>(rules: readonly R[] | null | undefined): R[] =>
     Array.isArray(rules) ? [...rules].sort(compareDefaultOrder) : [];
 
+/**
+ * What a rule is called in the editor's dropdown: its display-only name, else
+ * its first title, else its challenge tag or type, else its close times (first
+ * few, '…' for the rest). Runs on raw editor drafts, not just sanitized rules,
+ * so every field is re-checked and malformed close times mean "no summary".
+ * Returns '' when the rule carries nothing displayable — the renderer words
+ * that. Times-only output keeps the raw values (no wording), so the caller
+ * stays free to translate around them.
+ */
+const ruleDisplayName = (rule: RuleLike): string => {
+    const name = rule?.name;
+    if (typeof name === 'string' && name.trim()) return name.trim();
+    const [firstTitle] = titleRuleTitles(rule);
+    if (typeof firstTitle === 'string' && firstTitle.trim()) return firstTitle.trim();
+    const tag = rule?.challengeTag;
+    if (typeof tag === 'string' && tag.trim()) return tag.trim();
+    const type = rule?.type;
+    if (typeof type === 'string' && type.trim()) return type.trim();
+    const closeTimes = normalizeRuleCloseTimes(rule);
+    if (closeTimes !== null && closeTimes !== false && closeTimes.length > 0) {
+        return closeTimes
+            .slice(0, MAX_DISPLAYED_CLOSE_TIMES)
+            .map((time) => time.trim())
+            .filter(Boolean)
+            .join(', ')
+            .concat(closeTimes.length > MAX_DISPLAYED_CLOSE_TIMES ? ', …' : '');
+    }
+    return '';
+};
+
 export {
+    MAX_TITLE_LENGTH,
     TITLE_MATCH_MODES,
     normalizeTitle,
     normalizeTag,
@@ -358,4 +398,5 @@ export {
     ruleMatches,
     matchingRules,
     sortRulesByDefaultOrder,
+    ruleDisplayName,
 };

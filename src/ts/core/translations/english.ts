@@ -1138,6 +1138,13 @@ export const app = {
     removeTitleTagRule: 'Remove rule',
     noTitleTagRules:
         'No rules yet. Add one to match challenges by title, tag, type, photo count, length or close time.',
+    titleRuleName: 'Rule name',
+    titleRuleNameHint: 'Display only — matching uses the conditions below. A rule with only a name is dropped on save.',
+    titleRuleNameOnlyWarning:
+        'This rule has a name but will be dropped on save: it has no match condition, or matches without setting a profile, tags or overrides.',
+    titleRuleSelectRule: 'Select rule to edit',
+    titleRulePositionOf: 'Rule {n} of {m}',
+    titleRuleUntitled: '(untitled rule)',
     usingProfile: 'Using profile',
     fromRule: 'From rule: {title}',
     ruleNumber: 'rule #{n}',

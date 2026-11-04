@@ -18,6 +18,7 @@ import type { SettingKey } from '../../src/ts/core/settings/schema';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import settings = require('../../src/ts/core/settings');
 import { ruleLogLabel, MAX_CLOSE_TIMES_PER_RULE } from '../../src/ts/core/settings/titleRuleSanitize';
+import { ruleDisplayName, MAX_TITLE_LENGTH } from '../../src/ts/core/settings/challengeRules';
 
 jest.mock('../../src/ts/core/logger', () => ({
     info: jest.fn(),
@@ -746,18 +747,26 @@ describe('settings facade — title-keyed tag rules', () => {
         });
 
         test('the log label falls back to the close time, but only a strict one', () => {
-            expect(ruleLogLabel({ closesAt: '17:10' }, undefined)).toBe('closes 17:10');
-            expect(ruleLogLabel({ closesAt: '17:10', challengeTag: 'Comm' }, undefined)).toBe('Comm');
-            expect(ruleLogLabel({ closesAt: '17:10' }, 'Hats')).toBe('Hats');
-            expect(ruleLogLabel({ closesAt: 'evil\nlog line' }, undefined)).toBe('(untitled rule)');
-            expect(ruleLogLabel({ closesAt: '25:00' }, undefined)).toBe('(untitled rule)');
-            expect(ruleLogLabel({ closesAtTimes: ['17:10', '18:10'] }, undefined)).toBe('closes 17:10, 18:10');
-            expect(ruleLogLabel({ closesAtTimes: ['17:10', 'evil\nlog line'] }, undefined)).toBe('(untitled rule)');
+            expect(ruleLogLabel({ closesAt: '17:10' }, undefined, undefined)).toBe('closes 17:10');
+            expect(ruleLogLabel({ closesAt: '17:10', challengeTag: 'Comm' }, undefined, undefined)).toBe('Comm');
+            expect(ruleLogLabel({ closesAt: '17:10' }, 'Hats', undefined)).toBe('Hats');
+            expect(ruleLogLabel({ closesAt: 'evil\nlog line' }, undefined, undefined)).toBe('(untitled rule)');
+            expect(ruleLogLabel({ closesAt: '25:00' }, undefined, undefined)).toBe('(untitled rule)');
+            expect(ruleLogLabel({ closesAtTimes: ['17:10', '18:10'] }, undefined, undefined)).toBe(
+                'closes 17:10, 18:10',
+            );
+            expect(ruleLogLabel({ closesAtTimes: ['17:10', 'evil\nlog line'] }, undefined, undefined)).toBe(
+                '(untitled rule)',
+            );
             // A long list is one short line: the first three, then an ellipsis.
             const times = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`);
-            expect(ruleLogLabel({ closesAtTimes: times.slice(0, 3) }, undefined)).toBe('closes 00:00, 01:00, 02:00');
-            expect(ruleLogLabel({ closesAtTimes: times.slice(0, 4) }, undefined)).toBe('closes 00:00, 01:00, 02:00, …');
-            expect(ruleLogLabel({ closesAtTimes: times }, undefined)).toBe('closes 00:00, 01:00, 02:00, …');
+            expect(ruleLogLabel({ closesAtTimes: times.slice(0, 3) }, undefined, undefined)).toBe(
+                'closes 00:00, 01:00, 02:00',
+            );
+            expect(ruleLogLabel({ closesAtTimes: times.slice(0, 4) }, undefined, undefined)).toBe(
+                'closes 00:00, 01:00, 02:00, …',
+            );
+            expect(ruleLogLabel({ closesAtTimes: times }, undefined, undefined)).toBe('closes 00:00, 01:00, 02:00, …');
         });
 
         test('resolves in the app timezone, not the device clock', () => {
@@ -936,6 +945,106 @@ describe('settings facade — title-keyed tag rules', () => {
             expect(settings.saveChallengeProfile('TACTIC', { exposure: 70 })).toBe(true);
             expect(settings.getTitleRules()[0].profile).toBe('TACTIC');
             expect(settings.getTitleProfile('Portraits').profile).toEqual({ name: 'TACTIC', values: { exposure: 70 } });
+        });
+    });
+
+    describe('rule name (display-only) and display labels', () => {
+        const save = (rules: unknown) => settings.setTitleRules(rules);
+
+        test('the name round-trips trimmed and is dropped when empty', () => {
+            expect(
+                save([
+                    { title: 'A', name: '  Night owl ', autoJoin: true, mustIncludeTags: [], shouldIncludeTags: [] },
+                ]),
+            ).toBe(true);
+            expect(settings.getTitleRules()[0].name).toBe('Night owl');
+
+            expect(
+                save([{ title: 'A', name: '   ', autoJoin: true, mustIncludeTags: [], shouldIncludeTags: [] }]),
+            ).toBe(true);
+            expect(settings.getTitleRules()[0].name).toBeUndefined();
+        });
+
+        test('a non-string name is dropped silently, like the profile field', () => {
+            expect(save([{ title: 'A', name: 5, autoJoin: true, mustIncludeTags: [], shouldIncludeTags: [] }])).toBe(
+                true,
+            );
+            expect(settings.getTitleRules()[0].name).toBeUndefined();
+        });
+
+        test('an over-length name is rejected at the same bound as a title entry', () => {
+            expect(
+                save([
+                    {
+                        title: 'A',
+                        name: 'x'.repeat(MAX_TITLE_LENGTH),
+                        autoJoin: true,
+                        mustIncludeTags: [],
+                        shouldIncludeTags: [],
+                    },
+                ]),
+            ).toBe(true);
+            expect(settings.getTitleRules()[0].name).toBe('x'.repeat(MAX_TITLE_LENGTH));
+            expect(
+                save([
+                    {
+                        title: 'A',
+                        name: 'x'.repeat(MAX_TITLE_LENGTH + 1),
+                        autoJoin: true,
+                        mustIncludeTags: [],
+                        shouldIncludeTags: [],
+                    },
+                ]),
+            ).toBe(false);
+        });
+
+        test('the name is not part of the de-dupe identity: same conditions collapse last-wins', () => {
+            expect(
+                save([
+                    { title: 'A', autoJoin: true, name: 'First', mustIncludeTags: [], shouldIncludeTags: [] },
+                    { title: 'A', autoJoin: false, name: 'Second', mustIncludeTags: [], shouldIncludeTags: [] },
+                ]),
+            ).toBe(true);
+            const rules = settings.getTitleRules();
+            expect(rules).toHaveLength(1);
+            expect(rules[0].autoJoin).toBe(false);
+            expect(rules[0].name).toBe('Second');
+        });
+
+        test('a named rule with no condition and no behaviour is still dropped as a no-op', () => {
+            expect(save([{ name: 'Only a name', mustIncludeTags: [], shouldIncludeTags: [] }])).toBe(true);
+            expect(settings.getTitleRules()).toEqual([]);
+        });
+
+        test('the log label prefers the sanitized name, still typeof-guarded', () => {
+            expect(ruleLogLabel({ title: 'Hats' }, 'Hats', '  Night owl ')).toBe('Night owl');
+            expect(ruleLogLabel({ title: 'Hats' }, 'Hats', undefined)).toBe('Hats');
+            expect(ruleLogLabel({ closesAt: '17:10' }, undefined, 'Night owl')).toBe('Night owl');
+            expect(ruleLogLabel({}, undefined, '   ')).toBe('(untitled rule)');
+            expect(ruleLogLabel({ closesAt: '17:10' }, undefined, 7)).toBe('closes 17:10');
+            expect(ruleLogLabel({ closesAt: 'evil\nlog line' }, undefined, 'ok name')).toBe('ok name');
+        });
+
+        test('ruleDisplayName reads raw drafts and falls back arm by arm', () => {
+            expect(ruleDisplayName({ name: 'Night owl', title: 'Hats' })).toBe('Night owl');
+            // A whitespace-only name falls through to the title.
+            expect(ruleDisplayName({ name: '  ', title: 'Hats' })).toBe('Hats');
+            expect(ruleDisplayName({ title: 'Hats' })).toBe('Hats');
+            expect(ruleDisplayName({ title: '  ', titles: ['  ', ''] })).toBe('');
+            expect(ruleDisplayName({ challengeTag: 'Exhibition' })).toBe('Exhibition');
+            expect(ruleDisplayName({ type: 'flash' })).toBe('flash');
+            expect(ruleDisplayName({ closesAt: '17:10' })).toBe('17:10');
+            expect(ruleDisplayName({ closesAtTimes: ['17:10', '18:10'] })).toBe('17:10, 18:10');
+            expect(ruleDisplayName({ closesAtTimes: ['17:10', '18:10', '19:10', '20:10'] })).toBe(
+                '17:10, 18:10, 19:10, …',
+            );
+            // Malformed close times mean "no summary", never rendered.
+            expect(ruleDisplayName({ closesAtTimes: 'x' })).toBe('');
+            expect(ruleDisplayName({ closesAtTimes: 7 })).toBe('');
+            expect(ruleDisplayName({ challengeTag: 3, type: 9 })).toBe('');
+            expect(ruleDisplayName({})).toBe('');
+            expect(ruleDisplayName(null)).toBe('');
+            expect(ruleDisplayName(undefined)).toBe('');
         });
     });
 });

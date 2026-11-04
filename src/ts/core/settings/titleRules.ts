@@ -173,7 +173,7 @@ const _sanitizedUniqueRules = (rules: unknown[], storedProfiles: Record<string, 
         if (first !== undefined) {
             collapsed.push({
                 index: position + 1,
-                label: ruleLogLabel(result.rule, result.rule.title),
+                label: ruleLogLabel(result.rule, result.rule.title, result.rule.name),
                 reason: `same match condition as rule ${first.index} ("${_titleForLog(first.label)}") — the later values win, at the first one's position`,
             });
             // The stored rule is the last one (last wins at the first position),
@@ -185,7 +185,7 @@ const _sanitizedUniqueRules = (rules: unknown[], storedProfiles: Record<string, 
             byKey.set(key, {
                 rule: result.rule,
                 index: position + 1,
-                label: ruleLogLabel(result.rule, result.rule.title),
+                label: ruleLogLabel(result.rule, result.rule.title, result.rule.name),
             });
         }
     }
@@ -220,7 +220,7 @@ const _checkedRules = (
         if (rule.profile && !titleProfileComposesWithKnownOverrides(settings, rule, storedProfiles[rule.profile])) {
             return {
                 ok: false,
-                error: `Title profile conflicts with manual overrides for "${_titleForLog(ruleLogLabel(rule, rule.title))}"`,
+                error: `Title profile conflicts with manual overrides for "${_titleForLog(ruleLogLabel(rule, rule.title, rule.name))}"`,
             };
         }
     }

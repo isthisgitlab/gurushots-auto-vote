@@ -41,6 +41,8 @@ export type WindowType = 'login' | 'main';
  * the rule itself, hence the index signature.
  */
 export interface TitleRule {
+    /** Display-only label shown in the editor's dropdown and logs; never matched against and not part of the de-dupe identity. */
+    name?: string;
     title?: string;
     titles?: string[];
     match?: string;

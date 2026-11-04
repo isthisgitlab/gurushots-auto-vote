@@ -1145,6 +1145,14 @@ export const app: LatvianApp = {
     removeTitleTagRule: 'Noņemt noteikumu',
     noTitleTagRules:
         'Vēl nav noteikumu. Pievieno kādu, lai atlasītu izaicinājumus pēc nosaukuma, taga, veida, foto skaita, ilguma vai beigu laika.',
+    titleRuleName: 'Noteikuma nosaukums',
+    titleRuleNameHint:
+        'Tikai attēlošanai — atbilstību nosaka zemāk esošie nosacījumi. Noteikums, kuram ir tikai nosaukums, saglabājot tiks atmests.',
+    titleRuleNameOnlyWarning:
+        'Šim noteikumam ir tikai nosaukums, un saglabājot tas tiks atmests: tam nav atbilstības nosacījuma, vai tas nepiestata ne profilu, ne tagus, ne citus uzstādījumus.',
+    titleRuleSelectRule: 'Izvēlēties rediģējamo noteikumu',
+    titleRulePositionOf: '{n}. noteikums no {m}',
+    titleRuleUntitled: '(bez nosaukuma)',
     usingProfile: 'Izmanto profilu',
     fromRule: 'No noteikuma: {title}',
     ruleNumber: 'Nr. {n}',

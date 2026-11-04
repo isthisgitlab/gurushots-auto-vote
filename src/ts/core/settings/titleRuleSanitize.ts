@@ -8,6 +8,7 @@
 
 import { validateSetting } from './schema';
 import {
+    MAX_TITLE_LENGTH,
     TITLE_MATCH_MODES,
     normalizeTitle,
     normalizeTag,
@@ -27,9 +28,10 @@ import type { RuleLike } from './challengeRules';
 // settings JSON blob with every platform, so bound both the count and the
 // per-title length to keep a malformed/oversized payload from bloating the
 // file and slowing every rule scan. Real GuruShots titles are short, so 200 is
-// comfortably generous for both.
+// comfortably generous for both. MAX_TITLE_LENGTH lives in challengeRules.ts
+// (dependency-free) so the editor's inputs enforce the same bound; it bounds a
+// rule's title entries and its display-only name alike.
 const MAX_TITLE_RULES = 200;
-const MAX_TITLE_LENGTH = 200;
 // One rule may list several titles that share the same behaviour, so the user
 // doesn't have to duplicate a whole rule per recurring challenge.
 const MAX_TITLES_PER_RULE = 50;
@@ -78,6 +80,9 @@ const _canonicalTitleRuleProfile = (storedProfiles: Record<string, unknown>, req
 // Identity of a rule's match condition. "\u0000"/"\u0001" cannot occur in a
 // trimmed title or tag, so they are safe separators no user value can forge.
 // The title list is sorted so the same set in a different order is one rule.
+// The display-only `name` is deliberately NOT part of the key: two rules with
+// the same condition are the same rule to this list (last wins), whatever
+// they are called.
 const titleRuleKey = (rule: RuleLike): string => {
     const conditions = ruleConditions(rule);
     return [
@@ -159,13 +164,18 @@ const _sanitizeRuleClassConditions = (rule: RuleLike): ClassConditions | null =>
     return out;
 };
 
-// What a rejected rule is called in the log: its first title, else its tag or
-// type, else its close times (only strict 'HH:MM' values, so renderer input
-// never reaches the log), else a generic marker (a photo-count/runtime-only
-// rule has no name).
-const ruleLogLabel = (rule: RuleLike, title: string | undefined): string => {
+// What a rejected rule is called in the log: its display-only name (the
+// SANITIZED one, passed in — see sanitizeTitleRule — and still typeof-guarded
+// here, since this runs on partially-validated input by design), else its
+// first title, else its tag or type, else its close times (only strict
+// 'HH:MM' values, so renderer input never reaches the log), else a generic
+// marker (a photo-count/runtime-only rule has no name). `name` is a required
+// parameter so tsc finds every caller: the notes built outside the sanitizer
+// (titleRules.ts) must pass the stored rule's sanitized name.
+const ruleLogLabel = (rule: RuleLike, title: string | undefined, name: unknown): string => {
     const closeTimes = normalizeRuleCloseTimes(rule);
     return (
+        (typeof name === 'string' && name.trim()) ||
         title ||
         (typeof rule?.challengeTag === 'string' && rule.challengeTag.trim()) ||
         (typeof rule?.type === 'string' && rule.type.trim()) ||
@@ -219,14 +229,21 @@ const sanitizeTitleRule = (
     | { valid: true; rule: null; droppedBecause: string; label: string }
     | { valid: true; rule: TitleRule } => {
     const titleList = _sanitizeRuleTitleList(rule);
-    if (titleList === null) return { valid: false, title: ruleLogLabel(rule, undefined) };
+    if (titleList === null) return { valid: false, title: ruleLogLabel(rule, undefined, undefined) };
     const { titles, modes } = titleList;
     const title = titles[0] || '';
-    const label = ruleLogLabel(rule, title);
+    // The display-only name: trimmed, dropped when empty, REJECTED over the
+    // same length bound as a title entry (reject, not truncate, so a typo
+    // cannot shrink a name silently). Computed before any label so the log
+    // never sees the raw renderer text, and an over-length rejection is
+    // labeled by the name-less fallback, never by the name being rejected.
+    const name = typeof rule?.name === 'string' ? rule.name.trim() : '';
+    if (name.length > MAX_TITLE_LENGTH) return { valid: false, title: ruleLogLabel(rule, title, undefined) };
+    const label = ruleLogLabel(rule, title, name || undefined);
     const conditions = _sanitizeRuleClassConditions(rule);
     if (conditions === null) return { valid: false, title: label };
     // A rule needs at least one condition; one without any is the editor's
-    // empty new row and is dropped, not rejected.
+    // empty new row and is dropped, not rejected — even a named one.
     if (!title && Object.keys(conditions).length === 0)
         return { valid: true, rule: null, droppedBecause: 'the rule has no match condition and sets nothing', label };
     if (titles.length > MAX_TITLES_PER_RULE || titles.some((entry) => entry.length > MAX_TITLE_LENGTH)) {
@@ -236,9 +253,9 @@ const sanitizeTitleRule = (
     if (behaviour.invalid) return { valid: false, title: label, requestedProfile: behaviour.requestedProfile };
     const { mustIncludeTags, shouldIncludeTags, profile, inline } = behaviour;
 
-    // A rule that does nothing is dropped rather than stored. Inline overrides
-    // count as "does something" — a rule whose only content is `autoJoin: true`
-    // is a complete, meaningful rule.
+    // A rule that does nothing is dropped rather than stored, even a named
+    // one. Inline overrides count as "does something" — a rule whose only
+    // content is `autoJoin: true` is a complete, meaningful rule.
     const hasInline = Object.keys(inline).length > 0;
     if (!profile && !hasInline && mustIncludeTags.length === 0 && shouldIncludeTags.length === 0) {
         return {
@@ -258,6 +275,7 @@ const sanitizeTitleRule = (
     if (title && modes.some((mode) => mode !== modes[0])) sanitized.titleMatchModes = modes;
     else if (title && modes[0] !== 'exact') sanitized.match = modes[0];
     if (profile) sanitized.profile = profile;
+    if (name) sanitized.name = name;
     return { valid: true, rule: sanitized };
 };
 

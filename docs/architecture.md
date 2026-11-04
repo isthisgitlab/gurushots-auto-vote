@@ -177,7 +177,10 @@ Domain terms used throughout, in reader's terms:
   `exact`, the default, `starts`, or `contains`), `challengeTag`, `type`, `pics` (`max_photo_submits`) and a
   runtime range `minHours`/`maxHours` over `close_time` - `start_time`, and close times (strict `HH:MM`, any
   date) — and every condition present must hold (AND); a rule with none matches nothing, and a runtime
-  condition fails closed when either time is unreadable. The close times are `closesAt`, the first, and
+  condition fails closed when either time is unreadable. A rule may also carry an optional
+  display-only `name` (trimmed and length-capped by the sanitizer like a title entry): it labels the
+  rule in the editor's dropdown and in log lines, is never matched against, and is not part of the
+  de-dupe identity — two rules with the same condition collapse last-wins whatever they are called. The close times are `closesAt`, the first, and
   `closesAtTimes`, written only when there are two or more (at most 24; a repeat or blank entry is dropped on
   save). One normalizer, `normalizeRuleCloseTimes`, reads both into `RuleConditions.closeTimes`: a non-empty
   `closesAtTimes` wins over `closesAt`, and an empty list (or one of blanks) falls back to it; the rule matches
