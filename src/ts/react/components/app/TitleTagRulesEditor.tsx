@@ -98,6 +98,9 @@ export function TitleTagRulesEditor({
     // The two-step delete: armed (first press) then confirmed (second press).
     const [deleteArmed, setDeleteArmed] = useState(false);
     const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // The dropdown survives every form change, so it is the focus anchor after
+    // a confirmed delete removes the picked rule's button.
+    const selectRef = useRef<HTMLSelectElement | null>(null);
 
     const clearConfirmTimer = useCallback(() => {
         if (confirmTimerRef.current) {
@@ -162,7 +165,7 @@ export function TitleTagRulesEditor({
     const addRule = () => {
         disarm();
         setSelected(rules.length);
-        onChange([...rules, { name: '', title: '', profile: '', mustIncludeTags: [], shouldIncludeTags: [] }]);
+        onChange([...rules, { title: '', profile: '', mustIncludeTags: [], shouldIncludeTags: [] }]);
     };
 
     const removeSelected = (index: number) => {
@@ -171,8 +174,10 @@ export function TitleTagRulesEditor({
             return;
         }
         disarm();
-        // No ghost rule: the form goes back to "—".
+        // No ghost rule: the form goes back to "—", and focus follows to the
+        // dropdown — the confirm button is about to unmount with the form.
         setSelected(null);
+        selectRef.current?.focus();
         onChange(rules.filter((_, i) => i !== index));
     };
 
@@ -186,20 +191,30 @@ export function TitleTagRulesEditor({
     const selectedRule = selected !== null ? rules[selected] : undefined;
 
     // One polite live region: the picked rule's position announces on every
-    // selection/reorder change, an armed delete announces its confirm prompt.
-    const liveText = deleteArmed
-        ? t('app.confirmDelete')
-        : selected === null
-          ? ''
-          : rules[selected] !== undefined
-            ? t('app.titleRulePositionOf', { n: selected + 1, m: rules.length })
-            : '';
-    // The name-only drop warning mirrors the sanitizer's two drop paths: no
-    // match condition at all, or conditions without any behaviour.
-    const nameOnlyWarning =
+    // selection/reorder change. An armed delete needs no separate announcement
+    // — the button's own label carries the confirm prompt right beside it.
+    const liveText =
+        selected === null
+            ? ''
+            : rules[selected] !== undefined
+              ? t('app.titleRulePositionOf', { n: selected + 1, m: rules.length })
+              : '';
+    // Whether the rule carries anything the user entered — the pristine empty
+    // new row stays unwarned.
+    const hasUserContent = (rule: TitleRule): boolean =>
+        (typeof rule.name === 'string' && rule.name.trim() !== '') ||
+        (typeof rule.title === 'string' && rule.title.trim() !== '') ||
+        (Array.isArray(rule.titles) && rule.titles.some((title) => typeof title === 'string' && title.trim() !== '')) ||
+        hasRuleCondition(rule) ||
+        ruleHasBehaviour(rule);
+    // The drop warning mirrors the sanitizer's two drop paths — no match
+    // condition at all, or conditions without any behaviour — for any rule
+    // that already carries user content, named or not. (A malformed
+    // condition, e.g. a typo'd close time, is REFUSED rather than dropped;
+    // the message says "dropped or refused" to cover both.)
+    const dropWarning =
         selectedRule !== undefined &&
-        typeof selectedRule.name === 'string' &&
-        selectedRule.name.trim() !== '' &&
+        hasUserContent(selectedRule) &&
         (!hasRuleCondition(selectedRule) || !ruleHasBehaviour(selectedRule));
 
     return (
@@ -209,6 +224,7 @@ export function TitleTagRulesEditor({
             {rules.length > 0 && (
                 <div className="flex items-center gap-2">
                     <select
+                        ref={selectRef}
                         className="select select-sm flex-1 min-w-40"
                         aria-label={t('app.titleRuleSelectRule')}
                         value={selected === null ? '' : String(selected)}
@@ -291,15 +307,14 @@ export function TitleTagRulesEditor({
                                 type="text"
                                 className="input input-sm"
                                 maxLength={MAX_TITLE_LENGTH}
-                                aria-label={t('app.titleRuleName')}
                                 value={typeof selectedRule.name === 'string' ? selectedRule.name : ''}
                                 onChange={(e) => updateRule(selected, { name: e.currentTarget.value })}
                             />
                             <p className="text-xs text-base-content/70">{t('app.titleRuleNameHint')}</p>
                         </div>
-                        {nameOnlyWarning && (
+                        {dropWarning && (
                             <div role="alert" className="alert alert-warning py-2 text-sm">
-                                <span>{t('app.titleRuleNameOnlyWarning')}</span>
+                                <span>{t('app.titleRuleDropWarning')}</span>
                             </div>
                         )}
                         <div className="flex items-center gap-2">

@@ -1148,8 +1148,8 @@ export const app: LatvianApp = {
     titleRuleName: 'Noteikuma nosaukums',
     titleRuleNameHint:
         'Tikai attēlošanai — atbilstību nosaka zemāk esošie nosacījumi. Noteikums, kuram ir tikai nosaukums, saglabājot tiks atmests.',
-    titleRuleNameOnlyWarning:
-        'Šim noteikumam ir tikai nosaukums, un saglabājot tas tiks atmests: tam nav atbilstības nosacījuma, vai tas nepiestata ne profilu, ne tagus, ne citus uzstādījumus.',
+    titleRuleDropWarning:
+        'Šis noteikums saglabājot tiks atmests vai noraidīts: tam nav atbilstības nosacījuma, vai tas nepiestata ne profilu, ne tagus, ne citus uzstādījumus.',
     titleRuleSelectRule: 'Izvēlēties rediģējamo noteikumu',
     titleRulePositionOf: '{n}. noteikums no {m}',
     titleRuleUntitled: '(bez nosaukuma)',

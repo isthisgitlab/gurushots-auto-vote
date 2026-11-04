@@ -1333,7 +1333,8 @@ describe('SettingsModal — editing rules without a pending error', () => {
 
         expect(screen.getByDisplayValue('speed')).toBeTruthy();
         expect(screen.getByDisplayValue('Caps')).toBeTruthy();
-        expect(document.querySelector('[role="alert"]')).toBeNull();
+        // No ERROR alert; the title-only rule's drop warning is expected.
+        expect(document.querySelector('[role="alert"].alert-error')).toBeNull();
     });
 });
 

@@ -951,13 +951,27 @@ describe('settings facade — title-keyed tag rules', () => {
     describe('rule name (display-only) and display labels', () => {
         const save = (rules: unknown) => settings.setTitleRules(rules);
 
-        test('the name round-trips trimmed and is dropped when empty', () => {
+        test('the name round-trips whitespace-collapsed and is dropped when empty', () => {
             expect(
                 save([
                     { title: 'A', name: '  Night owl ', autoJoin: true, mustIncludeTags: [], shouldIncludeTags: [] },
                 ]),
             ).toBe(true);
             expect(settings.getTitleRules()[0].name).toBe('Night owl');
+            // Internal whitespace collapses too, so the stored, displayed and
+            // logged forms agree.
+            expect(
+                save([
+                    {
+                        title: 'A',
+                        name: 'Night\n  owl\trun ',
+                        autoJoin: true,
+                        mustIncludeTags: [],
+                        shouldIncludeTags: [],
+                    },
+                ]),
+            ).toBe(true);
+            expect(settings.getTitleRules()[0].name).toBe('Night owl run');
 
             expect(
                 save([{ title: 'A', name: '   ', autoJoin: true, mustIncludeTags: [], shouldIncludeTags: [] }]),

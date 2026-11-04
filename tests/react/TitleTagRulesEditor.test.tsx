@@ -60,7 +60,8 @@ describe('TitleTagRulesEditor', () => {
         };
         renderEditor(<Harness />, { select: null });
         fireEvent.click(screen.getByRole('button', { name: 'app.addTitleTagRule' }));
-        // The new rule is the one the form shows (n = m = 1).
+        // The new rule is the one the form shows (n = m = 1); the seed carries
+        // no name key (absence is the unset spelling).
         expect(dropdown().value).toBe('0');
         expect(screen.getByLabelText<HTMLInputElement>('app.titleRuleName').value).toBe('');
         expect(mockTranslator.t).toHaveBeenCalledWith('app.titleRulePositionOf', { n: 1, m: 1 }, 'en');
@@ -140,7 +141,7 @@ describe('TitleTagRulesEditor', () => {
         expect(screen.getByLabelText<HTMLInputElement>('app.titleRuleName').value).toBe('Night owl');
     });
 
-    test('a rule with a name but no condition and no behaviour warns at edit time', () => {
+    test('a rule with content but nothing set warns at edit time, named or not', () => {
         const onChange = jest.fn();
         const { rerender } = renderEditor(
             <TitleTagRulesEditor
@@ -148,23 +149,31 @@ describe('TitleTagRulesEditor', () => {
                 onChange={onChange}
             />,
         );
-        expect(screen.getByText('app.titleRuleNameOnlyWarning')).toBeTruthy();
-        // Still dropped (and still warned): a condition without any behaviour.
+        expect(screen.getByText('app.titleRuleDropWarning')).toBeTruthy();
+        // Still dropped (and still warned) unnamed: a title without any behaviour.
         rerender(
             <TitleTagRulesEditor
-                value={[{ name: 'Night owl', title: 'Hats', mustIncludeTags: [], shouldIncludeTags: [] }]}
+                value={[{ title: 'Hats', mustIncludeTags: [], shouldIncludeTags: [] }]}
                 onChange={onChange}
             />,
         );
-        expect(screen.getByText('app.titleRuleNameOnlyWarning')).toBeTruthy();
+        expect(screen.getByText('app.titleRuleDropWarning')).toBeTruthy();
         // A condition plus behaviour (tags) clears it.
         rerender(
             <TitleTagRulesEditor
-                value={[{ name: 'Night owl', title: 'Hats', mustIncludeTags: ['x'], shouldIncludeTags: [] }]}
+                value={[{ title: 'Hats', mustIncludeTags: ['x'], shouldIncludeTags: [] }]}
                 onChange={onChange}
             />,
         );
-        expect(screen.queryByText('app.titleRuleNameOnlyWarning')).toBeNull();
+        expect(screen.queryByText('app.titleRuleDropWarning')).toBeNull();
+        // The pristine empty new row stays quiet.
+        rerender(
+            <TitleTagRulesEditor
+                value={[{ title: '', mustIncludeTags: [], shouldIncludeTags: [] }]}
+                onChange={onChange}
+            />,
+        );
+        expect(screen.queryByText('app.titleRuleDropWarning')).toBeNull();
     });
 
     test('a rule can assign a scenario inline, and a missing one stays visible', async () => {
@@ -272,14 +281,32 @@ describe('TitleTagRulesEditor', () => {
         ];
         renderEditor(<TitleTagRulesEditor value={value} onChange={onChange} />);
         fireEvent.click(screen.getByRole('button', { name: 'app.removeTitleTagRule 1' }));
-        // Move rule 2 up (↑, the other direction from the reorder-focus test).
-        selectRule(1);
-        fireEvent.click(screen.getByLabelText('app.titleRuleMoveUp 2'));
+        // Armed on rule 1, its own ↓ clicked — no selection change in between,
+        // so moveRule's own disarm is what protects this path.
+        fireEvent.click(screen.getByLabelText('app.titleRuleMoveDown 1'));
         expect(onChange).toHaveBeenLastCalledWith([value[1], value[0]]);
-        // The selection followed the moved rule to position 1; the armed state did not.
-        fireEvent.click(screen.getByRole('button', { name: /^app\.removeTitleTagRule 1$/ }));
+        // The selection followed the moved rule to position 2; the armed state did not.
+        fireEvent.click(screen.getByRole('button', { name: /^app\.removeTitleTagRule 2$/ }));
         expect(onChange).not.toHaveBeenCalledWith([]);
-        expect(screen.getByRole('button', { name: /^app\.removeTitleTagRule 1$/ }).className).toContain('btn-error');
+        expect(screen.getByRole('button', { name: /^app\.removeTitleTagRule 2$/ }).className).toContain('btn-error');
+    });
+
+    test('an armed delete is disarmed by a list-length change alone (no handler disarm)', () => {
+        const value3 = [
+            { title: 'A', mustIncludeTags: [], shouldIncludeTags: [] },
+            { title: 'B', mustIncludeTags: [], shouldIncludeTags: [] },
+            { title: 'C', mustIncludeTags: [], shouldIncludeTags: [] },
+        ];
+        const { rerender } = renderEditor(<TitleTagRulesEditor value={value3} onChange={jest.fn()} />, { select: 1 });
+        fireEvent.click(screen.getByRole('button', { name: 'app.removeTitleTagRule 2' }));
+        expect(screen.getByRole('button', { name: 'app.removeTitleTagRule 2' }).className).toContain('btn-error');
+        // A background refresh shrinks the list while the selected index stays
+        // valid: only the length-change effect disarms here.
+        rerender(<TitleTagRulesEditor value={value3.slice(0, 2)} onChange={jest.fn()} />);
+        expect(dropdown().value).toBe('1');
+        fireEvent.click(screen.getByRole('button', { name: 'app.removeTitleTagRule 2' }));
+        // First press after the shrink: armed again, nothing deleted.
+        expect(screen.getByRole('button', { name: 'app.removeTitleTagRule 2' }).className).toContain('btn-error');
     });
 
     test('an armed delete is disarmed by Add rule; the next press re-arms', () => {
@@ -381,8 +408,15 @@ describe('TitleTagRulesEditor', () => {
         // position 2.
         expect(screen.getByLabelText<HTMLInputElement>('app.titleTagRuleTitle 1').value).toBe('A2');
         expect(mockTranslator.t).toHaveBeenCalledWith('app.titleRulePositionOf', { n: 2, m: 2 }, 'en');
+        // Move it back up: ↑ fires moveRule in the other direction, focus again
+        // surviving on the (relabelled) button.
+        const moveUp = screen.getByLabelText('app.titleRuleMoveUp 2');
+        moveUp.focus();
+        fireEvent.click(moveUp);
+        expect(screen.getByLabelText<HTMLInputElement>('app.titleTagRuleTitle 1').value).toBe('A2');
+        expect(mockTranslator.t).toHaveBeenCalledWith('app.titleRulePositionOf', { n: 1, m: 2 }, 'en');
         // The button was not remounted, so keyboard focus survived the move.
-        expect(document.activeElement).toBe(screen.getByLabelText('app.titleRuleMoveDown 2'));
+        expect(document.activeElement).toBe(screen.getByLabelText('app.titleRuleMoveUp 1'));
     });
 
     test('the reorder arrows at the ends are disabled', () => {
@@ -398,7 +432,7 @@ describe('TitleTagRulesEditor', () => {
         expect(screen.getByLabelText<HTMLButtonElement>('app.titleRuleMoveDown 2').disabled).toBe(true);
     });
 
-    test('the position text is a polite live region shared with the armed-delete prompt', () => {
+    test('the position text is a polite live region; the armed prompt lives on the button alone', () => {
         renderEditor(
             <TitleTagRulesEditor
                 value={[{ title: 'A', mustIncludeTags: [], shouldIncludeTags: [] }]}
@@ -407,9 +441,25 @@ describe('TitleTagRulesEditor', () => {
         );
         const live = screen.getByText('app.titleRulePositionOf');
         expect(live.getAttribute('aria-live')).toBe('polite');
-        fireEvent.click(screen.getByRole('button', { name: /^app\.removeTitleTagRule/ }));
-        // The same region (the header is never remounted) announces the prompt.
-        expect(live.textContent).toBe('app.confirmDelete');
+        const remove = () => screen.getByRole('button', { name: /^app\.removeTitleTagRule/ });
+        fireEvent.click(remove());
+        // The button carries the prompt; the live region keeps the position.
+        expect(remove().textContent).toBe('app.confirmDelete');
+        expect(live.textContent).toBe('app.titleRulePositionOf');
+    });
+
+    test('a confirmed delete moves focus to the dropdown', () => {
+        const value = [
+            { title: 'A', mustIncludeTags: [], shouldIncludeTags: [] },
+            { title: 'B', mustIncludeTags: [], shouldIncludeTags: [] },
+        ];
+        renderEditor(<TitleTagRulesEditor value={value} onChange={jest.fn()} />);
+        const remove = () => screen.getByRole('button', { name: 'app.removeTitleTagRule 1' });
+        remove().focus();
+        fireEvent.click(remove()); // arm
+        fireEvent.click(remove()); // confirm
+        // The confirm button unmounts with the form; the dropdown is the anchor.
+        expect(document.activeElement).toBe(dropdown());
     });
 
     test('editing the Must tags emits the parsed tag array (first TagsField in the form)', () => {

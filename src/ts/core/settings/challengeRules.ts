@@ -368,10 +368,10 @@ const ruleDisplayName = (rule: RuleLike): string => {
     if (typeof type === 'string' && type.trim()) return type.trim();
     const closeTimes = normalizeRuleCloseTimes(rule);
     if (closeTimes !== null && closeTimes !== false && closeTimes.length > 0) {
+        // Every listed time is already a strict, trimmed 'HH:MM' (the
+        // normalizer trims entries and the regex allows nothing else through).
         return closeTimes
             .slice(0, MAX_DISPLAYED_CLOSE_TIMES)
-            .map((time) => time.trim())
-            .filter(Boolean)
             .join(', ')
             .concat(closeTimes.length > MAX_DISPLAYED_CLOSE_TIMES ? ', …' : '');
     }
