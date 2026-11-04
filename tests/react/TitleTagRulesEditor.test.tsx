@@ -241,13 +241,14 @@ describe('TitleTagRulesEditor', () => {
         ];
         renderEditor(<TitleTagRulesEditor value={value} onChange={onChange} />);
         const remove = () => screen.getByRole('button', { name: 'app.removeTitleTagRule 1' });
+        const armed = () => screen.getByRole('button', { name: 'app.confirmDelete' });
         expect(remove().className).not.toContain('btn-error');
         fireEvent.click(remove());
-        // Armed: the button asks for confirmation (its text) instead of firing,
-        // while the stable aria-label keeps naming rule 1.
-        expect(remove().className).toContain('btn-error');
-        expect(remove().textContent).toBe('app.confirmDelete');
-        fireEvent.click(remove());
+        // Armed: the accessible name tracks the visible confirm prompt (the
+        // prompt is announced, and stays in the name per WCAG 2.5.3).
+        expect(armed().className).toContain('btn-error');
+        expect(armed().textContent).toBe('app.confirmDelete');
+        fireEvent.click(armed());
         expect(onChange).toHaveBeenCalledWith([{ title: 'B', mustIncludeTags: ['y'], shouldIncludeTags: [] }]);
         // No ghost rule: the form goes back to "—".
         expect(dropdown().value).toBe('');
@@ -270,7 +271,7 @@ describe('TitleTagRulesEditor', () => {
         fireEvent.click(screen.getByRole('button', { name: 'app.removeTitleTagRule 2' }));
         // First press after the switch: armed again, nothing removed yet.
         expect(onChange).not.toHaveBeenCalled();
-        expect(screen.getByRole('button', { name: 'app.removeTitleTagRule 2' }).className).toContain('btn-error');
+        expect(screen.getByRole('button', { name: 'app.confirmDelete' }).className).toContain('btn-error');
     });
 
     test('an armed delete is disarmed by a reorder: the move fires, the delete does not', () => {
@@ -286,9 +287,11 @@ describe('TitleTagRulesEditor', () => {
         fireEvent.click(screen.getByLabelText('app.titleRuleMoveDown 1'));
         expect(onChange).toHaveBeenLastCalledWith([value[1], value[0]]);
         // The selection followed the moved rule to position 2; the armed state did not.
-        fireEvent.click(screen.getByRole('button', { name: /^app\.removeTitleTagRule 2$/ }));
-        expect(onChange).not.toHaveBeenCalledWith([]);
-        expect(screen.getByRole('button', { name: /^app\.removeTitleTagRule 2$/ }).className).toContain('btn-error');
+        fireEvent.click(screen.getByRole('button', { name: 'app.removeTitleTagRule 2' }));
+        // If the delete HAD stayed armed, the second press would have removed
+        // the rule now at position 2.
+        expect(onChange).not.toHaveBeenCalledWith([value[0]]);
+        expect(screen.getByRole('button', { name: 'app.confirmDelete' }).className).toContain('btn-error');
     });
 
     test('an armed delete is disarmed by a list-length change alone (no handler disarm)', () => {
@@ -299,30 +302,43 @@ describe('TitleTagRulesEditor', () => {
         ];
         const { rerender } = renderEditor(<TitleTagRulesEditor value={value3} onChange={jest.fn()} />, { select: 1 });
         fireEvent.click(screen.getByRole('button', { name: 'app.removeTitleTagRule 2' }));
-        expect(screen.getByRole('button', { name: 'app.removeTitleTagRule 2' }).className).toContain('btn-error');
+        expect(screen.getByRole('button', { name: 'app.confirmDelete' }).className).toContain('btn-error');
         // A background refresh shrinks the list while the selected index stays
         // valid: only the length-change effect disarms here.
         rerender(<TitleTagRulesEditor value={value3.slice(0, 2)} onChange={jest.fn()} />);
         expect(dropdown().value).toBe('1');
         fireEvent.click(screen.getByRole('button', { name: 'app.removeTitleTagRule 2' }));
         // First press after the shrink: armed again, nothing deleted.
-        expect(screen.getByRole('button', { name: 'app.removeTitleTagRule 2' }).className).toContain('btn-error');
+        expect(screen.getByRole('button', { name: 'app.confirmDelete' }).className).toContain('btn-error');
     });
 
     test('an armed delete is disarmed by Add rule; the next press re-arms', () => {
+        const onChange = jest.fn();
+        const first = { title: 'A', mustIncludeTags: [], shouldIncludeTags: [] };
         const Harness = () => {
-            const [rules, setRules] = useState<TitleRule[]>([
-                { title: 'A', mustIncludeTags: [], shouldIncludeTags: [] },
-            ]);
-            return <TitleTagRulesEditor value={rules} onChange={setRules} />;
+            const [rules, setRules] = useState<TitleRule[]>([first]);
+            return (
+                <TitleTagRulesEditor
+                    value={rules}
+                    onChange={(next) => {
+                        onChange(next);
+                        setRules(next);
+                    }}
+                />
+            );
         };
         renderEditor(<Harness />);
         fireEvent.click(screen.getByRole('button', { name: 'app.removeTitleTagRule 1' }));
         fireEvent.click(screen.getByRole('button', { name: 'app.addTitleTagRule' }));
+        // The appended rule carries no name key: absence is the unset spelling.
+        expect(onChange).toHaveBeenLastCalledWith([
+            first,
+            { title: '', profile: '', mustIncludeTags: [], shouldIncludeTags: [] },
+        ]);
         expect(screen.getByLabelText<HTMLInputElement>('app.titleRuleName')).toBeTruthy();
         // The appended rule is selected; the first press on its delete arms it.
         fireEvent.click(screen.getByRole('button', { name: 'app.removeTitleTagRule 2' }));
-        expect(screen.getByRole('button', { name: 'app.removeTitleTagRule 2' }).className).toContain('btn-error');
+        expect(screen.getByRole('button', { name: 'app.confirmDelete' }).className).toContain('btn-error');
     });
 
     test('an armed delete is disarmed by Sort default; picking a rule re-arms from scratch', () => {
@@ -338,7 +354,7 @@ describe('TitleTagRulesEditor', () => {
         selectRule(1);
         fireEvent.click(screen.getByRole('button', { name: 'app.removeTitleTagRule 2' }));
         expect(onChange).not.toHaveBeenCalledWith([pics]);
-        expect(screen.getByRole('button', { name: 'app.removeTitleTagRule 2' }).className).toContain('btn-error');
+        expect(screen.getByRole('button', { name: 'app.confirmDelete' }).className).toContain('btn-error');
     });
 
     test('an armed delete disarms itself after the confirm window', () => {
@@ -352,15 +368,17 @@ describe('TitleTagRulesEditor', () => {
                 />,
             );
             const remove = () => screen.getByRole('button', { name: 'app.removeTitleTagRule 1' });
+            const armed = () => screen.getByRole('button', { name: 'app.confirmDelete' });
             fireEvent.click(remove());
-            expect(remove().className).toContain('btn-error');
+            expect(armed().className).toContain('btn-error');
             // Past the window the arm expires: the button is idle again.
             jest.advanceTimersByTime(4000);
+            expect(screen.queryByRole('button', { name: 'app.confirmDelete' })).toBeNull();
             expect(remove().className).not.toContain('btn-error');
             fireEvent.click(remove());
             // Idle again: the press armed, it did not delete.
             expect(onChange).not.toHaveBeenCalled();
-            expect(remove().className).toContain('btn-error');
+            expect(armed().className).toContain('btn-error');
         } finally {
             jest.useRealTimers();
         }
@@ -388,10 +406,11 @@ describe('TitleTagRulesEditor', () => {
         expect(screen.queryByLabelText('app.titleTagRuleTitle 1')).toBeNull();
     });
 
-    test('the selection follows the rule through a reorder, and the header keeps focus', () => {
+    test('the selection follows the rule through reorders, and the header keeps focus', () => {
         const value = [
             { title: 'A', mustIncludeTags: [], shouldIncludeTags: [] },
             { title: 'B', mustIncludeTags: [], shouldIncludeTags: [] },
+            { title: 'C', mustIncludeTags: [], shouldIncludeTags: [] },
         ];
         const Harness = () => {
             const [rules, setRules] = useState<TitleRule[]>(value);
@@ -407,16 +426,18 @@ describe('TitleTagRulesEditor', () => {
         // The emitted array is swapped; the form still edits rule "A2" — now at
         // position 2.
         expect(screen.getByLabelText<HTMLInputElement>('app.titleTagRuleTitle 1').value).toBe('A2');
-        expect(mockTranslator.t).toHaveBeenCalledWith('app.titleRulePositionOf', { n: 2, m: 2 }, 'en');
-        // Move it back up: ↑ fires moveRule in the other direction, focus again
-        // surviving on the (relabelled) button.
-        const moveUp = screen.getByLabelText('app.titleRuleMoveUp 2');
-        moveUp.focus();
-        fireEvent.click(moveUp);
+        expect(mockTranslator.t).toHaveBeenCalledWith('app.titleRulePositionOf', { n: 2, m: 3 }, 'en');
+        // Up and down again: both moveRule directions fire, and the last click
+        // deliberately lands the rule mid-list so the clicked button — now
+        // relabelled "Move rule down 2" — stays ENABLED. A focus assertion on
+        // a button the move itself disabled would prove nothing beyond
+        // happy-dom's quirks.
+        fireEvent.click(screen.getByLabelText('app.titleRuleMoveUp 2'));
+        fireEvent.click(screen.getByLabelText('app.titleRuleMoveDown 1'));
         expect(screen.getByLabelText<HTMLInputElement>('app.titleTagRuleTitle 1').value).toBe('A2');
-        expect(mockTranslator.t).toHaveBeenCalledWith('app.titleRulePositionOf', { n: 1, m: 2 }, 'en');
-        // The button was not remounted, so keyboard focus survived the move.
-        expect(document.activeElement).toBe(screen.getByLabelText('app.titleRuleMoveUp 1'));
+        expect(mockTranslator.t).toHaveBeenCalledWith('app.titleRulePositionOf', { n: 2, m: 3 }, 'en');
+        // The button was not remounted, so keyboard focus survived the moves.
+        expect(document.activeElement).toBe(screen.getByLabelText('app.titleRuleMoveDown 2'));
     });
 
     test('the reorder arrows at the ends are disabled', () => {
@@ -441,10 +462,10 @@ describe('TitleTagRulesEditor', () => {
         );
         const live = screen.getByText('app.titleRulePositionOf');
         expect(live.getAttribute('aria-live')).toBe('polite');
-        const remove = () => screen.getByRole('button', { name: /^app\.removeTitleTagRule/ });
-        fireEvent.click(remove());
-        // The button carries the prompt; the live region keeps the position.
-        expect(remove().textContent).toBe('app.confirmDelete');
+        fireEvent.click(screen.getByRole('button', { name: 'app.removeTitleTagRule 1' }));
+        // The button carries the prompt — in its accessible name as much as in
+        // its text — while the live region keeps the position.
+        expect(screen.getByRole('button', { name: 'app.confirmDelete' }).textContent).toBe('app.confirmDelete');
         expect(live.textContent).toBe('app.titleRulePositionOf');
     });
 
@@ -457,9 +478,27 @@ describe('TitleTagRulesEditor', () => {
         const remove = () => screen.getByRole('button', { name: 'app.removeTitleTagRule 1' });
         remove().focus();
         fireEvent.click(remove()); // arm
-        fireEvent.click(remove()); // confirm
+        fireEvent.click(screen.getByRole('button', { name: 'app.confirmDelete' })); // confirm
         // The confirm button unmounts with the form; the dropdown is the anchor.
         expect(document.activeElement).toBe(dropdown());
+    });
+
+    test('a confirmed delete of the last rule moves focus to Add rule', () => {
+        const Harness = () => {
+            const [rules, setRules] = useState<TitleRule[]>([
+                { title: 'A', mustIncludeTags: [], shouldIncludeTags: [] },
+            ]);
+            return <TitleTagRulesEditor value={rules} onChange={setRules} />;
+        };
+        renderEditor(<Harness />);
+        const remove = () => screen.getByRole('button', { name: 'app.removeTitleTagRule 1' });
+        remove().focus();
+        fireEvent.click(remove()); // arm
+        fireEvent.click(screen.getByRole('button', { name: 'app.confirmDelete' })); // confirm
+        // The dropdown unmounts with the last rule; Add rule is the surviving
+        // anchor, so focus never falls to <body>.
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'app.addTitleTagRule' }));
+        expect(screen.queryByLabelText('app.titleRuleSelectRule')).toBeNull();
     });
 
     test('editing the Must tags emits the parsed tag array (first TagsField in the form)', () => {

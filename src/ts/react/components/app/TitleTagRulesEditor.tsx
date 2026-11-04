@@ -26,6 +26,15 @@ const collapseWhitespace = (text: string): string => text.replace(/\s+/g, ' ').t
 const isBroadSpendingRule = (rule: TitleRule): boolean =>
     rulePatterns(rule).length === 0 && hasRuleCondition(rule) && (rule.autoJoin === true || rule.autoSubmit === true);
 
+// Whether the rule carries anything the user entered — the pristine empty new
+// row stays unwarned by the drop warning below.
+const hasUserContent = (rule: TitleRule): boolean =>
+    (typeof rule.name === 'string' && rule.name.trim() !== '') ||
+    (typeof rule.title === 'string' && rule.title.trim() !== '') ||
+    (Array.isArray(rule.titles) && rule.titles.some((title) => typeof title === 'string' && title.trim() !== '')) ||
+    hasRuleCondition(rule) ||
+    ruleHasBehaviour(rule);
+
 /**
  * Editor for challenge rules. GuruShots challenges rotate with a fresh id each
  * time, so id-keyed per-challenge overrides are lost on every rotation; these
@@ -98,9 +107,11 @@ export function TitleTagRulesEditor({
     // The two-step delete: armed (first press) then confirmed (second press).
     const [deleteArmed, setDeleteArmed] = useState(false);
     const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    // The dropdown survives every form change, so it is the focus anchor after
-    // a confirmed delete removes the picked rule's button.
+    // The dropdown survives every form change that keeps a rule, so it is the
+    // focus anchor after a confirmed delete; the Add button anchors the
+    // last-rule case, where the dropdown itself unmounts.
     const selectRef = useRef<HTMLSelectElement | null>(null);
+    const addRef = useRef<HTMLButtonElement | null>(null);
 
     const clearConfirmTimer = useCallback(() => {
         if (confirmTimerRef.current) {
@@ -174,10 +185,12 @@ export function TitleTagRulesEditor({
             return;
         }
         disarm();
-        // No ghost rule: the form goes back to "—", and focus follows to the
-        // dropdown — the confirm button is about to unmount with the form.
+        // No ghost rule: the form goes back to "—", and focus follows to
+        // whichever anchor survives this delete — the dropdown while other
+        // rules remain, else the Add button (the dropdown unmounts with the
+        // last rule).
         setSelected(null);
-        selectRef.current?.focus();
+        (rules.length > 1 ? selectRef : addRef).current?.focus();
         onChange(rules.filter((_, i) => i !== index));
     };
 
@@ -199,14 +212,6 @@ export function TitleTagRulesEditor({
             : rules[selected] !== undefined
               ? t('app.titleRulePositionOf', { n: selected + 1, m: rules.length })
               : '';
-    // Whether the rule carries anything the user entered — the pristine empty
-    // new row stays unwarned.
-    const hasUserContent = (rule: TitleRule): boolean =>
-        (typeof rule.name === 'string' && rule.name.trim() !== '') ||
-        (typeof rule.title === 'string' && rule.title.trim() !== '') ||
-        (Array.isArray(rule.titles) && rule.titles.some((title) => typeof title === 'string' && title.trim() !== '')) ||
-        hasRuleCondition(rule) ||
-        ruleHasBehaviour(rule);
     // The drop warning mirrors the sanitizer's two drop paths — no match
     // condition at all, or conditions without any behaviour — for any rule
     // that already carries user content, named or not. (A malformed
@@ -286,8 +291,15 @@ export function TitleTagRulesEditor({
                         <button
                             type="button"
                             className={`btn btn-sm ml-auto ${deleteArmed ? 'btn-error' : 'btn-outline'}`}
-                            title={t('app.removeTitleTagRule')}
-                            aria-label={`${t('app.removeTitleTagRule')} ${selected + 1}`}
+                            title={deleteArmed ? t('app.confirmDelete') : t('app.removeTitleTagRule')}
+                            // The accessible name must track the armed state:
+                            // a static label would keep announcing "Remove
+                            // rule N" over the visible confirm prompt, and
+                            // the visible text alone must stay in the name
+                            // (WCAG 2.5.3).
+                            aria-label={
+                                deleteArmed ? t('app.confirmDelete') : `${t('app.removeTitleTagRule')} ${selected + 1}`
+                            }
                             onClick={() => removeSelected(selected)}
                         >
                             {deleteArmed ? t('app.confirmDelete') : t('app.removeTitleTagRule')}
@@ -360,7 +372,7 @@ export function TitleTagRulesEditor({
                 ))}
             </datalist>
 
-            <button className="btn btn-sm btn-outline" onClick={addRule}>
+            <button ref={addRef} className="btn btn-sm btn-outline" onClick={addRule}>
                 <StrokeIcon d={ICON_PATHS.plus} className="w-4 h-4 mr-1" />
                 {t('app.addTitleTagRule')}
             </button>
