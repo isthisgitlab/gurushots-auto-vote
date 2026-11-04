@@ -243,11 +243,14 @@ describe('TitleTagRulesEditor', () => {
         const remove = () => screen.getByRole('button', { name: 'app.removeTitleTagRule 1' });
         const armed = () => screen.getByRole('button', { name: 'app.confirmDelete' });
         expect(remove().className).not.toContain('btn-error');
+        expect(remove().getAttribute('title')).toBe('app.removeTitleTagRule');
         fireEvent.click(remove());
         // Armed: the accessible name tracks the visible confirm prompt (the
-        // prompt is announced, and stays in the name per WCAG 2.5.3).
+        // prompt is announced, and stays in the name per WCAG 2.5.3) — and the
+        // tooltip follows, so a hover at the confirm moment names the action.
         expect(armed().className).toContain('btn-error');
         expect(armed().textContent).toBe('app.confirmDelete');
+        expect(armed().getAttribute('title')).toBe('app.confirmDelete');
         fireEvent.click(armed());
         expect(onChange).toHaveBeenCalledWith([{ title: 'B', mustIncludeTags: ['y'], shouldIncludeTags: [] }]);
         // No ghost rule: the form goes back to "—".
@@ -283,7 +286,9 @@ describe('TitleTagRulesEditor', () => {
         renderEditor(<TitleTagRulesEditor value={value} onChange={onChange} />);
         fireEvent.click(screen.getByRole('button', { name: 'app.removeTitleTagRule 1' }));
         // Armed on rule 1, its own ↓ clicked — no selection change in between,
-        // so moveRule's own disarm is what protects this path.
+        // so moveRule's own disarm is what protects this path. (The editor is
+        // uncontrolled here — onChange records the swap without the parent
+        // feeding it back, which is all this assertion needs.)
         fireEvent.click(screen.getByLabelText('app.titleRuleMoveDown 1'));
         expect(onChange).toHaveBeenLastCalledWith([value[1], value[0]]);
         // The selection followed the moved rule to position 2; the armed state did not.
@@ -353,7 +358,9 @@ describe('TitleTagRulesEditor', () => {
         expect(screen.queryByRole('button', { name: /app\.removeTitleTagRule/ })).toBeNull();
         selectRule(1);
         fireEvent.click(screen.getByRole('button', { name: 'app.removeTitleTagRule 2' }));
-        expect(onChange).not.toHaveBeenCalledWith([pics]);
+        // If the delete HAD stayed armed, the second press would have removed
+        // the rule at position 2 (pics), leaving titled alone.
+        expect(onChange).not.toHaveBeenCalledWith([titled]);
         expect(screen.getByRole('button', { name: 'app.confirmDelete' }).className).toContain('btn-error');
     });
 
