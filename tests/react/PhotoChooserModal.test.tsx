@@ -123,6 +123,7 @@ const setup = (
     over: Partial<{
         value: string[];
         challengeId: string | number | null;
+        challenge: Challenge | null;
         recommendedIds: string[];
         onSave: jest.MockedFunction<(ids: string[]) => boolean | Promise<boolean>>;
         onClose: jest.MockedFunction<() => void>;
@@ -2030,7 +2031,7 @@ describe('pins', () => {
         activeChallenges = [buildChallenge({ id: 7, member: { ranking: { entries: [{ boosted: true }] } } })];
         getPins().mockResolvedValue({ boost: idOf(1), turbo: null });
         const { onSave } = setup({ value: [idOf(1)] });
-        const line = await screen.findByText("Boost is pinned to a photo that isn't in this list.");
+        const line = await screen.findByText('Pinned for Boost');
         expect(screen.queryByRole('button', { name: 'Pin for Boost' })).toBeNull();
         fireEvent.click(within(line.closest('p') as HTMLElement).getByRole('button', { name: 'Clear pin' }));
         fireEvent.click(save());
@@ -2047,7 +2048,7 @@ describe('pins', () => {
         expect(screen.queryByRole('button', { name: 'Pin for Boost' })).toBeNull();
     });
 
-    test('a feature spent while the host save waits receives no new pin', async () => {
+    test('a Boost spent while the host save waits keeps the chooser open with an unavailable error', async () => {
         const hostSave = deferred<boolean>();
         activeChallenges = [buildChallenge({ id: 7 })];
         const onSave = jest.fn<Promise<boolean>, [string[]]>(() => hostSave.promise);
@@ -2059,11 +2060,16 @@ describe('pins', () => {
         activeChallenges = [buildChallenge({ id: 7, member: { ranking: { entries: [{ boosted: true }] } } })];
         rerender(<PhotoChooserModal isOpen onClose={onClose} value={[idOf(1)]} challengeId={7} onSave={onSave} />);
         await act(async () => hostSave.resolve(true));
+        await screen.findByText(/Boost pin wasn't saved: Unavailable/);
+        expect(onClose).not.toHaveBeenCalled();
+        expect(setPins()).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'Clear pin' }));
+        fireEvent.click(save());
         await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
         expect(setPins()).not.toHaveBeenCalled();
     });
 
-    test('a Turbo spent while the host save waits receives no new pin', async () => {
+    test('a Turbo spent while the host save waits keeps the chooser open with an unavailable error', async () => {
         const hostSave = deferred<boolean>();
         activeChallenges = [buildChallenge({ id: 7 })];
         const onSave = jest.fn<Promise<boolean>, [string[]]>(() => hostSave.promise);
@@ -2075,7 +2081,8 @@ describe('pins', () => {
         activeChallenges = [buildChallenge({ id: 7, member: { ranking: { entries: [{ turbo: true }] } } })];
         rerender(<PhotoChooserModal isOpen onClose={onClose} value={[idOf(1)]} challengeId={7} onSave={onSave} />);
         await act(async () => hostSave.resolve(true));
-        await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+        await screen.findByText(/Turbo pin wasn't saved: Unavailable/);
+        expect(onClose).not.toHaveBeenCalled();
         expect(setPins()).not.toHaveBeenCalled();
     });
 
@@ -2099,11 +2106,16 @@ describe('pins', () => {
             <PhotoChooserModal isOpen onClose={onClose} value={[idOf(1), idOf(2)]} challengeId={7} onSave={onSave} />,
         );
         await act(async () => boostWrite.resolve({ success: true }));
+        await screen.findByText(/Turbo pin wasn't saved: Unavailable/);
+        expect(onClose).not.toHaveBeenCalled();
+        expect(setPins()).toHaveBeenCalledTimes(1);
+        fireEvent.click(screen.getByRole('button', { name: 'Clear pin' }));
+        fireEvent.click(save());
         await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
         expect(setPins()).toHaveBeenCalledTimes(1);
     });
 
-    test('a blocked Boost assignment does not suppress an explicit Turbo clear', async () => {
+    test('a blocked Boost transfer preserves its implicit Turbo pin', async () => {
         activeChallenges = [buildChallenge({ id: 7 })];
         getPins().mockResolvedValue({ boost: null, turbo: idOf(1) });
         const { onClose, onSave, rerender } = setup({ value: [idOf(1)] });
@@ -2113,8 +2125,155 @@ describe('pins', () => {
         rerender(<PhotoChooserModal isOpen onClose={onClose} value={[idOf(1)]} challengeId={7} onSave={onSave} />);
         fireEvent.click(save());
         await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
-        await waitFor(() => expect(setPins()).toHaveBeenCalledWith('turbo', 7, null));
-        expect(setPins()).toHaveBeenCalledTimes(1);
+        await screen.findByText(/Boost pin wasn't saved: Unavailable/);
+        expect(onClose).not.toHaveBeenCalled();
+        expect(setPins()).not.toHaveBeenCalled();
+    });
+
+    test('a blocked Turbo transfer preserves its implicit Boost pin', async () => {
+        activeChallenges = [buildChallenge({ id: 7 })];
+        getPins().mockResolvedValue({ boost: idOf(1), turbo: null });
+        const { onClose, onSave, rerender } = setup({ value: [idOf(1)] });
+        await screen.findByRole('button', { name: 'Pin for Turbo' });
+        fireEvent.click(turboToggle());
+        activeChallenges = [buildChallenge({ id: 7, member: { ranking: { entries: [{ turbo: true }] } } })];
+        rerender(<PhotoChooserModal isOpen onClose={onClose} value={[idOf(1)]} challengeId={7} onSave={onSave} />);
+        fireEvent.click(save());
+        await screen.findByText(/Turbo pin wasn't saved: Unavailable/);
+        expect(onClose).not.toHaveBeenCalled();
+        expect(setPins()).not.toHaveBeenCalled();
+    });
+
+    test('a direct Turbo clear persists when a later Boost assignment is blocked', async () => {
+        activeChallenges = [buildChallenge({ id: 7, member: { turbo: { state: 'USED' } } })];
+        getPins().mockResolvedValue({ boost: null, turbo: idOf(1) });
+        const { onClose, onSave, rerender } = setup({ value: [idOf(1)] });
+        const turboLine = await screen.findByText('Pinned for Turbo');
+        fireEvent.click(within(turboLine.closest('p') as HTMLElement).getByRole('button', { name: 'Clear pin' }));
+        fireEvent.click(boostToggle());
+        activeChallenges = [buildChallenge({ id: 7, member: { boost: { state: 'USED' }, turbo: { state: 'USED' } } })];
+        rerender(<PhotoChooserModal isOpen onClose={onClose} value={[idOf(1)]} challengeId={7} onSave={onSave} />);
+        fireEvent.click(save());
+        await screen.findByText(/Boost pin wasn't saved: Unavailable/);
+        expect(onClose).not.toHaveBeenCalled();
+        expect(setPins()).toHaveBeenCalledWith('turbo', 7, null);
+    });
+
+    test('a Turbo clear toggled from a pressed pin persists when a later Boost assignment is blocked', async () => {
+        activeChallenges = [buildChallenge({ id: 7 })];
+        getPins().mockResolvedValue({ boost: null, turbo: idOf(1) });
+        const { onClose, onSave, rerender } = setup({ value: [idOf(1)] });
+        await screen.findByRole('button', { name: 'Pinned for Turbo' });
+        fireEvent.click(screen.getByRole('button', { name: 'Pinned for Turbo' }));
+        fireEvent.click(boostToggle());
+        activeChallenges = [buildChallenge({ id: 7, member: { boost: { state: 'USED' } } })];
+        rerender(<PhotoChooserModal isOpen onClose={onClose} value={[idOf(1)]} challengeId={7} onSave={onSave} />);
+        fireEvent.click(save());
+        await screen.findByText(/Boost pin wasn't saved: Unavailable/);
+        expect(onClose).not.toHaveBeenCalled();
+        expect(setPins()).toHaveBeenCalledWith('turbo', 7, null);
+    });
+
+    test('a direct clear failure reports its own error beside an unavailable assignment', async () => {
+        activeChallenges = [buildChallenge({ id: 7 })];
+        getPins().mockResolvedValue({ boost: null, turbo: idOf(1) });
+        setPins().mockResolvedValue({ success: false, error: 'pin-write-failed' });
+        const { onClose, onSave, rerender } = setup({ value: [idOf(1)] });
+        await screen.findByRole('button', { name: 'Pinned for Turbo' });
+        fireEvent.click(screen.getByRole('button', { name: 'Pinned for Turbo' }));
+        fireEvent.click(boostToggle());
+        activeChallenges = [buildChallenge({ id: 7, member: { boost: { state: 'USED' } } })];
+        rerender(<PhotoChooserModal isOpen onClose={onClose} value={[idOf(1)]} challengeId={7} onSave={onSave} />);
+        fireEvent.click(save());
+        expect((await screen.findByRole('alert')).textContent).toBe(
+            `Your chosen photos are kept, but the Boost pin wasn't saved: Unavailable Press Use these photos to try again. Your chosen photos are kept, but the Turbo pin wasn't saved: ${english('errors.pinFailed')} Press Use these photos to try again.`,
+        );
+        expect(onClose).not.toHaveBeenCalled();
+        expect(setPins()).toHaveBeenCalledWith('turbo', 7, null);
+    });
+
+    test('a direct Turbo clear is recovered after a failed Boost assignment', async () => {
+        getPins().mockResolvedValue({ boost: null, turbo: idOf(1) });
+        const { onClose } = setup({ value: [idOf(1)] });
+        await screen.findByRole('button', { name: 'Pinned for Turbo' });
+        fireEvent.click(screen.getByRole('button', { name: 'Pinned for Turbo' }));
+        fireEvent.click(boostToggle());
+        setPins().mockImplementation(async (kind: EntryPinKind) =>
+            kind === 'boost' ? { success: false, error: 'pin-cap-reached' } : { success: true },
+        );
+        fireEvent.click(save());
+        await waitFor(() => expect(setPins()).toHaveBeenCalledTimes(2));
+        expect(setPins()).toHaveBeenNthCalledWith(1, 'boost', 7, idOf(1));
+        expect(setPins()).toHaveBeenNthCalledWith(2, 'turbo', 7, null);
+        expect((await screen.findByRole('alert')).textContent).toContain(english('errors.pinCapReached'));
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    test('a direct Boost clear is recovered after a failed Turbo assignment', async () => {
+        getPins().mockResolvedValue({ boost: idOf(1), turbo: null });
+        const { onClose } = setup({ value: [idOf(1)] });
+        await screen.findByRole('button', { name: 'Pinned for Boost' });
+        fireEvent.click(boostPressed());
+        fireEvent.click(turboToggle());
+        setPins().mockImplementation(async (kind: EntryPinKind) =>
+            kind === 'turbo' ? { success: false, error: 'pin-cap-reached' } : { success: true },
+        );
+        fireEvent.click(save());
+        await waitFor(() => expect(setPins()).toHaveBeenCalledTimes(2));
+        expect(setPins()).toHaveBeenNthCalledWith(1, 'turbo', 7, idOf(1));
+        expect(setPins()).toHaveBeenNthCalledWith(2, 'boost', 7, null);
+        expect((await screen.findByRole('alert')).textContent).toContain(english('errors.pinCapReached'));
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    test('a recovered direct clear failure keeps its error beside the failed assignment', async () => {
+        getPins().mockResolvedValue({ boost: null, turbo: idOf(1) });
+        const { onClose } = setup({ value: [idOf(1)] });
+        await screen.findByRole('button', { name: 'Pinned for Turbo' });
+        fireEvent.click(screen.getByRole('button', { name: 'Pinned for Turbo' }));
+        fireEvent.click(boostToggle());
+        setPins().mockImplementation(async (kind: EntryPinKind) =>
+            kind === 'boost'
+                ? { success: false, error: 'pin-cap-reached' }
+                : { success: false, error: 'pin-write-failed' },
+        );
+        fireEvent.click(save());
+        await waitFor(() => expect(setPins()).toHaveBeenCalledTimes(2));
+        expect((await screen.findByRole('alert')).textContent).toBe(
+            `Your chosen photos are kept, but the Boost pin wasn't saved: ${english('errors.pinCapReached')} Press Use these photos to try again. Your chosen photos are kept, but the Turbo pin wasn't saved: ${english('errors.pinFailed')} Press Use these photos to try again.`,
+        );
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        [
+            'active context is stale',
+            buildChallenge({ id: 7 }),
+            buildChallenge({ id: 7, member: { boost: { state: 'USED' } } }),
+        ],
+        [
+            'Discover fallback is stale',
+            buildChallenge({ id: 7, member: { boost: { state: 'USED' } } }),
+            buildChallenge({ id: 7 }),
+        ],
+    ] as const)('%s does not overrule a spent Boost source', async (_name, active, fallback) => {
+        activeChallenges = [active];
+        setup({ value: [idOf(1)], challenge: fallback });
+        await screen.findByRole('button', { name: /^Chosen photo 00000001:/ });
+        expect(screen.queryByRole('button', { name: 'Pin for Boost' })).toBeNull();
+        expect(turboToggle()).toBeTruthy();
+    });
+
+    test('a feature without an available source leaves no empty pin group', async () => {
+        activeChallenges = [
+            buildChallenge({
+                id: 7,
+                member: { boost: { state: 'USED' }, turbo: { state: 'UNAVAILABLE' } },
+            }),
+        ];
+        setup({ value: [idOf(1)] });
+        await screen.findByRole('button', { name: /^Chosen photo 00000001:/ });
+        expect(screen.queryByRole('group', { name: 'Pins for chosen photo 1' })).toBeNull();
     });
 
     test('selected tiles carry the pair, disabled until the read settles, which names the stored pin', async () => {
@@ -2338,6 +2497,51 @@ describe('pins', () => {
         expect((await screen.findByRole('alert')).textContent).toBe(
             `Your chosen photos are kept, but the Boost pin wasn't saved: ${english('errors.pinFailed')} Press Use these photos to try again.`,
         );
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    test('a successful Boost write becomes the baseline while a Turbo write fails', async () => {
+        getPins().mockResolvedValue({ boost: idOf(1), turbo: null });
+        const { onClose } = setup({ value: [idOf(1), idOf(2)] });
+        await opened();
+        fireEvent.click(within(groupOf(2)).getByRole('button', { name: 'Pin for Boost' }));
+        fireEvent.click(within(groupOf(1)).getByRole('button', { name: 'Pin for Turbo' }));
+        setPins().mockImplementation(async (kind: EntryPinKind) =>
+            kind === 'turbo' ? { success: false, error: 'pin-write-failed' } : { success: true },
+        );
+        fireEvent.click(save());
+        await waitFor(() => expect(setPins()).toHaveBeenCalledTimes(2));
+        expect(setPins()).toHaveBeenNthCalledWith(1, 'boost', 7, idOf(2));
+        expect(setPins()).toHaveBeenNthCalledWith(2, 'turbo', 7, idOf(1));
+        expect(await screen.findByRole('button', { name: 'Pinned for Boost' })).toBeTruthy();
+        expect(within(groupOf(1)).getByRole('button', { name: 'Pin for Boost' })).toBeTruthy();
+        fireEvent.click(save());
+        await waitFor(() => expect(setPins()).toHaveBeenCalledTimes(3));
+        expect(setPins()).toHaveBeenNthCalledWith(3, 'turbo', 7, idOf(1));
+        await waitFor(() => expect(save().hasAttribute('disabled')).toBe(false));
+        fireEvent.click(within(groupOf(2)).getByRole('button', { name: 'Pinned for Boost' }));
+        fireEvent.click(save());
+        await waitFor(() => expect(setPins()).toHaveBeenCalledTimes(5));
+        expect(setPins()).toHaveBeenNthCalledWith(4, 'boost', 7, null);
+        expect(setPins()).toHaveBeenNthCalledWith(5, 'turbo', 7, idOf(1));
+        expect(setPins()).not.toHaveBeenNthCalledWith(4, 'boost', 7, idOf(2));
+        expect(setPins()).not.toHaveBeenNthCalledWith(5, 'boost', 7, idOf(2));
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    test('a successful transfer updates the opposite pin locally before a later failure', async () => {
+        getPins().mockResolvedValue({ boost: null, turbo: idOf(1) });
+        const { onClose } = setup({ value: [idOf(1), idOf(2)] });
+        await opened();
+        fireEvent.click(within(groupOf(1)).getByRole('button', { name: 'Pin for Boost' }));
+        fireEvent.click(within(groupOf(2)).getByRole('button', { name: 'Pin for Turbo' }));
+        setPins().mockImplementation(async (kind: EntryPinKind) =>
+            kind === 'turbo' ? { success: false, error: 'pin-write-failed' } : { success: true },
+        );
+        fireEvent.click(save());
+        await waitFor(() => expect(setPins()).toHaveBeenCalledTimes(2));
+        expect(within(groupOf(1)).getByRole('button', { name: 'Pinned for Boost' })).toBeTruthy();
+        expect(within(groupOf(1)).getByRole('button', { name: 'Pin for Turbo' })).toBeTruthy();
         expect(onClose).not.toHaveBeenCalled();
     });
 

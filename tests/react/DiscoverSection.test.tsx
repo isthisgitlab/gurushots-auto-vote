@@ -1392,6 +1392,7 @@ describe('chosen photos', () => {
         });
         const spent = invalid<OpenChallenge>({
             ...items[0],
+            id: '900001',
             member: {
                 boost: { state: 'NONE', timeout: 0 },
                 turbo: { state: 'NONE' },
@@ -1427,15 +1428,15 @@ describe('chosen photos', () => {
         expect(screen.getByRole('button', { name: 'app.pinForBoost' })).toBeTruthy();
     });
 
-    test('the active challenge context takes precedence over a spent Discover fallback', async () => {
+    test('a spent Discover fallback disables that feature when active context is stale', async () => {
         own['900001'] = [PHOTO];
-        activeChallenges = [buildChallenge({ id: 900001 })];
+        activeChallenges = [buildChallenge({ id: 900001, member: { turbo: { state: 'USED' } } })];
         const spent = invalid<OpenChallenge>({
             ...items[0],
             member: {
-                boost: { state: 'NONE', timeout: 0 },
+                boost: { state: 'USED', timeout: 0 },
                 turbo: { state: 'NONE' },
-                ranking: { entries: [{ boosted: true }] },
+                ranking: { entries: [] },
             },
         });
         window.api.getMemberChallenges = listMock().mockResolvedValue(invalid({ success: true, items: [spent] }));
@@ -1443,7 +1444,28 @@ describe('chosen photos', () => {
         await screen.findByText('Free One');
         await screen.findByText('app.discoverChosenChip');
         fireEvent.click(screen.getByText('app.choosePhotos'));
-        expect(await screen.findByRole('button', { name: 'app.pinForBoost' })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'app.pinForTurbo' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'app.pinForBoost' })).toBeNull();
+    });
+
+    test('a spent active feature disables that feature when the Discover fallback is stale', async () => {
+        own['900001'] = [PHOTO];
+        activeChallenges = [buildChallenge({ id: 900001, member: { boost: { state: 'USED' } } })];
+        const stale = invalid<OpenChallenge>({
+            ...items[0],
+            member: {
+                boost: { state: 'NONE', timeout: 0 },
+                turbo: { state: 'NONE' },
+                ranking: { entries: [{ turbo: true }] },
+            },
+        });
+        window.api.getMemberChallenges = listMock().mockResolvedValue(invalid({ success: true, items: [stale] }));
+        renderSection();
+        await screen.findByText('Free One');
+        await screen.findByText('app.discoverChosenChip');
+        fireEvent.click(screen.getByText('app.choosePhotos'));
+        expect(screen.queryByRole('button', { name: 'app.pinForBoost' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'app.pinForTurbo' })).toBeNull();
     });
 
     test('the Chosen chip reopens the chooser on the saved list; saving none removes the list', async () => {

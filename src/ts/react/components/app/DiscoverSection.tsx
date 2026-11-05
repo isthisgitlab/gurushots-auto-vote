@@ -541,7 +541,9 @@ export function DiscoverSection({
             />
 
             <RowPhotoChooser
-                challenge={choosing === null ? null : (list.find((row) => row.id === choosing.id) ?? choosing)}
+                challenge={
+                    choosing === null ? null : (list.find((row) => String(row.id) === String(choosing.id)) ?? choosing)
+                }
                 onClose={() => setChoosing(null)}
                 onSaved={chosen.refetch}
             />
