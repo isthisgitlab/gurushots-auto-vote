@@ -5,12 +5,14 @@
 
 jest.mock('../../src/ts/core/api/turbo', () => ({
     startTurboSession: jest.fn(),
+    submitSnapScore: jest.fn(),
     submitSnapVote: jest.fn(),
     getChallengeTurbo: jest.fn(),
 }));
 jest.mock('../../src/ts/core/services/visionVerifier', () => ({
     hasBundledModel: jest.fn(),
     judgeSnapImage: jest.fn(),
+    judgeSnapVideoFrames: jest.fn(),
     snapPrompts: jest.fn(),
     SNAP_CAPTION_MAX_CHARS: 200,
 }));
@@ -19,6 +21,7 @@ jest.mock('../../src/ts/core/timing', () => ({
     sleep: jest.fn(() => Promise.resolve()),
     getRandomDelay: jest.fn(() => 4000),
 }));
+jest.mock('../../src/ts/core/platform/port', () => ({ platform: jest.fn() }));
 
 import turboModule = require('../../src/ts/core/api/turbo');
 import visionModule = require('../../src/ts/core/services/visionVerifier');
@@ -26,16 +29,24 @@ import settingsModule = require('../../src/ts/core/settings');
 import timingModule = require('../../src/ts/core/timing');
 import cancellation = require('../../src/ts/core/voting/cancellation');
 import logger = require('../../src/ts/core/logger');
+import platformModule = require('../../src/ts/core/platform/port');
 import { __resetSnapTransientRunsForTests, runSnapGame } from '../../src/ts/core/strategies/real/snapGame';
-import { __resetSnapUnavailableForTests, isSnapUnavailable } from '../../src/ts/core/services/turboRunLock';
+import {
+    __resetSnapUnavailableForTests,
+    isSnapAutoCoolingDown,
+    isSnapUnavailable,
+} from '../../src/ts/core/services/turboRunLock';
 import type { CategoryLogger } from '../../src/ts/core/logger';
 import type { Challenge, SnapVoteResult, TurboSession } from '../../src/ts/core/types/gurushots';
+import type { SnapScoreResult } from '../../src/ts/core/types/gurushots/voting';
 import { invalid } from '../helpers/invalid';
 
 const turbo = jest.mocked(turboModule);
 const vision = jest.mocked(visionModule);
 const settings = jest.mocked(settingsModule);
 const timing = jest.mocked(timingModule);
+const platform = jest.mocked(platformModule.platform);
+const videoFrames = jest.fn<Promise<string[]>, [string, number, readonly number[]]>();
 
 const CHALLENGE = invalid<Challenge>({ id: 77, title: 'Snap Test' });
 const CAPTION = 'Does the soft, even light look natural?';
@@ -48,11 +59,38 @@ const snapSession = (position = 0, count = 3): Extract<TurboSession, { kind: 'sn
     images: Array.from({ length: count }, (_, i) => ({ imageId: `img${i}`, memberId: `m${i}` })),
 });
 
+const scoreSession = (position = 0, count = 1): Extract<TurboSession, { kind: 'score' }> => ({
+    kind: 'score',
+    sessionId: 'score-sess',
+    position,
+    caption: 'Rate overall picture quality.',
+    maxScore: 7,
+    images: Array.from({ length: count }, (_, index) => ({
+        imageId: `video${index}`,
+        memberId: `m${index}`,
+        durationMs: 5000,
+        mediaUrl: `https://media.gurushots.com/clip${index}.mp4`,
+    })),
+});
+
 const landed = (overrides: Partial<SnapVoteResult> = {}): SnapVoteResult => ({
     ok: true,
     completed: false,
     communityPct: 60,
     errorCode: null,
+    unclear: false,
+    serverAnswered: true,
+    ...overrides,
+});
+
+const scored = (overrides: Partial<SnapScoreResult> = {}): SnapScoreResult => ({
+    ok: true,
+    completed: false,
+    communityAvg: 6,
+    tooEarly: false,
+    retryAfterMs: null,
+    sessionEnded: false,
+    restartRequired: false,
     unclear: false,
     serverAnswered: true,
     ...overrides,
@@ -106,7 +144,10 @@ beforeEach(() => {
     vision.snapPrompts.mockReturnValue({ yes: 'y', no: 'n' });
     vision.judgeSnapImage.mockResolvedValue(judgment);
     turbo.startTurboSession.mockResolvedValue(snapSession());
+    turbo.submitSnapScore.mockResolvedValue(scored());
     turbo.submitSnapVote.mockResolvedValue(landed());
+    videoFrames.mockResolvedValue(['frame-a', 'frame-b', 'frame-c']);
+    platform.mockReturnValue(invalid<ReturnType<typeof platformModule.platform>>({ assets: { videoFrames } }));
 });
 
 describe('runSnapGame', () => {
@@ -139,6 +180,23 @@ describe('runSnapGame', () => {
         expect(turbo.submitSnapVote).toHaveBeenCalledWith('sess', 'img0', 'no', 'tok');
     });
 
+    test('cancels after the photo pacing wait and does not submit', async () => {
+        let cancelled = false;
+        const result = await runSnapGame(
+            CHALLENGE,
+            'tok',
+            deps({
+                isCancelled: () => cancelled,
+                sleep: async () => {
+                    cancelled = true;
+                },
+            }),
+        );
+
+        expect(result.stopReason).toBe('cancelled');
+        expect(turbo.submitSnapVote).not.toHaveBeenCalled();
+    });
+
     test('resumes from the position the server reports', async () => {
         turbo.startTurboSession.mockResolvedValue(snapSession(2, 3));
         turbo.submitSnapVote.mockResolvedValue(landed({ completed: true }));
@@ -157,6 +215,163 @@ describe('runSnapGame', () => {
 
         expect(result.meanAgreement).toBeNull();
         expect(infos().some((line) => line.endsWith('community=n/a%'))).toBe(true);
+    });
+
+    describe('scored video sessions', () => {
+        beforeEach(() => {
+            vision.hasBundledModel.mockResolvedValue(false);
+            settings.getEffectiveSetting.mockImplementation((key) => key === 'snapYesWithoutModel');
+            turbo.startTurboSession.mockResolvedValue(scoreSession());
+        });
+
+        test('uses the maximum score without a model and waits for clip duration plus pace', async () => {
+            turbo.submitSnapScore.mockResolvedValue(scored({ completed: true, communityAvg: 6.5 }));
+
+            const result = await runSnapGame(CHALLENGE, 'tok', deps());
+
+            expect(result).toEqual({ answered: 1, total: 1, meanAgreement: null, won: true, stopReason: 'completed' });
+            expect(turbo.submitSnapScore).toHaveBeenCalledWith('score-sess', 'video0', 7, 'tok');
+            expect(turbo.submitSnapVote).not.toHaveBeenCalled();
+            expect(sleeps).toEqual([9000]);
+        });
+
+        test('retries only an explicit too-early response, at most twice', async () => {
+            turbo.submitSnapScore
+                .mockResolvedValueOnce(scored({ ok: false, tooEarly: true, retryAfterMs: 300, communityAvg: null }))
+                .mockResolvedValueOnce(scored({ completed: true }));
+
+            await runSnapGame(CHALLENGE, 'tok', deps());
+
+            expect(turbo.submitSnapScore).toHaveBeenCalledTimes(2);
+            expect(sleeps).toEqual([9000, 300]);
+        });
+
+        test('uses the bounded minimum retry delay when the server does not provide one', async () => {
+            turbo.submitSnapScore
+                .mockResolvedValueOnce(scored({ ok: false, tooEarly: true, retryAfterMs: null }))
+                .mockResolvedValueOnce(scored({ completed: true, communityAvg: null }));
+
+            await runSnapGame(CHALLENGE, 'tok', deps());
+
+            expect(sleeps).toEqual([9000, 100]);
+        });
+
+        test('extracts three video frames and scores them with the model', async () => {
+            vision.hasBundledModel.mockResolvedValue(true);
+            vision.judgeSnapVideoFrames.mockResolvedValue(4);
+            turbo.submitSnapScore.mockResolvedValue(scored({ completed: true }));
+
+            await runSnapGame(CHALLENGE, 'tok', deps());
+
+            expect(videoFrames).toHaveBeenCalledWith('https://media.gurushots.com/clip0.mp4', 5000, [0.2, 0.5, 0.8]);
+            expect(vision.judgeSnapVideoFrames).toHaveBeenCalledWith(
+                'Rate overall picture quality.',
+                ['frame-a', 'frame-b', 'frame-c'],
+                7,
+            );
+            expect(turbo.submitSnapScore).toHaveBeenCalledWith('score-sess', 'video0', 4, 'tok');
+        });
+
+        test('resumes the scored session from the server position', async () => {
+            turbo.startTurboSession.mockResolvedValue(scoreSession(1, 3));
+            turbo.submitSnapScore.mockResolvedValueOnce(scored()).mockResolvedValueOnce(scored({ completed: true }));
+
+            const result = await runSnapGame(CHALLENGE, 'tok', deps());
+
+            expect(result).toMatchObject({ answered: 2, total: 3, meanAgreement: null, won: true });
+            expect(turbo.submitSnapScore.mock.calls).toEqual([
+                ['score-sess', 'video1', 7, 'tok'],
+                ['score-sess', 'video2', 7, 'tok'],
+            ]);
+        });
+
+        test('stops without sending when decoder or inference fails', async () => {
+            vision.hasBundledModel.mockResolvedValue(true);
+            videoFrames.mockRejectedValueOnce(new Error('decode failed'));
+
+            expect((await runSnapGame(CHALLENGE, 'tok', deps())).stopReason).toBe('judge-failed');
+            expect(turbo.submitSnapScore).not.toHaveBeenCalled();
+
+            videoFrames.mockResolvedValue(['frame-a', 'frame-b', 'frame-c']);
+            vision.judgeSnapVideoFrames.mockResolvedValueOnce(null);
+            expect((await runSnapGame(CHALLENGE, 'tok', deps())).stopReason).toBe('judge-failed');
+            expect(turbo.submitSnapScore).not.toHaveBeenCalled();
+        });
+
+        test('cancels after the clip-duration wait and never sends', async () => {
+            let cancelled = false;
+            const result = await runSnapGame(
+                CHALLENGE,
+                'tok',
+                deps({
+                    isCancelled: () => cancelled,
+                    sleep: async () => {
+                        cancelled = true;
+                    },
+                }),
+            );
+
+            expect(result.stopReason).toBe('cancelled');
+            expect(turbo.submitSnapScore).not.toHaveBeenCalled();
+        });
+
+        test('does not begin a score round after cancellation is already set', async () => {
+            const result = await runSnapGame(CHALLENGE, 'tok', deps({ isCancelled: () => true }));
+
+            expect(result.stopReason).toBe('cancelled');
+            expect(turbo.submitSnapScore).not.toHaveBeenCalled();
+        });
+
+        test.each([
+            ['landed response', scored({ tooEarly: true })],
+            ['unclear response', scored({ ok: false, unclear: true, tooEarly: true })],
+            ['terminal response', scored({ ok: false, sessionEnded: true, tooEarly: true })],
+        ])('does not retry a %s that also says too early', async (_name, response) => {
+            turbo.submitSnapScore.mockResolvedValue(response);
+
+            await runSnapGame(CHALLENGE, 'tok', deps());
+
+            expect(turbo.submitSnapScore).toHaveBeenCalledTimes(1);
+        });
+
+        test('stops after two explicit too-early retries', async () => {
+            turbo.submitSnapScore.mockResolvedValue(scored({ ok: false, tooEarly: true, retryAfterMs: 300 }));
+
+            const result = await runSnapGame(CHALLENGE, 'tok', deps());
+
+            expect(result.stopReason).toBe('request-failed');
+            expect(turbo.submitSnapScore).toHaveBeenCalledTimes(3);
+            expect(sleeps).toEqual([9000, 300, 300]);
+        });
+
+        test('cancels after a retry wait and never repeats the answer', async () => {
+            let cancelled = false;
+            turbo.submitSnapScore.mockResolvedValue(scored({ ok: false, tooEarly: true, retryAfterMs: 300 }));
+            const result = await runSnapGame(
+                CHALLENGE,
+                'tok',
+                deps({
+                    sleep: async (ms) => {
+                        if (ms === 300) cancelled = true;
+                    },
+                    isCancelled: () => cancelled,
+                }),
+            );
+
+            expect(result.stopReason).toBe('cancelled');
+            expect(turbo.submitSnapScore).toHaveBeenCalledTimes(1);
+        });
+
+        test('uses the bounded cooldown for repeated score refusals but a direct run can still retry', async () => {
+            turbo.submitSnapScore.mockResolvedValue(scored({ ok: false }));
+            await runSnapGame(CHALLENGE, 'tok', deps());
+            await runSnapGame(CHALLENGE, 'tok', deps());
+            await runSnapGame(CHALLENGE, 'tok', deps());
+
+            expect(isSnapAutoCoolingDown(77, 0)).toBe(true);
+            await runSnapGame(CHALLENGE, 'tok', deps());
+            expect(turbo.submitSnapScore).toHaveBeenCalledTimes(4);
+        });
     });
 
     describe('without the vision model and snapYesWithoutModel on', () => {
@@ -399,13 +614,13 @@ describe('runSnapGame', () => {
             expect(isSnapUnavailable(77)).toBe(false);
         });
 
-        test('unavailable: error 1105 marks Snap unavailable', async () => {
+        test('error 1105 is transient and leaves Snap available', async () => {
             turbo.submitSnapVote.mockResolvedValue(landed({ ok: false, errorCode: 1105, communityPct: null }));
 
             const result = await runSnapGame(CHALLENGE, 'tok', deps());
 
-            expect(result.stopReason).toBe('unavailable');
-            expect(isSnapUnavailable(77)).toBe(true);
+            expect(result.stopReason).toBe('request-failed');
+            expect(isSnapUnavailable(77)).toBe(false);
         });
 
         test('an over-long unparsed caption is logged cut to 200 characters', async () => {
@@ -479,14 +694,14 @@ describe('runSnapGame', () => {
                 stopReason: 'request-failed',
             });
             expect(isSnapUnavailable(77)).toBe(false);
-            expect(warnings()).toEqual([expect.stringContaining('got no answer from the server')]);
+            expect(warnings()).toEqual([]);
         });
     });
 
     describe('transient failures', () => {
         const noSession = () => turbo.startTurboSession.mockResolvedValue(null);
 
-        test('the third run in a row that lands nothing marks Snap unavailable and says so', async () => {
+        test('the third run in a row that lands nothing starts the automatic cooldown and says so', async () => {
             vision.judgeSnapImage.mockResolvedValue(null);
 
             await runSnapGame(CHALLENGE, 'tok', deps());
@@ -494,7 +709,8 @@ describe('runSnapGame', () => {
             expect(isSnapUnavailable(77)).toBe(false);
             await runSnapGame(CHALLENGE, 'tok', deps());
 
-            expect(isSnapUnavailable(77)).toBe(true);
+            expect(isSnapUnavailable(77)).toBe(false);
+            expect(isSnapAutoCoolingDown(77, 0)).toBe(true);
             expect(warnings().filter((line) => line.includes('3 runs in a row'))).toHaveLength(1);
         });
 
@@ -507,7 +723,8 @@ describe('runSnapGame', () => {
             expect(isSnapUnavailable(77)).toBe(false);
             await runSnapGame(CHALLENGE, 'tok', deps());
 
-            expect(isSnapUnavailable(77)).toBe(true);
+            expect(isSnapUnavailable(77)).toBe(false);
+            expect(isSnapAutoCoolingDown(77, 0)).toBe(true);
         });
 
         test('a landed answer in between starts the count again', async () => {
@@ -542,17 +759,19 @@ describe('runSnapGame', () => {
             expect(isSnapUnavailable(77)).toBe(false);
             await runSnapGame(CHALLENGE, 'tok', deps());
 
-            expect(isSnapUnavailable(77)).toBe(true);
+            expect(isSnapUnavailable(77)).toBe(false);
+            expect(isSnapAutoCoolingDown(77, 0)).toBe(true);
         });
 
-        test('three runs in a row that answer every photo without a win mark Snap unavailable', async () => {
+        test('runs that make progress clear the transient state even without a win', async () => {
             await runSnapGame(CHALLENGE, 'tok', deps());
             await runSnapGame(CHALLENGE, 'tok', deps());
             expect(isSnapUnavailable(77)).toBe(false);
             const third = await runSnapGame(CHALLENGE, 'tok', deps());
 
             expect(third.answered).toBe(3);
-            expect(isSnapUnavailable(77)).toBe(true);
+            expect(isSnapUnavailable(77)).toBe(false);
+            expect(isSnapAutoCoolingDown(77)).toBe(false);
         });
 
         test('a win between runs that ran out of photos starts the count again', async () => {

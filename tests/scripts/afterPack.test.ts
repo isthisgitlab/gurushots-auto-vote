@@ -21,25 +21,33 @@ jest.mock('@electron/fuses', () => ({
         OnlyLoadAppFromAsar: 5,
     },
 }));
+jest.mock('node:child_process', () => ({ execFileSync: jest.fn() }));
 
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 import os = require('node:os');
+import crypto = require('node:crypto');
 import pathModule = require('node:path');
 const path = jest.mocked(pathModule);
 import type * as fusesModule from '@electron/fuses';
+import type * as childProcessModule from 'node:child_process';
 import type afterPackHook from '../../scripts/afterPack.mts';
 import type { AfterPackContext } from 'electron-builder';
 import { invalid } from '../helpers/invalid';
 const { flipFuses, FuseV1Options } = jest.mocked(require('@electron/fuses') as typeof fusesModule);
+const { execFileSync } = jest.mocked(require('node:child_process') as typeof childProcessModule);
 const afterPack = (require('../../scripts/afterPack') as { default: typeof afterPackHook }).default;
 
 // A partial context: only the fields afterPack reads.
-const makeContext = (electronPlatformName: string, extra: { appOutDir?: string; arch?: number } = {}) =>
+const makeContext = (electronPlatformName: string, extra: { appOutDir?: string; arch?: number; full?: boolean } = {}) =>
     invalid<AfterPackContext>({
         appOutDir: '/out',
         electronPlatformName,
-        packager: { appInfo: { productFilename: 'GuruShotsAutoVote' }, executableName: 'gurushots-auto-vote' },
+        packager: {
+            appInfo: { productFilename: 'GuruShotsAutoVote' },
+            executableName: 'gurushots-auto-vote',
+            config: extra.full ? { extraResources: [{ from: '.cache/video-decoder', to: 'video-decoder' }] } : {},
+        },
         ...extra,
     });
 
@@ -48,6 +56,7 @@ describe('afterPack', () => {
 
     beforeEach(() => {
         flipFuses.mockClear();
+        execFileSync.mockClear();
         logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
     });
 
@@ -143,5 +152,143 @@ describe('afterPack', () => {
     test('propagates a flipFuses failure so the build fails', async () => {
         flipFuses.mockRejectedValueOnce(new Error('boom'));
         await expect(afterPack(makeContext('linux'))).rejects.toThrow('boom');
+    });
+
+    test('requires, signs, and rechecksums the full macOS decoder', async () => {
+        const appOutDir = makeMacApp(INTEGRITY_PLIST);
+        const decoder = path.join(
+            appOutDir,
+            'GuruShotsAutoVote.app',
+            'Contents',
+            'Resources',
+            'video-decoder',
+            'ffmpeg',
+        );
+        try {
+            fs.mkdirSync(path.dirname(decoder), { recursive: true });
+            const bytes = 'decoder';
+            fs.writeFileSync(decoder, bytes);
+            fs.writeFileSync(
+                path.join(path.dirname(decoder), 'MANIFEST.json'),
+                JSON.stringify({
+                    binary: 'ffmpeg',
+                    binarySha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+                    sourceArchive: 'ffmpeg-source.tar.gz',
+                    target: 'darwin-arm64',
+                }),
+            );
+            execFileSync.mockImplementationOnce((_command, args = []) => {
+                fs.writeFileSync(args[args.length - 1]!, 'signed decoder');
+                return Buffer.alloc(0);
+            });
+            await afterPack(makeContext('darwin', { appOutDir, arch: 3, full: true }));
+            expect(execFileSync).toHaveBeenCalledWith(
+                'codesign',
+                ['--force', '--sign', '-', '--timestamp=none', decoder],
+                { stdio: 'inherit' },
+            );
+            expect(JSON.parse(fs.readFileSync(path.join(path.dirname(decoder), 'MANIFEST.json'), 'utf8'))).toEqual(
+                expect.objectContaining({
+                    binarySha256: crypto.createHash('sha256').update('signed decoder').digest('hex'),
+                    sourceArchive: 'ffmpeg-source.tar.gz',
+                }),
+            );
+        } finally {
+            fs.rmSync(appOutDir, { recursive: true, force: true });
+        }
+    });
+
+    test('rejects a missing full-package decoder', async () => {
+        await expect(afterPack(makeContext('linux', { arch: 3, full: true }))).rejects.toThrow(
+            'packaged FFmpeg decoder is missing',
+        );
+    });
+
+    test('rejects a full-package manifest whose decoder file is missing', async () => {
+        const appOutDir = fs.mkdtempSync(path.join(os.tmpdir(), 'after-pack-'));
+        const manifest = path.join(appOutDir, 'resources', 'video-decoder', 'MANIFEST.json');
+        try {
+            fs.mkdirSync(path.dirname(manifest), { recursive: true });
+            fs.writeFileSync(
+                manifest,
+                JSON.stringify({ binary: 'ffmpeg', binarySha256: '0'.repeat(64), target: 'linux-arm64' }),
+            );
+            await expect(afterPack(makeContext('linux', { appOutDir, arch: 3, full: true }))).rejects.toThrow(
+                'packaged FFmpeg decoder is missing',
+            );
+            expect(execFileSync).not.toHaveBeenCalled();
+        } finally {
+            fs.rmSync(appOutDir, { recursive: true, force: true });
+        }
+    });
+
+    test('verifies a supported full Linux arm64 decoder without invoking macOS signing', async () => {
+        const appOutDir = fs.mkdtempSync(path.join(os.tmpdir(), 'after-pack-'));
+        const decoder = path.join(appOutDir, 'resources', 'video-decoder', 'ffmpeg');
+        try {
+            const bytes = 'decoder';
+            fs.mkdirSync(path.dirname(decoder), { recursive: true });
+            fs.writeFileSync(decoder, bytes);
+            fs.writeFileSync(
+                path.join(path.dirname(decoder), 'MANIFEST.json'),
+                JSON.stringify({
+                    binary: 'ffmpeg',
+                    binarySha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+                    target: 'linux-arm64',
+                }),
+            );
+            await expect(afterPack(makeContext('linux', { appOutDir, arch: 3, full: true }))).resolves.toBeUndefined();
+            expect(execFileSync).not.toHaveBeenCalled();
+        } finally {
+            fs.rmSync(appOutDir, { recursive: true, force: true });
+        }
+    });
+
+    test('rejects an unsupported full-package target before accepting a host decoder', async () => {
+        await expect(afterPack(makeContext('linux', { arch: 2, full: true }))).rejects.toThrow(
+            'does not support Electron architecture 2',
+        );
+        expect(flipFuses).not.toHaveBeenCalled();
+    });
+
+    test('keeps a lite package with an unsupported architecture eligible for ONNX pruning', async () => {
+        await expect(afterPack(makeContext('linux', { arch: 2 }))).resolves.toBeUndefined();
+        expect(flipFuses).toHaveBeenCalledTimes(1);
+    });
+
+    test('rejects a full-package decoder whose bytes differ from its manifest', async () => {
+        const appOutDir = fs.mkdtempSync(path.join(os.tmpdir(), 'after-pack-'));
+        const decoder = path.join(appOutDir, 'resources', 'video-decoder', 'ffmpeg');
+        try {
+            fs.mkdirSync(path.dirname(decoder), { recursive: true });
+            fs.writeFileSync(decoder, 'decoder');
+            fs.writeFileSync(
+                path.join(path.dirname(decoder), 'MANIFEST.json'),
+                JSON.stringify({ binary: 'ffmpeg', binarySha256: '0'.repeat(64), target: 'linux-arm64' }),
+            );
+            await expect(afterPack(makeContext('linux', { appOutDir, arch: 3, full: true }))).rejects.toThrow(
+                'checksum does not match',
+            );
+        } finally {
+            fs.rmSync(appOutDir, { recursive: true, force: true });
+        }
+    });
+
+    test('rejects a full-package decoder with an invalid manifest before signing', async () => {
+        const appOutDir = fs.mkdtempSync(path.join(os.tmpdir(), 'after-pack-'));
+        const manifest = path.join(appOutDir, 'resources', 'video-decoder', 'MANIFEST.json');
+        try {
+            fs.mkdirSync(path.dirname(manifest), { recursive: true });
+            fs.writeFileSync(
+                manifest,
+                JSON.stringify({ binary: '../ffmpeg', binarySha256: '0'.repeat(64), target: 'linux-arm64' }),
+            );
+            await expect(afterPack(makeContext('linux', { appOutDir, arch: 3, full: true }))).rejects.toThrow(
+                'manifest does not match',
+            );
+            expect(execFileSync).not.toHaveBeenCalled();
+        } finally {
+            fs.rmSync(appOutDir, { recursive: true, force: true });
+        }
     });
 });

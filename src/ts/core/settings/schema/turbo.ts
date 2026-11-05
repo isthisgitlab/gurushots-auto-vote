@@ -61,7 +61,7 @@ export const turboSettings = {
         label: 'app.turboNewSubmitOnConflict',
         description: 'app.turboNewSubmitOnConflictDesc',
     },
-    // Global only: in a build without the vision model, play the Snap game answering Yes to every photo.
+    // Global only: without the vision model, answer photo questions Yes and give scored videos the highest rating.
     snapYesWithoutModel: {
         type: 'boolean',
         default: false,

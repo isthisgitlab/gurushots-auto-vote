@@ -7,7 +7,7 @@ import type { Challenge } from '../../types/gurushots';
 import * as settings from '../../settings';
 import { isBoostWindowOpen as boostWindowOpen } from '../../voting/boostWindow';
 import { isKnownTurboMode } from '../../voting/turboMode';
-import { isSnapUnavailable } from '../turboRunLock';
+import { isSnapAutoCoolingDown, isSnapUnavailable } from '../turboRunLock';
 import { getEffectiveBoostTime, getEffectiveKeyUnlockedBoostTime, getEffectiveTurboTime } from './thresholds';
 import { isWithinEmergencyWindow, pickTurboEntry, resolvePin, resolveTurboFillNewMode } from './entryPick';
 
@@ -164,6 +164,7 @@ const shouldPlayAutoTurbo = (challenge: Challenge, now: number): boolean => {
     const turbo = challenge.member?.turbo;
     if (!turbo || !isKnownTurboMode(turbo)) return false;
     if (isSnapUnavailable(challenge.id)) return false;
+    if (turbo.mode === 'snap' && isSnapAutoCoolingDown(challenge.id, now * 1000)) return false;
     const state = turbo.state;
     if (state === 'FREE' || state === 'IN_PROGRESS') return true;
     if (state === 'TIMER' && typeof turbo.time_to_open === 'number' && turbo.time_to_open <= now) {

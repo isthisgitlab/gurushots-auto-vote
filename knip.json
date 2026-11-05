@@ -22,7 +22,7 @@
         "@/*": ["src/ts/react/*"]
     },
     "ignoreDependencies": ["postject"],
-    "ignoreBinaries": ["notify-send", "pgrep"],
+    "ignoreBinaries": ["make", "notify-send", "pgrep"],
     "rules": {
         "exports": "off",
         "nsExports": "off"

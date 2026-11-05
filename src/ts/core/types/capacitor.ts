@@ -45,6 +45,12 @@ export interface AutoVoteBackgroundPlugin {
     wipeLocalData(): Promise<{ ok: boolean }>;
 }
 
+/** Native `VideoMedia` plugin (android/.../VideoMediaPlugin.kt). */
+export interface VideoMediaPlugin {
+    /** Downloads one validated Snap MP4 without WebView cookies or request headers. */
+    download(options: { url: string }): Promise<{ base64: string }>;
+}
+
 /**
  * What the status call answers through the bridge (NativeAutovoteBridge.getStatus): the plugin's own status on
  * success, the no-plugin shape, or the rejected-call shape — whose `error` key is present whatever the rejection
@@ -59,6 +65,7 @@ export interface CapacitorPlugins {
     ApkInstaller?: ApkInstallerPlugin;
     Browser?: BrowserPlugin;
     AutoVoteBackground?: AutoVoteBackgroundPlugin;
+    VideoMedia?: VideoMediaPlugin;
 }
 
 /** `globalThis` in the Capacitor WebView. */

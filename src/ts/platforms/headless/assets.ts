@@ -17,6 +17,9 @@ const createHeadlessAssets = (): PlatformAssets => ({
         const parsed: unknown = JSON.parse(await fetchAsset(relativePath));
         return parsed;
     },
+    videoFrames: async (): Promise<string[]> => {
+        throw new Error('Video frame extraction is unavailable in the Android headless service');
+    },
     visionModel: {
         location: () => './',
         device: 'wasm',

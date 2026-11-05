@@ -29,10 +29,12 @@ const mockSeaTransformers = {
 };
 const mockCreateRequire = jest.fn(() => () => mockSeaTransformers);
 const mockExtract = jest.fn(() => ({ root: '/vision/root', modulePath: '/vision/root/vision-entry.js' }));
+const mockExtractNodeVideoFrames = jest.fn<Promise<string[]>, [string, number, readonly number[], () => string]>();
 
 jest.mock('node:sea', () => mockSea, { virtual: true });
 jest.mock('node:module', () => ({ createRequire: mockCreateRequire }));
 jest.mock('@huggingface/transformers', () => ({ __esModule: true, default: {} }));
+jest.mock('../../../src/ts/platforms/node/videoFrames', () => ({ extractNodeVideoFrames: mockExtractNodeVideoFrames }));
 jest.mock('../../../src/ts/appPaths', () => ({
     __esModule: true,
     appPath: jest.fn((...segments: string[]) => `/app/${segments.join('/')}`),
@@ -62,6 +64,9 @@ const withPackagedElectron = (fn: (assets: PlatformAssets) => void) => {
 beforeEach(() => {
     mockSea.isSea = () => false;
     mockSea.getAsset = () => '';
+    mockExtractNodeVideoFrames.mockImplementation(async (_url, _durationMs, _positions, decoderPath) => [
+        decoderPath(),
+    ]);
     appPaths.appPath.mockClear();
     __resetExtractedRootForTests();
 });
@@ -161,6 +166,71 @@ describe('visionModel', () => {
 
     test('from source the model lives in the app root .cache directory', () => {
         expect(createNodeAssets().visionModel.location()).toBe('/app/.cache/');
+    });
+});
+
+describe('videoFrames', () => {
+    const decoderName = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
+
+    test('uses the source checkout decoder path without a CLI extractor', async () => {
+        await expect(
+            createNodeAssets().videoFrames('https://media.gurushots.com/clip.mp4', 1_000, [0.2]),
+        ).resolves.toEqual([`/app/.cache/video-decoder/${process.platform}-${process.arch}/${decoderName}`]);
+        expect(mockExtractNodeVideoFrames).toHaveBeenCalledTimes(1);
+    });
+
+    test('uses the Windows executable name for a source-checkout decoder', async () => {
+        const descriptor = Object.getOwnPropertyDescriptor(process, 'platform')!;
+        let frames!: Promise<string[]>;
+        Object.defineProperty(process, 'platform', { value: 'win32' });
+        try {
+            jest.isolateModules(() => {
+                const assets =
+                    require('../../../src/ts/platforms/node/assets') as typeof import('../../../src/ts/platforms/node/assets');
+                frames = assets.createNodeAssets().videoFrames('https://media.gurushots.com/clip.mp4', 1_000, [0.2]);
+            });
+            await expect(frames).resolves.toEqual([`/app/.cache/video-decoder/win32-${process.arch}/ffmpeg.exe`]);
+        } finally {
+            Object.defineProperty(process, 'platform', descriptor);
+        }
+    });
+
+    test('uses the packaged Electron decoder resource path', async () => {
+        (process as { resourcesPath?: string }).resourcesPath = '/res';
+        let frames!: Promise<string[]>;
+        try {
+            withPackagedElectron((assets) => {
+                frames = assets.videoFrames('https://media.gurushots.com/clip.mp4', 1_000, [0.2]);
+            });
+            await expect(frames).resolves.toEqual([`/res/video-decoder/${decoderName}`]);
+        } finally {
+            delete (process as { resourcesPath?: string }).resourcesPath;
+        }
+    });
+
+    test('uses the injected CLI decoder extractor in a SEA build', async () => {
+        mockSea.isSea = () => true;
+        const extractVideoDecoderCliAssets = jest.fn(() => ({ decoderPath: '/sea/video-decoder/ffmpeg' }));
+        await expect(
+            createNodeAssets({ extractVideoDecoderCliAssets }).videoFrames(
+                'https://media.gurushots.com/clip.mp4',
+                1_000,
+                [0.2],
+            ),
+        ).resolves.toEqual(['/sea/video-decoder/ffmpeg']);
+        expect(extractVideoDecoderCliAssets).toHaveBeenCalledTimes(1);
+    });
+
+    test('does not use an injected CLI decoder extractor outside SEA', async () => {
+        const extractVideoDecoderCliAssets = jest.fn(() => ({ decoderPath: '/sea/video-decoder/ffmpeg' }));
+        await expect(
+            createNodeAssets({ extractVideoDecoderCliAssets }).videoFrames(
+                'https://media.gurushots.com/clip.mp4',
+                1_000,
+                [0.2],
+            ),
+        ).resolves.toEqual([`/app/.cache/video-decoder/${process.platform}-${process.arch}/${decoderName}`]);
+        expect(extractVideoDecoderCliAssets).not.toHaveBeenCalled();
     });
 });
 

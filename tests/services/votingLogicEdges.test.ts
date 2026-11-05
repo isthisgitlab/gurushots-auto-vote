@@ -9,7 +9,12 @@ import type { Challenge } from '../../src/ts/core/types/gurushots';
 import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
 import VotingLogic = require('../../src/ts/core/services/VotingLogic');
-import { __resetSnapUnavailableForTests, markSnapUnavailable } from '../../src/ts/core/services/turboRunLock';
+import {
+    __resetSnapUnavailableForTests,
+    markSnapUnavailable,
+    SNAP_AUTO_COOLDOWN_MS,
+    startSnapAutoCooldown,
+} from '../../src/ts/core/services/turboRunLock';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import { invalid } from '../helpers/invalid';
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
@@ -203,6 +208,14 @@ describe('shouldPlayAutoTurbo', () => {
         expect(
             VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state: 'FREE', mode: 'snap' }, { id: 'other' }), NOW),
         ).toBe(true);
+    });
+
+    test('skips an automatically cooled-down Snap but allows it again after expiry', () => {
+        mockSettings({ autoTurbo: true });
+        startSnapAutoCooldown('42', NOW * 1000);
+        const challenge = turboChallenge({ state: 'FREE', mode: 'snap' });
+        expect(VotingLogic.shouldPlayAutoTurbo(challenge, NOW)).toBe(false);
+        expect(VotingLogic.shouldPlayAutoTurbo(challenge, NOW + SNAP_AUTO_COOLDOWN_MS / 1000)).toBe(true);
     });
 
     test.each(['FREE', 'IN_PROGRESS'])('never plays a %s turbo whose mode is unknown', (state) => {

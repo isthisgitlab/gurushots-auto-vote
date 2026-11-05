@@ -215,7 +215,7 @@ export const playAutoTurbo = async (
         if (!snapModelHintLogged) {
             snapModelHintLogged = true;
             log.info(
-                'Snap turbos need the vision model, which this build does not include; turn on "Answer Snap with Yes without the vision model" (snapYesWithoutModel) to play them',
+                'Snap turbos need the vision model, which this build does not include; turn on "Play Snap without the vision model" (snapYesWithoutModel) to play them',
                 null,
             );
         }

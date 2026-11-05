@@ -589,6 +589,19 @@ describe('api-client', () => {
             expect(axios).toHaveBeenCalledTimes(1);
         });
 
+        test('a caller can retain the object metadata from an HTTP 4xx refusal', async () => {
+            axios.mockRejectedValue(httpError(400, { too_early: true, retry_after_ms: 250 }));
+            expect(await postOnce(mockUrl, headers, mockData, true)).toEqual({
+                kind: 'refused',
+                response: { too_early: true, retry_after_ms: 250 },
+            });
+        });
+
+        test('does not retain non-object metadata from an HTTP refusal', async () => {
+            axios.mockRejectedValue(httpError(400, 'refused'));
+            expect(await postOnce(mockUrl, headers, mockData, true)).toEqual({ kind: 'refused' });
+        });
+
         test('a redirect (3xx, never followed) is unclear: a redirected POST may have been processed', async () => {
             axios.mockRejectedValue(httpError(302));
             expect(await once()).toEqual({ kind: 'unclear' });

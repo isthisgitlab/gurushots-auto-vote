@@ -5,7 +5,7 @@
 import type * as turboModule from '../../src/ts/core/api/turbo';
 import type * as api_clientModule from '../../src/ts/core/api/api-client';
 
-const { getChallengeTurbo, submitTurboSelection, applyTurbo, startTurboSession, submitSnapVote } =
+const { getChallengeTurbo, submitTurboSelection, applyTurbo, startTurboSession, submitSnapScore, submitSnapVote } =
     require('../../src/ts/core/api/turbo') as typeof turboModule;
 
 jest.mock('../../src/ts/core/api/api-client', () => ({
@@ -157,7 +157,7 @@ describe('turbo', () => {
             expect(makePostRequest).toHaveBeenCalledWith(
                 'https://api.gurushots.com/rest/start_turbo_session',
                 expect.objectContaining({ 'x-token': mockToken, 'x-env': 'WEB', 'x-api-version': '13' }),
-                'challenge_id=124113',
+                'challenge_id=124113&supports_scores=true',
             );
             expect(result).toEqual({
                 kind: 'snap',
@@ -223,6 +223,58 @@ describe('turbo', () => {
             expect(await startTurboSession(1, mockToken)).toBeNull();
             for (const bad of malformed) {
                 makePostRequest.mockResolvedValueOnce({ ...snap, images: [IMG, bad] });
+                expect(await startTurboSession(1, mockToken)).toBeNull();
+            }
+        });
+
+        test('normalizes a fully valid scored video session and rejects malformed video metadata', async () => {
+            const score = {
+                success: true,
+                session_type: '2.0',
+                kind: 'score',
+                session_id: 'score-1',
+                position: 0,
+                caption: 'Rate overall picture quality.',
+                max_score: 7,
+                images: [
+                    {
+                        image_id: hex('a'),
+                        member_id: hex('b'),
+                        media_type: 'video',
+                        duration_ms: 5000,
+                        media_url: 'https://media.gurushots.com/clip.mp4',
+                    },
+                ],
+            };
+            makePostRequest.mockResolvedValueOnce(score);
+            expect(await startTurboSession(1, mockToken)).toEqual({
+                kind: 'score',
+                sessionId: 'score-1',
+                position: 0,
+                caption: 'Rate overall picture quality.',
+                maxScore: 7,
+                images: [
+                    {
+                        imageId: hex('a'),
+                        memberId: hex('b'),
+                        durationMs: 5000,
+                        mediaUrl: 'https://media.gurushots.com/clip.mp4',
+                    },
+                ],
+            });
+            for (const image of [
+                { ...score.images[0], media_type: 'image' },
+                { ...score.images[0], duration_ms: 120_001 },
+                { ...score.images[0], media_url: 'https://example.test/clip.mp4' },
+                { ...score.images[0], media_url: 7 },
+            ]) {
+                makePostRequest.mockResolvedValueOnce({ ...score, images: [image] });
+                expect(await startTurboSession(1, mockToken)).toBeNull();
+            }
+            makePostRequest.mockResolvedValueOnce({ ...score, images: [] });
+            expect(await startTurboSession(1, mockToken)).toBeNull();
+            for (const maxScore of [1, 11, 3.5]) {
+                makePostRequest.mockResolvedValueOnce({ ...score, max_score: maxScore });
                 expect(await startTurboSession(1, mockToken)).toBeNull();
             }
         });
@@ -310,6 +362,68 @@ describe('turbo', () => {
             await expect(submitSnapVote('', 'i', 'yes', mockToken)).rejects.toThrow('turbo: sessionId is required');
             await expect(submitSnapVote('s', '', 'yes', mockToken)).rejects.toThrow('turbo: imageId is required');
             await expect(submitSnapVote('s', 'i', 'yes', '')).rejects.toThrow('turbo: token is required');
+        });
+    });
+
+    describe('submitSnapScore', () => {
+        test('posts the integer score once and maps a completed answer', async () => {
+            postOnce.mockResolvedValueOnce({
+                kind: 'body',
+                body: { success: true, completed: true, community_avg: 6.4 },
+            });
+
+            expect(await submitSnapScore('sess', 'image', 7, mockToken)).toEqual({
+                ok: true,
+                completed: true,
+                communityAvg: 6.4,
+                tooEarly: false,
+                retryAfterMs: null,
+                sessionEnded: false,
+                restartRequired: false,
+                unclear: false,
+                serverAnswered: true,
+            });
+            expect(postOnce).toHaveBeenCalledWith(
+                'https://api.gurushots.com/rest/submit_snap_score',
+                expect.objectContaining({ 'x-token': mockToken }),
+                'session_id=sess&image_id=image&score=7',
+                true,
+            );
+        });
+
+        test('maps body and 4xx refusal metadata without treating either refusal as landed', async () => {
+            postOnce.mockResolvedValueOnce({
+                kind: 'body',
+                body: { success: false, too_early: true, retry_after_ms: 250 },
+            });
+            expect(await submitSnapScore('sess', 'image', 7, mockToken)).toEqual(
+                expect.objectContaining({ ok: false, tooEarly: true, retryAfterMs: 250, serverAnswered: true }),
+            );
+            postOnce.mockResolvedValueOnce({ kind: 'refused', response: { too_early: true, retry_after_ms: 300 } });
+            expect(await submitSnapScore('sess', 'image', 7, mockToken)).toEqual(
+                expect.objectContaining({ ok: false, tooEarly: true, retryAfterMs: 300, serverAnswered: true }),
+            );
+            postOnce.mockResolvedValueOnce({
+                kind: 'refused',
+                response: { success: true, completed: true, session_ended: true },
+            });
+            expect(await submitSnapScore('sess', 'image', 7, mockToken)).toEqual(
+                expect.objectContaining({ ok: false, completed: false, sessionEnded: true, serverAnswered: true }),
+            );
+            postOnce.mockResolvedValueOnce({ kind: 'refused' });
+            expect(await submitSnapScore('sess', 'image', 7, mockToken)).toEqual(
+                expect.objectContaining({ ok: false, unclear: false, serverAnswered: false }),
+            );
+            postOnce.mockResolvedValueOnce({ kind: 'unclear' });
+            expect(await submitSnapScore('sess', 'image', 7, mockToken)).toEqual(
+                expect.objectContaining({ ok: false, unclear: true, serverAnswered: false }),
+            );
+        });
+
+        test('requires an integer score', async () => {
+            await expect(submitSnapScore('sess', 'image', 2.5, mockToken)).rejects.toThrow(
+                'turbo: score must be an integer',
+            );
         });
     });
 

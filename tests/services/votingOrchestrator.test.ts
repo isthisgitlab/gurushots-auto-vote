@@ -466,7 +466,7 @@ describe('mock-parity behaviors on the shared path', () => {
                 expect(api.runTurboGame.mock.calls.map(([challenge]) => challenge.id)).toEqual([2, 2]);
                 expect(startedEarns().map(([id]) => id)).toEqual(['turbo-earn-2', 'turbo-earn-2']);
                 expect(infoLines().filter((line) => line.includes('Snap turbos need the vision model'))).toEqual([
-                    expect.stringContaining('(snapYesWithoutModel)'),
+                    'Snap turbos need the vision model, which this build does not include; turn on "Play Snap without the vision model" (snapYesWithoutModel) to play them',
                 ]);
             });
 

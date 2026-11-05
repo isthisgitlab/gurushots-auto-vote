@@ -16,6 +16,12 @@ afterEach(() => {
     globalThis.fetch = realFetch;
 });
 
+test('refuses frame extraction in the Android headless service', async () => {
+    await expect(createHeadlessAssets().videoFrames('https://media.gurushots.com/clip.mp4', 1, [0.2])).rejects.toThrow(
+        'unavailable in the Android headless service',
+    );
+});
+
 describe('readJson', () => {
     test('it parses the fetched text', async () => {
         globalThis.fetch = invalid<typeof fetch>(

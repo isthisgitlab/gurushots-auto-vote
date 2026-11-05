@@ -80,6 +80,8 @@ export interface StartTurboSessionResponse {
     position?: number;
     caption?: string | null;
     sub_caption?: string | null;
+    kind?: string;
+    max_score?: number;
     /** Untrusted elements: narrowed to well-formed photos by startTurboSession. */
     images?: unknown[];
 }
@@ -94,16 +96,44 @@ export interface SnapVoteResponse {
     message?: string | null;
 }
 
+/** submit_snap_score. */
+export interface SnapScoreResponse {
+    success?: boolean;
+    /** True on the last answer of the session. */
+    completed?: boolean;
+    community_avg?: number | null;
+    too_early?: boolean;
+    retry_after_ms?: number;
+    session_ended?: boolean;
+    restart_required?: boolean;
+}
+
 /** One photo of a Snap session. */
 export interface SnapImage {
     imageId: string;
     memberId: string;
 }
 
+/** One scored video of a Snap session. */
+export interface SnapScoreVideo {
+    imageId: string;
+    memberId: string;
+    durationMs: number;
+    mediaUrl: string;
+}
+
 /** A started turbo session, normalized from start_turbo_session. */
 export type TurboSession =
     | { kind: 'classic' }
-    | { kind: 'snap'; sessionId: string; position: number; caption: string; images: SnapImage[] };
+    | { kind: 'snap'; sessionId: string; position: number; caption: string; images: SnapImage[] }
+    | {
+          kind: 'score';
+          sessionId: string;
+          position: number;
+          caption: string;
+          maxScore: number;
+          images: SnapScoreVideo[];
+      };
 
 /** The outcome of one Snap answer; `unclear` means it was sent and may have been processed. */
 export interface SnapVoteResult {
@@ -113,6 +143,20 @@ export interface SnapVoteResult {
     errorCode: number | null;
     unclear: boolean;
     /** True only when a response body came back; false for a request that was refused before an answer or never left. */
+    serverAnswered: boolean;
+}
+
+/** The outcome of one scored Snap answer. */
+export interface SnapScoreResult {
+    ok: boolean;
+    completed: boolean;
+    communityAvg: number | null;
+    tooEarly: boolean;
+    retryAfterMs: number | null;
+    sessionEnded: boolean;
+    restartRequired: boolean;
+    unclear: boolean;
+    /** True only when the server sent an object response. */
     serverAnswered: boolean;
 }
 

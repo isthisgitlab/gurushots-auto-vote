@@ -14,7 +14,7 @@ import type { ActionResult, SuccessResponse } from '../types/gurushots';
  * or unclear (it was sent and no usable answer came — a timeout, a reset, a redirect, a 5xx, a body that is no JSON
  * object).
  */
-export type PostOutcome<T> = { kind: 'body'; body: T } | { kind: 'refused' } | { kind: 'unclear' };
+export type PostOutcome<T> = { kind: 'body'; body: T } | { kind: 'refused'; response?: T } | { kind: 'unclear' };
 
 // Errors that mean the request never left this machine, so repeating it cannot do anything twice.
 const NEVER_SENT_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN']);
@@ -32,6 +32,9 @@ const responseOf = (caught: unknown): FailureResponse | undefined => {
         headers: isPlainObject(headers) ? headers : undefined,
     };
 };
+
+/** The untrusted body supplied with an HTTP failure, if the server supplied one. */
+const responseDataOf = (caught: unknown): unknown => responseOf(caught)?.data;
 
 const codeOf = (caught: unknown): string | undefined =>
     isPlainObject(caught) && typeof caught.code === 'string' ? caught.code : undefined;
@@ -153,5 +156,6 @@ export {
     getRetryAfterMs,
     describeFailure,
     redirectOf,
+    responseDataOf,
     toActionResult,
 };

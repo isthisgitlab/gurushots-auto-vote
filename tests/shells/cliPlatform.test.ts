@@ -24,13 +24,20 @@ const mockExtract = jest.fn(() => ({
 const mockSea = { isSea: jest.fn(() => true), getAsset: jest.fn(() => 'sha') };
 const mockSeaTransformers = { env: {}, pipeline: jest.fn() };
 const mockCreateRequire = jest.fn(() => () => mockSeaTransformers);
+const mockExtractVideoDecoderCliAssets = jest.fn(() => ({ decoderPath: '/extracted/video-decoder/ffmpeg' }));
+const mockExtractNodeVideoFrames = jest.fn<Promise<string[]>, [string, number, readonly number[], () => string]>();
 
 jest.mock('../../src/ts/shells/cli/visionCliAssets', () => ({
     __esModule: true,
     extractVisionCliAssets: mockExtract,
 }));
+jest.mock('../../src/ts/shells/cli/videoDecoderCliAssets', () => ({
+    __esModule: true,
+    extractVideoDecoderCliAssets: mockExtractVideoDecoderCliAssets,
+}));
 jest.mock('node:sea', () => mockSea, { virtual: true });
 jest.mock('node:module', () => ({ createRequire: mockCreateRequire }));
+jest.mock('../../src/ts/platforms/node/videoFrames', () => ({ extractNodeVideoFrames: mockExtractNodeVideoFrames }));
 
 // Requiring the module installs the platform; the slot is cleared first,
 // because the setup file installed the node test platform before this file
@@ -49,7 +56,11 @@ const { __resetExtractedRootForTests } =
 // inside isolateModules only wins while the wrapped module has not been
 // instantiated in the outer registry (the location tests below instantiate
 // the file-level mock), and its afterEach re-registers that mock.
-const HEAVY = ['../../src/ts/shells/cli/visionCliAssets'];
+const HEAVY = [
+    '../../src/ts/shells/cli/visionCliAssets',
+    '../../src/ts/shells/cli/videoDecoderCliAssets',
+    '../../src/ts/core/logger',
+];
 
 describe('loading the CLI shell platform module defers the wrapped modules', () => {
     let mockLoaded: string[];
@@ -65,6 +76,10 @@ describe('loading the CLI shell platform module defers the wrapped modules', () 
         jest.doMock('../../src/ts/shells/cli/visionCliAssets', () => ({
             __esModule: true,
             extractVisionCliAssets: mockExtract,
+        }));
+        jest.doMock('../../src/ts/shells/cli/videoDecoderCliAssets', () => ({
+            __esModule: true,
+            extractVideoDecoderCliAssets: mockExtractVideoDecoderCliAssets,
         }));
     });
 
@@ -112,6 +127,10 @@ describe('loading the CLI shell platform module defers the wrapped modules', () 
 describe('the CLI shell platform module', () => {
     beforeEach(() => {
         __resetExtractedRootForTests();
+        mockExtractVideoDecoderCliAssets.mockClear();
+        mockExtractNodeVideoFrames.mockImplementation(async (_url, _durationMs, _positions, decoderPath) => [
+            decoderPath(),
+        ]);
     });
 
     test('the module installs the platform, and the windows are the explicit no-ops', () => {
@@ -130,6 +149,13 @@ describe('the CLI shell platform module', () => {
         expect(mockExtract).toHaveBeenCalledTimes(1);
         expect(mockCreateRequire).toHaveBeenCalledWith('/extracted/vision-runtime/vision-entry.js');
         expect(installed.assets.visionModel.location()).toBe(`/extracted/vision-runtime${path.sep}`);
+    });
+
+    test('injects the decoder extractor lazily for the CLI SEA runtime', async () => {
+        await expect(
+            installed.assets.videoFrames('https://media.gurushots.com/clip.mp4', 1_000, [0.2]),
+        ).resolves.toEqual(['/extracted/video-decoder/ffmpeg']);
+        expect(mockExtractVideoDecoderCliAssets).toHaveBeenCalledTimes(1);
     });
 
     test('the capabilities answer the CLI values, computed from the logger context flags', () => {

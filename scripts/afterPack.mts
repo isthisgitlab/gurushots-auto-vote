@@ -24,6 +24,8 @@
  */
 
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { flipFuses, FuseVersion, FuseV1Options } from '@electron/fuses';
 import type { AfterPackContext, LinuxPackager } from 'electron-builder';
@@ -65,6 +67,42 @@ const assertMacAsarIntegrity = (appBundle: string) => {
     }
 };
 
+const packagedDecoder = (resourcesDir: string, target: string) => {
+    const manifestPath = path.join(resourcesDir, 'video-decoder', 'MANIFEST.json');
+    if (!fs.existsSync(manifestPath)) throw new Error(`The packaged FFmpeg decoder is missing: ${manifestPath}`);
+    const parsed: unknown = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    if (
+        typeof parsed !== 'object' ||
+        parsed === null ||
+        !('binary' in parsed) ||
+        !('target' in parsed) ||
+        !('binarySha256' in parsed) ||
+        typeof parsed.binary !== 'string' ||
+        typeof parsed.binarySha256 !== 'string' ||
+        parsed.target !== target ||
+        path.basename(parsed.binary) !== parsed.binary
+    ) {
+        throw new Error(`The packaged FFmpeg decoder manifest does not match ${target}`);
+    }
+    const decoder = path.join(resourcesDir, 'video-decoder', parsed.binary);
+    if (!fs.existsSync(decoder)) throw new Error(`The packaged FFmpeg decoder is missing: ${decoder}`);
+    const actual = crypto.createHash('sha256').update(fs.readFileSync(decoder)).digest('hex');
+    if (actual !== parsed.binarySha256)
+        throw new Error('The packaged FFmpeg decoder checksum does not match its manifest');
+    return { decoder, manifestPath, manifest: { ...parsed, binary: parsed.binary, binarySha256: parsed.binarySha256 } };
+};
+
+const verifyAndSignPackagedDecoder = (resourcesDir: string, target: string, signForMac: boolean): void => {
+    const { decoder, manifestPath, manifest } = packagedDecoder(resourcesDir, target);
+    if (signForMac) {
+        execFileSync('codesign', ['--force', '--sign', '-', '--timestamp=none', decoder], { stdio: 'inherit' });
+        fs.writeFileSync(
+            manifestPath,
+            `${JSON.stringify({ ...manifest, binarySha256: crypto.createHash('sha256').update(fs.readFileSync(decoder)).digest('hex') })}\n`,
+        );
+    }
+};
+
 export default async function afterPack(context: AfterPackContext) {
     const { appOutDir, packager, electronPlatformName, arch } = context;
     const productName = packager.appInfo.productFilename;
@@ -88,11 +126,22 @@ export default async function afterPack(context: AfterPackContext) {
     }
 
     // Before the fuse flip, whose ad-hoc re-sign must cover the final tree.
-    pruneForeignOnnxBinaries(
-        isMac ? path.join(appOutDir, `${productName}.app`, 'Contents', 'Resources') : path.join(appOutDir, 'resources'),
-        isMac ? 'darwin' : electronPlatformName,
-        ONNX_ARCH_DIRS[arch],
+    const resourcesDir = isMac
+        ? path.join(appOutDir, `${productName}.app`, 'Contents', 'Resources')
+        : path.join(appOutDir, 'resources');
+    pruneForeignOnnxBinaries(resourcesDir, isMac ? 'darwin' : electronPlatformName, ONNX_ARCH_DIRS[arch]);
+
+    const configuredResources = context.packager.config.extraResources;
+    const resourceList = Array.isArray(configuredResources) ? configuredResources : [configuredResources];
+    const needsDecoder = resourceList.some(
+        (resource) =>
+            typeof resource === 'object' && resource !== null && 'to' in resource && resource.to === 'video-decoder',
     );
+    const targetArch = ONNX_ARCH_DIRS[arch];
+    if (needsDecoder && !targetArch)
+        throw new Error(`The packaged FFmpeg decoder does not support Electron architecture ${arch}`);
+    if (needsDecoder)
+        verifyAndSignPackagedDecoder(resourcesDir, `${isMac ? 'darwin' : electronPlatformName}-${targetArch!}`, isMac);
 
     await flipFuses(electronBinary, {
         version: FuseVersion.V1,

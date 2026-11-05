@@ -7,6 +7,7 @@
  */
 
 import { fetchAsset } from '../../core/platform/fetchAsset';
+import { extractWebviewVideoFrames } from './videoFrames';
 
 import type { PlatformAssets } from '../../core/platform/port';
 
@@ -16,6 +17,7 @@ const createWebviewAssets = (): PlatformAssets => ({
         const parsed: unknown = JSON.parse(await fetchAsset(relativePath));
         return parsed;
     },
+    videoFrames: extractWebviewVideoFrames,
     visionModel: {
         location: () => './',
         device: 'wasm',

@@ -628,7 +628,7 @@ A CLI built from a source checkout corresponds to the source of that checkout.
 5.1 Node.js
 
 The CLI binaries (gurucli-*) embed the Node.js runtime, Copyright Node.js contributors. The
-LICENSE of Node.js v26.10.0 follows; it also lists the licenses of the third-party
+LICENSE of Node.js v26.12.1 follows; it also lists the licenses of the third-party
 components bundled in Node.js.
 
 ======== Node.js LICENSE ========

@@ -18,6 +18,9 @@ jest.mock('node:child_process', () => ({ execFileSync: jest.fn() }));
 jest.mock('../../scripts/fetch-vision-model', () => ({
     ensureVisionModel: jest.fn().mockResolvedValue('/mock/vision-model'),
 }));
+jest.mock('../../scripts/build-video-decoder', () => ({
+    prepareVideoDecoder: jest.fn().mockResolvedValue('/mock/video-decoder'),
+}));
 
 // The Node whose LICENSE the notices vendor: the running Node unless a test says otherwise.
 let mockLicenseVersion = process.versions.node;
@@ -50,6 +53,7 @@ import type * as esbuildModule from 'esbuild';
 import type * as node_child_processModule from 'node:child_process';
 import type * as package_jsonModule from '../../package.json';
 import type * as fetch_vision_modelModule from '../../scripts/fetch-vision-model';
+import type * as build_video_decoderModule from '../../scripts/build-video-decoder';
 import type * as visionCliAssetsModule from '../../src/ts/shells/cli/visionCliAssets';
 import type * as node_osModule from 'node:os';
 import type { PathLike } from 'node:fs';
@@ -154,7 +158,12 @@ describe('build-cli', () => {
         // through to the real fs, which the spy must keep serving: Jest itself reads
         // modules through it while a failing expectation resolves a stack frame.
         jest.spyOn(fs, 'readFileSync').mockImplementation((file, ...args) => {
-            if (String(file).endsWith('vision-runtime.tar.gz')) return Buffer.from('test archive');
+            if (String(file).endsWith('vision-runtime.tar.gz') || String(file).endsWith('video-decoder.tar.gz')) {
+                return Buffer.from('test archive');
+            }
+            if (String(file) === '/mock/video-decoder/MANIFEST.json') {
+                return Buffer.from('{"binary":"ffmpeg","binarySha256":"test"}\n');
+            }
             const contents = files.get(String(file));
             if (contents) return contents;
             if (!BUILD_TREES.some((dir) => String(file).startsWith(dir))) return realReadFileSync(file, ...args);
@@ -235,6 +244,9 @@ describe('build-cli', () => {
                 assets: {
                     'semantic-vectors.json': LEXICON,
                     'THIRD_PARTY_NOTICES.txt': NOTICES,
+                    'video-decoder.tar.gz': path.join(BUILD_DIR, 'video-decoder.tar.gz'),
+                    'video-decoder.sha256': path.join(BUILD_DIR, 'video-decoder.sha256'),
+                    'video-decoder.manifest.sha256': path.join(BUILD_DIR, 'video-decoder.manifest.sha256'),
                     'vision-runtime.tar.gz': path.join(BUILD_DIR, 'vision-runtime.tar.gz'),
                     'vision-runtime.sha256': path.join(BUILD_DIR, 'vision-runtime.sha256'),
                     'vision-runtime.code.sha256': path.join(BUILD_DIR, 'vision-runtime.code.sha256'),
@@ -251,6 +263,9 @@ describe('build-cli', () => {
             buildCli.generateSeaBlob();
             expect(writtenConfig().assets).toEqual({
                 'THIRD_PARTY_NOTICES.txt': NOTICES,
+                'video-decoder.tar.gz': path.join(BUILD_DIR, 'video-decoder.tar.gz'),
+                'video-decoder.sha256': path.join(BUILD_DIR, 'video-decoder.sha256'),
+                'video-decoder.manifest.sha256': path.join(BUILD_DIR, 'video-decoder.manifest.sha256'),
                 'vision-runtime.tar.gz': path.join(BUILD_DIR, 'vision-runtime.tar.gz'),
                 'vision-runtime.sha256': path.join(BUILD_DIR, 'vision-runtime.sha256'),
                 'vision-runtime.code.sha256': path.join(BUILD_DIR, 'vision-runtime.code.sha256'),
@@ -293,6 +308,27 @@ describe('build-cli', () => {
                 expect.objectContaining({ env: expect.objectContaining({ COPYFILE_DISABLE: '1' }) }),
             );
         });
+    });
+
+    test('archives the verified decoder for the full SEA build', async () => {
+        const { prepareVideoDecoder } = jest.mocked(
+            require('../../scripts/build-video-decoder') as typeof build_video_decoderModule,
+        );
+        await buildCli.prepareVideoDecoderRuntime();
+        expect(prepareVideoDecoder).toHaveBeenCalledTimes(1);
+        expect(execFileSync).toHaveBeenCalledWith(
+            'tar',
+            ['-czf', path.join(BUILD_DIR, 'video-decoder.tar.gz'), '-C', '/mock/video-decoder', '.'],
+            { stdio: 'inherit' },
+        );
+        expect(fs.writeFileSync).toHaveBeenCalledWith(
+            path.join(BUILD_DIR, 'video-decoder.sha256'),
+            expect.stringMatching(/^[a-f0-9]{64}$/),
+        );
+        expect(fs.writeFileSync).toHaveBeenCalledWith(
+            path.join(BUILD_DIR, 'video-decoder.manifest.sha256'),
+            expect.stringMatching(/^[a-f0-9]{64}$/),
+        );
     });
 
     describe('getOfficialNodeBinary', () => {

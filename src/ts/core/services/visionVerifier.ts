@@ -324,6 +324,65 @@ const SNAP_POSITIVE_RE = /\b(?:natural|realistic|believable|real|authentic|convi
 const SNAP_NEGATION_RE = /\b(?:not|never|no|hardly|less)\b/;
 /** How much of a Snap caption is read (and logged). */
 const SNAP_CAPTION_MAX_CHARS = 200;
+const SNAP_SCORE_DESCRIPTIONS = [
+    'unusable picture',
+    'very poor picture quality',
+    'poor picture quality',
+    'fair picture quality',
+    'good picture quality',
+    'very good picture quality',
+    'excellent picture quality',
+] as const;
+
+const JPEG_DATA_URL_PREFIX = 'data:image/jpeg;base64,';
+
+const jpegBlobFromDataUrl = (frame: string): Blob | null => {
+    if (!frame.startsWith(JPEG_DATA_URL_PREFIX)) return null;
+    const encoded = frame.slice(JPEG_DATA_URL_PREFIX.length);
+    if (encoded === '') return null;
+    try {
+        const bytes = Uint8Array.from(atob(encoded), (byte) => byte.charCodeAt(0));
+        return new Blob([bytes], { type: 'image/jpeg' });
+    } catch {
+        return null;
+    }
+};
+
+const validSnapVideoScoreInput = (caption: string, frames: readonly string[], maxScore: number): boolean =>
+    frames.length === 3 && Number.isInteger(maxScore) && maxScore >= 2 && maxScore <= 10 && caption.trim() !== '';
+
+const snapVideoScorePrompts = (caption: string): string[] =>
+    SNAP_SCORE_DESCRIPTIONS.map((description) => `${description}. Server caption: ${caption}`);
+
+const snapVideoFrameRating = async (
+    classifier: Awaited<ReturnType<typeof getClassifier>>,
+    frame: string,
+    prompts: readonly string[],
+    maxScore: number,
+): Promise<number | null> => {
+    const image = jpegBlobFromDataUrl(frame);
+    if (!image) return null;
+    const results = await classifier(image, [...prompts]);
+    let highestIndex = 0;
+    let highestLogit = Number.NEGATIVE_INFINITY;
+    for (let index = 0; index < prompts.length; index++) {
+        const prompt = prompts[index];
+        const score = results?.find?.((result) => result.label === prompt)?.score;
+        if (typeof score !== 'number' || !Number.isFinite(score)) return null;
+        const logit = toLogit(score);
+        // Strictly greater keeps the lower category when two logits tie.
+        if (logit > highestLogit) {
+            highestIndex = index;
+            highestLogit = logit;
+        }
+    }
+    return 1 + (highestIndex * (maxScore - 1)) / (SNAP_SCORE_DESCRIPTIONS.length - 1);
+};
+
+const roundedSnapVideoScore = (ratings: readonly number[], maxScore: number): number => {
+    const mean = ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length;
+    return Math.min(maxScore, Math.max(1, Math.round(mean)));
+};
 
 /**
  * The two text prompts a Snap caption ("Does the soft, even light look natural?") is judged against.
@@ -379,6 +438,33 @@ const judgeSnapImage = async (caption: string, image: SnapImage): Promise<SnapJu
     }
 };
 
+/**
+ * Scores three sampled video frames with the bundled local model. This is an uncalibrated sampled-frame heuristic.
+ * It does not measure motion or establish whole-video picture quality.
+ */
+const judgeSnapVideoFrames = async (
+    caption: string,
+    frames: readonly string[],
+    maxScore: number,
+): Promise<number | null> => {
+    if (!validSnapVideoScoreInput(caption, frames, maxScore)) return null;
+    const prompts = snapVideoScorePrompts(caption);
+    try {
+        if (!(await hasBundledModel())) return null;
+        const classifier = await getClassifier();
+        const ratings: number[] = [];
+        for (const frame of frames) {
+            const rating = await snapVideoFrameRating(classifier, frame, prompts, maxScore);
+            if (rating === null) return null;
+            ratings.push(rating);
+        }
+        return roundedSnapVideoScore(ratings, maxScore);
+    } catch (error) {
+        logger.withCategory('turbo').warning(`Snap video judgment unavailable: ${errorMessage(error) || error}`, null);
+        return null;
+    }
+};
+
 const __resetForTests = () => {
     classifierPromise = undefined;
     bundledPromise = undefined;
@@ -392,6 +478,8 @@ export {
     descriptionLead,
     snapPrompts,
     SNAP_CAPTION_MAX_CHARS,
+    SNAP_SCORE_DESCRIPTIONS,
     judgeSnapImage,
+    judgeSnapVideoFrames,
     __resetForTests,
 };

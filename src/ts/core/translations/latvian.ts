@@ -336,9 +336,9 @@ export const app: LatvianApp = {
     turbo: 'Turbo',
     autoTurbo: 'Automātiski iegūt Turbo',
     autoTurboDesc: 'Automātiski spēlē Turbo minispēli, lai iegūtu bonusu',
-    snapYesWithoutModel: 'Atbildēt Snap ar „Jā” bez vizuālā modeļa',
+    snapYesWithoutModel: 'Spēlēt Snap bez vizuālā modeļa',
     snapYesWithoutModelDesc:
-        'Versijā bez vizuālā modeļa Snap Turbo spēlē, uz katru fotoattēlu atbildot „Jā”; Turbo iegūst ar jebkuru atbildi. Ja modelis ir, atbild modelis. Pēc noklusējuma izslēgts.',
+        'Versijā bez vizuālā modeļa uz foto jautājumiem atbildēt „Jā” un videoklipiem piešķirt augstāko vērtējumu. Ja modelis ir, atbild modelis. Pēc noklusējuma izslēgts.',
     useTurbo: 'Automātiski izmantot Turbo',
     useTurboDesc: 'Automātiski izmanto iegūto Turbo vienam no taviem foto',
     turboTime: 'Turbo izmantošanas laiks',

@@ -5,6 +5,7 @@ import { ENDPOINTS, createWebHeaders, makeRequireValue } from './constants';
 import { ID_PATTERN } from '../format/photoUrl';
 import { isInteger } from '../numbers';
 import { isPlainObject } from '../plainObject';
+import { MAX_VIDEO_DURATION_MS, validateVideoMediaUrl } from '../platform/videoMedia';
 
 import type {
     ActionResult,
@@ -19,12 +20,125 @@ import type {
     TurboSelectionResult,
     TurboSession,
 } from '../types/gurushots';
+import type { SnapScoreResponse, SnapScoreResult, SnapScoreVideo } from '../types/gurushots/voting';
 
 const TURBO_SELECTION_DELAY_MS = 1200;
 
 const requireValue = makeRequireValue('turbo');
 
 const isHexId = (value: unknown): value is string => typeof value === 'string' && ID_PATTERN.test(value);
+
+const isAllowedSnapVideoUrl = (value: unknown): value is string => {
+    if (typeof value !== 'string') return false;
+    try {
+        validateVideoMediaUrl(value);
+        return true;
+    } catch {
+        return false;
+    }
+};
+
+const hasValidPosition = (position: unknown, count: number): position is number =>
+    isInteger(position) && position >= 0 && position < count;
+
+// The server position indexes the original list. Reject the whole session when one member is malformed so that an
+// omitted item cannot move the next answer onto a different image.
+const parseSnapImages = (images: readonly unknown[]): SnapImage[] | null => {
+    const parsed: SnapImage[] = [];
+    for (const image of images) {
+        if (!isPlainObject(image) || !isHexId(image.image_id) || !isHexId(image.member_id)) return null;
+        parsed.push({ imageId: image.image_id, memberId: image.member_id });
+    }
+    return parsed.length > 0 ? parsed : null;
+};
+
+const parseSnapScoreVideos = (images: readonly unknown[]): SnapScoreVideo[] | null => {
+    const parsed: SnapScoreVideo[] = [];
+    for (const image of images) {
+        if (
+            !isPlainObject(image) ||
+            !isHexId(image.image_id) ||
+            !isHexId(image.member_id) ||
+            image.media_type !== 'video' ||
+            !isInteger(image.duration_ms) ||
+            image.duration_ms <= 0 ||
+            image.duration_ms > MAX_VIDEO_DURATION_MS ||
+            !isAllowedSnapVideoUrl(image.media_url)
+        ) {
+            return null;
+        }
+        parsed.push({
+            imageId: image.image_id,
+            memberId: image.member_id,
+            durationMs: image.duration_ms,
+            mediaUrl: image.media_url,
+        });
+    }
+    return parsed.length > 0 ? parsed : null;
+};
+
+const parseSnapSession = (response: StartTurboSessionResponse): TurboSession | null => {
+    if (
+        response.session_type !== '2.0' ||
+        typeof response.session_id !== 'string' ||
+        response.session_id === '' ||
+        !Array.isArray(response.images) ||
+        typeof response.caption !== 'string'
+    ) {
+        return null;
+    }
+    if (response.kind === 'score') {
+        if (!isInteger(response.max_score) || response.max_score < 2 || response.max_score > 10) return null;
+        const images = parseSnapScoreVideos(response.images);
+        if (!images || !hasValidPosition(response.position, images.length)) return null;
+        return {
+            kind: 'score',
+            sessionId: response.session_id,
+            position: response.position,
+            caption: response.caption,
+            maxScore: response.max_score,
+            images,
+        };
+    }
+    const images = parseSnapImages(response.images);
+    if (!images || !hasValidPosition(response.position, images.length)) return null;
+    return {
+        kind: 'snap',
+        sessionId: response.session_id,
+        position: response.position,
+        caption: response.caption,
+        images,
+    };
+};
+
+const emptySnapScoreResult = (unclear: boolean): SnapScoreResult => ({
+    ok: false,
+    completed: false,
+    communityAvg: null,
+    tooEarly: false,
+    retryAfterMs: null,
+    sessionEnded: false,
+    restartRequired: false,
+    unclear,
+    serverAnswered: false,
+});
+
+const snapScoreResult = (body: SnapScoreResponse, accepted: boolean): SnapScoreResult => ({
+    // A response body on an HTTP refusal is metadata for a refusal, not proof that the answer landed.
+    ok: accepted && body.success === true,
+    completed: accepted && body.completed === true,
+    communityAvg:
+        typeof body.community_avg === 'number' && Number.isFinite(body.community_avg) ? body.community_avg : null,
+    tooEarly: body.too_early === true,
+    retryAfterMs:
+        typeof body.retry_after_ms === 'number' && Number.isFinite(body.retry_after_ms) && body.retry_after_ms >= 0
+            ? body.retry_after_ms
+            : null,
+    sessionEnded: body.session_ended === true,
+    restartRequired: body.restart_required === true,
+    unclear: false,
+    serverAnswered: true,
+});
 
 /**
  * Fetches the current Turbo battle set for a challenge.
@@ -88,7 +202,7 @@ const startTurboSession = async (challengeId: string | number, token: string): P
     requireValue(challengeId, 'challengeId');
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
-    const data = `challenge_id=${encodeURIComponent(String(challengeId))}`;
+    const data = `challenge_id=${encodeURIComponent(String(challengeId))}&supports_scores=true`;
     const response = await makePostRequest<StartTurboSessionResponse>(ENDPOINTS.startTurboSession, headers, data);
     if (!response || response.success !== true) {
         return null;
@@ -96,25 +210,7 @@ const startTurboSession = async (challengeId: string | number, token: string): P
     if (response.session_type === '1.0') {
         return { kind: 'classic' };
     }
-    if (
-        response.session_type !== '2.0' ||
-        typeof response.session_id !== 'string' ||
-        response.session_id === '' ||
-        !Array.isArray(response.images) ||
-        typeof response.caption !== 'string'
-    ) {
-        return null;
-    }
-    // `position` indexes the server's list, so an image dropped here would shift it onto the wrong photo: one
-    // malformed element makes the whole session unusable.
-    const images: SnapImage[] = [];
-    for (const image of response.images) {
-        if (!isPlainObject(image) || !isHexId(image.image_id) || !isHexId(image.member_id)) return null;
-        images.push({ imageId: image.image_id, memberId: image.member_id });
-    }
-    const { position } = response;
-    if (images.length === 0 || !isInteger(position) || position < 0 || position >= images.length) return null;
-    return { kind: 'snap', sessionId: response.session_id, position, caption: response.caption, images };
+    return parseSnapSession(response);
 };
 
 /**
@@ -153,6 +249,27 @@ const submitSnapVote = async (
     };
 };
 
+/** Answers one scored Snap video. Sent once except for the runner's explicit too-early retry. */
+const submitSnapScore = async (
+    sessionId: string,
+    imageId: string,
+    score: number,
+    token: string,
+): Promise<SnapScoreResult> => {
+    requireValue(sessionId, 'sessionId');
+    requireValue(imageId, 'imageId');
+    requireValue(token, 'token');
+    if (!isInteger(score)) throw new Error('turbo: score must be an integer');
+    const headers = createWebHeaders(token);
+    const data = `session_id=${encodeURIComponent(sessionId)}&image_id=${encodeURIComponent(imageId)}&score=${score}`;
+    const outcome = await postOnce<SnapScoreResponse>(ENDPOINTS.submitSnapScore, headers, data, true);
+    if (outcome.kind === 'unclear') {
+        return emptySnapScoreResult(true);
+    }
+    if (outcome.kind === 'body') return snapScoreResult(outcome.body, true);
+    return outcome.response ? snapScoreResult(outcome.response, false) : emptySnapScoreResult(false);
+};
+
 /**
  * Applies a won Turbo to one of the user's entry images.
  *
@@ -180,5 +297,6 @@ export {
     applyTurbo,
     startTurboSession,
     submitSnapVote,
+    submitSnapScore,
     TURBO_SELECTION_DELAY_MS,
 };

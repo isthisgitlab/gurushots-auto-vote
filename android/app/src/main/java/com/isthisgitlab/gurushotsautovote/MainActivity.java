@@ -10,6 +10,7 @@ public class MainActivity extends BridgeActivity {
         // Capacitor bridge picks them up during plugin initialization.
         registerPlugin(AutoVotePlugin.class);
         registerPlugin(ApkInstallerPlugin.class);
+        registerPlugin(VideoMediaPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

@@ -19,9 +19,12 @@ import { createNodePlatform, extractedVisionRootOf } from '../../platforms/node'
 import type { PlatformWindows } from '../../core/platform/port';
 
 type VisionCliAssetsModule = typeof import('./visionCliAssets');
+type VideoDecoderCliAssetsModule = typeof import('./videoDecoderCliAssets');
 
 // The install must run before the logger loads.
 const visionCliAssets = (): VisionCliAssetsModule => require('./visionCliAssets') as VisionCliAssetsModule;
+const videoDecoderCliAssets = (): VideoDecoderCliAssetsModule =>
+    require('./videoDecoderCliAssets') as VideoDecoderCliAssetsModule;
 
 // The CLI has no windows to broadcast to or relaunch.
 const windows: PlatformWindows = {
@@ -31,6 +34,7 @@ const windows: PlatformWindows = {
 
 const cliPlatform = createNodePlatform(windows, {
     extractVisionCliAssets: () => visionCliAssets().extractVisionCliAssets(),
+    extractVideoDecoderCliAssets: () => videoDecoderCliAssets().extractVideoDecoderCliAssets(),
 });
 // The extracted runtime root wins while it is set — the root the family's
 // transformers load remembered; without it the family location stands (the

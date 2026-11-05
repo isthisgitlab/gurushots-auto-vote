@@ -14,6 +14,12 @@
 jest.unmock('../../src/ts/core/logger');
 
 describe('the legacy dev-dir notice at the settings-path resolution', () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => {
+        jest.clearAllTimers();
+        jest.useRealTimers();
+    });
+
     const LEGACY_FILE = '/apps/gurushots-auto-vote-dev/settings.json';
 
     const resolveAfterLoggerLoaded = async (legacyExists: boolean): Promise<string[]> => {
@@ -31,6 +37,7 @@ describe('the legacy dev-dir notice at the settings-path resolution', () => {
                 }));
                 const fs = jest.mocked(require('node:fs') as typeof import('node:fs'));
                 fs.existsSync.mockImplementation((p: unknown) => legacyExists && p === LEGACY_FILE);
+                fs.readdirSync.mockReturnValue([]);
                 // The setup's path mock answers stubs: the notice joins and
                 // dirnames real legacy paths, so it gets the real ones here.
                 const path = jest.mocked(require('node:path') as typeof import('node:path'));

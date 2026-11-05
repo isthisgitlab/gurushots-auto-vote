@@ -37,7 +37,7 @@ const PROJECT_SOURCE_URL = 'https://github.com/isthisgitlab/gurushots-auto-vote'
 
 // The Node.js release whose LICENSE is vendored (scripts/licenses/texts/Node.js-LICENSE.txt),
 // and the ONNX Runtime release whose LICENSE and ThirdPartyNotices are.
-const NODE_LICENSE_VERSION = '26.10.0';
+const NODE_LICENSE_VERSION = '26.12.1';
 const ONNXRUNTIME_TEXTS_VERSION = '1.30.0';
 
 // devDependencies whose output ships inside the app: their CSS is compiled into dist/styles.css.

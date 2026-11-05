@@ -16,9 +16,12 @@ import type { PlatformAssets } from '../../core/platform/port';
 type AppPathsModule = typeof import('../../appPaths');
 type NodePathsModule = typeof import('./paths');
 type VisionCliAssetsModule = typeof import('../../shells/cli/visionCliAssets');
+type VideoDecoderCliAssetsModule = typeof import('../../shells/cli/videoDecoderCliAssets');
+type VideoFramesModule = typeof import('./videoFrames');
 
 const appPaths = (): AppPathsModule => require('../../appPaths') as AppPathsModule;
 const nodePaths = (): NodePathsModule => require('./paths') as NodePathsModule;
+const videoFrames = (): VideoFramesModule => require('./videoFrames') as VideoFramesModule;
 
 /**
  * The parts a shell passes in: the CLI single binary's extractor of the
@@ -28,6 +31,17 @@ const nodePaths = (): NodePathsModule => require('./paths') as NodePathsModule;
  */
 type NodeAssetParts = {
     extractVisionCliAssets?: () => ReturnType<VisionCliAssetsModule['extractVisionCliAssets']>;
+    extractVideoDecoderCliAssets?: () => ReturnType<VideoDecoderCliAssetsModule['extractVideoDecoderCliAssets']>;
+};
+
+const decoderFileName = (): string => (process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
+
+const bundledDecoderPath = (): string => {
+    const path = require('node:path') as typeof import('node:path');
+    if (nodePaths().isElectron() && nodePaths().isPackaged()) {
+        return path.join(process.resourcesPath, 'video-decoder', decoderFileName());
+    }
+    return appPaths().appPath('.cache', 'video-decoder', `${process.platform}-${process.arch}`, decoderFileName());
 };
 
 // The SEA build's extracted vision-runtime root, set once loadTransformers
@@ -99,6 +113,12 @@ const createNodeAssets = (parts: NodeAssetParts = {}): PlatformAssets => ({
         const parsed: unknown = JSON.parse(readAssetFile(relativePath));
         return parsed;
     },
+    videoFrames: (url, durationMs, positions): Promise<string[]> =>
+        videoFrames().extractNodeVideoFrames(url, durationMs, positions, () => {
+            const extractor = parts.extractVideoDecoderCliAssets;
+            const sea = seaIfAny();
+            return extractor && sea?.isSea() ? extractor().decoderPath : bundledDecoderPath();
+        }),
     visionModel: {
         location: modelLocation,
         device: 'cpu',

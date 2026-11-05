@@ -60,6 +60,7 @@ const {
     descriptionLead,
     snapPrompts,
     judgeSnapImage,
+    judgeSnapVideoFrames,
     __resetForTests,
 } = require('../../src/ts/core/services/visionVerifier') as typeof visionVerifierModule;
 
@@ -778,5 +779,75 @@ describe('judgeSnapImage', () => {
         mockClassifier.mockRejectedValue(failure);
         expect(await judgeSnapImage(CAPTION, image)).toBeNull();
         expect(mockLog.warning).toHaveBeenCalledWith(`Snap judgment unavailable: ${detail}`, null);
+    });
+});
+
+describe('judgeSnapVideoFrames', () => {
+    test('uses the highest category per frame, keeps a lower tie, then maps and rounds the mean', async () => {
+        const winners = [0, 3, 6];
+        let frame = 0;
+        mockClassifier.mockImplementation(async (_image: Blob, prompts: string[]) => {
+            const winner = winners[frame++];
+            return prompts.map((label, index) => ({
+                label,
+                score: index === winner || (frame === 1 && index === 6) ? 0.9 : 0.1,
+            }));
+        });
+
+        const jpeg = 'data:image/jpeg;base64,/9j/2Q==';
+        expect(await judgeSnapVideoFrames('Rate overall picture quality.', [jpeg, jpeg, jpeg], 7)).toBe(4);
+        expect(mockClassifier).toHaveBeenCalledTimes(3);
+        const classifierCalls = mockClassifier.mock.calls as Array<[Blob, string[]]>;
+        for (const [image, prompts] of classifierCalls) {
+            expect(image).toBeInstanceOf(Blob);
+            expect((await image.arrayBuffer()).byteLength).toBe(4);
+            expect(prompts).toHaveLength(7);
+            expect(prompts.every((prompt: string) => prompt.includes('Rate overall picture quality.'))).toBe(true);
+        }
+    });
+
+    test('rejects a missing or non-finite model score', async () => {
+        mockClassifier.mockResolvedValue([{ label: 'unusable picture. Server caption: Rate it.', score: Number.NaN }]);
+        const jpeg = 'data:image/jpeg;base64,/9j/2Q==';
+        expect(await judgeSnapVideoFrames('Rate it.', [jpeg, jpeg, jpeg], 7)).toBeNull();
+    });
+
+    test.each([
+        [
+            'not a JPEG data URL',
+            ['data:image/png;base64,AA==', 'data:image/png;base64,AA==', 'data:image/png;base64,AA=='],
+        ],
+        ['an empty JPEG data URL', ['data:image/jpeg;base64,', 'data:image/jpeg;base64,', 'data:image/jpeg;base64,']],
+        [
+            'invalid JPEG base64',
+            ['data:image/jpeg;base64,!!!', 'data:image/jpeg;base64,!!!', 'data:image/jpeg;base64,!!!'],
+        ],
+        ['an invalid frame count', ['data:image/jpeg;base64,/9j/2Q==']],
+    ])('rejects %s before classifier inference', async (_name, frames) => {
+        expect(await judgeSnapVideoFrames('Rate it.', frames, 7)).toBeNull();
+        expect(mockClassifier).not.toHaveBeenCalled();
+    });
+
+    test.each([1, 11, 2.5])('rejects invalid score scale %p', async (maxScore) => {
+        const jpeg = 'data:image/jpeg;base64,/9j/2Q==';
+        expect(await judgeSnapVideoFrames('Rate it.', [jpeg, jpeg, jpeg], maxScore)).toBeNull();
+        expect(mockClassifier).not.toHaveBeenCalled();
+    });
+
+    test('rejects a model-free build and classifier exceptions', async () => {
+        const jpeg = 'data:image/jpeg;base64,/9j/2Q==';
+        fs.existsSync.mockReturnValue(false);
+        expect(await judgeSnapVideoFrames('Rate it.', [jpeg, jpeg, jpeg], 7)).toBeNull();
+        expect(mockClassifier).not.toHaveBeenCalled();
+
+        fs.existsSync.mockReturnValue(true);
+        __resetForTests();
+        mockClassifier.mockRejectedValueOnce(new Error('inference failed'));
+        expect(await judgeSnapVideoFrames('Rate it.', [jpeg, jpeg, jpeg], 7)).toBeNull();
+        expect(mockLog.warning).toHaveBeenCalledWith('Snap video judgment unavailable: inference failed', null);
+        __resetForTests();
+        mockClassifier.mockRejectedValueOnce(null);
+        expect(await judgeSnapVideoFrames('Rate it.', [jpeg, jpeg, jpeg], 7)).toBeNull();
+        expect(mockLog.warning).toHaveBeenCalledWith('Snap video judgment unavailable: null', null);
     });
 });

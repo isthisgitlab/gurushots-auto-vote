@@ -265,6 +265,13 @@ jobs:
                   download-bumped: 'true'
                   cache-vision-model: ${{ matrix.variant != 'lite' }}
 
+            - name: Install FFmpeg compiler and make on Windows
+              if: matrix.platform == 'win' && matrix.variant == 'full'
+              shell: pwsh
+              run: |
+                  choco install mingw make -y --no-progress
+                  'C:\tools\mingw64\bin' | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
             - name: Run linter
               if: matrix.variant != 'lite'
               run: pnpm lint
@@ -315,20 +322,6 @@ jobs:
                     fi
                   done
 
-            - name: Build Linux ARM app
-              if: matrix.platform == 'linux'
-              run: pnpm build:linux-arm
-              env:
-                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-                  NODE_ENV: production
-
-            - name: Build lite Linux ARM app
-              if: matrix.platform == 'linux'
-              run: pnpm build:linux-arm:lite
-              env:
-                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-                  NODE_ENV: production
-
             # Second setup-node ensures the exact Node the notices vendor the LICENSE of
             # (NODE_LICENSE_VERSION in scripts/build-notices.ts) is on PATH for the SEA injection
             # step: build-cli.ts embeds process.versions.node and refuses any other version.
@@ -337,7 +330,7 @@ jobs:
               if: matrix.platform != 'win'
               uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
               with:
-                  node-version: '26.10.0'
+                  node-version: '26.12.1'
 
             # Cache the official nodejs.org tarball that build-cli.ts pulls into
             # .cache/node-binaries (see the build-cli-arm job for the rationale).
@@ -407,15 +400,9 @@ jobs:
             - name: Setup Node.js 26 for CLI build
               uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
               with:
-                  node-version: '26.10.0'
+                  node-version: '26.12.1'
 
-            # build-cli.ts downloads the official nodejs.org tarball for
-            # TARGET_NODE_VERSION (= process.versions.node) into
-            # .cache/node-binaries. Cache it so each release doesn't re-pull the
-            # ~40 MB tarball from nodejs.org. Keyed on the resolved Node version
-            # + arch so a version bump or a wrong-arch tarball can never be served;
-            # build-cli.ts re-checks it against nodejs.org's SHASUMS256.txt and
-            # extracts it fresh on every build.
+            # The cached official Node archive is keyed by the resolved version and runner architecture.
             - name: Resolve Node version for CLI-binary cache key
               id: node-ver
               run: echo "v=$(node -p 'process.versions.node')" >> "$GITHUB_OUTPUT"
@@ -426,24 +413,32 @@ jobs:
                   path: .cache/node-binaries/node-v*.tar.*
                   key: node-sea-${{ runner.os }}-${{ runner.arch }}-${{ steps.node-ver.outputs.v }}
 
-            - name: Build CLI Linux ARM app (native arm64 runner)
-              run: pnpm build:cli:linux-arm
+            - name: Build full and lite Linux ARM apps (native arm64 runner)
+              run: |
+                  pnpm build:linux-arm
+                  pnpm build:linux-arm:lite
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  NODE_ENV: production
 
-            - name: Build lite CLI Linux ARM app (native arm64 runner)
-              run: pnpm build:cli:linux-arm:lite
+            - name: Build full and lite Linux ARM CLIs (native arm64 runner)
+              run: |
+                  pnpm build:cli:linux-arm
+                  pnpm build:cli:linux-arm:lite
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Check CLI artifact size
               run: pnpm size:cli
 
-            - name: Upload Linux ARM CLI artifact
+            - name: Upload Linux ARM artifacts
               uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
               with:
                   name: ${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-linux-arm-builds' || 'linux-arm-builds' }}
-                  path: build/cli/gurucli-v*-linux-arm*
+                  path: |
+                      build/**/*.AppImage
+                      build/**/*latest*.yml
+                      build/cli/gurucli-v*-linux-arm*
                   retention-days: 1
 
     build-android:

@@ -22,6 +22,7 @@ import {
     isRetryableError,
     isSafeToRepeat,
     redirectOf,
+    responseDataOf,
 } from './postOutcome';
 import type { PostOutcome } from './postOutcome';
 
@@ -57,6 +58,7 @@ const BODY_UNLOGGED_URLS = new Set<string>([
     ENDPOINTS.getMatch,
     ENDPOINTS.webActiveChallenges,
     ENDPOINTS.getMemberChallenges,
+    ENDPOINTS.startTurboSession,
 ]);
 
 // Upper bound on how long a single request will block while retrying.
@@ -117,6 +119,17 @@ const retryDelayMs = (caught: unknown, attempt: number, baseDelayMs: number): nu
     return cooldownMs > MAX_RETRY_DELAY_MS ? null : Math.max(cooldownMs, MIN_RETRY_DELAY_MS);
 };
 
+const terminalPostOutcome = <T extends object>(
+    url: string,
+    caught: unknown,
+    retainRefusedResponse: boolean,
+): PostOutcome<T> => {
+    if (failureVerdict(caught) !== 'refused') return { kind: 'unclear' };
+    if (!retainRefusedResponse) return { kind: 'refused' };
+    const response = responseObject<T>(url, responseDataOf(caught));
+    return response ? { kind: 'refused', response } : { kind: 'refused' };
+};
+
 /**
  * The retry loop behind both POST entry points.
  *
@@ -129,6 +142,7 @@ const sendPost = async <T extends object>(
     headers: RequestHeaders,
     data: string,
     repeatable: boolean,
+    retainRefusedResponse = false,
 ): Promise<PostOutcome<T>> => {
     const maxRetries = settings.getSetting('apiMaxRetries');
     const baseDelayMs = settings.getSetting('apiRetryBaseDelayMs');
@@ -177,11 +191,13 @@ const sendPost = async <T extends object>(
 
             const mayRepeat = repeatable ? isRetryableError(caught) : isSafeToRepeat(caught);
             if (!mayRepeat || attempt >= maxRetries) {
-                return { kind: failureVerdict(caught) }; // An outcome instead of a throw, to prevent crashing
+                return terminalPostOutcome<T>(url, caught, retainRefusedResponse);
             }
 
             const delayMs = retryDelayMs(caught, attempt, baseDelayMs);
-            if (delayMs === null) return { kind: failureVerdict(caught) };
+            if (delayMs === null) {
+                return terminalPostOutcome<T>(url, caught, retainRefusedResponse);
+            }
 
             logger.withCategory('api').warning('Retrying API request after transient failure', {
                 url,
@@ -230,8 +246,12 @@ const makePostRequest = async <T extends object>(
  *   retries, a request that never left); `unclear` when it was sent and no usable answer came (a timeout, a reset,
  *   a 5xx, a 2xx whose body is not a JSON object), so it may or may not have been processed.
  */
-const postOnce = <T extends object>(url: string, headers: RequestHeaders, data: string = ''): Promise<PostOutcome<T>> =>
-    sendPost<T>(url, headers, data, false);
+const postOnce = <T extends object>(
+    url: string,
+    headers: RequestHeaders,
+    data: string = '',
+    retainRefusedResponse = false,
+): Promise<PostOutcome<T>> => sendPost<T>(url, headers, data, false, retainRefusedResponse);
 
 /**
  * Creates common headers for all API requests to GuruShots

@@ -13,6 +13,7 @@ import { runIfMain } from './lib/run-if-main';
 import { ensureVisionModel } from './fetch-vision-model';
 import { NODE_LICENSE_VERSION } from './build-notices';
 import { digestVisionRuntime } from '../src/ts/shells/cli/visionCliAssets';
+import { prepareVideoDecoder } from './build-video-decoder';
 
 const { version } = packageJson;
 
@@ -126,6 +127,19 @@ async function prepareVisionRuntime() {
     fs.rmSync(deployDir, { recursive: true, force: true });
 }
 
+async function prepareVideoDecoderRuntime() {
+    const decoderDir = await prepareVideoDecoder();
+    const archive = path.join(BUILD_DIR, 'video-decoder.tar.gz');
+    execFileSync('tar', ['-czf', archive, '-C', decoderDir, '.'], { stdio: 'inherit' });
+    const digest = crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex');
+    const manifest = crypto
+        .createHash('sha256')
+        .update(fs.readFileSync(path.join(decoderDir, 'MANIFEST.json')))
+        .digest('hex');
+    fs.writeFileSync(path.join(BUILD_DIR, 'video-decoder.sha256'), digest);
+    fs.writeFileSync(path.join(BUILD_DIR, 'video-decoder.manifest.sha256'), manifest);
+}
+
 function generateSeaBlob(nodeBinary = process.execPath, { lite = false } = {}) {
     console.log('📦 Generating SEA blob...');
     const seaConfigPath = path.join(BUILD_DIR, 'sea-config.json');
@@ -153,6 +167,9 @@ function generateSeaBlob(nodeBinary = process.execPath, { lite = false } = {}) {
     if (!lite) {
         seaConfig.assets = {
             ...seaConfig.assets,
+            'video-decoder.tar.gz': path.join(BUILD_DIR, 'video-decoder.tar.gz'),
+            'video-decoder.sha256': path.join(BUILD_DIR, 'video-decoder.sha256'),
+            'video-decoder.manifest.sha256': path.join(BUILD_DIR, 'video-decoder.manifest.sha256'),
             'vision-runtime.tar.gz': path.join(BUILD_DIR, 'vision-runtime.tar.gz'),
             'vision-runtime.sha256': path.join(BUILD_DIR, 'vision-runtime.sha256'),
             'vision-runtime.code.sha256': path.join(BUILD_DIR, 'vision-runtime.code.sha256'),
@@ -326,7 +343,10 @@ async function main() {
         const targets = platformArg ? platforms.filter((p) => p.input === platformArg) : platforms;
         if (platformArg && targets.length === 0) throw new Error(`Unknown platform: ${platformArg}`);
         await bundleCli();
-        if (!lite) await prepareVisionRuntime();
+        if (!lite) {
+            await prepareVisionRuntime();
+            await prepareVideoDecoderRuntime();
+        }
         // Homebrew's Node can disable SEA; the official binary is also the
         // injection target, so generate the blob with that exact build.
         const hostNode = await getOfficialNodeBinary(process.platform, process.arch);
@@ -351,6 +371,7 @@ export {
     bundleCli,
     pruneVisionRuntime,
     prepareVisionRuntime,
+    prepareVideoDecoderRuntime,
     generateSeaBlob,
     getOfficialNodeBinary,
     buildPlatform,

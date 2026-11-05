@@ -50,6 +50,7 @@ class MainActivityTest {
             val activity = controller.setup().get()
             assertNotNull(activity.bridge.getPlugin("AutoVoteBackground"))
             assertNotNull(activity.bridge.getPlugin("ApkInstaller"))
+            assertNotNull(activity.bridge.getPlugin("VideoMedia"))
         }
     }
 }
