@@ -75,6 +75,15 @@ overrides:
     # (and so braces); 2.6.0 matches with picomatch instead. Any older release is moved up too. Verified: the app and site
     # CSS build byte-identical, and `tailwindcss --watch=always` still rebuilds on a change.
     '@parcel/watcher@<2.6.0': 2.6.0
+    # jest (glob@10/test-exclude, glob@13) and electron-builder (@electron/universal,
+    # app-builder-lib) still pin minimatch 9/10, all copies in GHSA-g3hv-75wg-m249's
+    # range (< 11.0.1: globparts amplification DoS; the only patched line is 11.0.1+,
+    # no backport to 9/10). minimatch 11 keeps a CJS export (engines '20 || >=22',
+    # exports.require present), and 11.0.4 already sits in the tree via glob@14 — note
+    # it moves the 9.x copies from ISC to Blue Oak-1.0.0 (both permissive; dev-only,
+    # never in the shipped notices tree). Drop once jest/electron-builder chains move
+    # to minimatch >= 11 natively.
+    'minimatch@>=7 <11.0.1': 11.0.4
 # braces <=3.0.3 (GHSA-vfj7-8cjw-p6xm: stack exhaustion on deeply nested brace patterns)
 # has NO patched release: 3.0.3 is the latest, and micromatch 4.0.8 and watchboy 0.4.3,
 # the dependents that remain, are the latest too. What remains is electronmon > watchboy >
@@ -82,8 +91,15 @@ overrides:
 # the patterns in this repository's package.json (`electronmon.patterns`); no input from
 # the app, the network or a user ever becomes a pattern, and nothing of it ships.
 # tests/ci-validation.test.ts fails if braces ever reaches the production tree.
-# Re-check: 2026-10-28 (look for a braces release, or a micromatch/watchboy one that
+# Re-check: 2026-11-05 (look for a braces release, or a micromatch/watchboy one that
 # drops it, and remove this ignore then).
+# deepmerge <=4.3.1 (GHSA-gcqx-w48m-w2h4: prototype poisoning of the objects
+# mergeObject() returns) has NO patched release: 4.3.1 is the latest, and its only
+# dependent is jest-config, which merges this repository's own jest config and
+# presets — no external input ever reaches a merge, and nothing of it ships.
+# Re-check: 2026-11-05 (look for a deepmerge release past 4.3.1 and remove this
+# ignore then).
 auditConfig:
     ignoreGhsas:
         - GHSA-vfj7-8cjw-p6xm
+        - GHSA-gcqx-w48m-w2h4
