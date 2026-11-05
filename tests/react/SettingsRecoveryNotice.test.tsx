@@ -8,7 +8,8 @@ import { act, fireEvent, render, screen, waitFor, within } from './helpers/test-
 import { SettingsRecoveryNotice } from '@/components/app/SettingsRecoveryNotice';
 import { mockTranslator, defaultTranslate, fillTemplate, fireSettingsChanged } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
-import type { RendererGlobals } from '../../src/ts/types/capacitor';
+import { resetPlatformKind } from '../helpers/platformKind';
+import { markPlatformKind } from '../../src/ts/core/platform/kind';
 
 const answer = (recovery: unknown) =>
     jest.mocked(window.api.getSettingsRecovery).mockResolvedValue(invalid({ success: true, recovery }));
@@ -16,7 +17,7 @@ const answer = (recovery: unknown) =>
 describe('SettingsRecoveryNotice', () => {
     afterEach(() => {
         mockTranslator.t.mockImplementation(defaultTranslate);
-        delete (globalThis as RendererGlobals).Capacitor;
+        resetPlatformKind();
     });
 
     test('shows nothing when the settings are in use', async () => {
@@ -67,7 +68,7 @@ describe('SettingsRecoveryNotice', () => {
         ['settings-unreadable', 'Unreadable', 'gurushots-config'],
         ['settings-import-failed', 'Import', 'gurushots-settings'],
     ])('%s on Android names no file and asks for no step on one', async (code, key, path) => {
-        (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+        markPlatformKind('capacitor');
         answer({ code, path });
         render(<SettingsRecoveryNotice />);
 
@@ -82,7 +83,7 @@ describe('SettingsRecoveryNotice', () => {
     });
 
     test('a dropped save words the same on Android as elsewhere', async () => {
-        (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+        markPlatformKind('capacitor');
         answer({ code: 'settings-save-dropped', path: 'gurushots-config', cause: 'storage' });
         render(<SettingsRecoveryNotice />);
 
@@ -166,10 +167,10 @@ describe('SettingsRecoveryNotice', () => {
     });
 
     test.each([
-        ['on a desktop', undefined, 'notice.recoverySignInKept'],
-        ['on Android', { isNativePlatform: () => true }, 'notice.recoverySignInKeptAndroid'],
-    ])('the damaged copy %s may still hold the sign-in, and the notice says so', async (_name, capacitor, key) => {
-        if (capacitor) (globalThis as RendererGlobals).Capacitor = capacitor;
+        ['on a desktop', false, 'notice.recoverySignInKept'],
+        ['on Android', true, 'notice.recoverySignInKeptAndroid'],
+    ])('the damaged copy %s may still hold the sign-in, and the notice says so', async (_name, native, key) => {
+        if (native) markPlatformKind('capacitor');
         answer({ code: 'settings-corrupt', path: '/data/config.json.corrupt-1' });
         render(<SettingsRecoveryNotice />);
 
@@ -221,7 +222,7 @@ describe('SettingsRecoveryNotice actions', () => {
 
     afterEach(() => {
         mockTranslator.t.mockImplementation(defaultTranslate);
-        delete (globalThis as RendererGlobals).Capacitor;
+        resetPlatformKind();
     });
 
     describe('a failed import offers Retry and Start fresh', () => {
@@ -401,7 +402,7 @@ describe('SettingsRecoveryNotice actions', () => {
         });
 
         test('on Android the same two actions are offered, with the no-file wording', async () => {
-            (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+            markPlatformKind('capacitor');
             answer({ code: 'settings-import-failed', path: 'gurushots-settings', blocking: true });
             render(<SettingsRecoveryNotice />);
 
@@ -659,7 +660,7 @@ describe('SettingsRecoveryNotice actions', () => {
 
     describe('on Android the questions and outcomes name no file either', () => {
         beforeEach(() => {
-            (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+            markPlatformKind('capacitor');
         });
 
         test('Start fresh asks, and says it worked, in the no-file wording', async () => {
@@ -755,7 +756,7 @@ describe('SettingsRecoveryNotice actions', () => {
         });
 
         test('on Android it names no file', async () => {
-            (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+            markPlatformKind('capacitor');
             answer({ code: 'settings-import-failed', path: 'gurushots-settings', blocking: false, detail: 'corrupt' });
             render(<SettingsRecoveryNotice />);
 

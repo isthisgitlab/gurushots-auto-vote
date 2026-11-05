@@ -6,13 +6,13 @@
  * failure reporting.
  */
 
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     getEffectiveSetting: jest.fn(() => false),
     getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
     consumeChosenPhotos: jest.fn(() => false),
 }));
 
-jest.mock('../../src/ts/services/VotingLogic', () => ({
+jest.mock('../../src/ts/core/services/VotingLogic', () => ({
     resolvePin: jest.fn(() => ({ state: 'none' })),
     getAutoFillThresholdSec: jest.fn(() => 0),
     shouldPlayAutoTurbo: jest.fn(() => false),
@@ -34,7 +34,7 @@ jest.mock('../../src/ts/services/VotingLogic', () => ({
     evaluateVotingDecision: jest.fn(() => ({ shouldVote: false, voteReason: 'test skip', targetExposure: 100 })),
 }));
 
-jest.mock('../../src/ts/services/autoFill', () => ({
+jest.mock('../../src/ts/core/services/autoFill', () => ({
     maybeAutoFillChallenge: jest.fn(async () => 'skipped'),
     maybeEmergencyFillChallenge: jest.fn(async () => 'skipped'),
     submitNewEntryForAction: jest.fn(async () => ({ ok: false, reason: 'none' })),
@@ -42,32 +42,32 @@ jest.mock('../../src/ts/services/autoFill', () => ({
     reflectEntryFlag: jest.fn(),
 }));
 
-jest.mock('../../src/ts/voting/cancellation', () => ({
+jest.mock('../../src/ts/core/voting/cancellation', () => ({
     isCancelled: jest.fn(() => false),
     setCancelled: jest.fn(),
     reset: jest.fn(),
 }));
 
-import logger = require('../../src/ts/logger');
-import settingsModule = require('../../src/ts/settings');
+import logger = require('../../src/ts/core/logger');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import votingLogicModule = require('../../src/ts/services/VotingLogic');
+import votingLogicModule = require('../../src/ts/core/services/VotingLogic');
 const votingLogic = jest.mocked(votingLogicModule);
-import autoFillModule = require('../../src/ts/services/autoFill');
+import autoFillModule = require('../../src/ts/core/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
-import cancellationModule = require('../../src/ts/voting/cancellation');
+import cancellationModule = require('../../src/ts/core/voting/cancellation');
 const cancellation = jest.mocked(cancellationModule);
-import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
+import type * as votingOrchestratorModule from '../../src/ts/core/services/votingOrchestrator';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import { renderLogTemplate } from '../helpers/logTemplate';
-import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
-import type { Challenge } from '../../src/ts/types/gurushots';
-import type { VotingPassDeps } from '../../src/ts/types/votingPass';
+import type * as entryAgeStoreModule from '../../src/ts/core/entryAgeStore';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
+import type { VotingPassDeps } from '../../src/ts/core/types/votingPass';
 import { invalid } from '../helpers/invalid';
 const { runVotingPass, resetMissionVoteLog } =
-    require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule;
+    require('../../src/ts/core/services/votingOrchestrator') as typeof votingOrchestratorModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
-const { createMemoryEntryAgeLedger } = require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
+const { createMemoryEntryAgeLedger } = require('../../src/ts/core/entryAgeStore') as typeof entryAgeStoreModule;
 
 const NOW = Math.floor(Date.now() / 1000);
 

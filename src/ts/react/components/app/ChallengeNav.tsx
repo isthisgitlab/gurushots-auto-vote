@@ -1,11 +1,11 @@
 import type { ComponentChildren } from 'preact';
-import type { Challenge } from '../../../types/gurushots';
+import type { Challenge } from '../../../core/types/gurushots';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useCustomizedChallengeIds } from '@/hooks/useCustomizedChallengeIds';
 import type { CustomizationKind } from '@/hooks/useCustomizedChallengeIds';
 import { ChipListPanel, ChallengeChip, ChipTitle } from './ChallengeChips';
 import { PulseDot } from '../ui/PulseDot';
-import { isBoostWindowOpen } from '../../../voting/boostWindow';
+import { isBoostWindowOpen } from '../../../core/voting/boostWindow';
 import { isLowExposure, isMinimalCardChallenge } from '@/utils/challengeAlerts';
 import { chipToneOf } from '@/utils/customizationTone';
 

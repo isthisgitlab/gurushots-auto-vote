@@ -7,7 +7,7 @@
  * through the commandHandlers run* handlers, usage errors included.
  */
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const calls: { level: string; msg: unknown }[] = [];
     const rec = (level: string) => (msg: unknown) => calls.push({ level, msg: String(msg) });
     const cat = {
@@ -26,7 +26,7 @@ jest.mock('../../src/ts/logger', () => {
     };
 });
 
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     // Tests replace entries on this object; the marker makes it the very
     // namespace the command modules import rather than a copy.
     __esModule: true,
@@ -43,7 +43,7 @@ jest.mock('../../src/ts/settings', () => ({
     resetAllGlobalDefaults: jest.fn(),
 }));
 
-jest.mock('../../src/ts/apiFactory', () => {
+jest.mock('../../src/ts/core/apiFactory', () => {
     const mw = {
         isAuthenticated: jest.fn(() => true),
         getActiveChallenges: jest.fn(),
@@ -57,27 +57,27 @@ jest.mock('node:fs', () => ({ readFileSync: jest.fn(), writeFileSync: jest.fn() 
 import { invalid } from '../helpers/invalid';
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
-import loggerModule = require('../../src/ts/logger');
+import loggerModule = require('../../src/ts/core/logger');
 const logger = jest.mocked(invalid<typeof loggerModule & { __calls: { level: string; msg: unknown }[] }>(loggerModule));
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import type * as apiFactoryModule from '../../src/ts/apiFactory';
+import type * as apiFactoryModule from '../../src/ts/core/apiFactory';
 const { __mw: mw } = jest.mocked(
-    require('../../src/ts/apiFactory') as typeof apiFactoryModule & {
+    require('../../src/ts/core/apiFactory') as typeof apiFactoryModule & {
         __mw: jest.Mocked<
             Pick<ReturnType<typeof apiFactoryModule.getMiddleware>, 'isAuthenticated' | 'getActiveChallenges'>
         >;
     },
 );
-import type * as titleRuleHandlersModule from '../../src/ts/cli/titleRuleHandlers';
-import type * as settingsHandlersModule from '../../src/ts/cli/settingsHandlers';
-import type * as titleRulesCommandsModule from '../../src/ts/cli/commands/titleRules';
+import type * as titleRuleHandlersModule from '../../src/ts/shells/cli/titleRuleHandlers';
+import type * as settingsHandlersModule from '../../src/ts/shells/cli/settingsHandlers';
+import type * as titleRulesCommandsModule from '../../src/ts/shells/cli/commands/titleRules';
 // The rows↔handlers cycle initialises only rows-first (commandRows reads the handlers'
 // exports at module scope), so load the rows before reaching for their handlers.
-require('../../src/ts/cli/commandRows');
-const titleRuleHandlers = require('../../src/ts/cli/titleRuleHandlers') as typeof titleRuleHandlersModule;
-const settingsHandlers = require('../../src/ts/cli/settingsHandlers') as typeof settingsHandlersModule;
-const cmd = require('../../src/ts/cli/commands/titleRules') as typeof titleRulesCommandsModule;
+require('../../src/ts/shells/cli/commandRows');
+const titleRuleHandlers = require('../../src/ts/shells/cli/titleRuleHandlers') as typeof titleRuleHandlersModule;
+const settingsHandlers = require('../../src/ts/shells/cli/settingsHandlers') as typeof settingsHandlersModule;
+const cmd = require('../../src/ts/shells/cli/commands/titleRules') as typeof titleRulesCommandsModule;
 
 const msgs = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
 const stdout = () => msgs('stdout');

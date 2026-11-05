@@ -4,7 +4,7 @@
  * budget accounting, cancellation, and the null-bankroll fail-safe.
  */
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const level = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     // The T-methods render through the real catalog and land on the same level
     // fn, so assertions written against the plain methods keep passing.
@@ -39,27 +39,29 @@ jest.mock(
     }),
     { virtual: true },
 );
-jest.mock('../../src/ts/voting/cancellation', () => ({ isCancelled: jest.fn(() => false) }));
-jest.mock('../../src/ts/services/autoFill', () => ({
+jest.mock('../../src/ts/core/voting/cancellation', () => ({ isCancelled: jest.fn(() => false) }));
+jest.mock('../../src/ts/core/services/autoFill', () => ({
     // The join's chosen-photos helpers are reached through this facade; they are the real ones.
-    ...jest.requireActual<typeof import('../../src/ts/services/autoFill/chosenPhotos')>(
-        '../../src/ts/services/autoFill/chosenPhotos',
+    ...jest.requireActual<typeof import('../../src/ts/core/services/autoFill/chosenPhotos')>(
+        '../../src/ts/core/services/autoFill/chosenPhotos',
     ),
-    ...jest.requireActual<typeof import('../../src/ts/services/autoFill/chosenWalkMemo')>(
-        '../../src/ts/services/autoFill/chosenWalkMemo',
+    ...jest.requireActual<typeof import('../../src/ts/core/services/autoFill/chosenWalkMemo')>(
+        '../../src/ts/core/services/autoFill/chosenWalkMemo',
     ),
     fetchCandidatesForChallenge: jest.fn(async () => [{ id: 'imgA', permission: { allowed: true } }]),
     resolveSemanticScores: jest.fn(async () => null),
 }));
-jest.mock('../../src/ts/services/photoPicker', () => ({
-    pickPhotosForChallenge: jest.fn(() => ['imgA']),
+jest.mock('../../src/ts/core/services/photoPicker', () => ({
+    buildChosenCandidates: jest.fn(() => ({ scored: [], chosenIds: null, orderedIds: [] })),
+    finalizePick: jest.fn(() => ['imgA']),
+    jointInputsOf: jest.fn(() => new Map()),
 }));
-jest.mock('../../src/ts/services/visionVerifier', () => ({
+jest.mock('../../src/ts/core/services/visionVerifier', () => ({
     rankVisually: jest.fn(async (challenge: unknown, ids: string[], eligible: unknown, wantCount: number) =>
         ids.slice(0, wantCount),
     ),
 }));
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     getEffectiveSetting: jest.fn((key: string) => {
         const map: Record<string, unknown> = {
             autoJoin: true,
@@ -77,22 +79,25 @@ jest.mock('../../src/ts/settings', () => ({
     resolveRuleSettingGroup: jest.fn(() => null),
     hasRuleJoinOptIn: jest.fn(() => false),
     getChallengeOverride: jest.fn(() => null),
+    getSetting: jest.fn(() => false),
 }));
 
-import cancellationModule = require('../../src/ts/voting/cancellation');
+import cancellationModule = require('../../src/ts/core/voting/cancellation');
 const cancellation = jest.mocked(cancellationModule);
-import photoPickerModule = require('../../src/ts/services/photoPicker');
+import photoPickerModule = require('../../src/ts/core/services/photoPicker');
 const photoPicker = jest.mocked(photoPickerModule);
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import type * as joinChallengesModule from '../../src/ts/services/joinChallenges';
-import type * as autoFillModule from '../../src/ts/services/autoFill';
-import type { Challenge } from '../../src/ts/types/gurushots';
-import type { RawJsonStore } from '../../src/ts/types/stores';
-import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
-import type { RuleMatchChallenge } from '../../src/ts/types/settings';
+import type * as joinChallengesModule from '../../src/ts/core/services/joinChallenges';
+import type * as autoFillModule from '../../src/ts/core/services/autoFill';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
+import type { RawJsonStore } from '../../src/ts/core/types/stores';
+import type { AndroidHeadlessStore } from '../../src/ts/core/types/settings';
+import type { RuleMatchChallenge } from '../../src/ts/core/types/settings';
 import { invalid } from '../helpers/invalid';
-import { isPlainObject } from '../../src/ts/plainObject';
+import { createWebviewStorage } from '../../src/ts/platforms/webview/store';
+import { installHeadlessTestPlatform, installWebviewTestPlatform } from '../helpers/platform';
+import { isPlainObject } from '../../src/ts/core/plainObject';
 import {
     clearUnlocked,
     findClaim,
@@ -100,10 +105,10 @@ import {
     claimUnlock,
     pruneClosedClaims,
     readUnlockedState,
-} from '../../src/ts/services/joinChallenges/unlockMarker';
-import { resolveCandidateConfig } from '../../src/ts/services/joinChallenges/settingsResolution';
-import type { JoinDeps } from '../../src/ts/services/joinChallenges';
-import type { acquireUnlockLock as AcquireUnlockLock } from '../../src/ts/joinStateStore';
+} from '../../src/ts/core/services/joinChallenges/unlockMarker';
+import { resolveCandidateConfig } from '../../src/ts/core/services/joinChallenges/settingsResolution';
+import type { JoinDeps } from '../../src/ts/core/services/joinChallenges';
+import type { acquireUnlockLock as AcquireUnlockLock } from '../../src/ts/core/joinStateStore';
 import { parseJsonObject } from '../helpers/parseJson';
 // Whether this call recorded the unlock claim (the others found one there, or could not write).
 const recorded = async (...args: Parameters<typeof claimUnlock>): Promise<boolean> =>
@@ -116,7 +121,7 @@ const {
     resolveJoinSetting,
     isAutoJoinActive,
     inFlight,
-} = require('../../src/ts/services/joinChallenges') as typeof joinChallengesModule;
+} = require('../../src/ts/core/services/joinChallenges') as typeof joinChallengesModule;
 
 // The logger factory above: withCategory() hands back one shared level object.
 type LogMock = jest.Mock<void, [message: string, data?: unknown]>;
@@ -199,7 +204,7 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
 beforeEach(() => {
     jest.clearAllMocks();
     cancellation.isCancelled.mockReturnValue(false);
-    photoPicker.pickPhotosForChallenge.mockReturnValue(['imgA']);
+    photoPicker.finalizePick.mockReturnValue(['imgA']);
     // Reset settings mocks to defaults so per-test overrides never leak.
     settings.getEffectiveTagSetting.mockReturnValue([]);
     settings.getTitleRules.mockReturnValue([]);
@@ -222,7 +227,7 @@ describe('performJoin — ordering & idempotency', () => {
 
     test('a join drops the photo chooser’s cached listing of the challenge; one that fails leaves it', async () => {
         const cache =
-            require('../../src/ts/services/libraryCache') as typeof import('../../src/ts/services/libraryCache');
+            require('../../src/ts/core/services/libraryCache') as typeof import('../../src/ts/core/services/libraryCache');
         cache.writeListing(1, {
             photos: [],
             memberId: null,
@@ -255,27 +260,29 @@ describe('performJoin — ordering & idempotency', () => {
     });
 
     test('joins with the visually re-ranked photo from a 12-photo shortlist', async () => {
-        photoPicker.pickPhotosForChallenge.mockReturnValue(['imgA', 'imgB']);
+        photoPicker.finalizePick.mockReturnValue(['imgA', 'imgB']);
         const rankVisually = jest.fn(async () => ['imgB']);
         const challenge = { id: 3, title: 'Glorious Green Leaves' };
         const deps = makeDeps({ rankVisually });
         const res = await performJoin(invalid(challenge), 'tok', deps, 0);
         expect(res.status).toBe('joined');
-        expect(photoPicker.pickPhotosForChallenge).toHaveBeenCalledWith(
+        expect(photoPicker.buildChosenCandidates).toHaveBeenCalledWith(
             challenge,
             expect.any(Array),
-            12,
             expect.any(Object),
         );
+        expect(photoPicker.finalizePick).toHaveBeenCalledWith(expect.any(Array), 12, null, null);
         expect(rankVisually).toHaveBeenCalledWith(challenge, ['imgA', 'imgB'], expect.any(Array), 1, {
             logger: expect.any(Object),
             ignoreWords: null,
+            jointInputs: expect.any(Map),
+            loadVotes: expect.any(Function),
         });
         expect(deps.submitToChallenge).toHaveBeenCalledWith(3, ['imgB'], 'tok');
     });
 
     test('no eligible photo → skip, NO coins spent', async () => {
-        photoPicker.pickPhotosForChallenge.mockReturnValue([]);
+        photoPicker.finalizePick.mockReturnValue([]);
         const deps = makeDeps();
         const res = await performJoin(invalid({ id: 1 }), 'tok', deps, 100);
         expect(res.status).toBe('skipped-no-photo');
@@ -367,7 +374,7 @@ describe('performJoin — ordering & idempotency', () => {
                 maybeCharged: 100,
             });
             expect(forgetful.writeRaw).toHaveBeenCalledTimes(1);
-            const logged: LoggerMock = invalid(require('../../src/ts/logger'));
+            const logged: LoggerMock = invalid(require('../../src/ts/core/logger'));
             expect(logged.withCategory().error.mock.calls.map(([msg]) => msg)).toContain(
                 'challenge 3: the unlock marker could not be flagged as unconfirmed — it stays as a charged one',
             );
@@ -391,7 +398,7 @@ describe('performJoin — ordering & idempotency', () => {
                 expect(outcome).toMatchObject({ status: 'charged-pending-submit', maybeCharged: 100 });
                 expect(outcome.reason).toBeUndefined();
                 expect(JSON.parse(raw ?? '{}')).toEqual({ '3': { unlockedAt: expect.any(Number) } });
-                const logged: LoggerMock = invalid(require('../../src/ts/logger'));
+                const logged: LoggerMock = invalid(require('../../src/ts/core/logger'));
                 expect(
                     logged
                         .withCategory()
@@ -521,7 +528,7 @@ describe('performJoin — ordering & idempotency', () => {
 
 describe('a paid join the pass decided: the price is read again right before the claim', () => {
     const open = (cost: number | undefined, id = 7) => [{ id, join_coins: cost }];
-    const warned = () => invalid<LoggerMock>(require('../../src/ts/logger')).withCategory().warning;
+    const warned = () => invalid<LoggerMock>(require('../../src/ts/core/logger')).withCategory().warning;
 
     test('a price that is unchanged joins', async () => {
         const deps = makeDeps({ getMemberChallenges: openList(open(100)) });
@@ -1055,13 +1062,13 @@ describe('runJoinPass — join window', () => {
             );
         const statuses = (res: Awaited<ReturnType<typeof runJoinPass>>) => res.results.map((r) => r.status);
         const earlyNotices = () =>
-            invalid<LoggerMock>(require('../../src/ts/logger'))
+            invalid<LoggerMock>(require('../../src/ts/core/logger'))
                 .withCategory()
                 .info.mock.calls.map(([msg]) => msg)
                 .filter((msg) => msg.includes('early for the active mission'));
         // The one-per-pass not-completable line of the join-mission dry run.
         const notCompletableNotices = () =>
-            invalid<LoggerMock>(require('../../src/ts/logger'))
+            invalid<LoggerMock>(require('../../src/ts/core/logger'))
                 .withCategory()
                 .info.mock.calls.map(([msg]) => msg)
                 .filter((msg) => msg.includes('join mission needs'));
@@ -1636,7 +1643,7 @@ describe('runJoinPass — join window', () => {
 
     test('the missing-close_time diagnostic logs the payload shape once per pass', async () => {
         withWindow(24);
-        const logger: LoggerMock = invalid(require('../../src/ts/logger'));
+        const logger: LoggerMock = invalid(require('../../src/ts/core/logger'));
         const deps = makeDeps({
             getMemberChallenges: openList([
                 { id: 1, join_coins: 0, type: 'flash', title: 'A' },
@@ -1807,7 +1814,7 @@ describe('runJoinPass — hours from start', () => {
             k === 'autoJoinAfterHoursFromStart' ? hours : DEFAULT_SETTINGS[k],
         );
     const clampNotes = () =>
-        invalid<LoggerMock>(require('../../src/ts/logger'))
+        invalid<LoggerMock>(require('../../src/ts/core/logger'))
             .withCategory()
             .info.mock.calls.map(([msg]) => msg)
             .filter((msg) => msg.includes('join-after-start time reaches past 99%'));
@@ -2263,7 +2270,7 @@ describe('joinChallengeSingle — manual', () => {
                     // that failed would never have got that far), and the photo was never even looked for. The third is the
                     // one look of the pruning that follows.
                     expect(readRaw).toHaveBeenCalledTimes(3);
-                    expect(photoPicker.pickPhotosForChallenge).not.toHaveBeenCalled();
+                    expect(photoPicker.finalizePick).not.toHaveBeenCalled();
                     expect(deps.submitToChallenge).not.toHaveBeenCalled();
                 });
 
@@ -2277,7 +2284,7 @@ describe('joinChallengeSingle — manual', () => {
 
             describe('no eligible photo to submit', () => {
                 test('coins already spent: reported as pending, not "no coins were charged", and the marker stays', async () => {
-                    photoPicker.pickPhotosForChallenge.mockReturnValue([]);
+                    photoPicker.finalizePick.mockReturnValue([]);
                     const writeRaw = jest.fn();
                     const deps = retrying(MARKED, { joinStateStore: { readRaw: () => MARKED, writeRaw } });
                     const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true });
@@ -2288,7 +2295,7 @@ describe('joinChallengeSingle — manual', () => {
                 });
 
                 test('nothing spent yet: still "no eligible photo"', async () => {
-                    photoPicker.pickPhotosForChallenge.mockReturnValue([]);
+                    photoPicker.finalizePick.mockReturnValue([]);
                     const deps = retrying(null);
                     expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe(
                         'skipped-no-photo',
@@ -2296,7 +2303,7 @@ describe('joinChallengeSingle — manual', () => {
                 });
 
                 test('a free join with a stray marker is not turned into a charge that never happened', async () => {
-                    photoPicker.pickPhotosForChallenge.mockReturnValue([]);
+                    photoPicker.finalizePick.mockReturnValue([]);
                     const deps = makeDeps({ joinStateStore: { readRaw: () => MARKED, writeRaw: jest.fn() } });
                     expect((await performJoin(invalid({ id: 2 }), 'tok', deps, 0)).status).toBe('skipped-no-photo');
                 });
@@ -2478,7 +2485,7 @@ describe('unlock claims', () => {
         });
 
         test('with no photo to finish with, the unconfirmed payment is what the user is told, not "no photo"', async () => {
-            photoPicker.pickPhotosForChallenge.mockReturnValue([]);
+            photoPicker.finalizePick.mockReturnValue([]);
             const store = fileWith(unconfirmed());
             const deps = asking(store, 450);
             const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true });
@@ -2666,7 +2673,7 @@ describe('unlock claims', () => {
         test.each([new Error('read-only'), new Error('')])(
             'a store that cannot be written is logged, and the pass goes on (%s)',
             async (failure) => {
-                const logged: LoggerMock = invalid(require('../../src/ts/logger'));
+                const logged: LoggerMock = invalid(require('../../src/ts/core/logger'));
                 logged.withCategory().warning.mockClear();
                 const stored = JSON.stringify(claims());
                 const deps = joiningAs(
@@ -2798,7 +2805,7 @@ describe('unlock claims', () => {
                 );
 
             test('no coins are spent without a claim recorded, and the log says why, not "locked by another process"', async () => {
-                const logged: LoggerMock = invalid(require('../../src/ts/logger'));
+                const logged: LoggerMock = invalid(require('../../src/ts/core/logger'));
                 const store = fileWith({});
                 const deps = joiningAs(store, { acquireUnlockLock: unavailableState() });
                 expect(await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).toMatchObject({
@@ -2867,7 +2874,7 @@ describe('unlock claims', () => {
         });
 
         test('pruning leaves a challenge whose lock another process holds, and says nothing of what it did not drop', async () => {
-            const logged: LoggerMock = invalid(require('../../src/ts/logger'));
+            const logged: LoggerMock = invalid(require('../../src/ts/core/logger'));
             logged.withCategory().debug.mockClear();
             const store = fileWith({ '7': OLD_JOINED, '8': OLD_JOINED });
             const acquire = jest.fn((id: string | number) => ({ ok: String(id) !== '7', release }));
@@ -2885,7 +2892,7 @@ describe('unlock claims', () => {
         });
 
         test('a prune whose write fails does not claim to have dropped anything', async () => {
-            const logged: LoggerMock = invalid(require('../../src/ts/logger'));
+            const logged: LoggerMock = invalid(require('../../src/ts/core/logger'));
             logged.withCategory().debug.mockClear();
             const stored = JSON.stringify({ '7': OLD_JOINED });
             const deps = joiningAs(
@@ -2958,7 +2965,7 @@ describe('unlock claims', () => {
         });
 
         test('what it could not change it says, and a claim it could not clear stays', async () => {
-            const logged: LoggerMock = invalid(require('../../src/ts/logger'));
+            const logged: LoggerMock = invalid(require('../../src/ts/core/logger'));
             const store = fileWith({ '2': { unlockedAt: RECENT } });
             // The claims file is locked from the start: the submit goes on the claim, but its removal cannot.
             const deps = joiningAs(store, { acquireUnlockLock: lockedFor(Number.POSITIVE_INFINITY) });
@@ -3065,7 +3072,7 @@ describe('unlock claims', () => {
             });
 
             test('a file that cannot be read is not waited for again: it will not be better a moment later', async () => {
-                const logged: LoggerMock = invalid(require('../../src/ts/logger'));
+                const logged: LoggerMock = invalid(require('../../src/ts/core/logger'));
                 const store = fileWith({});
                 const acquire = jest.fn((_id: string | number) => ({ ok: true, release: unlock }));
                 let armed = false;
@@ -3091,7 +3098,7 @@ describe('unlock claims', () => {
             });
 
             test('and when it never does, it is flagged unconfirmed instead, so it can be forgotten', async () => {
-                const logged: LoggerMock = invalid(require('../../src/ts/logger'));
+                const logged: LoggerMock = invalid(require('../../src/ts/core/logger'));
                 const { store, deps } = attempt(90);
                 expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe(
                     'failed-no-charge',
@@ -3104,7 +3111,7 @@ describe('unlock claims', () => {
             });
 
             test('and when it cannot be flagged either, that is logged', async () => {
-                const logged: LoggerMock = invalid(require('../../src/ts/logger'));
+                const logged: LoggerMock = invalid(require('../../src/ts/core/logger'));
                 const { store, deps } = attempt(Number.POSITIVE_INFINITY);
                 expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe(
                     'failed-no-charge',
@@ -3200,7 +3207,7 @@ describe('unlock claims', () => {
         });
 
         test('what it logs about the challenge has no line break to forge a log line with', async () => {
-            const logged: LoggerMock = invalid(require('../../src/ts/logger'));
+            const logged: LoggerMock = invalid(require('../../src/ts/core/logger'));
             const deps = forgetting(
                 invalid<ReturnType<typeof fileWith>>({
                     readRaw: () => JSON.stringify({ '7\nforged line': { unlockedAt: RECENT, unconfirmed: true } }),
@@ -3253,7 +3260,7 @@ describe('unlock claims', () => {
             expect(await join(deps)).toMatchObject({ status: 'failed-no-charge', reason: 'already-joined' });
             nothingDone(deps);
             // Refused before a photo is even chosen.
-            expect(photoPicker.pickPhotosForChallenge).not.toHaveBeenCalled();
+            expect(photoPicker.finalizePick).not.toHaveBeenCalled();
             expect(store.writeRaw).not.toHaveBeenCalled();
         });
 
@@ -3430,8 +3437,8 @@ describe('runJoinPass \u2014 join timing from class rules', () => {
 });
 
 describe('joinChallenges — edge paths', () => {
-    const logger: LoggerMock = invalid(require('../../src/ts/logger'));
-    const autoFill = jest.mocked(require('../../src/ts/services/autoFill') as typeof autoFillModule);
+    const logger: LoggerMock = invalid(require('../../src/ts/core/logger'));
+    const autoFill = jest.mocked(require('../../src/ts/core/services/autoFill') as typeof autoFillModule);
     const warnings = () => logger.withCategory().warning.mock.calls.map(([msg]) => msg);
     const errors = () => logger.withCategory().error.mock.calls.map(([msg]) => msg);
 
@@ -3721,7 +3728,7 @@ describe('joinChallenges — edge paths', () => {
         });
 
         test('a picker returning nothing at all is "no photo"', async () => {
-            photoPicker.pickPhotosForChallenge.mockReturnValue(invalid(null));
+            photoPicker.finalizePick.mockReturnValue(invalid(null));
             expect((await performJoin(invalid({ id: 12 }), 'tok', makeDeps(), 0)).status).toBe('skipped-no-photo');
         });
     });
@@ -3814,7 +3821,7 @@ describe('joinChallenges — edge paths', () => {
         });
 
         test('a candidate with no eligible photo is reported and not counted as joined', async () => {
-            photoPicker.pickPhotosForChallenge.mockReturnValue([]);
+            photoPicker.finalizePick.mockReturnValue([]);
             const deps = makeDeps({ getMemberChallenges: openList([{ id: 1, join_coins: 0 }]) });
             expect(await runJoinPass('tok', Date.now(), deps)).toEqual({
                 ran: true,
@@ -3824,7 +3831,7 @@ describe('joinChallenges — edge paths', () => {
         });
 
         test('a thrown non-Error from a candidate join is logged by value', async () => {
-            photoPicker.pickPhotosForChallenge.mockImplementationOnce(() => {
+            photoPicker.finalizePick.mockImplementationOnce(() => {
                 throw 'picker boom';
             });
             const deps = makeDeps({ getMemberChallenges: openList([{ id: 1, join_coins: 0 }]) });
@@ -4035,16 +4042,15 @@ describe('on the background service, whose claims go through the native bridge',
     };
     // One service session: the store as a freshly started service builds it.
     const session = () => {
-        h.__GS_HEADLESS__ = true;
+        installHeadlessTestPlatform();
         let store!: RawJsonStore;
         jest.isolateModules(() => {
-            store = (require('../../src/ts/joinStateStore') as typeof import('../../src/ts/joinStateStore'))
+            store = (require('../../src/ts/core/joinStateStore') as typeof import('../../src/ts/core/joinStateStore'))
                 .joinStateStore;
         });
         return store;
     };
     afterEach(() => {
-        delete h.__GS_HEADLESS__;
         delete h.AndroidHeadlessStore;
         sharedPrefs.clear();
     });
@@ -4112,7 +4118,7 @@ describe('on the background service, whose claims go through the native bridge',
 
 describe('on the app window, where the background service writes the same claims', () => {
     const h = globalThis as typeof globalThis & { Capacitor?: unknown };
-    type JoinStateModule = typeof import('../../src/ts/joinStateStore');
+    type JoinStateModule = typeof import('../../src/ts/core/joinStateStore');
     // The window with the plugin over `native` (a build with the service), or without one.
     const appWindow = async (native: ReturnType<typeof nativeClaims> | null) => {
         const compareAndWrite = jest.fn(async (call: { expected: string | null; value: string }) => {
@@ -4127,7 +4133,15 @@ describe('on the app window, where the background service writes the same claims
         if (native?.state.value) sharedPrefs.set('gs_join_state', native.state.value);
         let mod!: JoinStateModule;
         jest.isolateModules(() => {
-            mod = require('../../src/ts/joinStateStore') as JoinStateModule;
+            // The shared store's saves reach the plugin through the family's compare-and-write part: a bridge loaded
+            // here is fresh per window, so it reads the plugin global this test set. The platform stands before the
+            // module loads: the transports it builds are the family's.
+            const autovote =
+                require('../../src/ts/shells/capacitor/NativeAutovoteBridge') as typeof import('../../src/ts/shells/capacitor/NativeAutovoteBridge');
+            installWebviewTestPlatform({
+                storage: createWebviewStorage((key, expected, data) => autovote.compareAndWrite(key, expected, data)),
+            });
+            mod = require('../../src/ts/core/joinStateStore') as JoinStateModule;
         });
         await mod.initializeJoinStateAsync();
         const deps = (over: Partial<JoinDeps> = {}) =>
@@ -4136,7 +4150,7 @@ describe('on the app window, where the background service writes the same claims
     };
     const paidChallenge = () => invalid<Challenge>({ id: 3 });
     const warnings = () =>
-        invalid<LoggerMock>(require('../../src/ts/logger'))
+        invalid<LoggerMock>(require('../../src/ts/core/logger'))
             .withCategory()
             .warning.mock.calls.map(([msg]) => msg);
     // What the native side holds is what the service reads: the window's refresh reads it from Preferences.
@@ -4297,7 +4311,7 @@ describe('on the app window, where the background service writes the same claims
         failingPrefReads.delete('gs_join_state');
         const w = await appWindow(withClaim);
         const retry = w.deps();
-        photoPicker.pickPhotosForChallenge.mockImplementationOnce(() => {
+        photoPicker.finalizePick.mockImplementationOnce(() => {
             failingPrefReads.add('gs_join_state');
             return ['imgA'];
         });
@@ -4407,7 +4421,7 @@ describe('runJoinPass — Manual Only', () => {
             getMemberChallenges: openList([{ id, join_coins: 100, type: 'flash' }]),
             joinStateStore: fileWith({ [String(id)]: { unlockedAt: RECENT } }),
         });
-    const warned = () => invalid<LoggerMock>(require('../../src/ts/logger')).withCategory().warning;
+    const warned = () => invalid<LoggerMock>(require('../../src/ts/core/logger')).withCategory().warning;
 
     test('off: the candidate joins as ever, and no warning is written', async () => {
         const deps = makeDeps({ getMemberChallenges: openList([{ id: 21, join_coins: 0, type: 'flash' }]) });
@@ -4512,7 +4526,7 @@ describe('join safety — a challenge that is full, or whose unlock price cannot
     const FULL = { players: 100, max_players: 100 };
     const fullList = openList([{ id: 1, join_coins: 0, ...FULL }]);
     const priceUnknownList = openList([{ id: 2, join_coins: 0, member: { submit_state: 'join_unlock' } }]);
-    const level = () => invalid<LoggerMock>(require('../../src/ts/logger')).withCategory();
+    const level = () => invalid<LoggerMock>(require('../../src/ts/core/logger')).withCategory();
 
     test('the auto pass skips a full challenge as skipped:full, never spending', async () => {
         const deps = makeDeps({ getMemberChallenges: fullList });
@@ -4706,7 +4720,7 @@ describe("the join's photo pick under a failing suggested-photos read", () => {
             const res = await performJoin(invalid({ id: 18 }), 'tok', deps, 0);
             expect(res).toEqual({ status: 'joined', charged: 0, imageId: 'imgA' });
             expect(deps.coinsUnlock).not.toHaveBeenCalled();
-            expect(invalid<LoggerMock>(require('../../src/ts/logger')).withCategory().debug).toHaveBeenCalledWith(
+            expect(invalid<LoggerMock>(require('../../src/ts/core/logger')).withCategory().debug).toHaveBeenCalledWith(
                 expect.stringContaining(`could not read the suggested photos for 18: ${said}`),
                 null,
             );
@@ -4715,7 +4729,7 @@ describe("the join's photo pick under a failing suggested-photos read", () => {
 });
 
 describe('the spend-path guards on the join list', () => {
-    const warned = () => invalid<LoggerMock>(require('../../src/ts/logger')).withCategory().warning;
+    const warned = () => invalid<LoggerMock>(require('../../src/ts/core/logger')).withCategory().warning;
     // A claim whose join went through, old enough for the list to end it.
     const joinedOld = { unlockedAt: RECENT - 7 * 60 * 60 * 1000, joinedAt: RECENT - 7 * 60 * 60 * 1000 };
 

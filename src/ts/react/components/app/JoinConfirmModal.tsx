@@ -3,7 +3,7 @@ import { ToneNote } from '@/components/ui/ToneNote';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { costOf } from '@/utils/discoverCost';
 
-import type { Bankroll, OpenChallenge } from '../../../types/gurushots';
+import type { Bankroll, OpenChallenge } from '../../../core/types/gurushots';
 
 /**
  * Paid-join confirmation: names the challenge, the cost, and the current → resulting coin balance before any coins

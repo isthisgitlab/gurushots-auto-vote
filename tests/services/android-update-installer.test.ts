@@ -7,21 +7,18 @@
  * Robolectric tests; here we cover the JS routing.
  */
 
-jest.mock('../../src/ts/runtime', () => ({ isCapacitor: jest.fn(() => true) }));
-jest.mock('../../src/ts/services/UpdateChecker', () => ({
+jest.mock('../../src/ts/core/services/UpdateChecker', () => ({
     getReleaseAsset: jest.fn(),
     getReleasesUrl: jest.fn(() => 'https://github.com/o/r/releases/latest'),
 }));
 
-import runtimeModule = require('../../src/ts/runtime');
-const runtime = jest.mocked(runtimeModule);
-import logger = require('../../src/ts/logger');
-import updateCheckerModule = require('../../src/ts/services/UpdateChecker');
+import logger = require('../../src/ts/core/logger');
+import updateCheckerModule = require('../../src/ts/core/services/UpdateChecker');
 const updateChecker = jest.mocked(updateCheckerModule);
-import type * as AndroidUpdateInstallerModule from '../../src/ts/services/AndroidUpdateInstaller';
+import type * as AndroidUpdateInstallerModule from '../../src/ts/shells/capacitor/AndroidUpdateInstaller';
 const { downloadAndInstall } =
-    require('../../src/ts/services/AndroidUpdateInstaller') as typeof AndroidUpdateInstallerModule;
-import type { ApkInstallerPlugin, CapacitorGlobals } from '../../src/ts/types/capacitor';
+    require('../../src/ts/shells/capacitor/AndroidUpdateInstaller') as typeof AndroidUpdateInstallerModule;
+import type { ApkInstallerPlugin, CapacitorGlobals } from '../../src/ts/core/types/capacitor';
 import { invalid } from '../helpers/invalid';
 
 // The globals the installer reads; open and location are removed on purpose to reach the last fallbacks.
@@ -37,11 +34,13 @@ describe('AndroidUpdateInstaller', () => {
     let originalLocation: InstallerGlobals['location'];
 
     beforeEach(() => {
-        runtime.isCapacitor.mockReturnValue(true);
         updateChecker.getReleaseAsset.mockReturnValue(null);
         originalCapacitor = g.Capacitor;
         originalOpen = g.open;
         originalLocation = g.location;
+        // On the native platform by default; the tests that say otherwise
+        // reshape the global.
+        g.Capacitor = { isNativePlatform: () => true };
     });
 
     afterEach(() => {
@@ -54,7 +53,10 @@ describe('AndroidUpdateInstaller', () => {
         const dl = jest.fn().mockResolvedValue({ success: true });
         const remove = jest.fn();
         const addListener = jest.fn().mockResolvedValue({ remove });
-        g.Capacitor = { Plugins: { ApkInstaller: { downloadAndInstall: dl, addListener } } };
+        g.Capacitor = {
+            isNativePlatform: () => true,
+            Plugins: { ApkInstaller: { downloadAndInstall: dl, addListener } },
+        };
         const onProgress = jest.fn();
         updateChecker.getReleaseAsset.mockReturnValue({
             downloadUrl: 'https://x/app.apk',
@@ -72,7 +74,7 @@ describe('AndroidUpdateInstaller', () => {
     });
 
     test('without the native plugin it opens the release page, never the APK url', async () => {
-        g.Capacitor = { Plugins: {} };
+        g.Capacitor = { isNativePlatform: () => true, Plugins: {} };
         g.open = jest.fn();
         updateChecker.getReleaseAsset.mockReturnValue({
             downloadUrl: 'https://x/app.apk',
@@ -89,7 +91,7 @@ describe('AndroidUpdateInstaller', () => {
 
     test('without the native plugin and an asset it does not know, it opens the generic releases page', async () => {
         const browserOpen = jest.fn();
-        g.Capacitor = { Plugins: { Browser: { open: browserOpen } } };
+        g.Capacitor = { isNativePlatform: () => true, Plugins: { Browser: { open: browserOpen } } };
 
         await downloadAndInstall({ downloadUrl: 'https://x/app.apk', version: '1.2.3' });
 
@@ -102,7 +104,7 @@ describe('AndroidUpdateInstaller', () => {
     });
 
     test('is a no-op outside Capacitor', async () => {
-        runtime.isCapacitor.mockReturnValue(false);
+        delete g.Capacitor;
         const res = await downloadAndInstall({ downloadUrl: 'https://x/app.apk' });
         expect(res.success).toBe(false);
     });
@@ -117,7 +119,10 @@ describe('AndroidUpdateInstaller', () => {
             listener({ percent: 42 });
             return { success: false, error: 'user cancelled' };
         });
-        g.Capacitor = { Plugins: { ApkInstaller: { downloadAndInstall: dl, addListener } } };
+        g.Capacitor = {
+            isNativePlatform: () => true,
+            Plugins: { ApkInstaller: { downloadAndInstall: dl, addListener } },
+        };
         const onProgress = jest.fn();
 
         const res = await downloadAndInstall({ downloadUrl: 'https://x/app.apk', onProgress });
@@ -130,7 +135,7 @@ describe('AndroidUpdateInstaller', () => {
 
     test('a native failure without a message still reports why', async () => {
         const dl = jest.fn().mockResolvedValue({ success: false });
-        g.Capacitor = { Plugins: { ApkInstaller: { downloadAndInstall: dl } } };
+        g.Capacitor = { isNativePlatform: () => true, Plugins: { ApkInstaller: { downloadAndInstall: dl } } };
 
         const res = await downloadAndInstall({ downloadUrl: 'https://x/app.apk', version: '2.0.0' });
 
@@ -140,7 +145,10 @@ describe('AndroidUpdateInstaller', () => {
     test('skips the listener when no onProgress is given and treats a missing result as success', async () => {
         const addListener = jest.fn();
         const dl = jest.fn().mockResolvedValue(undefined);
-        g.Capacitor = { Plugins: { ApkInstaller: { downloadAndInstall: dl, addListener } } };
+        g.Capacitor = {
+            isNativePlatform: () => true,
+            Plugins: { ApkInstaller: { downloadAndInstall: dl, addListener } },
+        };
 
         const res = await downloadAndInstall({ downloadUrl: 'https://x/app.apk', version: '2.0.0' });
 
@@ -161,6 +169,7 @@ describe('AndroidUpdateInstaller', () => {
         const dl = jest.fn().mockRejectedValue(refusal);
         const browserOpen = jest.fn();
         g.Capacitor = {
+            isNativePlatform: () => true,
             Plugins: { ApkInstaller: { downloadAndInstall: dl, addListener }, Browser: { open: browserOpen } },
         };
         updateChecker.getReleaseAsset.mockReturnValue({
@@ -196,7 +205,10 @@ describe('AndroidUpdateInstaller', () => {
         'a rejection with %s carries the release-page-opened code, which says the page is open',
         async (_name, rejection) => {
             const dl = jest.fn().mockRejectedValue(rejection);
-            g.Capacitor = { Plugins: { ApkInstaller: { downloadAndInstall: dl }, Browser: { open: jest.fn() } } };
+            g.Capacitor = {
+                isNativePlatform: () => true,
+                Plugins: { ApkInstaller: { downloadAndInstall: dl }, Browser: { open: jest.fn() } },
+            };
 
             const res = await downloadAndInstall({ downloadUrl: 'https://x/app.apk', version: '1.0.0' });
 
@@ -212,7 +224,10 @@ describe('AndroidUpdateInstaller', () => {
     test('opens the generic releases page when the failed asset is unknown, and still says why without a message', async () => {
         const dl = jest.fn().mockRejectedValue('boom');
         const browserOpen = jest.fn();
-        g.Capacitor = { Plugins: { ApkInstaller: { downloadAndInstall: dl }, Browser: { open: browserOpen } } };
+        g.Capacitor = {
+            isNativePlatform: () => true,
+            Plugins: { ApkInstaller: { downloadAndInstall: dl }, Browser: { open: browserOpen } },
+        };
 
         const res = await downloadAndInstall({ downloadUrl: 'https://x/app.apk', version: '1.0.0' });
 
@@ -229,7 +244,10 @@ describe('AndroidUpdateInstaller', () => {
     test('opens the generic releases page when the asset has no release page of its own', async () => {
         const dl = jest.fn().mockRejectedValue(new Error('x'));
         const browserOpen = jest.fn();
-        g.Capacitor = { Plugins: { ApkInstaller: { downloadAndInstall: dl }, Browser: { open: browserOpen } } };
+        g.Capacitor = {
+            isNativePlatform: () => true,
+            Plugins: { ApkInstaller: { downloadAndInstall: dl }, Browser: { open: browserOpen } },
+        };
         updateChecker.getReleaseAsset.mockReturnValue({
             downloadUrl: 'https://x/app.apk',
             digest: null,
@@ -244,7 +262,7 @@ describe('AndroidUpdateInstaller', () => {
 
     test('reports the failure to open the release page when nothing can open it', async () => {
         const dl = jest.fn().mockRejectedValue(new Error('refused'));
-        g.Capacitor = { Plugins: { ApkInstaller: { downloadAndInstall: dl } } };
+        g.Capacitor = { isNativePlatform: () => true, Plugins: { ApkInstaller: { downloadAndInstall: dl } } };
         g.open = undefined;
         delete g.location;
 
@@ -255,6 +273,7 @@ describe('AndroidUpdateInstaller', () => {
 
     test('falls through to window.open when the Browser plugin throws', async () => {
         g.Capacitor = {
+            isNativePlatform: () => true,
             Plugins: {
                 Browser: {
                     open: () => {
@@ -272,7 +291,7 @@ describe('AndroidUpdateInstaller', () => {
     });
 
     test('navigates location.href when window.open is unavailable', async () => {
-        g.Capacitor = undefined;
+        g.Capacitor = { isNativePlatform: () => true };
         g.open = undefined;
         g.location = { href: 'app://index' };
 
@@ -283,7 +302,7 @@ describe('AndroidUpdateInstaller', () => {
     });
 
     test('reports failure when there is no way to open the URL', async () => {
-        g.Capacitor = undefined;
+        g.Capacitor = { isNativePlatform: () => true };
         g.open = undefined;
         delete g.location;
 

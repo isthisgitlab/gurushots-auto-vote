@@ -1,25 +1,25 @@
-import type { MemberBoost, MemberTurbo, RankingEntry } from '../../types/gurushots';
-import type { SerializableSchemaEntry } from '../../ipc/settings.handlers';
+import type { MemberBoost, MemberTurbo, RankingEntry } from '../../core/types/gurushots';
+import type { SerializableSchemaEntry } from '../../core/ipc/settings.handlers';
 /**
  * Time and display formatting utilities (pure functions only)
  */
 
 import { formatSecondsAsHoursMinutes } from './timeFieldUnits';
-import { formatDuration as formatDurationIn } from '../../format/duration';
-import { rendererTranslator } from '../../translations/renderer';
-import { buildPhotoUrl, entryPhotoUrl } from '../../format/photoUrl';
-import { formatEndTimeIn } from '../../format/endTime';
-import { finiteOr } from '../../numbers';
+import { formatDuration as formatDurationIn } from '../../core/format/duration';
+import { rendererTranslator } from '../../core/translations/renderer';
+import { buildPhotoUrl, entryPhotoUrl } from '../../core/format/photoUrl';
+import { formatEndTimeIn } from '../../core/format/endTime';
+import { finiteOr } from '../../core/numbers';
 import { LEVEL_BADGE_CLASS, LEVEL_PROGRESS_CLASS } from './levelBadge';
-import { isGuruPicked } from '../../voting/currencyAuto';
-import { turboStatusCode } from '../../voting/turboMode';
+import { isGuruPicked } from '../../core/voting/currencyAuto';
+import { turboStatusCode } from '../../core/voting/turboMode';
 
-import type { TurboStatusCode } from '../../voting/turboMode';
+import type { TurboStatusCode } from '../../core/voting/turboMode';
 
-import type { Translate } from '../../translations/translator';
+import type { Translate } from '../../core/translations/translator';
 
 // The shared core's formatter, so the renderer, the CLI, and the voting pass
-// (services/votingOrchestrator/boost.ts) all format durations identically — see src/ts/format/duration.ts —
+// (services/votingOrchestrator/boost.ts) all format durations identically — see src/ts/core/format/duration.ts —
 // in the UI's language: Latvian writes minutes "min", not "m" (metres).
 const formatDuration = (seconds: number, options: { includeSeconds?: boolean } = {}): string =>
     formatDurationIn(seconds, { ...options, locale: rendererTranslator.getCurrentLanguage() });
@@ -27,7 +27,7 @@ export { formatDuration };
 
 // Entry thumbnails. Re-exported here rather than imported straight into the
 // component so the renderer keeps one door onto the shared core, matching
-// formatDuration above — see src/ts/format/photoUrl.ts for why the URL has to
+// formatDuration above — see src/ts/core/format/photoUrl.ts for why the URL has to
 // be built client-side at all.
 export { buildPhotoUrl, entryPhotoUrl };
 
@@ -252,7 +252,7 @@ export const getEntryStatus = (
  * voting engine (services/VotingLogic.ts) uses too, so the two hosts can
  * never drift on what "open" means.
  */
-export { isBoostWindowOpen } from '../../voting/boostWindow';
+export { isBoostWindowOpen } from '../../core/voting/boostWindow';
 
 // The colour each turbo state code reads as on the card.
 const TURBO_STATUS_CLASS: Record<TurboStatusCode, string> = {

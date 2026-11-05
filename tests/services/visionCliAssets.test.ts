@@ -18,13 +18,18 @@ import childProcess = require('node:child_process');
 
 const mockSea = { getAsset: jest.fn<string | Buffer, [key: string, encoding?: string]>() };
 jest.mock('node:sea', () => mockSea, { virtual: true });
-jest.mock('../../src/ts/runtime', () => ({ getUserDataDir: jest.fn() }));
 
-import runtimeModule = require('../../src/ts/runtime');
-const runtime = jest.mocked(runtimeModule);
-import type * as visionCliAssetsModule from '../../src/ts/services/visionCliAssets';
+import { platform } from '../../src/ts/core/platform/port';
+import { installTestPlatform } from '../helpers/platform';
+import type * as visionCliAssetsModule from '../../src/ts/shells/cli/visionCliAssets';
 const { extractVisionCliAssets, digestVisionRuntime } =
-    require('../../src/ts/services/visionCliAssets') as typeof visionCliAssetsModule;
+    require('../../src/ts/shells/cli/visionCliAssets') as typeof visionCliAssetsModule;
+
+// The vision directory's parent comes from the platform (the CLI's user-data
+// directory): each test points the installed platform at its own directory.
+const useUserDataDir = (dir: string) => {
+    installTestPlatform({ paths: { ...platform().paths, getUserDataDir: () => dir } });
+};
 
 test('first extraction uses only bundled JavaScript with no system tar', () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vision-cli-assets-'));
@@ -41,12 +46,11 @@ test('first extraction uses only bundled JavaScript with no system tar', () => {
         const bytes = fs.readFileSync(archive);
         const digest = crypto.createHash('sha256').update(bytes).digest('hex');
         const codeDigest = digestVisionRuntime(source);
-        runtime.getUserDataDir.mockReturnValue(path.join(directory, 'userdata'));
+        useUserDataDir(path.join(directory, 'userdata'));
         mockSea.getAsset.mockImplementation((name) =>
             name === 'vision-runtime.code.sha256' ? codeDigest : name.endsWith('.sha256') ? digest : bytes,
         );
         process.env.PATH = path.join(directory, 'empty-path');
-
         const result = extractVisionCliAssets();
         expect(fs.readFileSync(path.join(result.root, 'vision-model', 'config.json'), 'utf8')).toBe('{}');
         expect(fs.readFileSync(path.join(result.root, 'node_modules', 'example', 'index.js'), 'utf8')).toBe(
@@ -79,7 +83,7 @@ describe('extraction failure paths', () => {
         bytes = fs.readFileSync(archive);
         digest = crypto.createHash('sha256').update(bytes).digest('hex');
         codeDigest = digestVisionRuntime(source);
-        runtime.getUserDataDir.mockReturnValue(path.join(directory, 'userdata'));
+        useUserDataDir(path.join(directory, 'userdata'));
     });
     afterEach(() => {
         jest.restoreAllMocks();
@@ -334,7 +338,7 @@ const systemTar = childProcess.spawnSync('tar', ['--version']);
             const bytes = fs.readFileSync(archive);
             const digest = crypto.createHash('sha256').update(bytes).digest('hex');
             const codeDigest = digestVisionRuntime(source);
-            runtime.getUserDataDir.mockReturnValue(path.join(directory, 'userdata'));
+            useUserDataDir(path.join(directory, 'userdata'));
             mockSea.getAsset.mockImplementation((name) =>
                 name === 'vision-runtime.code.sha256' ? codeDigest : name.endsWith('.sha256') ? digest : bytes,
             );

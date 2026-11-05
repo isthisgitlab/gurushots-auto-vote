@@ -3,10 +3,10 @@ import * as ipc from '@/api/ipc';
 import { useLatestRef } from './useLatestRef';
 import { useRepricedRows } from './useRepricedRows';
 import { costOf, rowToConfirm } from '../utils/discoverCost';
-import { errorMessage } from '../../errorMessage';
+import { errorMessage } from '../../core/errorMessage';
 
 import type { JoinOutcome } from '@/components/app/DiscoverSection';
-import type { OpenChallenge } from '../../types/gurushots';
+import type { OpenChallenge } from '../../core/types/gurushots';
 
 /** What a row's join is doing: asking what it costs (nothing is spent), or joining. */
 export type JoinPhase = 'asking' | 'joining';

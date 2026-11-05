@@ -5,7 +5,7 @@
  * are the ones Oxlint produces.
  */
 import type frameGuardPlugin from '../../scripts/lint/frame-guard.mts';
-import { isPlainObject } from '../../src/ts/plainObject';
+import { isPlainObject } from '../../src/ts/core/plainObject';
 import { invalid } from '../helpers/invalid';
 
 const plugin: typeof frameGuardPlugin = (
@@ -226,7 +226,7 @@ const INVALID: ReadonlyArray<readonly [string, ...string[]]> = [
     ['(x as WebContents).send("c");', send('send')],
     ['postMessage(data);', bare('postMessage')],
     ['sendToFrame(frameId, "c", x);', bare('sendToFrame')],
-    // A snippet shaped like ipc/registerHandlers.ts, with no disable comment: the file is not exempt.
+    // A snippet shaped like shells/electron/registerHandlers.ts, with no disable comment: the file is not exempt.
     [
         'const restrict = (event, webContents) => {\n    event.sender.mainFrame.send("c", x);\n    event.senderFrame.postMessage("c", x);\n    webContents.send("c", x);\n};',
         send('send'),

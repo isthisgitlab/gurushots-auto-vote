@@ -10,10 +10,13 @@ import { invalid } from '../helpers/invalid';
 import { pickOption } from './helpers/test-utils';
 import { act } from '@testing-library/preact';
 import { fireSettingsChanged } from './helpers/setup';
-import { CURRENT_NOTICE_VERSION } from '../../src/ts/noticeVersion';
+import { CURRENT_NOTICE_VERSION } from '../../src/ts/core/noticeVersion';
+import { resetPlatformKind } from '../helpers/platformKind';
+import { markPlatformKind } from '../../src/ts/core/platform/kind';
+import { installPhoneRemoteMode } from '../../src/ts/core/remote/phoneMode';
 
-import type { RendererGlobals } from '../../src/ts/types/capacitor';
-import type { WindowApi } from '../../src/ts/types/ipc';
+import type { RendererGlobals } from '../../src/ts/core/types/capacitor';
+import type { WindowApi } from '../../src/ts/core/types/ipc';
 import type * as LoginModule from '@/pages/Login';
 
 const API_METHODS = ['getSettings', 'getSetting', 'getEnvironmentInfo', 'authenticate', 'setSetting', 'login'] as const;
@@ -45,7 +48,22 @@ describe('Login page', () => {
         document.documentElement.removeAttribute('data-theme');
         document.body.innerHTML = '';
         delete (globalThis as RendererGlobals).__capacitorBootstrap;
-        delete (globalThis as RendererGlobals).Capacitor;
+        resetPlatformKind();
+    });
+
+    test('the Android app\'s "Control my computer" entry is on the login screen only where its entry installed it', async () => {
+        installPhoneRemoteMode({});
+        const without = await renderReady();
+        expect(screen.queryByText('app.remoteControlEntry')).toBeNull();
+        without.unmount();
+
+        installPhoneRemoteMode({ enter: jest.fn().mockResolvedValue({ success: true }) });
+        try {
+            await renderReady();
+            expect(screen.getByText('app.remoteControlEntry')).toBeTruthy();
+        } finally {
+            installPhoneRemoteMode({});
+        }
     });
 
     const renderReady = async () => {
@@ -397,7 +415,7 @@ describe('Login page', () => {
     });
 
     test('on Android a login that could not be saved says to restart the app, not to fix a file', async () => {
-        (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+        markPlatformKind('capacitor');
         jest.mocked(window.api.authenticate).mockResolvedValue({ success: false, error: 'token-not-saved' });
         await renderReady();
         submit('alice', 'pw');

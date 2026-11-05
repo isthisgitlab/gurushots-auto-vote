@@ -7,11 +7,13 @@
 const consoleLines: string[] = [];
 const persisted: { level: string; msg: string }[] = [];
 
-jest.mock('../../src/ts/logger', () => {
-    const { redactMessage } =
-        jest.requireActual<typeof import('../../src/ts/logger/sanitize')>('../../src/ts/logger/sanitize');
-    const { sanitizeForLog } =
-        jest.requireActual<typeof import('../../src/ts/logger/sanitize')>('../../src/ts/logger/sanitize');
+jest.mock('../../src/ts/core/logger', () => {
+    const { redactMessage } = jest.requireActual<typeof import('../../src/ts/core/logger/sanitize')>(
+        '../../src/ts/core/logger/sanitize',
+    );
+    const { sanitizeForLog } = jest.requireActual<typeof import('../../src/ts/core/logger/sanitize')>(
+        '../../src/ts/core/logger/sanitize',
+    );
     const rec = (level: string) => (msg: unknown) => persisted.push({ level, msg: String(msg) });
     const cat = { info: rec('info'), error: rec('error'), success: rec('success'), warning: rec('warning') };
     return {
@@ -21,7 +23,7 @@ jest.mock('../../src/ts/logger', () => {
         printLine: (text: string) => consoleLines.push(redactMessage(text)),
     };
 });
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     __esModule: true,
     SETTINGS_SCHEMA: { chosenPhotos: { type: 'photos', perChallenge: true, default: [] } },
     loadSettings: jest.fn(),
@@ -29,11 +31,11 @@ jest.mock('../../src/ts/settings', () => ({
 }));
 
 import { invalid } from '../helpers/invalid';
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import type * as listingModule from '../../src/ts/cli/commands/settings/listing';
+import type * as listingModule from '../../src/ts/shells/cli/commands/settings/listing';
 const { listSettings, listGlobalDefaults } =
-    require('../../src/ts/cli/commands/settings/listing') as typeof listingModule;
+    require('../../src/ts/shells/cli/commands/settings/listing') as typeof listingModule;
 
 beforeEach(() => {
     consoleLines.length = 0;

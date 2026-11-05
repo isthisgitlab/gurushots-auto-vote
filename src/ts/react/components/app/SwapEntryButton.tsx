@@ -4,16 +4,16 @@ import { ToneNote } from '@/components/ui/ToneNote';
 import { useSwapPhoto, useSwapBack } from '@/api/useCurrencyActions';
 import { entryPhotoUrl } from '@/utils/formatters';
 import { alreadyEntered, spentOrStale } from '@/utils/spentOrStale';
-import { CURRENCY_OUTCOME } from '../../../voting/currencyActions';
+import { CURRENCY_OUTCOME } from '../../../core/voting/currencyActions';
 import { ActionButton } from '@/components/ui/ActionButton';
 import { InlineError } from '@/components/ui/InlineError';
 import { BusyContent } from '@/components/ui/LoadingSpinner';
 
 import { CurrencyConfirmModal, currencyOutcomeText } from './CurrencyConfirmModal';
 
-import type { Bankroll, Challenge, RankingEntry } from '../../../types/gurushots';
-import type { SwapCandidate } from '../../../services/currencyActions';
-import type { EntryPinKind } from '../../../types/settings';
+import type { Bankroll, Challenge, RankingEntry } from '../../../core/types/gurushots';
+import type { SwapCandidate } from '../../../core/services/currencyActions';
+import type { EntryPinKind } from '../../../core/types/settings';
 import type { SwapBackOffer } from '@/api/useSwapBacks';
 import type { ComponentChildren, Ref } from 'preact';
 import type { ActionButtonVariant } from '@/components/ui/ActionButton';

@@ -18,15 +18,15 @@
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 
-jest.mock('../src/ts/settings', () => ({
+jest.mock('../src/ts/core/settings', () => ({
     getUserDataPath: jest.fn(() => '/fake/userdata'),
 }));
 
-import metadata = require('../src/ts/metadata');
-import type * as loggerModule from '../src/ts/logger';
-import type { CategoryLogger } from '../src/ts/logger';
-import type { ChallengeMetadataEntry, MetadataFile, UpdateCheckData } from '../src/ts/types/stores';
-import { isPlainObject } from '../src/ts/plainObject';
+import metadata = require('../src/ts/core/metadata');
+import type * as loggerModule from '../src/ts/core/logger';
+import type { CategoryLogger } from '../src/ts/core/logger';
+import type { ChallengeMetadataEntry, MetadataFile, UpdateCheckData } from '../src/ts/core/types/stores';
+import { isPlainObject } from '../src/ts/core/plainObject';
 import { invalid } from './helpers/invalid';
 import { isArrayOf, isNumber, isShape, isString, nullable, optional, parseJsonAs } from './helpers/parseJson';
 
@@ -404,7 +404,7 @@ describe('entryIds snapshot (voteOnNewEntry)', () => {
 });
 
 describe('validation of stored metadata', () => {
-    const logger = jest.mocked(require('../src/ts/logger') as typeof loggerModule);
+    const logger = jest.mocked(require('../src/ts/core/logger') as typeof loggerModule);
     const warnings = () =>
         logger.withCategory.mock.results.flatMap((r) =>
             jest.mocked((r.value as CategoryLogger).warning).mock.calls.map((call: unknown[]) => call[0]),

@@ -24,8 +24,8 @@
  * notifier is ever added, keep that gate so the two paths never both fire.
  */
 
-import type { Challenge } from '../../types/gurushots';
-import type { Translate } from '../../translations/translator';
+import type { Challenge } from '../../core/types/gurushots';
+import type { Translate } from '../../core/translations/translator';
 
 import {
     NOTIFY_CONFIG_KEYS,
@@ -33,8 +33,8 @@ import {
     createDedupe,
     formatNotification,
     readNotificationConfig,
-} from '../../services/deadlineNotifications';
-import { errorMessage } from '../../errorMessage';
+} from '../../core/services/deadlineNotifications';
+import { errorMessage } from '../../core/errorMessage';
 
 /**
  * One challenge's previewed deadline actions, as get-deadline-actions sends them.

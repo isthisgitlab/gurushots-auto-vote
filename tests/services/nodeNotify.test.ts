@@ -9,20 +9,20 @@
 
 // Partial mock so getEntryAgeLedger can be spied on (swc-compiled exports are
 // non-configurable getters on the real module).
-jest.mock('../../src/ts/apiFactory', () => ({
+jest.mock('../../src/ts/core/apiFactory', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/apiFactory')>('../../src/ts/apiFactory'),
+    ...jest.requireActual<typeof import('../../src/ts/core/apiFactory')>('../../src/ts/core/apiFactory'),
 }));
 
-import type * as nodeNotifyModule from '../../src/ts/services/notify/nodeNotify';
-import type * as apiFactoryModule from '../../src/ts/apiFactory';
-import type { Challenge } from '../../src/ts/types/gurushots';
-import type { EntryAgeLedger } from '../../src/ts/types/stores';
+import type * as nodeNotifyModule from '../../src/ts/shells/cli/nodeNotify';
+import type * as apiFactoryModule from '../../src/ts/core/apiFactory';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
+import type { EntryAgeLedger } from '../../src/ts/core/types/stores';
 import { invalid } from '../helpers/invalid';
 
 const { createNodeDeadlineNotifier, escapeAppleScript, escapePango } =
-    require('../../src/ts/services/notify/nodeNotify') as typeof nodeNotifyModule;
-const apiFactory = require('../../src/ts/apiFactory') as typeof apiFactoryModule;
+    require('../../src/ts/shells/cli/nodeNotify') as typeof nodeNotifyModule;
+const apiFactory = require('../../src/ts/core/apiFactory') as typeof apiFactoryModule;
 
 const NOW = 1_000_000;
 const describeWith =

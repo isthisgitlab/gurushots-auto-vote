@@ -4,12 +4,12 @@ import { useLatestRef } from './useLatestRef';
 import * as ipc from '@/api/ipc';
 import { valuesEqual } from '@/utils/valuesEqual';
 import { normalizeProfileName } from '@/utils/profileName';
-import { ON_ONLY_KEYS } from '../../settings/ruleBehaviour';
-import { errorMessage } from '../../errorMessage';
+import { ON_ONLY_KEYS } from '../../core/settings/ruleBehaviour';
+import { errorMessage } from '../../core/errorMessage';
 
 import type { IpcQueryTools } from '@/api/useIpcQuery';
-import type { ChallengeValues, RuleSource } from '../../types/settings';
-import type { RendererSchema, SettingChangeHandler, SettingResetHandler } from '../../types/settingsEditor';
+import type { ChallengeValues, RuleSource } from '../../core/types/settings';
+import type { RendererSchema, SettingChangeHandler, SettingResetHandler } from '../../core/types/settingsEditor';
 
 /**
  * The stored named profiles, as get-challenge-profiles answers them.

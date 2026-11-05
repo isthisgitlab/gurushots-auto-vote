@@ -7,8 +7,9 @@
  */
 
 import vm from 'node:vm';
-import type * as LoggerModule from '../../src/ts/logger';
+import type * as LoggerModule from '../../src/ts/core/logger';
 import { SHIM_BANNER } from '../../scripts/lib/browser-shims';
+import { installTestPlatform } from '../helpers/platform';
 import { invalid } from '../helpers/invalid';
 
 const LOGS_DIR = '/ud/logs';
@@ -27,9 +28,6 @@ const makeFs = (overrides = {}) => ({
 });
 
 const makeRuntime = (overrides = {}) => ({
-    isSourceCode: jest.fn(() => true),
-    getAppName: jest.fn(() => 'gurushots-auto-vote-dev'),
-    getAppUserDataPath: jest.fn(() => '/ud'),
     isDevelopment: jest.fn(() => false),
     isTest: jest.fn(() => true),
     isElectron: jest.fn(() => false),
@@ -39,27 +37,53 @@ const makeRuntime = (overrides = {}) => ({
 /**
  * Load a fresh copy of the real logger under a controlled environment.
  * Returns the module plus the stubs and the captured process 'exit' handler.
+ * The user-data directory and the source-detection answer are the platform's
+ * (the logs dir sits under it; the debug/api gating reads isSourceCode), so
+ * the install pins both per scenario.
  */
 const loadLogger = ({
     electron = false,
     argv1,
+    sourceCode = true,
     fs = makeFs(),
     runtime = makeRuntime({ isElectron: jest.fn(() => electron) }),
 }: {
     electron?: boolean;
     argv1?: string;
+    sourceCode?: boolean;
     fs?: ReturnType<typeof makeFs>;
     runtime?: ReturnType<typeof makeRuntime>;
 } = {}) => {
     const origArgv = process.argv;
     const onSpy = jest.spyOn(process, 'on').mockImplementation(() => process);
     process.argv = [origArgv[0], invalid<string>(argv1)];
+    // The context line and the cleanup arming are the platform's to answer at
+    // load; the node family computes them from the real runtime, so the
+    // Electron scenario installs them overridden, the same rule it applies.
+    const cliArg = Boolean(argv1 && /cli\.[jt]s/.test(argv1));
     let logger!: typeof LoggerModule;
     try {
         jest.isolateModules(() => {
             jest.doMock('fs', () => fs);
-            jest.doMock('../../src/ts/runtime', () => runtime);
-            logger = jest.requireActual<typeof import('../../src/ts/logger')>('../../src/ts/logger');
+            jest.doMock('../../src/ts/core/runtime', () => runtime);
+            const family = jest.requireActual<typeof import('../../src/ts/platforms/node/paths')>(
+                '../../src/ts/platforms/node/paths',
+            );
+            const paths = family.createNodePaths();
+            paths.userData = () => '/ud';
+            paths.isSourceCode = () => sourceCode;
+            installTestPlatform({
+                paths,
+                capabilities: {
+                    refreshMissionNeeds: false,
+                    snapAllowed: true,
+                    backgroundServiceOwnsScenarios: () => false,
+                    recoveryWording: 'file',
+                    logContext: () => (electron && !cliArg ? 'GUI' : 'CLI'),
+                    logCleanup: electron || cliArg,
+                },
+            });
+            logger = jest.requireActual<typeof import('../../src/ts/core/logger')>('../../src/ts/core/logger');
         });
     } finally {
         process.argv = origArgv;
@@ -379,7 +403,7 @@ describe('periodic cleanup interval', () => {
     });
 
     test('the tsx source run via cli.ts is a CLI run too', () => {
-        const { fs } = loadLogger({ argv1: '/app/src/ts/cli/cli.ts' });
+        const { fs } = loadLogger({ argv1: '/app/src/ts/shells/cli/cli.ts' });
         fs.readdirSync.mockClear();
         jest.advanceTimersByTime(60 * 60 * 1000);
         expect(fs.readdirSync).toHaveBeenCalledTimes(1);
@@ -580,7 +604,7 @@ describe('top-level sugar methods', () => {
     });
 
     test('packaged builds suppress debug and api channels', () => {
-        const { logger } = loadLogger({ runtime: makeRuntime({ isSourceCode: jest.fn(() => false) }) });
+        const { logger } = loadLogger({ sourceCode: false });
         logger.debug('d');
         logger.api('a');
         logger.apiRequest('GET', '/a');
@@ -593,10 +617,13 @@ describe('top-level sugar methods', () => {
         expect(logger.getRecentLogs()).toEqual([]);
     });
 
-    test('re-exports runtime identity helpers', () => {
-        const { logger, runtime } = loadLogger();
-        expect(logger.isSourceCode).toBe(runtime.isSourceCode);
-        expect(logger.getAppName).toBe(runtime.getAppName);
+    test('re-exports the identity helpers the platform answers', () => {
+        const { logger } = loadLogger();
+        expect(logger.isSourceCode()).toBe(true);
+        expect(logger.getAppName()).toBe('gurushots-auto-vote-dev');
+        const packaged = loadLogger({ sourceCode: false });
+        expect(packaged.logger.isSourceCode()).toBe(false);
+        expect(packaged.logger.getAppName()).toBe('gurushots-auto-vote');
         expect(logger.CATEGORIES.GENERAL).toBe('general');
     });
 

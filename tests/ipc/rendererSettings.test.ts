@@ -9,11 +9,11 @@ import {
     isRendererReadOnlyKey,
     toRendererSettings,
     withoutRendererHiddenKeys,
-} from '../../src/ts/ipc/rendererSettings';
-import { getDefaultSettings } from '../../src/ts/settings/defaults';
+} from '../../src/ts/core/ipc/rendererSettings';
+import { getDefaultSettings } from '../../src/ts/core/settings/defaults';
 import { invalid } from '../helpers/invalid';
 
-import type { ConfigV2 } from '../../src/ts/types/config';
+import type { ConfigV2 } from '../../src/ts/core/types/config';
 
 const config = (auth: Partial<ConfigV2['auth']> = {}, rest: Partial<ConfigV2> = {}): ConfigV2 => ({
     ...getDefaultSettings(),

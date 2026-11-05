@@ -10,7 +10,7 @@ jest.mock('node:fs', () => {
 });
 jest.unmock('path');
 jest.unmock('node:path');
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
         info: jest.fn(),
@@ -28,10 +28,11 @@ jest.mock('../../src/ts/logger', () => {
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type * as importMarkerModule from '../../src/ts/settings/importMarker';
-import type * as loggerModule from '../../src/ts/logger';
-import type * as runtimeModule from '../../src/ts/runtime';
-import type { CategoryLogger } from '../../src/ts/logger';
+import type * as importMarkerModule from '../../src/ts/core/settings/importMarker';
+import type * as loggerModule from '../../src/ts/core/logger';
+import type { CategoryLogger } from '../../src/ts/core/logger';
+import { platform } from '../../src/ts/core/platform/port';
+import { installTestPlatform } from '../helpers/platform';
 import { invalid } from '../helpers/invalid';
 import { parseJsonObject } from '../helpers/parseJson';
 
@@ -46,20 +47,18 @@ describe('the import marker (real fs)', () => {
 
     const load = () => {
         jest.isolateModules(() => {
-            const actualRuntime = jest.requireActual<typeof runtimeModule>('../../src/ts/runtime');
-            jest.doMock('../../src/ts/runtime', () => ({
-                __esModule: true,
-                ...actualRuntime,
-                getAppUserDataPath: () => root,
-            }));
-            const actualWait = jest.requireActual<typeof import('../../src/ts/lockWait')>('../../src/ts/lockWait');
-            jest.doMock('../../src/ts/lockWait', () => ({
+            // The marker file sits in the user-data directory: the platform
+            // resolves it into this test's temp dir.
+            installTestPlatform({ paths: { ...platform().paths, userData: () => root } });
+            const actualWait =
+                jest.requireActual<typeof import('../../src/ts/core/lockWait')>('../../src/ts/core/lockWait');
+            jest.doMock('../../src/ts/core/lockWait', () => ({
                 acquireWithin: (...args: Parameters<typeof actualWait.acquireWithin>) =>
                     lock.busy ? 'busy' : actualWait.acquireWithin(...args),
             }));
-            marker = require('../../src/ts/settings/importMarker') as typeof importMarkerModule;
+            marker = require('../../src/ts/core/settings/importMarker') as typeof importMarkerModule;
             cat = invalid<typeof loggerModule & { __cat: CatDouble }>(
-                require('../../src/ts/logger') as typeof loggerModule,
+                require('../../src/ts/core/logger') as typeof loggerModule,
             ).__cat;
         });
     };
@@ -75,8 +74,7 @@ describe('the import marker (real fs)', () => {
     afterEach(() => {
         jest.useRealTimers();
         jest.restoreAllMocks();
-        jest.dontMock('../../src/ts/runtime');
-        jest.dontMock('../../src/ts/lockWait');
+        jest.dontMock('../../src/ts/core/lockWait');
         fs.rmSync(root, { recursive: true, force: true });
     });
 

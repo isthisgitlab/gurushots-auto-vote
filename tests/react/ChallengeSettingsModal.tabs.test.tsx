@@ -8,10 +8,16 @@
  * sticky chrome — again after a reopen, and never from a Manual Only toggle.
  */
 import { fireEvent, render, screen, waitFor } from './helpers/test-utils';
+import { render as renderWithProviders } from '@testing-library/preact';
 import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal';
 import { TALL_MODAL_BOX_HEIGHT } from '@/components/ui/Modal';
+import { TranslationProvider } from '@/contexts/TranslationContext';
+import { AutovoteProvider } from '@/contexts/AutovoteContext';
 import { selectTab } from '../helpers/selectTab';
 import { defaultTranslate, mockApi, mockTranslator, fillTemplate } from './helpers/setup';
+import { TransportStub } from '../helpers/remoteTransport';
+import { markPlatformKind } from '../../src/ts/core/platform/kind';
+import { resetPlatformKind } from '../helpers/platformKind';
 import type { useSettingsSchema } from '@/api/useSettingsSchema';
 import { invalid } from '../helpers/invalid';
 
@@ -112,6 +118,43 @@ const stubStickyHeight = () => {
 };
 
 describe('ChallengeSettingsModal tabs', () => {
+    test('a remote screen ties "Saved on this device only." to the compact override input', async () => {
+        mockSchemaState.schema = invalid({
+            ...BASE_SCHEMA,
+            compactCards: field('boost', 'boolean', false, 'app.compactCards'),
+        });
+        mockSchemaState.defaults = {
+            ...invalid<Record<string, unknown>>(mockSchemaState.defaults),
+            compactCards: false,
+        };
+        markPlatformKind('remote');
+        try {
+            // On the remote kind the provider must be mounted with the pairing transport, the way
+            // the remote page mounts the modal.
+            const [, phone] = TransportStub.pair();
+            renderWithProviders(
+                <TranslationProvider>
+                    <AutovoteProvider remoteTransport={phone}>
+                        <ChallengeSettingsModal
+                            isOpen={true}
+                            onClose={jest.fn()}
+                            challengeId="1"
+                            challengeTitle="Challenge 1"
+                        />
+                    </AutovoteProvider>
+                </TranslationProvider>,
+            );
+            await waitFor(() => expect(document.getElementById('challenge-setting-compactCards')).not.toBeNull());
+            expect(document.getElementById('challenge-setting-compactCards-device-hint')).not.toBeNull();
+            expect(document.getElementById('challenge-setting-compactCards')!.getAttribute('aria-describedby')).toBe(
+                'challenge-setting-compactCards-device-hint',
+            );
+        } finally {
+            Object.assign(mockSchemaState, pristine);
+            resetPlatformKind();
+        }
+    });
+
     test('each band is a tab, and a fresh open shows the first band', async () => {
         renderModal();
         await loaded();

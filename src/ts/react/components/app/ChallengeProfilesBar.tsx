@@ -2,11 +2,11 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ToneNote } from '@/components/ui/ToneNote';
-import { getIntentByName, intentValuesMatch } from '../../../settings/intentProfiles';
+import { getIntentByName, intentValuesMatch } from '../../../core/settings/intentProfiles';
 import { CONFIRM_TIMEOUT_MS, checkProfileName, profileNameCheckMessage } from '@/utils/profileName';
 import * as ipc from '@/api/ipc';
 import { SettingHintList, chosenPhotosOnlyReachHint } from './SettingHints';
-import { errorMessage } from '../../../errorMessage';
+import { errorMessage } from '../../../core/errorMessage';
 
 /**
  * What a profile save or delete reports to the modal: the profile's name and

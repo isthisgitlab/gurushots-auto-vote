@@ -1,25 +1,30 @@
 /**
- * AutovoteContext — start/stop/toggle lifecycle, the voting-cycle outcome
- * handling, mount-time auto-resume, and the transport glue the provider hands
- * to the shared cadence chain and the deadline notifier.
+ * AutovoteContext — the React adapter over the autovote controller: the
+ * provider's public API, the deadline-notifier wiring, the context-value
+ * memoization, the autovote:running-changed window event, and dispose on
+ * unmount. The loop itself (start/stop lifecycle, cycle outcomes, the
+ * auto-resume hold, rearm/revert, the chain transport) is covered directly
+ * over the controller in tests/autovote/.
  *
- * The cadence chain and the notifier factory are wrapped (real implementation
- * underneath) so the injected deps can be exercised directly and asserted on.
+ * The deadline-notifier factories and the cadence chain are wrapped (real
+ * implementations underneath) so the injected deps can be asserted on. The
+ * background host defaults to a mocked no-op host, so a start proves the
+ * default host reaches the controller.
  */
 
 import { memo } from 'react';
 import { render, act } from '@testing-library/preact';
 import { AutovoteProvider, useAutovote } from '@/contexts/AutovoteContext';
-import * as foregroundService from '../../src/ts/services/ForegroundServiceController';
-import * as nativeAutovote from '../../src/ts/services/NativeAutovoteBridge';
-import { mockApi, mockTranslator, defaultTranslate, fillTemplate } from './helpers/setup';
+import { noopBackgroundHost } from '../../src/ts/react/contexts/noopBackgroundHost';
+import { mockApi, mockTranslator, defaultTranslate } from './helpers/setup';
+import { resetPlatformKind } from '../helpers/platformKind';
+import { markPlatformKind } from '../../src/ts/core/platform/kind';
 import type { ComponentProps } from 'preact';
 import type { RenderResult } from '@testing-library/preact';
-import type * as cadenceChainModule from '../../src/ts/scheduling/cadenceChain';
+import type * as cadenceChainModule from '../../src/ts/core/scheduling/cadenceChain';
 import type * as deadlineNotifierModule from '../../src/ts/react/notifications/deadlineNotifier';
 import type * as scenarioNotifierModule from '../../src/ts/react/notifications/scenarioNotifier';
-import type { RendererGlobals } from '../../src/ts/types/capacitor';
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 type ChainDeps = Parameters<typeof cadenceChainModule.createCadenceChain>[0];
@@ -35,10 +40,9 @@ const captured: {
     notifierDeps: null,
     scenarioDeps: null,
 };
-const g = globalThis as RendererGlobals;
 
-jest.mock('../../src/ts/scheduling/cadenceChain', () => {
-    const actual = jest.requireActual<typeof cadenceChainModule>('../../src/ts/scheduling/cadenceChain');
+jest.mock('../../src/ts/core/scheduling/cadenceChain', () => {
+    const actual = jest.requireActual<typeof cadenceChainModule>('../../src/ts/core/scheduling/cadenceChain');
     return {
         ...actual,
         createCadenceChain: (deps: ChainDeps) => {
@@ -74,29 +78,17 @@ jest.mock('../../src/ts/react/notifications/scenarioNotifier', () => {
     };
 });
 
-jest.mock('../../src/ts/services/ForegroundServiceController', () => ({
+jest.mock('../../src/ts/react/contexts/noopBackgroundHost', () => ({
     __esModule: true,
-    start: jest.fn().mockResolvedValue(undefined),
-    stop: jest.fn().mockResolvedValue(undefined),
-    update: jest.fn(),
-}));
-
-jest.mock('../../src/ts/services/NativeAutovoteBridge', () => ({
-    __esModule: true,
-    start: jest.fn().mockResolvedValue({ available: false }),
-    stop: jest.fn().mockResolvedValue({ available: false }),
-    getStatus: jest.fn().mockResolvedValue({ running: false, available: false }),
+    noopBackgroundHost: {
+        start: jest.fn().mockResolvedValue(undefined),
+        stop: jest.fn().mockResolvedValue(undefined),
+        update: jest.fn().mockResolvedValue(undefined),
+        status: jest.fn().mockResolvedValue({ running: false, available: false }),
+    },
 }));
 
 const MIN = 60_000;
-
-const deferred = () => {
-    let resolve!: (value?: unknown) => void;
-    const promise = new Promise((r) => {
-        resolve = r;
-    });
-    return { promise, resolve };
-};
 
 describe('AutovoteContext', () => {
     let ctx: ReturnType<typeof useAutovote>;
@@ -121,14 +113,8 @@ describe('AutovoteContext', () => {
             await jest.advanceTimersByTimeAsync(0);
         });
 
-    beforeEach(() => {
-        jest.useFakeTimers();
-        window.api = invalid(mockApi);
-        captured.chainDeps = null;
-        captured.notifierDeps = null;
-        captured.scenarioDeps = null;
-        delete g.Capacitor;
-
+    // The mockApi wiring a start needs, beyond the setup file's defaults.
+    const makeStartable = () => {
         const now = Math.floor(Date.now() / 1000);
         const far = invalid<Challenge[]>([{ id: 1, title: 'Far', type: 'regular', close_time: now + 100_000 }]);
         jest.mocked(window.api.getSettings).mockResolvedValue(
@@ -141,12 +127,17 @@ describe('AutovoteContext', () => {
             Promise.resolve(key === 'lastMinuteCheckFrequency' ? 1 : 10),
         );
         jest.mocked(window.api.runVotingCycle).mockResolvedValue(invalid({ success: true, challenges: far }));
-        jest.mocked(nativeAutovote.start).mockResolvedValue(invalid({ available: false }));
-        jest.mocked(nativeAutovote.stop).mockResolvedValue(invalid({ available: false }));
-        jest.mocked(nativeAutovote.getStatus).mockResolvedValue(invalid({ running: false, available: false }));
-        // Launched long ago, so the startup hold has passed unless a test sets one.
         jest.mocked(window.api.getEnvironmentInfo).mockResolvedValue(invalid({ launchedAt: Date.now() - 600_000 }));
         jest.mocked(window.api.getGlobalDefault).mockResolvedValue(60);
+    };
+
+    beforeEach(() => {
+        jest.useFakeTimers();
+        window.api = invalid(mockApi);
+        captured.chainDeps = null;
+        captured.notifierDeps = null;
+        captured.scenarioDeps = null;
+        resetPlatformKind();
     });
 
     afterEach(async () => {
@@ -158,7 +149,7 @@ describe('AutovoteContext', () => {
         view?.unmount();
         view = null;
         ctx = invalid(null);
-        delete g.Capacitor;
+        resetPlatformKind();
         jest.clearAllTimers();
         jest.useRealTimers();
     });
@@ -169,233 +160,56 @@ describe('AutovoteContext', () => {
         spy.mockRestore();
     });
 
-    describe('start / stop', () => {
-        it('starts: persists the flag, runs the first cycle, refreshes challenges and arms the chain', async () => {
-            const onChallengesRefresh = jest.fn();
-            const words: Record<string, string> = {
-                'app.autovoteNotificationPreparing': 'Preparing the first cycle',
-                'app.autovoteNotificationLastCycle': 'Last cycle: {time}',
-            };
-            mockTranslator.t.mockImplementation((key, vars) => fillTemplate(words[key] ?? key, vars));
-            renderProvider({ onChallengesRefresh });
+    it('the first render exposes the initial state shape, before and after the mount effect', async () => {
+        makeStartable();
+        renderProvider();
+        const initial = {
+            running: false,
+            cycles: 0,
+            lastRun: null,
+            nextRunAt: null,
+            pendingStartAt: null,
+            status: 'Stopped',
+            statusClass: 'badge-neutral',
+            error: null,
+        };
+        expect(ctx).toMatchObject(initial);
+        await flush();
+        expect(ctx).toMatchObject(initial);
+    });
 
-            await act(async () => {
-                await ctx.start();
-            });
+    it('the default background host is the no-op host, and a start reaches it', async () => {
+        makeStartable();
+        renderProvider();
+        await act(async () => {
+            await ctx.start();
+        });
+        expect(jest.mocked(noopBackgroundHost.start)).toHaveBeenCalledWith('app.autovoteNotificationPreparing');
+        expect(ctx.running).toBe(true);
+    });
 
-            expect(window.api.setCancelVoting).toHaveBeenCalledWith(false);
-            expect(window.api.setSetting).toHaveBeenCalledWith('autovoteRunning', true);
-            // The Android notification text is translated (not English literals) and the time follows the UI language.
-            expect(foregroundService.start).toHaveBeenCalledWith({ body: 'Preparing the first cycle' });
-            expect(foregroundService.update).toHaveBeenCalledWith({
-                body: expect.stringMatching(/^Last cycle: \d{2}:\d{2}:\d{2}$/),
-            });
-            expect(onChallengesRefresh).toHaveBeenCalledTimes(1);
-            expect(ctx.running).toBe(true);
-            expect(ctx.cycles).toBe(1);
-            expect(ctx.lastRun).toEqual(expect.any(String));
-            expect(ctx.status).toBe('Running');
-            // Prefetched list handed to the chain → no extra fetch.
-            expect(window.api.getActiveChallenges).not.toHaveBeenCalled();
-            expect(ctx.nextRunAt).toBeGreaterThan(Date.now());
+    it('toggle flips between start and stop', async () => {
+        makeStartable();
+        renderProvider();
+        await act(async () => {
+            await ctx.toggle();
+        });
+        expect(ctx.running).toBe(true);
+        await act(async () => {
+            await ctx.toggle();
+        });
+        expect(ctx.running).toBe(false);
+    });
 
-            // Starting twice is a no-op.
+    describe('dispose on unmount', () => {
+        it('a started provider unmounted runs no further cycle', async () => {
+            makeStartable();
+            const mounted = renderProvider();
             await act(async () => {
                 await ctx.start();
             });
             expect(window.api.runVotingCycle).toHaveBeenCalledTimes(1);
-        });
-
-        describe('launch marker', () => {
-            const markerWrites = () =>
-                jest.mocked(window.api.setSetting).mock.calls.filter(([key]) => key === 'autovoteStartedLaunch');
-
-            it('persists the launch time it read, just before the running flag', async () => {
-                jest.mocked(window.api.getEnvironmentInfo).mockResolvedValue(
-                    invalid({ launchedAt: 1_700_000_000_000 }),
-                );
-                renderProvider();
-                await act(async () => {
-                    await ctx.start();
-                });
-
-                const calls = jest.mocked(window.api.setSetting).mock.calls;
-                const marker = calls.findIndex(([key]) => key === 'autovoteStartedLaunch');
-                expect(calls[marker]).toEqual(['autovoteStartedLaunch', 1_700_000_000_000]);
-                expect(calls[marker + 1]).toEqual(['autovoteRunning', true]);
-            });
-
-            it.each([
-                ['unreadable', () => jest.mocked(window.api.getEnvironmentInfo).mockRejectedValue(new Error('io'))],
-                ['missing', () => jest.mocked(window.api.getEnvironmentInfo).mockResolvedValue(invalid({}))],
-            ])('persists 0 (matches no launch) when the launch time is %s', async (_label, breakEnv) => {
-                breakEnv();
-                renderProvider();
-                await act(async () => {
-                    await ctx.start();
-                });
-                expect(markerWrites()).toEqual([['autovoteStartedLaunch', 0]]);
-                expect(ctx.running).toBe(true);
-            });
-
-            it.each([
-                [new Error('disk full'), 'Could not record the auto-vote launch marker: disk full'],
-                [null, 'Could not record the auto-vote launch marker: null'],
-            ])('a failed write (%p) is logged as a warning and the start goes on', async (thrown, logged) => {
-                jest.mocked(window.api.setSetting).mockImplementation((key) =>
-                    key === 'autovoteStartedLaunch' ? Promise.reject(thrown) : Promise.resolve(invalid(undefined)),
-                );
-                renderProvider();
-                await act(async () => {
-                    await ctx.start();
-                });
-                expect(window.api.logWarning).toHaveBeenCalledWith(logged);
-                expect(window.api.setSetting).toHaveBeenCalledWith('autovoteRunning', true);
-                expect(ctx.running).toBe(true);
-            });
-        });
-
-        it('stops: clears the timer, persisted flag, native loop and refreshes challenges', async () => {
-            const onChallengesRefresh = jest.fn();
-            renderProvider({ onChallengesRefresh });
-            await act(async () => {
-                await ctx.start();
-            });
-            onChallengesRefresh.mockClear();
-
-            await act(async () => {
-                await ctx.stop();
-            });
-
-            expect(window.api.setCancelVoting).toHaveBeenLastCalledWith(true);
-            expect(window.api.setSetting).toHaveBeenLastCalledWith('autovoteRunning', false);
-            expect(foregroundService.stop).toHaveBeenCalledTimes(1);
-            expect(onChallengesRefresh).toHaveBeenCalledTimes(1);
-            expect(ctx.running).toBe(false);
-            expect(ctx.nextRunAt).toBeNull();
-
-            // The cleared timer never fires another cycle.
-            await act(async () => {
-                await jest.advanceTimersByTimeAsync(30 * MIN);
-            });
-            expect(window.api.runVotingCycle).toHaveBeenCalledTimes(1);
-
-            // Stopping when already stopped is a no-op.
-            await act(async () => {
-                await ctx.stop();
-            });
-            expect(window.api.setCancelVoting).toHaveBeenCalledTimes(2);
-        });
-
-        it('hands off to the native plugin when available and tolerates a failing flag write', async () => {
-            jest.mocked(nativeAutovote.start).mockResolvedValue(invalid({ available: true }));
-            jest.mocked(nativeAutovote.stop).mockResolvedValue(invalid({ available: true }));
-            jest.mocked(window.api.setSetting).mockRejectedValue(new Error('disk full'));
-            renderProvider();
-
-            await act(async () => {
-                await ctx.start();
-            });
-            expect(ctx.running).toBe(true);
-            expect(foregroundService.start).not.toHaveBeenCalled();
-
-            await act(async () => {
-                await ctx.stop();
-            });
-            expect(ctx.running).toBe(false);
-            expect(foregroundService.stop).not.toHaveBeenCalled();
-        });
-
-        it('toggle flips between start and stop', async () => {
-            renderProvider();
-            await act(async () => {
-                await ctx.toggle();
-            });
-            expect(ctx.running).toBe(true);
-            await act(async () => {
-                await ctx.toggle();
-            });
-            expect(ctx.running).toBe(false);
-        });
-
-        it('a stop during start setup skips the first cycle and leaves nothing armed', async () => {
-            const gate = deferred();
-            jest.mocked(window.api.setCancelVoting).mockImplementationOnce(() => invalid(gate.promise));
-            renderProvider();
-
-            let startPromise: Promise<void> | undefined;
-            act(() => {
-                startPromise = ctx.start();
-            });
-            await act(async () => {
-                await ctx.stop();
-            });
-            await act(async () => {
-                gate.resolve();
-                await startPromise;
-            });
-
-            expect(window.api.runVotingCycle).not.toHaveBeenCalled();
-            expect(ctx.running).toBe(false);
-            expect(ctx.nextRunAt).toBeNull();
-        });
-
-        it('a stop while the first cycle is in flight discards its result', async () => {
-            const gate = deferred();
-            jest.mocked(window.api.runVotingCycle).mockImplementationOnce(() => invalid(gate.promise));
-            const onChallengesRefresh = jest.fn();
-            renderProvider({ onChallengesRefresh });
-
-            let startPromise: Promise<void> | undefined;
-            await act(async () => {
-                startPromise = ctx.start();
-                await jest.advanceTimersByTimeAsync(0);
-            });
-            await act(async () => {
-                await ctx.stop();
-            });
-            onChallengesRefresh.mockClear();
-            await act(async () => {
-                gate.resolve({ success: true });
-                await startPromise;
-            });
-
-            expect(ctx.cycles).toBe(0);
-            expect(onChallengesRefresh).not.toHaveBeenCalled();
-        });
-
-        it('start replaces a timer armed by a rearm that raced the first cycle', async () => {
-            const gate = deferred();
-            jest.mocked(window.api.runVotingCycle).mockImplementationOnce(() => invalid(gate.promise));
-            renderProvider();
-
-            let startPromise: Promise<void> | undefined;
-            await act(async () => {
-                startPromise = ctx.start();
-                await jest.advanceTimersByTimeAsync(0);
-            });
-            // Running, no timer yet → rearm arms one.
-            await act(async () => {
-                await ctx.rearmSchedule();
-            });
-            await act(async () => {
-                gate.resolve({ success: true });
-                await startPromise;
-            });
-
-            // Exactly one chain survives: one cycle per 5-minute period.
-            await act(async () => {
-                await jest.advanceTimersByTimeAsync(5 * MIN + 1_000);
-            });
-            expect(window.api.runVotingCycle).toHaveBeenCalledTimes(2);
-        });
-
-        it('clears the armed timer on unmount', async () => {
-            renderProvider();
-            await act(async () => {
-                await ctx.start();
-            });
-            view!.unmount();
+            mounted.unmount();
             view = null;
             ctx = invalid(null);
             await act(async () => {
@@ -404,430 +218,90 @@ describe('AutovoteContext', () => {
             expect(window.api.runVotingCycle).toHaveBeenCalledTimes(1);
         });
 
+        it('a held resume arms through the host timers and never fires after the unmount', async () => {
+            makeStartable();
+            jest.mocked(window.api.getSetting).mockResolvedValue(true);
+            jest.mocked(window.api.getGlobalDefault).mockResolvedValue(60);
+            jest.mocked(window.api.getEnvironmentInfo).mockResolvedValue(invalid({ launchedAt: Date.now() - 10_000 }));
+            const mounted = renderProvider();
+            await flush();
+            expect(ctx.pendingStartAt).toBe(Date.now() + 50_000);
+            expect(ctx.running).toBe(false);
+            mounted.unmount();
+            view = null;
+            ctx = invalid(null);
+            await act(async () => {
+                await jest.advanceTimersByTimeAsync(60_000);
+            });
+            expect(window.api.runVotingCycle).not.toHaveBeenCalled();
+        });
+
         it('unmounts cleanly when nothing was ever armed', () => {
             renderProvider();
             expect(() => view!.unmount()).not.toThrow();
             view = null;
         });
-    });
 
-    describe('voting cycle outcomes', () => {
-        const startAndRead = async () => {
+        it('a remount runs exactly one chain, and the fresh mount counts from zero', async () => {
+            makeStartable();
+            const first = renderProvider();
             await act(async () => {
                 await ctx.start();
             });
-            return { error: ctx.error, status: ctx.status, cycles: ctx.cycles };
-        };
+            expect(ctx.cycles).toBe(1);
+            first.unmount();
 
-        it('reports the not-logged-in code when there is no token', async () => {
-            jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ app: {} }));
+            // The fresh mount builds a fresh controller: its state is its own,
+            // not inherited from the unmounted provider.
             renderProvider();
-            expect(await startAndRead()).toEqual({ error: 'not-logged-in', status: 'Error', cycles: 0 });
-            expect(window.api.runVotingCycle).not.toHaveBeenCalled();
-        });
+            expect(ctx.cycles).toBe(0);
+            await act(async () => {
+                await ctx.start();
+            });
+            expect(ctx.cycles).toBe(1);
 
-        it('surfaces the cycle error message and logs it', async () => {
-            jest.mocked(window.api.runVotingCycle).mockResolvedValue({ success: false, error: 'API request failed' });
-            renderProvider();
-            expect(await startAndRead()).toMatchObject({ error: 'API request failed', status: 'Error' });
-            expect(window.api.logWarning).toHaveBeenCalledWith('Voting cycle failed: API request failed');
-        });
-
-        it('falls back to the voting-failed code for an unsuccessful result without a message', async () => {
-            jest.mocked(window.api.runVotingCycle).mockResolvedValue(invalid(undefined));
-            renderProvider();
-            expect(await startAndRead()).toMatchObject({ error: 'voting-failed' });
-        });
-
-        it('reports a thrown error as a code and logs its message', async () => {
-            jest.mocked(window.api.runVotingCycle).mockRejectedValue(new Error('network down'));
-            renderProvider();
-            expect(await startAndRead()).toMatchObject({ error: 'voting-error' });
-            expect(window.api.logWarning).toHaveBeenCalledWith('Voting cycle threw: network down');
-        });
-
-        it.each([[{}], [null]])('reports a thrown %p without a message as the same code', async (thrown) => {
-            jest.mocked(window.api.runVotingCycle).mockRejectedValue(thrown);
-            renderProvider();
-            expect(await startAndRead()).toMatchObject({ error: 'voting-error' });
-        });
-
-        it('a success without a challenge list makes the chain fetch fresh', async () => {
-            jest.mocked(window.api.runVotingCycle).mockResolvedValue(invalid({ success: true }));
-            renderProvider();
-            expect(await startAndRead()).toMatchObject({ error: null, cycles: 1 });
-            expect(window.api.getActiveChallenges).toHaveBeenCalledWith();
+            // Exactly one chain is alive across the remount: one cycle per
+            // cadence period — a leaked first chain would fire it twice.
+            await act(async () => {
+                await jest.advanceTimersByTimeAsync(5 * MIN + 1_000);
+            });
+            expect(window.api.runVotingCycle).toHaveBeenCalledTimes(3);
+            expect(ctx.cycles).toBe(2);
         });
     });
 
-    describe('auto-resume on mount', () => {
-        const SEC = 1000;
-        // The persisted session was running; the hold is `delay` s after a launch `launchedAgo` s ago.
-        const interrupted = (launchedAgo: number, delay: unknown = 60) => {
-            jest.mocked(window.api.getSetting).mockResolvedValue(true);
-            jest.mocked(window.api.getGlobalDefault).mockResolvedValue(delay);
-            jest.mocked(window.api.getEnvironmentInfo).mockResolvedValue(
-                invalid({ launchedAt: Date.now() - launchedAgo * SEC }),
-            );
-        };
-        const advance = (ms: number) =>
-            act(async () => {
-                await jest.advanceTimersByTimeAsync(ms);
-            });
-
-        it('resumes a persisted running session when logged in', async () => {
-            jest.mocked(window.api.getSetting).mockResolvedValue(true);
-            renderProvider();
-            await flush();
-            expect(window.api.getSetting).toHaveBeenCalledWith('autovoteRunning');
-            expect(ctx.running).toBe(true);
-            expect(window.api.runVotingCycle).toHaveBeenCalledTimes(1);
-        });
-
-        it('does not resume without a token', async () => {
-            jest.mocked(window.api.getSetting).mockResolvedValue(true);
-            jest.mocked(window.api.getSettings).mockResolvedValue(invalid(null));
-            renderProvider();
-            await flush();
-            expect(ctx.running).toBe(false);
-        });
-
-        it('stays stopped when reading the flag fails', async () => {
-            jest.mocked(window.api.getSetting).mockRejectedValue(new Error('io'));
-            renderProvider();
-            await flush();
-            expect(ctx.running).toBe(false);
-            expect(window.api.getSettings).not.toHaveBeenCalled();
-        });
-
-        describe('startup hold', () => {
-            it('holds the resume until the delay after launch has passed, then starts', async () => {
-                interrupted(10);
-                const launchedAt = Date.now() - 10 * SEC;
-                renderProvider();
+    describe('autovote:running-changed', () => {
+        it('carries the initial false on mount, true on start and false on stop', async () => {
+            makeStartable();
+            const events: unknown[] = [];
+            const handler = (e: Event) => events.push((e as CustomEvent<unknown>).detail);
+            window.addEventListener('autovote:running-changed', handler);
+            try {
+                const mounted = renderProvider();
                 await flush();
-
-                expect(window.api.getGlobalDefault).toHaveBeenCalledWith('autovoteStartupDelay');
-                expect(ctx.running).toBe(false);
-                expect(ctx.pendingStartAt).toBe(launchedAt + 60 * SEC);
-                expect(window.api.runVotingCycle).not.toHaveBeenCalled();
-                expect(window.api.logDebug).toHaveBeenCalledWith('Auto-resume held for 50s after launch');
-
-                await advance(49 * SEC);
-                expect(ctx.running).toBe(false);
-                expect(window.api.runVotingCycle).not.toHaveBeenCalled();
-
-                await advance(2 * SEC);
-                expect(ctx.running).toBe(true);
-                expect(ctx.pendingStartAt).toBeNull();
-                expect(window.api.runVotingCycle).toHaveBeenCalledTimes(1);
-                expect(window.api.logDebug).toHaveBeenCalledWith('Auto-resume hold over — starting');
-            });
-
-            it('starts at once with a delay of 0', async () => {
-                interrupted(0, 0);
-                renderProvider();
-                await flush();
-                expect(ctx.running).toBe(true);
-                expect(ctx.pendingStartAt).toBeNull();
-            });
-
-            it('starts at once when the hold has already passed (a reload after it)', async () => {
-                interrupted(61);
-                renderProvider();
-                await flush();
-                expect(ctx.running).toBe(true);
-                expect(ctx.pendingStartAt).toBeNull();
-                expect(window.api.runVotingCycle).toHaveBeenCalledTimes(1);
-            });
-
-            it('a reload during the hold continues the same countdown instead of restarting it', async () => {
-                interrupted(40);
-                renderProvider();
-                await flush();
-                expect(ctx.pendingStartAt).toBe(Date.now() + 20 * SEC);
-                act(() => {
-                    view!.unmount();
-                });
-                view = null;
-
-                await advance(5 * SEC);
-                renderProvider();
-                await flush();
-                expect(ctx.pendingStartAt).toBe(Date.now() + 15 * SEC);
-            });
-
-            it('adopts a running native service at once, without reading the hold', async () => {
-                interrupted(5);
-                jest.mocked(nativeAutovote.getStatus).mockResolvedValue(invalid({ running: true, available: true }));
-                renderProvider();
-                await flush();
-                expect(ctx.running).toBe(true);
-                expect(ctx.pendingStartAt).toBeNull();
-                expect(window.api.getGlobalDefault).not.toHaveBeenCalledWith('autovoteStartupDelay');
-            });
-
-            it('a native service found after the app unmounted is not adopted', async () => {
-                interrupted(5);
-                const gate = deferred();
-                jest.mocked(nativeAutovote.getStatus).mockImplementation(() => invalid(gate.promise));
-                renderProvider();
-                act(() => {
-                    view!.unmount();
-                });
-                view = null;
-                gate.resolve({ running: true, available: true });
-                await flush();
-                expect(window.api.setCancelVoting).not.toHaveBeenCalled();
-            });
-
-            it('a manual start during the hold starts once, and the hold timer does not start again', async () => {
-                interrupted(10);
-                renderProvider();
-                await flush();
-                expect(ctx.pendingStartAt).not.toBeNull();
+                expect(events).toEqual([false]);
 
                 await act(async () => {
                     await ctx.start();
                 });
-                expect(ctx.running).toBe(true);
-                expect(ctx.pendingStartAt).toBeNull();
-
-                await advance(60 * SEC);
-                expect(window.api.runVotingCycle).toHaveBeenCalledTimes(1);
-            });
-
-            it('a manual start during the mount awaits leaves no pending state and no timer', async () => {
-                interrupted(10);
-                const gate = deferred();
-                // start() reads the launch time itself, so the gate sits on the delay read instead.
-                jest.mocked(window.api.getGlobalDefault).mockImplementation(() => invalid(gate.promise));
-                renderProvider();
-                await flush();
-
-                await act(async () => {
-                    await ctx.start();
-                });
-                gate.resolve(60);
-                await flush();
-
-                expect(ctx.running).toBe(true);
-                expect(ctx.pendingStartAt).toBeNull();
-                await advance(2 * 60 * SEC);
-                expect(window.api.runVotingCycle).toHaveBeenCalledTimes(1);
-            });
-
-            it('a start then a stop during the mount awaits does not arm the hold afterwards', async () => {
-                interrupted(10);
-                const gate = deferred();
-                // start() reads the launch time itself, so the gate sits on the delay read instead.
-                jest.mocked(window.api.getGlobalDefault).mockImplementation(() => invalid(gate.promise));
-                renderProvider();
-                await flush();
-
-                await act(async () => {
-                    await ctx.start();
-                });
-                await act(async () => {
-                    await ctx.stop();
-                });
-                jest.mocked(window.api.runVotingCycle).mockClear();
-                gate.resolve(60);
-                await flush();
-
-                expect(ctx.running).toBe(false);
-                expect(ctx.pendingStartAt).toBeNull();
-                await advance(2 * 60 * SEC);
-                expect(ctx.running).toBe(false);
-                expect(window.api.runVotingCycle).not.toHaveBeenCalled();
-            });
-
-            it('a system sleep does not stretch the hold: the wall clock decides, in chunks of 5 s', async () => {
-                interrupted(10);
-                renderProvider();
-                await flush();
-                expect(ctx.pendingStartAt).not.toBeNull();
-
-                // The machine sleeps for 50 s: monotonic timers fire late, Date.now() jumps
-                // past the resume time, and the next 5 s chunk notices.
-                jest.setSystemTime(Date.now() + 50 * SEC);
-                await advance(5 * SEC);
-                expect(ctx.running).toBe(true);
-                expect(ctx.pendingStartAt).toBeNull();
-                expect(window.api.runVotingCycle).toHaveBeenCalledTimes(1);
-            });
-
-            it('stop while pending cancels the resume, persists false and stops the background host', async () => {
-                interrupted(10);
-                renderProvider();
-                await flush();
+                expect(events.at(-1)).toBe(true);
 
                 await act(async () => {
                     await ctx.stop();
                 });
-                expect(ctx.pendingStartAt).toBeNull();
-                expect(ctx.running).toBe(false);
-                expect(window.api.setSetting).toHaveBeenLastCalledWith('autovoteRunning', false);
-                expect(nativeAutovote.stop).toHaveBeenCalledTimes(1);
-                expect(foregroundService.stop).toHaveBeenCalledTimes(1);
-                expect(window.api.logDebug).toHaveBeenCalledWith('Auto-resume cancelled');
-
-                await advance(2 * 60 * SEC);
-                expect(ctx.running).toBe(false);
-                expect(window.api.runVotingCycle).not.toHaveBeenCalled();
-            });
-
-            it('an unmount before the awaits resolve never arms the timer', async () => {
-                interrupted(10);
-                const gate = deferred();
-                jest.mocked(window.api.getEnvironmentInfo).mockImplementation(() => invalid(gate.promise));
-                renderProvider();
-                await flush();
-                act(() => {
-                    view!.unmount();
-                });
-                view = null;
-                gate.resolve({ launchedAt: Date.now() });
-                await flush();
-
-                await advance(2 * 60 * SEC);
-                expect(window.api.runVotingCycle).not.toHaveBeenCalled();
-                expect(window.api.logDebug).not.toHaveBeenCalledWith(expect.stringContaining('Auto-resume held'));
-            });
-
-            it('an unmount after the timer is armed clears it', async () => {
-                interrupted(10);
-                renderProvider();
-                await flush();
-                act(() => {
-                    view!.unmount();
-                });
+                expect(events.at(-1)).toBe(false);
+                mounted.unmount();
                 view = null;
                 ctx = invalid(null);
-
-                await advance(2 * 60 * SEC);
-                expect(window.api.runVotingCycle).not.toHaveBeenCalled();
-            });
-
-            it.each([
-                [
-                    'an unreadable delay',
-                    () => jest.mocked(window.api.getGlobalDefault).mockRejectedValue(new Error('io')),
-                ],
-                ['a null delay', () => jest.mocked(window.api.getGlobalDefault).mockResolvedValue(null)],
-                [
-                    'a non-numeric delay',
-                    () => jest.mocked(window.api.getGlobalDefault).mockResolvedValue(invalid('soon')),
-                ],
-            ])('%s holds for the default 60 s', async (_label, breakDelay) => {
-                interrupted(10);
-                breakDelay();
-                renderProvider();
-                await flush();
-                expect(ctx.pendingStartAt).toBe(Date.now() + 50 * SEC);
-            });
-
-            it.each([
-                [
-                    'unreadable launch time',
-                    () => jest.mocked(window.api.getEnvironmentInfo).mockRejectedValue(new Error('io')),
-                ],
-                [
-                    'launch time missing',
-                    () => jest.mocked(window.api.getEnvironmentInfo).mockResolvedValue(invalid({})),
-                ],
-            ])('an %s counts the mount as the launch, so the full hold applies', async (_label, breakEnv) => {
-                interrupted(10);
-                breakEnv();
-                renderProvider();
-                await flush();
-                expect(ctx.pendingStartAt).toBe(Date.now() + 60 * SEC);
-            });
-
-            it.each([
-                [new Error('offline'), 'Auto-resume failed: offline'],
-                [null, 'Auto-resume failed: null'],
-            ])('a rejected start from the timer (%p) is logged', async (thrown, logged) => {
-                interrupted(55);
-                jest.mocked(window.api.setCancelVoting).mockRejectedValueOnce(thrown);
-                renderProvider();
-                await flush();
-                await advance(6 * SEC);
-                expect(window.api.logError).toHaveBeenCalledWith(logged);
-            });
-        });
-    });
-
-    describe('cadence-chain transport', () => {
-        it('wires settings, challenge fetch and the last-minute frequency over IPC', async () => {
-            renderProvider();
-            const deps = captured.chainDeps!;
-            await deps.loadSettings();
-            expect(window.api.getSettings).toHaveBeenCalled();
-            await deps.fetchChallenges(invalid({}));
-            expect(window.api.getActiveChallenges).toHaveBeenCalledWith();
-            await expect(deps.resolveLastMinuteCheckMinutes()).resolves.toBe(1);
-            expect(window.api.getEffectiveSetting).toHaveBeenCalledWith('lastMinuteCheckFrequency', 'global');
-        });
-
-        it('logs non-normal cadence lines only, best-effort', () => {
-            renderProvider();
-            const { log } = captured.chainDeps!;
-            expect(log.cadence('normal', 'quiet')).toBeUndefined();
-            log.cadence('last-minute', 'loud');
-            expect(window.api.logDebug).toHaveBeenCalledWith('loud');
-            expect(window.api.logDebug).toHaveBeenCalledTimes(1);
-
-            const saved = window.api.logDebug;
-            delete invalid<{ logDebug?: unknown }>(window.api).logDebug;
-            try {
-                expect(() => log.cadence('scheduled', 'no sink')).not.toThrow();
             } finally {
-                window.api.logDebug = saved;
+                window.removeEventListener('autovote:running-changed', handler);
             }
-        });
-
-        it('formats decision and cycle errors for either Errors or bare values', () => {
-            renderProvider();
-            const { log } = captured.chainDeps!;
-            log.decisionError(new Error('bad math'));
-            expect(window.api.logWarning).toHaveBeenLastCalledWith(expect.stringMatching(/: bad math$/));
-            log.decisionError('plain');
-            expect(window.api.logWarning).toHaveBeenLastCalledWith(expect.stringMatching(/: plain$/));
-
-            log.cycleError(new Error('boom'));
-            expect(window.api.logWarning).toHaveBeenLastCalledWith('Voting cycle failed: boom');
-            log.cycleError('str');
-            expect(window.api.logWarning).toHaveBeenLastCalledWith('Voting cycle failed: str');
-            log.cycleError(undefined);
-            expect(window.api.logWarning).toHaveBeenLastCalledWith('Voting cycle failed: undefined');
-
-            log.overslept!(120_000, 60_000);
-            expect(window.api.logWarning).toHaveBeenCalledTimes(6);
-
-            const saved = window.api.logWarning;
-            delete invalid<{ logWarning?: unknown }>(window.api).logWarning;
-            try {
-                expect(() => log.cycleError(new Error('x'))).not.toThrow();
-                expect(() => log.overslept!(1, 1)).not.toThrow();
-            } finally {
-                window.api.logWarning = saved;
-            }
-        });
-
-        it('publishes the next run as an absolute instant, or clears it', async () => {
-            renderProvider();
-            const { onScheduled } = captured.chainDeps!;
-            const before = Date.now();
-            act(() => onScheduled!(1_000));
-            expect(ctx.nextRunAt).toBe(before + 1_000);
-            act(() => onScheduled!(null));
-            expect(ctx.nextRunAt).toBeNull();
         });
     });
 
     describe('deadline notifier wiring', () => {
         it('is wired on Electron with IPC-backed deps', async () => {
+            makeStartable();
             renderProvider();
             expect(captured.chainDeps!.onCycleChallenges).toEqual(expect.any(Function));
             const deps = captured.notifierDeps!;
@@ -842,11 +316,6 @@ describe('AutovoteContext', () => {
             mockTranslator.t.mockImplementation((k) => `T:${k}`);
             expect(deps.translate('a.b')).toBe('T:a.b');
             expect(mockTranslator.t).toHaveBeenCalledWith('a.b');
-            mockTranslator.t.mockImplementation((k) => k);
-
-            // The seam hands the translator method itself, not a key-only
-            // wrapper: a vars call reaches the translator and comes back
-            // interpolated.
             mockTranslator.t.mockImplementation(defaultTranslate);
             expect(deps.translate('app.timeLeft', { time: '5m' })).toBe('5m left');
             expect(deps.translate('app.timeLeft')).toBe('{time} left');
@@ -865,16 +334,25 @@ describe('AutovoteContext', () => {
         });
 
         it('is not wired on native Android (the foreground service owns notifications)', () => {
-            g.Capacitor = { isNativePlatform: () => true };
+            markPlatformKind('capacitor');
             renderProvider();
             expect(captured.notifierDeps).toBeNull();
             expect(captured.chainDeps!.onCycleChallenges).toBeUndefined();
         });
 
-        it('treats a Capacitor global without isNativePlatform as non-native', () => {
-            g.Capacitor = {};
+        it('the chain log stays best-effort when the bridge has no log sink', () => {
+            makeStartable();
             renderProvider();
-            expect(captured.chainDeps!.onCycleChallenges).toEqual(expect.any(Function));
+            const { log } = captured.chainDeps!;
+            const saved = window.api.logDebug;
+            delete invalid<{ logDebug?: unknown }>(window.api).logDebug;
+            try {
+                expect(() => log.cadence('scheduled', 'no sink')).not.toThrow();
+                expect(() => log.cycleError(new Error('x'))).not.toThrow();
+                expect(() => log.overslept!(1, 1)).not.toThrow();
+            } finally {
+                window.api.logDebug = saved;
+            }
         });
     });
 
@@ -892,6 +370,7 @@ describe('AutovoteContext', () => {
         );
 
         beforeEach(() => {
+            makeStartable();
             renders = 0;
         });
 
@@ -924,7 +403,7 @@ describe('AutovoteContext', () => {
             expect(ctx.running).toBe(true);
         });
 
-        it('publishes new controls when onChallengesRefresh changes', async () => {
+        it('keeps the controls stable when only onChallengesRefresh changes', async () => {
             const { rerender } = render(<Host onChallengesRefresh={jest.fn()} />);
             await flush();
             const first = ctx;
@@ -932,8 +411,10 @@ describe('AutovoteContext', () => {
             rerender(<Host onChallengesRefresh={jest.fn()} />);
             await flush();
 
-            expect(ctx).not.toBe(first);
-            expect(ctx.stop).not.toBe(first.stop);
+            // The controller reads the latest refresh identity at call time
+            // (through the host), so neither the value nor the controls churn.
+            expect(ctx).toBe(first);
+            expect(ctx.stop).toBe(first.stop);
             expect(ctx.running).toBe(first.running);
         });
     });

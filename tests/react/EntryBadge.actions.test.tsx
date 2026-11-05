@@ -6,7 +6,7 @@
 
 import { render, screen, fireEvent, waitFor } from './helpers/test-utils';
 import { EntryBadge } from '@/components/app/EntryBadge';
-import type { WindowApi } from '../../src/ts/types/ipc';
+import type { WindowApi } from '../../src/ts/core/types/ipc';
 import type { SwapBackOffer } from '@/api/useSwapBacks';
 import { invalid } from '../helpers/invalid';
 

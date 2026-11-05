@@ -4,7 +4,7 @@
  * reply's order is kept, and the list is capped at MAX_TAG_SUGGESTIONS.
  */
 
-import { MAX_TAG_SUGGESTIONS, suggestedTags } from '../src/ts/tagSuggestions';
+import { MAX_TAG_SUGGESTIONS, suggestedTags } from '../src/ts/core/tagSuggestions';
 
 describe('suggestedTags', () => {
     test('hides the tag equal to the term both ways: case-insensitively and with surrounding spaces', () => {

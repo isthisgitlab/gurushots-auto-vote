@@ -4,19 +4,19 @@
  * Tests the mock API client and the session-cache reset.
  */
 
-import mockIndex = require('../../src/ts/mock/index');
-import simulate = require('../../src/ts/mock/simulate');
-import cancellation = require('../../src/ts/voting/cancellation');
-import type * as authModule from '../../src/ts/mock/auth';
-import type * as challengesModule from '../../src/ts/mock/challenges';
-import type * as votingModule from '../../src/ts/mock/voting';
-import type * as boostModule from '../../src/ts/mock/boost';
-import type * as loggerModule from '../../src/ts/logger';
-import type * as metadataModule from '../../src/ts/metadata';
-import type * as settingsModule from '../../src/ts/settings';
-import type * as newEntryTrackerModule from '../../src/ts/services/newEntryTracker';
-import type * as indexModule from '../../src/ts/mock/index';
-import type { Challenge, VoteImagesResponse } from '../../src/ts/types/gurushots';
+import mockIndex = require('../../src/ts/core/mock/index');
+import simulate = require('../../src/ts/core/mock/simulate');
+import cancellation = require('../../src/ts/core/voting/cancellation');
+import type * as authModule from '../../src/ts/core/mock/auth';
+import type * as challengesModule from '../../src/ts/core/mock/challenges';
+import type * as votingModule from '../../src/ts/core/mock/voting';
+import type * as boostModule from '../../src/ts/core/mock/boost';
+import type * as loggerModule from '../../src/ts/core/logger';
+import type * as metadataModule from '../../src/ts/core/metadata';
+import type * as settingsModule from '../../src/ts/core/settings';
+import type * as newEntryTrackerModule from '../../src/ts/core/services/newEntryTracker';
+import type * as indexModule from '../../src/ts/core/mock/index';
+import type { Challenge, VoteImagesResponse } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 /** The shared category-logger functions this file's logger mock exposes. */
@@ -34,32 +34,32 @@ type ChallengesMock = jest.MockedObject<typeof challengesModule> & {
 /** The empty vote-images fixture the voting mock carries (not a real export). */
 type VotingMock = jest.MockedObject<typeof votingModule> & { mockEmptyVoteImages: { images: unknown[] } };
 
-jest.mock('../../src/ts/metadata', () => ({
+jest.mock('../../src/ts/core/metadata', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/metadata')>('../../src/ts/metadata'),
+    ...jest.requireActual<typeof import('../../src/ts/core/metadata')>('../../src/ts/core/metadata'),
 }));
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/settings')>('../../src/ts/settings'),
+    ...jest.requireActual<typeof import('../../src/ts/core/settings')>('../../src/ts/core/settings'),
 }));
 
 // Mock the individual mock modules. The mock endpoints import each one as a
 // namespace; `__esModule` makes that namespace the factory object itself.
 // mockActiveChallenges and mockEmptyVoteImages are not real exports: they are
 // per-test fixtures the generator mocks get pointed at.
-jest.mock('../../src/ts/mock/auth', () => ({
+jest.mock('../../src/ts/core/mock/auth', () => ({
     __esModule: true,
     mockLoginSuccess: { token: 'mock-auth-token', success: true },
     mockLoginFailure: { error: 'Invalid credentials', success: false },
 }));
 
-jest.mock('../../src/ts/mock/challenges', () => ({
+jest.mock('../../src/ts/core/mock/challenges', () => ({
     __esModule: true,
     mockActiveChallenges: { challenges: [{ id: '1', title: 'Test Challenge' }] },
     generateMockChallenges: jest.fn(() => ({ challenges: [{ id: '2', title: 'Generated Challenge' }] })),
 }));
 
-jest.mock('../../src/ts/mock/voting', () => ({
+jest.mock('../../src/ts/core/mock/voting', () => ({
     __esModule: true,
     mockEmptyVoteImages: { images: [] },
     mockVoteSubmissionSuccess: { success: true, votes: 5 },
@@ -67,7 +67,7 @@ jest.mock('../../src/ts/mock/voting', () => ({
     generateMockVoteImages: jest.fn(() => ({ images: [{ id: 'generated-img', ratio: 30 }] })),
 }));
 
-jest.mock('../../src/ts/mock/boost', () => ({
+jest.mock('../../src/ts/core/mock/boost', () => ({
     __esModule: true,
     mockBoostSuccess: { success: true, boost_applied: true },
 }));
@@ -77,7 +77,7 @@ jest.spyOn(console, 'log').mockImplementation();
 jest.spyOn(console, 'warn').mockImplementation();
 
 // Mock logger with shared mock functions defined inside
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     // Create shared mock functions inside the mock factory
     const mockDebugFn = jest.fn();
     const mockInfoFn = jest.fn();
@@ -140,11 +140,11 @@ jest.mock('../../src/ts/logger', () => {
 });
 
 describe('mock/index', () => {
-    const auth = require('../../src/ts/mock/auth') as typeof authModule;
-    const challenges = require('../../src/ts/mock/challenges') as ChallengesMock;
-    const voting = require('../../src/ts/mock/voting') as VotingMock;
-    const boost = require('../../src/ts/mock/boost') as typeof boostModule;
-    const logger = require('../../src/ts/logger') as LoggerMock;
+    const auth = require('../../src/ts/core/mock/auth') as typeof authModule;
+    const challenges = require('../../src/ts/core/mock/challenges') as ChallengesMock;
+    const voting = require('../../src/ts/core/mock/voting') as VotingMock;
+    const boost = require('../../src/ts/core/mock/boost') as typeof boostModule;
+    const logger = require('../../src/ts/core/logger') as LoggerMock;
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -551,7 +551,7 @@ describe('mock/index', () => {
                 // Mock ids never match real challenge ids, so a mock cycle
                 // running cleanupStaleMetadata would purge the user's REAL
                 // voting metadata. The binder must inject null for it.
-                const metadata = require('../../src/ts/metadata') as typeof metadataModule;
+                const metadata = require('../../src/ts/core/metadata') as typeof metadataModule;
                 const cleanupSpy = jest.spyOn(metadata, 'cleanupStaleMetadata');
 
                 const result = await mockIndex.mockApiClient.fetchChallengesAndVote('test-token');
@@ -567,8 +567,8 @@ describe('mock/index', () => {
                 // so a metadata-backed tracker here would pile up entryIds in the
                 // user's REAL metadata.json that nothing would ever prune. The mock
                 // binder must inject the in-memory tracker.
-                const metadata = require('../../src/ts/metadata') as typeof metadataModule;
-                const settings = require('../../src/ts/settings') as typeof settingsModule;
+                const metadata = require('../../src/ts/core/metadata') as typeof metadataModule;
+                const settings = require('../../src/ts/core/settings') as typeof settingsModule;
                 const setSpy = jest.spyOn(metadata, 'setChallengeEntryIds');
                 const getSpy = jest.spyOn(metadata, 'getChallengeEntryIds');
                 // Two things have to be true for this assertion to mean anything, and
@@ -608,7 +608,7 @@ describe('mock/index', () => {
                     // fixture change drops `entries` again, fail here rather than
                     // silently passing because the tracker was never reached.
                     const { readEntryIds } =
-                        require('../../src/ts/services/newEntryTracker') as typeof newEntryTrackerModule;
+                        require('../../src/ts/core/services/newEntryTracker') as typeof newEntryTrackerModule;
                     expect(readEntryIds(invalid(challenges.mockActiveChallenges.challenges[0]))).toEqual(['e1', 'e2']);
 
                     const result = await mockIndex.mockApiClient.fetchChallengesAndVote('test-token');
@@ -627,7 +627,7 @@ describe('mock/index', () => {
         });
 
         describe('fetchChallengesAndVote — fill-new options', () => {
-            const settings = require('../../src/ts/settings') as typeof settingsModule;
+            const settings = require('../../src/ts/core/settings') as typeof settingsModule;
 
             beforeEach(() => {
                 mockIndex.clearSessionCache();
@@ -775,7 +775,7 @@ describe('mock/index', () => {
 });
 
 describe('mock currency spends (keyUnlock / swapPhoto / exposureAutofill)', () => {
-    const { mockApiClient } = require('../../src/ts/mock/index') as typeof indexModule;
+    const { mockApiClient } = require('../../src/ts/core/mock/index') as typeof indexModule;
 
     test.each([
         ['keyUnlock', (id: string, tok: string) => mockApiClient.keyUnlock(id, tok)],

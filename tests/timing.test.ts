@@ -2,9 +2,9 @@
  * timing.ts — the shared sleep / randomized-delay primitives.
  */
 
-import type * as timingModule from '../src/ts/timing';
+import type * as timingModule from '../src/ts/core/timing';
 
-const { sleep, getRandomDelay } = require('../src/ts/timing') as typeof timingModule;
+const { sleep, getRandomDelay } = require('../src/ts/core/timing') as typeof timingModule;
 
 describe('sleep', () => {
     beforeEach(() => jest.useFakeTimers());

@@ -27,34 +27,31 @@ jest.mock(
     }),
     { virtual: true },
 );
-jest.mock('../src/ts/joinStateStore', () => ({
+jest.mock('../src/ts/core/joinStateStore', () => ({
     acquireUnlockLock: jest.fn((_id: string | number) => ({ ok: true, release: () => {} })),
 }));
-jest.mock('../src/ts/logger', () => {
+jest.mock('../src/ts/core/logger', () => {
     const category = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return { withCategory: jest.fn(() => category) };
 });
 
-import type * as scenarioStateStoreModule from '../src/ts/scenarioStateStore';
-import type { AndroidHeadlessStore } from '../src/ts/types/settings';
+import type * as scenarioStateStoreModule from '../src/ts/core/scenarioStateStore';
+import type { AndroidHeadlessStore } from '../src/ts/core/types/settings';
+import { installHeadlessTestPlatform, installTestPlatform, installWebviewTestPlatform } from './helpers/platform';
 import { parseJsonObject } from './helpers/parseJson';
-
-const g = globalThis as typeof globalThis & {
-    Capacitor?: { isNativePlatform: () => boolean; getPlatform: () => string };
-};
 
 const STATE = 'gs_scenario_state';
 const RESETS = 'gs_scenario_resets';
 
 let store: typeof scenarioStateStoreModule;
-const { initialState } = require('../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
+const { initialState } = require('../src/ts/core/scenarioStateStore') as typeof scenarioStateStoreModule;
 const record = () => initialState('Plan', 'buildup', 1000);
 const stopped = () => ({ ...record(), inFlight: { ruleId: 'r', actionIndex: 0, unclear: ['swap' as const] } });
 
 const boot = async (files: Record<string, string> = {}) => {
     for (const [key, value] of Object.entries(files)) stored.set(key, value);
     jest.isolateModules(() => {
-        store = require('../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
+        store = require('../src/ts/core/scenarioStateStore') as typeof scenarioStateStoreModule;
     });
     await store.initializeScenarioStateAsync();
 };
@@ -62,10 +59,9 @@ const boot = async (files: Record<string, string> = {}) => {
 const file = (map: Record<string, unknown>) => JSON.stringify(map);
 
 beforeEach(() => {
-    g.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android' };
+    installWebviewTestPlatform();
 });
 afterEach(() => {
-    delete g.Capacitor;
     failing.clear();
     mockPrefGet.mockImplementation(readOne);
     stored.clear();
@@ -204,7 +200,7 @@ describe('a start-up read that failed', () => {
     );
 
     test('is nothing to a platform that reads its files itself', async () => {
-        delete g.Capacitor;
+        installTestPlatform();
         failing.add(`read:${STATE}`);
         await boot();
         expect(store.scenarioStateLoaded()).toBe(true);
@@ -213,7 +209,6 @@ describe('a start-up read that failed', () => {
 
 describe('the background service', () => {
     const h = globalThis as typeof globalThis & {
-        __GS_HEADLESS__?: boolean;
         AndroidHeadlessStore?: AndroidHeadlessStore;
     };
     const saved = new Map<string, string>();
@@ -234,14 +229,12 @@ describe('the background service', () => {
         return writeKey;
     };
     const service = () => {
-        delete g.Capacitor;
-        h.__GS_HEADLESS__ = true;
+        installHeadlessTestPlatform();
         jest.isolateModules(() => {
-            store = require('../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
+            store = require('../src/ts/core/scenarioStateStore') as typeof scenarioStateStoreModule;
         });
     };
     afterEach(() => {
-        delete h.__GS_HEADLESS__;
         delete h.AndroidHeadlessStore;
         saved.clear();
     });

@@ -1,6 +1,6 @@
 import { useNamedIpcAction } from './useAsyncIpcAction';
 
-import type { LibraryUsage } from '../../types/photoPicker';
+import type { LibraryUsage } from '../../core/types/photoPicker';
 
 const suggestIpc = (challengeId: string | number, usage: LibraryUsage, exclude: string[]) =>
     window.api.suggestPhotos(challengeId, usage, exclude);

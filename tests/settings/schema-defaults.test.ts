@@ -3,11 +3,11 @@
  * schemaDefault() type a default as that key's value.
  */
 
-import type * as schemaModule from '../../src/ts/settings/schema';
-import type { SettingKey } from '../../src/ts/settings/schema';
-import type * as defaultsModule from '../../src/ts/settings/defaults';
+import type * as schemaModule from '../../src/ts/core/settings/schema';
+import type { SettingKey } from '../../src/ts/core/settings/schema';
+import type * as defaultsModule from '../../src/ts/core/settings/defaults';
 
-const { SETTINGS_SCHEMA, schemaDefault } = require('../../src/ts/settings/schema') as typeof schemaModule;
+const { SETTINGS_SCHEMA, schemaDefault } = require('../../src/ts/core/settings/schema') as typeof schemaModule;
 
 describe('schema defaults', () => {
     test.each(Object.keys(SETTINGS_SCHEMA) as SettingKey[])('%s: the default passes its own validation', (key) => {
@@ -23,7 +23,7 @@ describe('schema defaults', () => {
 
 describe('challengeValueSetIsValid', () => {
     const { challengeValueSetIsValid, schemaDefaults } =
-        require('../../src/ts/settings/defaults') as typeof defaultsModule;
+        require('../../src/ts/core/settings/defaults') as typeof defaultsModule;
 
     test('a candidate key the schema does not know is not validated', () => {
         const values = schemaDefaults();

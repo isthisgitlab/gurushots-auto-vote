@@ -8,7 +8,7 @@
  * are mocked.
  */
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const infoMock = jest.fn();
     return {
         __infoMock: infoMock,
@@ -23,7 +23,7 @@ jest.mock('../../src/ts/logger', () => {
     };
 });
 
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     loadSettings: jest.fn(() => ({
         app: {
             mock: true,
@@ -40,11 +40,11 @@ jest.mock('../../src/ts/settings', () => ({
     getEffectiveSetting: jest.fn(() => 1),
 }));
 
-jest.mock('../../src/ts/scheduling/runScheduler', () => ({ createScheduler: jest.fn() }));
+jest.mock('../../src/ts/shells/cli/runScheduler', () => ({ createScheduler: jest.fn() }));
 
 // The status header's automation lines read the shared handlers; the sections
 // under test here are the boost-window and standing ones.
-jest.mock('../../src/ts/ipc/actions.handlers', () => {
+jest.mock('../../src/ts/core/ipc/actions.handlers', () => {
     const handlers = {
         'get-auto-claim-status': jest.fn(async () => ({ success: true as const, enabled: false, nextClaimAt: 0 })),
         'get-auto-join-active': jest.fn(async () => ({ success: true as const, active: false })),
@@ -52,7 +52,7 @@ jest.mock('../../src/ts/ipc/actions.handlers', () => {
     return { __handlers: handlers, buildHandlers: () => handlers };
 });
 
-jest.mock('../../src/ts/apiFactory', () => {
+jest.mock('../../src/ts/core/apiFactory', () => {
     const mockGetActiveChallenges = jest.fn();
     const mockIsAuthenticated = jest.fn(() => true);
     return {
@@ -66,9 +66,9 @@ jest.mock('../../src/ts/apiFactory', () => {
 });
 
 import { invalid } from '../helpers/invalid';
-import loggerModule = require('../../src/ts/logger');
+import loggerModule = require('../../src/ts/core/logger');
 const logger = jest.mocked(invalid<typeof loggerModule & { __infoMock: jest.Mock<void, [unknown]> }>(loggerModule));
-import apiFactoryModule = require('../../src/ts/apiFactory');
+import apiFactoryModule = require('../../src/ts/core/apiFactory');
 type Middleware = ReturnType<typeof apiFactoryModule.getMiddleware>;
 const apiFactory = jest.mocked(
     invalid<
@@ -78,9 +78,9 @@ const apiFactory = jest.mocked(
         }
     >(apiFactoryModule),
 );
-import type * as statusModule from '../../src/ts/cli/commands/status';
-import type { Challenge } from '../../src/ts/types/gurushots';
-const { showStatus } = require('../../src/ts/cli/commands/status') as typeof statusModule;
+import type * as statusModule from '../../src/ts/shells/cli/commands/status';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
+const { showStatus } = require('../../src/ts/shells/cli/commands/status') as typeof statusModule;
 
 const challenge = (title: string, boost: { state: string; timeout?: number }) =>
     invalid<Challenge>({

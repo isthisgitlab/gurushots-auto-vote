@@ -9,15 +9,15 @@
 
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import type { MemoryStore } from '../helpers/headlessStore';
-import settings = require('../../src/ts/settings');
-import type * as schemaModule from '../../src/ts/settings/schema';
-import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
+import settings = require('../../src/ts/core/settings');
+import type * as schemaModule from '../../src/ts/core/settings/schema';
+import type * as scenarioStateStoreModule from '../../src/ts/core/scenarioStateStore';
 
-const { schemaEntry, validateSetting } = require('../../src/ts/settings/schema') as typeof schemaModule;
+const { schemaEntry, validateSetting } = require('../../src/ts/core/settings/schema') as typeof schemaModule;
 const { scenarioStateLedger, initialState } =
-    require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
+    require('../../src/ts/core/scenarioStateStore') as typeof scenarioStateStoreModule;
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const category = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
         info: jest.fn(),

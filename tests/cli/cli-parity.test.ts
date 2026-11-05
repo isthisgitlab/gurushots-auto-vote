@@ -11,11 +11,12 @@
  * tests/web/channel-parity.test.ts for the CLI side.
  */
 
-import type * as commandRowsModule from '../../src/ts/cli/commandRows';
-import type * as manifestModule from '../../src/ts/ipc/manifest';
+import type * as commandRowsModule from '../../src/ts/shells/cli/commandRows';
+import type * as manifestModule from '../../src/ts/core/ipc/manifest';
 
-const { COMMAND_ROWS } = require('../../src/ts/cli/commandRows') as typeof commandRowsModule;
-const { aliases, allInvokeChannels, invokeChannels } = require('../../src/ts/ipc/manifest') as typeof manifestModule;
+const { COMMAND_ROWS } = require('../../src/ts/shells/cli/commandRows') as typeof commandRowsModule;
+const { aliases, allInvokeChannels, invokeChannels } =
+    require('../../src/ts/core/ipc/manifest') as typeof manifestModule;
 
 // Every channel the manifest exposes, as the literal union the mapping's keys are checked against.
 type InvokeChannel = (typeof invokeChannels)[number] | (typeof aliases)[keyof typeof aliases];
@@ -204,6 +205,18 @@ const CLI_PARITY: Record<InvokeChannel, ParityEntry> = {
     // Log streaming
     'start-log-stream': { reason: 'Window feed; the CLI uses logs / logs --follow over the files.' },
     'stop-log-stream': { reason: 'Window feed; the CLI uses logs / logs --follow over the files.' },
+
+    // Remote access pairing
+    'get-remote-access': {
+        reason: 'The pairing QR and link belong to the desktop app; the CLI does not pair a phone.',
+    },
+    'set-remote-access': {
+        reason: 'The pairing QR and link belong to the desktop app; the CLI does not pair a phone.',
+    },
+    'reset-remote-pairing': {
+        reason: 'The pairing QR and link belong to the desktop app; the CLI does not pair a phone.',
+    },
+    'log-remote-info': { reason: 'The remote-access host runs in the desktop app; the CLI has none to log.' },
 
     // Alias target (api.applyTurbo; the channel is deliberately not in invokeChannels)
     'apply-turbo-to-entry': { commands: ['turbo'], flag: '--image' },

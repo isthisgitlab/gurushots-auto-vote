@@ -31,7 +31,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 
-import { isPlainObject } from '../src/ts/plainObject';
+import { isPlainObject } from '../src/ts/core/plainObject';
 import { runIfMain } from './lib/run-if-main';
 
 const ROOT = path.join(__dirname, '..');
@@ -44,6 +44,8 @@ const BUNDLES = [
     { name: 'logs', path: 'dist/logs-bundle.js', label: 'logs (Electron renderer)' },
     { name: 'capacitor', path: 'dist/capacitor-bundle.js', label: 'capacitor (Android WebView)' },
     { name: 'web', path: 'dist/web-bundle.js', label: 'web (browser tab, pnpm web)' },
+    { name: 'remote', path: 'dist/remote-bundle.js', label: 'remote (phone page)' },
+    { name: 'remoteLoader', path: 'dist/remoteLoader-bundle.js', label: 'remoteLoader (phone /remote/ loader)' },
     { name: 'headless', path: 'dist/headless-bundle.js', label: 'headless (Android background service)' },
     { name: 'preload', path: 'dist/preload-bundle.js', label: 'preload (Electron sandboxed preload)' },
     { name: 'preloadLogs', path: 'dist/preloadLogs-bundle.js', label: 'preloadLogs (Logs window preload)' },

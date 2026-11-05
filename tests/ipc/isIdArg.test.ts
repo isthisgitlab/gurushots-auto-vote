@@ -1,12 +1,12 @@
 /**
  * isIdArg is the runtime boundary check for challenge / image ids received
- * over IPC: a value the shared id rule (src/ts/ids.ts) accepts — a positive
+ * over IPC: a value the shared id rule (src/ts/core/ids.ts) accepts — a positive
  * safe integer, or a token that starts with a letter or digit — nothing else.
  */
 
-import type * as isIdArgModule from '../../src/ts/ipc/isIdArg';
+import type * as isIdArgModule from '../../src/ts/core/ipc/isIdArg';
 
-const { isIdArg, invalidArgs, MAX_IPC_ID_LENGTH } = require('../../src/ts/ipc/isIdArg') as typeof isIdArgModule;
+const { isIdArg, invalidArgs, MAX_IPC_ID_LENGTH } = require('../../src/ts/core/ipc/isIdArg') as typeof isIdArgModule;
 
 describe('isIdArg', () => {
     test.each([

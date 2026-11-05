@@ -1,7 +1,7 @@
 /**
  * Oxlint JS plugin: keeps every send toward a window behind the Logs-channel filter.
  *
- * `no-unfiltered-frame-send` — restrictToLogsChannels (ipc/registerHandlers.ts) filters
+ * `no-unfiltered-frame-send` — restrictToLogsChannels (shells/electron/registerHandlers.ts) filters
  * only `webContents.send`. `postMessage`, a frame's `send`, an event's `reply` and a
  * `webFrameMain` handle reach a window unfiltered, so no source may obtain a frame
  * handle or send on anything but `webContents`. The rule reads the AST, so a binding

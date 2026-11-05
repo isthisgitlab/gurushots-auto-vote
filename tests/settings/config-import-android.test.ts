@@ -4,13 +4,9 @@
  * configuration decides which context imports first).
  */
 
-// No test here may touch the real user-data folder: the path is a made-up one that does not exist.
-jest.mock('../../src/ts/runtime', () => ({
-    __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/runtime')>('../../src/ts/runtime'),
-    getAppUserDataPath: () => '/nonexistent/gurushots-auto-vote-test-user-data',
-}));
-jest.mock('../../src/ts/logger', () => {
+// No test here touches the real user-data folder: the installed test platform resolves it into the
+// file's own temporary directory (tests/setupPlatform.ts guards the real home).
+jest.mock('../../src/ts/core/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
         info: jest.fn(),
@@ -42,9 +38,11 @@ const mockPreferences = {
 };
 jest.mock('@capacitor/preferences', () => ({ Preferences: mockPreferences }), { virtual: true });
 
-import type * as settingsModule from '../../src/ts/settings';
-import type * as intentProfilesModule from '../../src/ts/settings/intentProfiles';
+import type * as settingsModule from '../../src/ts/core/settings';
+import type * as intentProfilesModule from '../../src/ts/core/settings/intentProfiles';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
+import { installHeadlessTestPlatform, installWebviewTestPlatform } from '../helpers/platform';
+import { createWebviewStorage } from '../../src/ts/platforms/webview/store';
 import { parseJsonObject } from '../helpers/parseJson';
 
 const g = globalThis as typeof globalThis & {
@@ -60,7 +58,23 @@ const ONE_X = JSON.stringify({
 const loadSettingsModule = () => {
     let mod: typeof settingsModule | undefined;
     jest.isolateModules(() => {
-        mod = require('../../src/ts/settings') as typeof settingsModule;
+        // The platform stands before the module loads: the transports it builds are the family's.
+        const autovote =
+            require('../../src/ts/shells/capacitor/NativeAutovoteBridge') as typeof import('../../src/ts/shells/capacitor/NativeAutovoteBridge');
+        installWebviewTestPlatform({
+            storage: createWebviewStorage((key, expected, data) => autovote.compareAndWrite(key, expected, data)),
+        });
+        mod = require('../../src/ts/core/settings') as typeof settingsModule;
+    });
+    return mod!;
+};
+
+/** A fresh settings module over the service's bridge: its transport is the headless family's. */
+const loadHeadlessSettingsModule = () => {
+    let mod: typeof settingsModule | undefined;
+    jest.isolateModules(() => {
+        installHeadlessTestPlatform();
+        mod = require('../../src/ts/core/settings') as typeof settingsModule;
     });
     return mod!;
 };
@@ -96,8 +110,13 @@ describe('the import in the Android app window', () => {
         let settings!: typeof settingsModule;
         let cat!: Record<'error' | 'warning', jest.Mock<void, [string, ...unknown[]]>>;
         jest.isolateModules(() => {
-            settings = require('../../src/ts/settings') as typeof settingsModule;
-            cat = (require('../../src/ts/logger') as unknown as { __cat: typeof cat }).__cat;
+            const autovote =
+                require('../../src/ts/shells/capacitor/NativeAutovoteBridge') as typeof import('../../src/ts/shells/capacitor/NativeAutovoteBridge');
+            installWebviewTestPlatform({
+                storage: createWebviewStorage((key, expected, data) => autovote.compareAndWrite(key, expected, data)),
+            });
+            settings = require('../../src/ts/core/settings') as typeof settingsModule;
+            cat = (require('../../src/ts/core/logger') as unknown as { __cat: typeof cat }).__cat;
         });
 
         // Before the window has hydrated, nothing can be read: the defaults answer, it is no import failure (nothing
@@ -257,7 +276,7 @@ describe('the intent profiles in the Android app window', () => {
         await settings.flushPendingWrites();
 
         const stored = saved('gurushots-config');
-        const { INTENT_PROFILES } = require('../../src/ts/settings/intentProfiles') as typeof intentProfilesModule;
+        const { INTENT_PROFILES } = require('../../src/ts/core/settings/intentProfiles') as typeof intentProfilesModule;
         expect(Object.keys(settings.getChallengeProfiles()).sort()).toEqual(
             INTENT_PROFILES.map((intent) => intent.name).sort(),
         );
@@ -373,7 +392,7 @@ describe('retrying the import in the Android app window before it has read the s
 describe('the import in the Android background service', () => {
     test('imports into the native store: the configuration, the pins and the marker; settings.json is left as it is', () => {
         const store = installHeadlessStore({ legacy: ONE_X });
-        const settings = loadSettingsModule();
+        const settings = loadHeadlessSettingsModule();
 
         expect(settings.loadSettings().app.theme).toBe('dark');
 
@@ -386,7 +405,7 @@ describe('the import in the Android background service', () => {
 
     test('adopts the configuration the app window saved first, and writes nothing over settings.json', () => {
         const store = installHeadlessStore({ legacy: ONE_X });
-        const settings = loadSettingsModule();
+        const settings = loadHeadlessSettingsModule();
         // The window's import lands between this context's read of the configuration and its write.
         const readKey = store.readKey!;
         store.readKey = (key) => {
@@ -413,7 +432,7 @@ describe('an import the Android native store does not take', () => {
 
     test('fails, saying the configuration could not be saved, and marks nothing and leaves settings.json as it is', () => {
         const store = refusing();
-        const settings = loadSettingsModule();
+        const settings = loadHeadlessSettingsModule();
 
         settings.loadSettings();
 
@@ -428,7 +447,7 @@ describe('an import the Android native store does not take', () => {
 
     test('starting fresh fails the same way', () => {
         refusing();
-        const settings = loadSettingsModule();
+        const settings = loadHeadlessSettingsModule();
         settings.loadSettings();
 
         expect(settings.startFresh()).toBe(false);
@@ -436,7 +455,7 @@ describe('an import the Android native store does not take', () => {
 
     test('starting fresh on a store that takes it writes the defaults and the marker, and leaves the blob as it is', () => {
         const store = installHeadlessStore({ legacy: '{broken' });
-        const settings = loadSettingsModule();
+        const settings = loadHeadlessSettingsModule();
         // The blob cannot be imported: the defaults were stored with the failure, and the import is not tried again.
         settings.loadSettings();
         expect(settings.getSettingsRecovery()).toEqual({
@@ -464,7 +483,7 @@ describe('an import the Android native store does not take', () => {
 describe('starting fresh in the Android background service', () => {
     test('finds the configuration the app window saved first and leaves it as it is', () => {
         const store = installHeadlessStore({ legacy: '{broken' });
-        const settings = loadSettingsModule();
+        const settings = loadHeadlessSettingsModule();
         settings.loadSettings();
         expect(settings.getSettingsRecovery()?.code).toBe('settings-import-failed');
         // The window's configuration lands between this context's read and its write.

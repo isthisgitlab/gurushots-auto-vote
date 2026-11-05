@@ -1,35 +1,35 @@
 /**
- * runSnapGame (src/ts/strategies/real/snapGame.ts): every way the Snap game stops, resuming from the server's
+ * runSnapGame (src/ts/core/strategies/real/snapGame.ts): every way the Snap game stops, resuming from the server's
  * position, the per-photo pacing, and that the classic game is never opened.
  */
 
-jest.mock('../../src/ts/api/turbo', () => ({
+jest.mock('../../src/ts/core/api/turbo', () => ({
     startTurboSession: jest.fn(),
     submitSnapVote: jest.fn(),
     getChallengeTurbo: jest.fn(),
 }));
-jest.mock('../../src/ts/services/visionVerifier', () => ({
+jest.mock('../../src/ts/core/services/visionVerifier', () => ({
     hasBundledModel: jest.fn(),
     judgeSnapImage: jest.fn(),
     snapPrompts: jest.fn(),
     SNAP_CAPTION_MAX_CHARS: 200,
 }));
-jest.mock('../../src/ts/settings', () => ({ __esModule: true, getEffectiveSetting: jest.fn() }));
-jest.mock('../../src/ts/timing', () => ({
+jest.mock('../../src/ts/core/settings', () => ({ __esModule: true, getEffectiveSetting: jest.fn() }));
+jest.mock('../../src/ts/core/timing', () => ({
     sleep: jest.fn(() => Promise.resolve()),
     getRandomDelay: jest.fn(() => 4000),
 }));
 
-import turboModule = require('../../src/ts/api/turbo');
-import visionModule = require('../../src/ts/services/visionVerifier');
-import settingsModule = require('../../src/ts/settings');
-import timingModule = require('../../src/ts/timing');
-import cancellation = require('../../src/ts/voting/cancellation');
-import logger = require('../../src/ts/logger');
-import { __resetSnapTransientRunsForTests, runSnapGame } from '../../src/ts/strategies/real/snapGame';
-import { __resetSnapUnavailableForTests, isSnapUnavailable } from '../../src/ts/services/turboRunLock';
-import type { CategoryLogger } from '../../src/ts/logger';
-import type { Challenge, SnapVoteResult, TurboSession } from '../../src/ts/types/gurushots';
+import turboModule = require('../../src/ts/core/api/turbo');
+import visionModule = require('../../src/ts/core/services/visionVerifier');
+import settingsModule = require('../../src/ts/core/settings');
+import timingModule = require('../../src/ts/core/timing');
+import cancellation = require('../../src/ts/core/voting/cancellation');
+import logger = require('../../src/ts/core/logger');
+import { __resetSnapTransientRunsForTests, runSnapGame } from '../../src/ts/core/strategies/real/snapGame';
+import { __resetSnapUnavailableForTests, isSnapUnavailable } from '../../src/ts/core/services/turboRunLock';
+import type { CategoryLogger } from '../../src/ts/core/logger';
+import type { Challenge, SnapVoteResult, TurboSession } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 const turbo = jest.mocked(turboModule);

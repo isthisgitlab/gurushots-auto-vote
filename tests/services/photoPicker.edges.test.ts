@@ -5,12 +5,12 @@
  * stems, and malformed semantic-score entries.
  */
 
-import type * as photoPickerModule from '../../src/ts/services/photoPicker';
-import type { SemanticScore } from '../../src/ts/types/photoPicker';
+import type * as photoPickerModule from '../../src/ts/core/services/photoPicker';
+import type { SemanticScore } from '../../src/ts/core/types/photoPicker';
 import { invalid } from '../helpers/invalid';
 
 const { tokenise, parseNegation, labelStemGroups, scorePhoto, buildScoredCandidates } =
-    require('../../src/ts/services/photoPicker') as typeof photoPickerModule;
+    require('../../src/ts/core/services/photoPicker') as typeof photoPickerModule;
 
 const allowed = (id: string, labels: string[]) => ({
     id,
@@ -21,7 +21,7 @@ const allowed = (id: string, labels: string[]) => ({
 
 describe('stripTags', () => {
     const { stripTags, MAX_TOKENISE_CHARS } =
-        require('../../src/ts/services/photoPicker/stemming') as typeof import('../../src/ts/services/photoPicker/stemming');
+        require('../../src/ts/core/services/photoPicker/stemming') as typeof import('../../src/ts/core/services/photoPicker/stemming');
 
     test('blanks a tag, and a bracket that opens no tag stays', () => {
         expect(stripTags('a<b>c<<d>e <i x="1">f</i>')).toBe('a c< e  f ');

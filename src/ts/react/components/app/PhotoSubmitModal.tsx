@@ -8,7 +8,7 @@ import { PhotoPickerToolbar } from './PhotoPicker';
 import { PhotoGrid } from './PhotoGrid';
 
 import type { LibraryPhoto } from '@/hooks/useLibraryListing';
-import type { LibraryUsage } from '../../../types/photoPicker';
+import type { LibraryUsage } from '../../../core/types/photoPicker';
 
 /**
  * What a submit came to: `done` (submitted, the modal closes), `refreshed` (it failed and the card was

@@ -4,37 +4,39 @@
  * carries each entry's recorded time. One in-memory ledger serves all of them; the real file is never touched.
  */
 
-jest.mock('../../src/ts/metadata', () => ({ updateChallengeVoteMetadata: jest.fn(() => true) }));
-jest.mock('../../src/ts/services/votingOrchestrator', () => ({
+jest.mock('../../src/ts/core/metadata', () => ({ updateChallengeVoteMetadata: jest.fn(() => true) }));
+jest.mock('../../src/ts/core/services/votingOrchestrator', () => ({
     runVotingPass: jest.fn(async () => ({ success: true, message: 'pass' })),
 }));
-jest.mock('../../src/ts/services/votingOrchestrator/suspendBoostRunner', () => ({
+jest.mock('../../src/ts/core/services/votingOrchestrator/suspendBoostRunner', () => ({
     runSuspendBoosts: jest.fn(async () => []),
 }));
-jest.mock('../../src/ts/services/missions', () => ({
+jest.mock('../../src/ts/core/services/missions', () => ({
     loadMissionNeeds: jest.fn(async () => null),
     registerMissionNeeds: jest.fn(() => null),
 }));
-jest.mock('../../src/ts/services/joinChallenges', () => ({
+jest.mock('../../src/ts/core/services/joinChallenges', () => ({
     runJoinPass: jest.fn(async () => ({ ran: false, joined: 0, results: [] })),
     joinChallengeSingle: jest.fn(),
     forgetUnconfirmedPayment: jest.fn(),
 }));
 // The CLAIM_ENDPOINTS name list rides along; a whole-module factory would leave it undefined for the strategy.
-jest.mock('../../src/ts/services/autoClaim', () => ({
+jest.mock('../../src/ts/core/services/autoClaim', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/services/autoClaim')>('../../src/ts/services/autoClaim'),
+    ...jest.requireActual<typeof import('../../src/ts/core/services/autoClaim')>(
+        '../../src/ts/core/services/autoClaim',
+    ),
     runClaimPass: jest.fn(async () => undefined),
 }));
 
-import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
-import type * as boostModule from '../../src/ts/services/votingOrchestrator/suspendBoostRunner';
-import type * as indexModule from '../../src/ts/mock/index';
-import type * as strategyModule from '../../src/ts/mock/strategy';
-import type * as apiFactoryModule from '../../src/ts/apiFactory';
-import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
-import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type * as votingOrchestratorModule from '../../src/ts/core/services/votingOrchestrator';
+import type * as boostModule from '../../src/ts/core/services/votingOrchestrator/suspendBoostRunner';
+import type * as indexModule from '../../src/ts/core/mock/index';
+import type * as strategyModule from '../../src/ts/core/mock/strategy';
+import type * as apiFactoryModule from '../../src/ts/core/apiFactory';
+import type * as entryAgeStoreModule from '../../src/ts/core/entryAgeStore';
+import type * as scenarioStateStoreModule from '../../src/ts/core/scenarioStateStore';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 // The ok submits and swaps now run the real chosen-photos consumption through
 // the facade: it reads and writes settings, so every test sits on the planted
@@ -42,16 +44,16 @@ import { invalid } from '../helpers/invalid';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 
 const { runVotingPass } = jest.mocked(
-    require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule,
+    require('../../src/ts/core/services/votingOrchestrator') as typeof votingOrchestratorModule,
 );
 const { runSuspendBoosts } = jest.mocked(
-    require('../../src/ts/services/votingOrchestrator/suspendBoostRunner') as typeof boostModule,
+    require('../../src/ts/core/services/votingOrchestrator/suspendBoostRunner') as typeof boostModule,
 );
-const { mockApiClient, clearSessionCache } = require('../../src/ts/mock/index') as typeof indexModule;
-const { mockEntryAgeLedger } = require('../../src/ts/mock/strategy') as typeof strategyModule;
-const { mockScenarioStateLedger } = require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
-const { entryAgeLedger } = require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
-const { getApiStrategy } = require('../../src/ts/apiFactory') as typeof apiFactoryModule;
+const { mockApiClient, clearSessionCache } = require('../../src/ts/core/mock/index') as typeof indexModule;
+const { mockEntryAgeLedger } = require('../../src/ts/core/mock/strategy') as typeof strategyModule;
+const { mockScenarioStateLedger } = require('../../src/ts/core/scenarioStateStore') as typeof scenarioStateStoreModule;
+const { entryAgeLedger } = require('../../src/ts/core/entryAgeStore') as typeof entryAgeStoreModule;
+const { getApiStrategy } = require('../../src/ts/core/apiFactory') as typeof apiFactoryModule;
 
 const settle = async <T>(promise: Promise<T>): Promise<T> => {
     let done = false;

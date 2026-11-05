@@ -4,16 +4,16 @@
  * that adds title pinning and in-flight coalescing.
  */
 
-import type * as activeChallengesModule from '../../src/ts/strategies/real/activeChallenges';
-import type * as challengesModule from '../../src/ts/api/challenges';
-import type * as api_clientModule from '../../src/ts/api/api-client';
-import type * as challengeTitlePinModule from '../../src/ts/services/challengeTitlePin';
-import type * as loggerModule from '../../src/ts/logger';
-import type * as teamMatchModule from '../../src/ts/strategies/real/teamMatch';
-import type * as suggestedPhotosModule from '../../src/ts/strategies/real/suggestedPhotos';
-import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
-import type { CategoryLogger } from '../../src/ts/logger';
-import { APP_SET_CHALLENGE_FIELDS } from '../../src/ts/challengeIntegrity';
+import type * as activeChallengesModule from '../../src/ts/core/strategies/real/activeChallenges';
+import type * as challengesModule from '../../src/ts/core/api/challenges';
+import type * as api_clientModule from '../../src/ts/core/api/api-client';
+import type * as challengeTitlePinModule from '../../src/ts/core/services/challengeTitlePin';
+import type * as loggerModule from '../../src/ts/core/logger';
+import type * as teamMatchModule from '../../src/ts/core/strategies/real/teamMatch';
+import type * as suggestedPhotosModule from '../../src/ts/core/strategies/real/suggestedPhotos';
+import type * as entryAgeStoreModule from '../../src/ts/core/entryAgeStore';
+import type { CategoryLogger } from '../../src/ts/core/logger';
+import { APP_SET_CHALLENGE_FIELDS } from '../../src/ts/core/challengeIntegrity';
 import { invalid } from '../helpers/invalid';
 
 // The logger factory below also exports its shared debug/endOperation mocks.
@@ -24,16 +24,16 @@ type LoggerMock = typeof loggerModule & {
 };
 
 const { getActiveChallenges } =
-    require('../../src/ts/strategies/real/activeChallenges') as typeof activeChallengesModule;
-const { fetchWebActiveOverlay } = require('../../src/ts/api/challenges') as typeof challengesModule;
+    require('../../src/ts/core/strategies/real/activeChallenges') as typeof activeChallengesModule;
+const { fetchWebActiveOverlay } = require('../../src/ts/core/api/challenges') as typeof challengesModule;
 const { beginSuggestedPhotos, getSuggestedPhotoIds } =
-    require('../../src/ts/strategies/real/suggestedPhotos') as typeof suggestedPhotosModule;
+    require('../../src/ts/core/strategies/real/suggestedPhotos') as typeof suggestedPhotosModule;
 
 // A 32-character lowercase-hex library photo id ('…01', '…02', …).
 const photoId = (n: number): string => n.toString(16).padStart(32, '0');
 
 // Mock the api-client module
-jest.mock('../../src/ts/api/api-client', () => ({
+jest.mock('../../src/ts/core/api/api-client', () => ({
     makePostRequest: jest.fn(),
     createCommonHeaders: jest.fn((token: string | undefined) => ({
         'x-token': token || 'mock-token',
@@ -46,19 +46,19 @@ jest.mock('../../src/ts/api/api-client', () => ({
 // testing fetch/coalescing behavior in isolation (pin behavior is unit-tested
 // in tests/services/challengeTitlePin.test.ts). Wiring is still asserted:
 // success responses must reach the pin hook, failed fetches must not.
-jest.mock('../../src/ts/services/challengeTitlePin', () => ({
+jest.mock('../../src/ts/core/services/challengeTitlePin', () => ({
     pinChallengeTitles: jest.fn((challenges: unknown) => challenges),
 }));
 
 // The team-match cache is unit-tested in tests/strategies/real-team-match.test.ts; here it is a stub, so
 // the ordered makePostRequest queues below never see a team request.
-jest.mock('../../src/ts/strategies/real/teamMatch', () => ({
+jest.mock('../../src/ts/core/strategies/real/teamMatch', () => ({
     refreshTeamMatch: jest.fn(),
     settledTeamMatch: jest.fn(),
 }));
 
 // Mock the logger module
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const mockDebugFn = jest.fn();
     const mockEndOperationFn = jest.fn();
     const mockWarningFn = jest.fn();
@@ -101,14 +101,14 @@ jest.mock('../../src/ts/logger', () => {
 describe('challenges', () => {
     const mockToken = 'test-token-123';
     const { makePostRequest, createCommonHeaders } = jest.mocked(
-        require('../../src/ts/api/api-client') as typeof api_clientModule,
+        require('../../src/ts/core/api/api-client') as typeof api_clientModule,
     );
     const { pinChallengeTitles } = jest.mocked(
-        require('../../src/ts/services/challengeTitlePin') as typeof challengeTitlePinModule,
+        require('../../src/ts/core/services/challengeTitlePin') as typeof challengeTitlePinModule,
     );
-    const logger: LoggerMock = invalid(require('../../src/ts/logger'));
+    const logger: LoggerMock = invalid(require('../../src/ts/core/logger'));
     const { refreshTeamMatch, settledTeamMatch } = jest.mocked(
-        require('../../src/ts/strategies/real/teamMatch') as typeof teamMatchModule,
+        require('../../src/ts/core/strategies/real/teamMatch') as typeof teamMatchModule,
     );
 
     beforeEach(() => {
@@ -272,7 +272,7 @@ describe('challenges', () => {
         });
 
         test('a successful fetch carries the time each entry went in, from the entry-age ledger', async () => {
-            const { entryAgeLedger } = require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
+            const { entryAgeLedger } = require('../../src/ts/core/entryAgeStore') as typeof entryAgeStoreModule;
             const observeAll = jest.spyOn(entryAgeLedger, 'observeAll').mockReturnValue({
                 '12345': { e1: { at: 1_800_000_000, exact: true } },
             });
@@ -303,7 +303,7 @@ describe('challenges', () => {
         });
 
         test('failed fetch never reaches the entry-age ledger', async () => {
-            const { entryAgeLedger } = require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
+            const { entryAgeLedger } = require('../../src/ts/core/entryAgeStore') as typeof entryAgeStoreModule;
             const observeAll = jest.spyOn(entryAgeLedger, 'observeAll');
             makePostRequest.mockResolvedValueOnce(null);
 

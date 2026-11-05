@@ -2,14 +2,15 @@
  * The notice version and the setting that records which version the user acknowledged.
  */
 
-import type * as schemaModule from '../src/ts/settings/schema';
-import type * as settingsModule from '../src/ts/settings';
+import type * as schemaModule from '../src/ts/core/settings/schema';
+import type * as settingsModule from '../src/ts/core/settings';
 import { installHeadlessStore, removeHeadlessStore } from './helpers/headlessStore';
 import type { MemoryStore } from './helpers/headlessStore';
-import { CURRENT_NOTICE_VERSION } from '../src/ts/noticeVersion';
-import { isRendererHiddenKey } from '../src/ts/ipc/rendererSettings';
+import { CURRENT_NOTICE_VERSION } from '../src/ts/core/noticeVersion';
+import { isRendererHiddenKey } from '../src/ts/core/ipc/rendererSettings';
 
-const { SETTINGS_SCHEMA, schemaEntry, validateSetting } = require('../src/ts/settings/schema') as typeof schemaModule;
+const { SETTINGS_SCHEMA, schemaEntry, validateSetting } =
+    require('../src/ts/core/settings/schema') as typeof schemaModule;
 
 describe('notice version', () => {
     test('the current version is a positive integer, so the default of 0 shows the notice', () => {
@@ -49,7 +50,7 @@ describe('noticeAcknowledgedVersion through the settings facade', () => {
     beforeEach(() => {
         store = installHeadlessStore();
         jest.isolateModules(() => {
-            settings = require('../src/ts/settings') as typeof settingsModule;
+            settings = require('../src/ts/core/settings') as typeof settingsModule;
         });
     });
 

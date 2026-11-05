@@ -4,7 +4,7 @@
  * `ruleValues` unless that is passed too (the inline values win, as in the real read).
  */
 
-import type { TitleRuleInfo } from '../../../src/ts/types/settings';
+import type { TitleRuleInfo } from '../../../src/ts/core/types/settings';
 
 export const titleRuleInfo = (over: Partial<TitleRuleInfo> = {}): TitleRuleInfo => {
     const profile = over.profile ?? null;

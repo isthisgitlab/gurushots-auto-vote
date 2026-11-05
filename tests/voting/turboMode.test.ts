@@ -7,7 +7,7 @@
  */
 
 import { buildChallenge } from '../helpers/challengeFixtures';
-import { canPlayTurbo, isKnownTurboMode, turboStatusCode } from '../../src/ts/voting/turboMode';
+import { canPlayTurbo, isKnownTurboMode, turboStatusCode } from '../../src/ts/core/voting/turboMode';
 
 const NOW = 500_000;
 const canPlay = (turbo: Record<string, unknown>, closeTime = NOW + 3600) =>

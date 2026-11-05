@@ -4,12 +4,12 @@
  */
 
 const mockAcquireWithin = jest.fn<unknown, unknown[]>();
-jest.mock('../../src/ts/lockWait', () => ({ acquireWithin: (...args: unknown[]) => mockAcquireWithin(...args) }));
+jest.mock('../../src/ts/core/lockWait', () => ({ acquireWithin: (...args: unknown[]) => mockAcquireWithin(...args) }));
 
-import type * as settingsLockModule from '../../src/ts/settings/settingsLock';
+import type * as settingsLockModule from '../../src/ts/core/settings/settingsLock';
 
 const { acquireSettingsLock, underSettingsLock } =
-    require('../../src/ts/settings/settingsLock') as typeof settingsLockModule;
+    require('../../src/ts/core/settings/settingsLock') as typeof settingsLockModule;
 
 const heldLock = () => ({ ok: true, release: jest.fn() });
 

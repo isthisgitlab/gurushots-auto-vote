@@ -1,4 +1,4 @@
-import { logMessages } from '../../src/ts/translations/logEnglish';
+import { logMessages } from '../../src/ts/core/translations/logEnglish';
 
 /**
  * Renders a log-catalog template the way the logger's T-methods do, so harness

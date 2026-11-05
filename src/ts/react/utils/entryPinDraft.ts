@@ -4,9 +4,9 @@
  * the modal owns the React state and makes the ipc calls.
  */
 
-import { applyPinToRecord } from '../../voting/entryPins';
+import { applyPinToRecord } from '../../core/voting/entryPins';
 
-import type { EntryPinKind, EntryPinRecord, EntryPins } from '../../types/settings';
+import type { EntryPinKind, EntryPinRecord, EntryPins } from '../../core/types/settings';
 
 // The two features a chosen photo can be pinned for, in save order.
 const PIN_KINDS = ['boost', 'turbo'] as const;

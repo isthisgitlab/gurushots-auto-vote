@@ -3,18 +3,18 @@
  * server sent stripped of terminal control characters.
  */
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const calls: { level: string; msg: string }[] = [];
     const rec = (level: string) => (msg: string) => calls.push({ level, msg });
     const cat = { info: rec('info'), error: rec('error'), warning: rec('warning'), debug: rec('debug') };
     // The terminal-only writer: what it receives is never a log line.
     return { __calls: calls, withCategory: jest.fn(() => cat), printLine: rec('stdout') };
 });
-jest.mock('../../src/ts/cli/guards', () => ({
+jest.mock('../../src/ts/shells/cli/guards', () => ({
     ensureAuthenticated: jest.fn(() => true),
     INVALID_ID_TEXT: 'Invalid challenge or image id.',
 }));
-jest.mock('../../src/ts/ipc/actions.handlers', () => {
+jest.mock('../../src/ts/core/ipc/actions.handlers', () => {
     const handlers = {
         'get-library-photos': jest.fn(),
         'suggest-photos': jest.fn(),
@@ -25,11 +25,11 @@ jest.mock('../../src/ts/ipc/actions.handlers', () => {
 });
 
 import { invalid } from '../helpers/invalid';
-import loggerModule = require('../../src/ts/logger');
+import loggerModule = require('../../src/ts/core/logger');
 const calls = invalid<{ __calls: { level: string; msg: string }[] }>(loggerModule).__calls;
-import guardsModule = require('../../src/ts/cli/guards');
+import guardsModule = require('../../src/ts/shells/cli/guards');
 const guards = jest.mocked(guardsModule);
-import handlersModule = require('../../src/ts/ipc/actions.handlers');
+import handlersModule = require('../../src/ts/core/ipc/actions.handlers');
 const handlers = invalid<{
     __handlers: {
         'get-library-photos': jest.Mock<Promise<unknown>, unknown[]>;
@@ -38,14 +38,14 @@ const handlers = invalid<{
         'get-photo-stats': jest.Mock<Promise<unknown>, unknown[]>;
     };
 }>(handlersModule).__handlers;
-import type * as photosModule from '../../src/ts/cli/commands/photos';
+import type * as photosModule from '../../src/ts/shells/cli/commands/photos';
 const { listPhotosCmd, suggestPhotosCmd, parseSearchFlag, parseSortFlag, BAD_SORT_TEXT, shellQuote } =
-    require('../../src/ts/cli/commands/photos') as typeof photosModule;
-import type * as actionHandlersModule from '../../src/ts/cli/actionHandlers';
+    require('../../src/ts/shells/cli/commands/photos') as typeof photosModule;
+import type * as actionHandlersModule from '../../src/ts/shells/cli/actionHandlers';
 // The rows↔handlers cycle initialises only rows-first (commandRows reads the handlers'
 // exports at module scope), so load the rows before reaching for their handlers.
-require('../../src/ts/cli/commandRows');
-const { runListPhotos } = require('../../src/ts/cli/actionHandlers') as typeof actionHandlersModule;
+require('../../src/ts/shells/cli/commandRows');
+const { runListPhotos } = require('../../src/ts/shells/cli/actionHandlers') as typeof actionHandlersModule;
 
 const text = (level: string) => calls.filter((c) => c.level === level).map((c) => c.msg);
 const photos = [

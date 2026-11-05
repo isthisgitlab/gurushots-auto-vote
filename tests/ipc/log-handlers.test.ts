@@ -5,19 +5,17 @@
  * registers a webContents and fans log entries out to it.
  */
 
-import type * as loggerModule from '../../src/ts/logger';
-import type * as logHandlersModule from '../../src/ts/ipc/log.handlers';
-import type { IpcMain } from 'electron';
+import type * as loggerModule from '../../src/ts/core/logger';
+import type * as logHandlersModule from '../../src/ts/core/ipc/log.handlers';
 import { invalid } from '../helpers/invalid';
 
 // The factory below also exposes the per-category loggers it hands out.
 type CategoryMock = jest.Mocked<Pick<loggerModule.CategoryLogger, 'debug' | 'error' | 'warning' | 'api'>>;
 type MockedLogger = jest.MockedObject<typeof loggerModule> & { categories: Record<string, CategoryMock> };
 type Handlers = ReturnType<typeof logHandlersModule.buildHandlers>;
-type ChannelImpl = Parameters<IpcMain['handle']>[1];
 const g = global as typeof global & { sendLogToGUI?: unknown };
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const categories: Record<string, CategoryMock> = {};
     const withCategory = jest.fn((name: string) => {
         categories[name] = categories[name] || {
@@ -31,9 +29,9 @@ jest.mock('../../src/ts/logger', () => {
     return {
         categories,
         withCategory,
-        sanitizeLogString:
-            jest.requireActual<typeof import('../../src/ts/logger/sanitize')>('../../src/ts/logger/sanitize')
-                .sanitizeLogString,
+        sanitizeLogString: jest.requireActual<typeof import('../../src/ts/core/logger/sanitize')>(
+            '../../src/ts/core/logger/sanitize',
+        ).sanitizeLogString,
         setContext: jest.fn(),
         clearContext: jest.fn(),
         getLogFile: jest.fn(() => '/logs/app.log'),
@@ -51,7 +49,7 @@ describe('log.handlers — stream lifecycle', () => {
     // empty each time — no registered webContents bleeds across tests.
     beforeEach(() => {
         jest.resetModules();
-        logHandlers = require('../../src/ts/ipc/log.handlers') as typeof logHandlers;
+        logHandlers = require('../../src/ts/core/ipc/log.handlers') as typeof logHandlers;
         handlers = logHandlers.buildHandlers();
     });
 
@@ -83,9 +81,9 @@ describe('log.handlers — renderer log writes and file lookups', () => {
 
     beforeEach(() => {
         jest.resetModules();
-        logger = require('../../src/ts/logger') as typeof logger;
+        logger = require('../../src/ts/core/logger') as typeof logger;
         handlers = (
-            require('../../src/ts/ipc/log.handlers') as typeof import('../../src/ts/ipc/log.handlers')
+            require('../../src/ts/core/ipc/log.handlers') as typeof import('../../src/ts/core/ipc/log.handlers')
         ).buildHandlers();
     });
 
@@ -161,15 +159,15 @@ describe('log.handlers — renderer log writes and file lookups', () => {
     });
 });
 
-describe('log.handlers — stream edge cases and register', () => {
+describe('log.handlers — stream edge cases', () => {
     let logHandlers: typeof logHandlersModule;
     let handlers: Handlers;
     let logger: MockedLogger;
 
     beforeEach(() => {
         jest.resetModules();
-        logger = require('../../src/ts/logger') as typeof logger;
-        logHandlers = require('../../src/ts/ipc/log.handlers') as typeof logHandlers;
+        logger = require('../../src/ts/core/logger') as typeof logger;
+        logHandlers = require('../../src/ts/core/ipc/log.handlers') as typeof logHandlers;
         handlers = logHandlers.buildHandlers();
     });
 
@@ -253,14 +251,5 @@ describe('log.handlers — stream edge cases and register', () => {
             success: false,
             error: 'Failed to stop log stream',
         });
-    });
-
-    test('register wires every channel and installs the global fan-out hook', async () => {
-        const channels = new Map<string, ChannelImpl>();
-        logHandlers.register(invalid({ handle: (channel: string, impl: ChannelImpl) => channels.set(channel, impl) }));
-
-        expect([...channels.keys()].sort()).toEqual(Object.keys(handlers).sort());
-        expect(g.sendLogToGUI).toBe(logHandlers.sendLogToGUI);
-        await expect(channels.get('get-log-file')!(invalid(undefined))).resolves.toBe('/logs/app.log');
     });
 });

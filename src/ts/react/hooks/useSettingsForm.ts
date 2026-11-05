@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { effectiveTimezone, getUiDefaultSettings } from '../../settings/uiDefaults';
+import { effectiveTimezone, getUiDefaultSettings } from '../../core/settings/uiDefaults';
 import * as ipc from '@/api/ipc';
 import { valuesEqual } from '@/utils/valuesEqual';
 
-import type { RendererSettings } from '../../types/settings';
+import type { RendererSettings } from '../../core/types/settings';
 import type {
     RendererSchema,
     SettingChangeHandler,
@@ -11,7 +11,7 @@ import type {
     UiChangeHandler,
     UiResetHandler,
     UiValues,
-} from '../../types/settingsEditor';
+} from '../../core/types/settingsEditor';
 
 /**
  * Module-scope defaults for the UI settings half of the modal. Sourced

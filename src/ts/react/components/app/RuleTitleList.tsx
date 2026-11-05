@@ -1,7 +1,7 @@
 import { useTranslation } from '@/contexts/TranslationContext';
-import { ruleTitleModes } from '../../../settings/challengeRules';
+import { ruleTitleModes } from '../../../core/settings/challengeRules';
 
-import type { LooseRecord, TitleRule } from '../../../types/settings';
+import type { LooseRecord, TitleRule } from '../../../core/types/settings';
 import type { RulePatchHandler } from './RuleFields';
 
 // Mirrors MAX_TITLES_PER_RULE in settings/titleRuleSanitize.ts; the sanitizer is the real gate.

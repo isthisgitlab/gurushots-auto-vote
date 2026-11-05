@@ -2,12 +2,12 @@ import { useId } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { ChosenPhotosControl, photoIdsOf } from './ChosenPhotosField';
 import { SettingHintList, chosenPhotosOnlyReachHint, manualPhotosOnlyHint } from './SettingHints';
-import { isDroppedOffValue } from '../../../settings/ruleBehaviour';
+import { isDroppedOffValue } from '../../../core/settings/ruleBehaviour';
 import { RuleHoursMinutesField, RuleNumberField } from './RuleFields';
 
-import type { LooseRecord, TitleRule } from '../../../types/settings';
+import type { LooseRecord, TitleRule } from '../../../core/types/settings';
 import type { RuleFieldProps, RulePatchHandler } from './RuleFields';
-import type { SettingHint, Translate } from '../../../types/settingsEditor';
+import type { SettingHint, Translate } from '../../../core/types/settingsEditor';
 
 // Tri-state boolean override. '' = inherit (the key is omitted from the saved
 // rule entirely, so the rule never freezes today's default into storage);

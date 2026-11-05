@@ -4,16 +4,16 @@
  * against a stubbed API strategy).
  */
 
-import logger = require('../../src/ts/logger');
-import type * as autoFillModule from '../../src/ts/services/autoFill';
-import type * as currencyActionsModule from '../../src/ts/services/currencyActions';
-import type * as swapBackStoreModule from '../../src/ts/swapBackStore';
-import type { ActionResult, Challenge, MemberBoost, MemberRanking } from '../../src/ts/types/gurushots';
-import type * as settingsModule from '../../src/ts/settings';
+import logger = require('../../src/ts/core/logger');
+import type * as autoFillModule from '../../src/ts/core/services/autoFill';
+import type * as currencyActionsModule from '../../src/ts/core/services/currencyActions';
+import type * as swapBackStoreModule from '../../src/ts/core/swapBackStore';
+import type { ActionResult, Challenge, MemberBoost, MemberRanking } from '../../src/ts/core/types/gurushots';
+import type * as settingsModule from '../../src/ts/core/settings';
 import { invalid } from '../helpers/invalid';
-const { __resetMemberIdCache } = require('../../src/ts/services/autoFill') as typeof autoFillModule;
+const { __resetMemberIdCache } = require('../../src/ts/core/services/autoFill') as typeof autoFillModule;
 const { unlockBoostWithKey, previewSwap, swapEntry, fillExposure } =
-    require('../../src/ts/services/currencyActions') as typeof currencyActionsModule;
+    require('../../src/ts/core/services/currencyActions') as typeof currencyActionsModule;
 
 const NOW = () => Math.floor(Date.now() / 1000);
 
@@ -75,6 +75,7 @@ const stubStrategy = ({
     getActiveChallenges: jest.fn().mockResolvedValue({ challenges: challenge ? [challenge] : [] }),
     getBankroll: jest.fn().mockResolvedValue(bankroll),
     getEligiblePhotos: jest.fn().mockResolvedValue(library),
+    getEligiblePhotosWalk: jest.fn().mockResolvedValue({ items: [], truncated: false, nextStart: 0 }),
     getImageData: jest.fn().mockResolvedValue(null),
     searchTagAutocomplete: jest.fn().mockResolvedValue([]),
     getCurrentMemberProfile: jest.fn().mockResolvedValue({ id: 'mem1', userName: 'u' }),
@@ -279,6 +280,151 @@ describe('previewSwap', () => {
     });
 });
 
+describe('previewSwap and the Chosen Photos settings', () => {
+    const chosenSettings = ({ chosen, only = false }: { chosen: string[]; only?: boolean }) =>
+        invalid<typeof settingsModule>({
+            getEffectiveTagSetting: () => undefined,
+            getEffectiveSetting: (key: string) => {
+                if (key === 'chosenPhotos') return chosen;
+                if (key === 'chosenPhotosOnly') return only;
+                return undefined;
+            },
+        });
+    const recordingLogger = () => {
+        const lines: string[] = [];
+        const cat = {
+            info: (message: string) => lines.push(message),
+            warning: () => {},
+            success: () => {},
+            error: () => {},
+            debug: () => {},
+        };
+        const recording = invalid<typeof logger>({
+            ...logger,
+            withCategory: () => cat,
+            challengeTag: () => '[Challenge 555]',
+        });
+        return { recording, lines };
+    };
+    const library = () => [photo('entered', 900), photo('old', 700), photo('fresh', 10)];
+
+    test('a chosen photo the themed search misses is found through the strategy library walk', async () => {
+        const strategy = stubStrategy({ library: library() });
+        strategy.getEligiblePhotosWalk.mockResolvedValue({ items: [photo('car', 1)], truncated: false, nextStart: 1 });
+        const result = await previewSwap(555, 'old', 'tok', {
+            strategy,
+            logger,
+            settings: chosenSettings({ chosen: ['car'] }),
+        });
+        expect(result).toEqual({ ok: true, outcome: 'ok', candidate: { id: 'car', member_id: 'mem1' } });
+        expect(strategy.getEligiblePhotosWalk).toHaveBeenCalledWith(
+            555,
+            'tok',
+            expect.objectContaining({ usage: 'swap' }),
+        );
+    });
+
+    test('enforceChosenOnly with Submit Only on and no chosen photo left → no-alternative and one log line', async () => {
+        const strategy = stubStrategy({ library: library() });
+        const { recording, lines } = recordingLogger();
+        const result = await previewSwap(
+            555,
+            'old',
+            'tok',
+            { strategy, logger: recording, settings: chosenSettings({ chosen: ['entered'], only: true }) },
+            { enforceChosenOnly: true },
+        );
+        expect(result).toEqual({ ok: false, outcome: 'no-alternative' });
+        expect(lines).toEqual([
+            'swap: Submit Only Chosen Photos is on and no chosen photo is left for [Challenge 555]. Add photos to Chosen Photos or turn Submit Only off',
+        ]);
+    });
+
+    test('enforceChosenOnly with chosen photos unentered but none usable → no-alternative and the Submit Only line', async () => {
+        const refused = { ...photo('mine', 1), permission: { allowed: false, message: null } };
+        const strategy = stubStrategy({ library: [...library(), refused] });
+        strategy.getEligiblePhotosWalk.mockResolvedValue({ items: [refused], truncated: false, nextStart: 1 });
+        const { recording, lines } = recordingLogger();
+        const result = await previewSwap(
+            555,
+            'old',
+            'tok',
+            { strategy, logger: recording, settings: chosenSettings({ chosen: ['mine'], only: true }) },
+            { enforceChosenOnly: true },
+        );
+        expect(result).toEqual({ ok: false, outcome: 'no-alternative' });
+        expect(lines).toContain(
+            'swap: Submit Only Chosen Photos is on and no chosen photo is left for [Challenge 555]. Add photos to Chosen Photos or turn Submit Only off',
+        );
+        // An empty pick ends before the visual check, which has nothing to reorder.
+        expect(lines.filter((line) => line.startsWith('Visual check'))).toEqual([]);
+    });
+
+    test('the automatic swap never brings back a swapped-out chosen photo, so it ends without a walk', async () => {
+        const strategy = stubStrategy({ library: [...library(), photo('swapped-before', 1)] });
+        const { recording, lines } = recordingLogger();
+        const result = await previewSwap(
+            555,
+            'old',
+            'tok',
+            { strategy, logger: recording, settings: chosenSettings({ chosen: ['swapped-before'], only: true }) },
+            { enforceChosenOnly: true, excludeSwapped: true },
+        );
+        expect(result).toEqual({ ok: false, outcome: 'no-alternative' });
+        expect(lines).toHaveLength(1);
+        expect(strategy.getEligiblePhotos).not.toHaveBeenCalled();
+        expect(strategy.getEligiblePhotosWalk).not.toHaveBeenCalled();
+    });
+
+    test('without enforceChosenOnly the same settings still give a suggestion', async () => {
+        const strategy = stubStrategy({ library: library() });
+        const result = await previewSwap(555, 'old', 'tok', {
+            strategy,
+            logger,
+            settings: chosenSettings({ chosen: ['entered'], only: true }),
+        });
+        expect(result).toEqual({ ok: true, outcome: 'ok', candidate: { id: 'fresh', member_id: 'mem1' } });
+    });
+
+    test('enforceChosenOnly with Submit Only off does not hold a suggestion back', async () => {
+        const strategy = stubStrategy({ library: library() });
+        const result = await previewSwap(
+            555,
+            'old',
+            'tok',
+            { strategy, logger, settings: chosenSettings({ chosen: ['entered'] }) },
+            { enforceChosenOnly: true },
+        );
+        expect(result).toEqual({ ok: true, outcome: 'ok', candidate: { id: 'fresh', member_id: 'mem1' } });
+    });
+
+    test('enforceChosenOnly takes the chosen photo that is left', async () => {
+        const strategy = stubStrategy({ library: [...library(), photo('mine', 1)] });
+        const result = await previewSwap(
+            555,
+            'old',
+            'tok',
+            { strategy, logger, settings: chosenSettings({ chosen: ['mine'], only: true }) },
+            { enforceChosenOnly: true },
+        );
+        expect(result).toEqual({ ok: true, outcome: 'ok', candidate: { id: 'mine', member_id: 'mem1' } });
+    });
+
+    test('with a chosenId nothing is ranked, enforcement or not', async () => {
+        const strategy = stubStrategy({ library: library() });
+        const result = await previewSwap(
+            555,
+            'old',
+            'tok',
+            { strategy, logger, settings: chosenSettings({ chosen: ['entered'], only: true }) },
+            { chosenId: 'picked', enforceChosenOnly: true },
+        );
+        expect(result).toEqual({ ok: true, outcome: 'ok', candidate: { id: 'picked', member_id: 'mem1' } });
+        expect(strategy.getEligiblePhotos).not.toHaveBeenCalled();
+        expect(strategy.getEligiblePhotosWalk).not.toHaveBeenCalled();
+    });
+});
+
 describe('previewSwap with a chosen photo', () => {
     const chosen = (strategy: ReturnType<typeof stubStrategy>, chosenId: string, imageId = 'old') =>
         previewSwap(555, imageId, 'tok', { strategy, logger, settings: noSettings }, { chosenId });
@@ -368,7 +514,7 @@ describe('swapEntry', () => {
 
     test('drops the photo chooser’s cached listing of the challenge', async () => {
         const cache =
-            require('../../src/ts/services/libraryCache') as typeof import('../../src/ts/services/libraryCache');
+            require('../../src/ts/core/services/libraryCache') as typeof import('../../src/ts/core/services/libraryCache');
         const listing = () => ({
             photos: [],
             memberId: null,
@@ -453,8 +599,8 @@ describe('swapEntry', () => {
 });
 
 describe('swap back', () => {
-    const { createMemoryLedger } = require('../../src/ts/swapBackStore') as typeof swapBackStoreModule;
-    const { swapBack } = require('../../src/ts/services/currencyActions') as typeof currencyActionsModule;
+    const { createMemoryLedger } = require('../../src/ts/core/swapBackStore') as typeof swapBackStoreModule;
+    const { swapBack } = require('../../src/ts/core/services/currencyActions') as typeof currencyActionsModule;
 
     // Slot now holds 'repl'; the boosted original 'orig' sits in the swap history.
     const swappedChallenge = () =>
@@ -503,7 +649,7 @@ describe('swap back', () => {
 
     test('a swap back drops the photo chooser’s cached listing of the challenge too', async () => {
         const cache =
-            require('../../src/ts/services/libraryCache') as typeof import('../../src/ts/services/libraryCache');
+            require('../../src/ts/core/services/libraryCache') as typeof import('../../src/ts/core/services/libraryCache');
         const strategy = stubStrategy({ challenge: swappedChallenge() });
         const ledger = createMemoryLedger();
         ledger.onSwapped(555, { id: 'orig', member_id: 'mem1', boosted: true }, 'repl');
@@ -551,8 +697,8 @@ describe('swap back', () => {
 });
 
 describe('edge paths', () => {
-    const { createMemoryLedger } = require('../../src/ts/swapBackStore') as typeof swapBackStoreModule;
-    const { swapBack } = require('../../src/ts/services/currencyActions') as typeof currencyActionsModule;
+    const { createMemoryLedger } = require('../../src/ts/core/swapBackStore') as typeof swapBackStoreModule;
+    const { swapBack } = require('../../src/ts/core/services/currencyActions') as typeof currencyActionsModule;
 
     test('previewSwap: a live block (swap locked) spends and ranks nothing', async () => {
         const strategy = stubStrategy({ challenge: makeChallenge({ swap_locked: true }) });
@@ -661,8 +807,8 @@ describe('edge paths', () => {
 });
 
 describe('a spend that got no answer is not "rejected"', () => {
-    const { createMemoryLedger } = require('../../src/ts/swapBackStore') as typeof swapBackStoreModule;
-    const { swapBack } = require('../../src/ts/services/currencyActions') as typeof currencyActionsModule;
+    const { createMemoryLedger } = require('../../src/ts/core/swapBackStore') as typeof swapBackStoreModule;
+    const { swapBack } = require('../../src/ts/core/services/currencyActions') as typeof currencyActionsModule;
     const noAnswer = { ok: false, raw: null, unclear: true };
     // A spend that answers with the given result, and the live challenge list as the strategy reads it.
     const answering = (result: ActionResult) => jest.fn<Promise<ActionResult>, unknown[]>().mockResolvedValue(result);

@@ -6,7 +6,7 @@
  * (pruned + int8-quantized GloVe vectors, produced by the manual, network-
  * touching `pnpm fetch:embeddings` step) and emits the runtime asset
  * src/assets/semantic-vectors.json that the semantic matcher
- * (src/ts/services/semantic/lexicon.ts) loads on every platform. The asset is
+ * (src/ts/core/services/semantic/lexicon.ts) loads on every platform. The asset is
  * NEVER imported into a JS bundle, so the renderer / headless / capacitor
  * size-limit budgets are untouched.
  *
@@ -27,20 +27,23 @@
  * asar and is embedded as a SEA asset for the CLI single binary.
  */
 
+// The scripts' platform installs before any app module loads.
+import './lib/platform';
+
 import fs from 'node:fs';
 import path from 'node:path';
-import { isPlainObject } from '../src/ts/plainObject';
-import { stem } from '../src/ts/services/photoPicker';
+import { isPlainObject } from '../src/ts/core/plainObject';
+import { stem } from '../src/ts/core/services/photoPicker';
 // The collision/vocab rules are shared with the fetch step ON PURPOSE — two
 // hand-rolled copies of "stem -> owner, fail on cross-cluster collision"
 // would drift apart silently.
 import { collectAuthoredWords, isConceptsConfig, sha256OfString } from './fetch-embeddings';
 // The runtime's own decode + pooling, so the shipped axis is measured in exactly
 // the space concreteness() later projects onto.
-import { buildTable, embedIn } from '../src/ts/services/semantic/lexicon';
+import { buildTable, embedIn } from '../src/ts/core/services/semantic/lexicon';
 import { runIfMain } from './lib/run-if-main';
 
-import type { SearchGroup } from '../src/ts/types/semantic';
+import type { SearchGroup } from '../src/ts/core/types/semantic';
 
 /** One authored cluster of scripts/lexicon-concepts.json. */
 interface Concept {
@@ -130,7 +133,7 @@ const AXIS_DECIMALS = 6;
 
 /**
  * Derive the concreteness axis (see concreteness() in
- * src/ts/services/semantic/lexicon.ts) from the `concreteness` block of the
+ * src/ts/core/services/semantic/lexicon.ts) from the `concreteness` block of the
  * concepts file: unit(mean(concrete words) - mean(abstract anchors)).
  *
  * No block -> no axis, and the runtime reads that as "no opinion" everywhere.

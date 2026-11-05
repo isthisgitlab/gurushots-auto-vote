@@ -1,7 +1,7 @@
 import { useState, useLayoutEffect, useRef } from 'react';
 import * as ipc from '@/api/ipc';
 
-import type { GuiLogEntry } from '../../logger';
+import type { GuiLogEntry } from '../../core/logger';
 
 const MAX_ENTRIES = 1000;
 

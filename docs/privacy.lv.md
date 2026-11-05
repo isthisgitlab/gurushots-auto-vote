@@ -12,12 +12,23 @@ Vietne tiek mitināta **GitHub Pages**. GitHub piegādā katru lapu un var reģi
 
 - Tā **neiestata sīkdatnes**.
 - Tā **neizmanto analītiku, izsekotājus vai reklāmu**.
-- Tā **neielādē neko no citām vietnēm**: lapas, stili, skripti, logotips un nozīmītes nāk no šīs vietnes, bez trešo pušu fontiem, attēliem vai skriptiem.
+- Lapas, stili, skripti, logotips un nozīmītes nāk no šīs vietnes, bez trešo pušu fontiem, attēliem vai skriptiem — ar vienu izņēmumu: **attālinātās vadības lapa** (`/remote/`, tikai atverot savienošanas saiti) veido savienojumu ar publiskajiem Nostr retranslatoriem, pa kuriem notiek savienošana (`wss://nos.lol`, `wss://relay.primal.net`, `wss://nostr.mom`, `wss://nostr.oxtr.dev`), un STUN serveriem (`stun:stun.cloudflare.com:3478`, `stun:stun.l.google.com:19302`). Retranslatori redz šifrētu signālu apmaiņu un telefona IP adresi. Ja tiešs savienojums nav iespējams, tie pārraida arī lietotnes pašas ziņojumus, šifrētus ar savienošanas atslēgu: tie redz to laiku un aptuvenos izmērus, patur tos vismaz neilgu laiku, un jebkurš retranslators tos var ierakstīt. Ikviens, kas tos ir ierakstījis un vēlāk iegūst jūsu savienošanas saiti, var tos atšifrēt; līdzeklis ir **Atiestatīt savienošanu pārī**. Signālu apmaiņu un šos ziņojumus paraksta viena un tā pati publiskā atslēga, tāpēc retranslatori var tos saistīt, un telefons klausās līdz 3 retranslatoriem, tāpēc var lejupielādēt katru ziņojumu līdz 3 reizēm; lietotne to apstrādā vienu reizi. Dators klausās visus retranslatorus. Savienotais dators redz telefona IP. Lapa nekad nesūta savienošanas atslēgu retranslatoriem atklātā tekstā — tā tiek lietota kā šifrēšanas parole. Pilnā saite nav tikai datorā redzamajā QR kodā: tā paliek arī starpliktuvē pēc darbības **Kopēt saiti**, grāmatzīmēs un sākuma ekrāna ikonā, cilnes sesijas krātuvē, pārlūka vēsturē (ko pārlūks var sinhronizēt ar jūsu kontu) un QR skenera vēsturē.
 - Tā lūdz pārlūkus **nesūtīt atsauces adresi** (referrer), tāpēc, atverot saiti uz citu vietni, tai netiek paziņots, no kuras lapas atnācāt.
 
 ## Kas paliek jūsu pārlūkā
 
-Tikai tad, ja noklikšķināt uz gaišās/tumšās **tēmas pārslēdzēja**, vietne saglabā jūsu izvēli (`theme`: `light` vai `dark`) pārlūka lokālajā krātuvē, lai nākamā lapa atvērtos tajā pašā tēmā. Nekas cits netiek saglabāts, un tas nekur netiek sūtīts. Kamēr neesat nospieduši pārslēdzēju, vietne seko jūsu sistēmas tēmai un neko nesaglabā. Ja pārlūkā notīrāt vietnes datus, izvēle tiek izdzēsta.
+Vietnes lapās tikai tad, ja noklikšķināt uz gaišās/tumšās **tēmas pārslēdzēja**, vietne saglabā jūsu izvēli (`theme`: `light` vai `dark`) pārlūka lokālajā krātuvē, lai nākamā lapa atvērtos tajā pašā tēmā. Kamēr neesat nospieduši pārslēdzēju, šīs lapas seko jūsu sistēmas tēmai un neko nesaglabā. Ja pārlūkā notīrāt vietnes datus, izvēle tiek izdzēsta. Attālinātās vadības lapa (`/remote/`) aplūkota tālāk.
+
+Ja atverat **attālinātās vadības savienošanas saiti**, savienošanas atslēga tiek saglabāta šīs cilnes sesijas krātuvē (pazūd, aizverot cilni), un paliek pašā saitē — tāpēc grāmatzīme vai sākuma ekrāna ikona turpina strādāt. Vietne nevienu no šīm kopijām nekur nesūta; atslēga ceļo tikai caur šifrēto savienojumu uz jūsu pašu datoru. Lai to noņemtu, izdzēsiet grāmatzīmi vai sākuma ekrāna ikonu.
+
+**Attālinātās vadības lapa** (`/remote/`) papildus saglabā šos ierakstus, un tikai tad, ja atverat savienošanas saiti:
+
+- Lokālajā krātuvē, līdz pārlūkā notīrāt vietnes datus (grāmatzīmes vai sākuma ekrāna ikonas izdzēšana tos nenoņem):
+    - `gs-remote-view-prefs` — lapas tēma, valoda un kompaktais skats, arī atsevišķu izaicinājumu kompakto kartīšu izvēles. Tie paliek jūsu telefonā un netiek sūtīti uz datoru.
+    - `gs-remote-desktop-version` — īss kods, kas iegūts no savienošanas kanāla identifikatora, un darbvirsmas lietotnes versija, lai lapa varētu uzreiz atvērt šo versiju. Savienošanas atslēgu tas nekad nesatur. Lapa to izdzēš arī tad, kad tas vairs neder, piemēram, kad atverat citu savienošanas saiti, un to izdzēš Android lietotnes poga **Atvienoties**.
+- Sesijas krātuvē, līdz aizverat cilni:
+    - `gs-remote-skipped-to` — darbvirsmas versija, uz kuru cilne jau pārgāja uzreiz, lai lapa nepārlēkātu starp divām versijām.
+    - `remote-add-home-hint` — karodziņš, lai ieteikumu pievienot lapu sākuma ekrānam piedāvātu vienu reizi cilnē.
 
 ## Saites uz citām vietnēm
 

@@ -3,9 +3,9 @@
  * (challengeIntegrity) and the IPC id check (ipc/isIdArg).
  */
 
-import type * as idsModule from '../src/ts/ids';
+import type * as idsModule from '../src/ts/core/ids';
 
-const { isValidId } = require('../src/ts/ids') as typeof idsModule;
+const { isValidId } = require('../src/ts/core/ids') as typeof idsModule;
 
 describe('isValidId', () => {
     test.each([

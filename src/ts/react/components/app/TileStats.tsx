@@ -7,7 +7,7 @@
 import { dateLocale } from '@/utils/formatters';
 
 import type { TileStats } from '@/hooks/usePhotoStatsLoader';
-import type { Translate } from '../../../translations/translator';
+import type { Translate } from '../../../core/translations/translator';
 
 // Number formats per locale and fraction digits: one stats answer re-renders many tiles at once.
 const formats = new Map<string, Intl.NumberFormat>();

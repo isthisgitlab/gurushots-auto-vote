@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { signal } from '@preact/signals';
-import { nextWakeAt } from '../../scenarios/nextWake';
-import { startState } from '../../scenarios/evaluate';
+import { nextWakeAt } from '../../core/scenarios/nextWake';
+import { startState } from '../../core/scenarios/evaluate';
 import { useLatestRef } from '../hooks/useLatestRef';
 import * as ipc from './ipc';
 
-import type { Challenge } from '../../types/gurushots';
-import type { WindowApi } from '../../types/ipc';
-import type { ScenarioState, SpendAction } from '../../types/stores';
-import type { ScenarioDocument } from '../../settings/scenarioSchema';
+import type { Challenge } from '../../core/types/gurushots';
+import type { WindowApi } from '../../core/types/ipc';
+import type { ScenarioState, SpendAction } from '../../core/types/stores';
+import type { ScenarioDocument } from '../../core/settings/scenarioSchema';
 
 // Bumped when scenario progress was reset (one challenge's or every challenge's): every card reads its status again.
 const scenarioResets = signal(0);

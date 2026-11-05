@@ -1,12 +1,12 @@
 /**
- * The shared boundary-mark predicate (src/ts/challengeMarks.ts): one
+ * The shared boundary-mark predicate (src/ts/core/challengeMarks.ts): one
  * null-safe, structural check used by every refusal, filter and skip.
  */
 
-import type * as challengeMarksModule from '../src/ts/challengeMarks';
+import type * as challengeMarksModule from '../src/ts/core/challengeMarks';
 import { invalid } from './helpers/invalid';
 
-const { isMarkedChallenge } = require('../src/ts/challengeMarks') as typeof challengeMarksModule;
+const { isMarkedChallenge } = require('../src/ts/core/challengeMarks') as typeof challengeMarksModule;
 
 describe('isMarkedChallenge', () => {
     test('a non-empty dataIssues array marks', () => {

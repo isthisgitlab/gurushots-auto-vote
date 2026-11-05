@@ -5,30 +5,30 @@
  */
 
 jest.mock('node:child_process', () => ({ execFile: jest.fn() }));
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     getSetting: jest.fn(() => 'en'),
     getGlobalDefault: jest.fn(),
     loadSettings: jest.fn(() => ({})),
     getEffectiveSetting: jest.fn(),
 }));
 
-jest.mock('../../src/ts/services/VotingLogic', () => ({ describeDeadlineActions: jest.fn() }));
-jest.mock('../../src/ts/apiFactory', () => ({
+jest.mock('../../src/ts/core/services/VotingLogic', () => ({ describeDeadlineActions: jest.fn() }));
+jest.mock('../../src/ts/core/apiFactory', () => ({
     // The view ledger is not under test here; null keeps the seam hermetic.
     getEntryAgeLedger: jest.fn(() => null),
 }));
 
 const { execFile } = jest.mocked(require('node:child_process') as typeof node_child_processModule);
-import votingLogicModule = require('../../src/ts/services/VotingLogic');
+import votingLogicModule = require('../../src/ts/core/services/VotingLogic');
 const votingLogic = jest.mocked(votingLogicModule);
-import logger = require('../../src/ts/logger');
-import settingsModule = require('../../src/ts/settings');
+import logger = require('../../src/ts/core/logger');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
 import type * as node_child_processModule from 'node:child_process';
-import type * as nodeNotifyModule from '../../src/ts/services/notify/nodeNotify';
+import type * as nodeNotifyModule from '../../src/ts/shells/cli/nodeNotify';
 import { invalid } from '../helpers/invalid';
 const { createNodeDeadlineNotifier, deliverOsNotification, nodeTranslate } =
-    require('../../src/ts/services/notify/nodeNotify') as typeof nodeNotifyModule;
+    require('../../src/ts/shells/cli/nodeNotify') as typeof nodeNotifyModule;
 
 /** What deliverOsNotification passes to execFile: file, argv, completion callback. */
 type ExecFileCall = [file: string, args: string[], callback: (error: Error | null) => void];

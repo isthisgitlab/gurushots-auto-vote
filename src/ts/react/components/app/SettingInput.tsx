@@ -11,13 +11,13 @@ import { useScenarios } from '@/api/useScenarios';
 export { SCHEDULED_FILL_MAX_ENTRIES } from './TimeSettingFields';
 
 import type { ComponentChildren, ComponentType, TargetedEvent } from 'preact';
-import type { SerializableSchemaEntry } from '../../../ipc/settings.handlers';
+import type { SerializableSchemaEntry } from '../../../core/ipc/settings.handlers';
 import type {
     SettingChangeHandler,
     SettingFieldProps,
     SettingResetHandler,
     Translate,
-} from '../../../types/settingsEditor';
+} from '../../../core/types/settingsEditor';
 
 // Setting types rendered as several controls (each with its own aria-label)
 // rather than one: their caption names a role="group" wrapper instead of
@@ -166,7 +166,17 @@ function TagsSetting({ id, settingKey, config, value, onChange, onReset, disable
     );
 }
 
-function BooleanField({ id, settingKey, config, value, onChange, onReset, disabled, rejected }: SettingFieldProps) {
+function BooleanField({
+    id,
+    settingKey,
+    config,
+    value,
+    onChange,
+    onReset,
+    disabled,
+    rejected,
+    describedBy,
+}: DescribedFieldProps) {
     return (
         <ControlRow settingKey={settingKey} labelKey={config.label} onReset={onReset}>
             <input
@@ -177,6 +187,7 @@ function BooleanField({ id, settingKey, config, value, onChange, onReset, disabl
                 onChange={(e) => onChange(settingKey, e.currentTarget.checked)}
                 disabled={disabled}
                 aria-invalid={rejected || undefined}
+                aria-describedby={describedBy}
             />
         </ControlRow>
     );
@@ -349,7 +360,7 @@ function getDefaultForType(type: string | undefined): number | boolean | never[]
 // onReset, disabled }. The timeOfDayList values look device-local but are
 // interpreted in the app timezone setting — the surrounding modal renders a
 // hint naming the zone.
-const FIELD_BY_TYPE: Map<string | undefined, ComponentType<SettingFieldProps>> = new Map([
+const FIELD_BY_TYPE: Map<string | undefined, ComponentType<DescribedFieldProps>> = new Map([
     ['tags', TagsSetting],
     ['schedule', ScheduleField],
     ['timeOfDayList', TimeOfDayListField],
@@ -366,6 +377,13 @@ const FIELD_BY_TYPE: Map<string | undefined, ComponentType<SettingFieldProps>> =
 const GROUP_WRAPPED_TYPES: Set<string | undefined> = new Set(['schedule', 'timeOfDayList', 'timeList', 'photos']);
 
 /**
+ * SettingFieldProps plus the id of an element beside the control the control points at with
+ * aria-describedby (a hint rendered by the caller, not by SettingInput). Only the single-control
+ * fields carry it — a group points its caption at whole rows instead.
+ */
+type DescribedFieldProps = SettingFieldProps & { describedBy?: string };
+
+/**
  * Schema-driven input renderer for settings. `id` goes on the control a
  * SettingLabel with the same `inputId` points at; multi-control types instead
  * render a role="group" named by that caption (see SettingLabel).
@@ -379,6 +397,7 @@ export function SettingInput({
     disabled = false,
     rejected = false,
     id = `setting-${settingKey}`,
+    describedBy,
 }: {
     settingKey: string;
     config?: SerializableSchemaEntry | null;
@@ -389,6 +408,8 @@ export function SettingInput({
     /** The last Save refused this setting's value (see SettingFieldProps.rejected). */
     rejected?: boolean;
     id?: string;
+    /** An element id the control points at with aria-describedby (a hint beside it). */
+    describedBy?: string;
 }) {
     // Guard against missing config
     if (!config) {
@@ -407,6 +428,7 @@ export function SettingInput({
             onReset={onReset}
             disabled={disabled}
             rejected={rejected}
+            describedBy={describedBy}
         />
     );
     if (!GROUP_WRAPPED_TYPES.has(config.type)) return field;

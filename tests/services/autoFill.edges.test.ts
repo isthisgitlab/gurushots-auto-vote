@@ -6,13 +6,18 @@
  * pass-through, and the invalid-challenge / refreshed-with-room paths.
  */
 
-import type * as autoFillModule from '../../src/ts/services/autoFill';
+import type * as autoFillModule from '../../src/ts/core/services/autoFill';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-import type { FetchErrorResult, FillDeps, FillLogger, FillSettings } from '../../src/ts/types/autoFill';
-import type { LibraryPhoto, MemberIdentity } from '../../src/ts/types/gurushots';
+import type { FetchErrorResult, FillDeps, FillLogger, FillSettings } from '../../src/ts/core/types/autoFill';
+import type { LibraryPhoto, MemberIdentity } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
-jest.mock('../../src/ts/settings/storage', () => ({
+type RankVisually = NonNullable<FillDeps['rankVisually']>;
+type ImageData = NonNullable<FillDeps['getImageData']>;
+
+jest.mock('../../src/ts/core/settings/storage', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/core/settings/storage')>('../../src/ts/core/settings/storage'),
     createJsonStore: () => ({
         readRaw: () => null,
         writeRaw: () => {},
@@ -29,7 +34,7 @@ const {
     rankCandidatesForChallenge,
     maybeEmergencyFillChallenge,
     submitNewEntryForAction,
-} = require('../../src/ts/services/autoFill') as typeof autoFillModule;
+} = require('../../src/ts/core/services/autoFill') as typeof autoFillModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
 const NOW = 1_000_000;
@@ -258,7 +263,9 @@ describe('rankCandidatesForChallenge', () => {
     test('a swap candidate goes through the same visual re-rank as a fill', async () => {
         const { logger } = makeCapturingLogger();
         const challenge = makeChallenge();
-        const rankVisually = jest.fn().mockResolvedValue(['leaves']);
+        const rankVisually = jest
+            .fn<ReturnType<RankVisually>, Parameters<RankVisually>>()
+            .mockResolvedValue(['leaves']);
         const result = await rankCandidatesForChallenge(challenge, 'tok', {
             settings: makeSettings(),
             logger,
@@ -279,6 +286,39 @@ describe('rankCandidatesForChallenge', () => {
                 ignoreWords: null,
             }),
         );
+    });
+});
+
+describe('rankCandidatesForChallenge — the votes the visual check weighs', () => {
+    test('a swap ranking reads them with its own token, for the photos the check asks about', async () => {
+        const { logger } = makeCapturingLogger();
+        const getImageData = jest
+            .fn<ReturnType<ImageData>, Parameters<ImageData>>()
+            .mockResolvedValue(invalid({ votes: 321, views: 9, achievements: [] }));
+        const seen: { answer?: Map<string, unknown>; inputs?: ReadonlyMap<string, unknown> } = {};
+        const rankVisually = jest.fn<ReturnType<RankVisually>, Parameters<RankVisually>>(
+            async (_c, ids, _e, want, options) => {
+                seen.inputs = options.jointInputs;
+                seen.answer = await options.loadVotes(['leaves']);
+                return ids.slice(0, want);
+            },
+        );
+        const result = await rankCandidatesForChallenge(makeChallenge(), 'tok-swap', {
+            settings: makeSettings(),
+            logger,
+            // One clear theme match: nothing is contested, so only the visual check's own lookup reads stats.
+            getEligiblePhotos: jest.fn().mockResolvedValue([
+                { ...allowedPhoto('island'), labels: ['Sand'] },
+                { ...allowedPhoto('leaves'), labels: ['Pink', 'Nature'] },
+            ]),
+            getImageData,
+            rankVisually,
+        });
+        expect(result.status).toBe('ranked');
+        expect(getImageData).toHaveBeenCalledTimes(1);
+        expect(getImageData).toHaveBeenCalledWith('leaves', 'tok-swap');
+        expect(seen.answer).toEqual(new Map([['leaves', { votes: 321, statsKnown: true }]]));
+        expect([...(seen.inputs?.keys() ?? [])].sort()).toEqual(['island', 'leaves']);
     });
 });
 
@@ -340,7 +380,7 @@ describe('submitNewEntryForAction', () => {
 });
 
 describe('negated-title fallback warning', () => {
-    const { fillChallengeNow } = require('../../src/ts/services/autoFill') as typeof autoFillModule;
+    const { fillChallengeNow } = require('../../src/ts/core/services/autoFill') as typeof autoFillModule;
 
     test('when every eligible photo shows the excluded subject, the fill warns before going off-theme', async () => {
         const { logger, lines } = makeCapturingLogger();
@@ -422,7 +462,7 @@ describe('popularity-pick explanation after a refresh truncates the batch', () =
 });
 
 describe('themed search edge shapes', () => {
-    const { fetchCandidatesForChallenge } = require('../../src/ts/services/autoFill') as typeof autoFillModule;
+    const { fetchCandidatesForChallenge } = require('../../src/ts/core/services/autoFill') as typeof autoFillModule;
     const LIB = [allowedPhoto('lib1'), allowedPhoto('lib2')];
 
     test('a search that answers with a non-array is treated as no hits', async () => {

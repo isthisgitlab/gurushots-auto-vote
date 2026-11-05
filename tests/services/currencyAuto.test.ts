@@ -5,11 +5,11 @@
  * "another spend in flight" deferral is exercised for real.
  */
 
-jest.mock('../../src/ts/settings');
-jest.mock('../../src/ts/services/currencyActions', () => ({
+jest.mock('../../src/ts/core/settings');
+jest.mock('../../src/ts/core/services/currencyActions', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/services/currencyActions')>(
-        '../../src/ts/services/currencyActions',
+    ...jest.requireActual<typeof import('../../src/ts/core/services/currencyActions')>(
+        '../../src/ts/core/services/currencyActions',
     ),
     unlockBoostWithKey: jest.fn(),
     previewSwap: jest.fn(),
@@ -17,27 +17,27 @@ jest.mock('../../src/ts/services/currencyActions', () => ({
     fillExposure: jest.fn(),
 }));
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import currencyActionsModule = require('../../src/ts/services/currencyActions');
+import currencyActionsModule = require('../../src/ts/core/services/currencyActions');
 const currencyActions = jest.mocked(currencyActionsModule);
-import type * as loggerModule from '../../src/ts/logger';
-import type * as currencyAutoModule from '../../src/ts/services/currencyAuto';
-import type * as currencyAutoStoreModule from '../../src/ts/currencyAutoStore';
-import type { CurrencyPassDeps } from '../../src/ts/services/currencyAuto';
-import type { FillMission, MissionNeeds } from '../../src/ts/services/missions';
+import type * as loggerModule from '../../src/ts/core/logger';
+import type * as currencyAutoModule from '../../src/ts/core/services/currencyAuto';
+import type * as currencyAutoStoreModule from '../../src/ts/core/currencyAutoStore';
+import type { CurrencyPassDeps } from '../../src/ts/core/services/currencyAuto';
+import type { FillMission, MissionNeeds } from '../../src/ts/core/services/missions';
 import type {
     Challenge,
     MemberBoost,
     MemberRanking,
     RankingEntry,
     RankingExposure,
-} from '../../src/ts/types/gurushots';
+} from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 const { runAutoKey, runAutoSwap, runAutoExposureFill, runMissionFill } =
-    require('../../src/ts/services/currencyAuto') as typeof currencyAutoModule;
+    require('../../src/ts/core/services/currencyAuto') as typeof currencyAutoModule;
 const { createMemoryAutoSpendLedger, createAutoSpendLedger } =
-    require('../../src/ts/currencyAutoStore') as typeof currencyAutoStoreModule;
+    require('../../src/ts/core/currencyAutoStore') as typeof currencyAutoStoreModule;
 
 const NOW = 1_000_000;
 const H = 3600;
@@ -264,9 +264,11 @@ describe('runAutoSwap', () => {
     test('replaces the last entry by default and records it in the pass', async () => {
         const ctx = makeCtx();
         expect(await runAutoSwap(ctx)).toBe(true);
-        // Auto swap always brings in a fresh photo — never one swapped out before.
+        // Auto swap always brings in a fresh photo — never one swapped out before — and takes only chosen
+        // photos when Submit Only Chosen Photos is on.
         expect(currencyActions.previewSwap).toHaveBeenCalledWith(555, 'e2', 'tok', expect.any(Object), {
             excludeSwapped: true,
+            enforceChosenOnly: true,
         });
         expect(currencyActions.swapEntry).toHaveBeenCalledWith(
             555,
@@ -396,7 +398,7 @@ describe('runAutoSwap', () => {
         // The guarded spend is the real service one: the pass's snapshot says the target is plain,
         // while the LIVE challenge the strategy answers is what the guard reads.
         const realSwapEntry = jest.requireActual<typeof currencyActionsModule>(
-            '../../src/ts/services/currencyActions',
+            '../../src/ts/core/services/currencyActions',
         ).swapEntry;
 
         const runWithLive = async (
@@ -655,7 +657,7 @@ describe('runAutoExposureFill', () => {
 // Every line the code under test has logged at info level.
 const infoLines = (): string[] =>
     jest
-        .mocked(require('../../src/ts/logger') as typeof loggerModule)
+        .mocked(require('../../src/ts/core/logger') as typeof loggerModule)
         .withCategory.mock.results.flatMap((result) =>
             jest.mocked((result.value as loggerModule.CategoryLogger).info).mock.calls.map((call) => String(call[0])),
         );
@@ -663,7 +665,7 @@ const infoLines = (): string[] =>
 // The same, for warnings (the T-methods render onto the warning fn too).
 const warningLines = (): string[] =>
     jest
-        .mocked(require('../../src/ts/logger') as typeof loggerModule)
+        .mocked(require('../../src/ts/core/logger') as typeof loggerModule)
         .withCategory.mock.results.flatMap((result) =>
             jest
                 .mocked((result.value as loggerModule.CategoryLogger).warning)

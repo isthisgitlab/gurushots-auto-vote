@@ -5,26 +5,26 @@
  * waits), and mock mode's substring answer.
  */
 
-jest.mock('../../src/ts/settings');
-jest.mock('../../src/ts/apiFactory');
-jest.mock('../../src/ts/services/auth');
-jest.mock('../../src/ts/services/autoFill');
+jest.mock('../../src/ts/core/settings');
+jest.mock('../../src/ts/core/apiFactory');
+jest.mock('../../src/ts/core/services/auth');
+jest.mock('../../src/ts/core/services/autoFill');
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import apiFactoryModule = require('../../src/ts/apiFactory');
+import apiFactoryModule = require('../../src/ts/core/apiFactory');
 const apiFactory = jest.mocked(apiFactoryModule);
-import authModule = require('../../src/ts/services/auth');
+import authModule = require('../../src/ts/core/services/auth');
 const auth = jest.mocked(authModule);
-import autoFillModule = require('../../src/ts/services/autoFill');
+import autoFillModule = require('../../src/ts/core/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
-import type * as libraryModule from '../../src/ts/ipc/actions/library';
-import type * as mockTagsModule from '../../src/ts/mock/endpoints/tags';
+import type * as libraryModule from '../../src/ts/core/ipc/actions/library';
+import type * as mockTagsModule from '../../src/ts/core/mock/endpoints/tags';
 import { invalid } from '../helpers/invalid';
 import { logCategories } from '../helpers/logCategories';
 
 const { handleSearchPhotoTags, __resetLibraryThrottle, TAG_THROTTLE_MS } =
-    require('../../src/ts/ipc/actions/library') as typeof libraryModule;
+    require('../../src/ts/core/ipc/actions/library') as typeof libraryModule;
 
 // The handler is invoked the way ipcMain does: the event first.
 const call = (...args: unknown[]) =>
@@ -179,7 +179,7 @@ describe('the throttle', () => {
 
 describe('mock mode', () => {
     test('the mock autocomplete answers the library tags that contain the term: flo -> flower', async () => {
-        const mockTags = require('../../src/ts/mock/endpoints/tags') as typeof mockTagsModule;
+        const mockTags = require('../../src/ts/core/mock/endpoints/tags') as typeof mockTagsModule;
         stubStrategy({ searchTagAutocomplete: mockTags.searchTagAutocomplete });
         await expect(call('flo')).resolves.toEqual({ success: true, tags: ['flower'] });
     });

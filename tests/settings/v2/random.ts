@@ -6,7 +6,7 @@
  * is the one to refuse them.
  */
 
-import { V1_SETTINGS_SCHEMA } from '../../../src/ts/settings/importV1/schema';
+import { V1_SETTINGS_SCHEMA } from '../../../src/ts/core/settings/importV1/schema';
 import {
     autoSpendCount,
     beforeEndList,
@@ -35,7 +35,7 @@ import {
     windowMinutes,
     zBool,
     zString,
-} from '../../../src/ts/settings/importV1/validators';
+} from '../../../src/ts/core/settings/importV1/validators';
 import { at, HOUR, NOW } from './fixtures/types';
 
 import type { z } from 'zod';

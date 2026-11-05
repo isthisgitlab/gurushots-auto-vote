@@ -1,6 +1,6 @@
 /**
  * The renderer's one-shot calls and event subscriptions over the shell bridge
- * (`window.api`, generated from src/ts/ipc/manifest.ts by both the Electron
+ * (`window.api`, generated from src/ts/core/ipc/manifest.ts by both the Electron
  * preload and the Capacitor bridge). Components, hooks and contexts import
  * this module as a namespace (`import * as ipc from '@/api/ipc'`) — or use the
  * query/action hooks beside it — and never touch `window.api` themselves.
@@ -13,7 +13,7 @@
  * best-effort and never throw.
  */
 
-import type { WindowApi } from '../../types/ipc';
+import type { WindowApi } from '../../core/types/ipc';
 
 /**
  * The bridge seen as untyped callables, for the pass-throughs below that only
@@ -52,7 +52,10 @@ const dropLogOutcome = (): void => undefined;
  *
  * @param method - bridge log method name
  */
-function logBestEffort(method: 'logError' | 'logWarning' | 'logDebug', message: string): Promise<void> {
+function logBestEffort(
+    method: 'logError' | 'logWarning' | 'logDebug' | 'logRemoteInfo',
+    message: string,
+): Promise<void> {
     try {
         // The renderer sends the message only; the handler's `data` is optional at runtime.
         const api = window.api as Partial<BridgeCalls<typeof method>> | undefined;
@@ -82,6 +85,8 @@ export const logRendererError = (message: string): Promise<void> => logBestEffor
 export const logRendererWarning = (message: string): Promise<void> => logBestEffort('logWarning', message);
 /** @returns resolves once the line is handed off; never rejects */
 export const logRendererDebug = (message: string): Promise<void> => logBestEffort('logDebug', message);
+/** The remote-access host's INFO line (the desktop's `log-debug` is silent in a packaged build). @returns resolves once the line is handed off; never rejects */
+export const logRemoteInfo = (message: string): Promise<void> => logBestEffort('logRemoteInfo', message);
 
 // Settings
 export const getSettings = forward('getSettings');
@@ -160,6 +165,8 @@ export const downloadUpdate = forward('downloadUpdate');
 export const installUpdate = forward('installUpdate');
 export const skipUpdateVersion = forward('skipUpdateVersion');
 export const onUpdateAvailable = forward('onUpdateAvailable');
+export const onUpdateChecking = forward('onUpdateChecking');
+export const onUpdateNotAvailable = forward('onUpdateNotAvailable');
 export const onDownloadProgress = forward('onDownloadProgress');
 export const onUpdateDownloaded = forward('onUpdateDownloaded');
 export const onUpdateError = forward('onUpdateError');
@@ -169,6 +176,11 @@ export const startLogStream = forward('startLogStream');
 export const stopLogStream = forward('stopLogStream');
 export const getLogBacklog = forward('getLogBacklog');
 export const onLogMessage = forward('onLogMessage');
+
+// Remote access pairing (the desktop app is what gets paired to)
+export const getRemoteAccess = forward('getRemoteAccess');
+export const setRemoteAccess = forward('setRemoteAccess');
+export const resetRemotePairing = forward('resetRemotePairing');
 
 /**
  * Subscribe to settings-changed. Returns the unsubscribe function, or

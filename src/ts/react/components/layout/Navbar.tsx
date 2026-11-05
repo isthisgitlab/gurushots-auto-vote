@@ -1,10 +1,15 @@
+import { useEffect, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { openDonatePage } from '@/api/donate';
 import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
+import { platformKind } from '../../../core/platform/kind';
+import { remoteConnectionCount, remoteRelayCount, subscribeRemoteConnectionCount } from '../../api/remoteHost';
+import { RemoteStateBadge } from '@/components/app/RemoteStateBadge';
+import { RemoteDisconnectButton } from '@/components/app/RemoteDisconnectButton';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 
 /**
- * Main app navbar with title, mock status, donate, logs (Android), settings, and logout
+ * Main app navbar with title, mock status, remote badges, donate, logs (Android), settings, and logout
  */
 export function Navbar({
     isMock,
@@ -18,16 +23,42 @@ export function Navbar({
     onLogout: () => void | Promise<void>;
 }) {
     const { t } = useTranslation();
-    // The in-app Logs button is only for platforms without a menu to open the Logs window from (Android).
-    const { inAppLogs: showLogs } = usePlatformCapabilities();
+    // The in-app Logs button is only for platforms without a menu to open the Logs window from (Android, the phone).
+    const { inAppLogs: showLogs, showsLogout } = usePlatformCapabilities();
+    const kind = platformKind();
+    const desktop = kind === 'electron';
+    // The desktop's badge counts the paired phones while any is connected.
+    const [remoteCount, setRemoteCount] = useState(remoteConnectionCount);
+    const [remoteRelay, setRemoteRelay] = useState(remoteRelayCount);
+    useEffect(
+        () =>
+            subscribeRemoteConnectionCount(() => {
+                setRemoteCount(remoteConnectionCount());
+                setRemoteRelay(remoteRelayCount());
+            }),
+        [],
+    );
 
     return (
         <div className="navbar bg-base-100 shadow-md mb-4">
             <div className="navbar-start w-auto flex-1 min-w-0 flex-wrap gap-x-2">
                 <h1 className="text-xl font-bold">{t('app.title')}</h1>
                 {isMock && <span className="badge badge-warning badge-sm whitespace-nowrap">{t('app.mockMode')}</span>}
+                {desktop && remoteCount > 0 && (
+                    <span className="badge badge-secondary badge-sm whitespace-nowrap">
+                        {remoteRelay > 0
+                            ? t('app.remoteConnectedCountRelay', {
+                                  count: String(remoteCount),
+                                  relay: String(remoteRelay),
+                              })
+                            : t('app.remoteConnectedCount', { count: String(remoteCount) })}
+                    </span>
+                )}
+                {kind === 'remote' && <RemoteStateBadge />}
             </div>
             <div className="navbar-end w-auto shrink-0 gap-2">
+                {/* The Android remote mode's leave: only while the phone shows the computer's app */}
+                <RemoteDisconnectButton t={t} className="btn btn-outline btn-sm max-sm:min-h-10" />
                 <button
                     type="button"
                     className="btn btn-primary btn-sm max-sm:min-h-10"
@@ -56,14 +87,16 @@ export function Navbar({
                 >
                     <StrokeIcon className="w-4 h-4" d={ICON_PATHS.cog} />
                 </button>
-                <button
-                    className="btn btn-outline btn-sm max-sm:min-h-10"
-                    onClick={() => void onLogout()}
-                    title={t('app.logout')}
-                    aria-label={t('app.logout')}
-                >
-                    <StrokeIcon className="w-4 h-4" d={ICON_PATHS.logout} />
-                </button>
+                {showsLogout && (
+                    <button
+                        className="btn btn-outline btn-sm max-sm:min-h-10"
+                        onClick={() => void onLogout()}
+                        title={t('app.logout')}
+                        aria-label={t('app.logout')}
+                    >
+                        <StrokeIcon className="w-4 h-4" d={ICON_PATHS.logout} />
+                    </button>
+                )}
             </div>
         </div>
     );

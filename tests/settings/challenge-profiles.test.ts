@@ -17,9 +17,9 @@
 
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import type { MemoryStore } from '../helpers/headlessStore';
-import settings = require('../../src/ts/settings');
-import loggerModule = require('../../src/ts/logger');
-import { isPlainObject } from '../../src/ts/plainObject';
+import settings = require('../../src/ts/core/settings');
+import loggerModule = require('../../src/ts/core/logger');
+import { isPlainObject } from '../../src/ts/core/plainObject';
 const logger = jest.mocked(loggerModule);
 
 /** One stored profile of a loaded configuration, to edit it behind the facade's back. */
@@ -29,7 +29,7 @@ const profileOf = (config: ReturnType<typeof settings.loadSettings>, name: strin
     return profile;
 };
 
-jest.mock('../../src/ts/logger', () => ({
+jest.mock('../../src/ts/core/logger', () => ({
     info: jest.fn(),
     warning: jest.fn(),
     error: jest.fn(),
@@ -202,15 +202,15 @@ describe('settings facade — challenge profiles', () => {
             const before = store.value;
             let isolated: typeof settings | undefined;
             jest.isolateModules(() => {
-                jest.doMock('../../src/ts/settings/challengeOverrides', () => ({
-                    ...jest.requireActual<typeof import('../../src/ts/settings/challengeOverrides')>(
-                        '../../src/ts/settings/challengeOverrides',
+                jest.doMock('../../src/ts/core/settings/challengeOverrides', () => ({
+                    ...jest.requireActual<typeof import('../../src/ts/core/settings/challengeOverrides')>(
+                        '../../src/ts/core/settings/challengeOverrides',
                     ),
                     replaceChallengeOverridesInSettings: () => false,
                 }));
-                isolated = require('../../src/ts/settings') as typeof settings;
+                isolated = require('../../src/ts/core/settings') as typeof settings;
             });
-            jest.dontMock('../../src/ts/settings/challengeOverrides');
+            jest.dontMock('../../src/ts/core/settings/challengeOverrides');
             // The first load of a fresh module graph runs its once-per-process cleanup: let it, then count writes.
             isolated!.loadSettings();
             const settled = store.value;

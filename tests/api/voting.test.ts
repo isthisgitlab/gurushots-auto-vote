@@ -4,10 +4,10 @@
  * Tests the vote images fetching and submission functionality.
  */
 
-const { getVoteImages, submitVotes } = require('../../src/ts/api/voting') as typeof votingModule;
+const { getVoteImages, submitVotes } = require('../../src/ts/core/api/voting') as typeof votingModule;
 
 // Mock the makePostRequest function
-jest.mock('../../src/ts/api/api-client', () => ({
+jest.mock('../../src/ts/core/api/api-client', () => ({
     makePostRequest: jest.fn(),
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded',
     createCommonHeaders: jest.fn(() => ({ 'x-token': 'test-token' })),
@@ -21,7 +21,7 @@ const mockErrorFn = jest.fn();
 const mockSuccessFn = jest.fn();
 
 // Mock the logger module
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const mockEndOperationFn = jest.fn();
 
     return {
@@ -53,19 +53,19 @@ jest.mock('../../src/ts/logger', () => {
 });
 
 // Mock the metadata module
-jest.mock('../../src/ts/metadata', () => ({
+jest.mock('../../src/ts/core/metadata', () => ({
     updateChallengeVoteMetadata: jest.fn(() => true),
 }));
 
-const { makePostRequest } = jest.mocked(require('../../src/ts/api/api-client') as typeof api_clientModule);
-import loggerModule = require('../../src/ts/logger');
+const { makePostRequest } = jest.mocked(require('../../src/ts/core/api/api-client') as typeof api_clientModule);
+import loggerModule = require('../../src/ts/core/logger');
 const logger = jest.mocked(loggerModule);
-import type * as votingModule from '../../src/ts/api/voting';
-import type * as api_clientModule from '../../src/ts/api/api-client';
-import type * as metadataModule from '../../src/ts/metadata';
-import type { VoteImage } from '../../src/ts/types/gurushots';
+import type * as votingModule from '../../src/ts/core/api/voting';
+import type * as api_clientModule from '../../src/ts/core/api/api-client';
+import type * as metadataModule from '../../src/ts/core/metadata';
+import type { VoteImage } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
-const { updateChallengeVoteMetadata } = jest.mocked(require('../../src/ts/metadata') as typeof metadataModule);
+const { updateChallengeVoteMetadata } = jest.mocked(require('../../src/ts/core/metadata') as typeof metadataModule);
 
 describe('voting', () => {
     beforeEach(() => {

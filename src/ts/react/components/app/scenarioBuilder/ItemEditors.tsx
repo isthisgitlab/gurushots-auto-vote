@@ -12,12 +12,12 @@ import {
     defaultAction,
     defaultSelector,
     defaultFieldValue,
-} from '../../../../scenarios/builderSpec';
-import { COMPARISON_OPS, CURRENCIES, BOOLEAN_ENTRY_FIELDS, isOneOf } from '../../../../scenarios/vocabulary';
-import { moveItem } from '../../../../scenarios/builderModel';
+} from '../../../../core/scenarios/builderSpec';
+import { COMPARISON_OPS, CURRENCIES, BOOLEAN_ENTRY_FIELDS, isOneOf } from '../../../../core/scenarios/vocabulary';
+import { moveItem } from '../../../../core/scenarios/builderModel';
 
 import type { ComponentChildren } from 'preact';
-import type { FieldSpec } from '../../../../scenarios/builderSpec';
+import type { FieldSpec } from '../../../../core/scenarios/builderSpec';
 
 type ValueChange = (next: unknown) => void;
 

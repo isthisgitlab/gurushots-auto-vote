@@ -9,11 +9,11 @@
  * known state by replacing the whole map with a plain call.
  */
 
-import type * as challengeFactsModule from '../../src/ts/settings/challengeFacts';
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type * as challengeFactsModule from '../../src/ts/core/settings/challengeFacts';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
-const facts = require('../../src/ts/settings/challengeFacts') as typeof challengeFactsModule;
+const facts = require('../../src/ts/core/settings/challengeFacts') as typeof challengeFactsModule;
 
 beforeEach(() => {
     // A plain call replaces the whole map — a clean slate per test.

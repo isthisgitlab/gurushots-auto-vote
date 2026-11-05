@@ -1,34 +1,27 @@
 /**
  * NativeAutovoteBridge wraps the custom AutoVoteBackground Capacitor plugin
  * (the native Foreground Service + AlarmManager that drives background voting).
- * These tests exercise its runtime guard, lazy plugin resolution, and the
- * { available } result shapes — all without a device. runtime is mocked so
- * isCapacitor() can be flipped per-test; the plugin is injected via
- * globalThis.Capacitor.Plugins. getPlugin() caches its lookup, so each test
- * resets the module registry.
+ * These tests exercise its Capacitor-global guard, lazy plugin resolution, and
+ * the { available } result shapes — all without a device. The guard flips
+ * through the globalThis.Capacitor the module reads (its presence and its
+ * platform probe), and the plugin is injected via globalThis.Capacitor.Plugins.
+ * getPlugin() caches its lookup, so each test resets the module registry.
  */
 
-import type * as RuntimeModule from '../../src/ts/runtime';
-import type { CapacitorGlobals, CapacitorPlugins } from '../../src/ts/types/capacitor';
+import type { CapacitorGlobals, CapacitorPlugins } from '../../src/ts/core/types/capacitor';
 import { invalid } from '../helpers/invalid';
 
-jest.mock('../../src/ts/runtime', () => ({
-    isCapacitor: jest.fn(() => false),
-}));
-
 const loadBridge = () =>
-    require('../../src/ts/services/NativeAutovoteBridge') as typeof import('../../src/ts/services/NativeAutovoteBridge');
+    require('../../src/ts/shells/capacitor/NativeAutovoteBridge') as typeof import('../../src/ts/shells/capacitor/NativeAutovoteBridge');
 
 const g = globalThis as CapacitorGlobals;
 
 describe('NativeAutovoteBridge', () => {
-    let runtime: jest.MockedObject<typeof RuntimeModule>;
-
     beforeEach(() => {
         jest.resetModules();
-        delete g.Capacitor;
-        runtime = jest.mocked(require('../../src/ts/runtime') as typeof RuntimeModule);
-        runtime.isCapacitor.mockReturnValue(true);
+        // On the native platform by default; the tests that say otherwise
+        // delete or reshape the global.
+        g.Capacitor = { isNativePlatform: () => true };
     });
 
     afterEach(() => {
@@ -36,7 +29,9 @@ describe('NativeAutovoteBridge', () => {
     });
 
     describe('when not running on Capacitor', () => {
-        beforeEach(() => runtime.isCapacitor.mockReturnValue(false));
+        beforeEach(() => {
+            delete g.Capacitor;
+        });
 
         test('isAvailable() is false and start/stop/getStatus report unavailable', async () => {
             const bridge = loadBridge();
@@ -50,9 +45,9 @@ describe('NativeAutovoteBridge', () => {
     test('says once that the plugin is not registered, however often it is asked for', () => {
         const warning = jest.fn();
         jest.mocked(
-            require('../../src/ts/logger') as typeof import('../../src/ts/logger'),
+            require('../../src/ts/core/logger') as typeof import('../../src/ts/core/logger'),
         ).withCategory.mockReturnValue(invalid({ warning }));
-        g.Capacitor = { Plugins: {} };
+        g.Capacitor = { isNativePlatform: () => true, Plugins: {} };
         const bridge = loadBridge();
         expect(bridge.isAvailable()).toBe(false);
         expect(bridge.compareAndWrite('gs_join_state', null, '{}')).toBeNull();
@@ -62,7 +57,7 @@ describe('NativeAutovoteBridge', () => {
     });
 
     test('reports unavailable when the plugin is not registered on the build', async () => {
-        g.Capacitor = { Plugins: {} };
+        g.Capacitor = { isNativePlatform: () => true, Plugins: {} };
         const bridge = loadBridge();
         expect(bridge.isAvailable()).toBe(false);
         await expect(bridge.start()).resolves.toEqual({ running: false, available: false });
@@ -76,7 +71,7 @@ describe('NativeAutovoteBridge', () => {
             compareAndWrite: jest.fn(),
             wipeLocalData: jest.fn(),
         };
-        g.Capacitor = { Plugins: { AutoVoteBackground: plugin } };
+        g.Capacitor = { isNativePlatform: () => true, Plugins: { AutoVoteBackground: plugin } };
         const bridge = loadBridge();
 
         expect(bridge.isAvailable()).toBe(true);
@@ -93,7 +88,7 @@ describe('NativeAutovoteBridge', () => {
             compareAndWrite: jest.fn(),
             wipeLocalData: jest.fn(),
         };
-        g.Capacitor = { Plugins: { AutoVoteBackground: plugin } };
+        g.Capacitor = { isNativePlatform: () => true, Plugins: { AutoVoteBackground: plugin } };
         const bridge = loadBridge();
 
         await expect(bridge.start()).resolves.toEqual({ running: false, available: true, error: 'boom' });
@@ -104,7 +99,7 @@ describe('NativeAutovoteBridge', () => {
     test('a start/stop failure is logged, a getStatus failure is not (it polls)', async () => {
         const error = jest.fn();
         jest.mocked(
-            require('../../src/ts/logger') as typeof import('../../src/ts/logger'),
+            require('../../src/ts/core/logger') as typeof import('../../src/ts/core/logger'),
         ).withCategory.mockReturnValue(invalid({ error }));
         const startFailure = new Error('boom');
         const stopFailure = new Error('stop boom');
@@ -115,7 +110,7 @@ describe('NativeAutovoteBridge', () => {
             compareAndWrite: jest.fn(),
             wipeLocalData: jest.fn(),
         };
-        g.Capacitor = { Plugins: { AutoVoteBackground: plugin } };
+        g.Capacitor = { isNativePlatform: () => true, Plugins: { AutoVoteBackground: plugin } };
         const bridge = loadBridge();
 
         await bridge.getStatus();
@@ -131,9 +126,10 @@ describe('NativeAutovoteBridge', () => {
     test('reports unavailable (and logs) when reading the plugin registry throws', async () => {
         const warning = jest.fn();
         jest.mocked(
-            require('../../src/ts/logger') as typeof import('../../src/ts/logger'),
+            require('../../src/ts/core/logger') as typeof import('../../src/ts/core/logger'),
         ).withCategory.mockReturnValueOnce(invalid({ warning }));
         g.Capacitor = {
+            isNativePlatform: () => true,
             get Plugins(): CapacitorPlugins {
                 throw new Error('bridge not ready');
             },
@@ -147,7 +143,10 @@ describe('NativeAutovoteBridge', () => {
     describe('compareAndWrite (the app window changing a store the service changes too)', () => {
         test('goes to the plugin with the key, what the caller read and the new value, and answers what it did', async () => {
             const compareAndWrite = jest.fn().mockResolvedValue({ saved: false, current: '{"a":1}' });
-            g.Capacitor = { Plugins: { AutoVoteBackground: invalid({ compareAndWrite }) } };
+            g.Capacitor = {
+                isNativePlatform: () => true,
+                Plugins: { AutoVoteBackground: invalid({ compareAndWrite }) },
+            };
             const bridge = loadBridge();
             await expect(bridge.compareAndWrite('gs_join_state', null, '{"b":1}')).resolves.toEqual({
                 saved: false,
@@ -157,13 +156,16 @@ describe('NativeAutovoteBridge', () => {
         });
 
         test('is null where there is no plugin (a build without the service): the caller is the only writer', () => {
-            g.Capacitor = { Plugins: {} };
+            g.Capacitor = { isNativePlatform: () => true, Plugins: {} };
             expect(loadBridge().compareAndWrite('gs_join_state', null, '{}')).toBeNull();
         });
 
         test('a rejection of the plugin reaches the caller, who treats it as not saved', async () => {
             const compareAndWrite = jest.fn().mockRejectedValue(new Error('not saved'));
-            g.Capacitor = { Plugins: { AutoVoteBackground: invalid({ compareAndWrite }) } };
+            g.Capacitor = {
+                isNativePlatform: () => true,
+                Plugins: { AutoVoteBackground: invalid({ compareAndWrite }) },
+            };
             await expect(loadBridge().compareAndWrite('gs_join_state', null, '{}')).rejects.toThrow('not saved');
         });
     });

@@ -6,24 +6,24 @@
  * load light.
  */
 
-import type * as capacitorModule from '../../src/ts/bridge/capacitor';
-import type { WindowApi } from '../../src/ts/types/ipc';
-import type { UpdateSummary } from '../../src/ts/services/AutoUpdater';
+import type * as capacitorModule from '../../src/ts/shells/capacitor/bridge/capacitor';
+import type { WindowApi } from '../../src/ts/core/types/ipc';
+import type { UpdateSummary } from '../../src/ts/shells/electron/AutoUpdater';
 
 let mockSkipStore = '';
 const mockCheck = jest.fn<Promise<unknown>, unknown[]>();
 
-jest.mock('../../src/ts/ipc/settings.handlers', () => ({ buildHandlers: () => ({}) }));
-jest.mock('../../src/ts/ipc/voting.handlers', () => ({ buildHandlers: () => ({}) }));
-jest.mock('../../src/ts/ipc/log.handlers', () => ({ buildHandlers: () => ({}) }));
-jest.mock('../../src/ts/ipc/actions.handlers', () => ({ buildHandlers: () => ({}) }));
-jest.mock('../../src/ts/services/AndroidUpdateInstaller', () => ({ downloadAndInstall: jest.fn() }));
-jest.mock('../../src/ts/services/visionVerifier', () => ({ hasBundledModel: async () => true }));
-jest.mock('../../src/ts/services/UpdateChecker', () => ({
+jest.mock('../../src/ts/core/ipc/settings.handlers', () => ({ buildHandlers: () => ({}) }));
+jest.mock('../../src/ts/core/ipc/voting.handlers', () => ({ buildHandlers: () => ({}) }));
+jest.mock('../../src/ts/core/ipc/log.handlers', () => ({ buildHandlers: () => ({}) }));
+jest.mock('../../src/ts/core/ipc/actions.handlers', () => ({ buildHandlers: () => ({}) }));
+jest.mock('../../src/ts/shells/capacitor/AndroidUpdateInstaller', () => ({ downloadAndInstall: jest.fn() }));
+jest.mock('../../src/ts/core/services/visionVerifier', () => ({ hasBundledModel: async () => true }));
+jest.mock('../../src/ts/core/services/UpdateChecker', () => ({
     checkForUpdates: (...args: unknown[]) => mockCheck(...args),
     getReleasesUrl: () => 'https://example.com/releases',
 }));
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     getSetting: jest.fn((key) => (key === 'skipUpdateVersion' ? mockSkipStore : undefined)),
     setSetting: jest.fn((key: string, value: string) => {
         if (key === 'skipUpdateVersion') mockSkipStore = value;
@@ -45,7 +45,7 @@ describe('Capacitor bridge — update skip', () => {
         // Reset the module registry so the bridge's module-level
         // lastUpdateInfo cache doesn't leak between tests.
         jest.resetModules();
-        const { installBridge } = require('../../src/ts/bridge/capacitor') as typeof capacitorModule;
+        const { installBridge } = require('../../src/ts/shells/capacitor/bridge/capacitor') as typeof capacitorModule;
         api = installBridge();
     });
 

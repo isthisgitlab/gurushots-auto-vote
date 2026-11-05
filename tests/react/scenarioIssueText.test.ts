@@ -1,7 +1,7 @@
 import { scenarioIssueText, scenarioPathText } from '@/utils/scenarioIssueText';
 import { fillTemplate } from './helpers/setup';
 
-import type { Translate } from '../../src/ts/translations/translator';
+import type { Translate } from '../../src/ts/core/translations/translator';
 
 const keys: Translate = (key) => key;
 

@@ -3,7 +3,7 @@
  * settings source it is handed, per challenge id, and answers true only for a stored `true`.
  */
 
-import { isManualPhotosOnly } from '../../src/ts/services/manualPhotosOnly';
+import { isManualPhotosOnly } from '../../src/ts/core/services/manualPhotosOnly';
 import { invalid } from '../helpers/invalid';
 
 const sourceOf = (value: unknown) =>

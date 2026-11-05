@@ -6,14 +6,14 @@
  * caller can rely on the contract.
  */
 
-import type * as manualVoteModule from '../../src/ts/services/manualVote';
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type * as manualVoteModule from '../../src/ts/core/services/manualVote';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 const { submitVotesForChallenge, voteAllChallengesManual, STAGGER_MS } =
-    require('../../src/ts/services/manualVote') as typeof manualVoteModule;
+    require('../../src/ts/core/services/manualVote') as typeof manualVoteModule;
 
-jest.mock('../../src/ts/settings');
+jest.mock('../../src/ts/core/settings');
 
 const NOW = () => Math.floor(Date.now() / 1000);
 

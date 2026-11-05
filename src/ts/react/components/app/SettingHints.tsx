@@ -1,13 +1,13 @@
 import { deriveWindowHints } from '@/utils/windowHints';
 import { formatSecondsAsHoursMinutes } from '@/utils/timeFieldUnits';
 import { ToneNote } from '@/components/ui/ToneNote';
-import { MAX_VOTING_PAUSE_MINUTES } from '../../../settings/limits';
-import { effectiveTimezone } from '../../../settings/uiDefaults';
+import { MAX_VOTING_PAUSE_MINUTES } from '../../../core/settings/limits';
+import { effectiveTimezone } from '../../../core/settings/uiDefaults';
 
 import type { WindowHintPolicy, WindowHintState } from '@/utils/windowHints';
-import type { Challenge } from '../../../types/gurushots';
-import type { ConfigApp } from '../../../types/config';
-import type { HintsFor, RendererSchema, SettingHint, Translate } from '../../../types/settingsEditor';
+import type { Challenge } from '../../../core/types/gurushots';
+import type { ConfigApp } from '../../../core/types/config';
+import type { HintsFor, RendererSchema, SettingHint, Translate } from '../../../core/types/settingsEditor';
 
 export type EffectiveOf = (key: string) => unknown;
 

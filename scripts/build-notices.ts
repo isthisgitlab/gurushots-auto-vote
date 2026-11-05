@@ -23,7 +23,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseAllDocuments } from 'yaml';
-import { isPlainObject } from '../src/ts/plainObject';
+import { isPlainObject } from '../src/ts/core/plainObject';
 import { GLOVE_URL } from './fetch-embeddings/config';
 import { REPOS } from './fetch-vision-model';
 import { readLicenseText, visionModelNotice } from './lib/licenses';

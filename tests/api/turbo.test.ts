@@ -2,13 +2,13 @@
  * Tests for turbo.ts
  */
 
-import type * as turboModule from '../../src/ts/api/turbo';
-import type * as api_clientModule from '../../src/ts/api/api-client';
+import type * as turboModule from '../../src/ts/core/api/turbo';
+import type * as api_clientModule from '../../src/ts/core/api/api-client';
 
 const { getChallengeTurbo, submitTurboSelection, applyTurbo, startTurboSession, submitSnapVote } =
-    require('../../src/ts/api/turbo') as typeof turboModule;
+    require('../../src/ts/core/api/turbo') as typeof turboModule;
 
-jest.mock('../../src/ts/api/api-client', () => ({
+jest.mock('../../src/ts/core/api/api-client', () => ({
     makePostRequest: jest.fn(),
     postOnce: jest.fn(),
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8',
@@ -17,7 +17,7 @@ jest.mock('../../src/ts/api/api-client', () => ({
 describe('turbo', () => {
     const mockToken = 'test-token-123';
     const { makePostRequest, postOnce } = jest.mocked(
-        require('../../src/ts/api/api-client') as typeof api_clientModule,
+        require('../../src/ts/core/api/api-client') as typeof api_clientModule,
     );
 
     beforeEach(() => {

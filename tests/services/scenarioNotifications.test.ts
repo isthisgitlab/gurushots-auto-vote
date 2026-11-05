@@ -3,12 +3,12 @@
  * started, each once, coalesced per cycle; never throws.
  */
 
-import type * as scenarioNotificationsModule from '../../src/ts/services/scenarioNotifications';
-import type { OutboxItem } from '../../src/ts/services/scenarioNotifications';
+import type * as scenarioNotificationsModule from '../../src/ts/core/services/scenarioNotifications';
+import type { OutboxItem } from '../../src/ts/core/services/scenarioNotifications';
 import { invalid } from '../helpers/invalid';
 
 const { createNoticeTracker, formatScenarioNotification, createScenarioNotifier } =
-    require('../../src/ts/services/scenarioNotifications') as typeof scenarioNotificationsModule;
+    require('../../src/ts/core/services/scenarioNotifications') as typeof scenarioNotificationsModule;
 
 /** Fill `{name}` tokens the way the translator core does: a missing var renders as an empty string. */
 const fill = (text: string, vars?: Record<string, string | number | null | undefined>): string =>

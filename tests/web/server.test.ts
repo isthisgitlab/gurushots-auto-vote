@@ -15,15 +15,18 @@ import * as net from 'node:net';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { clearInstalledPlatform } from '../helpers/platform';
+import { platform } from '../../src/ts/core/platform/port';
 
-import type * as serverModule from '../../src/ts/web/server';
-import type * as settingsHandlersModule from '../../src/ts/ipc/settings.handlers';
-import type * as authModule from '../../src/ts/services/auth';
-import type * as settingsModule from '../../src/ts/settings';
-import type * as randomizerModule from '../../src/ts/api/randomizer';
-import type * as updateCheckerModule from '../../src/ts/services/UpdateChecker';
-import type * as cliSessionLockModule from '../../src/ts/settings/cliSessionLock';
-import type { CategoryLogger, GuiLogSink } from '../../src/ts/logger';
+import type { Platform } from '../../src/ts/core/platform/port';
+
+import type * as serverModule from '../../src/ts/shells/web/server';
+import type * as authModule from '../../src/ts/core/services/auth';
+import type * as settingsModule from '../../src/ts/core/settings';
+import type * as randomizerModule from '../../src/ts/core/api/randomizer';
+import type * as updateCheckerModule from '../../src/ts/core/services/UpdateChecker';
+import type * as cliSessionLockModule from '../../src/ts/platforms/node/cliSessionLock';
+import type { CategoryLogger, GuiLogSink } from '../../src/ts/core/logger';
 
 let mockWipeSucceeds = true;
 // While set, 'slow-setting' waits for it: a request that is still in flight when a wipe finishes.
@@ -31,26 +34,28 @@ let mockSlowGate: Promise<void> | null = null;
 // The stored settings the server reads, per key: the clear tests set token and stayLoggedIn per test.
 // A wipe empties the stored configuration, so its handler empties this too (the token then reads '').
 let mockSettingValues: Record<string, string | boolean> = {};
-let mockSettingsDeps: Parameters<typeof settingsHandlersModule.buildHandlers>[0] | null = null;
-jest.mock('../../src/ts/ipc/settings.handlers', () => ({
-    buildHandlers: (deps: Parameters<typeof settingsHandlersModule.buildHandlers>[0]) => {
-        mockSettingsDeps = deps;
-        return {
-            'get-setting': async (_event: unknown, key: string, scope = 'global') => ({ key, scope }),
-            'slow-setting': async () => {
-                await mockSlowGate;
-                return 'slow';
-            },
-            'wipe-local-data': async () => {
-                if (!mockWipeSucceeds) return { success: false, error: 'busy' };
-                mockSettingsDeps?.afterWipe?.();
-                mockSettingValues = {};
-                return { success: true };
-            },
-        };
-    },
+// The web platform the server module installs at load; its windows delegate
+// to the run the current createWebServer registered (setWebShellRun), so the
+// mock's wipe hand-over and the broadcast test drive this test's server the
+// way the production flow does. The platform slot itself cannot serve here:
+// the setup file's afterEach reinstalls the node test platform on it.
+let webPlatform: Platform;
+jest.mock('../../src/ts/core/ipc/settings.handlers', () => ({
+    buildHandlers: () => ({
+        'get-setting': async (_event: unknown, key: string, scope = 'global') => ({ key, scope }),
+        'slow-setting': async () => {
+            await mockSlowGate;
+            return 'slow';
+        },
+        'wipe-local-data': async () => {
+            if (!mockWipeSucceeds) return { success: false, error: 'busy' };
+            webPlatform.windows.afterWipe();
+            mockSettingValues = {};
+            return { success: true };
+        },
+    }),
 }));
-jest.mock('../../src/ts/ipc/voting.handlers', () => ({
+jest.mock('../../src/ts/core/ipc/voting.handlers', () => ({
     buildHandlers: () => ({
         'gui-vote': async () => {
             throw new Error('vote exploded');
@@ -61,19 +66,19 @@ jest.mock('../../src/ts/ipc/voting.handlers', () => ({
         'get-active-challenges': async () => ({ big: BigInt(1) }),
     }),
 }));
-jest.mock('../../src/ts/ipc/log.handlers', () => ({
+jest.mock('../../src/ts/core/ipc/log.handlers', () => ({
     buildHandlers: () => ({ 'get-log-backlog': async () => undefined }),
 }));
-jest.mock('../../src/ts/ipc/actions.handlers', () => ({ buildHandlers: () => ({}) }));
-jest.mock('../../src/ts/ipc/computations.handlers', () => ({ buildHandlers: () => ({}) }));
-jest.mock('../../src/ts/ipc/currency.handlers', () => ({ buildHandlers: () => ({}) }));
-jest.mock('../../src/ts/ipc/scenarios.handlers', () => ({ buildHandlers: () => ({}) }));
-jest.mock('../../src/ts/services/visionVerifier', () => ({ hasBundledModel: async () => true }));
-jest.mock('../../src/ts/services/UpdateChecker', () => ({
+jest.mock('../../src/ts/core/ipc/actions.handlers', () => ({ buildHandlers: () => ({}) }));
+jest.mock('../../src/ts/core/ipc/computations.handlers', () => ({ buildHandlers: () => ({}) }));
+jest.mock('../../src/ts/core/ipc/currency.handlers', () => ({ buildHandlers: () => ({}) }));
+jest.mock('../../src/ts/core/ipc/scenarios.handlers', () => ({ buildHandlers: () => ({}) }));
+jest.mock('../../src/ts/core/services/visionVerifier', () => ({ hasBundledModel: async () => true }));
+jest.mock('../../src/ts/core/services/UpdateChecker', () => ({
     checkForUpdates: jest.fn(),
     getReleasesUrl: jest.fn(() => 'https://example.com/releases'),
 }));
-jest.mock('../../src/ts/services/auth', () => {
+jest.mock('../../src/ts/core/services/auth', () => {
     class LogoutNotSavedError extends Error {}
     return {
         logout: jest.fn(async () => true),
@@ -81,8 +86,8 @@ jest.mock('../../src/ts/services/auth', () => {
         LogoutNotSavedError,
     };
 });
-jest.mock('../../src/ts/api/randomizer', () => ({ initializeHeaders: jest.fn() }));
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/api/randomizer', () => ({ initializeHeaders: jest.fn() }));
+jest.mock('../../src/ts/core/settings', () => ({
     getSetting: jest.fn((key: string) => mockSettingValues[key] ?? ''),
     setSetting: jest.fn(() => true),
     seedIntentProfiles: jest.fn(),
@@ -91,25 +96,33 @@ jest.mock('../../src/ts/settings', () => ({
 }));
 // The marker the server holds while it runs: recorded, never written to a user-data directory.
 const mockReleaseMarker = jest.fn<void, []>();
-jest.mock('../../src/ts/settings/cliSessionLock', () => ({
+jest.mock('../../src/ts/platforms/node/cliSessionLock', () => ({
     holdWebServerLock: jest.fn(() => mockReleaseMarker),
     isCliSessionActive: jest.fn(() => Promise.resolve(false)),
     isDesktopAppActive: jest.fn(() => Promise.resolve(false)),
     isWebServerActive: jest.fn(() => Promise.resolve(false)),
 }));
 const mockLog = { error: jest.fn(), warning: jest.fn(), info: jest.fn() };
-jest.mock('../../src/ts/logger', () => ({
+jest.mock('../../src/ts/core/logger', () => ({
     withCategory: jest.fn((): Pick<CategoryLogger, 'error' | 'warning' | 'info'> => mockLog),
     printLine: jest.fn(),
 }));
 
-const { createWebServer, startWebServer } = require('../../src/ts/web/server') as typeof serverModule;
-const auth = jest.mocked(require('../../src/ts/services/auth') as typeof authModule);
-const settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
-const randomizer = jest.mocked(require('../../src/ts/api/randomizer') as typeof randomizerModule);
-const updateChecker = jest.mocked(require('../../src/ts/services/UpdateChecker') as typeof updateCheckerModule);
-const cliSessionLock = jest.mocked(require('../../src/ts/settings/cliSessionLock') as typeof cliSessionLockModule);
-const printLine = jest.mocked(require('../../src/ts/logger') as { printLine: jest.Mock<void, [string]> }).printLine;
+clearInstalledPlatform();
+const { createWebServer, startWebServer } = require('../../src/ts/shells/web/server') as typeof serverModule;
+// The server module imported its platform module first, so the install ran
+// before this read.
+webPlatform = platform();
+const auth = jest.mocked(require('../../src/ts/core/services/auth') as typeof authModule);
+const settings = jest.mocked(require('../../src/ts/core/settings') as typeof settingsModule);
+const randomizer = jest.mocked(require('../../src/ts/core/api/randomizer') as typeof randomizerModule);
+const updateChecker = jest.mocked(require('../../src/ts/core/services/UpdateChecker') as typeof updateCheckerModule);
+const cliSessionLock = jest.mocked(
+    require('../../src/ts/platforms/node/cliSessionLock') as typeof cliSessionLockModule,
+);
+const printLine = jest.mocked(
+    require('../../src/ts/core/logger') as { printLine: jest.Mock<void, [string]> },
+).printLine;
 
 type Reply = { status: number; headers: http.IncomingHttpHeaders; body: string };
 
@@ -618,7 +631,10 @@ describe('events', () => {
         expect(stream.frames[0]).toBe(': connected\n\n');
 
         emit('update-checking');
-        mockSettingsDeps!.broadcastSettingsChange!({ theme: 'dark' });
+        // The settings writes reach this channel through the web platform's
+        // windows (the run the beforeEach's createWebServer registered), the
+        // way a real handler announces one.
+        webPlatform.windows.broadcastSettingsChanged({ theme: 'dark' });
         await waitFor(() => stream.frames.join('').includes('settings-changed'));
         const all = stream.frames.join('');
         expect(all).toContain('event: update-checking\ndata: null\n\n');
@@ -733,7 +749,9 @@ describe('startWebServer', () => {
 
     test('after a wipe it says on the console that the web shell must be started again', async () => {
         const started = await startWebServer({ port: 0, distDir });
-        const loggerModule = jest.mocked(require('../../src/ts/logger') as { printLine: jest.Mock<void, [string]> });
+        const loggerModule = jest.mocked(
+            require('../../src/ts/core/logger') as { printLine: jest.Mock<void, [string]> },
+        );
         const origin = started.url.split('#')[0];
 
         await fetch(`${origin}api/invoke/wipe-local-data`, {

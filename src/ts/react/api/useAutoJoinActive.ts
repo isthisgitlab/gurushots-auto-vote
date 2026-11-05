@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useIpcQuery } from './useIpcQuery';
 
-import type { WindowApi } from '../../types/ipc';
+import type { WindowApi } from '../../core/types/ipc';
 import type { IpcQueryTools } from './useIpcQuery';
 
 /**

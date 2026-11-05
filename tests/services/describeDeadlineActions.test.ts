@@ -9,20 +9,21 @@
  * and the boostBlocked empty-entry guard.
  */
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import VotingLogic = require('../../src/ts/services/VotingLogic');
+import VotingLogic = require('../../src/ts/core/services/VotingLogic');
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 const { buildChallenge: buildBaseChallenge } =
     require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
-import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
-import type { Challenge, MemberBoost, MemberTurbo, RankingEntry } from '../../src/ts/types/gurushots';
+import type * as entryAgeStoreModule from '../../src/ts/core/entryAgeStore';
+import type * as selectionModule from '../../src/ts/core/services/boostGuard/selection';
+import type { Challenge, MemberBoost, MemberTurbo, RankingEntry } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
-const { createMemoryEntryAgeLedger } = require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
+const { createMemoryEntryAgeLedger } = require('../../src/ts/core/entryAgeStore') as typeof entryAgeStoreModule;
 const { boostDeadline } =
-    require('../../src/ts/voting/boostWindow') as typeof import('../../src/ts/voting/boostWindow');
+    require('../../src/ts/core/voting/boostWindow') as typeof import('../../src/ts/core/voting/boostWindow');
 
-jest.mock('../../src/ts/settings');
+jest.mock('../../src/ts/core/settings');
 
 const NOW = 1_000_000 - 100; // just before close_time below
 const CLOSE = 1_000_000;
@@ -470,7 +471,7 @@ describe('describeDeadlineActions — Manual Only', () => {
     });
 
     test('the quit guard (and so the sleep boost) selects no boost on the challenge', () => {
-        const guard = require('../../src/ts/windows/quitGuard') as typeof import('../../src/ts/windows/quitGuard');
+        const guard = require('../../src/ts/core/services/boostGuard/selection') as typeof selectionModule;
         const challenge = build({ boost: { state: 'AVAILABLE', timeout: CLOSE - 10 } });
         guard.rememberChallenges([challenge], false);
         try {
@@ -483,7 +484,7 @@ describe('describeDeadlineActions — Manual Only', () => {
             mockSettings({ manualPhotosOnly: true });
             expect(guard.imminentBoostChallenges(NOW, VotingLogic.describeDeadlineActions, 3600, null)).toEqual([]);
         } finally {
-            guard.resetQuitGuard();
+            guard.resetBoostSelection();
         }
     });
 

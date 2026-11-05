@@ -4,8 +4,8 @@
  * Tests that the boost timing logic respects user settings instead of hardcoded values.
  */
 
-import type * as realModule from '../../src/ts/strategies/real';
-import type * as loggerModule from '../../src/ts/logger';
+import type * as realModule from '../../src/ts/core/strategies/real';
+import type * as loggerModule from '../../src/ts/core/logger';
 import { invalid } from '../helpers/invalid';
 
 // The logger factory below also exports its shared start/endOperation mocks.
@@ -28,14 +28,14 @@ const mockSettings = {
     },
 };
 
-jest.mock('../../src/ts/settings', () => mockSettings);
+jest.mock('../../src/ts/core/settings', () => mockSettings);
 
 // Mock the challenges module
 const mockChallenges = {
     getActiveChallenges: jest.fn(),
 };
 
-jest.mock('../../src/ts/strategies/real/activeChallenges', () => mockChallenges);
+jest.mock('../../src/ts/core/strategies/real/activeChallenges', () => mockChallenges);
 
 // Mock the voting module
 const mockVoting = {
@@ -43,14 +43,14 @@ const mockVoting = {
     submitVotes: jest.fn(),
 };
 
-jest.mock('../../src/ts/api/voting', () => mockVoting);
+jest.mock('../../src/ts/core/api/voting', () => mockVoting);
 
 // Mock the boost module
 const mockBoost = {
     applyBoost: jest.fn(),
 };
 
-jest.mock('../../src/ts/strategies/real/applyBoost', () => mockBoost);
+jest.mock('../../src/ts/core/strategies/real/applyBoost', () => mockBoost);
 
 // Mock the timing module
 const mockUtils = {
@@ -58,7 +58,7 @@ const mockUtils = {
     getRandomDelay: jest.fn(),
 };
 
-jest.mock('../../src/ts/timing', () => mockUtils);
+jest.mock('../../src/ts/core/timing', () => mockUtils);
 
 // Mock the voting logic service
 const mockVotingLogic = {
@@ -82,10 +82,10 @@ const mockVotingLogic = {
     ]),
 };
 
-jest.mock('../../src/ts/services/VotingLogic', () => mockVotingLogic);
+jest.mock('../../src/ts/core/services/VotingLogic', () => mockVotingLogic);
 
 // Mock the turbo module so its imports are not loaded
-jest.mock('../../src/ts/api/turbo', () => ({
+jest.mock('../../src/ts/core/api/turbo', () => ({
     getChallengeTurbo: jest.fn(),
     submitTurboSelection: jest.fn(),
     applyTurbo: jest.fn(),
@@ -97,10 +97,10 @@ const mockMetadata = {
     cleanupStaleMetadata: jest.fn(),
 };
 
-jest.mock('../../src/ts/metadata', () => mockMetadata);
+jest.mock('../../src/ts/core/metadata', () => mockMetadata);
 
 // Mock the logger module
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const mockStartOperationFn = jest.fn();
     const mockEndOperationFn = jest.fn();
 
@@ -208,7 +208,7 @@ describe('boost timing settings', () => {
             });
 
             // Import the main module
-            const { fetchChallengesAndVote } = require('../../src/ts/strategies/real') as typeof realModule;
+            const { fetchChallengesAndVote } = require('../../src/ts/core/strategies/real') as typeof realModule;
 
             await fetchChallengesAndVote(mockToken);
 
@@ -224,7 +224,7 @@ describe('boost timing settings', () => {
             expect(mockBoost.applyBoost).toHaveBeenCalledWith(challengeWithBoost, mockToken);
 
             // Verify that boost operation was started and ended
-            const logger: LoggerMock = invalid(require('../../src/ts/logger'));
+            const logger: LoggerMock = invalid(require('../../src/ts/core/logger'));
             expect(logger.withCategory).toHaveBeenCalledWith('boost');
             expect(logger.__mockStartOperationFn).toHaveBeenCalledWith(
                 'boost-12345',
@@ -265,7 +265,7 @@ describe('boost timing settings', () => {
             mockVotingLogic.getEffectiveBoostTime.mockReturnValue(1800); // 30 minutes
 
             // Import the main module
-            const { fetchChallengesAndVote } = require('../../src/ts/strategies/real') as typeof realModule;
+            const { fetchChallengesAndVote } = require('../../src/ts/core/strategies/real') as typeof realModule;
 
             await fetchChallengesAndVote(mockToken);
 
@@ -313,7 +313,7 @@ describe('boost timing settings', () => {
             mockVotingLogic.getEffectiveBoostTime.mockReturnValue(3600); // 1 hour default
 
             // Import the main module
-            const { fetchChallengesAndVote } = require('../../src/ts/strategies/real') as typeof realModule;
+            const { fetchChallengesAndVote } = require('../../src/ts/core/strategies/real') as typeof realModule;
 
             await fetchChallengesAndVote(mockToken);
 
@@ -377,7 +377,7 @@ describe('boost timing settings', () => {
                 .mockReturnValueOnce(7200); // 2 hours for second challenge
 
             // Import the main module
-            const { fetchChallengesAndVote } = require('../../src/ts/strategies/real') as typeof realModule;
+            const { fetchChallengesAndVote } = require('../../src/ts/core/strategies/real') as typeof realModule;
 
             await fetchChallengesAndVote(mockToken);
 
@@ -421,7 +421,7 @@ describe('boost timing settings', () => {
                 targetExposure: 100,
             });
 
-            const { fetchChallengesAndVote } = require('../../src/ts/strategies/real') as typeof realModule;
+            const { fetchChallengesAndVote } = require('../../src/ts/core/strategies/real') as typeof realModule;
 
             await expect(fetchChallengesAndVote(mockToken)).resolves.toBeDefined();
 
@@ -459,7 +459,7 @@ describe('boost timing settings', () => {
                 targetExposure: 100,
             });
 
-            const { fetchChallengesAndVote } = require('../../src/ts/strategies/real') as typeof realModule;
+            const { fetchChallengesAndVote } = require('../../src/ts/core/strategies/real') as typeof realModule;
 
             await expect(fetchChallengesAndVote(mockToken)).resolves.toBeDefined();
 

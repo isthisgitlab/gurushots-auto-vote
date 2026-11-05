@@ -1,4 +1,4 @@
-import type { Challenge, OpenChallenge } from '../../types/gurushots';
+import type { Challenge, OpenChallenge } from '../../core/types/gurushots';
 
 /** What a row costs to join: its `join_coins` as a positive number, else 0 (free). */
 export const costOf = (c: Challenge): number => {

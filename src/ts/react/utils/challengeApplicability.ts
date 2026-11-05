@@ -1,5 +1,5 @@
-import type { Challenge, ChallengeMember } from '../../types/gurushots';
-import { featureNeverFires } from '../../voting/entryPins';
+import type { Challenge, ChallengeMember } from '../../core/types/gurushots';
+import { featureNeverFires } from '../../core/voting/entryPins';
 /**
  * Per-challenge settings applicability.
  *

@@ -6,7 +6,7 @@
  */
 
 import { parse } from 'yaml';
-import { isPlainObject } from '../src/ts/plainObject';
+import { isPlainObject } from '../src/ts/core/plainObject';
 
 const { execFileSync } = jest.requireActual<typeof import('node:child_process')>('node:child_process');
 const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
@@ -21,11 +21,14 @@ interface Step {
     id?: string;
     env?: Record<string, string>;
     with?: Record<string, unknown>;
+    'working-directory'?: string;
 }
 
 interface Job {
     needs?: string | string[];
     env?: Record<string, string>;
+    'runs-on'?: string;
+    'timeout-minutes'?: number;
     steps: Step[];
 }
 
@@ -180,6 +183,32 @@ describe('Android signing', () => {
         expect(upload.with?.path).toBe('signed/GuruShotsAutoVote-v*.apk');
         const files = String(stepNamed(build.jobs['create-release'], 'Create Release').with?.files);
         expect(files).toContain('android-builds/GuruShotsAutoVote-v*.apk');
+    });
+
+    test('the release ships the phone page and its checksum from the remote-page job', () => {
+        const files = String(stepNamed(build.jobs['create-release'], 'Create Release').with?.files);
+        expect(files).toContain('artifacts/remote-page/remote-page.zip');
+        expect(files).toContain('artifacts/remote-page/remote-page.zip.sha256');
+        // The zip carries the release's version directory, built from the bumped package.
+        const job = build.jobs['remote-page'];
+        expect(job.steps.some((step) => step.run?.includes('pnpm build:react'))).toBe(true);
+        const zipping = stepNamed(job, 'Zip the remote page with its checksum').run ?? '';
+        expect(zipping).toContain('remote-page.zip');
+        expect(zipping).toContain('sha256sum remote-page.zip > remote-page.zip.sha256');
+        const upload = stepNamed(job, 'Upload remote page artifact');
+        expect(upload.with?.name).toBe('remote-page');
+        expect(String(upload.with?.path)).toContain('remote-page.zip.sha256');
+    });
+
+    test('the release and the attestation wait for the phone page, and the attestation signs its zip', () => {
+        // Without the dependency a failed remote-page job would not hold the release back, and the
+        // download in create-release would race the upload.
+        expect(needsOf(build.jobs['create-release'])).toContain('remote-page');
+        expect(needsOf(build.jobs.attest)).toContain('remote-page');
+        const subjects = String(stepNamed(build.jobs.attest, 'Attest build provenance').with?.['subject-path']);
+        expect(subjects).toContain('artifacts/remote-page/remote-page.zip');
+        // Only the zip is a subject: its checksum file is data about it, like the updater manifests.
+        expect(subjects).not.toContain('remote-page.zip.sha256');
     });
 });
 
@@ -397,6 +426,232 @@ describe('version bump type', () => {
         ['a body [minor] does not either', 'Fix a bug\n\nNotes: [minor]'],
     ])('%s', (_label, message) => {
         expect(bumpFor(message)).toBe('BUMP_TYPE=patch');
+    });
+});
+
+describe('Pages', () => {
+    const pages = load('.github/workflows/pages.yml');
+
+    test('is dispatched only — it has no push or schedule trigger', () => {
+        const parsed: unknown = parse(text('.github/workflows/pages.yml'));
+        if (!isPlainObject(parsed)) throw new Error('pages.yml is not a mapping');
+        const triggers = isPlainObject(parsed.on) ? Object.keys(parsed.on) : null;
+        expect(triggers).toEqual(['workflow_dispatch']);
+    });
+
+    test('a release dispatches the rebuild on the branch that was released', () => {
+        const trigger = stepNamed(build.jobs['create-release'], 'Trigger Pages rebuild');
+        expect(trigger.if).toBe("github.ref_name == 'master' || github.ref_name == 'develop'");
+        // The ref travels through the step's env, never interpolated into the script.
+        expect(trigger.run).toContain('gh workflow run pages.yml --ref "$REF"');
+        expect(trigger.run).not.toContain('${{');
+        expect(trigger.env?.REF).toBe('${{ github.ref_name }}');
+    });
+
+    test('the build job runs on ubuntu-latest with time for two installs and two site builds', () => {
+        expect(pages.jobs.build['runs-on']).toBe('ubuntu-latest');
+        expect(pages.jobs.build['timeout-minutes']).toBe(30);
+    });
+
+    test('the /remote/ build resolves the newest release tag of the dispatched branch first', () => {
+        const tag = stepNamed(pages.jobs.build, 'Resolve the released tag');
+        expect(tag.id).toBe('remote-tag');
+        const run = tag.run ?? '';
+        // The whole script avoids expression interpolation — the repository name
+        // travels through the step's REPO env instead, so bash never evaluates a ${{ }}.
+        expect(run.startsWith('set -euo pipefail')).toBe(true);
+        expect(run).not.toContain('${{');
+        expect(run).toContain('"repos/$REPO/contents/package.json?ref=$BRANCH"');
+        expect(tag.env?.BRANCH).toBe('${{ github.ref_name }}');
+        expect(run).toContain('jq -r .version');
+        // The branch's package.json version only changes in the release bump commit,
+        // so the version check plus a published-release check pin the newest release.
+        expect(run).toContain('[[ ! "$version" =~ ^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]');
+        // Only the release view's stdout is discarded: gh's own stderr (auth,
+        // network, rate limit, not found) stays in the log.
+        expect(run).toContain('gh release view "v$version" --repo "$REPO" > /dev/null;');
+        expect(run).not.toContain('2>&1');
+        expect(run).toContain('::error::no published release for tag v$version');
+        expect(run).toContain('re-run the release job (create-release) in build.yml');
+        expect(run).toContain('exit 1');
+        expect(run).toContain('tag=v$version');
+        expect(run).toContain('$GITHUB_OUTPUT');
+        expect(tag.env?.GH_TOKEN).toBe('${{ secrets.GITHUB_TOKEN }}');
+        expect(tag.env?.REPO).toBe('${{ github.repository }}');
+    });
+
+    test('the remote page is checked out from the resolved release tag without persisted credentials', () => {
+        const checkout = stepNamed(pages.jobs.build, 'Checkout the released code for the remote page');
+        expect(checkout.uses).toMatch(SHA_PIN);
+        expect(checkout.with?.ref).toBe('${{ steps.remote-tag.outputs.tag }}');
+        expect(checkout.with?.path).toBe('remote-src');
+        expect(checkout.with?.['persist-credentials']).toBe(false);
+    });
+
+    test('the docs checkout does not persist credentials either', () => {
+        const checkout = stepNamed(pages.jobs.build, 'Checkout code');
+        expect(checkout.with?.['persist-credentials']).toBe(false);
+    });
+
+    test('the build site, tag, checkout, install, build, loader guard and publish steps run in that order', () => {
+        const job = pages.jobs.build;
+        const order = [
+            'Build site',
+            'Resolve the released tag',
+            'Checkout the released code for the remote page',
+            'Install the remote page dependencies',
+            'Build the remote page',
+            'Require the remote page loader',
+            'Publish the remote page from the release',
+        ].map((name) => indexOfStep(job, name));
+        expect(order).toEqual([...order].sort((a, b) => a - b));
+    });
+
+    test('the remote page installs and builds inside remote-src', () => {
+        const install = stepNamed(pages.jobs.build, 'Install the remote page dependencies');
+        expect(install['working-directory']).toBe('remote-src');
+        expect(install.run).toContain('pnpm install --frozen-lockfile');
+        const remote = stepNamed(pages.jobs.build, 'Build the remote page');
+        expect(remote['working-directory']).toBe('remote-src');
+        expect(remote.run).toContain('pnpm build:site');
+    });
+
+    test('the job fails when the remote page loader is missing', () => {
+        const guard = stepNamed(pages.jobs.build, 'Require the remote page loader');
+        expect(guard.run).toContain('remote-src/dist-site/remote/index.html');
+        expect(guard.run).toContain('exit 1');
+    });
+
+    test('the develop build replaces the remote tree the artifact uploads', () => {
+        const publish = stepNamed(pages.jobs.build, 'Publish the remote page from the release');
+        expect(publish.run).toContain('rm -rf dist-site/remote');
+        expect(publish.run).toContain('cp -R remote-src/dist-site/remote dist-site/remote');
+        expect(stepNamed(pages.jobs.build, 'Upload Pages artifact').with?.path).toBe('dist-site');
+    });
+
+    test('only the two site builds read GITHUB_TOKEN — the dependency installs never do', () => {
+        const readers = pages.jobs.build.steps
+            .filter((step) => step.env?.GITHUB_TOKEN !== undefined)
+            .map((step) => step.name);
+        expect(readers).toEqual(['Build site', 'Build the remote page']);
+        expect(stepNamed(pages.jobs.build, 'Build site').env?.GITHUB_TOKEN).toBe('${{ secrets.GITHUB_TOKEN }}');
+        expect(stepNamed(pages.jobs.build, 'Build the remote page').env?.GITHUB_TOKEN).toBe(
+            '${{ secrets.GITHUB_TOKEN }}',
+        );
+        expect(stepNamed(pages.jobs.build, 'Install the remote page dependencies').env?.GITHUB_TOKEN).toBeUndefined();
+    });
+
+    describe('the released tag script runs', () => {
+        const script = stepNamed(pages.jobs.build, 'Resolve the released tag').run ?? '';
+
+        interface TagResolution {
+            status: number;
+            stderr: string;
+            output: string;
+        }
+
+        // Runs the step's script with a stub gh executable placed first on PATH:
+        // `gh api …` answers with STUB_VERSION's package.json body (or fails when
+        // STUB_API_FAIL is 1), `gh release view <tag> …` succeeds only for the tag
+        // named in STUB_RELEASE. jq comes from the real PATH, like on the CI runners.
+        const resolveWith = (stub: Record<string, string>): TagResolution => {
+            const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'remote-tag-'));
+            try {
+                const bin = path.join(directory, 'bin');
+                fs.mkdirSync(bin);
+                const gh = path.join(bin, 'gh');
+                fs.writeFileSync(
+                    gh,
+                    [
+                        '#!/bin/sh',
+                        'case "$1" in',
+                        '    api)',
+                        '        [ "$STUB_API_FAIL" = 1 ] && exit 1',
+                        '        case "$2" in *"?ref=$BRANCH") ;; *) echo "wrong ref: $2" >&2; exit 65 ;; esac',
+                        '        printf \'{"version":"%s"}\\n\' "$STUB_VERSION"',
+                        '        ;;',
+                        '    release)',
+                        '        if [ "$3" = "$STUB_RELEASE" ]; then exit 0; fi',
+                        '        echo "release not found" >&2',
+                        '        exit 1',
+                        '        ;;',
+                        '    *)',
+                        '        echo "unexpected gh command: $1" >&2',
+                        '        exit 64',
+                        '        ;;',
+                        'esac',
+                    ].join('\n'),
+                );
+                fs.chmodSync(gh, 0o755);
+                const output = path.join(directory, 'github-output');
+                fs.writeFileSync(output, '');
+                const read = () => fs.readFileSync(output, 'utf8').trim();
+                try {
+                    execFileSync('bash', ['-c', script], {
+                        cwd: directory,
+                        encoding: 'utf8',
+                        env: {
+                            PATH: `${bin}:${process.env.PATH ?? ''}`,
+                            GITHUB_OUTPUT: output,
+                            REPO: 'owner/repo',
+                            BRANCH: 'master',
+                            GH_TOKEN: 'stub-token',
+                            ...stub,
+                        },
+                    });
+                    return { status: 0, stderr: '', output: read() };
+                } catch (error: unknown) {
+                    if (
+                        !isPlainObject(error) ||
+                        typeof error.status !== 'number' ||
+                        typeof error.stdout !== 'string' ||
+                        typeof error.stderr !== 'string'
+                    ) {
+                        throw error;
+                    }
+                    return { status: error.status, stderr: error.stderr, output: read() };
+                }
+            } finally {
+                fs.rmSync(directory, { recursive: true, force: true });
+            }
+        };
+
+        test('a published beta version resolves to its release tag', () => {
+            const result = resolveWith({ STUB_VERSION: '1.15.0-beta.1', STUB_RELEASE: 'v1.15.0-beta.1' });
+            expect(result.status).toBe(0);
+            expect(result.output).toBe('tag=v1.15.0-beta.1');
+        });
+
+        test('fails when develop has no published release, keeping the gh error on stderr', () => {
+            const result = resolveWith({ STUB_VERSION: '1.15.0-beta.1' });
+            expect(result.status).not.toBe(0);
+            expect(result.output).toBe('');
+            expect(result.stderr).toContain('release not found');
+        });
+
+        test('fails on a version that is not x.y.z with an optional suffix', () => {
+            // STUB_RELEASE matches the tag a broken script would resolve, so the
+            // test fails if the version check is ever dropped.
+            const result = resolveWith({ STUB_VERSION: '1.2', STUB_RELEASE: 'v1.2' });
+            expect(result.status).not.toBe(0);
+            expect(result.output).toBe('');
+        });
+
+        test('fails on a version carrying an embedded newline', () => {
+            const result = resolveWith({ STUB_VERSION: '1.2.3\nbad', STUB_RELEASE: 'v1.2.3\nbad' });
+            expect(result.status).not.toBe(0);
+            expect(result.output).toBe('');
+        });
+
+        test('fails when the GitHub API call fails', () => {
+            const result = resolveWith({
+                STUB_VERSION: '1.15.0-beta.1',
+                STUB_RELEASE: 'v1.15.0-beta.1',
+                STUB_API_FAIL: '1',
+            });
+            expect(result.status).not.toBe(0);
+            expect(result.output).toBe('');
+        });
     });
 });
 

@@ -2,10 +2,10 @@
  * The Snap-without-the-model switch (`snapYesWithoutModel`): global only, a boolean in the turbo group, off by default.
  */
 
-import settings = require('../../src/ts/settings');
+import settings = require('../../src/ts/core/settings');
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const category = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
         info: jest.fn(),

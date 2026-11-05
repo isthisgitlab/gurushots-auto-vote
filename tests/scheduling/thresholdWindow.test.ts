@@ -1,6 +1,6 @@
 /**
  * Shared last-minute threshold math used by both schedulers (runScheduler.ts
- * for CLI/Android, autovoteScheduler.ts for the GUI). The only platform
+ * for CLI/Android, src/ts/core/autovote/resolvers.ts for the GUI). The only platform
  * difference is how a per-challenge threshold is resolved — sync
  * settings.getEffectiveSetting on Node vs async window.api.getEffectiveSetting
  * in the WebView — so the core takes a `resolveThreshold` function and works
@@ -10,8 +10,8 @@
  * prove the core behaves identically on each platform.
  */
 
-import type * as thresholdWindowModule from '../../src/ts/scheduling/thresholdWindow';
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type * as thresholdWindowModule from '../../src/ts/core/scheduling/thresholdWindow';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 // Partial resolver configs (fields the case never reaches left out).
@@ -19,7 +19,7 @@ type FinalWindowTopUpConfig = Awaited<ReturnType<thresholdWindowModule.ResolveFi
 type BoostPrefillConfig = Awaited<ReturnType<thresholdWindowModule.ResolveBoostPrefill>>;
 
 const { calculateNextThresholdEntry, isAnyChallengeInThresholdWindow, computeNextCycleDelayMs } =
-    require('../../src/ts/scheduling/thresholdWindow') as typeof thresholdWindowModule;
+    require('../../src/ts/core/scheduling/thresholdWindow') as typeof thresholdWindowModule;
 
 // Two resolver shapes: Node (sync return) and WebView (Promise). Both yield 5.
 const resolvers = {

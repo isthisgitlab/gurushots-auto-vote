@@ -14,14 +14,14 @@ import { formatEndTime } from '@/utils/formatters';
 import { LEVEL_BADGE_CLASS, LEVEL_PROGRESS_CLASS } from '@/utils/levelBadge';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import type { EntryBadge as RealEntryBadge } from '@/components/app/EntryBadge';
-import type { Challenge, MemberTurbo, RankingTotal } from '../../src/ts/types/gurushots';
-import type { WindowApi } from '../../src/ts/types/ipc';
+import type { Challenge, MemberTurbo, RankingTotal } from '../../src/ts/core/types/gurushots';
+import type { WindowApi } from '../../src/ts/core/types/ipc';
 import { invalid } from '../helpers/invalid';
 import { parseJson, parseJsonObject } from '../helpers/parseJson';
 import { mockTranslator } from './helpers/setup';
-import { app, errors } from '../../src/ts/translations/english';
-import { createTranslator } from '../../src/ts/translations/translator';
-import type { Translate } from '../../src/ts/translations/translator';
+import { app, errors } from '../../src/ts/core/translations/english';
+import { createTranslator } from '../../src/ts/core/translations/translator';
+import type { Translate } from '../../src/ts/core/translations/translator';
 
 // The real English strings (plural groups included), placeholders filled like the real t fills them.
 const realEnglish: Translate = (() => {
@@ -109,7 +109,7 @@ const deferred = <T,>() => {
 beforeEach(() => {
     window.api.getSettingsSchema = jest.fn().mockResolvedValue({ schema: {}, defaults: {} });
     window.api.getEffectiveSetting = jest.fn().mockResolvedValue(null);
-    window.api.getChallengeOverride = jest.fn().mockResolvedValue(null);
+    window.api.getChallengeOverrides = jest.fn().mockResolvedValue({});
     window.api.getDeadlineActions = jest.fn().mockResolvedValue({ success: true, actions: [], boostBlocked: false });
     window.api.getSwapBacks = jest.fn().mockResolvedValue({ success: true, items: [] });
     window.api.playAutoTurbo = jest.fn().mockResolvedValue({ success: true });
@@ -321,7 +321,7 @@ describe('header', () => {
         await waitFor(() => expect(window.api.getEffectiveSetting).toHaveBeenCalled());
         const toggle = screen.getByText('app.compact');
         expect(toggle.querySelector('svg')!.getAttribute('fill')).toBe('none');
-        window.api.getChallengeOverride = jest.fn(async (key) => (key === 'compactCards' ? false : null));
+        window.api.getChallengeOverrides = jest.fn().mockResolvedValue({ compactCards: false });
         fireEvent.click(toggle);
         await waitFor(() => expect(window.api.setChallengeOverride).toHaveBeenCalledWith('compactCards', '101', true));
         // The reload now sees an override, so the icon fills in.

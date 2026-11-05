@@ -6,7 +6,7 @@
  *
  * Lite artifacts carry a "-lite" suffix, land in build/lite/, and publish
  * their own update files (lite*.yml) so electron-updater keeps a lite install
- * on lite. services/AutoUpdater.ts limits lite to stable releases: on a
+ * on lite. shells/electron/AutoUpdater.ts limits lite to stable releases: on a
  * prerelease the GitHub provider would fall back to latest*.yml, the full build.
  */
 

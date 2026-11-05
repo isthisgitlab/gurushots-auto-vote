@@ -1,5 +1,5 @@
 /**
- * Bundles the Electron main process (src/ts/index.ts) into out/main/app.js,
+ * Bundles the Electron main process (src/ts/shells/electron/index.ts) into out/main/app.js,
  * behind the out/main/index.js loader that package.json `main` points at.
  *
  * Only the app's own modules are bundled. Every package import stays a
@@ -32,7 +32,7 @@ const LOADER = path.join(OUT_DIR, 'index.js');
 const LOADER_SOURCE = "process.setSourceMapsEnabled(true);\nrequire('./app.js');\n";
 
 const OPTIONS: BuildOptions = {
-    entryPoints: [path.join(ROOT, 'src', 'ts', 'index.ts')],
+    entryPoints: [path.join(ROOT, 'src', 'ts', 'shells', 'electron', 'index.ts')],
     outfile: path.join(OUT_DIR, 'app.js'),
     bundle: true,
     platform: 'node',

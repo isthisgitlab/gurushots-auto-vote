@@ -1,14 +1,13 @@
 /**
- * The third-party notices loader (src/ts/thirdPartyNotices.ts): one resolver per
- * shell — fetch from the web assets (Android), the embedded asset (CLI binary),
- * the file under src/assets (CLI from source, Electron). The asset itself is
- * generated at build time, so every read is mocked.
+ * The third-party notices loader (src/ts/core/thirdPartyNotices.ts): it asks the
+ * installed platform for the asset text, whose readers per family are the
+ * webviews' fetch (Android), the CLI binary's embedded asset and the file
+ * under src/assets (node). The per-family reads are proven in the family
+ * asset tests; these keep the loader's own assertions — the asset name, the
+ * platform's text coming through, and the rejection on an unreadable asset.
+ * The asset itself is generated at build time, so every read is mocked.
  */
 
-jest.mock('../src/ts/runtime', () => ({
-    isCapacitor: jest.fn(() => false),
-    isHeadlessService: jest.fn(() => false),
-}));
 jest.mock('../src/ts/appPaths', () => ({ appPath: jest.fn((...segments: string[]) => `/app/${segments.join('/')}`) }));
 
 const mockSea: { isSea: () => boolean; getAsset: (key: string, encoding: string) => string } = {
@@ -17,18 +16,16 @@ const mockSea: { isSea: () => boolean; getAsset: (key: string, encoding: string)
 };
 jest.mock('node:sea', () => mockSea, { virtual: true });
 
-import runtimeModule = require('../src/ts/runtime');
-const runtime = jest.mocked(runtimeModule);
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
-import { loadThirdPartyNotices, NOTICES_ASSET_NAME } from '../src/ts/thirdPartyNotices';
+import { loadThirdPartyNotices, NOTICES_ASSET_NAME } from '../src/ts/core/thirdPartyNotices';
+import { installHeadlessTestPlatform, installTestPlatform, installWebviewTestPlatform } from './helpers/platform';
 import { invalid } from './helpers/invalid';
 
 const realFetch = globalThis.fetch;
 
 beforeEach(() => {
-    runtime.isCapacitor.mockReturnValue(false);
-    runtime.isHeadlessService.mockReturnValue(false);
+    installTestPlatform();
 });
 
 afterEach(() => {
@@ -41,12 +38,12 @@ test('the asset is src/assets/THIRD_PARTY_NOTICES.txt', () => {
     expect(NOTICES_ASSET_NAME).toBe('THIRD_PARTY_NOTICES.txt');
 });
 
-describe('Android (fetched from the web assets)', () => {
-    test.each<[string, 'isCapacitor' | 'isHeadlessService']>([
-        ['the app WebView', 'isCapacitor'],
-        ['the background service', 'isHeadlessService'],
-    ])('%s fetches it relative to the web root', async (_label, flag) => {
-        runtime[flag].mockReturnValue(true);
+describe('Android (the webview platforms fetch it from the web assets)', () => {
+    test.each<[string, () => void]>([
+        ['the app WebView', () => installWebviewTestPlatform()],
+        ['the background service', () => installHeadlessTestPlatform()],
+    ])('%s fetches it relative to the web root', async (_label, install) => {
+        install();
         globalThis.fetch = invalid<typeof fetch>(
             jest.fn(async () => ({ ok: true, status: 200, text: async () => 'NOTICES' })),
         );
@@ -56,14 +53,14 @@ describe('Android (fetched from the web assets)', () => {
     });
 
     test('a failed response rejects', async () => {
-        runtime.isCapacitor.mockReturnValue(true);
+        installWebviewTestPlatform();
         globalThis.fetch = invalid<typeof fetch>(jest.fn(async () => ({ ok: false, status: 404 })));
 
         await expect(loadThirdPartyNotices()).rejects.toThrow('HTTP 404');
     });
 });
 
-describe('CLI binary (embedded asset)', () => {
+describe('CLI binary (the node platform reads the embedded asset)', () => {
     test('reads the SEA asset as text', async () => {
         mockSea.isSea = () => true;
         const getAsset = jest.fn(() => 'EMBEDDED');
@@ -75,7 +72,7 @@ describe('CLI binary (embedded asset)', () => {
     });
 });
 
-describe('Electron and the CLI from source (file under src/assets)', () => {
+describe('Electron and the CLI from source (the node platform reads the file under src/assets)', () => {
     test('reads the file through the app root', async () => {
         fs.readFileSync.mockReturnValue('FROM FILE');
 

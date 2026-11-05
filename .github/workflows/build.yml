@@ -81,7 +81,7 @@ jobs:
 
             # Rejects a tampered gradle-wrapper.jar before ./gradlew runs it.
             - name: Validate Gradle wrapper
-              uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+              uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
             # A failed dependency check (android/gradle/verification-metadata.xml) says how to regenerate it.
             - name: Explain Gradle dependency verification failures
@@ -457,7 +457,7 @@ jobs:
 
             # Rejects a tampered gradle-wrapper.jar before ./gradlew runs it.
             - name: Validate Gradle wrapper
-              uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+              uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
             # A failed dependency check (android/gradle/verification-metadata.xml) says how to regenerate it.
             - name: Explain Gradle dependency verification failures
@@ -611,8 +611,49 @@ jobs:
                   path: signed/GuruShotsAutoVote-v*.apk
                   retention-days: 1
 
+    # The phone page ships with the release as remote-page.zip (+ its SHA-256), so the site
+    # build can keep serving every older version under /remote/<version>/ (build:site unpacks
+    # the zips of the last releases beside the current one). Built from the bumped package so
+    # the version directory carries the release's version.
+    remote-page:
+        needs: version-bump
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+              with:
+                  ref: ${{ github.sha }}
+
+            - name: Setup build environment
+              uses: ./.github/actions/setup-build
+              with:
+                  download-bumped: 'true'
+
+            - name: Build the remote page
+              run: pnpm build:css && pnpm build:react
+
+            - name: Zip the remote page with its checksum
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  VERSION=$(node -p "require('./package.json').version")
+                  cd "dist/remote/$VERSION"
+                  zip -q -r "$RUNNER_TEMP/remote-page.zip" .
+                  cd "$RUNNER_TEMP"
+                  sha256sum remote-page.zip > remote-page.zip.sha256
+
+            - name: Upload remote page artifact
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+              with:
+                  name: remote-page
+                  path: |
+                      ${{ runner.temp }}/remote-page.zip
+                      ${{ runner.temp }}/remote-page.zip.sha256
+                  retention-days: 1
+
     attest:
-        needs: [build, build-cli-arm, sign-android, version-bump]
+        needs: [build, build-cli-arm, sign-android, version-bump, remote-page]
         runs-on: ubuntu-latest
         timeout-minutes: 10
         if: github.event_name == 'push'
@@ -653,9 +694,10 @@ jobs:
                       artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}linux-arm-builds/gurucli-v*-linux-arm
                       artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}linux-arm-builds/gurucli-v*-linux-arm-lite
                       artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}android-builds/GuruShotsAutoVote-v*.apk
+                      artifacts/remote-page/remote-page.zip
 
     create-release:
-        needs: [build, build-cli-arm, sign-android, version-bump, attest]
+        needs: [build, build-cli-arm, sign-android, version-bump, remote-page, attest]
         runs-on: ubuntu-latest
         timeout-minutes: 15
         if: github.event_name == 'push'
@@ -828,6 +870,8 @@ jobs:
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-arm-builds/gurucli-v*-linux-arm
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-arm-builds/gurucli-v*-linux-arm-lite
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}android-builds/GuruShotsAutoVote-v*.apk
+                      artifacts/remote-page/remote-page.zip
+                      artifacts/remote-page/remote-page.zip.sha256
                       src/assets/THIRD_PARTY_NOTICES.txt
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -837,16 +881,18 @@ jobs:
             # (The bump commit above carries [skip ci] so build.yml doesn't
             # re-fire on its own push; workflow_dispatch is not a push, so
             # dispatching pages.yml here doesn't re-trigger build.yml either —
-            # no loop.) Guarded to master; Pages serves master, not the develop
-            # pre-release channel. A dispatch hiccup must not fail the job — the
+            # no loop.) Fired after every release, on the branch that was released:
+            # pages.yml builds the docs from that branch and the /remote/ tree from
+            # its newest release tag. A dispatch hiccup must not fail the job — the
             # release is already published — so warn instead of erroring.
-            - name: Trigger Pages rebuild (master only)
-              if: github.ref_name == 'master'
+            - name: Trigger Pages rebuild
+              if: github.ref_name == 'master' || github.ref_name == 'develop'
               # The release and bump are already published by the time we get here,
               # so a dispatch hiccup must not fail the whole job — surface a warning
               # instead so a maintainer can re-run pages.yml from the Actions tab.
               run: |
-                  gh workflow run pages.yml --ref master \
+                  gh workflow run pages.yml --ref "$REF" \
                     || echo "::warning::Pages dispatch failed — re-run pages.yml manually from the Actions tab to refresh the site."
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  REF: ${{ github.ref_name }}

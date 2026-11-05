@@ -6,7 +6,7 @@
  * assert the dispatch and the confirmation gate.
  */
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const calls: { level: string; msg: unknown; data?: unknown }[] = [];
     const rec = (level: string) => (msg: unknown, data?: unknown) => calls.push({ level, msg, data });
     const cat = {
@@ -19,12 +19,12 @@ jest.mock('../../src/ts/logger', () => {
     return { __calls: calls, withCategory: jest.fn(() => cat), CATEGORIES: {} };
 });
 
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     getSetting: jest.fn(() => 'tok'),
     loadSettings: jest.fn(() => ({ mock: true, token: 'tok' })),
 }));
 
-jest.mock('../../src/ts/apiFactory', () => {
+jest.mock('../../src/ts/core/apiFactory', () => {
     const getActiveChallenges = jest.fn();
     const isAuthenticated = jest.fn(() => true);
     return {
@@ -35,12 +35,12 @@ jest.mock('../../src/ts/apiFactory', () => {
     };
 });
 
-jest.mock('../../src/ts/ipc/actions.handlers', () => {
+jest.mock('../../src/ts/core/ipc/actions.handlers', () => {
     const handlers = { 'get-bankroll': jest.fn() };
     return { __handlers: handlers, buildHandlers: () => handlers, register: jest.fn() };
 });
 
-jest.mock('../../src/ts/ipc/currency.handlers', () => {
+jest.mock('../../src/ts/core/ipc/currency.handlers', () => {
     const handlers = {
         'key-unlock-boost': jest.fn(),
         'preview-swap-photo': jest.fn(),
@@ -53,11 +53,11 @@ jest.mock('../../src/ts/ipc/currency.handlers', () => {
 });
 
 import { invalid } from '../helpers/invalid';
-import loggerModule = require('../../src/ts/logger');
+import loggerModule = require('../../src/ts/core/logger');
 const logger = jest.mocked(
     invalid<typeof loggerModule & { __calls: { level: string; msg: unknown; data?: unknown }[] }>(loggerModule),
 );
-import apiFactoryModule = require('../../src/ts/apiFactory');
+import apiFactoryModule = require('../../src/ts/core/apiFactory');
 // The middleware whose methods the factory mock exposes as __-prefixed jest.fns.
 type Middleware = ReturnType<typeof apiFactoryModule.getMiddleware>;
 const apiFactory = jest.mocked(
@@ -68,17 +68,17 @@ const apiFactory = jest.mocked(
         }
     >(apiFactoryModule),
 );
-import type * as actionsModule from '../../src/ts/cli/commands/actions';
-import type * as spendModule from '../../src/ts/cli/commands/spend';
+import type * as actionsModule from '../../src/ts/shells/cli/commands/actions';
+import type * as spendModule from '../../src/ts/shells/cli/commands/spend';
 // Both handler mocks, merged into one table the describe.each rows index by
 // channel name: every entry is an async handler the tests treat alike.
 type HandlerTable = Record<string, jest.Mock<Promise<unknown>, unknown[]>>;
 const handlers: HandlerTable = {
-    ...invalid<{ __handlers: HandlerTable }>(require('../../src/ts/ipc/actions.handlers')).__handlers,
-    ...invalid<{ __handlers: HandlerTable }>(require('../../src/ts/ipc/currency.handlers')).__handlers,
+    ...invalid<{ __handlers: HandlerTable }>(require('../../src/ts/core/ipc/actions.handlers')).__handlers,
+    ...invalid<{ __handlers: HandlerTable }>(require('../../src/ts/core/ipc/currency.handlers')).__handlers,
 };
-const { swapCmd, swapBackCmd } = require('../../src/ts/cli/commands/actions') as typeof actionsModule;
-const { unlockBoostCmd, fillExposureCmd } = require('../../src/ts/cli/commands/spend') as typeof spendModule;
+const { swapCmd, swapBackCmd } = require('../../src/ts/shells/cli/commands/actions') as typeof actionsModule;
+const { unlockBoostCmd, fillExposureCmd } = require('../../src/ts/shells/cli/commands/spend') as typeof spendModule;
 
 const msgsAt = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
 const allMsgs = () => logger.__calls.map((c) => String(c.msg));

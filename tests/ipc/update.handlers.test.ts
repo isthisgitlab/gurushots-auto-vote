@@ -10,18 +10,17 @@
  * Every channel returns a {success, ...} envelope and never throws.
  */
 
-import type * as AutoUpdaterModule from '../../src/ts/services/AutoUpdater';
-import type * as update_handlersModule from '../../src/ts/ipc/update.handlers';
-import type { IpcMain } from 'electron';
+import type * as AutoUpdaterModule from '../../src/ts/shells/electron/AutoUpdater';
+import type * as update_handlersModule from '../../src/ts/shells/electron/update.handlers';
 import { invalid } from '../helpers/invalid';
 
-jest.mock('../../src/ts/services/AutoUpdater', () => ({ AutoUpdater: jest.fn() }));
-jest.mock('../../src/ts/services/UpdateChecker', () => ({
+jest.mock('../../src/ts/shells/electron/AutoUpdater', () => ({ AutoUpdater: jest.fn() }));
+jest.mock('../../src/ts/core/services/UpdateChecker', () => ({
     getReleasesUrl: jest.fn(() => 'https://github.com/example/releases'),
 }));
 
-const { AutoUpdater } = jest.mocked(require('../../src/ts/services/AutoUpdater') as typeof AutoUpdaterModule);
-const { buildHandlers, register } = require('../../src/ts/ipc/update.handlers') as typeof update_handlersModule;
+const { AutoUpdater } = jest.mocked(require('../../src/ts/shells/electron/AutoUpdater') as typeof AutoUpdaterModule);
+const { buildHandlers } = require('../../src/ts/shells/electron/update.handlers') as typeof update_handlersModule;
 
 const makeUpdater = (overrides = {}) => ({
     checkForUpdates: jest.fn().mockResolvedValue({ latestVersion: '9.9.9' }),
@@ -242,20 +241,5 @@ describe('get-releases-url and can-auto-update', () => {
             canAutoUpdate: false,
         });
         expect(AutoUpdater).not.toHaveBeenCalled();
-    });
-});
-
-describe('register', () => {
-    test('registers every channel on ipcMain with the given deps', async () => {
-        const channels = new Map<string, Parameters<IpcMain['handle']>[1]>();
-        const ipcMain = {
-            handle: (channel: string, impl: Parameters<IpcMain['handle']>[1]) => channels.set(channel, impl),
-        };
-        const updater = makeUpdater();
-        register(invalid(ipcMain), invalid(makeDeps(updater)));
-
-        expect([...channels.keys()].sort()).toEqual(Object.keys(buildHandlers(invalid(makeDeps()))).sort());
-        await expect(channels.get('install-update')!(invalid(undefined))).resolves.toEqual({ success: true });
-        expect(updater.quitAndInstall).toHaveBeenCalled();
     });
 });

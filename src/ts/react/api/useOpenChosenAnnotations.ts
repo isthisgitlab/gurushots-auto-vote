@@ -1,9 +1,9 @@
 import { useCallback } from 'react';
 import { useIpcQuery } from './useIpcQuery';
 import * as ipc from './ipc';
-import { MAX_ANNOTATED_IDS } from '../../settings/limits';
+import { MAX_ANNOTATED_IDS } from '../../core/settings/limits';
 
-import type { ChosenAnnotation } from '../../types/gurushots';
+import type { ChosenAnnotation } from '../../core/types/gurushots';
 
 const NO_ANNOTATIONS: Record<string, ChosenAnnotation> = {};
 

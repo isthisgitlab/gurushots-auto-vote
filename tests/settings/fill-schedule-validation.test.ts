@@ -7,9 +7,9 @@
  * the migration output that happens to pass it.
  */
 
-import type * as schemaModule from '../../src/ts/settings/schema';
+import type * as schemaModule from '../../src/ts/core/settings/schema';
 
-const { validateSetting } = require('../../src/ts/settings/schema') as typeof schemaModule;
+const { validateSetting } = require('../../src/ts/core/settings/schema') as typeof schemaModule;
 
 const KEY = 'autoSubmitSchedule';
 const MAX_SECONDS = 30 * 24 * 3600;

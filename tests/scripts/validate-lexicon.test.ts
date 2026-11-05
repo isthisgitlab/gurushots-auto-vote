@@ -9,7 +9,7 @@
 // The real-asset describe below needs the loader to read the committed file
 // through the real fs (tests/setup.ts mocks it), exactly as
 // tests/services/tagResolver.test.ts does.
-jest.mock('../../src/ts/services/semantic/assets', () => {
+jest.mock('../../src/ts/core/services/semantic/assets', () => {
     const realFs = jest.requireActual<typeof import('node:fs')>('node:fs');
     const realPath = jest.requireActual<typeof import('node:path')>('node:path');
     const assetPath = realPath.join(__dirname, '..', '..', 'src', 'assets', 'semantic-vectors.json');
@@ -23,19 +23,21 @@ jest.mock('../../src/ts/services/semantic/assets', () => {
         __resetForTests: () => {},
     };
 });
-jest.mock('../../src/ts/services/semantic/lexicon', () => ({
+jest.mock('../../src/ts/core/services/semantic/lexicon', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/services/semantic/lexicon')>(
-        '../../src/ts/services/semantic/lexicon',
+    ...jest.requireActual<typeof import('../../src/ts/core/services/semantic/lexicon')>(
+        '../../src/ts/core/services/semantic/lexicon',
     ),
 }));
-import lexiconModule = require('../../src/ts/services/semantic/lexicon');
+import lexiconModule = require('../../src/ts/core/services/semantic/lexicon');
 const lexicon = jest.mocked(lexiconModule);
 import type * as validate_lexiconModule from '../../scripts/validate-lexicon';
-import type * as stopwordsModule from '../../src/ts/services/photoPicker/stopwords';
-import type * as stemModule from '../../src/ts/services/photoPicker/stem';
+import type * as stopwordsModule from '../../src/ts/core/services/photoPicker/stopwords';
+import type * as stemModule from '../../src/ts/core/services/photoPicker/stem';
 import type { ConceptsConfig } from '../../scripts/build-lexicon';
 import { invalid } from '../helpers/invalid';
+import { clearInstalledPlatform } from '../helpers/platform';
+clearInstalledPlatform();
 const { main, checkSubjectCases } = require('../../scripts/validate-lexicon') as typeof validate_lexiconModule;
 
 // Fake lexicon: embed() mean-pools the known words (null when none are known),
@@ -242,8 +244,8 @@ describe('checkSubjectCases against the real shipped lexicon', () => {
         const asset = readJson(['src', 'assets', 'semantic-vectors.json']) as { packed: Record<string, string> };
         const compounds = Object.keys(asset.packed).filter((key) => key.includes('-'));
         expect(compounds).toHaveLength(3319);
-        const { STOPWORDS } = require('../../src/ts/services/photoPicker/stopwords') as typeof stopwordsModule;
-        const { stem } = require('../../src/ts/services/photoPicker/stem') as typeof stemModule;
+        const { STOPWORDS } = require('../../src/ts/core/services/photoPicker/stopwords') as typeof stopwordsModule;
+        const { stem } = require('../../src/ts/core/services/photoPicker/stem') as typeof stemModule;
         const stopwordStems = new Set([...STOPWORDS].map(stem));
         const stopwordHeads = compounds.filter((key) => stopwordStems.has(stem(key.slice(key.lastIndexOf('-') + 1))));
         expect(stopwordHeads).toHaveLength(229);

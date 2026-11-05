@@ -4,9 +4,9 @@
  * configuration's own merge reads both sides as a load does first, so a default is no change.
  */
 
-import { rebaseConfigText } from '../../src/ts/settings/settingsMerge';
-import { isPlainObject } from '../../src/ts/plainObject';
-import { getDefaultSettings } from '../../src/ts/settings/defaults';
+import { rebaseConfigText } from '../../src/ts/core/settings/settingsMerge';
+import { isPlainObject } from '../../src/ts/core/plainObject';
+import { getDefaultSettings } from '../../src/ts/core/settings/defaults';
 
 const text = (value: unknown) => JSON.stringify(value, null, 2);
 // The generic cases run over the `defaults` container, which holds any keys: the rest of the configuration is the defaults.

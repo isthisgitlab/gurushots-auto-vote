@@ -1,7 +1,7 @@
 /** Pure vector math and vocabulary selection: parse, normalize, retrofit, stem assignment, quantize. */
 
-import { isPlainObject } from '../../src/ts/plainObject';
-import { stem } from '../../src/ts/services/photoPicker';
+import { isPlainObject } from '../../src/ts/core/plainObject';
+import { stem } from '../../src/ts/core/services/photoPicker';
 
 import type { ConceptsConfig } from '../build-lexicon';
 

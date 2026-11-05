@@ -32,6 +32,8 @@ Ja saņemat pieprasījumu limita kļūdu, apturiet visus eksemplārus, pagaidiet
 
 Grafiskajai lietotnei to nodrošina pati darbvirsmas lietotne: ja palaižat to otrreiz, tiek aktivizēts jau atvērtais logs, nevis sākts jauns eksemplārs. Tā nekonstatē CLI, tīmekļa saskarni vai Android lietotni, ko darbina vienlaikus ar grafisko lietotni, — uz šīm kombinācijām attiecas augstāk minētais brīdinājums.
 
+Telefons, kas savienots pārī ar [attālināto piekļuvi](docs/usage.lv.md#attālinātā-piekļuve), ir tālvadības pults vienai strādājošai darbvirsmas lietotnei, nevis otrs eksemplārs. Android lietotnes pašas balsošanai jābūt izslēgtai, kamēr tā vada datoru: **Vadīt manu datoru** to aptur, un pēc **Atvienoties** tā paliek izslēgta, līdz telefonā atkal ieslēdzat automātisko balsošanu.
+
 ## 🚀 Funkcijas
 
 - **Automātiska balsošana** — balso jūsu aktīvajos izaicinājumos, līdz sasniegts jūsu norādītais redzamības mērķis.
@@ -40,33 +42,35 @@ Grafiskajai lietotnei to nodrošina pati darbvirsmas lietotne: ja palaižat to o
 - **Beigu loga redzamība** — atsevišķi, parasti zemāki redzamības griesti uzstādāmam laika logam pirms beigām (pēc noklusējuma — pēdējā stunda).
 - **Boost** — tuvu termiņa beigām automātiski izmanto Boost foto, kas atrodas izvēlētajā vietā. Ja Boost jāizmanto 30 minūšu laikā, tas tiek izmantots uzreiz, kad dators pāriet miega režīmā (darbvirsmas lietotnē; izslēdzams ar Boost pirms miega), bet aizverot lietotni, kamēr Boost ir gaidāms, vispirms tiek jautāts.
 - **Turbo (iegūt + izmantot)** — automātiski spēlē minispēli, lai _iegūtu_ Turbo, un pēc tam pirms termiņa beigām automātiski to _izmanto_ izvēlētajam foto.
-- **Automātiskā iesniegšana** — tuvu termiņa beigām iesniedz foto tukšajās vietās ar laika atstarpēm, lai balsis nesadalītos starp vienlaikus iesniegtiem foto; tai ir tagu filtri, tēmai atbilstoša foto izvēle, ko vēlreiz pārbauda ierīcē darbināms attēlu atpazīšanas modelis, un ārkārtas drošības tīkls.
+- **Automātiskā iesniegšana** — tuvu termiņa beigām iesniedz foto tukšajās vietās ar laika atstarpēm, lai balsis nesadalītos starp vienlaikus iesniegtiem foto; tai ir tagu filtri, jūsu pašu **izvēlētie foto** (ar **Iesniegt tikai izvēlētos foto** automātiskā iesniegšana un pievienošanās ievieto tikai tos), tēmai atbilstoša foto izvēle, ko vēlreiz pārbauda ierīcē darbināms attēlu atpazīšanas modelis, un ārkārtas drošības tīkls.
 - **Automātiskā pievienošanās** — atrod atvērtos izaicinājumus, kuriem vēl neesat pievienojušies, un automātiski pievienojas tiem (pēc noklusējuma izslēgta). Kad tā ieslēgta, pēc noklusējuma lietotne pievienojas visiem izaicinājumiem; loku var sašaurināt ar izaicinājumu veidu iekļaušanas/izslēgšanas sarakstu vai izaicinājumu noteikumu. Maksas izaicinājumiem ir monētu limiti (vienam izaicinājumam un vienam ciklam), un monētas nekad netiek iztērētas, ja pievienošanās nav pabeigta. Pievienoties var arī manuāli — grafiskajā lietotnē sakļaujamajā sarakstā "Atrast izaicinājumus" un ar CLI komandām `discover`/`join`.
-- **Misijas** — pēc izvēles palīdz izpildīt GuruShots mainīgās misijas (visas šīs funkcijas pēc noklusējuma ir izslēgtas): pietaupa katra izaicinājuma Turbo "Win Turbo" misijai, nevienu nezaudējot, "Join challenges" misijas laikā pievienojas izaicinājumiem, negaidot automātiskās pievienošanās laiku, "Use Fill" misijas laikā izmanto uzpildes un "Vote on photos" misijas laikā balso jūsu izaicinājumos.
+- **Misijas** — pēc izvēles palīdz izpildīt GuruShots mainīgās misijas (visas šīs funkcijas pēc noklusējuma ir izslēgtas): pietaupa katra izaicinājuma Turbo "Win Turbo" misijai, nevienu nezaudējot, "Join challenges" misijas laikā pievienojas izaicinājumiem, negaidot automātiskās pievienošanās laiku, "Use Fill" misijas laikā izmanto uzpildes, "Use a boost" misijas laikā izmanto pieejamu Boost un "Vote on photos" misijas laikā balso jūsu izaicinājumos.
 - **Konta atlikums** — rāda jūsu atslēgas / apmaiņas / uzpildes / monētas grafiskajā lietotnē blakus laika atskaitei un ar CLI komandu `bankroll` (sinonīms `coins`).
 - **Uzstādījumi katram izaicinājumam** — katram balsošanas uzstādījumam ir globāla noklusējuma vērtība, ko jebkuram izaicinājumam var pielāgot atsevišķi.
-- **Izaicinājumu noteikumi** — noteikumi, kas atlasa izaicinājumus pēc nosaukuma, izaicinājuma taga, veida, foto skaita vai ilguma (tāpēc tie darbojas arī tad, kad GuruShots katrā rotācijā piešķir izaicinājumam jaunu ID), jūsu izvēlētā secībā; katrs noteikums var piešķirt uzstādījumu profilu, ieslēgt vai izslēgt automātisko pievienošanos / automātisko iesniegšanu, noteikt pievienošanās laiku un pievienot tagus automātiskajai iesniegšanai.
+- **Izaicinājumu noteikumi** — noteikumi, kas atlasa izaicinājumus pēc nosaukuma, izaicinājuma taga, veida, foto skaita, ilguma vai beigu laika (tāpēc tie darbojas arī tad, kad GuruShots katrā rotācijā piešķir izaicinājumam jaunu ID), jūsu izvēlētā secībā; katrs noteikums var piešķirt uzstādījumu profilu, ieslēgt vai izslēgt automātisko pievienošanos / automātisko iesniegšanu, noteikt pievienošanās laiku un pievienot tagus automātiskajai iesniegšanai.
+- **Profili** — saglabājiet izaicinājuma uzstādījumus kā nosauktu profilu (**Saglabāt pašreizējos kā profilu**), rediģējiet to sadaļā Uzstādījumi → Profili un piemērojiet izaicinājumam vai ļaujiet to piešķirt izaicinājumu noteikumam.
 - **Scenāriji** — jūsu pašu vairāku dienu plāni izaicinājumam: fāzes ar saviem uzstādījumiem un noteikumi, kas jūsu izvēlētos laikos un apstākļos iesniedz foto, apmaina foto, izmanto Boost, spēlē Turbo, gaida vai sūta jums paziņojumu. Scenārijus veido vizuālajā redaktorā (vai JSON formātā), kopīgo kā failus un, pirms tie kaut ko iztērē, pārbauda ar "kas būtu, ja" simulāciju.
 - **Darbvirsmas paziņojumi** — pēc izvēles brīdinājumi dažas minūtes pirms Boost, Turbo vai automātiskās iesniegšanas, kā arī jūsu scenāriju sūtītie ziņojumi.
 - **Trīs platformas** — Electron grafiskā lietotne, `gurucli` komandrinda un Android lietotne, kas balso arī tad, kad telefons ir bloķēts.
+- **Attālinātā piekļuve** — pēc izvēles (pēc noklusējuma izslēgta): vadiet datorā strādājošo lietotni no telefona ar savienošanas saiti vai QR kodu; vienlaikus var būt savienoti līdz 3 telefoniem. Skatiet [Attālinātā piekļuve](docs/usage.lv.md#attālinātā-piekļuve).
 - **Noturīgs API slānis** — uzstādāms pieprasījumu gaidīšanas laiks un automātiski atkārtoti mēģinājumi ar pieaugošu pauzi, ja rodas pārejošas kļūmes.
-- **Ērtības** — gaišā/tumšā tēma, angļu/latviešu saskarne, laiku rādīšana izvēlētajā laika joslā, testa režīms drošai izmēģināšanai un iebūvēti paziņojumi par atjauninājumiem.
+- **Ērtības** — tēmu izvēle ar visām DaisyUI tēmām, angļu/latviešu saskarne, laiku rādīšana izvēlētajā laika joslā, testa režīms drošai izmēģināšanai un iebūvēti paziņojumi par atjauninājumiem.
 
 ## 📥 Lejupielāde un instalācija
 
 ### Jaunākie būvējumi
 
-**Jaunākā versija: v1.14.2**
+**Jaunākā versija: v1.15.0-beta.8**
 
 #### 🖥️ Grafiskā lietotne (ieteicama lielākajai daļai lietotāju)
 
-| Platforma         | Lejupielāde                                                                                                                                                            | Izmērs  | Tips                    |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ----------------------- |
-| **Windows**       | [📥 GuruShotsAutoVote-v1.14.2-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.2-x64.exe)                 | ~270 MB | Portatīvs izpildfails   |
-| **macOS (DMG)**   | [📥 GuruShotsAutoVote-v1.14.2-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.2-arm64.dmg)             | ~310 MB | DMG instalētājs         |
-| **macOS (APP)**   | [📥 GuruShotsAutoVote-v1.14.2-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.2-arm64.app.zip)     | ~335 MB | Lietotnes pakotne (ZIP) |
-| **Linux (x64)**   | [📥 GuruShotsAutoVote-v1.14.2-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.2-x86_64.AppImage) | ~270 MB | AppImage                |
-| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v1.14.2-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.2-arm64.AppImage)   | ~255 MB | AppImage                |
+| Platforma         | Lejupielāde                                                                                                                                                                          | Izmērs  | Tips                    |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- | ----------------------- |
+| **Windows**       | [📥 GuruShotsAutoVote-v1.15.0-beta.8-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.15.0-beta.8-x64.exe)                 | ~270 MB | Portatīvs izpildfails   |
+| **macOS (DMG)**   | [📥 GuruShotsAutoVote-v1.15.0-beta.8-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.15.0-beta.8-arm64.dmg)             | ~310 MB | DMG instalētājs         |
+| **macOS (APP)**   | [📥 GuruShotsAutoVote-v1.15.0-beta.8-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.15.0-beta.8-arm64.app.zip)     | ~335 MB | Lietotnes pakotne (ZIP) |
+| **Linux (x64)**   | [📥 GuruShotsAutoVote-v1.15.0-beta.8-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.15.0-beta.8-x86_64.AppImage) | ~270 MB | AppImage                |
+| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v1.15.0-beta.8-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.15.0-beta.8-arm64.AppImage)   | ~255 MB | AppImage                |
 
 > **macOS:** tikai Apple Silicon (arm64) — Intel (x86_64) būvējuma nav. Vienkāršāk instalēt no **DMG**; **APP** zip ir alternatīva, ja lietotnes pakotni vēlaties ievietot paši.
 
@@ -74,37 +78,37 @@ Grafiskajai lietotnei to nodrošina pati darbvirsmas lietotne: ja palaižat to o
 
 #### 📱 Mobilā lietotne (Android APK — bez Play Store)
 
-| Platforma                            | Lejupielāde                                                                                                                                    | Izmērs  | Tips           |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------- | -------------- |
-| **Android (8.0+, ārpus Play Store)** | [📥 GuruShotsAutoVote-v1.14.2.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.2.apk) | ~160 MB | Parakstīts APK |
+| Platforma                            | Lejupielāde                                                                                                                                                  | Izmērs  | Tips           |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- | -------------- |
+| **Android (8.0+, ārpus Play Store)** | [📥 GuruShotsAutoVote-v1.15.0-beta.8.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.15.0-beta.8.apk) | ~160 MB | Parakstīts APK |
 
 Android versija ir Capacitor apvalks ap to pašu React saskarni, un tai ir Kotlin spraudnis, kas balsošanas ciklus izpilda fonā tieši Android vidē, izmantojot `AlarmManager` un priekšplāna pakalpojumu. Balsošana turpinās arī tad, kad telefons ir bloķēts un lietotne aizvērta neseno lietotņu sarakstā.
 
 #### 💻 Komandrinda (pieredzējušiem lietotājiem / automatizācijai)
 
-| Platforma             | Lejupielāde                                                                                                                            | Izmērs  | Tips                  |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------- | --------------------- |
-| **macOS CLI**         | [📥 gurucli-v1.14.2-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.14.2-mac)             | ~375 MB | Termināļa izpildfails |
-| **Linux CLI (x64)**   | [📥 gurucli-v1.14.2-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.14.2-linux)         | ~355 MB | Termināļa izpildfails |
-| **Linux CLI (ARM64)** | [📥 gurucli-v1.14.2-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.14.2-linux-arm) | ~350 MB | Termināļa izpildfails |
+| Platforma             | Lejupielāde                                                                                                                                          | Izmērs  | Tips                  |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --------------------- |
+| **macOS CLI**         | [📥 gurucli-v1.15.0-beta.8-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.15.0-beta.8-mac)             | ~375 MB | Termināļa izpildfails |
+| **Linux CLI (x64)**   | [📥 gurucli-v1.15.0-beta.8-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.15.0-beta.8-linux)         | ~355 MB | Termināļa izpildfails |
+| **Linux CLI (ARM64)** | [📥 gurucli-v1.15.0-beta.8-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.15.0-beta.8-linux-arm) | ~350 MB | Termināļa izpildfails |
 
 > Windows CLI būvējuma nav — operētājsistēmā Windows izmantojiet augstāk minēto grafisko lietotni.
 
 #### 🪶 Vieglie būvējumi (bez attēlu modeļa)
 
-Katra augstāk minētā lejupielāde pieejama arī kā **vieglais** (lite) būvējums bez attēlu atpazīšanas modeļa un tā izpildvides: macOS DMG izmērs samazinās no ~310 MB līdz ~130 MB, bet macOS CLI — no ~375 MB līdz ~140 MB. Viss pārējais darbojas tāpat — automātiskā iesniegšana izlaiž [vizuālo pārbaudi](docs/usage.lv.md#trūkstošo-foto-automātiskā-iesniegšana) un ranžē foto bez tās. Vieglajai grafiskajai lietotnei un vieglajai Android lietotnei tiek piedāvāti tikai vieglie atjauninājumi (vieglā darbvirsmas lietotne pirmsizlaiduma versijas izlaiž).
+Katra augstāk minētā lejupielāde pieejama arī kā **vieglais** (lite) būvējums bez attēlu atpazīšanas modeļa un tā izpildvides: macOS DMG izmērs samazinās no ~310 MB līdz ~130 MB, bet macOS CLI — no ~375 MB līdz ~140 MB. Viss pārējais darbojas tāpat — automātiskā iesniegšana izlaiž [vizuālo pārbaudi](docs/usage.lv.md#trūkstošo-foto-automātiskā-iesniegšana) un ranžē foto bez tās, bet Snap Turbo, kam vajadzīgs modelis, tiek spēlēts, uz katru fotoattēlu atbildot „Jā”, tikai tad, ja ieslēgts `snapYesWithoutModel`. Vieglajai grafiskajai lietotnei un vieglajai Android lietotnei tiek piedāvāti tikai vieglie atjauninājumi (vieglā darbvirsmas lietotne pirmsizlaiduma versijas izlaiž).
 
-| Platforma                            | Lejupielāde                                                                                                                                                                      |
-| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Windows**                          | [📥 GuruShotsAutoVote-v1.14.2-x64-lite.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.2-x64-lite.exe)                 |
-| **macOS (DMG)**                      | [📥 GuruShotsAutoVote-v1.14.2-arm64-lite.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.2-arm64-lite.dmg)             |
-| **macOS (APP)**                      | [📥 GuruShotsAutoVote-v1.14.2-arm64-lite.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.2-arm64-lite.app.zip)     |
-| **Linux (x64)**                      | [📥 GuruShotsAutoVote-v1.14.2-x86_64-lite.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.2-x86_64-lite.AppImage) |
-| **Linux (ARM64)**                    | [📥 GuruShotsAutoVote-v1.14.2-arm64-lite.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.2-arm64-lite.AppImage)   |
-| **Android (8.0+, ārpus Play Store)** | [📥 GuruShotsAutoVote-v1.14.2-lite.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.2-lite.apk)                         |
-| **macOS CLI**                        | [📥 gurucli-v1.14.2-mac-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.14.2-mac-lite)                                             |
-| **Linux CLI (x64)**                  | [📥 gurucli-v1.14.2-linux-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.14.2-linux-lite)                                         |
-| **Linux CLI (ARM64)**                | [📥 gurucli-v1.14.2-linux-arm-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.14.2-linux-arm-lite)                                 |
+| Platforma                            | Lejupielāde                                                                                                                                                                                    |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Windows**                          | [📥 GuruShotsAutoVote-v1.15.0-beta.8-x64-lite.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.15.0-beta.8-x64-lite.exe)                 |
+| **macOS (DMG)**                      | [📥 GuruShotsAutoVote-v1.15.0-beta.8-arm64-lite.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.15.0-beta.8-arm64-lite.dmg)             |
+| **macOS (APP)**                      | [📥 GuruShotsAutoVote-v1.15.0-beta.8-arm64-lite.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.15.0-beta.8-arm64-lite.app.zip)     |
+| **Linux (x64)**                      | [📥 GuruShotsAutoVote-v1.15.0-beta.8-x86_64-lite.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.15.0-beta.8-x86_64-lite.AppImage) |
+| **Linux (ARM64)**                    | [📥 GuruShotsAutoVote-v1.15.0-beta.8-arm64-lite.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.15.0-beta.8-arm64-lite.AppImage)   |
+| **Android (8.0+, ārpus Play Store)** | [📥 GuruShotsAutoVote-v1.15.0-beta.8-lite.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.15.0-beta.8-lite.apk)                         |
+| **macOS CLI**                        | [📥 gurucli-v1.15.0-beta.8-mac-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.15.0-beta.8-mac-lite)                                             |
+| **Linux CLI (x64)**                  | [📥 gurucli-v1.15.0-beta.8-linux-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.15.0-beta.8-linux-lite)                                         |
+| **Linux CLI (ARM64)**                | [📥 gurucli-v1.15.0-beta.8-linux-arm-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.15.0-beta.8-linux-arm-lite)                                 |
 
 Nepieciešama konkrēta versija? Apskatiet **[visus izlaidumus](https://github.com/isthisgitlab/gurushots-auto-vote/releases)** vai **[jaunākā izlaiduma piezīmes](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest)**.
 
@@ -131,11 +135,11 @@ Nepieciešama konkrēta versija? Apskatiet **[visus izlaidumus](https://github.c
 
 **CLI operētājsistēmā macOS:**
 
-1. Lejupielādējiet `gurucli-v1.14.2-mac`.
+1. Lejupielādējiet `gurucli-v1.15.0-beta.8-mac`.
 2. `cd ~/Downloads`
-3. Padariet failu izpildāmu: `chmod +x gurucli-v1.14.2-mac`
-4. Noņemiet karantīnas atzīmi (tikai pārlūkā lejupielādētam failam): `xattr -d com.apple.quarantine ./gurucli-v1.14.2-mac`
-5. Palaidiet: `./gurucli-v1.14.2-mac help`
+3. Padariet failu izpildāmu: `chmod +x gurucli-v1.15.0-beta.8-mac`
+4. Noņemiet karantīnas atzīmi (tikai pārlūkā lejupielādētam failam): `xattr -d com.apple.quarantine ./gurucli-v1.15.0-beta.8-mac`
+5. Palaidiet: `./gurucli-v1.15.0-beta.8-mac help`
 
 Kad CLI pirmo reizi iesniedz foto, tas izpako iekļauto attēlu atpazīšanas modeli un izpildvidi (~560 MB) mapē `~/Library/Application Support/gurushots-auto-vote/vision/`. Tas notiek vienreiz katrai versijai; pēc izpakošanas jaunā versija izdzēš vecākās kopijas, kas pēdējā stundā nav izmantotas.
 
@@ -144,15 +148,15 @@ Kad CLI pirmo reizi iesniedz foto, tas izpako iekļauto attēlu atpazīšanas mo
 **Grafiskā lietotne (AppImage):**
 
 1. Lejupielādējiet savai procesora arhitektūrai atbilstošo AppImage failu.
-2. Padariet to izpildāmu: `chmod +x GuruShotsAutoVote-v1.14.2-*.AppImage` (vai failu pārvaldniekā: Properties → Permissions).
-3. Palaidiet: `./GuruShotsAutoVote-v1.14.2-*.AppImage`
+2. Padariet to izpildāmu: `chmod +x GuruShotsAutoVote-v1.15.0-beta.8-*.AppImage` (vai failu pārvaldniekā: Properties → Permissions).
+3. Palaidiet: `./GuruShotsAutoVote-v1.15.0-beta.8-*.AppImage`
 
 **CLI:**
 
-1. Lejupielādējiet `gurucli-v1.14.2-linux` (vai `-linux-arm`).
+1. Lejupielādējiet `gurucli-v1.15.0-beta.8-linux` (vai `-linux-arm`).
 2. `cd ~/Downloads`
-3. `chmod +x gurucli-v1.14.2-linux`
-4. `./gurucli-v1.14.2-linux help`
+3. `chmod +x gurucli-v1.15.0-beta.8-linux`
+4. `./gurucli-v1.15.0-beta.8-linux help`
 
 Kad CLI pirmo reizi iesniedz foto, tas izpako iekļauto attēlu atpazīšanas modeli un izpildvidi (~550 MB) mapē `~/.config/gurushots-auto-vote/vision/`. Tas notiek vienreiz katrai versijai; pēc izpakošanas jaunā versija izdzēš vecākās kopijas, kas pēdējā stundā nav izmantotas.
 
@@ -160,7 +164,7 @@ Kad CLI pirmo reizi iesniedz foto, tas izpako iekļauto attēlu atpazīšanas mo
 
 Android versija **nav pieejama Google Play** — to instalē, tieši lejupielādējot APK failu.
 
-1. Telefonā atveriet [jaunākā izlaiduma lapu](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest) un pieskarieties `GuruShotsAutoVote-v1.14.2.apk`.
+1. Telefonā atveriet [jaunākā izlaiduma lapu](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest) un pieskarieties `GuruShotsAutoVote-v1.15.0-beta.8.apk`.
 2. Pirms APK lejupielādes pārlūks rāda brīdinājumu — pieskarieties **Tomēr lejupielādēt**.
 3. Paziņojumu panelī pieskarieties lejupielādētajam failam.
 4. Android prasīs atļauju **Instalēt nezināmas lietotnes** — piešķiriet to lietotnei, ar kuru lejupielādējāt failu (Chrome, Files u. c.), un pieskarieties **Instalēt**.
@@ -170,6 +174,8 @@ Android versija **nav pieejama Google Play** — to instalē, tieši lejupielād
 6. Piesakieties un pieskarieties **Sākt automātisko balsošanu**. Pastāvīgajā paziņojumā redzams pēdējā cikla laiks. Lietotni var aizvērt neseno lietotņu sarakstā — balsošana turpināsies.
 
 **Fona ierobežojumi:** ražotāju akumulatora pārvaldnieki tomēr var apturēt pakalpojumu (pievienojiet lietotni izņēmumiem tā, kā to paredz konkrētais ražotājs; saite ir lietotnes uzstādījumos). Pēdējās minūtes režīma 1 minūtes pārbaužu intervālam vajadzīga atļauja `SCHEDULE_EXACT_ALARM` (Android 13+ to piešķir automātiski, Android 12 — jāpiešķir manuāli).
+
+Ja **Saglabāt pieteikšanos** ir izslēgts (pēc noklusējuma) un automātiskā balsošana ir izslēgta, lietotni pēc tās apturēšanas atverot vēlreiz, tiek prasīts pieteikties. Ieslēgta automātiskā balsošana sesiju saglabā — tieši tas uztur fona balsošanu.
 
 ## 🎯 Ātrais sākums
 
@@ -184,16 +190,16 @@ Android versija **nav pieejama Google Play** — to instalē, tieši lejupielād
 ### Komandrinda
 
 ```bash
-./gurucli-v1.14.2-[platforma] login    # piesakieties vienreiz (saglabā tokenu)
-./gurucli-v1.14.2-[platforma] run      # viens pilns automātiskās stratēģijas cikls (Boost, Turbo, automātiskā iesniegšana, balsošana pēc sliekšņa)
-./gurucli-v1.14.2-[platforma] start    # nepārtraukta balsošana (Ctrl+C, lai apturētu)
+./gurucli-v1.15.0-beta.8-[platforma] login    # piesakieties vienreiz (saglabā tokenu)
+./gurucli-v1.15.0-beta.8-[platforma] run      # viens pilns automātiskās stratēģijas cikls (Boost, Turbo, automātiskā iesniegšana, balsošana pēc sliekšņa)
+./gurucli-v1.15.0-beta.8-[platforma] start    # nepārtraukta balsošana (Ctrl+C, lai apturētu)
 ```
 
 > Aizstājiet `[platforma]` ar `mac`, `linux` vai `linux-arm`. Palaidiet `help`, lai redzētu visas komandas.
 
 ### Tīmekļa saskarne (no pirmkoda)
 
-Tādu pašu saskarni var atvērt parastā pārlūka cilnē, nevis darbvirsmas logā, — tas noder pārlūka automatizācijai, piemēram, ar Playwright. Tam vajadzīga pirmkoda kopija, Node.js 26 vai jaunāka versija un pnpm:
+Tādu pašu saskarni var atvērt parastā pārlūka cilnē, nevis darbvirsmas logā, — tas noder pārlūka automatizācijai, piemēram, ar Playwright. Tam vajadzīga pirmkoda kopija, Node.js 26.12.1 vai jaunāka versija un pnpm:
 
 ```bash
 pnpm install
@@ -209,20 +215,23 @@ Norādījumus par grafisko lietotni un CLI, balsošanas noteikumus, uzstādījum
 
 - Visi API pieprasījumi tiek sūtīti, izmantojot HTTPS.
 - Akreditācijas dati žurnālos netiek rādīti — pirms jebkura ieraksta žurnālā jutīgo lauku vērtības tiek maskētas.
-- Lietotne jūsu tokenu glabā lokāli uzstādījumu failā (darbvirsmā un CLI — failā, ko var lasīt tikai tā īpašnieks; Android — lietotnes privātajā krātuvē) un sūta to tikai uz GuruShots; uzstādījumi un konfigurācija nekad nepamet jūsu ierīci.
-- **Kas atstāj jūsu ierīci:** pieprasījumi uz GuruShots (balsošana un konta dati, foto miniatūras) un pieprasījumi uz GitHub (`api.github.com` un GitHub izlaidumu lejupielādes), lai pārbaudītu un lejupielādētu atjauninājumus. Citām adresēm lietotne nesazinās, un foto analīze notiek ierīcē.
+- Lietotne jūsu tokenu glabā lokāli uzstādījumu failā (darbvirsmā un CLI — failā, ko var lasīt tikai tā īpašnieks; Android — lietotnes privātajā krātuvē) un sūta to tikai uz GuruShots; uzstādījumi un konfigurācija nekad nepamet jūsu ierīci, izņemot telefonu, ko savienojat pārī ar attālināto piekļuvi; ja tiešs savienojums nav iespējams, tie šķērso arī publiskos Nostr retranslatorus, šifrēti ar savienošanas atslēgu.
+- **Kas atstāj jūsu ierīci:** pieprasījumi uz GuruShots (balsošana un konta dati, foto miniatūras) un pieprasījumi uz GitHub (`api.github.com` un GitHub izlaidumu lejupielādes), lai pārbaudītu un lejupielādētu atjauninājumus. Kamēr **attālinātā piekļuve ir izslēgta** (tas ir pēc noklusējuma), citām adresēm lietotne nesazinās, un foto analīze notiek ierīcē.
+- **Attālinātā piekļuve** (Uzstādījumi → Lietotnes uzstādījumi → Attālinātā piekļuve; pēc noklusējuma izslēgta) ļauj telefonam vadīt datorā strādājošo lietotni caur vienu pastāvīgu saiti. Ieslēdzot to, lietotne sazinās ar publiskajiem Nostr retranslatoriem (`wss://nos.lol`, `wss://relay.primal.net`, `wss://nostr.mom`, `wss://nostr.oxtr.dev`), lai atrastu telefonu, un STUN serveriem (`stun:stun.cloudflare.com:3478`, `stun:stun.l.google.com:19302`), lai izveidotu savienojumu. Retranslatori redz šifrētu signālu apmaiņu un abu galu IP adreses; telefons un dators redz viens otra IP. Ja tiešs savienojums nav iespējams, retranslatori pārraida arī lietotnes pašas ziņojumus, šifrētus ar savienošanas atslēgu: tie redz to laiku un aptuvenos izmērus, patur tos vismaz neilgu laiku, un jebkurš retranslators tos var ierakstīt. Ikviens, kas tos ir ierakstījis un vēlāk iegūst jūsu savienošanas saiti, var tos atšifrēt; līdzeklis ir „Atiestatīt savienošanu pārī”. Signālu apmaiņu un šos ziņojumus paraksta viena un tā pati publiskā atslēga, tāpēc retranslatori var tos saistīt, un telefons klausās līdz 3 retranslatoriem, tāpēc var lejupielādēt katru ziņojumu līdz 3 reizēm; lietotne to apstrādā vienu reizi. Dators klausās visus retranslatorus. Skatiet [draudu modeli](docs/architecture.md#10-security-renderer--main--state-the-limits-dont-over-promise).
 - Izrakstoties tiek noņemts tikai pieteikšanās tokens. **Dzēst visus vietējos datus** (Uzstādījumi → Lietotnes uzstādījumi → Par lietotni un datiem; CLI `reset-data --yes`) izdzēš visu, ko lietotne glabā ierīcē; skatiet [kur tiek glabāti jūsu dati](docs/usage.lv.md#️-kur-tiek-glabāti-jūsu-dati--kā-tos-dzēst).
 - Kļūdu ziņojumos nav jutīgas informācijas.
 - Tīmekļa saskarne (`pnpm web`) ir pieejama tikai šajā datorā (localhost), noraida pieprasījumus no citām vietnēm un tai nav savas paroles — tā vietā katrā palaišanas reizē tiek izveidots nejaušs tokens, kas jānorāda katram pieprasījumam. Atveriet precīzu adresi, ko komanda izvada (tā beidzas ar `#t=<tokens>`); cilne tokenu glabā, kamēr ir atvērta, tāpēc pārlādēšana darbojas, bet adrese bez tokena, atvērta jaunā cilnē, tiek noraidīta, tāpat kā iepriekšējā palaišanas reizē atstāta lapa (palaidiet `pnpm web` vēlreiz un atveriet tā jauno adresi). Nekad nepadariet tās portu pieejamu tīklā.
 - Automātiskās iesniegšanas vizuālā pārbaude darbojas lokāli ar iebūvētu modeli; tā no GuruShots lejupielādē tikai jūsu pašu foto sīktēlus un neko nesūta citiem pakalpojumiem.
 - Darbvirsmas būvējumus neparaksta izdevējs, tāpēc atjauninājumiem uzticas, pamatojoties uz projekta GitHub izlaidumiem. Skatiet [pieņemtos ierobežojumus](docs/architecture.md#10-security-renderer--main--state-the-limits-dont-over-promise) (angliski).
+- **Lejupielādes pārbaude** (GitHub CLI, pieteicies): `gh attestation verify <file> --repo isthisgitlab/gurushots-auto-vote --signer-workflow isthisgitlab/gurushots-auto-vote/.github/workflows/build.yml` pārbauda, vai izpildfails vai APK ir sabūvēts ar šī projekta izlaiduma darbplūsmu.
+- **Ziņojiet par ievainojamību** privāti, kā aprakstīts failā [`SECURITY.md`](SECURITY.md) (angliski), — nevis publiskā problēmas pieteikumā.
 - Trešo pušu programmatūra un dati, ko lietotne iekļauj, ar to licencēm: Uzstādījumi → Lietotnes uzstādījumi → Par lietotni un datiem vai CLI komanda `licenses`.
 
 ## 📄 Licence un atbalsts
 
 Lietotne tiek izplatīta saskaņā ar **Apache 2.0 licenci**. Ikvienam, kas izplata kodu vai atvasinātu darbu, atbilstoši licencei jāsaglabā failā [`NOTICE`](NOTICE) norādītā atribūcija.
 
-Ja nepieciešama palīdzība, vispirms skatiet sadaļu [Problēmu risināšana](docs/usage.lv.md#-problēmu-risināšana), pēc tam [izveidojiet problēmas pieteikumu](https://github.com/isthisgitlab/gurushots-auto-vote/issues).
+Ja nepieciešama palīdzība, vispirms skatiet sadaļu [Problēmu risināšana](docs/usage.lv.md#-problēmu-risināšana), pēc tam [izveidojiet problēmas pieteikumu](https://github.com/isthisgitlab/gurushots-auto-vote/issues). Drošības problēmas ziņojiet saskaņā ar [`SECURITY.md`](SECURITY.md), nevis publiskā pieteikumā.
 
 Ja šis rīks jums noder, varat atbalstīt tā izstrādi:
 

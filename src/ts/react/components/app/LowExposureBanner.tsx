@@ -1,4 +1,4 @@
-import type { Challenge } from '../../../types/gurushots';
+import type { Challenge } from '../../../core/types/gurushots';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { lowExposureChallenges } from '@/utils/challengeAlerts';
 import { ChallengeAlertPanel } from './ChallengeChips';

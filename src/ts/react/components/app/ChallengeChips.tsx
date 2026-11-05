@@ -1,5 +1,5 @@
 import type { ComponentChildren } from 'preact';
-import type { Challenge } from '../../../types/gurushots';
+import type { Challenge } from '../../../core/types/gurushots';
 import type { PulseDotVariant } from '../ui/PulseDot';
 import { scrollToChallenge } from '@/utils/scrollToChallenge';
 import { PulseDot } from '../ui/PulseDot';

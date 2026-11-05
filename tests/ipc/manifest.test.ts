@@ -20,29 +20,29 @@ jest.mock('electron', () => ({
 jest.mock('electron-updater', () => ({
     autoUpdater: { on: jest.fn(), setFeedURL: jest.fn() },
 }));
-jest.mock('../../src/ts/settings');
-jest.mock('../../src/ts/apiFactory', () => ({
+jest.mock('../../src/ts/core/settings');
+jest.mock('../../src/ts/core/apiFactory', () => ({
     getApiStrategy: jest.fn(),
     getMiddleware: jest.fn(),
     refreshApi: jest.fn(),
 }));
-jest.mock('../../src/ts/ui/applicationMenu', () => ({
+jest.mock('../../src/ts/shells/electron/ui/applicationMenu', () => ({
     updateMenuTranslations: jest.fn(),
 }));
 
 const fs = jest.requireActual<typeof import('fs')>('fs');
 import pathModule = require('node:path');
 const path = jest.mocked(pathModule);
-import type * as manifestModule from '../../src/ts/ipc/manifest';
-import type * as settings_handlersModule from '../../src/ts/ipc/settings.handlers';
-import type * as voting_handlersModule from '../../src/ts/ipc/voting.handlers';
-import type * as log_handlersModule from '../../src/ts/ipc/log.handlers';
-import type * as actions_handlersModule from '../../src/ts/ipc/actions.handlers';
-import type * as computations_handlersModule from '../../src/ts/ipc/computations.handlers';
-import type * as currency_handlersModule from '../../src/ts/ipc/currency.handlers';
-import type * as scenarios_handlersModule from '../../src/ts/ipc/scenarios.handlers';
-import type * as misc_handlersModule from '../../src/ts/ipc/misc.handlers';
-import type * as update_handlersModule from '../../src/ts/ipc/update.handlers';
+import type * as manifestModule from '../../src/ts/core/ipc/manifest';
+import type * as settings_handlersModule from '../../src/ts/core/ipc/settings.handlers';
+import type * as voting_handlersModule from '../../src/ts/core/ipc/voting.handlers';
+import type * as log_handlersModule from '../../src/ts/core/ipc/log.handlers';
+import type * as actions_handlersModule from '../../src/ts/core/ipc/actions.handlers';
+import type * as computations_handlersModule from '../../src/ts/core/ipc/computations.handlers';
+import type * as currency_handlersModule from '../../src/ts/core/ipc/currency.handlers';
+import type * as scenarios_handlersModule from '../../src/ts/core/ipc/scenarios.handlers';
+import type * as misc_handlersModule from '../../src/ts/shells/electron/misc.handlers';
+import type * as update_handlersModule from '../../src/ts/shells/electron/update.handlers';
 
 const {
     invokeChannels,
@@ -54,29 +54,38 @@ const {
     logsWindowSettingKeys,
     kebabToCamel,
     allInvokeChannels,
-} = require('../../src/ts/ipc/manifest') as typeof manifestModule;
+} = require('../../src/ts/core/ipc/manifest') as typeof manifestModule;
+
+// The pairing store stands in for the one registerIpc builds from remote/pairing.ts.
+const remoteStub = {
+    accessInfo: () => ({ enabled: false, link: '', qrDataUrl: '' }),
+    setEnabled: () => true,
+    resetKey: () => 'k',
+};
 
 const collectHandlerChannels = () => {
-    const settingsHandlers = require('../../src/ts/ipc/settings.handlers') as typeof settings_handlersModule;
-    const votingHandlers = require('../../src/ts/ipc/voting.handlers') as typeof voting_handlersModule;
-    const logHandlers = require('../../src/ts/ipc/log.handlers') as typeof log_handlersModule;
-    const actionsHandlers = require('../../src/ts/ipc/actions.handlers') as typeof actions_handlersModule;
+    const settingsHandlers = require('../../src/ts/core/ipc/settings.handlers') as typeof settings_handlersModule;
+    const votingHandlers = require('../../src/ts/core/ipc/voting.handlers') as typeof voting_handlersModule;
+    const logHandlers = require('../../src/ts/core/ipc/log.handlers') as typeof log_handlersModule;
+    const actionsHandlers = require('../../src/ts/core/ipc/actions.handlers') as typeof actions_handlersModule;
     const computationsHandlers =
-        require('../../src/ts/ipc/computations.handlers') as typeof computations_handlersModule;
-    const currencyHandlers = require('../../src/ts/ipc/currency.handlers') as typeof currency_handlersModule;
-    const scenariosHandlers = require('../../src/ts/ipc/scenarios.handlers') as typeof scenarios_handlersModule;
-    const miscHandlers = require('../../src/ts/ipc/misc.handlers') as typeof misc_handlersModule;
-    const updateHandlers = require('../../src/ts/ipc/update.handlers') as typeof update_handlersModule;
+        require('../../src/ts/core/ipc/computations.handlers') as typeof computations_handlersModule;
+    const currencyHandlers = require('../../src/ts/core/ipc/currency.handlers') as typeof currency_handlersModule;
+    const scenariosHandlers = require('../../src/ts/core/ipc/scenarios.handlers') as typeof scenarios_handlersModule;
+    const miscHandlers = require('../../src/ts/shells/electron/misc.handlers') as typeof misc_handlersModule;
+    const updateHandlers = require('../../src/ts/shells/electron/update.handlers') as typeof update_handlersModule;
 
     return [
-        ...Object.keys(settingsHandlers.buildHandlers({ broadcastSettingsChange: () => {} })),
+        ...Object.keys(settingsHandlers.buildHandlers()),
         ...Object.keys(votingHandlers.buildHandlers()),
         ...Object.keys(logHandlers.buildHandlers()),
         ...Object.keys(actionsHandlers.buildHandlers()),
         ...Object.keys(computationsHandlers.buildHandlers()),
         ...Object.keys(currencyHandlers.buildHandlers()),
         ...Object.keys(scenariosHandlers.buildHandlers()),
-        ...Object.keys(miscHandlers.buildHandlers({ getMainWindow: () => null, getLoginWindow: () => null })),
+        ...Object.keys(
+            miscHandlers.buildHandlers({ remote: remoteStub, getMainWindow: () => null, getLoginWindow: () => null }),
+        ),
         ...Object.keys(
             updateHandlers.buildHandlers({
                 getAutoUpdater: () => null,
@@ -97,7 +106,7 @@ describe('ipc channel manifest', () => {
     test('sendMethods channels set-equal index.ts direct ipcMain.on registrations', () => {
         // index.ts pulls in the whole Electron app bootstrap, so its direct
         // registrations are read structurally instead of by requiring it.
-        const src = fs.readFileSync(path.join(__dirname, '../../src/ts/index.ts'), 'utf8');
+        const src = fs.readFileSync(path.join(__dirname, '../../src/ts/shells/electron/index.ts'), 'utf8');
         const registered = [...src.matchAll(/ipcMain\.on\(\s*'([^']+)'/g)].map((m) => m[1]).sort();
         expect(Object.values(sendMethods).sort()).toEqual(registered);
     });

@@ -3,11 +3,11 @@
  * only.
  */
 
-import * as logger from '../../../src/ts/logger';
-import { V1_KEY_RENAMES, importV1Settings, renameV1ScenarioDocument } from '../../../src/ts/settings/importV1';
-import { getV1Defaults } from '../../../src/ts/settings/importV1/defaults';
-import { renameV1Keys } from '../../../src/ts/settings/importV1/renames';
-import { TOP_LEVEL_ONLY_KEYS } from '../../../src/ts/settings/importV1/convert';
+import * as logger from '../../../src/ts/core/logger';
+import { V1_KEY_RENAMES, importV1Settings, renameV1ScenarioDocument } from '../../../src/ts/core/settings/importV1';
+import { getV1Defaults } from '../../../src/ts/core/settings/importV1/defaults';
+import { renameV1Keys } from '../../../src/ts/core/settings/importV1/renames';
+import { TOP_LEVEL_ONLY_KEYS } from '../../../src/ts/core/settings/importV1/convert';
 import { invalid } from '../../helpers/invalid';
 
 type Result = ReturnType<typeof importV1Settings>;

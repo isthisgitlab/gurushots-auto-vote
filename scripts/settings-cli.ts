@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 
-import * as settings from '../src/ts/settings';
-import * as logger from '../src/ts/logger';
+// The CLI platform installs before any core module loads.
+import '../src/ts/shells/cli/platform';
+
+import * as settings from '../src/ts/core/settings';
+import * as logger from '../src/ts/core/logger';
 import {
     dumpSchema,
     listGlobalDefaults,
@@ -10,9 +13,9 @@ import {
     resetSetting,
     resetGlobalDefault,
     resetAllSettings,
-} from '../src/ts/cli/commands/settings';
+} from '../src/ts/shells/cli/commands/settings';
 import { spawn } from 'node:child_process';
-import { errorMessage } from '../src/ts/errorMessage';
+import { errorMessage } from '../src/ts/core/errorMessage';
 import { runIfMain } from './lib/run-if-main';
 
 /**
@@ -27,7 +30,7 @@ import { runIfMain } from './lib/run-if-main';
  *
  * Output note (deliberate): `get` prints plain console lines (pipeable,
  * no timestamps — it is the read/inspect path), while the mutating
- * commands delegate to src/ts/cli/commands/settings.ts and emit through
+ * commands delegate to src/ts/shells/cli/commands/settings.ts and emit through
  * the shared logger (timestamped, colored) exactly like the main CLI.
  *
  * Examples:
@@ -318,12 +321,12 @@ async function main() {
                 break;
 
             case 'schema':
-                // Shared with the main CLI (src/ts/cli/commands/settings.ts).
+                // Shared with the main CLI (src/ts/shells/cli/commands/settings.ts).
                 dumpSchema();
                 break;
 
             case 'global-defaults':
-                // Shared with the main CLI (src/ts/cli/commands/settings.ts).
+                // Shared with the main CLI (src/ts/shells/cli/commands/settings.ts).
                 listGlobalDefaults();
                 break;
 

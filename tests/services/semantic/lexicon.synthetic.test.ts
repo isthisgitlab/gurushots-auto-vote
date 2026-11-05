@@ -3,7 +3,7 @@
  * load, and a zero vector that must not divide by zero when normalised.
  */
 
-import type { RawLexicon } from '../../../src/ts/types/semantic';
+import type { RawLexicon } from '../../../src/ts/core/types/semantic';
 
 const toB64 = (ints: number[]) => Buffer.from(Int8Array.from(ints).buffer).toString('base64');
 const mockAsset: RawLexicon = {
@@ -14,13 +14,13 @@ const mockAsset: RawLexicon = {
 };
 const mockLoad = jest.fn(async () => mockAsset);
 
-jest.mock('../../../src/ts/services/semantic/assets', () => ({
+jest.mock('../../../src/ts/core/services/semantic/assets', () => ({
     loadLexiconAsset: (...args: []) => mockLoad(...args),
     ASSET_NAME: 'semantic-vectors.json',
     __resetForTests: () => {},
 }));
 
-import lexicon = require('../../../src/ts/services/semantic/lexicon');
+import lexicon = require('../../../src/ts/core/services/semantic/lexicon');
 
 beforeEach(() => {
     lexicon.__resetForTests();

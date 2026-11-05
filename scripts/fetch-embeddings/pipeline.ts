@@ -2,7 +2,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { errorMessage } from '../../src/ts/errorMessage';
+import { errorMessage } from '../../src/ts/core/errorMessage';
 import {
     ROOT,
     CACHE_DIR,
@@ -192,7 +192,7 @@ export const main = async ({
         fail([
             `bad stem-merge rate ${(badRate * 100).toFixed(2)}% exceeds the ` +
                 `${MAX_BAD_COLLISION_RATE * 100}% ceiling — the stemmer is merging unrelated words at scale.`,
-            'Inspect the samples above; fix the stemmer edge case (src/ts/services/photoPicker/stemming.ts) before committing.',
+            'Inspect the samples above; fix the stemmer edge case (src/ts/core/services/photoPicker/stemming.ts) before committing.',
         ]);
     }
 

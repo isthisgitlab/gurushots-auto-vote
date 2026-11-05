@@ -1,10 +1,10 @@
 const { validateSetting, getValidationError, SETTINGS_SCHEMA, MAX_SCHEDULED_FILL_ENTRIES } =
-    require('../../src/ts/settings/schema') as typeof schemaModule;
+    require('../../src/ts/core/settings/schema') as typeof schemaModule;
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
-import settings = require('../../src/ts/settings');
-import type * as schemaModule from '../../src/ts/settings/schema';
+import settings = require('../../src/ts/core/settings');
+import type * as schemaModule from '../../src/ts/core/settings/schema';
 
-jest.mock('../../src/ts/logger', () => ({
+jest.mock('../../src/ts/core/logger', () => ({
     info: jest.fn(),
     warning: jest.fn(),
     error: jest.fn(),

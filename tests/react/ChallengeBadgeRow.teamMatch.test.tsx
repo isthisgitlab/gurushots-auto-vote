@@ -8,10 +8,10 @@
 import { render } from './helpers/test-utils';
 import { mockTranslator } from './helpers/setup';
 import { ChallengeBadgeRow } from '@/components/app/ChallengeBadgeRow';
-import { createTranslator } from '../../src/ts/translations/translator';
+import { createTranslator } from '../../src/ts/core/translations/translator';
 import { buildChallenge } from '../helpers/challengeFixtures';
-import type { TeamMatch, TeamStanding } from '../../src/ts/types/gurushots';
-import type { Translate } from '../../src/ts/translations/translator';
+import type { TeamMatch, TeamStanding } from '../../src/ts/core/types/gurushots';
+import type { Translate } from '../../src/ts/core/translations/translator';
 
 // The real English strings, plural groups included, so the substituted opponent and totals can be asserted.
 const translator = createTranslator();

@@ -18,15 +18,15 @@
  */
 
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
-import settings = require('../../src/ts/settings');
-import type * as intentProfilesModule from '../../src/ts/settings/intentProfiles';
-import type * as schemaModule from '../../src/ts/settings/schema';
-import type { SettingsSchemaEntry } from '../../src/ts/settings/schema';
+import settings = require('../../src/ts/core/settings');
+import type * as intentProfilesModule from '../../src/ts/core/settings/intentProfiles';
+import type * as schemaModule from '../../src/ts/core/settings/schema';
+import type { SettingsSchemaEntry } from '../../src/ts/core/settings/schema';
 const { INTENT_PROFILES, getIntentByName, intentValuesMatch } =
-    require('../../src/ts/settings/intentProfiles') as typeof intentProfilesModule;
-const { validateSetting } = require('../../src/ts/settings/schema') as typeof schemaModule;
+    require('../../src/ts/core/settings/intentProfiles') as typeof intentProfilesModule;
+const { validateSetting } = require('../../src/ts/core/settings/schema') as typeof schemaModule;
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const scoped = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
         info: jest.fn(),

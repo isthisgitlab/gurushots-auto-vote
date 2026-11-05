@@ -1,5 +1,6 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useUpdate, UPDATE_STATES } from '@/contexts/UpdateContext';
+import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { releaseNotesText } from '@/utils/releaseNotesText';
@@ -36,6 +37,7 @@ const ERROR_KEYS = {
  */
 export function UpdateDialog() {
     const { t, language } = useTranslation();
+    const { showsUpdateInstall } = usePlatformCapabilities();
     const {
         state,
         updateInfo,
@@ -48,6 +50,10 @@ export function UpdateDialog() {
         hideDialog,
         openBrowserDownload,
     } = useUpdate();
+
+    // Updates are downloaded and installed on the computer; a remote screen is told to update,
+    // never walked through it here.
+    if (!showsUpdateInstall) return null;
 
     const dismissable = state === UPDATE_STATES.AVAILABLE || state === UPDATE_STATES.ERROR;
     // No title while idle: the dialog is never visible then.

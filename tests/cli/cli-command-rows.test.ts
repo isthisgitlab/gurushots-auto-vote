@@ -4,11 +4,11 @@
  * a row, aliases ride their row's handler and markerless flag, and a row's usage text is readable.
  */
 
-import type * as commandTableModule from '../../src/ts/cli/commandTable';
-import type * as commandRowsModule from '../../src/ts/cli/commandRows';
+import type * as commandTableModule from '../../src/ts/shells/cli/commandTable';
+import type * as commandRowsModule from '../../src/ts/shells/cli/commandRows';
 
-const { COMMANDS, holdsSessionMarker } = require('../../src/ts/cli/commandTable') as typeof commandTableModule;
-const { COMMAND_ROWS, usageOf } = require('../../src/ts/cli/commandRows') as typeof commandRowsModule;
+const { COMMANDS, holdsSessionMarker } = require('../../src/ts/shells/cli/commandTable') as typeof commandTableModule;
+const { COMMAND_ROWS, usageOf } = require('../../src/ts/shells/cli/commandRows') as typeof commandRowsModule;
 
 describe('command rows', () => {
     test('every row name and alias is unique across the table', () => {

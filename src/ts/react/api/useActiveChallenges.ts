@@ -1,8 +1,8 @@
 import { useCallback, useRef } from 'react';
 import { useIpcQuery } from './useIpcQuery';
 
-import type { ActiveChallengesResponse, Challenge } from '../../types/gurushots';
-import type { RendererSettings } from '../../types/settings';
+import type { ActiveChallengesResponse, Challenge } from '../../core/types/gurushots';
+import type { RendererSettings } from '../../core/types/settings';
 import type { IpcQueryTools } from './useIpcQuery';
 
 /**

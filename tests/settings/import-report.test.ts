@@ -9,7 +9,7 @@ jest.mock('node:fs', () => {
 });
 jest.unmock('path');
 jest.unmock('node:path');
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
         info: jest.fn(),
@@ -27,11 +27,12 @@ jest.mock('../../src/ts/logger', () => {
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type * as runtimeModule from '../../src/ts/runtime';
-import type * as settingsModule from '../../src/ts/settings';
-import type * as storageModule from '../../src/ts/settings/storage';
-import type * as loggerModule from '../../src/ts/logger';
-import type { CategoryLogger } from '../../src/ts/logger';
+import type * as settingsModule from '../../src/ts/core/settings';
+import type * as storageModule from '../../src/ts/core/settings/storage';
+import type * as loggerModule from '../../src/ts/core/logger';
+import type { CategoryLogger } from '../../src/ts/core/logger';
+import { platform } from '../../src/ts/core/platform/port';
+import { installTestPlatform } from '../helpers/platform';
 import { invalid } from '../helpers/invalid';
 import { parseJsonObject } from '../helpers/parseJson';
 
@@ -80,16 +81,13 @@ describe('after the import of a settings.json (real fs)', () => {
     // Each test gets its own module graph: the recovery state lives in the settings module.
     const loadFresh = () => {
         jest.isolateModules(() => {
-            const actualRuntime = jest.requireActual<typeof runtimeModule>('../../src/ts/runtime');
-            jest.doMock('../../src/ts/runtime', () => ({
-                __esModule: true,
-                ...actualRuntime,
-                getAppUserDataPath: () => userData,
-            }));
-            settings = require('../../src/ts/settings') as typeof settingsModule;
-            storage = require('../../src/ts/settings/storage') as typeof storageModule;
+            // The settings file sits in the user-data directory: the platform resolves it into this test's
+            // temp dir (a closure, so `jest.restoreAllMocks()` cannot send it back to the real folder).
+            installTestPlatform({ paths: { ...platform().paths, userData: () => userData } });
+            settings = require('../../src/ts/core/settings') as typeof settingsModule;
+            storage = require('../../src/ts/core/settings/storage') as typeof storageModule;
             cat = invalid<typeof loggerModule & { __cat: CatDouble }>(
-                require('../../src/ts/logger') as typeof loggerModule,
+                require('../../src/ts/core/logger') as typeof loggerModule,
             ).__cat;
         });
     };
@@ -105,7 +103,6 @@ describe('after the import of a settings.json (real fs)', () => {
 
     afterEach(() => {
         jest.restoreAllMocks();
-        jest.dontMock('../../src/ts/runtime');
         fs.rmSync(root, { recursive: true, force: true });
     });
 

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CURRENT_NOTICE_VERSION } from '../../noticeVersion';
-import { errorMessage } from '../../errorMessage';
+import { CURRENT_NOTICE_VERSION } from '../../core/noticeVersion';
+import { errorMessage } from '../../core/errorMessage';
 import * as ipc from '../api/ipc';
 
-import type { RendererSettings } from '../../types/settings';
+import type { RendererSettings } from '../../core/types/settings';
 
 /**
  * What the "unofficial app" notice gate tells its page.

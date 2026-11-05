@@ -5,24 +5,26 @@
  * emergency fill — and the emergency stand-down check agrees with the runner.
  */
 
-import type * as autoFillModule from '../../src/ts/services/autoFill';
-import type * as chosenPhotosModule from '../../src/ts/services/autoFill/chosenPhotos';
-import type * as verifyModule from '../../src/ts/services/autoFill/pipeline/verify';
-import type * as photoPickerModule from '../../src/ts/services/photoPicker';
+import type * as autoFillModule from '../../src/ts/core/services/autoFill';
+import type * as chosenPhotosModule from '../../src/ts/core/services/autoFill/chosenPhotos';
+import type * as verifyModule from '../../src/ts/core/services/autoFill/pipeline/verify';
+import type * as photoPickerModule from '../../src/ts/core/services/photoPicker';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
-import type { FillDeps, FillLogger, FillSettings, RankDeps } from '../../src/ts/types/autoFill';
-import type { PickerPhoto, ScoredCandidate } from '../../src/ts/types/photoPicker';
+import type * as entryAgeStoreModule from '../../src/ts/core/entryAgeStore';
+import type { FillDeps, FillLogger, FillSettings, RankDeps } from '../../src/ts/core/types/autoFill';
+import type { PickerPhoto, ScoredCandidate } from '../../src/ts/core/types/photoPicker';
 import { invalid } from '../helpers/invalid';
 
-jest.mock('../../src/ts/services/semantic/lexicon', () => ({
+jest.mock('../../src/ts/core/services/semantic/lexicon', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/services/semantic/lexicon')>(
-        '../../src/ts/services/semantic/lexicon',
+    ...jest.requireActual<typeof import('../../src/ts/core/services/semantic/lexicon')>(
+        '../../src/ts/core/services/semantic/lexicon',
     ),
 }));
 // photoStats persists its cache through this store; keep it in memory.
-jest.mock('../../src/ts/settings/storage', () => ({
+jest.mock('../../src/ts/core/settings/storage', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/core/settings/storage')>('../../src/ts/core/settings/storage'),
     createJsonStore: () => ({
         readRaw: () => null,
         writeRaw: () => {},
@@ -40,16 +42,16 @@ const {
     reflectNewEntry,
     rankCandidatesForChallenge,
     __resetMemberIdCache,
-} = require('../../src/ts/services/autoFill') as typeof autoFillModule;
+} = require('../../src/ts/core/services/autoFill') as typeof autoFillModule;
 const { forgetChosenPhotosMemory, logChosenSkipOnce } =
-    require('../../src/ts/services/autoFill/chosenPhotos') as typeof chosenPhotosModule;
+    require('../../src/ts/core/services/autoFill/chosenPhotos') as typeof chosenPhotosModule;
 const { resolveMissingChosen, refuseRememberedChosen, lastWalkStoppedAtPageCap } =
-    require('../../src/ts/services/autoFill/chosenWalkMemo') as typeof import('../../src/ts/services/autoFill/chosenWalkMemo');
+    require('../../src/ts/core/services/autoFill/chosenWalkMemo') as typeof import('../../src/ts/core/services/autoFill/chosenWalkMemo');
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 const { verifyFillPick, recordUncertainSubmission } =
-    require('../../src/ts/services/autoFill/pipeline/verify') as typeof verifyModule;
-const { buildChosenCandidates } = require('../../src/ts/services/photoPicker') as typeof photoPickerModule;
-const { createMemoryEntryAgeLedger } = require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
+    require('../../src/ts/core/services/autoFill/pipeline/verify') as typeof verifyModule;
+const { buildChosenCandidates } = require('../../src/ts/core/services/photoPicker') as typeof photoPickerModule;
+const { createMemoryEntryAgeLedger } = require('../../src/ts/core/entryAgeStore') as typeof entryAgeStoreModule;
 
 const NOW = 1_000_000;
 
@@ -337,6 +339,7 @@ describe('chosen photos rank first', () => {
         );
         const verified = await verifyFillPick(
             challenge,
+            'token',
             scored,
             photos,
             ['c1', 'r1'],
@@ -375,7 +378,7 @@ describe('chosen photos rank first', () => {
         const { logger, lines } = makeLog();
         const deps = invalid<RankDeps & FillDeps>({ logger, rankVisually, entryAges: ledger });
         const picked = ['c1', 'r1', 'r2'];
-        const verified = await verifyFillPick(challenge, scored, [], picked, null, deps, chosenIds);
+        const verified = await verifyFillPick(challenge, 'token', scored, [], picked, null, deps, chosenIds);
         expect(rankVisually).toHaveBeenCalledTimes(2);
         expect(verified.visualEvidence).toBeNull();
         // The theme read inside awaits the lexicon, so the record call must be
@@ -439,6 +442,7 @@ describe('chosen photos rank first', () => {
             });
             const verified = await verifyFillPick(
                 challenge,
+                'token',
                 scored,
                 photos,
                 ['c3', 'r1'],
@@ -464,8 +468,8 @@ describe('chosen photos rank first', () => {
             ids.slice(0, want),
         );
         const deps = invalid<RankDeps>({ logger: makeLog().logger, rankVisually });
-        await verifyFillPick(challenge, scored, photos, ['a', 'b'], null, deps, new Set());
-        await verifyFillPick(challenge, scored, photos, ['a', 'b'], null, deps, null);
+        await verifyFillPick(challenge, 'token', scored, photos, ['a', 'b'], null, deps, new Set());
+        await verifyFillPick(challenge, 'token', scored, photos, ['a', 'b'], null, deps, null);
         expect(rankVisually).toHaveBeenCalledTimes(2);
     });
 
@@ -1657,37 +1661,153 @@ describe('forgetChosenPhotosMemory (a logout)', () => {
     });
 });
 
-describe('swap ranking ignores the chosen photos settings', () => {
-    const rank = async (settings: SettingsSpec) => {
+describe('swap ranking and the chosen photos settings', () => {
+    const car = photo('car', ['Car']);
+    const dog = photo('dog', ['Dog']);
+    const rank = async (
+        settings: SettingsSpec,
+        opts: {
+            excludeIds?: string[];
+            enforceChosenOnly?: boolean;
+            wantCount?: number;
+            entries?: unknown[];
+            themed?: PickerPhoto[];
+        } = {},
+        walkItems: PickerPhoto[] = [photo('theme-a'), photo('theme-b'), car, dog],
+    ) => {
         forgetChosenPhotosMemory();
         const deps = makeDeps({
-            library: [
+            library: opts.themed ?? [
                 photo('theme-a', ['Pink'], { upload_date: 9300 }),
                 photo('theme-b', ['Pink'], { upload_date: 9200 }),
             ],
-            walkItems: [photo('theme-a'), photo('theme-b'), photo('car', ['Car'])],
+            walkItems,
             settings,
         });
-        const result = await rankCandidatesForChallenge(makeChallenge(), 'tok', deps, {
+        const result = await rankCandidatesForChallenge(makeChallenge({ entries: opts.entries }), 'tok', deps, {
             usage: 'swap',
-            wantCount: 3,
+            wantCount: opts.wantCount ?? 1,
+            excludeIds: new Set(opts.excludeIds ?? []),
+            enforceChosenOnly: opts.enforceChosenOnly,
         });
         return { result, deps };
     };
+    const ids = (result: Awaited<ReturnType<typeof rank>>['result']) =>
+        result.status === 'ranked' ? result.picked.map((p) => p.id) : result.status;
 
-    test('the output is identical with the settings set, and no library walk looks for a chosen photo', async () => {
-        const plain = await rank({});
-        const chosen = await rank({ chosen: ['car'], only: true });
-        expect(chosen.result).toEqual(plain.result);
-        expect(chosen.result).toEqual({
-            status: 'ranked',
-            picked: [expect.objectContaining({ id: 'theme-a' }), expect.objectContaining({ id: 'theme-b' })],
-        });
-        expect(chosen.deps.getEligiblePhotosWalk).not.toHaveBeenCalled();
-        // The settings are never even read.
-        const asked = chosen.deps.settings.getEffectiveSetting.mock.calls.map((call) => call[0]);
-        expect(asked).not.toContain('chosenPhotos');
-        expect(asked).not.toContain('chosenPhotosOnly');
+    test('without a chosen list the ranking is the plain one and no library walk runs', async () => {
+        const { result, deps } = await rank({}, { wantCount: 3 });
+        expect(result).toEqual({ status: 'ranked', picked: [expect.anything(), expect.anything()] });
+        expect(ids(result)).toEqual(['theme-a', 'theme-b']);
+        expect(deps.getEligiblePhotosWalk).not.toHaveBeenCalled();
+    });
+
+    test('a chosen photo ranks first, and is found by the library walk when the themed search misses it', async () => {
+        const { result, deps } = await rank({ chosen: ['car'] }, { wantCount: 2 });
+        expect(ids(result)).toEqual(['car', 'theme-a']);
+        expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(1);
+    });
+
+    test('with enforcement on and Submit Only on, only chosen photos are returned', async () => {
+        const { result } = await rank({ chosen: ['car'], only: true }, { enforceChosenOnly: true, wantCount: 3 });
+        expect(ids(result)).toEqual(['car']);
+    });
+
+    test('with enforcement on, Submit Only off still tops the pick up from the rest', async () => {
+        const { result } = await rank({ chosen: ['car'], only: false }, { enforceChosenOnly: true, wantCount: 2 });
+        expect(ids(result)).toEqual(['car', 'theme-a']);
+    });
+
+    test.each([
+        ['excluded', { excludeIds: ['car'] }],
+        ['entered', { entries: [{ id: 'existing' }, { id: 'car' }] }],
+    ])('with every chosen photo %s, the pick is empty and nothing is fetched or walked', async (_name, opts) => {
+        const { result, deps } = await rank({ chosen: ['car'], only: true }, { ...opts, enforceChosenOnly: true });
+        expect(result).toEqual({ status: 'ranked', picked: [], noChosenLeft: true });
+        expect(deps.getEligiblePhotos).not.toHaveBeenCalled();
+        expect(deps.getEligiblePhotosWalk).not.toHaveBeenCalled();
+    });
+
+    test('with enforcement on and no chosen photo usable, the pick is empty', async () => {
+        const { result } = await rank({ chosen: ['car'], only: true }, { enforceChosenOnly: true }, [
+            photo('theme-a'),
+            photo('car', ['Car'], { permission: { allowed: false, message: 'full' } }),
+        ]);
+        expect(result).toEqual({ status: 'ranked', picked: [], noChosenLeft: true });
+    });
+
+    test.each([
+        ['excluded', { excludeIds: ['car'] }],
+        ['entered', { entries: [{ id: 'existing' }, { id: 'car' }] }],
+    ])('without enforcement, Submit Only does not hold back a photo when the chosen one is %s', async (_name, opts) => {
+        const { result } = await rank({ chosen: ['car'], only: true }, { ...opts, wantCount: 2 });
+        expect(ids(result)).toEqual(['theme-a', 'theme-b']);
+    });
+
+    test('in order, the chosen photos come in the list order', async () => {
+        const forward = await rank({ chosen: ['dog', 'car'], inOrder: true }, { wantCount: 2 });
+        expect(ids(forward.result)).toEqual(['dog', 'car']);
+        const backward = await rank({ chosen: ['car', 'dog'], inOrder: true }, { wantCount: 2 });
+        expect(ids(backward.result)).toEqual(['car', 'dog']);
+    });
+
+    test('in order with enforcement and Submit Only on, the first usable chosen photo in list order is picked and no other photo', async () => {
+        const first = await rank(
+            { chosen: ['dog', 'car'], inOrder: true, only: true },
+            { enforceChosenOnly: true, wantCount: 1 },
+        );
+        expect(ids(first.result)).toEqual(['dog']);
+        // The first photo of the list is refused: the next usable one in list order takes its place.
+        const skipped = await rank({ chosen: ['dog', 'car'], inOrder: true, only: true }, { enforceChosenOnly: true }, [
+            photo('theme-a'),
+            photo('dog', ['Dog'], { permission: { allowed: false, message: 'full' } }),
+            car,
+        ]);
+        expect(ids(skipped.result)).toEqual(['car']);
+        // More slots than usable chosen photos: nothing from outside the list tops the pick up.
+        const topUp = await rank(
+            { chosen: ['dog', 'car'], inOrder: true, only: true },
+            { enforceChosenOnly: true, wantCount: 4 },
+        );
+        expect(ids(topUp.result)).toEqual(['dog', 'car']);
+    });
+
+    test('the walk asks for the swap usage, and its memo leaves the submit memo empty', async () => {
+        const { result, deps } = await rank({ chosen: ['car'] }, { wantCount: 2 });
+        expect(ids(result)).toEqual(['car', 'theme-a']);
+        expect(deps.getEligiblePhotosWalk).toHaveBeenCalledWith(
+            'c1',
+            'tok',
+            expect.objectContaining({ usage: 'swap' }),
+        );
+        const lookup = async (usage?: 'swap') =>
+            (
+                await resolveMissingChosen({
+                    challenge: makeChallenge(),
+                    token: 'tok',
+                    ids: ['car'],
+                    eligible: [],
+                    wantCount: 1,
+                    allowWalk: false,
+                    deps: { logger: makeLog().logger },
+                    label: 'autoSubmit',
+                    usage,
+                })
+            ).map((found) => found.id);
+        // The swap memo remembers the photo; the submit memo knows nothing of it.
+        expect(await lookup('swap')).toEqual(['car']);
+        expect(await lookup()).toEqual([]);
+    });
+
+    test('an excluded chosen photo in the themed results does not stop the walk from finding the next one', async () => {
+        // "dog" is the swapped-out chosen photo and is in the themed results; "car" is not.
+        const { result, deps } = await rank(
+            { chosen: ['dog', 'car'] },
+            { excludeIds: ['dog'], themed: [photo('theme-a'), photo('dog', ['Pink'])] },
+            [photo('theme-a'), car, photo('dog', ['Pink'])],
+        );
+        expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(1);
+        expect(ids(result)).toEqual(['car']);
     });
 });
 

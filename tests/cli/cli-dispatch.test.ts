@@ -1,5 +1,5 @@
 /**
- * Unit tests for the CLI entry point (src/ts/cli/cli.ts). The module is a
+ * Unit tests for the CLI entry point (src/ts/shells/cli/cli.ts). The module is a
  * script: it reads process.argv, registers process-level error handlers and
  * runs main() on load. Each test sets argv and re-requires it in an isolated
  * module registry with every command module mocked, then asserts which
@@ -8,30 +8,31 @@
  * process.on is captured, never installed.
  */
 
-import type * as loggerModule from '../../src/ts/logger';
-import type * as settingsModule from '../../src/ts/settings';
-import type * as runtimeModule from '../../src/ts/runtime';
-import type * as randomizerModule from '../../src/ts/api/randomizer';
-import type * as guardsModule from '../../src/ts/cli/guards';
-import type * as authModule from '../../src/ts/cli/commands/auth';
-import type * as votingModule from '../../src/ts/cli/commands/voting';
-import type * as statusModule from '../../src/ts/cli/commands/status';
-import type * as actionsModule from '../../src/ts/cli/commands/actions';
-import type * as submitModule from '../../src/ts/cli/commands/submit';
-import type * as spendModule from '../../src/ts/cli/commands/spend';
-import type * as bankrollModule from '../../src/ts/cli/commands/bankroll';
-import type * as joinModule from '../../src/ts/cli/commands/join';
-import type * as pinModule from '../../src/ts/cli/commands/pin';
-import type * as photosModule from '../../src/ts/cli/commands/photos';
-import type * as deadlinesModule from '../../src/ts/cli/commands/deadlines';
-import type * as updateModule from '../../src/ts/cli/commands/update';
-import type * as logsModule from '../../src/ts/cli/commands/logs';
-import type * as logsFollowModule from '../../src/ts/cli/commands/logsFollow';
-import type * as settingsCommandsModule from '../../src/ts/cli/commands/settings';
-import type * as scenariosModule from '../../src/ts/cli/commands/scenarios';
-import type * as cliSessionLockModule from '../../src/ts/settings/cliSessionLock';
+import type * as loggerModule from '../../src/ts/core/logger';
+import type * as settingsModule from '../../src/ts/core/settings';
+import type * as nodePathsModule from '../../src/ts/platforms/node/paths';
+import type * as randomizerModule from '../../src/ts/core/api/randomizer';
+import type * as guardsModule from '../../src/ts/shells/cli/guards';
+import type * as authModule from '../../src/ts/shells/cli/commands/auth';
+import type * as votingModule from '../../src/ts/shells/cli/commands/voting';
+import type * as statusModule from '../../src/ts/shells/cli/commands/status';
+import type * as actionsModule from '../../src/ts/shells/cli/commands/actions';
+import type * as submitModule from '../../src/ts/shells/cli/commands/submit';
+import type * as spendModule from '../../src/ts/shells/cli/commands/spend';
+import type * as bankrollModule from '../../src/ts/shells/cli/commands/bankroll';
+import type * as joinModule from '../../src/ts/shells/cli/commands/join';
+import type * as pinModule from '../../src/ts/shells/cli/commands/pin';
+import type * as photosModule from '../../src/ts/shells/cli/commands/photos';
+import type * as deadlinesModule from '../../src/ts/shells/cli/commands/deadlines';
+import type * as updateModule from '../../src/ts/shells/cli/commands/update';
+import type * as logsModule from '../../src/ts/shells/cli/commands/logs';
+import type * as logsFollowModule from '../../src/ts/shells/cli/commands/logsFollow';
+import type * as settingsCommandsModule from '../../src/ts/shells/cli/commands/settings';
+import type * as scenariosModule from '../../src/ts/shells/cli/commands/scenarios';
+import type * as cliSessionLockModule from '../../src/ts/platforms/node/cliSessionLock';
 import { invalid } from '../helpers/invalid';
-import { CURRENT_NOTICE_VERSION } from '../../src/ts/noticeVersion';
+import { clearInstalledPlatform } from '../helpers/platform';
+import { CURRENT_NOTICE_VERSION } from '../../src/ts/core/noticeVersion';
 
 type Mods = {
     logger: jest.MockedObjectDeep<typeof loggerModule> & { __calls: { level: string; msg: unknown }[] };
@@ -58,7 +59,7 @@ type Mods = {
 };
 type Loaded = Mods & { msgs: (level: string) => string[]; exitCodes: unknown[] };
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const calls: { level: string; msg: unknown }[] = [];
     const rec = (level: string) => (msg: unknown) => calls.push({ level, msg });
     const cat = { info: rec('info'), error: rec('error'), debug: rec('debug'), warning: rec('warning') };
@@ -73,7 +74,7 @@ jest.mock('../../src/ts/logger', () => {
     };
 });
 
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     loadSettings: jest.fn(() => ({ app: { mock: false } })),
     getSettingsRecovery: jest.fn(() => null),
     getSetting: jest.fn(() => 1),
@@ -83,10 +84,10 @@ jest.mock('../../src/ts/settings', () => ({
     isPinnableImageId: jest.fn((value: unknown) => typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value)),
 }));
 
-jest.mock('../../src/ts/api/randomizer', () => ({ initializeHeaders: jest.fn() }));
+jest.mock('../../src/ts/core/api/randomizer', () => ({ initializeHeaders: jest.fn() }));
 
 // The marker a running command holds in the user-data directory: recorded, never written.
-jest.mock('../../src/ts/settings/cliSessionLock', () => {
+jest.mock('../../src/ts/platforms/node/cliSessionLock', () => {
     const release = jest.fn<void, []>();
     return { __release: release, holdCliSessionLock: jest.fn(() => release) };
 });
@@ -95,25 +96,26 @@ jest.mock('../../src/ts/settings/cliSessionLock', () => {
 // Electron so its package entry point does not try to download a binary.
 jest.mock('electron', () => ({}));
 
-jest.mock('../../src/ts/cli/guards', () => ({
+jest.mock('../../src/ts/shells/cli/guards', () => ({
     requireChallenge: jest.fn(({ challengeId }: { challengeId: string | null }) => challengeId),
     requireProfileArgs: jest.fn((command: string, { rest }: { rest: string[] }) => rest[0]),
     // The real helper, so the profile rows are checked against the usage
     // line the commands actually print, not a copy of its format.
-    profileUsage: jest.requireActual<typeof import('../../src/ts/cli/guards')>('../../src/ts/cli/guards').profileUsage,
+    profileUsage: jest.requireActual<typeof import('../../src/ts/shells/cli/guards')>('../../src/ts/shells/cli/guards')
+        .profileUsage,
     ensureAuthenticated: jest.fn(() => true),
     // The worded refusals the real command modules build on at module scope.
     INVALID_ID_TEXT: 'Invalid challenge or image id.',
     resolveChallenge: jest.fn(async () => null),
 }));
 
-jest.mock('../../src/ts/cli/commands/auth', () => ({ handleLogin: jest.fn(), handleLogout: jest.fn() }));
+jest.mock('../../src/ts/shells/cli/commands/auth', () => ({ handleLogin: jest.fn(), handleLogout: jest.fn() }));
 
 // parseChallengeFlag / parseSwapFlags / the usage strings are pure helpers —
 // keep the real ones so the dispatcher's argv handling is tested end to end.
-jest.mock('../../src/ts/cli/commands/voting', () => {
-    const { parseChallengeFlag } = jest.requireActual<typeof import('../../src/ts/cli/commands/voting')>(
-        '../../src/ts/cli/commands/voting',
+jest.mock('../../src/ts/shells/cli/commands/voting', () => {
+    const { parseChallengeFlag } = jest.requireActual<typeof import('../../src/ts/shells/cli/commands/voting')>(
+        '../../src/ts/shells/cli/commands/voting',
     );
     return {
         parseChallengeFlag,
@@ -123,15 +125,15 @@ jest.mock('../../src/ts/cli/commands/voting', () => {
     };
 });
 
-jest.mock('../../src/ts/cli/commands/status', () => ({
+jest.mock('../../src/ts/shells/cli/commands/status', () => ({
     showStatus: jest.fn(),
     rankingTail: jest.fn(() => null),
 }));
 
-jest.mock('../../src/ts/cli/commands/actions', () => {
+jest.mock('../../src/ts/shells/cli/commands/actions', () => {
     const { parseSwapFlags, SWAP_USAGE, SWAP_BACK_USAGE } = jest.requireActual<
-        typeof import('../../src/ts/cli/commands/actions')
-    >('../../src/ts/cli/commands/actions');
+        typeof import('../../src/ts/shells/cli/commands/actions')
+    >('../../src/ts/shells/cli/commands/actions');
     return {
         parseSwapFlags,
         SWAP_USAGE,
@@ -143,38 +145,40 @@ jest.mock('../../src/ts/cli/commands/actions', () => {
     };
 });
 
-jest.mock('../../src/ts/cli/commands/submit', () => ({
+jest.mock('../../src/ts/shells/cli/commands/submit', () => ({
     fillChallenge: jest.fn(),
     submitPickedCmd: jest.fn(async () => 0),
 }));
 
-jest.mock('../../src/ts/cli/commands/spend', () => ({
+jest.mock('../../src/ts/shells/cli/commands/spend', () => ({
     unlockBoostCmd: jest.fn(),
     fillExposureCmd: jest.fn(),
 }));
 
-jest.mock('../../src/ts/cli/commands/deadlines', () => ({ deadlinesCmd: jest.fn(async () => true) }));
+jest.mock('../../src/ts/shells/cli/commands/deadlines', () => ({ deadlinesCmd: jest.fn(async () => true) }));
 
-jest.mock('../../src/ts/cli/commands/pin', () => ({
+jest.mock('../../src/ts/shells/cli/commands/pin', () => ({
     PIN_USAGE: 'Usage: pin --challenge=<id> [--boost=<imageId|none>] [--turbo=<imageId|none>]',
     pinCmd: jest.fn(),
 }));
 
-jest.mock('../../src/ts/cli/commands/bankroll', () => ({ showBankroll: jest.fn() }));
-jest.mock('../../src/ts/cli/commands/join', () => ({
+jest.mock('../../src/ts/shells/cli/commands/bankroll', () => ({ showBankroll: jest.fn() }));
+jest.mock('../../src/ts/shells/cli/commands/join', () => ({
     showDiscover: jest.fn(),
     joinChallengeCmd: jest.fn(async () => 0),
     forgetPaymentCmd: jest.fn(async () => 0),
 }));
-jest.mock('../../src/ts/cli/commands/photos', () => ({
-    ...jest.requireActual<typeof import('../../src/ts/cli/commands/photos')>('../../src/ts/cli/commands/photos'),
+jest.mock('../../src/ts/shells/cli/commands/photos', () => ({
+    ...jest.requireActual<typeof import('../../src/ts/shells/cli/commands/photos')>(
+        '../../src/ts/shells/cli/commands/photos',
+    ),
     listPhotosCmd: jest.fn(async () => 0),
     suggestPhotosCmd: jest.fn(async () => 0),
 }));
-jest.mock('../../src/ts/cli/commands/update', () => ({ checkUpdates: jest.fn() }));
-jest.mock('../../src/ts/cli/commands/logs', () => ({ showLogs: jest.fn() }));
-jest.mock('../../src/ts/cli/commands/logsFollow', () => ({ followLogs: jest.fn(async () => 0) }));
-jest.mock('../../src/ts/cli/commands/scenarios', () =>
+jest.mock('../../src/ts/shells/cli/commands/update', () => ({ checkUpdates: jest.fn() }));
+jest.mock('../../src/ts/shells/cli/commands/logs', () => ({ showLogs: jest.fn() }));
+jest.mock('../../src/ts/shells/cli/commands/logsFollow', () => ({ followLogs: jest.fn(async () => 0) }));
+jest.mock('../../src/ts/shells/cli/commands/scenarios', () =>
     Object.fromEntries(
         [
             'listScenarios',
@@ -192,7 +196,7 @@ jest.mock('../../src/ts/cli/commands/scenarios', () =>
         ].map((name) => [name, jest.fn(async () => 0)]),
     ),
 );
-jest.mock('../../src/ts/cli/commands/settings', () => ({
+jest.mock('../../src/ts/shells/cli/commands/settings', () => ({
     getSetting: jest.fn(),
     setSetting: jest.fn(),
     setGlobalDefault: jest.fn(),
@@ -238,30 +242,31 @@ const run = async (argv: string[], setup?: (mods: Mods) => void) => {
     process.argv = ['node', 'cli.ts', ...argv];
     jest.isolateModules(() => {
         m = invalid<Loaded>({
-            logger: require('../../src/ts/logger') as typeof loggerModule,
-            settings: require('../../src/ts/settings') as typeof settingsModule,
-            randomizer: require('../../src/ts/api/randomizer') as typeof randomizerModule,
-            guards: require('../../src/ts/cli/guards') as typeof guardsModule,
-            auth: require('../../src/ts/cli/commands/auth') as typeof authModule,
-            voting: require('../../src/ts/cli/commands/voting') as typeof votingModule,
-            status: require('../../src/ts/cli/commands/status') as typeof statusModule,
-            actions: require('../../src/ts/cli/commands/actions') as typeof actionsModule,
-            submit: require('../../src/ts/cli/commands/submit') as typeof submitModule,
-            spend: require('../../src/ts/cli/commands/spend') as typeof spendModule,
-            bankroll: require('../../src/ts/cli/commands/bankroll') as typeof bankrollModule,
-            join: require('../../src/ts/cli/commands/join') as typeof joinModule,
-            pin: require('../../src/ts/cli/commands/pin') as typeof pinModule,
-            photos: require('../../src/ts/cli/commands/photos') as typeof photosModule,
-            deadlines: require('../../src/ts/cli/commands/deadlines') as typeof deadlinesModule,
-            update: require('../../src/ts/cli/commands/update') as typeof updateModule,
-            logs: require('../../src/ts/cli/commands/logs') as typeof logsModule,
-            logsFollow: require('../../src/ts/cli/commands/logsFollow') as typeof logsFollowModule,
-            cmd: require('../../src/ts/cli/commands/settings') as typeof settingsCommandsModule,
-            scenarios: require('../../src/ts/cli/commands/scenarios') as typeof scenariosModule,
-            sessionLock: require('../../src/ts/settings/cliSessionLock') as typeof cliSessionLockModule,
+            logger: require('../../src/ts/core/logger') as typeof loggerModule,
+            settings: require('../../src/ts/core/settings') as typeof settingsModule,
+            randomizer: require('../../src/ts/core/api/randomizer') as typeof randomizerModule,
+            guards: require('../../src/ts/shells/cli/guards') as typeof guardsModule,
+            auth: require('../../src/ts/shells/cli/commands/auth') as typeof authModule,
+            voting: require('../../src/ts/shells/cli/commands/voting') as typeof votingModule,
+            status: require('../../src/ts/shells/cli/commands/status') as typeof statusModule,
+            actions: require('../../src/ts/shells/cli/commands/actions') as typeof actionsModule,
+            submit: require('../../src/ts/shells/cli/commands/submit') as typeof submitModule,
+            spend: require('../../src/ts/shells/cli/commands/spend') as typeof spendModule,
+            bankroll: require('../../src/ts/shells/cli/commands/bankroll') as typeof bankrollModule,
+            join: require('../../src/ts/shells/cli/commands/join') as typeof joinModule,
+            pin: require('../../src/ts/shells/cli/commands/pin') as typeof pinModule,
+            photos: require('../../src/ts/shells/cli/commands/photos') as typeof photosModule,
+            deadlines: require('../../src/ts/shells/cli/commands/deadlines') as typeof deadlinesModule,
+            update: require('../../src/ts/shells/cli/commands/update') as typeof updateModule,
+            logs: require('../../src/ts/shells/cli/commands/logs') as typeof logsModule,
+            logsFollow: require('../../src/ts/shells/cli/commands/logsFollow') as typeof logsFollowModule,
+            cmd: require('../../src/ts/shells/cli/commands/settings') as typeof settingsCommandsModule,
+            scenarios: require('../../src/ts/shells/cli/commands/scenarios') as typeof scenariosModule,
+            sessionLock: require('../../src/ts/platforms/node/cliSessionLock') as typeof cliSessionLockModule,
         });
         setup?.(m);
-        require('../../src/ts/cli/cli');
+        clearInstalledPlatform();
+        require('../../src/ts/shells/cli/cli');
     });
     await flush();
     await flush();
@@ -335,8 +340,8 @@ describe('startup', () => {
     test('a user-data folder that cannot be created is said in plain words and exits 1', async () => {
         const m = await run(['status'], (mods) =>
             mods.randomizer.initializeHeaders.mockImplementation(() => {
-                const runtime = require('../../src/ts/runtime') as typeof runtimeModule;
-                throw new runtime.UserDataUnavailableError('/data/gurushots', 'EACCES');
+                const nodePaths = require('../../src/ts/platforms/node/paths') as typeof nodePathsModule;
+                throw new nodePaths.UserDataUnavailableError('/data/gurushots', 'EACCES');
             }),
         );
         expect(m.msgs('error')).toEqual([expect.stringContaining('/data/gurushots')]);
@@ -475,12 +480,13 @@ describe('the CLI session marker', () => {
 // lines joined with newlines, between the "Commands:" header and the blank line before "Examples:".
 const COMMANDS_BLOCK = `Commands:
   login    - Authenticate with GuruShots and save token
-  logout   - Clear the saved authentication token
+  logout   - Clear the saved authentication token and set mock mode back to its default (off in released builds)
   vote     - Run one manual voting cycle (votes to 100% regardless of settings; skips Manual Only challenges).
              Add --challenge=<id> to manually vote a single challenge, which works on a Manual Only one too.
              With --challenge=<id>, exits 1 when the vote did not run (0 when it did).
   run      - Run one full auto-strategy cycle (boost / turbo / auto-submit / threshold-aware vote).
              Add --challenge=<id> to scope to a single challenge; on a Manual Only challenge it does nothing.
+             Afterwards it removes the per-challenge settings of challenges that are gone (not in mock mode).
   challenges - List the active challenges with their ids — the id every --challenge=<id> command needs.
              Add --challenge=<id> for one challenge in detail (its photo ids, to aim --image=<id> at).
              Alias: list
@@ -510,7 +516,8 @@ const COMMANDS_BLOCK = `Commands:
   fill-exposure - Spend a fill to top exposure up to 100%: fill-exposure --challenge=<id> [--yes]
              Currency actions spend nothing without --yes; they print the cost first.
   start    - Start continuous voting on a schedule (runs until stopped with Ctrl+C)
-  status   - Show current status and settings
+  status   - Show current status and settings, including the Auto-claim and Auto-join lines and, when signed in,
+             a Standing section: each challenge's rank, its benchmark gap and its team-match standing.
   bankroll - Show your currency balances (keys / swaps / fills / coins). Alias: coins
   discover - List open (un-joined) challenges you can join, and the upcoming ones starting
              within discoverUpcomingHours (24 by default; 0 = open only). An upcoming challenge
@@ -526,8 +533,9 @@ const COMMANDS_BLOCK = `Commands:
              coin budget.
   list-photos [--challenge=<id>] [--search=<tag>] [--sort=votes|newest|oldest] - List your photo ids, to choose
              them for auto-join / auto-submit. With --challenge each photo shows whether that challenge accepts
-             it. --sort orders the whole library on the server — votes (the default), newest or oldest (the
-             date the photo was added to your library) — and the whole listing comes out in that order.
+             it. --sort sets the order: votes (the default) is the order the server returns; newest or oldest (the
+             date the photo was added to your library) are requested from the server and the order is also
+             enforced on every photo read, so the whole listing comes out in that order.
              --search matches a tag exactly, and also lists the tags in your library that contain the term (3+
              characters), so a partial term still shows the full tag to search with.
              --stats also reads votes, views, likes and Guru picks for the listed photos — the first

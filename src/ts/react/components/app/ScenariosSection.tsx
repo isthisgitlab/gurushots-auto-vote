@@ -8,11 +8,11 @@ import * as ipc from '@/api/ipc';
 import { ScenarioError, issuesOf } from './ScenarioError';
 import { ScenarioBuilder } from './scenarioBuilder/ScenarioBuilder';
 import { SettingsSectionPanel } from './SettingsSectionPanel';
-import { newScenario } from '../../../scenarios/builderModel';
+import { newScenario } from '../../../core/scenarios/builderModel';
 
-import type { WindowApi } from '../../../types/ipc';
-import type { ScenarioDraft } from '../../../types/scenarioBuilder';
-import type { ScenarioDocument } from '../../../settings/scenarioSchema';
+import type { WindowApi } from '../../../core/types/ipc';
+import type { ScenarioDraft } from '../../../core/types/scenarioBuilder';
+import type { ScenarioDocument } from '../../../core/settings/scenarioSchema';
 import type { ScenarioErrorInfo } from './ScenarioError';
 
 /**

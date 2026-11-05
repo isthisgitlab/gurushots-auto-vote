@@ -3,23 +3,26 @@
  * due within the horizon, asks, and re-issues it only on "Quit anyway".
  */
 
-import type * as VotingLogicModule from '../../src/ts/services/VotingLogic';
-import type * as quitGuardModule from '../../src/ts/windows/quitGuard';
+import type * as VotingLogicModule from '../../src/ts/core/services/VotingLogic';
+import type * as quitGuardModule from '../../src/ts/shells/electron/windows/quitGuard';
+import type * as selectionModule from '../../src/ts/core/services/boostGuard/selection';
 import type { BrowserWindow, Dialog } from 'electron';
-import type { Challenge } from '../../src/ts/types/gurushots';
-import type { CategoryLogger } from '../../src/ts/logger';
-import { createTranslator } from '../../src/ts/translations/translator';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
+import type { CategoryLogger } from '../../src/ts/core/logger';
+import { createTranslator } from '../../src/ts/core/translations/translator';
 import { invalid } from '../helpers/invalid';
 
 type Deps = Parameters<typeof quitGuardModule.holdQuitForOpenBoosts>[1];
 type ShowMessageBox = jest.MockedFunction<Dialog['showMessageBox']>;
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn() };
     return { withCategory: jest.fn(() => cat), cat };
 });
-jest.mock('../../src/ts/services/VotingLogic', () => ({ describeDeadlineActions: jest.fn(() => ({ actions: [] })) }));
-jest.mock('../../src/ts/apiFactory', () => ({
+jest.mock('../../src/ts/core/services/VotingLogic', () => ({
+    describeDeadlineActions: jest.fn(() => ({ actions: [] })),
+}));
+jest.mock('../../src/ts/core/apiFactory', () => ({
     // The view ledger is not under test here; null keeps the seam hermetic.
     getEntryAgeLedger: jest.fn(() => null),
 }));
@@ -57,6 +60,7 @@ const dictionaryT = (language = 'en') => {
 const flush = () => new Promise((r) => setImmediate(r));
 
 let guard: typeof quitGuardModule;
+let selection: typeof selectionModule;
 let logger: {
     cat: { info: jest.MockedFunction<CategoryLogger['info']>; error: jest.MockedFunction<CategoryLogger['error']> };
 };
@@ -64,8 +68,9 @@ let logger: {
 beforeEach(() => {
     // Module-level state (list, bypass, prompting) must not leak across tests.
     jest.resetModules();
-    guard = require('../../src/ts/windows/quitGuard') as typeof guard;
-    logger = require('../../src/ts/logger') as typeof logger;
+    guard = require('../../src/ts/shells/electron/windows/quitGuard') as typeof guard;
+    selection = require('../../src/ts/core/services/boostGuard/selection') as typeof selection;
+    logger = require('../../src/ts/core/logger') as typeof logger;
 });
 
 const setup = ({
@@ -108,37 +113,37 @@ describe('holdQuitForOpenBoosts — when to ask', () => {
     });
 
     test('passes through when auto-vote is stopped — quitting loses nothing', () => {
-        guard.rememberChallenges([timed], false);
+        selection.rememberChallenges([timed], false);
         const { event, hold } = setup({ autovoteRunning: false });
         expect(hold()).toBe(false);
         expect(event.preventDefault).not.toHaveBeenCalled();
     });
 
     test('ignores boosts whose window is closed or used, even if a boost row exists', () => {
-        guard.rememberChallenges([used, expired], false);
+        selection.rememberChallenges([used, expired], false);
         expect(setup().hold()).toBe(false);
     });
 
     test('ignores an open window whose boost is further off than the horizon', () => {
         // Key-unlocked boost on a challenge days from closing: no reason to ask.
-        guard.rememberChallenges([keyed], false);
+        selection.rememberChallenges([keyed], false);
         const far = () => ({ actions: [{ action: 'boost', dueAt: NOW + 3 * 86400 }] });
         expect(setup({ describe: far }).hold()).toBe(false);
 
-        const edge = () => ({ actions: [{ action: 'boost', dueAt: NOW + guard.QUIT_WARN_HORIZON_SEC }] });
+        const edge = () => ({ actions: [{ action: 'boost', dueAt: NOW + selection.QUIT_WARN_HORIZON_SEC }] });
         expect(setup({ describe: edge }).hold()).toBe(true);
     });
 
     test('ignores an open window auto-vote will not boost (no boost row / no due time)', () => {
-        guard.rememberChallenges([timed], false);
+        selection.rememberChallenges([timed], false);
         expect(setup({ describe: () => ({ actions: [] }) }).hold()).toBe(false);
         expect(setup({ describe: () => ({ actions: [{ action: 'boost', dueAt: null }] }) }).hold()).toBe(false);
         expect(setup({ describe: () => undefined }).hold()).toBe(false);
     });
 
     test('defaults to the real clock and VotingLogic.describeDeadlineActions', () => {
-        const votingLogic = jest.mocked(require('../../src/ts/services/VotingLogic') as typeof VotingLogicModule);
-        guard.rememberChallenges([keyed], false);
+        const votingLogic = jest.mocked(require('../../src/ts/core/services/VotingLogic') as typeof VotingLogicModule);
+        selection.rememberChallenges([keyed], false);
         votingLogic.describeDeadlineActions.mockReturnValue(
             invalid({
                 actions: [{ action: 'boost', dueAt: Math.floor(Date.now() / 1000) + 60 }],
@@ -156,7 +161,7 @@ describe('holdQuitForOpenBoosts — when to ask', () => {
     });
 
     test('a throw while reading boost state lets the quit through', () => {
-        guard.rememberChallenges([timed], false);
+        selection.rememberChallenges([timed], false);
         const err = new Error('bad challenge');
         const { event, hold } = setup({
             describe: () => {
@@ -169,15 +174,15 @@ describe('holdQuitForOpenBoosts — when to ask', () => {
     });
 
     test('ignores a non-array list and keeps the previous one', () => {
-        guard.rememberChallenges([timed], false);
-        guard.rememberChallenges(undefined, false);
+        selection.rememberChallenges([timed], false);
+        selection.rememberChallenges(undefined, false);
         expect(setup().hold()).toBe(true);
     });
 });
 
 describe('holdQuitForOpenBoosts — the dialog', () => {
     test('holds, lists due boosts soonest first, and quits on "Quit anyway"', async () => {
-        guard.rememberChallenges([timed, used, keyed], false);
+        selection.rememberChallenges([timed, used, keyed], false);
         const { event, dialog, proceed, hold } = setup({ response: 1 });
 
         expect(hold()).toBe(true);
@@ -203,7 +208,7 @@ describe('holdQuitForOpenBoosts — the dialog', () => {
     });
 
     test('substitutes the time until the boost into the translated suffix', () => {
-        guard.rememberChallenges([timed], false);
+        selection.rememberChallenges([timed], false);
         const dialog: { showMessageBox: ShowMessageBox } = {
             showMessageBox: invalid(jest.fn(() => new Promise(() => {}))),
         };
@@ -229,7 +234,7 @@ describe('holdQuitForOpenBoosts — the dialog', () => {
         ['en', 'Boost pēc 9m'],
         [undefined, 'Boost pēc 9m'],
     ])('writes the time in the UI language (%p): Latvian minutes are "min", not metres', (locale, text) => {
-        guard.rememberChallenges([timed], false);
+        selection.rememberChallenges([timed], false);
         const dialog: { showMessageBox: ShowMessageBox } = {
             showMessageBox: invalid(jest.fn(() => new Promise(() => {}))),
         };
@@ -252,7 +257,7 @@ describe('holdQuitForOpenBoosts — the dialog', () => {
     });
 
     test('"Keep running" leaves the app up and asks again next time', async () => {
-        guard.rememberChallenges([timed], false);
+        selection.rememberChallenges([timed], false);
         const first = setup({ response: 0 });
         first.hold();
         await flush();
@@ -264,7 +269,7 @@ describe('holdQuitForOpenBoosts — the dialog', () => {
     });
 
     test('a second quit while the dialog is up is held without stacking a dialog', () => {
-        guard.rememberChallenges([timed], false);
+        selection.rememberChallenges([timed], false);
         setup({ showMessageBox: invalid(jest.fn(() => new Promise(() => {}))) }).hold();
 
         const again = setup();
@@ -274,14 +279,14 @@ describe('holdQuitForOpenBoosts — the dialog', () => {
     });
 
     test('attaches the dialog to a live parent window, not a destroyed one', () => {
-        guard.rememberChallenges([timed], false);
+        selection.rememberChallenges([timed], false);
         const live = invalid<BrowserWindow>({ isDestroyed: () => false });
         const a = setup({ parent: live, showMessageBox: invalid(jest.fn(() => new Promise(() => {}))) });
         a.hold();
         expect(a.dialog.showMessageBox).toHaveBeenCalledWith(live, expect.any(Object));
 
         guard.resetQuitGuard();
-        guard.rememberChallenges([timed], false);
+        selection.rememberChallenges([timed], false);
         const dead = setup({
             parent: invalid({ isDestroyed: () => true }),
             showMessageBox: invalid(jest.fn(() => new Promise(() => {}))),
@@ -291,7 +296,7 @@ describe('holdQuitForOpenBoosts — the dialog', () => {
     });
 
     test('a failing dialog quits anyway instead of trapping the user', async () => {
-        guard.rememberChallenges([timed], false);
+        selection.rememberChallenges([timed], false);
         const err = new Error('no dialog');
         const { proceed, hold } = setup({ showMessageBox: invalid(jest.fn(() => Promise.reject(err))) });
         hold();
@@ -312,7 +317,7 @@ describe('holdQuitForOpenBoosts — the dialog', () => {
             });
 
         test('quits anyway, after the quit handler has returned, and runs proceed once', async () => {
-            guard.rememberChallenges([timed], false);
+            selection.rememberChallenges([timed], false);
             const { event, proceed, hold } = throwing();
             expect(hold()).toBe(true);
             // Held, and not re-issued from inside the handler that just prevented the default.
@@ -329,7 +334,7 @@ describe('holdQuitForOpenBoosts — the dialog', () => {
         });
 
         test('a proceed that throws after the dialog threw is logged too, and still runs once', async () => {
-            guard.rememberChallenges([timed], false);
+            selection.rememberChallenges([timed], false);
             const failure = new Error('proceed failed');
             const proceed = jest.fn(() => {
                 throw failure;
@@ -362,7 +367,7 @@ describe('holdQuitForOpenBoosts — the dialog', () => {
             // Not resetQuitGuard (which clears the prompt itself): the failure handling must.
             jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] });
             try {
-                guard.rememberChallenges([timed], false);
+                selection.rememberChallenges([timed], false);
                 throwing().hold();
                 await flush();
                 jest.advanceTimersByTime(guard.BYPASS_TTL_MS + 1);
@@ -376,7 +381,7 @@ describe('holdQuitForOpenBoosts — the dialog', () => {
     });
 
     test('a quit that was confirmed runs proceed once; one that throws is logged, not left as an unhandled rejection', async () => {
-        guard.rememberChallenges([timed], false);
+        selection.rememberChallenges([timed], false);
         const failure = new Error('proceed failed');
         const proceed = jest.fn(() => {
             throw failure;
@@ -412,7 +417,7 @@ describe('bypass and reset', () => {
 
     test('bypassQuitGuard waves quits through, then lapses so a quit that never landed is guarded again', () => {
         jest.useFakeTimers();
-        guard.rememberChallenges([timed], false);
+        selection.rememberChallenges([timed], false);
         guard.bypassQuitGuard();
         guard.bypassQuitGuard(); // re-arming replaces the pending timer
         expect(setup().hold()).toBe(false);
@@ -422,19 +427,19 @@ describe('bypass and reset', () => {
     });
 
     test('resetQuitGuard clears bypass and the remembered list', () => {
-        guard.rememberChallenges([timed], false);
+        selection.rememberChallenges([timed], false);
         guard.bypassQuitGuard();
         guard.resetQuitGuard();
         expect(setup().hold()).toBe(false); // list cleared
-        guard.rememberChallenges([timed], false);
+        selection.rememberChallenges([timed], false);
         expect(setup().hold()).toBe(true); // bypass cleared
     });
 });
 
 describe('remembered list — suspend selection', () => {
     test('imminentBoostChallenges applies the given horizon, soonest first, and imminentBoosts selects the same set', () => {
-        guard.rememberChallenges([timed, keyed, used, expired], false);
-        const all = guard.imminentBoostChallenges(NOW, describe_, guard.QUIT_WARN_HORIZON_SEC, null);
+        selection.rememberChallenges([timed, keyed, used, expired], false);
+        const all = selection.imminentBoostChallenges(NOW, describe_, selection.QUIT_WARN_HORIZON_SEC, null);
         expect(all.map((b) => [b.challenge.id, b.dueAt])).toEqual([
             [2, NOW - 30],
             [1, NOW + 540],
@@ -458,42 +463,16 @@ describe('remembered list — suspend selection', () => {
         expect(all.map((b) => `• ${b.challenge.title} —`).every((line) => detail?.includes(line))).toBe(true);
     });
 
-    test('the suspend horizon is 30 min: due at exactly 30 min is selected, 31 min is not', () => {
-        guard.rememberChallenges([keyed], false);
-        const at = (sec: number) => () => ({ actions: [{ action: 'boost', dueAt: NOW + sec }] });
-        expect(guard.SUSPEND_BOOST_HORIZON_SEC).toBe(30 * 60);
-        expect(guard.imminentBoostChallenges(NOW, at(1800), guard.SUSPEND_BOOST_HORIZON_SEC, null)).toHaveLength(1);
-        expect(guard.imminentBoostChallenges(NOW, at(1860), guard.SUSPEND_BOOST_HORIZON_SEC, null)).toHaveLength(0);
-    });
-
-    test('rememberChallenges records the mock flag it was fetched under; a non-array leaves both untouched', () => {
-        expect(guard.rememberedChallengesMock()).toBeNull();
-        guard.rememberChallenges([timed], true);
-        expect(guard.rememberedChallengesMock()).toBe(true);
-        guard.rememberChallenges(undefined, false);
-        expect(guard.rememberedChallengesMock()).toBe(true);
-        guard.resetQuitGuard();
-        expect(guard.rememberedChallengesMock()).toBeNull();
-    });
-
     test('markBoostApplied marks the boost used, so the quit guard no longer prompts for it', () => {
         const fresh = invalid<Challenge>({
             id: 1,
             title: 'Anything Music',
             member: { boost: { state: 'AVAILABLE', timeout: NOW + 1140 } },
         });
-        guard.rememberChallenges([fresh], false);
+        selection.rememberChallenges([fresh], false);
         expect(setup().hold()).toBe(true);
-        guard.markBoostApplied(1);
+        selection.markBoostApplied(1);
         expect(fresh.member?.boost?.state).toBe('USED');
         expect(setup().hold()).toBe(false);
-    });
-
-    test('markBoostApplied ignores an unknown id and a challenge without a boost', () => {
-        const bare = invalid<Challenge>({ id: 9, title: 'Bare' });
-        guard.rememberChallenges([bare, timed], false);
-        expect(() => guard.markBoostApplied(9)).not.toThrow();
-        expect(() => guard.markBoostApplied(404)).not.toThrow();
-        expect(timed.member?.boost?.state).toBe('AVAILABLE');
     });
 });

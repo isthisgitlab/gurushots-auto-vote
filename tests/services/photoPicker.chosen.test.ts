@@ -5,8 +5,8 @@
  */
 
 import { invalid } from '../helpers/invalid';
-import type * as photoPickerModule from '../../src/ts/services/photoPicker';
-import type { PickerPhoto, ScoredCandidate } from '../../src/ts/types/photoPicker';
+import type * as photoPickerModule from '../../src/ts/core/services/photoPicker';
+import type { PickerPhoto, ScoredCandidate } from '../../src/ts/core/types/photoPicker';
 
 const {
     pickPhotosForChallenge,
@@ -16,7 +16,7 @@ const {
     selectBlockEnrichmentSet,
     selectEnrichmentSet,
     splitByChosen,
-} = require('../../src/ts/services/photoPicker') as typeof photoPickerModule;
+} = require('../../src/ts/core/services/photoPicker') as typeof photoPickerModule;
 
 const photo = (id: string, labels: string[], uploadDate = 1000): PickerPhoto => ({
     id,

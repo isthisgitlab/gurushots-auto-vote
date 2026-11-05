@@ -6,7 +6,7 @@ import { useSettingsSchema } from '@/api/useSettingsSchema';
 import { useProfileEditor } from '@/hooks/useProfileEditor';
 import { tierSchemaEntries } from '@/utils/groupSettings';
 import { CONFIRM_TIMEOUT_MS, checkProfileName, profileNameCheckMessage } from '@/utils/profileName';
-import { getIntentByName, intentValuesMatch } from '../../../settings/intentProfiles';
+import { getIntentByName, intentValuesMatch } from '../../../core/settings/intentProfiles';
 import { InlineLoader, LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { ToneNote } from '@/components/ui/ToneNote';

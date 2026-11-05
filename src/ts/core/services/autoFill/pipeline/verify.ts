@@ -1,0 +1,207 @@
+/**
+ * Fill pipeline, pick checks: the visual re-rank and the uncertain-subject record.
+ */
+
+import {
+    finalizePick,
+    jointInputsOf,
+    readChallengeTheme,
+    buildThemeKeywords,
+    scorePhoto,
+    splitByChosen,
+    detectLetterPrefix,
+    letterTitleLeftovers,
+    wholeLabelStems,
+    startsWithLetter,
+} from '../../photoPicker';
+import * as lexicon from '../../semantic/lexicon';
+import { createStatsBudget, createVotesLoader } from '../../photoStats';
+import type { StatsBudget } from '../../photoStats';
+import { rankVisually } from '../../visionVerifier';
+import type { Challenge } from '../../../types/gurushots';
+import type { IgnoreWords, PickerPhoto, ScoredCandidate } from '../../../types/photoPicker';
+import type { FillAttemptParams, RankDeps } from '../../../types/autoFill';
+import { errorMessage } from '../../../errorMessage';
+import { oneLine } from '../../../format/logSafe';
+
+type VerifiedPick = { picked: string[]; visualEvidence: Set<string> | null };
+
+// Visual re-rank of one ranked block (see services/visionVerifier.ts). The
+// picked ids lead the shortlist so a model that abstains returns exactly them;
+// the rest of the tag ranking follows as alternatives it may promote. The
+// votes the joint ranking reads come from the block's own stats where they are
+// known, else from lookups under the fill's `statsBudget`; mock ids never
+// reach the real stats cache (the rule scoring.ts applies to its enrichment).
+const rankBlock = async (
+    challenge: Challenge,
+    token: string,
+    scored: ScoredCandidate[],
+    eligible: PickerPhoto[],
+    picked: string[],
+    ignoreWords: IgnoreWords,
+    deps: RankDeps,
+    statsBudget: StatsBudget,
+): Promise<VerifiedPick> => {
+    const ranked = finalizePick(scored, Math.max(12, picked.length));
+    const selected = new Set(picked.map(String));
+    const preferred = [...picked, ...ranked.filter((id) => !selected.has(String(id)))];
+    try {
+        const rank = deps.rankVisually || rankVisually;
+        let visualEvidence: Set<string> | null = null;
+        const result = await rank(challenge, preferred, eligible, picked.length, {
+            logger: deps.logger,
+            ignoreWords,
+            onVisualEvidence: (acceptedIds) => {
+                visualEvidence = acceptedIds;
+            },
+            jointInputs: jointInputsOf(scored),
+            loadVotes: createVotesLoader(scored, token, {
+                getImageData: deps.getImageData,
+                logger: deps.logger,
+                statsBudget,
+                persist: deps.settings?.getSetting?.('mock') !== true,
+            }),
+        });
+        return Array.isArray(result) && result.length === picked.length
+            ? { picked: result, visualEvidence }
+            : { picked, visualEvidence: null };
+    } catch (error) {
+        deps.logger
+            .withCategory('autoSubmit')
+            .warning(
+                `Visual check failed for ${deps.logger.challengeTag(challenge)}: ${errorMessage(error) || error}`,
+                null,
+            );
+        return { picked, visualEvidence: null };
+    }
+};
+
+/**
+ * The visual re-rank of a pick. With the user's chosen block it reorders only
+ * WITHIN a block — a chosen photo is never swapped for a top-up photo, nor the
+ * reverse — and a chosen block no larger than the slots it fills has nothing to
+ * choose between, so it is left alone and costs no model run. The rest block
+ * keeps the usual re-rank, as does an empty chosen set (the same as no list).
+ * A chosen block that goes by the user's order (`inOrder`) is never re-ranked: the
+ * photos are entered in the order picked, and the model must not reorder them.
+ */
+const verifyFillPick = async (
+    challenge: Challenge,
+    token: string,
+    scored: ScoredCandidate[],
+    eligible: PickerPhoto[],
+    picked: string[],
+    ignoreWords: IgnoreWords,
+    deps: RankDeps,
+    chosenIds: ReadonlySet<string> | null,
+    inOrder: boolean = false,
+): Promise<VerifiedPick> => {
+    // One budget for the whole fill, so its votes lookups neither drain the voting pass's nor
+    // leave a later challenge short of lookups for its contested ties.
+    const statsBudget = createStatsBudget();
+    if (!chosenIds || chosenIds.size === 0) {
+        return rankBlock(challenge, token, scored, eligible, picked, ignoreWords, deps, statsBudget);
+    }
+    const blocks = splitByChosen(scored, chosenIds);
+    const results: VerifiedPick[] = [];
+    for (const [block, isChosen] of [
+        [blocks.chosen, true],
+        [blocks.rest, false],
+    ] as const) {
+        const blockPicked = picked.filter((id) => chosenIds.has(String(id)) === isChosen);
+        results.push(
+            blockPicked.length === 0 || (isChosen && (inOrder || block.length <= blockPicked.length))
+                ? { picked: blockPicked, visualEvidence: null }
+                : await rankBlock(challenge, token, block, eligible, blockPicked, ignoreWords, deps, statsBudget),
+        );
+    }
+    // A chosen photo is never marked uncertain, so only the top-up block's
+    // evidence is read; merging in the chosen block's would read a top-up
+    // photo as rejected whenever that block's model run abstained.
+    return {
+        picked: results.flatMap((result) => result.picked),
+        visualEvidence: results[1].visualEvidence,
+    };
+};
+
+/**
+ * Persist weak subject evidence only after a photo was actually submitted.
+ * A photo the user chose is never marked: they picked it on purpose, so
+ * automatic Boost/Turbo must not skip it as a doubtful theme match.
+ */
+const recordUncertainSubmission = async ({
+    challenge,
+    label,
+    scored,
+    picked,
+    visualEvidence,
+    ignoreWords,
+    chosenIds,
+    deps,
+}: Pick<FillAttemptParams, 'challenge' | 'label' | 'deps'> & {
+    scored: ScoredCandidate[];
+    picked: string[];
+    visualEvidence: Set<string> | null;
+    ignoreWords: IgnoreWords;
+    chosenIds: ReadonlySet<string> | null;
+}) => {
+    if (label === 'manualFill' || !deps.entryAges) return;
+    // The theme read tokenises the title in compound mode, which reads the
+    // lexicon's table — load it before reading the title. Never rejects.
+    await lexicon.isAvailable();
+    if (readChallengeTheme(challenge, ignoreWords).kind === 'open') return;
+    const subjectWords = visualEvidence ? [] : buildThemeKeywords(challenge, ignoreWords);
+    // On a letter challenge the challenge's OWN rule ("label starts with S") is
+    // in force, so a matching letter label is evidence — but only when the
+    // letter is the title's ONLY subject: the whole negation-adjusted title,
+    // its letter phrases stripped, must tokenise to nothing (letterTitleLeftovers
+    // in the photoPicker module, read for every title). The whole-title gate,
+    // pinned title by title in tests/services/autoFill.chosen.test.ts: 'The
+    // Letter "S"' and 'Letter S - Challenge' are exempt — "challenge" is
+    // boilerplate, so the stripped title tokenises to nothing — while 'Letter
+    // S - 10 Hours' ("hours") and 'Color Hunt: The Letter S' ("color", "hunt")
+    // still name words, and a non-letter title keeps today's evidence rules.
+    const letter = detectLetterPrefix(challenge?.title);
+    const leftovers = letterTitleLeftovers(challenge, ignoreWords);
+    // leftovers is null exactly when letter is — both read the same title — so
+    // the guard above is what settles the non-null case for the check below.
+    const onlySubject = letter !== null && leftovers!.length === 0;
+    for (const id of picked) {
+        const entry = scored.find((candidate) => String(candidate.id) === String(id));
+        // Should Include Tags are a user preference, not evidence that the
+        // photo depicts the challenge subject.
+        if (
+            !entry ||
+            chosenIds?.has(String(id)) ||
+            (visualEvidence
+                ? visualEvidence.has(id)
+                : entry.semantic !== 0 ||
+                  scorePhoto(entry.photo, subjectWords) !== 0 ||
+                  (onlySubject && startsWithLetter(wholeLabelStems(entry.photo), letter)))
+        )
+            continue;
+        const reason = visualEvidence
+            ? 'visual check did not confirm the subject'
+            : leftovers !== null && leftovers.length > 0
+              ? `no subject match (the title also names ${leftovers.map((s) => `"${s}"`).join(', ')})`
+              : 'no subject match';
+        try {
+            deps.entryAges.markUncertain(challenge, id, Math.floor(Date.now() / 1000));
+            deps.logger
+                .withCategory('autoSubmit')
+                .warning(
+                    `${label}: photo ${oneLine(id)} ${reason} for ${deps.logger.challengeTag(challenge)}; automatic Boost/Turbo may be skipped`,
+                    null,
+                );
+        } catch (error) {
+            deps.logger
+                .withCategory('autoSubmit')
+                .warning(
+                    `${label}: could not record theme uncertainty for submitted photo ${oneLine(id)}: ${errorMessage(error)}`,
+                    null,
+                );
+        }
+    }
+};
+
+export { verifyFillPick, recordUncertainSubmission };

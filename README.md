@@ -32,6 +32,8 @@ If you hit a rate-limit error: stop every instance, wait 5–10 minutes, then st
 
 The desktop app enforces this for GUI instances: launching it a second time focuses the already-running window instead of starting a new copy. It does not detect the CLI, the web UI or the Android app running alongside the GUI — the warning above applies to those combinations.
 
+A phone paired through [Remote access](docs/usage.md#remote-access) is a remote for the one running desktop app, not a second instance. The Android app's own voting must stay off while it controls the computer: **Control my computer** stops it, and after **Disconnect** it stays off until you start auto-vote on the phone again.
+
 ## 🚀 Features
 
 - **Automated voting** — votes your active challenges up to a configurable exposure target.
@@ -40,33 +42,35 @@ The desktop app enforces this for GUI instances: launching it a second time focu
 - **Final-window exposure** — a separate, usually lower exposure ceiling for a configurable window before close (default the final hour).
 - **Boost** — auto-applies boost near the deadline, on a chosen entry slot. A boost due within 30 min goes out right away when the computer goes to sleep (desktop app; turn it off with Boost Before Sleep), and quitting while one is due asks first.
 - **Turbo (earn + apply)** — auto-plays the mini-game to _earn_ turbo, then auto-_applies_ it to a chosen entry before the deadline.
-- **Auto-submit** — submits photos into empty entry slots near the deadline, staggered to avoid vote dilution, with tag filters, theme-aware photo selection double-checked by an on-device image model, and an emergency safety net.
+- **Auto-submit** — submits photos into empty entry slots near the deadline, staggered to avoid vote dilution, with tag filters, your own **Chosen Photos** (with **Submit Only Chosen Photos**, auto-submit and auto-join enter only those), theme-aware photo selection double-checked by an on-device image model, and an emergency safety net.
 - **Auto-join** — discovers open (un-joined) challenges and joins them automatically (off by default); once on it joins all of them by default, narrowed by an include/exclude challenge-type list or a challenge rule. Paid challenges are gated by per-challenge and per-cycle coin caps and never charged without a completed join. Manual joining is available too, via a collapsible "Discover" list in the GUI and the `discover`/`join` CLI commands.
-- **Missions** — optional help with GuruShots' rotating missions (all off by default): saves each challenge's turbo for a "Win Turbo" mission without losing any, joins challenges early during a "Join challenges" mission, spends fills during a "Use Fill" mission, and votes on your challenges during a "Vote on photos" mission.
+- **Missions** — optional help with GuruShots' rotating missions (all off by default): saves each challenge's turbo for a "Win Turbo" mission without losing any, joins challenges early during a "Join challenges" mission, spends fills during a "Use Fill" mission, applies an available boost during a "Use a boost" mission, and votes on your challenges during a "Vote on photos" mission.
 - **Bankroll display** — shows your keys / swaps / fills / coins next to the timer in the GUI and via the `bankroll` (alias `coins`) CLI command.
 - **Per-challenge overrides** — every voting setting has a global default that any individual challenge can override.
-- **Challenge rules** — rules that match challenges by title, challenge tag, type, photo count or length (so they survive GuruShots' per-rotation challenge-ID changes), in an order you choose; each can assign a settings profile, switch auto-join / auto-submit, set join timing, and add auto-submit tags.
+- **Challenge rules** — rules that match challenges by title, challenge tag, type, photo count, length or close time (so they survive GuruShots' per-rotation challenge-ID changes), in an order you choose; each can assign a settings profile, switch auto-join / auto-submit, set join timing, and add auto-submit tags.
+- **Profiles** — save a challenge's settings as a named profile (**Save current as profile**), edit it under Settings → Profiles, and apply it to a challenge or let a challenge rule assign it.
 - **Scenarios** — your own multi-day plans for a challenge: phases with their own settings, and rules that enter photos, swap, boost, play turbo, wait or notify you at the times and conditions you choose. Built in a visual editor (or as JSON), shared as files, and previewed with a what-if simulation before they spend anything.
 - **Desktop notifications** — optional warnings a few minutes before a boost, turbo or auto-submit, plus the messages your scenarios send.
 - **Three platforms** — Electron GUI, `gurucli` command line, and an Android app that votes with the phone locked.
+- **Remote access** — optional, off by default: control the running desktop app from a phone through a pairing link or QR code, with up to 3 phones at once. See [Remote access](docs/usage.md#remote-access).
 - **Resilient API layer** — configurable timeout plus automatic retry/backoff on transient failures.
-- **Quality-of-life** — light/dark themes, English/Latvian UI, timezone display, mock mode for safe testing, and built-in update notifications.
+- **Quality-of-life** — a theme picker with all DaisyUI themes, English/Latvian UI, timezone display, mock mode for safe testing, and built-in update notifications.
 
 ## 📥 Download & Install
 
 ### Latest builds
 
-**Latest Version: v1.14.2**
+**Latest Version: v1.15.0-beta.8**
 
 #### 🖥️ GUI (recommended for most users)
 
-| Platform          | Download                                                                                                                                                               | Size    | Type                |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------------------- |
-| **Windows**       | [📥 GuruShotsAutoVote-v1.14.2-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.2-x64.exe)                 | ~270 MB | Portable Executable |
-| **macOS (DMG)**   | [📥 GuruShotsAutoVote-v1.14.2-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.2-arm64.dmg)             | ~310 MB | DMG Installer       |
-| **macOS (APP)**   | [📥 GuruShotsAutoVote-v1.14.2-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.2-arm64.app.zip)     | ~335 MB | App Bundle (ZIP)    |
-| **Linux (x64)**   | [📥 GuruShotsAutoVote-v1.14.2-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.2-x86_64.AppImage) | ~270 MB | AppImage            |
-| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v1.14.2-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.2-arm64.AppImage)   | ~255 MB | AppImage            |
+| Platform          | Download                                                                                                                                                                             | Size    | Type                |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- | ------------------- |
+| **Windows**       | [📥 GuruShotsAutoVote-v1.15.0-beta.8-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.15.0-beta.8-x64.exe)                 | ~270 MB | Portable Executable |
+| **macOS (DMG)**   | [📥 GuruShotsAutoVote-v1.15.0-beta.8-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.15.0-beta.8-arm64.dmg)             | ~310 MB | DMG Installer       |
+| **macOS (APP)**   | [📥 GuruShotsAutoVote-v1.15.0-beta.8-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.15.0-beta.8-arm64.app.zip)     | ~335 MB | App Bundle (ZIP)    |
+| **Linux (x64)**   | [📥 GuruShotsAutoVote-v1.15.0-beta.8-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.15.0-beta.8-x86_64.AppImage) | ~270 MB | AppImage            |
+| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v1.15.0-beta.8-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.15.0-beta.8-arm64.AppImage)   | ~255 MB | AppImage            |
 
 > **macOS:** Apple Silicon (arm64) only — there is no Intel (x86_64) build. The **DMG** is the simplest install; the **APP** zip is an alternative if you'd rather drop the bundle in yourself.
 
@@ -74,19 +78,19 @@ The desktop app enforces this for GUI instances: launching it a second time focu
 
 #### 📱 Mobile (Android sideload — no Play Store)
 
-| Platform                     | Download                                                                                                                                       | Size    | Type       |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ---------- |
-| **Android (8.0+, sideload)** | [📥 GuruShotsAutoVote-v1.14.2.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.2.apk) | ~160 MB | Signed APK |
+| Platform                     | Download                                                                                                                                                     | Size    | Type       |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- | ---------- |
+| **Android (8.0+, sideload)** | [📥 GuruShotsAutoVote-v1.15.0-beta.8.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.15.0-beta.8.apk) | ~160 MB | Signed APK |
 
 The Android build is a Capacitor wrapper around the same React UI, plus a Kotlin plugin that runs voting cycles natively in the background via `AlarmManager` and a foreground service. Voting continues with the phone locked and the app swiped away from recents.
 
 #### 💻 CLI (for power users / automation)
 
-| Platform              | Download                                                                                                                               | Size    | Type                |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------------------- |
-| **macOS CLI**         | [📥 gurucli-v1.14.2-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.14.2-mac)             | ~375 MB | Terminal Executable |
-| **Linux CLI (x64)**   | [📥 gurucli-v1.14.2-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.14.2-linux)         | ~355 MB | Terminal Executable |
-| **Linux CLI (ARM64)** | [📥 gurucli-v1.14.2-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.14.2-linux-arm) | ~350 MB | Terminal Executable |
+| Platform              | Download                                                                                                                                             | Size    | Type                |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------------------- |
+| **macOS CLI**         | [📥 gurucli-v1.15.0-beta.8-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.15.0-beta.8-mac)             | ~375 MB | Terminal Executable |
+| **Linux CLI (x64)**   | [📥 gurucli-v1.15.0-beta.8-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.15.0-beta.8-linux)         | ~355 MB | Terminal Executable |
+| **Linux CLI (ARM64)** | [📥 gurucli-v1.15.0-beta.8-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.15.0-beta.8-linux-arm) | ~350 MB | Terminal Executable |
 
 > There is no Windows CLI build — on Windows, use the GUI app above.
 
@@ -94,17 +98,17 @@ The Android build is a Capacitor wrapper around the same React UI, plus a Kotlin
 
 Every download above also comes as a **lite** build without the image model and its runtime: the macOS DMG shrinks from ~310 MB to ~130 MB and the macOS CLI from ~375 MB to ~140 MB. Everything else works the same — auto-submit skips the [visual check](docs/usage.md#auto-submit-missing-entries) and ranks photos without it, and Snap turbos, which need the model, are played with Yes answers only when `snapYesWithoutModel` is on. A lite GUI or Android install is only offered lite updates (the lite desktop app skips pre-releases).
 
-| Platform                     | Download                                                                                                                                                                         |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Windows**                  | [📥 GuruShotsAutoVote-v1.14.2-x64-lite.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.2-x64-lite.exe)                 |
-| **macOS (DMG)**              | [📥 GuruShotsAutoVote-v1.14.2-arm64-lite.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.2-arm64-lite.dmg)             |
-| **macOS (APP)**              | [📥 GuruShotsAutoVote-v1.14.2-arm64-lite.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.2-arm64-lite.app.zip)     |
-| **Linux (x64)**              | [📥 GuruShotsAutoVote-v1.14.2-x86_64-lite.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.2-x86_64-lite.AppImage) |
-| **Linux (ARM64)**            | [📥 GuruShotsAutoVote-v1.14.2-arm64-lite.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.2-arm64-lite.AppImage)   |
-| **Android (8.0+, sideload)** | [📥 GuruShotsAutoVote-v1.14.2-lite.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.14.2-lite.apk)                         |
-| **macOS CLI**                | [📥 gurucli-v1.14.2-mac-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.14.2-mac-lite)                                             |
-| **Linux CLI (x64)**          | [📥 gurucli-v1.14.2-linux-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.14.2-linux-lite)                                         |
-| **Linux CLI (ARM64)**        | [📥 gurucli-v1.14.2-linux-arm-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.14.2-linux-arm-lite)                                 |
+| Platform                     | Download                                                                                                                                                                                       |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Windows**                  | [📥 GuruShotsAutoVote-v1.15.0-beta.8-x64-lite.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.15.0-beta.8-x64-lite.exe)                 |
+| **macOS (DMG)**              | [📥 GuruShotsAutoVote-v1.15.0-beta.8-arm64-lite.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.15.0-beta.8-arm64-lite.dmg)             |
+| **macOS (APP)**              | [📥 GuruShotsAutoVote-v1.15.0-beta.8-arm64-lite.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.15.0-beta.8-arm64-lite.app.zip)     |
+| **Linux (x64)**              | [📥 GuruShotsAutoVote-v1.15.0-beta.8-x86_64-lite.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.15.0-beta.8-x86_64-lite.AppImage) |
+| **Linux (ARM64)**            | [📥 GuruShotsAutoVote-v1.15.0-beta.8-arm64-lite.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.15.0-beta.8-arm64-lite.AppImage)   |
+| **Android (8.0+, sideload)** | [📥 GuruShotsAutoVote-v1.15.0-beta.8-lite.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.15.0-beta.8-lite.apk)                         |
+| **macOS CLI**                | [📥 gurucli-v1.15.0-beta.8-mac-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.15.0-beta.8-mac-lite)                                             |
+| **Linux CLI (x64)**          | [📥 gurucli-v1.15.0-beta.8-linux-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.15.0-beta.8-linux-lite)                                         |
+| **Linux CLI (ARM64)**        | [📥 gurucli-v1.15.0-beta.8-linux-arm-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.15.0-beta.8-linux-arm-lite)                                 |
 
 Prefer a specific version? Browse **[all releases](https://github.com/isthisgitlab/gurushots-auto-vote/releases)** or the **[latest release notes](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest)**.
 
@@ -131,11 +135,11 @@ Prefer a specific version? Browse **[all releases](https://github.com/isthisgitl
 
 **CLI on macOS:**
 
-1. Download `gurucli-v1.14.2-mac`.
+1. Download `gurucli-v1.15.0-beta.8-mac`.
 2. `cd ~/Downloads`
-3. Make it executable: `chmod +x gurucli-v1.14.2-mac`
-4. Clear the quarantine flag (browser downloads only): `xattr -d com.apple.quarantine ./gurucli-v1.14.2-mac`
-5. Run: `./gurucli-v1.14.2-mac help`
+3. Make it executable: `chmod +x gurucli-v1.15.0-beta.8-mac`
+4. Clear the quarantine flag (browser downloads only): `xattr -d com.apple.quarantine ./gurucli-v1.15.0-beta.8-mac`
+5. Run: `./gurucli-v1.15.0-beta.8-mac help`
 
 The first time the CLI submits a photo, it unpacks its bundled image model and runtime (~560 MB) into `~/Library/Application Support/gurushots-auto-vote/vision/`. This happens once per version; after unpacking, a new version removes older copies that haven't been used in the last hour.
 
@@ -144,15 +148,15 @@ The first time the CLI submits a photo, it unpacks its bundled image model and r
 **GUI (AppImage):**
 
 1. Download the AppImage for your architecture.
-2. Make it executable: `chmod +x GuruShotsAutoVote-v1.14.2-*.AppImage` (or via file-manager → Properties → Permissions).
-3. Run it: `./GuruShotsAutoVote-v1.14.2-*.AppImage`
+2. Make it executable: `chmod +x GuruShotsAutoVote-v1.15.0-beta.8-*.AppImage` (or via file-manager → Properties → Permissions).
+3. Run it: `./GuruShotsAutoVote-v1.15.0-beta.8-*.AppImage`
 
 **CLI:**
 
-1. Download `gurucli-v1.14.2-linux` (or `-linux-arm`).
+1. Download `gurucli-v1.15.0-beta.8-linux` (or `-linux-arm`).
 2. `cd ~/Downloads`
-3. `chmod +x gurucli-v1.14.2-linux`
-4. `./gurucli-v1.14.2-linux help`
+3. `chmod +x gurucli-v1.15.0-beta.8-linux`
+4. `./gurucli-v1.15.0-beta.8-linux help`
 
 The first time the CLI submits a photo, it unpacks its bundled image model and runtime (~550 MB) into `~/.config/gurushots-auto-vote/vision/`. This happens once per version; after unpacking, a new version removes older copies that haven't been used in the last hour.
 
@@ -160,7 +164,7 @@ The first time the CLI submits a photo, it unpacks its bundled image model and r
 
 The Android build is **not on Google Play** — install via direct APK download.
 
-1. On the phone, open the [latest release page](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest) and tap `GuruShotsAutoVote-v1.14.2.apk`.
+1. On the phone, open the [latest release page](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest) and tap `GuruShotsAutoVote-v1.15.0-beta.8.apk`.
 2. Your browser warns before downloading an APK — tap **Download anyway**.
 3. Tap the downloaded file from the notification shade.
 4. Android prompts **Install unknown apps** — grant it to whichever app you downloaded with (Chrome / Files / etc.), then tap **Install**.
@@ -186,16 +190,16 @@ With **Stay Logged In** off (the default) and auto-vote off, reopening the app a
 ### CLI
 
 ```bash
-./gurucli-v1.14.2-[platform] login    # authenticate once (saves a token)
-./gurucli-v1.14.2-[platform] run      # one full auto-strategy cycle (boost/turbo/auto-submit/threshold-aware vote)
-./gurucli-v1.14.2-[platform] start    # continuous voting (Ctrl+C to stop)
+./gurucli-v1.15.0-beta.8-[platform] login    # authenticate once (saves a token)
+./gurucli-v1.15.0-beta.8-[platform] run      # one full auto-strategy cycle (boost/turbo/auto-submit/threshold-aware vote)
+./gurucli-v1.15.0-beta.8-[platform] start    # continuous voting (Ctrl+C to stop)
 ```
 
 > Replace `[platform]` with `mac`, `linux`, or `linux-arm`. Run `help` to see every command.
 
 ### Web UI (from source)
 
-The same interface can run in an ordinary browser tab instead of the desktop window, which is handy for browser automation such as Playwright. It needs a source checkout with Node.js 26+ and pnpm:
+The same interface can run in an ordinary browser tab instead of the desktop window, which is handy for browser automation such as Playwright. It needs a source checkout with Node.js 26.12.1+ and pnpm:
 
 ```bash
 pnpm install
@@ -211,20 +215,23 @@ For GUI and CLI instructions, voting rules, settings, logs, and troubleshooting,
 
 - All API calls use HTTPS.
 - Credentials are redacted from logs — sensitive keys are masked before any log write.
-- Your token is stored locally in the app's settings file (owner-only on desktop and the CLI; app-private storage on Android) and is sent only to GuruShots; settings and config never leave your device.
-- **What leaves your device:** requests to GuruShots (voting and your account data, photo thumbnails) and requests to GitHub (`api.github.com` and GitHub release downloads) to check for and download updates. Nothing else is contacted, and the photo analysis runs on the device.
+- Your token is stored locally in the app's settings file (owner-only on desktop and the CLI; app-private storage on Android) and is sent only to GuruShots; settings and config never leave your device, except to a phone you pair through Remote access — and, when no direct connection is possible, across the public Nostr relays, encrypted with the pairing key.
+- **What leaves your device:** requests to GuruShots (voting and your account data, photo thumbnails) and requests to GitHub (`api.github.com` and GitHub release downloads) to check for and download updates. With **Remote access off** (the default), nothing else is contacted, and the photo analysis runs on the device.
+- **Remote access** (Settings → Application Settings → Remote access; off by default) lets a phone control the running desktop app through one permanent pairing link. Turning it on makes the app contact public Nostr relays (`wss://nos.lol`, `wss://relay.primal.net`, `wss://nostr.mom`, `wss://nostr.oxtr.dev`) to find the phone, and STUN servers (`stun:stun.cloudflare.com:3478`, `stun:stun.l.google.com:19302`) to connect. The relays see encrypted signalling and the IP addresses of both ends; the phone and the computer see each other's IP. When a direct connection is not possible, the relays also carry the app's own messages, encrypted with the pairing key: they see their timing and approximate sizes, keep them at least briefly, and any relay can record them. Someone who records them and later gets your pairing link can decrypt them; Reset pairing is the remedy. The same public key signs the signalling and these messages, so relays can link the two, and the phone listens on up to 3 relays, so it may download each message up to 3 times; the app processes it once. The computer listens on every relay. See [the threat model](docs/architecture.md#10-security-renderer--main--state-the-limits-dont-over-promise).
 - Logging out removes only the login token. **Delete all local data** (Settings → Application Settings → About and data; CLI `reset-data --yes`) removes everything the app stores in its data folder, browser storage included — see [where your data is stored](docs/usage.md#️-where-your-data-is-stored--how-to-erase-it).
 - Error messages don't expose sensitive information.
 - The web UI (`pnpm web`) listens only on this computer (localhost), refuses requests from other websites, and has no password of its own — instead each run generates a random token that every request must carry. Open the exact URL the command prints (it ends in `#t=<token>`); the tab keeps the token for as long as it stays open, so a reload works, but the bare address opened in a new tab is refused, as is any page left open from an earlier run (start `pnpm web` again and open its new URL). Never expose its port to a network.
 - The auto-submit image check runs locally with a bundled model; it only downloads your own photo thumbnails from GuruShots and sends nothing to any other service.
 - Desktop builds are not signed by a publisher, so updates are trusted on the strength of the project's GitHub releases. See [accepted limits](docs/architecture.md#10-security-renderer--main--state-the-limits-dont-over-promise).
+- **Verify a download** (GitHub CLI, signed in): `gh attestation verify <file> --repo isthisgitlab/gurushots-auto-vote --signer-workflow isthisgitlab/gurushots-auto-vote/.github/workflows/build.yml` checks that a binary or APK was built by this project's release workflow.
+- **Report a vulnerability** privately, as described in [`SECURITY.md`](SECURITY.md) — not in a public issue.
 - Third-party software and data the app includes, with their licenses: Settings → Application Settings → About and data, or `licenses` in the CLI.
 
 ## 📄 License & Support
 
 Licensed under the **Apache License 2.0**. Anyone who redistributes the code or a derived work must keep the attribution in [`NOTICE`](NOTICE), as the license requires.
 
-For help, check [Troubleshooting](docs/usage.md#-troubleshooting) first, then [open an issue](https://github.com/isthisgitlab/gurushots-auto-vote/issues).
+For help, check [Troubleshooting](docs/usage.md#-troubleshooting) first, then [open an issue](https://github.com/isthisgitlab/gurushots-auto-vote/issues). Security problems go to [`SECURITY.md`](SECURITY.md) instead, not to a public issue.
 
 If this tool is useful to you, you can support development:
 

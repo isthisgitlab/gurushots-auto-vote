@@ -29,8 +29,8 @@ const ROOT = path.join(__dirname, '..', '..');
 
 beforeEach(() => jest.clearAllMocks());
 
-test('bundles src/ts/index.ts next to the loader package.json `main` points at', () => {
-    expect(OPTIONS.entryPoints).toEqual([path.join(ROOT, 'src', 'ts', 'index.ts')]);
+test('bundles src/ts/shells/electron/index.ts next to the loader package.json `main` points at', () => {
+    expect(OPTIONS.entryPoints).toEqual([path.join(ROOT, 'src', 'ts', 'shells', 'electron', 'index.ts')]);
     expect(path.relative(ROOT, LOADER)).toBe(path.normalize(packageMain));
     expect(path.dirname(OPTIONS.outfile!)).toBe(path.dirname(LOADER));
 });

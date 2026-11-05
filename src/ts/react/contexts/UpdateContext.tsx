@@ -3,8 +3,8 @@ import * as ipc from '../api/ipc';
 
 import type { ComponentChildren } from 'preact';
 import type { Dispatch } from 'react';
-import type { UpdateSummary } from '../../services/AutoUpdater';
-import { errorMessage } from '../../errorMessage';
+import type { UpdateSummary } from '../../shells/electron/AutoUpdater';
+import { errorMessage } from '../../core/errorMessage';
 
 // Update states
 export const UPDATE_STATES = {

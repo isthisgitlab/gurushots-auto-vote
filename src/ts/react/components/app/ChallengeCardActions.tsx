@@ -17,10 +17,10 @@ import { CurrencyCellButton } from './CurrencyActionButton';
 import { PhotoSubmitModal, PICK_TEXTS } from './PhotoSubmitModal';
 import { currencyOutcomeText } from './CurrencyConfirmModal';
 import { SwapConfirmModal, SwapWarningLines } from './SwapEntryButton';
-import { CURRENCY_OUTCOME, swapExcludedIds } from '../../../voting/currencyActions';
+import { CURRENCY_OUTCOME, swapExcludedIds } from '../../../core/voting/currencyActions';
 
-import type { Bankroll, Challenge, RankingEntry } from '../../../types/gurushots';
-import type { SwapCandidate } from '../../../services/currencyActions';
+import type { Bankroll, Challenge, RankingEntry } from '../../../core/types/gurushots';
+import type { SwapCandidate } from '../../../core/services/currencyActions';
 import type { ChallengeCardView } from './ChallengeCard';
 import type { PickOutcome } from './PhotoSubmitModal';
 import type { OpenSwapPick, SwapWarnings } from './SwapEntryButton';

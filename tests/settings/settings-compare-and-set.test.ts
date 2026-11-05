@@ -4,13 +4,9 @@
  * makes it again on what the other saved meanwhile, so a toggle made on one side is not lost to the other.
  */
 
-// No test here may touch the real user-data folder: the path is a made-up one that does not exist.
-jest.mock('../../src/ts/runtime', () => ({
-    __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/runtime')>('../../src/ts/runtime'),
-    getAppUserDataPath: () => '/nonexistent/gurushots-auto-vote-test-user-data',
-}));
-jest.mock('../../src/ts/logger', () => {
+// No test here touches the real user-data folder: the installed test platform resolves it into the
+// file's own temporary directory (tests/setupPlatform.ts guards the real home).
+jest.mock('../../src/ts/core/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
         isSourceCode: jest.fn(() => true),
@@ -27,11 +23,13 @@ const mockPreferences = {
 };
 jest.mock('@capacitor/preferences', () => ({ Preferences: mockPreferences }), { virtual: true });
 
-import type * as storageModule from '../../src/ts/settings/storage';
-import type * as settingsModule from '../../src/ts/settings';
-import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
-import type { CasAnswer } from '../../src/ts/settings/storeTransport';
-import loggerModule = require('../../src/ts/logger');
+import type * as storageModule from '../../src/ts/core/settings/storage';
+import type * as settingsModule from '../../src/ts/core/settings';
+import type { AndroidHeadlessStore } from '../../src/ts/core/types/settings';
+import type { CasAnswer } from '../../src/ts/core/types/stores';
+import loggerModule = require('../../src/ts/core/logger');
+import { installHeadlessTestPlatform, installWebviewTestPlatform } from '../helpers/platform';
+import { createWebviewStorage } from '../../src/ts/platforms/webview/store';
 import { invalid } from '../helpers/invalid';
 
 type CompareAndWrite = (call: { key: string; expected: string | null; value: string }) => Promise<CasAnswer>;
@@ -47,7 +45,23 @@ const KEY = 'gurushots-config';
 const loadStorage = () => {
     let mod: typeof storageModule | undefined;
     jest.isolateModules(() => {
-        mod = require('../../src/ts/settings/storage') as typeof storageModule;
+        // The platform stands before the module loads: the transports it builds are the family's.
+        const autovote =
+            require('../../src/ts/shells/capacitor/NativeAutovoteBridge') as typeof import('../../src/ts/shells/capacitor/NativeAutovoteBridge');
+        installWebviewTestPlatform({
+            storage: createWebviewStorage((key, expected, data) => autovote.compareAndWrite(key, expected, data)),
+        });
+        mod = require('../../src/ts/core/settings/storage') as typeof storageModule;
+    });
+    return mod!;
+};
+
+/** A fresh storage module over the background service's bridge: its transport is the headless family's. */
+const loadHeadlessStorage = () => {
+    let mod: typeof storageModule | undefined;
+    jest.isolateModules(() => {
+        installHeadlessTestPlatform();
+        mod = require('../../src/ts/core/settings/storage') as typeof storageModule;
     });
     return mod!;
 };
@@ -301,14 +315,13 @@ describe('the background service saving the settings', () => {
                 return answer.saved;
             }),
         };
-        g.__GS_HEADLESS__ = true;
         g.AndroidHeadlessStore = bridge;
         return { native, bridge };
     };
 
     test('a save the window did not touch is written at once', () => {
         const { native, bridge } = nativeService('{"a":1}');
-        const { storage } = loadStorage();
+        const { storage } = loadHeadlessStorage();
 
         expect(storage.readRaw()).toBe('{"a":1}');
         expect(storage.writeRaw('{"a":2}')).toBe(true);
@@ -319,7 +332,7 @@ describe('the background service saving the settings', () => {
 
     test('a blob the window changed since the read is read again and the change made again on it', () => {
         const { native, bridge } = nativeService('{"a":1}');
-        const { storage } = loadStorage();
+        const { storage } = loadHeadlessStorage();
         storage.readRaw();
         native.value = '{"a":1,"window":2}';
 
@@ -332,7 +345,7 @@ describe('the background service saving the settings', () => {
 
     test('the text saved is the base of the next write, with no read in between', () => {
         const { native, bridge } = nativeService('{"a":1}');
-        const { storage } = loadStorage();
+        const { storage } = loadHeadlessStorage();
         storage.readRaw();
 
         expect(storage.writeRaw('{"a":1,"b":1}')).toBe(true);
@@ -344,7 +357,7 @@ describe('the background service saving the settings', () => {
 
     test('a key that kept changing fails the save, said in the log, and nothing of the service is saved', () => {
         const { native, bridge } = nativeService('{"a":1}');
-        const { storage } = loadStorage();
+        const { storage } = loadHeadlessStorage();
         storage.readRaw();
         let n = 0;
         bridge.write.mockImplementation(() => {
@@ -361,7 +374,7 @@ describe('the background service saving the settings', () => {
 
     test('a stored blob that is unreadable is not overwritten', () => {
         const { native, bridge } = nativeService('{"a":1}');
-        const { storage } = loadStorage();
+        const { storage } = loadHeadlessStorage();
         storage.readRaw();
         native.value = '{broken';
 
@@ -375,7 +388,7 @@ describe('the background service saving the settings', () => {
     test('a refusal with nothing changed is not retried', () => {
         const { bridge } = nativeService('{"a":1}');
         bridge.write.mockReturnValue(false);
-        const { storage } = loadStorage();
+        const { storage } = loadHeadlessStorage();
         storage.readRaw();
 
         expect(storage.writeRaw('{"a":2}')).toBe(false);
@@ -391,7 +404,8 @@ describe('the background service saving the settings', () => {
             if (reads === 2) native.value = json({ app: { theme: 'dark', language: 'lv' } });
         });
         jest.isolateModules(() => {
-            settings = require('../../src/ts/settings') as typeof settingsModule;
+            installHeadlessTestPlatform();
+            settings = require('../../src/ts/core/settings') as typeof settingsModule;
         });
         // Reads made by the first load are not counted against the toggle.
         settings!.loadSettings();
@@ -430,11 +444,11 @@ describe('setSetting on the background service', () => {
                 return answer.saved;
             }),
         };
-        g.__GS_HEADLESS__ = true;
         g.AndroidHeadlessStore = bridge;
         let settings: typeof settingsModule | undefined;
         jest.isolateModules(() => {
-            settings = require('../../src/ts/settings') as typeof settingsModule;
+            installHeadlessTestPlatform();
+            settings = require('../../src/ts/core/settings') as typeof settingsModule;
         });
         settings!.loadSettings();
         windowText = json({ app: { theme: 'dark', language: 'lv' } });
@@ -482,26 +496,21 @@ describe('both writers saving different settings at once', () => {
             Promise.resolve({ value: key === KEY ? native.value : null }),
         );
         const window = loadStorage();
-        const service = loadStorage();
+        const service = loadHeadlessStorage();
         await window.initializeAsync();
 
         // The window toggles one setting (its save is behind the cache) and the service another, before the window's
         // save runs.
         window.storage.writeRaw(json({ a: 1, window: 'on' }));
-        g.__GS_HEADLESS__ = true;
         service.storage.readRaw();
         expect(service.storage.writeRaw(json({ a: 1, service: 'on' }))).toBe(true);
-        delete g.__GS_HEADLESS__;
         await window.flushPendingWrites();
         expect(parse(native.value)).toEqual({ a: 1, window: 'on', service: 'on' });
 
         // The service read before the window saved; its change is made again on the window's.
-        g.__GS_HEADLESS__ = true;
         service.storage.readRaw();
-        delete g.__GS_HEADLESS__;
         window.storage.writeRaw(json({ a: 1, window: 'off', service: 'on' }));
         await window.flushPendingWrites();
-        g.__GS_HEADLESS__ = true;
         expect(service.storage.writeRaw(json({ a: 1, window: 'on', service: 'off' }))).toBe(true);
 
         expect(parse(native.value)).toEqual({ a: 1, window: 'off', service: 'off' });
@@ -758,7 +767,12 @@ describe('the app window being told that a save was given up', () => {
         const { native, compareAndWrite } = nativeWindow('{"app":{"theme":"light"}}');
         let facade: typeof settingsModule | undefined;
         jest.isolateModules(() => {
-            facade = require('../../src/ts/settings') as typeof settingsModule;
+            const autovote =
+                require('../../src/ts/shells/capacitor/NativeAutovoteBridge') as typeof import('../../src/ts/shells/capacitor/NativeAutovoteBridge');
+            installWebviewTestPlatform({
+                storage: createWebviewStorage((key, expected, data) => autovote.compareAndWrite(key, expected, data)),
+            });
+            facade = require('../../src/ts/core/settings') as typeof settingsModule;
         });
         await facade!.initializeAsync();
         const listener = jest.fn();

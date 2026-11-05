@@ -14,18 +14,13 @@
 import axiosModule = require('axios');
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { invalid } from '../helpers/invalid';
-import type { CategoryLogger } from '../../src/ts/logger';
+import type { CategoryLogger } from '../../src/ts/core/logger';
 // tests/setup.ts replaces axios with a bare jest.fn(), called with one config.
 type AxiosMock = jest.Mock<Promise<unknown>, [config: AxiosRequestConfig]>;
 const axios: AxiosMock = invalid(axiosModule);
 
-jest.mock('../../src/ts/api/randomizer', () => ({
+jest.mock('../../src/ts/core/api/randomizer', () => ({
     generateRandomHeaders: jest.fn((token: string) => ({ 'x-token': token })),
-}));
-
-jest.mock('../../src/ts/runtime', () => ({
-    isCapacitor: jest.fn(() => false),
-    isHeadlessService: jest.fn(() => false),
 }));
 
 jest.mock(
@@ -36,19 +31,18 @@ jest.mock(
     { virtual: true },
 );
 
-jest.mock('../../src/ts/settings', () => ({ getSetting: jest.fn() }));
+jest.mock('../../src/ts/core/settings', () => ({ getSetting: jest.fn() }));
 
-jest.mock('../../src/ts/timing', () => ({ sleep: jest.fn(() => Promise.resolve()) }));
+jest.mock('../../src/ts/core/timing', () => ({ sleep: jest.fn(() => Promise.resolve()) }));
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import runtimeModule = require('../../src/ts/runtime');
-const runtime = jest.mocked(runtimeModule);
-import timingModule = require('../../src/ts/timing');
+import timingModule = require('../../src/ts/core/timing');
 const timing = jest.mocked(timingModule);
-import logger = require('../../src/ts/logger');
-import type * as api_clientModule from '../../src/ts/api/api-client';
-const { makePostRequest } = require('../../src/ts/api/api-client') as typeof api_clientModule;
+import { installHeadlessTestPlatform, installWebviewTestPlatform } from '../helpers/platform';
+import logger = require('../../src/ts/core/logger');
+import type * as api_clientModule from '../../src/ts/core/api/api-client';
+const { makePostRequest } = require('../../src/ts/core/api/api-client') as typeof api_clientModule;
 
 const URL = 'https://api.gurushots.com/edge';
 
@@ -81,14 +75,13 @@ const g = globalThis as typeof globalThis & {
 
 /** Capture the adapter makePostRequest attaches on the headless path. */
 const captureHeadlessAdapter = async () => {
-    runtime.isHeadlessService.mockReturnValue(true);
+    installHeadlessTestPlatform();
     let adapter: TestAdapter | undefined;
     axios.mockImplementationOnce(async (config) => {
         adapter = invalid(config.adapter);
         return { status: 200, headers: {}, data: {} };
     });
     await makePostRequest(URL, {}, '');
-    runtime.isHeadlessService.mockReturnValue(false);
     return adapter!;
 };
 
@@ -208,15 +201,13 @@ describe('headless adapter', () => {
             const existing = jest.fn();
             g.__gsResolveHeadlessHttp = existing;
             try {
-                const isolatedRuntime = jest.mocked(require('../../src/ts/runtime') as typeof runtimeModule);
                 const isolatedAxios: AxiosMock = invalid(require('axios'));
-                isolatedRuntime.isHeadlessService.mockReturnValue(true);
+                installHeadlessTestPlatform();
                 isolatedAxios.mockResolvedValueOnce({ status: 200, headers: {}, data: {} });
                 (
-                    require('../../src/ts/api/api-client') as typeof import('../../src/ts/api/api-client')
+                    require('../../src/ts/core/api/api-client') as typeof import('../../src/ts/core/api/api-client')
                 ).makePostRequest(URL, {}, '');
                 expect(g.__gsResolveHeadlessHttp).toBe(existing);
-                isolatedRuntime.isHeadlessService.mockReturnValue(false);
             } finally {
                 delete g.__gsResolveHeadlessHttp;
             }
@@ -226,7 +217,7 @@ describe('headless adapter', () => {
 
 describe('capacitor adapter caching', () => {
     test('the same CapacitorHttp adapter instance is reused across requests', async () => {
-        runtime.isCapacitor.mockReturnValue(true);
+        installWebviewTestPlatform();
         const adapters: unknown[] = [];
         axios.mockImplementation(async (config) => {
             adapters.push(config.adapter);
@@ -235,7 +226,6 @@ describe('capacitor adapter caching', () => {
 
         await makePostRequest(URL, {}, '');
         await makePostRequest(URL, {}, '');
-        runtime.isCapacitor.mockReturnValue(false);
 
         expect(adapters).toHaveLength(2);
         expect(typeof adapters[0]).toBe('function');

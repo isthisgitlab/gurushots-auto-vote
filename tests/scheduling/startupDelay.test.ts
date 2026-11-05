@@ -1,5 +1,5 @@
-import { startupDelaySeconds, startupResumeAt } from '../../src/ts/scheduling/startupDelay';
-import { DEFAULT_STARTUP_DELAY_SECONDS, MAX_STARTUP_DELAY_SECONDS } from '../../src/ts/settings/limits';
+import { startupDelaySeconds, startupResumeAt } from '../../src/ts/core/scheduling/startupDelay';
+import { DEFAULT_STARTUP_DELAY_SECONDS, MAX_STARTUP_DELAY_SECONDS } from '../../src/ts/core/settings/limits';
 
 const LAUNCH = 1_700_000_000_000;
 

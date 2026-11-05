@@ -2,14 +2,14 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { useListDraft, LIST_FINGERPRINT_SEP } from '@/hooks/useListDraft';
 import { secondsToHoursMinutes, hoursMinutesToSeconds } from '@/utils/timeFieldUnits';
-import { MAX_SCHEDULED_FILL_ENTRIES } from '../../../settings/limits';
+import { MAX_SCHEDULED_FILL_ENTRIES } from '../../../core/settings/limits';
 import { SAVE_ERROR_ID } from '@/components/ui/ModalActionRow';
 import { SettingResetButton } from './SettingResetButton';
 import { NumberUnitInput } from './HoursMinutesFields';
 
 import type { ComponentChildren } from 'preact';
-import type { SettingFieldProps, SettingResetHandler, Translate } from '../../../types/settingsEditor';
-import type { FillSchedule } from '../../../services/scheduleRemap';
+import type { SettingFieldProps, SettingResetHandler, Translate } from '../../../core/types/settingsEditor';
+import type { FillSchedule } from '../../../core/services/scheduleRemap';
 
 /**
  * One row of a variable row-list editor, as RowListField hands it to its

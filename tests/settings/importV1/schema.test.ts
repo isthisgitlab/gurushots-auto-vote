@@ -3,12 +3,12 @@
  * valid, and the list sanitizers do what 1.x did. Frozen code: nothing here follows the live schema.
  */
 
-import { V1_SETTINGS_SCHEMA, v1SchemaEntry, validateV1Setting } from '../../../src/ts/settings/importV1/schema';
+import { V1_SETTINGS_SCHEMA, v1SchemaEntry, validateV1Setting } from '../../../src/ts/core/settings/importV1/schema';
 import {
     sanitizeBeforeEndList,
     sanitizeFillSchedule,
     sanitizeTimeOfDayList,
-} from '../../../src/ts/settings/importV1/validators';
+} from '../../../src/ts/core/settings/importV1/validators';
 
 describe('the frozen 1.x schema', () => {
     const keys = Object.keys(V1_SETTINGS_SCHEMA);

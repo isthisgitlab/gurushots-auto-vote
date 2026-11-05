@@ -7,7 +7,7 @@
  * mocked; process signal / exit / stdin hooks are stubbed per test.
  */
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const calls: { level: string; msg: unknown; data?: unknown }[] = [];
     const rec = (level: string) => (msg: unknown, data?: unknown) => calls.push({ level, msg, data });
     const cat = {
@@ -21,14 +21,14 @@ jest.mock('../../src/ts/logger', () => {
     return { __calls: calls, withCategory: jest.fn(() => cat) };
 });
 
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     loadSettings: jest.fn(() => ({ app: { mock: true }, auth: { token: '' }, challenges: {} })),
     getEffectiveSetting: jest.fn(),
     getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
     SETTINGS_SCHEMA: { chosenPhotos: { type: 'photos', perChallenge: true, default: [] } },
 }));
 
-jest.mock('../../src/ts/apiFactory', () => {
+jest.mock('../../src/ts/core/apiFactory', () => {
     const mw = {
         isAuthenticated: jest.fn(() => true),
         getActiveChallenges: jest.fn(),
@@ -38,18 +38,18 @@ jest.mock('../../src/ts/apiFactory', () => {
     return { __mw: mw, getMiddleware: jest.fn(() => mw) };
 });
 
-jest.mock('../../src/ts/scheduling/runScheduler', () => ({ createScheduler: jest.fn() }));
-jest.mock('../../src/ts/dateFormat', () => ({ formatDateTime: jest.fn(() => 'NOW') }));
-jest.mock('../../src/ts/voting/boostWindow', () => ({ openBoostWindows: jest.fn(() => []) }));
-jest.mock('../../src/ts/services/auth', () => ({ clearTokenUnlessStayingLoggedIn: jest.fn() }));
+jest.mock('../../src/ts/shells/cli/runScheduler', () => ({ createScheduler: jest.fn() }));
+jest.mock('../../src/ts/core/dateFormat', () => ({ formatDateTime: jest.fn(() => 'NOW') }));
+jest.mock('../../src/ts/core/voting/boostWindow', () => ({ openBoostWindows: jest.fn(() => []) }));
+jest.mock('../../src/ts/core/services/auth', () => ({ clearTokenUnlessStayingLoggedIn: jest.fn() }));
 
-jest.mock('../../src/ts/ipc/voting.handlers', () => {
+jest.mock('../../src/ts/core/ipc/voting.handlers', () => {
     const handlers = { 'vote-on-challenge-manual': jest.fn() };
     return { __handlers: handlers, buildHandlers: () => handlers };
 });
 
 // status reads the automation header through the shared handlers too.
-jest.mock('../../src/ts/ipc/actions.handlers', () => {
+jest.mock('../../src/ts/core/ipc/actions.handlers', () => {
     const handlers = {
         'get-auto-claim-status': jest.fn(async () => ({ success: true as const, enabled: false, nextClaimAt: 0 })),
         'get-auto-join-active': jest.fn(async () => ({ success: true as const, active: false })),
@@ -58,12 +58,12 @@ jest.mock('../../src/ts/ipc/actions.handlers', () => {
 });
 
 import { invalid } from '../helpers/invalid';
-import type { ConfigV2 } from '../../src/ts/types/config';
-import loggerModule = require('../../src/ts/logger');
+import type { ConfigV2 } from '../../src/ts/core/types/config';
+import loggerModule = require('../../src/ts/core/logger');
 const logger = jest.mocked(
     invalid<typeof loggerModule & { __calls: { level: string; msg: unknown; data?: unknown }[] }>(loggerModule),
 );
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 // The configuration `loadSettings` answers: the app preferences, the sign-in state and the challenges' records.
 const config = (over: { app?: object; auth?: object; challenges?: object } = {}) =>
     invalid<ConfigV2>({
@@ -73,15 +73,15 @@ const config = (over: { app?: object; auth?: object; challenges?: object } = {})
     });
 
 const settings = jest.mocked(settingsModule);
-import type * as apiFactoryModule from '../../src/ts/apiFactory';
-import type * as runSchedulerModule from '../../src/ts/scheduling/runScheduler';
-import type * as boostWindowModule from '../../src/ts/voting/boostWindow';
-import type * as authModule from '../../src/ts/services/auth';
-import type * as votingModule from '../../src/ts/cli/commands/voting';
-import type * as statusModule from '../../src/ts/cli/commands/status';
-import type * as votingHandlersModule from '../../src/ts/ipc/voting.handlers';
+import type * as apiFactoryModule from '../../src/ts/core/apiFactory';
+import type * as runSchedulerModule from '../../src/ts/shells/cli/runScheduler';
+import type * as boostWindowModule from '../../src/ts/core/voting/boostWindow';
+import type * as authModule from '../../src/ts/core/services/auth';
+import type * as votingModule from '../../src/ts/shells/cli/commands/voting';
+import type * as statusModule from '../../src/ts/shells/cli/commands/status';
+import type * as votingHandlersModule from '../../src/ts/core/ipc/voting.handlers';
 const { __mw: mw } = jest.mocked(
-    require('../../src/ts/apiFactory') as typeof apiFactoryModule & {
+    require('../../src/ts/core/apiFactory') as typeof apiFactoryModule & {
         __mw: jest.Mocked<
             Pick<
                 ReturnType<typeof apiFactoryModule.getMiddleware>,
@@ -90,17 +90,19 @@ const { __mw: mw } = jest.mocked(
         >;
     },
 );
-const { createScheduler } = jest.mocked(require('../../src/ts/scheduling/runScheduler') as typeof runSchedulerModule);
-const { openBoostWindows } = jest.mocked(require('../../src/ts/voting/boostWindow') as typeof boostWindowModule);
-const { clearTokenUnlessStayingLoggedIn } = jest.mocked(require('../../src/ts/services/auth') as typeof authModule);
+const { createScheduler } = jest.mocked(require('../../src/ts/shells/cli/runScheduler') as typeof runSchedulerModule);
+const { openBoostWindows } = jest.mocked(require('../../src/ts/core/voting/boostWindow') as typeof boostWindowModule);
+const { clearTokenUnlessStayingLoggedIn } = jest.mocked(
+    require('../../src/ts/core/services/auth') as typeof authModule,
+);
 // The handler-module mocks expose their jest.fn table for the assertions.
 type HandlersMock = {
     __handlers: jest.Mocked<Pick<ReturnType<typeof votingHandlersModule.buildHandlers>, 'vote-on-challenge-manual'>>;
 };
-const votingHandlers = invalid<HandlersMock>(require('../../src/ts/ipc/voting.handlers')).__handlers;
+const votingHandlers = invalid<HandlersMock>(require('../../src/ts/core/ipc/voting.handlers')).__handlers;
 const { runVotingCycle, voteChallengeManual, parseChallengeFlag, startContinuousVoting } =
-    require('../../src/ts/cli/commands/voting') as typeof votingModule;
-const { showStatus } = require('../../src/ts/cli/commands/status') as typeof statusModule;
+    require('../../src/ts/shells/cli/commands/voting') as typeof votingModule;
+const { showStatus } = require('../../src/ts/shells/cli/commands/status') as typeof statusModule;
 
 const msgs = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
 

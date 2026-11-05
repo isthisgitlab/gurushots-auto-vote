@@ -3,30 +3,32 @@
  * (maybeAutoFillChallenge) and the manual GUI entry point (fillChallengeNow).
  */
 
-import type * as autoFillModule from '../../src/ts/services/autoFill';
+import type * as autoFillModule from '../../src/ts/core/services/autoFill';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-import type * as lexiconModule from '../../src/ts/services/semantic/lexicon';
-import type * as photoStatsModule from '../../src/ts/services/photoStats';
-import type * as photoPickerModule from '../../src/ts/services/photoPicker';
-import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
-import type { CategoryLogger } from '../../src/ts/logger';
-import type { FillDeps, FillLogger, FillSettings } from '../../src/ts/types/autoFill';
-import type { FillSchedule } from '../../src/ts/services/scheduleRemap';
-import type { ActionResult, Challenge, ImageRecord } from '../../src/ts/types/gurushots';
-import { isPlainObject } from '../../src/ts/plainObject';
+import type * as lexiconModule from '../../src/ts/core/services/semantic/lexicon';
+import type * as photoStatsModule from '../../src/ts/core/services/photoStats';
+import type * as photoPickerModule from '../../src/ts/core/services/photoPicker';
+import type * as entryAgeStoreModule from '../../src/ts/core/entryAgeStore';
+import type { CategoryLogger } from '../../src/ts/core/logger';
+import type { FillDeps, FillLogger, FillSettings } from '../../src/ts/core/types/autoFill';
+import type { FillSchedule } from '../../src/ts/core/services/scheduleRemap';
+import type { ActionResult, Challenge, ImageRecord } from '../../src/ts/core/types/gurushots';
+import { isPlainObject } from '../../src/ts/core/plainObject';
 import { invalid } from '../helpers/invalid';
 
-jest.mock('../../src/ts/services/semantic/lexicon', () => ({
+jest.mock('../../src/ts/core/services/semantic/lexicon', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/services/semantic/lexicon')>(
-        '../../src/ts/services/semantic/lexicon',
+    ...jest.requireActual<typeof import('../../src/ts/core/services/semantic/lexicon')>(
+        '../../src/ts/core/services/semantic/lexicon',
     ),
 }));
 
 // photoStats persists its cache through this store; keep it in memory so the
 // suite never touches the real user-data directory.
 let statsStoreData: unknown = null;
-jest.mock('../../src/ts/settings/storage', () => ({
+jest.mock('../../src/ts/core/settings/storage', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/core/settings/storage')>('../../src/ts/core/settings/storage'),
     createJsonStore: () => ({
         readRaw: () => statsStoreData,
         writeRaw: (data: unknown) => {
@@ -51,9 +53,9 @@ const {
     resolveScheduleTarget,
     getNextScheduleThresholdSec,
     refreshChallengeState,
-} = require('../../src/ts/services/autoFill') as typeof autoFillModule;
+} = require('../../src/ts/core/services/autoFill') as typeof autoFillModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
-const { createMemoryEntryAgeLedger } = require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
+const { createMemoryEntryAgeLedger } = require('../../src/ts/core/entryAgeStore') as typeof entryAgeStoreModule;
 
 // Mirrors the schema default: "have ≥2 entries at T-30m, ≥3 at T-20m, ≥4 at
 // T-10m" for a 4-slot challenge.
@@ -2110,7 +2112,7 @@ describe('reflectNewEntry — same-cycle slot accounting', () => {
 
     test('drops the photo chooser’s cached listing of that challenge: what it accepts changed with its entries', () => {
         const cache =
-            require('../../src/ts/services/libraryCache') as typeof import('../../src/ts/services/libraryCache');
+            require('../../src/ts/core/services/libraryCache') as typeof import('../../src/ts/core/services/libraryCache');
         const challenge: Partial<Challenge> = { id: 'c1', max_photo_submits: 4, member: { ranking: { entries: [] } } };
         cache.writeListing('c1', {
             photos: [],
@@ -2327,7 +2329,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
     });
 
     test('searches related existing tags before the truncated whole-library fallback', async () => {
-        const lexicon = require('../../src/ts/services/semantic/lexicon') as typeof lexiconModule;
+        const lexicon = require('../../src/ts/core/services/semantic/lexicon') as typeof lexiconModule;
         const related = jest.spyOn(lexicon, 'relatedSearchTerms').mockReturnValue(['church', 'altar']);
         const getEligiblePhotos = jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) =>
             opts.search === 'church' ? [allowedPhoto('church', ['Church'])] : [],
@@ -2345,7 +2347,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
     });
 
     test('includes related tags when an exact title tag already has a candidate', async () => {
-        const lexicon = require('../../src/ts/services/semantic/lexicon') as typeof lexiconModule;
+        const lexicon = require('../../src/ts/core/services/semantic/lexicon') as typeof lexiconModule;
         const related = jest.spyOn(lexicon, 'relatedSearchTerms').mockReturnValue(['church', 'altar']);
         const getEligiblePhotos = jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) => {
             if (opts.search === 'history') return [allowedPhoto('history', ['History'])];
@@ -2366,7 +2368,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
     });
 
     test('uses the whole library when related tags also have no eligible photos', async () => {
-        const lexicon = require('../../src/ts/services/semantic/lexicon') as typeof lexiconModule;
+        const lexicon = require('../../src/ts/core/services/semantic/lexicon') as typeof lexiconModule;
         const related = jest.spyOn(lexicon, 'relatedSearchTerms').mockReturnValue(['church']);
         const getEligiblePhotos = jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) =>
             opts.search ? [] : [allowedPhoto('fallback', ['Portrait'])],
@@ -3387,7 +3389,7 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
 });
 
 describe('photo-stats enrichment in the fill pipeline', () => {
-    const photoStats = require('../../src/ts/services/photoStats') as typeof photoStatsModule;
+    const photoStats = require('../../src/ts/core/services/photoStats') as typeof photoStatsModule;
 
     // Stable per-category logger so warnings can be asserted on.
     const makeCapturingLogger = () => {
@@ -3624,7 +3626,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         // Guard the premise: if the matcher ever learns "staircase" ~ "stair",
         // this test stops testing the semantic-only path and must be revisited.
         const { scorePhoto, buildChallengeKeywords } =
-            require('../../src/ts/services/photoPicker') as typeof photoPickerModule;
+            require('../../src/ts/core/services/photoPicker') as typeof photoPickerModule;
         const challenge = makeChallenge({ title: 'Stairs', url: 'stairs', entries: [{ id: 'e1' }] });
         expect(scorePhoto(photos[0], buildChallengeKeywords(challenge))).toBe(0);
 
@@ -3900,6 +3902,87 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         const parsed: unknown = JSON.parse(raw);
         const photos = isPlainObject(parsed) && isPlainObject(parsed.photos) ? parsed.photos : {};
         expect(Object.keys(photos).sort()).toEqual(['portfolio', 'soccer']);
+    });
+
+    describe('the votes the visual check weighs', () => {
+        // One clear theme match and one off-theme photo: nothing is contested, so the pick itself looks no stats up
+        // and the only lookups are the ones the visual check's votes loader makes.
+        const soccerChallenge = () => abstractChallenge({ title: 'Soccer', url: 'soccer' });
+        const library = () => [
+            { ...libraryPhoto('goal', 10, 9000), labels: ['Soccer'] },
+            { ...libraryPhoto('farm', 10, 8000), labels: ['Barn'] },
+            { ...libraryPhoto('lake', 10, 7000), labels: ['Water'] },
+        ];
+        type LoaderOptions = {
+            loadVotes: (ids: string[]) => Promise<Map<string, { votes: number; statsKnown: boolean }>>;
+        };
+        const askingRanker = (ask: string[], answers: Array<Map<string, unknown>> = []) =>
+            jest.fn(async (_c: unknown, ids: string[], _e: unknown, want: number, options: LoaderOptions) => {
+                answers.push(await options.loadVotes(ask));
+                return ids.slice(0, want);
+            });
+
+        test('are read with the fill’s token, only for the photos the check asks about', async () => {
+            const getImageData = jest.fn(async (_id: string | number, _token: string) => ({
+                votes: 500,
+                views: 10,
+                achievements: [],
+            }));
+            const answers: Array<Map<string, unknown>> = [];
+            const result = await maybeAutoFillChallenge(soccerChallenge(), 'tok-fill', NOW, {
+                settings: makeSettings({ autoSubmit: true }),
+                logger: makeLogger(),
+                getEligiblePhotos: jest.fn().mockResolvedValue(library()),
+                getImageData,
+                submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
+                rankVisually: invalid(askingRanker(['goal', 'farm'], answers)),
+            });
+            expect(result).toBe('submitted');
+            expect(getImageData.mock.calls.map(([id, token]) => [String(id), token]).sort()).toEqual([
+                ['farm', 'tok-fill'],
+                ['goal', 'tok-fill'],
+            ]);
+            expect(answers[0]).toEqual(
+                new Map([
+                    ['goal', { votes: 500, statsKnown: true }],
+                    ['farm', { votes: 500, statsKnown: true }],
+                ]),
+            );
+        });
+
+        test('a mock-mode fill reads them but never persists them', async () => {
+            const getImageData = jest.fn(async () => ({ votes: 500, views: 10, achievements: [] }));
+            await maybeAutoFillChallenge(soccerChallenge(), 'tok', NOW, {
+                settings: invalid<jest.MockedObject<FillSettings>>({
+                    ...makeSettings({ autoSubmit: true }),
+                    getSetting: jest.fn((key: string) => key === 'mock'),
+                }),
+                logger: makeLogger(),
+                getEligiblePhotos: jest.fn().mockResolvedValue(library()),
+                getImageData,
+                submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
+                rankVisually: invalid(askingRanker(['goal', 'farm'])),
+            });
+            expect(getImageData).toHaveBeenCalled();
+            expect(statsStoreData).toBeNull();
+        });
+
+        test('draw on a budget of the fill’s own: a later challenge keeps its lookups for contested ties', async () => {
+            // Every lookup fails, which opens the fill's breaker after three; the voting pass's stays closed.
+            const failing = jest.fn(async () => null);
+            await maybeAutoFillChallenge(soccerChallenge(), 'tok', NOW, {
+                settings: makeSettings({ autoSubmit: true }),
+                logger: makeLogger(),
+                getEligiblePhotos: jest.fn().mockResolvedValue(library()),
+                getImageData: failing,
+                submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
+                rankVisually: invalid(askingRanker(['goal', 'farm', 'lake'])),
+            });
+            expect(failing).toHaveBeenCalledTimes(3);
+            const working = jest.fn(async () => ({ votes: 1, views: 1, achievements: [] }));
+            await photoStats.enrichCandidates([libraryPhoto('later', 1, 1)], 'tok', { getImageData: working });
+            expect(working).toHaveBeenCalledTimes(1);
+        });
     });
 
     test('a fill with no settings module at all still persists stat lookups', async () => {

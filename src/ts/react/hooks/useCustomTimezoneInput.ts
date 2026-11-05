@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { BUILT_IN_TIMEZONES, DEFAULT_TIMEZONE, isValidTimezone } from '../../settings/uiDefaults';
+import { BUILT_IN_TIMEZONES, DEFAULT_TIMEZONE, isValidTimezone } from '../../core/settings/uiDefaults';
 
-import type { UiChangeHandler, UiValues } from '../../types/settingsEditor';
+import type { UiChangeHandler, UiValues } from '../../core/types/settingsEditor';
 
 /**
  * The custom-timezone "+" input: local UI state, never persisted, so it stays

@@ -4,14 +4,14 @@
  * algorithms in `settings/challengeOverrides.ts`, `ruleResolution.ts`, `titleRules.ts`, `challengeFacts.ts`,
  * `scenarioOverlay.ts`, `scenarios.ts`, `entryPins.ts`, `titlePins.ts`, `services/joinChallenges/settingsResolution.ts`,
  * `services/scenarioStatus.ts` and `react/hooks/useCustomizedChallengeIds.ts` as of the last 1.x release, over the
- * frozen schema and load pipeline in `src/ts/settings/importV1/`. It reads nothing from the live settings code, so a
+ * frozen schema and load pipeline in `src/ts/core/settings/importV1/`. It reads nothing from the live settings code, so a
  * change to the live resolver or to the stored format cannot change what it answers.
  */
 
-import { isPlainObject } from '../../../src/ts/plainObject';
-import { interpretV1Settings, parseV1Settings } from '../../../src/ts/settings/importV1';
-import { pruneV1Obsolete } from '../../../src/ts/settings/importV1/loadValidation';
-import { v1SchemaEntry } from '../../../src/ts/settings/importV1/schema';
+import { isPlainObject } from '../../../src/ts/core/plainObject';
+import { interpretV1Settings, parseV1Settings } from '../../../src/ts/core/settings/importV1';
+import { pruneV1Obsolete } from '../../../src/ts/core/settings/importV1/loadValidation';
+import { v1SchemaEntry } from '../../../src/ts/core/settings/importV1/schema';
 import { matchingRules, ruleConditions } from './ruleMatching';
 import { validatedScenario } from './scenarioDocument';
 import {
@@ -25,7 +25,7 @@ import {
     sanitizeTitleRuleInline,
 } from './values';
 
-import type { V1Blob, V1Values } from '../../../src/ts/settings/importV1/types';
+import type { V1Blob, V1Values } from '../../../src/ts/core/settings/importV1/types';
 import type { MatchTarget } from './ruleMatching';
 import type { OracleScenario } from './scenarioDocument';
 

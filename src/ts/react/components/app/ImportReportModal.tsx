@@ -5,7 +5,7 @@ import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { BusyContent } from '@/components/ui/LoadingSpinner';
 import * as ipc from '@/api/ipc';
-import { errorMessage } from '../../../errorMessage';
+import { errorMessage } from '../../../core/errorMessage';
 
 // Whether the report is recorded as seen; a refusal or a throw is logged.
 const acknowledgeReport = async (): Promise<boolean> => {

@@ -1,8 +1,8 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { StatusBadge } from '../ui/StatusBadge';
-import { challengeKind, challengePhotoCount } from '../../../format/challengeListing';
+import { challengeKind, challengePhotoCount } from '../../../core/format/challengeListing';
 
-import type { Challenge } from '../../../types/gurushots';
+import type { Challenge } from '../../../core/types/gurushots';
 
 /**
  * The challenge's type (its badge when it has none) and how many photos it takes, as the challenge card and the

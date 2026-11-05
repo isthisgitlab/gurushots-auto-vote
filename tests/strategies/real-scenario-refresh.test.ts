@@ -4,50 +4,55 @@
  * scenario state first — its phase-settings overlay must be current.
  */
 
-import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
-import type * as scenarioRunnerModule from '../../src/ts/services/scenarioRunner';
-import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
-import type * as realModule from '../../src/ts/strategies/real';
+import type * as votingOrchestratorModule from '../../src/ts/core/services/votingOrchestrator';
+import type * as scenarioRunnerModule from '../../src/ts/core/services/scenarioRunner';
+import type * as scenarioStateStoreModule from '../../src/ts/core/scenarioStateStore';
+import type * as realModule from '../../src/ts/core/strategies/real';
 
-jest.mock('../../src/ts/services/votingOrchestrator', () => ({
+jest.mock('../../src/ts/core/services/votingOrchestrator', () => ({
     runVotingPass: jest.fn(async () => ({ success: true })),
 }));
-jest.mock('../../src/ts/services/scenarioRunner', () => ({ backgroundServiceOwnsScenarios: jest.fn() }));
-jest.mock('../../src/ts/scenarioStateStore', () => ({
+jest.mock('../../src/ts/core/services/scenarioRunner', () => ({ backgroundServiceOwnsScenarios: jest.fn() }));
+jest.mock('../../src/ts/core/scenarioStateStore', () => ({
     scenarioStateLedger: {},
     scenarioStateLoaded: jest.fn(() => true),
     refreshScenarioStateAsync: jest.fn(async () => {}),
 }));
-jest.mock('../../src/ts/services/joinChallenges', () => ({ runJoinPass: jest.fn(), joinChallengeSingle: jest.fn() }));
+jest.mock('../../src/ts/core/services/joinChallenges', () => ({
+    runJoinPass: jest.fn(),
+    joinChallengeSingle: jest.fn(),
+}));
 // The CLAIM_ENDPOINTS name list rides along (see the non-configurable-getter note in strategies/real.test.ts).
-jest.mock('../../src/ts/services/autoClaim', () => ({
+jest.mock('../../src/ts/core/services/autoClaim', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/services/autoClaim')>('../../src/ts/services/autoClaim'),
+    ...jest.requireActual<typeof import('../../src/ts/core/services/autoClaim')>(
+        '../../src/ts/core/services/autoClaim',
+    ),
     runClaimPass: jest.fn(),
 }));
-jest.mock('../../src/ts/settings', () => {
-    const actual = jest.requireActual<typeof import('../../src/ts/settings')>('../../src/ts/settings');
+jest.mock('../../src/ts/core/settings', () => {
+    const actual = jest.requireActual<typeof import('../../src/ts/core/settings')>('../../src/ts/core/settings');
     return { __esModule: true, ...actual };
 });
 
 const { runVotingPass } = jest.mocked(
-    require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule,
+    require('../../src/ts/core/services/votingOrchestrator') as typeof votingOrchestratorModule,
 );
 const { backgroundServiceOwnsScenarios } = jest.mocked(
-    require('../../src/ts/services/scenarioRunner') as typeof scenarioRunnerModule,
+    require('../../src/ts/core/services/scenarioRunner') as typeof scenarioRunnerModule,
 );
 const { refreshScenarioStateAsync, scenarioStateLoaded } = jest.mocked(
-    require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule,
+    require('../../src/ts/core/scenarioStateStore') as typeof scenarioStateStoreModule,
 );
-const { scenarioStateLedger } = require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
-import joinChallengesModule = require('../../src/ts/services/joinChallenges');
-import autoClaimModule = require('../../src/ts/services/autoClaim');
+const { scenarioStateLedger } = require('../../src/ts/core/scenarioStateStore') as typeof scenarioStateStoreModule;
+import joinChallengesModule = require('../../src/ts/core/services/joinChallenges');
+import autoClaimModule = require('../../src/ts/core/services/autoClaim');
 const { runJoinPass } = jest.mocked(joinChallengesModule);
 const { runClaimPass } = jest.mocked(autoClaimModule);
-import settings = require('../../src/ts/settings');
-import logger = require('../../src/ts/logger');
+import settings = require('../../src/ts/core/settings');
+import logger = require('../../src/ts/core/logger');
 import { invalid } from '../helpers/invalid';
-const { fetchChallengesAndVote } = require('../../src/ts/strategies/real') as typeof realModule;
+const { fetchChallengesAndVote } = require('../../src/ts/core/strategies/real') as typeof realModule;
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -117,7 +122,7 @@ describe('saying why the window did not join or fill', () => {
     const freshProcess = () => {
         let fresh!: typeof fetchChallengesAndVote;
         jest.isolateModules(() => {
-            fresh = (require('../../src/ts/strategies/real') as typeof realModule).fetchChallengesAndVote;
+            fresh = (require('../../src/ts/core/strategies/real') as typeof realModule).fetchChallengesAndVote;
         });
         return fresh;
     };

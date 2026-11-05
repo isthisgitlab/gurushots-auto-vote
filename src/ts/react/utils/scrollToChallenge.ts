@@ -1,4 +1,4 @@
-import type { Challenge } from '../../types/gurushots';
+import type { Challenge } from '../../core/types/gurushots';
 import { scrollBehavior } from './scrollBehavior';
 /**
  * Scroll to (smoothly, unless the user prefers reduced motion) and focus the ChallengeCard with the given id. Cards carry

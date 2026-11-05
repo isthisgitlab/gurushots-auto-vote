@@ -6,7 +6,7 @@
  * entries, and says when a save displaced the other feature's pin.
  */
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const calls: { level: string; msg: unknown }[] = [];
     const rec = (level: string) => (msg: unknown) => calls.push({ level, msg });
     const cat = {
@@ -19,12 +19,12 @@ jest.mock('../../src/ts/logger', () => {
     return { __calls: calls, withCategory: jest.fn(() => cat), CATEGORIES: {} };
 });
 
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     getSetting: jest.fn(() => 'tok'),
     loadSettings: jest.fn(() => ({ mock: true, token: 'tok' })),
 }));
 
-jest.mock('../../src/ts/apiFactory', () => {
+jest.mock('../../src/ts/core/apiFactory', () => {
     const getActiveChallenges = jest.fn();
     const isAuthenticated = jest.fn(() => true);
     return {
@@ -35,16 +35,16 @@ jest.mock('../../src/ts/apiFactory', () => {
     };
 });
 
-jest.mock('../../src/ts/ipc/settings.handlers', () => {
+jest.mock('../../src/ts/core/ipc/settings.handlers', () => {
     const handlers = { 'get-entry-pins': jest.fn(), 'set-entry-pin': jest.fn() };
     return { __handlers: handlers, buildHandlers: () => handlers, register: jest.fn() };
 });
 
 import { invalid } from '../helpers/invalid';
-import { sentenceCaseLogMessage } from '../../src/ts/format/logSafe';
-import loggerModule = require('../../src/ts/logger');
+import { sentenceCaseLogMessage } from '../../src/ts/core/format/logSafe';
+import loggerModule = require('../../src/ts/core/logger');
 const logger = jest.mocked(invalid<typeof loggerModule & { __calls: { level: string; msg: unknown }[] }>(loggerModule));
-import apiFactoryModule = require('../../src/ts/apiFactory');
+import apiFactoryModule = require('../../src/ts/core/apiFactory');
 type Middleware = ReturnType<typeof apiFactoryModule.getMiddleware>;
 const apiFactory = jest.mocked(
     invalid<
@@ -54,10 +54,10 @@ const apiFactory = jest.mocked(
         }
     >(apiFactoryModule),
 );
-import type * as pinModule from '../../src/ts/cli/commands/pin';
+import type * as pinModule from '../../src/ts/shells/cli/commands/pin';
 type HandlerTable = Record<string, jest.Mock<Promise<unknown>, unknown[]>>;
-const handlers = invalid<{ __handlers: HandlerTable }>(require('../../src/ts/ipc/settings.handlers')).__handlers;
-const { pinCmd, printableChallengeId, PIN_USAGE } = require('../../src/ts/cli/commands/pin') as typeof pinModule;
+const handlers = invalid<{ __handlers: HandlerTable }>(require('../../src/ts/core/ipc/settings.handlers')).__handlers;
+const { pinCmd, printableChallengeId, PIN_USAGE } = require('../../src/ts/shells/cli/commands/pin') as typeof pinModule;
 
 const msgsAt = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
 

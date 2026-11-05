@@ -1,6 +1,6 @@
-import type * as photoUrlModule from '../../src/ts/format/photoUrl';
+import type * as photoUrlModule from '../../src/ts/core/format/photoUrl';
 import { invalid } from '../helpers/invalid';
-const { buildPhotoUrl, entryPhotoUrl } = require('../../src/ts/format/photoUrl') as typeof photoUrlModule;
+const { buildPhotoUrl, entryPhotoUrl } = require('../../src/ts/core/format/photoUrl') as typeof photoUrlModule;
 
 // A real member/photo id pair, shaped exactly like the API returns them.
 const MEMBER = 'c1d1f7733b10b21459a3a86c5162efa9';

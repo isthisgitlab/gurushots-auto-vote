@@ -1,16 +1,16 @@
 import { renderHook } from '@testing-library/preact';
 import { isNativePlatform, usePlatformCapabilities } from '@/api/usePlatformCapabilities';
-import type { RendererGlobals } from '../../src/ts/types/capacitor';
+import { UpdateDialog } from '@/components/app/UpdateDialog';
+import { TranslationProvider } from '@/contexts/TranslationContext';
+import { UpdateProvider } from '@/contexts/UpdateContext';
+import { render as renderWithProviders } from '@testing-library/preact';
+import { markPlatformKind } from '../../src/ts/core/platform/kind';
+import { resetPlatformKind } from '../helpers/platformKind';
 
-const g = globalThis as RendererGlobals;
-
-afterEach(() => {
-    delete g.Capacitor;
-    delete (g as { webShell?: true }).webShell;
-});
+afterEach(resetPlatformKind);
 
 describe('platform capabilities', () => {
-    test('a desktop or browser page (no Capacitor runtime) has none of the Android-only ones', () => {
+    test('an unmarked page (the Electron renderer, or a browser before the web bridge installs) has none of the Android-only ones', () => {
         expect(isNativePlatform()).toBe(false);
         const { result } = renderHook(() => usePlatformCapabilities());
         expect(result.current).toEqual({
@@ -19,29 +19,23 @@ describe('platform capabilities', () => {
             backgroundService: false,
             settingsFile: true,
             relaunchesAfterWipe: true,
+            showsLogout: true,
+            showsLocalDataWipe: true,
+            showsUpdateInstall: true,
+            showsRemoteAccessSection: true,
+            viewPrefsLocal: false,
         });
     });
 
-    test('a page the web bridge installed does not relaunch after a wipe', () => {
-        (g as { webShell?: true }).webShell = true;
+    test('a page the web bridge marked does not relaunch after a wipe', () => {
+        markPlatformKind('web');
         const { result } = renderHook(() => usePlatformCapabilities());
         expect(result.current.relaunchesAfterWipe).toBe(false);
         expect(result.current.settingsFile).toBe(true);
     });
 
-    test('a Capacitor web target is not native', () => {
-        g.Capacitor = { isNativePlatform: () => false };
-        expect(isNativePlatform()).toBe(false);
-        expect(renderHook(() => usePlatformCapabilities()).result.current.inAppLogs).toBe(false);
-    });
-
-    test('a runtime without the probe is not native', () => {
-        g.Capacitor = {};
-        expect(isNativePlatform()).toBe(false);
-    });
-
     test('the Android app gets the in-app logs, the battery guidance and the background service', () => {
-        g.Capacitor = { isNativePlatform: () => true };
+        markPlatformKind('capacitor');
         expect(isNativePlatform()).toBe(true);
         const { result, rerender } = renderHook(() => usePlatformCapabilities());
         expect(result.current).toEqual({
@@ -50,10 +44,44 @@ describe('platform capabilities', () => {
             backgroundService: true,
             settingsFile: false,
             relaunchesAfterWipe: true,
+            showsLogout: true,
+            showsLocalDataWipe: true,
+            showsUpdateInstall: true,
+            showsRemoteAccessSection: false,
+            viewPrefsLocal: false,
         });
         // Fixed for the life of the page: the same object on every render.
         const first = result.current;
         rerender();
         expect(result.current).toBe(first);
+    });
+
+    test('a remote screen has the relayed log stream and none of the desktop powers', () => {
+        markPlatformKind('remote');
+        const { result } = renderHook(() => usePlatformCapabilities());
+        expect(result.current).toEqual({
+            inAppLogs: true,
+            batteryGuidance: false,
+            backgroundService: false,
+            settingsFile: false,
+            relaunchesAfterWipe: false,
+            showsLogout: false,
+            showsLocalDataWipe: false,
+            showsUpdateInstall: false,
+            showsRemoteAccessSection: false,
+            viewPrefsLocal: true,
+        });
+    });
+
+    test('the remote kind shows no update dialog: updates happen on the computer', () => {
+        markPlatformKind('remote');
+        const { container } = renderWithProviders(
+            <TranslationProvider>
+                <UpdateProvider>
+                    <UpdateDialog />
+                </UpdateProvider>
+            </TranslationProvider>,
+        );
+        expect(container.textContent).toBe('');
     });
 });

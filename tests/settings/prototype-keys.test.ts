@@ -8,7 +8,7 @@
  * Drives the in-memory headless-store seam, like settings-coverage.test.ts.
  */
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
         info: jest.fn(),
@@ -23,16 +23,16 @@ jest.mock('../../src/ts/logger', () => {
     };
 });
 
-import settings = require('../../src/ts/settings');
-import type * as schemaModule from '../../src/ts/settings/schema';
-import type { ConfigV2 } from '../../src/ts/types/config';
+import settings = require('../../src/ts/core/settings');
+import type * as schemaModule from '../../src/ts/core/settings/schema';
+import type { ConfigV2 } from '../../src/ts/core/types/config';
 import { invalid } from '../helpers/invalid';
 import { isConfig } from '../helpers/storedShapes';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import type { MemoryStore } from '../helpers/headlessStore';
 import { parseJson, parseJsonAs } from '../helpers/parseJson';
 
-const { schemaEntry } = require('../../src/ts/settings/schema') as typeof schemaModule;
+const { schemaEntry } = require('../../src/ts/core/settings/schema') as typeof schemaModule;
 
 const PROTOTYPE_KEYS = ['constructor', 'toString', '__proto__', 'hasOwnProperty'];
 
@@ -246,13 +246,15 @@ describe('prototype-named keys', () => {
         test('an out-of-range value is said once, not on every read', () => {
             let warning: jest.Mock<void, [string, ...unknown[]]> | undefined;
             jest.isolateModules(() => {
-                const isolated = require('../../src/ts/settings') as typeof settings;
+                // The store is installed before the facade loads: its transports are built over the platform that
+                // stands at load.
+                installHeadlessStore({ config: JSON.stringify({ app: { theme: 'dark', apiTimeout: 100000 } }) });
+                const isolated = require('../../src/ts/core/settings') as typeof settings;
                 warning = (
-                    require('../../src/ts/logger') as unknown as {
+                    require('../../src/ts/core/logger') as unknown as {
                         __cat: { warning: jest.Mock<void, [string, ...unknown[]]> };
                     }
                 ).__cat.warning;
-                installHeadlessStore({ config: JSON.stringify({ app: { theme: 'dark', apiTimeout: 100000 } }) });
                 isolated.loadSettings();
                 isolated.loadSettings();
                 isolated.loadSettings();
@@ -266,24 +268,24 @@ describe('prototype-named keys', () => {
 
 describe('a schema entry without a validator', () => {
     afterEach(() => {
-        jest.dontMock('../../src/ts/settings/schema');
+        jest.dontMock('../../src/ts/core/settings/schema');
     });
 
     test('is skipped by the load-time validation instead of throwing into the defaults fallback', () => {
         let loaded: ConfigV2 | undefined;
         jest.isolateModules(() => {
-            jest.doMock('../../src/ts/settings/schema', () => {
-                const actual = jest.requireActual<typeof schemaModule>('../../src/ts/settings/schema');
+            jest.doMock('../../src/ts/core/settings/schema', () => {
+                const actual = jest.requireActual<typeof schemaModule>('../../src/ts/core/settings/schema');
                 return {
                     ...actual,
                     schemaEntry: (key: string) =>
                         key === 'hollow' ? invalid({ type: 'number', perChallenge: false }) : actual.schemaEntry(key),
                 };
             });
-            const isolated = require('../../src/ts/settings') as typeof settings;
             installHeadlessStore({
                 config: JSON.stringify({ app: { theme: 'dark' }, defaults: { hollow: 1, exposure: 70 } }),
             });
+            const isolated = require('../../src/ts/core/settings') as typeof settings;
             loaded = isolated.loadSettings();
         });
         removeHeadlessStore();

@@ -4,10 +4,10 @@
  * everything here must hold without any settings/logger plumbing.
  */
 
-import type * as scheduleRemapModule from '../../src/ts/services/scheduleRemap';
+import type * as scheduleRemapModule from '../../src/ts/core/services/scheduleRemap';
 
 const { getScheduleShift, remapScheduleRows } =
-    require('../../src/ts/services/scheduleRemap') as typeof scheduleRemapModule;
+    require('../../src/ts/core/services/scheduleRemap') as typeof scheduleRemapModule;
 
 const DEFAULT_SCHEDULE = [
     { count: 2, seconds: 1800 },

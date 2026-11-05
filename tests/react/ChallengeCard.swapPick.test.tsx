@@ -9,12 +9,12 @@ import { render, screen, fireEvent, waitFor, within } from './helpers/test-utils
 import { ChallengeCard } from '@/components/app/ChallengeCard';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import { mockTranslator } from './helpers/setup';
-import { app, errors } from '../../src/ts/translations/english';
-import { createTranslator } from '../../src/ts/translations/translator';
+import { app, errors } from '../../src/ts/core/translations/english';
+import { createTranslator } from '../../src/ts/core/translations/translator';
 import { invalid } from '../helpers/invalid';
-import type { Bankroll } from '../../src/ts/types/gurushots';
-import type { WindowApi } from '../../src/ts/types/ipc';
-import type { Translate } from '../../src/ts/translations/translator';
+import type { Bankroll } from '../../src/ts/core/types/gurushots';
+import type { WindowApi } from '../../src/ts/core/types/ipc';
+import type { Translate } from '../../src/ts/core/translations/translator';
 
 const mockChallengeSettings = {
     hasCustomSettings: false,

@@ -4,7 +4,7 @@
  * control and invisible format characters dropped.
  */
 
-import { htmlToText } from '../../src/ts/format/htmlToText';
+import { htmlToText } from '../../src/ts/core/format/htmlToText';
 
 describe('htmlToText', () => {
     test('removes tags and keeps their text', () => {

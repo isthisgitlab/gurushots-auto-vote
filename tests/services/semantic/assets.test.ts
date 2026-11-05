@@ -1,16 +1,13 @@
 /**
  * Tests for the cross-platform lexicon asset loader (semantic/assets.ts).
  *
- * Every platform branch resolves to the parsed object or null — never a throw —
- * and the result is memoised, with concurrent callers sharing one load.
- * `runtime` is mocked to pick the branch; `fs` is already mocked by
+ * Every platform resolves to the parsed object or null — never a throw — and
+ * the result is memoised, with concurrent callers sharing one load. The
+ * branch is picked by the installed platform (the webview platforms fetch,
+ * the node platform reads the SEA asset or the committed file — the reads
+ * themselves are proven in the family asset tests); `fs` is already mocked by
  * tests/setup.ts; `node:sea` is replaced per test.
  */
-
-jest.mock('../../../src/ts/runtime', () => ({
-    isCapacitor: jest.fn(() => false),
-    isHeadlessService: jest.fn(() => false),
-}));
 
 // One mutable stand-in: the registry instantiates a mock once, so tests
 // reconfigure this object instead of re-mocking the module.
@@ -20,11 +17,10 @@ const mockSea: { isSea: () => boolean; getAsset: (key: string, encoding: string)
 };
 jest.mock('node:sea', () => mockSea, { virtual: true });
 
-import runtimeModule = require('../../../src/ts/runtime');
-const runtime = jest.mocked(runtimeModule);
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
-import assets = require('../../../src/ts/services/semantic/assets');
+import assets = require('../../../src/ts/core/services/semantic/assets');
+import { installHeadlessTestPlatform, installTestPlatform, installWebviewTestPlatform } from '../../helpers/platform';
 import { invalid } from '../../helpers/invalid';
 
 const LEXICON = { dims: 2, scale: 1, packed: {} };
@@ -32,8 +28,7 @@ const realFetch = globalThis.fetch;
 
 beforeEach(() => {
     assets.__resetForTests();
-    runtime.isCapacitor.mockReturnValue(false);
-    runtime.isHeadlessService.mockReturnValue(false);
+    installTestPlatform();
 });
 
 afterEach(() => {
@@ -42,28 +37,30 @@ afterEach(() => {
     mockSea.getAsset = () => null;
 });
 
-describe('fetch branch (Capacitor WebView / headless service)', () => {
-    test.each<[string, 'isCapacitor' | 'isHeadlessService']>([
-        ['Capacitor', 'isCapacitor'],
-        ['headless service', 'isHeadlessService'],
-    ])('%s loads the asset via fetch and memoises it', async (_label, flag) => {
-        runtime[flag].mockReturnValue(true);
-        globalThis.fetch = invalid<typeof fetch>(jest.fn(async () => ({ ok: true, json: async () => LEXICON })));
+describe('fetch branch (the webview platforms)', () => {
+    test.each<[string, () => void]>([
+        ['Capacitor', () => installWebviewTestPlatform()],
+        ['headless service', () => installHeadlessTestPlatform()],
+    ])('%s loads the asset via fetch and memoises it', async (_label, install) => {
+        install();
+        globalThis.fetch = invalid<typeof fetch>(
+            jest.fn(async () => ({ ok: true, status: 200, text: async () => JSON.stringify(LEXICON) })),
+        );
 
-        await expect(assets.loadLexiconAsset()).resolves.toBe(LEXICON);
-        await expect(assets.loadLexiconAsset()).resolves.toBe(LEXICON);
+        await expect(assets.loadLexiconAsset()).resolves.toEqual(LEXICON);
+        await expect(assets.loadLexiconAsset()).resolves.toEqual(LEXICON);
         expect(globalThis.fetch).toHaveBeenCalledTimes(1);
         expect(globalThis.fetch).toHaveBeenCalledWith(assets.ASSET_NAME);
     });
 
     test('concurrent callers share one in-flight load', async () => {
-        runtime.isCapacitor.mockReturnValue(true);
+        installWebviewTestPlatform();
         let release!: () => void;
         globalThis.fetch = invalid<typeof fetch>(
             jest.fn(
                 () =>
                     new Promise((resolve) => {
-                        release = () => resolve({ ok: true, json: async () => LEXICON });
+                        release = () => resolve({ ok: true, status: 200, text: async () => JSON.stringify(LEXICON) });
                     }),
             ),
         );
@@ -79,7 +76,7 @@ describe('fetch branch (Capacitor WebView / headless service)', () => {
         ['a null response', async () => null],
         ['a rejected fetch', async () => Promise.reject(new Error('offline'))],
     ])('%s resolves to a cached null (lexical-only fallback)', async (_label, impl) => {
-        runtime.isCapacitor.mockReturnValue(true);
+        installWebviewTestPlatform();
         globalThis.fetch = invalid<typeof fetch>(jest.fn(impl));
         await expect(assets.loadLexiconAsset()).resolves.toBeNull();
         await expect(assets.loadLexiconAsset()).resolves.toBeNull();
@@ -87,8 +84,10 @@ describe('fetch branch (Capacitor WebView / headless service)', () => {
     });
 
     test('__resetForTests forces a fresh load', async () => {
-        runtime.isCapacitor.mockReturnValue(true);
-        globalThis.fetch = invalid<typeof fetch>(jest.fn(async () => ({ ok: true, json: async () => LEXICON })));
+        installWebviewTestPlatform();
+        globalThis.fetch = invalid<typeof fetch>(
+            jest.fn(async () => ({ ok: true, status: 200, text: async () => JSON.stringify(LEXICON) })),
+        );
         await assets.loadLexiconAsset();
         assets.__resetForTests();
         await assets.loadLexiconAsset();
@@ -125,5 +124,12 @@ describe('node branch (CLI / Electron)', () => {
             throw new Error('ENOENT');
         });
         await expect(assets.loadLexiconAsset()).resolves.toBeNull();
+    });
+
+    test('a SEA asset that fails to parse falls back to the file', async () => {
+        mockSea.isSea = () => true;
+        mockSea.getAsset = () => '{not json';
+        fs.readFileSync.mockReturnValueOnce(JSON.stringify(LEXICON));
+        await expect(assets.loadLexiconAsset()).resolves.toEqual(LEXICON);
     });
 });

@@ -16,8 +16,8 @@ import { SettingsModal } from '@/components/app/SettingsModal';
 import { TALL_MODAL_BOX_HEIGHT } from '@/components/ui/Modal';
 import { fireSettingsChanged } from './helpers/setup';
 import { selectTab } from '../helpers/selectTab';
-import type { TitleRule } from '../../src/ts/types/settings';
-import type { UiResetHandler } from '../../src/ts/types/settingsEditor';
+import type { TitleRule } from '../../src/ts/core/types/settings';
+import type { UiResetHandler } from '../../src/ts/core/types/settingsEditor';
 import type { useSettingsForm } from '@/hooks/useSettingsForm';
 import type { useSettingsSchema } from '@/api/useSettingsSchema';
 import { invalid } from '../helpers/invalid';
@@ -453,7 +453,8 @@ describe('SettingsModal — title-tag-rules save', () => {
         const onClose = jest.fn();
 
         render(<SettingsModal isOpen={true} onClose={onClose} />);
-        // Wait for the load effect to seed the rule (and mark it loaded).
+        // Wait for the load effect to seed the rule (and mark it loaded), then pick it.
+        await pickFirstRule();
         await screen.findByDisplayValue('Hats');
 
         clickSave();
@@ -473,6 +474,7 @@ describe('SettingsModal — title-tag-rules save', () => {
         const onClose = jest.fn();
 
         render(<SettingsModal isOpen={true} onClose={onClose} />);
+        await pickFirstRule();
         await screen.findByDisplayValue('Hats');
 
         clickSave();
@@ -488,6 +490,7 @@ describe('SettingsModal — title-tag-rules save', () => {
         const onClose = jest.fn();
 
         render(<SettingsModal isOpen={true} onClose={onClose} />);
+        await pickFirstRule();
         await screen.findByDisplayValue('Hats');
 
         clickSave();
@@ -513,6 +516,7 @@ describe('SettingsModal — title-tag-rules save', () => {
 
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
 
+        await pickFirstRule();
         const profileSelect = await screen.findByLabelText<HTMLSelectElement>('app.titleRuleProfile');
         expect(profileSelect.value).toBe('Portrait Tactic');
         expect(profileSelect.textContent).toContain('Portrait Tactic');
@@ -717,6 +721,15 @@ describe('SettingsModal — app-wide settings', () => {
 const clickButtonByText = (text: string, index = 0) => {
     const buttons = Array.from(document.querySelectorAll('button')).filter((b) => b.textContent.trim() === text);
     fireEvent.click(buttons[index]);
+};
+
+// The rules tab's editor shows its form only for a rule picked in the dropdown,
+// and the tab's panel is hidden until selected: open the tab, wait for the
+// rules to load, then pick the first one.
+const pickFirstRule = async () => {
+    selectTab('app.titleTagRules');
+    const dropdown = await screen.findByRole('combobox', { name: 'app.titleRuleSelectRule' });
+    fireEvent.change(dropdown, { target: { value: '0' } });
 };
 
 // The application-settings ResetButtons are named "<reset action>: <setting>", in DOM order:
@@ -1156,6 +1169,7 @@ describe('SettingsModal — save outcomes', () => {
         ]);
         jest.mocked(window.api.setTitleRules).mockResolvedValueOnce(false);
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        await pickFirstRule();
         await screen.findByDisplayValue('Hats');
         clickButtonByText('app.save');
         await screen.findByText('app.titleTagRulesSaveError');
@@ -1311,6 +1325,7 @@ describe('SettingsModal — editing rules without a pending error', () => {
             { title: 'Hats', type: 'flash', mustIncludeTags: [], shouldIncludeTags: [] },
         ]);
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        await pickFirstRule();
         await screen.findByDisplayValue('Hats');
 
         fireEvent.change(screen.getByDisplayValue('flash'), { target: { value: 'speed' } });
@@ -1318,7 +1333,8 @@ describe('SettingsModal — editing rules without a pending error', () => {
 
         expect(screen.getByDisplayValue('speed')).toBeTruthy();
         expect(screen.getByDisplayValue('Caps')).toBeTruthy();
-        expect(document.querySelector('[role="alert"]')).toBeNull();
+        // No ERROR alert; the title-only rule's drop warning is expected.
+        expect(document.querySelector('[role="alert"].alert-error')).toBeNull();
     });
 });
 
@@ -1351,6 +1367,7 @@ describe('SettingsModal — the Rules tab follows a profile saved in the Profile
         await waitFor(() => expect(window.api.saveChallengeProfile).toHaveBeenCalledWith('brand', { exposure: 80 }));
 
         selectTab('app.titleTagRules');
+        await pickFirstRule();
         const profileSelect = screen.getByLabelText<HTMLSelectElement>('app.titleRuleProfile');
         await waitFor(() => expect(within(profileSelect).getByRole('option', { name: 'brand' })).toBeTruthy());
         expect(profileSelect.value).toBe('tactic');

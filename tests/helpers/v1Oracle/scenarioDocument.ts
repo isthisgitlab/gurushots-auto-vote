@@ -10,9 +10,9 @@
 import { z } from 'zod';
 
 import { challengeValueSetIsValid, RESERVED_PROFILE_NAMES, validateSetting } from './values';
-import { v1SchemaEntry } from '../../../src/ts/settings/importV1/schema';
+import { v1SchemaEntry } from '../../../src/ts/core/settings/importV1/schema';
 
-import type { V1Values } from '../../../src/ts/settings/importV1/types';
+import type { V1Values } from '../../../src/ts/core/settings/importV1/types';
 
 const COMPARISON_OPS = ['<', '<=', '=', '!=', '>=', '>'] as const;
 const REPEAT_MODES = ['always', 'once', 'oncePerPhase', 'oncePerDay'] as const;

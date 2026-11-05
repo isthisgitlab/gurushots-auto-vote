@@ -13,19 +13,15 @@ jest.mock('node:fs', () => {
 });
 jest.unmock('path');
 jest.unmock('node:path');
-jest.mock('../../src/ts/runtime', () => ({
-    __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/runtime')>('../../src/ts/runtime'),
-}));
 
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type * as runtimeModule from '../../src/ts/runtime';
-import type * as storageModule from '../../src/ts/settings/storage';
+import { platform } from '../../src/ts/core/platform/port';
+import type * as storageModule from '../../src/ts/core/settings/storage';
+import { installTestPlatform } from '../helpers/platform';
 
-const runtime = require('../../src/ts/runtime') as typeof runtimeModule;
-const { storage, createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+const { storage, createJsonStore } = require('../../src/ts/core/settings/storage') as typeof storageModule;
 
 const modeOf = (p: string) => fs.statSync(p).mode & 0o777;
 
@@ -39,7 +35,9 @@ describePosix('userData JSON writers leave files owner-only', () => {
     beforeEach(() => {
         root = fs.mkdtempSync(path.join(os.tmpdir(), 'gs-storage-'));
         userData = path.join(root, 'userData');
-        jest.spyOn(runtime, 'getAppUserDataPath').mockReturnValue(userData);
+        // The stores resolve their file from the settings path: the platform
+        // resolves user data into this test's real temp dir.
+        installTestPlatform({ paths: { ...platform().paths, userData: () => userData } });
     });
 
     afterEach(() => {

@@ -8,7 +8,7 @@ import { SettingHintList, challengeSettingHints, manualPhotosOnlyHint } from '@/
 import { deriveChallengeCardView } from '@/utils/challengeCardView';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import { invalid } from '../helpers/invalid';
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 
 const t = (key: string) => key;
 

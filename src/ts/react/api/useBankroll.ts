@@ -1,6 +1,6 @@
 import { useIpcResultQuery } from './useIpcQuery';
 
-import type { Bankroll } from '../../types/gurushots';
+import type { Bankroll } from '../../core/types/gurushots';
 
 const fetchBankroll = () => window.api.getBankroll();
 const selectBalances = (result: Bankroll): Bankroll => ({

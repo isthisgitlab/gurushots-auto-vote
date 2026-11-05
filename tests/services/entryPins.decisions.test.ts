@@ -4,18 +4,18 @@
  * spend (and when it gives way), and the deadline preview that reads the same pick.
  */
 
-jest.mock('../../src/ts/settings');
+jest.mock('../../src/ts/core/settings');
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import type * as VotingLogicModule from '../../src/ts/services/VotingLogic';
-import type * as entryPickModule from '../../src/ts/services/decisions/entryPick';
+import type * as VotingLogicModule from '../../src/ts/core/services/VotingLogic';
+import type * as entryPickModule from '../../src/ts/core/services/decisions/entryPick';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-import type { Challenge, RankingEntry } from '../../src/ts/types/gurushots';
-import type { EntryPins } from '../../src/ts/types/settings';
+import type { Challenge, RankingEntry } from '../../src/ts/core/types/gurushots';
+import type { EntryPins } from '../../src/ts/core/types/settings';
 import { invalid } from '../helpers/invalid';
-const VotingLogic = require('../../src/ts/services/VotingLogic') as typeof VotingLogicModule;
-const { pinReleaseAt } = require('../../src/ts/services/decisions/entryPick') as typeof entryPickModule;
+const VotingLogic = require('../../src/ts/core/services/VotingLogic') as typeof VotingLogicModule;
+const { pinReleaseAt } = require('../../src/ts/core/services/decisions/entryPick') as typeof entryPickModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
 const CLOSE = 1_000_000;

@@ -9,11 +9,11 @@ import { ChallengeCard } from '@/components/app/ChallengeCard';
 import { EntryDetails } from '@/components/app/EntryDetails';
 import { deriveChallengeCardView } from '@/utils/challengeCardView';
 import { buildChallenge } from '../helpers/challengeFixtures';
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 import type { EntryPinsState, SwapBackOffers } from '@/components/app/ChallengeCardDetail';
 import { invalid } from '../helpers/invalid';
-import english = require('../../src/ts/translations/english');
-import latvian = require('../../src/ts/translations/latvian');
+import english = require('../../src/ts/core/translations/english');
+import latvian = require('../../src/ts/core/translations/latvian');
 
 const mockChallengeSettings = {
     hasCustomSettings: false,

@@ -6,10 +6,10 @@
 
 import type * as formattersModule from '../../src/ts/react/utils/formatters';
 
-import type * as rendererModule from '../../src/ts/translations/renderer';
+import type * as rendererModule from '../../src/ts/core/translations/renderer';
 
 const { formatDuration } = require('../../src/ts/react/utils/formatters') as typeof formattersModule;
-const { rendererTranslator } = require('../../src/ts/translations/renderer') as typeof rendererModule;
+const { rendererTranslator } = require('../../src/ts/core/translations/renderer') as typeof rendererModule;
 
 describe('formatDuration', () => {
     test('sub-minute (and zero / negative) reads "<1m", never "0m"', () => {

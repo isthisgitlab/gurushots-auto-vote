@@ -3,9 +3,9 @@
  * (what format 1 meant by it).
  */
 
-import { withImportedTimezone } from '../../src/ts/settings/formatOneTimezone';
+import { withImportedTimezone } from '../../src/ts/core/settings/formatOneTimezone';
 
-import type { StoredConfigV2 } from '../../src/ts/types/config';
+import type { StoredConfigV2 } from '../../src/ts/core/types/config';
 
 const configWith = (app: Record<string, unknown>): StoredConfigV2 => ({
     version: 2,

@@ -10,7 +10,7 @@ import { act, renderHook, waitFor } from '@testing-library/preact';
 import { usePhotoPicker } from '@/hooks/usePhotoPicker';
 import { mockApi } from './helpers/setup';
 
-import type { WindowApi } from '../../src/ts/types/ipc';
+import type { WindowApi } from '../../src/ts/core/types/ipc';
 
 type Listing = Extract<Awaited<ReturnType<WindowApi['getLibraryPhotos']>>, { success: true }>;
 type Answer = Awaited<ReturnType<WindowApi['getLibraryPhotos']>>;

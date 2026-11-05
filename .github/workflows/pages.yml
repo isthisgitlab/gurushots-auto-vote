@@ -1,8 +1,12 @@
 name: Pages
 
 # Builds the README (+ linked docs) into a branded static site and publishes it
-# to GitHub Pages. Requires a one-time repo setting:
-# Settings → Pages → Build and deployment → Source = "GitHub Actions".
+# to GitHub Pages from the branch it is dispatched on: build.yml dispatches it on
+# the branch that was just released (master or develop). The docs come from that
+# branch's checkout, and the /remote/ tree (the phone page and its version pages)
+# from that branch's newest release tag. Requires one-time repo settings:
+# Settings → Pages → Build and deployment → Source = "GitHub Actions", and
+# master and develop in the github-pages environment's allowed deployment branches.
 on:
     # No push trigger: Pages must never go live before a release succeeds.
     # build.yml's create-release job dispatches this workflow only after a
@@ -28,8 +32,8 @@ env:
 
 jobs:
     build:
-        runs-on: ubuntu-slim
-        timeout-minutes: 15
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
         # configure-pages/upload-pages-artifact only need read here — the
         # deploy job below carries pages:write + id-token:write.
         permissions:
@@ -37,12 +41,83 @@ jobs:
         steps:
             - name: Checkout code
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+              with:
+                  persist-credentials: false
 
             - name: Setup build environment
               uses: ./.github/actions/setup-build
 
+            # build-site lists releases through the GitHub API; the token lifts
+            # the anonymous rate limit. Only the dependency install steps run
+            # without it.
             - name: Build site
               run: pnpm build:site
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            # The /remote/ tree is built from this branch's newest release tag, not
+            # the checkout above, so unreleased commits never reach it.
+            #
+            # tag v<this branch's package.json version> is its newest release:
+            # that version changes only in the release job's bump commit, so a
+            # published release for it must exist. Building from the tag instead
+            # of the branch head keeps unreleased commits off Pages.
+            - name: Resolve the released tag
+              id: remote-tag
+              run: |
+                  set -euo pipefail
+                  version=$(gh api "repos/$REPO/contents/package.json?ref=$BRANCH" -H 'Accept: application/vnd.github.raw+json' | jq -r .version)
+                  if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+                      echo "::error::$BRANCH's package.json version '$version' is not a valid version — cannot resolve a release tag."
+                      exit 1
+                  fi
+                  # Only stdout is discarded: gh's own stderr (auth, network, rate
+                  # limit, not found) stays in the log.
+                  if ! gh release view "v$version" --repo "$REPO" > /dev/null; then
+                      echo "::error::no published release for tag v$version — the /remote/ tree is built from released code only. If $BRANCH's version bump was pushed but publishing failed, re-run the release job (create-release) in build.yml."
+                      exit 1
+                  fi
+                  echo "tag=v$version" >> "$GITHUB_OUTPUT"
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  REPO: ${{ github.repository }}
+                  BRANCH: ${{ github.ref_name }}
+
+            - name: Checkout the released code for the remote page
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+              with:
+                  ref: ${{ steps.remote-tag.outputs.tag }}
+                  path: remote-src
+                  persist-credentials: false
+
+            # The composite action installs at the repo root only, so this
+            # install runs directly; Node/pnpm are already set up above.
+            - name: Install the remote page dependencies
+              working-directory: remote-src
+              run: pnpm install --frozen-lockfile
+
+            # build-site/remote.ts reads GITHUB_TOKEN to lift the GitHub API's
+            # anonymous rate limit; the install above deliberately runs without
+            # it so its lifecycle scripts never see a token.
+            - name: Build the remote page
+              working-directory: remote-src
+              run: pnpm build:site
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            # The loader is the pairing link's entry point — without it the
+            # link 404s, so a missing one must fail the job.
+            - name: Require the remote page loader
+              run: |
+                  [ -f remote-src/dist-site/remote/index.html ] || {
+                      echo "::error::remote-src/dist-site/remote/index.html is missing — the release's build:site produced no remote page loader."
+                      exit 1
+                  }
+
+            - name: Publish the remote page from the release
+              run: |
+                  rm -rf dist-site/remote
+                  cp -R remote-src/dist-site/remote dist-site/remote
 
             - name: Configure Pages
               uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6

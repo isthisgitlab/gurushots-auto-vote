@@ -1,7 +1,7 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { ActionButton } from '@/components/ui/ActionButton';
 
-import type { EntryPinKind } from '../../../types/settings';
+import type { EntryPinKind } from '../../../core/types/settings';
 
 // A pressed pin is solid in its feature's colour. An unpressed one is a plain `btn-outline`, which daisyUI draws in
 // `base-content` (border and label) in every theme; the label names the feature, so no colour cue is needed.

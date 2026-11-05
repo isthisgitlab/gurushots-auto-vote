@@ -1,12 +1,12 @@
-import type { Bankroll, Challenge } from '../../types/gurushots';
-import type { RankedChallenge } from '../../types/rendererUtils';
+import type { Bankroll, Challenge } from '../../core/types/gurushots';
+import type { RankedChallenge } from '../../core/types/rendererUtils';
 import { formatDuration, getBoostStatus, getTurboStatus, isBoostWindowOpen } from '@/utils/formatters';
 import { isChallengeLive, isLowExposure } from '@/utils/challengeAlerts';
 import { exposureBand } from '@/utils/statTone';
 import type { StatTone } from '@/utils/statTone';
-import { canKeyUnlock, canSwapEntry, canFillExposure } from '../../voting/currencyActions';
-import { finiteOr } from '../../numbers';
-import { canPlayTurbo } from '../../voting/turboMode';
+import { canKeyUnlock, canSwapEntry, canFillExposure } from '../../core/voting/currencyActions';
+import { finiteOr } from '../../core/numbers';
+import { canPlayTurbo } from '../../core/voting/turboMode';
 
 const LEVEL_NAMES = ['', 'POPULAR', 'SKILLED', 'PREMIER', 'ELITE', 'ALL STAR'];
 

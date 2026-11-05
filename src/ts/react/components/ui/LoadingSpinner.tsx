@@ -1,4 +1,4 @@
-import { rendererTranslator } from '../../../translations/renderer';
+import { rendererTranslator } from '../../../core/translations/renderer';
 
 import type { ComponentChildren } from 'preact';
 

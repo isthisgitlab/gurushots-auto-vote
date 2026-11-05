@@ -3,7 +3,7 @@
  * are redacted, and any other value is logged as it came.
  */
 
-import { loggableSettingValue } from '../../src/ts/settings/logValue';
+import { loggableSettingValue } from '../../src/ts/core/settings/logValue';
 
 describe('loggableSettingValue', () => {
     test('counts a photo list, never lists it', () => {

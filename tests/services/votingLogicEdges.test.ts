@@ -5,16 +5,16 @@
  * Each test pins the observable fallback, not just that the line ran.
  */
 
-import type { Challenge } from '../../src/ts/types/gurushots';
-import settingsModule = require('../../src/ts/settings');
+import type { Challenge } from '../../src/ts/core/types/gurushots';
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import VotingLogic = require('../../src/ts/services/VotingLogic');
-import { __resetSnapUnavailableForTests, markSnapUnavailable } from '../../src/ts/services/turboRunLock';
+import VotingLogic = require('../../src/ts/core/services/VotingLogic');
+import { __resetSnapUnavailableForTests, markSnapUnavailable } from '../../src/ts/core/services/turboRunLock';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import { invalid } from '../helpers/invalid';
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
-jest.mock('../../src/ts/settings');
+jest.mock('../../src/ts/core/settings');
 
 const NOW = 1_700_000_000;
 

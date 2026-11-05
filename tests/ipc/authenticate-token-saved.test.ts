@@ -4,21 +4,21 @@
  * must not look like a login.
  */
 
-jest.mock('../../src/ts/settings');
-jest.mock('../../src/ts/apiFactory');
-jest.mock('../../src/ts/windows/quitGuard', () => ({ rememberChallenges: jest.fn() }));
+jest.mock('../../src/ts/core/settings');
+jest.mock('../../src/ts/core/apiFactory');
+jest.mock('../../src/ts/core/services/boostGuard/selection', () => ({ rememberChallenges: jest.fn() }));
 
 import { invalid } from '../helpers/invalid';
 import { logCategories } from '../helpers/logCategories';
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import apiFactoryModule = require('../../src/ts/apiFactory');
+import apiFactoryModule = require('../../src/ts/core/apiFactory');
 const apiFactory = jest.mocked(apiFactoryModule);
-import loggerModule = require('../../src/ts/logger');
+import loggerModule = require('../../src/ts/core/logger');
 const logger = jest.mocked(loggerModule);
-import type * as actions_handlersModule from '../../src/ts/ipc/actions.handlers';
-const { buildHandlers } = require('../../src/ts/ipc/actions.handlers') as typeof actions_handlersModule;
+import type * as actions_handlersModule from '../../src/ts/core/ipc/actions.handlers';
+const { buildHandlers } = require('../../src/ts/core/ipc/actions.handlers') as typeof actions_handlersModule;
 
 describe('authenticate with settings that cannot be written', () => {
     const authenticate = jest.fn();

@@ -5,7 +5,7 @@
  * returned them on 2026-09-28), trimmed to the sentences that matter.
  */
 
-import type * as photoPickerModule from '../../src/ts/services/photoPicker';
+import type * as photoPickerModule from '../../src/ts/core/services/photoPicker';
 const {
     readChallengeTheme,
     buildSearchTerms,
@@ -16,7 +16,7 @@ const {
     withoutLetterPhrases,
     parseNegation,
     tokenise,
-} = require('../../src/ts/services/photoPicker') as typeof photoPickerModule;
+} = require('../../src/ts/core/services/photoPicker') as typeof photoPickerModule;
 
 const TEN_HOURS = {
     title: '10 Hours',

@@ -2,7 +2,7 @@
  * Waiting for a lock that something else holds for a moment: tried in small steps within a bound, never longer.
  */
 
-import { acquireWithin } from '../src/ts/lockWait';
+import { acquireWithin } from '../src/ts/core/lockWait';
 
 describe('acquireWithin', () => {
     let clock = 0;

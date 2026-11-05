@@ -19,6 +19,7 @@ const path = jest.mocked(pathModule);
 import crypto = require('node:crypto');
 import type * as build_lexiconModule from '../../scripts/build-lexicon';
 import { isArrayOf, isRecordOf, isShape, isString, isUnknown, parseJsonAs } from '../helpers/parseJson';
+import { clearInstalledPlatform } from '../helpers/platform';
 import type { LexiconAsset } from '../../scripts/build-lexicon';
 
 type WrittenAsset = Pick<LexiconAsset, 'surfaces' | 'packed'> & { searchGroups: unknown[] };
@@ -28,6 +29,7 @@ const isAsset = isShape<WrittenAsset>({
     searchGroups: isArrayOf(isUnknown),
 });
 
+clearInstalledPlatform();
 const { main } = require('../../scripts/build-lexicon') as typeof build_lexiconModule;
 
 // The asset main() writes, as buildAsset produces it.

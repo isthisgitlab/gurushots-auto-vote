@@ -7,7 +7,7 @@ import { act, render, screen, waitFor } from './helpers/test-utils';
 import { useScenarios } from '@/api/useScenarios';
 import { refreshScenarioStatuses, useScenarioStatus } from '@/api/useScenarioStatus';
 import { invalid } from '../helpers/invalid';
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 import { parseJsonObject } from '../helpers/parseJson';
 
 function ScenariosProbe({ enabled }: { enabled?: boolean }) {

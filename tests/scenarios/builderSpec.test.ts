@@ -4,14 +4,14 @@
  * vocabulary piece is in the table.
  */
 
-import spec = require('../../src/ts/scenarios/builderSpec');
-import vocabulary = require('../../src/ts/scenarios/vocabulary');
-const { validateScenario } = require('../../src/ts/settings/scenarioSchema') as typeof scenarioSchemaModule;
-const { schemaDefaults } = require('../../src/ts/settings/defaults') as typeof defaultsModule;
-import english = require('../../src/ts/translations/english');
-import latvian = require('../../src/ts/translations/latvian');
-import type * as scenarioSchemaModule from '../../src/ts/settings/scenarioSchema';
-import type * as defaultsModule from '../../src/ts/settings/defaults';
+import spec = require('../../src/ts/core/scenarios/builderSpec');
+import vocabulary = require('../../src/ts/core/scenarios/vocabulary');
+const { validateScenario } = require('../../src/ts/core/settings/scenarioSchema') as typeof scenarioSchemaModule;
+const { schemaDefaults } = require('../../src/ts/core/settings/defaults') as typeof defaultsModule;
+import english = require('../../src/ts/core/translations/english');
+import latvian = require('../../src/ts/core/translations/latvian');
+import type * as scenarioSchemaModule from '../../src/ts/core/settings/scenarioSchema';
+import type * as defaultsModule from '../../src/ts/core/settings/defaults';
 
 const globalDefaults = schemaDefaults();
 

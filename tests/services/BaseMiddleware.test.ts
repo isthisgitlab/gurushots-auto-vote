@@ -5,34 +5,34 @@
  * token-requiring pass-throughs.
  */
 
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     getSetting: jest.fn(),
     setSetting: jest.fn(() => true),
     forgetOpenChallengeIds: jest.fn(),
 }));
 
-jest.mock('../../src/ts/services/auth', () => ({
+jest.mock('../../src/ts/core/services/auth', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/services/auth')>('../../src/ts/services/auth'),
+    ...jest.requireActual<typeof import('../../src/ts/core/services/auth')>('../../src/ts/core/services/auth'),
     clearAuthToken: jest.fn(async () => true),
 }));
 
-jest.mock('../../src/ts/voting/cancellation', () => ({ reset: jest.fn() }));
+jest.mock('../../src/ts/core/voting/cancellation', () => ({ reset: jest.fn() }));
 
-jest.mock('../../src/ts/services/manualVote', () => ({
+jest.mock('../../src/ts/core/services/manualVote', () => ({
     voteAllChallengesManual: jest.fn(async () => ({ voted: 1, skipped: 0 })),
 }));
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import logger = require('../../src/ts/logger');
-import cancellationModule = require('../../src/ts/voting/cancellation');
+import logger = require('../../src/ts/core/logger');
+import cancellationModule = require('../../src/ts/core/voting/cancellation');
 const cancellation = jest.mocked(cancellationModule);
-import type * as authModule from '../../src/ts/services/auth';
-import type * as BaseMiddlewareModule from '../../src/ts/services/BaseMiddleware';
-const { clearAuthToken } = jest.mocked(require('../../src/ts/services/auth') as typeof authModule);
-const { BaseMiddleware } = require('../../src/ts/services/BaseMiddleware') as typeof BaseMiddlewareModule;
-import type { CategoryLogger } from '../../src/ts/logger';
+import type * as authModule from '../../src/ts/core/services/auth';
+import type * as BaseMiddlewareModule from '../../src/ts/core/services/BaseMiddleware';
+const { clearAuthToken } = jest.mocked(require('../../src/ts/core/services/auth') as typeof authModule);
+const { BaseMiddleware } = require('../../src/ts/core/services/BaseMiddleware') as typeof BaseMiddlewareModule;
+import type { CategoryLogger } from '../../src/ts/core/logger';
 import { invalid } from '../helpers/invalid';
 
 /** One shared category logger so assertions can see every call. */

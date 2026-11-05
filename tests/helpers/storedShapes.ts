@@ -1,6 +1,6 @@
-import { isPlainObject } from '../../src/ts/plainObject';
-import type { PhotoStatsFile } from '../../src/ts/services/photoStats';
-import type { ConfigV2 } from '../../src/ts/types/config';
+import { isPlainObject } from '../../src/ts/core/plainObject';
+import type { PhotoStatsFile } from '../../src/ts/core/services/photoStats';
+import type { ConfigV2 } from '../../src/ts/core/types/config';
 import { isNumber, isRecordOf, isShape, isString, optional } from './parseJson';
 import type { Guard } from './parseJson';
 

@@ -2,7 +2,7 @@
  * Pure draft edits for the scenario builder.
  */
 
-import model = require('../../src/ts/scenarios/builderModel');
+import model = require('../../src/ts/core/scenarios/builderModel');
 
 describe('setIn', () => {
     test('replaces a nested value without mutating the original', () => {

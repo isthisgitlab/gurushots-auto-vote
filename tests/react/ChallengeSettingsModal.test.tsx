@@ -13,8 +13,8 @@ import { TALL_MODAL_BOX_HEIGHT } from '@/components/ui/Modal';
 import { mockApi } from './helpers/setup';
 import { titleRuleInfo } from './helpers/titleRules';
 import type { useSettingsSchema } from '@/api/useSettingsSchema';
-import type { Challenge } from '../../src/ts/types/gurushots';
-import type { ChallengeValues } from '../../src/ts/types/settings';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
+import type { ChallengeValues } from '../../src/ts/core/types/settings';
 import { invalid } from '../helpers/invalid';
 
 // Belt-and-suspenders: the global setup wires window.api, but the

@@ -6,48 +6,49 @@
  * installed without a WebView.
  */
 
-import type * as bridgeModule from '../../src/ts/bridge/capacitor';
-import type * as settingsModule from '../../src/ts/settings';
-import type * as settingsHandlersModule from '../../src/ts/ipc/settings.handlers';
-import type * as updateCheckerModule from '../../src/ts/services/UpdateChecker';
-import type * as installerModule from '../../src/ts/services/AndroidUpdateInstaller';
-import type * as authModule from '../../src/ts/services/auth';
-import type * as loggerModule from '../../src/ts/logger';
-import type { CategoryLogger, GuiLogSink } from '../../src/ts/logger';
-import type { CapacitorGlobals } from '../../src/ts/types/capacitor';
-import type { WindowApi } from '../../src/ts/types/ipc';
+import type * as bridgeModule from '../../src/ts/shells/capacitor/bridge/capacitor';
+import type * as settingsModule from '../../src/ts/core/settings';
+import type * as updateCheckerModule from '../../src/ts/core/services/UpdateChecker';
+import type * as installerModule from '../../src/ts/shells/capacitor/AndroidUpdateInstaller';
+import type * as logHandlersModule from '../../src/ts/core/ipc/log.handlers';
+import type * as authModule from '../../src/ts/core/services/auth';
+import type * as loggerModule from '../../src/ts/core/logger';
+import type { CategoryLogger, GuiLogSink } from '../../src/ts/core/logger';
+import type { CapacitorGlobals } from '../../src/ts/core/types/capacitor';
+import type { WindowApi } from '../../src/ts/core/types/ipc';
 import { invalid } from '../helpers/invalid';
+import { resetPlatformKind } from '../helpers/platformKind';
+import { platformKind } from '../../src/ts/core/platform/kind';
 
-let mockSettingsDeps: Parameters<typeof settingsHandlersModule.buildHandlers>[0] | null = null;
-jest.mock('../../src/ts/ipc/settings.handlers', () => ({
-    buildHandlers: (deps: Parameters<typeof settingsHandlersModule.buildHandlers>[0]) => {
-        mockSettingsDeps = deps;
-        return { 'get-settings': jest.fn(async () => ({ theme: 'dark' })) };
-    },
+jest.mock('../../src/ts/core/ipc/settings.handlers', () => ({
+    buildHandlers: () => ({ 'get-settings': jest.fn(async () => ({ theme: 'dark' })) }),
 }));
-jest.mock('../../src/ts/ipc/voting.handlers', () => ({
+jest.mock('../../src/ts/core/ipc/voting.handlers', () => ({
     buildHandlers: () => ({ 'gui-vote': jest.fn(async (_event) => ({ success: true, via: 'gui-vote' })) }),
 }));
-jest.mock('../../src/ts/ipc/log.handlers', () => ({ buildHandlers: () => ({}) }));
-jest.mock('../../src/ts/ipc/actions.handlers', () => ({
+const mockLogBuildHandlers = jest.fn<ReturnType<typeof logHandlersModule.buildHandlers>, []>(() =>
+    invalid<ReturnType<typeof logHandlersModule.buildHandlers>>({}),
+);
+jest.mock('../../src/ts/core/ipc/log.handlers', () => ({ buildHandlers: mockLogBuildHandlers }));
+jest.mock('../../src/ts/core/ipc/actions.handlers', () => ({
     buildHandlers: () => ({
         'apply-boost-to-entry': jest.fn(async (_event: unknown, id: string | number) => ({ success: true, id })),
     }),
 }));
-jest.mock('../../src/ts/ipc/computations.handlers', () => ({ buildHandlers: () => ({}) }));
-jest.mock('../../src/ts/ipc/currency.handlers', () => ({ buildHandlers: () => ({}) }));
-jest.mock('../../src/ts/services/AndroidUpdateInstaller', () => ({ downloadAndInstall: jest.fn() }));
+jest.mock('../../src/ts/core/ipc/computations.handlers', () => ({ buildHandlers: () => ({}) }));
+jest.mock('../../src/ts/core/ipc/currency.handlers', () => ({ buildHandlers: () => ({}) }));
+jest.mock('../../src/ts/shells/capacitor/AndroidUpdateInstaller', () => ({ downloadAndInstall: jest.fn() }));
 const mockHasBundledModel = jest.fn(async () => true);
-jest.mock('../../src/ts/services/visionVerifier', () => ({ hasBundledModel: mockHasBundledModel }));
-jest.mock('../../src/ts/services/UpdateChecker', () => ({
+jest.mock('../../src/ts/core/services/visionVerifier', () => ({ hasBundledModel: mockHasBundledModel }));
+jest.mock('../../src/ts/core/services/UpdateChecker', () => ({
     checkForUpdates: jest.fn(),
     getReleasesUrl: () => 'https://example.com/releases',
 }));
-jest.mock('../../src/ts/services/auth', () => {
+jest.mock('../../src/ts/core/services/auth', () => {
     class LogoutNotSavedError extends Error {}
     return { logout: jest.fn(async () => true), LogoutNotSavedError };
 });
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     getSetting: jest.fn(),
     setSetting: jest.fn(),
     seedIntentProfiles: jest.fn(),
@@ -69,22 +70,39 @@ describe('Capacitor bridge', () => {
     beforeEach(() => {
         delete g.api;
         jest.resetModules();
-        settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
-        updateChecker = jest.mocked(require('../../src/ts/services/UpdateChecker') as typeof updateCheckerModule);
-        installer = jest.mocked(require('../../src/ts/services/AndroidUpdateInstaller') as typeof installerModule);
-        auth = jest.mocked(require('../../src/ts/services/auth') as typeof authModule);
+        settings = jest.mocked(require('../../src/ts/core/settings') as typeof settingsModule);
+        updateChecker = jest.mocked(require('../../src/ts/core/services/UpdateChecker') as typeof updateCheckerModule);
+        installer = jest.mocked(
+            require('../../src/ts/shells/capacitor/AndroidUpdateInstaller') as typeof installerModule,
+        );
+        auth = jest.mocked(require('../../src/ts/core/services/auth') as typeof authModule);
         log = { error: jest.fn(), warning: jest.fn(), info: jest.fn(), debug: jest.fn() };
-        jest.mocked(require('../../src/ts/logger') as typeof loggerModule).withCategory.mockReturnValue(invalid(log));
-        bridge = require('../../src/ts/bridge/capacitor') as typeof bridge;
+        jest.mocked(require('../../src/ts/core/logger') as typeof loggerModule).withCategory.mockReturnValue(
+            invalid(log),
+        );
+        bridge = require('../../src/ts/shells/capacitor/bridge/capacitor') as typeof bridge;
         api = bridge.installBridge();
     });
 
     afterEach(() => {
         delete g.api;
         delete g.sendLogToGUI;
+        delete g.Capacitor;
+        resetPlatformKind();
     });
 
     describe('installation', () => {
+        test('the remote-access pairing channels answer not-applicable on Android', async () => {
+            for (const method of ['getRemoteAccess', 'setRemoteAccess', 'resetRemotePairing', 'logRemoteInfo']) {
+                await expect(
+                    (api as unknown as Record<string, () => Promise<{ success: boolean; error: string }>>)[method](),
+                ).resolves.toEqual({
+                    success: false,
+                    error: expect.stringContaining('Remote access pairing is not available in the Android app'),
+                });
+            }
+        });
+
         test('exposes the api on globalThis and adapts (event, ...args) handlers to (...args)', async () => {
             expect(g.api).toBe(api);
             // Installing reads and writes no setting: the stored ones are not hydrated yet (see seedBridgeProfiles).
@@ -105,6 +123,37 @@ describe('Capacitor bridge', () => {
             bridge.seedBridgeProfiles();
 
             expect(settings.seedIntentProfiles).toHaveBeenCalledTimes(1);
+        });
+
+        test('marks the platform kind capacitor when the runtime probes native', () => {
+            g.Capacitor = { isNativePlatform: () => true };
+            bridge.installBridge();
+
+            expect(platformKind()).toBe('capacitor');
+        });
+
+        test('does not mark when the Capacitor runtime is absent (no probe to ask)', () => {
+            bridge.installBridge();
+
+            expect(platformKind()).toBe('electron');
+        });
+
+        test('does not mark when the probe answers false (a Capacitor web target)', () => {
+            g.Capacitor = { isNativePlatform: () => false };
+            bridge.installBridge();
+
+            expect(platformKind()).toBe('electron');
+        });
+
+        test('marks the kind before a later install step throws, so a failed install still reads capacitor', () => {
+            g.Capacitor = { isNativePlatform: () => true };
+            mockLogBuildHandlers.mockImplementationOnce(() => {
+                throw new Error('log handlers unavailable');
+            });
+
+            expect(() => bridge.installBridge()).toThrow('log handlers unavailable');
+
+            expect(platformKind()).toBe('capacitor');
         });
 
         test('a failing intent-profile seed is logged and does not throw', () => {
@@ -150,7 +199,10 @@ describe('Capacitor bridge', () => {
             const onChange = jest.fn();
             api.onSettingsChanged(onChange);
 
-            mockSettingsDeps!.broadcastSettingsChange!({ language: 'lv' });
+            // The write announcements reach this channel through the
+            // installed platform's windows (capacitorPlatform), which emit
+            // here; the pub/sub delivery is what the bridge owns.
+            bridge.emit('settings-changed', { language: 'lv' });
 
             expect(onChange).toHaveBeenCalledWith({ language: 'lv' });
         });
@@ -390,17 +442,18 @@ describe('Capacitor bridge', () => {
             await expect(api.reloadWindow()).resolves.toEqual({ success: true });
         });
 
-        test('once all local data is deleted the WebView reloads into the login screen', () => {
-            const reload = jest.fn();
-            globalThis.location = invalid({ reload });
-
-            mockSettingsDeps!.afterWipe!();
-
-            expect(reload).toHaveBeenCalledTimes(1);
-        });
-
         test('refreshMenu is a successful no-op on mobile', async () => {
             await expect(api.refreshMenu()).resolves.toEqual({ success: true });
+        });
+
+        test('isCapacitorNative: a global with a platform probe, never its result', () => {
+            delete g.Capacitor;
+            expect(bridge.isCapacitorNative()).toBe(false);
+            // A Capacitor web target: the global is present, the probe is not.
+            g.Capacitor = {};
+            expect(bridge.isCapacitorNative()).toBe(false);
+            g.Capacitor = { isNativePlatform: () => false };
+            expect(bridge.isCapacitorNative()).toBe(true);
         });
 
         test('openExternalUrl refuses non-https schemes', async () => {

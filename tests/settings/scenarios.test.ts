@@ -4,14 +4,14 @@
  * headless-store seam so loadSettings/saveSettings round-trip without fs.
  */
 
-import settings = require('../../src/ts/settings');
-import loggerModule = require('../../src/ts/logger');
+import settings = require('../../src/ts/core/settings');
+import loggerModule = require('../../src/ts/core/logger');
 const logger = jest.mocked(loggerModule);
-import type * as templatesModule from '../../src/ts/scenarios/templates';
-import type * as scenariosModule from '../../src/ts/settings/scenarios';
-const { SCENARIO_TEMPLATES } = require('../../src/ts/scenarios/templates') as typeof templatesModule;
+import type * as templatesModule from '../../src/ts/core/scenarios/templates';
+import type * as scenariosModule from '../../src/ts/core/settings/scenarios';
+const { SCENARIO_TEMPLATES } = require('../../src/ts/core/scenarios/templates') as typeof templatesModule;
 import { invalid } from '../helpers/invalid';
-import type { ConfigV2 } from '../../src/ts/types/config';
+import type { ConfigV2 } from '../../src/ts/core/types/config';
 import { isConfig } from '../helpers/storedShapes';
 import { parseJsonAs } from '../helpers/parseJson';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
@@ -21,7 +21,7 @@ type SaveRefused = Extract<ReturnType<typeof settings.saveScenario>, { ok: false
 type PreviewAccepted = Extract<ReturnType<typeof settings.previewScenarioImport>, { ok: true }>;
 type PreviewRefused = Extract<ReturnType<typeof settings.previewScenarioImport>, { ok: false }>;
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const category = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
         info: jest.fn(),
@@ -242,9 +242,9 @@ describe('settings facade — scenarios', () => {
         // printDocument prints an export without redacting it, on the ground that a scenario holds no credentials.
         test('an exported scenario holds no key a log would redact, no sign-in and no account identifier', () => {
             const { SENSITIVE_KEY_RE } =
-                require('../../src/ts/logger/sanitize') as typeof import('../../src/ts/logger/sanitize');
+                require('../../src/ts/core/logger/sanitize') as typeof import('../../src/ts/core/logger/sanitize');
             const { PRIVATE_SETTING_KEYS } =
-                require('../../src/ts/format/settingsLogMask') as typeof import('../../src/ts/format/settingsLogMask');
+                require('../../src/ts/core/format/settingsLogMask') as typeof import('../../src/ts/core/format/settingsLogMask');
             const keysOf = (value: unknown): string[] =>
                 value !== null && typeof value === 'object'
                     ? Object.entries(value).flatMap(([key, inner]) => [key, ...keysOf(inner)])
@@ -369,17 +369,17 @@ describe('settings facade — scenarios when the save fails', () => {
 
     beforeEach(() => {
         jest.isolateModules(() => {
-            jest.doMock('../../src/ts/settings/persistence', () => {
-                const actual = jest.requireActual<typeof import('../../src/ts/settings/persistence')>(
-                    '../../src/ts/settings/persistence',
+            jest.doMock('../../src/ts/core/settings/persistence', () => {
+                const actual = jest.requireActual<typeof import('../../src/ts/core/settings/persistence')>(
+                    '../../src/ts/core/settings/persistence',
                 );
                 return { ...actual, loadSettings: () => actual.loadSettings(), saveSettings: () => false };
             });
-            scenarios = require('../../src/ts/settings/scenarios') as typeof scenarios;
+            scenarios = require('../../src/ts/core/settings/scenarios') as typeof scenarios;
         });
     });
 
-    afterEach(() => jest.dontMock('../../src/ts/settings/persistence'));
+    afterEach(() => jest.dontMock('../../src/ts/core/settings/persistence'));
 
     test('save and delete report the failure', () => {
         expect((scenarios.saveScenario(simple()) as SaveRefused).issues[0].message).toContain('could not be saved');
@@ -387,15 +387,15 @@ describe('settings facade — scenarios when the save fails', () => {
 
     test('delete reports false when the save fails', () => {
         jest.isolateModules(() => {
-            jest.doMock('../../src/ts/settings/persistence', () => {
-                const actual = jest.requireActual<typeof import('../../src/ts/settings/persistence')>(
-                    '../../src/ts/settings/persistence',
+            jest.doMock('../../src/ts/core/settings/persistence', () => {
+                const actual = jest.requireActual<typeof import('../../src/ts/core/settings/persistence')>(
+                    '../../src/ts/core/settings/persistence',
                 );
                 const blob = actual.loadSettings();
                 blob.scenarios = { Plan: simple() };
                 return { ...actual, loadSettings: () => structuredClone(blob), saveSettings: () => false };
             });
-            const isolated = require('../../src/ts/settings/scenarios') as typeof scenariosModule;
+            const isolated = require('../../src/ts/core/settings/scenarios') as typeof scenariosModule;
             expect(isolated.deleteScenario('Plan')).toBe(false);
         });
     });

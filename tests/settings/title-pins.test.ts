@@ -12,14 +12,14 @@ import { invalid } from '../helpers/invalid';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import { isRecordOf, isString, parseJsonAs } from '../helpers/parseJson';
 
-import type * as settingsModule from '../../src/ts/settings';
-import type * as titlePinsModule from '../../src/ts/settings/titlePins';
-import type * as jsonStoreModule from '../../src/ts/settings/jsonStore';
+import type * as settingsModule from '../../src/ts/core/settings';
+import type * as titlePinsModule from '../../src/ts/core/settings/titlePins';
+import type * as jsonStoreModule from '../../src/ts/core/settings/jsonStore';
 import type { MemoryStore } from '../helpers/headlessStore';
 
 const PINS_KEY = 'gs_title_pins';
 
-jest.mock('../../src/ts/logger', () => ({
+jest.mock('../../src/ts/core/logger', () => ({
     info: jest.fn(),
     warning: jest.fn(),
     error: jest.fn(),
@@ -51,7 +51,7 @@ describe('settings facade — first-seen title pins', () => {
         jest.resetModules();
         jest.doMock('electron', () => ({}));
         store = installHeadlessStore();
-        settings = require('../../src/ts/settings') as typeof settingsModule;
+        settings = require('../../src/ts/core/settings') as typeof settingsModule;
     });
 
     afterEach(() => {
@@ -98,16 +98,16 @@ describe('settings facade — first-seen title pins', () => {
 
     test('a pin store that cannot be written reports the merge as not saved', () => {
         jest.resetModules();
-        jest.doMock('../../src/ts/settings/storage', () => ({
+        jest.doMock('../../src/ts/core/settings/storage', () => ({
             __esModule: true,
             createJsonStore: () => ({
                 readRaw: () => null,
                 updateNow: () => 'failed',
             }),
         }));
-        const isolated = require('../../src/ts/settings/titlePins') as typeof titlePinsModule;
+        const isolated = require('../../src/ts/core/settings/titlePins') as typeof titlePinsModule;
         expect(isolated.mergeTitlePins({ 1: 'Pink In Nature' }, [])).toBe(false);
-        jest.dontMock('../../src/ts/settings/storage');
+        jest.dontMock('../../src/ts/core/settings/storage');
     });
 
     test('a cache that is wiped after it was read holds no pins any more', () => {
@@ -116,7 +116,7 @@ describe('settings facade — first-seen title pins', () => {
 
         // A local-data wipe: the key is gone from the native store and the store forgets what it last wrote.
         store.keys.delete(PINS_KEY);
-        (require('../../src/ts/settings/jsonStore') as typeof jsonStoreModule).discardStores();
+        (require('../../src/ts/core/settings/jsonStore') as typeof jsonStoreModule).discardStores();
 
         expect(settings.getTitlePins()).toEqual({});
     });

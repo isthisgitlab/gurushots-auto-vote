@@ -12,7 +12,9 @@
 let storeData: string | null = null;
 const mockInitializeAsync = jest.fn(async () => {});
 const mockFlushPendingWrites = jest.fn(async () => {});
-jest.mock('../../src/ts/settings/storage', () => ({
+jest.mock('../../src/ts/core/settings/storage', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/core/settings/storage')>('../../src/ts/core/settings/storage'),
     createJsonStore: () => ({
         readRaw: () => storeData,
         writeRaw: (data: string) => {
@@ -24,15 +26,15 @@ jest.mock('../../src/ts/settings/storage', () => ({
     }),
 }));
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const level = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return { withCategory: jest.fn(() => level), __level: level };
 });
 
-import photoStats = require('../../src/ts/services/photoStats');
-import type { PickerPhoto } from '../../src/ts/types/photoPicker';
-import type { RankDeps } from '../../src/ts/types/autoFill';
-import type { CategoryLogger } from '../../src/ts/logger';
+import photoStats = require('../../src/ts/core/services/photoStats');
+import type { PickerPhoto, ScoredCandidate } from '../../src/ts/core/types/photoPicker';
+import type { RankDeps } from '../../src/ts/core/types/autoFill';
+import type { CategoryLogger } from '../../src/ts/core/logger';
 import { invalid } from '../helpers/invalid';
 import { isPhotoStatsFile } from '../helpers/storedShapes';
 import { parseJson, parseJsonAs } from '../helpers/parseJson';
@@ -46,7 +48,7 @@ const {
     MAX_CACHE_ENTRIES,
     STATS_TTL_MS,
 } = photoStats;
-const { __level: log } = invalid<{ __level: LevelMock }>(require('../../src/ts/logger'));
+const { __level: log } = invalid<{ __level: LevelMock }>(require('../../src/ts/core/logger'));
 
 /** The per-category logger double the logger mock above hands out (and exposes as `__level`). */
 type LevelMock = {
@@ -683,5 +685,96 @@ describe('photoStats.persistCache trims in place', () => {
         expect(persisted['late-one']).toBeDefined();
         expect(persisted['trim-one']).toBeDefined();
         expect(Object.keys(persisted).length).toBeLessThanOrEqual(MAX_CACHE_ENTRIES);
+    });
+});
+
+describe('photoStats.createVotesLoader', () => {
+    const { createVotesLoader } = photoStats;
+    const candidate = (id: string, extra: Partial<ScoredCandidate> = {}): ScoredCandidate =>
+        invalid<ScoredCandidate>({
+            id,
+            photo: photo(id),
+            statsKnown: false,
+            votes: 0,
+            ...extra,
+        });
+    const getImageDataOf = () =>
+        jest
+            .fn<ReturnType<GetImageData>, Parameters<GetImageData>>()
+            .mockImplementation(async (id) => payload(Number(String(id).replace(/\D/g, '')) * 100, 5));
+
+    beforeEach(() => {
+        storeData = null;
+        photoStats.__resetForTests();
+        resetPassState();
+        jest.clearAllMocks();
+    });
+
+    test('a photo already measured answers from its scored entry; only the others are looked up, with the token', async () => {
+        const getImageData = getImageDataOf();
+        const load = createVotesLoader(
+            [candidate('p1', { statsKnown: true, votes: 40 }), candidate('p2'), candidate('p3')],
+            'tok',
+            {
+                getImageData,
+                statsBudget: createStatsBudget(),
+            },
+        );
+        const votes = await load(['p1', 'p2', 'p3']);
+        expect(getImageData.mock.calls.map(([id, token]) => [String(id), token]).sort()).toEqual([
+            ['p2', 'tok'],
+            ['p3', 'tok'],
+        ]);
+        expect(votes).toEqual(
+            new Map([
+                ['p1', { votes: 40, statsKnown: true }],
+                ['p2', { votes: 200, statsKnown: true }],
+                ['p3', { votes: 300, statsKnown: true }],
+            ]),
+        );
+    });
+
+    test('everything already measured costs no request', async () => {
+        const getImageData = getImageDataOf();
+        const load = createVotesLoader([candidate('p1', { statsKnown: true, votes: 7 })], 'tok', {
+            getImageData,
+            statsBudget: createStatsBudget(),
+        });
+        expect(await load(['p1'])).toEqual(new Map([['p1', { votes: 7, statsKnown: true }]]));
+        expect(getImageData).not.toHaveBeenCalled();
+    });
+
+    test('a photo that cannot be measured is answered as stats-unknown, never as zero votes', async () => {
+        const getImageData = jest.fn<ReturnType<GetImageData>, Parameters<GetImageData>>().mockResolvedValue(null);
+        const load = createVotesLoader([candidate('p1')], 'tok', { getImageData, statsBudget: createStatsBudget() });
+        const votes = await load(['p1']);
+        expect(votes.get('p1')).toEqual({ votes: 0, statsKnown: false });
+    });
+
+    test('lookups spend the budget it was given, not the pass budget', async () => {
+        const getImageData = getImageDataOf();
+        const own = createStatsBudget(1);
+        const load = createVotesLoader([candidate('p1'), candidate('p2')], 'tok', { getImageData, statsBudget: own });
+        const votes = await load(['p1', 'p2']);
+        expect(own.fetched).toBe(1);
+        expect(getImageData).toHaveBeenCalledTimes(1);
+        expect([...votes.values()].map((stat) => stat.statsKnown).sort()).toEqual([false, true]);
+        // The pass's own budget still has all of its lookups: a later contested enrichment is not starved.
+        const pass = getImageDataOf();
+        await enrichCandidates([photo('later-1'), photo('later-2')], 'tok', { getImageData: pass });
+        expect(pass).toHaveBeenCalledTimes(2);
+    });
+
+    test('persist: false keeps the numbers out of the stats cache; the default writes them', async () => {
+        const getImageData = getImageDataOf();
+        const scored = [candidate('p1')];
+        await createVotesLoader(scored, 'tok', { getImageData, statsBudget: createStatsBudget(), persist: false })([
+            'p1',
+        ]);
+        expect(storeData).toBeNull();
+        await createVotesLoader(scored, 'tok', { getImageData, statsBudget: createStatsBudget() })(['p1']);
+        // Read again through a call: TypeScript has narrowed the variable to null after the check above.
+        const written = (): string | null => storeData;
+        expect(parseJsonAs(String(written()), isPhotoStatsFile).photos.p1).toBeDefined();
     });
 });

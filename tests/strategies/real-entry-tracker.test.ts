@@ -1,5 +1,5 @@
 /**
- * Binder wiring test for the voteOnNewEntry entry tracker in src/ts/strategies/real/index.ts.
+ * Binder wiring test for the voteOnNewEntry entry tracker in src/ts/core/strategies/real/index.ts.
  *
  * The mock fork of this loop once silently lost auto-fill, emergency fill and
  * turbo-earn wiring, which is the documented reason the shared orchestrator
@@ -9,18 +9,18 @@
  * tests/mock/index.test.ts holds the mock half.
  */
 
-jest.mock('../../src/ts/strategies/real/activeChallenges', () => ({ getActiveChallenges: jest.fn() }));
-jest.mock('../../src/ts/api/voting', () => ({ getVoteImages: jest.fn(), submitVotes: jest.fn() }));
-jest.mock('../../src/ts/strategies/real/applyBoost', () => ({ applyBoost: jest.fn() }));
-jest.mock('../../src/ts/api/boost', () => ({ applyBoostToEntry: jest.fn() }));
-jest.mock('../../src/ts/api/turbo', () => ({
+jest.mock('../../src/ts/core/strategies/real/activeChallenges', () => ({ getActiveChallenges: jest.fn() }));
+jest.mock('../../src/ts/core/api/voting', () => ({ getVoteImages: jest.fn(), submitVotes: jest.fn() }));
+jest.mock('../../src/ts/core/strategies/real/applyBoost', () => ({ applyBoost: jest.fn() }));
+jest.mock('../../src/ts/core/api/boost', () => ({ applyBoostToEntry: jest.fn() }));
+jest.mock('../../src/ts/core/api/turbo', () => ({
     getChallengeTurbo: jest.fn(),
     submitTurboSelection: jest.fn(),
     applyTurbo: jest.fn(),
     TURBO_SELECTION_DELAY_MS: 0,
 }));
-jest.mock('../../src/ts/api/submissions', () => ({ getEligiblePhotos: jest.fn(), submitToChallenge: jest.fn() }));
-jest.mock('../../src/ts/metadata', () => ({
+jest.mock('../../src/ts/core/api/submissions', () => ({ getEligiblePhotos: jest.fn(), submitToChallenge: jest.fn() }));
+jest.mock('../../src/ts/core/metadata', () => ({
     cleanupStaleMetadata: jest.fn(() => true),
     getChallengeEntryIds: jest.fn(() => null),
     setChallengeEntryIds: jest.fn(() => true),
@@ -29,7 +29,7 @@ jest.mock('../../src/ts/metadata', () => ({
     MAX_TRACKED_ENTRY_IDS: 64,
     MAX_ENTRY_ID_LENGTH: 64,
 }));
-jest.mock('../../src/ts/services/VotingLogic', () => ({
+jest.mock('../../src/ts/core/services/VotingLogic', () => ({
     resolvePin: jest.fn(() => ({ state: 'none' })),
     shouldApplyBoost: jest.fn(() => false),
     getEffectiveBoostTime: jest.fn(() => 3600),
@@ -38,27 +38,27 @@ jest.mock('../../src/ts/services/VotingLogic', () => ({
     evaluateVotingDecision: jest.fn(() => ({ shouldVote: false, voteReason: 'skip', targetExposure: 100 })),
     orderDeadlineActions: jest.fn(() => []),
 }));
-jest.mock('../../src/ts/services/autoFill', () => ({
+jest.mock('../../src/ts/core/services/autoFill', () => ({
     maybeAutoFillChallenge: jest.fn(async () => 'skipped'),
     maybeEmergencyFillChallenge: jest.fn(async () => 'skipped'),
     submitNewEntryForAction: jest.fn(async () => ({ ok: false, reason: 'none' })),
     reflectNewEntry: jest.fn(),
 }));
-jest.mock('../../src/ts/settings', () => ({ getEffectiveSetting: jest.fn(() => false) }));
+jest.mock('../../src/ts/core/settings', () => ({ getEffectiveSetting: jest.fn(() => false) }));
 
 const { getActiveChallenges } = jest.mocked(
-    require('../../src/ts/strategies/real/activeChallenges') as typeof activeChallengesModule,
+    require('../../src/ts/core/strategies/real/activeChallenges') as typeof activeChallengesModule,
 );
-import metadataModule = require('../../src/ts/metadata');
+import metadataModule = require('../../src/ts/core/metadata');
 const metadata = jest.mocked(metadataModule);
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import votingLogicModule = require('../../src/ts/services/VotingLogic');
+import votingLogicModule = require('../../src/ts/core/services/VotingLogic');
 const votingLogic = jest.mocked(votingLogicModule);
-import type * as activeChallengesModule from '../../src/ts/strategies/real/activeChallenges';
-import type * as realModule from '../../src/ts/strategies/real';
+import type * as activeChallengesModule from '../../src/ts/core/strategies/real/activeChallenges';
+import type * as realModule from '../../src/ts/core/strategies/real';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-const { fetchChallengesAndVote } = require('../../src/ts/strategies/real') as typeof realModule;
+const { fetchChallengesAndVote } = require('../../src/ts/core/strategies/real') as typeof realModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
 const NOW = Math.floor(Date.now() / 1000);

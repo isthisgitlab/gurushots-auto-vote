@@ -6,18 +6,18 @@
  * alternate token keys a live response can use.
  */
 
-jest.mock('../../src/ts/settings', () => ({ loadSettings: jest.fn() }));
-jest.mock('../../src/ts/logger', () => ({
+jest.mock('../../src/ts/core/settings', () => ({ loadSettings: jest.fn() }));
+jest.mock('../../src/ts/core/logger', () => ({
     withCategory: jest.fn(() => ({ info: jest.fn(), warning: jest.fn(), error: jest.fn() })),
 }));
 
 import { invalid } from '../helpers/invalid';
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import loggerModule = require('../../src/ts/logger');
+import loggerModule = require('../../src/ts/core/logger');
 const logger = jest.mocked(loggerModule);
-import type * as authModule from '../../src/ts/services/auth';
-const { extractAuthResult, requireAuthToken } = require('../../src/ts/services/auth') as typeof authModule;
+import type * as authModule from '../../src/ts/core/services/auth';
+const { extractAuthResult, requireAuthToken } = require('../../src/ts/core/services/auth') as typeof authModule;
 
 describe('extractAuthResult', () => {
     test('null / undefined response → no-response failure', () => {

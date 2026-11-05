@@ -59,11 +59,6 @@ jest.mock('fs', () => ({
     }),
 }));
 
-jest.mock('../src/ts/runtime', () => ({
-    isCapacitor: jest.fn(() => false),
-    isHeadlessService: jest.fn(() => false),
-}));
-
 const mockStore = {
     initializeAsync: jest.fn(),
     refreshAsync: jest.fn(async () => true),
@@ -71,19 +66,20 @@ const mockStore = {
     readRaw: jest.fn(() => '{"c1":{}}'),
     updateThrough: jest.fn(async () => 'saved' as const),
 };
-jest.mock('../src/ts/settings/storage', () => ({
+jest.mock('../src/ts/core/settings/storage', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../src/ts/core/settings/storage')>('../src/ts/core/settings/storage'),
     createJsonStore: jest.fn(() => mockStore),
     getSettingsPath: jest.fn(() => '/cfg/settings.json'),
 }));
 
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
-import runtimeModule = require('../src/ts/runtime');
-const runtime = jest.mocked(runtimeModule);
-import logger = require('../src/ts/logger');
-import storageModule = require('../src/ts/settings/storage');
+import logger = require('../src/ts/core/logger');
+import storageModule = require('../src/ts/core/settings/storage');
 const storage = jest.mocked(storageModule);
-import joinState = require('../src/ts/joinStateStore');
+import joinState = require('../src/ts/core/joinStateStore');
+import { installHeadlessTestPlatform, installWebviewTestPlatform } from './helpers/platform';
 import { invalid } from './helpers/invalid';
 
 // Captured at require time: tests/setup.ts clears every mock before each test.
@@ -101,7 +97,7 @@ describe('store wiring', () => {
     test('claims read as the store has them, and as unreadable (a throw) when the store was never filled', () => {
         expect(joinState.joinStateStore.readRaw()).toBe('{"c1":{}}');
         // The app window, whose start-up read has not filled the cache: not "no claims".
-        runtime.isCapacitor.mockReturnValueOnce(true);
+        installWebviewTestPlatform();
         expect(() => joinState.joinStateStore.readRaw()).toThrow('the saved claims have not loaded');
     });
 
@@ -110,7 +106,7 @@ describe('store wiring', () => {
         await expect(joinState.joinStateStore.updateThrough(update)).resolves.toBe('saved');
         expect(mockStore.updateThrough).toHaveBeenCalledWith(update);
         mockStore.updateThrough.mockClear();
-        runtime.isCapacitor.mockReturnValueOnce(true);
+        installWebviewTestPlatform();
         await expect(joinState.joinStateStore.updateThrough(update)).resolves.toBe('failed');
         expect(mockStore.updateThrough).not.toHaveBeenCalled();
     });
@@ -136,19 +132,17 @@ describe('acquireUnlockLock', () => {
         jest.clearAllMocks();
         mockFiles.clear();
         mockFds.clear();
-        runtime.isCapacitor.mockReturnValue(false);
-        runtime.isHeadlessService.mockReturnValue(false);
     });
 
     afterEach(() => {
         jest.useRealTimers();
     });
 
-    test.each<[string, 'isCapacitor' | 'isHeadlessService']>([
-        ['Capacitor', 'isCapacitor'],
-        ['headless service', 'isHeadlessService'],
-    ])('is a no-op on %s (single-process surfaces)', (_label, fn) => {
-        runtime[fn].mockReturnValue(true);
+    test.each<[string, () => void]>([
+        ['Capacitor', installWebviewTestPlatform],
+        ['headless service', installHeadlessTestPlatform],
+    ])('is a no-op on %s (single-process surfaces)', (_label, install) => {
+        install();
         const lock = joinState.acquireUnlockLock('c1');
         expect(lock.ok).toBe(true);
         expect(() => lock.release()).not.toThrow();

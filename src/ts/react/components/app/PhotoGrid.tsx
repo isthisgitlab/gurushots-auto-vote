@@ -5,8 +5,8 @@ import { ipcErrorText } from '@/api/ipcErrorText';
 import { reorderLoadedPhotos } from '@/utils/loadedPhotoSort';
 import { ListingHeader } from './ListingHeader';
 import { MissingTile, PendingTile, PhotoTile, SavedPickTile } from './PhotoTile';
-import { orderByUploadDate } from '../../../librarySort';
-import { MAX_CHOSEN_PHOTOS } from '../../../settings/limits';
+import { orderByUploadDate } from '../../../core/librarySort';
+import { MAX_CHOSEN_PHOTOS } from '../../../core/settings/limits';
 
 import type { FocusEvent, ReactNode } from 'react';
 import type { usePhotoPicker } from '@/hooks/usePhotoPicker';

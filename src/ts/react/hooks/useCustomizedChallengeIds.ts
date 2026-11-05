@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { useIpcQuery } from '@/api/useIpcQuery';
 import * as ipc from '@/api/ipc';
-import { hasPostJoinInlineValue } from '../../settings/ruleBehaviour';
+import { hasPostJoinInlineValue } from '../../core/settings/ruleBehaviour';
 
 // Stable empty result so consumers never see a changing identity while the
 // first fetch is in flight (or after a failed one).

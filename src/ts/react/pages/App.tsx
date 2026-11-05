@@ -1,13 +1,16 @@
-import type { Challenge } from '../../types/gurushots';
-import type { RendererGlobals } from '../../types/capacitor';
+import type { Challenge } from '../../core/types/gurushots';
+import type { RendererGlobals } from '../../core/types/capacitor';
+import type { BackgroundHost } from '../../core/autovote/controller';
+import type { RemoteTransport } from '../../core/remote/relays';
 import { createRoot } from 'react-dom/client';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { TranslationProvider, useTranslation } from '@/contexts/TranslationContext';
 import { ChallengesProvider, useChallenges } from '@/contexts/ChallengesContext';
 import { AutovoteProvider, useAutovote } from '@/contexts/AutovoteContext';
+import { noopBackgroundHost } from '@/contexts/noopBackgroundHost';
 import { UpdateProvider } from '@/contexts/UpdateContext';
 import { useSettings } from '@/api/useSettings';
-import { LOGOUT_NOT_SAVED } from '../../ipc/logoutCode';
+import { LOGOUT_NOT_SAVED } from '../../core/ipc/logoutCode';
 import { useBankroll } from '@/api/useBankroll';
 import { useAutoJoinActive } from '@/api/useAutoJoinActive';
 import { useAutoClaimStatus } from '@/api/useAutoClaimStatus';
@@ -30,9 +33,9 @@ import { ScrollToTopButton } from '@/components/ui/ScrollToTopButton';
 import { useDisclosure } from '@/hooks/useDisclosure';
 import { useDocumentTheme } from '@/hooks/useDocumentTheme';
 import { useNoticeGate } from '@/hooks/useNoticeGate';
-import { effectiveTimezone } from '../../settings/uiDefaults';
+import { effectiveTimezone } from '../../core/settings/uiDefaults';
 import * as ipc from '@/api/ipc';
-import { errorMessage } from '../../errorMessage';
+import { errorMessage } from '../../core/errorMessage';
 
 const NO_CHALLENGE: { id: Challenge['id'] | null; title: string } = { id: null, title: '' };
 
@@ -390,11 +393,21 @@ function AppContent() {
 /**
  * App with Autovote provider (needs challenges refetch callback)
  */
-function AppWithAutovote() {
+function AppWithAutovote({
+    backgroundHost,
+    remoteTransport,
+}: {
+    backgroundHost: BackgroundHost;
+    remoteTransport?: RemoteTransport;
+}) {
     const { refetch } = useChallenges();
 
     return (
-        <AutovoteProvider onChallengesRefresh={refetch}>
+        <AutovoteProvider
+            onChallengesRefresh={refetch}
+            backgroundHost={backgroundHost}
+            remoteTransport={remoteTransport}
+        >
             <AppContent />
         </AutovoteProvider>
     );
@@ -403,7 +416,13 @@ function AppWithAutovote() {
 /**
  * App with Challenges provider
  */
-function AppWithChallenges() {
+function AppWithChallenges({
+    backgroundHost,
+    remoteTransport,
+}: {
+    backgroundHost: BackgroundHost;
+    remoteTransport?: RemoteTransport;
+}) {
     const [autovoteRunning, setAutovoteRunning] = useState(false);
 
     // AutovoteProvider dispatches 'autovote:running-changed' whenever its
@@ -421,7 +440,7 @@ function AppWithChallenges() {
 
     return (
         <ChallengesProvider autovoteRunning={autovoteRunning}>
-            <AppWithAutovote />
+            <AppWithAutovote backgroundHost={backgroundHost} remoteTransport={remoteTransport} />
         </ChallengesProvider>
     );
 }
@@ -429,11 +448,17 @@ function AppWithChallenges() {
 /**
  * Main App component with all providers
  */
-function App() {
+function App({
+    backgroundHost = noopBackgroundHost,
+    remoteTransport,
+}: {
+    backgroundHost?: BackgroundHost;
+    remoteTransport?: RemoteTransport;
+}) {
     return (
         <TranslationProvider>
             <UpdateProvider>
-                <AppWithChallenges />
+                <AppWithChallenges backgroundHost={backgroundHost} remoteTransport={remoteTransport} />
             </UpdateProvider>
         </TranslationProvider>
     );
@@ -442,22 +467,31 @@ function App() {
 // Mount the React app at module load. The Capacitor entry sets
 // __capacitorBootstrap before importing this module so it can defer
 // mounting until after the bridge is installed and settings are
-// hydrated; everywhere else (Electron) auto-mounts.
-export const mountApp = () => {
+// hydrated; everywhere else (Electron) auto-mounts. The background host
+// is the shell's choice: the no-op host here, the Capacitor bridges from
+// shells/capacitor/page.tsx (via mountForToken). Returns the root it created
+// (null without a container) so the single-document shells can unmount
+// the previous tree — and dispose its autovote controller — on a swap.
+export const mountApp = (
+    backgroundHost: BackgroundHost = noopBackgroundHost,
+    remoteTransport?: RemoteTransport,
+): ReturnType<typeof createRoot> | null => {
     const container = document.getElementById('root');
-    if (container) {
-        const root = createRoot(container);
-        root.render(<App />);
+    if (!container) {
+        return null;
     }
+    const root = createRoot(container);
+    root.render(<App backgroundHost={backgroundHost} remoteTransport={remoteTransport} />);
+    return root;
 };
 
-// Deferred via queueMicrotask: ESM hoists Capacitor.tsx's static
+// Deferred via queueMicrotask: ESM hoists shells/capacitor/page.tsx's static
 // imports above its `globalThis.__capacitorBootstrap = true;` assignment,
 // so a synchronous check at module load would see the flag undefined
 // and double-mount on top of Login.tsx, breaking React's reconciler.
 queueMicrotask(() => {
     if (!(globalThis as RendererGlobals).__capacitorBootstrap) {
-        mountApp();
+        mountApp(noopBackgroundHost);
     }
 });
 

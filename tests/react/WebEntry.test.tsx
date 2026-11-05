@@ -1,11 +1,11 @@
 /**
- * Web entry (pages/Web.tsx) — at module load installs the fetch/SSE bridge,
+ * Web entry (shells/web/page.tsx) — at module load installs the fetch/SSE bridge,
  * mounts Login or App from whether the server holds a token, and re-mounts on
  * login-success / logout. Each test loads the module in an isolated registry
  * with its collaborators doMock'ed.
  */
 
-import type { RendererGlobals } from '../../src/ts/types/capacitor';
+import type { RendererGlobals } from '../../src/ts/core/types/capacitor';
 
 const SRC = '../../src/ts';
 
@@ -36,18 +36,21 @@ describe('Web entry', () => {
             }),
             getSettings: jest.fn(getSettings),
             logRendererError: jest.fn(async (_message: string) => {}),
+            // The sentinel the shell must hand to mountForToken for the App mount.
+            noopHost: { marker: 'web-noop-background-host' },
             mountApp: jest.fn(),
             mountLogin: jest.fn(),
         };
         jest.isolateModules(() => {
-            jest.doMock(`${SRC}/bridge/web`, () => ({
+            jest.doMock(`${SRC}/shells/web/bridge/web`, () => ({
                 installWebBridge: m.installWebBridge,
                 onShellEvent: m.onShellEvent,
             }));
             jest.doMock('@/api/ipc', () => ({ getSettings: m.getSettings, logRendererError: m.logRendererError }));
+            jest.doMock('@/contexts/noopBackgroundHost', () => ({ noopBackgroundHost: m.noopHost }));
             jest.doMock('@/pages/App', () => ({ mountApp: m.mountApp }));
             jest.doMock('@/pages/Login', () => ({ mountLogin: m.mountLogin }));
-            require('@/pages/Web');
+            require('../../src/ts/shells/web/page');
         });
         return m;
     };
@@ -59,6 +62,8 @@ describe('Web entry', () => {
         expect(m.installWebBridge.mock.invocationCallOrder[0]).toBeLessThan(m.getSettings.mock.invocationCallOrder[0]);
         expect(m.getSettings).toHaveBeenCalledTimes(1);
         expect(m.mountApp).toHaveBeenCalledTimes(1);
+        // The App mount carries the no-op background host (the web shell has none).
+        expect(m.mountApp).toHaveBeenCalledWith(m.noopHost);
         expect(m.mountLogin).not.toHaveBeenCalled();
     });
 

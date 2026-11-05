@@ -1,5 +1,5 @@
 /**
- * Capacitor entry (pages/Capacitor.tsx) — runs its bootstrap at module load:
+ * Capacitor entry (shells/capacitor/page.tsx) — runs its bootstrap at module load:
  * on a native platform installs the bridge and hydrates every write-behind
  * store, wires flush-on-background, clears a leftover token with Stay Logged
  * In off (skipping it while background auto-vote is armed), then mounts Login
@@ -8,9 +8,9 @@
  * bootstrap can be driven per case.
  */
 
-import type { RendererGlobals } from '../../src/ts/types/capacitor';
-import type { CategoryLogger } from '../../src/ts/logger';
-import type { AutoVoteStatus } from '../../src/ts/services/NativeAutovoteBridge';
+import type { CapacitorGlobals, RendererGlobals } from '../../src/ts/core/types/capacitor';
+import type { CategoryLogger } from '../../src/ts/core/logger';
+import type { AutoVoteStatus } from '../../src/ts/shells/capacitor/NativeAutovoteBridge';
 
 const SRC = '../../src/ts';
 
@@ -55,11 +55,12 @@ describe('Capacitor entry', () => {
             if (savedGlobals[k] === undefined) delete (globalThis as RendererGlobals)[k];
             else (globalThis as RendererGlobals)[k] = savedGlobals[k];
         }
+        delete (globalThis as CapacitorGlobals).Capacitor;
         document.body.innerHTML = '';
     });
 
     /**
-     * Load Capacitor.tsx with mocked collaborators.
+     * Load shells/capacitor/page.tsx with mocked collaborators.
      */
     const load = ({
         native = true,
@@ -71,6 +72,7 @@ describe('Capacitor entry', () => {
         status = { running: false, available: false },
         clears = false,
         clearRejection = null,
+        remoteKey = null,
     }: {
         native?: boolean;
         token?: string;
@@ -83,6 +85,8 @@ describe('Capacitor entry', () => {
         clears?: boolean;
         /** A value the mocked clear helper rejects with (the settings refusing the write). */
         clearRejection?: unknown;
+        /** The pairing key the Android remote mode has stored: the entry hands the WebView to the remote loader. */
+        remoteKey?: string | null;
     } = {}) => {
         // With deferHydrations the eight store hydrations stay pending until a test calls the resolver they leave here.
         const releases: Array<() => void> = [];
@@ -98,6 +102,9 @@ describe('Capacitor entry', () => {
             // cleared value like the real stores would.
             auth: { token, stayLoggedIn },
             installBridge: jest.fn(),
+            readStoredPairingKey: jest.fn((): Promise<string | null> => Promise.resolve(remoteKey)),
+            installRemoteModeEntry: jest.fn(),
+            loadBundledRemoteLoader: jest.fn(),
             seedBridgeProfiles: jest.fn(),
             subscribe: jest.fn((event: string, cb: () => void): void => {
                 m.subscribers[event] = cb;
@@ -133,7 +140,6 @@ describe('Capacitor entry', () => {
             flushDiagnosticsWrites: jest.fn(),
             initializePhotoStatsAsync: hydration(),
             flushPhotoStatsWrites: jest.fn(),
-            isCapacitor: jest.fn(() => native),
             categoryError: jest.fn(),
             categoryInfo: jest.fn(),
             categoryWarning: jest.fn(),
@@ -144,61 +150,86 @@ describe('Capacitor entry', () => {
                     warning: m.categoryWarning,
                 }),
             ),
+            // The sentinel the shell must hand to mountForToken for the App
+            // mount: the entry passes the Capacitor background host through.
+            backgroundHost: { marker: 'capacitor-background-host' },
             mountApp: jest.fn(),
             mountLogin: jest.fn(),
         };
         jest.isolateModules(() => {
-            jest.doMock(`${SRC}/bridge/capacitor`, () => ({
+            jest.doMock(`${SRC}/shells/capacitor/bridge/capacitor`, () => ({
                 installBridge: m.installBridge,
                 seedBridgeProfiles: m.seedBridgeProfiles,
                 subscribe: m.subscribe,
+                isCapacitorNative: () => native,
             }));
-            jest.doMock(`${SRC}/settings`, () => ({
+            // The page's first import is its shell platform module: every
+            // collaborator here is mocked, so the real install (and the core
+            // imports it would pull in under this file's runtime mock) must
+            // not run — and a second, different install would throw on the
+            // next isolated load.
+            jest.doMock(`${SRC}/shells/capacitor/platform`, () => ({}));
+            jest.doMock(`${SRC}/core/settings`, () => ({
                 initializeAsync: m.initSettings,
                 flushPendingWrites: m.flushPendingWrites,
                 getSetting: m.getSetting,
             }));
-            jest.doMock(`${SRC}/metadata`, () => ({
+            jest.doMock(`${SRC}/core/metadata`, () => ({
                 initializeMetadataAsync: m.initializeMetadataAsync,
                 flushMetadataWrites: m.flushMetadataWrites,
             }));
-            jest.doMock(`${SRC}/joinStateStore`, () => ({
+            jest.doMock(`${SRC}/core/joinStateStore`, () => ({
                 initializeJoinStateAsync: m.initializeJoinStateAsync,
                 flushJoinStateWrites: m.flushJoinStateWrites,
             }));
-            jest.doMock(`${SRC}/swapBackStore`, () => ({
+            jest.doMock(`${SRC}/core/swapBackStore`, () => ({
                 initializeSwapBackAsync: m.initializeSwapBackAsync,
                 flushSwapBackWrites: m.flushSwapBackWrites,
             }));
-            jest.doMock(`${SRC}/currencyAutoStore`, () => ({
+            jest.doMock(`${SRC}/core/currencyAutoStore`, () => ({
                 initializeAutoSpendAsync: m.initializeAutoSpendAsync,
                 flushAutoSpendWrites: m.flushAutoSpendWrites,
             }));
-            jest.doMock(`${SRC}/entryAgeStore`, () => ({
+            jest.doMock(`${SRC}/core/entryAgeStore`, () => ({
                 initializeEntryAgesAsync: m.initializeEntryAgesAsync,
                 flushEntryAgeWrites: m.flushEntryAgeWrites,
             }));
-            jest.doMock(`${SRC}/scenarioStateStore`, () => ({
+            jest.doMock(`${SRC}/core/scenarioStateStore`, () => ({
                 initializeScenarioStateAsync: m.initializeScenarioStateAsync,
                 flushScenarioStateWrites: m.flushScenarioStateWrites,
             }));
-            jest.doMock(`${SRC}/services/semantic/diagnostics`, () => ({
+            jest.doMock(`${SRC}/core/services/semantic/diagnostics`, () => ({
                 initializeDiagnosticsAsync: m.initializeDiagnosticsAsync,
                 flushDiagnosticsWrites: m.flushDiagnosticsWrites,
             }));
-            jest.doMock(`${SRC}/services/photoStats`, () => ({
+            jest.doMock(`${SRC}/core/services/photoStats`, () => ({
                 initializePhotoStatsAsync: m.initializePhotoStatsAsync,
                 flushPhotoStatsWrites: m.flushPhotoStatsWrites,
             }));
-            jest.doMock(`${SRC}/runtime`, () => ({ isCapacitor: m.isCapacitor }));
-            jest.doMock(`${SRC}/logger`, () => ({ withCategory: m.withCategory }));
-            jest.doMock(`${SRC}/services/auth`, () => ({
+            // The entry's native check reads the Capacitor global directly
+            // (presence and a platform probe): on the native path the global
+            // stands, off it the global is absent.
+            if (native) {
+                (globalThis as CapacitorGlobals).Capacitor = { isNativePlatform: () => true };
+            } else {
+                delete (globalThis as CapacitorGlobals).Capacitor;
+            }
+            jest.doMock(`${SRC}/core/logger`, () => ({ withCategory: m.withCategory }));
+            jest.doMock(`${SRC}/core/services/auth`, () => ({
                 clearTokenUnlessStayingLoggedIn: m.clearTokenUnlessStayingLoggedIn,
             }));
-            jest.doMock(`${SRC}/services/NativeAutovoteBridge`, () => ({ getStatus: m.getStatus }));
+            jest.doMock(`${SRC}/shells/capacitor/NativeAutovoteBridge`, () => ({ getStatus: m.getStatus }));
+            jest.doMock(`${SRC}/shells/capacitor/remoteMode`, () => ({
+                readStoredPairingKey: m.readStoredPairingKey,
+                installRemoteModeEntry: m.installRemoteModeEntry,
+                loadBundledRemoteLoader: m.loadBundledRemoteLoader,
+            }));
+            jest.doMock(`${SRC}/shells/capacitor/bridge/capacitorBackgroundHost`, () => ({
+                capacitorBackgroundHost: m.backgroundHost,
+            }));
             jest.doMock('@/pages/App', () => ({ mountApp: m.mountApp }));
             jest.doMock('@/pages/Login', () => ({ mountLogin: m.mountLogin }));
-            require('@/pages/Capacitor');
+            require('../../src/ts/shells/capacitor/page');
         });
         return m;
     };
@@ -253,9 +284,39 @@ describe('Capacitor entry', () => {
         m.releases.at(-1)!();
         await flush();
         expect(m.mountApp).toHaveBeenCalledTimes(1);
+        // The App mount carries the Capacitor background host.
+        expect(m.mountApp).toHaveBeenCalledWith(m.backgroundHost);
         expect(m.mountLogin).not.toHaveBeenCalled();
         // Stale DOM from a previous tree is cleared before mounting.
         expect(root.childNodes).toHaveLength(0);
+        // No remote key: the normal mode got the paste entry and nothing was handed to the remote loader.
+        expect(m.installRemoteModeEntry).toHaveBeenCalledTimes(1);
+        expect(m.loadBundledRemoteLoader).not.toHaveBeenCalled();
+    });
+
+    test('a stored remote-mode key hands the WebView to the bundled remote loader before anything else runs', async () => {
+        addRoot('stale');
+        const m = load({ remoteKey: 'k'.repeat(43) });
+        await flush();
+
+        expect(m.loadBundledRemoteLoader).toHaveBeenCalledWith('k'.repeat(43));
+        // Nothing of the normal app starts: no bridge, no store hydration, no token clear, no mount
+        // (the AutovoteProvider lives under mountApp, so it never mounts in remote mode).
+        expect(m.installBridge).not.toHaveBeenCalled();
+        expect(m.installRemoteModeEntry).not.toHaveBeenCalled();
+        expect(m.initSettings).not.toHaveBeenCalled();
+        expect(m.clearTokenUnlessStayingLoggedIn).not.toHaveBeenCalled();
+        expect(m.mountApp).not.toHaveBeenCalled();
+        expect(m.mountLogin).not.toHaveBeenCalled();
+        expect(m.subscribers).toEqual({});
+    });
+
+    test('off a native platform the remote-mode key is not read', async () => {
+        const m = load({ native: false, remoteKey: 'k'.repeat(43) });
+        await flush();
+        expect(m.readStoredPairingKey).not.toHaveBeenCalled();
+        expect(m.loadBundledRemoteLoader).not.toHaveBeenCalled();
+        expect(m.installRemoteModeEntry).not.toHaveBeenCalled();
     });
 
     test('flushes every store when the page is hidden or torn down, never throwing', async () => {
@@ -329,6 +390,8 @@ describe('Capacitor entry', () => {
         expect(m.seedBridgeProfiles).not.toHaveBeenCalled();
         expect(docListeners.visibilitychange).toBeUndefined();
         expect(m.mountApp).toHaveBeenCalledTimes(1);
+        // The Capacitor host is the App mount's background host off-native too.
+        expect(m.mountApp).toHaveBeenCalledWith(m.backgroundHost);
     });
 
     test('a bootstrap failure is logged and still mounts', async () => {

@@ -5,20 +5,20 @@
  * strategy's in-memory cache, whose failure must not break the listing.
  */
 
-jest.mock('../../src/ts/settings');
-jest.mock('../../src/ts/apiFactory');
-jest.mock('../../src/ts/services/auth');
-jest.mock('../../src/ts/services/autoFill');
+jest.mock('../../src/ts/core/settings');
+jest.mock('../../src/ts/core/apiFactory');
+jest.mock('../../src/ts/core/services/auth');
+jest.mock('../../src/ts/core/services/autoFill');
 
-import { handleGetMemberChallenges } from '../../src/ts/ipc/actions/account';
-import { clearUpcomingCache } from '../../src/ts/services/discoverChallenges';
+import { handleGetMemberChallenges } from '../../src/ts/core/ipc/actions/account';
+import { clearUpcomingCache } from '../../src/ts/core/services/discoverChallenges';
 import { invalid } from '../helpers/invalid';
 
-import settingsModule = require('../../src/ts/settings');
-import apiFactoryModule = require('../../src/ts/apiFactory');
-import authModule = require('../../src/ts/services/auth');
-import type { OpenChallenge } from '../../src/ts/types/gurushots';
-import type * as apiFactoryType from '../../src/ts/apiFactory';
+import settingsModule = require('../../src/ts/core/settings');
+import apiFactoryModule = require('../../src/ts/core/apiFactory');
+import authModule = require('../../src/ts/core/services/auth');
+import type { OpenChallenge } from '../../src/ts/core/types/gurushots';
+import type * as apiFactoryType from '../../src/ts/core/apiFactory';
 
 const settings = jest.mocked(settingsModule);
 const apiFactory = jest.mocked(apiFactoryModule);

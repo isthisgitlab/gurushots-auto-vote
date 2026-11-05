@@ -1,5 +1,5 @@
-import type { ChallengeValues } from '../../types/settings';
-import type { RendererSchema } from '../../types/settingsEditor';
+import type { ChallengeValues } from '../../core/types/settings';
+import type { RendererSchema } from '../../core/types/settingsEditor';
 
 /**
  * Keep only the keys the schema allows as per-challenge overrides; without a

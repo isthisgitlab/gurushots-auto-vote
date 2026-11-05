@@ -1,4 +1,4 @@
-import type { RendererGlobals } from '../../types/capacitor';
+import type { RendererGlobals } from '../../core/types/capacitor';
 import { createRoot } from 'react-dom/client';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { TranslationProvider, useTranslation } from '@/contexts/TranslationContext';
@@ -8,6 +8,7 @@ import { LoginForm } from '@/components/login/LoginForm';
 import { LanguageSwitcher } from '@/components/login/LanguageSwitcher';
 import { SettingsToggles } from '@/components/login/SettingsToggles';
 import { ModeInfoText } from '@/components/login/ModeInfoText';
+import { RemoteControlEntry } from '@/components/app/RemoteControlEntry';
 import { PageLoader } from '@/components/ui/LoadingSpinner';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { useDocumentTheme } from '@/hooks/useDocumentTheme';
@@ -16,7 +17,7 @@ import { UnofficialNoticeModal } from '@/components/app/UnofficialNoticeModal';
 import { SettingsRecoveryNotice } from '@/components/app/SettingsRecoveryNotice';
 import { ipcErrorText } from '@/api/ipcErrorText';
 import * as ipc from '@/api/ipc';
-import { isPlainObject } from '../../plainObject';
+import { isPlainObject } from '../../core/plainObject';
 import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 
 /**
@@ -204,6 +205,9 @@ function LoginPageContent({ startupError }: { startupError?: string }) {
 
                     {/* Mode Info Text */}
                     <ModeInfoText isMock={mockMode} />
+
+                    {/* Control my computer — the Android remote mode's paste entry (installed by the Capacitor entry only) */}
+                    <RemoteControlEntry />
                 </div>
             </div>
 
@@ -239,7 +243,7 @@ export const mountLogin = (startupError?: string) => {
 };
 
 // Deferred via queueMicrotask: see App.tsx for the full reasoning —
-// ESM import hoisting moves Capacitor.tsx's bootstrap-flag assignment
+// ESM import hoisting moves shells/capacitor/page.tsx's bootstrap-flag assignment
 // after its imports, so the check has to wait a microtask to see it.
 queueMicrotask(() => {
     if (!(globalThis as RendererGlobals).__capacitorBootstrap) {

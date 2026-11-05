@@ -4,10 +4,10 @@
  * facade's getDefaultSettings() and the renderer's Settings form.
  */
 
-import type * as uiDefaultsModule from '../../src/ts/settings/uiDefaults';
+import type * as uiDefaultsModule from '../../src/ts/core/settings/uiDefaults';
 
 const { getUiDefaultSettings, effectiveTimezone, isValidTimezone, BUILT_IN_TIMEZONES } =
-    require('../../src/ts/settings/uiDefaults') as typeof uiDefaultsModule;
+    require('../../src/ts/core/settings/uiDefaults') as typeof uiDefaultsModule;
 
 describe('getUiDefaultSettings', () => {
     test('returns the documented UI-form defaults', () => {

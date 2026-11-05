@@ -11,56 +11,58 @@
  * before any `require` resolves.
  */
 
-jest.mock('../../src/ts/settings');
-jest.mock('../../src/ts/apiFactory');
-jest.mock('../../src/ts/services/auth');
-jest.mock('../../src/ts/services/VotingLogic');
-jest.mock('../../src/ts/services/autoFill');
-jest.mock('../../src/ts/windows/quitGuard', () => ({ rememberChallenges: jest.fn() }));
+jest.mock('../../src/ts/core/settings');
+jest.mock('../../src/ts/core/apiFactory');
+jest.mock('../../src/ts/core/services/auth');
+jest.mock('../../src/ts/core/services/VotingLogic');
+jest.mock('../../src/ts/core/services/autoFill');
+jest.mock('../../src/ts/core/services/boostGuard/selection', () => ({ rememberChallenges: jest.fn() }));
 
-import type { IpcMain } from 'electron';
 import { invalid } from '../helpers/invalid';
 import {
     __resetSnapUnavailableForTests,
     claimTurboRun,
     markSnapUnavailable,
     releaseTurboRun,
-} from '../../src/ts/services/turboRunLock';
-import { registerMissionNeeds } from '../../src/ts/services/missions';
-import { clearOpenChallenges } from '../../src/ts/services/openChallengeCache';
-import { isPlainObject } from '../../src/ts/plainObject';
-import { MAX_SUGGEST_EXCLUDE } from '../../src/ts/settings/limits';
-import type { TurboGameResult } from '../../src/ts/types/gurushots';
-import type { JoinSingleResult } from '../../src/ts/services/joinChallenges/shared';
-import type { ForgetOutcome } from '../../src/ts/services/joinChallenges/forgetPayment';
+} from '../../src/ts/core/services/turboRunLock';
+import { registerMissionNeeds } from '../../src/ts/core/services/missions';
+import { clearOpenChallenges } from '../../src/ts/core/services/openChallengeCache';
+import { isPlainObject } from '../../src/ts/core/plainObject';
+import { MAX_SUGGEST_EXCLUDE } from '../../src/ts/core/settings/limits';
+import type { TurboGameResult } from '../../src/ts/core/types/gurushots';
+import type { JoinSingleResult } from '../../src/ts/core/services/joinChallenges/shared';
+import type { ForgetOutcome } from '../../src/ts/core/services/joinChallenges/forgetPayment';
 
-import loggerModule = require('../../src/ts/logger');
+import loggerModule = require('../../src/ts/core/logger');
 const logger = jest.mocked(loggerModule);
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import apiFactoryModule = require('../../src/ts/apiFactory');
+import apiFactoryModule = require('../../src/ts/core/apiFactory');
 const apiFactory = jest.mocked(apiFactoryModule);
-import authModule = require('../../src/ts/services/auth');
+import authModule = require('../../src/ts/core/services/auth');
 const auth = jest.mocked(authModule);
-import votingLogicModule = require('../../src/ts/services/VotingLogic');
+import votingLogicModule = require('../../src/ts/core/services/VotingLogic');
 const votingLogic = jest.mocked(votingLogicModule);
-import autoFillModule = require('../../src/ts/services/autoFill');
+import autoFillModule = require('../../src/ts/core/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
-import type { CategoryLogger } from '../../src/ts/logger';
-import type * as quitGuardModule from '../../src/ts/windows/quitGuard';
+import type { CategoryLogger } from '../../src/ts/core/logger';
+import type * as quitGuardModule from '../../src/ts/core/services/boostGuard/selection';
 import type * as logCategoriesModule from '../helpers/logCategories';
-import type * as actions_handlersModule from '../../src/ts/ipc/actions.handlers';
-import type * as libraryCacheModule from '../../src/ts/services/libraryCache';
-import type * as discoverChallengesModule from '../../src/ts/services/discoverChallenges';
-import type * as autoClaimModule from '../../src/ts/services/autoClaim';
-const { rememberChallenges } = jest.mocked(require('../../src/ts/windows/quitGuard') as typeof quitGuardModule);
+import type * as actions_handlersModule from '../../src/ts/core/ipc/actions.handlers';
+import type * as libraryCacheModule from '../../src/ts/core/services/libraryCache';
+import type * as discoverChallengesModule from '../../src/ts/core/services/discoverChallenges';
+import type * as autoClaimModule from '../../src/ts/core/services/autoClaim';
+const { rememberChallenges } = jest.mocked(
+    require('../../src/ts/core/services/boostGuard/selection') as typeof quitGuardModule,
+);
 const { logCategories } = require('../helpers/logCategories') as typeof logCategoriesModule;
 
 // The handler routes auth through the factory surfaces + the shared
 // extractAuthResult normalizer; exercise the real normalizer rather than a stub
 // so these tests pin the actual token-key handling.
-const { extractAuthResult: realExtractAuthResult } =
-    jest.requireActual<typeof import('../../src/ts/services/auth')>('../../src/ts/services/auth');
+const { extractAuthResult: realExtractAuthResult } = jest.requireActual<
+    typeof import('../../src/ts/core/services/auth')
+>('../../src/ts/core/services/auth');
 
 const NOW = () => Math.floor(Date.now() / 1000);
 
@@ -119,10 +121,11 @@ const mockChosenSettings = ({
 // long as every test awaits the calls it makes, the Set stays empty between
 // tests — no jest.resetModules() needed (and it would defeat module-top
 // jest.mock() bindings anyway by giving the handler fresh mock instances).
-const { buildHandlers } = require('../../src/ts/ipc/actions.handlers') as typeof actions_handlersModule;
-const { clearUpcomingCache } = require('../../src/ts/services/discoverChallenges') as typeof discoverChallengesModule;
+const { buildHandlers } = require('../../src/ts/core/ipc/actions.handlers') as typeof actions_handlersModule;
+const { clearUpcomingCache } =
+    require('../../src/ts/core/services/discoverChallenges') as typeof discoverChallengesModule;
 const { writeListing, readFresh, clearLibraryCache } =
-    require('../../src/ts/services/libraryCache') as typeof libraryCacheModule;
+    require('../../src/ts/core/services/libraryCache') as typeof libraryCacheModule;
 
 type Handlers = ReturnType<typeof buildHandlers>;
 // A zero-parameter handler invoked the way ipcMain does, with the event first.
@@ -1725,7 +1728,7 @@ describe('join-challenge', () => {
 describe('get-auto-claim-status', () => {
     test('exposes the shared claim clock without running a claim', async () => {
         settings.getEffectiveSetting = invalid(jest.fn(() => true));
-        const { resetClaimThrottle } = require('../../src/ts/services/autoClaim') as typeof autoClaimModule;
+        const { resetClaimThrottle } = require('../../src/ts/core/services/autoClaim') as typeof autoClaimModule;
         resetClaimThrottle();
         await expect(
             invalid<WithEvent<Handlers['get-auto-claim-status']>>(buildHandlers()['get-auto-claim-status'])({}),
@@ -2600,25 +2603,6 @@ describe('log categories', () => {
             'voting',
         ]);
         expect(logCategories('info', '🚀 Applying boost to entry: Challenge=123, Image=i1', null)).toEqual(['voting']);
-    });
-});
-
-describe('register', () => {
-    test('registers every action channel on ipcMain', async () => {
-        const { register } = require('../../src/ts/ipc/actions.handlers') as typeof actions_handlersModule;
-        const channels = new Map<string, Parameters<IpcMain['handle']>[1]>();
-        register(
-            invalid({
-                handle: (channel: string, impl: Parameters<IpcMain['handle']>[1]) => channels.set(channel, impl),
-            }),
-        );
-        expect([...channels.keys()].sort()).toEqual(Object.keys(buildHandlers()).sort());
-
-        stubAuthGuardFail();
-        await expect(channels.get('get-bankroll')!(invalid(undefined))).resolves.toEqual({
-            success: false,
-            error: 'No authentication token found',
-        });
     });
 });
 

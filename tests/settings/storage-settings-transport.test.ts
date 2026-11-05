@@ -5,13 +5,9 @@
  * Desktop quarantine (rename) is covered against a real directory in settings-recovery.test.ts.
  */
 
-// No test here may touch the real user-data folder: the path is a made-up one that does not exist.
-jest.mock('../../src/ts/runtime', () => ({
-    __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/runtime')>('../../src/ts/runtime'),
-    getAppUserDataPath: () => '/nonexistent/gurushots-auto-vote-test-user-data',
-}));
-jest.mock('../../src/ts/logger', () => {
+// No test here touches the real user-data folder: the installed test platform resolves it into the
+// file's own temporary directory (tests/setupPlatform.ts guards the real home).
+jest.mock('../../src/ts/core/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
         isSourceCode: jest.fn(() => true),
@@ -28,15 +24,14 @@ const mockPreferences = {
 };
 jest.mock('@capacitor/preferences', () => ({ Preferences: mockPreferences }), { virtual: true });
 
-import type * as storageModule from '../../src/ts/settings/storage';
-import type * as settingsModule from '../../src/ts/settings';
-import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
-import loggerModule = require('../../src/ts/logger');
+import type * as storageModule from '../../src/ts/core/settings/storage';
+import type * as settingsModule from '../../src/ts/core/settings';
+import type { AndroidHeadlessStore } from '../../src/ts/core/types/settings';
+import loggerModule = require('../../src/ts/core/logger');
+import { installHeadlessTestPlatform, installWebviewTestPlatform } from '../helpers/platform';
 import { invalid } from '../helpers/invalid';
 
 const g = globalThis as typeof globalThis & {
-    Capacitor?: { isNativePlatform: () => boolean };
-    __GS_HEADLESS__?: boolean;
     AndroidHeadlessStore?: AndroidHeadlessStore;
 };
 // The Preferences key an unusable value is kept under: the key, the suffix and the time it was set aside.
@@ -46,22 +41,23 @@ const cat = invalid<{ __cat: { error: jest.Mock<void, [string, ...unknown[]]> } 
 const loadStorage = () => {
     let mod: typeof storageModule | undefined;
     jest.isolateModules(() => {
-        mod = require('../../src/ts/settings/storage') as typeof storageModule;
+        mod = require('../../src/ts/core/settings/storage') as typeof storageModule;
     });
     return mod!;
 };
 
 afterEach(() => {
-    delete g.Capacitor;
-    delete g.__GS_HEADLESS__;
     delete g.AndroidHeadlessStore;
     jest.clearAllMocks();
     mockPreferences.keys.mockResolvedValue({ keys: [] });
 });
 
 describe('a settings write in the Android background service', () => {
+    beforeEach(() => {
+        installHeadlessTestPlatform();
+    });
+
     const withBridge = (write: AndroidHeadlessStore['write']) => {
-        g.__GS_HEADLESS__ = true;
         g.AndroidHeadlessStore = { read: () => null, write };
     };
 
@@ -87,7 +83,6 @@ describe('a settings write in the Android background service', () => {
         ['refused', ' (refused)'],
         ['', ''],
     ] as const)('a refusal the bridge explains (%j) says why in the log', (refusal, suffix) => {
-        g.__GS_HEADLESS__ = true;
         g.AndroidHeadlessStore = {
             read: () => null,
             write: jest.fn(() => false as unknown as void),
@@ -110,7 +105,6 @@ describe('a settings write in the Android background service', () => {
     });
 
     test('with no bridge there is nothing to refuse the write', () => {
-        g.__GS_HEADLESS__ = true;
         const { storage } = loadStorage();
 
         expect(storage.writeRaw('{}')).toBe(true);
@@ -122,7 +116,7 @@ describe('a settings write in the Android background service', () => {
         g.AndroidHeadlessStore!.read = () => stored;
         let settings: typeof settingsModule | undefined;
         jest.isolateModules(() => {
-            settings = require('../../src/ts/settings') as typeof settingsModule;
+            settings = require('../../src/ts/core/settings') as typeof settingsModule;
         });
 
         expect(settings!.saveAppSettings({ theme: 'light' })).toBe(false);
@@ -132,7 +126,6 @@ describe('a settings write in the Android background service', () => {
     });
 
     test('cannot set an unusable value aside, so it reports a failure', () => {
-        g.__GS_HEADLESS__ = true;
         const { storage } = loadStorage();
 
         expect(storage.quarantineRaw('{broken')).toEqual({
@@ -142,14 +135,13 @@ describe('a settings write in the Android background service', () => {
     });
 
     test('the location of the settings is the preference key', () => {
-        g.__GS_HEADLESS__ = true;
         expect(loadStorage().storage.location()).toBe('gurushots-config');
     });
 });
 
 describe('an unusable settings value in the Android app (Preferences)', () => {
     beforeEach(() => {
-        g.Capacitor = { isNativePlatform: () => true };
+        installWebviewTestPlatform();
     });
 
     test('is copied to the _corrupt key, removed from its own, and the cache is emptied', async () => {
@@ -257,7 +249,7 @@ describe('an unusable settings value in the Android app (Preferences)', () => {
         );
         let settings: typeof settingsModule | undefined;
         jest.isolateModules(() => {
-            settings = require('../../src/ts/settings') as typeof settingsModule;
+            settings = require('../../src/ts/core/settings') as typeof settingsModule;
         });
         await settings!.initializeAsync();
 

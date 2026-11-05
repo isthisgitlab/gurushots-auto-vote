@@ -15,7 +15,7 @@ import org.json.JSONObject
  * Capacitor's Preferences plugin stores values in a SharedPreferences
  * file named "CapacitorStorage" by default, where each key maps to a
  * String value. The configuration is stored under the single key
- * "gurushots-config" (see CONFIG_KEY in src/ts/settings/storage.ts), the two
+ * "gurushots-config" (see CONFIG_KEY in src/ts/core/settings/storage.ts), the two
  * values read here in its `app` object. Until the app window has imported
  * settings.json into it (the first start after an upgrade), the same two values
  * are read from the top level of the settings.json blob under "gurushots-settings".

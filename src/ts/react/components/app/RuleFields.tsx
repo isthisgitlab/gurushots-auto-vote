@@ -4,7 +4,7 @@ import { TagsField } from './SettingInput';
 import { HoursMinutesDraftField } from './HoursMinutesFields';
 import { useScenarios } from '@/api/useScenarios';
 
-import type { LooseRecord, TitleRule } from '../../../types/settings';
+import type { LooseRecord, TitleRule } from '../../../core/types/settings';
 
 /**
  * A rule edit merged over the rule. A cleared field is '' (inherit / any)

@@ -12,16 +12,17 @@
  * names go through `liveKey`.
  */
 
-import { V1_KEY_RENAMES } from '../../../src/ts/settings/importV1';
+import { V1_KEY_RENAMES } from '../../../src/ts/core/settings/importV1';
+import { installHeadlessTestPlatform, restoreNodeTestPlatform } from '../../helpers/platform';
 import { invalid } from '../../helpers/invalid';
 
-import type * as joinModule from '../../../src/ts/services/joinChallenges/settingsResolution';
-import type * as scenarioStatusModule from '../../../src/ts/services/scenarioStatus';
-import type * as settingsModule from '../../../src/ts/settings';
-import type * as challengeFactsModule from '../../../src/ts/settings/challengeFacts';
-import type * as ruleBehaviourModule from '../../../src/ts/settings/ruleBehaviour';
-import type { AndroidHeadlessStore } from '../../../src/ts/types/settings';
-import type { ScenarioStateLedger } from '../../../src/ts/types/votingPass';
+import type * as joinModule from '../../../src/ts/core/services/joinChallenges/settingsResolution';
+import type * as scenarioStatusModule from '../../../src/ts/core/services/scenarioStatus';
+import type * as settingsModule from '../../../src/ts/core/settings';
+import type * as challengeFactsModule from '../../../src/ts/core/settings/challengeFacts';
+import type * as ruleBehaviourModule from '../../../src/ts/core/settings/ruleBehaviour';
+import type { AndroidHeadlessStore } from '../../../src/ts/core/types/settings';
+import type { ScenarioStateLedger } from '../../../src/ts/core/types/votingPass';
 import type { Customization, OracleEnv, V1Oracle } from '../../helpers/v1Oracle';
 
 /** The live name of a format-1 setting key: the harness always compares `live[liveKey(k)]` with `oracle[k]`. */
@@ -86,7 +87,7 @@ type Modules = {
 const loadModules = (): Modules => {
     // The facade resolves Electron's app paths; the real package would try to fetch its binary.
     jest.doMock('electron', () => ({}));
-    jest.doMock('../../../src/ts/scenarioStateStore', () => ({
+    jest.doMock('../../../src/ts/core/scenarioStateStore', () => ({
         __esModule: true,
         scenarioStateLedger: { get: ledgerGet },
         mockScenarioStateLedger: { get: ledgerGet },
@@ -94,12 +95,15 @@ const loadModules = (): Modules => {
     }));
     let modules: Modules | null = null;
     jest.isolateModules(() => {
+        // The live reader is the background service's: its storage transport is the headless family's, over the
+        // AndroidHeadlessStore global the reader points at this blob with.
+        installHeadlessTestPlatform();
         modules = {
-            settings: require('../../../src/ts/settings') as typeof settingsModule,
-            join: require('../../../src/ts/services/joinChallenges/settingsResolution') as typeof joinModule,
-            scenarioStatus: require('../../../src/ts/services/scenarioStatus') as typeof scenarioStatusModule,
-            ruleBehaviour: require('../../../src/ts/settings/ruleBehaviour') as typeof ruleBehaviourModule,
-            challengeFacts: require('../../../src/ts/settings/challengeFacts') as typeof challengeFactsModule,
+            settings: require('../../../src/ts/core/settings') as typeof settingsModule,
+            join: require('../../../src/ts/core/services/joinChallenges/settingsResolution') as typeof joinModule,
+            scenarioStatus: require('../../../src/ts/core/services/scenarioStatus') as typeof scenarioStatusModule,
+            ruleBehaviour: require('../../../src/ts/core/settings/ruleBehaviour') as typeof ruleBehaviourModule,
+            challengeFacts: require('../../../src/ts/core/settings/challengeFacts') as typeof challengeFactsModule,
         };
     });
     if (!modules) throw new Error('the live modules did not load');
@@ -110,6 +114,7 @@ const loadModules = (): Modules => {
 const releaseLive = () => {
     delete headless.__GS_HEADLESS__;
     delete headless.AndroidHeadlessStore;
+    restoreNodeTestPlatform();
     jest.useRealTimers();
 };
 

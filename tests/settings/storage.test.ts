@@ -6,13 +6,12 @@
  * settings (incl. the token) stay in sync between app and background.
  */
 
-import type * as storageModule from '../../src/ts/settings/storage';
+import type * as storageModule from '../../src/ts/core/settings/storage';
 import type { GetOptions, GetResult, SetOptions } from '@capacitor/preferences';
-import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
+import type { AndroidHeadlessStore } from '../../src/ts/core/types/settings';
+import { installHeadlessTestPlatform, installWebviewTestPlatform } from '../helpers/platform';
 
 const g = globalThis as typeof globalThis & {
-    Capacitor?: { isNativePlatform: () => boolean; getPlatform: () => string };
-    __GS_HEADLESS__?: boolean;
     AndroidHeadlessStore?: AndroidHeadlessStore;
 };
 
@@ -38,13 +37,13 @@ jest.mock(
     { virtual: true },
 );
 
-const { storage, createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
-
 describe('storage — headless service branch', () => {
     let store: HeadlessStoreDouble;
+    let storage: typeof storageModule.storage;
+    let createJsonStore: typeof storageModule.createJsonStore;
 
     beforeEach(() => {
-        g.__GS_HEADLESS__ = true;
+        installHeadlessTestPlatform();
         store = {
             value: null,
             read: jest.fn(() => store.value),
@@ -53,10 +52,14 @@ describe('storage — headless service branch', () => {
             }),
         };
         g.AndroidHeadlessStore = store;
+        jest.isolateModules(() => {
+            const mod = require('../../src/ts/core/settings/storage') as typeof storageModule;
+            storage = mod.storage;
+            createJsonStore = mod.createJsonStore;
+        });
     });
 
     afterEach(() => {
-        delete g.__GS_HEADLESS__;
         delete g.AndroidHeadlessStore;
     });
 
@@ -123,15 +126,11 @@ describe('storage — capacitor write-behind', () => {
         mockPrefSet.mockResolvedValue(undefined);
         mockPrefGet.mockReset();
         mockPrefGet.mockResolvedValue({ value: null });
-        // isCapacitor() keys off globalThis.Capacitor.isNativePlatform.
-        g.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android' };
-        const mod = require('../../src/ts/settings/storage') as typeof storageModule;
+        // The app window's write-behind transport is the webview family's, so the window's platform is installed.
+        installWebviewTestPlatform();
+        const mod = require('../../src/ts/core/settings/storage') as typeof storageModule;
         capStorage = mod.storage;
         flushPendingWrites = mod.flushPendingWrites;
-    });
-
-    afterEach(() => {
-        delete g.Capacitor;
     });
 
     test('the in-memory cache reflects the latest write synchronously', () => {

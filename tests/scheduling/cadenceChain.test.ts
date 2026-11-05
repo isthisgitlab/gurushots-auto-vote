@@ -1,6 +1,6 @@
 /**
  * Direct tests for the shared cadence-chain factory
- * (src/ts/scheduling/cadenceChain.ts) through a fake transport.
+ * (src/ts/core/scheduling/cadenceChain.ts) through a fake transport.
  *
  * Both hosts (runScheduler.ts for CLI/Android, AutovoteContext.tsx for the
  * GUI) are thin adapters over this factory — these tests are the guard that
@@ -10,10 +10,10 @@
  * are asserted here once, against the factory itself.
  */
 
-import type * as cadenceChainModule from '../../src/ts/scheduling/cadenceChain';
-import type * as randomDelayModule from '../../src/ts/scheduling/randomDelay';
-import type { TimerHandle } from '../../src/ts/scheduling/cadenceChain';
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type * as cadenceChainModule from '../../src/ts/core/scheduling/cadenceChain';
+import type * as randomDelayModule from '../../src/ts/core/scheduling/randomDelay';
+import type { TimerHandle } from '../../src/ts/core/scheduling/cadenceChain';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 type RunningToggle = { _setRunning: (value: boolean) => void };
@@ -26,8 +26,9 @@ type FakeLog = {
 };
 
 const { createCadenceChain, DECISION_ERROR_MESSAGE, OFFLINE_RETRY_MS } =
-    require('../../src/ts/scheduling/cadenceChain') as typeof cadenceChainModule;
-const { MS_PER_MINUTE, MIN_CYCLE_GAP_MS } = require('../../src/ts/scheduling/randomDelay') as typeof randomDelayModule;
+    require('../../src/ts/core/scheduling/cadenceChain') as typeof cadenceChainModule;
+const { MS_PER_MINUTE, MIN_CYCLE_GAP_MS } =
+    require('../../src/ts/core/scheduling/randomDelay') as typeof randomDelayModule;
 
 const FIXED_DELAY_MIN = 3;
 const FIXED_DELAY_MS = FIXED_DELAY_MIN * MS_PER_MINUTE;
@@ -801,7 +802,7 @@ describe('createCadenceChain', () => {
 // and pruneUnsafe plays no part.
 describe('marked-read cap', () => {
     const { __resetMarkedReadCapForTests } =
-        require('../../src/ts/scheduling/cadenceChain') as typeof cadenceChainModule;
+        require('../../src/ts/core/scheduling/cadenceChain') as typeof cadenceChainModule;
 
     beforeEach(() => {
         jest.useFakeTimers();
@@ -959,7 +960,7 @@ describe('marked-read cap', () => {
 // The gate itself, unit-tested away from the timer plumbing.
 describe('oversleptBy', () => {
     const { oversleptBy, OVERSLEEP_ABSOLUTE_MS, OVERSLEEP_ALWAYS_MS } =
-        require('../../src/ts/scheduling/cadenceChain') as typeof cadenceChainModule;
+        require('../../src/ts/core/scheduling/cadenceChain') as typeof cadenceChainModule;
 
     test('an on-time (or early) fire is never late', () => {
         expect(oversleptBy(3 * MS_PER_MINUTE, 3 * MS_PER_MINUTE)).toBe(0);
@@ -1017,7 +1018,8 @@ describe('oversleptBy', () => {
 // One wording, shared by both hosts, because it lands on the GUI's Logs page
 // where a user is trying to work out why a slot went unfilled.
 describe('formatOversleptMessage', () => {
-    const { formatOversleptMessage } = require('../../src/ts/scheduling/cadenceChain') as typeof cadenceChainModule;
+    const { formatOversleptMessage } =
+        require('../../src/ts/core/scheduling/cadenceChain') as typeof cadenceChainModule;
 
     test('states what happened, why, and what to do next', () => {
         const message = formatOversleptMessage(51 * MS_PER_MINUTE, 3 * MS_PER_MINUTE);

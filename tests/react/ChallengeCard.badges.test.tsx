@@ -21,7 +21,7 @@ import { ChallengeBadgeRow } from '@/components/app/ChallengeBadgeRow';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import { invalid } from '../helpers/invalid';
 import { isKindBadgeText } from '../helpers/kindBadges';
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 
 const mockChallengeSettings = {
     hasCustomSettings: false,

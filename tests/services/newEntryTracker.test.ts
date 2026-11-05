@@ -9,20 +9,20 @@
  */
 
 const { readEntryIds, hasNewEntries, shouldRecordSnapshot, createMemoryEntryTracker, createMetadataEntryTracker } =
-    require('../../src/ts/services/newEntryTracker') as typeof newEntryTrackerModule;
-import metadataModule = require('../../src/ts/metadata');
+    require('../../src/ts/core/services/newEntryTracker') as typeof newEntryTrackerModule;
+import metadataModule = require('../../src/ts/core/metadata');
 const metadata = jest.mocked(metadataModule);
-import loggerModule = require('../../src/ts/logger');
+import loggerModule = require('../../src/ts/core/logger');
 const logger = jest.mocked(loggerModule);
-import type * as newEntryTrackerModule from '../../src/ts/services/newEntryTracker';
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type * as newEntryTrackerModule from '../../src/ts/core/services/newEntryTracker';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
-jest.mock('../../src/ts/logger', () => ({
+jest.mock('../../src/ts/core/logger', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/logger')>('../../src/ts/logger'),
+    ...jest.requireActual<typeof import('../../src/ts/core/logger')>('../../src/ts/core/logger'),
 }));
-jest.mock('../../src/ts/metadata');
+jest.mock('../../src/ts/core/metadata');
 
 const challengeWithEntries = (entries: unknown[]) => invalid<Challenge>({ member: { ranking: { entries } } });
 
@@ -225,7 +225,7 @@ describe('cap fallback when metadata exports are not finite', () => {
         metadata.MAX_ENTRY_ID_LENGTH = invalid(Number.NaN);
         try {
             jest.isolateModules(() => {
-                const isolated = require('../../src/ts/services/newEntryTracker') as typeof newEntryTrackerModule;
+                const isolated = require('../../src/ts/core/services/newEntryTracker') as typeof newEntryTrackerModule;
 
                 const entries = Array.from({ length: 70 }, (_, i) => ({ id: `e${i}` }));
                 entries[0] = { id: 'x'.repeat(65) }; // over the fallback length cap → dropped

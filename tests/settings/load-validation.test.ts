@@ -7,13 +7,13 @@
 
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import { parseJson, parseJsonObject } from '../helpers/parseJson';
-import settings = require('../../src/ts/settings');
-import type * as defaultsModule from '../../src/ts/settings/defaults';
+import settings = require('../../src/ts/core/settings');
+import type * as defaultsModule from '../../src/ts/core/settings/defaults';
 import type { MemoryStore } from '../helpers/headlessStore';
-const { getDefaultSettings } = require('../../src/ts/settings/defaults') as typeof defaultsModule;
+const { getDefaultSettings } = require('../../src/ts/core/settings/defaults') as typeof defaultsModule;
 
 const mockWarning = jest.fn<void, [message: string, data?: unknown]>();
-jest.mock('../../src/ts/logger', () => ({
+jest.mock('../../src/ts/core/logger', () => ({
     info: jest.fn(),
     warning: jest.fn(),
     error: jest.fn(),

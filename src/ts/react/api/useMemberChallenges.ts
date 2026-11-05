@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useIpcQuery } from './useIpcQuery';
 
-import type { OpenChallenge } from '../../types/gurushots';
+import type { OpenChallenge } from '../../core/types/gurushots';
 import type { IpcQueryTools } from './useIpcQuery';
 
 type MemberChallengesResult = Awaited<ReturnType<typeof window.api.getMemberChallenges>>;

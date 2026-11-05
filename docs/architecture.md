@@ -2,14 +2,15 @@
 
 This is the deep reference behind the terse invariant bullets in `CLAUDE.md` / `AGENTS.md`. It documents
 the application's own conventions — the voting engine, scheduler, API transport, IPC surface, persistence,
-renderer, i18n, and security — the things a contributor (human or agent) must not break but that the code
+renderer, i18n, security, and the code layout — the things a contributor (human or agent) must not break but that the code
 alone doesn't spell out. For the three per-platform timer engines, see the companion `scheduling.md`.
 
 **Citation convention.** Each reference names the **symbol/function** and its file, and carries no line
 numbers: this repo has high edit velocity and line ranges rot on the next unrelated edit. Search by name.
 
-**Path convention.** Paths are relative to `src/ts/`; renderer paths keep their `react/…` segments
-(e.g. `react/components/ui/Modal.tsx`).
+**Path convention.** Paths are relative to `src/ts/core/` unless they start with `platforms/`, `shells/` or
+`react/` (e.g. `react/components/ui/Modal.tsx`, `shells/electron/registerIpc.ts`), which are relative to `src/ts/`;
+`appPaths.ts` is the one file at `src/ts/`'s root. §12 describes the layout and the layer rules.
 
 ---
 
@@ -98,21 +99,23 @@ Domain terms used throughout, in reader's terms:
   interface: it hides nothing, but it buys import-path stability under the length-limit split policy, and is
   kept deliberately for that reason.
 - **Sleep boost** (`runSuspendBoost` / `runSuspendBoosts` in `services/votingOrchestrator/boost.ts`, driven by
-  `windows/suspendBoost.ts` on `powerMonitor` `'suspend'`): not a fork of the pass — it reuses `runBoost`'s target
+  `services/boostGuard/suspendBoost.ts` on `powerMonitor` `'suspend'`): not a fork of the pass — it reuses `runBoost`'s target
   resolution, uncertain-photo skip and turboed-only skip, and is reached through the strategy's
   `applyBoostsOnSuspend` binder (real in `strategies/real/index.ts`, mock in `mock/strategy.ts`) exactly as
   `runVotingPass` is reached through `deps`. It never submits a new photo and overrides a fresh-entry hold instead of
   honouring it. It is the **one deliberate exception to the sequential-runner rule**: `runSuspendBoosts` runs the
   selected challenges in parallel (`Promise.allSettled`), because they are separate challenge objects with no shared
   mutation (there is no auto-fill here to reflect a new entry) and the device is about to lose the network, so
-  the 2–5 s inter-challenge delay is not affordable. The quit guard (`windows/quitGuard.ts`) and the sleep boost
+  the 2–5 s inter-challenge delay is not affordable. The quit guard (the Electron dialog half in `shells/electron/windows/quitGuard.ts`, over the platform-free selection in
+  `services/boostGuard/`) and the sleep boost
   pick their challenges with the same `imminentBoostChallenges`, differing only in horizon (60 min vs 30 min).
 
 ## 2. Scheduling
 
 - `createCadenceChain()` (`scheduling/cadenceChain/chain.ts`) is a single recursive `setTimeout`
-  chain — **no cron** — shared by the CLI (`scheduling/runScheduler.ts`) and the GUI
-  (`react/contexts/AutovoteContext.tsx`). The Android headless service (`headless/index.ts`) has no chain: the
+  chain — **no cron** — shared by the CLI (`shells/cli/runScheduler.ts`) and the GUI (the renderer's autovote
+  controller, `autovote/controller.ts`, which `react/contexts/AutovoteContext.tsx` builds a host for and renders; the
+  renderer owns the timer). The Android headless service (`shells/headless/index.ts`) has no chain: the
   native service's `AlarmManager` ticks, each tick runs one cycle, and the next delay comes from
   `computeNextCycleDelayMs()` below. See `scheduling.md` for the three timer engines per platform.
 - The single cadence decision is `computeNextCycleDelayMs()` (`scheduling/thresholdWindow/cadenceDecision.ts`): modes `last-minute` / `approaching` / `scheduled` / `normal`, with the invariant **never sleep
@@ -174,7 +177,10 @@ Domain terms used throughout, in reader's terms:
   `exact`, the default, `starts`, or `contains`), `challengeTag`, `type`, `pics` (`max_photo_submits`) and a
   runtime range `minHours`/`maxHours` over `close_time` - `start_time`, and close times (strict `HH:MM`, any
   date) — and every condition present must hold (AND); a rule with none matches nothing, and a runtime
-  condition fails closed when either time is unreadable. The close times are `closesAt`, the first, and
+  condition fails closed when either time is unreadable. A rule may also carry an optional
+  display-only `name` (trimmed and length-capped by the sanitizer like a title entry): it labels the
+  rule in the editor's dropdown and in log lines, is never matched against, and is not part of the
+  de-dupe identity — two rules with the same condition collapse last-wins whatever they are called. The close times are `closesAt`, the first, and
   `closesAtTimes`, written only when there are two or more (at most 24; a repeat or blank entry is dropped on
   save). One normalizer, `normalizeRuleCloseTimes`, reads both into `RuleConditions.closeTimes`: a non-empty
   `closesAtTimes` wins over `closesAt`, and an empty list (or one of blanks) falls back to it; the rule matches
@@ -368,12 +374,12 @@ repeated six times is one that gets forgotten at one of them.
 - **Blocks.** `buildScoredCandidates` runs over the whole pool first, so the hard filters and the `submitWithoutTagMatch` relaxation apply to chosen photos like any other (under Only, the relaxation is judged on the chosen set alone, so whether a chosen photo is used never depends on unrelated photos). Already-entered ids leave the pool as a set. The pool then splits into a **chosen block** and a **rest block**; the pick takes the chosen block first, ordered by the existing tiers, then tops up from the rest. Emergency truncation keeps the head of the list, which is the chosen block.
 - **Per-block enrichment.** `selectBlockEnrichmentSet` enriches the candidates still competing for each block's last slot: `selectEnrichmentSet(chosen, min(k, want)) ∪ selectEnrichmentSet(rest, want − k)`. A block that fills no slot (`want − k = 0`) enriches nothing. Block membership (`chosenIds`) is returned so `finalizePick`, `verifyFillPick` and the pick logging use it.
 - **Block-bounded visual re-rank.** The re-rank reorders only **within** a block — a chosen photo is never swapped for a top-up photo or the reverse — and is skipped for a _chosen_ block no larger than the slots it fills (the rest block re-ranks as it always did, and an empty chosen set reads exactly like no list). For a join, a usable chosen block is the whole shortlist.
-- **Missing chosen ids and the walk memo.** The themed fetch may not return a chosen photo. When usable chosen photos number fewer than `min(unentered chosen, want)`, one targeted library walk runs (never when the fetch already walked unfiltered, never on the emergency path) and merges in only the matching chosen records. `getEligiblePhotos` has a variant returning `{ items, truncated }`: an id is recorded "not found" only when the walk was complete. Outcomes ("found" / "found but refused" / "not found") are memoised across passes per challenge, per usage (submit, or a swap's: the server filters `allowed` per usage, so the swap picker's Auto keeps its own memo) and per photo id (`services/autoFill/chosenPhotos.ts`) for about 30 minutes; a changed entry count drops only the negative outcomes, so a photo already found stays found (and the emergency probe still sees it after another chosen photo was submitted). A submit the server answered with `success: false` marks as refused only the submitted ids the memo had found; a submit that threw or got no answer teaches nothing, so those ids go back to unresolved (no backoff). A walk cut short, or one that throws, leaves its unresolved ids waiting with an exponential backoff per challenge (5, 10, 20, 40, then 60 minutes) so the walk does not repeat every cycle; the wait covers only the ids it was set for, so a newly chosen id is looked up at once. When every chosen id is already an entry, the chosen tier is skipped before any fetch (Only off) or the challenge skips (Only on).
-- **Only, and its exemptions.** Under Only with no usable chosen photo a challenge is skipped, with one log line per state change. Manual join and `+1`/`+N` (the flag comes from the fill label or the manual-join call site, never from IPC), Emergency Submit (`probeStandDown` and `evaluateEmergencyFill` read the same options, so the deadline view, quit guard and sleep boost agree with the runner) and a paid join that already unlocked (`performJoin` reads `isUnlocked` **before** picking and passes `ignoreChosenOnly`, so coins are never stranded) all ignore it. The automatic swap ignores both settings; the swap picker's Auto ranks with Chosen Photos (they rank first) but never enforces Submit Only. A chosen photo is never recorded as "uncertain" by `recordUncertainSubmission`, so automatic Boost/Turbo don't skip it. While Only is on nothing is consumed (see **Consumption.**): the stored list is held so the skip can keep explaining, and "when every chosen id is already an entry" is reached via that held list, or via an inherited rule or global list — never via an emptied per-challenge list, which Only never produces.
+- **Missing chosen ids and the walk memo.** The themed fetch may not return a chosen photo. When usable chosen photos number fewer than `min(unentered chosen, want)`, one targeted library walk runs (never when the fetch already walked unfiltered, never on the emergency path) and merges in only the matching chosen records. `getEligiblePhotos` has a variant returning `{ items, truncated }`: an id is recorded "not found" only when the walk was complete. Outcomes ("found" / "found but refused" / "not found") are memoised across passes per challenge, per usage (submit, or a swap's: the server filters `allowed` per usage, so every swap ranking — the picker's Auto, the Swap button's suggestion, the automatic and scenario swaps — keeps its own memo) and per photo id (`services/autoFill/chosenPhotos.ts`) for about 30 minutes; a changed entry count drops only the negative outcomes, so a photo already found stays found (and the emergency probe still sees it after another chosen photo was submitted). A submit the server answered with `success: false` marks as refused only the submitted ids the memo had found; a submit that threw or got no answer teaches nothing, so those ids go back to unresolved (no backoff). A walk cut short, or one that throws, leaves its unresolved ids waiting with an exponential backoff per challenge (5, 10, 20, 40, then 60 minutes) so the walk does not repeat every cycle; the wait covers only the ids it was set for, so a newly chosen id is looked up at once. When every chosen id is already an entry, the chosen tier is skipped before any fetch (Only off) or the challenge skips (Only on).
+- **Only, and its exemptions.** Under Only with no usable chosen photo a challenge is skipped, with one log line per state change. Manual join and `+1`/`+N` (the flag comes from the fill label or the manual-join call site, never from IPC), Emergency Submit (`probeStandDown` and `evaluateEmergencyFill` read the same options, so the deadline view, quit guard and sleep boost agree with the runner) and a paid join that already unlocked (`performJoin` reads `isUnlocked` **before** picking and passes `ignoreChosenOnly`, so coins are never stranded) all ignore it. Every swap ranking (`rankCandidatesForChallenge`, reached through `previewSwap`) reads the Chosen Photos: they rank first, and a chosen photo the themed search misses is found by the library walk. Only the automatic swap and a scenario swap step that does not name its photo enforce Only (a step that names its own photo never calls `previewSwap`): they call `previewSwap` with `enforceChosenOnly`, and with no usable chosen photo left the ranking answers empty (`noChosenLeft`), `previewSwap` logs one `currency` line per attempt and answers `noAlternative`, and nothing is spent. Both manual paths never enforce it — the Swap button's default suggestion (`preview-swap-photo`, which passes no option) and the swap picker's Auto (`suggestFillPhotos` with `ignoreOnly` for `usage: 'swap'`) — so a user pressing a button always gets a photo; keep the two paths the same. The automatic swap can still swap out an entered chosen photo. It passes `excludeSwapped`, so it never brings back a photo that was swapped out of the challenge, even a chosen one, and a slot does not flip between two photos; the scheduled submit can still enter a swapped-out photo that is in Chosen Photos. A chosen photo is never recorded as "uncertain" by `recordUncertainSubmission`, so automatic Boost/Turbo don't skip it. While Only is on nothing is consumed (see **Consumption.**): the stored list is held so the skip can keep explaining, and "when every chosen id is already an entry" is reached via that held list, or via an inherited rule or global list — never via an emptied per-challenge list, which Only never produces.
 - **Scenarios.** A phase's settings overlay sits above every layer, but an un-joined challenge has no scenario state, so a scenario's list applies only to fills after the join. `exportScenarioWithNotes` strips `chosenPhotos` (GUI and CLI share it) and reports what it left out; the import preview's `flagged` lists both keys.
 - **Discover rows.** `get-member-challenges` annotates each open item with `chosenOwn` (its own per-id list, as saved) and `chosenEffectiveCount` (resolved with `resolveJoinSetting`, the join's own resolution), so a row shows a list that reaches it through a rule or the global default as "Inherited". `get-open-chosen-annotations(ids)` answers the same shape from the settings, so the rows follow a settings change (the settings-changed broadcast, a save in the chooser) without fetching the challenge list again. Clearing a row's own list removes it, i.e. the row inherits again.
 - **Discover sources.** `get-member-challenges` takes no argument: the handler decides what to fetch. `getMemberChallenges(token, 'open' | 'upcoming')` returns **`null` on failure** (an empty list is a real answer), and every caller handles it: the join pass logs and does not run, manual join answers `fetch-failed`, and the handler answers `{ success: false }` for a failed open list. The handler fetches `open` and `upcoming` side by side. `upcoming` is fetched on **every** Discover load, even with `discoverUpcomingHours` at 0, because its ids are what keep chosen lists alive; the result is cached for about 60 s (`services/discoverChallenges.ts`: one slot; concurrent callers share one request; a failure is never cached; emptied by `forgetAccountMemory` at logout and account switch). `mergeDiscoverLists` builds the shown list against an injectable clock: the open copy wins when an id is in both; an upcoming item stays only while its `start_time` is a finite number after now and at most `discoverUpcomingHours` hours ahead (far end inclusive; one that has already started is dropped — the open feed shows it); open rows come first, then upcoming rows by `start_time` then id, at most 100. Upcoming rows carry `status: 'upcoming'` (the only marker; an open row carries none). A failed `upcoming` fetch leaves the open list as it is and logs the filter and the kind of failure only — never the token or a member. **The upcoming-id set** (`settings/openChallenges.ts`, through the facade) maps id → `start_time`, starts as `null`, is written only by this handler and only from a successful `upcoming` fetch (with **every** id the fetch returned — the window decides what is shown, not what is kept), and is never touched by the join pass. An id the feed drops is **carried over** — the feed drops a challenge the moment it starts, while the open feed may not list it yet — until it is in the open or active list or `UPCOMING_GRACE_SEC` (600 s) after its `start_time`. The set also records when it was fetched: older than five minutes it counts as unknown again, since another process (the CLI) may have chosen photos for a newly announced id since. `isKeptForJoin` keeps an entry whose id is in the open set or the upcoming set, or while **either** set is `null`/unknown, so a restart, a failed first fetch, a stale set or a race with Discover never prunes anything. A request still in flight when the account is forgotten answers, but writes none of this: each write compares the token captured at request start with the stored one and is skipped when they differ. `openChallengeCache` holds the **merged** list plus the previously cached items of the carried-over ids, so `get-open-chosen-annotations` resolves rules by title, tags and type for upcoming and "starting now" rows too (`MAX_ANNOTATED_IDS` is 300: the open list plus the 100 upcoming rows). A paid join spends no more than the cost the caller confirmed: `join-challenge` takes an optional `expectedCost` (a finite, non-negative number, else `invalid-args`), and `joinChallengeSingle` answers `needs-confirm` with the live cost — unlocking nothing — when the live cost is above it (the Discover confirmation passes the cost it showed; the CLI's `--yes --max-coins=N` does; `--yes` alone passes the cost `join` printed first). Joining stays tied to the **live open lookup**: the join pass asks for `open` only, and `joinChallengeSingle` joins only an id the live `open` list holds. For an id it does not hold it makes one **live** `upcoming` call — `not-started` if the id is in it (nothing unlocked or submitted), `unavailable` if it is not or the call fails — so the answer holds in a fresh CLI process and never calls a started or joined challenge "not started". The renderer keeps a row that was upcoming and whose start has passed as "Starting now" for up to 10 minutes while the open list lags (re-reading every minute), and re-reads the list at the soonest upcoming start (`useDiscoverRows`). The mock branches on the filter (`mock/endpoints/join.ts`: three upcoming fixtures, 900101–900103, the last beyond the default 24 h window).
-- **Library listing.** `get-library-photos(challengeId?, search?, mode?, usage?, start?, keep?, order?)` (`ipc/actions/library.ts`) is a read-only listing for the chooser and `list-photos`. `get_photos_private` requires a challenge id, so a caller with none borrows an active (else open) challenge and the result says `allowedKnown: false`; with no challenge to borrow it answers `no-challenge-context`. Walks are throttled to one in flight per process with a minimum gap, and a newer request replaces a queued one (`superseded`). Only the mapped fields `id`, `labels`, `allowed`, `message`, `uploadDate` plus `memberId`, `truncated`, `nextStart`, `wonIds`/`wonCount`, `preview` and `readAtMs` are forwarded, and the renderer shows them as text only. A third argument `mode` (`'cached'`, or `'fresh'`, the default and the CLI's) lets the choosers open at once: `'cached'` answers the no-search listing from `services/libraryCache.ts` (memory only, per challenge and per usage, expiring after 5 minutes) before the throttle, as a preview with its marks withheld when only another challenge's or an expired listing is held. A `'cached'` answer is always a read from offset 0 — the cache holds only those — so `'cached'` with `start > 0` is refused as `invalid-args`; every no-search read from offset 0 is kept for the next `'cached'` request, whatever its `keep` — a wider re-read (a Refresh/Retry extent, e.g. `keep: 8` or `keep: 500`) replaces the entry, so a later `'cached'` answer never shows an older, smaller listing — while a continuation (`start > 0`) and a search are never cached. Actions of this window that change what a challenge accepts (submit, fill, join, swap) drop that challenge's entry, and a logout or account switch empties the cache (`forgetAccountMemory`); a walk that began before either writes nothing. A fourth argument `usage` (`'submit'`, the default and the CLI's, or `'swap'`, the swap picker's) says which eligibility the `allowed` flags describe, and a listing of one usage answers only that usage (the other's serves as a preview). A fifth argument `start` reads one batch from that offset instead of walking the library, and `keep` (given only with `start`) says how many photos the batch counts before it stops — 100 by default, at most one full walk (1000). The count is checked after each page, so the page that crosses `keep` is kept whole: a batch is 100–199 photos, or one page when nothing is left out. Won photos never count (they are skipped before the count), and when the read names a challenge only photos it accepts count — the submit grid gets ~100 pickable tiles per batch, with refused ones riding along. The page cap (10 pages, doubled under a `skip`) and the 20 s wall-clock budget still bound every batch, and every exit reports `nextStart`, the offset a continuation reads from; continuations run over a live list in the server's own order (vote-ordered by default; the requested order is enforced client-side), so they can repeat a row (the grid dedupes by id) or skip one. Any paged read whose first page fails answers `library-read-failed` (mapped to `errors.libraryReadFailed` in the renderer) instead of an empty batch — `start: 0` included, so Load photos, a search and Retry land in the error state with Retry, not only a continuation. In the renderer (`useLibraryListing`) the batch is **Load more** under the grid: it is held while any read is in flight (its own, one that replaces the listing, a preview's re-check), and Refresh and an Order switch re-read the loaded extent, always as a fresh walk (`keep` is the counted photos on screen, at most 1000, one batch from the error state; a preview's fresh re-check reads one batch when the preview was read for another challenge — with a challenge such a borrowed preview is never on screen, the grid holds a loader for it, and a failed re-check lands in the error state with Retry — while a same-challenge cached answer, distrusted only for its marks, is re-read to its own accepted extent, as is the no-challenge chooser's preview), so a press never loses what is shown — a cached answer never shrinks what is on screen. A seventh argument `order` (`'votes'`, `'newest'` or `'oldest'`, the one list in dependency-free `src/ts/librarySort.ts`) names a whole-library server sort, mapped to `get_photos_private`'s `order`+`sort` pair in `api/submissions.ts`; `'votes'` is the order the app has always sent and stays the default, so an absent or votes order reads exactly as before, and any other name is refused (`invalid-args`) — the endpoint silently falls back to date desc on unknown values, so none are ever sent. A non-votes order is always read fresh: the listing cache holds vote-ordered reads only, so a `'cached'` request carrying one walks as `'fresh'`, answers `preview: false`, and is neither written to nor answered from the cache. The mock honours the order too (votes by the mock's vote counts, newest/oldest by `upload_date`). The endpoint's `order`+`sort` pair cannot be relied on without a search, so the date orders are also enforced on what comes back: the handler orders each answer by `uploadDate` (`orderByUploadDate` in `librarySort.ts`; photos without one last, ties in the server's order), and the grid orders the loaded photos across appended batches the same way, from the listing's `order` tag. Enforcement orders the photos loaded, not which photos are fetched — a Newest/Oldest load whose order the endpoint ignored shows the server's (vote-ranked) batch date-ordered, and Load more pages the server's list. A listing the endpoint already returns date-ordered, unknown dates last, comes back unchanged. Its sibling `get-photo-stats(ids)` (`ipc/actions/photoStats.ts`) answers the picker's Show stats display from the shared `photo-stats.json` cache (`services/photoStats.ts` over `services/photoStats/cache.ts`): ids are validated against the chosen-photo id shape, deduped, capped at 100 (`invalid-args` otherwise), and what the cache lacks is fetched with one `get_image_data` per photo through the same strategy as the listing — mock mode reads the mock's numbers and never persists. It runs on its own single-flight queue (one run at a time, a 1.5 s minimum gap, a newer call replacing a queued one with `superseded`, and the picker's loader re-asking a superseded call only after the same gap, so two readers in the web shell's one process cannot knock each other's queued call out in a loop), and after a call's failure breaker trips, later calls answer every uncached id as `missing` without fetching for 60 s. The stats queue and the voting pass's enrichment are not coordinated: together they can reach 10 concurrent `get_image_data` requests (5 + 5).
+- **Library listing.** `get-library-photos(challengeId?, search?, mode?, usage?, start?, keep?, order?)` (`ipc/actions/library.ts`) is a read-only listing for the chooser and `list-photos`. `get_photos_private` requires a challenge id, so a caller with none borrows an active (else open) challenge and the result says `allowedKnown: false`; with no challenge to borrow it answers `no-challenge-context`. Walks are throttled to one in flight per process with a minimum gap, and a newer request replaces a queued one (`superseded`). Only the mapped fields `id`, `labels`, `allowed`, `message`, `uploadDate` plus `memberId`, `truncated`, `nextStart`, `wonIds`/`wonCount`, `preview` and `readAtMs` are forwarded, and the renderer shows them as text only. A third argument `mode` (`'cached'`, or `'fresh'`, the default and the CLI's) lets the choosers open at once: `'cached'` answers the no-search listing from `services/libraryCache.ts` (memory only, per challenge and per usage, expiring after 5 minutes) before the throttle, as a preview with its marks withheld when only another challenge's or an expired listing is held. A `'cached'` answer is always a read from offset 0 — the cache holds only those — so `'cached'` with `start > 0` is refused as `invalid-args`; every no-search read from offset 0 is kept for the next `'cached'` request, whatever its `keep` — a wider re-read (a Refresh/Retry extent, e.g. `keep: 8` or `keep: 500`) replaces the entry, so a later `'cached'` answer never shows an older, smaller listing — while a continuation (`start > 0`) and a search are never cached. Actions of this window that change what a challenge accepts (submit, fill, join, swap) drop that challenge's entry, and a logout or account switch empties the cache (`forgetAccountMemory`); a walk that began before either writes nothing. A fourth argument `usage` (`'submit'`, the default and the CLI's, or `'swap'`, the swap picker's) says which eligibility the `allowed` flags describe, and a listing of one usage answers only that usage (the other's serves as a preview). A fifth argument `start` reads one batch from that offset instead of walking the library, and `keep` (given only with `start`) says how many photos the batch counts before it stops — 100 by default, at most one full walk (1000). The count is checked after each page, so the page that crosses `keep` is kept whole: a batch is 100–199 photos, or one page when nothing is left out. Won photos never count (they are skipped before the count), and when the read names a challenge only photos it accepts count — the submit grid gets ~100 pickable tiles per batch, with refused ones riding along. The page cap (10 pages, doubled under a `skip`) and the 20 s wall-clock budget still bound every batch, and every exit reports `nextStart`, the offset a continuation reads from; continuations run over a live list in the server's own order (vote-ordered by default; the requested order is enforced client-side), so they can repeat a row (the grid dedupes by id) or skip one. Any paged read whose first page fails answers `library-read-failed` (mapped to `errors.libraryReadFailed` in the renderer) instead of an empty batch — `start: 0` included, so Load photos, a search and Retry land in the error state with Retry, not only a continuation. In the renderer (`useLibraryListing`) the batch is **Load more** under the grid: it is held while any read is in flight (its own, one that replaces the listing, a preview's re-check), and Refresh and an Order switch re-read the loaded extent, always as a fresh walk (`keep` is the counted photos on screen, at most 1000, one batch from the error state; a preview's fresh re-check reads one batch when the preview was read for another challenge — with a challenge such a borrowed preview is never on screen, the grid holds a loader for it, and a failed re-check lands in the error state with Retry — while a same-challenge cached answer, distrusted only for its marks, is re-read to its own accepted extent, as is the no-challenge chooser's preview), so a press never loses what is shown — a cached answer never shrinks what is on screen. A seventh argument `order` (`'votes'`, `'newest'` or `'oldest'`, the one list in dependency-free `src/ts/core/librarySort.ts`) names a whole-library server sort, mapped to `get_photos_private`'s `order`+`sort` pair in `api/submissions.ts`; `'votes'` is the order the app has always sent and stays the default, so an absent or votes order reads exactly as before, and any other name is refused (`invalid-args`) — the endpoint silently falls back to date desc on unknown values, so none are ever sent. A non-votes order is always read fresh: the listing cache holds vote-ordered reads only, so a `'cached'` request carrying one walks as `'fresh'`, answers `preview: false`, and is neither written to nor answered from the cache. The mock honours the order too (votes by the mock's vote counts, newest/oldest by `upload_date`). The endpoint's `order`+`sort` pair cannot be relied on without a search, so the date orders are also enforced on what comes back: the handler orders each answer by `uploadDate` (`orderByUploadDate` in `librarySort.ts`; photos without one last, ties in the server's order), and the grid orders the loaded photos across appended batches the same way, from the listing's `order` tag. Enforcement orders the photos loaded, not which photos are fetched — a Newest/Oldest load whose order the endpoint ignored shows the server's (vote-ranked) batch date-ordered, and Load more pages the server's list. A listing the endpoint already returns date-ordered, unknown dates last, comes back unchanged. Its sibling `get-photo-stats(ids)` (`ipc/actions/photoStats.ts`) answers the picker's Show stats display from the shared `photo-stats.json` cache (`services/photoStats.ts` over `services/photoStats/cache.ts`): ids are validated against the chosen-photo id shape, deduped, capped at 100 (`invalid-args` otherwise), and what the cache lacks is fetched with one `get_image_data` per photo through the same strategy as the listing — mock mode reads the mock's numbers and never persists. It runs on its own single-flight queue (one run at a time, a 1.5 s minimum gap, a newer call replacing a queued one with `superseded`, and the picker's loader re-asking a superseded call only after the same gap, so two readers in the web shell's one process cannot knock each other's queued call out in a loop), and after a call's failure breaker trips, later calls answer every uncached id as `missing` without fetching for 60 s. The stats queue and the voting pass's enrichment are not coordinated: together they can reach 10 concurrent `get_image_data` requests (5 + 5).
 - **Rollback.** An older build drops the unknown keys from its settings, profiles and rules when it next saves, and rejects a scenario whose phase uses them. A rule with a close-time condition (`closesAt` / `closesAtTimes`) matches more widely there, since an older build ignores the condition (an auto-join rule would pay for challenges it excluded); downgrades are not guarded, and going back is the user's choice.
 
 ## 4. Semantic / lexicon
@@ -416,8 +422,16 @@ repeated six times is one that gets forgotten at one of them.
   stripped. Unlike the semantic theme vector, the description is safe here: SigLIP reads a sentence as a
   sentence rather than averaging its words, and it is averaged with the title prompt, not used alone.
 - **It only reorders and never empties a pick.** A photo's fit is the mean logit over the prompts; photos
-  more than `ln(10)` below the best fit move behind the rest, and tag/popularity order is kept inside both
-  groups. It **abstains** (original order) when the title has no visual subject, when no photo reaches
+  more than `ln(10)` below the best fit move behind the rest (the rejected ones by fit). Among the accepted
+  photos, when there are two or more, theme strength, vision fit and votes are weighed together
+  (`photoPicker/jointRank.ts`, equal weights, plus a 0.25 bonus for a GuruShots-suggested photo): a much more
+  popular photo can beat a slightly stronger theme match. The score runs only inside a gate group —
+  matched photos stay ahead of unmatched ones, and more Should Include Tags stay ahead of fewer — and never
+  crosses the accepted/rejected split or a Chosen Photos block. Votes are looked up for the accepted photos
+  only (`createVotesLoader` in `services/photoStats.ts`: stats already known are reused, the rest are fetched
+  under the fill's or the join pick's own `createStatsBudget()`, persisted unless mock mode); photos whose stats
+  are unknown count as neutral, never as zero votes. Exact ties keep the tag order. Without model scores
+  the tag/popularity order is kept as it was. It **abstains** (original order) when the title has no visual subject, when no photo reaches
   `ABSTAIN_LOGIT` for any prompt, or on any load/inference/URL failure. An abstain reports no visual
   evidence, so the uncertain-photo check falls back to the semantic/keyword evidence. Both thresholds were calibrated on
   16 live challenges (2026-09-24) — re-measure against real shortlists before moving them.
@@ -427,7 +441,7 @@ repeated six times is one that gets forgotten at one of them.
       The Android-only copies under `dist/` and the standalone `onnxruntime-web` package are excluded from
       the asar, and `scripts/afterPack.mts` deletes other OS/CPU `onnxruntime-node` binaries.
     - CLI: the build embeds a `pnpm deploy --prod` tree + model as a SEA asset (pruned to the host OS/CPU by
-      `pruneVisionRuntime`); `services/visionCliAssets.ts` verifies its sha256, extracts it once per version
+      `pruneVisionRuntime`); `shells/cli/visionCliAssets.ts` verifies its sha256, extracts it once per version
       into `<userData>/vision/<sha>`, and removes finished copies from earlier versions unless one was marked in use
       within the last hour (an older CLI still running may not have loaded its model yet).
     - Android: `dist/` is the WebView root, so `vision-model/` and the single-threaded ORT WASM files are
@@ -581,7 +595,7 @@ repeated six times is one that gets forgotten at one of them.
   (`maxDurationMin`), because substituting or honouring those would both be fail-_closed_ and could stop
   voting for good. Both catches **log**: the orchestrator has a per-challenge catch that reports the errors
   it sees, so a silent swallow here would be the least visible failure in the pass.
-- **Sleep-boost guards** (`windows/suspendBoost.ts`, `windows/quitGuard.ts`): the remembered challenge list carries
+- **Sleep-boost guards** (`services/boostGuard/suspendBoost.ts`, `shells/electron/windows/quitGuard.ts`): the remembered challenge list carries
   the `mock` flag it was fetched under, and the sleep path acts only when it matches the current mode (mock mode
   also uses the in-memory entry-age ledger, never the real file), so a real list is never boosted from mock mode
   or the reverse. A module-level re-entrancy flag stops two quick sleeps from sending twice and is released in
@@ -600,20 +614,33 @@ repeated six times is one that gets forgotten at one of them.
 - `ipc/manifest.ts` is the **dependency-free single source of truth** for the whole `window.api` surface —
   four lists: `invokeChannels`, `aliases`, `sendMethods`, `eventMethods`, plus the Logs window's subsets
   `logsWindowInvokeChannels` / `logsWindowEventMethods` and the settings it may read, `logsWindowSettingKeys`
-  (`language` only). Both shells generate from it:
-  Electron `preload.ts` builds `contextBridge.exposeInMainWorld('api', …)`; Capacitor
-  `bridge/capacitor.ts` builds the identical surface in-process.
+  (`language` only). Both renderer shells generate from it:
+  Electron `shells/electron/preload.ts` builds `contextBridge.exposeInMainWorld('api', …)`; Capacitor
+  `shells/capacitor/bridge/capacitor.ts` builds the identical surface in-process, and the web shell
+  (`shells/web/bridge/web.ts`) the same over HTTP.
 - **Drift is CI-enforced** by `tests/ipc/manifest.test.ts` at the name level. Signatures travel through the
   `WindowApi` type (`types/ipc.ts`, derived from the manifest lists and every `buildHandlers()`), so a
   renderer call in a type-checked file is checked against its handler's parameters and result — only as
-  precise as that handler's type annotations.
-- Handler shape: every `ipc/*.handlers.ts` exports `buildHandlers(deps) → {channel: impl}` **and**
-  `register(ipcMain)`. **CLI and Capacitor reuse the same handler modules** (`cli/commands/*.ts` lazily
-  require `buildHandlers()`) — never write a parallel implementation.
+  precise as that handler's type annotations. `types/ipc.ts` and `ipc/releaseUpdates.ts` keep `typeof import(…)`
+  references to the two Electron-only handler modules (`shells/electron/misc.handlers.ts`,
+  `shells/electron/update.handlers.ts`) so the type sees their handlers; core may not import a shell, but a
+  `typeof import()` is erased at build and carries no runtime edge, which the `layer-boundaries` rule's type-only
+  exemption allows (§12).
+- Handler shape: every handler module exports `buildHandlers(deps) → {channel: impl}` and nothing that
+  registers itself. The shared ones are `ipc/*.handlers.ts`; the two Electron-only ones (`misc` — shell and
+  window calls — and `update` — electron-updater) live in `shells/electron/`. `ipc/invokeHandler.ts` holds the
+  contract every shell shares: the `IpcHandler` type and `invokeHandler`, the one place renderer arguments reach a
+  handler. **CLI, web shell and Capacitor reuse the same handler modules** (`shells/cli/commands/*.ts` lazily
+  require `buildHandlers()`; the web server and the Capacitor bridge spread them and call through `invokeHandler`)
+  — never write a parallel implementation.
+- **Electron registration** is `shells/electron/registerIpc.ts` (it names every handler module and
+  registers each, in a fixed order) over `shells/electron/registerHandlers.ts`, whose `registerHandlers()` wraps
+  each channel in `ipcMain.handle` with the sender checks (`isTrustedSender`, the Logs-window channel and
+  setting-key checks — §10) before it calls `invokeHandler`.
 - **Add a channel end-to-end**: (a) add the channel string to the right list in `manifest.ts`; (b)
-  implement it in the matching `ipc/*.handlers.ts` `buildHandlers()`; (c) Electron picks it up
-  automatically via `preload.ts` + the module's `register()`; (d) ensure the handler module is in
-  `capacitor.ts`'s spread for the Capacitor build.
+  implement it in the matching `buildHandlers()`; (c) Electron picks it up automatically via `preload.ts` +
+  `registerIpc.ts`; (d) the web server and `shells/capacitor/bridge/capacitor.ts` spread each shared handler
+  module's `buildHandlers()`, so a new module must be added to both spreads (and to `registerIpc.ts`).
 - Handlers **never throw to the renderer** — they return a tagged `{ success, error }` object. Shared
   preconditions use a Result guard: `requireAuthToken()` (`services/auth.ts`) returns
   `{ ok: true, token, settings }` or `{ ok: false, response }`, and callers do
@@ -624,15 +651,23 @@ repeated six times is one that gets forgotten at one of them.
 
 ## 7. Persistence & platform detection
 
-- **Don't hand-roll `fs`.** `createJsonStore({fileName, prefKey})` (`settings/storage.ts`) is
-  the reusable three-platform JSON store: sync fs at `userData/<fileName>` (mode `0o600`) on Electron/CLI,
-  hydrate-once cache + ordered async write-behind to `@capacitor/preferences` on Capacitor, and the native
-  keyed preference bridge (`settings/storeTransport.ts`) on the Android headless service. The write-protocol
-  state behind that transport (the write serials and the cached and stored texts) changes in one place only,
-  `settings/settingsFileProtocol.ts`: the factory bodies and the method helpers read it and make every change
-  through its named transitions. Every consumer is
-  listed in the store registry `settings/localData.ts` (`LOCAL_DATA_STORES`) — also what "Delete all local
-  data" removes — and `tests/settings/localData.test.ts` fails for a `createJsonStore` call site missing there.
+- **Don't hand-roll `fs`.** `createJsonStore({fileName, prefKey})` (`settings/jsonStore.ts`, imported through
+  `settings/storage.ts`) is the reusable JSON store. It is a core wrapper (the refuse-writes checks, the discard
+  listeners, the public surface) over a **transport the platform builds**: `platform().storage.jsonStore(…)`
+  (and `platform().storage.settingsFile(…)` for the two settings files), so core never tests which family it
+  runs on. The transports live in the platform families: sync fs at `userData/<fileName>` (mode `0o600`, atomic
+  writes) in `platforms/node/` (`store.ts`, `settingsFileNode.ts`, `atomicWrite.ts`, `ownerOnlyWrite.ts`) for Electron,
+  the CLI and the web server; a hydrate-once cache with an ordered async write-behind to `@capacitor/preferences`
+  in `platforms/webview/` (`store.ts`, `writeBehind.ts`, `capacitorPreferences.ts`, and the settings-file transport
+  in `settingsFileTransport.ts`); and the native keyed
+  preference bridge (`AndroidHeadlessStore`) on the Android headless service in `platforms/headless/store.ts`. The
+  write-protocol state behind the WebView's settings-file transport (the write serials and the cached and stored
+  texts) changes in one place only, `platforms/webview/settingsFileProtocol.ts`: the transport bodies read it and make every
+  change through its named transitions. The native compare-and-write the WebView's shared keys are saved through
+  arrives as the port's `cas` (`platforms/webview/index.ts`'s `parts.cas`; the Capacitor shell passes
+  `NativeAutovoteBridge.compareAndWrite`). Every consumer is
+  listed in the store registry `settings/localData.ts` (`LOCAL_DATA_STORES`) — also what "Delete all local data"
+  removes — and `tests/settings/localData.test.ts` fails for a `createJsonStore` call site missing there.
 - **The configuration (`config.json`, `ConfigV2` in `types/config.ts`, `version: 2`; the `gurushots-config` key on
   Android) is the app's settings blob and the only source of truth.** It holds `app` (preferences and app-state
   flags), `auth` (token, API headers, last user name), `defaults` (the global per-challenge
@@ -641,7 +676,10 @@ repeated six times is one that gets forgotten at one of them.
   structured entries — the rule number from 1 and its title, the profile name, or the challenge id and title where the
   import knew it, and the profile or scenario they name — or as the text an earlier build stored; whether the report
   was seen). Title pins stay in their own cache store. A load validates it and fills what it lacks
-  over the defaults (`loadValidation.ts`); `persistence.ts` owns load and save, `storage.ts` the bytes.
+  over the defaults (`loadValidation.ts`); `persistence.ts` owns load and save, `storage.ts` the bytes through the platform's transport.
+  One exception: the paired remote phone page keeps its view preferences — theme, language, `compactCards` (the global
+  default and per-challenge own overrides) and `compactCardActions` — on the device itself, in `localStorage` under
+  `gs-remote-view-prefs`, while `config.json` stays the source of truth for everything else.
 - **`auth` never reaches a renderer.** `toRendererSettings` (`ipc/rendererSettings.ts`) takes the block out of what
   a window receives and answers only `hasToken`, derived from the stored token; `withoutRendererHiddenKeys` drops
   `auth`, `token`, `hasToken` and `apiHeaders` from a renderer's write, and `lastUsername`
@@ -724,6 +762,13 @@ repeated six times is one that gets forgotten at one of them.
   equivalence harness (`v2/equivalence.test.ts`) ask the oracle and the live code the same questions for every fixture
   and seeded random file, with `v2/golden.test.ts` pinning the oracle's own answers (`__golden__/oracle.json`); the
   import itself is covered by `importV1/` and `config-import.test.ts`.
+- **The remote-access pairing store (`remote-access.json`, `gs_remote_access` on Android) sits beside the
+  configuration, not in it.** A `createJsonStore` file the desktop's pairing channels answer from
+  (`shells/electron/remote/pairing.ts`): `{enabled, key}`, where `key` is 32 random bytes in base64url — the
+  permanent credential behind the pairing link and its QR code. No settings channel, export or profile can read it
+  or switch it; a remote peer is refused all three pairing channels, so the key never travels over the pairing
+  connection. The QR code is drawn in the main process (`qrcode-generator`, exact-pinned) as a `data:image/svg+xml`
+  URL; the key and the link are never logged.
 - **The title pins and the import marker are shared stores (`createJsonStore({ shared: true })`).** The Android
   service writes them too, so every change is made against what is stored when the write is made — never the app
   window's cache written whole: `updateThrough` (the window) re-reads and saves by the native compare-and-write, made
@@ -759,9 +804,10 @@ repeated six times is one that gets forgotten at one of them.
   `setSetting` hands `saveSettings` only the changed key, so the service's own load-and-save has no stale whole blob
   to write back. Desktop and the CLI write the file atomically and are unchanged.
 - **Session markers and "Delete all local data".** Two processes can hold the user-data directory at once, so each
-  running one leaves a marker file there (`settings/cliSessionLock.ts`): every CLI command that loads
+  running one leaves a marker file there (`platforms/node/cliSessionLock.ts`; the wipe reads them through the port's
+  `wipe.markers`): every CLI command that loads
   the settings, which a load can write back and a command can spend from (all but `help`, `--help`, `-h`, `licenses` and
-  `reset-data`; taken once in `cli/cli.ts` before the settings are first touched, released when the process exits, and
+  `reset-data`; taken once in `shells/cli/cli.ts` before the settings are first touched, released when the process exits, and
   best effort: a marker that cannot be written is one warning, not a failure) holds `cli-session-<pid>.lock` (a CLI
   marker named just `cli-session.lock` counts the same), the `pnpm web` server
   holds `web-server-<pid>.lock` while it listens, and the desktop app holds `desktop-app.lock` for its lifetime. Each
@@ -793,25 +839,32 @@ repeated six times is one that gets forgotten at one of them.
   behind cannot bring an import of it back (the marker goes with them); a removal that fails on a busy file is
   retried. On
   Electron it clears the storage and cache of the app's windows and of Electron's default session (its files sit at
-  the user-data root). After a successful wipe Electron and Android relaunch; the web shell's server stops, so its text says to
-  start `pnpm web` again (`usePlatformCapabilities().relaunchesAfterWipe`, read from the flag the web bridge sets).
+  the user-data root) through the port's `wipe.clearSession`, which the Electron platform module
+  (`shells/electron/platform.ts`) supplies and `ElectronPlatform` requires; on Android the plugin-backed
+  `wipe.nativeWipe` (`AutoVoteBackground.wipeLocalData`) empties the native stores. After a successful wipe Electron and Android relaunch; the web shell's server stops, so its text says to
+  start `pnpm web` again (`usePlatformCapabilities().relaunchesAfterWipe`, read from the platform kind the web
+  bridge marks).
 - Write-behind is **ordered** (writes chain onto a promise) and `flushPendingWrites()` awaits durability
   before session invalidation. On Capacitor, `initializeAsync()` must be awaited before the first sync
   read — **each store hydrates independently**, so a new store must be wired into the Capacitor bootstrap
-  (`react/pages/Capacitor.tsx`) or its markers are invisible after relaunch. `joinState` is wired there
+  (`shells/capacitor/page.tsx`, with `shells/capacitor/localStores.ts`) or its markers are invisible after relaunch. `joinState` is wired there
   alongside settings + metadata; skipping it would double-charge a paid retry on Android.
-- Platform detection has two sides: **node-side** via `runtime.ts` (`isCapacitor()`, `isHeadlessService()`,
-  `getPlatform()`, `getAppUserDataPath()` — the single path resolver shared with the logger); **renderer-
-  side** via `globalThis.Capacitor?.isNativePlatform?.() === true` inline, to keep node out of the browser
-  bundle.
-- **The Electron main process runs from a bundle.** `scripts/build-main.ts` bundles `src/ts/index.ts` into
+- Platform detection has two sides, and neither is a branch in business logic. **Node-side** code asks the
+  installed Platform port (`platform()`, `platform/port.ts` — §12) for what differs per family (paths, storage,
+  assets, wipe, native services, capabilities, the HTTP adapter); `runtime.ts` is only the env flags
+  (`isDevelopment()`, `isTest()`, `getEnvSnapshot()`) — the single reader of `process.env`.
+  **Renderer-side** code asks `platformKind()` (`platform/kind.ts`), marked by the bridges (the Capacitor bridge only
+  when `Capacitor.isNativePlatform()` is true; unmarked means Electron, because its preload runs in an isolated
+  world), which keeps node out of the browser bundle.
+- **The Electron main process runs from a bundle.** `scripts/build-main.ts` bundles `src/ts/shells/electron/index.ts` into
   `out/main/app.js` with a linked source map, loaded by the `out/main/index.js` stub (package.json `main`)
   that turns source maps on first so main-process stack traces point at `src/ts`. Every package import stays
   a runtime require from the shipped `node_modules`; `src/ts` itself is not packaged, and `out/` stays out of
   `dist/` (Capacitor's webDir, which ships in the APK). Inside the bundle every module shares the bundle's
   `__dirname`, so paths to the app's own files (HTML pages, preload bundle, assets, the dev model cache) come
   from `appPath(...)` (`appPaths.ts`), which resolves the root as `__dirname/../..` — valid because the bundle
-  sits at the same depth below the root as `src/ts/`.
+  sits at the same depth below the root as `src/ts/`. That depth is why `appPaths.ts` stays at the root of `src/ts/`
+  instead of moving into `platforms/node/`; the node platform's `paths.appPath` delegates to it (§12).
 
 ## 8. Renderer / UI conventions
 
@@ -869,46 +922,50 @@ repeated six times is one that gets forgotten at one of them.
 ## 10. Security (renderer / main) — state the limits, don't over-promise
 
 - The login and main windows set `contextIsolation: on`, `nodeIntegration: off`, `webSecurity: on`
-  and `sandbox: on` explicitly (`index/windows.ts`, after any caller-supplied preferences so a caller
-  can't override them). The Logs window (`ui/applicationMenu.ts`) sets `contextIsolation`,
+  and `sandbox: on` explicitly (`shells/electron/index/windows.ts`, after any caller-supplied preferences so a caller
+  can't override them). The Logs window (`shells/electron/ui/applicationMenu.ts`) sets `contextIsolation`,
   `nodeIntegration` and `sandbox` explicitly and relies on Electron's default for `webSecurity`; the
   menu keeps one reference to it, focuses it when open and clears it on `closed`. The renderer is exposed only `window.api` via `contextBridge`, never
   `ipcRenderer`. Regressing context-isolation / node-integration / sandbox is a classic severe-vuln class.
-- A defense-in-depth **sender-frame trust check** (`isTrustedSender`, `ipc/registerHandlers.ts`) has
+- A defense-in-depth **sender-frame trust check** (`isTrustedSender`, `shells/electron/registerHandlers.ts`) has
   these rules: no Electron event at all (a direct call from the CLI, Capacitor, the web shell or a
   test) is trusted; an event with no `senderFrame`, or a frame whose `url` is not a string, is refused;
   a frame that is not the window's main frame is refused; the main frame is trusted only when its URL
   starts with `file://`; anything that throws while being inspected is refused. It does not check that
   the file lies inside the app, so a packaged or portable layout can't lock itself out — the navigation
   guard below is what keeps a window on the app's own pages. The check is reused by the manual
-  `ipcMain.on` channels, and its refusal log line carries the sender URL.
-- **Logs window** (`ui/applicationMenu.ts`): it loads its own sandboxed preload, `dist/preloadLogs-bundle.js`
-  (`preloadLogs.ts`), built from the same `preloadApi.ts` helpers as the main preload but from the manifest's
+  `ipcMain.on` channels, and its refusal log line carries the sender URL. It runs on every invoke because
+  `registerIpc.ts` registers every handler module through `registerHandlers()` — the one Electron registration
+  path — which calls `invokeHandler` (`ipc/invokeHandler.ts`) only after the checks pass; the CLI, the web shell and
+  Capacitor reach `invokeHandler` directly, with no Electron event, which `isTrustedSender` treats as trusted
+  because no untrusted frame can be behind it.
+- **Logs window** (`shells/electron/ui/applicationMenu.ts`): it loads its own sandboxed preload, `dist/preloadLogs-bundle.js`
+  (`shells/electron/preloadLogs.ts`), built from the same `shells/electron/preloadApi.ts` helpers as the main preload but from the manifest's
   `logsWindowInvokeChannels` (`get-setting`, `log-error`, `get-log-backlog`, `start-log-stream`,
   `stop-log-stream`) and `logsWindowEventMethods` (`onLogMessage`, `onSettingsChanged`) only — no spend, no
   settings write, no other log channel. The main process enforces the same set per sender, whatever the
   preload exposes: the menu registers the window's `webContents` with `restrictToLogsChannels`, and
-  `registerHandlers` refuses any other invoke from it (`isChannelAllowedForSender`), next to `isTrustedSender`.
+  `registerHandlers` (`shells/electron/registerHandlers.ts`) refuses any other invoke from it (`isChannelAllowedForSender`), next to `isTrustedSender`.
   Its settings read is language-only: `get-setting` from that window answers only the `logsWindowSettingKeys`
   (`isSettingKeyAllowedForSender` refuses any other key), and the `settings-changed` events the main process sends
   it are cut down to the same keys, so the window learns the language and nothing else about the settings.
   `restrictToLogsChannels` filters only `webContents.send`, so the `frame-guard/no-unfiltered-frame-send` lint rule
-  (`scripts/lint/frame-guard.mts`) keeps frame handles and every other send out of `src/ts`.
+  (`scripts/lint/frame-guard.mts`) keeps frame handles and every other send out of `src/ts`, wherever the file sits in the layers.
   The rule catches accidental frame-handle use and unfiltered sends; deliberate obfuscation (reflection such as
   `Reflect.apply` or `Function.prototype.call.call`, aliasing `webContents.send` and rebinding it, computed keys
   from variables) is out of its scope. The runtime guarantee is the Logs window's reduced preload, which exposes
   no listener for any other channel, plus the per-sender channel check in the main process.
-- **Navigation guard** (`index/navigationGuard.ts`, registered in `index.ts` on `web-contents-created`
+- **Navigation guard** (`shells/electron/index/navigationGuard.ts`, registered in `shells/electron/index.ts` on `web-contents-created`
   so it covers every window): no window opens another — `setWindowOpenHandler` always denies, and hands
   the URL to the system (`shell.openExternal`) only when `isOpenableLinkUrl` (`format/urlSafe.ts`)
   accepts it: `https:`/`http:` without userinfo, or `mailto:`. `will-navigate` and `will-redirect` let a
-  window stay on its current URL (reload) or move to an app page (`isAppFileUrl`, `appFileUrl.ts`: a
+  window stay on its current URL (reload) or move to an app page (`isAppFileUrl`, `shells/electron/appFileUrl.ts`: a
   `file:` URL below `src/html`, compared with the platform's path rules — case-insensitive on Windows,
   another drive or a UNC share rejected); any other target is cancelled and then opened externally if
   openable, else logged as refused. Challenge `welcome_message` links (`sanitizeWelcomeMessage`) rely on
   this: they never load in an app window.
-- **Permission handlers** (`index/permissions.ts`, installed in `onReady` before the first window): on
-  the default session and on the in-memory app session `gurushots` (`APP_PARTITION`, `index/session.ts`:
+- **Permission handlers** (`shells/electron/index/permissions.ts`, installed in `onReady` before the first window): on
+  the default session and on the in-memory app session `gurushots` (`APP_PARTITION`, `shells/electron/index/session.ts`:
   no `persist:` prefix, so its cookies, storage and cache never reach the disk; a stale on-disk partition
   directory is removed at startup), only `notifications` is granted (the deadline
   notifier), and only when the requesting `webContents.getURL()` starts with `file:`. Checks are judged
@@ -916,13 +973,334 @@ repeated six times is one that gets forgotten at one of them.
   web contents is denied. Every denial is logged.
 - **CSP**: every renderer page carries a policy with `object-src 'none'`, `form-action 'none'` and
   `img-src 'self' data: https://photos.gurushots.com`, and a build test fails on a missing policy or an inline
-  script. The Electron pages (`app.html`, `login.html`, `logs.html`) and the web shell page use
+  script. The Electron pages (`login.html`, `logs.html`) and the web shell page use
   `connect-src 'self'`: the renderer makes no fetch/XHR to a remote host (all network calls run in the
-  main process). The Android pages (the Capacitor page and `headless.html`) run network code in the WebView,
+  main process). `app.html` — the main window, where the remote-access host runs — adds the pinned Nostr
+  relay hosts (`wss://nos.lol`, `wss://relay.primal.net`, `wss://nostr.mom`,
+  `wss://nostr.oxtr.dev`) to `connect-src`, and the remote documents (`remote.html`, `remote-loader.html`) carry a strict
+  policy whose `connect-src` is exactly those relays plus `'self'` (the loader's `HEAD` probe for the version's
+  page); a test pins both lists to the shared constant
+  (`core/remote/relays.ts`). The Android pages (the Capacitor page and `headless.html`) run network code in the WebView,
   so their `connect-src` also allows `https://api.github.com` and the photo CDN, and their `script-src`
   adds `'wasm-unsafe-eval'` for the vision runtime.
+
+### Remote access (the pairing surface)
+
+When Remote access is on (off by default), the desktop main window's renderer joins a WebRTC room signalled
+over the public Nostr relays through Trystero (exact-pinned at 0.26.0; the one adapter is `core/remote/trystero.ts`),
+with the pairing key as the room's AES-GCM password and the room id derived as SHA-256 of it, so the key itself
+never appears in relay traffic. A paired phone drives the desktop through one explicit allowlist
+(`core/remote/allowlist.ts`): every manifest channel is classified as allowed, refused with a pinned reason, or
+answered in the host — account sign-in/out, the local-data wipe, the log-file reads, update download/install,
+window control, destructive resets and the pairing channels themselves are refused, `autovoteRunning` is refused
+per key on every write path whatever the running state is, and `get-environment-info` is answered with the user-data path
+(which holds the OS username) removed. At most 3 phones are connected at once; the log stream is the host's own,
+served while at least one phone wants it.
+
+- **The key is the only credential.** Whoever holds the full link (or scans the QR code) can control the app
+  within the allowlist; there is no second factor. The key is permanent by design: no expiry and no per-device
+  revocation — **Reset pairing** (a new key, every paired phone must scan again) is the only revocation.
+- **The relays see encrypted signalling and both IP addresses.** WebRTC also contacts STUN servers to learn each
+  side's public address (`stun:stun.cloudflare.com:3478`, `stun:stun.l.google.com:19302`, pinned through the
+  join's `rtcConfig.iceServers`; CSP does not govern that), and the two peers see each other's IP. There is no
+  TURN relay, so some carrier networks cannot establish a direct connection at all — the relay fallback below
+  carries the same messages then. The versioned page's badge shows "try Wi-Fi" only when neither path reaches the
+  desktop: trystero reports the SDP failure after about 23 s and the hybrid transport holds it back 12 s more
+  while the relays may still reach the peer, so the text appears after about 35 s (and "your browser is too old"
+  instead when the browser has no `CompressionStream`, so only the direct path exists). The loader gives up after
+  15 s with the offline-or-reset text, or, in such a browser, "too old"; the loader's own "try Wi-Fi" is reached
+  only when the failure is reported inside those 15 s.
+- **The relay fallback** (`core/remote/relayLink.ts` and its siblings, behind `core/remote/hybridTransport.ts`).
+  When WebRTC cannot connect, the same protocol messages travel as Nostr ephemeral events on a topic of their own
+  (SHA-256 of the app id, `relay` and the room id), over WebSockets the link opens itself
+  (`relaySockets.ts`, apart from trystero's). A message is gzipped once, split into parts and each part sealed with
+  AES-GCM under a key HKDF-derived from the pairing key (fresh random IV per part); an event stays under
+  `RELAY_EVENT_MAX_BYTES` (48 000 bytes, pinned by a live publish to every listed relay). The link sends at most 8
+  events a second (a burst of 1), so to a peer that reads them it carries many messages in one event, a **batch**
+  (`v: 2`):
+    - **Format.** One sealed event for one receiver: a random 128-bit `id` of its own, the sender's `from` and `epoch`,
+      the receiver's `to` and `toEpoch`, and `ts`, carried once; then the ids of the messages it acknowledges (raw,
+      16 bytes each) and data parts that carry no sender fields. Acks stay per message, keyed by `msgId`: the replay
+      key, the re-ack rule and the stream rules are the frame's, there is no cumulative ack, and a lost middle message
+      is sent again alone. An ack waits up to 50 ms (`ACK_LINGER_MS`) for data to leave with, and leaves alone after
+      that. Acks take batch slots ahead of data.
+    - **Limits and budgets.**
+        - Each part keeps the per-frame limits (`RELAY_HEADER_MAX_BYTES` on its header, `RELAY_PART_BYTES` on its
+          bytes). A batch holds at most `RELAY_BATCH_MAX_FRAMES` (64) parts and acks together; a receiver drops one
+          with more, or one whose layout or any inner header is malformed, whole.
+        - The sender counts a batch's header in its real UTF-8 bytes (escapes included). A batch between two ids is
+          made only when its header is within `RELAY_HEADER_MAX_BYTES` **and** one full part with its own header fits
+          beside it (`batchFits`: the room is the event's plaintext less the header, and a part costs
+          `RELAY_BATCH_FRAME_BYTES` plus `RELAY_PART_BYTES`). Ids of ordinary length, and even 64 ASCII characters
+          each, pass; ids of many multi-byte or escaped characters may not. A peer for which it fails is sent single
+          frames, and a batch that finds nothing that fits sends its head part as a frame.
+        - At most 512 acks are owed to a peer at a time, the oldest dropped past that (a lost ack only makes its sender
+          send the message again, and the duplicate is acknowledged again).
+        - One decrypt can finish up to 64 messages, so each data message that finishes, in a batch or in a frame, is
+          charged to a budget of 200 a second (burst 512) before it is unzipped and parsed; over it the message is
+          dropped unread, neither remembered nor acknowledged, and its sender sends it again. The burst is sized for one
+          full startup of the phone's page: an account with 30 or more challenges sends 330 or more invokes at once,
+          and 512 is one second of full batches (8 events of 64), so a startup is never dropped and resent after the
+          4 s resend wait.
+        - Two limits, stated plainly. The finished-message budget (200 a second) and the inflate queue are per link, not
+          per peer: a key holder that floods without stopping can make the other phones' messages drop. Their senders
+          give up after `MAX_RESENDS` resends (about 12 s) and the phones reconnect; a flood shorter than that only
+          delays them. This is accepted, because every key holder is already equally trusted. And at 200 finished
+          messages a second, the sustained inflate work a key holder can cause is about 4 times that of single frames
+          (which the 50 events a second decrypt cap holds to 50 messages a second); it is still bounded by
+          `MAX_CONCURRENT_INFLATES` at any moment.
+        - A finished message waits in a queue before it is unzipped and parsed (`relayInflate.ts`), so the memory one
+          burst can hold is bounded whatever its size: at most 4 concurrent inflations of up to
+          `MAX_PEER_MESSAGE_BYTES` each, plus their decode and parse copies, and at most 512 waiting messages
+          (`MAX_QUEUED_INFLATES`; the waiting compressed parts are bounded by the burst of 512). Messages wait in order
+          and are not dropped, except that a message arriving with the queue full is dropped unread (after the budget
+          is asked) — neither remembered nor acknowledged, so its sender sends it again.
+        - The ordered inbox holds up to 128 finished messages behind a gap (`MAX_HELD_MESSAGES`, two full batches), so
+          a lost batch leaves the batch after it, and one more, waiting for its resend instead of delivering the later
+          messages out of order; past 128 the gap is skipped at once. That bounds one stream at 128 ×
+          `MAX_PEER_MESSAGE_BYTES` (256 MiB serialized). A sender has at most one live stream: a new stream retires the
+          old one, and a retired inbox is closed and holds nothing. Only the table entries count toward the 32 a sender
+          may have, so the most one sender holds behind gaps is one stream's 256 MiB, not 32 times that.
+        - The memory the inboxes hold is bounded in bytes for the whole link: at most `MAX_HELD_BYTES` (64 MiB),
+          counted as the inflated size of each message (what gunzip produced; the gzipped size is not used), across
+          every stream and sender. It counts both the messages held behind gaps and the messages parked for a sender
+          that is away. When a message brings the total over the cap, parked messages go first: the suspended inbox with
+          the most parked bytes loses its oldest parked messages, until the total is under the cap. If it is still over,
+          the inbox holding the most bytes behind a gap skips its gap, and so on: the later messages of that stream are
+          delivered ahead of the missing ones, as the count limit does. A message delivered, skipped or dropped no
+          longer counts. A parked message was never acknowledged: the ack goes only to a sender that is
+          still joined, and a message parks only while its sender is away. A dropped parked message is neither
+          acknowledged nor remembered (its replay key is forgotten), so if the sender comes back with the same epoch it
+          sends the message again, as it does any message it holds unacknowledged, and that copy is delivered once.
+          This recovers it only while the sender is still resending (`MAX_RESENDS` tries, about 12 s): a sender that
+          gave up before it returned, or never returns, loses the message, and so does one that comes back with a new
+          epoch, whose old streams are retired anyway. That loss is accepted for a sender that left. The replay key of a dropped parked message is forgotten on purpose: if it
+          were kept, the returning sender's resend would be acknowledged as already delivered, and the message would be lost
+          silently. The cost is that for up to 300 s a relay can replay the original v1 frame, which makes a short ghost
+          join and delivers the message once; it takes a v1 sender and more than 64 MiB pushed through the inboxes. Bytes held behind a gap by a suspended inbox cannot be given
+          up, so the total can stay over the cap while nothing is left that can be dropped or skipped; it comes back
+          under as those senders return or their streams are dropped (600 s unused). Parsed objects in memory are larger
+          than their serialized size, so 64 MiB bounds the serialized bytes, not the memory itself. Only a paired key
+          holder can send messages that large, and every key holder is already equally trusted.
+        - The other memory that waits before a message reaches an inbox, with its bound from the constants (upper bounds
+          from the counts: the 50 events a second the link decrypts also limit how fast any of it can fill, which is why a
+          real burst stays far below them). A reassembled message is gzipped, at most `RELAY_MAX_PARTS` ×
+          `RELAY_PART_BYTES` = 100 × 35 137 = 3 513 700 bytes (3.35 MiB). The messages waiting in the inflate queue are
+          up to `MAX_QUEUED_INFLATES` (512) of them, so up to 512 × 3 513 700 = 1 799 014 400 bytes (1.68 GiB) of gzipped
+          bytes, besides the 4 being unzipped (each up to 2 MiB inflated, plus the copies of decode and parse). The
+          unfinished messages a peer has partly received are up to `MAX_PARTIAL_MESSAGES` (8) per peer, so up to
+          8 × 3 513 700 = 28 109 600 bytes (26.8 MiB) a peer. The relay link itself does not cap how many peers it
+          tracks (the host refuses a fourth phone at the protocol level, in the host, not in the link), so the link total
+          for partial messages grows with the number of peers a key holder makes up, each with its own 8 partials.
+        - The replay memory is bounded so that no live entry is ever evicted. An entry lives 600 s, and every entry
+          comes from a budgeted source: each decrypted event adds at most one key (a batch key or one frame key), and
+          each finished data message adds one. A batch's acks add no key. So the memory never holds more than
+          (50 events + 200 messages a second) × 600 s, plus the two burst allowances (50 and 512), which is 150 562
+          entries, under its cap of 262 144; the cap only bounds memory and is never reached by live entries, so a
+          recorded batch or message handed back within its window is always still remembered.
+    - **Receive checks.** A batch passes the checks a frame passes, once for the whole event: one that is not for the
+      receiver (its `to`, `toEpoch` or `ts`) is dropped whole. Then the replay memory is asked for the batch `id`
+      (`batch|from|id`): one seen before is dropped whole, before it can admit a peer that has left or refresh one that
+      is silent, and the id is remembered once the batch is accepted. A message sent again travels in a batch with an
+      id of its own, so its duplicate is still acknowledged again. A message that finishes is first checked for being
+      in progress (a copy of a message queued or being unzipped is not queued again and is delivered once), then the
+      budget and the queue are asked, and only then is any stream or inbox state touched, so a message that is dropped
+      changes none. The message is remembered and acknowledged only after its unzip and parse have finished, never
+      before, and not at all if the link was left meanwhile (leaving also drops the queue); the ack goes to the peer
+      that is joined under that id now when it is the same sender instance, so a peer that left and came back during
+      the unzip still hears it.
+    - **Compatibility with beta.3.** Presence and bye stay single `v: 1` frames, and a presence carries the capability
+      flag `batch`, which the old header check ignores since it reads only the fields it names. A link sends batches
+      only to a peer whose latest presence carried the flag (or that sent a batch), and a peer that joins again with a
+      new epoch starts without it, so every other peer is sent single frames, and both kinds are read by a new link.
+      Acks owed to a peer that has since withdrawn the flag leave as ack frames: at most `MAX_RELEASED_ACKS` (8, the newest) are sent that way and the rest are dropped (a lost ack only causes a resend).
+    - **Paths and what the relays see.** A peer joins on whichever path reaches it first, with no wait. WebRTC is
+      the preferred path: a peer on the relay that WebRTC then reaches moves to `direct` **in place**, with no leave and
+      no join (an upgrade; the transport tells `onPathChange`, the phone's badge follows and the desktop's relay count
+      is read again). What happens to the messages the relay link still holds for that peer depends on which way they
+      go, and `createHybridTransport`'s `role` says (`host` on the desktop, `phone` on the phone):
+        - **The desktop moves what has not started and copies what is safe.** It sends results, events and states.
+          At the upgrade it moves every message the relay link has queued and not started to WebRTC, in order (they
+          have no sequence number yet, so the relay stream has no gap), and a message that finishes packing later
+          goes to WebRTC too (the link's redirect, ended by a leave or `stopRedirect`). A message the relay link
+          **has started** and not had acknowledged stays where it is and keeps being sent again, so the relay
+          stream has no gap and a message sent on the relay later is not held for the gap timer. It is also sent over
+          WebRTC when a second copy is harmless: a `hello`, a `result` (the phone ignores a result for an invoke that
+          is not pending, and never reconnects for one) and an `autovote-state` (stamped; an older count is
+          ignored), which is what `isSafeToSendTwice` (`protocol.ts`) answers. An **event** that started
+          (`settings-changed`, `log-message`, `update-*`) is not copied, because a repeat would make the phone
+          refetch or show a log line twice: it finishes on the relay, and reaches the phone once. The relay link giving
+          up on a peer that is `direct` is **never a leave on the desktop**: the results were copied, and dropping the
+          phone would stop its pushes with no notice. The cost is accepted: an event that started on the relay and
+          whose acknowledgement never comes is lost.
+        - **The phone drains, then switches, and holds its sends meanwhile.** It sends invokes and commands, for which
+          a duplicate is not harmless (a spend could run twice) and whose order matters (two writes to one setting).
+          So the peer stays on the relay for **sending** while the relay link has a message to it in flight (waiting
+          to be packed in the link's send chain, being packed, or started and not acknowledged; `inFlight`), and
+          sends made meanwhile are **held** in the hybrid transport, in order, and not given to the relay link: the
+          send resolves at once, as a queued relay send does, and the drain ends once what is in flight is
+          acknowledged however fast the page sends. When nothing is in flight (`whenIdle`) the messages the link
+          queued and did not start are taken back (`takeUnsent`) and sent over WebRTC in order, then the held ones, and
+          then `onPathChange` is told. The held sends are capped at the relay queue's size (`MAX_QUEUED_FRAMES`): a
+          send past the cap is refused as the relay queue refuses one. **WebRTC lost during the drain is a leave,
+          then a join on the relay**, and so is the relay link giving up during the drain: the desktop upgraded at
+          once and may have answered over WebRTC, so nothing the phone sent on the relay can be taken as answered. The
+          leave settles everything in flight (a spend as unclear), and the held sends are dropped, because the invokes
+          they were made for are settled by it; the phone then says hello again. A held `autovote-command` is lost
+          when the relay link gives up during the drain, the same as a command queued on the relay and lost through
+          `forgetPeer`: it is not sent again, and the leave puts the phone back to connecting. A drop
+          of WebRTC during the drain settles everything the same way, instead of leaving it held. A relay link that gives up on a `direct` peer
+          with messages it sent never acknowledged is a leave then a join on the phone as well. After `leave`
+          nothing is moved, sent or announced, and the path events of either transport are ignored.
+
+        **Desktop events can arrive out of order across an upgrade.** An event that started on the relay is not
+        copied, and events made after the upgrade go over WebRTC at once, so a later `settings-changed`, `update-*` or
+        `log-message` can overtake an earlier one that is still finishing on the relay. For `settings-changed` that
+        can show: `TranslationContext` applies `payload.app.language` straight from the payload, so if the language is
+        changed twice right around an upgrade, the phone can show the older one until the next change. This is
+        accepted: the window is the relay's few seconds around a path change, and the next change corrects it.
+
+        The two rules differ because a duplicate toward the phone is harmless for those three kinds and not for an
+        event, and a duplicate or reordering toward the desktop is never harmless. In both, a message handed over
+        whose WebRTC send fails is a WebRTC loss for that peer (a leave, then a join on the relay if it still reaches
+        the peer), never swallowed. A leave settles only the end where it happens: each end learns of the loss from its
+        own path events, so each settles its own invoke state. On an upgrade the desktop also sends the phone only the
+        current `autovote-state` (and only if the phone has said hello): not `settings-changed`, so the phone refetches
+        nothing. The way down is still a leave and then a join: a WebRTC drop on a peer the relay still reaches (a
+        downgrade), and on the phone the relay link giving up on a peer that is `direct` now while messages it had sent
+        on the relay were never acknowledged (the leave event carries that count): an invoke sent on the relay may
+        never have arrived, and only a leave
+        settles it, a spend as unclear. The desktop host listens on every
+        relay; a phone listens on up to 3, and a phone that knows no desktop yet announces itself on each
+        relay that opens, so the first presence reaches a relay the host listens on. What this adds to what the relays can see:
+        - They now also carry the app's encrypted data. They see its timing and approximate sizes, keep the
+          events at least briefly, and any relay can record them.
+        - They see the same pubkey for the signalling and the data (trystero's one key), so they can link the two.
+        - Anyone who records the traffic and later gets the pairing key can decrypt it: there is no forward secrecy
+          on this path. **Reset pairing** ends that for later traffic.
+        - Every paired phone holds the same key, so each is equally trusted and can pose as another.
+        - Junk sent to the topic can delay the path: the link decrypts at most 50 events a second and drops the rest
+          unread, so junk can starve real frames. Accepted for a fallback path.
+        - A replayed presence can make a short-lived ghost peer (gone after 25 s of silence, and a presence of another
+          epoch replaces a live peer only if it is newer than anything accepted from it); it has no data effect. The
+          original v1 frame of a dropped parked message is different, because its replay key is forgotten on purpose (see
+          the inbox memory bound): for up to 300 s a relay can replay it, which makes a short ghost join and delivers the
+          message once, late. That is a data effect: it can be a message its sender already gave up on (an invoke the
+          phone reported as failed, for example). It is accepted: it needs a v1 sender, a relay that replays, and more
+          than 64 MiB pushed through the inboxes, and the message is still delivered at most once.
+        - What a replayed event can and cannot do. Whoever records events cannot read them, but can hand one back
+          while it is under 300 s old. A replay cannot cross a restart of the receiver (data and acks are bound to the
+          receiver's random epoch) or of the sender (a presence or frame of another epoch replaces a live peer only if
+          it is newer than anything accepted from it), cannot be delivered twice (replays are remembered for 600 s: per
+          finished data message `(sender, message)` — not per part, so a message whose partial was evicted still
+          completes when its sender sends it again — per part for presence, ack and bye frames, and per batch id for batches;
+          a replay of a finished message is only acknowledged again; the memory is capped at 262 144 entries, the oldest
+          going first, a cap the budgets keep live entries well under: see **Limits and budgets**), and cannot retire a live stream. Data streams are ordered per
+          `(sender, stream)`: a sender draws a fresh stream id when it starts sending to a peer and again after it
+          forgets the peer, and the receiver keeps each stream's inbox across the peer's removal and re-admission, so a
+          one-sided drop causes no stall and no reset. A stream id that is new to the receiver replaces the sender's
+          live stream only if it comes from the epoch the sender was admitted with and its frame is newer than
+          anything accepted on the live stream — a sender draws a new stream only after its older frames, so a replay
+          of an older stream always carries an older timestamp. Any other new stream is born retired, and a frame of a
+          retired stream is ignored and not acknowledged, so its sender gives up through its normal resend path.
+          The rule trusts the sender's own timestamps, so it has a known limit. If a sender's clock steps back by more
+          than the time since its last accepted frame (a manual change, a resync), its next stream carries a timestamp
+          older than the live stream's newest and is born retired: nothing of it is delivered or acknowledged, and the
+          sender gives up after its resends, sends a `bye` and tries again on yet another stream. This heals once the
+          sender's clock has caught up with the live stream's newest timestamp, which takes at most as long as the step
+          itself, and a step of more than five minutes cannot happen on this path at all, because a frame more than
+          300 s from the receiver's clock is refused whatever its stream (the relay path needs clocks within five
+          minutes of each other). Replacing an idle live stream instead would shorten that wait, but would let a
+          replayed frame of an older stream retire a live one again, so the link does not. What a replay can still do:
+          make a short-lived ghost peer, or deliver a frame of the live stream that had not arrived yet (which the
+          sender would have delivered anyway). The table is bounded, not exact: at most 32 streams a sender, dropped
+          lazily after 600 s unused.
+        - The phone listens on up to 3 relays, on any network, so it may download each message up to 3 times, one copy
+          per relay; the app processes it once. The sockets drop a copy by the SHA-256 of its content before anything
+          is decrypted (never by the relay's event id, which a relay could stamp on a forged event to block the real
+          ones), remembering at most 4096 contents for 60 s and computing at most 64 digests at a time, and drop the
+          link's own echoes by pubkey. The desktop listens on every relay.
+        - Both paths sign with one pubkey from one IP, so a relay's rate limit or block by pubkey hits both; the
+          link's send budget (8 events a second) keeps that unlikely. A relay that answers one of the link's events
+          `OK false` with a `rate-limited:`, `blocked:`, `banned:`, `restricted:`, `pow:` or `auth-required:` reason,
+          or a plain `rate limited` / `rate-limited` at the start of the reason (nostr.oxtr.dev sends no prefix colon),
+          gets no more of them for 60 s, doubling on each new refusal up to 15 min (an `OK true` resets it); its
+          socket and subscription stay.
+
+- **The phone page is served from this project's GitHub Pages and reads the key from the URL fragment.** A
+  compromised Pages deploy (or a compromised `pages.yml` run) could ship JavaScript that sends paired keys
+  elsewhere. Mitigation: Pages publishes only after a green release (`workflow_dispatch` from `build.yml`), the
+  site builds are reproducible from the repo, and the Android remote mode loads the bundled page, not
+  the Pages copy. Copies of the link stay in the clipboard after Copy link, in bookmarks and the Home Screen icon,
+  in the tab's session storage, in the browser's history (which a browser may sync to its account) and in the QR
+  scanner's history — that is the same permanence the key's design accepts.
+- **Log lines relayed to a paired phone can hold local paths.** A phone that opens its log view receives the
+  desktop's log entries as they are written, and an entry can name a local path that contains the OS username.
+  That is within what the link's holder may see; the pairing key itself, the link and invoke arguments are never
+  logged. The host writes its own activity at INFO (peer connect, leave and refusal, each invoke's channel name,
+  each auto-vote command), so it shows in a packaged build's log files.
+- **The loader and the versioned page keep the saved link stable.** The versioned page replaces the address bar with
+  the stable loader address (`../#k=<key>`, same origin) through `history.replaceState`, so a bookmark or Home Screen
+  icon saved from it survives the next desktop update; a versioned page that hears a `hello` with another version
+  sends the tab to the loader (`location.replace`) instead of showing a notice. The loader refuses a `hello`
+  whose version is not a release version before it builds a path from it, and navigates with `location.replace`.
+  Results, events and a leave count only from the peer that said `hello` as the desktop; a fellow phone's leave
+  or failed connection never ends a working session.
+- **The loader goes straight to the kept version.** The phone keeps the desktop version it last reached in
+  `localStorage` under `gs-remote-desktop-version` (`core/remote/desktopVersion.ts`), as `<fingerprint>:<version>`.
+  The fingerprint is the first 16 hex digits of the SHA-256 of the pairing room's id (itself the SHA-256 of the key),
+  so a value kept for another pairing is not trusted, and the store never holds the pairing key. The fingerprint is a stable 64-bit id of the pairing, and the value sits in the `localStorage` of
+  `isthisgitlab.github.io`, which every page on that origin can read: another site there learns the id, and cannot get the
+  key or the room id from it (it is a truncated hash of a hash). It is written only from
+  a `hello` with `host: true` whose version passes `isReleaseVersion`, by three writers: the loader when it reads the
+  version, a versioned page that accepts the desktop, and a versioned page that hears another version (it keeps that one
+  before it sends the tab to the loader). On load the loader goes to that version's page **only when** the value passes
+  `isReleaseVersion` and carries the current key's fingerprint, the same published check the loader uses after a
+  `hello` passes (one `HEAD` request for the page file, no transport; inside the Android app it asks the app's local
+  server) except when the request cannot run at all: then a return visit does not skip, while the check after a `hello`
+  goes on to the page, and this tab has not already gone straight to that version: before it navigates, the loader writes a
+  `sessionStorage` mark, "skipped to V". Otherwise it clears the stored value and runs the whole flow, with its
+  `update`, `unpublished` and `update-this` notices. The mark is the loop guard: a page that keeps nothing on a mismatch
+  (beta.3 and older pages) sends the tab back with the stored value unchanged, the loader finds its own mark and
+  runs the whole flow, and the worst case is one extra connect; a page that accepts the desktop clears the mark, so a
+  reload of the loader in that tab goes straight on again. **Disconnect** (Navbar and the loader's notice
+  screens) clears the stored version as it clears the key. In a plain browser there is no Disconnect, so the stored version stays until a different pairing key is used or the site data is cleared.
+- **The phone's view preferences are kept in the page origin's `localStorage`.** The `gs-remote-view-prefs` key holds
+  only display values — theme, language, the compact flags and the challenge ids they name — on the device itself, as
+  the one exception to `config.json` being the only stored settings file. Other pages on the site's origin can read and
+  write `gs-remote-view-prefs`, but it holds no credential, and strict field checks on both read and write keep a
+  written value to a display change.
+- **The desktop's auto-vote state is stamped.** Every `autovote-state` carries `hostRun` (a random id the desktop's
+  renderer drew when it started) and `n` (how many states it has stamped, only upward, across every host the
+  renderer makes). The phone ignores a state with the same `hostRun` and a lower `n` than one it applied, so a state
+  still draining on the relay cannot overwrite a newer one that went over WebRTC; a new `hostRun` (the desktop
+  restarted or reloaded) is always applied and starts the comparison again, and a state with no stamp (an older
+  desktop) is applied as it comes. An older phone ignores the extra fields.
+- **The loader is not a phone.** Its `hello` carries `role: 'loader'`; the host answers it with its version only —
+  no snapshot, no peer slot, no count, no desktop notice. A fourth phone is turned away with `bye` carrying
+  `reason: 'full'`, which the phone reads as "too many phones are connected", not as an offline computer.
+- **Reset pairing is confirmed and loud.** The Settings section asks first, and offers the reset while Remote
+  access is off too (a leaked link stays valid until it is reset). When the new key could not be saved, the
+  handler answers `success: false` and the section says so — the old link still works — instead of showing a
+  reset that did not happen.
+- **The Android app's remote mode** (`shells/capacitor/remoteMode.ts`, `shells/remote/phoneMode.ts`): the
+  login screen and Settings → Application Settings offer "Control my computer", a paste field for the pairing
+  link (the phone's camera opens the link in the browser instead of scanning in-app). Entering stops
+  `AutoVoteService`, writes `autovoteRunning=false` and flushes it, stores the key under `gs_remote_access`
+  (in `LOCAL_DATA_STORES`, so the wipe clears it) and loads `/remote/index.html` from the APK. The startup entry
+  reads that key before anything mounts, so a relaunch stays in remote mode and `AutovoteProvider` never mounts
+  over the Capacitor bridge. The local server answers a directory path with the app's own document, so every
+  bundled page is addressed by its file name (`/remote/<version>/index.html`), and the bundled loader takes the
+  version from `hello` like the Pages one; a version the APK does not carry reads "Update the app on your
+  computer". Both documents reach Preferences through the native bridge's `nativePromise`
+  (`core/remote/phoneKeyStore.ts`), because the remote bundles register no Capacitor plugin. **Disconnect**
+  (Navbar and the loader's notice screens) clears the key and the kept desktop version and reloads the app's own
+  document, in normal mode with local voting off.
+- On a lost connection an in-flight invoke on a spend channel (`core/remote/allowlist.ts`, the `postOnce`
+  spenders) is answered "unclear — check before retrying", never a clean failure; every other channel reports
+  the failure. In-flight invokes are never queued or replayed after a reconnect.
 - The settings file `config.json` is written
-  mode `0o600` — but **only at creation. A pre-existing or backup-restored file keeps whatever mode it already
+  mode `0o600` (by the node platform's transport, `platforms/node/atomicWrite.ts`) — but **only at creation. A pre-existing or backup-restored file keeps whatever mode it already
   had** (the source says as much); don't state 0600 as an always-guarantee. The renderer never receives the `auth`
   block of the configuration, only `hasToken` (§7).
 - **Log redaction (`logger/sanitize.ts`, through the `logger.ts` facade) is two-layer but credential-key-keyed, not exhaustive.** `sanitizeForLog`
@@ -954,7 +1332,7 @@ These are known and deliberate; don't describe the app as stronger than this.
   all local data" removes them. The damaged copy the app sets aside cannot be read as settings, so a logout cannot
   clear it: the notice that names it says it may still hold the sign-in and advises deleting it. It
   is not encrypted because the Node CLI shares the files with the GUI and cannot read Electron `safeStorage`, and
-  macOS runs Chromium on a mock keychain on purpose (`use-mock-keychain`, `index.ts`), so `safeStorage` would add no
+  macOS runs Chromium on a mock keychain on purpose (`use-mock-keychain`, `shells/electron/index.ts`), so `safeStorage` would add no
   real protection there. Anything that can read the owner's files, or run as that user, can read the token; logging
   out removes it from `config.json`, and so does "Delete all local data".
 - **Desktop builds are not signed by a publisher** (no Developer ID or notarization on macOS, no publisher
@@ -1133,6 +1511,110 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editab
 - **Builder** (`react/components/app/scenarioBuilder/`): forms generated from `scenarios/builderSpec.ts` (every
   condition / action / selector's fields and kinds — a test checks every default against the validator) over
   pure draft edits in `scenarios/builderModel.ts`; it never validates itself — save and simulate do.
-- **Surfaces**: IPC `ipc/scenarios.handlers.ts` (the CLI reuses it), CLI `cli/commands/scenarios.ts`,
+- **Surfaces**: IPC `ipc/scenarios.handlers.ts` (the CLI reuses it), CLI `shells/cli/commands/scenarios.ts`,
   GUI `ScenariosSection` (+ the builder), the `scenario` field in `SettingInput`, and the card
   `ScenarioStatusLine`.
+
+## 12. Code layout, layers and the Platform port
+
+The app ships as five entry points over one shared core. `src/ts/` is split by who may import whom:
+
+```
+src/ts/
+  core/       shared logic: api, apiFactory, strategies, mock, services, settings, scheduling, voting, scenarios,
+              metadata, format, logger, translations, types, ipc (manifest, buildHandlers halves, invokeHandler),
+              platform (the port), autovote (the renderer's controller), runtime.ts (env flags only)
+  platforms/  one runtime each: node/ (fs transport, OS paths, fs assets, file lock), webview/ (Preferences
+              transport, CapacitorHttp adapter, fetch assets), headless/ (AndroidHeadlessStore / AndroidHeadlessHttp)
+  shells/     one entry point each: electron/, cli/, web/, capacitor/, headless/ (main file, windows, bridges,
+              native-service wrappers, and the shell's platform.ts)
+  react/      the UI only: pages, components, hooks, contexts, react/api
+  appPaths.ts the one file at the root
+```
+
+**Why `appPaths.ts` stays at the root.** It resolves the app root as `__dirname/../..`, and in the bundled Electron main
+that `__dirname` is `out/main/` — the same depth below the root as `src/ts/`. Moving it into `platforms/node/` would
+change the depth the bundle needs. The lint table classes it as node-platform, and `platforms/node/paths.ts` reaches it
+at call time.
+
+**Layer rules** (`scripts/lint/layer-boundaries.mts`, the one table that names each boundary):
+
+- **core** imports only core — not `electron*`, `@capacitor/*`, `@capawesome-team/*`, `platforms/`, `shells/` or `react/`.
+- **platforms/x** imports core — not another platform, not a shell.
+- **shells/x** imports core, platforms and react — not another shell.
+- **react** imports react and core — not platforms, shells, `electron*` or `@capacitor/*` (the renderer rules in §8 stay).
+
+The `layer-boundaries/no-cross-layer-import` Oxlint rule enforces them over all of `src/ts` and is an **error**: a new
+import across a boundary fails `pnpm lint`. It reads static imports, `require('…')` string literals and `import()`.
+`import type`, `export type … from` and `typeof import(…)` are exempt, because the build erases them and they leave no
+runtime edge; an inline `import { type A }` is not erased under `verbatimModuleSyntax`, so it is checked like any runtime
+import. That exemption is what lets core types name Electron-only handler modules (`types/ipc.ts`,
+`ipc/releaseUpdates.ts`; §6). `tests/ci-validation.test.ts` pins the rule's level and that no file is exempt.
+
+**The renderer bundle graph check.** A rule on source text cannot see an indirect import, so the same test file
+rebuilds the four renderer bundles (`app`, `login`, `logs`, `web`) in-process with the build script's exact options and
+reads esbuild's module graph: none may contain `core/platform/port.ts`, anything under `platforms/`, or the Capacitor
+native services. The Capacitor bundle is the sanctioned route to both — it reaches them through the injected
+background host (`shells/capacitor/bridge/capacitorBackgroundHost.ts`) — and a second test asserts it does, so the
+check cannot pass on an empty graph.
+
+### The Platform port
+
+`core/platform/port.ts` is the one seam between the core and the platform families. A shell installs its family's
+`Platform` object once, before any core module loads; core asks `platform()` for what it used to branch on itself.
+Members:
+
+| Member         | What it is for                                                                                                                                                                                                                                         |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `http`         | The axios adapter (`CapacitorHttp` on the WebView, `AndroidHeadlessHttp` in the service); null means axios's default.                                                                                                                                  |
+| `storage`      | `jsonStore(ref, flags)` and `settingsFile(ref, wiring)` build one transport per store (read, write, hydrate, flush, discard, compare-and-write); `loaded(key)`; `lockPolicy` (`file` lock on node, `none` where the native compare-and-write decides). |
+| `paths`        | The user-data directory, the OS user-data dir of an app name, packaged and source-code detection, the resources path, `appPath(...)`.                                                                                                                  |
+| `assets`       | `readText` / `readJson` of the runtime assets and the local vision model (location, device, whether it ships, the library loader).                                                                                                                     |
+| `wipe`         | What "Delete all local data" reaches: the session clear (required on Electron), the plugin's native wipe, reload-after-wipe, the Preferences keys to list and remove, the user-data markers to respect.                                                |
+| `native`       | The Android services core calls: `autovote` (the AutoVoteBackground plugin), `foregroundService`, `apkInstaller`; each null where the platform has none. There is deliberately no `openExternal`.                                                      |
+| `windows`      | What the shell does to its windows: broadcast settings changes, relaunch after a wipe. Every shell supplies it.                                                                                                                                        |
+| `capabilities` | Facts the rules read: whether the mission-needs refresh resolver exists, whether Snap may play, whether the native service owns scenarios, the recovery wording (`file` or `store`), the log context line, the hourly log cleanup.                     |
+
+`installPlatform(p)` stores the object in a `globalThis` slot keyed by `Symbol.for('gurushots.platform')`, so it survives
+`jest.resetModules`. Installing the same object again does nothing; **a second, different install throws** (an entry
+forgot its install, or two entries installed). `platform()` throws when none is installed — a core module ran before
+its entry's install, a real boundary and not a default to fall back on. `installedPlatform()` answers null instead, for
+modules a renderer bundle also loads, where the port stays empty by design. Renderer pages install nothing. Tests swap
+platforms only through `tests/helpers/platform.ts`.
+
+Each family builds one object (`createNodePlatform`, `createWebviewPlatform`, `createHeadlessPlatform`) and **never calls
+`installPlatform` itself**. What a family cannot import — a shell's native services, windows, plugin wipe,
+compare-and-write — the shell passes in, and the builder's parameters are required, so a shell that forgets one fails to
+compile. The Capacitor shell (`shells/capacitor/platform.ts`) passes the plugin-backed native wipe, `cas`, native services
+and windows; `tests/shells/capacitorPlatform.test.ts` asserts each is the plugin-backed one.
+
+**The renderer's platform** is a separate, smaller thing: `core/platform/kind.ts` (`electron` / `web` / `capacitor`),
+marked by the web and Capacitor bridges when they install `window.api`, read with `platformKind()`; unmarked means
+Electron. It is dependency-free so a renderer can read it without importing a bridge.
+
+### Install before the logger
+
+The logger reads `platform()` at module scope (`logger/context.ts`, `logger/files.ts`), so **every entry installs its
+platform before the logger — and therefore the rest of core — loads**. Each shell has `platform.ts`
+(`shells/<shell>/platform.ts`, and `scripts/lib/platform.ts` for scripts), imported first by the entry point
+(`shells/electron/index.ts`, `shells/cli/cli.ts`, `shells/web/server.ts`, `shells/capacitor/page.tsx`,
+`shells/headless/index.ts`). The rule for such a module:
+
+- Its static imports are the port and its family builder, plus type-only imports, node builtins, dependency-free
+  core modules that reach neither the logger nor `platform()` (`core/plainObject`, for example), and (Electron only)
+  `shells/electron/index/session.ts`, a leaf whose own logger access is a call-time `require`.
+- Everything else — the shell's native services, the bridge, the vision assets, `electron` — is reached at **call
+  time** with a lazy `require('./x') as typeof import('./x')` inside the member that needs it, never at load.
+- No module in that load chain reads `platform()` at load. The families follow the same rule for the modules they
+  delegate to.
+
+A static logger import anywhere in that chain throws before the install runs — the bundled Electron main crashed at
+startup exactly that way. Two CI guards enforce it, and they cover each other's blind spot:
+
+- **The metafile load-time chain test** (`tests/ci-validation.test.ts`, "shell platform module load-time chains")
+  bundles each shell platform module in-process and walks esbuild's metafile over `import-statement` edges only (call-time
+  requires are the documented exception), and fails on any logger module it reaches. A control asserts the Electron entry
+  does reach the logger, so the walk is known to see real edges. It cannot see a module-scope `require`.
+- **`tests/shells/loadOrder.test.ts`** runs the load itself: with the port slot cleared and the logger mocked by a
+  recording factory, each shell platform module must install without throwing and without loading the logger — which
+  catches a module-scope `require` of the logger and any other load-time `platform()` read the static walk misses.

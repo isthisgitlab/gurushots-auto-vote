@@ -11,13 +11,13 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { BusyContent } from '@/components/ui/LoadingSpinner';
 import { suggestErrorText } from '@/api/ipcErrorText';
 import { useTagSuggestions } from '@/api/useTagSuggestions';
-import { LIBRARY_ORDERS, LOADED_SORTS, isLibraryOrder, isLoadedSort } from '../../../librarySort';
-import { MIN_AUTOCOMPLETE_CHARS } from '../../../settings/limits';
-import { suggestedTags } from '../../../tagSuggestions';
+import { LIBRARY_ORDERS, LOADED_SORTS, isLibraryOrder, isLoadedSort } from '../../../core/librarySort';
+import { MIN_AUTOCOMPLETE_CHARS } from '../../../core/settings/limits';
+import { suggestedTags } from '../../../core/tagSuggestions';
 import { SuggestedStrip } from './SuggestedStrip';
 
 import type { ReactNode } from 'react';
-import type { LibraryOrder, LoadedSort } from '../../../librarySort';
+import type { LibraryOrder, LoadedSort } from '../../../core/librarySort';
 import type { usePhotoPicker } from '@/hooks/usePhotoPicker';
 import type { LibraryPhoto } from '@/hooks/useLibraryListing';
 

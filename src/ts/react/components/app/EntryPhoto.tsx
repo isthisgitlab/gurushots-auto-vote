@@ -1,4 +1,4 @@
-import type { RankingEntry } from '../../../types/gurushots';
+import type { RankingEntry } from '../../../core/types/gurushots';
 import { useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { entryPhotoUrl } from '@/utils/formatters';
@@ -20,7 +20,7 @@ const FULL_PX = 1200;
  * WHY IT EXISTS: auto-fill picks the photo, and the pick is not always the one
  * you would have made. Without this the only way to see what was submitted is
  * to open gurushots.com. No API response carries an image URL, so the src is
- * built from the entry's own ids — see src/ts/format/photoUrl.ts.
+ * built from the entry's own ids — see src/ts/core/format/photoUrl.ts.
  *
  * Lives apart from EntryBadge so the badge stays about rank/boost/turbo state;
  * folding this inline pushed that component past the repo's complexity gate.

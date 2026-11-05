@@ -1,0 +1,380 @@
+import * as settings from '../../settings';
+import { errorResult } from '../errorResult';
+import { isIdArg } from '../isIdArg';
+import * as logger from '../../logger';
+import * as apiFactory from '../../apiFactory';
+import * as auth from '../../services/auth';
+import { isAutoJoinActive } from '../../services/joinChallenges';
+import { chosenAnnotator, annotateOpenIds, MAX_ANNOTATED_IDS } from './chosenAnnotations';
+import { rememberOpenChallenges } from '../../services/openChallengeCache';
+import { fetchUpcoming, mergeDiscoverLists } from '../../services/discoverChallenges';
+import { dropContext } from '../../services/libraryCache';
+import { getAutoClaimStatus } from '../../services/autoClaim';
+import { rememberChallenges } from '../../services/boostGuard/selection';
+import { sanitizeForLog, refuseInvalidArgs } from './shared';
+import { isPlainObject } from '../../plainObject';
+
+import type { IpcReplyFn } from '../invokeHandler';
+import type { joinChallengeSingle } from '../../services/joinChallenges';
+import type {
+    ActiveChallengesResponse,
+    Bankroll,
+    Challenge,
+    ChosenAnnotation,
+    DiscoverChallenge,
+    OpenChallenge,
+} from '../../types/gurushots';
+
+const handleGetAutoClaimStatus = (async () => {
+    try {
+        return { success: true as const, ...getAutoClaimStatus() };
+    } catch (error) {
+        logger.withCategory('claim').error('Error reading auto-claim status:', error);
+        return errorResult(error, 'Could not read auto-claim status');
+    }
+}) satisfies IpcReplyFn;
+
+const handleGetActiveChallenges = (async (): Promise<ActiveChallengesResponse> => {
+    try {
+        logger.withCategory('api').debug('=== IPC get-active-challenges ===', null);
+        // The token never travels from the renderer: it is read from the store.
+        // No token is the pre-login state, answered with the failed-fetch shape
+        // (the renderer polls this, so no warning per call).
+        const { auth, app } = settings.loadSettings();
+        const { token } = auth;
+        const { mock } = app;
+        if (!token) return { challenges: [], fetchFailed: true };
+        const strategy = apiFactory.getApiStrategy();
+        const result: ActiveChallengesResponse = await strategy.getActiveChallenges(token);
+        // Feeds the quit confirmation. A failed fetch keeps the previous
+        // list — an empty one would wave through a quit mid-boost-window.
+        if (!result?.fetchFailed) rememberChallenges(result?.challenges, mock === true);
+        return result;
+    } catch (error) {
+        // Never throw to the renderer (architecture invariant). Return the
+        // same `{ challenges, fetchFailed }` shape the happy path uses so
+        // useActiveChallenges' "always resolves a list shape" assumption
+        // holds — a corrupted config.json during getApiStrategy() must
+        // surface as a failed fetch, not a raw stack in the error UI.
+        logger.withCategory('api').error('Error handling get-active-challenges request:', error);
+        return { challenges: [], fetchFailed: true };
+    }
+}) satisfies IpcReplyFn;
+
+const handleAuthenticate = (async (event: unknown, username: string, password: string, isMock: boolean) => {
+    // IPC boundary: the renderer (or any caller) can send anything, so the typed signature is checked before any use.
+    if (!(typeof username === 'string' && typeof password === 'string')) {
+        logger
+            .withCategory(logger.CATEGORIES.AUTHENTICATION)
+            .warning('authenticate refused non-string credentials locally; GuruShots was not contacted', null);
+        return { success: false as const, error: 'Invalid credentials' };
+    }
+    logger
+        .withCategory(logger.CATEGORIES.AUTHENTICATION)
+        .info(`🔐 Authentication request received - Mock: ${isMock}`, null);
+    try {
+        // Route through the factory (no direct api/mock imports) and the
+        // shared token normalizer. The explicit isMock arg from the login
+        // screen still selects the surface — login happens before the mock
+        // setting is necessarily committed, so we pass the caller's choice
+        // as an explicit override rather than re-reading settings.mock here.
+        const strategy = apiFactory.getApiStrategy({ mock: !!isMock });
+        const response = await strategy.authenticate(username, password);
+        const { ok, token, error } = auth.extractAuthResult(response);
+
+        if (ok) {
+            // A login that could not be saved would sign the user out at the next start: say so now.
+            if (auth.switchAccountToken(token) === false) {
+                logger
+                    .withCategory('authentication')
+                    .error('Authentication succeeded but the token was not saved', null);
+                return { success: false as const, error: 'token-not-saved' };
+            }
+            // The login form pre-fills the name while "Stay logged in" is on.
+            const nameSaved = settings.setSetting(
+                'lastUsername',
+                settings.getSetting('stayLoggedIn') === true ? username : '',
+            );
+            if (!nameSaved) {
+                logger
+                    .withCategory('authentication')
+                    .warning('The user name for the login form could not be saved; the login itself was');
+            }
+            logger.withCategory('authentication').info('🔐 Authentication successful', { success: true });
+            return { success: true as const };
+        }
+        logger.withCategory('authentication').info('🔐 Authentication failed', { error });
+        return { success: false as const, error };
+    } catch (error) {
+        logger.withCategory('authentication').error('Error handling authenticate request:', error);
+        return errorResult(error, 'Authentication failed due to network error');
+    }
+}) satisfies IpcReplyFn;
+
+// Account currency balances (keys/swaps/fills/coins). success:false means
+// the balance could not be read — the renderer/CLI must NOT render 0 in that
+// case (0 would wrongly imply an empty balance).
+const handleGetBankroll = (async () => {
+    try {
+        const guard = auth.requireAuthToken('bankroll');
+        if (!guard.ok) return guard.response;
+        const strategy = apiFactory.getApiStrategy();
+        const bankroll: Bankroll | null = await strategy.getBankroll(guard.token);
+        if (!bankroll) {
+            return { success: false as const, error: 'Could not read your balance right now' };
+        }
+        // Whitelist the four known currencies — never forward a raw payload.
+        return {
+            success: true as const,
+            keys: bankroll.keys,
+            swaps: bankroll.swaps,
+            fills: bankroll.fills,
+            coins: bankroll.coins,
+        };
+    } catch (error) {
+        logger.withCategory('api').error('Error handling get-bankroll request:', error);
+        return errorResult(error, 'Failed to read bankroll');
+    }
+}) satisfies IpcReplyFn;
+
+// Whether auto-join is armed (master on OR a title profile enables it) —
+// drives the header "auto-join" indicator. Settings-only, no auth needed.
+const handleGetAutoJoinActive = (async () => {
+    try {
+        return { success: true as const, active: isAutoJoinActive() === true };
+    } catch (error) {
+        logger.withCategory('join').error('Error handling get-auto-join-active request:', error);
+        return { success: false as const, active: false };
+    }
+}) satisfies IpcReplyFn;
+
+const idsOf = (items: ReadonlyArray<Challenge | null>): Array<string | number> =>
+    items.flatMap((c) => (c?.id == null ? [] : [c.id]));
+
+/**
+ * The challenge's suggested photo ids from the strategy's in-memory cache — an enrichment, never a
+ * fetch: any failure (the cache being cold, a challenge without an id) resolves empty, and the
+ * listing always lands.
+ */
+const suggestedIds = async (
+    token: string,
+    strategy: apiFactory.ApiStrategy,
+    id: Challenge['id'] | null | undefined,
+): Promise<string[]> => {
+    if (id === null || id === undefined) return [];
+    try {
+        return await strategy.getSuggestedPhotoIds(token, String(id));
+    } catch {
+        return [];
+    }
+};
+
+/**
+ * What a Discover row (and the CLI's `discover`, and the join paths) reads off a listing item: an
+ * explicit pick, so no other field GuruShots carries — `guru_info`, ranking payloads, anything
+ * server-side — ever crosses IPC with the list. `member` is narrowed to the one field the join's
+ * fresh-join guard reads (`submit_state`). `suggestedPhotoIds` rides along only when there are any:
+ * the field stays absent, not empty, on a challenge GuruShots suggests nothing for.
+ */
+const pickDiscoverItem = (item: DiscoverChallenge, chosen: ChosenAnnotation, suggested: string[]): OpenChallenge => ({
+    id: item.id,
+    title: item.title,
+    url: item.url,
+    type: item.type,
+    badge: item.badge,
+    tags: item.tags,
+    status: item.status,
+    start_time: item.start_time,
+    close_time: item.close_time,
+    entries: item.entries,
+    players: item.players,
+    max_players: item.max_players,
+    votes: item.votes,
+    join_coins: item.join_coins,
+    max_photo_submits: item.max_photo_submits,
+    // The renderer reads the prize line with .map, so only an array of objects crosses IPC —
+    // anything else (GuruShots has sent a bare object) drops the field.
+    first_prizes:
+        Array.isArray(item.first_prizes) && item.first_prizes.every(isPlainObject) ? item.first_prizes : undefined,
+    member: item.member && { submit_state: item.member.submit_state },
+    ...(suggested.length > 0 ? { suggestedPhotoIds: suggested } : {}),
+    ...chosen,
+});
+
+/**
+ * The upcoming list, or null when it could not be had: a failure never costs the open list its
+ * place. The log line carries the filter and the kind of failure only — no token, no member.
+ */
+const fetchUpcomingOrNull = async (token: string, strategy: apiFactory.ApiStrategy): Promise<Challenge[] | null> => {
+    try {
+        const upcoming = await fetchUpcoming(token, strategy.getMemberChallenges);
+        if (upcoming === null)
+            logger.withCategory('api').warning('Could not list challenges (filter=upcoming: failed)');
+        return upcoming;
+    } catch (error) {
+        const kind = error instanceof Error ? error.name : typeof error;
+        logger.withCategory('api').warning(`Could not list challenges (filter=upcoming: ${kind})`);
+        // aislop-ignore-next-line ai-slop/hidden-fallback -- logged just above; null is the documented "could not be had" outcome
+        return null;
+    }
+};
+
+// List the challenges Discover shows (and the CLI's `discover`): the open (un-joined) ones and, when
+// discoverUpcomingHours is above 0, the upcoming ones starting within that many hours. The handler
+// decides what to fetch; the renderer sends nothing.
+const handleGetMemberChallenges = (async () => {
+    try {
+        const guard = auth.requireAuthToken('member challenges');
+        if (!guard.ok) return guard.response;
+        const strategy = apiFactory.getApiStrategy();
+        const [open, upcoming] = await Promise.all([
+            strategy.getMemberChallenges(guard.token, 'open'),
+            // Fetched whatever the window: every upcoming id is what keeps its chosen photos from cleanup.
+            fetchUpcomingOrNull(guard.token, strategy),
+        ]);
+        if (open === null) return { success: false as const, error: 'Could not list challenges', items: [] };
+        const merged = mergeDiscoverLists({
+            open,
+            upcoming: upcoming ?? [],
+            hours: settings.getEffectiveSetting('discoverUpcomingHours', null),
+            nowSec: Date.now() / 1000,
+        });
+        // The lists belong to the token they were read under: a login that replaced it while they
+        // were on their way is still answered, but nothing is remembered for the account it replaced
+        // (a request still in flight must not refill what a logout or account switch emptied).
+        if (guard.token === settings.getSetting('token')) {
+            // These lists keep a chosen-photos entry alive for a challenge that is not joined yet (see
+            // cleanupStaleChallengeSetting); the upcoming one is written only from a successful fetch.
+            settings.rememberOpenChallengeIds(idsOf(open));
+            if (upcoming !== null) settings.rememberUpcomingChallenges(upcoming);
+            // A challenge the upcoming feed dropped but the open one does not list yet stays in the
+            // cache, so its rules (by title or tags) still resolve while it is "starting now".
+            const fetched = new Set(idsOf(upcoming ?? []).map(String));
+            const lingering = Array.from(settings.getUpcomingChallengeIds() ?? []).filter((id) => !fetched.has(id));
+            rememberOpenChallenges(merged, lingering);
+        }
+        const annotate = chosenAnnotator();
+        return {
+            success: true as const,
+            items: await Promise.all(
+                merged.map(async (item) =>
+                    pickDiscoverItem(item, annotate(item), await suggestedIds(guard.token, strategy, item.id)),
+                ),
+            ),
+        };
+    } catch (error) {
+        logger.withCategory('api').error('Error handling get-member-challenges request:', error);
+        return { ...errorResult(error, 'Failed to list challenges'), items: [] };
+    }
+}) satisfies IpcReplyFn;
+
+// The Chosen Photos annotations of open challenges, read from the settings: what the Discover
+// rows re-read when a setting changes, without fetching the challenge list again.
+/**
+ * @param ids - the open challenges' ids
+ */
+const handleGetOpenChosenAnnotations = (async (event: unknown, ids: Array<string | number>) => {
+    if (!Array.isArray(ids) || ids.length > MAX_ANNOTATED_IDS || !ids.every(isIdArg)) {
+        return refuseInvalidArgs('join', 'get-open-chosen-annotations');
+    }
+    try {
+        return { success: true as const, annotations: await annotateOpenIds(ids) };
+    } catch (error) {
+        logger.withCategory('join').error('Error handling get-open-chosen-annotations request:', error);
+        return { ...errorResult(error, 'Failed to read the chosen photos'), annotations: {} };
+    }
+}) satisfies IpcReplyFn;
+
+// Manual single join. Paid joins require spendCoins:true — otherwise the
+// service returns status 'needs-confirm' and nothing is charged. The
+// service re-fetches the live candidate and holds a shared in-flight lock,
+// so this handler stays thin.
+/**
+ * @param spendCoins - Only `true` authorizes a paid join.
+ * @param expectedCost - The cost the caller's confirmation named: a challenge that now costs more is
+ *   not joined (it answers `needs-confirm` with the live cost). Absent: the current cost is accepted.
+ */
+const handleJoinChallenge = (async (
+    event: unknown,
+    challengeId: string | number,
+    spendCoins?: boolean,
+    expectedCost?: number,
+) => {
+    if (!isIdArg(challengeId)) return refuseInvalidArgs('join', 'join-challenge');
+    if (
+        expectedCost !== undefined &&
+        !(typeof expectedCost === 'number' && Number.isFinite(expectedCost) && expectedCost >= 0)
+    ) {
+        return refuseInvalidArgs('join', 'join-challenge');
+    }
+    const safeId = sanitizeForLog(challengeId);
+    try {
+        logger
+            .withCategory('join')
+            .info(
+                `▶️ Join request: Challenge=${safeId}, spendCoins=${spendCoins === true}, expectedCost=${expectedCost ?? 'none'}`,
+                null,
+            );
+        const guard = auth.requireAuthToken('join');
+        if (!guard.ok) return guard.response;
+        const strategy = apiFactory.getApiStrategy();
+        const outcome: Awaited<ReturnType<typeof joinChallengeSingle>> | null = await strategy.joinChallenge(
+            challengeId,
+            spendCoins === true,
+            guard.token,
+            ...(expectedCost === undefined ? [] : [expectedCost]),
+        );
+        // Joining enters photos, so which ones the challenge now accepts has changed.
+        if (outcome?.status === 'joined') dropContext(challengeId);
+        return {
+            success: outcome?.status === 'joined',
+            status: outcome?.status,
+            cost: outcome?.cost,
+            coins: outcome?.coins,
+            challengeId: outcome?.challengeId,
+            reason: outcome?.reason,
+            coinsBefore: outcome?.coinsBefore,
+        };
+    } catch (error) {
+        logger.withCategory('join').error('Error handling join-challenge request:', error);
+        return errorResult(error, 'Failed to join challenge');
+    }
+}) satisfies IpcReplyFn;
+
+/**
+ * The user forgetting a payment that could not be confirmed (the claim of an unlock that got no answer, or one from
+ * before accounts were told apart), after checking GuruShots shows the coins were not taken: the next join of the
+ * challenge asks for its price. Never touches a claim known to be charged.
+ */
+const handleForgetUnconfirmedPayment = (async (event: unknown, challengeId: string | number) => {
+    // A plain challenge id only: claims are keyed by their challenge id, so an id with a colon in it names no record.
+    if (!isIdArg(challengeId) || !/^\d+$/.test(String(challengeId))) {
+        return refuseInvalidArgs('join', 'forget-unconfirmed-payment');
+    }
+    try {
+        logger
+            .withCategory('join')
+            .info(`▶️ Forget unconfirmed payment: Challenge=${sanitizeForLog(challengeId)}`, null);
+        const guard = auth.requireAuthToken('forget payment');
+        if (!guard.ok) return { ...guard.response, status: 'not-authenticated' as const };
+        const outcome = await apiFactory.getApiStrategy().forgetUnconfirmedPayment(challengeId, guard.token);
+        return outcome.status === 'forgotten'
+            ? { success: true as const, status: outcome.status }
+            : { success: false as const, error: outcome.status, status: outcome.status };
+    } catch (error) {
+        logger.withCategory('join').error('Error handling forget-unconfirmed-payment request:', error);
+        return errorResult(error, 'Failed to forget the payment');
+    }
+}) satisfies IpcReplyFn;
+
+export {
+    handleForgetUnconfirmedPayment,
+    handleGetAutoClaimStatus,
+    handleGetActiveChallenges,
+    handleAuthenticate,
+    handleGetBankroll,
+    handleGetAutoJoinActive,
+    handleGetMemberChallenges,
+    handleGetOpenChosenAnnotations,
+    handleJoinChallenge,
+};

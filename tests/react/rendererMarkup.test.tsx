@@ -13,8 +13,8 @@ import { SettingsToggles } from '@/components/login/SettingsToggles';
 import { ItemEditor } from '@/components/app/scenarioBuilder/ItemEditors';
 import { challengeSettingHints, globalSettingHints, SettingHintList } from '@/components/app/SettingHints';
 import { invalid } from '../helpers/invalid';
-import type { Challenge } from '../../src/ts/types/gurushots';
-import type { RendererSchema } from '../../src/ts/types/settingsEditor';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
+import type { RendererSchema } from '../../src/ts/core/types/settingsEditor';
 
 // tests/setup.ts stubs node:fs; the recorder needs the real one.
 const { readFileSync, writeFileSync } = jest.requireActual<typeof import('node:fs')>('node:fs');

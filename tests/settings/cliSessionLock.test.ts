@@ -10,19 +10,15 @@ jest.mock('node:fs', () => {
 });
 jest.unmock('path');
 jest.unmock('node:path');
-jest.mock('../../src/ts/runtime', () => ({
-    __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/runtime')>('../../src/ts/runtime'),
-}));
 
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type * as runtimeModule from '../../src/ts/runtime';
-import type * as lockModule from '../../src/ts/settings/cliSessionLock';
+import type * as lockModule from '../../src/ts/platforms/node/cliSessionLock';
+import { platform } from '../../src/ts/core/platform/port';
+import { installTestPlatform } from '../helpers/platform';
 import { isNumber, isShape, isString, parseJsonAs } from '../helpers/parseJson';
 
-const runtime = require('../../src/ts/runtime') as typeof runtimeModule;
 const {
     holdCliSessionLock,
     isCliSessionActive,
@@ -39,7 +35,7 @@ const {
     TICK_MS,
     SETTLE_MS,
     refreshDesktopAppLock,
-} = require('../../src/ts/settings/cliSessionLock') as typeof lockModule;
+} = require('../../src/ts/platforms/node/cliSessionLock') as typeof lockModule;
 
 // Sets the age of a marker file: the time it was last refreshed.
 const age = (file: string, ms: number) => {
@@ -53,7 +49,8 @@ describe('cli session lock', () => {
 
     beforeEach(() => {
         root = fs.mkdtempSync(path.join(os.tmpdir(), 'gs-lock-'));
-        jest.spyOn(runtime, 'getAppUserDataPath').mockReturnValue(root);
+        // The markers live in the user-data directory: the platform resolves it into this test's temp dir.
+        installTestPlatform({ paths: { ...platform().paths, userData: () => root } });
         // This process's own CLI marker; what is written into it names whichever process a test wants it to.
         lockFile = path.join(root, processMarkerName(CLI_SESSION_PREFIX));
     });

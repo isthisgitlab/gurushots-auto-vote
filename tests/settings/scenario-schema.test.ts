@@ -4,12 +4,12 @@
  * resolvable references, and readable error paths.
  */
 
-import type * as scenarioSchemaModule from '../../src/ts/settings/scenarioSchema';
-import type * as defaultsModule from '../../src/ts/settings/defaults';
+import type * as scenarioSchemaModule from '../../src/ts/core/settings/scenarioSchema';
+import type * as defaultsModule from '../../src/ts/core/settings/defaults';
 
 const { validateScenario, parseScenarioJson, formatPath } =
-    require('../../src/ts/settings/scenarioSchema') as typeof scenarioSchemaModule;
-const { schemaDefaults } = require('../../src/ts/settings/defaults') as typeof defaultsModule;
+    require('../../src/ts/core/settings/scenarioSchema') as typeof scenarioSchemaModule;
+const { schemaDefaults } = require('../../src/ts/core/settings/defaults') as typeof defaultsModule;
 
 const globalDefaults = schemaDefaults();
 

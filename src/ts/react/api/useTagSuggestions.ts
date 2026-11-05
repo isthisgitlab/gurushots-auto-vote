@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { useIpcQuery } from './useIpcQuery';
 import { logRendererError } from './ipc';
-import { MIN_AUTOCOMPLETE_CHARS } from '../../settings/limits';
+import { MIN_AUTOCOMPLETE_CHARS } from '../../core/settings/limits';
 
-import type { WindowApi } from '../../types/ipc';
+import type { WindowApi } from '../../core/types/ipc';
 import type { IpcQueryApply } from './useIpcQuery';
 
 /** The search-photo-tags reply, as the handler answers it. */

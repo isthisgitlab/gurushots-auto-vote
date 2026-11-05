@@ -6,10 +6,10 @@ import * as ipc from '@/api/ipc';
 import { valuesEqual } from '@/utils/valuesEqual';
 
 import type { Dispatch, SetStateAction } from 'react';
-import type { ChallengeValues, RuleSource, TitleRuleInfo } from '../../types/settings';
-import type { RendererSchema, SettingChangeHandler, SettingResetHandler } from '../../types/settingsEditor';
-import { errorMessage } from '../../errorMessage';
-import { ON_ONLY_KEYS } from '../../settings/ruleBehaviour';
+import type { ChallengeValues, RuleSource, TitleRuleInfo } from '../../core/types/settings';
+import type { RendererSchema, SettingChangeHandler, SettingResetHandler } from '../../core/types/settingsEditor';
+import { errorMessage } from '../../core/errorMessage';
+import { ON_ONLY_KEYS } from '../../core/settings/ruleBehaviour';
 
 /**
  * What the challenge's matching rules contribute, as the modal holds it: the matched profile

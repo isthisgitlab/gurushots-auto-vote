@@ -8,8 +8,8 @@ import {
     ruleHasBehaviour,
     ruleInlineEntries,
     TITLE_RULE_INLINE_KEYS,
-} from '../../src/ts/settings/ruleBehaviour';
-import { sanitizeTitleRuleInline } from '../../src/ts/settings/titleRuleSanitize';
+} from '../../src/ts/core/settings/ruleBehaviour';
+import { sanitizeTitleRuleInline } from '../../src/ts/core/settings/titleRuleSanitize';
 
 describe('ruleInlineEntries', () => {
     test('lists the allowlisted inline keys a rule sets, leaving out "inherit" values', () => {

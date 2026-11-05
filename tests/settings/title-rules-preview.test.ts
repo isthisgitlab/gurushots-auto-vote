@@ -9,11 +9,11 @@
 
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import type { MemoryStore } from '../helpers/headlessStore';
-import type { CategoryLogger } from '../../src/ts/logger';
+import type { CategoryLogger } from '../../src/ts/core/logger';
 import { invalid } from '../helpers/invalid';
-import settings = require('../../src/ts/settings');
+import settings = require('../../src/ts/core/settings');
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
         info: jest.fn(),
@@ -30,7 +30,7 @@ jest.mock('../../src/ts/logger', () => {
 
 const cat = invalid<{
     __cat: { [K in 'info' | 'error' | 'debug' | 'success' | 'warning']: jest.MockedFunction<CategoryLogger[K]> };
-}>(require('../../src/ts/logger')).__cat;
+}>(require('../../src/ts/core/logger')).__cat;
 
 const HOUR = 3600;
 const START = 1_700_000_000;

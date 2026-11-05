@@ -7,10 +7,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as ipc from '@/api/ipc';
-import { LIBRARY_BATCH_PHOTOS, STATS_MIN_INTERVAL_MS } from '../../settings/limits';
-import { sleep } from '../../timing';
+import { LIBRARY_BATCH_PHOTOS, STATS_MIN_INTERVAL_MS } from '../../core/settings/limits';
+import { sleep } from '../../core/timing';
 
-import type { LoadedSort } from '../../librarySort';
+import type { LoadedSort } from '../../core/librarySort';
 
 /** What a stats run reports while it is out: how many of its ids are answered, of how many asked. */
 export type StatsProgress = { done: number; total: number };

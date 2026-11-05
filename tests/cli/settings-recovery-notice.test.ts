@@ -4,7 +4,7 @@
  * on it.
  */
 
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     loadSettings: jest.fn(),
     getSettingsRecovery: jest.fn(),
     retryImportDetailed: jest.fn(),
@@ -14,21 +14,21 @@ jest.mock('../../src/ts/settings', () => ({
     acknowledgeImportReport: jest.fn(),
 }));
 const mockCategory = { success: jest.fn(), error: jest.fn(), info: jest.fn() };
-jest.mock('../../src/ts/logger', () => ({
+jest.mock('../../src/ts/core/logger', () => ({
     printStderr: jest.fn(),
     printLine: jest.fn(),
     withCategory: jest.fn(() => mockCategory),
 }));
 
-import loggerModule = require('../../src/ts/logger');
-import settingsModule = require('../../src/ts/settings');
-import type * as noticeModule from '../../src/ts/cli/commands/settingsRecovery';
-import type * as commandTableModule from '../../src/ts/cli/commandTable';
+import loggerModule = require('../../src/ts/core/logger');
+import settingsModule = require('../../src/ts/core/settings');
+import type * as noticeModule from '../../src/ts/shells/cli/commands/settingsRecovery';
+import type * as commandTableModule from '../../src/ts/shells/cli/commandTable';
 
 const logger = jest.mocked(loggerModule);
 const settings = jest.mocked(settingsModule);
 const { describeSettingsRecovery, reportSettingsRecovery, settingsRecoveryCmd } =
-    require('../../src/ts/cli/commands/settingsRecovery') as typeof noticeModule;
+    require('../../src/ts/shells/cli/commands/settingsRecovery') as typeof noticeModule;
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -227,7 +227,7 @@ describe('settingsRecoveryCmd', () => {
 
     test('is registered in the command table', async () => {
         jest.mocked(settings.startFreshDetailed).mockReturnValue({ ok: true });
-        const { COMMANDS } = require('../../src/ts/cli/commandTable') as typeof commandTableModule;
+        const { COMMANDS } = require('../../src/ts/shells/cli/commandTable') as typeof commandTableModule;
 
         await expect(COMMANDS['settings-recovery'](['start-fresh'])).resolves.toBe(0);
     });

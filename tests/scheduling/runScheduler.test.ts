@@ -11,7 +11,7 @@
  * (last-minute), and reverts to the random cadence once the window clears.
  */
 
-jest.mock('../../src/ts/settings', () => ({
+jest.mock('../../src/ts/core/settings', () => ({
     loadSettings: jest.fn(),
     getSetting: jest.fn(),
     getEffectiveSetting: jest.fn(),
@@ -20,13 +20,14 @@ jest.mock('../../src/ts/settings', () => ({
 
 import { invalid } from '../helpers/invalid';
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
-import type * as runSchedulerModule from '../../src/ts/scheduling/runScheduler';
-import type * as randomDelayModule from '../../src/ts/scheduling/randomDelay';
-const { createScheduler } = require('../../src/ts/scheduling/runScheduler') as typeof runSchedulerModule;
+import type * as runSchedulerModule from '../../src/ts/shells/cli/runScheduler';
+import type * as randomDelayModule from '../../src/ts/core/scheduling/randomDelay';
+const { createScheduler } = require('../../src/ts/shells/cli/runScheduler') as typeof runSchedulerModule;
 type SchedulerDeps = Parameters<typeof createScheduler>[0];
-const { MIN_CYCLE_GAP_MS, MS_PER_MINUTE } = require('../../src/ts/scheduling/randomDelay') as typeof randomDelayModule;
+const { MIN_CYCLE_GAP_MS, MS_PER_MINUTE } =
+    require('../../src/ts/core/scheduling/randomDelay') as typeof randomDelayModule;
 
 const FIXED_DELAY_MIN = 3;
 const FIXED_DELAY_MS = FIXED_DELAY_MIN * MS_PER_MINUTE;

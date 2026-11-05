@@ -10,14 +10,14 @@
 import { fireEvent, render, screen } from './helpers/test-utils';
 import { PhotoGrid } from '@/components/app/PhotoGrid';
 import { mockTranslator } from './helpers/setup';
-import { createTranslator } from '../../src/ts/translations/translator';
+import { createTranslator } from '../../src/ts/core/translations/translator';
 import { invalid } from '../helpers/invalid';
 import type { TileStats } from '@/hooks/usePhotoStatsLoader';
 import type { LibraryPhoto } from '@/hooks/useLibraryListing';
 import type { usePhotoPicker } from '@/hooks/usePhotoPicker';
-import type { LibraryOrder } from '../../src/ts/librarySort';
-import type { WindowApi } from '../../src/ts/types/ipc';
-import type { Translate } from '../../src/ts/translations/translator';
+import type { LibraryOrder } from '../../src/ts/core/librarySort';
+import type { WindowApi } from '../../src/ts/core/types/ipc';
+import type { Translate } from '../../src/ts/core/translations/translator';
 
 type Listing = Extract<Awaited<ReturnType<WindowApi['getLibraryPhotos']>>, { success: true }>;
 

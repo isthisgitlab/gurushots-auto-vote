@@ -1,15 +1,21 @@
-import type { FillLogger } from '../../src/ts/types/autoFill';
+import type { FillLogger } from '../../src/ts/core/types/autoFill';
+import type { JointInput, VoteStat } from '../../src/ts/core/services/photoPicker/jointRank';
 import { invalid } from '../helpers/invalid';
+import { createNodePlatform, extractedVisionRootOf, __resetExtractedRootForTests } from '../../src/ts/platforms/node';
+import { installHeadlessTestPlatform, installTestPlatform, installWebviewTestPlatform } from '../helpers/platform';
+
+import type { PlatformWindows } from '../../src/ts/core/platform/port';
 
 /** The mocked transformers `env`: the module writes arbitrary config keys onto it. */
 type MockEnv = { backends: { onnx: { wasm: object } }; localModelPath?: string; [key: string]: unknown };
 
-const mockRuntime = {
-    isCapacitor: jest.fn(() => false),
-    isHeadlessService: jest.fn(() => false),
-    isCli: jest.fn(() => false),
-    isElectron: jest.fn(() => true),
-    isPackaged: jest.fn(() => true),
+// The node family answers its location from these inputs: the version flag
+// its Electron check reads (set through setElectron), and the packaged answer
+// its guarded electron read takes from the mocked electron module.
+const runtimeFlags = { packaged: true };
+const setElectron = (on: boolean) => {
+    if (on) (process.versions as { electron?: string }).electron = '43.0.0';
+    else delete (process.versions as { electron?: string }).electron;
 };
 const mockSea = { isSea: jest.fn(() => false), getAsset: jest.fn(() => 'sha') };
 const mockClassifier = jest.fn();
@@ -26,18 +32,26 @@ const mockCreateRequire = jest.fn(() => () => mockSeaTransformers);
 const mockExtract = jest.fn(() => ({ root: '/vision/root', modulePath: '/vision/root/vision-entry.js' }));
 
 jest.mock('path', () => jest.requireActual<typeof import('path')>('path'));
-jest.mock('../../src/ts/runtime', () => mockRuntime);
-jest.mock('../../src/ts/logger', () => ({ withCategory: jest.fn(() => mockLog) }));
+// The packaged answer is the node family's paths member now (its guarded
+// electron read), so the electron module answers through the same flags.
+jest.mock('electron', () => ({
+    __esModule: true,
+    app: {
+        get isPackaged() {
+            return runtimeFlags.packaged;
+        },
+    },
+}));
+jest.mock('../../src/ts/core/logger', () => ({ withCategory: jest.fn(() => mockLog) }));
 jest.mock('node:sea', () => mockSea, { virtual: true });
 jest.mock('node:module', () => ({ createRequire: mockCreateRequire }));
 jest.mock('@huggingface/transformers', () => mockTransformers);
-jest.mock('../../src/ts/services/visionCliAssets', () => ({ extractVisionCliAssets: mockExtract }));
 
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 import pathModule = require('node:path');
 const path = jest.mocked(pathModule);
-import type * as visionVerifierModule from '../../src/ts/services/visionVerifier';
+import type * as visionVerifierModule from '../../src/ts/core/services/visionVerifier';
 const {
     rankVisually,
     hasBundledModel,
@@ -47,7 +61,34 @@ const {
     snapPrompts,
     judgeSnapImage,
     __resetForTests,
-} = require('../../src/ts/services/visionVerifier') as typeof visionVerifierModule;
+} = require('../../src/ts/core/services/visionVerifier') as typeof visionVerifierModule;
+
+// The service's windows: the explicit no-ops its shell module passes.
+const windows: PlatformWindows = {
+    broadcastSettingsChanged: () => undefined,
+    afterWipe: () => undefined,
+};
+
+/**
+ * The node platform with the CLI's extractor injected, as the CLI shell
+ * installs it: its transformers load extracts through the mock and remembers
+ * the root, which the shell's location override answers.
+ */
+const installNodePlatformWithExtractor = (): void => {
+    const installed = installTestPlatform();
+    const family = createNodePlatform(windows, { extractVisionCliAssets: () => mockExtract() });
+    const nodeModelLocation = family.assets.visionModel.location;
+    installed.assets = {
+        ...family.assets,
+        visionModel: {
+            ...family.assets.visionModel,
+            location: () => {
+                const root = extractedVisionRootOf();
+                return root === undefined ? nodeModelLocation() : `${root}${path.sep}`;
+            },
+        },
+    };
+};
 
 const hex = (seed: string) => seed.repeat(32).slice(0, 32);
 const photo = (id: string) => ({ id: hex(id), member_id: hex('f') });
@@ -60,13 +101,29 @@ const PROMPTS = ['a photo of glorious green leaves', 'show us some green leaves.
 const sigmoid = (logit: number) => 1 / (1 + Math.exp(-logit));
 
 const makeLogger = () => {
-    const scoped = { info: jest.fn(), warning: jest.fn() };
+    const scoped = { info: jest.fn(), warning: jest.fn(), debug: jest.fn() };
     return invalid<FillLogger & { scoped: typeof scoped }>({
         scoped,
         withCategory: jest.fn(() => scoped),
         challengeTag: jest.fn(() => '[Challenge c1: Leaves]'),
     });
 };
+
+/** What a pick's tier values and votes look like when nothing but the model's fit tells the photos apart. */
+const tierInput = (overrides: Partial<JointInput> = {}): JointInput => ({
+    themeMatch: true,
+    shouldMatchCount: 0,
+    semantic: 70,
+    semanticSupport: 3,
+    score: 2,
+    suggested: false,
+    ...overrides,
+});
+const inputsFor = (seeds: string[], overrides: Record<string, Partial<JointInput>> = {}) =>
+    new Map(seeds.map((seed) => [hex(seed), tierInput(overrides[seed])]));
+const noVotes = () => jest.fn(async (): Promise<Map<string, VoteStat>> => new Map());
+/** The joint arguments of a call that does not care about the joint step. */
+const joint = (seeds = ['a', 'b', 'c']) => ({ jointInputs: inputsFor(seeds), loadVotes: noVotes() });
 
 // Logits per photo seed, one per prompt, returned as the pipeline does:
 // [{label, score}] sorted by score.
@@ -80,12 +137,10 @@ const logitsBy = (table: Record<string, number[]>) =>
 
 beforeEach(() => {
     __resetForTests();
+    __resetExtractedRootForTests();
     jest.clearAllMocks();
-    mockRuntime.isCapacitor.mockReturnValue(false);
-    mockRuntime.isHeadlessService.mockReturnValue(false);
-    mockRuntime.isCli.mockReturnValue(false);
-    mockRuntime.isElectron.mockReturnValue(true);
-    mockRuntime.isPackaged.mockReturnValue(true);
+    setElectron(true);
+    runtimeFlags.packaged = true;
     mockSea.isSea.mockReturnValue(false);
     mockSea.getAsset.mockReturnValue('sha');
     jest.spyOn(fs, 'existsSync').mockReturnValue(true);
@@ -97,6 +152,12 @@ beforeEach(() => {
         env.backends.onnx.wasm = {};
     }
     (process as { resourcesPath?: string }).resourcesPath = '/app/resources';
+    // The node test platform stands (the setup installed it); a test that
+    // swapped it gets it back from the setup's afterEach.
+});
+
+afterEach(() => {
+    setElectron(false);
 });
 
 afterAll(() => {
@@ -147,7 +208,7 @@ describe('challengePrompts', () => {
 });
 
 describe('orderByVisualFit', () => {
-    test('moves clear off-theme photos behind the accepted ones, keeping tag order inside each group', () => {
+    test('moves clear off-theme photos behind the accepted ones, keeping tag order inside each group', async () => {
         // Live "Glorious Green Leaves" logits: aerial island, field walkers,
         // leaf close-up, bridge, leaf canopy.
         const scored = [
@@ -158,11 +219,11 @@ describe('orderByVisualFit', () => {
             { id: 'canopy', logits: [-3.52, -2.91] },
         ];
         const accepted = jest.fn<void, [Set<string>]>();
-        expect(orderByVisualFit(scored, accepted)).toEqual(['leaf', 'canopy', 'walkers', 'island', 'bridge']);
+        expect(await orderByVisualFit(scored, accepted)).toEqual(['leaf', 'canopy', 'walkers', 'island', 'bridge']);
         expect(accepted).toHaveBeenCalledWith(new Set(['leaf', 'canopy']));
     });
 
-    test('fit averages the prompts, so a title-only match cannot push out a photo that fits both', () => {
+    test('fit averages the prompts, so a title-only match cannot push out a photo that fits both', async () => {
         // Live "Smoke-Filled Scenes": the title prompt alone rated fog far
         // above the real smoke photo, which the description prompt preferred.
         const scored = [
@@ -170,14 +231,14 @@ describe('orderByVisualFit', () => {
             { id: 'fog', logits: [-1.05, -8.9] },
             { id: 'portrait', logits: [-11.96, -12.44] },
         ];
-        expect(orderByVisualFit(scored)).toEqual(['smoke', 'fog', 'portrait']);
+        expect(await orderByVisualFit(scored)).toEqual(['smoke', 'fog', 'portrait']);
     });
 
-    test('abstains when no photo clearly matches any prompt, or nothing was scored', () => {
+    test('abstains when no photo clearly matches any prompt, or nothing was scored', async () => {
         // Live "It's all About Balance": best photo peaked at -7.78.
         const accepted = jest.fn<void, [Set<string>]>();
         expect(
-            orderByVisualFit(
+            await orderByVisualFit(
                 [
                     { id: 'stairs', logits: [-7.97] },
                     { id: 'rose', logits: [-11.17] },
@@ -187,7 +248,7 @@ describe('orderByVisualFit', () => {
         ).toBeNull();
         // The model could not judge the theme: that is no evidence, not a rejection.
         expect(accepted).not.toHaveBeenCalled();
-        expect(orderByVisualFit([])).toBeNull();
+        expect(await orderByVisualFit([])).toBeNull();
     });
 });
 
@@ -200,17 +261,26 @@ describe('rankVisually', () => {
         const logger = makeLogger();
 
         const onVisualEvidence = jest.fn<void, [Set<string>]>();
-        expect(await rankVisually(LEAVES, ids, eligible, 2, { logger, onVisualEvidence })).toEqual([
+        expect(await rankVisually(LEAVES, ids, eligible, 2, { logger, onVisualEvidence, ...joint() })).toEqual([
             hex('b'),
             hex('c'),
         ]);
         expect(onVisualEvidence).toHaveBeenCalledWith(new Set([hex('b'), hex('c')]));
         expect(mockClassifier).toHaveBeenCalledWith(expect.stringContaining('/256x256/'), PROMPTS);
         expect(logger.scoped.info).toHaveBeenCalledWith(
-            `Visual check reordered picks for [Challenge c1: Leaves]: ${hex('a')}, ${hex('b')} → ${hex('b')}, ${hex('c')}`,
+            `Visual check re-ranked picks for [Challenge c1: Leaves]: ${hex('a')}, ${hex('b')} → ${hex('b')}, ${hex('c')}`,
             {
                 prompts: PROMPTS,
                 scores: expect.arrayContaining([{ id: hex('b'), logits: [expect.any(Number), -2.8] }]),
+                joint: {
+                    [hex('b')]: { theme_n: expect.any(Number), vision_n: 1, votes_n: 0.5, joint: expect.any(Number) },
+                    [hex('c')]: {
+                        theme_n: expect.any(Number),
+                        vision_n: expect.any(Number),
+                        votes_n: 0.5,
+                        joint: expect.any(Number),
+                    },
+                },
             },
         );
         expect(mockTransformers.env).toMatchObject({
@@ -223,7 +293,7 @@ describe('rankVisually', () => {
             device: 'cpu',
         });
 
-        await rankVisually(LEAVES, ids, eligible, 1, { logger, ignoreWords: ['glorious'] });
+        await rankVisually(LEAVES, ids, eligible, 1, { logger, ignoreWords: ['glorious'], ...joint() });
         expect(mockTransformers.pipeline).toHaveBeenCalledTimes(1);
         expect(mockClassifier).toHaveBeenLastCalledWith(expect.any(String), [
             'a photo of green leaves',
@@ -237,7 +307,7 @@ describe('rankVisually', () => {
         mockClassifier.mockImplementation(async (url: string, prompts: string[]) =>
             prompts.map((label) => ({ label, score: 0.1 })),
         );
-        const picked = await rankVisually(LEAVES, long, photos, 13, { logger: makeLogger() });
+        const picked = await rankVisually(LEAVES, long, photos, 13, { logger: makeLogger(), ...joint() });
         expect(mockClassifier).toHaveBeenCalledTimes(13);
         expect(picked).toEqual(long.slice(0, 13));
     });
@@ -245,10 +315,14 @@ describe('rankVisually', () => {
     test('an unchanged pick records the model scores', async () => {
         logitsBy({ a: [-2, -2], b: [-2.5, -2.5], c: [-9, -9] });
         const logger = makeLogger();
-        expect(await rankVisually(LEAVES, ids, eligible, 1, { logger })).toEqual([hex('a')]);
+        expect(await rankVisually(LEAVES, ids, eligible, 1, { logger, ...joint() })).toEqual([hex('a')]);
         expect(logger.scoped.info).toHaveBeenCalledWith(
-            'Visual check kept tag order for [Challenge c1: Leaves]: no higher-fit replacement',
-            { prompts: PROMPTS, scores: expect.arrayContaining([{ id: hex('a'), logits: [-2, -2] }]) },
+            'Visual check kept pick order for [Challenge c1: Leaves]: no replacement ranked higher',
+            {
+                prompts: PROMPTS,
+                scores: expect.arrayContaining([{ id: hex('a'), logits: [-2, -2] }]),
+                joint: { [hex('a')]: expect.any(Object), [hex('b')]: expect.any(Object) },
+            },
         );
     });
 
@@ -257,7 +331,7 @@ describe('rankVisually', () => {
         ['an empty ranking', LEAVES, []],
         ['a letter challenge (the letter phrase is not a subject)', { title: 'The Letter "S"' }, ids],
     ])('%s keeps the tag order without loading the model', async (_name, challenge, ranked) => {
-        expect(await rankVisually(challenge, ranked, eligible, 1, { logger: makeLogger() })).toEqual(
+        expect(await rankVisually(challenge, ranked, eligible, 1, { logger: makeLogger(), ...joint() })).toEqual(
             ranked.slice(0, 1),
         );
         expect(mockTransformers.pipeline).not.toHaveBeenCalled();
@@ -265,16 +339,16 @@ describe('rankVisually', () => {
 
     test('a candidate without a buildable photo URL keeps the tag order', async () => {
         const withBroken = [...eligible, { id: 'not-an-md5', member_id: hex('f') }];
-        expect(await rankVisually(LEAVES, [...ids, 'not-an-md5'], withBroken, 1, { logger: makeLogger() })).toEqual([
-            hex('a'),
-        ]);
+        expect(
+            await rankVisually(LEAVES, [...ids, 'not-an-md5'], withBroken, 1, { logger: makeLogger(), ...joint() }),
+        ).toEqual([hex('a')]);
         expect(mockTransformers.pipeline).not.toHaveBeenCalled();
     });
 
     test('abstains to the tag order when nothing matches the prompts', async () => {
         logitsBy({ a: [-9, -9], b: [-8, -8], c: [-12, -12] });
         const logger = makeLogger();
-        expect(await rankVisually(LEAVES, ids, eligible, 1, { logger })).toEqual([hex('a')]);
+        expect(await rankVisually(LEAVES, ids, eligible, 1, { logger, ...joint() })).toEqual([hex('a')]);
         expect(logger.scoped.info).toHaveBeenCalledWith(
             'Visual check abstained for [Challenge c1: Leaves]; kept tag order',
             { prompts: PROMPTS, scores: expect.arrayContaining([{ id: hex('b'), logits: [-8, -8] }]) },
@@ -285,7 +359,9 @@ describe('rankVisually', () => {
         'an unusable classifier result %p keeps the tag order',
         async (output) => {
             mockClassifier.mockResolvedValue(output);
-            expect(await rankVisually(LEAVES, ids, eligible, 1, { logger: makeLogger() })).toEqual([hex('a')]);
+            expect(await rankVisually(LEAVES, ids, eligible, 1, { logger: makeLogger(), ...joint() })).toEqual([
+                hex('a'),
+            ]);
         },
     );
 
@@ -296,7 +372,7 @@ describe('rankVisually', () => {
     ])('a model load failure (%p) keeps the tag order and warns', async (failure, detail) => {
         mockTransformers.pipeline.mockRejectedValueOnce(failure);
         const logger = makeLogger();
-        expect(await rankVisually(LEAVES, ids, eligible, 1, { logger })).toEqual([hex('a')]);
+        expect(await rankVisually(LEAVES, ids, eligible, 1, { logger, ...joint() })).toEqual([hex('a')]);
         expect(logger.scoped.warning).toHaveBeenCalledWith(
             `Visual check unavailable for [Challenge c1: Leaves]: ${detail}`,
             null,
@@ -304,12 +380,12 @@ describe('rankVisually', () => {
     });
 
     test.each([
-        ['Capacitor', () => mockRuntime.isCapacitor.mockReturnValue(true)],
-        ['the headless service', () => mockRuntime.isHeadlessService.mockReturnValue(true)],
+        ['Capacitor', () => installWebviewTestPlatform()],
+        ['the headless service', () => installHeadlessTestPlatform()],
     ])('%s runs single-threaded WASM from the WebView origin', async (_name, arrange) => {
         arrange();
         logitsBy({ a: [-2, -2] });
-        await rankVisually(LEAVES, [hex('a')], [photo('a')], 1, { logger: makeLogger() });
+        await rankVisually(LEAVES, [hex('a')], [photo('a')], 1, { logger: makeLogger(), ...joint() });
         expect(mockTransformers.env.localModelPath).toBe('./');
         expect(mockTransformers.env.backends.onnx.wasm).toEqual({ wasmPaths: './', numThreads: 1 });
         expect(mockTransformers.pipeline).toHaveBeenCalledWith('zero-shot-image-classification', 'vision-model', {
@@ -318,12 +394,181 @@ describe('rankVisually', () => {
         });
     });
 
+    describe('the joint step', () => {
+        // The logged "Everything Sports" join (2026-11-03): the model's logits for the 12 shortlisted photos,
+        // in the tier order the pick was ranked in. 41d4 (golf, 5,470 votes) led the accepted group under the
+        // old order; 6f26 (soccer, 68,596 votes) fits best of all.
+        const SPORTS = {
+            id: '137654',
+            title: 'Everything Sports',
+            welcome_message: 'Share your best photos of sports. Athletes, a soccer game, playing golf, swimming.',
+        };
+        const LOGGED: Record<string, number[]> = {
+            '9': [-8.25400921238462, -11.180912938953927],
+            '4': [-3.910000802633653, -6.20046662189218],
+            '6': [-2.647967318348275, -5.779306397868556],
+            '2': [-4.80815309799085, -6.320335405006422],
+            e: [-5.452210887308753, -7.352216709486179],
+            '0': [-6.53552153938595, -8.245462425355221],
+            '5': [-6.382664647645, -8.401554106574784],
+            '7': [-7.357165791949786, -8.261360175550559],
+            '8': [-9.153389007315798, -10.056156146631611],
+            '1': [-10.023301095037032, -12.202523274358844],
+            f: [-12.089464186061774, -14.966932254564744],
+            d: [-11.443315521565099, -14.283918423333319],
+        };
+        // The shortlist's logged order: 9942, 41d4, 6f26, 0c9b, 284c, 6559, 087d, 68cd, 8b4b, 1d4c, f44e, ea46.
+        const seeds = ['9', '4', '6', '0', '2', '5', '7', 'd', '8', '1', 'f', 'e'];
+        // Step 0 of the plan: shouldMatchCount 0, semantic bucket 76, support 3 (e: 2), lexical 3 (2: 2).
+        const tiers = inputsFor(seeds, {
+            '9': { semantic: 76, score: 3 },
+            '4': { semantic: 76, score: 3 },
+            '6': { semantic: 76, score: 3 },
+            '2': { semantic: 76, score: 2 },
+            e: { semantic: 76, semanticSupport: 2, score: 3 },
+        });
+        // The cached votes of the two photos the logs name; the other two accepted photos have no stats yet.
+        const stats = new Map<string, VoteStat>([
+            [hex('4'), { votes: 5470, statsKnown: true }],
+            [hex('6'), { votes: 68596, statsKnown: true }],
+        ]);
+        const shortlist = seeds.map(hex);
+        const sports = seeds.map(photo);
+
+        test('the logged join picks the soccer photo, where the old order picked golf', async () => {
+            logitsBy(LOGGED);
+            const loadVotes = jest.fn(
+                async (asked: string[]) =>
+                    new Map(asked.filter((id) => stats.has(id)).map((id) => [id, stats.get(id)!])),
+            );
+            const logger = makeLogger();
+            const picked = await rankVisually(SPORTS, shortlist, sports, 1, {
+                logger,
+                jointInputs: tiers,
+                loadVotes,
+            });
+            expect(picked).toEqual([hex('6')]);
+            // Only the four photos the model accepted are looked up.
+            expect(loadVotes).toHaveBeenCalledWith([hex('4'), hex('6'), hex('2'), hex('e')]);
+            const [message, detail] = logger.scoped.info.mock.calls[0] as [string, { joint: Record<string, unknown> }];
+            expect(message).toBe(`Visual check re-ranked picks for [Challenge c1: Leaves]: ${hex('9')} → ${hex('6')}`);
+            expect(Object.keys(detail.joint).sort()).toEqual([hex('2'), hex('4'), hex('6'), hex('e')].sort());
+            // The old order: the same shortlist split by fit alone keeps the incoming order inside the accepted group.
+            const split = await orderByVisualFit(seeds.map((seed) => ({ id: hex(seed), logits: LOGGED[seed] })));
+            expect(split!.slice(0, 4)).toEqual([hex('4'), hex('6'), hex('2'), hex('e')]);
+        });
+
+        test('a failed votes lookup counts every photo as unknown, keeps the vision split and is logged', async () => {
+            logitsBy(LOGGED);
+            const logger = makeLogger();
+            const picked = await rankVisually(SPORTS, shortlist, sports, 2, {
+                logger,
+                jointInputs: tiers,
+                loadVotes: jest.fn(async () => {
+                    throw new Error('stats down');
+                }),
+            });
+            // Soccer still leads on fit; the rejected photo is not among the two.
+            expect(picked).toEqual([hex('6'), hex('4')]);
+            expect(logger.scoped.debug).toHaveBeenCalledWith(
+                'Visual check could not read the votes for [Challenge c1: Leaves]: stats down',
+                null,
+            );
+            expect(logger.scoped.warning).not.toHaveBeenCalled();
+            expect(logger.scoped.info).toHaveBeenCalledWith(
+                expect.any(String),
+                expect.objectContaining({
+                    joint: expect.objectContaining({ [hex('6')]: expect.objectContaining({ votes_n: 0.5 }) }),
+                }),
+            );
+        });
+
+        test('a bare rejection of the votes lookup is read as its text', async () => {
+            logitsBy(LOGGED);
+            const logger = makeLogger();
+            await rankVisually(SPORTS, shortlist, sports, 1, {
+                logger,
+                jointInputs: tiers,
+                loadVotes: jest.fn(() => Promise.reject('plain failure')),
+            });
+            expect(logger.scoped.debug).toHaveBeenCalledWith(
+                'Visual check could not read the votes for [Challenge c1: Leaves]: plain failure',
+                null,
+            );
+        });
+
+        test('one accepted photo asks for no votes, and a reorder by the split alone is logged', async () => {
+            // b is the only photo within the margin; the rejected a was ranked first.
+            logitsBy({ a: [-9, -9], b: [-1, -1], c: [-8, -8] });
+            const loadVotes = noVotes();
+            const logger = makeLogger();
+            expect(
+                await rankVisually(LEAVES, ids, eligible, 1, {
+                    logger,
+                    jointInputs: inputsFor(['a', 'b', 'c']),
+                    loadVotes,
+                }),
+            ).toEqual([hex('b')]);
+            expect(loadVotes).not.toHaveBeenCalled();
+            expect(logger.scoped.info).toHaveBeenCalledWith(
+                `Visual check re-ranked picks for [Challenge c1: Leaves]: ${hex('a')} → ${hex('b')}`,
+                expect.objectContaining({ joint: {} }),
+            );
+        });
+
+        test.each([
+            ['abstains', { a: [-9, -9], b: [-8, -8], c: [-12, -12] }],
+            ['finds no visual subject', null],
+        ])('a model that %s asks for no votes and keeps the tag order', async (_name, table) => {
+            const loadVotes = noVotes();
+            const challenge = table ? LEAVES : { title: 'Photo of the Day' };
+            if (table) logitsBy(table);
+            expect(
+                await rankVisually(challenge, ids, eligible, 2, {
+                    logger: makeLogger(),
+                    jointInputs: inputsFor(['a']),
+                    loadVotes,
+                }),
+            ).toEqual(ids.slice(0, 2));
+            expect(loadVotes).not.toHaveBeenCalled();
+        });
+
+        test('a model error keeps the tag order and asks for no votes', async () => {
+            mockTransformers.pipeline.mockRejectedValueOnce(new Error('onnx missing'));
+            const loadVotes = noVotes();
+            expect(
+                await rankVisually(LEAVES, ids, eligible, 2, {
+                    logger: makeLogger(),
+                    jointInputs: inputsFor(['a']),
+                    loadVotes,
+                }),
+            ).toEqual(ids.slice(0, 2));
+            expect(loadVotes).not.toHaveBeenCalled();
+        });
+
+        test('the gates hold: an unmatched accepted photo with the top fit and votes stays behind a matched one', async () => {
+            logitsBy({ a: [-1, -1], b: [-2, -2], c: [-9, -9] });
+            const votes = new Map<string, VoteStat>([
+                [hex('a'), { votes: 90000, statsKnown: true }],
+                [hex('b'), { votes: 10, statsKnown: true }],
+            ]);
+            const picked = await rankVisually(LEAVES, ids, eligible, 2, {
+                logger: makeLogger(),
+                jointInputs: inputsFor(['a', 'b', 'c'], {
+                    a: { themeMatch: false, semantic: 0, semanticSupport: 0, score: 0 },
+                }),
+                loadVotes: jest.fn(async () => votes),
+            });
+            expect(picked).toEqual([hex('b'), hex('a')]);
+        });
+    });
+
     test('the SEA CLI loads transformers and the model from its extracted runtime', async () => {
-        mockRuntime.isCli.mockReturnValue(true);
-        mockRuntime.isElectron.mockReturnValue(false);
+        installNodePlatformWithExtractor();
+        setElectron(false);
         mockSea.isSea.mockReturnValue(true);
         logitsBy({ a: [-2, -2] });
-        await rankVisually(LEAVES, [hex('a')], [photo('a')], 1, { logger: makeLogger() });
+        await rankVisually(LEAVES, [hex('a')], [photo('a')], 1, { logger: makeLogger(), ...joint() });
         expect(mockExtract).toHaveBeenCalled();
         expect(mockCreateRequire).toHaveBeenCalledWith('/vision/root/vision-entry.js');
         expect(mockSeaTransformers.env.localModelPath).toBe(`/vision/root${path.sep}`);
@@ -331,8 +576,8 @@ describe('rankVisually', () => {
     });
 
     test('a failed integrity check is not kept: the next call extracts and loads again', async () => {
-        mockRuntime.isCli.mockReturnValue(true);
-        mockRuntime.isElectron.mockReturnValue(false);
+        installNodePlatformWithExtractor();
+        setElectron(false);
         mockSea.isSea.mockReturnValue(true);
         mockExtract.mockImplementationOnce(() => {
             throw new Error('Vision runtime failed its integrity check');
@@ -340,11 +585,11 @@ describe('rankVisually', () => {
         logitsBy({ a: [-2, -2] });
         const logger = makeLogger();
 
-        await rankVisually(LEAVES, [hex('a')], [photo('a')], 1, { logger });
+        await rankVisually(LEAVES, [hex('a')], [photo('a')], 1, { logger, ...joint() });
         expect(logger.scoped.warning).toHaveBeenCalled();
         expect(mockSeaTransformers.pipeline).not.toHaveBeenCalled();
 
-        await rankVisually(LEAVES, [hex('a')], [photo('a')], 1, { logger });
+        await rankVisually(LEAVES, [hex('a')], [photo('a')], 1, { logger, ...joint() });
         expect(mockExtract).toHaveBeenCalledTimes(2);
         expect(mockSeaTransformers.pipeline).toHaveBeenCalledTimes(1);
     });
@@ -353,15 +598,19 @@ describe('rankVisually', () => {
         [
             'a source-run CLI',
             () => {
-                mockRuntime.isCli.mockReturnValue(true);
-                mockRuntime.isElectron.mockReturnValue(false);
+                setElectron(false);
             },
         ],
-        ['unpackaged Electron', () => mockRuntime.isPackaged.mockReturnValue(false)],
+        [
+            'unpackaged Electron',
+            () => {
+                runtimeFlags.packaged = false;
+            },
+        ],
     ])('%s reads the build cache under the repository root', async (_name, arrange) => {
         arrange();
         logitsBy({ a: [-2, -2] });
-        await rankVisually(LEAVES, [hex('a')], [photo('a')], 1, { logger: makeLogger() });
+        await rankVisually(LEAVES, [hex('a')], [photo('a')], 1, { logger: makeLogger(), ...joint() });
         expect(mockExtract).not.toHaveBeenCalled();
         expect(mockTransformers.env.localModelPath).toBe(path.join(__dirname, '..', '..', '.cache') + path.sep);
     });
@@ -369,8 +618,8 @@ describe('rankVisually', () => {
     test('a lite build without the model keeps the tag order quietly and checks only once', async () => {
         fs.existsSync.mockReturnValue(false);
         const logger = makeLogger();
-        expect(await rankVisually(LEAVES, ids, eligible, 1, { logger })).toEqual([hex('a')]);
-        await rankVisually(LEAVES, ids, eligible, 1, { logger });
+        expect(await rankVisually(LEAVES, ids, eligible, 1, { logger, ...joint() })).toEqual([hex('a')]);
+        await rankVisually(LEAVES, ids, eligible, 1, { logger, ...joint() });
         expect(fs.existsSync).toHaveBeenCalledTimes(1);
         expect(fs.existsSync).toHaveBeenCalledWith(
             path.join(`/app/resources${path.sep}`, 'vision-model', 'config.json'),
@@ -380,20 +629,30 @@ describe('rankVisually', () => {
     });
 });
 
+describe('the family remembers the extracted SEA runtime root', () => {
+    test('the root is answered once the transformers load has extracted it', async () => {
+        expect(extractedVisionRootOf()).toBeUndefined();
+        installNodePlatformWithExtractor();
+        mockSea.isSea.mockReturnValue(true);
+        logitsBy({ a: [-2, -2] });
+        await rankVisually(LEAVES, [hex('a')], [photo('a')], 1, { logger: makeLogger(), ...joint() });
+        expect(extractedVisionRootOf()).toBe('/vision/root');
+    });
+});
+
 describe('hasBundledModel', () => {
     test.each([
         ['serves the model config', async () => ({ ok: true }), true],
         ['answers 404', async () => ({ ok: false }), false],
         ['cannot fetch at all', async () => Promise.reject(new Error('offline')), false],
     ])('the Android WebView sees the model when its webDir %s', async (_name, response, expected) => {
-        mockRuntime.isCapacitor.mockReturnValue(true);
+        installWebviewTestPlatform();
         jest.mocked(global.fetch).mockImplementation(invalid(response));
         expect(await hasBundledModel()).toBe(expected);
         expect(global.fetch).toHaveBeenCalledWith('vision-model/config.json');
     });
 
     test('the SEA CLI looks for the embedded runtime asset', async () => {
-        mockRuntime.isCli.mockReturnValue(true);
         mockSea.isSea.mockReturnValue(true);
         expect(await hasBundledModel()).toBe(true);
         expect(mockSea.getAsset).toHaveBeenCalledWith('vision-runtime.sha256');
@@ -407,8 +666,7 @@ describe('hasBundledModel', () => {
     });
 
     test('a source-run CLI checks the build cache', async () => {
-        mockRuntime.isCli.mockReturnValue(true);
-        mockRuntime.isElectron.mockReturnValue(false);
+        setElectron(false);
         fs.existsSync.mockReturnValue(false);
         expect(await hasBundledModel()).toBe(false);
         expect(fs.existsSync).toHaveBeenCalledWith(

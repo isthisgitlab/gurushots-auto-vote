@@ -4,7 +4,7 @@
  */
 
 import fs from 'node:fs';
-import { isPlainObject } from '../../src/ts/plainObject';
+import { isPlainObject } from '../../src/ts/core/plainObject';
 
 /** One packages.json entry: the SPDX expression shown, the vendored text ids that apply, copyright lines. */
 interface LicenseEntry {

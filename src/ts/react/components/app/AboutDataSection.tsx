@@ -12,7 +12,7 @@ import { DeleteLocalDataModal } from './DeleteLocalDataModal';
 
 import type { ImportReport } from '@/api/useImportReport';
 import type { SettingFilterTexts } from '@/utils/matchesSettingFilter';
-import type { Translate } from '../../../translations/translator';
+import type { Translate } from '../../../core/translations/translator';
 
 /**
  * What the import of settings.json left unresolved, read-only: when it ran and the references that
@@ -83,6 +83,7 @@ export const aboutDataMatchesFilter = (t: Translate, query: string, namesOnly: b
 export function AboutDataSection({ report, showAll }: { report: ImportReport | null; showAll?: boolean }) {
     const { t } = useTranslation();
     const { query, namesOnly } = useSettingsNav();
+    const { showsLocalDataWipe } = usePlatformCapabilities();
     const [licensesOpen, setLicensesOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const shown = showAll || aboutDataMatchesFilter(t, query, namesOnly, report !== null);
@@ -102,18 +103,20 @@ export function AboutDataSection({ report, showAll }: { report: ImportReport | n
                 <span className="text-xs text-base-content/70">{t('about.licensesDesc')}</span>
             </div>
             <ImportReportBlock report={report} />
-            <div className="rounded-lg border border-error/50 p-3">
-                <h6 className="font-medium text-sm mb-1">
-                    <ToneIcon tone="error" />
-                    {t('about.dangerTitle')}
-                </h6>
-                <div className="flex flex-wrap items-center gap-3">
-                    <button type="button" className="btn btn-error btn-sm" onClick={() => setDeleteOpen(true)}>
-                        {t('about.deleteButton')}
-                    </button>
-                    <span className="text-xs text-base-content/70">{t('about.deleteDesc')}</span>
+            {showsLocalDataWipe && (
+                <div className="rounded-lg border border-error/50 p-3">
+                    <h6 className="font-medium text-sm mb-1">
+                        <ToneIcon tone="error" />
+                        {t('about.dangerTitle')}
+                    </h6>
+                    <div className="flex flex-wrap items-center gap-3">
+                        <button type="button" className="btn btn-error btn-sm" onClick={() => setDeleteOpen(true)}>
+                            {t('about.deleteButton')}
+                        </button>
+                        <span className="text-xs text-base-content/70">{t('about.deleteDesc')}</span>
+                    </div>
                 </div>
-            </div>
+            )}
             <LicensesModal isOpen={licensesOpen} onClose={() => setLicensesOpen(false)} />
             <DeleteLocalDataModal isOpen={deleteOpen} onClose={() => setDeleteOpen(false)} />
         </div>

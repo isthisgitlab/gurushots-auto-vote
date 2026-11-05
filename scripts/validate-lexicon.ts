@@ -55,8 +55,11 @@
  *      inside the pre-committed percentile gate above.
  */
 
-import * as lexicon from '../src/ts/services/semantic/lexicon';
-import { SEMANTIC_MATCH_FLOOR, abstractTitleWords, tokenise } from '../src/ts/services/photoPicker';
+// The scripts' platform installs before any app module loads.
+import './lib/platform';
+
+import * as lexicon from '../src/ts/core/services/semantic/lexicon';
+import { SEMANTIC_MATCH_FLOOR, abstractTitleWords, tokenise } from '../src/ts/core/services/photoPicker';
 import { runIfMain } from './lib/run-if-main';
 
 import CONFIG from './lexicon-concepts.json';
@@ -150,7 +153,7 @@ const runSubjectGate = (config: ConceptsConfig, lex: { concreteness: (arg0: stri
     for (const f of failures) console.error(`   - ${f}`);
     console.error(
         '\n   Fix the axis first — `abstractAnchors` / `excludeParents` — then rebuild. Move\n' +
-            '   CONCRETE_SUBJECT_MIN / ABSTRACT_WORD_MAX (src/ts/services/photoPicker/title.ts) only for a case\n' +
+            '   CONCRETE_SUBJECT_MIN / ABSTRACT_WORD_MAX (src/ts/core/services/photoPicker/title.ts) only for a case\n' +
             '   that genuinely sits on the boundary, and never edit a case to match the output.',
     );
     process.exit(1);
@@ -334,7 +337,7 @@ const main = async ({
                 '   2. if the WHOLE related distribution sits low, raise RETROFIT_BETA in\n' +
                 '      scripts/fetch-embeddings.ts and re-run fetch + build (offline once cached).\n' +
                 '      MEAN_CENTER is already on — do not turn it off to inflate related scores.\n' +
-                '   3. only then adjust SEMANTIC_MATCH_FLOOR (src/ts/services/photoPicker/tiers.ts), keeping it\n' +
+                '   3. only then adjust SEMANTIC_MATCH_FLOOR (src/ts/core/services/photoPicker/tiers.ts), keeping it\n' +
                 '      strictly inside p99(unrelated) < FLOOR < p25(related). Do NOT widen the gate itself.',
         );
         process.exit(1);

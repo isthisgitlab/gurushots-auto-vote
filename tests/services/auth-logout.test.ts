@@ -10,14 +10,14 @@
  */
 
 import { invalid } from '../helpers/invalid';
-import type { Challenge, DiscoverChallenge } from '../../src/ts/types/gurushots';
-import type * as discoverChallengesModule from '../../src/ts/services/discoverChallenges';
-import type * as libraryCacheModule from '../../src/ts/services/libraryCache';
+import type { Challenge, DiscoverChallenge } from '../../src/ts/core/types/gurushots';
+import type * as discoverChallengesModule from '../../src/ts/core/services/discoverChallenges';
+import type * as libraryCacheModule from '../../src/ts/core/services/libraryCache';
 
 // The simulated write-behind store the settings mock exposes as __state.
 type SettingsState = { cached: Record<string, unknown>; persisted: Record<string, unknown>; flushCalls: number };
 
-jest.mock('../../src/ts/settings', () => {
+jest.mock('../../src/ts/core/settings', () => {
     const state: SettingsState = {
         cached: { token: 'old-token' },
         persisted: { token: 'old-token' },
@@ -42,12 +42,12 @@ jest.mock('../../src/ts/settings', () => {
     };
 });
 
-import settingsModule = require('../../src/ts/settings');
+import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule as typeof settingsModule & { __state: SettingsState });
-import type * as authModule from '../../src/ts/services/auth';
-import type * as openChallengeCacheModule from '../../src/ts/services/openChallengeCache';
-import type * as chosenPhotosModule from '../../src/ts/services/autoFill/chosenPhotos';
-const { clearAuthToken, logout, switchAccountToken } = require('../../src/ts/services/auth') as typeof authModule;
+import type * as authModule from '../../src/ts/core/services/auth';
+import type * as openChallengeCacheModule from '../../src/ts/core/services/openChallengeCache';
+import type * as chosenPhotosModule from '../../src/ts/core/services/autoFill/chosenPhotos';
+const { clearAuthToken, logout, switchAccountToken } = require('../../src/ts/core/services/auth') as typeof authModule;
 
 describe('clearAuthToken', () => {
     beforeEach(() => {
@@ -59,7 +59,7 @@ describe('clearAuthToken', () => {
 
     it('forgets the remembered open challenges, which belong to the account that left', async () => {
         const { rememberOpenChallenges, getOpenChallenge } =
-            require('../../src/ts/services/openChallengeCache') as typeof openChallengeCacheModule;
+            require('../../src/ts/core/services/openChallengeCache') as typeof openChallengeCacheModule;
         const open = invalid<DiscoverChallenge>({ id: 9, title: 'Rule Match' });
         rememberOpenChallenges([open, null]);
         expect(getOpenChallenge('9')).toBe(open);
@@ -76,7 +76,7 @@ describe('clearAuthToken', () => {
 
     it('forgets the photo-library listings, so the next account is never shown the previous one’s', async () => {
         const { writeListing, readFresh, readLatest } =
-            require('../../src/ts/services/libraryCache') as typeof libraryCacheModule;
+            require('../../src/ts/core/services/libraryCache') as typeof libraryCacheModule;
         const listing = {
             photos: [],
             memberId: 'm',
@@ -101,7 +101,7 @@ describe('clearAuthToken', () => {
 
     it("forgets the cached upcoming list, so the next account is never shown the previous one's", async () => {
         const { fetchUpcoming } =
-            require('../../src/ts/services/discoverChallenges') as typeof discoverChallengesModule;
+            require('../../src/ts/core/services/discoverChallenges') as typeof discoverChallengesModule;
         const fetchList = jest.fn(async () => [invalid<Challenge>({ id: 1 })]);
         await fetchUpcoming('old-token', fetchList);
         await fetchUpcoming('old-token', fetchList);
@@ -113,7 +113,7 @@ describe('clearAuthToken', () => {
 
     it('forgets the explained chosen-photo skips, so the next account is told its own', async () => {
         const { logChosenSkipOnce } =
-            require('../../src/ts/services/autoFill/chosenPhotos') as typeof chosenPhotosModule;
+            require('../../src/ts/core/services/autoFill/chosenPhotos') as typeof chosenPhotosModule;
         const warning = jest.fn();
         const fillLogger = invalid<Parameters<typeof logChosenSkipOnce>[0]>({
             withCategory: () => ({ warning }),
@@ -236,7 +236,7 @@ describe('logout', () => {
  * really is Electron-specific.
  */
 describe('clearTokenUnlessStayingLoggedIn', () => {
-    const { clearTokenUnlessStayingLoggedIn } = require('../../src/ts/services/auth') as typeof authModule;
+    const { clearTokenUnlessStayingLoggedIn } = require('../../src/ts/core/services/auth') as typeof authModule;
 
     beforeEach(() => {
         settings.__state.cached = { token: 'old-token', stayLoggedIn: false };
@@ -282,9 +282,9 @@ describe('switchAccountToken — a login on top of another session', () => {
 
     const remembered = () => {
         const { rememberOpenChallenges, getOpenChallenge } =
-            require('../../src/ts/services/openChallengeCache') as typeof openChallengeCacheModule;
+            require('../../src/ts/core/services/openChallengeCache') as typeof openChallengeCacheModule;
         const { logChosenSkipOnce } =
-            require('../../src/ts/services/autoFill/chosenPhotos') as typeof chosenPhotosModule;
+            require('../../src/ts/core/services/autoFill/chosenPhotos') as typeof chosenPhotosModule;
         const warning = jest.fn();
         const fillLogger = invalid<Parameters<typeof logChosenSkipOnce>[0]>({
             withCategory: () => ({ warning }),
@@ -316,7 +316,7 @@ describe('switchAccountToken — a login on top of another session', () => {
 
     it("forgets the previous account's cached upcoming list on a switch, and keeps it on the same token", async () => {
         const { fetchUpcoming } =
-            require('../../src/ts/services/discoverChallenges') as typeof discoverChallengesModule;
+            require('../../src/ts/core/services/discoverChallenges') as typeof discoverChallengesModule;
         const fetchList = jest.fn(async () => [invalid<Challenge>({ id: 1 })]);
         await fetchUpcoming('tok-a', fetchList);
         switchAccountToken('old-token');

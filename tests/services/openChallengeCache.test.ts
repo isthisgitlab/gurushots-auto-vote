@@ -3,11 +3,11 @@
  */
 
 import { invalid } from '../helpers/invalid';
-import type * as cacheModule from '../../src/ts/services/openChallengeCache';
-import type { DiscoverChallenge } from '../../src/ts/types/gurushots';
+import type * as cacheModule from '../../src/ts/core/services/openChallengeCache';
+import type { DiscoverChallenge } from '../../src/ts/core/types/gurushots';
 
 const { rememberOpenChallenges, getOpenChallenge, clearOpenChallenges } =
-    require('../../src/ts/services/openChallengeCache') as typeof cacheModule;
+    require('../../src/ts/core/services/openChallengeCache') as typeof cacheModule;
 
 const item = (id: number | string, title: string) => invalid<DiscoverChallenge>({ id, title });
 

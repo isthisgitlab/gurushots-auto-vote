@@ -4,7 +4,7 @@ import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { BusyContent } from '@/components/ui/LoadingSpinner';
 import * as ipc from '@/api/ipc';
-import { errorMessage } from '../../../errorMessage';
+import { errorMessage } from '../../../core/errorMessage';
 
 type Busy = 'busy-pass' | 'busy-cli' | 'busy-app' | 'busy-web';
 type Outcome = 'idle' | Busy | 'failed' | 'failed-reload' | 'done';

@@ -9,7 +9,7 @@ import { useTitleRules } from '@/hooks/useTitleRules';
 import { fireSettingsChanged, mockApi } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
 
-import type { ChallengeValues, TitleRule } from '../../src/ts/types/settings';
+import type { ChallengeValues, TitleRule } from '../../src/ts/core/types/settings';
 
 const RULE_A: TitleRule = { title: 'A', mustIncludeTags: ['x'] };
 

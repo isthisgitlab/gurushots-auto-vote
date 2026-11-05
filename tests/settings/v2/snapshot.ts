@@ -7,7 +7,7 @@
  * what differs from no state), which loses nothing when both trees are compared and keeps the golden file readable.
  */
 
-import { V1_SETTINGS_SCHEMA } from '../../../src/ts/settings/importV1/schema';
+import { V1_SETTINGS_SCHEMA } from '../../../src/ts/core/settings/importV1/schema';
 
 import type { LedgerEntry, OracleEnv, V1Oracle } from '../../helpers/v1Oracle';
 import type { MatchTarget } from '../../helpers/v1Oracle/ruleMatching';

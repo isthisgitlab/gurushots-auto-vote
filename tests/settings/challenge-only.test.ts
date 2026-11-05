@@ -10,8 +10,8 @@
 
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import type { MemoryStore } from '../helpers/headlessStore';
-import type { SettingsSchemaEntry } from '../../src/ts/settings/schema';
-import settings = require('../../src/ts/settings');
+import type { SettingsSchemaEntry } from '../../src/ts/core/settings/schema';
+import settings = require('../../src/ts/core/settings');
 import { isConfig } from '../helpers/storedShapes';
 import { parseJsonAs } from '../helpers/parseJson';
 

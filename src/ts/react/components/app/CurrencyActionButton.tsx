@@ -8,7 +8,7 @@ import { BusyContent } from '@/components/ui/LoadingSpinner';
 
 import { CurrencyConfirmModal, currencyOutcomeText } from './CurrencyConfirmModal';
 
-import type { Bankroll, Challenge } from '../../../types/gurushots';
+import type { Bankroll, Challenge } from '../../../core/types/gurushots';
 
 /**
  * A bankroll spend hook's state envelope (useKeyUnlock / useFillExposure).

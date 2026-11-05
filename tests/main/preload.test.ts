@@ -1,5 +1,5 @@
 /**
- * Electron preload (src/ts/preload.ts): the service-worker register() block
+ * Electron preload (src/ts/shells/electron/preload.ts): the service-worker register() block
  * and the window.api surface generated from ipc/manifest.ts.
  */
 
@@ -11,7 +11,7 @@ jest.mock('electron', () => ({
     ipcRenderer: { invoke: jest.fn(), send: jest.fn(), on: jest.fn(), removeListener: jest.fn() },
 }));
 
-import manifest = require('../../src/ts/ipc/manifest');
+import manifest = require('../../src/ts/core/ipc/manifest');
 
 /** One generated window.api method, as the tests call it (by computed name). */
 type ApiMethod = (...args: unknown[]) => unknown;
@@ -21,7 +21,7 @@ let electron: jest.MaybeMockedDeep<typeof electronModule>;
 function loadPreload(): Record<string, ApiMethod> {
     jest.resetModules();
     electron = jest.mocked(require('electron') as typeof electronModule);
-    require('../../src/ts/preload');
+    require('../../src/ts/shells/electron/preload');
     const [name, api] = electron.contextBridge.exposeInMainWorld.mock.calls[0] as [string, Record<string, ApiMethod>];
     expect(name).toBe('api');
     return api;
@@ -107,11 +107,11 @@ describe('window.api surface', () => {
     });
 });
 
-describe('Logs window preload (src/ts/preloadLogs.ts)', () => {
+describe('Logs window preload (src/ts/shells/electron/preloadLogs.ts)', () => {
     function loadLogsPreload(): Record<string, ApiMethod> {
         jest.resetModules();
         electron = jest.mocked(require('electron') as typeof electronModule);
-        require('../../src/ts/preloadLogs');
+        require('../../src/ts/shells/electron/preloadLogs');
         const [name, api] = electron.contextBridge.exposeInMainWorld.mock.calls[0] as [
             string,
             Record<string, ApiMethod>,

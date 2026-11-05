@@ -7,12 +7,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import * as ipc from '@/api/ipc';
 import { rememberCurrentMember } from './currentMember';
 
-import { asPreview } from '../../libraryPreview';
-import { LIBRARY_BATCH_PHOTOS, MAX_LIBRARY_KEEP_PHOTOS, MAX_WON_IDS } from '../../settings/limits';
+import { asPreview } from '../../core/libraryPreview';
+import { LIBRARY_BATCH_PHOTOS, MAX_LIBRARY_KEEP_PHOTOS, MAX_WON_IDS } from '../../core/settings/limits';
 
-import type { WindowApi } from '../../types/ipc';
-import type { LibraryOrder } from '../../librarySort';
-import type { LibraryUsage } from '../../types/photoPicker';
+import type { WindowApi } from '../../core/types/ipc';
+import type { LibraryOrder } from '../../core/librarySort';
+import type { LibraryUsage } from '../../core/types/photoPicker';
 
 type LibraryAnswer = Awaited<ReturnType<WindowApi['getLibraryPhotos']>>;
 type Listing = Extract<LibraryAnswer, { success: true }>;

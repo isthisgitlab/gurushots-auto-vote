@@ -1,13 +1,13 @@
 import { createContext, useContext, useCallback, useLayoutEffect, useMemo } from 'react';
-import { rendererTranslator } from '../../translations/renderer';
-import { DEFAULT_LANGUAGE, isSupportedLanguage, resolveLanguage } from '../../translations/translator';
+import { rendererTranslator } from '../../core/translations/renderer';
+import { DEFAULT_LANGUAGE, isSupportedLanguage, resolveLanguage } from '../../core/translations/translator';
 import { useIpcQuery } from '../api/useIpcQuery';
 import * as ipc from '../api/ipc';
 
 import type { ComponentChildren } from 'preact';
 import type { IpcQueryTools } from '../api/useIpcQuery';
-import type { TranslateVars } from '../../translations/translator';
-import { errorMessage } from '../../errorMessage';
+import type { TranslateVars } from '../../core/translations/translator';
+import { errorMessage } from '../../core/errorMessage';
 
 /**
  * What useTranslation returns.

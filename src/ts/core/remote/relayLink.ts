@@ -1,0 +1,278 @@
+/**
+ * The relay link: the pairing's protocol messages carried over Nostr relay events, for when
+ * WebRTC cannot connect. A `RemoteTransport` over an injected `RelayIo` (the sockets in
+ * production) and codec, so its tests run on an in-memory bus. Messages are encrypted with the
+ * pairing key (`relayCodec.ts`); a peer is whoever sends an authentic frame, found by presence
+ * frames and lost on silence or a `bye`.
+ *
+ * What relays still see in clear: the topic tag, the event kind, `created_at`, the signing
+ * pubkey (trystero's, the same one its signalling uses), the event size and the IP addresses.
+ * A recorded event cannot be replayed past a restart (epochs), outside five minutes of its
+ * timestamp, or twice (the seen-set). Junk on the topic can starve real frames of the decrypt
+ * cap — accepted for a fallback path. Dependency-light and DOM-free.
+ */
+
+import { cryptoRandom, splitBytes } from './relayCodec';
+import { batchBudgetBytes } from './relayBatchCodec';
+import { RELAY_MAX_PARTS, RELAY_PART_BYTES, toHex } from './relayWire';
+import { createSeenSet, createTokenBucket } from './relayGuards';
+import {
+    DECRYPT_FRAMES_PER_SECOND,
+    FINISHED_MESSAGES_BURST,
+    FINISHED_MESSAGES_PER_SECOND,
+    REPLAY_MEMORY_MAX_ENTRIES,
+    REPLAY_MEMORY_MS,
+    handleContent,
+} from './relayLinkFrames';
+import {
+    broadcastByeFrame,
+    canBatch,
+    emitBatch,
+    emitFrame,
+    inFlight,
+    removePeer,
+    settleIfIdle,
+    sendPresenceOnOpen,
+    sendPresence,
+} from './relayLinkState';
+import { createInflateQueue } from './relayInflate';
+import { createOutbox } from './relayOutbox';
+import { createStreamTable } from './relayStreams';
+import { isPlainObject } from '../plainObject';
+import { TRYSTERO_APP_ID } from './relays';
+
+import type { RelayCodec } from './relayCodec';
+import type { LinkContext, LinkRole, Peer, RelayIo } from './relayLinkState';
+import type { RemoteTransport } from './relays';
+
+export type { LinkRole, RelayIo } from './relayLinkState';
+
+/** The phone announces itself this often while the link is open, and the host this often while a phone is joined: below the 10 s idle timeout some relays apply. */
+export const PRESENCE_MS = 8_000;
+
+/** A peer that sent nothing for this long is gone. */
+export const PEER_SILENCE_MS = 25_000;
+
+const SWEEP_MS = 1_000;
+
+/** The topic the link's events carry: the SHA-256 hex of the app id, `relay` and the room id, so it differs from the signalling room's. */
+export const relayTopic = async (roomId: string): Promise<string> => {
+    const digest = await crypto.subtle.digest(
+        'SHA-256',
+        new TextEncoder().encode(`${TRYSTERO_APP_ID}:relay:${roomId}`),
+    );
+    return toHex(new Uint8Array(digest));
+};
+
+export type RelayLinkOptions = {
+    io: RelayIo;
+    codec: RelayCodec;
+    topic: string;
+    selfId: string;
+    role: LinkRole;
+    /** Whether the link sends batch events to peers that read them and says so in its presence; default true. Off, it is the link as it was before batches. */
+    batching?: boolean;
+    now?: () => number;
+    random?: (length: number) => Uint8Array;
+};
+
+/** Whether a message only carries a log line — the first thing dropped under backlog. */
+const isLogEvent = (message: unknown): boolean =>
+    isPlainObject(message) && message.t === 'event' && message.channel === 'log-message';
+
+/**
+ * Packs, splits and queues one message; the sequence number is taken when its first frame leaves the
+ * budget. A message that cannot be sent (too large, the queue full) would be lost with the peer
+ * still joined and nobody the wiser, so the peer is given up on — with a link `bye` — and the other
+ * side settles what it has in flight.
+ */
+const queueMessage = async (ctx: LinkContext, message: unknown, target: string): Promise<void> => {
+    const peer = ctx.peers.get(target);
+    if (ctx.closed || peer === undefined) throw new Error('The relay link does not reach that peer.');
+    try {
+        const parts = splitBytes(await ctx.codec.pack(message), RELAY_PART_BYTES);
+        // The peer's messages are moving to another path: this one, packed too late to be taken back, goes there too,
+        // whether or not the relay link still has the peer (it may have given up on it meanwhile, and the other path still reaches it).
+        const redirect = ctx.redirects.get(peer.id);
+        if (redirect !== undefined) {
+            redirect(message);
+            return;
+        }
+        if (parts.length > RELAY_MAX_PARTS) throw new Error('The message is too large for the relay link.');
+        if (ctx.peers.get(target) !== peer) throw new Error('The peer left while the message was prepared.');
+        const msgId = toHex(ctx.random(16));
+        const frames = parts.map((part, index) => ({
+            draft: { to: peer.id, toEpoch: peer.epoch, msgId, part: index, parts: parts.length, kind: 'data' as const },
+            part,
+        }));
+        ctx.outbox.sendMessage(peer.id, msgId, frames, isLogEvent(message), message);
+    } catch (error) {
+        if (ctx.peers.get(target) === peer) removePeer(ctx, peer, true);
+        throw error;
+    }
+};
+
+/** The two timers the peer table drives: the silence sweep, and the host's presence. The phone's presence runs for the link's life. */
+const createTimers = (ctx: LinkContext): { sync: () => void; stop: () => void } => {
+    let sweep: ReturnType<typeof setInterval> | null = null;
+    let presence: ReturnType<typeof setInterval> | null = null;
+    const sweepSilent = (): void => {
+        for (const peer of ctx.peers.values()) {
+            // The host tells a silent phone it was dropped, so the phone does not keep talking to nobody.
+            if (ctx.now() - peer.lastSeen > PEER_SILENCE_MS) removePeer(ctx, peer, ctx.role === 'host');
+        }
+    };
+    const toggle = (current: ReturnType<typeof setInterval> | null, want: boolean, run: () => void, ms: number) => {
+        if (want && current === null) return globalThis.setInterval(run, ms);
+        if (!want && current !== null) globalThis.clearInterval(current);
+        return want ? current : null;
+    };
+    const sync = (): void => {
+        const present = ctx.peers.size > 0;
+        sweep = toggle(sweep, present, sweepSilent, SWEEP_MS);
+        if (ctx.role === 'host') presence = toggle(presence, present, () => sendPresence(ctx, null), PRESENCE_MS);
+    };
+    if (ctx.role === 'phone') {
+        presence = globalThis.setInterval(() => sendPresence(ctx, null), PRESENCE_MS);
+        sendPresence(ctx, null);
+    }
+    return {
+        sync,
+        stop: () => {
+            if (sweep !== null) globalThis.clearInterval(sweep);
+            if (presence !== null) globalThis.clearInterval(presence);
+            sweep = null;
+            presence = null;
+        },
+    };
+};
+
+const handlerSet =
+    <A extends unknown[]>(set: Set<(...args: A) => void>) =>
+    (handler: (...args: A) => void) => {
+        set.add(handler);
+        return () => set.delete(handler);
+    };
+
+/** The link's context over its options: the peer table, the streams, the budgets, the outbox and the handler sets. */
+const buildContext = (options: RelayLinkOptions, onPeersChanged: () => void): LinkContext => {
+    const now = options.now ?? Date.now;
+    const random = options.random ?? cryptoRandom;
+    const ctx: LinkContext = {
+        ...options,
+        batching: options.batching ?? true,
+        now,
+        random,
+        epoch: toHex(random(16)),
+        peers: new Map(),
+        streams: createStreamTable((from, message) => {
+            for (const handler of ctx.messageHandlers) handler(from, message);
+        }, now),
+        owedPresence: new Set(),
+        seen: createSeenSet(REPLAY_MEMORY_MS, now, REPLAY_MEMORY_MAX_ENTRIES),
+        decryptBudget: createTokenBucket(DECRYPT_FRAMES_PER_SECOND, DECRYPT_FRAMES_PER_SECOND, now),
+        finishedBudget: createTokenBucket(FINISHED_MESSAGES_PER_SECOND, FINISHED_MESSAGES_BURST, now),
+        inflater: createInflateQueue(),
+        outbox: createOutbox({
+            now,
+            random,
+            emit: (frame) => void emitFrame(ctx, frame),
+            emitBatch: (batch) => void emitBatch(ctx, batch),
+            canBatch: (peerId) => canBatch(ctx, peerId),
+            batchBudgetBytes: (peerId) => batchBudgetBytes(ctx.selfId, peerId),
+            // An unacknowledged message ends the peer, and the peer is told. A peer that left took its
+            // messages with it (`forgetPeer`), so a message that gives up always has its peer here.
+            giveUp: (peerId) => removePeer(ctx, ctx.peers.get(peerId) as Peer, true, 1),
+            onAcked: (peerId) => settleIfIdle(ctx, peerId),
+        }),
+        sending: new Map(),
+        redirects: new Map(),
+        idleWaiters: new Map(),
+        messageHandlers: new Set(),
+        joinHandlers: new Set(),
+        leaveHandlers: new Set(),
+        onPeersChanged,
+        closed: false,
+    };
+    return ctx;
+};
+
+/** The link's `send`: sends go through one chain, so two messages are numbered in the order they were sent however long each takes to compress. */
+const createSender = (ctx: LinkContext): RemoteTransport['send'] => {
+    let sends: Promise<unknown> = Promise.resolve();
+    return (message, target) => {
+        if (target === undefined) return Promise.reject(new Error('The relay link sends to one peer at a time.'));
+        ctx.sending.set(target, (ctx.sending.get(target) ?? 0) + 1);
+        const queued = sends.then(async () => {
+            try {
+                await queueMessage(ctx, message, target);
+            } finally {
+                const waiting = (ctx.sending.get(target) as number) - 1;
+                if (waiting === 0) ctx.sending.delete(target);
+                else ctx.sending.set(target, waiting);
+                settleIfIdle(ctx, target);
+            }
+        });
+        sends = queued.catch(() => undefined);
+        return queued;
+    };
+};
+
+/** Calls `callback` once the peer has nothing in flight (at once if it has none); answers a cancel. */
+const whenIdle = (ctx: LinkContext, peerId: string, callback: () => void): (() => void) => {
+    if (inFlight(ctx, peerId) === 0) {
+        callback();
+        return () => undefined;
+    }
+    const waiters = ctx.idleWaiters.get(peerId) ?? new Set<() => void>();
+    waiters.add(callback);
+    ctx.idleWaiters.set(peerId, waiters);
+    return () => {
+        waiters.delete(callback);
+    };
+};
+
+/** Says bye to every peer and closes the link; `stops` end the timers and the io subscriptions first, in order. */
+const leaveLink = async (ctx: LinkContext, stops: Array<() => void>): Promise<void> => {
+    if (ctx.closed) return;
+    // Nothing waits for the link or is redirected by it once it is leaving, however long the bye takes.
+    ctx.idleWaiters.clear();
+    ctx.redirects.clear();
+    if (ctx.peers.size > 0) await emitFrame(ctx, broadcastByeFrame(ctx));
+    ctx.closed = true;
+    for (const stop of stops) stop();
+    ctx.outbox.close();
+    ctx.inflater.close();
+    ctx.streams.close();
+    ctx.peers.clear();
+    ctx.io.close();
+};
+
+export const createRelayLink = (options: RelayLinkOptions): RemoteTransport => {
+    const ctx = buildContext(options, () => timers.sync());
+    const timers = createTimers(ctx);
+    const unsubscribe = ctx.io.onEvent((content) => void handleContent(ctx, content));
+    // A presence sent before any relay socket was open is sent when the first one opens, not at the next 8 s tick.
+    const unsubscribeOpen = ctx.io.onOpen(() => sendPresenceOnOpen(ctx));
+    ctx.io.subscribe(ctx.topic);
+
+    return {
+        send: createSender(ctx),
+        onMessage: handlerSet(ctx.messageHandlers),
+        onPeerJoin: handlerSet(ctx.joinHandlers),
+        onPeerLeave: handlerSet(ctx.leaveHandlers),
+        takeUnsent: (peerId) => ctx.outbox.takeUnstarted(peerId),
+        startedMessages: (peerId) => ctx.outbox.startedMessages(peerId),
+        redirect: (peerId, late) => {
+            ctx.redirects.set(peerId, late);
+        },
+        stopRedirect: (peerId) => {
+            ctx.redirects.delete(peerId);
+        },
+        inFlight: (peerId) => inFlight(ctx, peerId),
+        whenIdle: (peerId, callback) => whenIdle(ctx, peerId, callback),
+        // A relay link has no join failures: a peer is joined by its first authentic frame.
+        onJoinError: () => () => undefined,
+        leave: () => leaveLink(ctx, [timers.stop, unsubscribe, unsubscribeOpen]),
+    };
+};

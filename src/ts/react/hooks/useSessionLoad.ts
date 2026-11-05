@@ -3,7 +3,7 @@ import { useIpcQuery } from '@/api/useIpcQuery';
 import * as ipc from '@/api/ipc';
 
 import type { IpcQueryTools } from '@/api/useIpcQuery';
-import { errorMessage } from '../../errorMessage';
+import { errorMessage } from '../../core/errorMessage';
 
 /**
  * A load settled inside the query: its value, or why it failed.

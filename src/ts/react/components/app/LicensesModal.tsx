@@ -3,7 +3,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal } from '@/components/ui/Modal';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import * as ipc from '@/api/ipc';
-import { errorMessage } from '../../../errorMessage';
+import { errorMessage } from '../../../core/errorMessage';
 
 type NoticesState = { status: 'loading' } | { status: 'error' } | { status: 'ready'; text: string };
 

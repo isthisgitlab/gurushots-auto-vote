@@ -1,0 +1,478 @@
+/**
+ * Bankroll-currency actions on an entered challenge: spend a KEY to unlock a
+ * locked boost, a SWAP to replace an entered photo, a FILL to top exposure up
+ * to 100%.
+ *
+ * Every spend first re-reads the LIVE challenge and the LIVE bankroll and
+ * re-checks the shared predicate (voting/currencyActions.ts). That re-check is
+ * also the idempotency guard: each spend is a single call whose effect is
+ * visible in the challenge (boost AVAILABLE_KEY, entry replaced, exposure 100),
+ * so a repeated request finds the state already changed and spends nothing —
+ * unlike coinsUnlock's charge-then-join, which needs a persisted marker.
+ *
+ * Confirmation and argument validation live in the IPC layer
+ * (ipc/currency.handlers.ts); these functions assume the caller already decided
+ * to spend. The double-spend lock (withSpendLock) lives here so the manual
+ * handlers and the automatic runners (services/currencyAuto.ts) share it.
+ */
+
+import { errorMessage } from '../errorMessage';
+import { findActiveChallenge } from './findActiveChallenge';
+import { isMarkedChallenge } from '../challengeMarks';
+import { rankCandidatesForChallenge, resolveMemberId } from './autoFill';
+import { swappedOutIds } from './autoFill/challengeState';
+import { resetPassState as resetPhotoStatsPassState } from './photoStats';
+import { dropChallenge } from './libraryCache';
+import { CURRENCY_OUTCOME, blockedOutcome, swapExcludedIds } from '../voting/currencyActions';
+
+import type { Challenge, RankingEntry } from '../types/gurushots';
+import type * as loggerModule from '../logger';
+import type * as settingsModule from '../settings';
+import type * as swapBackStore from '../swapBackStore';
+import type * as activeChallengesApi from '../strategies/real/activeChallenges';
+import type * as joinApi from '../api/join';
+import type * as currencyApi from '../api/currency';
+import type * as submissionsApi from '../api/submissions';
+import type * as tagsApi from '../api/tags';
+
+type Logger = typeof loggerModule;
+type SettingsFacade = typeof settingsModule;
+export type SwapBackLedger = ReturnType<typeof swapBackStore.createLedger>;
+export type CurrencyAction = 'key' | 'swap' | 'fill';
+
+/**
+ * The endpoints a spend reads off the strategy (the real or mock surface).
+ */
+export interface CurrencyStrategy {
+    getActiveChallenges: typeof activeChallengesApi.getActiveChallenges;
+    getBankroll: typeof joinApi.getBankroll;
+    keyUnlock: typeof currencyApi.keyUnlock;
+    swapPhoto: typeof currencyApi.swapPhoto;
+    exposureAutofill: typeof currencyApi.exposureAutofill;
+    getEligiblePhotos: typeof submissionsApi.getEligiblePhotos;
+    getEligiblePhotosWalk: typeof submissionsApi.getEligiblePhotosWalk;
+    getImageData: typeof submissionsApi.getImageData;
+    searchTagAutocomplete: typeof tagsApi.searchTagAutocomplete;
+    getCurrentMemberProfile: typeof tagsApi.getCurrentMemberProfile;
+}
+
+type CurrencyOutcome = (typeof CURRENCY_OUTCOME)[keyof typeof CURRENCY_OUTCOME];
+export type SpendOutcome = { ok: boolean; outcome: string };
+export type SwapCandidate = { id: string; member_id: string };
+
+const nowSec = () => Math.floor(Date.now() / 1000);
+
+// ONE lock across every spend — manual (all channels) and automatic alike: a
+// single spend in flight at a time, so a click during a voting pass can't race
+// the automation into spending twice. Released in `finally` so a throw can never
+// wedge it.
+let spendInFlight = false;
+
+/**
+ * Runs `spend` under the process-wide spend lock. Resolves {busy: true} without
+ * calling it when another spend is in flight.
+ */
+const withSpendLock = async <T>(spend: () => Promise<T>): Promise<{ busy: true } | { busy: false; value: T }> => {
+    if (spendInFlight) return { busy: true };
+    spendInFlight = true;
+    try {
+        return { busy: false, value: await spend() };
+    } finally {
+        spendInFlight = false;
+    }
+};
+
+const cat = (logger: Logger) => logger.withCategory('currency');
+
+/**
+ * Reads the live challenge and bankroll. `readFailed` tells a failed challenge
+ * read (no usable response, or one flagged `fetchFailed`) from a read that worked
+ * but does not list the challenge (closed or gone): checkLive maps the first onto
+ * apiFailed and the second onto notAvailable. `pruneUnsafe` marks a read that
+ * dropped elements, so a missing challenge may be the dropped one. An unreadable
+ * bankroll is left null for blockedOutcome to map onto balanceUnknown.
+ */
+const loadLive = async (challengeId: string | number, token: string, strategy: CurrencyStrategy) => {
+    const [challengesResponse, bankroll] = await Promise.all([
+        strategy.getActiveChallenges(token),
+        strategy.getBankroll(token),
+    ]);
+    const readFailed =
+        !challengesResponse || !!challengesResponse.fetchFailed || !Array.isArray(challengesResponse.challenges);
+    return {
+        challenge: findActiveChallenge(challengesResponse?.challenges, challengeId),
+        bankroll,
+        readFailed,
+        pruneUnsafe: challengesResponse?.pruneUnsafe === true,
+    };
+};
+
+const entriesOf = (challenge: Challenge): RankingEntry[] =>
+    Array.isArray(challenge?.member?.ranking?.entries) ? challenge.member.ranking.entries : [];
+
+const findEntry = (challenge: Challenge, imageId: string | number) =>
+    entriesOf(challenge).find((entry) => String(entry?.id) === String(imageId));
+
+const entryIds = (challenge: Challenge) =>
+    new Set(
+        entriesOf(challenge)
+            .map((entry) => entry?.id)
+            .filter((id) => id !== undefined && id !== null && id !== '')
+            .map(String),
+    );
+
+// How many swaps the challenge's swap history holds.
+const swapsMade = (challenge: Challenge): number =>
+    Array.isArray(challenge?.member?.ranking?.swaps) ? challenge.member.ranking.swaps.length : 0;
+
+/**
+ * Live re-check shared by every action. Returns the blocking outcome, or null
+ * with the live challenge when the spend may go ahead.
+ */
+const checkLive = async (
+    action: CurrencyAction,
+    challengeId: string | number,
+    token: string,
+    strategy: CurrencyStrategy,
+): Promise<
+    { blocked: CurrencyOutcome; challenge: null } | { blocked: CurrencyOutcome | null; challenge: Challenge }
+> => {
+    const { challenge, bankroll, readFailed, pruneUnsafe } = await loadLive(challengeId, token, strategy);
+    if (!challenge) {
+        // On a read that dropped elements the missing challenge may be the one
+        // that was dropped, which cannot be told from "gone": refuse as
+        // data-incomplete, not not-available.
+        return {
+            blocked: readFailed
+                ? CURRENCY_OUTCOME.apiFailed
+                : pruneUnsafe
+                  ? CURRENCY_OUTCOME.dataIncomplete
+                  : CURRENCY_OUTCOME.notAvailable,
+            challenge: null,
+        };
+    }
+    if (isMarkedChallenge(challenge)) {
+        return { blocked: CURRENCY_OUTCOME.dataIncomplete, challenge: null };
+    }
+    // blockedOutcome only ever answers a CURRENCY_OUTCOME value or null.
+    const blocked = blockedOutcome(action, challenge, bankroll, nowSec()) as CurrencyOutcome | null;
+    return { blocked, challenge };
+};
+
+const spendResult = (
+    logger: Logger,
+    label: string,
+    challenge: Challenge,
+    result: { ok?: boolean; unclear?: boolean } | null | undefined,
+): SpendOutcome => {
+    if (result?.ok) {
+        cat(logger).info(`${label}: done for ${logger.challengeTag(challenge)}`, null);
+        return { ok: true, outcome: CURRENCY_OUTCOME.ok };
+    }
+    if (result?.unclear) {
+        cat(logger).warning(
+            `${label}: no usable answer for ${logger.challengeTag(challenge)} — it may have gone through`,
+            null,
+        );
+        return { ok: false, outcome: CURRENCY_OUTCOME.unclear };
+    }
+    cat(logger).warning(`${label}: rejected by the server for ${logger.challengeTag(challenge)}`, null);
+    return { ok: false, outcome: CURRENCY_OUTCOME.apiFailed };
+};
+
+/**
+ * A swap that got no answer, settled against the live entries: it went through when the photo it put in is
+ * entered and the one it took out is not. Anything else (not entered, or the challenge cannot be read) stays unclear.
+ */
+const settleUnclearSwap = async (
+    result: SpendOutcome,
+    challengeId: string | number,
+    entered: { out: string; in: string },
+    token: string,
+    { strategy, logger }: { strategy: CurrencyStrategy; logger: Logger },
+): Promise<SpendOutcome> => {
+    if (result.outcome !== CURRENCY_OUTCOME.unclear) return result;
+    let landed = false;
+    try {
+        const { challenge } = await loadLive(challengeId, token, strategy);
+        // A marked challenge cannot be settled either — its entries cannot be
+        // read — so the request stays unclear (it may have gone through), the
+        // same as a read that answers nothing.
+        if (challenge && !isMarkedChallenge(challenge)) {
+            const ids = entryIds(challenge);
+            landed = ids.has(entered.in) && !ids.has(entered.out);
+        }
+    } catch (error) {
+        cat(logger).warning(
+            `swap: could not read the challenge to settle an unanswered request: ${errorMessage(error) || error}`,
+            null,
+        );
+    }
+    if (!landed) return result;
+    cat(logger).info(`swap: the unanswered request had gone through for challenge ${challengeId}`, null);
+    return { ok: true, outcome: CURRENCY_OUTCOME.ok };
+};
+
+/**
+ * Spends a KEY to unlock the challenge's LOCKED boost (unlock only — the boost
+ * is not applied to any photo).
+ */
+const unlockBoostWithKey = async (
+    challengeId: string | number,
+    token: string,
+    { strategy, logger }: { strategy: CurrencyStrategy; logger: Logger },
+): Promise<SpendOutcome> => {
+    const { blocked, challenge } = await checkLive('key', challengeId, token, strategy);
+    if (blocked) return { ok: false, outcome: blocked };
+    return spendResult(logger, 'keyUnlock', challenge, await strategy.keyUnlock(challenge.id, token));
+};
+
+/**
+ * Previews the photo a swap would put in place of `imageId`. Spends nothing.
+ *
+ * Without `chosenId` it is the app's suggestion: the best-ranked candidate under
+ * the same pipeline a fill uses, excluding every photo already entered and
+ * `imageId` itself. The Chosen Photos rank first, and one the themed search does
+ * not return is looked up in the library. A photo swapped out earlier stays a
+ * candidate unless `excludeSwapped` is set — the automatic swap sets it, since it
+ * means "bring in a fresh photo" and would otherwise flip a slot between the photo
+ * it just swapped out and its replacement.
+ *
+ * `enforceChosenOnly` applies Submit Only Chosen Photos: the automatic swap and a
+ * scenario swap step set it, since they run without the user. With it on and no
+ * chosen photo left, the answer is `noAlternative` (nothing is spent). The manual
+ * Swap suggestion does not set it, so a button press still gets a photo.
+ *
+ * With `chosenId` the user picked the photo: nothing is ranked and no tag rule
+ * applies, like the Pick… submit. Beyond the live checks, `imageId` still being
+ * entered and `chosenId` not being entered, the server has the final say on
+ * whether the photo is eligible when the swap is spent.
+ *
+ * @param imageId - the entered photo to replace
+ * @param options.chosenId - the library photo to swap in instead of a suggestion
+ * @param options.enforceChosenOnly - take only chosen photos when Submit Only Chosen Photos is on
+ */
+const previewSwap = async (
+    challengeId: string | number,
+    imageId: string,
+    token: string,
+    { strategy, logger, settings }: { strategy: CurrencyStrategy; logger: Logger; settings: SettingsFacade },
+    {
+        excludeSwapped = false,
+        chosenId,
+        enforceChosenOnly = false,
+    }: { excludeSwapped?: boolean; chosenId?: string; enforceChosenOnly?: boolean } = {},
+): Promise<{ ok: false; outcome: string } | { ok: true; outcome: string; candidate: SwapCandidate }> => {
+    const { blocked, challenge } = await checkLive('swap', challengeId, token, strategy);
+    if (blocked) return { ok: false, outcome: blocked };
+    if (!entryIds(challenge).has(imageId)) {
+        return { ok: false, outcome: CURRENCY_OUTCOME.notAvailable };
+    }
+    if (chosenId !== undefined) {
+        // swapExcludedIds holds every entered photo, `imageId` included.
+        if (swapExcludedIds(challenge).has(chosenId)) {
+            return { ok: false, outcome: CURRENCY_OUTCOME.alreadyEntered };
+        }
+        return {
+            ok: true,
+            outcome: CURRENCY_OUTCOME.ok,
+            candidate: { id: chosenId, member_id: String(findEntry(challenge, imageId)?.member_id ?? '') },
+        };
+    }
+
+    // A manual swap is its own operation, like a manual fill: fresh photo-stats
+    // budget so an earlier pass's tripped breaker doesn't deny enrichment.
+    resetPhotoStatsPassState();
+    const id = String(challenge.id);
+    const excludeIds = swapExcludedIds(challenge);
+    excludeIds.add(imageId);
+    if (excludeSwapped) {
+        for (const swappedId of swappedOutIds(challenge)) excludeIds.add(swappedId);
+    }
+    const ranked = await rankCandidatesForChallenge(
+        challenge,
+        token,
+        {
+            settings,
+            logger,
+            getEligiblePhotos: strategy.getEligiblePhotos,
+            getEligiblePhotosWalk: strategy.getEligiblePhotosWalk,
+            getImageData: strategy.getImageData,
+            searchTagAutocomplete: strategy.searchTagAutocomplete,
+            getCurrentMemberProfile: strategy.getCurrentMemberProfile,
+        },
+        {
+            label: 'swap',
+            usage: 'swap',
+            excludeIds,
+            wantCount: 1,
+            mustIncludeTags: settings.getEffectiveTagSetting('mustIncludeTags', challenge) ?? null,
+            shouldIncludeTags: settings.getEffectiveTagSetting('shouldIncludeTags', challenge) ?? null,
+            submitWithoutTagMatch: settings.getEffectiveSetting('submitWithoutTagMatch', id),
+            enforceChosenOnly,
+        },
+    );
+    if (ranked.status !== 'ranked') {
+        return { ok: false, outcome: CURRENCY_OUTCOME.apiFailed };
+    }
+    // The pipeline's picks are library photo records (id, and usually member_id).
+    const best = ranked.picked[0] as { id: string | number; member_id?: string } | undefined;
+    if (!best) {
+        if (ranked.noChosenLeft) {
+            cat(logger).info(
+                `swap: Submit Only Chosen Photos is on and no chosen photo is left for ${logger.challengeTag(challenge)}. Add photos to Chosen Photos or turn Submit Only off`,
+                null,
+            );
+            return { ok: false, outcome: CURRENCY_OUTCOME.noAlternative };
+        }
+        cat(logger).info(`swap: no different photo available for ${logger.challengeTag(challenge)}`, null);
+        return { ok: false, outcome: CURRENCY_OUTCOME.noAlternative };
+    }
+    return {
+        ok: true,
+        outcome: CURRENCY_OUTCOME.ok,
+        // Library rows carry the owner's member_id; the replaced entry has the
+        // same owner, which covers a row without it (the thumbnail needs it).
+        candidate: {
+            id: String(best.id),
+            member_id: String(best.member_id ?? findEntry(challenge, imageId)?.member_id ?? ''),
+        },
+    };
+};
+
+/**
+ * Spends a SWAP to replace entered photo `imageId` with `newImageId`. Refuses
+ * (spending nothing) with `not-available` when `imageId` is no longer entered,
+ * when `guard` refuses the live entry (the automatic swap passes one so a photo
+ * that gained a boost/turbo/Guru's pick between the pass's start and this spend
+ * is never swapped out), or with `already-entered` when `newImageId` is already
+ * entered / equals `imageId`.
+ *
+ * @param deps - ledger: the swap-back
+ *   ledger (swapBackStore.ts), told about every successful swap so a swapped-out
+ *   boosted, turbo'd or guru-picked photo can be swapped back later; guard: given the live
+ *   entry about to be swapped out, false refuses the spend (nothing sent);
+ *   maxSwaps: spend nothing when the live challenge's swap history already holds that many
+ */
+const swapEntry = async (
+    challengeId: string | number,
+    imageId: string,
+    newImageId: string,
+    token: string,
+    {
+        strategy,
+        logger,
+        ledger = null,
+        maxSwaps,
+        guard,
+    }: {
+        strategy: CurrencyStrategy;
+        logger: Logger;
+        ledger?: SwapBackLedger | null;
+        maxSwaps?: number;
+        guard?: (entry: RankingEntry | undefined) => boolean;
+    },
+): Promise<SpendOutcome> => {
+    const { blocked, challenge } = await checkLive('swap', challengeId, token, strategy);
+    if (blocked) return { ok: false, outcome: blocked };
+    if (maxSwaps !== undefined && swapsMade(challenge) >= maxSwaps) {
+        cat(logger).info(`swap: ${logger.challengeTag(challenge)} is already at its limit of ${maxSwaps} swaps`, null);
+        return { ok: false, outcome: CURRENCY_OUTCOME.notAvailable };
+    }
+    if (!entryIds(challenge).has(imageId)) {
+        return { ok: false, outcome: CURRENCY_OUTCOME.notAvailable };
+    }
+    if (newImageId === imageId || swapExcludedIds(challenge).has(newImageId)) {
+        return { ok: false, outcome: CURRENCY_OUTCOME.alreadyEntered };
+    }
+    const oldEntry = findEntry(challenge, imageId);
+    if (guard && !guard(oldEntry)) {
+        cat(logger).warningT('m2a7d4f8c3e91', [logger.challengeTag(challenge)], null);
+        return { ok: false, outcome: CURRENCY_OUTCOME.notAvailable };
+    }
+    const result = await settleUnclearSwap(
+        spendResult(logger, 'swap', challenge, await strategy.swapPhoto(challenge.id, imageId, newImageId, token)),
+        challenge.id,
+        { out: imageId, in: newImageId },
+        token,
+        { strategy, logger },
+    );
+    if (result.ok && ledger) ledger.onSwapped(challenge.id, oldEntry, newImageId);
+    // The entry's photo changed (or may have, with no answer): the photo chooser's listing for it is out of date.
+    dropChallenge(challenge.id);
+    return result;
+};
+
+/**
+ * Spends a SWAP to put a photo that was swapped out while boosted, turbo'd or
+ * guru-picked back into the slot now holding `currentImageId` — the photo gets
+ * its boost/turbo/Guru's pick back. The original comes from the swap-back
+ * ledger, never from the caller, and must still be in this challenge's swap
+ * history (not entered).
+ *
+ * @param currentImageId - the replacement now in the slot
+ */
+const swapBack = async (
+    challengeId: string | number,
+    currentImageId: string,
+    token: string,
+    { strategy, logger, ledger }: { strategy: CurrencyStrategy; logger: Logger; ledger: SwapBackLedger },
+): Promise<SpendOutcome> => {
+    const record = ledger.list(challengeId).find((r) => r.currentId === String(currentImageId));
+    if (!record) return { ok: false, outcome: CURRENCY_OUTCOME.notAvailable };
+    const { blocked, challenge } = await checkLive('swap', challengeId, token, strategy);
+    if (blocked) return { ok: false, outcome: blocked };
+    const history = swappedOutIds(challenge);
+    const entered = entryIds(challenge);
+    if (!entered.has(record.currentId) || entered.has(record.previousId) || !history.has(record.previousId)) {
+        // The slot moved on outside this app — the record no longer describes it.
+        ledger.remove(challengeId, record.currentId);
+        return { ok: false, outcome: CURRENCY_OUTCOME.notAvailable };
+    }
+    const result = await settleUnclearSwap(
+        spendResult(
+            logger,
+            'swapBack',
+            challenge,
+            await strategy.swapPhoto(challenge.id, record.currentId, record.previousId, token),
+        ),
+        challenge.id,
+        { out: record.currentId, in: record.previousId },
+        token,
+        { strategy, logger },
+    );
+    if (result.ok) ledger.remove(challengeId, record.currentId);
+    dropChallenge(challenge.id);
+    return result;
+};
+
+/**
+ * Spends a FILL to top the challenge exposure up to 100%.
+ */
+const fillExposure = async (
+    challengeId: string | number,
+    token: string,
+    { strategy, logger }: { strategy: CurrencyStrategy; logger: Logger },
+): Promise<SpendOutcome> => {
+    const { blocked, challenge } = await checkLive('fill', challengeId, token, strategy);
+    if (blocked) return { ok: false, outcome: blocked };
+    // The member id the endpoint wants is the profile id; every entry carries
+    // the same id as member_id, which covers a failed profile lookup.
+    // aislop-ignore-next-line ai-slop/hidden-fallback -- warned via the currency logger below; apiFailed is the documented outcome
+    const memberId =
+        (await resolveMemberId(token, strategy.getCurrentMemberProfile, logger, 'currency')) ||
+        entriesOf(challenge)[0]?.member_id ||
+        null;
+    if (!memberId) {
+        cat(logger).warning(`fillExposure: member id unavailable for ${logger.challengeTag(challenge)}`, null);
+        return { ok: false, outcome: CURRENCY_OUTCOME.apiFailed };
+    }
+    return spendResult(
+        logger,
+        'fillExposure',
+        challenge,
+        await strategy.exposureAutofill(challenge.id, String(memberId), token),
+    );
+};
+
+export { withSpendLock, unlockBoostWithKey, previewSwap, swapEntry, swapBack, fillExposure };

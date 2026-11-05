@@ -3,13 +3,13 @@
  * to a week, 24 by default.
  */
 
-import settings = require('../../src/ts/settings');
-import type * as limitsModule from '../../src/ts/settings/limits';
+import settings = require('../../src/ts/core/settings');
+import type * as limitsModule from '../../src/ts/core/settings/limits';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 
-const { MAX_UPCOMING_HOURS } = require('../../src/ts/settings/limits') as typeof limitsModule;
+const { MAX_UPCOMING_HOURS } = require('../../src/ts/core/settings/limits') as typeof limitsModule;
 
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const category = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
         info: jest.fn(),

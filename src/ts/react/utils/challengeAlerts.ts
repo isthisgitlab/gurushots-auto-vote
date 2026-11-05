@@ -1,8 +1,8 @@
-import { challengeAllows } from '../../voting/currencyActions';
-import { isMarkedChallenge } from '../../challengeMarks';
+import { challengeAllows } from '../../core/voting/currencyActions';
+import { isMarkedChallenge } from '../../core/challengeMarks';
 
-import type { Challenge } from '../../types/gurushots';
-import type { RankedChallenge } from '../../types/rendererUtils';
+import type { Challenge } from '../../core/types/gurushots';
+import type { RankedChallenge } from '../../core/types/rendererUtils';
 /**
  * At-a-glance "needs attention" predicates for the challenge list, so a user
  * opening the app can spot what matters without reading every card: an open

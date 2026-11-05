@@ -1,7 +1,7 @@
 import { useLayoutEffect, useState } from 'react';
 
-import type { Challenge } from '../../types/gurushots';
-import type { SwapBackRecord } from '../../types/stores';
+import type { Challenge } from '../../core/types/gurushots';
+import type { SwapBackRecord } from '../../core/types/stores';
 
 /**
  * A slot whose recorded boosted, turbo'd or guru-picked original can be swapped back in.

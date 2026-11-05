@@ -1,15 +1,16 @@
 /**
- * src/ts/index/permissions.ts — notifications from the app's own file: pages
- * are the only permission granted, on both the default and the app-window
+ * src/ts/shells/electron/index/permissions.ts — notifications and
+ * clipboard-sanitized-write from the app's own file: pages are the only
+ * permissions granted, on both the default and the app-window
  * (in-memory) session. The page is judged on webContents.getURL(), never on the origin a
  * check reports (always `file:///` for a file: page).
  */
 
 import type { WebContents } from 'electron';
-import type * as permissionsModule from '../../src/ts/index/permissions';
-import type * as sessionModule from '../../src/ts/index/session';
-import type * as loggerModule from '../../src/ts/logger';
-import type { CategoryLogger } from '../../src/ts/logger';
+import type * as permissionsModule from '../../src/ts/shells/electron/index/permissions';
+import type * as sessionModule from '../../src/ts/shells/electron/index/session';
+import type * as loggerModule from '../../src/ts/core/logger';
+import type { CategoryLogger } from '../../src/ts/core/logger';
 import { invalid } from '../helpers/invalid';
 
 type RequestHandler = (webContents: WebContents, permission: string, callback: (granted: boolean) => void) => void;
@@ -36,19 +37,21 @@ jest.mock('electron', () => ({
     session: {
         defaultSession: mockSessions.default,
         fromPartition: jest.fn((partition: string) =>
-            partition === jest.requireActual<typeof sessionModule>('../../src/ts/index/session').APP_PARTITION
+            partition ===
+            jest.requireActual<typeof sessionModule>('../../src/ts/shells/electron/index/session').APP_PARTITION
                 ? mockSessions.appWindow
                 : null,
         ),
     },
 }));
-jest.mock('../../src/ts/logger', () => {
+jest.mock('../../src/ts/core/logger', () => {
     const cat = { warning: jest.fn() };
     return { withCategory: jest.fn(() => cat), cat };
 });
 
-const { installPermissionHandlers } = require('../../src/ts/index/permissions') as typeof permissionsModule;
-const cat = jest.mocked((require('../../src/ts/logger') as typeof loggerModule & { cat: CategoryLogger }).cat);
+const { installPermissionHandlers } =
+    require('../../src/ts/shells/electron/index/permissions') as typeof permissionsModule;
+const cat = jest.mocked((require('../../src/ts/core/logger') as typeof loggerModule & { cat: CategoryLogger }).cat);
 
 const page = (url: string) => invalid<WebContents>({ getURL: () => url });
 const FILE_PAGE = 'file:///app/src/html/app.html';
@@ -59,7 +62,7 @@ beforeEach(() => {
 });
 
 it('locks down the partition the app windows use, which is an in-memory one', () => {
-    const { APP_PARTITION } = require('../../src/ts/index/session') as typeof sessionModule;
+    const { APP_PARTITION } = require('../../src/ts/shells/electron/index/session') as typeof sessionModule;
     const { session } = require('electron') as { session: { fromPartition: jest.Mock<unknown, [string]> } };
 
     expect(session.fromPartition).toHaveBeenCalledWith(APP_PARTITION);
@@ -75,6 +78,14 @@ describe.each([
     it('grants a notifications request from a file: page', () => {
         const callback = jest.fn();
         session().request!(page(FILE_PAGE), 'notifications', callback);
+
+        expect(callback).toHaveBeenCalledWith(true);
+        expect(cat.warning).not.toHaveBeenCalled();
+    });
+
+    it('grants a clipboard-sanitized-write request from a file: page', () => {
+        const callback = jest.fn();
+        session().request!(page(FILE_PAGE), 'clipboard-sanitized-write', callback);
 
         expect(callback).toHaveBeenCalledWith(true);
         expect(cat.warning).not.toHaveBeenCalled();
@@ -105,18 +116,58 @@ describe.each([
         );
     });
 
+    it('denies a clipboard-sanitized-write request from a remote page and logs it', () => {
+        const callback = jest.fn();
+        session().request!(page('https://evil.example/'), 'clipboard-sanitized-write', callback);
+
+        expect(callback).toHaveBeenCalledWith(false);
+        expect(cat.warning).toHaveBeenCalledWith(
+            "Denied permission request 'clipboard-sanitized-write' from https://evil.example/",
+            null,
+        );
+    });
+
     it('allows a notifications check from a file: page whatever origin is reported', () => {
         expect(session().check!(page(FILE_PAGE), 'notifications', 'file:///')).toBe(true);
         expect(cat.warning).not.toHaveBeenCalled();
     });
 
+    it('allows a clipboard-sanitized-write check from a file: page', () => {
+        expect(session().check!(page(FILE_PAGE), 'clipboard-sanitized-write', 'file:///')).toBe(true);
+        expect(cat.warning).not.toHaveBeenCalled();
+    });
+
+    it('denies a clipboard-read check from a file: page and logs it', () => {
+        expect(session().check!(page(FILE_PAGE), 'clipboard-read', 'file:///')).toBe(false);
+        expect(cat.warning).toHaveBeenCalledWith(`Denied permission check 'clipboard-read' from ${FILE_PAGE}`, null);
+    });
+
     it('does not judge a check on its requesting origin', () => {
         expect(session().check!(page('https://evil.example/'), 'notifications', 'file:///')).toBe(false);
-        expect(session().check!(page(FILE_PAGE), 'media', 'file:///')).toBe(false);
+        expect(session().check!(page(FILE_PAGE), 'geolocation', 'file:///')).toBe(false);
+    });
+
+    it('allows a media check from a file: page, so WebRTC exposes the local addresses remote access needs', () => {
+        expect(session().check!(page(FILE_PAGE), 'media', 'file:///')).toBe(true);
+        expect(cat.warning).not.toHaveBeenCalled();
+    });
+
+    it('denies a media check from a remote page and with no web contents', () => {
+        expect(session().check!(page('https://evil.example/'), 'media', 'file:///')).toBe(false);
+        expect(session().check!(null, 'media', 'file:///')).toBe(false);
+        expect(cat.warning).toHaveBeenCalledWith("Denied permission check 'media' from https://evil.example/", null);
     });
 
     it('denies a check with no web contents and logs <unknown>', () => {
         expect(session().check!(null, 'notifications', 'file:///')).toBe(false);
         expect(cat.warning).toHaveBeenCalledWith("Denied permission check 'notifications' from <unknown>", null);
+    });
+
+    it('denies a clipboard-sanitized-write check with no web contents and logs <unknown>', () => {
+        expect(session().check!(null, 'clipboard-sanitized-write', 'file:///')).toBe(false);
+        expect(cat.warning).toHaveBeenCalledWith(
+            "Denied permission check 'clipboard-sanitized-write' from <unknown>",
+            null,
+        );
     });
 });

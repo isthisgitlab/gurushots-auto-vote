@@ -18,8 +18,8 @@
  * component that renders it.
  */
 
-import { occurrencesOf } from '../../scheduling/wallClock';
-import { MAX_SCHEDULED_FILL_ENTRIES } from '../../settings/limits';
+import { occurrencesOf } from '../../core/scheduling/wallClock';
+import { MAX_SCHEDULED_FILL_ENTRIES } from '../../core/settings/limits';
 
 export interface WindowHintState {
     /** Parsed-shape daily entries, cap-sliced. */

@@ -1,16 +1,19 @@
 #!/usr/bin/env node
 
+// The CLI platform installs before any core module loads.
+import '../src/ts/shells/cli/platform';
+
 import fs from 'node:fs';
 import path from 'node:path';
 // The shared resolver, so this script targets the same userData dir as the
 // app (the -dev dir when run from source, where the logs actually live).
-import * as runtime from '../src/ts/runtime';
+import { platform } from '../src/ts/core/platform/port';
 import { runIfMain } from './lib/run-if-main';
 
 // Deletes the api-debug-* files from `logsDir` (defaults to the
 // userData logs dir). Exported so tests can point it at a temp dir; the
 // deletion runs only when the file is executed directly.
-function cleanupLogs(logsDir = path.join(runtime.getAppUserDataPath(), 'logs')) {
+function cleanupLogs(logsDir = path.join(platform().paths.userData(), 'logs')) {
     if (!fs.existsSync(logsDir)) {
         console.log(`No logs directory at ${logsDir}`);
         return;

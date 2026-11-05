@@ -7,7 +7,7 @@ import readline from 'node:readline';
 import { pipeline } from 'node:stream/promises';
 import yauzl from 'yauzl';
 import type { Entry, Options as YauzlOptions, ZipFile } from 'yauzl';
-import { errorMessage } from '../../src/ts/errorMessage';
+import { errorMessage } from '../../src/ts/core/errorMessage';
 import { ROOT, MAX_REDIRECTS, ENTRY_NAME, MAX_ENTRY_BYTES } from './config';
 import { fail } from './support';
 

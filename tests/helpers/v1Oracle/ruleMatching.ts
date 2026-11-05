@@ -3,7 +3,7 @@
  * wall-clock reads it makes, as of the last 1.x release; it never follows the live code.
  */
 
-import { isPlainObject } from '../../../src/ts/plainObject';
+import { isPlainObject } from '../../../src/ts/core/plainObject';
 
 /** What a rule is matched on: a challenge payload, or just a title. */
 export type MatchTarget = {

@@ -4,9 +4,9 @@
  * non-whitespace, length-capped strings up to a max array size.
  */
 
-import type * as schemaModule from '../../src/ts/settings/schema';
+import type * as schemaModule from '../../src/ts/core/settings/schema';
 
-const { validateSetting } = require('../../src/ts/settings/schema') as typeof schemaModule;
+const { validateSetting } = require('../../src/ts/core/settings/schema') as typeof schemaModule;
 
 describe('tag-list schema validation', () => {
     describe('mustIncludeTags', () => {

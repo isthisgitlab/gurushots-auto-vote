@@ -8,14 +8,16 @@
  * the window.api mock.
  */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
-import { DEFAULT_TIMEZONE } from '../../src/ts/settings/uiDefaults';
+import { DEFAULT_TIMEZONE } from '../../src/ts/core/settings/uiDefaults';
 import { invalid } from '../helpers/invalid';
-import { CURRENT_NOTICE_VERSION } from '../../src/ts/noticeVersion';
+import { resetPlatformKind } from '../helpers/platformKind';
+import { markPlatformKind } from '../../src/ts/core/platform/kind';
+import { CURRENT_NOTICE_VERSION } from '../../src/ts/core/noticeVersion';
 
 import type { ComponentChildren } from 'preact';
-import type { Challenge } from '../../src/ts/types/gurushots';
-import type { RendererGlobals } from '../../src/ts/types/capacitor';
-import type { WindowApi } from '../../src/ts/types/ipc';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
+import type { RendererGlobals } from '../../src/ts/core/types/capacitor';
+import type { WindowApi } from '../../src/ts/core/types/ipc';
 import type * as AppModule from '@/pages/App';
 import type { ChallengesContextValue, ChallengesProvider } from '@/contexts/ChallengesContext';
 import type { AutovoteProvider } from '@/contexts/AutovoteContext';
@@ -97,6 +99,11 @@ jest.mock('@/components/app/LogsModal', () => ({ LogsModal: mockStub('LogsModal'
 jest.mock('@/components/app/UpdateDialog', () => ({ UpdateDialog: mockStub('UpdateDialog') }));
 jest.mock('@/components/app/WelcomeModal', () => ({ WelcomeModal: mockStub('WelcomeModal') }));
 
+// The auto-mount and every default `<App />` render pass the no-op background
+// host down to AutovoteProvider; the sentinel pins the identity.
+const mockNoopHost = { marker: 'noop-background-host' };
+jest.mock('@/contexts/noopBackgroundHost', () => ({ noopBackgroundHost: mockNoopHost }));
+
 let App: typeof AppModule.default;
 let mountApp: typeof AppModule.mountApp;
 
@@ -130,7 +137,7 @@ describe('App page', () => {
         Object.assign(window.api, originals);
         document.documentElement.removeAttribute('data-theme');
         document.body.innerHTML = '';
-        delete (globalThis as RendererGlobals).Capacitor;
+        resetPlatformKind();
         delete (globalThis as RendererGlobals).__capacitorBootstrap;
     });
 
@@ -450,7 +457,7 @@ describe('App page', () => {
     });
 
     test('settings and logs modals open from the navbar and close via onClose', async () => {
-        (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+        markPlatformKind('capacitor');
         await renderReady();
         expect(mockProps.SettingsModal.isOpen).toBe(false);
         fireEvent.click(screen.getByTitle('app.settings'));
@@ -610,5 +617,7 @@ describe('App page', () => {
         });
         await Promise.resolve();
         expect(root.textContent).toBe('common.loading');
+        // The auto-mount passes the no-op background host to the provider.
+        expect(mockProps.AutovoteProvider.backgroundHost).toBe(mockNoopHost);
     });
 });

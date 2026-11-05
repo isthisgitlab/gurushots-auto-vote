@@ -2,12 +2,12 @@
  * mock/voting.ts — generated vote-image payloads for mock mode.
  */
 
-import type * as votingModule from '../../src/ts/mock/voting';
+import type * as votingModule from '../../src/ts/core/mock/voting';
 
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
-const { generateMockVoteImages } = require('../../src/ts/mock/voting') as typeof votingModule;
+const { generateMockVoteImages } = require('../../src/ts/core/mock/voting') as typeof votingModule;
 
 afterEach(() => jest.restoreAllMocks());
 

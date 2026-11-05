@@ -15,7 +15,7 @@ import { ChallengeCard } from '@/components/app/ChallengeCard';
 import { useActiveChallenges } from '@/api/useActiveChallenges';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import { invalid } from '../helpers/invalid';
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 
 jest.mock('@/api/useActiveChallenges', () => ({ useActiveChallenges: jest.fn() }));
 

@@ -33,6 +33,7 @@ import { ModalActionRow } from '@/components/ui/ModalActionRow';
 import { STICKY_FOOTER_SCROLL_PADDING } from '@/components/ui/StickyModalFooter';
 import { SettingsTierIntro } from '@/components/ui/SettingsTierIntro';
 import { SettingHelp } from '@/components/ui/SettingHelp';
+import { LocalOnlyHint, LOCAL_VIEW_PREF_KEYS } from '@/components/ui/LocalOnlyHint';
 import { SettingInput, SettingLabel } from './SettingInput';
 import { SettingHintList, globalSettingHints } from './SettingHints';
 import { ApplicationSettingsSection, applicationCellTexts } from './ApplicationSettingsSection';
@@ -42,12 +43,21 @@ import { TitleTagRulesEditor } from './TitleTagRulesEditor';
 import { ScenariosSection } from './ScenariosSection';
 import { ProfilesSection } from './ProfilesSection';
 import { AboutDataSection, aboutDataTexts } from './AboutDataSection';
+import { RemoteAccessSection, remoteAccessTexts } from './RemoteAccessSection';
+import { RemoteControlEntry, remoteControlTexts } from './RemoteControlEntry';
+import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
+import { phoneRemoteMode } from '../../../core/remote/phoneMode';
 
 import type { ImportReport } from '@/api/useImportReport';
 import type { SettingsBand, SettingsSection, SettingsTab, SettingsTabId } from '@/utils/groupSettings';
 import type { SettingFilterTexts } from '@/utils/matchesSettingFilter';
 import type { TabDescriptor } from '@/components/ui/Tabs';
-import type { HintsFor, SettingChangeHandler, SettingResetHandler, Translate } from '../../../types/settingsEditor';
+import type {
+    HintsFor,
+    SettingChangeHandler,
+    SettingResetHandler,
+    Translate,
+} from '../../../core/types/settingsEditor';
 
 /**
  * The form state every schema-driven setting input reads and writes.
@@ -94,6 +104,7 @@ function SchemaSettingsGroup({
     rejectedKeys,
 }: { group: SettingsSection; showAll?: boolean } & SchemaFormProps) {
     const { t } = useTranslation();
+    const { viewPrefsLocal } = usePlatformCapabilities();
     const { query, namesOnly } = useSettingsNav();
     // The group's own heading matched (or the tab title did): the heading and every entry show.
     const labelShown = showAll || groupLabelMatchesFilter(t, group, query);
@@ -101,32 +112,40 @@ function SchemaSettingsGroup({
         <div className={`mb-4 ${showAll || groupMatchesFilter(t, group, query, namesOnly) ? '' : 'hidden'}`}>
             <h5 className="font-medium text-sm opacity-70 mb-2 mt-3">{t(group.label)}</h5>
             <div className={SETTINGS_GRID_CLASS}>
-                {group.entries.map(([key, config]) => (
-                    <div
-                        key={key}
-                        className={`${SETTING_CELL_CLASS} ${
-                            labelShown || entryMatchesFilter(t, config, query, namesOnly) ? '' : 'hidden'
-                        }`}
-                    >
-                        <SettingLabel inputId={`setting-${key}`} type={config.type} config={config}>
-                            <span className="font-medium">{t(config.label)}</span>
-                            {config.perChallenge && (
-                                <span className="badge badge-ghost badge-sm ml-2">{t('app.globalDefault')}</span>
-                            )}
-                        </SettingLabel>
-                        <p className="text-xs text-base-content/70 mb-2">{t(config.description)}</p>
-                        <SettingHelp helpKey={config.helpKey} />
-                        <SettingInput
-                            settingKey={key}
-                            config={config}
-                            value={formValues[key] ?? config.default}
-                            onChange={handleFormChange}
-                            onReset={handleResetGlobal}
-                            rejected={rejectedKeys.includes(key)}
-                        />
-                        <SettingHintList hints={hintsFor(key)} />
-                    </div>
-                ))}
+                {group.entries.map(([key, config]) => {
+                    // Only the view preferences the remote page keeps on the device get the hint, and
+                    // the control points at it only where the hint renders.
+                    const localHintId =
+                        viewPrefsLocal && LOCAL_VIEW_PREF_KEYS.has(key) ? `setting-${key}-device-hint` : undefined;
+                    return (
+                        <div
+                            key={key}
+                            className={`${SETTING_CELL_CLASS} ${
+                                labelShown || entryMatchesFilter(t, config, query, namesOnly) ? '' : 'hidden'
+                            }`}
+                        >
+                            <SettingLabel inputId={`setting-${key}`} type={config.type} config={config}>
+                                <span className="font-medium">{t(config.label)}</span>
+                                {config.perChallenge && (
+                                    <span className="badge badge-ghost badge-sm ml-2">{t('app.globalDefault')}</span>
+                                )}
+                            </SettingLabel>
+                            <p className="text-xs text-base-content/70 mb-2">{t(config.description)}</p>
+                            <SettingHelp helpKey={config.helpKey} />
+                            <SettingInput
+                                settingKey={key}
+                                config={config}
+                                value={formValues[key] ?? config.default}
+                                onChange={handleFormChange}
+                                onReset={handleResetGlobal}
+                                rejected={rejectedKeys.includes(key)}
+                                describedBy={localHintId}
+                            />
+                            {localHintId && <LocalOnlyHint id={localHintId} />}
+                            <SettingHintList hints={hintsFor(key)} />
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );
@@ -230,6 +249,7 @@ function useSettingsModalFilter({
     defaultsBands,
     defaultsTabs,
     importReport,
+    showsRemoteAccess,
 }: {
     t: Translate;
     sections: readonly SettingsTab[];
@@ -237,6 +257,7 @@ function useSettingsModalFilter({
     defaultsBands: readonly SettingsBand[];
     defaultsTabs: readonly SettingsTab[];
     importReport: ImportReport | null;
+    showsRemoteAccess: boolean;
 }) {
     // Every text the filter searches in one tab: the tab's own title, and the names and
     // descriptions of everything it renders.
@@ -247,6 +268,9 @@ function useSettingsModalFilter({
                 ...applicationCellTexts(t),
                 ...appGroups.flatMap((group) => groupFilterTexts(t, group)),
                 aboutDataTexts(t, importReport !== null),
+                ...(showsRemoteAccess ? [remoteAccessTexts(t)] : []),
+                // The Android app's "Control my computer" entry, found like a section when installed.
+                ...(phoneRemoteMode()?.enter !== undefined ? [remoteControlTexts(t)] : []),
             ];
         }
         if (id === 'titleRules') return [{ names: [t(SETTINGS_SECTION_TITLES.titleRules)], descriptions: [] }];
@@ -283,6 +307,7 @@ function useSettingsModalFilter({
 export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
     const { t, language, setLanguage } = useTranslation();
     const { rearmSchedule } = useAutovote();
+    const { showsRemoteAccessSection } = usePlatformCapabilities();
     const { settings, updateSetting, refetch: refetchSettings } = useSettings();
     const { schema, defaults, groups, tiers, refetch: refetchSchema, loading: schemaLoading } = useSettingsSchema();
 
@@ -320,7 +345,15 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
     // reopening fetches fresh data.
     const { data: importReport } = useImportReport({ enabled: isOpen });
 
-    const filter = useSettingsModalFilter({ t, sections, appGroups, defaultsBands, defaultsTabs, importReport });
+    const filter = useSettingsModalFilter({
+        t,
+        sections,
+        appGroups,
+        defaultsBands,
+        defaultsTabs,
+        importReport,
+        showsRemoteAccess: showsRemoteAccessSection,
+    });
 
     const timezoneInput = useCustomTimezoneInput({ isOpen, uiValues, handleUiChange });
     const titleRules = useTitleRules(isOpen);
@@ -399,6 +432,9 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                                 />
                             ))}
                             <AboutDataSection report={importReport} showAll={filter.appShowAll} />
+                            {showsRemoteAccessSection && <RemoteAccessSection showAll={filter.appShowAll} />}
+                            {/* The Android app's paste entry; it renders nothing where its shell did not install it */}
+                            <RemoteControlEntry showAll={filter.appShowAll} />
                         </ApplicationSettingsSection>
                         {defaultsBands.map((band, index) => {
                             const tab = defaultsTabs[index];

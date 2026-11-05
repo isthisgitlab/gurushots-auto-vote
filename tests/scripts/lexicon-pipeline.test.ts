@@ -17,6 +17,8 @@ import type * as fetch_embeddingsModule from '../../scripts/fetch-embeddings';
 import type * as stored_zipModule from './helpers/stored-zip';
 import type { ConceptsConfig } from '../../scripts/build-lexicon';
 import { invalid } from '../helpers/invalid';
+import { clearInstalledPlatform } from '../helpers/platform';
+clearInstalledPlatform();
 const { buildAsset, buildConcreteAxis } = require('../../scripts/build-lexicon') as typeof build_lexiconModule;
 const { percentile, validateConfigRefs } = require('../../scripts/validate-lexicon') as typeof validate_lexiconModule;
 const {

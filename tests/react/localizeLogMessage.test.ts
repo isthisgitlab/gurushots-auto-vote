@@ -1,12 +1,12 @@
-import { logMessages as englishLogMessages } from '../../src/ts/translations/logEnglish';
-import { logMessages as latvianLogMessages } from '../../src/ts/translations/logLatvian';
+import { logMessages as englishLogMessages } from '../../src/ts/core/translations/logEnglish';
+import { logMessages as latvianLogMessages } from '../../src/ts/core/translations/logLatvian';
 import { localizeLogMessage } from '../../src/ts/react/components/logs/localizeLogMessage';
-import { sentenceCaseLogMessage, splitIcon } from '../../src/ts/format/logSafe';
-import { formatOversleptMessage } from '../../src/ts/scheduling/cadenceChain/oversleep';
-import { formatChosenSkipMessage } from '../../src/ts/services/autoFill/chosenPhotos';
-import { formatTagSearchFallbackMessage } from '../../src/ts/services/autoFill/candidates';
-import { formatOffThemePickMessage } from '../../src/ts/services/autoFill/fillLogging';
-import { START_FRESH_BLOCKED } from '../../src/ts/cli/commands/settingsRecovery';
+import { sentenceCaseLogMessage, splitIcon } from '../../src/ts/core/format/logSafe';
+import { formatOversleptMessage } from '../../src/ts/core/scheduling/cadenceChain/oversleep';
+import { formatChosenSkipMessage } from '../../src/ts/core/services/autoFill/chosenPhotos';
+import { formatTagSearchFallbackMessage } from '../../src/ts/core/services/autoFill/candidates';
+import { formatOffThemePickMessage } from '../../src/ts/core/services/autoFill/fillLogging';
+import { START_FRESH_BLOCKED } from '../../src/ts/shells/cli/commands/settingsRecovery';
 
 const slots = /\{(\d+)\}/g;
 const noAutomaticIcon = /^(?:$|\s|[=-]|\p{Extended_Pictographic})/u;
@@ -61,6 +61,16 @@ describe('Latvian log messages', () => {
             'ℹ️ Iesniegšana: [Izaicinājums 42: No Humans] norāda tikai to, ko neiekļaut (human); sarindo visu bibliotēku un izslēdz foto, kuros tas redzams',
         );
         expect(localizeLogMessage('ℹ️ Invalid timestamp provided')).toBe('ℹ️ Norādīts nederīgs laika zīmogs');
+    });
+
+    test('translates the visual check re-rank line (its slot values pass through as logged)', () => {
+        expect(
+            localizeLogMessage(
+                'ℹ️ Visual check re-ranked picks for [Challenge 137654: Everything Sports]: 9942aca1, 41d42b07 → 6f26a121, 41d42b07',
+            ),
+        ).toBe(
+            'ℹ️ Vizuālā pārbaude pārkārtoja izvēlētos foto izaicinājumam [Challenge 137654: Everything Sports]: 9942aca1, 41d42b07 → 6f26a121, 41d42b07',
+        );
     });
 
     test('translates the Manual Only lines', () => {
@@ -159,6 +169,16 @@ describe('Latvian log messages', () => {
         ]) {
             expect(localizeLogMessage(message)).toBe(
                 '⚠️ Apmaiņa: apmaināmais foto ir ar Boost, Turbo vai Guru izvēli — apmaiņa izaicinājumam [Izaicinājums 555: Sunset] netiek tērēta',
+            );
+        }
+    });
+
+    test('translates the swap line for Submit Only Chosen Photos with no chosen photo left', () => {
+        const tag = '[Challenge 42: Sunset]';
+        const english = `swap: Submit Only Chosen Photos is on and no chosen photo is left for ${tag}. Add photos to Chosen Photos or turn Submit Only off`;
+        for (const message of [`ℹ️ ${english}`, `ℹ️ ${sentenceCaseLogMessage(english)}`]) {
+            expect(localizeLogMessage(message)).toBe(
+                'ℹ️ swap: ir ieslēgts „Iesniegt tikai izvēlētos foto”, un izaicinājumam [Izaicinājums 42: Sunset] nav palicis neviens izvēlētais foto. Pievieno foto sarakstam „Izvēlētie foto” vai izslēdz „Iesniegt tikai izvēlētos foto”',
             );
         }
     });
@@ -447,6 +467,7 @@ describe('forward template localization', () => {
             ['m21b1261f69f8', ['[Challenge 42: Sunset]']],
             ['mc93c515e28d4', ['[Challenge 42: Sunset]', 'e1']],
             ['m9c0719be2c97', ['[Challenge 42: Sunset]', 'e1']],
+            ['m9c08a1e5d2f7', ['[Challenge 42: Sunset]']],
             ['m3e7a92c4b518', ['[Challenge 42: Sunset]']],
             ['m6b04d81f7c23', ['[Challenge 42: Sunset]']],
             ['m9f25e7a3d681', ['[Challenge 42: Sunset]']],

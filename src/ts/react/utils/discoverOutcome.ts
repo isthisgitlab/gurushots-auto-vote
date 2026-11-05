@@ -1,4 +1,4 @@
-import type { JoinReason } from '../../types/join';
+import type { JoinReason } from '../../core/types/join';
 
 type OutcomeVariant = 'success' | 'warning' | 'error' | 'neutral';
 

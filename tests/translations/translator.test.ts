@@ -3,14 +3,14 @@
  * renderer's shared instance (translations/renderer.ts).
  */
 
-import english = require('../../src/ts/translations/english');
-import latvian = require('../../src/ts/translations/latvian');
-import type * as translatorModule from '../../src/ts/translations/translator';
-import type * as rendererModule from '../../src/ts/translations/renderer';
-import type { TranslateVars } from '../../src/ts/translations/translator';
+import english = require('../../src/ts/core/translations/english');
+import latvian = require('../../src/ts/core/translations/latvian');
+import type * as translatorModule from '../../src/ts/core/translations/translator';
+import type * as rendererModule from '../../src/ts/core/translations/renderer';
+import type { TranslateVars } from '../../src/ts/core/translations/translator';
 import { invalid } from '../helpers/invalid';
 const { DEFAULT_LANGUAGE, createTranslator, isSupportedLanguage, resolveLanguage } =
-    require('../../src/ts/translations/translator') as typeof translatorModule;
+    require('../../src/ts/core/translations/translator') as typeof translatorModule;
 
 describe('language helpers', () => {
     test('only en and lv are supported', () => {
@@ -181,14 +181,14 @@ describe('plurals', () => {
 
 describe('English fallback', () => {
     afterEach(() => {
-        jest.dontMock('../../src/ts/translations/latvian');
+        jest.dontMock('../../src/ts/core/translations/latvian');
     });
 
     test('a key missing (or empty) in Latvian falls back to English', () => {
         jest.isolateModules(() => {
-            jest.doMock('../../src/ts/translations/latvian', () => ({ logs: { title: '' }, common: {} }));
+            jest.doMock('../../src/ts/core/translations/latvian', () => ({ logs: { title: '' }, common: {} }));
             const { createTranslator: isolated } =
-                require('../../src/ts/translations/translator') as typeof translatorModule;
+                require('../../src/ts/core/translations/translator') as typeof translatorModule;
             const translator = isolated();
             expect(translator.t('logs.title', undefined, 'lv')).toBe(english.logs.title);
             expect(translator.t('themes.dark', undefined, 'lv')).toBe(english.themes.dark);
@@ -198,9 +198,9 @@ describe('English fallback', () => {
 
     test('a group missing in Latvian falls back to English with English rules', () => {
         jest.isolateModules(() => {
-            jest.doMock('../../src/ts/translations/latvian', () => ({ logs: { title: '' }, common: {}, app: {} }));
+            jest.doMock('../../src/ts/core/translations/latvian', () => ({ logs: { title: '' }, common: {}, app: {} }));
             const { createTranslator: isolated } =
-                require('../../src/ts/translations/translator') as typeof translatorModule;
+                require('../../src/ts/core/translations/translator') as typeof translatorModule;
             const translator = isolated();
             expect(translator.t('app.teamStandingOverStandby', { count: 1 }, 'lv')).toBe('+1 vote over standby');
             // 21 is en-other but lv-one: English rules, not Latvian ones, must pick the form.
@@ -211,10 +211,11 @@ describe('English fallback', () => {
 
 describe('renderer instance', () => {
     test('is a translator shared by every importer of the module', () => {
-        const { rendererTranslator } = require('../../src/ts/translations/renderer') as typeof rendererModule;
+        const { rendererTranslator } = require('../../src/ts/core/translations/renderer') as typeof rendererModule;
         expect(
-            (require('../../src/ts/translations/renderer') as typeof import('../../src/ts/translations/renderer'))
-                .rendererTranslator,
+            (
+                require('../../src/ts/core/translations/renderer') as typeof import('../../src/ts/core/translations/renderer')
+            ).rendererTranslator,
         ).toBe(rendererTranslator);
         expect(rendererTranslator.getCurrentLanguage()).toBe('en');
         expect(rendererTranslator.t('themes.dark', undefined, 'lv')).toBe(latvian.themes.dark);
