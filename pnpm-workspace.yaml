@@ -77,7 +77,7 @@ overrides:
     '@parcel/watcher@<2.6.0': 2.6.0
     # jest (glob@10/test-exclude, glob@13) and electron-builder (@electron/universal,
     # app-builder-lib) still pin minimatch 9/10, all copies in GHSA-g3hv-75wg-m249's
-    # range (< 11.0.1: globparts amplification DoS; the only patched line is 11.0.1+,
+    # range (>= 7, < 11.0.1: globparts amplification DoS; the only patched line is 11.0.1+,
     # no backport to 9/10). minimatch 11 keeps a CJS export (engines '20 || >=22',
     # exports.require present), and 11.0.4 already sits in the tree via glob@14 — note
     # it moves the 9.x copies from ISC to Blue Oak-1.0.0 (both permissive; dev-only,
