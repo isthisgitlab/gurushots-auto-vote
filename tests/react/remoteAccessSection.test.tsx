@@ -116,13 +116,17 @@ describe('RemoteAccessSection', () => {
         );
         await act(async () => Promise.resolve());
         expect(screen.queryByRole('img')).toBeNull();
-        expect(screen.queryByText(/isthisgitlab\.github\.io/)).toBeNull();
+        expect(
+            screen.queryByText(/^https:\/\/isthisgitlab\.github\.io\/gurushots-auto-vote\/remote\/#k=\S+$/),
+        ).toBeNull();
 
         fireEvent.click(screen.getByRole('button', { name: 'app.remoteShow' }));
         const qr = screen.getByRole('img');
         expect(qr.getAttribute('src')).toContain('data:image/svg+xml');
         expect(qr.getAttribute('alt')).not.toContain('secret');
-        expect(screen.getByText(/isthisgitlab\.github\.io/)).toBeDefined();
+        expect(
+            screen.getByText(/^https:\/\/isthisgitlab\.github\.io\/gurushots-auto-vote\/remote\/#k=\S+$/),
+        ).toBeDefined();
     });
 
     const renderEnabled = async (): Promise<void> => {
@@ -342,7 +346,9 @@ describe('RemoteAccessSection', () => {
             fireEvent.click(screen.getByRole('button', { name: 'app.remoteShow' }));
             fireEvent.click(screen.getByRole('button', { name: 'app.remoteCopyLink' }));
             await act(async () => Promise.resolve());
-            expect(screen.getByText(/isthisgitlab\.github\.io/)).toBeDefined();
+            expect(
+                screen.getByText(/^https:\/\/isthisgitlab\.github\.io\/gurushots-auto-vote\/remote\/#k=\S+$/),
+            ).toBeDefined();
         } finally {
             if (hadClipboard !== undefined) Object.defineProperty(globalThis.navigator, 'clipboard', hadClipboard);
         }
