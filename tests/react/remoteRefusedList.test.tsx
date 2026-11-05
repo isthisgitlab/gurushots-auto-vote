@@ -1,14 +1,16 @@
 /**
  * A list channel an older desktop refuses: the real peer bridge answers the page's own allowlisted channel with
- * the "update the app on your computer" text, and the real active-challenges hook settles on it, with an empty
- * list and no error, instead of crashing or waiting forever.
+ * the "update the app on your computer" text, the real active-challenges hook settles on it as an error, and the
+ * challenges section shows that text, instead of an empty list, a crash or a wait that never ends.
  */
 
-import { renderHook, waitFor } from '@testing-library/preact';
+import { render, screen, waitFor } from '@testing-library/preact';
+import { TranslationProvider } from '@/contexts/TranslationContext';
+import { ChallengesProvider, useChallenges } from '@/contexts/ChallengesContext';
+import { ChallengesSection } from '@/components/app/ChallengesSection';
 import { installPeerBridge } from '../../src/ts/shells/remote/bridge/peer';
 import { APP_VERSION, LINK_VERSION, PROTOCOL_VERSION } from '../../src/ts/core/remote/protocol';
 import { setRemoteConnectionState } from '../../src/ts/core/remote/connectionState';
-import { useActiveChallenges } from '@/api/useActiveChallenges';
 import { TransportStub } from '../helpers/remoteTransport';
 
 type SentInvoke = { t: 'invoke'; id: number; channel: string };
@@ -44,8 +46,28 @@ describe('a list channel the desktop refuses', () => {
         setRemoteConnectionState('connecting');
     });
 
-    test('a refused list channel settles as an empty list without a crash or a hang', async () => {
-        const { result } = renderHook(() => useActiveChallenges());
+    test('a refused list channel reaches the UI: the hook settles with the update text and the list shows it', async () => {
+        let hookError: Error | null = null;
+        let hookLoading = true;
+        const Probe = () => {
+            const { error, loading } = useChallenges();
+            hookError = error;
+            hookLoading = loading;
+            return null;
+        };
+        render(
+            <TranslationProvider>
+                <ChallengesProvider autovoteRunning={false}>
+                    <Probe />
+                    <ChallengesSection
+                        isLoggedIn
+                        timezone="UTC"
+                        autovoteRunning={false}
+                        onChallengeSettingsClick={jest.fn()}
+                    />
+                </ChallengesProvider>
+            </TranslationProvider>,
+        );
         // The hook reads the settings, then the challenges: answer the first, refuse the second.
         await waitFor(() => expect(invokesOf(phone).map((invoke) => invoke.channel)).toContain('get-settings'));
         const settingsInvoke = invokesOf(phone).find((invoke) => invoke.channel === 'get-settings');
@@ -59,9 +81,11 @@ describe('a list channel the desktop refuses', () => {
             'host',
         );
 
-        await waitFor(() => expect(result.current.loading).toBe(false));
-        expect(result.current.data).toEqual([]);
-        expect(result.current.error).toBeNull();
+        // The happy-dom project's translator answers the key; tests/remote/peerBridge.test.ts pins the English text.
+        await waitFor(() => expect(hookLoading).toBe(false));
+        expect((hookError as Error | null)?.message).toBe('errors.remoteUpdateComputer');
+        expect(await screen.findByText('errors.remoteUpdateComputer')).toBeTruthy();
+        expect(screen.queryByText('errors.fetchFailed')).toBeNull();
     });
 
     test('the same refusal reaches the caller as the update text', async () => {

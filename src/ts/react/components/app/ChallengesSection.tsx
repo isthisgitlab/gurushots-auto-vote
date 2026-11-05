@@ -15,6 +15,7 @@ import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { LocalOnlyHint } from '@/components/ui/LocalOnlyHint';
 import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import * as ipc from '@/api/ipc';
+import { ChallengesRefusedError } from '@/api/useActiveChallenges';
 
 /**
  * Global card density: the compactCards default and the compactCardActions
@@ -139,10 +140,11 @@ export function ChallengesSection({
 
     // Transient-failure banner: a failed fetch (retries exhausted) surfaces
     // here instead of being silently shown as "no challenges". Auto-clears on
-    // the next successful refresh.
+    // the next successful refresh. A refusal carries its own text, already
+    // translated by the bridge that refused the read; every other error reads as a failed fetch.
     const fetchErrorBanner = error ? (
         <div role="alert" className="alert alert-warning text-sm mb-4">
-            <span>{t('errors.fetchFailed')}</span>
+            <span>{error instanceof ChallengesRefusedError ? error.message : t('errors.fetchFailed')}</span>
         </div>
     ) : null;
 

@@ -10,7 +10,7 @@ import { render as bareRender } from '@testing-library/preact';
 import { TranslationProvider } from '@/contexts/TranslationContext';
 import { ChallengesProvider, useChallenges } from '@/contexts/ChallengesContext';
 import { ChallengesSection } from '@/components/app/ChallengesSection';
-import { useActiveChallenges } from '@/api/useActiveChallenges';
+import { ChallengesRefusedError, useActiveChallenges } from '@/api/useActiveChallenges';
 import { mockApi, fireSettingsChanged } from './helpers/setup';
 import { markPlatformKind } from '../../src/ts/core/platform/kind';
 import { resetPlatformKind } from '../helpers/platformKind';
@@ -18,7 +18,11 @@ import type { ChallengeCard } from '@/components/app/ChallengeCard';
 import type { Challenge } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
-jest.mock('@/api/useActiveChallenges', () => ({ useActiveChallenges: jest.fn() }));
+jest.mock('@/api/useActiveChallenges', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('@/api/useActiveChallenges')>('@/api/useActiveChallenges'),
+    useActiveChallenges: jest.fn(),
+}));
 
 jest.mock('@/components/app/ChallengeCard', () => ({
     ChallengeCard: ({
@@ -200,6 +204,20 @@ describe('ChallengesProvider + ChallengesSection', () => {
             expect(screen.getByText('app.pleaseLogin')).toBeTruthy();
             expect(screen.getByText('errors.fetchFailed')).toBeTruthy();
             expect(screen.queryByText('common.refresh')).toBeNull();
+        });
+
+        it('shows a refusal as its own text, already translated by the bridge that refused the read', () => {
+            setHook({ data: [], error: new ChallengesRefusedError('Update the app on your computer to use this.') });
+            renderSection();
+            expect(screen.getByText('Update the app on your computer to use this.')).toBeTruthy();
+            expect(screen.queryByText('errors.fetchFailed')).toBeNull();
+        });
+
+        it('shows any other error as a failed fetch, never its raw message', () => {
+            setHook({ data: [], error: new Error('socket hang up') });
+            renderSection();
+            expect(screen.getByText('errors.fetchFailed')).toBeTruthy();
+            expect(screen.queryByText('socket hang up')).toBeNull();
         });
 
         it('offers a retry after a failed fetch with no data', () => {

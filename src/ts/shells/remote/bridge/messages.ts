@@ -7,7 +7,7 @@
 
 import { LINK_VERSION, parsePeerMessage } from '../../../core/remote/protocol';
 import { classifyRemoteChannel } from '../../../core/remote/allowlist';
-import { REMOTE_REFUSAL_PREFIX, REMOTE_SAY_HELLO_FIRST } from '../../../core/remote/dispatch';
+import { REMOTE_REFUSAL_PREFIX, REMOTE_SAY_HELLO_FIRST, isAllowedWrite } from '../../../core/remote/dispatch';
 import { setRemoteConnectionState, setRemoteHostPath, setRemoteHostPeerId } from '../../../core/remote/connectionState';
 import { rendererTranslator } from '../../../core/translations/renderer';
 import { clearSkipMark, storeLinkVersion } from '../../../core/remote/linkVersion';
@@ -100,9 +100,13 @@ const handleResult = (message: ResultMessage, peerId: string, watch: MessageWatc
     if (message.ok) invoke.resolve(message.result);
     else if (message.error.startsWith(REMOTE_REFUSAL_PREFIX)) {
         // A channel the desktop does not serve a phone: the answer a handler would give, in the
-        // phone's language, not the protocol's text. When this page's own allowlist allows the channel, the
-        // desktop is the older side (it lacks the channel, or refused it in its day): the phone says to update it.
-        const offered = classifyRemoteChannel(invoke.channel).kind === 'allowed';
+        // phone's language, not the protocol's text. When this page's own allowlist allows the channel and
+        // its arguments, the desktop is the older side (it lacks the channel, or refused it in its day): the
+        // phone says to update it. An argument the per-argument rules refuse (the auto-vote key) is refused
+        // on every desktop, so an update would not help.
+        const offered =
+            classifyRemoteChannel(invoke.channel).kind === 'allowed' &&
+            isAllowedWrite(invoke.channel, invoke.args) === true;
         invoke.resolve({
             success: false,
             error: rendererTranslator.t(offered ? 'errors.remoteUpdateComputer' : 'errors.remoteRefused'),

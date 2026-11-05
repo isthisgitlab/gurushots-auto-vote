@@ -12,6 +12,8 @@ type PendingInvoke = {
     spend: boolean;
     /** The channel the invoke asked, so a refusal can say whether this page offered a channel the desktop lacks. */
     channel: string;
+    /** The arguments the invoke sent, so a refusal can tell a per-argument rule from a channel the desktop lacks. */
+    args: unknown[];
 };
 
 export type Listener = (payload: unknown) => void;

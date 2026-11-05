@@ -924,6 +924,57 @@ describe('installPeerBridge: which peer counts', () => {
         });
     });
 
+    test('an allowed channel with allowed arguments that the desktop refuses still says to update (set-setting with an ordinary key)', async () => {
+        phone.emitJoin('host');
+        phone.receiveFromPeer(hostHello, 'host');
+        const pending = api.setSetting('mock', true) as Promise<unknown>;
+        phone.receiveFromPeer(
+            {
+                t: 'result',
+                id: invokeId(),
+                ok: false,
+                error: 'Refused remotely: The channel is not part of the remote surface.',
+            },
+            'host',
+        );
+        await expect(pending).resolves.toEqual({
+            success: false,
+            error: 'Update the app on your computer to use this.',
+        });
+    });
+
+    test('a refused set-setting of the auto-vote key says it is done on the computer: an update would not help', async () => {
+        phone.emitJoin('host');
+        phone.receiveFromPeer(hostHello, 'host');
+        const pending = api.setSetting('autovoteRunning', true) as Promise<unknown>;
+        phone.receiveFromPeer(
+            {
+                t: 'result',
+                id: invokeId(),
+                ok: false,
+                error: 'Refused remotely: The auto-vote switch is not a setting — use the Start and Stop controls.',
+            },
+            'host',
+        );
+        await expect(pending).resolves.toEqual({ success: false, error: 'This is done on the computer.' });
+    });
+
+    test('a refused save-settings that carries the auto-vote key says it is done on the computer', async () => {
+        phone.emitJoin('host');
+        phone.receiveFromPeer(hostHello, 'host');
+        const pending = api.saveSettings({ autovoteRunning: true }) as Promise<unknown>;
+        phone.receiveFromPeer(
+            {
+                t: 'result',
+                id: invokeId(),
+                ok: false,
+                error: 'Refused remotely: The auto-vote switch is not a setting — use the Start and Stop controls.',
+            },
+            'host',
+        );
+        await expect(pending).resolves.toEqual({ success: false, error: 'This is done on the computer.' });
+    });
+
     test('a result too large for the phone rejects with its own text', async () => {
         phone.emitJoin('host');
         phone.receiveFromPeer(hostHello, 'host');

@@ -37,7 +37,7 @@ export const withoutUserDataPath = (result: unknown): unknown => {
 };
 
 /** Whether this write, on this channel with these arguments, may pass at all. */
-const isAllowedWrite = (channel: string, args: unknown[]): true | string => {
+export const isAllowedWrite = (channel: string, args: unknown[]): true | string => {
     const keyAt = KEYED_WRITE_CHANNELS[channel];
     if (keyAt !== undefined && args[keyAt] === AUTOVOTE_RUNNING_KEY) {
         return 'The auto-vote switch is not a setting — use the Start and Stop controls.';

@@ -6,7 +6,7 @@
  * the next success. Not-logged-in (no token) must NOT raise an error.
  */
 import { renderHook, waitFor, act } from '@testing-library/preact';
-import { useActiveChallenges } from '@/api/useActiveChallenges';
+import { ChallengesRefusedError, useActiveChallenges } from '@/api/useActiveChallenges';
 import { mockApi } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
 
@@ -54,6 +54,41 @@ describe('useActiveChallenges', () => {
 
         expect(result.current.error?.message).toBe('fetch_failed');
         expect(result.current.data).toEqual([{ id: 1 }]); // last-known kept, not blanked
+    });
+
+    test('a success:false answer with a text sets that text as the error, keeps prior data and prunes nothing', async () => {
+        mockApi.getActiveChallenges.mockResolvedValueOnce(invalid({ challenges: [{ id: 1 }] }));
+
+        const { result } = renderHook(() => useActiveChallenges());
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        mockApi.cleanupStaleMetadata.mockClear();
+
+        mockApi.getActiveChallenges.mockResolvedValueOnce(
+            invalid({ success: false, error: 'Update the app on your computer to use this.' }),
+        );
+        await act(async () => {
+            await result.current.refetch();
+        });
+
+        expect(result.current.error).toBeInstanceOf(ChallengesRefusedError);
+        expect(result.current.error?.message).toBe('Update the app on your computer to use this.');
+        expect(result.current.data).toEqual([{ id: 1 }]);
+        expect(mockApi.cleanupStaleMetadata).not.toHaveBeenCalled();
+    });
+
+    test('an answer that is not a refusal sets no error: success:true, or success:false without a text', async () => {
+        mockApi.getActiveChallenges.mockResolvedValueOnce(invalid({ success: true, challenges: [{ id: 1 }] }));
+        const { result } = renderHook(() => useActiveChallenges());
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        expect(result.current.error).toBeNull();
+        expect(result.current.data).toEqual([{ id: 1 }]);
+
+        mockApi.getActiveChallenges.mockResolvedValueOnce(invalid({ success: false, challenges: [{ id: 2 }] }));
+        await act(async () => {
+            await result.current.refetch();
+        });
+        expect(result.current.error).toBeNull();
+        expect(result.current.data).toEqual([{ id: 2 }]);
     });
 
     test('a genuinely empty list is not treated as a failure', async () => {

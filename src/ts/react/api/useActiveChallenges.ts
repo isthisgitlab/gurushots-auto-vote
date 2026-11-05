@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react';
+import { isPlainObject } from '../../core/plainObject';
 import { useIpcQuery } from './useIpcQuery';
 
 import type { ActiveChallengesResponse, Challenge } from '../../core/types/gurushots';
@@ -21,6 +22,13 @@ const payloadKey = (challenges: Challenge[]): string | null => {
         return null;
     }
 };
+
+/** A handler-style refusal (`{ success: false, error }`): the remote bridge answers a channel the desktop refuses this way, with the text already translated. */
+const isRefusal = (value: unknown): value is { success: false; error: string } =>
+    isPlainObject(value) && value.success === false && typeof value.error === 'string';
+
+/** The error a refusal sets: its message is already translated, so the UI may show it as it is (no other error's is). */
+export class ChallengesRefusedError extends Error {}
 
 /**
  * Prunes stale per-challenge data against the challenges now on screen:
@@ -59,6 +67,8 @@ const cleanupStale = async (challenges: Challenge[], autovoteRunning: boolean, p
  * (the UI's "retrying" banner) and keeps the last-known challenges on screen.
  * getActiveChallenges always resolves a list shape, so the `fetchFailed` marker
  * is what tells the two apart; the null check guards a genuinely absent response.
+ * A handler-style refusal (`success: false` with a text, e.g. the remote bridge's "update the app on
+ * your computer") sets that text as the error instead of reading as an empty list.
  *
  * @param autovoteRunning - whether the autovote loop is
  *   currently running; stale challenge settings are not pruned while it is
@@ -91,6 +101,13 @@ export function useActiveChallenges(autovoteRunning: boolean = false): {
             { setData, setError }: IpcQueryTools<Challenge[], Error>,
             skipCleanup: boolean = false,
         ) => {
+            // A refusal is no list: the user sees its text (the bridge's, already translated), and the last-known
+            // challenges stay as they are.
+            if (isRefusal(result)) {
+                setError(new ChallengesRefusedError(result.error));
+                return;
+            }
+
             if (settings.hasToken && (result == null || result.fetchFailed)) {
                 setError(new Error('fetch_failed'));
                 return;
