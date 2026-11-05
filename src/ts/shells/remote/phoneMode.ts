@@ -10,7 +10,7 @@
 
 import { installPhoneRemoteMode } from '../../core/remote/phoneMode';
 import { clearStoredKey } from '../../core/remote/phoneKeyStore';
-import { clearDesktopVersion } from '../../core/remote/desktopVersion';
+import { clearLinkVersion } from '../../core/remote/linkVersion';
 
 import type { CapacitorGlobals } from '../../core/types/capacitor';
 
@@ -24,13 +24,13 @@ const isAppWebView = (): boolean => {
 };
 
 /**
- * Leaves remote mode: the stored key goes (and the desktop version kept with it), then the WebView moves to the app's
+ * Leaves remote mode: the stored key goes (and the link version kept with it), then the WebView moves to the app's
  * own document. Rejects when the key could not be cleared — the WebView stays
  * put, because a navigation back would only land in remote mode again.
  */
 const disconnectFromComputer = async (): Promise<void> => {
     await clearStoredKey();
-    clearDesktopVersion();
+    clearLinkVersion();
     globalThis.location.assign(APP_DOCUMENT_PATH);
 };
 

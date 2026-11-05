@@ -9,7 +9,8 @@
 import { installPeerBridge, LOCAL_CHANNELS } from '../../src/ts/shells/remote/bridge/peer';
 import { HELLO_RETRY_MS, HOST_ANSWER_TIMEOUT_MS } from '../../src/ts/core/remote/helloRepeat';
 import {
-    PAGE_VERSION,
+    APP_VERSION,
+    LINK_VERSION,
     PROTOCOL_VERSION,
     REMOTE_RESULT_TOO_LARGE,
     REMOTE_RESULT_UNSENDABLE,
@@ -30,9 +31,9 @@ import {
 const versionCalls: string[] = [];
 /** Makes the store's write fail, the way a browser that refuses storage does. */
 let storeFails = false;
-jest.mock('../../src/ts/core/remote/desktopVersion', () => ({
-    storeDesktopVersion: jest.fn(async (version: string) => {
-        versionCalls.push(`store:${version}`);
+jest.mock('../../src/ts/core/remote/linkVersion', () => ({
+    storeLinkVersion: jest.fn(async (linkVersion: number) => {
+        versionCalls.push(`store:${linkVersion}`);
         if (storeFails) throw new Error('storage refused');
     }),
     clearSkipMark: jest.fn(() => {
@@ -40,8 +41,14 @@ jest.mock('../../src/ts/core/remote/desktopVersion', () => ({
     }),
 }));
 
-const hostHello = { t: 'hello', version: PAGE_VERSION, protocolVersion: PROTOCOL_VERSION, host: true };
-const fellowHello = { t: 'hello', version: PAGE_VERSION, protocolVersion: PROTOCOL_VERSION, host: false };
+const hostHello = {
+    t: 'hello',
+    version: APP_VERSION,
+    protocolVersion: PROTOCOL_VERSION,
+    linkVersion: LINK_VERSION,
+    host: true,
+};
+const fellowHello = { t: 'hello', version: APP_VERSION, protocolVersion: PROTOCOL_VERSION, host: false };
 
 // The page hands the bridge the loader it must go to on a version mismatch; the harness gives it one fixed target.
 const LOADER_TARGET = 'https://site.test/remote/index.html#k=the-key';
@@ -98,7 +105,7 @@ describe('installPeerBridge (the phone bridge)', () => {
 
     const connect = (): void => {
         phone.emitJoin('host');
-        host.receiveFromPeer({ t: 'hello', version: PAGE_VERSION, host: false }, 'phone');
+        host.receiveFromPeer({ t: 'hello', version: APP_VERSION, host: false }, 'phone');
         phone.receiveFromPeer(hostHello, 'host');
     };
 
@@ -309,7 +316,7 @@ describe('installPeerBridge (the phone bridge)', () => {
         unsubscribe();
 
         // A non-host hello while already connected: no state change.
-        phone.receiveFromPeer({ t: 'hello', version: PAGE_VERSION, host: false }, 'fellow');
+        phone.receiveFromPeer({ t: 'hello', version: APP_VERSION, host: false }, 'fellow');
         expect(remoteConnectionState()).toBe('connected');
 
         // A repeat hello from the already-known desktop changes nothing.
@@ -324,7 +331,7 @@ describe('installPeerBridge (the phone bridge)', () => {
     test('a non-host hello while already connected changes nothing, and an undefined argument travels tagged', async () => {
         connect();
         // A fellow phone announcing itself: not the desktop, no state change.
-        phone.receiveFromPeer({ t: 'hello', version: PAGE_VERSION, host: false }, 'fellow');
+        phone.receiveFromPeer({ t: 'hello', version: APP_VERSION, host: false }, 'fellow');
         expect(remoteConnectionState()).toBe('connected');
 
         // A top-level undefined argument travels as null + its index, and the result resolves.
@@ -350,7 +357,7 @@ describe('installPeerBridge (the phone bridge)', () => {
     test('a fellow phone leaving does not read offline', () => {
         connect();
         phone.emitJoin('fellow');
-        phone.receiveFromPeer({ t: 'hello', version: PAGE_VERSION, host: false }, 'fellow');
+        phone.receiveFromPeer({ t: 'hello', version: APP_VERSION, host: false }, 'fellow');
         phone.emitLeave('fellow');
         expect(remoteConnectionState()).toBe('connected');
     });
@@ -468,7 +475,7 @@ describe('installPeerBridge (the phone bridge)', () => {
     test('only the desktop hello (host: true) connects; a fellow phone does not', () => {
         phone.emitJoin('host');
         phone.receiveFromPeer(
-            { t: 'hello', version: PAGE_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            { t: 'hello', version: APP_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
             'fellow-phone',
         );
         expect(remoteConnectionState()).toBe('connecting');
@@ -476,7 +483,7 @@ describe('installPeerBridge (the phone bridge)', () => {
         expect(remoteConnectionState()).toBe('connected');
     });
 
-    describe('a desktop of another version', () => {
+    describe('a desktop of another link version', () => {
         let replaced: string[];
         const realLocation = (globalThis as { location?: unknown }).location;
 
@@ -500,7 +507,7 @@ describe('installPeerBridge (the phone bridge)', () => {
                 phone.emitJoin('host');
                 await Promise.resolve();
                 phone.receiveFromPeer(
-                    { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, host: true },
+                    { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, linkVersion: 2, host: true },
                     'host',
                 );
                 // The loader target is whatever the page handed the bridge (the page resolves it from
@@ -508,7 +515,7 @@ describe('installPeerBridge (the phone bridge)', () => {
                 // goes straight to the matching page next.
                 await Promise.resolve();
                 await Promise.resolve();
-                expect(versionCalls).toEqual(['store:0.0.1']);
+                expect(versionCalls).toEqual(['store:2']);
                 expect(replaced).toEqual([LOADER_TARGET]);
                 expect(remoteConnectionState()).toBe('connecting');
                 const after = hostReceived.length;
@@ -524,11 +531,11 @@ describe('installPeerBridge (the phone bridge)', () => {
             storeFails = true;
             phone.emitJoin('host');
             phone.receiveFromPeer(
-                { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, host: true },
+                { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, linkVersion: 2, host: true },
                 'host',
             );
             await flushAsync();
-            expect(versionCalls).toEqual(['store:0.0.1']);
+            expect(versionCalls).toEqual(['store:2']);
             expect(replaced).toEqual([LOADER_TARGET]);
         });
 
@@ -537,11 +544,11 @@ describe('installPeerBridge (the phone bridge)', () => {
             phone.receiveFromPeer(hostHello, 'host');
             versionCalls.length = 0;
             phone.receiveFromPeer(
-                { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, host: true },
+                { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, linkVersion: 2, host: true },
                 'host',
             );
             await flushAsync();
-            expect(versionCalls).toEqual(['store:0.0.1']);
+            expect(versionCalls).toEqual(['store:2']);
             expect(replaced).toEqual([LOADER_TARGET]);
         });
 
@@ -551,7 +558,7 @@ describe('installPeerBridge (the phone bridge)', () => {
             versionCalls.length = 0;
             phone.emitJoin('other');
             phone.receiveFromPeer(
-                { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, host: true },
+                { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, linkVersion: 2, host: true },
                 'other',
             );
             await flushAsync();
@@ -560,23 +567,41 @@ describe('installPeerBridge (the phone bridge)', () => {
             expect(remoteConnectionState()).toBe('connected');
         });
 
-        test('the same version with another protocol shape says to update the app on the computer', () => {
+        test('a legacy desktop (no link version) sends the tab to the loader and stores nothing', async () => {
             phone.emitJoin('host');
             phone.receiveFromPeer(
-                { t: 'hello', version: PAGE_VERSION, protocolVersion: PROTOCOL_VERSION + 1, host: true },
+                { t: 'hello', version: '1.15.0', protocolVersion: PROTOCOL_VERSION, host: true },
                 'host',
             );
+            await flushAsync();
+            expect(versionCalls).toEqual([]);
+            expect(replaced).toEqual([LOADER_TARGET]);
+            expect(remoteConnectionState()).toBe('connecting');
+        });
+
+        test('a desktop with the same app version but another link version is still sent to the loader', async () => {
+            phone.emitJoin('host');
+            phone.receiveFromPeer({ ...hostHello, linkVersion: LINK_VERSION + 1 }, 'host');
+            await flushAsync();
+            expect(versionCalls).toEqual([`store:${LINK_VERSION + 1}`]);
+            expect(replaced).toEqual([LOADER_TARGET]);
+        });
+
+        test('a desktop of another app version and the same link version is accepted', async () => {
+            phone.emitJoin('host');
+            phone.receiveFromPeer({ ...hostHello, version: '0.0.1' }, 'host');
+            await flushAsync();
             expect(replaced).toEqual([]);
-            expect(remoteConnectionState()).toBe('update');
+            expect(remoteConnectionState()).toBe('connected');
         });
     });
 
-    test("the desktop of this page's version is kept for the loader's next visit, and the loader's mark is cleared; a second hello keeps nothing again", () => {
+    test("the desktop of this page's link version is kept for the loader's next visit, and the loader's mark is cleared; a second hello keeps nothing again", () => {
         phone.emitJoin('host');
         phone.receiveFromPeer(hostHello, 'host');
-        expect(versionCalls).toEqual([`store:${PAGE_VERSION}`, 'clearSkipMark']);
+        expect(versionCalls).toEqual([`store:${LINK_VERSION}`, 'clearSkipMark']);
         phone.receiveFromPeer(hostHello, 'host');
-        expect(versionCalls).toEqual([`store:${PAGE_VERSION}`, 'clearSkipMark']);
+        expect(versionCalls).toEqual([`store:${LINK_VERSION}`, 'clearSkipMark']);
     });
 
     test('a store that refuses the write when the desktop is accepted changes nothing: the phone is connected', async () => {
@@ -585,7 +610,7 @@ describe('installPeerBridge (the phone bridge)', () => {
         phone.receiveFromPeer(hostHello, 'host');
         await flushAsync();
         expect(remoteConnectionState()).toBe('connected');
-        expect(versionCalls).toEqual([`store:${PAGE_VERSION}`, 'clearSkipMark']);
+        expect(versionCalls).toEqual([`store:${LINK_VERSION}`, 'clearSkipMark']);
     });
 
     test("a fellow phone's hello keeps nothing", () => {
@@ -877,6 +902,26 @@ describe('installPeerBridge: which peer counts', () => {
             'host',
         );
         await expect(pending).resolves.toEqual({ success: false, error: 'This is done on the computer.' });
+    });
+
+    test('a channel this page offers that the desktop refuses says to update the app on the computer', async () => {
+        phone.emitJoin('host');
+        phone.receiveFromPeer(hostHello, 'host');
+        // get-active-challenges is on this page's own allowlist, so the desktop refusing it is an older desktop.
+        const pending = api.getActiveChallenges() as Promise<unknown>;
+        phone.receiveFromPeer(
+            {
+                t: 'result',
+                id: invokeId(),
+                ok: false,
+                error: 'Refused remotely: The channel is not part of the remote surface.',
+            },
+            'host',
+        );
+        await expect(pending).resolves.toEqual({
+            success: false,
+            error: 'Update the app on your computer to use this.',
+        });
     });
 
     test('a result too large for the phone rejects with its own text', async () => {

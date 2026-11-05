@@ -17,10 +17,36 @@ import * as pkg from '../../../../package.json';
 
 import type { AutovoteState } from '../autovote/state';
 
-/** The app version this build carries; `hello` announces it and the phone page compares the desktop's against it. */
-export const PAGE_VERSION: string = pkg.version;
+/**
+ * The app version this build carries. `hello` announces it for the logs and for a legacy peer (1.15.0 and its
+ * betas, which compare it); no current peer compares it, the link version decides compatibility.
+ */
+export const APP_VERSION: string = pkg.version;
 
-/** The protocol shape version. A peer whose PROTOCOL_VERSION differs is not spoken to. */
+/**
+ * The link version: the number of the phone ⇄ desktop contract this build speaks, like a versioned API. The phone
+ * page is published under `/remote/v<LINK_VERSION>/` and serves every desktop that speaks the same number, whatever
+ * app version either side runs. The pinned shapes are `core/remote/contract/v<N>/`, checked by
+ * `tests/remote/contractV1.test.ts`.
+ *
+ * The rule inside one link version: a change may only add — new channels, new optional fields, a channel moving
+ * from refused to allowed. A new value in an existing closed field (a `reason`, a `role`, a command name), a new
+ * enum member of an existing setting, or a change to a channel's spend class needs a new number and a new
+ * `contract/v<N>/`. New page code must handle a missing field and a channel an older desktop refuses.
+ */
+export const LINK_VERSION = 1 as const;
+
+/** The highest link version a `hello` may carry: a bound on the wire, not a statement of what is published. */
+const MAX_LINK_VERSION = 999;
+
+/** Whether `value` is a link version: an integer from 1 to 999. */
+export const isLinkVersion = (value: unknown): value is number =>
+    isInteger(value) && value >= 1 && value <= MAX_LINK_VERSION;
+
+/**
+ * The legacy protocol shape version, frozen at 1: 1.15.0 and its betas parse a `hello` only when it carries
+ * `protocolVersion`. It is sent, never compared; compatibility is the link version.
+ */
 export const PROTOCOL_VERSION = 1 as const;
 
 /** Longest serialized message a peer may send; anything over it is dropped unlooked at. */
@@ -37,14 +63,17 @@ export const MAX_PEER_FIELD_LENGTH = 512;
 
 export type AutovoteCommandName = 'start' | 'stop' | 'rearm';
 
-/** Both directions: announces the sender's app version and its protocol shape version. The
- * phone speaks first; only the desktop's reply carries `host: true`, which is how a phone
- * tells it from a fellow phone. A peer whose `protocolVersion` differs from ours is told to
- * update, the same as an app-version mismatch. */
+/** Both directions: announces the sender's app version (for the logs and for a legacy peer), the
+ * frozen legacy `protocolVersion` and its link version. The phone speaks first; only the desktop's
+ * reply carries `host: true`, which is how a phone tells it from a fellow phone. A peer whose
+ * `linkVersion` differs from ours is told, not served; a hello without one is a legacy peer
+ * (1.15.0 and its betas), which the loader sends to its app-version page. */
 export type HelloMessage = {
     t: 'hello';
     version: string;
     protocolVersion: number;
+    /** Absent from a legacy peer. Present: an integer from 1 to 999. */
+    linkVersion?: number;
     host: boolean;
     /** `'loader'` marks the /remote/ loader, which only asks the desktop's version: it takes no peer slot and no snapshot. */
     role?: 'loader';
@@ -161,6 +190,7 @@ export const parsePeerMessage = (raw: unknown): PeerMessage | null => {
     switch (raw.t) {
         case 'hello': {
             if (raw.role !== undefined && raw.role !== 'loader') return null;
+            if (raw.linkVersion !== undefined && !isLinkVersion(raw.linkVersion)) return null;
             if (
                 typeof raw.host !== 'boolean' ||
                 !isBoundedString(raw.version) ||
@@ -174,6 +204,7 @@ export const parsePeerMessage = (raw: unknown): PeerMessage | null => {
                 version: raw.version,
                 protocolVersion: raw.protocolVersion,
                 host: raw.host,
+                ...(raw.linkVersion === undefined ? {} : { linkVersion: raw.linkVersion }),
             };
             return raw.role === undefined ? hello : { ...hello, role: raw.role };
         }

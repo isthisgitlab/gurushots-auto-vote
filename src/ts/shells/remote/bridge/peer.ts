@@ -26,7 +26,7 @@
  */
 
 import { markPlatformKind } from '../../../core/platform/kind';
-import { PAGE_VERSION, PROTOCOL_VERSION } from '../../../core/remote/protocol';
+import { APP_VERSION, LINK_VERSION, PROTOCOL_VERSION } from '../../../core/remote/protocol';
 import { createHelloRepeater } from '../../../core/remote/helloRepeat';
 import { watchPageLifecycle } from '../../../core/remote/pageLifecycle';
 
@@ -46,7 +46,7 @@ export { LOCAL_CHANNELS };
  * Installs the bridge: marks the platform kind (synchronously, before anything mounts),
  * generates the window.api surface, and drives the connection state machine (the state lives
  * in core/remote/connectionState.ts, where the page's React reads it). `loaderTarget` is the
- * absolute loader address the page resolved from its own location — the one place a version
+ * absolute loader address the page resolved from its own location — the one place a link version
  * mismatch sends the tab to.
  */
 const installPeerBridge = (transport: RemoteTransport, loaderTarget: string): void => {
@@ -54,12 +54,13 @@ const installPeerBridge = (transport: RemoteTransport, loaderTarget: string): vo
 
     const ctx = createPeerBridgeContext(transport);
 
-    // The phone's hello: its own app version, the protocol shape version, not the host. It repeats
+    // The phone's hello: its own app version, the legacy protocol shape version, its link version, not the host. It repeats
     // until the desktop answers (core/remote/helloRepeat.ts: the first one can vanish on the relays).
     const announce: HelloMessage = {
         t: 'hello',
-        version: PAGE_VERSION,
+        version: APP_VERSION,
         protocolVersion: PROTOCOL_VERSION,
+        linkVersion: LINK_VERSION,
         host: false,
     };
     const hello = createHelloRepeater({ transport, announce, active: () => ctx.hostPeerId === null });

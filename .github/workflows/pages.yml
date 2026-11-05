@@ -3,8 +3,9 @@ name: Pages
 # Builds the README (+ linked docs) into a branded static site and publishes it
 # to GitHub Pages from the branch it is dispatched on: build.yml dispatches it on
 # the branch that was just released (master or develop). The docs come from that
-# branch's checkout, and the /remote/ tree (the phone page and its version pages)
-# from that branch's newest release tag. Requires one-time repo settings:
+# branch's checkout, and the /remote/ tree (the loader, one phone page per link
+# version as /remote/v<N>/ and the legacy 1.15.0 page) from that branch's newest
+# release tag. Requires one-time repo settings:
 # Settings → Pages → Build and deployment → Source = "GitHub Actions", and
 # master and develop in the github-pages environment's allowed deployment branches.
 on:

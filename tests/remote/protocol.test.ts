@@ -6,10 +6,12 @@
 
 import {
     MAX_PEER_MESSAGE_BYTES,
-    PAGE_VERSION,
+    APP_VERSION,
+    LINK_VERSION,
     PROTOCOL_VERSION,
     checkPeerMessageLimit,
     compareReleaseVersions,
+    isLinkVersion,
     isReleaseVersion,
     isWithinPeerMessageLimit,
     isSafeToSendTwice,
@@ -54,9 +56,46 @@ describe('parsePeerMessage', () => {
         expect(PROTOCOL_VERSION).toBe(1);
     });
 
+    test('the link version is 1, and the legacy protocol version stays frozen at 1', () => {
+        expect(LINK_VERSION).toBe(1);
+        expect(PROTOCOL_VERSION).toBe(1);
+    });
+
     test('the hello carries the protocol version, and a mismatching one still parses', () => {
         const other: HelloMessage = { t: 'hello', version: '1.2.3', protocolVersion: 99, host: false };
         expect(parsePeerMessage(other)).toEqual(other);
+    });
+
+    test.each([1, 2, 999])('a hello may carry link version %s, and it is kept', (linkVersion) => {
+        const hello: HelloMessage = {
+            t: 'hello',
+            version: '1.2.3',
+            protocolVersion: PROTOCOL_VERSION,
+            linkVersion,
+            host: true,
+        };
+        expect(parsePeerMessage(hello)).toEqual(hello);
+    });
+
+    test('a hello without a link version is a legacy peer: it parses, with no link version', () => {
+        const legacy = { t: 'hello', version: '1.15.0', protocolVersion: PROTOCOL_VERSION, host: true };
+        const parsed = parsePeerMessage(legacy);
+        expect(parsed).toEqual(legacy);
+        expect(parsed).not.toHaveProperty('linkVersion');
+    });
+
+    test.each([0, -1, 1.5, 1000, '1', 1e21, null, NaN])(
+        'a hello with link version %p is dropped whole',
+        (linkVersion) => {
+            expect(
+                parsePeerMessage({ t: 'hello', version: '1.2.3', protocolVersion: 1, linkVersion, host: true }),
+            ).toBeNull();
+        },
+    );
+
+    test('isLinkVersion is the same 1 to 999 integer rule', () => {
+        expect([1, 999].every(isLinkVersion)).toBe(true);
+        expect([0, 1000, 1.5, '1', undefined].some(isLinkVersion)).toBe(false);
     });
 
     test('accepts every message shape', () => {
@@ -373,9 +412,9 @@ describe('checkPeerMessageLimit', () => {
 });
 
 describe('release versions', () => {
-    test('PAGE_VERSION is the package version', () => {
-        expect(PAGE_VERSION).toBe(pkg.version);
-        expect(isReleaseVersion(PAGE_VERSION)).toBe(true);
+    test('APP_VERSION is the package version', () => {
+        expect(APP_VERSION).toBe(pkg.version);
+        expect(isReleaseVersion(APP_VERSION)).toBe(true);
     });
 
     test.each(['1.2.3', '0.0.1', '10.20.30', '1.2.3-beta', '1.2.3-beta.4', '1.2.3-rc.1.2'])(

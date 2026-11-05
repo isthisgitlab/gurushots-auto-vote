@@ -1,12 +1,12 @@
 /**
  * The room's message switch: what a phone's raw message means, and the guards
- * around each kind — a mismatched `hello` is told the version without a
+ * around each kind — a `hello` of another link version is told ours without a
  * snapshot, the room caps its phones, an invoke from an unvalidated peer is
  * refused, and a `bye` drops the peer.
  */
 
 import { REMOTE_SAY_HELLO_FIRST } from '../../core/remote/dispatch';
-import { parsePeerMessage, PROTOCOL_VERSION, restoreInvokeArgs } from '../../core/remote/protocol';
+import { LINK_VERSION, parsePeerMessage, restoreInvokeArgs } from '../../core/remote/protocol';
 
 import { MAX_REMOTE_PEERS } from './remoteHostCreate';
 import type { HostContext } from './remoteHostPeers';
@@ -18,13 +18,10 @@ export const handleMessage = (ctx: HostContext, peerId: string, raw: unknown): v
     if (message === null) return;
     switch (message.t) {
         case 'hello': {
-            if (
-                message.role === 'loader' ||
-                message.version !== ctx.deps.version ||
-                message.protocolVersion !== PROTOCOL_VERSION
-            ) {
-                // The loader only asks the version, and a mismatch is told, not served: neither gets a
-                // snapshot, a peer slot, a count or a desktop notice.
+            if (message.role === 'loader' || message.linkVersion !== LINK_VERSION) {
+                // The loader only asks the version, and a phone of another link version (or a legacy one,
+                // which sends none) is told, not served: neither gets a snapshot, a peer slot, a count or a
+                // desktop notice. The app version is not compared: the link version is the contract.
                 void sendHostHello(ctx, peerId);
                 return;
             }

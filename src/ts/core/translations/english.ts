@@ -117,6 +117,7 @@ export const errors = {
     remoteEnterFailed: 'Could not switch to remote mode. This app stays in its normal mode — try again.',
     remoteDisconnectFailed: 'Could not disconnect. This page stays connected to your computer — try again.',
     remoteRefused: 'This is done on the computer.',
+    remoteUpdateComputer: 'Update the app on your computer to use this.',
     remoteResultTooLarge:
         'The result is too large to send to your phone. Do this on the computer, or ask for less at a time.',
     remoteAnswerUnsendable: "The computer's answer could not be sent. Do this on the computer.",

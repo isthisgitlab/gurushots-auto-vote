@@ -7,7 +7,7 @@
  * and leaves.
  */
 
-import { PAGE_VERSION } from '../../core/remote/protocol';
+import { APP_VERSION } from '../../core/remote/protocol';
 
 import type { RemoteTransportFactory } from '../../core/remote/relays';
 import type { eventMethods } from '../../core/ipc/manifest';
@@ -37,7 +37,7 @@ export type RemoteHostDeps = {
     notify: () => void;
     /** Best-effort renderer logging at INFO (the desktop's own Logs window and log files show these). */
     logInfo: (message: string) => void;
-    /** The app version `hello` announces (package.json's version). */
+    /** The app version `hello` announces, for the logs and for a legacy phone (package.json's version). */
     version: string;
 };
 
@@ -77,7 +77,7 @@ export type ForwardedEventChannel = (typeof FORWARDED_EVENT_CHANNEL_NAMES)[numbe
 const FORWARDED_EVENT_CHANNELS: ReadonlySet<ForwardedEventChannel> = new Set(FORWARDED_EVENT_CHANNEL_NAMES);
 
 /** The app version `hello` announces: package.json at bundle time (esbuild inlines the file). */
-export const appVersion = (): string => PAGE_VERSION;
+export const appVersion = (): string => APP_VERSION;
 
 export const createRemoteHost = (deps: RemoteHostDeps): RemoteHost => {
     const ctx: HostContext = {

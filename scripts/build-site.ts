@@ -8,8 +8,9 @@
 //
 // The site's content and the pure helpers (hasScheme/toRepoPath/rewriteLink/
 // rewriteImage/badgeSvg/render/srcDirOf, exported for unit tests) live in
-// build-site/pages.ts; the remote-access release pipeline (the /remote/ tree
-// and its GitHub fetchers) lives in build-site/remote.ts — both re-exported
+// build-site/pages.ts; the remote-access release pipeline (the /remote/ tree, one
+// page per link version as /remote/v<N>/, and its GitHub fetchers) lives in
+// build-site/remote.ts, remoteReleases.ts and remoteUnpack.ts — all re-exported
 // here. main() runs only when the file is executed directly (via runIfMain),
 // so requiring it has no effect.
 // main() takes the repo root / output dir / layout as overridable paths so the
@@ -36,8 +37,9 @@ import {
     srcDirOf,
     toRepoPath,
 } from './build-site/pages';
-import { buildRemoteSite, listReleasesFromGitHub } from './build-site/remote';
-import type { RemoteSiteDeps } from './build-site/remote';
+import { buildRemoteSite } from './build-site/remote';
+import { listReleasesFromGitHub } from './build-site/remoteReleases';
+import type { RemoteSiteDeps } from './build-site/remoteReleases';
 
 const root = path.join(__dirname, '..');
 const outDir = path.join(root, 'dist-site');
@@ -190,13 +192,13 @@ export {
 };
 
 export {
-    REMOTE_PAGE_ZIP,
-    REMOTE_CHECKSUM_FILE,
-    REMOTE_RELEASE_COUNT,
+    REMOTE_PAGE_ZIP_PATTERN,
     listReleasesFromGitHub,
+    getReleaseByTagFromGitHub,
     downloadFromGitHub,
-    selectRemotePageReleases,
-    buildRemoteSite,
-} from './build-site/remote';
+    selectLinkVersionPages,
+} from './build-site/remoteReleases';
+export { LEGACY_PAGE_SHA256, LEGACY_PAGE_TAG, LEGACY_PAGE_VERSION, LEGACY_PAGE_ZIP } from './build-site/remoteUnpack';
+export { buildRemoteSite } from './build-site/remote';
 
-export type { RemoteRelease, RemoteSiteDeps } from './build-site/remote';
+export type { LinkVersionPage, RemoteRelease, RemoteSiteDeps } from './build-site/remoteReleases';

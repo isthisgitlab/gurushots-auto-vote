@@ -15,6 +15,7 @@ import {
     remoteLoaderHtml,
     webHtml,
 } from './documents';
+import { LINK_VERSION } from '../../src/ts/core/remote/protocol';
 import { commonOptions, entryPoints, isLite, isWatch, perEntryOptions } from './entries';
 import type { EntryName } from './entries';
 
@@ -140,32 +141,33 @@ const buildEntries = async () => {
     }
 };
 
-// The remote page under dist/remote/<version>/ (HTML, bundle, CSS, notices): Capacitor's
-// webDir carries it into the APK, so the Android remote mode (slice 2) loads its bundled
-// page without the network. Run after the bundles are built, never in watch mode.
+// The remote page under dist/remote/v<LINK_VERSION>/ (HTML, bundle, CSS, notices): Capacitor's
+// webDir carries it into the APK, so the Android remote mode loads its bundled page without
+// the network. The directory is named by the link version, not the app version: one page
+// serves every desktop that speaks the link. dist/remote/ is emptied first, so a build carries
+// no folder an earlier build staged. Run after the bundles are built, never in watch mode.
 const copyRemoteVersionDir = (): void => {
-    const { version } = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as {
-        version: string;
-    };
-    const target = path.join(distDir, 'remote', version);
+    const loaderDir = path.join(distDir, 'remote');
+    fs.rmSync(loaderDir, { recursive: true, force: true });
+    const name = `v${LINK_VERSION}`;
+    const target = path.join(loaderDir, name);
     fs.mkdirSync(target, { recursive: true });
     fs.copyFileSync(path.join(distDir, 'remote.html'), path.join(target, 'index.html'));
     fs.copyFileSync(path.join(distDir, 'remote-bundle.js'), path.join(target, 'remote-bundle.js'));
     // The loader inside the same tree: the Android remote mode opens `/remote/index.html#k=<key>`
     // (the app's local server routes an extension-less path to the app's own document, so the
-    // loader is always addressed by file name), and the versions it moves on to sit below it.
-    const loaderDir = path.join(distDir, 'remote');
+    // loader is always addressed by file name), and the pages it moves on to sit below it.
     fs.writeFileSync(path.join(loaderDir, 'index.html'), remoteLoaderHtml);
     fs.copyFileSync(path.join(distDir, 'remoteLoader-bundle.js'), path.join(loaderDir, 'remoteLoader-bundle.js'));
-    for (const name of ['styles.css', NOTICES_ASSET_NAME]) {
-        const source = path.join(distDir, name);
+    for (const assetName of ['styles.css', NOTICES_ASSET_NAME]) {
+        const source = path.join(distDir, assetName);
         if (fs.existsSync(source)) {
-            fs.copyFileSync(source, path.join(target, name));
+            fs.copyFileSync(source, path.join(target, assetName));
             // The loader is a published document too: its stylesheet and the notices sit beside it.
-            fs.copyFileSync(source, path.join(loaderDir, name));
-        } else console.log(`⏭️  remote/${version}: ${name} not built yet — run build:css / build:notices for it`);
+            fs.copyFileSync(source, path.join(loaderDir, assetName));
+        } else console.log(`⏭️  remote/${name}: ${assetName} not built yet — run build:css / build:notices for it`);
     }
-    console.log(`✓ Staged the remote page under dist/remote/${version}/`);
+    console.log(`✓ Staged the remote page under dist/remote/${name}/`);
 };
 
 async function buildReact() {

@@ -10,6 +10,7 @@ import { classifyRemoteChannel } from '../../core/remote/allowlist';
 import { errorMessage } from '../../core/errorMessage';
 import {
     checkPeerMessageLimit,
+    LINK_VERSION,
     MAX_PEER_FIELD_LENGTH,
     PROTOCOL_VERSION,
     REMOTE_RESULT_TOO_LARGE,
@@ -26,9 +27,15 @@ const shortError = (error: unknown): string => {
     return (text.length > 0 ? text : 'The computer could not run this.').slice(0, MAX_PEER_FIELD_LENGTH);
 };
 
-/** The host's own `hello`: its version and protocol, nothing else. */
+/** The host's own `hello`: its app version, the legacy protocol version and its link version, nothing else. */
 export const sendHostHello = (ctx: HostContext, peerId: string): Promise<void> =>
-    sendTo(ctx, peerId, { t: 'hello', version: ctx.deps.version, protocolVersion: PROTOCOL_VERSION, host: true });
+    sendTo(ctx, peerId, {
+        t: 'hello',
+        version: ctx.deps.version,
+        protocolVersion: PROTOCOL_VERSION,
+        linkVersion: LINK_VERSION,
+        host: true,
+    });
 
 export const sendSnapshot = async (ctx: HostContext, peerId: string): Promise<void> => {
     await sendHostHello(ctx, peerId);

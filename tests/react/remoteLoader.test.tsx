@@ -1,7 +1,8 @@
 /**
  * The /remote/ loader: with a key it joins the room, reads the desktop's
- * version from its hello, and moves on to that version's page (the fragment
- * kept); a version the site does not publish says to update; no answer at
+ * link version from its hello, and moves on to that link version's page
+ * (the fragment kept; a legacy desktop without one goes to its app-version
+ * page); a page the site does not publish says to update; no answer at
  * all says the computer is offline; no key says to scan the QR code.
  */
 
@@ -19,33 +20,37 @@ jest.mock('../../src/ts/core/remote/trystero', () => ({
     isConnectionFailureJoinError: (error: string): boolean =>
         error.startsWith('could not connect to peer') && error.includes('after exchanging SDP'),
 }));
-// The desktop version the loader keeps and the tab's loop guard are the store module's; here an in-memory stand-in
+// The link version the loader keeps and the tab's loop guard are the store module's; here an in-memory stand-in
 // records what the loader asks of it (the real store has its own tests, and the round trips run in remotePathSkip).
 const versionStore = {
-    stored: null as string | null,
-    skipped: null as string | null,
-    storeCalls: [] as string[],
+    stored: null as number | null,
+    skipped: null as number | null,
+    storeCalls: [] as number[],
     /** Makes the store's write fail, the way a browser that refuses storage does. */
     storeFails: false,
     cleared: 0,
+    legacyForgotten: 0,
     asked: 0,
 };
-jest.mock('../../src/ts/core/remote/desktopVersion', () => ({
-    storedDesktopVersion: jest.fn(async () => {
+jest.mock('../../src/ts/core/remote/linkVersion', () => ({
+    storedLinkVersion: jest.fn(async () => {
         versionStore.asked += 1;
         return versionStore.stored;
     }),
-    storeDesktopVersion: jest.fn(async (version: string) => {
-        versionStore.storeCalls.push(version);
+    storeLinkVersion: jest.fn(async (linkVersion: number) => {
+        versionStore.storeCalls.push(linkVersion);
         if (versionStore.storeFails) throw new Error('storage refused');
     }),
-    clearDesktopVersion: jest.fn(() => {
+    clearLinkVersion: jest.fn(() => {
         versionStore.cleared += 1;
         versionStore.stored = null;
     }),
+    forgetLegacyDesktopVersion: jest.fn(() => {
+        versionStore.legacyForgotten += 1;
+    }),
     skippedTo: jest.fn(() => versionStore.skipped),
-    markSkippedTo: jest.fn((version: string) => {
-        versionStore.skipped = version;
+    markSkippedTo: jest.fn((linkVersion: number) => {
+        versionStore.skipped = linkVersion;
     }),
 }));
 const installPhoneDisconnect = jest.fn<void, []>();
@@ -61,7 +66,7 @@ jest.mock('../../src/ts/shells/remote/phoneMode', () => ({
         }
     },
 }));
-import { PAGE_VERSION, PROTOCOL_VERSION } from '../../src/ts/core/remote/protocol';
+import { APP_VERSION, LINK_VERSION, PROTOCOL_VERSION } from '../../src/ts/core/remote/protocol';
 import { installPhoneRemoteMode } from '../../src/ts/core/remote/phoneMode';
 import { rendererTranslator } from '../../src/ts/core/translations/renderer';
 import { HELLO_RETRY_MS, HOST_ANSWER_TIMEOUT_MS } from '../../src/ts/core/remote/helloRepeat';
@@ -71,6 +76,15 @@ jest.mock('../../src/ts/core/translations/renderer', () => ({
         '../../src/ts/core/translations/renderer',
     ).rendererTranslator,
 }));
+
+/** A desktop's hello: current ones carry the link version, a legacy one (1.15.0 and its betas) carries none. */
+const desktopHello = (version: string, linkVersion?: number) => ({
+    t: 'hello',
+    version,
+    protocolVersion: PROTOCOL_VERSION,
+    host: true,
+    ...(linkVersion === undefined ? {} : { linkVersion }),
+});
 
 const g = globalThis as { fetch?: unknown };
 const navigated: string[] = [];
@@ -113,6 +127,7 @@ describe('the /remote/ loader', () => {
         versionStore.storeCalls = [];
         versionStore.storeFails = false;
         versionStore.cleared = 0;
+        versionStore.legacyForgotten = 0;
         versionStore.asked = 0;
     });
 
@@ -127,7 +142,7 @@ describe('the /remote/ loader', () => {
         rendererTranslator.setCurrentLanguage('en');
     });
 
-    test('a hello names the version and the loader moves to its page, fragment kept', async () => {
+    test('a hello names the link version and the loader moves to its page, fragment kept', async () => {
         loadLoader();
         await flush();
         const transport = transportStub.current as TransportStub;
@@ -137,70 +152,87 @@ describe('the /remote/ loader', () => {
         const hello = transport.sent.find(({ message }) => (message as { t: string }).t === 'hello');
         expect(hello?.target).toBe('host');
 
-        transport.receiveFromPeer(
-            { t: 'hello', version: '1.2.3', protocolVersion: PROTOCOL_VERSION, host: true },
-            'host',
-        );
+        transport.receiveFromPeer(desktopHello('1.2.3', LINK_VERSION), 'host');
         await flush();
-        expect(fetchCalls).toEqual(['./1.2.3/index.html']);
-        expect(navigated).toEqual(['./1.2.3/index.html#k=the-key']);
-        // The version is kept for the next visit.
-        expect(versionStore.storeCalls).toEqual(['1.2.3']);
+        expect(fetchCalls).toEqual([`./v${LINK_VERSION}/index.html`]);
+        expect(navigated).toEqual([`./v${LINK_VERSION}/index.html#k=the-key`]);
+        // The link version is kept for the next visit.
+        expect(versionStore.storeCalls).toEqual([LINK_VERSION]);
+        // The earlier loader's key is removed before anything is read.
+        expect(versionStore.legacyForgotten).toBe(1);
     });
 
-    test('a store that refuses the write never strands the tab: it still moves on to the version page', async () => {
+    test('whatever app version the desktop runs, the same link version gets the same page', async () => {
+        loadLoader();
+        await flush();
+        const transport = transportStub.current as TransportStub;
+        transport.emitJoin('host');
+        await flush();
+        transport.receiveFromPeer(desktopHello('99.0.0-beta.7', 1), 'host');
+        await flush();
+        expect(navigated).toEqual(['./v1/index.html#k=the-key']);
+    });
+
+    test('a legacy hello (no link version) goes to its app-version page and keeps nothing for the next visit', async () => {
+        loadLoader();
+        await flush();
+        const transport = transportStub.current as TransportStub;
+        transport.emitJoin('host');
+        await flush();
+        transport.receiveFromPeer(desktopHello('1.15.0'), 'host');
+        await flush();
+        expect(fetchCalls).toEqual(['./1.15.0/index.html']);
+        expect(navigated).toEqual(['./1.15.0/index.html#k=the-key']);
+        expect(versionStore.storeCalls).toEqual([]);
+    });
+
+    test('a store that refuses the write never strands the tab: it still moves on to the page', async () => {
         versionStore.storeFails = true;
         loadLoader();
         await flush();
         const transport = transportStub.current as TransportStub;
         transport.emitJoin('host');
         await flush();
-        transport.receiveFromPeer(
-            { t: 'hello', version: '1.2.3', protocolVersion: PROTOCOL_VERSION, host: true },
-            'host',
-        );
+        transport.receiveFromPeer(desktopHello('1.2.3', 1), 'host');
         await flush();
-        expect(versionStore.storeCalls).toEqual(['1.2.3']);
-        expect(navigated).toEqual(['./1.2.3/index.html#k=the-key']);
+        expect(versionStore.storeCalls).toEqual([1]);
+        expect(navigated).toEqual(['./v1/index.html#k=the-key']);
     });
 
-    test('a version whose page the site does not carry is not kept for the next visit', async () => {
+    test('a link version whose page the site does not carry is not kept for the next visit', async () => {
         headOk = false;
         loadLoader();
         await flush();
         const transport = transportStub.current as TransportStub;
         transport.emitJoin('host');
         await flush();
-        transport.receiveFromPeer(
-            { t: 'hello', version: '1.2.3', protocolVersion: PROTOCOL_VERSION, host: true },
-            'host',
-        );
+        transport.receiveFromPeer(desktopHello('1.2.3', 1), 'host');
         await flush();
         expect(navigated).toEqual([]);
         expect(versionStore.storeCalls).toEqual([]);
     });
 
-    describe('a return visit (a desktop version kept from the last one)', () => {
+    describe('a return visit (a link version kept from the last one)', () => {
         const createTransport = () => {
             const trystero =
                 require('../../src/ts/core/remote/trystero') as typeof import('../../src/ts/core/remote/trystero');
             return jest.mocked(trystero.createTrysteroTransport);
         };
 
-        test("goes straight to the kept version's page after one HEAD request, with no transport, fragment kept, and marks the tab", async () => {
-            versionStore.stored = '2.0.0';
+        test("goes straight to the kept link version's page after one HEAD request, with no transport, fragment kept, and marks the tab", async () => {
+            versionStore.stored = 2;
             const before = createTransport().mock.calls.length;
             loadLoader();
             await flush();
-            expect(fetchCalls).toEqual(['./2.0.0/index.html']);
-            expect(navigated).toEqual(['./2.0.0/index.html#k=the-key']);
-            expect(versionStore.skipped).toBe('2.0.0');
+            expect(fetchCalls).toEqual(['./v2/index.html']);
+            expect(navigated).toEqual(['./v2/index.html#k=the-key']);
+            expect(versionStore.skipped).toBe(2);
             expect(versionStore.cleared).toBe(0);
             expect(createTransport().mock.calls.length).toBe(before); // nothing joined the room
         });
 
-        test('a kept version whose page is not published is cleared, and the whole flow runs (and says what is wrong)', async () => {
-            versionStore.stored = '2.0.0';
+        test('a kept link version whose page is not published is cleared, and the whole flow runs (and says what is wrong)', async () => {
+            versionStore.stored = 2;
             headOk = false;
             loadLoader();
             await flush();
@@ -211,18 +243,15 @@ describe('the /remote/ loader', () => {
             const transport = transportStub.current as TransportStub;
             transport.emitJoin('host');
             await flush();
-            transport.receiveFromPeer(
-                { t: 'hello', version: '2.0.0', protocolVersion: PROTOCOL_VERSION, host: true },
-                'host',
-            );
+            transport.receiveFromPeer(desktopHello('2.0.0', 2), 'host');
             await flush();
-            // The desktop (2.0.0) is newer than this page and the site does not carry its page: said, not skipped over.
+            // The desktop (link 2) is newer than this loader and the site does not carry its page: said, not skipped over.
             expect(document.getElementById('root')?.textContent).toContain('not published yet');
         });
 
-        test('a version this tab already went straight to is not skipped to again: it is cleared and the whole flow runs', async () => {
-            versionStore.stored = '2.0.0';
-            versionStore.skipped = '2.0.0'; // its page sent the tab back
+        test('a link version this tab already went straight to is not skipped to again: it is cleared and the whole flow runs', async () => {
+            versionStore.stored = 2;
+            versionStore.skipped = 2; // its page sent the tab back
             loadLoader();
             await flush();
             expect(fetchCalls).toEqual([]);
@@ -231,22 +260,19 @@ describe('the /remote/ loader', () => {
             const transport = transportStub.current as TransportStub;
             transport.emitJoin('host');
             await flush();
-            transport.receiveFromPeer(
-                { t: 'hello', version: '3.0.0', protocolVersion: PROTOCOL_VERSION, host: true },
-                'host',
-            );
+            transport.receiveFromPeer(desktopHello('3.0.0', 3), 'host');
             await flush();
-            expect(navigated).toEqual(['./3.0.0/index.html#k=the-key']);
-            expect(versionStore.storeCalls).toEqual(['3.0.0']);
+            expect(navigated).toEqual(['./v3/index.html#k=the-key']);
+            expect(versionStore.storeCalls).toEqual([3]);
         });
 
-        test('a kept version differing from the one this tab went to is skipped to (the page it was kept by found a newer desktop)', async () => {
-            versionStore.stored = '3.0.0';
-            versionStore.skipped = '2.0.0';
+        test('a kept link version differing from the one this tab went to is skipped to (the page it was kept by found a newer desktop)', async () => {
+            versionStore.stored = 3;
+            versionStore.skipped = 2;
             loadLoader();
             await flush();
-            expect(navigated).toEqual(['./3.0.0/index.html#k=the-key']);
-            expect(versionStore.skipped).toBe('3.0.0');
+            expect(navigated).toEqual(['./v3/index.html#k=the-key']);
+            expect(versionStore.skipped).toBe(3);
         });
 
         test('nothing kept: the whole flow runs, and nothing is cleared', async () => {
@@ -259,15 +285,15 @@ describe('the /remote/ loader', () => {
 
         test("inside the Android app the same check runs against the app's local server (the probe is the relative page file)", async () => {
             androidApp.current = true;
-            versionStore.stored = '2.0.0';
+            versionStore.stored = 1;
             loadLoader();
             await flush();
-            expect(fetchCalls).toEqual(['./2.0.0/index.html']);
-            expect(navigated).toEqual(['./2.0.0/index.html#k=the-key']);
+            expect(fetchCalls).toEqual(['./v1/index.html']);
+            expect(navigated).toEqual(['./v1/index.html#k=the-key']);
         });
 
-        test('a probe that cannot run does not skip: the kept version is cleared and the whole flow runs, which says the computer is not reached', async () => {
-            versionStore.stored = '2.0.0';
+        test('a probe that cannot run does not skip: the kept link version is cleared and the whole flow runs, which says the computer is not reached', async () => {
+            versionStore.stored = 2;
             g.fetch = jest.fn(async () => {
                 throw new Error('offline');
             });
@@ -285,7 +311,7 @@ describe('the /remote/ loader', () => {
         });
 
         test('a probe that cannot run does not skip, and the desktop answering still takes the tab to its page (the hello rule)', async () => {
-            versionStore.stored = '2.0.0';
+            versionStore.stored = 2;
             let probes = 0;
             g.fetch = jest.fn(async () => {
                 probes += 1;
@@ -296,30 +322,53 @@ describe('the /remote/ loader', () => {
             const transport = transportStub.current as TransportStub;
             transport.emitJoin('host');
             await flush();
-            transport.receiveFromPeer(
-                { t: 'hello', version: '2.0.0', protocolVersion: PROTOCOL_VERSION, host: true },
-                'host',
-            );
+            transport.receiveFromPeer(desktopHello('2.0.0', 2), 'host');
             await flush();
             expect(probes).toBe(2); // the return visit's, then the hello's
-            expect(navigated).toEqual(['./2.0.0/index.html#k=the-key']);
+            expect(navigated).toEqual(['./v2/index.html#k=the-key']);
+        });
+
+        test('a downgrade does not loop: the v1 page bounced the tab off a legacy desktop, so the whole flow runs and lands on its app-version page', async () => {
+            versionStore.stored = 1;
+            versionStore.skipped = 1; // the v1 page found a legacy desktop and sent the tab back
+            loadLoader();
+            await flush();
+            expect(navigated).toEqual([]);
+            const transport = transportStub.current as TransportStub;
+            transport.emitJoin('host');
+            await flush();
+            transport.receiveFromPeer(desktopHello('1.15.0'), 'host');
+            await flush();
+            expect(navigated).toEqual(['./1.15.0/index.html#k=the-key']);
+            expect(versionStore.storeCalls).toEqual([]);
         });
     });
 
-    test("a version the site does not carry says to update (the probe names the page file, as the app's local server needs)", async () => {
+    test("a legacy desktop whose page the site does not carry says to update (the probe names the page file, as the app's local server needs)", async () => {
         headOk = false;
         loadLoader();
         await flush();
         const transport = transportStub.current as TransportStub;
         transport.emitJoin('host');
         await flush();
-        transport.receiveFromPeer(
-            { t: 'hello', version: '0.9.0', protocolVersion: PROTOCOL_VERSION, host: true },
-            'host',
-        );
+        transport.receiveFromPeer(desktopHello('0.9.0'), 'host');
         await flush();
+        expect(fetchCalls).toEqual(['./0.9.0/index.html']);
         expect(navigated).toEqual([]);
         expect(transport.left).toBe(true);
+        expect(document.getElementById('root')?.textContent).toContain('Update the app on your computer');
+    });
+
+    test('a link version this loader speaks whose page the site lacks says to update the computer (the site is broken)', async () => {
+        headOk = false;
+        loadLoader();
+        await flush();
+        const transport = transportStub.current as TransportStub;
+        transport.emitJoin('host');
+        await flush();
+        transport.receiveFromPeer(desktopHello('2.0.0', LINK_VERSION), 'host');
+        await flush();
+        expect(navigated).toEqual([]);
         expect(document.getElementById('root')?.textContent).toContain('Update the app on your computer');
     });
 
@@ -641,8 +690,9 @@ describe('the /remote/ loader', () => {
         const hello = transport.sent.find(({ message }) => (message as { t: string }).t === 'hello');
         expect(hello?.message).toEqual({
             t: 'hello',
-            version: PAGE_VERSION,
+            version: APP_VERSION,
             protocolVersion: PROTOCOL_VERSION,
+            linkVersion: LINK_VERSION,
             host: false,
             role: 'loader',
         });
@@ -670,17 +720,14 @@ describe('the /remote/ loader', () => {
         },
     );
 
-    test('a desktop newer than every page the site carries says the page is not published yet', async () => {
+    test('a desktop on a newer link version than every page the site carries says the page is not published yet', async () => {
         headOk = false;
         loadLoader();
         await flush();
         const transport = transportStub.current as TransportStub;
         transport.emitJoin('host');
         await flush();
-        transport.receiveFromPeer(
-            { t: 'hello', version: '999.0.0', protocolVersion: PROTOCOL_VERSION, host: true },
-            'host',
-        );
+        transport.receiveFromPeer(desktopHello('999.0.0', LINK_VERSION + 1), 'host');
         await flush();
         expect(navigated).toEqual([]);
         // A browser tab cannot update an app: the site just has not published the version's page yet.
@@ -689,7 +736,7 @@ describe('the /remote/ loader', () => {
         expect(document.getElementById('root')?.textContent).not.toContain('on your computer');
     });
 
-    test('inside the Android app a desktop newer than every page it carries says to update this app', async () => {
+    test('inside the Android app a desktop on a newer link version than every page it carries says to update this app', async () => {
         androidApp.current = true;
         headOk = false;
         loadLoader();
@@ -697,10 +744,7 @@ describe('the /remote/ loader', () => {
         const transport = transportStub.current as TransportStub;
         transport.emitJoin('host');
         await flush();
-        transport.receiveFromPeer(
-            { t: 'hello', version: '999.0.0', protocolVersion: PROTOCOL_VERSION, host: true },
-            'host',
-        );
+        transport.receiveFromPeer(desktopHello('999.0.0', LINK_VERSION + 1), 'host');
         await flush();
         expect(navigated).toEqual([]);
         expect(document.getElementById('root')?.textContent).toContain('Update this app');
@@ -779,7 +823,7 @@ describe('the /remote/ loader', () => {
         // The fellow announces itself as no desktop: its own connection trouble on cellular is not
         // the desktop's failing connection, so it must not become the try-Wi-Fi notice.
         transport.receiveFromPeer(
-            { t: 'hello', version: PAGE_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            { t: 'hello', version: APP_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
             'fellow',
         );
         await flush();

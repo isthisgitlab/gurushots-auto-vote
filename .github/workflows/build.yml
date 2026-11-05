@@ -611,10 +611,10 @@ jobs:
                   path: signed/GuruShotsAutoVote-v*.apk
                   retention-days: 1
 
-    # The phone page ships with the release as remote-page.zip (+ its SHA-256), so the site
-    # build can keep serving every older version under /remote/<version>/ (build:site unpacks
-    # the zips of the last releases beside the current one). Built from the bumped package so
-    # the version directory carries the release's version.
+    # The phone page ships with the release as remote-page-v<N>.zip (+ its SHA-256), N being the
+    # link version the page speaks (core/remote/protocol.ts LINK_VERSION), not the app version.
+    # build:site publishes every link version under /remote/v<N>/ from the newest stable release
+    # that carries its zip, so one page serves every desktop that speaks the link.
     remote-page:
         needs: version-bump
         runs-on: ubuntu-latest
@@ -637,19 +637,27 @@ jobs:
               shell: bash
               run: |
                   set -euo pipefail
-                  VERSION=$(node -p "require('./package.json').version")
-                  cd "dist/remote/$VERSION"
-                  zip -q -r "$RUNNER_TEMP/remote-page.zip" .
+                  # The build stages exactly one dist/remote/v<N>/ directory; the name is the zip's.
+                  shopt -s nullglob
+                  DIRS=(dist/remote/v*/)
+                  if [ "${#DIRS[@]}" -ne 1 ]; then
+                      echo "expected exactly one dist/remote/v*/ directory, found ${#DIRS[@]}" >&2
+                      exit 1
+                  fi
+                  NAME=$(basename "${DIRS[0]}")
+                  ZIP="remote-page-$NAME.zip"
+                  cd "${DIRS[0]}"
+                  zip -q -r "$RUNNER_TEMP/$ZIP" .
                   cd "$RUNNER_TEMP"
-                  sha256sum remote-page.zip > remote-page.zip.sha256
+                  sha256sum "$ZIP" > "$ZIP.sha256"
 
             - name: Upload remote page artifact
               uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
               with:
                   name: remote-page
                   path: |
-                      ${{ runner.temp }}/remote-page.zip
-                      ${{ runner.temp }}/remote-page.zip.sha256
+                      ${{ runner.temp }}/remote-page-v*.zip
+                      ${{ runner.temp }}/remote-page-v*.zip.sha256
                   retention-days: 1
 
     attest:
@@ -694,7 +702,7 @@ jobs:
                       artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}linux-arm-builds/gurucli-v*-linux-arm
                       artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}linux-arm-builds/gurucli-v*-linux-arm-lite
                       artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}android-builds/GuruShotsAutoVote-v*.apk
-                      artifacts/remote-page/remote-page.zip
+                      artifacts/remote-page/remote-page-v*.zip
 
     create-release:
         needs: [build, build-cli-arm, sign-android, version-bump, remote-page, attest]
@@ -870,8 +878,8 @@ jobs:
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-arm-builds/gurucli-v*-linux-arm
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-arm-builds/gurucli-v*-linux-arm-lite
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}android-builds/GuruShotsAutoVote-v*.apk
-                      artifacts/remote-page/remote-page.zip
-                      artifacts/remote-page/remote-page.zip.sha256
+                      artifacts/remote-page/remote-page-v*.zip
+                      artifacts/remote-page/remote-page-v*.zip.sha256
                       src/assets/THIRD_PARTY_NOTICES.txt
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

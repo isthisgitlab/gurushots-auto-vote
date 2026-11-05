@@ -5,11 +5,12 @@
  * renderer entries, so it stays free of Node-side modules.
  */
 
-import { PAGE_VERSION, PROTOCOL_VERSION, parsePeerMessage } from '../../../core/remote/protocol';
+import { LINK_VERSION, parsePeerMessage } from '../../../core/remote/protocol';
+import { classifyRemoteChannel } from '../../../core/remote/allowlist';
 import { REMOTE_REFUSAL_PREFIX, REMOTE_SAY_HELLO_FIRST } from '../../../core/remote/dispatch';
 import { setRemoteConnectionState, setRemoteHostPath, setRemoteHostPeerId } from '../../../core/remote/connectionState';
 import { rendererTranslator } from '../../../core/translations/renderer';
-import { clearSkipMark, storeDesktopVersion } from '../../../core/remote/desktopVersion';
+import { clearSkipMark, storeLinkVersion } from '../../../core/remote/linkVersion';
 
 import type { HelloRepeater } from '../../../core/remote/helloRepeat';
 import type { ByeMessage, EventMessage, HelloMessage, ResultMessage } from '../../../core/remote/protocol';
@@ -36,7 +37,7 @@ const dispatchEvent = (ctx: PeerBridgeContext, channel: string, payload: unknown
     for (const listener of ctx.listeners.get(channel) ?? []) listener(payload);
 };
 
-/** This page does not match the desktop's version: the loader the page named finds the one that does. */
+/** This page does not speak the desktop's link version: the loader the page named finds the one that does. */
 const goToLoader = (loaderTarget: string): void => {
     globalThis.location.replace(loaderTarget);
 };
@@ -50,34 +51,26 @@ const handleHello = (message: HelloMessage, peerId: string, watch: MessageWatch)
         ctx.waiting.delete(peerId);
         return;
     }
-    if (message.version !== PAGE_VERSION) {
+    if (message.linkVersion !== LINK_VERSION) {
         // Once a desktop is accepted, only that peer can send this page away; before one is, the first desktop's
         // hello decides (the round trip from a stale kept version needs it).
         if (ctx.hostPeerId !== null && peerId !== ctx.hostPeerId) return;
-        // The desktop runs another version: the stable loader finds the page that matches it
-        // (or says which side to update), so no notice shows here.
+        // The desktop speaks another link version, or none (a legacy 1.15.0 desktop): the stable loader finds
+        // the page that matches it (or says which side to update), so no notice shows here.
         hello.stop();
         hello.clear();
-        // The loader goes straight to the version this page remembers next time: the one the desktop runs. A write
-        // that fails is a shortcut lost, never a stranded tab.
-        void storeDesktopVersion(message.version)
-            .catch(() => undefined)
-            .then(() => goToLoader(watch.loaderTarget));
-        return;
-    }
-    if (message.protocolVersion !== PROTOCOL_VERSION) {
-        // The same version with another protocol shape (a build in development): terminal for this
-        // connection — the phone says to update and the hello repeat stops.
-        hello.stop();
-        hello.clear();
-        setRemoteConnectionState('update');
+        // The loader goes straight to the link version this page remembers next time: the one the desktop speaks. A
+        // legacy desktop has none, so nothing is stored for it. A write that fails is a shortcut lost, never a
+        // stranded tab.
+        const stored = message.linkVersion === undefined ? Promise.resolve() : storeLinkVersion(message.linkVersion);
+        void stored.catch(() => undefined).then(() => goToLoader(watch.loaderTarget));
         return;
     }
     if (ctx.hostPeerId === null) {
         ctx.hostPeerId = peerId;
         setRemoteHostPeerId(peerId);
         // This page is the desktop's: remembered for the loader's next visit, and the loader's mark has done its work.
-        void storeDesktopVersion(message.version).catch(() => undefined);
+        void storeLinkVersion(LINK_VERSION).catch(() => undefined);
         clearSkipMark();
         setRemoteHostPath(ctx.transport.peerPath?.(peerId) ?? 'direct');
         ctx.everConnected = true;
@@ -107,8 +100,13 @@ const handleResult = (message: ResultMessage, peerId: string, watch: MessageWatc
     if (message.ok) invoke.resolve(message.result);
     else if (message.error.startsWith(REMOTE_REFUSAL_PREFIX)) {
         // A channel the desktop does not serve a phone: the answer a handler would give, in the
-        // phone's language, not the protocol's text.
-        invoke.resolve({ success: false, error: rendererTranslator.t('errors.remoteRefused') });
+        // phone's language, not the protocol's text. When this page's own allowlist allows the channel, the
+        // desktop is the older side (it lacks the channel, or refused it in its day): the phone says to update it.
+        const offered = classifyRemoteChannel(invoke.channel).kind === 'allowed';
+        invoke.resolve({
+            success: false,
+            error: rendererTranslator.t(offered ? 'errors.remoteUpdateComputer' : 'errors.remoteRefused'),
+        });
     } else if (message.reason === 'unsendable') {
         // The invoke ran; its answer just could not come back. A spend may have landed:
         // unclear, never a plain failure.

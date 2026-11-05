@@ -17,7 +17,7 @@ import { GAP_HOLD_MS } from '../../src/ts/core/remote/relayInbox';
 import { createRelayLink } from '../../src/ts/core/remote/relayLink';
 import { installPeerBridge } from '../../src/ts/shells/remote/bridge/peer';
 import { initialState } from '../../src/ts/core/autovote/state';
-import { PAGE_VERSION, PROTOCOL_VERSION, isSafeToSendTwice } from '../../src/ts/core/remote/protocol';
+import { APP_VERSION, LINK_VERSION, PROTOCOL_VERSION, isSafeToSendTwice } from '../../src/ts/core/remote/protocol';
 import {
     remoteConnectionState,
     remoteHostPath,
@@ -32,8 +32,8 @@ import type { Bus } from '../helpers/relayBus';
 
 import type { RemoteTransport } from '../../src/ts/core/remote/relays';
 
-jest.mock('../../src/ts/core/remote/desktopVersion', () => ({
-    storeDesktopVersion: async () => undefined,
+jest.mock('../../src/ts/core/remote/linkVersion', () => ({
+    storeLinkVersion: async () => undefined,
     clearSkipMark: () => undefined,
 }));
 
@@ -126,7 +126,7 @@ describe('a path changing under traffic', () => {
             onLogMessage: () => () => undefined,
             notify: () => undefined,
             logInfo: () => undefined,
-            version: PAGE_VERSION,
+            version: APP_VERSION,
         });
         await host.start('the-key');
         installPeerBridge(phoneHybrid, 'https://site.test/remote/index.html#k=the-key');
@@ -446,7 +446,13 @@ describe('a path changing under traffic', () => {
 });
 
 describe('the relay link giving up on a peer that is on WebRTC now', () => {
-    const hostHello = { t: 'hello', version: PAGE_VERSION, protocolVersion: PROTOCOL_VERSION, host: true };
+    const hostHello = {
+        t: 'hello',
+        version: APP_VERSION,
+        protocolVersion: PROTOCOL_VERSION,
+        linkVersion: LINK_VERSION,
+        host: true,
+    };
     let direct: TransportStub;
     let relay: TransportStub;
     let api: Api;

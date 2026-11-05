@@ -22,11 +22,11 @@ export type RemoteConnectionState =
     | 'network'
     /** like `network`, but this browser has no `CompressionStream`, so the relay fallback could not even run */
     | 'old-browser'
-    /** the desktop runs an older app version than this page, and the site no longer carries its page */
+    /** the desktop is older than this page (a legacy 1.15.0 beta, or a link version the site no longer carries), and no page of its own is published */
     | 'update'
-    /** the desktop runs a newer app version than this app carries a page for */
+    /** the desktop speaks a newer link version than this app carries a page for */
     | 'update-this'
-    /** the desktop runs a newer version than this site publishes a page for, and this page is a browser tab (inside the Android app the state is `update-this`) */
+    /** the desktop speaks a newer link version than this site publishes a page for, and this page is a browser tab (inside the Android app the state is `update-this`) */
     | 'unpublished'
     /** the desktop already has the most phones it takes */
     | 'full'

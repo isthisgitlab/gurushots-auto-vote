@@ -1239,32 +1239,47 @@ served while at least one phone wants it.
   That is within what the link's holder may see; the pairing key itself, the link and invoke arguments are never
   logged. The host writes its own activity at INFO (peer connect, leave and refusal, each invoke's channel name,
   each auto-vote command), so it shows in a packaged build's log files.
+- **The phone page is versioned by link version, not by app version.** `LINK_VERSION` (`core/remote/protocol.ts`) names
+  the phone ⇄ desktop contract, like a versioned API: the page is published as `/remote/v<N>/`, and one page serves every
+  desktop that speaks link version N, whatever app version either side runs. A new number (v2, v3…) is made only when a
+  change breaks v1. The `hello` carries `linkVersion` (an integer from 1 to 999; a present but malformed value drops the
+  `hello`); `protocolVersion` stays on the wire, frozen at 1, because 1.15.0 and its betas parse a `hello` only with it,
+  and is no longer compared. A `hello` without `linkVersion` is a **legacy** peer (1.15.0 and its betas). The desktop
+  serves a phone whose `linkVersion` equals its own and tells any other (or legacy) phone its `hello` without a
+  snapshot; the phone page accepts a desktop whose `linkVersion` equals its own and sends the tab to the loader
+  otherwise, storing nothing for a legacy desktop. The app version is announced for the logs and for legacy peers only.
 - **The loader and the versioned page keep the saved link stable.** The versioned page replaces the address bar with
   the stable loader address (`../#k=<key>`, same origin) through `history.replaceState`, so a bookmark or Home Screen
-  icon saved from it survives the next desktop update; a versioned page that hears a `hello` with another version
-  sends the tab to the loader (`location.replace`) instead of showing a notice. The loader refuses a `hello`
-  whose version is not a release version before it builds a path from it, and navigates with `location.replace`.
-  Results, events and a leave count only from the peer that said `hello` as the desktop; a fellow phone's leave
-  or failed connection never ends a working session.
-- **The loader goes straight to the kept version.** The phone keeps the desktop version it last reached in
-  `localStorage` under `gs-remote-desktop-version` (`core/remote/desktopVersion.ts`), as `<fingerprint>:<version>`.
+  icon saved from it survives the next desktop update and the next link version; a versioned page that hears a
+  `hello` with another link version (or none) sends the tab to the loader (`location.replace`) instead of showing a
+  notice. The loader routes a `hello` with `linkVersion: N` to `./v<N>/index.html`, and a legacy `hello` to
+  `./<appVersion>/index.html` (after the `isReleaseVersion` check, so nothing a peer sends names another place on the
+  site; the site keeps that page for 1.15.0 only). A page the site does not publish shows `unpublished` in a browser
+  and `update-this` in the Android app when the desktop's link version is newer than the loader's, and `update` for an
+  older or legacy desktop. Results, events and a leave count only from the peer that said `hello` as the desktop; a
+  fellow phone's leave or failed connection never ends a working session.
+- **The loader goes straight to the kept link version.** The phone keeps the link version it last reached in
+  `localStorage` under `gs-remote-link-version` (`core/remote/linkVersion.ts`), as `<fingerprint>:<N>`, where `N`
+  matches `^[1-9]\d{0,2}$` (so `01` and `1e0` are rejected on read). The loader removes the key an earlier loader used,
+  `gs-remote-desktop-version`.
   The fingerprint is the first 16 hex digits of the SHA-256 of the pairing room's id (itself the SHA-256 of the key),
   so a value kept for another pairing is not trusted, and the store never holds the pairing key. The fingerprint is a stable 64-bit id of the pairing, and the value sits in the `localStorage` of
   `isthisgitlab.github.io`, which every page on that origin can read: another site there learns the id, and cannot get the
   key or the room id from it (it is a truncated hash of a hash). It is written only from
-  a `hello` with `host: true` whose version passes `isReleaseVersion`, by three writers: the loader when it reads the
-  version, a versioned page that accepts the desktop, and a versioned page that hears another version (it keeps that one
-  before it sends the tab to the loader). On load the loader goes to that version's page **only when** the value passes
-  `isReleaseVersion` and carries the current key's fingerprint, the same published check the loader uses after a
+  a `hello` with `host: true` that carries a `linkVersion`, by three writers: the loader when it reads the
+  link version, a versioned page that accepts the desktop, and a versioned page that hears another link version (it keeps
+  that one before it sends the tab to the loader); a legacy desktop gets no shortcut. On load the loader goes to that
+  link version's page **only when** the value passes the `N` rule and carries the current key's fingerprint, the same
+  published check the loader uses after a
   `hello` passes (one `HEAD` request for the page file, no transport; inside the Android app it asks the app's local
   server) except when the request cannot run at all: then a return visit does not skip, while the check after a `hello`
   goes on to the page, and this tab has not already gone straight to that version: before it navigates, the loader writes a
-  `sessionStorage` mark, "skipped to V". Otherwise it clears the stored value and runs the whole flow, with its
+  `sessionStorage` mark, "skipped to N" (the same `"<N>"` form the stored value has, so the two compare like with like). Otherwise it clears the stored value and runs the whole flow, with its
   `update`, `unpublished` and `update-this` notices. The mark is the loop guard: a page that keeps nothing on a mismatch
-  (beta.3 and older pages) sends the tab back with the stored value unchanged, the loader finds its own mark and
+  (a v1 page that hears a legacy 1.15.0 desktop) sends the tab back with the stored value unchanged, the loader finds its own mark and
   runs the whole flow, and the worst case is one extra connect; a page that accepts the desktop clears the mark, so a
   reload of the loader in that tab goes straight on again. **Disconnect** (Navbar and the loader's notice
-  screens) clears the stored version as it clears the key. In a plain browser there is no Disconnect, so the stored version stays until a different pairing key is used or the site data is cleared.
+  screens) clears the stored link version (and the earlier key) as it clears the key. In a plain browser there is no Disconnect, so the stored link version stays until a different pairing key is used or the site data is cleared.
 - **The phone's view preferences are kept in the page origin's `localStorage`.** The `gs-remote-view-prefs` key holds
   only display values — theme, language, the compact flags and the challenge ids they name — on the device itself, as
   the one exception to `config.json` being the only stored settings file. Other pages on the site's origin can read and
@@ -1276,6 +1291,24 @@ served while at least one phone wants it.
   still draining on the relay cannot overwrite a newer one that went over WebRTC; a new `hostRun` (the desktop
   restarted or reloaded) is always applied and starts the comparison again, and a state with no stamp (an older
   desktop) is applied as it comes. An older phone ignores the extra fields.
+- **The link version 1 contract is a type-level freeze.** `core/remote/contract/v1/` is type-only and written out as
+  concrete types, copied from the shapes the app resolved when v1 was cut: the arguments and result of every channel the
+  desktop serves a phone, the event payloads, `autovote-state`, the message envelopes with their closed unions
+  (`HelloMessage.role`, `ResultMessage.reason`, `ByeMessage.reason`, the `autovote-command` names) and the value type of
+  every setting key. Within one link version the page and the desktop run different releases in both directions (a newer
+  page against an older desktop, and the APK's bundled page or a stable page against a newer desktop), so
+  `tests/remote/contractV1.test.ts` holds the living types inside it under `pnpm typecheck`: the frozen arguments must be
+  assignable to the current handler's parameters, the current results, payloads and state to the frozen ones, the
+  envelopes both ways, and each closed union and each setting's value type must be _equal_, so a new value fails. Each
+  check has a broken fixture that must fail, so a vacuous check fails too. Runtime checks pin that every frozen channel is
+  still in the manifest and served, that no channel's spend class moved, that the settings schema keeps every frozen key
+  and that the parser drops an unknown result `reason`. The rule: a change inside a link version may only add (new
+  channels, new optional fields, a channel moving from refused to allowed); a new value in an existing closed field, a
+  new enum member of an existing setting or a change of a channel's spend class needs a bump and a new `contract/v<N>/`;
+  new page code handles a missing field and a channel an older desktop refuses. When the desktop refuses a channel that
+  the page's own allowlist allows, the phone shows `errors.remoteUpdateComputer` ("Update the app on your computer to use
+  this."); a channel the page also refuses keeps `errors.remoteRefused`. Beta testers who use the browser page get the
+  stable v1 page, so phone features that are new in a beta show only in the beta APK.
 - **The loader is not a phone.** Its `hello` carries `role: 'loader'`; the host answers it with its version only —
   no snapshot, no peer slot, no count, no desktop notice. A fourth phone is turned away with `bye` carrying
   `reason: 'full'`, which the phone reads as "too many phones are connected", not as an offline computer.
@@ -1290,11 +1323,13 @@ served while at least one phone wants it.
   (in `LOCAL_DATA_STORES`, so the wipe clears it) and loads `/remote/index.html` from the APK. The startup entry
   reads that key before anything mounts, so a relaunch stays in remote mode and `AutovoteProvider` never mounts
   over the Capacitor bridge. The local server answers a directory path with the app's own document, so every
-  bundled page is addressed by its file name (`/remote/<version>/index.html`), and the bundled loader takes the
-  version from `hello` like the Pages one; a version the APK does not carry reads "Update the app on your
-  computer". Both documents reach Preferences through the native bridge's `nativePromise`
+  bundled page is addressed by its file name (`/remote/v<N>/index.html`; `build:react` empties `dist/remote/` and stages
+  only the build's own link version), and the bundled loader takes the link version from `hello` like the Pages one.
+  A new APK paired with a 1.15.0 desktop reads "Update the app on your computer" (the APK carries no
+  `/remote/1.15.0/`), and a 1.15.0 APK paired with a v1 desktop reads "Update this app" (its loader reads the desktop's
+  app version, the APK carries no `/remote/<appVersion>/` page for it, and the desktop is newer). Both documents reach Preferences through the native bridge's `nativePromise`
   (`core/remote/phoneKeyStore.ts`), because the remote bundles register no Capacitor plugin. **Disconnect**
-  (Navbar and the loader's notice screens) clears the key and the kept desktop version and reloads the app's own
+  (Navbar and the loader's notice screens) clears the key and the kept link version and reloads the app's own
   document, in normal mode with local voting off.
 - On a lost connection an in-flight invoke on a spend channel (`core/remote/allowlist.ts`, the `postOnce`
   spenders) is answered "unclear — check before retrying", never a clean failure; every other channel reports

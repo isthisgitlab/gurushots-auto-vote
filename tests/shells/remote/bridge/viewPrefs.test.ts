@@ -16,7 +16,7 @@
 import { createViewPrefs, VIEW_PREFS_STORAGE } from '../../../../src/ts/shells/remote/bridge/viewPrefs';
 import { createPeerBridgeContext } from '../../../../src/ts/shells/remote/bridge/context';
 import { installPeerBridge } from '../../../../src/ts/shells/remote/bridge/peer';
-import { PAGE_VERSION, PROTOCOL_VERSION } from '../../../../src/ts/core/remote/protocol';
+import { APP_VERSION, LINK_VERSION, PROTOCOL_VERSION } from '../../../../src/ts/core/remote/protocol';
 import { setRemoteConnectionState, setRemoteHostPeerId } from '../../../../src/ts/core/remote/connectionState';
 import { isPlainObject } from '../../../../src/ts/core/plainObject';
 import { TransportStub } from '../../../helpers/remoteTransport';
@@ -25,7 +25,7 @@ import type { PeerBridgeContext } from '../../../../src/ts/shells/remote/bridge/
 import type { InvokePipeline } from '../../../../src/ts/shells/remote/bridge/invokes';
 import type { ViewPrefs } from '../../../../src/ts/shells/remote/bridge/viewPrefs';
 
-// ---------------------------------------------------------------- storage doubles (desktopVersion.test.ts style)
+// ---------------------------------------------------------------- storage doubles (linkVersion.test.ts style)
 
 const memoryStorage = (): Storage => {
     const items = new Map<string, string>();
@@ -1296,7 +1296,13 @@ describe('pruning the inactive challenges from both per-challenge maps', () => {
 // ---------------------------------------------------------------- through the installed bridge
 
 const LOADER_TARGET = 'https://site.test/remote/index.html#k=the-key';
-const hostHello = { t: 'hello', version: PAGE_VERSION, protocolVersion: PROTOCOL_VERSION, host: true };
+const hostHello = {
+    t: 'hello',
+    version: APP_VERSION,
+    protocolVersion: PROTOCOL_VERSION,
+    linkVersion: LINK_VERSION,
+    host: true,
+};
 
 describe('through the installed peer bridge', () => {
     let host: TransportStub;
@@ -1333,7 +1339,7 @@ describe('through the installed peer bridge', () => {
 
     const connect = (): void => {
         phone.emitJoin('host');
-        host.receiveFromPeer({ t: 'hello', version: PAGE_VERSION, host: false }, 'phone');
+        host.receiveFromPeer({ t: 'hello', version: APP_VERSION, host: false }, 'phone');
         phone.receiveFromPeer(hostHello, 'host');
     };
 

@@ -120,6 +120,7 @@ export const errors: typeof english.errors = {
     remoteEnterFailed: 'Neizdevās pārslēgties uz attālināto vadību. Lietotne paliek parastajā režīmā — mēģini vēlreiz.',
     remoteDisconnectFailed: 'Neizdevās atvienoties. Šī lapa paliek savienota ar datoru — mēģini vēlreiz.',
     remoteRefused: 'Šo veic datorā.',
+    remoteUpdateComputer: 'Lai to izmantotu, atjaunini lietotni datorā.',
     remoteResultTooLarge:
         'Rezultāts ir pārāk liels, lai to nosūtītu uz telefonu. Veic šo darbību datorā vai pieprasi mazāk vienā reizē.',
     remoteAnswerUnsendable: 'Datora atbildi neizdevās nosūtīt. Veic šo darbību datorā.',

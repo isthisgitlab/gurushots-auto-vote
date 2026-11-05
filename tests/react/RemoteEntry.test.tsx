@@ -196,10 +196,10 @@ describe('Remote entry', () => {
         expect(document.getElementById('root')?.textContent).toBe('app.remoteOfflineDetail');
     });
 
-    test('a version mismatch reached from a versioned page goes to the loader beside it, not the site root', async () => {
+    test('a link version mismatch reached from a versioned page goes to the loader beside it, not the site root', async () => {
         // The document sits at the versioned page; the entry then rewrites the address bar to the
         // loader directory, so only a target resolved before that rewrite still reaches the loader.
-        window.history.pushState(null, '', '/remote/1.2.3/index.html#k=the-key');
+        window.history.pushState(null, '', '/remote/v1/index.html#k=the-key');
         const transport = new TransportStub('phone');
         loadWithRealBridge(transport);
         await flush();
@@ -211,18 +211,18 @@ describe('Remote entry', () => {
             transport.emitJoin('host');
             await flush();
             transport.receiveFromPeer(
-                { t: 'hello', version: '9.9.9', protocolVersion: PROTOCOL_VERSION, host: true },
+                { t: 'hello', version: '9.9.9', protocolVersion: PROTOCOL_VERSION, linkVersion: 2, host: true },
                 'host',
             );
             await flush();
-            // The page keeps the desktop's version first (the real store hashes the pairing key, which takes a
+            // The page keeps the desktop's link version first (the real store hashes the pairing key, which takes a
             // moment off the microtask queue), then moves the tab to the loader.
             for (let waited = 0; waited < 100 && replaced.length === 0; waited += 1) {
                 await new Promise((resolve) => setTimeout(resolve, 10));
             }
             const target = replaced[0];
             expect(target).toBeDefined();
-            expect(window.localStorage.getItem('gs-remote-desktop-version')).toMatch(/^[0-9a-f]{16}:9\.9\.9$/);
+            expect(window.localStorage.getItem('gs-remote-link-version')).toMatch(/^[0-9a-f]{16}:2$/);
             expect(new URL(target ?? '', window.location.href).pathname.endsWith('/remote/index.html')).toBe(true);
         } finally {
             replaceSpy.mockRestore();

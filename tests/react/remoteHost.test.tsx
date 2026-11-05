@@ -17,6 +17,7 @@ import { fireSettingsChanged, mockApi } from './helpers/setup';
 import {
     MAX_PEER_FIELD_LENGTH,
     MAX_PEER_MESSAGE_BYTES,
+    LINK_VERSION,
     PROTOCOL_VERSION,
     REMOTE_RESULT_TOO_LARGE,
     REMOTE_RESULT_UNSENDABLE,
@@ -123,7 +124,13 @@ const flush = async (): Promise<void> => {
 };
 
 describe('createRemoteHost: the path a phone is reached over', () => {
-    const hello = { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false };
+    const hello = {
+        t: 'hello',
+        version: HOST_VERSION,
+        protocolVersion: PROTOCOL_VERSION,
+        linkVersion: LINK_VERSION,
+        host: false,
+    };
 
     test('the host asks for a transport as the host, and logs each join with its path', async () => {
         const created: Array<{ key: string; role: string }> = [];
@@ -294,7 +301,13 @@ describe('createRemoteHost', () => {
         const transport = deps.transports[0];
         transport.emitJoin('p1');
         transport.receiveFromPeer(
-            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            {
+                t: 'hello',
+                version: HOST_VERSION,
+                protocolVersion: PROTOCOL_VERSION,
+                linkVersion: LINK_VERSION,
+                host: false,
+            },
             'p1',
         );
         expect(host.connectedCount()).toBe(1);
@@ -312,7 +325,13 @@ describe('createRemoteHost', () => {
         const transport = deps.transports[0];
         transport.emitJoin('p1');
         transport.receiveFromPeer(
-            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            {
+                t: 'hello',
+                version: HOST_VERSION,
+                protocolVersion: PROTOCOL_VERSION,
+                linkVersion: LINK_VERSION,
+                host: false,
+            },
             'p1',
         );
         await flush();
@@ -323,6 +342,7 @@ describe('createRemoteHost', () => {
             t: 'hello',
             version: HOST_VERSION,
             protocolVersion: PROTOCOL_VERSION,
+            linkVersion: LINK_VERSION,
             host: true,
         });
         expect(sentBy(transport)[1].message).toEqual({
@@ -334,13 +354,35 @@ describe('createRemoteHost', () => {
         expect(deps.notifications).toBe(1);
     });
 
-    test('a version mismatch is told and no snapshot is served', async () => {
+    test('a phone on another app version but the same link version is served', async () => {
         const { host, deps } = makeHarness();
         await host.start('k');
         const transport = deps.transports[0];
         transport.emitJoin('p1');
         transport.receiveFromPeer(
-            { t: 'hello', version: '8.0.0', protocolVersion: PROTOCOL_VERSION, host: false },
+            { t: 'hello', version: '8.0.0', protocolVersion: PROTOCOL_VERSION, linkVersion: LINK_VERSION, host: false },
+            'p1',
+        );
+        await flush();
+
+        expect(sentBy(transport).map(({ message }) => (message as { t: string }).t)).toEqual([
+            'hello',
+            'event',
+            'autovote-state',
+        ]);
+        expect(host.connectedCount()).toBe(1);
+    });
+
+    test.each([
+        ['another link version', { linkVersion: LINK_VERSION + 1 }],
+        ['no link version (a legacy phone)', {}],
+    ])('a phone with %s is told our hello and no snapshot is served', async (_label, link) => {
+        const { host, deps } = makeHarness();
+        await host.start('k');
+        const transport = deps.transports[0];
+        transport.emitJoin('p1');
+        transport.receiveFromPeer(
+            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false, ...link },
             'p1',
         );
 
@@ -349,6 +391,7 @@ describe('createRemoteHost', () => {
             t: 'hello',
             version: HOST_VERSION,
             protocolVersion: PROTOCOL_VERSION,
+            linkVersion: LINK_VERSION,
             host: true,
         });
         expect(host.connectedCount()).toBe(0);
@@ -361,7 +404,13 @@ describe('createRemoteHost', () => {
         const transport = deps.transports[0];
         transport.emitJoin('p1');
         transport.receiveFromPeer(
-            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            {
+                t: 'hello',
+                version: HOST_VERSION,
+                protocolVersion: PROTOCOL_VERSION,
+                linkVersion: LINK_VERSION,
+                host: false,
+            },
             'p1',
         );
         for (const command of ['start', 'stop', 'rearm'] as const) {
@@ -377,7 +426,13 @@ describe('createRemoteHost', () => {
         const transport = deps.transports[0];
         transport.emitJoin('p1');
         transport.receiveFromPeer(
-            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            {
+                t: 'hello',
+                version: HOST_VERSION,
+                protocolVersion: PROTOCOL_VERSION,
+                linkVersion: LINK_VERSION,
+                host: false,
+            },
             'p1',
         );
         transport.receiveFromPeer(
@@ -416,12 +471,24 @@ describe('createRemoteHost', () => {
         const transport = deps.transports[0];
         transport.emitJoin('p1');
         transport.receiveFromPeer(
-            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            {
+                t: 'hello',
+                version: HOST_VERSION,
+                protocolVersion: PROTOCOL_VERSION,
+                linkVersion: LINK_VERSION,
+                host: false,
+            },
             'p1',
         );
         transport.emitJoin('p2');
         transport.receiveFromPeer(
-            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            {
+                t: 'hello',
+                version: HOST_VERSION,
+                protocolVersion: PROTOCOL_VERSION,
+                linkVersion: LINK_VERSION,
+                host: false,
+            },
             'p2',
         );
         await flush();
@@ -469,7 +536,13 @@ describe('createRemoteHost', () => {
         for (let i = 0; i < MAX_REMOTE_PEERS + 1; i++) {
             transport.emitJoin(`p${i}`);
             transport.receiveFromPeer(
-                { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+                {
+                    t: 'hello',
+                    version: HOST_VERSION,
+                    protocolVersion: PROTOCOL_VERSION,
+                    linkVersion: LINK_VERSION,
+                    host: false,
+                },
                 `p${i}`,
             );
             await flush();
@@ -488,7 +561,13 @@ describe('createRemoteHost', () => {
         const transport = deps.transports[0];
         transport.emitJoin('p1');
         transport.receiveFromPeer(
-            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            {
+                t: 'hello',
+                version: HOST_VERSION,
+                protocolVersion: PROTOCOL_VERSION,
+                linkVersion: LINK_VERSION,
+                host: false,
+            },
             'p1',
         );
         transport.receiveFromPeer({ t: 'invoke', id: 10, channel: 'start-log-stream', args: [] }, 'p1');
@@ -511,7 +590,13 @@ describe('createRemoteHost', () => {
 
         transport.emitJoin('p1');
         transport.receiveFromPeer(
-            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            {
+                t: 'hello',
+                version: HOST_VERSION,
+                protocolVersion: PROTOCOL_VERSION,
+                linkVersion: LINK_VERSION,
+                host: false,
+            },
             'p1',
         );
         await flush();
@@ -534,7 +619,13 @@ describe('createRemoteHost', () => {
         for (const peerId of ['p1', 'p2']) {
             transport.emitJoin(peerId);
             transport.receiveFromPeer(
-                { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+                {
+                    t: 'hello',
+                    version: HOST_VERSION,
+                    protocolVersion: PROTOCOL_VERSION,
+                    linkVersion: LINK_VERSION,
+                    host: false,
+                },
                 peerId,
             );
         }
@@ -561,7 +652,13 @@ describe('createRemoteHost', () => {
         const nextTransport = next.deps.transports[0];
         nextTransport.emitJoin('p1');
         nextTransport.receiveFromPeer(
-            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            {
+                t: 'hello',
+                version: HOST_VERSION,
+                protocolVersion: PROTOCOL_VERSION,
+                linkVersion: LINK_VERSION,
+                host: false,
+            },
             'p1',
         );
         await flush();
@@ -580,7 +677,13 @@ describe('createRemoteHost', () => {
         const transport = deps.transports[0];
         transport.emitJoin('p1');
         transport.receiveFromPeer(
-            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            {
+                t: 'hello',
+                version: HOST_VERSION,
+                protocolVersion: PROTOCOL_VERSION,
+                linkVersion: LINK_VERSION,
+                host: false,
+            },
             'p1',
         );
         transport.receiveFromPeer({ t: 'invoke', id: 1, channel: 'get-settings', args: [{ secret: KEY }] }, 'p1');
@@ -602,7 +705,13 @@ describe('createRemoteHost (refusals, bye, events, unload)', () => {
         const transport = deps.transports[0];
         transport.emitJoin('p1');
         transport.receiveFromPeer(
-            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            {
+                t: 'hello',
+                version: HOST_VERSION,
+                protocolVersion: PROTOCOL_VERSION,
+                linkVersion: LINK_VERSION,
+                host: false,
+            },
             'p1',
         );
         await flush();
@@ -624,7 +733,13 @@ describe('createRemoteHost (refusals, bye, events, unload)', () => {
         const transport = deps.transports[0];
         transport.emitJoin('p1');
         transport.receiveFromPeer(
-            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            {
+                t: 'hello',
+                version: HOST_VERSION,
+                protocolVersion: PROTOCOL_VERSION,
+                linkVersion: LINK_VERSION,
+                host: false,
+            },
             'p1',
         );
         transport.receiveFromPeer({ t: 'invoke', id: 1, channel: 'start-log-stream', args: [] }, 'p1');
@@ -666,7 +781,13 @@ describe('createRemoteHost (refusals, bye, events, unload)', () => {
         const transport = deps.transports[0];
         transport.emitJoin('p1');
         transport.receiveFromPeer(
-            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            {
+                t: 'hello',
+                version: HOST_VERSION,
+                protocolVersion: PROTOCOL_VERSION,
+                linkVersion: LINK_VERSION,
+                host: false,
+            },
             'p1',
         );
         await flush();
@@ -694,7 +815,13 @@ describe('createRemoteHost (refusals, bye, events, unload)', () => {
         transport.failNextSendOnce();
         transport.emitJoin('p1');
         transport.receiveFromPeer(
-            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            {
+                t: 'hello',
+                version: HOST_VERSION,
+                protocolVersion: PROTOCOL_VERSION,
+                linkVersion: LINK_VERSION,
+                host: false,
+            },
             'p1',
         );
         await flush();
@@ -716,7 +843,13 @@ describe('createRemoteHost (failures answer the phone)', () => {
         const transport = harness.deps.transports[0];
         transport.emitJoin(peer);
         transport.receiveFromPeer(
-            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            {
+                t: 'hello',
+                version: HOST_VERSION,
+                protocolVersion: PROTOCOL_VERSION,
+                linkVersion: LINK_VERSION,
+                host: false,
+            },
             peer,
         );
         await flush();
@@ -856,7 +989,13 @@ describe('createRemoteHost (failures answer the phone)', () => {
         const transport = harness.deps.transports[0];
         transport.emitJoin('p1');
         transport.receiveFromPeer(
-            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            {
+                t: 'hello',
+                version: HOST_VERSION,
+                protocolVersion: PROTOCOL_VERSION,
+                linkVersion: LINK_VERSION,
+                host: false,
+            },
             'p1',
         );
         await flush();
@@ -935,6 +1074,7 @@ describe('createRemoteHost (the loader is not a phone)', () => {
         t: 'hello',
         version,
         protocolVersion: PROTOCOL_VERSION,
+        linkVersion: LINK_VERSION,
         host: false,
         role: 'loader',
     });
@@ -952,7 +1092,13 @@ describe('createRemoteHost (the loader is not a phone)', () => {
             await flush();
             expect(sentBy(transport).map(({ message, target }) => ({ message, target }))).toEqual([
                 {
-                    message: { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: true },
+                    message: {
+                        t: 'hello',
+                        version: HOST_VERSION,
+                        protocolVersion: PROTOCOL_VERSION,
+                        linkVersion: LINK_VERSION,
+                        host: true,
+                    },
                     target: 'loader',
                 },
             ]);
@@ -970,7 +1116,13 @@ describe('createRemoteHost (the loader is not a phone)', () => {
         for (let i = 0; i < MAX_REMOTE_PEERS; i++) {
             transport.emitJoin(`p${i}`);
             transport.receiveFromPeer(
-                { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+                {
+                    t: 'hello',
+                    version: HOST_VERSION,
+                    protocolVersion: PROTOCOL_VERSION,
+                    linkVersion: LINK_VERSION,
+                    host: false,
+                },
                 `p${i}`,
             );
         }
@@ -1002,7 +1154,13 @@ describe('createRemoteHost (activity is logged at INFO, never with a key or argu
         const transport = deps.transports[0];
         transport.emitJoin('p1');
         transport.receiveFromPeer(
-            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            {
+                t: 'hello',
+                version: HOST_VERSION,
+                protocolVersion: PROTOCOL_VERSION,
+                linkVersion: LINK_VERSION,
+                host: false,
+            },
             'p1',
         );
         transport.receiveFromPeer({ t: 'invoke', id: 1, channel: 'get-settings', args: [{ secret: 'arg' }] }, 'p1');
@@ -1010,7 +1168,13 @@ describe('createRemoteHost (activity is logged at INFO, never with a key or argu
         transport.receiveFromPeer({ t: 'autovote-command', command: 'start' }, 'p1');
         for (let i = 2; i < MAX_REMOTE_PEERS + 2; i++) {
             transport.receiveFromPeer(
-                { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+                {
+                    t: 'hello',
+                    version: HOST_VERSION,
+                    protocolVersion: PROTOCOL_VERSION,
+                    linkVersion: LINK_VERSION,
+                    host: false,
+                },
                 `p${i}`,
             );
         }
@@ -1047,7 +1211,13 @@ describe('createRemoteHost (activity is logged at INFO, never with a key or argu
         const transport = deps.transports[0];
         transport.emitJoin('p1');
         transport.receiveFromPeer(
-            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            {
+                t: 'hello',
+                version: HOST_VERSION,
+                protocolVersion: PROTOCOL_VERSION,
+                linkVersion: LINK_VERSION,
+                host: false,
+            },
             'p1',
         );
         transport.receiveFromPeer({ t: 'invoke', id: 1, channel: 'get-bankroll', args: [] }, 'p1');
@@ -1116,7 +1286,13 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
 
         mine()[0].emitJoin('p1');
         mine()[0].receiveFromPeer(
-            { t: 'hello', version: appVersion(), protocolVersion: PROTOCOL_VERSION, host: false },
+            {
+                t: 'hello',
+                version: appVersion(),
+                protocolVersion: PROTOCOL_VERSION,
+                linkVersion: LINK_VERSION,
+                host: false,
+            },
             'p1',
         );
         await flush();
@@ -1199,7 +1375,13 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
         const transport = mine()[0];
         transport.emitJoin('p1');
         transport.receiveFromPeer(
-            { t: 'hello', version: appVersion(), protocolVersion: PROTOCOL_VERSION, host: false },
+            {
+                t: 'hello',
+                version: appVersion(),
+                protocolVersion: PROTOCOL_VERSION,
+                linkVersion: LINK_VERSION,
+                host: false,
+            },
             'p1',
         );
         await flush();
@@ -1248,7 +1430,13 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
         for (const peer of ['p1', 'p2']) {
             transport.emitJoin(peer);
             transport.receiveFromPeer(
-                { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+                {
+                    t: 'hello',
+                    version: HOST_VERSION,
+                    protocolVersion: PROTOCOL_VERSION,
+                    linkVersion: LINK_VERSION,
+                    host: false,
+                },
                 peer,
             );
         }
@@ -1334,14 +1522,26 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
 
         transport.emitJoin('p1');
         transport.receiveFromPeer(
-            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            {
+                t: 'hello',
+                version: HOST_VERSION,
+                protocolVersion: PROTOCOL_VERSION,
+                linkVersion: LINK_VERSION,
+                host: false,
+            },
             'p1',
         );
         await flush();
         // A repeat hello from the known phone: not a new connection, no second notification.
         deps.notifications = 0;
         transport.receiveFromPeer(
-            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            {
+                t: 'hello',
+                version: HOST_VERSION,
+                protocolVersion: PROTOCOL_VERSION,
+                linkVersion: LINK_VERSION,
+                host: false,
+            },
             'p1',
         );
         await flush();
@@ -1361,7 +1561,13 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
         const transport = deps.transports[0];
         transport.emitJoin('p1');
         transport.receiveFromPeer(
-            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            {
+                t: 'hello',
+                version: HOST_VERSION,
+                protocolVersion: PROTOCOL_VERSION,
+                linkVersion: LINK_VERSION,
+                host: false,
+            },
             'p1',
         );
         await flush();
@@ -1385,7 +1591,13 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
             const transport = mine()[0];
             transport.emitJoin('p1');
             transport.receiveFromPeer(
-                { t: 'hello', version: appVersion(), protocolVersion: PROTOCOL_VERSION, host: false },
+                {
+                    t: 'hello',
+                    version: appVersion(),
+                    protocolVersion: PROTOCOL_VERSION,
+                    linkVersion: LINK_VERSION,
+                    host: false,
+                },
                 'p1',
             );
             await flush();
@@ -1497,7 +1709,13 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
                 // Nobody is hearing the room any more.
                 mine()[0].emitJoin('p1');
                 mine()[0].receiveFromPeer(
-                    { t: 'hello', version: appVersion(), protocolVersion: PROTOCOL_VERSION, host: false },
+                    {
+                        t: 'hello',
+                        version: appVersion(),
+                        protocolVersion: PROTOCOL_VERSION,
+                        linkVersion: LINK_VERSION,
+                        host: false,
+                    },
                     'p1',
                 );
                 await flush();
@@ -1524,7 +1742,13 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
                 expect(mine()[1].left).toBe(false);
                 mine()[1].emitJoin('p1');
                 mine()[1].receiveFromPeer(
-                    { t: 'hello', version: appVersion(), protocolVersion: PROTOCOL_VERSION, host: false },
+                    {
+                        t: 'hello',
+                        version: appVersion(),
+                        protocolVersion: PROTOCOL_VERSION,
+                        linkVersion: LINK_VERSION,
+                        host: false,
+                    },
                     'p1',
                 );
                 await flush();
@@ -1548,7 +1772,13 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
                 expect(mine()[0].left).toBe(false);
                 mine()[0].emitJoin('p1');
                 mine()[0].receiveFromPeer(
-                    { t: 'hello', version: appVersion(), protocolVersion: PROTOCOL_VERSION, host: false },
+                    {
+                        t: 'hello',
+                        version: appVersion(),
+                        protocolVersion: PROTOCOL_VERSION,
+                        linkVersion: LINK_VERSION,
+                        host: false,
+                    },
                     'p1',
                 );
                 await flush();
@@ -1570,7 +1800,13 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
         seen.length = 0;
         mine()[0].emitJoin('p1');
         mine()[0].receiveFromPeer(
-            { t: 'hello', version: appVersion(), protocolVersion: PROTOCOL_VERSION, host: false },
+            {
+                t: 'hello',
+                version: appVersion(),
+                protocolVersion: PROTOCOL_VERSION,
+                linkVersion: LINK_VERSION,
+                host: false,
+            },
             'p1',
         );
         await flush();

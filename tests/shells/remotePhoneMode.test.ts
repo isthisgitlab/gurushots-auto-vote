@@ -40,7 +40,7 @@ describe('the remote page inside the Android app', () => {
         expect(assign).toHaveBeenCalledWith('/index.html');
     });
 
-    test('Disconnect also forgets the desktop version kept for the loader; a key that could not be cleared keeps it', async () => {
+    test('Disconnect also forgets the link version kept for the loader and the earlier desktop-version key; a key that could not be cleared keeps both', async () => {
         const removeItem = jest.fn<void, [string]>();
         Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { removeItem } });
         try {
@@ -48,7 +48,9 @@ describe('the remote page inside the Android app', () => {
             await expect(load().disconnectFromComputer()).rejects.toThrow('prefs');
             expect(removeItem).not.toHaveBeenCalled();
             await load().disconnectFromComputer();
+            expect(removeItem).toHaveBeenCalledWith('gs-remote-link-version');
             expect(removeItem).toHaveBeenCalledWith('gs-remote-desktop-version');
+            expect(removeItem).toHaveBeenCalledTimes(2);
             expect(assign).toHaveBeenCalledWith('/index.html');
         } finally {
             delete (globalThis as { localStorage?: unknown }).localStorage;

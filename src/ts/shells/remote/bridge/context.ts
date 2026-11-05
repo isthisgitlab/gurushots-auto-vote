@@ -10,6 +10,8 @@ type PendingInvoke = {
     resolve: (result: unknown) => void;
     reject: (error: Error) => void;
     spend: boolean;
+    /** The channel the invoke asked, so a refusal can say whether this page offered a channel the desktop lacks. */
+    channel: string;
 };
 
 export type Listener = (payload: unknown) => void;

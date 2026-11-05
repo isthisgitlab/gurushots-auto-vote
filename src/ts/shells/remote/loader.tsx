@@ -1,14 +1,16 @@
 /**
  * Remote loader entry — the thin, stable document the pairing link opens (`/remote/`). It
- * joins the pairing room, reads the desktop's app version from its `hello`, and moves on to
- * the matching `/remote/<version>/index.html` page (the link's fragment is kept, so the key travels
- * with it). An older desktop always gets a matching phone page this way, and the pairing
- * link itself never changes.
+ * joins the pairing room, reads the desktop's link version from its `hello`, and moves on to
+ * the matching `/remote/v<N>/index.html` page (the link's fragment is kept, so the key travels
+ * with it). A desktop of 1.15.0 or one of its betas sends no link version: its `hello` names an app
+ * version, and the loader moves on to that app version's page, which the site keeps for 1.15.0 only.
+ * The pairing link itself never changes, and every desktop that speaks link version N gets the one
+ * page, whatever app version it runs.
  *
  * The notice screen shows from the first moment ("Connecting to your computer…"), not once the
- * room is joined. A version whose page the site no longer publishes says which side to update:
- * the app on the computer when the desktop is older than this page; when the desktop is newer,
- * the Android app says to update this app and a browser tab says the page is not published yet. A
+ * room is joined. A page the site does not publish says which side to update: the app on the
+ * computer when the desktop is older than this page (or a legacy one); when the desktop's link version is
+ * newer, the Android app says to update this app and a browser tab says the page is not published yet. A
  * room where no desktop answers says the computer is offline, or this link was reset. The
  * timeout must outlast a relay round trip on a slow mobile network — it is generous on purpose.
  *
@@ -22,16 +24,17 @@ import { HOST_ANSWER_TIMEOUT_MS, createHelloRepeater } from '../../core/remote/h
 import { watchPageLifecycle } from '../../core/remote/pageLifecycle';
 import { takePairingKey } from '../../core/remote/pairingKey';
 import {
-    clearDesktopVersion,
+    clearLinkVersion,
+    forgetLegacyDesktopVersion,
     markSkippedTo,
     skippedTo,
-    storeDesktopVersion,
-    storedDesktopVersion,
-} from '../../core/remote/desktopVersion';
+    storeLinkVersion,
+    storedLinkVersion,
+} from '../../core/remote/linkVersion';
 import {
-    PAGE_VERSION,
+    APP_VERSION,
+    LINK_VERSION,
     PROTOCOL_VERSION,
-    compareReleaseVersions,
     isReleaseVersion,
     parsePeerMessage,
 } from '../../core/remote/protocol';
@@ -42,19 +45,27 @@ import { installPhoneDisconnect } from './phoneMode';
 import type { HelloMessage } from '../../core/remote/protocol';
 
 /**
- * The version's page by file name: the Android app's local server answers a directory path with
+ * A page's directory under `/remote/`: `v<N>` for a link version, the app version itself for a legacy desktop.
+ * Both are built from a checked number or a checked release version, so nothing a peer sends names another place.
+ */
+type PageDir = string;
+
+const linkVersionDir = (linkVersion: number): PageDir => `v${linkVersion}`;
+
+/**
+ * The page by file name: the Android app's local server answers a directory path with
  * its own document, so a versioned page is always addressed as its `index.html` (the Pages site
  * serves the same file).
  */
-const versionPage = (version: string): string => `./${encodeURIComponent(version)}/index.html`;
+const versionPage = (dir: PageDir): string => `./${encodeURIComponent(dir)}/index.html`;
 
 /**
- * Whether the site (or the APK) carries the version's page. `whenProbeFails` is the answer when the probe itself could not
+ * Whether the site (or the APK) carries the page. `whenProbeFails` is the answer when the probe itself could not
  * run: after a hello the versioned page speaks for itself (true); a return visit has not heard the desktop, so it does not skip (false).
  */
-const versionIsPublished = async (version: string, whenProbeFails: boolean): Promise<boolean> => {
+const pageIsPublished = async (dir: PageDir, whenProbeFails: boolean): Promise<boolean> => {
     try {
-        const probe = await fetch(versionPage(version), { method: 'HEAD' });
+        const probe = await fetch(versionPage(dir), { method: 'HEAD' });
         return probe.ok;
     } catch {
         return whenProbeFails;
@@ -72,24 +83,27 @@ void (async () => {
     // here on every launch until the user leaves remote mode. It is installed before the first render.
     installPhoneDisconnect();
     mountRemoteNotice();
-    // A return visit goes straight to the page of the version it last reached: no transport, one HEAD request. A
+    // The key an earlier loader kept the desktop's app version under is of no use any more.
+    forgetLegacyDesktopVersion();
+    // A return visit goes straight to the page of the link version it last reached: no transport, one HEAD request. A
     // version this tab already went straight to (its page sent the tab back, so the version was wrong or the page
     // could not tell), one whose page is not published, or a request that cannot run runs the whole flow below, which
     // says what is wrong (the network notice, if the network is why).
-    const stored = await storedDesktopVersion(key);
-    if (stored !== null && skippedTo() !== stored && (await versionIsPublished(stored, false))) {
+    const stored = await storedLinkVersion(key);
+    if (stored !== null && skippedTo() !== stored && (await pageIsPublished(linkVersionDir(stored), false))) {
         markSkippedTo(stored);
-        globalThis.location.replace(`${versionPage(stored)}${globalThis.location.hash}`);
+        globalThis.location.replace(`${versionPage(linkVersionDir(stored))}${globalThis.location.hash}`);
         return;
     }
-    if (stored !== null) clearDesktopVersion();
+    if (stored !== null) clearLinkVersion();
     let done = false;
     const transport = await createTrysteroTransport({ key, role: 'phone' });
     // The loader only asks the desktop's version: `role: 'loader'` keeps it out of the desktop's phone count.
     const announce: HelloMessage = {
         t: 'hello',
-        version: PAGE_VERSION,
+        version: APP_VERSION,
         protocolVersion: PROTOCOL_VERSION,
+        linkVersion: LINK_VERSION,
         host: false,
         role: 'loader',
     };
@@ -102,24 +116,27 @@ void (async () => {
         void transport.leave();
         setRemoteConnectionState(state);
     };
-    const finishWith = (version: string): void => {
+    /** `linkVersion` is the desktop's link version, absent from a legacy desktop, whose app version names its page. */
+    const finishWith = (dir: PageDir, linkVersion: number | undefined): void => {
         if (done) return;
         done = true;
         hello.stop();
-        void versionIsPublished(version, true).then(async (published) => {
+        void pageIsPublished(dir, true).then(async (published) => {
             if (!published) {
                 void transport.leave();
-                const newerThanPage = compareReleaseVersions(version, PAGE_VERSION) > 0;
+                const newerThanLoader = linkVersion !== undefined && linkVersion > LINK_VERSION;
                 // Inside the Android app the bundled page is simply older than the desktop: update this
-                // app. In a browser the site just has not published that version's page yet: try later.
+                // app. In a browser the site just has not published that link version's page yet: try later.
+                // A desktop whose page is gone (a legacy one, or an older link version) is the one to update.
                 setRemoteConnectionState(
-                    newerThanPage ? (phoneRemoteMode() === null ? 'unpublished' : 'update-this') : 'update',
+                    newerThanLoader ? (phoneRemoteMode() === null ? 'unpublished' : 'update-this') : 'update',
                 );
                 return;
             }
-            // Kept for the next visit, only for a page that is there; a write that fails is a shortcut lost, never a stranded tab.
-            await storeDesktopVersion(version).catch(() => undefined);
-            globalThis.location.replace(`${versionPage(version)}${globalThis.location.hash}`);
+            // Kept for the next visit, only for a page that is there and only for a link version; a write that
+            // fails is a shortcut lost, never a stranded tab.
+            if (linkVersion !== undefined) await storeLinkVersion(linkVersion).catch(() => undefined);
+            globalThis.location.replace(`${versionPage(dir)}${globalThis.location.hash}`);
         });
     };
     transport.onPeerJoin((peerId) => {
@@ -137,9 +154,14 @@ void (async () => {
             phones.add(peerId);
             return;
         }
-        // A version that is not a release version is no desktop's answer: nothing builds a path from it.
+        if (message.linkVersion !== undefined) {
+            finishWith(linkVersionDir(message.linkVersion), message.linkVersion);
+            return;
+        }
+        // A legacy desktop names its page by app version; one that is not a release version is no desktop's
+        // answer: nothing builds a path from it.
         if (!isReleaseVersion(message.version)) return;
-        finishWith(message.version);
+        finishWith(message.version, undefined);
     });
     /** Whether a peer failed its connection on the SDP exchange before anyone answered — the timeout then reports the try-Wi-Fi case. */
     let connectionFailure = false;

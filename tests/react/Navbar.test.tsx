@@ -7,7 +7,7 @@ import { render as rawRender } from '@testing-library/preact';
 import { fireEvent, render, screen } from './helpers/test-utils';
 import { resetPlatformKind } from '../helpers/platformKind';
 import { markPlatformKind } from '../../src/ts/core/platform/kind';
-import { PROTOCOL_VERSION } from '../../src/ts/core/remote/protocol';
+import { LINK_VERSION, PROTOCOL_VERSION } from '../../src/ts/core/remote/protocol';
 import { setRemoteConnectionState } from '../../src/ts/core/remote/connectionState';
 import { Navbar } from '@/components/layout/Navbar';
 import { TranslationProvider } from '@/contexts/TranslationContext';
@@ -45,7 +45,13 @@ describe('Navbar', () => {
         const view = render(
             <Navbar isMock={false} onLogsClick={() => {}} onSettingsClick={() => {}} onLogout={() => {}} />,
         );
-        const hello = { t: 'hello', version: '1.14.2', protocolVersion: PROTOCOL_VERSION, host: false };
+        const hello = {
+            t: 'hello',
+            version: '1.14.2',
+            protocolVersion: PROTOCOL_VERSION,
+            linkVersion: LINK_VERSION,
+            host: false,
+        };
         const settle = async (): Promise<void> => {
             await act(async () => {
                 for (let i = 0; i < 10; i++) await Promise.resolve();
@@ -100,7 +106,13 @@ describe('Navbar', () => {
         act(() => {
             transport.emitJoin('p1');
             transport.receiveFromPeer(
-                { t: 'hello', version: '1.14.2', protocolVersion: PROTOCOL_VERSION, host: false },
+                {
+                    t: 'hello',
+                    version: '1.14.2',
+                    protocolVersion: PROTOCOL_VERSION,
+                    linkVersion: LINK_VERSION,
+                    host: false,
+                },
                 'p1',
             );
         });

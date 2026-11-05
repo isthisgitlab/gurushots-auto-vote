@@ -185,19 +185,25 @@ describe('Android signing', () => {
         expect(files).toContain('android-builds/GuruShotsAutoVote-v*.apk');
     });
 
-    test('the release ships the phone page and its checksum from the remote-page job', () => {
+    test('the release ships the phone page and its checksum from the remote-page job, named by link version', () => {
         const files = String(stepNamed(build.jobs['create-release'], 'Create Release').with?.files);
-        expect(files).toContain('artifacts/remote-page/remote-page.zip');
-        expect(files).toContain('artifacts/remote-page/remote-page.zip.sha256');
-        // The zip carries the release's version directory, built from the bumped package.
+        expect(files).toContain('artifacts/remote-page/remote-page-v*.zip');
+        expect(files).toContain('artifacts/remote-page/remote-page-v*.zip.sha256');
+        // The zip carries the one link-version directory the build stages (dist/remote/v<N>/), built from the bumped package.
         const job = build.jobs['remote-page'];
         expect(job.steps.some((step) => step.run?.includes('pnpm build:react'))).toBe(true);
         const zipping = stepNamed(job, 'Zip the remote page with its checksum').run ?? '';
-        expect(zipping).toContain('remote-page.zip');
-        expect(zipping).toContain('sha256sum remote-page.zip > remote-page.zip.sha256');
+        expect(zipping).toContain('dist/remote/v*/');
+        expect(zipping).toContain('-ne 1');
+        expect(zipping).toContain('exit 1');
+        expect(zipping).toContain('ZIP="remote-page-$NAME.zip"');
+        expect(zipping).toContain('sha256sum "$ZIP" > "$ZIP.sha256"');
+        // The name never reads the app version or a .ts file: the directory is the single source.
+        expect(zipping).not.toContain('package.json');
         const upload = stepNamed(job, 'Upload remote page artifact');
         expect(upload.with?.name).toBe('remote-page');
-        expect(String(upload.with?.path)).toContain('remote-page.zip.sha256');
+        expect(String(upload.with?.path)).toContain('remote-page-v*.zip');
+        expect(String(upload.with?.path)).toContain('remote-page-v*.zip.sha256');
     });
 
     test('the release and the attestation wait for the phone page, and the attestation signs its zip', () => {
@@ -206,9 +212,9 @@ describe('Android signing', () => {
         expect(needsOf(build.jobs['create-release'])).toContain('remote-page');
         expect(needsOf(build.jobs.attest)).toContain('remote-page');
         const subjects = String(stepNamed(build.jobs.attest, 'Attest build provenance').with?.['subject-path']);
-        expect(subjects).toContain('artifacts/remote-page/remote-page.zip');
+        expect(subjects).toContain('artifacts/remote-page/remote-page-v*.zip');
         // Only the zip is a subject: its checksum file is data about it, like the updater manifests.
-        expect(subjects).not.toContain('remote-page.zip.sha256');
+        expect(subjects).not.toContain('remote-page-v*.zip.sha256');
     });
 });
 
