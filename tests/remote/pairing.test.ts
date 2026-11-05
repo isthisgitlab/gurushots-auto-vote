@@ -20,6 +20,9 @@ import { buildNodeTestPlatform, clearInstalledPlatform } from '../helpers/platfo
 
 import type * as pairingModule from '../../src/ts/shells/electron/remote/pairing';
 
+/** The exact published pairing link: the Pages origin, /remote/, and the 43-char base64url key. */
+const PUBLISHED_LINK = /^https:\/\/isthisgitlab\.github\.io\/gurushots-auto-vote\/remote\/#k=[A-Za-z0-9_-]{43}$/;
+
 const loadPairing = (): {
     pairing: typeof pairingModule;
     jsonStore: typeof import('../../src/ts/core/settings/jsonStore');
@@ -116,9 +119,7 @@ describe('the desktop pairing store', () => {
             argv: ['--remote-link-origin=http://127.0.0.1:8080'],
             warn: (message) => packagedWarns.push(message),
         });
-        expect(packaged.accessInfo().link).toMatch(
-            /^https:\/\/isthisgitlab\.github\.io\/gurushots-auto-vote\/remote\/#k=[A-Za-z0-9_-]{43}$/,
-        );
+        expect(packaged.accessInfo().link).toMatch(PUBLISHED_LINK);
         expect(packagedWarns).toHaveLength(1);
     });
 
@@ -145,9 +146,7 @@ describe('the desktop pairing store', () => {
         'javascript:alert(1)',
     ])('the dev launcher argument refuses %s, says so, and the link keeps the published pages', (origin) => {
         const { pairing, warns } = newPairing(userData, [`--remote-link-origin=${origin}`]);
-        expect(pairing.accessInfo().link).toMatch(
-            /^https:\/\/isthisgitlab\.github\.io\/gurushots-auto-vote\/remote\/#k=[A-Za-z0-9_-]{43}$/,
-        );
+        expect(pairing.accessInfo().link).toMatch(PUBLISHED_LINK);
         expect(warns).toEqual([expect.stringContaining('only http://localhost:<port> or http://127.0.0.1:<port>')]);
     });
 
@@ -183,9 +182,7 @@ describe('the desktop pairing store', () => {
         expect(pairing.state().enabled).toBe(false);
         expect(pairing.state().key).toMatch(/^[A-Za-z0-9_-]{43}$/);
         // The empty origin is ignored: the link points at the published pages.
-        expect(pairing.accessInfo().link).toMatch(
-            /^https:\/\/isthisgitlab\.github\.io\/gurushots-auto-vote\/remote\/#k=[A-Za-z0-9_-]{43}$/,
-        );
+        expect(pairing.accessInfo().link).toMatch(PUBLISHED_LINK);
         // And a write over the wrong shape keeps the state it makes.
         expect(pairing.setEnabled(true)).toBe(true);
         expect(pairing.state().enabled).toBe(true);

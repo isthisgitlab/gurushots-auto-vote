@@ -39,6 +39,9 @@ const path = jest.mocked(pathModule);
 const { build } = jest.mocked(require('esbuild') as typeof esbuildModule);
 const { execFileSync } = jest.mocked(require('node:child_process') as typeof node_child_processModule);
 const { version } = require('../../package.json') as typeof package_jsonModule;
+// Declared here, not grouped with the helpers below, so the clearInstalledPlatform() call reads
+// declared-before-use; the call itself must stay above the in-place build-cli require that
+// follows — that module-load order is load-bearing. Imports hoist, so this position is lexical.
 import { clearInstalledPlatform } from '../helpers/platform';
 
 clearInstalledPlatform();

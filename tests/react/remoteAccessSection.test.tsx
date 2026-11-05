@@ -15,6 +15,10 @@ const ANSWERS: { current: { success: boolean; enabled: boolean; link: string; qr
     current: undefined,
 };
 const calls: Array<{ api: string; args: unknown[] }> = [];
+/** The pairing link exactly as the <code> element renders it — `\S+`, not the 43-char class,
+ *  because this file's mock key is the `secret` sentinel; the real key shape is asserted in
+ *  tests/remote/pairing.test.ts. */
+const FULL_LINK = /^https:\/\/isthisgitlab\.github\.io\/gurushots-auto-vote\/remote\/#k=\S+$/;
 /** What the write channels answer; a function throws or rejects, anything else is the answer. */
 const WRITE_ANSWERS: { set: unknown; reset: unknown } = { set: { success: true }, reset: { success: true } };
 const answerWrite = (answer: unknown): unknown => {
@@ -116,17 +120,16 @@ describe('RemoteAccessSection', () => {
         );
         await act(async () => Promise.resolve());
         expect(screen.queryByRole('img')).toBeNull();
-        expect(
-            screen.queryByText(/^https:\/\/isthisgitlab\.github\.io\/gurushots-auto-vote\/remote\/#k=\S+$/),
-        ).toBeNull();
+        expect(screen.queryByText(FULL_LINK)).toBeNull();
+        // Wide leak net, deliberately regex-free so CodeQL's anchor query stays quiet: any element
+        // whose text carries the key fragment fails the hidden state, not just a full-link render.
+        expect(screen.queryByText((_, el) => el?.textContent?.includes('#k=') ?? false)).toBeNull();
 
         fireEvent.click(screen.getByRole('button', { name: 'app.remoteShow' }));
         const qr = screen.getByRole('img');
         expect(qr.getAttribute('src')).toContain('data:image/svg+xml');
         expect(qr.getAttribute('alt')).not.toContain('secret');
-        expect(
-            screen.getByText(/^https:\/\/isthisgitlab\.github\.io\/gurushots-auto-vote\/remote\/#k=\S+$/),
-        ).toBeDefined();
+        expect(screen.getByText(FULL_LINK)).toBeDefined();
     });
 
     const renderEnabled = async (): Promise<void> => {
@@ -346,9 +349,7 @@ describe('RemoteAccessSection', () => {
             fireEvent.click(screen.getByRole('button', { name: 'app.remoteShow' }));
             fireEvent.click(screen.getByRole('button', { name: 'app.remoteCopyLink' }));
             await act(async () => Promise.resolve());
-            expect(
-                screen.getByText(/^https:\/\/isthisgitlab\.github\.io\/gurushots-auto-vote\/remote\/#k=\S+$/),
-            ).toBeDefined();
+            expect(screen.getByText(FULL_LINK)).toBeDefined();
         } finally {
             if (hadClipboard !== undefined) Object.defineProperty(globalThis.navigator, 'clipboard', hadClipboard);
         }
