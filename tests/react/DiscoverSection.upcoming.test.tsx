@@ -6,6 +6,7 @@
 
 import { act, render, screen, fireEvent } from './helpers/test-utils';
 import { DiscoverSection } from '@/components/app/DiscoverSection';
+import { useChallenges } from '@/contexts/ChallengesContext';
 import { mockTranslator } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
 import { isKindBadgeText } from '../helpers/kindBadges';
@@ -27,6 +28,8 @@ const upcoming = (id: number, title: string, startsIn: number, over: object = {}
 type MemberChallenges = jest.MockedFunction<WindowApi['getMemberChallenges']>;
 const answer = (items: OpenChallenge[]) => ({ success: true as const, items });
 
+jest.mock('@/contexts/ChallengesContext', () => ({ __esModule: true, useChallenges: jest.fn() }));
+
 // The English text with its placeholders filled in, so what a user reads is what is asserted.
 const translator = createTranslator();
 const english: Translate = (key, vars) => translator.t(key, vars, 'en');
@@ -44,6 +47,12 @@ const settle = () => act(async () => void (await jest.advanceTimersByTimeAsync(0
 const advance = (ms: number) => act(async () => void (await jest.advanceTimersByTimeAsync(ms)));
 
 beforeEach(() => {
+    jest.mocked(useChallenges).mockReturnValue({
+        challenges: [],
+        loading: false,
+        error: null,
+        refetch: async () => undefined,
+    });
     jest.useFakeTimers({ now: NOW_MS });
     mockTranslator.t.mockImplementation(english);
     getMemberChallenges = jest.fn();

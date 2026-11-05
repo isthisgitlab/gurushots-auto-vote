@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { useChallenges } from '@/contexts/ChallengesContext';
 import { Modal } from '@/components/ui/Modal';
 import { StickyModalFooter } from '@/components/ui/StickyModalFooter';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
@@ -16,11 +17,72 @@ import { useCurrentMember } from '@/hooks/currentMember';
 import { useChooserSave } from '@/hooks/usePhotoChooser';
 import { usePhotoPicker } from '@/hooks/usePhotoPicker';
 import { MAX_CHOSEN_PHOTOS } from '../../../core/settings/limits';
+import { canStillFire } from '../../../core/voting/entryPins';
 
+import type { Challenge } from '../../../core/types/gurushots';
 import type { EntryPinKind } from '../../../core/types/settings';
 import type { PinDraft } from '@/utils/entryPinDraft';
 import type { LibraryPhoto } from '@/hooks/useLibraryListing';
 import type { Translate } from '../../../core/translations/translator';
+
+const resolveChooserChallenge = (
+    challenges: readonly Challenge[],
+    challengeId: string | number | null,
+    fallback?: Challenge | null,
+): Challenge | null => {
+    if (challengeId === null) return null;
+    return challenges.find((active) => String(active.id) === String(challengeId)) ?? fallback ?? null;
+};
+
+const canAssignPin = (challenge: Challenge | null, kind: EntryPinKind): boolean =>
+    challenge !== null && canStillFire(challenge, kind);
+
+const eligiblePinValue = (
+    draft: PinDraft,
+    challenge: Challenge | null,
+    kind: EntryPinKind,
+): string | null | undefined => {
+    const imageId = draft[kind];
+    return imageId !== null && imageId !== undefined && !canAssignPin(challenge, kind) ? undefined : imageId;
+};
+
+const useResolvedChooserChallenge = (challengeId: string | number | null, fallback?: Challenge | null) => {
+    const { challenges } = useChallenges();
+    const challenge = resolveChooserChallenge(challenges, challengeId, fallback);
+    const latestChallenge = useRef(challenge);
+    latestChallenge.current = challenge;
+    return { challenge, latestChallenge };
+};
+
+type SetEntryPin = (
+    ...args: Parameters<typeof ipc.setEntryPin>
+) => Promise<Awaited<ReturnType<typeof ipc.setEntryPin>> | { success: false; error: string }>;
+
+type PinWriteFailure = { kind: EntryPinKind; code: string };
+
+const writeEligiblePinCommits = async (
+    draft: PinDraft,
+    storedPins: { boost: string | null; turbo: string | null },
+    latestChallenge: { current: Challenge | null },
+    runSetEntryPin: SetEntryPin,
+    challengeId: string | number,
+    onFailure: (failures: PinWriteFailure[]) => void,
+): Promise<boolean> => {
+    const latest = latestChallenge.current;
+    const eligibleDraft: PinDraft = {
+        boost: eligiblePinValue(draft, latest, 'boost'),
+        turbo: eligiblePinValue(draft, latest, 'turbo'),
+    };
+    const failures: PinWriteFailure[] = [];
+    for (const { kind, imageId } of planPinCommits(eligibleDraft, storedPins)) {
+        if (imageId !== null && !canAssignPin(latestChallenge.current, kind)) continue;
+        const outcome = await runSetEntryPin(kind, challengeId, imageId);
+        if (!outcome.success) failures.push({ kind, code: outcome.error });
+    }
+    if (failures.length === 0) return true;
+    onFailure(failures);
+    return false;
+};
 
 /** A kind's feature name, as the pin strings fill {kind}. */
 const kindName = (kind: EntryPinKind, t: Translate): string => t(kind === 'boost' ? 'app.boost' : 'app.turbo');
@@ -42,6 +104,7 @@ function PhotoChooserBody({
     value,
     challengeId,
     clearMeansInherit,
+    challenge,
     recommendedIds,
     onSave,
     onClose,
@@ -50,6 +113,8 @@ function PhotoChooserBody({
     value: string[];
     challengeId: string | number | null;
     clearMeansInherit: boolean;
+    /** Discover's row until its active-challenge counterpart arrives in the shared context. */
+    challenge?: Challenge | null;
     /** The photo ids GuruShots suggests for the challenge, marked on their tiles (a Discover row's chooser). */
     recommendedIds?: ReadonlyArray<string>;
     onSave: (ids: string[]) => boolean | Promise<boolean>;
@@ -58,6 +123,7 @@ function PhotoChooserBody({
     unsaved: { current: boolean };
 }) {
     const { t } = useTranslation();
+    const { challenge: resolvedChallenge, latestChallenge } = useResolvedChooserChallenge(challengeId, challenge);
     // The member the page has already seen, so the saved picks show their thumbnails before any Auto run.
     const currentMember = useCurrentMember();
     const [selected, setSelected] = useState<string[]>(value);
@@ -106,18 +172,10 @@ function PhotoChooserBody({
     let commit: (() => Promise<boolean>) | undefined;
     if (challengeId !== null) {
         const challengeKey = challengeId;
-        commit = async () => {
-            const failures: Array<{ kind: EntryPinKind; code: string }> = [];
-            for (const { kind, imageId } of planPinCommits(pinDraft, storedPins)) {
-                const outcome = await runSetEntryPin(kind, challengeKey, imageId);
-                if (!outcome.success) failures.push({ kind, code: outcome.error });
-            }
-            if (failures.length > 0) {
-                setPinSaveError({ kinds: failures.map((failure) => failure.kind), code: failures[0].code });
-                return false;
-            }
-            return true;
-        };
+        commit = () =>
+            writeEligiblePinCommits(pinDraft, storedPins, latestChallenge, runSetEntryPin, challengeKey, (failures) =>
+                setPinSaveError({ kinds: failures.map((failure) => failure.kind), code: failures[0].code }),
+            );
     }
 
     const { save: hostSave, saving, saveFailed } = useChooserSave(selected, onSave, onClose, commit);
@@ -144,7 +202,7 @@ function PhotoChooserBody({
     // — until a chosen photo is pinned for that kind, which is what saving writes instead.
     const elsewhereKinds = PIN_KINDS.filter((kind) => {
         const pinned = pinOf(pinDraft, storedPins, kind);
-        return pinned !== null && !selected.includes(pinned);
+        return pinned !== null && (!selected.includes(pinned) || !canAssignPin(resolvedChallenge, kind));
     });
 
     // Adds the best suggestions not picked yet, in rank order, up to the cap; a hand pick is never taken out.
@@ -231,7 +289,7 @@ function PhotoChooserBody({
                                       })}
                                       className="flex flex-wrap gap-1"
                                   >
-                                      {PIN_KINDS.map((kind) => (
+                                      {PIN_KINDS.filter((kind) => canAssignPin(resolvedChallenge, kind)).map((kind) => (
                                           <PinToggle
                                               key={kind}
                                               kind={kind}
@@ -285,6 +343,7 @@ export function PhotoChooserModal({
     value,
     challengeId = null,
     clearMeansInherit = false,
+    challenge,
     recommendedIds,
     onSave,
 }: {
@@ -293,6 +352,7 @@ export function PhotoChooserModal({
     value: string[];
     challengeId?: string | number | null;
     clearMeansInherit?: boolean;
+    challenge?: Challenge | null;
     /** The photo ids GuruShots suggests for the challenge; their tiles carry the recommended mark. */
     recommendedIds?: ReadonlyArray<string>;
     onSave: (ids: string[]) => boolean | Promise<boolean>;
@@ -320,6 +380,7 @@ export function PhotoChooserModal({
                     value={value}
                     challengeId={challengeId}
                     clearMeansInherit={clearMeansInherit}
+                    challenge={challenge}
                     recommendedIds={recommendedIds}
                     onSave={onSave}
                     onClose={onClose}

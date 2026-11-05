@@ -7,13 +7,16 @@
 
 import { act, render, screen, fireEvent, waitFor, within } from './helpers/test-utils';
 import { DiscoverSection } from '@/components/app/DiscoverSection';
+import { useChallenges } from '@/contexts/ChallengesContext';
 import { fillTemplate, fireSettingsChanged, mockApi, mockTranslator } from './helpers/setup';
+import { buildChallenge } from '../helpers/challengeFixtures';
 import { invalid } from '../helpers/invalid';
 import { resetPlatformKind } from '../helpers/platformKind';
 import { markPlatformKind } from '../../src/ts/core/platform/kind';
 import { app, errors } from '../../src/ts/core/translations/english';
 import { createTranslator } from '../../src/ts/core/translations/translator';
 import type { OpenChallenge } from '../../src/ts/core/types/gurushots';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 import type { WindowApi } from '../../src/ts/core/types/ipc';
 import type { JoinOutcome } from '@/components/app/DiscoverSection';
 import type { Translate } from '../../src/ts/core/translations/translator';
@@ -23,6 +26,8 @@ type ListApi = WindowApi['getMemberChallenges'];
 // Typed mocks of the two calls this file drives; what they answer is a partial fixture, so it goes through invalid().
 const joinMock = () => jest.fn<ReturnType<JoinApi>, Parameters<JoinApi>>();
 const listMock = () => jest.fn<ReturnType<ListApi>, Parameters<ListApi>>();
+
+jest.mock('@/contexts/ChallengesContext', () => ({ __esModule: true, useChallenges: jest.fn() }));
 
 // The components hand the placeholder values to t as a second argument now; fill
 // them like the real t does, so an assertion on composed text keeps reading.
@@ -52,7 +57,16 @@ const items = invalid<OpenChallenge[]>([
     },
 ]);
 
+let activeChallenges: Challenge[] = [];
+
 beforeEach(() => {
+    activeChallenges = [];
+    jest.mocked(useChallenges).mockImplementation(() => ({
+        challenges: activeChallenges,
+        loading: false,
+        error: null,
+        refetch: async () => undefined,
+    }));
     window.api = invalid({
         onSettingsChanged: undefined,
         getMemberChallenges: listMock().mockResolvedValue(invalid({ success: true, items })),
@@ -1368,6 +1382,68 @@ describe('chosen photos', () => {
         expect(screen.getAllByText('app.discoverChosenChip')).toHaveLength(1);
         expect(window.api.getMemberChallenges).toHaveBeenCalledTimes(1);
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    });
+
+    test('a refreshed selected row updates the chooser fallback challenge', async () => {
+        own['900001'] = [PHOTO];
+        const available = invalid<OpenChallenge>({
+            ...items[0],
+            member: { boost: { state: 'NONE', timeout: 0 }, turbo: { state: 'NONE' }, ranking: { entries: [] } },
+        });
+        const spent = invalid<OpenChallenge>({
+            ...items[0],
+            member: {
+                boost: { state: 'NONE', timeout: 0 },
+                turbo: { state: 'NONE' },
+                ranking: { entries: [{ boosted: true }] },
+            },
+        });
+        window.api.getMemberChallenges = listMock().mockResolvedValue(invalid({ success: true, items: [available] }));
+        renderSection();
+        await screen.findByText('Free One');
+        await screen.findByText('app.discoverChosenChip');
+        fireEvent.click(screen.getByText('app.choosePhotos'));
+        expect(await screen.findByRole('button', { name: 'app.pinForBoost' })).toBeTruthy();
+        window.api.getMemberChallenges = listMock().mockResolvedValue(invalid({ success: true, items: [spent] }));
+        fireEvent.click(screen.getByText('app.discoverRefresh'));
+        await waitFor(() => expect(screen.queryByRole('button', { name: 'app.pinForBoost' })).toBeNull());
+    });
+
+    test('a selected row that leaves the refreshed list keeps its chooser fallback challenge', async () => {
+        own['900001'] = [PHOTO];
+        const available = invalid<OpenChallenge>({
+            ...items[0],
+            member: { boost: { state: 'NONE', timeout: 0 }, turbo: { state: 'NONE' }, ranking: { entries: [] } },
+        });
+        window.api.getMemberChallenges = listMock().mockResolvedValue(invalid({ success: true, items: [available] }));
+        renderSection();
+        await screen.findByText('Free One');
+        await screen.findByText('app.discoverChosenChip');
+        fireEvent.click(screen.getByText('app.choosePhotos'));
+        expect(await screen.findByRole('button', { name: 'app.pinForBoost' })).toBeTruthy();
+        window.api.getMemberChallenges = listMock().mockResolvedValue(invalid({ success: true, items: [] }));
+        fireEvent.click(screen.getByText('app.discoverRefresh'));
+        await waitFor(() => expect(screen.queryByText('Free One')).toBeNull());
+        expect(screen.getByRole('button', { name: 'app.pinForBoost' })).toBeTruthy();
+    });
+
+    test('the active challenge context takes precedence over a spent Discover fallback', async () => {
+        own['900001'] = [PHOTO];
+        activeChallenges = [buildChallenge({ id: 900001 })];
+        const spent = invalid<OpenChallenge>({
+            ...items[0],
+            member: {
+                boost: { state: 'NONE', timeout: 0 },
+                turbo: { state: 'NONE' },
+                ranking: { entries: [{ boosted: true }] },
+            },
+        });
+        window.api.getMemberChallenges = listMock().mockResolvedValue(invalid({ success: true, items: [spent] }));
+        renderSection();
+        await screen.findByText('Free One');
+        await screen.findByText('app.discoverChosenChip');
+        fireEvent.click(screen.getByText('app.choosePhotos'));
+        expect(await screen.findByRole('button', { name: 'app.pinForBoost' })).toBeTruthy();
     });
 
     test('the Chosen chip reopens the chooser on the saved list; saving none removes the list', async () => {

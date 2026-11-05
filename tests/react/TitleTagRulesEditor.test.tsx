@@ -9,11 +9,21 @@
 import { useState } from 'react';
 import { fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { TitleTagRulesEditor } from '@/components/app/TitleTagRulesEditor';
+import { useChallenges } from '@/contexts/ChallengesContext';
 import type { TitleRule } from '../../src/ts/core/types/settings';
 import { invalid } from '../helpers/invalid';
 import { fillTemplate, mockTranslator } from './helpers/setup';
 import { app as englishApp } from '../../src/ts/core/translations/english';
 import { app as latvianApp } from '../../src/ts/core/translations/latvian';
+
+jest.mock('@/contexts/ChallengesContext', () => ({ __esModule: true, useChallenges: jest.fn() }));
+
+jest.mocked(useChallenges).mockReturnValue({
+    challenges: [],
+    loading: false,
+    error: null,
+    refetch: async () => undefined,
+});
 
 /** The dropdown the rule is picked in. */
 const dropdown = () => screen.getByLabelText<HTMLSelectElement>('app.titleRuleSelectRule');

@@ -188,6 +188,7 @@ function RowPhotoChooser({
             onClose={onClose}
             value={challenge?.chosenOwn ?? []}
             challengeId={challenge?.id ?? null}
+            challenge={challenge as Challenge | null}
             // GuruShots' suggested photos for this challenge, from the listing: their tiles say so.
             recommendedIds={challenge?.suggestedPhotoIds}
             clearMeansInherit
@@ -539,7 +540,11 @@ export function DiscoverSection({
                 }}
             />
 
-            <RowPhotoChooser challenge={choosing} onClose={() => setChoosing(null)} onSaved={chosen.refetch} />
+            <RowPhotoChooser
+                challenge={choosing === null ? null : (list.find((row) => row.id === choosing.id) ?? choosing)}
+                onClose={() => setChoosing(null)}
+                onSaved={chosen.refetch}
+            />
         </>
     );
 }

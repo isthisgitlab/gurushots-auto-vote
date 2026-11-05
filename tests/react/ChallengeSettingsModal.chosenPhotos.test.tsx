@@ -5,6 +5,7 @@
  */
 import { fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal';
+import { useChallenges } from '@/contexts/ChallengesContext';
 import { mockApi } from './helpers/setup';
 import type { useSettingsSchema } from '@/api/useSettingsSchema';
 import { invalid } from '../helpers/invalid';
@@ -33,7 +34,15 @@ jest.mock('@/api/useSettingsSchema', () => ({
     useSettingsSchema: () => mockSchemaState,
 }));
 
+jest.mock('@/contexts/ChallengesContext', () => ({ __esModule: true, useChallenges: jest.fn() }));
+
 beforeEach(() => {
+    jest.mocked(useChallenges).mockReturnValue({
+        challenges: [],
+        loading: false,
+        error: null,
+        refetch: async () => undefined,
+    });
     window.api = invalid(mockApi);
     mockApi.getTitleProfile.mockReset().mockResolvedValue(null);
     mockApi.getChallengeOverrides.mockResolvedValue({});

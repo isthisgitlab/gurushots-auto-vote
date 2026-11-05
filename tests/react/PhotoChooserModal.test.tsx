@@ -12,15 +12,18 @@
 import { act, fireEvent, pickOption, render, screen, waitFor, within } from './helpers/test-utils';
 import { PhotoChooserModal } from '@/components/app/PhotoChooserModal';
 import { PhotoGrid } from '@/components/app/PhotoGrid';
+import { useChallenges } from '@/contexts/ChallengesContext';
 import { useImageLoads } from '@/hooks/useImageLoads';
 import { Modal } from '@/components/ui/Modal';
 import { mockTranslator } from './helpers/setup';
+import { buildChallenge } from '../helpers/challengeFixtures';
 import { rememberCurrentMember } from '../../src/ts/react/hooks/currentMember';
 import { createTranslator } from '../../src/ts/core/translations/translator';
 import { MAX_CHOSEN_PHOTOS } from '../../src/ts/core/settings/limits';
 import { invalid } from '../helpers/invalid';
 import type { usePhotoPicker } from '@/hooks/usePhotoPicker';
 import type { TileStats } from '@/hooks/usePhotoStatsLoader';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 import type { EntryPinKind } from '../../src/ts/core/types/settings';
 import type { WindowApi } from '../../src/ts/core/types/ipc';
 import type { Translate } from '../../src/ts/core/translations/translator';
@@ -39,6 +42,8 @@ jest.mock('@/hooks/usePhotoPicker', () => ({
     },
 }));
 
+jest.mock('@/contexts/ChallengesContext', () => ({ __esModule: true, useChallenges: jest.fn() }));
+
 // Counts renders of the tiles: each PhotoTile render calls the hook once.
 jest.mock('@/hooks/useImageLoads', () => {
     const actual = jest.requireActual<typeof import('@/hooks/useImageLoads')>('@/hooks/useImageLoads');
@@ -49,6 +54,7 @@ type Listing = Extract<Awaited<ReturnType<WindowApi['getLibraryPhotos']>>, { suc
 type LibraryPhoto = Listing['photos'][number];
 
 const MEMBER = 'c'.repeat(32);
+let activeChallenges: Challenge[] = [];
 // 32-hex ids, so buildPhotoUrl accepts them; the first 8 characters tell tiles apart.
 const idOf = (n: number) => `${String(n).padStart(8, '0')}${'a'.repeat(24)}`;
 const shortOf = (n: number) => String(n).padStart(8, '0');
@@ -134,6 +140,13 @@ const setup = (
 };
 
 beforeEach(() => {
+    activeChallenges = [buildChallenge({ id: 7 })];
+    jest.mocked(useChallenges).mockImplementation(() => ({
+        challenges: activeChallenges,
+        loading: false,
+        error: null,
+        refetch: async () => undefined,
+    }));
     mockTranslator.t.mockImplementation(english);
     // The remembered member outlives a test (a module-level store): each starts before any listing named one.
     rememberCurrentMember(null);
@@ -1967,6 +1980,141 @@ describe('pins', () => {
         fireEvent.click(save());
         await waitFor(() => expect(onSave).toHaveBeenCalled());
         expect(setPins()).not.toHaveBeenCalled();
+    });
+
+    test('a boosted entry in the active challenge makes Boost unavailable', async () => {
+        activeChallenges = [buildChallenge({ id: 7, member: { ranking: { entries: [{ boosted: true }] } } })];
+        setup({ value: [idOf(1)] });
+        await screen.findByRole('button', { name: /^Chosen photo 00000001:/ });
+        expect(screen.queryByRole('button', { name: 'Pin for Boost' })).toBeNull();
+        expect(turboToggle()).toBeTruthy();
+    });
+
+    test('a Turbo entry in the active challenge makes Turbo unavailable', async () => {
+        activeChallenges = [buildChallenge({ id: 7, member: { ranking: { entries: [{ turbo: true }] } } })];
+        setup({ value: [idOf(1)] });
+        await screen.findByRole('button', { name: /^Chosen photo 00000001:/ });
+        expect(boostToggle()).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Pin for Turbo' })).toBeNull();
+    });
+
+    test.each([
+        ['Boost', 'boost', 'USED'],
+        ['Boost', 'boost', 'UNAVAILABLE'],
+        ['Turbo', 'turbo', 'USED'],
+        ['Turbo', 'turbo', 'UNAVAILABLE'],
+    ] as const)('%s state %s makes that pin unavailable', async (_label, kind, state) => {
+        activeChallenges = [buildChallenge({ id: 7, member: { [kind]: { state } } })];
+        setup({ value: [idOf(1)] });
+        await screen.findByRole('button', { name: /^Chosen photo 00000001:/ });
+        expect(screen.queryByRole('button', { name: `Pin for ${_label}` })).toBeNull();
+    });
+
+    test('both pins stay available when both active features can still fire', async () => {
+        activeChallenges = [buildChallenge({ id: 7 })];
+        setup({ value: [idOf(1)] });
+        await screen.findByRole('button', { name: /^Chosen photo 00000001:/ });
+        expect(boostToggle()).toBeTruthy();
+        expect(turboToggle()).toBeTruthy();
+    });
+
+    test('missing active and Discover challenge data permits no new pins', async () => {
+        activeChallenges = [];
+        setup({ value: [idOf(1)] });
+        await screen.findByRole('button', { name: /^Chosen photo 00000001:/ });
+        expect(screen.queryByRole('button', { name: 'Pin for Boost' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Pin for Turbo' })).toBeNull();
+    });
+
+    test('a spent selected pin remains clearable', async () => {
+        activeChallenges = [buildChallenge({ id: 7, member: { ranking: { entries: [{ boosted: true }] } } })];
+        getPins().mockResolvedValue({ boost: idOf(1), turbo: null });
+        const { onSave } = setup({ value: [idOf(1)] });
+        const line = await screen.findByText("Boost is pinned to a photo that isn't in this list.");
+        expect(screen.queryByRole('button', { name: 'Pin for Boost' })).toBeNull();
+        fireEvent.click(within(line.closest('p') as HTMLElement).getByRole('button', { name: 'Clear pin' }));
+        fireEvent.click(save());
+        await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(setPins()).toHaveBeenCalledWith('boost', 7, null));
+    });
+
+    test('an active challenge update while open removes a pin that became spent', async () => {
+        activeChallenges = [buildChallenge({ id: 7 })];
+        const { onClose, onSave, rerender } = setup({ value: [idOf(1)] });
+        expect(groupOf(1)).toBeTruthy();
+        activeChallenges = [buildChallenge({ id: 7, member: { ranking: { entries: [{ boosted: true }] } } })];
+        rerender(<PhotoChooserModal isOpen onClose={onClose} value={[idOf(1)]} challengeId={7} onSave={onSave} />);
+        expect(screen.queryByRole('button', { name: 'Pin for Boost' })).toBeNull();
+    });
+
+    test('a feature spent while the host save waits receives no new pin', async () => {
+        const hostSave = deferred<boolean>();
+        activeChallenges = [buildChallenge({ id: 7 })];
+        const onSave = jest.fn<Promise<boolean>, [string[]]>(() => hostSave.promise);
+        const { onClose, rerender } = setup({ value: [idOf(1)], onSave });
+        await screen.findByRole('button', { name: 'Pin for Boost' });
+        fireEvent.click(boostToggle());
+        fireEvent.click(save());
+        await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+        activeChallenges = [buildChallenge({ id: 7, member: { ranking: { entries: [{ boosted: true }] } } })];
+        rerender(<PhotoChooserModal isOpen onClose={onClose} value={[idOf(1)]} challengeId={7} onSave={onSave} />);
+        await act(async () => hostSave.resolve(true));
+        await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+        expect(setPins()).not.toHaveBeenCalled();
+    });
+
+    test('a Turbo spent while the host save waits receives no new pin', async () => {
+        const hostSave = deferred<boolean>();
+        activeChallenges = [buildChallenge({ id: 7 })];
+        const onSave = jest.fn<Promise<boolean>, [string[]]>(() => hostSave.promise);
+        const { onClose, rerender } = setup({ value: [idOf(1)], onSave });
+        await screen.findByRole('button', { name: 'Pin for Turbo' });
+        fireEvent.click(turboToggle());
+        fireEvent.click(save());
+        await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+        activeChallenges = [buildChallenge({ id: 7, member: { ranking: { entries: [{ turbo: true }] } } })];
+        rerender(<PhotoChooserModal isOpen onClose={onClose} value={[idOf(1)]} challengeId={7} onSave={onSave} />);
+        await act(async () => hostSave.resolve(true));
+        await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+        expect(setPins()).not.toHaveBeenCalled();
+    });
+
+    test('rechecks each feature between pin writes', async () => {
+        const boostWrite = deferred<Awaited<ReturnType<WindowApi['setEntryPin']>>>();
+        activeChallenges = [buildChallenge({ id: 7 })];
+        const { onClose, onSave, rerender } = setup({ value: [idOf(1), idOf(2)] });
+        expect(groupOf(1)).toBeTruthy();
+        await waitFor(() =>
+            expect(
+                within(groupOf(1)).getByRole('button', { name: 'Pin for Boost' }).getAttribute('aria-disabled'),
+            ).toBe('false'),
+        );
+        fireEvent.click(within(groupOf(1)).getByRole('button', { name: 'Pin for Boost' }));
+        fireEvent.click(within(groupOf(2)).getByRole('button', { name: 'Pin for Turbo' }));
+        setPins().mockReturnValueOnce(invalid(boostWrite.promise));
+        fireEvent.click(save());
+        await waitFor(() => expect(setPins()).toHaveBeenCalledWith('boost', 7, idOf(1)));
+        activeChallenges = [buildChallenge({ id: 7, member: { ranking: { entries: [{ turbo: true }] } } })];
+        rerender(
+            <PhotoChooserModal isOpen onClose={onClose} value={[idOf(1), idOf(2)]} challengeId={7} onSave={onSave} />,
+        );
+        await act(async () => boostWrite.resolve({ success: true }));
+        await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+        expect(setPins()).toHaveBeenCalledTimes(1);
+    });
+
+    test('a blocked Boost assignment does not suppress an explicit Turbo clear', async () => {
+        activeChallenges = [buildChallenge({ id: 7 })];
+        getPins().mockResolvedValue({ boost: null, turbo: idOf(1) });
+        const { onClose, onSave, rerender } = setup({ value: [idOf(1)] });
+        await screen.findByRole('button', { name: 'Pin for Boost' });
+        fireEvent.click(boostToggle());
+        activeChallenges = [buildChallenge({ id: 7, member: { ranking: { entries: [{ boosted: true }] } } })];
+        rerender(<PhotoChooserModal isOpen onClose={onClose} value={[idOf(1)]} challengeId={7} onSave={onSave} />);
+        fireEvent.click(save());
+        await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(setPins()).toHaveBeenCalledWith('turbo', 7, null));
+        expect(setPins()).toHaveBeenCalledTimes(1);
     });
 
     test('selected tiles carry the pair, disabled until the read settles, which names the stored pin', async () => {

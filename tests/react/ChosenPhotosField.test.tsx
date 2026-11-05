@@ -9,11 +9,14 @@
 import { act, fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { SettingInput } from '@/components/app/SettingInput';
 import { ChosenPhotosControl } from '@/components/app/ChosenPhotosField';
+import { useChallenges } from '@/contexts/ChallengesContext';
 import { rememberCurrentMember } from '@/hooks/currentMember';
 import { buildPhotoUrl } from '@/utils/formatters';
 import { SettingsChallengeProvider } from '@/contexts/SettingsChallengeContext';
 import type { SerializableSchemaEntry } from '../../src/ts/core/ipc/settings.handlers';
 import { invalid } from '../helpers/invalid';
+
+jest.mock('@/contexts/ChallengesContext', () => ({ __esModule: true, useChallenges: jest.fn() }));
 
 const MEMBER = 'c'.repeat(32);
 const idOf = (n: number) => `${String(n).padStart(8, '0')}${'a'.repeat(24)}`;
@@ -38,6 +41,12 @@ const renderInput = (value: unknown, over: Record<string, unknown> = {}) => {
 };
 
 beforeEach(() => {
+    jest.mocked(useChallenges).mockReturnValue({
+        challenges: [],
+        loading: false,
+        error: null,
+        refetch: async () => undefined,
+    });
     window.api.getLibraryPhotos = jest.fn().mockResolvedValue(libraryOf(1, 2));
 });
 
