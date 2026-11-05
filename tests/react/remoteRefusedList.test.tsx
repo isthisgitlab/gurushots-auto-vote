@@ -44,7 +44,7 @@ describe('a list channel the desktop refuses', () => {
         setRemoteConnectionState('connecting');
     });
 
-    test('shows the update text from the bridge and leaves the hook settled with an empty list', async () => {
+    test('a refused list channel settles as an empty list without a crash or a hang', async () => {
         const { result } = renderHook(() => useActiveChallenges());
         // The hook reads the settings, then the challenges: answer the first, refuse the second.
         await waitFor(() => expect(invokesOf(phone).map((invoke) => invoke.channel)).toContain('get-settings'));

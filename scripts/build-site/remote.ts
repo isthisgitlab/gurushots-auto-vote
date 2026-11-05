@@ -9,13 +9,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { errorMessage } from '../../src/ts/core/errorMessage';
-import { LINK_VERSION } from '../../src/ts/core/remote/protocol';
+import { LINK_VERSION, compareReleaseVersions } from '../../src/ts/core/remote/protocol';
 import { NOTICES_ASSET_NAME } from '../../src/ts/core/thirdPartyNotices';
 import {
     downloadFromGitHub,
     getReleaseByTagFromGitHub,
     listReleasesFromGitHub,
     selectLinkVersionPages,
+    versionOfTag,
 } from './remoteReleases';
 import type { LinkVersionPage, RemoteRelease, RemoteSiteDeps } from './remoteReleases';
 import { LEGACY_PAGE_VERSION, unpackLegacyPage, unpackLinkVersionPage } from './remoteUnpack';
@@ -88,11 +89,17 @@ const listReleasesOrThrow = async (listReleases: () => Promise<RemoteRelease[]>)
 };
 
 /**
- * Whether the local build stands in for its own link version: a stable build always does; a pre-release build only
- * when no stable release carries that version's page, so a beta never replaces the page stable users get.
+ * Whether the local build stands in for its own link version: when no release carries that version's page; when the
+ * local build is stable and the pick is a pre-release or not newer; or when both are pre-releases and the local one is not older. A
+ * beta never replaces the page stable users get, and an older build never replaces a newer release's page.
  */
-const localStandsIn = (appVersion: string, pick: LinkVersionPage | undefined): boolean =>
-    !appVersion.includes('-') || pick === undefined || pick.prerelease;
+const localStandsIn = (appVersion: string, pick: LinkVersionPage | undefined): boolean => {
+    if (pick === undefined) return true;
+    const notOlder = compareReleaseVersions(appVersion, versionOfTag(pick.tag)) >= 0;
+    const stable = !appVersion.includes('-');
+    // A stable build always wins over a pre-release pick, whatever its version: stable users never get a beta's page.
+    return stable ? pick.prerelease || notOlder : pick.prerelease && notOlder;
+};
 
 /** The link versions below the local one must all be published: a desktop on one of them depends on its page. */
 const requireOlderPages = (localLinkVersion: number, picks: Map<number, LinkVersionPage>): void => {

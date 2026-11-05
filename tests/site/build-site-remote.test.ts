@@ -214,6 +214,42 @@ describe('the remote page tree', () => {
             expect(read('v1', 'index.html')).toBe('<html>local</html>');
         });
 
+        test('an older stable local build does not replace a newer stable v1', async () => {
+            seedDist(1);
+            await buildRemoteSite(out, '9.9.8', remoteSiteDeps(dist, [pageRelease('9.9.9', [1])]));
+            expect(read('v1', 'index.html')).toContain('9.9.9/remote-page-v1.zip');
+        });
+
+        test('a stable local build replaces a newer pre-release v1 (no stable release carries it yet)', async () => {
+            seedDist(1);
+            await buildRemoteSite(
+                out,
+                '9.9.9',
+                remoteSiteDeps(dist, [pageRelease('9.9.10-beta.1', [1], { prerelease: true })]),
+            );
+            expect(read('v1', 'index.html')).toBe('<html>local</html>');
+        });
+
+        test('an older pre-release local build does not replace a newer pre-release v1', async () => {
+            seedDist(1);
+            await buildRemoteSite(
+                out,
+                '9.9.10-beta.1',
+                remoteSiteDeps(dist, [pageRelease('9.9.10-beta.2', [1], { prerelease: true })]),
+            );
+            expect(read('v1', 'index.html')).toContain('9.9.10-beta.2/remote-page-v1.zip');
+        });
+
+        test('a newer pre-release local build replaces an older pre-release v1', async () => {
+            seedDist(1);
+            await buildRemoteSite(
+                out,
+                '9.9.10-beta.3',
+                remoteSiteDeps(dist, [pageRelease('9.9.10-beta.2', [1], { prerelease: true })]),
+            );
+            expect(read('v1', 'index.html')).toBe('<html>local</html>');
+        });
+
         test('drafts and tags that are not release versions are skipped', async () => {
             seedDist(2);
             await buildRemoteSite(
@@ -425,13 +461,38 @@ describe('the remote page tree', () => {
                         downloadFile: async (url) =>
                             url === LEGACY_ZIP_URL
                                 ? LEGACY_BYTES
-                                : Buffer.from(url.endsWith('.sha256') ? 'deadbeef  x.zip\n' : 'tampered'),
+                                : Buffer.from(url.endsWith('.sha256') ? `${'0'.repeat(64)}  x.zip\n` : 'tampered'),
                     }),
                 ),
             ).rejects.toThrow('v9.9.8: remote-page-v1.zip does not match its checksum');
             expect(unzip).not.toHaveBeenCalled();
             expect(fs.existsSync(nodePath.join(out, 'remote', 'v1'))).toBe(false);
         });
+
+        test.each([
+            ['an empty file', ''],
+            ['a short hash', 'deadbeef  x.zip\n'],
+            ['text that is not a hash', 'not a checksum file\n'],
+            ['a hash with a non-hex digit', `${'g'.repeat(64)}  x.zip\n`],
+        ])(
+            'a checksum file that is %s fails the build as not a SHA-256 file, and nothing is unpacked',
+            async (_name, body) => {
+                seedDist();
+                const unzip = jest.fn(fakeUnzip);
+                await expect(
+                    buildRemoteSite(
+                        out,
+                        '9.9.9',
+                        remoteSiteDeps(dist, [pageRelease('9.9.8', [2])], {
+                            unzip,
+                            downloadFile: async (url) =>
+                                url.endsWith('.sha256') ? Buffer.from(body) : fakeDownload(url),
+                        }),
+                    ),
+                ).rejects.toThrow('v9.9.8: remote-page-v2.zip.sha256 is not a SHA-256 checksum file');
+                expect(unzip).not.toHaveBeenCalled();
+            },
+        );
 
         test('a failed download of a newer link version fails the build', async () => {
             seedDist();
@@ -568,6 +629,36 @@ describe('the GitHub fetchers (the real remote-site deps)', () => {
         await expect(getReleaseByTagFromGitHub('v9.9.9', asFetch(fetchMock))).rejects.toThrow(
             'release v9.9.9 lookup failed (404)',
         );
+    });
+
+    test.each([
+        ['a release without a tag', { assets: [] }],
+        ['a tag that is not a string', { tag_name: 1, assets: [] }],
+        ['assets that are not a list', { tag_name: 'v1.0.0', assets: {} }],
+        ['an asset without a name', { tag_name: 'v1.0.0', assets: [{ browser_download_url: 'https://x/y' }] }],
+        ['an asset without a url', { tag_name: 'v1.0.0', assets: [{ name: 'a.zip' }] }],
+        ['an asset that is not an object', { tag_name: 'v1.0.0', assets: ['a.zip'] }],
+        ['a prerelease flag that is not a boolean', { tag_name: 'v1.0.0', assets: [], prerelease: 'yes' }],
+        ['a draft flag that is not a boolean', { tag_name: 'v1.0.0', assets: [], draft: 1 }],
+        ['a release that is not an object', 'v1.0.0'],
+    ])('a release with %s fails the listing and the lookup by tag', async (_name, release) => {
+        await expect(listReleasesFromGitHub(async () => jsonResponse([release]))).rejects.toThrow(
+            'releases listing failed (a release is not the expected shape)',
+        );
+        await expect(getReleaseByTagFromGitHub('v1.0.0', async () => jsonResponse(release))).rejects.toThrow(
+            'release v1.0.0 lookup failed (not the expected shape)',
+        );
+    });
+
+    test('a well-formed release passes both checks, with its flags and assets', async () => {
+        const release = {
+            tag_name: 'v1.0.0',
+            prerelease: true,
+            draft: false,
+            assets: [{ name: 'a.zip', browser_download_url: 'https://x/a.zip' }],
+        };
+        await expect(listReleasesFromGitHub(async () => jsonResponse([release]))).resolves.toEqual([release]);
+        await expect(getReleaseByTagFromGitHub('v1.0.0', async () => jsonResponse(release))).resolves.toEqual(release);
     });
 
     test('the real fetch is the default of both API reads', async () => {

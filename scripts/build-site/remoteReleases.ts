@@ -2,6 +2,7 @@
 // page, against one fixed address), the downloads, and the choice of which release supplies each
 // link version's phone page.
 
+import { isPlainObject } from '../../src/ts/core/plainObject';
 import { compareReleaseVersions, isReleaseVersion } from '../../src/ts/core/remote/protocol';
 import { REPO } from './pages';
 
@@ -41,6 +42,20 @@ export type RemoteSiteDeps = {
     unzip?: (zipPath: string, dir: string) => Promise<void>;
 };
 
+const isReleaseAsset = (value: unknown): value is RemoteRelease['assets'][number] =>
+    isPlainObject(value) && typeof value.name === 'string' && typeof value.browser_download_url === 'string';
+
+const isBooleanOrAbsent = (value: unknown): boolean => value === undefined || typeof value === 'boolean';
+
+/** Whether a parsed JSON value is a release as the build reads it; the API's answer is checked, never cast. */
+const isRemoteRelease = (value: unknown): value is RemoteRelease =>
+    isPlainObject(value) &&
+    typeof value.tag_name === 'string' &&
+    Array.isArray(value.assets) &&
+    value.assets.every(isReleaseAsset) &&
+    isBooleanOrAbsent(value.prerelease) &&
+    isBooleanOrAbsent(value.draft);
+
 /**
  * The API request headers. A `GITHUB_TOKEN` in the environment (the CI script's, not app configuration) lifts the
  * API's anonymous rate limit.
@@ -64,7 +79,10 @@ export const listReleasesFromGitHub = async (fetchImpl: typeof fetch = fetch): P
         if (!response.ok) throw new Error(`releases listing failed (${response.status})`);
         const batch: unknown = await response.json();
         if (!Array.isArray(batch)) throw new Error('releases listing failed (not a list)');
-        releases.push(...(batch as RemoteRelease[]));
+        if (!batch.every(isRemoteRelease)) {
+            throw new Error('releases listing failed (a release is not the expected shape)');
+        }
+        releases.push(...batch);
         if (batch.length < RELEASES_PER_PAGE) return releases;
     }
 };
@@ -76,7 +94,9 @@ export const getReleaseByTagFromGitHub = async (
 ): Promise<RemoteRelease> => {
     const response = await fetchImpl(`${RELEASES_API}/tags/${encodeURIComponent(tag)}`, { headers: apiHeaders() });
     if (!response.ok) throw new Error(`release ${tag} lookup failed (${response.status})`);
-    return (await response.json()) as RemoteRelease;
+    const release: unknown = await response.json();
+    if (!isRemoteRelease(release)) throw new Error(`release ${tag} lookup failed (not the expected shape)`);
+    return release;
 };
 
 export const downloadFromGitHub = async (url: string): Promise<Buffer> => {

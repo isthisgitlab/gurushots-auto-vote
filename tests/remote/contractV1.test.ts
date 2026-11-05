@@ -466,10 +466,7 @@ whileLinkVersion1('the link version 1 contract', () => {
         });
     });
 
-    test('the frozen spend channels are all in the current spend set, and every spend channel is a frozen channel', () => {
-        expect(
-            [...SPEND_REMOTE_CHANNELS].filter((channel) => !(FROZEN_CHANNELS as readonly string[]).includes(channel)),
-        ).toEqual([]);
+    test('each frozen spend channel is still a spend channel (a new spend channel is an addition)', () => {
         expect(FROZEN_SPEND_CHANNELS.filter((channel) => !SPEND_REMOTE_CHANNELS.has(channel))).toEqual([]);
     });
 });

@@ -26,6 +26,9 @@ export type UnpackDeps = {
     unzip: (zipPath: string, dir: string) => Promise<void>;
 };
 
+/** A SHA-256 as `sha256sum` writes it: 64 hex digits. */
+const SHA256_HEX = /^[0-9a-f]{64}$/;
+
 const sha256Of = (bytes: Buffer): string => crypto.createHash('sha256').update(bytes).digest('hex');
 
 /** Writes already verified bytes to a temp zip, unpacks them into `target` and always cleans the temp dir up. */
@@ -52,7 +55,10 @@ export const unpackLinkVersionPage = async (page: LinkVersionPage, target: strin
         deps.download(page.zip.browser_download_url),
         deps.download(page.checksum.browser_download_url),
     ]);
-    const expected = checksumBytes.toString('utf8').trim().split(/\s+/)[0];
+    const expected = checksumBytes.toString('utf8').trim().split(/\s+/)[0].toLowerCase();
+    if (!SHA256_HEX.test(expected)) {
+        throw new Error(`${page.tag}: ${page.checksum.name} is not a SHA-256 checksum file`);
+    }
     if (sha256Of(zipBytes) !== expected) {
         throw new Error(`${page.tag}: ${page.zip.name} does not match its checksum`);
     }
