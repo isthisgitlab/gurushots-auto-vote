@@ -97,6 +97,10 @@ describe('a list channel the desktop refuses', () => {
             'host',
         );
         // The happy-dom project's translator answers the key; tests/remote/peerBridge.test.ts pins the English text.
-        await expect(pending).resolves.toEqual({ success: false, error: 'errors.remoteUpdateComputer' });
+        await expect(pending).resolves.toEqual({
+            success: false,
+            error: 'errors.remoteUpdateComputer',
+            errorKey: 'errors.remoteUpdateComputer',
+        });
     });
 });

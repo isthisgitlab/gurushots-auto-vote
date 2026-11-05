@@ -901,7 +901,11 @@ describe('installPeerBridge: which peer counts', () => {
             },
             'host',
         );
-        await expect(pending).resolves.toEqual({ success: false, error: 'This is done on the computer.' });
+        await expect(pending).resolves.toEqual({
+            success: false,
+            error: 'This is done on the computer.',
+            errorKey: 'errors.remoteRefused',
+        });
     });
 
     test('a channel this page offers that the desktop refuses says to update the app on the computer', async () => {
@@ -921,6 +925,7 @@ describe('installPeerBridge: which peer counts', () => {
         await expect(pending).resolves.toEqual({
             success: false,
             error: 'Update the app on your computer to use this.',
+            errorKey: 'errors.remoteUpdateComputer',
         });
     });
 
@@ -940,6 +945,7 @@ describe('installPeerBridge: which peer counts', () => {
         await expect(pending).resolves.toEqual({
             success: false,
             error: 'Update the app on your computer to use this.',
+            errorKey: 'errors.remoteUpdateComputer',
         });
     });
 
@@ -956,7 +962,11 @@ describe('installPeerBridge: which peer counts', () => {
             },
             'host',
         );
-        await expect(pending).resolves.toEqual({ success: false, error: 'This is done on the computer.' });
+        await expect(pending).resolves.toEqual({
+            success: false,
+            error: 'This is done on the computer.',
+            errorKey: 'errors.remoteRefused',
+        });
     });
 
     test('a refused save-settings that carries the auto-vote key says it is done on the computer', async () => {
@@ -972,7 +982,11 @@ describe('installPeerBridge: which peer counts', () => {
             },
             'host',
         );
-        await expect(pending).resolves.toEqual({ success: false, error: 'This is done on the computer.' });
+        await expect(pending).resolves.toEqual({
+            success: false,
+            error: 'This is done on the computer.',
+            errorKey: 'errors.remoteRefused',
+        });
     });
 
     test('a result too large for the phone rejects with its own text', async () => {

@@ -59,7 +59,7 @@ export const createInvokePipeline = (ctx: PeerBridgeContext): InvokePipeline => 
                 ? { t: 'invoke', id, channel, args: payload, undefinedAt }
                 : { t: 'invoke', id, channel, args: payload };
         return new Promise((resolve, reject) => {
-            pending.set(id, { resolve, reject, spend, channel, args });
+            pending.set(id, { resolve, reject, spend, channel, sentArgs: payload });
             const { hostPeerId } = ctx;
             if (hostPeerId === null) {
                 if (spend || ctx.everConnected) {

@@ -56,24 +56,44 @@ describe('useActiveChallenges', () => {
         expect(result.current.data).toEqual([{ id: 1 }]); // last-known kept, not blanked
     });
 
-    test('a success:false answer with a text sets that text as the error, keeps prior data and prunes nothing', async () => {
-        mockApi.getActiveChallenges.mockResolvedValueOnce(invalid({ challenges: [{ id: 1 }] }));
+    test.each(['errors.remoteUpdateComputer', 'errors.remoteRefused'] as const)(
+        'a success:false answer with the errorKey %s sets a refusal carrying that key, keeps prior data and prunes nothing',
+        async (errorKey) => {
+            mockApi.getActiveChallenges.mockResolvedValueOnce(invalid({ challenges: [{ id: 1 }] }));
 
+            const { result } = renderHook(() => useActiveChallenges());
+            await waitFor(() => expect(result.current.loading).toBe(false));
+            mockApi.cleanupStaleMetadata.mockClear();
+
+            mockApi.getActiveChallenges.mockResolvedValueOnce(
+                invalid({ success: false, error: 'Update the app on your computer to use this.', errorKey }),
+            );
+            await act(async () => {
+                await result.current.refetch();
+            });
+
+            expect(result.current.error).toBeInstanceOf(ChallengesRefusedError);
+            expect((result.current.error as ChallengesRefusedError).key).toBe(errorKey);
+            expect(result.current.error?.message).toBe(errorKey);
+            expect(result.current.data).toEqual([{ id: 1 }]);
+            expect(mockApi.cleanupStaleMetadata).not.toHaveBeenCalled();
+        },
+    );
+
+    test('a success:false answer with only a raw text, or an unknown errorKey, is no refusal: no error, no text', async () => {
+        mockApi.getActiveChallenges.mockResolvedValueOnce(invalid({ success: false, error: 'raw English' }));
         const { result } = renderHook(() => useActiveChallenges());
         await waitFor(() => expect(result.current.loading).toBe(false));
-        mockApi.cleanupStaleMetadata.mockClear();
+        expect(result.current.error).toBeNull();
 
         mockApi.getActiveChallenges.mockResolvedValueOnce(
-            invalid({ success: false, error: 'Update the app on your computer to use this.' }),
+            invalid({ success: false, error: 'raw English', errorKey: 'errors.somethingElse' }),
         );
         await act(async () => {
             await result.current.refetch();
         });
-
-        expect(result.current.error).toBeInstanceOf(ChallengesRefusedError);
-        expect(result.current.error?.message).toBe('Update the app on your computer to use this.');
-        expect(result.current.data).toEqual([{ id: 1 }]);
-        expect(mockApi.cleanupStaleMetadata).not.toHaveBeenCalled();
+        expect(result.current.error).toBeNull();
+        expect(result.current.error).not.toBeInstanceOf(ChallengesRefusedError);
     });
 
     test('an answer that is not a refusal sets no error: success:true, or success:false without a text', async () => {

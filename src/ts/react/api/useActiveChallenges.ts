@@ -23,12 +23,26 @@ const payloadKey = (challenges: Challenge[]): string | null => {
     }
 };
 
-/** A handler-style refusal (`{ success: false, error }`): the remote bridge answers a channel the desktop refuses this way, with the text already translated. */
-const isRefusal = (value: unknown): value is { success: false; error: string } =>
-    isPlainObject(value) && value.success === false && typeof value.error === 'string';
+/** The translation keys of the two refusals the remote bridge answers a refused channel with (`errorKey`). */
+export const REMOTE_REFUSAL_KEYS = ['errors.remoteUpdateComputer', 'errors.remoteRefused'] as const;
 
-/** The error a refusal sets: its message is already translated, so the UI may show it as it is (no other error's is). */
-export class ChallengesRefusedError extends Error {}
+export type RemoteRefusalKey = (typeof REMOTE_REFUSAL_KEYS)[number];
+
+const isRefusalKey = (value: unknown): value is RemoteRefusalKey => REMOTE_REFUSAL_KEYS.some((key) => key === value);
+
+/** A bridge refusal (`{ success: false, errorKey }`): only a key the bridge sets counts, so a handler's raw `error` text never reaches the user. */
+const isRefusal = (value: unknown): value is { success: false; errorKey: RemoteRefusalKey } =>
+    isPlainObject(value) && value.success === false && isRefusalKey(value.errorKey);
+
+/** The error a refusal sets: it carries the translation key (also its message), so the UI shows the text in the current language. */
+export class ChallengesRefusedError extends Error {
+    readonly key: RemoteRefusalKey;
+
+    constructor(key: RemoteRefusalKey) {
+        super(key);
+        this.key = key;
+    }
+}
 
 /**
  * Prunes stale per-challenge data against the challenges now on screen:
@@ -67,8 +81,8 @@ const cleanupStale = async (challenges: Challenge[], autovoteRunning: boolean, p
  * (the UI's "retrying" banner) and keeps the last-known challenges on screen.
  * getActiveChallenges always resolves a list shape, so the `fetchFailed` marker
  * is what tells the two apart; the null check guards a genuinely absent response.
- * A handler-style refusal (`success: false` with a text, e.g. the remote bridge's "update the app on
- * your computer") sets that text as the error instead of reading as an empty list.
+ * A bridge refusal (`success: false` with an `errorKey`, e.g. the remote bridge's "update the app on
+ * your computer") sets an error carrying that key instead of reading as an empty list.
  *
  * @param autovoteRunning - whether the autovote loop is
  *   currently running; stale challenge settings are not pruned while it is
@@ -101,10 +115,10 @@ export function useActiveChallenges(autovoteRunning: boolean = false): {
             { setData, setError }: IpcQueryTools<Challenge[], Error>,
             skipCleanup: boolean = false,
         ) => {
-            // A refusal is no list: the user sees its text (the bridge's, already translated), and the last-known
+            // A refusal is no list: the user sees its text (translated from the bridge's key), and the last-known
             // challenges stay as they are.
             if (isRefusal(result)) {
-                setError(new ChallengesRefusedError(result.error));
+                setError(new ChallengesRefusedError(result.errorKey));
                 return;
             }
 

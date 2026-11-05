@@ -140,11 +140,11 @@ export function ChallengesSection({
 
     // Transient-failure banner: a failed fetch (retries exhausted) surfaces
     // here instead of being silently shown as "no challenges". Auto-clears on
-    // the next successful refresh. A refusal carries its own text, already
-    // translated by the bridge that refused the read; every other error reads as a failed fetch.
+    // the next successful refresh. A refusal carries the key of its text, translated here so it follows a
+    // language change; every other error reads as a failed fetch.
     const fetchErrorBanner = error ? (
         <div role="alert" className="alert alert-warning text-sm mb-4">
-            <span>{error instanceof ChallengesRefusedError ? error.message : t('errors.fetchFailed')}</span>
+            <span>{error instanceof ChallengesRefusedError ? t(error.key) : t('errors.fetchFailed')}</span>
         </div>
     ) : null;
 
@@ -160,9 +160,12 @@ export function ChallengesSection({
         return (
             <div>
                 {fetchErrorBanner}
-                <div className="text-center py-4 text-base-content/70">
-                    {isLoggedIn ? t('app.noActiveChallenges') : t('app.pleaseLogin')}
-                </div>
+                {/* A refused read leaves the list unavailable, not empty. */}
+                {!(error instanceof ChallengesRefusedError) && (
+                    <div className="text-center py-4 text-base-content/70">
+                        {isLoggedIn ? t('app.noActiveChallenges') : t('app.pleaseLogin')}
+                    </div>
+                )}
                 {error && isLoggedIn && (
                     <div className="text-center">
                         <button

@@ -14,6 +14,7 @@ import { clearSkipMark, storeLinkVersion } from '../../../core/remote/linkVersio
 
 import type { HelloRepeater } from '../../../core/remote/helloRepeat';
 import type { ByeMessage, EventMessage, HelloMessage, ResultMessage } from '../../../core/remote/protocol';
+import type { RemoteRefusalKey } from '../../../react/api/useActiveChallenges';
 import type { PeerBridgeContext } from './context';
 import type { InvokePipeline } from './invokes';
 import type { ViewPrefs } from './viewPrefs';
@@ -106,11 +107,10 @@ const handleResult = (message: ResultMessage, peerId: string, watch: MessageWatc
         // on every desktop, so an update would not help.
         const offered =
             classifyRemoteChannel(invoke.channel).kind === 'allowed' &&
-            isAllowedWrite(invoke.channel, invoke.args) === true;
-        invoke.resolve({
-            success: false,
-            error: rendererTranslator.t(offered ? 'errors.remoteUpdateComputer' : 'errors.remoteRefused'),
-        });
+            isAllowedWrite(invoke.channel, invoke.sentArgs) === true;
+        // The key travels with the text, so a reader that shows it (the challenge list) can translate it afresh.
+        const errorKey: RemoteRefusalKey = offered ? 'errors.remoteUpdateComputer' : 'errors.remoteRefused';
+        invoke.resolve({ success: false, error: rendererTranslator.t(errorKey), errorKey });
     } else if (message.reason === 'unsendable') {
         // The invoke ran; its answer just could not come back. A spend may have landed:
         // unclear, never a plain failure.

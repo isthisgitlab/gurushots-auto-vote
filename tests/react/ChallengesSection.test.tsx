@@ -206,11 +206,24 @@ describe('ChallengesProvider + ChallengesSection', () => {
             expect(screen.queryByText('common.refresh')).toBeNull();
         });
 
-        it('shows a refusal as its own text, already translated by the bridge that refused the read', () => {
-            setHook({ data: [], error: new ChallengesRefusedError('Update the app on your computer to use this.') });
+        it.each(['errors.remoteUpdateComputer', 'errors.remoteRefused'] as const)(
+            'shows the refusal %s as its translated key, with no empty-list text and a Refresh button',
+            (key) => {
+                setHook({ data: [], error: new ChallengesRefusedError(key) });
+                renderSection();
+                expect(screen.getByText(key)).toBeTruthy();
+                expect(screen.queryByText('errors.fetchFailed')).toBeNull();
+                expect(screen.queryByText('app.noActiveChallenges')).toBeNull();
+                fireEvent.click(screen.getByText('common.refresh'));
+                expect(refetch).toHaveBeenCalledWith();
+            },
+        );
+
+        it('keeps the empty-list text under a failed fetch with no data', () => {
+            setHook({ data: [], error: new Error('x') });
             renderSection();
-            expect(screen.getByText('Update the app on your computer to use this.')).toBeTruthy();
-            expect(screen.queryByText('errors.fetchFailed')).toBeNull();
+            expect(screen.getByText('errors.fetchFailed')).toBeTruthy();
+            expect(screen.getByText('app.noActiveChallenges')).toBeTruthy();
         });
 
         it('shows any other error as a failed fetch, never its raw message', () => {
