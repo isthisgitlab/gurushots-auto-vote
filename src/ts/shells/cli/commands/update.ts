@@ -11,6 +11,7 @@ import * as updateChecker from '../../../core/services/UpdateChecker';
 import { hasBundledModel } from '../../../core/services/visionVerifier';
 import * as pkg from '../../../../../package.json';
 import { errorMessage } from '../../../core/errorMessage';
+import { displayVersion } from '../../../core/appVersion';
 
 // The release asset this binary ships as (gurucli-v<version>-<target>[-lite],
 // see scripts/build-cli.ts), so the download link matches this build's own
@@ -36,7 +37,7 @@ const plain = (s: string | null | undefined) => String(s ?? '').replace(CONTROL_
 const checkUpdates = async () => {
     const ui = logger.withCategory('ui');
     ui.info('=== GuruShots Auto Voter - Update Check ===');
-    ui.info(`Current version: ${pkg.version}`);
+    ui.info(`Current version: ${displayVersion()}`);
 
     let result;
     try {
@@ -60,7 +61,7 @@ const checkUpdates = async () => {
     }
 
     if (!result.updateAvailable) {
-        ui.success(`You're up to date (${pkg.version}).`);
+        ui.success(`You're up to date (${displayVersion()}).`);
         return;
     }
 

@@ -8,6 +8,7 @@ import {
 } from '../../../platforms/node/cliSessionLock';
 import { initializeHeaders } from '../../../core/api/randomizer';
 import * as logger from '../../../core/logger';
+import { displayVersion } from '../../../core/appVersion';
 import { AutoUpdater } from '../AutoUpdater';
 import { ensureExit } from '../windows/lifecycle';
 import { bypassQuitGuard } from '../windows/quitGuard';
@@ -68,6 +69,7 @@ const holdAppMarker = () => {
 
 /** Setup that needs no window: permissions, headers, presets, the leftover login, the log cleanup and the menu. */
 const prepareApp = () => {
+    logger.withCategory('ui').infoT('m956d26ca4fee', [logger.getAppName(), displayVersion()]);
     logger.withCategory('ui').info(`[App] UserData path: ${settings.getUserDataPath()}`, null);
 
     // Before any window exists: a page must never see Electron's grant-by-default.

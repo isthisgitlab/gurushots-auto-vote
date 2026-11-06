@@ -110,6 +110,19 @@ describe('UpdateProvider + UpdateDialog', () => {
         expect(screen.getByText('Fixes')).toBeTruthy();
     });
 
+    it('shows the running version with -dirty on a dirty build, while the update info keeps the clean one', async () => {
+        Object.assign(globalThis, { __GS_DIRTY__: true });
+        try {
+            renderDialog();
+            await emit('onUpdateAvailable', INFO);
+            expect(screen.getByText('1.0.0-dirty')).toBeTruthy();
+            expect(screen.getByText('1.1.0')).toBeTruthy();
+            expect(ctx.updateInfo?.currentVersion).toBe('1.0.0');
+        } finally {
+            Reflect.deleteProperty(globalThis, '__GS_DIRTY__');
+        }
+    });
+
     it('omits the pre-release badge, and says so when there are no notes', async () => {
         renderDialog();
         await emit('onUpdateAvailable', { ...INFO, releaseNotes: '' });

@@ -11,7 +11,7 @@ import type * as runtimeModule from '../src/ts/core/runtime';
 
 const rt = require('../src/ts/core/runtime') as typeof runtimeModule;
 
-const envKeys = ['NODE_ENV', 'DEV', 'PROD'];
+const envKeys = ['NODE_ENV', 'DEV', 'PROD', 'GITHUB_ACTIONS'];
 let savedEnv: Record<string, string | undefined>;
 
 beforeEach(() => {
@@ -46,5 +46,14 @@ describe('env flags', () => {
         expect(rt.getEnvSnapshot()).toEqual({ nodeEnv: 'test', dev: '1', prod: '0' });
         process.env.NODE_ENV = 'production';
         expect(rt.isTest()).toBe(false);
+    });
+
+    test('isGithubActions is true when the runner sets GITHUB_ACTIONS and false when it is unset or empty', () => {
+        delete process.env.GITHUB_ACTIONS;
+        expect(rt.isGithubActions()).toBe(false);
+        process.env.GITHUB_ACTIONS = '';
+        expect(rt.isGithubActions()).toBe(false);
+        process.env.GITHUB_ACTIONS = 'true';
+        expect(rt.isGithubActions()).toBe(true);
     });
 });

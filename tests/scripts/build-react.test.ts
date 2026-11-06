@@ -227,6 +227,26 @@ describe('scripts/build-react.ts', () => {
             expect(logged()).toContain('Building lite React bundles...');
         });
 
+        test.each([
+            [undefined, 'true'],
+            ['', 'true'],
+            ['true', 'false'],
+        ])('bakes the dirty flag into every bundle (GITHUB_ACTIONS=%p gives %s)', async (githubActions, expected) => {
+            const saved = process.env.GITHUB_ACTIONS;
+            if (githubActions === undefined) delete process.env.GITHUB_ACTIONS;
+            else process.env.GITHUB_ACTIONS = githubActions;
+            try {
+                await run([], 'production');
+            } finally {
+                if (saved === undefined) delete process.env.GITHUB_ACTIONS;
+                else process.env.GITHUB_ACTIONS = saved;
+            }
+            expect(esbuild.build).toHaveBeenCalledTimes(ENTRY_NAMES.length);
+            expect(esbuild.build.mock.calls.map(([opts]) => opts.define!.__GS_DIRTY__)).toEqual(
+                ENTRY_NAMES.map(() => expected),
+            );
+        });
+
         test('creates dist/, skips missing entries and the lexicon, defaults NODE_ENV to development', async () => {
             fs.existsSync.mockImplementation(
                 (p) => p !== DIST && p !== LEXICON && p !== NOTICES && !p.endsWith('Logs.tsx'),

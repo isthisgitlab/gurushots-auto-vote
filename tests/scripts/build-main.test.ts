@@ -56,6 +56,33 @@ test('maps stack traces back to src/ts: the loader enables source maps, then req
     );
 });
 
+describe('the dirty-build flag', () => {
+    // OPTIONS is evaluated when the script loads, so each case loads a fresh copy under its own GITHUB_ACTIONS.
+    const defineFor = (githubActions: string | undefined) => {
+        const saved = process.env.GITHUB_ACTIONS;
+        if (githubActions === undefined) delete process.env.GITHUB_ACTIONS;
+        else process.env.GITHUB_ACTIONS = githubActions;
+        try {
+            let options!: typeof OPTIONS;
+            jest.isolateModules(() => {
+                options = (require('../../scripts/build-main') as typeof build_mainModule).OPTIONS;
+            });
+            return options.define;
+        } finally {
+            if (saved === undefined) delete process.env.GITHUB_ACTIONS;
+            else process.env.GITHUB_ACTIONS = saved;
+        }
+    };
+
+    test.each([
+        [undefined, 'true'],
+        ['', 'true'],
+        ['true', 'false'],
+    ])('GITHUB_ACTIONS=%p bakes __GS_DIRTY__ as %s', (githubActions, expected) => {
+        expect(defineFor(githubActions)).toEqual({ __GS_DIRTY__: expected });
+    });
+});
+
 test('builds once by default, writing the loader first', async () => {
     await main([]);
     expect(fs.mkdirSync).toHaveBeenCalledWith(path.dirname(LOADER), { recursive: true });

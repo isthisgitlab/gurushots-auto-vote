@@ -3,6 +3,7 @@ import { sentenceCaseLogMessage, splitIcon, stripTerminalControl } from '../form
 import { getContext } from './context';
 import { writeConsole } from './consoleSink';
 import { logsDir, currentLogFiles } from './files';
+import { logKind, writeDebug } from './debugLog';
 import { formatConsoleMessage, getTimeString, withIcon, LEVEL_ICONS } from './format';
 import { sanitizeForLog, redactMessage } from './sanitize';
 
@@ -42,7 +43,8 @@ const routeLogFile = (level: LogLevel, category: string): string => {
  *
  * Emits to ring buffer, disk (when fs is available), console, and the
  * GUI IPC fan-out (when wired). Sanitizes data for disk; sends raw to
- * the GUI which renders it.
+ * the GUI which renders it. A dirty build also copies the entry, as it was passed
+ * in, to the debug log (debugLog.ts), whatever happens to the other sinks.
  * @param icon - prefixed unless the message already leads with one
  */
 const writeLog = (
@@ -53,6 +55,9 @@ const writeLog = (
     icon: string = LEVEL_ICONS[level],
     template?: LogEntry['template'],
 ) => {
+    // The debug log gets the entry as passed in, before redaction, the length cap and the icon.
+    const originalMessage = message;
+    const originalData = data;
     try {
         const context = getContext();
         const timestamp = new Date().toISOString();
@@ -118,6 +123,9 @@ const writeLog = (
         }
     } catch (error) {
         writeConsole('error', 'Error writing log entry:', error);
+    } finally {
+        // After the try, so a sanitizer or sink that throws cannot skip it; writeDebug never throws.
+        writeDebug(logKind(level, category), originalMessage, originalData);
     }
 };
 

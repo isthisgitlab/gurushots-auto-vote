@@ -1,6 +1,7 @@
 import { oneLine } from './format/logSafe';
 import { isSourceCode, getAppName, getContext, setContext, clearContext, devMode, cliMode } from './logger/context';
 import { currentLogFiles, cleanupOldLogs, logsDir } from './logger/files';
+import { debugLogEnabled, logKind, writeDebug } from './logger/debugLog';
 import { buildProgressMessage, LEVEL_ICONS } from './logger/format';
 import { sanitizeForLog, sanitizeLogString, redactMessage } from './logger/sanitize';
 import { logMessages as englishTemplates } from './translations/logEnglish';
@@ -52,6 +53,13 @@ const LOG_CATEGORIES = {
 // apps stay quiet on these noisy channels.
 const apiOrDebugEnabled = () => isSourceCode();
 
+// A debug or api call: written like any entry in a source build; in a packaged build the normal sinks drop it, and a
+// dirty one still gets it in the debug log (and nothing else).
+const writeGated = (level: LogLevel, message: string, data: unknown, category: string | null | undefined): void => {
+    if (apiOrDebugEnabled()) writeLog(level, message, data, category);
+    else writeDebug(logKind(level, category), message, data);
+};
+
 // Export logger functions
 // Basic logging methods
 export const error: (message: string, data?: unknown, category?: string | null) => void = (
@@ -68,16 +76,12 @@ export const debug: (message: string, data?: unknown, category?: string | null) 
     message,
     data,
     category,
-): void => {
-    if (apiOrDebugEnabled()) writeLog('DEBUG', message, data, category);
-};
+): void => writeGated('DEBUG', message, data, category);
 export const api: (message: string, data?: unknown, category?: string | null) => void = (
     message,
     data,
     category = 'api',
-): void => {
-    if (apiOrDebugEnabled()) writeLog('INFO', message, data, category);
-};
+): void => writeGated('INFO', message, data, category);
 // Enhanced logging methods
 export const success: (message: string, data?: unknown, duration?: number | null, category?: string | null) => void = (
     message,
@@ -150,12 +154,8 @@ export const withCategory = (category: string): CategoryLogger => ({
     infoT: (key, params, data) => writeTemplate('INFO', key, params, data, category),
     warningT: (key, params, data) => writeTemplate('WARN', key, params, data, category),
     errorT: (key, params, data) => writeTemplate('ERROR', key, params, data, category),
-    debug: (message, data) => {
-        if (apiOrDebugEnabled()) writeLog('DEBUG', message, data, category);
-    },
-    api: (message, data) => {
-        if (apiOrDebugEnabled()) writeLog('INFO', message, data, category);
-    },
+    debug: (message, data) => writeGated('DEBUG', message, data, category),
+    api: (message, data) => writeGated('INFO', message, data, category),
     apiRequest: (method, url, duration = null) => {
         if (!apiOrDebugEnabled()) return;
         const suffix = duration !== null ? ` (${duration}ms)` : '';
@@ -243,4 +243,6 @@ export {
     sanitizeForLog,
     sanitizeLogString,
     redactMessage,
+    writeDebug,
+    debugLogEnabled,
 };

@@ -64,6 +64,8 @@ const commonOptions: BuildOptions = {
     },
     define: {
         'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
+        // A build made outside GitHub Actions reads as -dirty (core/buildInfo.ts).
+        __GS_DIRTY__: JSON.stringify(!process.env.GITHUB_ACTIONS),
     },
 };
 

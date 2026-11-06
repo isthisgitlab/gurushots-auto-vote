@@ -35,6 +35,32 @@ describe('LogEntry', () => {
         }
     });
 
+    test('shows the startup line in Latvian from its catalog template, version and -dirty untouched', async () => {
+        mockApi.getSetting.mockResolvedValue('lv');
+        const translator = createTranslator();
+        mockTranslator.t.mockImplementation((key) => translator.t(key, undefined, 'lv'));
+        try {
+            const { container } = render(
+                <LogEntry
+                    entry={{
+                        timestamp: 'T1',
+                        level: 'INFO',
+                        context: 'GUI',
+                        category: 'ui',
+                        message: 'ℹ️ Running gurushots-auto-vote-dev v1.2.3-dirty',
+                        template: { key: 'm956d26ca4fee', params: ['gurushots-auto-vote-dev', '1.2.3-dirty'] },
+                    }}
+                />,
+            );
+            await waitFor(() =>
+                expect(container.textContent).toContain('Darbojas gurushots-auto-vote-dev v1.2.3-dirty'),
+            );
+        } finally {
+            mockApi.getSetting.mockResolvedValue(null);
+            mockTranslator.t.mockImplementation((key) => key);
+        }
+    });
+
     test.each([
         ['Error refreshing title rules: disk', 'Kļūda, atsvaidzinot izaicinājumu noteikumus: disk'],
         // The ❌ a message leads with is the level's own icon: the entry renders it once, on the badge.

@@ -58,7 +58,7 @@ const invokeChannel = async (
         return;
     }
     try {
-        sendJson(res, 200, { result: await invokeHandler(handlers[channel], null, args) });
+        sendJson(res, 200, { result: await invokeHandler(channel, handlers[channel], null, args) });
     } catch (error) {
         logger.withCategory('api').error(`Web handler '${channel}' threw`, error);
         fail(res, 500, errorMessage(error) || 'Handler failed');

@@ -61,6 +61,9 @@ jest.mock('../src/ts/core/logger', () => ({
     cliDebug: jest.fn(),
     cliWarning: jest.fn(),
     isDevMode: jest.fn(() => false),
+    // The debug log of a dirty build: off in tests, so a record is never written unless a test turns it on.
+    writeDebug: jest.fn(),
+    debugLogEnabled: jest.fn(() => false),
     // Runtime detection helpers (canonical source) — settings.ts destructures these from logger.
     isSourceCode: jest.fn(() => true),
     getAppName: jest.fn(() => 'gurushots-auto-vote-dev'),

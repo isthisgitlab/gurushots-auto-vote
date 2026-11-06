@@ -453,6 +453,7 @@ export const logMessages = {
     m946a14a408ae:
         'Automātiskā balsošana neļauj ierīcei iemigt, lai nepalaistu garām plānoto foto iesniegšanu un balsošanu; tas beidzas, kad aptur automātisko balsošanu (ekrāns joprojām var izslēgties)',
     m9529811773ef: 'Nodrošina iziešanu pēc {0}...',
+    m956d26ca4fee: 'Darbojas {0} v{1}',
     m95cc253408a6: '{0}: nav piemērotu foto izaicinājumam {1}',
     m95e54e8184ee: '=== GuruShots Auto Voter — CLI balsošana{0} ===',
     m96024565ed4e: 'Attālinātais dalībnieks atteikts: vienlaikus var būt savienoti ne vairāk kā {0} telefoni',

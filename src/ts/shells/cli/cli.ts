@@ -29,6 +29,7 @@ import * as settings from '../../core/settings';
 import { UserDataUnavailableError } from '../../core/platform/userDataUnavailable';
 import { fileErrorMessage } from '../../core/errorMessage';
 import { initializeHeaders } from '../../core/api/randomizer';
+import { displayVersion } from '../../core/appVersion';
 import { COMMANDS, holdsSessionMarker } from './commandTable';
 import { holdCliSessionLock } from '../../platforms/node/cliSessionLock';
 import { usageError } from './commandKit';
@@ -83,6 +84,9 @@ const main = async () => {
         }
         reportSettingsRecovery();
         showUnofficialNotice();
+        // Debug, not info: a release CLI's stdout stays as it is (piped JSON stays valid);
+        // a dirty build's debug.log gets the line.
+        logger.withCategory('ui').debug(`Running ${logger.getAppName()} v${displayVersion()}`);
         logger.withCategory('api').debug('main: Command is:', command);
 
         const code = await dispatch(command, args.slice(1));

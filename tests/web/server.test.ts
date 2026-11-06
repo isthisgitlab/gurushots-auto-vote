@@ -102,9 +102,13 @@ jest.mock('../../src/ts/platforms/node/cliSessionLock', () => ({
     isDesktopAppActive: jest.fn(() => Promise.resolve(false)),
     isWebServerActive: jest.fn(() => Promise.resolve(false)),
 }));
-const mockLog = { error: jest.fn(), warning: jest.fn(), info: jest.fn() };
+const pkg = require('../../package.json') as typeof import('../../package.json');
+const mockLog = { error: jest.fn(), warning: jest.fn(), info: jest.fn(), infoT: jest.fn() };
 jest.mock('../../src/ts/core/logger', () => ({
-    withCategory: jest.fn((): Pick<CategoryLogger, 'error' | 'warning' | 'info'> => mockLog),
+    withCategory: jest.fn((): Pick<CategoryLogger, 'error' | 'warning' | 'info' | 'infoT'> => mockLog),
+    getAppName: jest.fn(() => 'gurushots-auto-vote-dev'),
+    debugLogEnabled: jest.fn(() => false),
+    writeDebug: jest.fn(),
     printLine: jest.fn(),
 }));
 
@@ -511,6 +515,26 @@ describe('invoke', () => {
         expect(parsed(reply)).toEqual({ result: { key: 'theme', scope: 'challenge-1' } });
     });
 
+    test('names the channel to the debug log when it is on, and not for a log channel', async () => {
+        const logger = jest.mocked(
+            require('../../src/ts/core/logger') as {
+                debugLogEnabled: jest.Mock<boolean, []>;
+                writeDebug: jest.Mock<void, [string, string, unknown?]>;
+            },
+        );
+        logger.debugLogEnabled.mockReturnValue(true);
+        try {
+            await invoke('get-setting', { args: ['theme'] });
+            await invoke('get-log-backlog', { args: [] });
+            expect(logger.writeDebug.mock.calls.map(([kind, message]) => [kind, message])).toEqual([
+                ['ipc-in', 'get-setting'],
+                ['ipc-out', 'get-setting'],
+            ]);
+        } finally {
+            logger.debugLogEnabled.mockReturnValue(false);
+        }
+    });
+
     test('restores undefined arguments so default parameters apply; ignores bad positions', async () => {
         const reply = await invoke('get-setting', { args: ['theme', null], undefinedAt: [1, 5, -1, 'x', 0.5] });
         expect(parsed(reply)).toEqual({ result: { key: 'theme', scope: 'global' } });
@@ -701,6 +725,8 @@ describe('startWebServer', () => {
             );
             expect(started.token).toMatch(/^[0-9a-f]{64}$/);
             expect(started.server.address()).toEqual(expect.objectContaining({ address: '127.0.0.1' }));
+            // The build is named through the log catalog (key 'Running {0} v{1}').
+            expect(mockLog.infoT).toHaveBeenCalledWith('m956d26ca4fee', ['gurushots-auto-vote-dev', pkg.version]);
             expect(typeof globals.sendLogToGUI).toBe('function');
             globals.sendLogToGUI!({
                 seq: 1,

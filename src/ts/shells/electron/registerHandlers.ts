@@ -135,7 +135,7 @@ const registerHandlers = (ipcMain: IpcMain, handlers: Record<string, IpcHandler>
                     .warning(`Refused IPC '${channel}' for a setting the Logs window may not read`, null);
                 return { success: false as const, error: 'Refused: setting not available to this window' };
             }
-            return invokeHandler(impl, event, args);
+            return invokeHandler(channel, impl, event, args);
         });
     }
 };

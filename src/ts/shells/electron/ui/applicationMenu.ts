@@ -6,6 +6,7 @@ import { AutoUpdater } from '../AutoUpdater';
 import { appState } from '../index/state';
 import { restrictToLogsChannels } from '../registerHandlers';
 import * as packageInfo from '../../../../../package.json';
+import { displayVersion } from '../../../core/appVersion';
 
 import type { MenuItemConstructorOptions } from 'electron';
 import { errorMessage } from '../../../core/errorMessage';
@@ -208,7 +209,7 @@ function showAbout() {
     void dialog.showMessageBox({
         type: 'info',
         title: t('menu.aboutTitle'),
-        message: `${packageInfo.name} v${packageInfo.version}`,
+        message: `${packageInfo.name} v${displayVersion(packageInfo.version)}`,
         detail: `${t('menu.aboutDescription')}\n\n${t('menu.aboutAuthor')}: ${packageInfo.author.name}\n${t('menu.aboutElectron')}: ${process.versions.electron}\n${t('menu.aboutNode')}: ${process.versions.node}`,
         buttons: [t('common.ok')],
     });

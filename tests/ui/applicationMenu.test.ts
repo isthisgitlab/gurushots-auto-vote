@@ -295,6 +295,19 @@ describe('Help → About', () => {
     });
 });
 
+describe('Help → About on a dirty build', () => {
+    afterEach(() => Reflect.deleteProperty(globalThis, '__GS_DIRTY__'));
+
+    it('reads -dirty after the version', () => {
+        Object.assign(globalThis, { __GS_DIRTY__: true });
+        menuModule.createApplicationMenu();
+        helpItem('menu.about').click!();
+
+        const arg = electron.dialog.showMessageBox.mock.calls[0][0];
+        expect(arg.message).toBe(`${packageInfo.name} v${packageInfo.version}-dirty`);
+    });
+});
+
 describe('Help → Logs', () => {
     beforeEach(() => menuModule.createApplicationMenu());
 

@@ -443,6 +443,7 @@ export const logMessages = {
     m946a14a408ae:
         'Auto-vote is keeping this device awake so scheduled photo submissions and votes are not missed; it stops when you stop auto-vote (the display can still sleep)',
     m9529811773ef: 'Ensuring exit after {0}...',
+    m956d26ca4fee: 'Running {0} v{1}',
     m95cc253408a6: '{0}: no eligible photos for {1}',
     m95e54e8184ee: '=== GuruShots Auto Voter - CLI Voting{0} ===',
     m96024565ed4e: 'Remote peer refused: at most {0} phones can be connected',

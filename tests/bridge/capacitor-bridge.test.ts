@@ -111,6 +111,17 @@ describe('Capacitor bridge', () => {
             await expect(api.guiVote()).resolves.toEqual({ success: true, via: 'gui-vote' });
         });
 
+        test('names the channel to the debug log when it is on', async () => {
+            const logger = jest.mocked(require('../../src/ts/core/logger') as typeof loggerModule);
+            logger.debugLogEnabled.mockReturnValue(true);
+            try {
+                await api.guiVote();
+                expect(logger.writeDebug).toHaveBeenCalledWith('ipc-in', 'gui-vote', { channel: 'gui-vote', args: [] });
+            } finally {
+                logger.debugLogEnabled.mockReturnValue(false);
+            }
+        });
+
         test('mirrors the manifest aliases onto their target channel methods', async () => {
             expect(api.applyBoost).toBe(api.applyBoostToEntry);
             await expect(invalid<(entryId: string) => Promise<unknown>>(api.applyBoost)('e1')).resolves.toEqual({
@@ -249,6 +260,22 @@ describe('Capacitor bridge', () => {
             };
             expect(res).toEqual({ success: true, updateInfo });
             expect(onAvailable).toHaveBeenCalledWith(updateInfo);
+        });
+
+        test('on a dirty build the checker and the update info still carry the clean version', async () => {
+            Object.assign(globalThis, { __GS_DIRTY__: true });
+            try {
+                updateChecker.checkForUpdates.mockResolvedValue(available);
+                const res = await api.checkForUpdates();
+                expect(updateChecker.checkForUpdates).toHaveBeenCalledWith({
+                    currentVersion: pkg.version,
+                    isBetaChannel: pkg.version.includes('-'),
+                    assetSuffix: '.apk',
+                });
+                expect(res).toMatchObject({ updateInfo: { currentVersion: pkg.version } });
+            } finally {
+                Reflect.deleteProperty(globalThis, '__GS_DIRTY__');
+            }
         });
 
         test('a lite build (no bundled vision model) asks for the lite APK', async () => {

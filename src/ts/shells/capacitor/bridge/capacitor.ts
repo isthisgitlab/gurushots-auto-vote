@@ -69,9 +69,9 @@ const emit = (channel: string, payload?: unknown) => {
 // renderer can call it as (...args). The first parameter (event) is
 // passed as null since there is no IPC event on Capacitor.
 const wrap =
-    (impl: IpcHandler) =>
+    (channel: string, impl: IpcHandler) =>
     (...args: unknown[]) =>
-        Promise.resolve(invokeHandler(impl, null, args));
+        Promise.resolve(invokeHandler(channel, impl, null, args));
 
 const buildAllHandlers = () => {
     // Every successful settings write (save-settings, set-setting and the
@@ -160,7 +160,7 @@ type BridgeApi = Record<string, (...args: never[]) => unknown>;
  */
 const addHandlerMethods = (api: BridgeApi) => {
     for (const [channel, impl] of Object.entries(buildAllHandlers())) {
-        api[kebabToCamel(channel)] = wrap(impl);
+        api[kebabToCamel(channel)] = wrap(channel, impl);
     }
     for (const [method, channel] of Object.entries(aliases)) {
         api[method] = api[kebabToCamel(channel)];

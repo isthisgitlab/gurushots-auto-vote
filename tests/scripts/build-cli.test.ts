@@ -230,6 +230,27 @@ describe('build-cli', () => {
         );
     });
 
+    test.each([
+        [undefined, 'true'],
+        ['', 'true'],
+        ['true', 'false'],
+    ])('bundleCli bakes the dirty flag in (GITHUB_ACTIONS=%p gives %s)', async (githubActions, expected) => {
+        const saved = process.env.GITHUB_ACTIONS;
+        if (githubActions === undefined) delete process.env.GITHUB_ACTIONS;
+        else process.env.GITHUB_ACTIONS = githubActions;
+        try {
+            await buildCli.bundleCli();
+        } finally {
+            if (saved === undefined) delete process.env.GITHUB_ACTIONS;
+            else process.env.GITHUB_ACTIONS = saved;
+        }
+        expect(build).toHaveBeenCalledWith(
+            expect.objectContaining({
+                define: { 'process.env.NODE_ENV': '"production"', __GS_DIRTY__: expected },
+            }),
+        );
+    });
+
     describe('generateSeaBlob', () => {
         const writtenConfig = () => parseJsonObject(String(fs.writeFileSync.mock.calls[0][1]));
 

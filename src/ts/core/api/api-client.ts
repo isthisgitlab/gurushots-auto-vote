@@ -119,6 +119,41 @@ const retryDelayMs = (caught: unknown, attempt: number, baseDelayMs: number): nu
     return cooldownMs > MAX_RETRY_DELAY_MS ? null : Math.max(cooldownMs, MIN_RETRY_DELAY_MS);
 };
 
+/**
+ * How a failed attempt goes on: the wait before the next one, or null when the call ends here (not worth repeating,
+ * out of attempts, or a cooldown longer than the in-call cap).
+ */
+const nextAttemptDelayMs = (
+    caught: unknown,
+    repeatable: boolean,
+    attempt: number,
+    maxRetries: number,
+    baseDelayMs: number,
+): number | null => {
+    const mayRepeat = repeatable ? isRetryableError(caught) : isSafeToRepeat(caught);
+    return mayRepeat && attempt < maxRetries ? retryDelayMs(caught, attempt, baseDelayMs) : null;
+};
+
+/**
+ * The debug log's record of a failed attempt: what happens next, and the response body whole, for every endpoint
+ * ('API Error Response' keeps only a few fields of it).
+ */
+const debugFailure = (
+    url: string,
+    failure: Omit<ReturnType<typeof describeFailure>, 'responseData'>,
+    caught: unknown,
+    decision: string,
+    delayMs: number | null,
+): void =>
+    logger.writeDebug('api-error', `POST ${url} failed (${failure.status})`, {
+        url,
+        status: failure.status,
+        error: failure.error,
+        decision,
+        delayMs: delayMs === null ? null : Math.round(delayMs),
+        responseData: responseDataOf(caught),
+    });
+
 const terminalPostOutcome = <T extends object>(
     url: string,
     caught: unknown,
@@ -152,6 +187,8 @@ const sendPost = async <T extends object>(
 
         // Log the request with enhanced context
         logger.withCategory('api').apiRequest('POST', url);
+        // The debug log keeps the request whole: every header (the token included) and the body.
+        logger.writeDebug('api-out', `POST ${url}`, { url, headers, body: data });
 
         try {
             const response = await axios(postConfig(url, headers, data));
@@ -165,6 +202,15 @@ const sendPost = async <T extends object>(
                 status: response.status,
                 duration: duration,
                 ...(BODY_UNLOGGED_URLS.has(url) ? {} : { responseData: response.data as unknown }),
+            });
+
+            // The body of any other endpoint is already in the debug log, in the 'API Response' record above.
+            logger.writeDebug('api-in', `POST ${url} → ${response.status} (${duration}ms)`, {
+                url,
+                status: response.status,
+                headers: response.headers,
+                durationMs: duration,
+                ...(BODY_UNLOGGED_URLS.has(url) ? { responseData: response.data as unknown } : {}),
             });
 
             const body = responseObject<T>(url, response.data);
@@ -189,15 +235,13 @@ const sendPost = async <T extends object>(
                 });
             }
 
-            const mayRepeat = repeatable ? isRetryableError(caught) : isSafeToRepeat(caught);
-            if (!mayRepeat || attempt >= maxRetries) {
-                return terminalPostOutcome<T>(url, caught, retainRefusedResponse);
-            }
-
-            const delayMs = retryDelayMs(caught, attempt, baseDelayMs);
+            const delayMs = nextAttemptDelayMs(caught, repeatable, attempt, maxRetries, baseDelayMs);
             if (delayMs === null) {
-                return terminalPostOutcome<T>(url, caught, retainRefusedResponse);
+                const outcome = terminalPostOutcome<T>(url, caught, retainRefusedResponse);
+                debugFailure(url, failure, caught, outcome.kind, null);
+                return outcome;
             }
+            debugFailure(url, failure, caught, 'retry', delayMs);
 
             logger.withCategory('api').warning('Retrying API request after transient failure', {
                 url,

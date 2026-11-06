@@ -18,10 +18,13 @@ const isDevelopment = () =>
 
 const isTest = () => process.env.NODE_ENV === 'test';
 
+// Set by GitHub Actions on every runner; the same truthiness test the build scripts use for the dirty flag.
+const isGithubActions = () => Boolean(process.env.GITHUB_ACTIONS);
+
 const getEnvSnapshot = () => ({
     nodeEnv: process.env.NODE_ENV,
     dev: process.env.DEV,
     prod: process.env.PROD,
 });
 
-export { isDevelopment, isTest, getEnvSnapshot };
+export { isDevelopment, isTest, isGithubActions, getEnvSnapshot };

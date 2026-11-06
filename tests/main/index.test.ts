@@ -203,8 +203,13 @@ jest.mock('electron', (): FakeElectron => {
 });
 
 jest.mock('../../src/ts/core/logger', () => {
-    const cat = { info: jest.fn(), warning: jest.fn(), error: jest.fn(), debug: jest.fn() };
-    return { withCategory: jest.fn(() => cat), cleanup: jest.fn(), cat };
+    const cat = { info: jest.fn(), infoT: jest.fn(), warning: jest.fn(), error: jest.fn(), debug: jest.fn() };
+    return {
+        withCategory: jest.fn(() => cat),
+        getAppName: jest.fn(() => 'gurushots-auto-vote-dev'),
+        cleanup: jest.fn(),
+        cat,
+    };
 });
 
 jest.mock('../../src/ts/core/settings', () => ({
@@ -429,6 +434,7 @@ describe('startup (whenReady)', () => {
         load();
         await flush();
 
+        expect(m.cat.infoT).toHaveBeenCalledWith('m956d26ca4fee', ['gurushots-auto-vote-dev', expect.any(String)]);
         expect(m.cat.info).toHaveBeenCalledWith('[App] UserData path: /tmp/userData', null);
         expect(m.randomizer.initializeHeaders).toHaveBeenCalled();
         expect(m.settings.seedIntentProfiles).toHaveBeenCalled();

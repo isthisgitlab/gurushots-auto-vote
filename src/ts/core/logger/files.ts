@@ -57,6 +57,12 @@ const getCurrentDate = () => {
 };
 
 /**
+ * Today's debug log, computed on every call so a session that runs past midnight rolls over to the next day's file.
+ * Only a dirty build writes it (debugLog.ts).
+ */
+const debugLogPath = (): string => path.join(logsDir, `debug-${getCurrentDate()}.log`);
+
+/**
  * @param date - YYYY-MM-DD
  */
 const getLogFilePaths = (
@@ -70,18 +76,22 @@ const getLogFilePaths = (
     };
 };
 
-// Per-log-prefix retention rules: { days, maxMB }.
-const LOG_RETENTION: Record<string, { days: number; maxMB: number }> = {
+// Per-log-prefix retention rules: { days, maxMB }. A rule without maxMB has no size limit: the debug log is kept by
+// age only, so today's file is never deleted while the session is still writing it.
+const LOG_RETENTION: Record<string, { days: number; maxMB?: number }> = {
     errors: { days: 30, maxMB: 10 },
     app: { days: 7, maxMB: 50 },
     api: { days: 1, maxMB: 20 },
     settings: { days: 7, maxMB: 10 },
+    debug: { days: 3 },
 };
 
-// Parse date from filename (e.g., "errors-2025-07-28.log" -> "2025-07-28")
-const parseDateFromFilename = (filename: string): string | null => {
-    const match = filename.match(/(errors|app|api|settings)-(\d{4}-\d{2}-\d{2})\.log$/);
-    return match ? match[2] : null;
+// Parse a log file name (e.g., "errors-2025-07-28.log" -> { prefix: "errors", date: "2025-07-28" }). Anchored at the
+// start: unanchored, an "api-debug-<date>.log" file would match the debug rule instead of keeping its mtime-based
+// 7-day rule below.
+const parseLogFilename = (filename: string): { prefix: string; date: string } | null => {
+    const match = filename.match(/^(errors|app|api|debug|settings)-(\d{4}-\d{2}-\d{2})\.log$/);
+    return match ? { prefix: match[1], date: match[2] } : null;
 };
 
 // Check if a date is older than specified days
@@ -114,16 +124,13 @@ const cleanupOldLogs = () => {
             let shouldDelete = false;
             let reason = '';
 
-            const fileDate = parseDateFromFilename(file);
+            const parsed = parseLogFilename(file);
 
-            if (fileDate) {
-                const prefix = Object.keys(LOG_RETENTION).find((p) => file.startsWith(`${p}-`));
-                if (prefix) {
-                    const { days, maxMB } = LOG_RETENTION[prefix];
-                    const tooOld = isDateOlderThan(fileDate, days);
-                    shouldDelete = tooOld || fileSizeMB > maxMB;
-                    reason = tooOld ? 'age' : 'size';
-                }
+            if (parsed) {
+                const { days, maxMB } = LOG_RETENTION[parsed.prefix];
+                const tooOld = isDateOlderThan(parsed.date, days);
+                shouldDelete = tooOld || (maxMB !== undefined && fileSizeMB > maxMB);
+                reason = tooOld ? 'age' : 'size';
             } else if (file.startsWith('api-debug-')) {
                 const fileAge = now.getTime() - stats.mtime.getTime();
                 shouldDelete = fileAge > 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -159,4 +166,4 @@ process.on('exit', () => {
 
 const currentLogFiles = getLogFilePaths();
 
-export { logsDir, currentLogFiles, cleanupOldLogs };
+export { logsDir, currentLogFiles, cleanupOldLogs, debugLogPath };

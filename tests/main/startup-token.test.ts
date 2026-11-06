@@ -24,8 +24,13 @@ jest.mock('../../src/ts/platforms/node/cliSessionLock', () => ({
 }));
 jest.mock('../../src/ts/core/api/randomizer', () => ({ initializeHeaders: jest.fn() }));
 jest.mock('../../src/ts/core/logger', () => {
-    const cat = { info: jest.fn(), error: jest.fn(), warning: jest.fn(), debug: jest.fn() };
-    return { withCategory: jest.fn(() => cat), cleanup: jest.fn(), __cat: cat };
+    const cat = { info: jest.fn(), infoT: jest.fn(), error: jest.fn(), warning: jest.fn(), debug: jest.fn() };
+    return {
+        withCategory: jest.fn(() => cat),
+        getAppName: jest.fn(() => 'gurushots-auto-vote-dev'),
+        cleanup: jest.fn(),
+        __cat: cat,
+    };
 });
 jest.mock('../../src/ts/shells/electron/AutoUpdater', () => ({
     AutoUpdater: jest.fn(() => ({ checkForUpdates: jest.fn().mockResolvedValue(undefined) })),
@@ -53,6 +58,7 @@ const windows = jest.mocked(windowsModule);
 const cat = invalid<{
     __cat: {
         info: jest.Mock<void, [string, ...unknown[]]>;
+        infoT: jest.Mock<void, [string, unknown[], ...unknown[]]>;
         error: jest.Mock<void, [string, ...unknown[]]>;
         warning: jest.Mock<void, [string, ...unknown[]]>;
     };
@@ -239,6 +245,23 @@ describe('desktop startup marks the app as running', () => {
             settings.seedIntentProfiles.mock.invocationCallOrder[0],
         );
         expect(jest.mocked(app.on)).toHaveBeenCalledWith('will-quit', mockReleaseAppLock);
+    });
+
+    test.each([
+        [false, ''],
+        [true, '-dirty'],
+    ])('names the running build through the log catalog (dirty build: %s)', async (dirty, suffix) => {
+        Object.assign(globalThis, { __GS_DIRTY__: dirty });
+        try {
+            await onReady();
+        } finally {
+            Reflect.deleteProperty(globalThis, '__GS_DIRTY__');
+        }
+        // The catalog entry reads 'Running {0} v{1}'.
+        expect(cat.infoT).toHaveBeenCalledWith('m956d26ca4fee', [
+            'gurushots-auto-vote-dev',
+            `${(require('../../package.json') as typeof import('../../package.json')).version}${suffix}`,
+        ]);
     });
 
     test('a marker that cannot be written is logged and never stops startup', async () => {

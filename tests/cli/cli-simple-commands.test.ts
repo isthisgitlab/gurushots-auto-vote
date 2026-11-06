@@ -949,6 +949,24 @@ describe('check-updates', () => {
         expect(msgs('success')).toEqual([`You're up to date (${pkg.version}).`]);
     });
 
+    test('on a dirty build only the printed version reads -dirty; the checker still gets the clean one', async () => {
+        setHost('darwin', 'arm64');
+        Object.assign(globalThis, { __GS_DIRTY__: true });
+        try {
+            updateChecker.checkForUpdates.mockResolvedValue(invalid({ updateAvailable: false }));
+            await checkUpdates();
+            expect(updateChecker.checkForUpdates).toHaveBeenCalledWith({
+                currentVersion: pkg.version,
+                isBetaChannel: pkg.version.includes('-'),
+                assetSuffix: '-mac',
+            });
+            expect(msgs('info')).toContain(`Current version: ${pkg.version}-dirty`);
+            expect(msgs('success')).toEqual([`You're up to date (${pkg.version}-dirty).`]);
+        } finally {
+            Reflect.deleteProperty(globalThis, '__GS_DIRTY__');
+        }
+    });
+
     test.each([
         ['darwin', 'arm64', true, '-mac'],
         ['linux', 'x64', true, '-linux'],

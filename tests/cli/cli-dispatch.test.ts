@@ -57,6 +57,7 @@ type Mods = {
     scenarios: jest.MockedObjectDeep<typeof scenariosModule>;
     sessionLock: jest.MockedObjectDeep<typeof cliSessionLockModule> & { __release: jest.Mock<void, []> };
 };
+const pkg = require('../../package.json') as typeof import('../../package.json');
 type Loaded = Mods & { msgs: (level: string) => string[]; exitCodes: unknown[] };
 
 jest.mock('../../src/ts/core/logger', () => {
@@ -67,6 +68,7 @@ jest.mock('../../src/ts/core/logger', () => {
     return {
         __calls: calls,
         withCategory: jest.fn(() => cat),
+        getAppName: jest.fn(() => 'gurushots-auto-vote-dev'),
         printLine: rec('stdout'),
         printDocument: rec('stdout'),
         printStderr: rec('stderr'),
@@ -285,6 +287,22 @@ describe('startup', () => {
         expect(m.status.showStatus).toHaveBeenCalled();
         expect(m.exitCodes).toEqual([0]);
         expect(m.logger.cleanup).toHaveBeenCalled();
+    });
+
+    test('names the running build in a debug line, so a release CLI prints nothing more than before', async () => {
+        const m = await run(['status']);
+        expect(m.msgs('debug')).toContain(`Running gurushots-auto-vote-dev v${pkg.version}`);
+        expect(m.msgs('info')).not.toContain(`Running gurushots-auto-vote-dev v${pkg.version}`);
+    });
+
+    test('reads -dirty after the version on a dirty build', async () => {
+        Object.assign(globalThis, { __GS_DIRTY__: true });
+        try {
+            const m = await run(['status']);
+            expect(m.msgs('debug')).toContain(`Running gurushots-auto-vote-dev v${pkg.version}-dirty`);
+        } finally {
+            Reflect.deleteProperty(globalThis, '__GS_DIRTY__');
+        }
     });
 
     test('saved settings that are not in use are said on stderr before the command runs', async () => {

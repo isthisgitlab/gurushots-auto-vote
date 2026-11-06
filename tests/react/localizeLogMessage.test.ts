@@ -73,6 +73,17 @@ describe('Latvian log messages', () => {
         );
     });
 
+    test('translates the startup line that names the running build, -dirty included', () => {
+        expect(localizeLogMessage('ℹ️ Running gurushots-auto-vote v1.2.3')).toBe(
+            'ℹ️ Darbojas gurushots-auto-vote v1.2.3',
+        );
+        expect(localizeLogMessage('ℹ️ Running gurushots-auto-vote-dev v1.2.3-dirty')).toBe(
+            'ℹ️ Darbojas gurushots-auto-vote-dev v1.2.3-dirty',
+        );
+        // The wording is anchored: an ordinary line with a " v" in it is not read as this template.
+        expect(localizeLogMessage('ℹ️ Joining a challenge via the app')).not.toContain('Darbojas');
+    });
+
     test('translates the Manual Only lines', () => {
         const tag = '[Challenge 42: Sunset]';
         expect(localizeLogMessage(`ℹ️ ${tag} Manual Only is on — nothing runs automatically`)).toBe(

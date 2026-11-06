@@ -4,6 +4,7 @@ import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { releaseNotesText } from '@/utils/releaseNotesText';
+import { displayVersion } from '../../../core/appVersion';
 
 const BYTE_UNITS = ['byte', 'kilobyte', 'megabyte', 'gigabyte'] as const;
 
@@ -79,7 +80,7 @@ export function UpdateDialog() {
                     <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
                             <span className="text-base-content/70">{t('app.currentVersion')}:</span>
-                            <span className="ml-2 font-mono">{updateInfo.currentVersion}</span>
+                            <span className="ml-2 font-mono">{displayVersion(updateInfo.currentVersion)}</span>
                         </div>
                         <div>
                             <span className="text-base-content/70">{t('app.latestVersion')}:</span>

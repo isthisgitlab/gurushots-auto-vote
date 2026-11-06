@@ -18,6 +18,7 @@ import * as settings from '../../core/settings';
 import { holdWebServerLock } from '../../platforms/node/cliSessionLock';
 import { clearLeftoverToken, clearTokenBeforeExit } from './loginClears';
 import * as logger from '../../core/logger';
+import { displayVersion } from '../../core/appVersion';
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { GuiLogSink } from '../../core/logger';
@@ -185,6 +186,7 @@ const startWebServer = async ({ port, distDir }: StartOptions) => {
     };
     const address = server.address() as { port: number };
     const origin = `http://localhost:${address.port}/`;
+    logger.withCategory('ui').infoT('m956d26ca4fee', [logger.getAppName(), displayVersion()]);
     logger.withCategory('ui').info(`Web UI listening on ${origin}`, { userData: settings.getUserDataPath() });
     return { server, token, url: `${origin}#t=${token}`, stop, whenClosed };
 };

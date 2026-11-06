@@ -122,6 +122,27 @@ describe('registerHandlers applies the check to every channel', () => {
         expect(impl).toHaveBeenCalledWith(event, 'a', 'b');
         expect(result).toBe('ok');
     });
+
+    test('names the channel to the debug log of a dirty build, and records nothing for a refused sender', async () => {
+        const logger = jest.mocked(require('../../src/ts/core/logger') as typeof loggerModule);
+        logger.debugLogEnabled.mockReturnValue(true);
+        try {
+            const ipcMain = makeIpcMain();
+            registerHandlers(invalid(ipcMain), { 'do-thing': jest.fn(async () => 'ok') });
+
+            await ipcMain.channels.get('do-thing')!(mainFrame('https://evil.example/'), 'x');
+            expect(logger.writeDebug).not.toHaveBeenCalled();
+
+            await ipcMain.channels.get('do-thing')!(mainFrame('file:///app/index.html'), 'a');
+            expect(logger.writeDebug.mock.calls.map(([kind, message]) => [kind, message])).toEqual([
+                ['ipc-in', 'do-thing'],
+                ['ipc-out', 'do-thing'],
+            ]);
+            expect(logger.writeDebug).toHaveBeenCalledWith('ipc-in', 'do-thing', { channel: 'do-thing', args: ['a'] });
+        } finally {
+            logger.debugLogEnabled.mockReturnValue(false);
+        }
+    });
 });
 
 describe('registerHandlers holds the Logs window to the Logs channel set', () => {

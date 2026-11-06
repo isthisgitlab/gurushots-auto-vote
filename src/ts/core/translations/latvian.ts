@@ -1950,6 +1950,7 @@ export const notice: typeof english.notice = {
 // about
 export const about: typeof english.about = {
     title: 'Par lietotni un datiem',
+    version: 'Versija: {version}',
     donateDesc: 'Ja lietotne jums noder, varat atbalstīt tās izstrādi ar ziedojumu vietnē donatr.ee.',
     donateButton: 'Atbalstīt izstrādi',
     licensesDesc: 'Atvērtā koda programmatūra un dati, kas iekļauti šajā lietotnē, ar to licencēm.',

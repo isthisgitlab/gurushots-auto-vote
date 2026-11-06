@@ -60,6 +60,47 @@ afterEach(() => {
     resetPlatformKind();
 });
 
+describe('version line', () => {
+    const version = (require('../../package.json') as typeof import('../../package.json')).version;
+
+    afterEach(() => {
+        mockTranslator.t.mockImplementation(defaultTranslate);
+        Reflect.deleteProperty(globalThis, '__GS_DIRTY__');
+    });
+
+    const renderVersion = () => {
+        mockTranslator.t.mockImplementation((key, vars) =>
+            fillTemplate(key === 'about.version' ? 'Version: {version}' : key, vars),
+        );
+        renderSection();
+    };
+
+    test('shows the app version under the heading', () => {
+        Object.assign(globalThis, { __GS_DIRTY__: false });
+        renderVersion();
+        expect(screen.getByText(`Version: ${version}`)).toBeTruthy();
+    });
+
+    test('reads -dirty after the version on a dirty build', () => {
+        Object.assign(globalThis, { __GS_DIRTY__: true });
+        renderVersion();
+        expect(screen.getByText(`Version: ${version}-dirty`)).toBeTruthy();
+    });
+
+    test('is found by the settings filter, by the word "version"', () => {
+        mockTranslator.t.mockImplementation((key) => (key === 'about.version' ? 'Version: {version}' : key));
+        const { container } = renderSection('version', true);
+        expect(container.querySelector('.hidden')).toBeNull();
+        const hidden = renderSection('no-such-setting', true);
+        expect(hidden.container.querySelector('.hidden')).not.toBeNull();
+    });
+
+    test('has English and Latvian text with the same slot', () => {
+        expect(englishAbout.version).toBe('Version: {version}');
+        expect(latvianAbout.version).toBe('Versija: {version}');
+    });
+});
+
 describe('third-party licenses', () => {
     test('opens a dialog that reads the notices, shown in a named, focusable, scrollable region', async () => {
         jest.mocked(window.api.getThirdPartyNotices).mockResolvedValue({ success: true, text: 'MIT License\n…' });

@@ -7,6 +7,7 @@ import { useImportRefText } from '@/api/useImportReport';
 import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import { matchesFilterTexts } from '@/utils/matchesSettingFilter';
 import { dateLocale } from '@/utils/formatters';
+import { displayVersion } from '../../../core/appVersion';
 import { LicensesModal } from './LicensesModal';
 import { DeleteLocalDataModal } from './DeleteLocalDataModal';
 
@@ -54,6 +55,7 @@ function ImportReportBlock({ report }: { report: ImportReport | null }) {
 
 const ABOUT_DATA_NAME_KEYS = [
     'about.title',
+    'about.version',
     'about.donateButton',
     'about.licensesButton',
     'about.dangerTitle',
@@ -90,6 +92,7 @@ export function AboutDataSection({ report, showAll }: { report: ImportReport | n
     return (
         <div className={`mb-4 ${shown ? '' : 'hidden'}`}>
             <h5 className="font-medium text-sm opacity-70 mb-2 mt-3">{t('about.title')}</h5>
+            <p className="text-sm mb-4">{t('about.version', { version: displayVersion() })}</p>
             <div className="flex flex-wrap items-center gap-3 mb-4">
                 <button type="button" className="btn btn-outline btn-sm" onClick={openDonatePage}>
                     {t('about.donateButton')}

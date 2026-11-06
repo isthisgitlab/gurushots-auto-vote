@@ -525,16 +525,19 @@ Logs help with troubleshooting and are stored alongside your settings:
 - **Windows:** `%APPDATA%\gurushots-auto-vote\logs\`
 - **Linux:** `~/.config/gurushots-auto-vote/logs/`
 
-Files are rotated daily (`<type>-YYYY-MM-DD.log`) and auto-pruned by age and size, on startup and hourly while running:
+Files are rotated daily (`<type>-YYYY-MM-DD.log`) and auto-pruned by age and size, on startup and hourly while running (the web shell prunes only at startup):
 
-| File         | Contents                                        | Kept    | Max size |
-| ------------ | ----------------------------------------------- | ------- | -------- |
-| `errors-*`   | Errors across all categories                    | 30 days | 10 MB    |
-| `app-*`      | General application activity                    | 7 days  | 50 MB    |
-| `settings-*` | Settings reads/writes                           | 7 days  | 10 MB    |
-| `api-*`      | API requests/responses (source/dev builds only) | 1 day   | 20 MB    |
+| File         | Contents                                                       | Kept    | Max size |
+| ------------ | -------------------------------------------------------------- | ------- | -------- |
+| `errors-*`   | Errors across all categories                                   | 30 days | 10 MB    |
+| `app-*`      | General application activity                                   | 7 days  | 50 MB    |
+| `settings-*` | Settings reads/writes                                          | 7 days  | 10 MB    |
+| `api-*`      | API requests/responses (source/dev builds only)                | 1 day   | 20 MB    |
+| `debug-*`    | Everything, unredacted (local `-dirty` builds only; see below) | 3 days  | none     |
 
-From the CLI, tail any of them with `logs [--error|--api|--settings] [--lines=<n>]`. Credentials are redacted before anything is written to disk.
+From the CLI, tail any of them with `logs [--error|--api|--settings] [--lines=<n>]`. Credentials are redacted before anything is written to these files.
+
+**Local builds also write an unredacted debug log.** A build that GitHub Actions did not make, including anything you run from source, shows `-dirty` after its version (Settings → About and data, the About dialog, the CLI `update` command) and also writes `debug-YYYY-MM-DD.log`: every IPC call and its reply, every API request and response with all its headers, every error, and a copy of every log line, with nothing redacted or shortened. It holds your tokens, your login password, pairing keys, the requests of a paired phone, and other members' profile and team data. Never share it or attach it to an issue. Release builds from GitHub write no debug log, and the Android app writes none.
 
 The visual check logs under the `autoSubmit` category: `Visual check re-ranked picks for [Challenge …]` when it changed which photo gets submitted, and `Visual check unavailable for [Challenge …]` when the model couldn't run (the tag ranking was used instead). `Visual check kept pick order for [Challenge …]` means it ran and left the pick as it was, and `Visual check abstained …` or `Visual check skipped: …` means it could not judge the photos, so the tag ranking was kept.
 

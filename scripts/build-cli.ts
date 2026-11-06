@@ -68,6 +68,8 @@ async function bundleCli() {
         sourcemap: false,
         define: {
             'process.env.NODE_ENV': '"production"',
+            // A build made outside GitHub Actions reads as -dirty (core/buildInfo.ts).
+            __GS_DIRTY__: JSON.stringify(!process.env.GITHUB_ACTIONS),
         },
     });
     console.log('✅ CLI bundled');

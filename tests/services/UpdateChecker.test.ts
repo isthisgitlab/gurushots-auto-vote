@@ -7,6 +7,7 @@
 import axiosModule = require('axios');
 const axios = jest.mocked(axiosModule);
 import type * as UpdateCheckerModule from '../../src/ts/core/services/UpdateChecker';
+import type * as loggerModule from '../../src/ts/core/logger';
 const { checkForUpdates, compareSemver, pickAsset, getReleaseAsset, getReleasesUrl, REPO_OWNER, REPO_NAME } =
     require('../../src/ts/core/services/UpdateChecker') as typeof UpdateCheckerModule;
 
@@ -272,5 +273,33 @@ describe('UpdateChecker', () => {
                 error: 'Failed to check for updates',
             });
         });
+    });
+});
+
+describe('UpdateChecker debug records', () => {
+    const logger = jest.mocked(require('../../src/ts/core/logger') as typeof loggerModule);
+
+    test.each([
+        [false, LATEST_URL, { tag_name: 'v9.9.9' }],
+        [true, LIST_URL, [{ prerelease: true, tag_name: 'v9.9.9-beta.1' }]],
+    ])('beta channel %s: the request and the answer, body included, go to the debug log', async (beta, url, body) => {
+        axios.get = jest.fn().mockResolvedValue({ status: 200, headers: { etag: 'x' }, data: body });
+        await checkForUpdates({ currentVersion: '1.0.0', isBetaChannel: beta, timeoutMs: 5000 });
+        expect(logger.writeDebug.mock.calls).toEqual([
+            ['http-out', `GET ${url}`, { url, timeoutMs: 5000 }],
+            [
+                'http-in',
+                `GET ${url} → 200`,
+                { url, status: 200, headers: { etag: 'x' }, durationMs: expect.any(Number), body },
+            ],
+        ]);
+        expect(axios.get).toHaveBeenCalledWith(url, { timeout: 5000 });
+    });
+
+    test('a failed request leaves only the http-out record; the error still comes back as the result', async () => {
+        axios.get = jest.fn().mockRejectedValue(new Error('offline'));
+        const result = await checkForUpdates({ currentVersion: '1.0.0' });
+        expect(result.error).toBe('offline');
+        expect(logger.writeDebug.mock.calls.map(([kind]) => kind)).toEqual(['http-out']);
     });
 });

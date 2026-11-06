@@ -11,6 +11,7 @@ import type * as LoggerModule from '../../src/ts/core/logger';
 import { SHIM_BANNER } from '../../scripts/lib/browser-shims';
 import { installTestPlatform } from '../helpers/platform';
 import { invalid } from '../helpers/invalid';
+import { parseJson } from '../helpers/parseJson';
 
 const LOGS_DIR = '/ud/logs';
 
@@ -30,6 +31,7 @@ const makeFs = (overrides = {}) => ({
 const makeRuntime = (overrides = {}) => ({
     isDevelopment: jest.fn(() => false),
     isTest: jest.fn(() => true),
+    isGithubActions: jest.fn(() => false),
     isElectron: jest.fn(() => false),
     ...overrides,
 });
@@ -753,5 +755,271 @@ describe('challengeTag', () => {
         expect(logger.challengeTag({})).toBe('[Challenge unknown: unknown]');
         expect(logger.challengeTag(3, 'T')).toBe('[Challenge 3: T]');
         expect(invalid<() => string>(logger.challengeTag)()).toBe('[Challenge unknown: unknown]');
+    });
+});
+
+describe('debug log (dirty builds)', () => {
+    const DAY = '2026-01-02';
+    const DEBUG_FILE = `${LOGS_DIR}/debug-${DAY}.log`;
+    const MB = 1024 * 1024;
+
+    beforeEach(() => {
+        jest.setSystemTime(new Date(`${DAY}T12:00:00Z`));
+        Object.assign(g, { __GS_DIRTY__: true });
+    });
+    afterEach(() => {
+        Reflect.deleteProperty(g, '__GS_DIRTY__');
+    });
+
+    const debugWrites = (fs: ReturnType<typeof makeFs>) =>
+        fs.appendFileSync.mock.calls.filter(([file]) => file.includes('/debug-'));
+    const debugText = (fs: ReturnType<typeof makeFs>) => debugWrites(fs).map(([, text]) => text);
+
+    test('copies every entry as it was passed in, unredacted, to debug-<date>.log (owner-only)', () => {
+        const { logger, fs } = loadLogger();
+        logger.info('plain message', { token: 'secret-token', n: 1 }, 'voting');
+
+        expect(debugWrites(fs)).toEqual([[DEBUG_FILE, expect.any(String), { mode: 0o600 }]]);
+        expect(debugText(fs)[0]).toBe(
+            `[${DAY}T12:00:00.000Z] [log:INFO:voting] [CLI] plain message\n{"token":"secret-token","n":1}\n`,
+        );
+        // The normal sinks keep redacting and sentence-casing.
+        const normal = fs.appendFileSync.mock.calls.find(([file]) => file === logger.getLogFile())![1];
+        expect(normal).toContain('Plain message');
+        expect(normal).not.toContain('secret-token');
+    });
+
+    test('keeps a message past the length cap whole, and names the GUI context', () => {
+        const { logger, fs } = loadLogger({ electron: true });
+        const long = 'x'.repeat(20000);
+        logger.warning(long);
+        expect(debugText(fs)[0]).toBe(`[${DAY}T12:00:00.000Z] [log:WARN:general] [GUI] ${long}\n`);
+    });
+
+    test('a clean build writes no debug file', () => {
+        Object.assign(g, { __GS_DIRTY__: false });
+        const { logger, fs } = loadLogger();
+        logger.info('x');
+        logger.error('y');
+        expect(debugWrites(fs)).toEqual([]);
+        expect(fs.appendFileSync).toHaveBeenCalledTimes(2);
+    });
+
+    test('with no logs directory (the renderer fs shim) nothing is written', () => {
+        const shim = { ...makeFs(), chmodSync: undefined };
+        const { logger } = loadLogger({ fs: invalid<ReturnType<typeof makeFs>>(shim) });
+        logger.info('x');
+        expect(logger.debugLogEnabled()).toBe(false);
+        expect(shim.appendFileSync).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ['neither GitHub Actions nor the test runner made it', false, false, true],
+        ['GitHub Actions made it', false, true, false],
+        ['the test runner made it', true, false, false],
+    ])('without a baked-in flag the environment decides: %s', (_name, isTest, isGithubActions, dirty) => {
+        Reflect.deleteProperty(g, '__GS_DIRTY__');
+        const runtime = makeRuntime({ isTest: jest.fn(() => isTest), isGithubActions: jest.fn(() => isGithubActions) });
+        const { logger, fs } = loadLogger({ runtime });
+        logger.info('x');
+        expect(logger.debugLogEnabled()).toBe(dirty);
+        expect(debugWrites(fs)).toHaveLength(dirty ? 1 : 0);
+    });
+
+    test('writes a record without data as one line, and a non-JSON value as its text', () => {
+        const { logger, fs } = loadLogger();
+        logger.writeDebug('custom', 'no data');
+        logger.writeDebug('custom', 'null data', null);
+        logger.writeDebug('custom', 'symbol data', Symbol('marker'));
+        expect(debugText(fs).map((text) => text.replace(/^\[[^\]]+\] /, ''))).toEqual([
+            '[custom] [CLI] no data\n',
+            '[custom] [CLI] null data\n',
+            '[custom] [CLI] symbol data\nSymbol(marker)\n',
+        ]);
+    });
+
+    test('writes an Error, a BigInt and a cycle readably, and a shared (not cyclic) object twice', () => {
+        const { logger, fs } = loadLogger();
+        const cyclic: { name: string; self?: unknown } = { name: 'loop' };
+        cyclic.self = cyclic;
+        const shared = { a: 1 };
+        const error = new Error('boom');
+        logger.writeDebug('custom', 'shapes', { error, big: 10n, cyclic, first: shared, second: shared });
+
+        const body = parseJson(debugText(fs)[0].split('\n')[1]);
+        expect(body).toEqual({
+            error: { name: 'Error', message: 'boom', stack: error.stack },
+            big: '10',
+            cyclic: { name: 'loop', self: '[Circular]' },
+            first: { a: 1 },
+            second: { a: 1 },
+        });
+    });
+
+    test('a value that cannot be written is one console report per process; the normal log is unaffected', () => {
+        const { logger, fs } = loadLogger();
+        const unwritable = {
+            toJSON: () => {
+                throw new Error('toJSON failed');
+            },
+        };
+        logger.writeDebug('custom', 'first', unwritable);
+        logger.writeDebug('custom', 'second', unwritable);
+        logger.info('after');
+
+        expect(errorSpy.mock.calls.filter(([text]) => String(text).includes('debug log'))).toEqual([
+            ['[logger] could not write the debug log:', 'toJSON failed'],
+        ]);
+        expect(lastEntry(logger).message).toBe('ℹ️ After');
+        expect(fs.appendFileSync.mock.calls.some(([file]) => file === logger.getLogFile())).toBe(true);
+    });
+
+    test('a failing append is reported once on the console and never goes through the logger', () => {
+        const fs = makeFs({
+            appendFileSync: jest.fn((file: string) => {
+                if (file.includes('/debug-')) throw new Error('ENOSPC');
+            }),
+        });
+        const { logger } = loadLogger({ fs });
+        logger.info('one');
+        logger.info('two');
+
+        expect(errorSpy.mock.calls.filter(([text]) => String(text).includes('debug log'))).toEqual([
+            ['[logger] could not write the debug log:', 'ENOSPC'],
+        ]);
+        // Only the two entries themselves: the failure report added none.
+        expect(logger.getRecentLogs().map((entry) => entry.message)).toEqual(['ℹ️ One', 'ℹ️ Two']);
+    });
+
+    test('a throwing GUI sink does not skip the copy, and a throwing debug write does not skip the sinks', () => {
+        const { logger, fs } = loadLogger();
+        g.sendLogToGUI = () => {
+            throw new Error('sink broke');
+        };
+        logger.info('mirrored anyway');
+        expect(debugText(fs)[0]).toContain('[log:INFO:general] [CLI] mirrored anyway');
+        expect(errorSpy).toHaveBeenCalledWith('Error writing log entry:', expect.any(Error));
+
+        const sink = jest.fn();
+        g.sendLogToGUI = sink;
+        fs.appendFileSync.mockImplementation((file) => {
+            if (file.includes('/debug-')) throw new Error('ENOSPC');
+        });
+        logger.info('sinks still run');
+        expect(sink).toHaveBeenCalledTimes(1);
+    });
+
+    test('strips terminal control from the message and string data, and escapes it inside JSON strings', () => {
+        const { logger, fs } = loadLogger();
+        logger.writeDebug('custom', '\u001b[31mred\u001b[0m\nforged\u202e', 'text\u0007\r\nmore');
+        logger.writeDebug('custom', 'nested', {
+            title: 'a\u202eb\u0085c\u2028d\u200be\u001b[2Jf',
+            emoji: 'ok 👍\u200d',
+        });
+
+        const [first, second] = debugText(fs);
+        expect(first.replace(/^\[[^\]]+\] /, '')).toBe('[custom] [CLI] red forged\ntext more\n');
+        const body = second.split('\n')[1];
+        // JSON itself escapes ESC; the characters it leaves raw (C1, bidi, zero-width, line separator) are escaped here.
+        expect(body).toBe('{"title":"a\\u202eb\\u0085c\\u2028d\\u200be\\u001b[2Jf","emoji":"ok 👍\u200d"}');
+    });
+
+    test("rolls over to the next day's file without a restart", () => {
+        const { logger, fs } = loadLogger();
+        jest.setSystemTime(new Date(`${DAY}T23:59:59Z`));
+        logger.info('late');
+        jest.setSystemTime(new Date('2026-01-03T00:00:01Z'));
+        logger.info('early');
+        expect(debugWrites(fs).map(([file]) => file)).toEqual([
+            `${LOGS_DIR}/debug-${DAY}.log`,
+            `${LOGS_DIR}/debug-2026-01-03.log`,
+        ]);
+    });
+
+    test('a packaged dirty build copies the gated debug and api calls, and only there', () => {
+        const { logger, fs } = loadLogger({ sourceCode: false });
+        const sink = jest.fn();
+        g.sendLogToGUI = sink;
+        logger.debug('d', { a: 1 });
+        logger.api('a');
+        logger.api('b', null, 'boost');
+        const scoped = logger.withCategory('x');
+        scoped.debug('sd');
+        scoped.api('sa');
+        logger.apiRequest('GET', '/a');
+        logger.apiResponse('GET', '/a', 200);
+        scoped.apiRequest('GET', '/a');
+        scoped.apiResponse('GET', '/a', 200);
+
+        expect(debugText(fs).map((text) => /\[(log:[^\]]+)\]/.exec(text)![1])).toEqual([
+            'log:DEBUG:general',
+            'log:INFO:api',
+            'log:INFO:boost',
+            'log:DEBUG:x',
+            'log:INFO:x',
+        ]);
+        expect(debugText(fs)[0]).toContain('\n{"a":1}\n');
+        expect(logger.getRecentLogs()).toEqual([]);
+        expect(sink).not.toHaveBeenCalled();
+        expect(fs.appendFileSync).toHaveBeenCalledTimes(5);
+        expect(logSpy).not.toHaveBeenCalled();
+    });
+
+    test('a source build writes a gated call to the debug log once, through the entry itself', () => {
+        const { logger, fs } = loadLogger({ sourceCode: true });
+        logger.debug('d');
+        logger.withCategory('x').api('a');
+        expect(debugText(fs)).toHaveLength(2);
+        expect(logger.getRecentLogs()).toHaveLength(2);
+    });
+
+    test('a clean packaged build drops the gated calls entirely', () => {
+        Object.assign(g, { __GS_DIRTY__: false });
+        const { logger, fs } = loadLogger({ sourceCode: false });
+        logger.debug('d');
+        logger.api('a');
+        expect(fs.appendFileSync).not.toHaveBeenCalled();
+    });
+
+    test('the CLI uncaught-exception details land in debug.log with the stack, before the process exits', () => {
+        const { logger, fs } = loadLogger({ sourceCode: false });
+        const crash = new Error('kaboom');
+        logger.withCategory('api').error('Uncaught Exception');
+        logger.withCategory('api').debug('Uncaught Exception details:', crash);
+
+        const [message, details] = debugText(fs);
+        expect(message).toContain('[log:ERROR:api] [CLI] Uncaught Exception\n');
+        expect(details).toContain('[log:DEBUG:api] [CLI] Uncaught Exception details:\n');
+        expect(details).toContain(JSON.stringify(crash.stack));
+    });
+
+    describe('retention', () => {
+        const today = new Date().toISOString().split('T')[0];
+        const loadWith = (files: Record<string, { size: number; mtime: Date }>) => {
+            const fs = makeFs({
+                readdirSync: jest.fn(() => Object.keys(files)),
+                statSync: jest.fn((p: string) => files[p.split('/').pop()!]),
+            });
+            loadLogger({ fs });
+            return fs.unlinkSync.mock.calls.map(([p]) => p.split('/').pop()).sort();
+        };
+
+        test("keeps a debug file by age only: today's is never deleted for its size, one 3+ days old is", () => {
+            const deleted = loadWith({
+                [`debug-${today}.log`]: { size: 500 * MB, mtime: new Date() },
+                'debug-2000-01-01.log': { size: 1, mtime: new Date() },
+                [`app-${today}.log`]: { size: 60 * MB, mtime: new Date() },
+            });
+            expect(deleted).toEqual([`app-${today}.log`, 'debug-2000-01-01.log'].sort());
+            expect(logSpy).toHaveBeenCalledWith('Cleaned up old log file: debug-2000-01-01.log (age, 0.00 MB)');
+        });
+
+        test('an api-debug file is judged by its modification time, not by a date in its name', () => {
+            const deleted = loadWith({
+                'api-debug-2000-01-01.log': { size: 1, mtime: new Date() },
+                'api-debug-2026-01-01.log': { size: 1, mtime: new Date(Date.now() - 8 * 24 * 3600 * 1000) },
+            });
+            expect(deleted).toEqual(['api-debug-2026-01-01.log']);
+        });
     });
 });

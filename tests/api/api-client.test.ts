@@ -72,6 +72,7 @@ jest.mock('../../src/ts/core/logger', () => {
         apiRequest: jest.fn(),
         apiResponse: jest.fn(),
         isDevMode: jest.fn(() => false),
+        writeDebug: jest.fn(),
         startOperation: jest.fn(),
         endOperation: jest.fn(),
         withCategory: jest.fn(() => ({

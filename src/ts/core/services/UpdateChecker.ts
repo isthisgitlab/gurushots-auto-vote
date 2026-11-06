@@ -9,12 +9,15 @@
  * unconditionally because the WebView has no equivalent of
  * electron-updater.
  *
- * No fs, no electron — pure axios + semver comparison. Safe to bundle
- * into the Capacitor renderer.
+ * No electron — axios, semver comparison and the logger's debug log (a
+ * dirty build records each request there; a Capacitor build has no logs
+ * directory, so it writes nothing). Safe to bundle into the Capacitor
+ * renderer.
  */
 
 import axios from 'axios';
 import { errorMessage } from '../errorMessage';
+import * as logger from '../logger';
 
 /**
  * The subset of a GitHub release (REST `releases` payload) this module reads.
@@ -47,6 +50,23 @@ const pickedAssets = new Map<string, ReleaseAssetInfo>();
 const releasesLatestUrl = () => `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
 const releasesListUrl = (perPage: number) =>
     `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases?per_page=${perPage}`;
+
+/**
+ * GET a GitHub API document. A dirty build records the request and the answer, body included, in the debug log.
+ */
+const getJson = async <T>(url: string, timeoutMs: number): Promise<T> => {
+    logger.writeDebug('http-out', `GET ${url}`, { url, timeoutMs });
+    const startTime = Date.now();
+    const response = await axios.get<T>(url, { timeout: timeoutMs });
+    logger.writeDebug('http-in', `GET ${url} → ${response.status}`, {
+        url,
+        status: response.status,
+        headers: response.headers,
+        durationMs: Date.now() - startTime,
+        body: response.data,
+    });
+    return response.data;
+};
 
 /**
  * Compare two versions per SemVer 2.0: the dotted-numeric core first, then the pre-release identifiers
@@ -148,11 +168,11 @@ const checkForUpdates = async ({
     try {
         let release: GithubRelease | null = null;
         if (isBetaChannel) {
-            const { data } = await axios.get<GithubRelease[] | null>(releasesListUrl(10), { timeout: timeoutMs });
+            const data = await getJson<GithubRelease[] | null>(releasesListUrl(10), timeoutMs);
             // Newest matching prerelease (sorted by published_at descending in GitHub API).
             release = (data || []).find((r) => r.prerelease) || null;
         } else {
-            const { data } = await axios.get<GithubRelease | null>(releasesLatestUrl(), { timeout: timeoutMs });
+            const data = await getJson<GithubRelease | null>(releasesLatestUrl(), timeoutMs);
             release = data || null;
         }
         if (!release || !release.tag_name) return empty;

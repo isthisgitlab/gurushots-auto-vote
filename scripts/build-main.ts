@@ -41,6 +41,8 @@ const OPTIONS: BuildOptions = {
     format: 'cjs',
     packages: 'external',
     sourcemap: 'linked',
+    // A build made outside GitHub Actions reads as -dirty (core/buildInfo.ts).
+    define: { __GS_DIRTY__: JSON.stringify(!process.env.GITHUB_ACTIONS) },
     logLevel: 'info',
 };
 

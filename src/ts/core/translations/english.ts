@@ -1920,6 +1920,7 @@ export const notice = {
 // about
 export const about = {
     title: 'About and data',
+    version: 'Version: {version}',
     donateDesc: 'If the app is useful to you, you can support its development with a donation on donatr.ee.',
     donateButton: 'Support development',
     licensesDesc: 'The open-source software and data this app includes, with their licenses.',
