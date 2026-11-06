@@ -47,8 +47,18 @@ export interface AutoVoteBackgroundPlugin {
 
 /** Native `VideoMedia` plugin (android/.../VideoMediaPlugin.kt). */
 export interface VideoMediaPlugin {
-    /** Downloads one validated Snap MP4 without WebView cookies or request headers. */
-    download(options: { url: string }): Promise<{ base64: string }>;
+    /**
+     * Downloads one validated Snap MP4 natively (no WebView cookies or request headers), decodes it there and answers
+     * one JPEG data URL per position, in order. A call with a new `jobId` replaces the job still running.
+     */
+    extractFrames(options: {
+        jobId: string;
+        url: string;
+        durationMs: number;
+        positions: number[];
+    }): Promise<{ frames: string[] }>;
+    /** Stops the job with this id; a cancel for any other id does nothing. */
+    cancel(options: { jobId: string }): Promise<void>;
 }
 
 /**
