@@ -637,10 +637,10 @@ describe('node video frame extraction', () => {
                 'file,pipe',
                 '-show_entries',
                 'format=duration',
-                '-max_pixels',
-                '921600',
             ]),
         );
+        expect(spawn.mock.calls[0][1]).not.toContain('-max_pixels');
+        expect(spawn.mock.calls[1][1]).not.toContain('-max_pixels');
         expect(spawn.mock.calls[1][1]).toContain('1.999');
     });
 

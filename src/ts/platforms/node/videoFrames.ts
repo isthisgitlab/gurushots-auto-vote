@@ -16,7 +16,6 @@ const MAX_VIDEO_BYTES = 256 * 1024 * 1024;
 const MAX_FRAME_BYTES = 2 * 1024 * 1024;
 const MAX_FRAME_WIDTH = 1_280;
 const MAX_FRAME_HEIGHT = 720;
-const MAX_DECODED_PIXELS = MAX_FRAME_WIDTH * MAX_FRAME_HEIGHT;
 const MAX_PROBE_OUTPUT_BYTES = 1024;
 
 const requireFs = (): typeof import('node:fs') => require('node:fs') as typeof import('node:fs');
@@ -164,8 +163,6 @@ const probeDuration = (probe: string, input: string, signal?: AbortSignal): Prom
             [
                 '-threads',
                 '1',
-                '-max_pixels',
-                String(MAX_DECODED_PIXELS),
                 '-protocol_whitelist',
                 'file,pipe',
                 '-v',
@@ -250,8 +247,6 @@ const runDecoder = (
             args.push(
                 '-ss',
                 (timestamp / 1_000).toFixed(3),
-                '-max_pixels',
-                String(MAX_DECODED_PIXELS),
                 '-threads',
                 '1',
                 '-i',
