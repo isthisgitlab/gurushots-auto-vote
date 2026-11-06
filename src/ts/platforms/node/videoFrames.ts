@@ -182,6 +182,8 @@ const probeDuration = (probe: string, input: string, signal?: AbortSignal): Prom
         child.once('error', (error) => finish(error));
         child.once('close', (code) => finish(code === 0 ? null : new Error('Video probe failed')));
         stopListening = listenForAbort(signal, () => finish(cancelledError()));
+        // An already aborted signal finished the work before this assignment found a listener to stop.
+        if (finished) stopListening();
     });
 
 const runDecoder = (
@@ -261,6 +263,8 @@ const runDecoder = (
         child.once('error', (error) => finish(error));
         child.once('close', (code) => finish(code === 0 ? null : new Error('Video decoder failed')));
         stopListening = listenForAbort(signal, () => finish(cancelledError()));
+        // An already aborted signal finished the work before this assignment found a listener to stop.
+        if (finished) stopListening();
     });
 
 const frameDataUrl = (path: string): string => {

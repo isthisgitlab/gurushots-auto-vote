@@ -855,10 +855,13 @@ describe('node video frame extraction with an abort signal', () => {
 
         test('a signal that is already aborted fails the download at once', async () => {
             const req = silentRequest();
+            const signal = abortedSignal();
+            const removed = stoppedListening(signal);
             await expect(
-                downloadVideo(MEDIA_URL, path.join(temporaryDirectory(), 'input.mp4'), abortedSignal()),
+                downloadVideo(MEDIA_URL, path.join(temporaryDirectory(), 'input.mp4'), signal),
             ).rejects.toThrow(CANCELLED);
             expect(req.destroy).toHaveBeenCalledTimes(1);
+            expect(removed).toHaveBeenCalledWith('abort', expect.any(Function));
         });
 
         test('an abort mid-stream destroys the response and rejects once the file is closed', async () => {
@@ -917,8 +920,12 @@ describe('node video frame extraction with an abort signal', () => {
             const probe = controlledProbeChild();
             spawn.mockReturnValueOnce(probe.child);
 
-            await expect(probeDuration('/ffprobe', '/input.mp4', abortedSignal())).rejects.toThrow(CANCELLED);
+            const signal = abortedSignal();
+            const removed = stoppedListening(signal);
+
+            await expect(probeDuration('/ffprobe', '/input.mp4', signal)).rejects.toThrow(CANCELLED);
             expect(probe.kill).toHaveBeenCalledWith('SIGKILL');
+            expect(removed).toHaveBeenCalledWith('abort', expect.any(Function));
         });
 
         test('stops listening for the abort once the probe completes', async () => {
@@ -963,9 +970,13 @@ describe('node video frame extraction with an abort signal', () => {
             jest.useFakeTimers(FAKE_TIMERS);
             const { kill } = decoderChild();
 
-            await expect(runDecoder('/decoder', '/input.mp4', frames, abortedSignal())).rejects.toThrow(CANCELLED);
+            const signal = abortedSignal();
+            const removed = stoppedListening(signal);
+
+            await expect(runDecoder('/decoder', '/input.mp4', frames, signal)).rejects.toThrow(CANCELLED);
             expect(kill).toHaveBeenCalledWith('SIGKILL');
             expect(jest.getTimerCount()).toBe(0);
+            expect(removed).toHaveBeenCalledWith('abort', expect.any(Function));
         });
 
         test('stops listening for the abort once the decoder completes', async () => {
