@@ -29,7 +29,10 @@ const mockSeaTransformers = {
 };
 const mockCreateRequire = jest.fn(() => () => mockSeaTransformers);
 const mockExtract = jest.fn(() => ({ root: '/vision/root', modulePath: '/vision/root/vision-entry.js' }));
-const mockExtractNodeVideoFrames = jest.fn<Promise<string[]>, [string, number, readonly number[], () => string]>();
+const mockExtractNodeVideoFrames = jest.fn<
+    Promise<string[]>,
+    [string, number, readonly number[], () => string, AbortSignal?]
+>();
 
 jest.mock('node:sea', () => mockSea, { virtual: true });
 jest.mock('node:module', () => ({ createRequire: mockCreateRequire }));
@@ -177,6 +180,12 @@ describe('videoFrames', () => {
             createNodeAssets().videoFrames('https://media.gurushots.com/clip.mp4', 1_000, [0.2]),
         ).resolves.toEqual([`/app/.cache/video-decoder/${process.platform}-${process.arch}/${decoderName}`]);
         expect(mockExtractNodeVideoFrames).toHaveBeenCalledTimes(1);
+    });
+
+    test('passes the abort signal on to the extractor', async () => {
+        const controller = new AbortController();
+        await createNodeAssets().videoFrames('https://media.gurushots.com/clip.mp4', 1_000, [0.2], controller.signal);
+        expect(mockExtractNodeVideoFrames.mock.calls[0]![4]).toBe(controller.signal);
     });
 
     test('uses the Windows executable name for a source-checkout decoder', async () => {

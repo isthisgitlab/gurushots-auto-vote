@@ -782,6 +782,50 @@ describe('judgeSnapImage', () => {
     });
 });
 
+describe('a stop signal', () => {
+    const CAPTION = 'Does the soft, even light look natural?';
+    const prompts = snapPrompts(CAPTION)!;
+    const image = { imageId: hex('a'), memberId: hex('f') };
+    const jpeg = 'data:image/jpeg;base64,/9j/2Q==';
+
+    test('judgeSnapImage returns null without a log, and without running the classifier, once aborted', async () => {
+        mockClassifier.mockResolvedValue([
+            { label: prompts.yes, score: 0.9 },
+            { label: prompts.no, score: 0.1 },
+        ]);
+        const controller = new AbortController();
+        controller.abort();
+
+        expect(await judgeSnapImage(CAPTION, image, controller.signal)).toBeNull();
+        expect(mockClassifier).not.toHaveBeenCalled();
+        expect(mockLog.warning).not.toHaveBeenCalled();
+        expect(await judgeSnapImage(CAPTION, image, new AbortController().signal)).toEqual(
+            expect.objectContaining({ answer: 'yes' }),
+        );
+    });
+
+    test('judgeSnapVideoFrames stops between frames, without a log, once aborted', async () => {
+        const controller = new AbortController();
+        mockClassifier.mockImplementation(async (_image: Blob, labels: string[]) => {
+            controller.abort();
+            return labels.map((label) => ({ label, score: 0.5 }));
+        });
+
+        expect(await judgeSnapVideoFrames('Rate it.', [jpeg, jpeg, jpeg], 7, controller.signal)).toBeNull();
+        expect(mockClassifier).toHaveBeenCalledTimes(1);
+        expect(mockLog.warning).not.toHaveBeenCalled();
+    });
+
+    test('judgeSnapVideoFrames scores all frames while the signal stays quiet', async () => {
+        mockClassifier.mockImplementation(async (_image: Blob, labels: string[]) =>
+            labels.map((label, index) => ({ label, score: index === 3 ? 0.9 : 0.1 })),
+        );
+
+        expect(await judgeSnapVideoFrames('Rate it.', [jpeg, jpeg, jpeg], 7, new AbortController().signal)).toBe(4);
+        expect(mockClassifier).toHaveBeenCalledTimes(3);
+    });
+});
+
 describe('judgeSnapVideoFrames', () => {
     test('uses the highest category per frame, keeps a lower tie, then maps and rounds the mean', async () => {
         const winners = [0, 3, 6];

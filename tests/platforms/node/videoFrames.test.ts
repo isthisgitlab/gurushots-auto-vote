@@ -24,6 +24,7 @@ import {
     downloadVideo,
     extractNodeVideoFrames,
     probeDuration,
+    runDecoder,
 } from '../../../src/ts/platforms/node/videoFrames';
 
 const probeChild = (output = '1'): ChildProcess => {
@@ -779,5 +780,246 @@ describe('node video frame extraction', () => {
             extractNodeVideoFrames('https://example.test/clip.mp4', 1, [0.2], () => '/decoder'),
         ).rejects.toThrow('not an allowed HTTPS MP4');
         expect(request).not.toHaveBeenCalled();
+    });
+});
+
+describe('node video frame extraction with an abort signal', () => {
+    const CANCELLED = 'Video extraction was cancelled';
+
+    afterEach(() => {
+        jest.useRealTimers();
+        for (const directory of directories.splice(0)) fs.rmSync(directory, { recursive: true, force: true });
+        jest.restoreAllMocks();
+        request.mockReset();
+        spawn.mockReset();
+        jest.clearAllMocks();
+    });
+
+    const abortedSignal = (): AbortSignal => {
+        const controller = new AbortController();
+        controller.abort();
+        return controller.signal;
+    };
+
+    const silentRequest = (): ClientRequest => {
+        const req = new EventEmitter() as ClientRequest;
+        Object.assign(req, { destroy: jest.fn(), end: jest.fn() });
+        request.mockImplementationOnce(invalid(() => req));
+        return req;
+    };
+
+    const stoppedListening = (signal: AbortSignal) => jest.spyOn(signal, 'removeEventListener');
+
+    test('an already aborted extraction rejects before any work', async () => {
+        const makeDirectory = jest.spyOn(fs, 'mkdtempSync');
+        await expect(
+            extractNodeVideoFrames('https://media.gurushots.com/clip.mp4', 1, [0.2], () => '/decoder', abortedSignal()),
+        ).rejects.toThrow(CANCELLED);
+        expect(makeDirectory).not.toHaveBeenCalled();
+        expect(request).not.toHaveBeenCalled();
+        expect(spawn).not.toHaveBeenCalled();
+    });
+
+    describe('download', () => {
+        test('an abort before the response destroys the request and rejects', async () => {
+            const req = silentRequest();
+            const controller = new AbortController();
+            const removed = stoppedListening(controller.signal);
+            const download = downloadVideo(
+                MEDIA_URL,
+                path.join(temporaryDirectory(), 'input.mp4'),
+                30_000,
+                undefined,
+                controller.signal,
+            );
+            controller.abort();
+
+            await expect(download).rejects.toThrow(CANCELLED);
+            expect(req.destroy).toHaveBeenCalledWith(expect.objectContaining({ message: CANCELLED }));
+            expect(removed).toHaveBeenCalledWith('abort', expect.any(Function));
+        });
+
+        test('a signal that is already aborted fails the download at once', async () => {
+            const req = silentRequest();
+            await expect(
+                downloadVideo(
+                    MEDIA_URL,
+                    path.join(temporaryDirectory(), 'input.mp4'),
+                    30_000,
+                    undefined,
+                    abortedSignal(),
+                ),
+            ).rejects.toThrow(CANCELLED);
+            expect(req.destroy).toHaveBeenCalledTimes(1);
+        });
+
+        test('an abort mid-stream destroys the response and rejects once the file is closed', async () => {
+            const res = response(200);
+            Object.assign(res, { destroy: jest.fn() });
+            requestFor(res);
+            const streams = captureStreams();
+            const controller = new AbortController();
+            const removed = stoppedListening(controller.signal);
+            const download = downloadVideo(
+                MEDIA_URL,
+                path.join(temporaryDirectory(), 'input.mp4'),
+                30_000,
+                undefined,
+                controller.signal,
+            );
+            res.emit('data', Buffer.from('ab'));
+            controller.abort();
+            let closedAtRejection: boolean | undefined;
+
+            await expect(
+                download.catch((error: unknown) => {
+                    closedAtRejection = streams[0]!.closed;
+                    throw error;
+                }),
+            ).rejects.toThrow(CANCELLED);
+            expect(closedAtRejection).toBe(true);
+            expect(res.destroy).toHaveBeenCalledTimes(1);
+            expect(removed).toHaveBeenCalledWith('abort', expect.any(Function));
+        });
+
+        test('stops listening for the abort once the download completes', async () => {
+            const res = response(200);
+            requestFor(res);
+            const controller = new AbortController();
+            const removed = stoppedListening(controller.signal);
+            const download = downloadVideo(
+                MEDIA_URL,
+                path.join(temporaryDirectory(), 'input.mp4'),
+                30_000,
+                undefined,
+                controller.signal,
+            );
+            res.emit('data', Buffer.from('abc'));
+            res.emit('end');
+            res.emit('close');
+            await download;
+
+            expect(removed).toHaveBeenCalledWith('abort', expect.any(Function));
+        });
+    });
+
+    describe('probe', () => {
+        test('an abort kills the probe child and rejects', async () => {
+            const probe = controlledProbeChild();
+            spawn.mockReturnValueOnce(probe.child);
+            const controller = new AbortController();
+            const removed = stoppedListening(controller.signal);
+            const result = probeDuration('/ffprobe', '/input.mp4', controller.signal);
+            controller.abort();
+
+            await expect(result).rejects.toThrow(CANCELLED);
+            expect(probe.kill).toHaveBeenCalledWith('SIGKILL');
+            expect(removed).toHaveBeenCalledWith('abort', expect.any(Function));
+        });
+
+        test('a signal that is already aborted kills the probe child at once', async () => {
+            const probe = controlledProbeChild();
+            spawn.mockReturnValueOnce(probe.child);
+
+            await expect(probeDuration('/ffprobe', '/input.mp4', abortedSignal())).rejects.toThrow(CANCELLED);
+            expect(probe.kill).toHaveBeenCalledWith('SIGKILL');
+        });
+
+        test('stops listening for the abort once the probe completes', async () => {
+            const probe = controlledProbeChild();
+            spawn.mockReturnValueOnce(probe.child);
+            const controller = new AbortController();
+            const removed = stoppedListening(controller.signal);
+            const result = probeDuration('/ffprobe', '/input.mp4', controller.signal);
+            probe.stdout.emit('data', Buffer.from('1'));
+            probe.child.emit('close', 0);
+
+            await expect(result).resolves.toBe(1_000);
+            expect(removed).toHaveBeenCalledWith('abort', expect.any(Function));
+        });
+    });
+
+    describe('decoder', () => {
+        const frames = [{ output: '/tmp/frame-0.jpg', timestamp: 0 }];
+        const decoderChild = () => {
+            const child = new EventEmitter() as ChildProcess;
+            const kill = jest.fn<void, []>();
+            Object.assign(child, { kill, killed: false });
+            spawn.mockReturnValueOnce(child);
+            return { child, kill };
+        };
+
+        test('an abort kills the decoder child, clears its timers and rejects', async () => {
+            jest.useFakeTimers(FAKE_TIMERS);
+            const { kill } = decoderChild();
+            const controller = new AbortController();
+            const removed = stoppedListening(controller.signal);
+            const result = runDecoder('/decoder', '/input.mp4', frames, controller.signal);
+            controller.abort();
+
+            await expect(result).rejects.toThrow(CANCELLED);
+            expect(kill).toHaveBeenCalledWith('SIGKILL');
+            expect(jest.getTimerCount()).toBe(0);
+            expect(removed).toHaveBeenCalledWith('abort', expect.any(Function));
+        });
+
+        test('a signal that is already aborted kills the decoder child at once', async () => {
+            jest.useFakeTimers(FAKE_TIMERS);
+            const { kill } = decoderChild();
+
+            await expect(runDecoder('/decoder', '/input.mp4', frames, abortedSignal())).rejects.toThrow(CANCELLED);
+            expect(kill).toHaveBeenCalledWith('SIGKILL');
+            expect(jest.getTimerCount()).toBe(0);
+        });
+
+        test('stops listening for the abort once the decoder completes', async () => {
+            jest.useFakeTimers(FAKE_TIMERS);
+            const { child, kill } = decoderChild();
+            const controller = new AbortController();
+            const removed = stoppedListening(controller.signal);
+            const result = runDecoder('/decoder', '/input.mp4', frames, controller.signal);
+            child.emit('close', 0);
+
+            await expect(result).resolves.toBeUndefined();
+            expect(kill).not.toHaveBeenCalled();
+            expect(removed).toHaveBeenCalledWith('abort', expect.any(Function));
+        });
+    });
+
+    test('an abort while the decoder runs kills its child and removes the temporary directory', async () => {
+        jest.useFakeTimers(FAKE_TIMERS);
+        const res = response(200, { 'content-length': '3' });
+        requestFor(res);
+        const child = new EventEmitter() as ChildProcess;
+        const kill = jest.fn();
+        Object.assign(child, { kill, killed: false });
+        spawn.mockImplementation(
+            invalid((_executable: string, args: string[]) =>
+                args.some((arg) => arg.endsWith('.jpg')) ? child : probeChild(),
+            ),
+        );
+        const makeDirectory = jest.spyOn(fs, 'mkdtempSync');
+        const controller = new AbortController();
+        const extraction = extractNodeVideoFrames(
+            'https://media.gurushots.com/clip.mp4',
+            1,
+            [0.2],
+            () => '/decoder',
+            controller.signal,
+        );
+        const rejected = expect(extraction).rejects.toThrow(CANCELLED);
+        res.emit('data', Buffer.from('mp4'));
+        res.emit('end');
+        await until(() => spawn.mock.calls.length > 0);
+        await jest.advanceTimersByTimeAsync(0);
+        expect(spawn).toHaveBeenCalledTimes(2);
+        expect(kill).not.toHaveBeenCalled();
+
+        controller.abort();
+        await rejected;
+
+        expect(kill).toHaveBeenCalledWith('SIGKILL');
+        expect(fs.existsSync(String(makeDirectory.mock.results[0]!.value))).toBe(false);
+        expect(jest.getTimerCount()).toBe(0);
     });
 });

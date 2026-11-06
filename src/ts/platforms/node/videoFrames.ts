@@ -32,6 +32,17 @@ const probePathOf = (decoder: string): string =>
         requirePath().extname(decoder) === '.exe' ? 'ffprobe.exe' : 'ffprobe',
     );
 
+const cancelledError = (): Error => new Error('Video extraction was cancelled');
+
+/**
+ * Calls `onAbort` once when `signal` aborts (at once when it already has) and returns the call that stops listening.
+ */
+const listenForAbort = (signal: AbortSignal | undefined, onAbort: () => void): (() => void) => {
+    if (signal?.aborted) onAbort();
+    signal?.addEventListener('abort', onAbort, { once: true });
+    return () => signal?.removeEventListener('abort', onAbort);
+};
+
 const contentLength = (header: string | string[] | undefined): number | null => {
     if (typeof header !== 'string' || !/^[0-9]+$/.test(header)) return null;
     const bytes = Number(header);
@@ -43,7 +54,7 @@ const contentLength = (header: string | string[] | undefined): number | null => 
  * streaming the body to `destination`. The socket idle timeout is
  * DOWNLOAD_IDLE_TIMEOUT_MS; `deadlineMs` bounds the whole download. The promise
  * settles only after the write stream has closed, so the file is never open when
- * the caller removes it.
+ * the caller removes it. An aborted `signal` fails the download with a cancellation error.
  */
 const downloadVideo = async (
     url: URL,
@@ -51,8 +62,10 @@ const downloadVideo = async (
     deadlineMs: number,
     // A parameter only so tests can check the streamed cap without writing 256 MiB.
     maxBytes = MAX_VIDEO_BYTES,
+    signal?: AbortSignal,
 ): Promise<void> =>
     new Promise((resolve, reject) => {
+        let stopListening = (): void => {};
         const connection: {
             request: import('node:http').ClientRequest | undefined;
             response: import('node:http').IncomingMessage | undefined;
@@ -67,7 +80,10 @@ const downloadVideo = async (
             connection.request?.destroy(error);
             connection.response?.destroy?.(error);
             if (connection.stream) connection.stream.destroy();
-            else reject(error);
+            else {
+                stopListening();
+                reject(error);
+            }
         };
         const openedRequest = requireHttps().request(
             url,
@@ -98,6 +114,7 @@ const downloadVideo = async (
                 stream.on('drain', () => receivedResponse.resume());
                 stream.once('close', () => {
                     clearTimeout(connection.deadline);
+                    stopListening();
                     if (connection.failure) reject(connection.failure);
                     else resolve();
                 });
@@ -134,12 +151,14 @@ const downloadVideo = async (
         openedRequest.once('timeout', () => fail(new Error('Video download timed out')));
         openedRequest.once('error', (error) => fail(error));
         openedRequest.end();
+        stopListening = listenForAbort(signal, () => fail(cancelledError()));
     });
 
 type DecoderFrame = { output: string; timestamp: number };
 
-const probeDuration = (probe: string, input: string): Promise<number> =>
+const probeDuration = (probe: string, input: string, signal?: AbortSignal): Promise<number> =>
     new Promise((resolve, reject) => {
+        let stopListening = (): void => {};
         const child = requireChildProcess().spawn(
             probe,
             [
@@ -166,6 +185,7 @@ const probeDuration = (probe: string, input: string): Promise<number> =>
             if (finished) return;
             finished = true;
             clearTimeout(timer);
+            stopListening();
             if (error) {
                 if (!child.killed) child.kill('SIGKILL');
                 reject(error);
@@ -202,10 +222,17 @@ const probeDuration = (probe: string, input: string): Promise<number> =>
         child.stdout.once('error', (error) => finish(error));
         child.once('error', (error) => finish(error));
         child.once('close', (code) => finish(code === 0 ? null : new Error('Video probe failed')));
+        stopListening = listenForAbort(signal, () => finish(cancelledError()));
     });
 
-const runDecoder = (decoder: string, input: string, frames: readonly DecoderFrame[]): Promise<void> =>
+const runDecoder = (
+    decoder: string,
+    input: string,
+    frames: readonly DecoderFrame[],
+    signal?: AbortSignal,
+): Promise<void> =>
     new Promise((resolve, reject) => {
+        let stopListening = (): void => {};
         const args = [
             '-nostdin',
             '-hide_banner',
@@ -251,6 +278,7 @@ const runDecoder = (decoder: string, input: string, frames: readonly DecoderFram
             finished = true;
             clearTimeout(timer);
             clearInterval(outputSizeCheck);
+            stopListening();
             if (error) {
                 if (!child.killed) child.kill('SIGKILL');
                 reject(error);
@@ -272,6 +300,7 @@ const runDecoder = (decoder: string, input: string, frames: readonly DecoderFram
         }, 25);
         child.once('error', (error) => finish(error));
         child.once('close', (code) => finish(code === 0 ? null : new Error('Video decoder failed')));
+        stopListening = listenForAbort(signal, () => finish(cancelledError()));
     });
 
 const frameDataUrl = (path: string): string => {
@@ -287,14 +316,17 @@ const frameDataUrl = (path: string): string => {
 
 /**
  * Downloads one validated video to a private temporary directory and runs the
- * bundled decoder in a child process. Extraction has no rating or scoring rule.
+ * bundled decoder in a child process. Extraction has no rating or scoring rule. An aborted `signal` rejects before any
+ * work, or ends the running download or decoder child (killed) and rejects.
  */
 const extractNodeVideoFrames = async (
     rawUrl: string,
     durationMs: number,
     positions: readonly number[],
     decoderPath: () => string,
+    signal?: AbortSignal,
 ): Promise<string[]> => {
+    if (signal?.aborted) throw cancelledError();
     const url = validateVideoMediaUrl(rawUrl);
     validateVideoFrameRequest(durationMs, positions);
     const fs = requireFs();
@@ -303,9 +335,9 @@ const extractNodeVideoFrames = async (
     const input = path.join(directory, 'input.mp4');
     const outputs = positions.map((_, index) => path.join(directory, `frame-${index}.jpg`));
     try {
-        await downloadVideo(url, input, Math.max(DOWNLOAD_IDLE_TIMEOUT_MS, durationMs));
+        await downloadVideo(url, input, Math.max(DOWNLOAD_IDLE_TIMEOUT_MS, durationMs), undefined, signal);
         const decoder = decoderPath();
-        const actualDurationMs = await probeDuration(probePathOf(decoder), input);
+        const actualDurationMs = await probeDuration(probePathOf(decoder), input, signal);
         await runDecoder(
             decoder,
             input,
@@ -313,6 +345,7 @@ const extractNodeVideoFrames = async (
                 output,
                 timestamp: videoFrameTimestampMs(durationMs, actualDurationMs, positions[index]!),
             })),
+            signal,
         );
         return outputs.map(frameDataUrl);
     } finally {

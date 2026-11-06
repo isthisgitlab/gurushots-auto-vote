@@ -414,9 +414,14 @@ export interface SnapJudgment {
 /**
  * Answers a Snap question about one photo: whichever of the two prompts the model scores higher.
  *
- * @returns null when the caption is not understood, the model is unavailable or it gives no valid score
+ * @returns null when the caption is not understood, the model is unavailable or it gives no valid score, or (without
+ * a log) when `signal` is aborted before the classifier runs
  */
-const judgeSnapImage = async (caption: string, image: SnapImage): Promise<SnapJudgment | null> => {
+const judgeSnapImage = async (
+    caption: string,
+    image: SnapImage,
+    signal?: AbortSignal,
+): Promise<SnapJudgment | null> => {
     const prompts = snapPrompts(caption);
     if (!prompts) return null;
     const url = entryPhotoUrl({ id: image.imageId, member_id: image.memberId }, { size: 512, fit: true });
@@ -428,6 +433,7 @@ const judgeSnapImage = async (caption: string, image: SnapImage): Promise<SnapJu
     try {
         if (!(await hasBundledModel())) return null;
         const classifier = await getClassifier();
+        if (signal?.aborted) return null;
         const results = await classifier(url, [prompts.yes, prompts.no]);
         const yesLogit = toLogit(results?.find?.((r) => r.label === prompts.yes)?.score);
         const noLogit = toLogit(results?.find?.((r) => r.label === prompts.no)?.score);
@@ -440,12 +446,14 @@ const judgeSnapImage = async (caption: string, image: SnapImage): Promise<SnapJu
 
 /**
  * Scores three sampled video frames with the bundled local model. This is an uncalibrated sampled-frame heuristic.
- * It does not measure motion or establish whole-video picture quality.
+ * It does not measure motion or establish whole-video picture quality. An aborted `signal` ends it with null, without
+ * a log, before the next frame.
  */
 const judgeSnapVideoFrames = async (
     caption: string,
     frames: readonly string[],
     maxScore: number,
+    signal?: AbortSignal,
 ): Promise<number | null> => {
     if (!validSnapVideoScoreInput(caption, frames, maxScore)) return null;
     const prompts = snapVideoScorePrompts(caption);
@@ -454,6 +462,7 @@ const judgeSnapVideoFrames = async (
         const classifier = await getClassifier();
         const ratings: number[] = [];
         for (const frame of frames) {
+            if (signal?.aborted) return null;
             const rating = await snapVideoFrameRating(classifier, frame, prompts, maxScore);
             if (rating === null) return null;
             ratings.push(rating);

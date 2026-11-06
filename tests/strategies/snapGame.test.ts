@@ -18,7 +18,7 @@ jest.mock('../../src/ts/core/services/visionVerifier', () => ({
 }));
 jest.mock('../../src/ts/core/settings', () => ({ __esModule: true, getEffectiveSetting: jest.fn() }));
 jest.mock('../../src/ts/core/timing', () => ({
-    sleep: jest.fn(() => Promise.resolve()),
+    sleep: jest.fn(() => new Promise<void>((resolve) => setImmediate(resolve))),
     getRandomDelay: jest.fn(() => 4000),
 }));
 jest.mock('../../src/ts/core/platform/port', () => ({ platform: jest.fn() }));
@@ -37,6 +37,7 @@ import {
     isSnapUnavailable,
 } from '../../src/ts/core/services/turboRunLock';
 import type { CategoryLogger } from '../../src/ts/core/logger';
+import type { SnapJudgment } from '../../src/ts/core/services/visionVerifier';
 import type { Challenge, SnapVoteResult, TurboSession } from '../../src/ts/core/types/gurushots';
 import type { SnapScoreResult } from '../../src/ts/core/types/gurushots/voting';
 import { invalid } from '../helpers/invalid';
@@ -46,7 +47,7 @@ const vision = jest.mocked(visionModule);
 const settings = jest.mocked(settingsModule);
 const timing = jest.mocked(timingModule);
 const platform = jest.mocked(platformModule.platform);
-const videoFrames = jest.fn<Promise<string[]>, [string, number, readonly number[]]>();
+const videoFrames = jest.fn<Promise<string[]>, [string, number, readonly number[], AbortSignal?]>();
 
 const CHALLENGE = invalid<Challenge>({ id: 77, title: 'Snap Test' });
 const CAPTION = 'Does the soft, even light look natural?';
@@ -123,12 +124,22 @@ const steppedClock = (stepMs: number) => {
     };
 };
 
+// The cancel watcher and the sliced waits sleep in pieces of at most this many ms.
+const POLL_MS = 250;
+// Every sleep ends on a macrotask: the watcher loop of a judgment that never settles must not starve the event loop.
+const nextTask = () => new Promise<void>((resolve) => setImmediate(resolve));
 const sleeps: number[] = [];
+// What a wait of `ms` records: whole slices and the remainder.
+const slicesOf = (ms: number): number[] => [
+    ...Array<number>(Math.floor(ms / POLL_MS)).fill(POLL_MS),
+    ...(ms % POLL_MS === 0 ? [] : [ms % POLL_MS]),
+];
 const deps = (overrides: Parameters<typeof runSnapGame>[2] = {}) => ({
     now: () => 0,
     pace: () => 4000,
     sleep: async (ms: number) => {
         sleeps.push(ms);
+        await nextTask();
     },
     ...overrides,
 });
@@ -166,7 +177,11 @@ describe('runSnapGame', () => {
             ['sess', 'img1', 'yes', 'tok'],
             ['sess', 'img2', 'yes', 'tok'],
         ]);
-        expect(vision.judgeSnapImage).toHaveBeenCalledWith(CAPTION, { imageId: 'img0', memberId: 'm0' });
+        expect(vision.judgeSnapImage).toHaveBeenCalledWith(
+            CAPTION,
+            { imageId: 'img0', memberId: 'm0' },
+            expect.any(AbortSignal),
+        );
         expect(turbo.getChallengeTurbo).not.toHaveBeenCalled();
         expect(infos()).toContain('[Challenge 77: Snap Test] Snap 1/3: yes (yes=1.23 no=-0.50) community=50%');
     });
@@ -187,8 +202,11 @@ describe('runSnapGame', () => {
             'tok',
             deps({
                 isCancelled: () => cancelled,
-                sleep: async () => {
-                    cancelled = true;
+                pace: () => 4100,
+                // The cancel watcher and the full slices are skipped: only the last slice of the wait sets the flag.
+                sleep: async (ms) => {
+                    if (ms !== POLL_MS) cancelled = true;
+                    await nextTask();
                 },
             }),
         );
@@ -232,7 +250,7 @@ describe('runSnapGame', () => {
             expect(result).toEqual({ answered: 1, total: 1, meanAgreement: null, won: true, stopReason: 'completed' });
             expect(turbo.submitSnapScore).toHaveBeenCalledWith('score-sess', 'video0', 7, 'tok');
             expect(turbo.submitSnapVote).not.toHaveBeenCalled();
-            expect(sleeps).toEqual([9000]);
+            expect(sleeps).toEqual(slicesOf(9000));
         });
 
         test('allows an empty score caption with snapYesWithoutModel enabled', async () => {
@@ -265,7 +283,7 @@ describe('runSnapGame', () => {
             await runSnapGame(CHALLENGE, 'tok', deps());
 
             expect(turbo.submitSnapScore).toHaveBeenCalledTimes(2);
-            expect(sleeps).toEqual([9000, 300]);
+            expect(sleeps).toEqual([...slicesOf(9000), ...slicesOf(300)]);
         });
 
         test('uses the bounded minimum retry delay when the server does not provide one', async () => {
@@ -275,7 +293,7 @@ describe('runSnapGame', () => {
 
             await runSnapGame(CHALLENGE, 'tok', deps());
 
-            expect(sleeps).toEqual([9000, 100]);
+            expect(sleeps).toEqual([...slicesOf(9000), ...slicesOf(100)]);
         });
 
         test('extracts three video frames and scores them with the model', async () => {
@@ -285,11 +303,17 @@ describe('runSnapGame', () => {
 
             await runSnapGame(CHALLENGE, 'tok', deps());
 
-            expect(videoFrames).toHaveBeenCalledWith('https://media.gurushots.com/clip0.mp4', 5000, [0.2, 0.5, 0.8]);
+            expect(videoFrames).toHaveBeenCalledWith(
+                'https://media.gurushots.com/clip0.mp4',
+                5000,
+                [0.2, 0.5, 0.8],
+                expect.any(AbortSignal),
+            );
             expect(vision.judgeSnapVideoFrames).toHaveBeenCalledWith(
                 'Rate overall picture quality.',
                 ['frame-a', 'frame-b', 'frame-c'],
                 7,
+                expect.any(AbortSignal),
             );
             expect(turbo.submitSnapScore).toHaveBeenCalledWith('score-sess', 'video0', 4, 'tok');
         });
@@ -313,6 +337,7 @@ describe('runSnapGame', () => {
 
             expect((await runSnapGame(CHALLENGE, 'tok', deps())).stopReason).toBe('judge-failed');
             expect(turbo.submitSnapScore).not.toHaveBeenCalled();
+            expect(warnings()).toEqual(['Snap video judgment unavailable: Error: decode failed']);
 
             videoFrames.mockResolvedValue(['frame-a', 'frame-b', 'frame-c']);
             vision.judgeSnapVideoFrames.mockResolvedValueOnce(null);
@@ -363,18 +388,20 @@ describe('runSnapGame', () => {
 
             expect(result.stopReason).toBe('request-failed');
             expect(turbo.submitSnapScore).toHaveBeenCalledTimes(3);
-            expect(sleeps).toEqual([9000, 300, 300]);
+            expect(sleeps).toEqual([...slicesOf(9000), ...slicesOf(300), ...slicesOf(300)]);
         });
 
         test('cancels after a retry wait and never repeats the answer', async () => {
             let cancelled = false;
-            turbo.submitSnapScore.mockResolvedValue(scored({ ok: false, tooEarly: true, retryAfterMs: 300 }));
+            turbo.submitSnapScore.mockResolvedValue(scored({ ok: false, tooEarly: true, retryAfterMs: 1000 }));
             const result = await runSnapGame(
                 CHALLENGE,
                 'tok',
                 deps({
-                    sleep: async (ms) => {
-                        if (ms === 300) cancelled = true;
+                    // Only the retry wait (after the first answer went out) sets the flag.
+                    sleep: async () => {
+                        if (turbo.submitSnapScore.mock.calls.length > 0) cancelled = true;
+                        await nextTask();
                     },
                     isCancelled: () => cancelled,
                 }),
@@ -393,6 +420,201 @@ describe('runSnapGame', () => {
             expect(isSnapAutoCoolingDown(77, 0)).toBe(true);
             await runSnapGame(CHALLENGE, 'tok', deps());
             expect(turbo.submitSnapScore).toHaveBeenCalledTimes(4);
+        });
+    });
+
+    describe('a stop while a round is running', () => {
+        const deferred = <T>() => {
+            let resolve!: (value: T) => void;
+            let reject!: (reason: unknown) => void;
+            const promise = new Promise<T>((res, rej) => {
+                resolve = res;
+                reject = rej;
+            });
+            return { promise, resolve, reject };
+        };
+        // Lets a rejection that nobody awaits surface before the test ends.
+        const settleStragglers = async () => {
+            await nextTask();
+            await nextTask();
+        };
+        const unhandled = jest.fn();
+        beforeEach(() => {
+            unhandled.mockClear();
+            process.on('unhandledRejection', unhandled);
+        });
+        afterEach(() => {
+            process.off('unhandledRejection', unhandled);
+        });
+
+        describe('photo rounds', () => {
+            beforeEach(() => {
+                turbo.startTurboSession.mockResolvedValue(snapSession(0, 1));
+                turbo.submitSnapVote.mockResolvedValue(landed({ completed: true }));
+            });
+
+            test('a judgment that settles first is answered, and the watcher stops polling', async () => {
+                const pending = deferred<SnapJudgment | null>();
+                vision.judgeSnapImage.mockReturnValue(pending.promise);
+
+                const result = await runSnapGame(
+                    CHALLENGE,
+                    'tok',
+                    deps({
+                        pace: () => 0,
+                        sleep: async (ms) => {
+                            sleeps.push(ms);
+                            if (sleeps.length === 3) pending.resolve(judgment);
+                            await nextTask();
+                        },
+                    }),
+                );
+                await settleStragglers();
+
+                expect(result).toMatchObject({ answered: 1, won: true, stopReason: 'completed' });
+                expect(turbo.submitSnapVote).toHaveBeenCalledWith('sess', 'img0', 'yes', 'tok');
+                expect(sleeps).toEqual([POLL_MS, POLL_MS, POLL_MS]);
+            });
+
+            test('a stop during the judgment returns at once, aborts it and drops its later failure silently', async () => {
+                const pending = deferred<SnapJudgment | null>();
+                let signal: AbortSignal | undefined;
+                vision.judgeSnapImage.mockImplementation((_caption, _image, received) => {
+                    signal = received;
+                    return pending.promise;
+                });
+
+                const result = await runSnapGame(CHALLENGE, 'tok', deps({ isCancelled: () => sleeps.length >= 3 }));
+                expect(signal?.aborted).toBe(true);
+                pending.reject(new Error('late failure'));
+                await settleStragglers();
+
+                expect(result).toEqual({
+                    answered: 0,
+                    total: 1,
+                    meanAgreement: null,
+                    won: false,
+                    stopReason: 'cancelled',
+                });
+                expect(sleeps).toEqual([POLL_MS, POLL_MS, POLL_MS]);
+                expect(turbo.submitSnapVote).not.toHaveBeenCalled();
+                expect(warnings()).toEqual([]);
+                expect(unhandled).not.toHaveBeenCalled();
+            });
+
+            test('a stop during the answer wait is seen within one slice', async () => {
+                const result = await runSnapGame(CHALLENGE, 'tok', deps({ isCancelled: () => sleeps.length >= 5 }));
+
+                expect(result.stopReason).toBe('cancelled');
+                expect(sleeps).toEqual([POLL_MS, POLL_MS, POLL_MS, POLL_MS, POLL_MS]);
+                expect(turbo.submitSnapVote).not.toHaveBeenCalled();
+            });
+
+            test('a stop that is already set when the answer wait begins sleeps no slice', async () => {
+                let cancelled = false;
+                const result = await runSnapGame(
+                    CHALLENGE,
+                    'tok',
+                    deps({
+                        isCancelled: () => cancelled,
+                        pace: () => {
+                            cancelled = true;
+                            return 4000;
+                        },
+                    }),
+                );
+
+                expect(result.stopReason).toBe('cancelled');
+                expect(sleeps).toEqual([POLL_MS]);
+                expect(turbo.submitSnapVote).not.toHaveBeenCalled();
+            });
+        });
+
+        describe('score rounds', () => {
+            beforeEach(() => {
+                turbo.startTurboSession.mockResolvedValue(scoreSession());
+                turbo.submitSnapScore.mockResolvedValue(scored({ completed: true }));
+            });
+
+            test('a judgment that settles first is submitted, and the watcher stops polling', async () => {
+                const pending = deferred<number | null>();
+                vision.judgeSnapVideoFrames.mockReturnValue(pending.promise);
+
+                const result = await runSnapGame(
+                    CHALLENGE,
+                    'tok',
+                    deps({
+                        pace: () => 0,
+                        now: steppedClock(5000),
+                        sleep: async (ms) => {
+                            sleeps.push(ms);
+                            if (sleeps.length === 3) pending.resolve(5);
+                            await nextTask();
+                        },
+                    }),
+                );
+                await settleStragglers();
+
+                expect(result).toMatchObject({ answered: 1, won: true, stopReason: 'completed' });
+                expect(turbo.submitSnapScore).toHaveBeenCalledWith('score-sess', 'video0', 5, 'tok');
+                expect(sleeps).toEqual([POLL_MS, POLL_MS, POLL_MS]);
+            });
+
+            test('a stop during frame extraction returns at once, aborts it and drops its later failure silently', async () => {
+                const pending = deferred<string[]>();
+                let signal: AbortSignal | undefined;
+                videoFrames.mockImplementation((_url, _durationMs, _positions, received) => {
+                    signal = received;
+                    return pending.promise;
+                });
+
+                const result = await runSnapGame(CHALLENGE, 'tok', deps({ isCancelled: () => sleeps.length >= 3 }));
+                expect(signal?.aborted).toBe(true);
+                pending.reject(new Error('Video extraction was cancelled'));
+                await settleStragglers();
+
+                expect(result).toEqual({
+                    answered: 0,
+                    total: 1,
+                    meanAgreement: null,
+                    won: false,
+                    stopReason: 'cancelled',
+                });
+                expect(sleeps).toEqual([POLL_MS, POLL_MS, POLL_MS]);
+                expect(vision.judgeSnapVideoFrames).not.toHaveBeenCalled();
+                expect(turbo.submitSnapScore).not.toHaveBeenCalled();
+                expect(warnings()).toEqual([]);
+                expect(unhandled).not.toHaveBeenCalled();
+            });
+
+            test('a stop during the model call aborts it, and its later result is dropped', async () => {
+                const pending = deferred<number | null>();
+                let signal: AbortSignal | undefined;
+                vision.judgeSnapVideoFrames.mockImplementation((_caption, _frames, _maxScore, received) => {
+                    signal = received;
+                    return pending.promise;
+                });
+
+                const result = await runSnapGame(CHALLENGE, 'tok', deps({ isCancelled: () => sleeps.length >= 3 }));
+                expect(signal?.aborted).toBe(true);
+                pending.reject(new Error('late failure'));
+                await settleStragglers();
+
+                expect(result.stopReason).toBe('cancelled');
+                expect(warnings()).toEqual([]);
+                expect(turbo.submitSnapScore).not.toHaveBeenCalled();
+                expect(unhandled).not.toHaveBeenCalled();
+            });
+
+            test('a stop during the answer wait of a 5 s clip is seen within one slice', async () => {
+                vision.judgeSnapVideoFrames.mockResolvedValue(4);
+
+                const result = await runSnapGame(CHALLENGE, 'tok', deps({ isCancelled: () => sleeps.length >= 5 }));
+
+                expect(result.stopReason).toBe('cancelled');
+                expect(sleeps).toEqual([POLL_MS, POLL_MS, POLL_MS, POLL_MS, POLL_MS]);
+                expect(turbo.submitSnapScore).not.toHaveBeenCalled();
+            });
         });
     });
 
@@ -444,7 +666,7 @@ describe('runSnapGame', () => {
             await runSnapGame(CHALLENGE, 'tok', deps());
 
             expect(turbo.submitSnapVote.mock.calls).toEqual([['sess', 'img2', 'yes', 'tok']]);
-            expect(sleeps).toEqual([4000]);
+            expect(sleeps).toEqual(slicesOf(4000));
         });
 
         test('keeps the stop handling of the model path', async () => {
@@ -505,7 +727,8 @@ describe('runSnapGame', () => {
             await runSnapGame(CHALLENGE, 'tok', deps({ now, pace }));
 
             expect(pace).toHaveBeenCalledTimes(2);
-            expect(sleeps).toEqual([2500, 2500]);
+            // Per image: the cancel watcher's one poll, then the wait in slices.
+            expect(sleeps).toEqual([POLL_MS, ...slicesOf(2500), POLL_MS, ...slicesOf(2500)]);
         });
 
         test('does not wait when judging alone took the target', async () => {
@@ -513,7 +736,7 @@ describe('runSnapGame', () => {
 
             await runSnapGame(CHALLENGE, 'tok', deps({ now: steppedClock(5000) }));
 
-            expect(sleeps).toEqual([]);
+            expect(sleeps).toEqual([POLL_MS]);
             expect(turbo.submitSnapVote).toHaveBeenCalledTimes(1);
         });
 
@@ -526,8 +749,11 @@ describe('runSnapGame', () => {
 
             dateNow.mockRestore();
             expect(timing.getRandomDelay).toHaveBeenCalledWith(3000, 6000);
-            // Target 4000 minus the 100 ms the clock advanced between its two readings.
-            expect(timing.sleep).toHaveBeenCalledWith(3900);
+            // Target 4000 minus the 100 ms the clock advanced between its two readings, waited in slices, plus the
+            // cancel watcher's one poll.
+            const waited = timing.sleep.mock.calls.reduce((sum, [ms]) => sum + ms, 0);
+            expect(waited).toBe(3900 + POLL_MS);
+            expect(timing.sleep).toHaveBeenCalledWith(150);
         });
     });
 

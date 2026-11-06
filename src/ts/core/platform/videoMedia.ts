@@ -1,6 +1,7 @@
 /** The only video CDN that a Snap session may ask this app to download. */
 const VIDEO_MEDIA_HOST = 'media.gurushots.com';
 const MAX_VIDEO_DURATION_MS = 120_000;
+const MAX_VIDEO_FRAME_POSITIONS = 8;
 
 /**
  * Parses and validates the server media URL before any platform downloads it.
@@ -33,6 +34,7 @@ const validateVideoFrameRequest = (durationMs: number, positions: readonly numbe
         throw new Error('Video duration is outside the supported range');
     }
     if (positions.length === 0) throw new Error('At least one video frame position is required');
+    if (positions.length > MAX_VIDEO_FRAME_POSITIONS) throw new Error('Too many video frame positions');
     for (const position of positions) {
         if (!Number.isFinite(position) || position < 0 || position > 1) {
             throw new Error('Video frame position must be between zero and one');

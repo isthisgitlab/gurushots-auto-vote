@@ -9,6 +9,12 @@ describe('video media validation', () => {
     test('accepts the fixed HTTPS MP4 origin and valid frame request', () => {
         expect(validateVideoMediaUrl('https://media.gurushots.com/path/clip.MP4?x=1').href).toContain('/path/clip.MP4');
         expect(() => validateVideoFrameRequest(MAX_VIDEO_DURATION_MS, [0, 0.2, 0.5, 0.8, 1])).not.toThrow();
+        expect(() =>
+            validateVideoFrameRequest(
+                10,
+                Array.from({ length: 8 }, () => 0.5),
+            ),
+        ).not.toThrow();
     });
 
     test.each([
@@ -30,6 +36,7 @@ describe('video media validation', () => {
         [10, [-0.1]],
         [10, [1.1]],
         [10, [Number.NaN]],
+        [10, Array.from({ length: 9 }, () => 0.5)],
     ])('rejects an unsupported frame request', (duration, positions) => {
         expect(() => validateVideoFrameRequest(duration, positions)).toThrow();
     });

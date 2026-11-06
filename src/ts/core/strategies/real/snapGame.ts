@@ -34,6 +34,8 @@ const SNAP_SCORE_FRAME_POSITIONS = [0.2, 0.5, 0.8] as const;
 const SNAP_SCORE_RETRY_COUNT = 2;
 const SNAP_SCORE_RETRY_MIN_MS = 100;
 const SNAP_SCORE_RETRY_MAX_MS = 30_000;
+// How often a wait or a running judgment looks at the stop flag.
+const SNAP_CANCEL_POLL_MS = 250;
 
 // Per challenge: how many consecutive runs ended without landing an answer for a transient reason.
 const transientRuns = new Map<string, number>();
@@ -72,10 +74,48 @@ const stoppedRound = (reason: SnapStopReason, transient = false, unavailable = f
     unavailable,
 });
 
-const waitForSnapAnswer = async (startedAt: number, clipDurationMs: number, deps: SnapRoundDeps): Promise<boolean> => {
-    const remaining = deps.pace() + clipDurationMs - (deps.now() - startedAt);
-    if (remaining > 0) await deps.sleep(remaining);
+/**
+ * Sleeps `ms` in slices of at most SNAP_CANCEL_POLL_MS so a stop is seen within one slice.
+ *
+ * @returns false when the stop flag was set, true when the wait ran its course
+ */
+const sleepUnlessCancelled = async (ms: number, deps: SnapRoundDeps): Promise<boolean> => {
+    for (let left = ms; left > 0 && !deps.isCancelled(); left -= SNAP_CANCEL_POLL_MS) {
+        await deps.sleep(Math.min(left, SNAP_CANCEL_POLL_MS));
+    }
     return !deps.isCancelled();
+};
+
+const waitForSnapAnswer = (startedAt: number, clipDurationMs: number, deps: SnapRoundDeps): Promise<boolean> =>
+    sleepUnlessCancelled(deps.pace() + clipDurationMs - (deps.now() - startedAt), deps);
+
+type RacedJudgment<T> = { cancelled: true } | { cancelled: false; judged: T };
+
+/**
+ * Runs a judgment next to a watcher that looks at the stop flag every SNAP_CANCEL_POLL_MS. A stop that comes first
+ * aborts the judgment's signal and returns at once; the abandoned judgment ends on its own and its failure is dropped.
+ * The watcher ends as soon as the judgment settles.
+ */
+const raceCancellation = async <T>(
+    work: (signal: AbortSignal) => Promise<T>,
+    deps: SnapRoundDeps,
+): Promise<RacedJudgment<T>> => {
+    const controller = new AbortController();
+    let settled = false;
+    const judgment = work(controller.signal).finally(() => {
+        settled = true;
+    });
+    judgment.catch(() => {});
+    const watcher = (async (): Promise<RacedJudgment<T>> => {
+        while (!settled && !deps.isCancelled()) await deps.sleep(SNAP_CANCEL_POLL_MS);
+        return { cancelled: true };
+    })();
+    const first = await Promise.race([
+        judgment.then((judged): RacedJudgment<T> => ({ cancelled: false, judged })),
+        watcher,
+    ]);
+    if (first.cancelled) controller.abort();
+    return first;
 };
 
 const isExplicitTooEarlyRefusal = (vote: SnapScoreResult): boolean =>
@@ -93,8 +133,7 @@ const submitSnapScoreWithRetries = async (
 ): Promise<SnapScoreResult | null> => {
     let vote = await submitSnapScore(sessionId, imageId, score, token);
     for (let retry = 0; isExplicitTooEarlyRefusal(vote) && retry < SNAP_SCORE_RETRY_COUNT; retry++) {
-        await deps.sleep(scoreRetryDelayMs(vote));
-        if (deps.isCancelled()) return null;
+        if (!(await sleepUnlessCancelled(scoreRetryDelayMs(vote), deps))) return null;
         vote = await submitSnapScore(sessionId, imageId, score, token);
     }
     return vote;
@@ -112,10 +151,11 @@ const playSnapPhotoRound = async (
     let answer: SnapJudgment['answer'] = 'yes';
     let basis = 'no vision model';
     if (modelAnswers) {
-        const judgment = await judgeSnapImage(caption, image);
-        if (!judgment) return stoppedRound('judge-failed', true);
-        answer = judgment.answer;
-        basis = `yes=${judgment.yesLogit.toFixed(2)} no=${judgment.noLogit.toFixed(2)}`;
+        const raced = await raceCancellation((signal) => judgeSnapImage(caption, image, signal), deps);
+        if (raced.cancelled) return stoppedRound('cancelled');
+        if (!raced.judged) return stoppedRound('judge-failed', true);
+        answer = raced.judged.answer;
+        basis = `yes=${raced.judged.yesLogit.toFixed(2)} no=${raced.judged.noLogit.toFixed(2)}`;
     }
     if (!(await waitForSnapAnswer(startedAt, 0, deps))) return stoppedRound('cancelled');
     const vote = await submitSnapVote(sessionId, image.imageId, answer, token);
@@ -128,6 +168,29 @@ const playSnapPhotoRound = async (
         agreement: vote.communityPct,
         message: `${answer} (${basis}) community=${vote.communityPct ?? 'n/a'}%`,
     };
+};
+
+/** The frames of one clip scored by the model; null when it cannot be judged. A failure after a stop is not logged. */
+const judgeSnapVideo = async (
+    caption: string,
+    maxScore: number,
+    image: SnapScoreVideo,
+    signal: AbortSignal,
+): Promise<number | null> => {
+    try {
+        const frames = await platform().assets.videoFrames(
+            image.mediaUrl,
+            image.durationMs,
+            SNAP_SCORE_FRAME_POSITIONS,
+            signal,
+        );
+        return await judgeSnapVideoFrames(caption, frames, maxScore, signal);
+    } catch (error) {
+        if (!signal.aborted) {
+            logger.withCategory('turbo').warning(`Snap video judgment unavailable: ${String(error)}`, null);
+        }
+        return null;
+    }
 };
 
 const playSnapScoreRound = async (
@@ -143,20 +206,11 @@ const playSnapScoreRound = async (
     let score = maxScore;
     let basis = 'no vision model';
     if (modelAnswers) {
-        try {
-            const frames = await platform().assets.videoFrames(
-                image.mediaUrl,
-                image.durationMs,
-                SNAP_SCORE_FRAME_POSITIONS,
-            );
-            const judged = await judgeSnapVideoFrames(caption, frames, maxScore);
-            if (judged === null) return stoppedRound('judge-failed', true);
-            score = judged;
-            basis = `score=${score}`;
-        } catch (error) {
-            logger.withCategory('turbo').warning(`Snap video judgment unavailable: ${String(error)}`, null);
-            return stoppedRound('judge-failed', true);
-        }
+        const raced = await raceCancellation((signal) => judgeSnapVideo(caption, maxScore, image, signal), deps);
+        if (raced.cancelled) return stoppedRound('cancelled');
+        if (raced.judged === null) return stoppedRound('judge-failed', true);
+        score = raced.judged;
+        basis = `score=${score}`;
     }
     if (!(await waitForSnapAnswer(startedAt, image.durationMs, deps))) return stoppedRound('cancelled');
     const vote = await submitSnapScoreWithRetries(sessionId, image.imageId, score, token, deps);

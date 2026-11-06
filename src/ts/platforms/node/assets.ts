@@ -113,12 +113,18 @@ const createNodeAssets = (parts: NodeAssetParts = {}): PlatformAssets => ({
         const parsed: unknown = JSON.parse(readAssetFile(relativePath));
         return parsed;
     },
-    videoFrames: (url, durationMs, positions): Promise<string[]> =>
-        videoFrames().extractNodeVideoFrames(url, durationMs, positions, () => {
-            const extractor = parts.extractVideoDecoderCliAssets;
-            const sea = seaIfAny();
-            return extractor && sea?.isSea() ? extractor().decoderPath : bundledDecoderPath();
-        }),
+    videoFrames: (url, durationMs, positions, signal): Promise<string[]> =>
+        videoFrames().extractNodeVideoFrames(
+            url,
+            durationMs,
+            positions,
+            () => {
+                const extractor = parts.extractVideoDecoderCliAssets;
+                const sea = seaIfAny();
+                return extractor && sea?.isSea() ? extractor().decoderPath : bundledDecoderPath();
+            },
+            signal,
+        ),
     visionModel: {
         location: modelLocation,
         device: 'cpu',

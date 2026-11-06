@@ -177,9 +177,14 @@ export type PlatformAssets = {
     /**
      * Extracts JPEG data URLs at the requested fractional positions in one
      * validated video. The returned URLs keep the input order. Any failed
-     * frame rejects the whole request.
+     * frame rejects the whole request. An aborted `signal` stops the work and rejects.
      */
-    videoFrames: (url: string, durationMs: number, positions: readonly number[]) => Promise<string[]>;
+    videoFrames: (
+        url: string,
+        durationMs: number,
+        positions: readonly number[],
+        signal?: AbortSignal,
+    ) => Promise<string[]>;
     /** The local vision model: where it lives, the device inference runs on, whether this build ships it, and the
      * library the classifier pipeline is built from (the SEA build's extracted copy, else the package import). */
     visionModel: {
