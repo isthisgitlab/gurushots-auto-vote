@@ -4,7 +4,7 @@
  */
 import { bandTabs, groupSchemaEntries, tierSchemaEntries } from '@/utils/groupSettings';
 import { SETTINGS_SCHEMA, SETTINGS_GROUPS } from '../../src/ts/core/settings/schema';
-import type { SettingsBand, SettingsSection, SettingsTab, SettingsTabId } from '@/utils/groupSettings';
+import type { SettingsBand, SettingsSection, SettingsTab } from '@/utils/groupSettings';
 import type { RendererSchema } from '../../src/ts/core/types/settingsEditor';
 import { invalid } from '../helpers/invalid';
 
@@ -186,9 +186,6 @@ describe('bandTabs', () => {
 
     test('maps each band to tier-<tierId> with its label key', () => {
         const tabs = bandTabs([band('core', 'app.tierCore'), band('overrides', 'app.tierOverrides')]);
-        const ids: SettingsTabId[] = tabs.map((tab) => tab.id);
-        expect(ids).toEqual(['tier-core', 'tier-overrides']);
-        expect(tabs.map((tab) => tab.label)).toEqual(['app.tierCore', 'app.tierOverrides']);
         expect(tabs as SettingsTab[]).toEqual([
             { id: 'tier-core', label: 'app.tierCore' },
             { id: 'tier-overrides', label: 'app.tierOverrides' },
@@ -205,7 +202,6 @@ describe('bandTabs', () => {
     test('a real tier called "other" gets tier-other, distinct from otherTier', () => {
         const tabs = bandTabs([band('other', 'app.tierOther'), band(null, null)]);
         expect(tabs.map((tab) => tab.id)).toEqual(['tier-other', 'otherTier']);
-        expect(new Set(tabs.map((tab) => tab.id)).size).toBe(tabs.length);
     });
 
     test('ids stay unique across bands', () => {

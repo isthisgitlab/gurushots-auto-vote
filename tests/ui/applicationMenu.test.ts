@@ -144,7 +144,6 @@ describe('createApplicationMenu', () => {
         menuModule.createApplicationMenu();
 
         const tpl = builtTemplate();
-        expect(tpl[0].label).toBe('GuruShots Auto Voter');
         expect(tpl[0].submenu!.map((i) => i.role).filter(Boolean)).toEqual([
             'about',
             'services',

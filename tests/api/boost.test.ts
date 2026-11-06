@@ -274,34 +274,5 @@ describe('boost', () => {
                 'c_id=challenge%26special&image_id=image%3Dspecial',
             );
         });
-
-        test('should use same endpoint as applyBoost', async () => {
-            const mockResponse = { success: true };
-            makePostRequest.mockResolvedValueOnce(mockResponse);
-
-            await applyBoostToEntry('test-challenge', 'test-image', mockToken);
-
-            expect(makePostRequest).toHaveBeenCalledWith(
-                'https://api.gurushots.com/rest_mobile/boost_photo',
-                expect.anything(),
-                expect.any(String),
-            );
-        });
-
-        test('should include correct headers', async () => {
-            const mockResponse = { success: true };
-            makePostRequest.mockResolvedValueOnce(mockResponse);
-
-            await applyBoostToEntry('test-challenge', 'test-image', mockToken);
-
-            expect(makePostRequest).toHaveBeenCalledWith(
-                expect.any(String),
-                expect.objectContaining({
-                    'x-token': mockToken,
-                    'content-type': 'application/x-www-form-urlencoded; charset=utf-8',
-                }),
-                expect.any(String),
-            );
-        });
     });
 });

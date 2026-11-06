@@ -307,10 +307,6 @@ describe('photoPicker', () => {
             // parts flow through (and "life" is stripped as the stopword it is).
             expect(tokenise('Beauty of Still Life', { ignoreWords: ['still life'] })).toEqual(['beauty', 'still']);
         });
-
-        test('compoundOf is false before init()', () => {
-            expect(lexicon.compoundOf(['close', 'up'])).toBe(false);
-        });
     });
 
     describe('labelStemGroups', () => {

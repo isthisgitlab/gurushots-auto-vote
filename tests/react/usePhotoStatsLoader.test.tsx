@@ -718,8 +718,6 @@ describe('restarts while a call is out', () => {
             .mock.calls.slice(1)
             .map((call) => call[0] as string[]);
         expect(asked).toEqual([ids(100, 100), ids(50, 200)]);
-        const flat = asked.flat();
-        expect(new Set(flat).size).toBe(flat.length);
         expect(result.current.statsProgress).toBeNull();
         expect(result.current.stats.size).toBe(250);
         expect(result.current.statsMissing).toEqual([]);
@@ -829,7 +827,6 @@ describe('restarts while a call is out', () => {
             await waitFor(() => expect(result.current.statsRead).toBe(true));
             const asked = askedAfterFirst();
             expect(asked).toEqual([ids(100), ids(100, 100), ids(50, 200)]);
-            expect(new Set(asked.flat()).size).toBe(250);
             expectBounded(trace);
             expect(result.current.stats.size).toBe(250);
             expect(result.current.statsMissing).toEqual([]);

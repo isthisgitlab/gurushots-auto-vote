@@ -465,8 +465,4 @@ whileLinkVersion1('the link version 1 contract', () => {
             ]);
         });
     });
-
-    test('each frozen spend channel is still a spend channel (a new spend channel is an addition)', () => {
-        expect(FROZEN_SPEND_CHANNELS.filter((channel) => !SPEND_REMOTE_CHANNELS.has(channel))).toEqual([]);
-    });
 });

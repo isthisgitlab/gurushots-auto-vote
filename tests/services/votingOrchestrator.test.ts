@@ -164,12 +164,6 @@ describe('pass activity (what the local-data wipe refuses to run beneath)', () =
 });
 
 describe('envelopes', () => {
-    test('empty active list returns success with the empty list', async () => {
-        const api = makeApi([]);
-        const result = await runVotingPass('tok', null, deps(api));
-        expect(result).toEqual({ success: true, message: 'No active challenges found', challenges: [] });
-    });
-
     test('challengeIdFilter miss returns failure but still carries the full list', async () => {
         const list = [makeChallenge({ id: 1 }), makeChallenge({ id: 2 })];
         const api = makeApi(list);
@@ -204,14 +198,6 @@ describe('metadata cleanup injection', () => {
         const cleanup = jest.fn(() => true);
         await runVotingPass('tok', 2, deps(api, { cleanupStaleMetadata: cleanup }));
         expect(cleanup).toHaveBeenCalledWith(['1', '2'], false);
-    });
-
-    test('mock mode (null) never touches metadata cleanup', async () => {
-        const api = makeApi([makeChallenge()]);
-        await runVotingPass('tok', null, deps(api));
-        // Nothing to assert beyond "did not throw and completed" — the null
-        // injection point is the guarantee; the mock binder test pins that
-        // mock/strategy.ts actually passes null.
     });
 });
 

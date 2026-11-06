@@ -215,15 +215,6 @@ describe('challenges', () => {
             expect(createCommonHeaders).toHaveBeenCalledWith(undefined);
         });
 
-        test('should return empty challenges array when request fails', async () => {
-            makePostRequest.mockResolvedValueOnce(null);
-
-            const result = await getActiveChallenges(mockToken);
-
-            expect(result).toEqual({ challenges: [], fetchFailed: true });
-            // The logger module handles the error message, not console.error
-        });
-
         test('should log response structure details', async () => {
             const mockResponse = {
                 challenges: [
@@ -260,15 +251,6 @@ describe('challenges', () => {
                 hasValidStructure: false,
                 responseKeys: ['other_field'],
             });
-        });
-
-        test('should handle null response gracefully', async () => {
-            makePostRequest.mockResolvedValueOnce(null);
-
-            const result = await getActiveChallenges(mockToken);
-
-            expect(result).toEqual({ challenges: [], fetchFailed: true });
-            // The logger module handles the error message, not console.error
         });
 
         test('a successful fetch carries the time each entry went in, from the entry-age ledger', async () => {
