@@ -288,7 +288,7 @@ const runSnapGame = async (
     total = session.images.length;
     if (
         (session.kind === 'snap' && modelAnswers && !snapPrompts(session.caption)) ||
-        (session.kind === 'score' && session.caption.trim() === '')
+        (session.kind === 'score' && modelAnswers && session.caption.trim() === '')
     ) {
         markSnapUnavailable(challenge.id);
         log.warning(

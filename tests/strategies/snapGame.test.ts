@@ -235,6 +235,28 @@ describe('runSnapGame', () => {
             expect(sleeps).toEqual([9000]);
         });
 
+        test('allows an empty score caption with snapYesWithoutModel enabled', async () => {
+            turbo.startTurboSession.mockResolvedValue({ ...scoreSession(), caption: '' });
+            turbo.submitSnapScore.mockResolvedValue(scored({ completed: true }));
+
+            const result = await runSnapGame(CHALLENGE, 'tok', deps());
+
+            expect(result).toMatchObject({ answered: 1, won: true, stopReason: 'completed' });
+            expect(turbo.submitSnapScore).toHaveBeenCalledWith('score-sess', 'video0', 7, 'tok');
+            expect(vision.judgeSnapVideoFrames).not.toHaveBeenCalled();
+        });
+
+        test('rejects an empty score caption when the model would validate it', async () => {
+            vision.hasBundledModel.mockResolvedValue(true);
+            turbo.startTurboSession.mockResolvedValue({ ...scoreSession(), caption: '' });
+
+            const result = await runSnapGame(CHALLENGE, 'tok', deps());
+
+            expect(result).toMatchObject({ answered: 0, won: false, stopReason: 'unparsed-caption' });
+            expect(turbo.submitSnapScore).not.toHaveBeenCalled();
+            expect(vision.judgeSnapVideoFrames).not.toHaveBeenCalled();
+        });
+
         test('retries only an explicit too-early response, at most twice', async () => {
             turbo.submitSnapScore
                 .mockResolvedValueOnce(scored({ ok: false, tooEarly: true, retryAfterMs: 300, communityAvg: null }))
