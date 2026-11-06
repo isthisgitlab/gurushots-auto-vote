@@ -79,7 +79,7 @@ describe('the records of one POST', () => {
         axios.mockResolvedValue({ status: 200, headers: { 'content-type': 'application/json' }, data: { ok: true } });
         await makePostRequest(URL, {}, '');
         const [record] = debugRecords('api-in');
-        expect(record.message).toMatch(new RegExp(`^POST ${URL} → 200 \\(\\d+ms\\)$`));
+        expect(record.message).toMatch(new RegExp(`^POST ${URL.replace(/\./g, '\\.')} → 200 \\(\\d+ms\\)$`));
         expect(record.data).toEqual({
             url: URL,
             status: 200,

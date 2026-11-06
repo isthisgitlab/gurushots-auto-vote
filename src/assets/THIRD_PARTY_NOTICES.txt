@@ -387,7 +387,7 @@ get-proto 1.0.1
   License: MIT
   Copyright (c) 2025 Jordan Harband
 
-global-agent 4.1.6
+global-agent 4.1.7
   License: BSD-3-Clause
   Copyright (c) 2026, Gajus Kuizinas (https://gajus.com/)
 
@@ -548,7 +548,7 @@ supports-color 10.2.2
   License: MIT
   Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)
 
-tailwindcss 4.3.4
+tailwindcss 4.3.5
   License: MIT
   Copyright (c) Tailwind Labs, Inc.
 

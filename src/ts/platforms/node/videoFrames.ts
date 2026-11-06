@@ -268,14 +268,21 @@ const runDecoder = (
     });
 
 const frameDataUrl = (path: string): string => {
-    if (requireFs().statSync(path).size > MAX_FRAME_BYTES) {
-        throw new Error('Video decoder produced an invalid JPEG frame');
+    // Size-check and read through one fd so the file cannot change between the check and the read.
+    const fs = requireFs();
+    const fd = fs.openSync(path, 'r');
+    try {
+        if (fs.fstatSync(fd).size > MAX_FRAME_BYTES) {
+            throw new Error('Video decoder produced an invalid JPEG frame');
+        }
+        const bytes = fs.readFileSync(fd);
+        if (bytes.length === 0 || bytes.length > MAX_FRAME_BYTES || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+            throw new Error('Video decoder produced an invalid JPEG frame');
+        }
+        return `data:image/jpeg;base64,${bytes.toString('base64')}`;
+    } finally {
+        fs.closeSync(fd);
     }
-    const bytes = requireFs().readFileSync(path);
-    if (bytes.length === 0 || bytes.length > MAX_FRAME_BYTES || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
-        throw new Error('Video decoder produced an invalid JPEG frame');
-    }
-    return `data:image/jpeg;base64,${bytes.toString('base64')}`;
 };
 
 /**

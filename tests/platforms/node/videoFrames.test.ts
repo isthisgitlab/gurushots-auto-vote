@@ -389,11 +389,10 @@ describe('node video frame extraction', () => {
     test('rejects a JPEG-shaped frame that exceeds the final size bound', async () => {
         const res = response(200, { 'content-length': '3' });
         requestFor(res);
-        const statSync = fs.statSync;
-        jest.spyOn(fs, 'statSync').mockImplementation(((file: fs.PathLike) => {
-            if (String(file).endsWith('.jpg')) return { size: 2 * 1024 * 1024 + 1 } as fs.Stats;
-            return statSync(file);
-        }) as typeof fs.statSync);
+        jest.spyOn(fs, 'fstatSync').mockImplementation(
+            // Only the decoded frame is fstat'ed during extraction; nothing else takes this path.
+            invalid<typeof fs.fstatSync>(() => ({ size: 2 * 1024 * 1024 + 1 })),
+        );
         spawn.mockImplementation(
             invalid((_decoder: string, args: string[]) => {
                 if (!args.some((arg) => arg.endsWith('.jpg'))) return probeChild();
