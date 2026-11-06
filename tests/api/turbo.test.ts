@@ -171,6 +171,16 @@ describe('turbo', () => {
             });
         });
 
+        test('accepts only the legacy kind-less photo session and rejects explicit unknown kinds', async () => {
+            makePostRequest.mockResolvedValueOnce(snap);
+            expect(await startTurboSession(1, mockToken)).toEqual(expect.objectContaining({ kind: 'snap' }));
+
+            for (const kind of ['', 'photo', 'snap', 'video']) {
+                makePostRequest.mockResolvedValueOnce({ ...snap, kind });
+                expect(await startTurboSession(1, mockToken)).toBeNull();
+            }
+        });
+
         test('session_type 1.0 is the classic game', async () => {
             makePostRequest.mockResolvedValueOnce({ session_type: '1.0', success: true });
             expect(await startTurboSession(1, mockToken)).toEqual({ kind: 'classic' });

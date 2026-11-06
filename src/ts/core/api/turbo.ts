@@ -100,6 +100,7 @@ const parseSnapSession = (response: StartTurboSessionResponse): TurboSession | n
             images,
         };
     }
+    if (response.kind !== undefined) return null;
     const images = parseSnapImages(response.images);
     if (!images || !hasValidPosition(response.position, images.length)) return null;
     return {
