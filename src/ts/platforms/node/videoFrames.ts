@@ -10,9 +10,9 @@ import {
     videoFrameTimestampMs,
 } from '../../core/platform/videoMedia';
 
-const DOWNLOAD_TIMEOUT_MS = 30_000;
+const DOWNLOAD_IDLE_TIMEOUT_MS = 30_000;
 const DECODE_TIMEOUT_MS = 30_000;
-const MAX_VIDEO_BYTES = 32 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 256 * 1024 * 1024;
 const MAX_FRAME_BYTES = 2 * 1024 * 1024;
 const MAX_FRAME_WIDTH = 1_280;
 const MAX_FRAME_HEIGHT = 720;
@@ -38,73 +38,91 @@ const contentLength = (header: string | string[] | undefined): number | null => 
     return Number.isSafeInteger(bytes) ? bytes : null;
 };
 
-/** Downloads an allowed MP4 without request credentials or redirect following. */
-const downloadVideo = async (url: URL, destination: string): Promise<void> =>
+/**
+ * Downloads an allowed MP4 without request credentials or redirect following,
+ * streaming the body to `destination`. The socket idle timeout is
+ * DOWNLOAD_IDLE_TIMEOUT_MS; `deadlineMs` bounds the whole download. The promise
+ * settles only after the write stream has closed, so the file is never open when
+ * the caller removes it.
+ */
+const downloadVideo = async (
+    url: URL,
+    destination: string,
+    deadlineMs: number,
+    maxBytes = MAX_VIDEO_BYTES,
+): Promise<void> =>
     new Promise((resolve, reject) => {
-        let response: import('node:http').IncomingMessage | undefined;
         const connection: {
             request: import('node:http').ClientRequest | undefined;
+            response: import('node:http').IncomingMessage | undefined;
+            stream: import('node:fs').WriteStream | undefined;
             deadline: ReturnType<typeof setTimeout> | undefined;
-        } = { request: undefined, deadline: undefined };
-        let settled = false;
-        const finish = (error: Error | null): void => {
-            if (settled) return;
-            settled = true;
-            if (connection.deadline !== undefined) clearTimeout(connection.deadline);
-            if (error) {
-                connection.request?.destroy(error);
-                response?.destroy?.(error);
-                reject(error);
-            } else resolve();
+            failure: Error | null;
+        } = { request: undefined, response: undefined, stream: undefined, deadline: undefined, failure: null };
+        const fail = (error: Error): void => {
+            if (connection.failure) return;
+            connection.failure = error;
+            clearTimeout(connection.deadline);
+            connection.request?.destroy(error);
+            connection.response?.destroy?.(error);
+            if (connection.stream) connection.stream.destroy();
+            else reject(error);
         };
         const openedRequest = requireHttps().request(
             url,
             {
                 method: 'GET',
                 headers: {},
-                timeout: DOWNLOAD_TIMEOUT_MS,
+                timeout: DOWNLOAD_IDLE_TIMEOUT_MS,
             },
             (receivedResponse) => {
-                response = receivedResponse;
-                if (response.statusCode !== 200) {
-                    finish(new Error('Video download did not return HTTP 200'));
+                if (connection.failure) return;
+                connection.response = receivedResponse;
+                if (receivedResponse.statusCode !== 200) {
+                    fail(new Error('Video download did not return HTTP 200'));
                     return;
                 }
-                const declaredBytes = contentLength(response.headers['content-length']);
-                if (declaredBytes !== null && declaredBytes > MAX_VIDEO_BYTES) {
-                    finish(new Error('Video download exceeds the supported size'));
+                const declaredBytes = contentLength(receivedResponse.headers['content-length']);
+                if (declaredBytes !== null && declaredBytes > maxBytes) {
+                    fail(new Error(`Video download exceeds the supported size (${declaredBytes} bytes)`));
                     return;
                 }
-                const chunks: Buffer[] = [];
+                const stream = requireFs().createWriteStream(destination, { flags: 'wx', mode: 0o600 });
+                connection.stream = stream;
                 let receivedBytes = 0;
-                response.on('data', (chunk: Buffer) => {
+                let responseEnded = false;
+                stream.on('error', (error) => fail(error));
+                stream.on('drain', () => receivedResponse.resume());
+                stream.once('close', () => {
+                    clearTimeout(connection.deadline);
+                    if (connection.failure) reject(connection.failure);
+                    else resolve();
+                });
+                receivedResponse.on('data', (chunk: Buffer) => {
+                    if (connection.failure) return;
                     receivedBytes += chunk.length;
-                    if (receivedBytes > MAX_VIDEO_BYTES) {
-                        finish(new Error('Video download exceeds the supported size'));
+                    if (receivedBytes > maxBytes) {
+                        fail(new Error(`Video download exceeds the supported size (${receivedBytes} bytes)`));
                         return;
                     }
-                    chunks.push(chunk);
+                    if (!stream.write(chunk)) receivedResponse.pause();
                 });
-                response.once('aborted', () => finish(new Error('Video download was aborted')));
-                response.once('error', (error) => finish(error));
-                response.once('close', () => {
-                    if (!settled) finish(new Error('Video download closed before completion'));
+                receivedResponse.once('aborted', () => fail(new Error('Video download was aborted')));
+                receivedResponse.once('error', (error) => fail(error));
+                receivedResponse.once('close', () => {
+                    if (!responseEnded) fail(new Error('Video download closed before completion'));
                 });
-                response.once('end', () => {
-                    try {
-                        requireFs().writeFileSync(destination, Buffer.concat(chunks), { mode: 0o600 });
-                        finish(null);
-                    } catch (error) {
-                        finish(error instanceof Error ? error : new Error('Video download could not be written'));
-                    }
+                receivedResponse.once('end', () => {
+                    responseEnded = true;
+                    stream.end();
                 });
             },
         );
         connection.request = openedRequest;
-        connection.deadline = setTimeout(() => finish(new Error('Video download timed out')), DOWNLOAD_TIMEOUT_MS);
-        if (settled) clearTimeout(connection.deadline);
-        openedRequest.once('timeout', () => finish(new Error('Video download timed out')));
-        openedRequest.once('error', (error) => finish(error));
+        connection.deadline = setTimeout(() => fail(new Error('Video download timed out')), deadlineMs);
+        if (connection.failure) clearTimeout(connection.deadline);
+        openedRequest.once('timeout', () => fail(new Error('Video download timed out')));
+        openedRequest.once('error', (error) => fail(error));
         openedRequest.end();
     });
 
@@ -275,7 +293,7 @@ const extractNodeVideoFrames = async (
     const input = path.join(directory, 'input.mp4');
     const outputs = positions.map((_, index) => path.join(directory, `frame-${index}.jpg`));
     try {
-        await downloadVideo(url, input);
+        await downloadVideo(url, input, Math.max(DOWNLOAD_IDLE_TIMEOUT_MS, durationMs));
         const decoder = decoderPath();
         const actualDurationMs = await probeDuration(probePathOf(decoder), input);
         await runDecoder(
@@ -294,7 +312,7 @@ const extractNodeVideoFrames = async (
 
 export {
     DECODE_TIMEOUT_MS,
-    DOWNLOAD_TIMEOUT_MS,
+    DOWNLOAD_IDLE_TIMEOUT_MS,
     MAX_FRAME_BYTES,
     MAX_PROBE_OUTPUT_BYTES,
     MAX_VIDEO_BYTES,
