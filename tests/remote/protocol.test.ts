@@ -51,18 +51,27 @@ const state = {
     error: null,
 } satisfies AutovoteState;
 
+/** The pair every autovote-state carries. */
+const stamp = { hostRun: 'run-a', n: 1 };
+
 describe('parsePeerMessage', () => {
     test('the protocol version is 1', () => {
         expect(PROTOCOL_VERSION).toBe(1);
     });
 
-    test('the link version is 1, and the legacy protocol version stays frozen at 1', () => {
+    test('the link version is 1, and the protocol version stays frozen at 1', () => {
         expect(LINK_VERSION).toBe(1);
         expect(PROTOCOL_VERSION).toBe(1);
     });
 
     test('the hello carries the protocol version, and a mismatching one still parses', () => {
-        const other: HelloMessage = { t: 'hello', version: '1.2.3', protocolVersion: 99, host: false };
+        const other: HelloMessage = {
+            t: 'hello',
+            version: '1.2.3',
+            protocolVersion: 99,
+            linkVersion: LINK_VERSION,
+            host: false,
+        };
         expect(parsePeerMessage(other)).toEqual(other);
     });
 
@@ -77,11 +86,10 @@ describe('parsePeerMessage', () => {
         expect(parsePeerMessage(hello)).toEqual(hello);
     });
 
-    test('a hello without a link version is a legacy peer: it parses, with no link version', () => {
-        const legacy = { t: 'hello', version: '1.15.0', protocolVersion: PROTOCOL_VERSION, host: true };
-        const parsed = parsePeerMessage(legacy);
-        expect(parsed).toEqual(legacy);
-        expect(parsed).not.toHaveProperty('linkVersion');
+    test('a hello without a link version is dropped whole', () => {
+        expect(
+            parsePeerMessage({ t: 'hello', version: '1.15.0', protocolVersion: PROTOCOL_VERSION, host: true }),
+        ).toBeNull();
     });
 
     test.each([0, -1, 1.5, 1000, '1', 1e21, null, NaN])(
@@ -99,11 +107,18 @@ describe('parsePeerMessage', () => {
     });
 
     test('accepts every message shape', () => {
-        const hello: HelloMessage = { t: 'hello', version: '1.2.3', protocolVersion: PROTOCOL_VERSION, host: true };
+        const hello: HelloMessage = {
+            t: 'hello',
+            version: '1.2.3',
+            protocolVersion: PROTOCOL_VERSION,
+            linkVersion: LINK_VERSION,
+            host: true,
+        };
         expect(parsePeerMessage(hello)).toEqual({
             t: 'hello',
             version: '1.2.3',
             protocolVersion: PROTOCOL_VERSION,
+            linkVersion: LINK_VERSION,
             host: true,
         });
         const invoke: InvokeMessage = { t: 'invoke', id: 0, channel: 'get-settings', args: [1, null] };
@@ -135,8 +150,8 @@ describe('parsePeerMessage', () => {
             channel: 'settings-changed',
             payload: { a: 1 },
         });
-        const autovoteState: AutovoteStateMessage = { t: 'autovote-state', state };
-        expect(parsePeerMessage(autovoteState)).toEqual({ t: 'autovote-state', state });
+        const autovoteState: AutovoteStateMessage = { t: 'autovote-state', state, ...stamp };
+        expect(parsePeerMessage(autovoteState)).toEqual({ t: 'autovote-state', state, ...stamp });
         // The other reaches of the state checker's chains: Stopped/badge-neutral and an
         // error string, with no next run pending.
         const stopped: AutovoteStateMessage = {
@@ -151,6 +166,7 @@ describe('parsePeerMessage', () => {
                 statusClass: 'badge-neutral',
                 error: 'boom',
             },
+            ...stamp,
         };
         expect(parsePeerMessage(stopped)).toEqual(stopped);
         const errored: AutovoteStateMessage = {
@@ -165,6 +181,7 @@ describe('parsePeerMessage', () => {
                 statusClass: 'badge-error',
                 error: 'kaboom',
             },
+            ...stamp,
         };
         expect(parsePeerMessage(errored)).toEqual(errored);
         const command: AutovoteCommandMessage = { t: 'autovote-command', command: 'rearm' };
@@ -183,9 +200,16 @@ describe('parsePeerMessage', () => {
         ['hello: version not a string', { t: 'hello', version: 4, host: true }],
         ['hello: empty version', { t: 'hello', version: '', host: false }],
         ['hello: host flag missing', { t: 'hello', version: '1.2.3' }],
-        ['hello: protocolVersion missing', { t: 'hello', version: '1.2.3', host: true }],
-        ['hello: protocolVersion not a number', { t: 'hello', version: '1.2.3', protocolVersion: '1', host: true }],
-        ['hello: protocolVersion below one', { t: 'hello', version: '1.2.3', protocolVersion: 0, host: true }],
+        ['hello: link version missing', { t: 'hello', version: '1.2.3', protocolVersion: 1, host: true }],
+        ['hello: protocolVersion missing', { t: 'hello', version: '1.2.3', linkVersion: 1, host: true }],
+        [
+            'hello: protocolVersion not a number',
+            { t: 'hello', version: '1.2.3', protocolVersion: '1', linkVersion: 1, host: true },
+        ],
+        [
+            'hello: protocolVersion below one',
+            { t: 'hello', version: '1.2.3', protocolVersion: 0, linkVersion: 1, host: true },
+        ],
         ['invoke: id not an integer', { t: 'invoke', id: 1.5, channel: 'a', args: [] }],
         ['invoke: negative id', { t: 'invoke', id: -1, channel: 'a', args: [] }],
         ['invoke: channel not a string', { t: 'invoke', id: 1, channel: 3, args: [] }],
@@ -194,9 +218,10 @@ describe('parsePeerMessage', () => {
         ['result: ok not a boolean', { t: 'result', id: 1, ok: 'yes' }],
         ['result: failure without an error', { t: 'result', id: 1, ok: false }],
         ['event: payload missing', { t: 'event', channel: 'settings-changed' }],
-        ['autovote-state: state of the wrong kind', { t: 'autovote-state', state: { running: 'yes' } }],
-        ['autovote-state: state not an object', { t: 'autovote-state', state: 'nope' }],
-        ['autovote-state: state null', { t: 'autovote-state', state: null }],
+        ['autovote-state: state of the wrong kind', { t: 'autovote-state', state: { running: 'yes' }, ...stamp }],
+        ['autovote-state: state not an object', { t: 'autovote-state', state: 'nope', ...stamp }],
+        ['autovote-state: state null', { t: 'autovote-state', state: null, ...stamp }],
+        ['autovote-state: no stamp', { t: 'autovote-state', state }],
         ['autovote-command: unknown command', { t: 'autovote-command', command: 'restart' }],
     ])('refuses %s', (_label, raw) => {
         expect(parsePeerMessage(invalid(raw))).toBeNull();
@@ -221,8 +246,8 @@ describe('parsePeerMessage', () => {
             ['a negative count', { hostRun: 'run-a', n: -1 }],
             ['a fractional count', { hostRun: 'run-a', n: 1.5 }],
             ['a count that is not a number', { hostRun: 'run-a', n: '3' }],
-        ])('%s is no stamp at all: the state itself is still read', (_name, extra) => {
-            expect(parsePeerMessage({ t: 'autovote-state', state, ...extra })).toEqual({ t: 'autovote-state', state });
+        ])('%s is no stamp: the state is dropped whole', (_name, extra) => {
+            expect(parsePeerMessage({ t: 'autovote-state', state, ...extra })).toBeNull();
         });
     });
 
@@ -243,6 +268,7 @@ describe('parsePeerMessage', () => {
             t: 'hello',
             version: '1.2.3',
             protocolVersion: PROTOCOL_VERSION,
+            linkVersion: LINK_VERSION,
             host: true,
             toJSON: () => undefined,
         };
@@ -250,6 +276,7 @@ describe('parsePeerMessage', () => {
             t: 'hello',
             version: '1.2.3',
             protocolVersion: PROTOCOL_VERSION,
+            linkVersion: LINK_VERSION,
             host: true,
         });
     });
@@ -365,12 +392,25 @@ describe('isConnectionFailureJoinError (the try-Wi-Fi classifier)', () => {
 
 describe('the loader role and the full bye', () => {
     test("a hello may carry role 'loader', and only that role", () => {
-        const loader = { t: 'hello', version: '1.2.3', protocolVersion: PROTOCOL_VERSION, host: false, role: 'loader' };
+        const loader = {
+            t: 'hello',
+            version: '1.2.3',
+            protocolVersion: PROTOCOL_VERSION,
+            linkVersion: LINK_VERSION,
+            host: false,
+            role: 'loader',
+        };
         expect(parsePeerMessage(loader)).toEqual(loader);
         expect(parsePeerMessage({ ...loader, role: 'admin' })).toBeNull();
         expect(parsePeerMessage({ ...loader, role: 1 })).toBeNull();
         // Without a role it is a phone's hello, unchanged.
-        const phone = { t: 'hello', version: '1.2.3', protocolVersion: PROTOCOL_VERSION, host: false };
+        const phone = {
+            t: 'hello',
+            version: '1.2.3',
+            protocolVersion: PROTOCOL_VERSION,
+            linkVersion: LINK_VERSION,
+            host: false,
+        };
         expect(parsePeerMessage(phone)).toEqual(phone);
     });
 
@@ -464,10 +504,10 @@ describe('release versions', () => {
 
 describe('isSafeToSendTwice', () => {
     test.each([
-        [{ t: 'hello', version: '1.2.3', protocolVersion: 1, host: true }],
+        [{ t: 'hello', version: '1.2.3', protocolVersion: 1, linkVersion: 1, host: true }],
         [{ t: 'result', id: 1, ok: true, result: 'x' }],
         [{ t: 'result', id: 1, ok: false, error: 'refused' }],
-        [{ t: 'autovote-state', state }],
+        [{ t: 'autovote-state', state, ...stamp }],
     ])('a %j may go out over both paths', (message) => {
         expect(isSafeToSendTwice(message)).toBe(true);
     });

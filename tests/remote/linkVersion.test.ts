@@ -4,12 +4,10 @@
  */
 
 import {
-    LEGACY_DESKTOP_VERSION_STORAGE,
     LINK_VERSION_STORAGE,
     SKIPPED_TO_STORAGE,
     clearLinkVersion,
     clearSkipMark,
-    forgetLegacyDesktopVersion,
     markSkippedTo,
     skippedTo,
     storeLinkVersion,
@@ -159,24 +157,13 @@ describe('the link version kept for the loader', () => {
     });
 
     describe('clearing', () => {
-        test('forgets the kept link version and the earlier loader key beside it, whether or not any is kept', async () => {
+        test('forgets the kept link version, whether or not any is kept', async () => {
             await storeLinkVersion(1);
-            local.setItem(LEGACY_DESKTOP_VERSION_STORAGE, 'aaaaaaaaaaaaaaaa:1.15.0');
             clearLinkVersion();
             expect(local.getItem(LINK_VERSION_STORAGE)).toBeNull();
-            expect(local.getItem(LEGACY_DESKTOP_VERSION_STORAGE)).toBeNull();
             clearLinkVersion();
             setGlobals({ localStorage: refusingStorage() });
             expect(() => clearLinkVersion()).not.toThrow();
-        });
-
-        test('the loader removes the earlier key alone, and leaves a stored link version', async () => {
-            await storeLinkVersion(1);
-            local.setItem(LEGACY_DESKTOP_VERSION_STORAGE, 'aaaaaaaaaaaaaaaa:1.15.0');
-            forgetLegacyDesktopVersion();
-            expect(local.getItem(LEGACY_DESKTOP_VERSION_STORAGE)).toBeNull();
-            expect(local.getItem(LINK_VERSION_STORAGE)).not.toBeNull();
-            expect(LEGACY_DESKTOP_VERSION_STORAGE).toBe('gs-remote-desktop-version');
         });
     });
 

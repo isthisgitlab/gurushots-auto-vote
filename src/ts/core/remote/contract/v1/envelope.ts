@@ -5,6 +5,8 @@
  * A new value in one of these closed unions would reach an older peer that does not know it, so it needs a new
  * LINK_VERSION and a new `contract/v<N>/` (see protocol.ts for the rule); a new optional field does not.
  * `tests/remote/contractV1.test.ts` checks the living types against this file.
+ *
+ * `hello.linkVersion` and `autovote-state`'s `hostRun`/`n` are required: every link-version-1 peer always sent them.
  */
 
 import type { AutovoteStateV1 } from './shapesConfig';
@@ -13,7 +15,7 @@ export type HelloMessageV1 = {
     t: 'hello';
     version: string;
     protocolVersion: number;
-    linkVersion?: number;
+    linkVersion: number;
     host: boolean;
     role?: 'loader';
 };
@@ -26,7 +28,7 @@ export type ResultMessageV1 =
 
 export type EventMessageV1 = { t: 'event'; channel: string; payload: unknown };
 
-export type AutovoteStateMessageV1 = { t: 'autovote-state'; state: AutovoteStateV1; hostRun?: string; n?: number };
+export type AutovoteStateMessageV1 = { t: 'autovote-state'; state: AutovoteStateV1; hostRun: string; n: number };
 
 export type AutovoteCommandMessageV1 = { t: 'autovote-command'; command: 'start' | 'stop' | 'rearm' };
 

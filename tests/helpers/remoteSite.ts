@@ -12,15 +12,6 @@ import type { RemoteRelease, RemoteSiteDeps } from '../../scripts/build-site';
 
 export const sha256 = (data: Buffer): string => nodeCrypto.createHash('sha256').update(data).digest('hex');
 
-/** The legacy 1.15.0 page's bytes in the tests; their hash is injected as the pin. */
-export const LEGACY_BYTES = Buffer.from('legacy-1.15.0-page');
-export const LEGACY_ZIP_URL = 'https://example.com/v1.15.0/remote-page.zip';
-
-export const legacyRelease: RemoteRelease = {
-    tag_name: 'v1.15.0',
-    assets: [{ name: 'remote-page.zip', browser_download_url: LEGACY_ZIP_URL }],
-};
-
 /** One release carrying the phone pages of the given link versions (zip + checksum for each). */
 export const pageRelease = (
     version: string,
@@ -50,9 +41,8 @@ export const pageRelease = (
     ]),
 });
 
-/** The fake download: a zip is its URL, a checksum file is that zip's hash. The legacy zip is LEGACY_BYTES. */
+/** The fake download: a zip is its URL, a checksum file is that zip's hash. */
 export const fakeDownload = async (url: string): Promise<Buffer> => {
-    if (url === LEGACY_ZIP_URL) return LEGACY_BYTES;
     if (url.endsWith('.sha256')) return Buffer.from(`${sha256(Buffer.from(url.replace(/\.sha256$/, '')))}  x.zip\n`);
     return Buffer.from(url);
 };
@@ -73,9 +63,7 @@ export const remoteSiteDeps = (
 ): RemoteSiteDeps => ({
     dist,
     listReleases: async () => releases,
-    getReleaseByTag: async () => legacyRelease,
     downloadFile: fakeDownload,
     unzip: fakeUnzip,
-    legacyPageSha256: sha256(LEGACY_BYTES),
     ...extra,
 });

@@ -30,7 +30,7 @@ export const STUN_SERVER_URLS = ['stun:stun.cloudflare.com:3478', 'stun:stun.l.g
 /** The GitHub Pages origin the pairing link points at. */
 export const REMOTE_PAGES_ORIGIN = 'https://isthisgitlab.github.io/gurushots-auto-vote';
 
-/** The path of the remote page under the Pages origin (and of every versioned copy below it: `v<N>/` per link version, and the legacy `1.15.0/`). */
+/** The path of the remote page under the Pages origin (and of every versioned copy below it: `v<N>/` per link version). */
 export const REMOTE_PAGES_PATH = '/remote/';
 
 /** Trystero's application id: rooms of other apps never collide with ours. */

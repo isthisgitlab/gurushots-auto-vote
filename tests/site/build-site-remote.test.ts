@@ -1,8 +1,7 @@
 /**
  * The remote-page half of the site build (scripts/build-site/remote*.ts): one phone page per link version under
- * /remote/v<N>/, the local build standing in for its own link version only when it is that version's pick, the
- * 1.15.0 legacy page checked against a pinned hash, and a build that fails rather than deploy without a page some
- * desktop depends on. Releases, downloads and unzip are injected: nothing here reaches the network.
+ * /remote/v<N>/, the local build standing in for its own link version only when it is that version's pick, and a
+ * build that fails rather than deploy without a page some desktop depends on. Releases, downloads and unzip are injected: nothing here reaches the network.
  */
 
 // The shared tests/setup.ts mocks `path` and `fs` globally; this suite builds a real temp tree.
@@ -15,25 +14,11 @@ import fs = require('node:fs');
 import os = require('node:os');
 import nodePath = require('node:path');
 import { invalid } from '../helpers/invalid';
+import { fakeDownload, fakeUnzip, pageRelease, remoteSiteDeps, sha256 } from '../helpers/remoteSite';
 import {
-    LEGACY_BYTES,
-    LEGACY_ZIP_URL,
-    fakeDownload,
-    fakeUnzip,
-    legacyRelease,
-    pageRelease,
-    remoteSiteDeps,
-    sha256,
-} from '../helpers/remoteSite';
-import {
-    LEGACY_PAGE_SHA256,
-    LEGACY_PAGE_TAG,
-    LEGACY_PAGE_VERSION,
-    LEGACY_PAGE_ZIP,
     REMOTE_PAGE_ZIP_PATTERN,
     buildRemoteSite,
     downloadFromGitHub,
-    getReleaseByTagFromGitHub,
     listReleasesFromGitHub,
     selectLinkVersionPages,
 } from '../../scripts/build-site';
@@ -78,7 +63,7 @@ describe('the remote page tree', () => {
     });
 
     describe('what lands in dist-site/remote/', () => {
-        test('the loader, the local build as v1, a newer link version from a pre-release, and the legacy page', async () => {
+        test('the loader, the local build as v1, a newer link version from a pre-release', async () => {
             seedDist();
             await buildRemoteSite(
                 out,
@@ -86,26 +71,25 @@ describe('the remote page tree', () => {
                 remoteSiteDeps(dist, [pageRelease('9.9.10-beta.1', [2], { prerelease: true })]),
             );
 
-            expect(listing()).toEqual(['1.15.0', 'index.html', 'remoteLoader-bundle.js', 'styles.css', 'v1', 'v2']);
+            expect(listing()).toEqual(['index.html', 'remoteLoader-bundle.js', 'styles.css', 'v1', 'v2']);
             expect(read('index.html')).toContain('loader');
             expect(read('v1', 'index.html')).toBe('<html>local</html>');
             // The beta-only v2 is kept by a stable v1 build, from the beta release that carries it.
             expect(read('v2', 'index.html')).toContain('9.9.10-beta.1/remote-page-v2.zip');
-            expect(read('1.15.0', 'index.html')).toContain('legacy-1.15.0-page');
             expect(fs.existsSync(nodePath.join(out, 'remote', '9.9.9'))).toBe(false);
         });
 
-        test('no page of an app-version directory except the legacy one, and never a 1.15.0-beta page', async () => {
+        test('no page of an app-version directory, whatever releases carry', async () => {
             seedDist();
             await buildRemoteSite(
                 out,
                 '9.9.9',
                 remoteSiteDeps(dist, [
-                    pageRelease('1.15.0-beta.2', [1], { prerelease: true }),
-                    pageRelease('1.15.1', [1]),
+                    pageRelease('9.8.0-beta.2', [1], { prerelease: true }),
+                    pageRelease('9.8.1', [1]),
                 ]),
             );
-            expect(listing().filter((name) => /^\d/.test(name))).toEqual(['1.15.0']);
+            expect(listing().filter((name) => /^\d/.test(name))).toEqual([]);
         });
 
         test('the app stylesheet lands at the loader root and in the page the local build stands in for, not in a downloaded one', async () => {
@@ -143,9 +127,9 @@ describe('the remote page tree', () => {
             expect(fs.existsSync(nodePath.join(out, 'remote', 'v1'))).toBe(false);
         });
 
-        test('without the local build only the legacy page is created, and the skipped steps are said', async () => {
+        test('without the local build nothing is created, and the skipped steps are said', async () => {
             await buildRemoteSite(out, '9.9.9', remoteSiteDeps(dist));
-            expect(listing()).toEqual(['1.15.0']);
+            expect(fs.existsSync(nodePath.join(out, 'remote'))).toBe(false);
             expect(logSpy).toHaveBeenCalledWith('⏭️  remote/ loader: build:react has not produced it yet');
             expect(logSpy).toHaveBeenCalledWith('⏭️  remote/v1/: build:react has not staged it yet');
             expect(logSpy).toHaveBeenCalledWith('⏭️  remote/styles.css: build:css has not produced it yet');
@@ -275,16 +259,7 @@ describe('the remote page tree', () => {
                 '9.9.9',
                 remoteSiteDeps(dist, [pageRelease('9.9.8', [1]), pageRelease('9.9.12', [3, 999])], { linkVersion: 2 }),
             );
-            expect(listing()).toEqual([
-                '1.15.0',
-                'index.html',
-                'remoteLoader-bundle.js',
-                'styles.css',
-                'v1',
-                'v2',
-                'v3',
-                'v999',
-            ]);
+            expect(listing()).toEqual(['index.html', 'remoteLoader-bundle.js', 'styles.css', 'v1', 'v2', 'v3', 'v999']);
         });
     });
 
@@ -318,99 +293,6 @@ describe('the remote page tree', () => {
 
         test('a listing without any phone page picks nothing', () => {
             expect(selectLinkVersionPages([{ tag_name: 'v1.0.0', assets: [] }]).size).toBe(0);
-        });
-    });
-
-    describe('the legacy 1.15.0 page', () => {
-        test('is fetched by tag, checked against the pin and unpacked to /remote/1.15.0/', async () => {
-            seedDist();
-            const tags: string[] = [];
-            await buildRemoteSite(
-                out,
-                '9.9.9',
-                remoteSiteDeps(dist, [], {
-                    getReleaseByTag: async (tag) => {
-                        tags.push(tag);
-                        return legacyRelease;
-                    },
-                }),
-            );
-            expect(tags).toEqual([LEGACY_PAGE_TAG]);
-            expect(LEGACY_PAGE_TAG).toBe('v1.15.0');
-            expect(read('1.15.0', 'index.html')).toBe('<html>legacy-1.15.0-page</html>');
-            expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('pinned SHA-256 verified'));
-        });
-
-        test('the real pin is the SHA-256 of the v1.15.0 release asset', () => {
-            expect(LEGACY_PAGE_SHA256).toBe('3e81b7f2964b9ccef1519ead21dfa1aa5b8f742efa48b1d052ff82e76f38cf4d');
-            expect(LEGACY_PAGE_VERSION).toBe('1.15.0');
-            expect(LEGACY_PAGE_ZIP).toBe('remote-page.zip');
-        });
-
-        test('bytes that do not match the pin fail the build, and nothing is written or unpacked', async () => {
-            seedDist();
-            const unzip = jest.fn(fakeUnzip);
-            // No injected pin: the real one, which these bytes cannot match.
-            const deps = remoteSiteDeps(dist, [], { unzip });
-            delete deps.legacyPageSha256;
-            await expect(buildRemoteSite(out, '9.9.9', deps)).rejects.toThrow(
-                'could not build the legacy 1.15.0 phone page: remote-page.zip does not match the pinned SHA-256',
-            );
-            expect(unzip).not.toHaveBeenCalled();
-            expect(fs.existsSync(nodePath.join(out, 'remote', '1.15.0'))).toBe(false);
-        });
-
-        test('a failed lookup of the release fails the build', async () => {
-            seedDist();
-            await expect(
-                buildRemoteSite(
-                    out,
-                    '9.9.9',
-                    remoteSiteDeps(dist, [], {
-                        getReleaseByTag: async () => {
-                            throw new Error('release v1.15.0 lookup failed (404)');
-                        },
-                    }),
-                ),
-            ).rejects.toThrow('could not build the legacy 1.15.0 phone page: release v1.15.0 lookup failed (404)');
-        });
-
-        test('a release without the zip fails the build', async () => {
-            seedDist();
-            await expect(
-                buildRemoteSite(
-                    out,
-                    '9.9.9',
-                    remoteSiteDeps(dist, [], { getReleaseByTag: async () => ({ tag_name: 'v1.15.0', assets: [] }) }),
-                ),
-            ).rejects.toThrow('v1.15.0 carries no remote-page.zip');
-        });
-
-        test('a failed download fails the build', async () => {
-            seedDist();
-            await expect(
-                buildRemoteSite(
-                    out,
-                    '9.9.9',
-                    remoteSiteDeps(dist, [], {
-                        downloadFile: async (url) => {
-                            if (url === LEGACY_ZIP_URL) throw new Error('download failed (500)');
-                            return fakeDownload(url);
-                        },
-                    }),
-                ),
-            ).rejects.toThrow('could not build the legacy 1.15.0 phone page: download failed (500)');
-        });
-
-        test('a failure without a reason is still said', async () => {
-            seedDist();
-            await expect(
-                buildRemoteSite(
-                    out,
-                    '9.9.9',
-                    remoteSiteDeps(dist, [], { getReleaseByTag: () => Promise.reject(null) }),
-                ),
-            ).rejects.toThrow('could not build the legacy 1.15.0 phone page: no reason given');
         });
     });
 
@@ -459,9 +341,7 @@ describe('the remote page tree', () => {
                         linkVersion: 2,
                         unzip,
                         downloadFile: async (url) =>
-                            url === LEGACY_ZIP_URL
-                                ? LEGACY_BYTES
-                                : Buffer.from(url.endsWith('.sha256') ? `${'0'.repeat(64)}  x.zip\n` : 'tampered'),
+                            Buffer.from(url.endsWith('.sha256') ? `${'0'.repeat(64)}  x.zip\n` : 'tampered'),
                     }),
                 ),
             ).rejects.toThrow('v9.9.8: remote-page-v1.zip does not match its checksum');
@@ -528,14 +408,14 @@ describe('the remote page tree', () => {
         await buildRemoteSite(
             out,
             '9.9.9',
-            remoteSiteDeps(dist, [], {
-                downloadFile: async () => zipBytes,
-                legacyPageSha256: sha256(zipBytes),
+            remoteSiteDeps(dist, [pageRelease('9.9.8', [2])], {
+                downloadFile: async (url) =>
+                    url.endsWith('.sha256') ? Buffer.from(`${sha256(zipBytes)}  x.zip\n`) : zipBytes,
                 // The real unzip dep (the default) runs here.
                 unzip: invalid<(zipPath: string, dir: string) => Promise<void>>(undefined),
             }),
         );
-        expect(read('1.15.0', 'index.html')).toContain('paged');
+        expect(read('v2', 'index.html')).toContain('paged');
         fs.rmSync(zipDir, { recursive: true, force: true });
     });
 });
@@ -614,23 +494,6 @@ describe('the GitHub fetchers (the real remote-site deps)', () => {
         }
     });
 
-    test('the release by tag asks the fixed API address and refuses a failed response', async () => {
-        const fetchMock = jest
-            .fn<Promise<Response>, [string, RequestInit]>()
-            .mockResolvedValueOnce(jsonResponse({ tag_name: 'v1.15.0', assets: [] }))
-            .mockResolvedValueOnce(jsonResponse({}, false, 404));
-        await expect(getReleaseByTagFromGitHub('v1.15.0', asFetch(fetchMock))).resolves.toEqual({
-            tag_name: 'v1.15.0',
-            assets: [],
-        });
-        expect(fetchMock.mock.calls[0]?.[0]).toBe(
-            'https://api.github.com/repos/isthisgitlab/gurushots-auto-vote/releases/tags/v1.15.0',
-        );
-        await expect(getReleaseByTagFromGitHub('v9.9.9', asFetch(fetchMock))).rejects.toThrow(
-            'release v9.9.9 lookup failed (404)',
-        );
-    });
-
     test.each([
         ['a release without a tag', { assets: [] }],
         ['a tag that is not a string', { tag_name: 1, assets: [] }],
@@ -641,16 +504,13 @@ describe('the GitHub fetchers (the real remote-site deps)', () => {
         ['a prerelease flag that is not a boolean', { tag_name: 'v1.0.0', assets: [], prerelease: 'yes' }],
         ['a draft flag that is not a boolean', { tag_name: 'v1.0.0', assets: [], draft: 1 }],
         ['a release that is not an object', 'v1.0.0'],
-    ])('a release with %s fails the listing and the lookup by tag', async (_name, release) => {
+    ])('a release with %s fails the listing', async (_name, release) => {
         await expect(listReleasesFromGitHub(async () => jsonResponse([release]))).rejects.toThrow(
             'releases listing failed (a release is not the expected shape)',
         );
-        await expect(getReleaseByTagFromGitHub('v1.0.0', async () => jsonResponse(release))).rejects.toThrow(
-            'release v1.0.0 lookup failed (not the expected shape)',
-        );
     });
 
-    test('a well-formed release passes both checks, with its flags and assets', async () => {
+    test('a well-formed release passes the check, with its flags and assets', async () => {
         const release = {
             tag_name: 'v1.0.0',
             prerelease: true,
@@ -658,16 +518,11 @@ describe('the GitHub fetchers (the real remote-site deps)', () => {
             assets: [{ name: 'a.zip', browser_download_url: 'https://x/a.zip' }],
         };
         await expect(listReleasesFromGitHub(async () => jsonResponse([release]))).resolves.toEqual([release]);
-        await expect(getReleaseByTagFromGitHub('v1.0.0', async () => jsonResponse(release))).resolves.toEqual(release);
     });
 
-    test('the real fetch is the default of both API reads', async () => {
+    test('the real fetch is the default of the API read', async () => {
         globalThis.fetch = invalid<typeof fetch>(jest.fn(async () => jsonResponse([])));
         await expect(listReleasesFromGitHub()).resolves.toEqual([]);
-        globalThis.fetch = invalid<typeof fetch>(
-            jest.fn(async () => jsonResponse({ tag_name: 'v1.15.0', assets: [] })),
-        );
-        await expect(getReleaseByTagFromGitHub('v1.15.0')).resolves.toEqual({ tag_name: 'v1.15.0', assets: [] });
     });
 
     test('an asset download is a plain request: the token is the API reads', async () => {

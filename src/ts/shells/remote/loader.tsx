@@ -2,14 +2,12 @@
  * Remote loader entry — the thin, stable document the pairing link opens (`/remote/`). It
  * joins the pairing room, reads the desktop's link version from its `hello`, and moves on to
  * the matching `/remote/v<N>/index.html` page (the link's fragment is kept, so the key travels
- * with it). A desktop of 1.15.0 or one of its betas sends no link version: its `hello` names an app
- * version, and the loader moves on to that app version's page, which the site keeps for 1.15.0 only.
- * The pairing link itself never changes, and every desktop that speaks link version N gets the one
- * page, whatever app version it runs.
+ * with it). The pairing link itself never changes, and every desktop that speaks link version N gets
+ * the one page, whatever app version it runs.
  *
  * The notice screen shows from the first moment ("Connecting to your computer…"), not once the
  * room is joined. A page the site does not publish says which side to update: the app on the
- * computer when the desktop is older than this page (or a legacy one); when the desktop's link version is
+ * computer when the desktop is older than this page; when the desktop's link version is
  * newer, the Android app says to update this app and a browser tab says the page is not published yet. A
  * room where no desktop answers says the computer is offline, or this link was reset. The
  * timeout must outlast a relay round trip on a slow mobile network — it is generous on purpose.
@@ -25,29 +23,19 @@ import { watchPageLifecycle } from '../../core/remote/pageLifecycle';
 import { takePairingKey } from '../../core/remote/pairingKey';
 import {
     clearLinkVersion,
-    forgetLegacyDesktopVersion,
     markSkippedTo,
     skippedTo,
     storeLinkVersion,
     storedLinkVersion,
 } from '../../core/remote/linkVersion';
-import {
-    APP_VERSION,
-    LINK_VERSION,
-    PROTOCOL_VERSION,
-    isReleaseVersion,
-    parsePeerMessage,
-} from '../../core/remote/protocol';
+import { APP_VERSION, LINK_VERSION, PROTOCOL_VERSION, parsePeerMessage } from '../../core/remote/protocol';
 import { mountRemoteNotice } from '../../react/components/app/RemoteNoticeScreen';
 import { phoneRemoteMode } from '../../core/remote/phoneMode';
 import { installPhoneDisconnect } from './phoneMode';
 
 import type { HelloMessage } from '../../core/remote/protocol';
 
-/**
- * A page's directory under `/remote/`: `v<N>` for a link version, the app version itself for a legacy desktop.
- * Both are built from a checked number or a checked release version, so nothing a peer sends names another place.
- */
+/** A page's directory under `/remote/`: `v<N>`, built from a checked link version, so nothing a peer sends names another place. */
 type PageDir = string;
 
 const linkVersionDir = (linkVersion: number): PageDir => `v${linkVersion}`;
@@ -83,8 +71,6 @@ void (async () => {
     // here on every launch until the user leaves remote mode. It is installed before the first render.
     installPhoneDisconnect();
     mountRemoteNotice();
-    // The key an earlier loader kept the desktop's app version under is of no use any more.
-    forgetLegacyDesktopVersion();
     // A return visit goes straight to the page of the link version it last reached: no transport, one HEAD request. A
     // version this tab already went straight to (its page sent the tab back, so the version was wrong or the page
     // could not tell), one whose page is not published, or a request that cannot run runs the whole flow below, which
@@ -116,26 +102,26 @@ void (async () => {
         void transport.leave();
         setRemoteConnectionState(state);
     };
-    /** `linkVersion` is the desktop's link version, absent from a legacy desktop, whose app version names its page. */
-    const finishWith = (dir: PageDir, linkVersion: number | undefined): void => {
+    /** `linkVersion` is the desktop's link version, which names its page. */
+    const finishWith = (dir: PageDir, linkVersion: number): void => {
         if (done) return;
         done = true;
         hello.stop();
         void pageIsPublished(dir, true).then(async (published) => {
             if (!published) {
                 void transport.leave();
-                const newerThanLoader = linkVersion !== undefined && linkVersion > LINK_VERSION;
+                const newerThanLoader = linkVersion > LINK_VERSION;
                 // Inside the Android app the bundled page is simply older than the desktop: update this
                 // app. In a browser the site just has not published that link version's page yet: try later.
-                // A desktop whose page is gone (a legacy one, or an older link version) is the one to update.
+                // A desktop whose page is gone (an older link version) is the one to update.
                 setRemoteConnectionState(
                     newerThanLoader ? (phoneRemoteMode() === null ? 'unpublished' : 'update-this') : 'update',
                 );
                 return;
             }
-            // Kept for the next visit, only for a page that is there and only for a link version; a write that
-            // fails is a shortcut lost, never a stranded tab.
-            if (linkVersion !== undefined) await storeLinkVersion(linkVersion).catch(() => undefined);
+            // Kept for the next visit, only for a page that is there; a write that fails is a shortcut lost, never
+            // a stranded tab.
+            await storeLinkVersion(linkVersion).catch(() => undefined);
             globalThis.location.replace(`${versionPage(dir)}${globalThis.location.hash}`);
         });
     };
@@ -154,14 +140,7 @@ void (async () => {
             phones.add(peerId);
             return;
         }
-        if (message.linkVersion !== undefined) {
-            finishWith(linkVersionDir(message.linkVersion), message.linkVersion);
-            return;
-        }
-        // A legacy desktop names its page by app version; one that is not a release version is no desktop's
-        // answer: nothing builds a path from it.
-        if (!isReleaseVersion(message.version)) return;
-        finishWith(message.version, undefined);
+        finishWith(linkVersionDir(message.linkVersion), message.linkVersion);
     });
     /** Whether a peer failed its connection on the SDP exchange before anyone answered — the timeout then reports the try-Wi-Fi case. */
     let connectionFailure = false;

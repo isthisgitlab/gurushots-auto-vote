@@ -32,10 +32,6 @@ export type RemoteSiteDeps = {
     linkVersion?: number;
     /** The GitHub releases listing, read in full (network). */
     listReleases?: () => Promise<RemoteRelease[]>;
-    /** One release by tag (network). */
-    getReleaseByTag?: (tag: string) => Promise<RemoteRelease>;
-    /** The SHA-256 the legacy page must match (defaults to the pin in remoteUnpack.ts; tests inject their own bytes' hash). */
-    legacyPageSha256?: string;
     /** One release asset (network). */
     downloadFile?: (url: string) => Promise<Buffer>;
     /** Extracts a zip into a directory (the `unzip` CLI). */
@@ -85,18 +81,6 @@ export const listReleasesFromGitHub = async (fetchImpl: typeof fetch = fetch): P
         releases.push(...batch);
         if (batch.length < RELEASES_PER_PAGE) return releases;
     }
-};
-
-/** One release by its tag, from the fixed `RELEASES_API`. */
-export const getReleaseByTagFromGitHub = async (
-    tag: string,
-    fetchImpl: typeof fetch = fetch,
-): Promise<RemoteRelease> => {
-    const response = await fetchImpl(`${RELEASES_API}/tags/${encodeURIComponent(tag)}`, { headers: apiHeaders() });
-    if (!response.ok) throw new Error(`release ${tag} lookup failed (${response.status})`);
-    const release: unknown = await response.json();
-    if (!isRemoteRelease(release)) throw new Error(`release ${tag} lookup failed (not the expected shape)`);
-    return release;
 };
 
 export const downloadFromGitHub = async (url: string): Promise<Buffer> => {

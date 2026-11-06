@@ -132,7 +132,7 @@ describe('AutovoteProvider on the remote kind', () => {
         );
         setRemoteHostPeerId('host');
         await act(async () => {
-            phone.receiveFromPeer({ t: 'autovote-state', state: relayedState }, 'host');
+            phone.receiveFromPeer({ t: 'autovote-state', state: relayedState, hostRun: 'run-a', n: 1 }, 'host');
             await Promise.resolve();
         });
         expect(refreshes).toBe(1);
@@ -154,7 +154,7 @@ describe('AutovoteProvider on the remote kind', () => {
         );
         setRemoteHostPeerId('host');
         await act(async () => {
-            phone.receiveFromPeer({ t: 'autovote-state', state: relayedState }, 'fellow');
+            phone.receiveFromPeer({ t: 'autovote-state', state: relayedState, hostRun: 'run-a', n: 1 }, 'fellow');
             await Promise.resolve();
         });
         expect(refreshes).toBe(0);

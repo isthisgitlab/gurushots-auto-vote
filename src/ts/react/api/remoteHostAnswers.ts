@@ -27,7 +27,7 @@ const shortError = (error: unknown): string => {
     return (text.length > 0 ? text : 'The computer could not run this.').slice(0, MAX_PEER_FIELD_LENGTH);
 };
 
-/** The host's own `hello`: its app version, the legacy protocol version and its link version, nothing else. */
+/** The host's own `hello`: its app version, the protocol version and its link version, nothing else. */
 export const sendHostHello = (ctx: HostContext, peerId: string): Promise<void> =>
     sendTo(ctx, peerId, {
         t: 'hello',

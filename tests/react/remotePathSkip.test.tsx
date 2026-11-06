@@ -5,19 +5,14 @@
  *
  * - a stale kept link version: the loader goes straight to its page, which finds another desktop link version, keeps
  *   it and sends the tab back; the loader then goes to the right page, and no second skip happens;
- * - a legacy desktop (1.15.0, no link version): the v1 page keeps nothing and sends the tab back with the kept
- *   version unchanged: the loader finds its own mark and runs the whole flow, ending on the desktop's app-version
- *   page after one extra connect, without looping.
+ * - a v1 page whose write the browser refused: it keeps nothing and sends the tab back with the kept version
+ *   unchanged: the loader finds its own mark and runs the whole flow, ending on the desktop's page after one
+ *   extra connect, without looping.
  */
 
 import { TransportStub } from '../helpers/remoteTransport';
 import { LINK_VERSION, PROTOCOL_VERSION } from '../../src/ts/core/remote/protocol';
-import {
-    LEGACY_DESKTOP_VERSION_STORAGE,
-    LINK_VERSION_STORAGE,
-    SKIPPED_TO_STORAGE,
-    storeLinkVersion,
-} from '../../src/ts/core/remote/linkVersion';
+import { LINK_VERSION_STORAGE, SKIPPED_TO_STORAGE, storeLinkVersion } from '../../src/ts/core/remote/linkVersion';
 import { installPeerBridge } from '../../src/ts/shells/remote/bridge/peer';
 import { setRemoteConnectionState, setRemoteHostPeerId } from '../../src/ts/core/remote/connectionState';
 
@@ -51,8 +46,8 @@ const loadLoader = async (): Promise<TransportStub> => {
     return transportStub.current;
 };
 
-/** A fresh load of a v1 page: the desktop's hello names its link version, or none (a legacy desktop). */
-const loadPage = async (linkVersion?: number): Promise<void> => {
+/** A fresh load of a v1 page: the desktop's hello names its link version. */
+const loadPage = async (linkVersion: number): Promise<void> => {
     const transport = new TransportStub('phone');
     jest.isolateModules(() => {
         const bridge = require('../../src/ts/shells/remote/bridge/peer') as {
@@ -64,10 +59,10 @@ const loadPage = async (linkVersion?: number): Promise<void> => {
     transport.receiveFromPeer(
         {
             t: 'hello',
-            version: linkVersion === undefined ? '1.15.0' : '9.9.9',
+            version: '9.9.9',
             protocolVersion: PROTOCOL_VERSION,
+            linkVersion,
             host: true,
-            ...(linkVersion === undefined ? {} : { linkVersion }),
         },
         'host',
     );
@@ -118,14 +113,29 @@ describe("the loader's skip to the kept link version, across the documents", () 
         expect(navigated).toEqual([`./v1/index.html#k=${KEY}`, LOADER_TARGET, `./v2/index.html#k=${KEY}`]);
     });
 
-    test('a legacy desktop (a v1 page keeps nothing and bounces the tab back): the loader finds its own mark, runs the whole flow and lands on the app-version page', async () => {
+    test("a page that could not keep the link version (the browser refused the write) bounces the tab back: the loader finds its own mark, runs the whole flow and lands on the desktop's page", async () => {
         await storeLinkVersion(LINK_VERSION);
 
         await loadLoader();
         expect(navigated).toEqual([`./v1/index.html#k=${KEY}`]);
 
-        // The v1 page hears a 1.15.0 desktop (no link version): it writes nothing and sends the tab back to the loader.
-        await loadPage();
+        // The v1 page hears a desktop of link version 2 but its write is refused: it keeps nothing and sends the tab
+        // back to the loader.
+        const kept = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+        Object.defineProperty(globalThis, 'localStorage', {
+            configurable: true,
+            value: {
+                setItem: () => {
+                    throw new Error('storage refused');
+                },
+            },
+        });
+        try {
+            await loadPage(2);
+        } finally {
+            if (kept === undefined) delete (globalThis as { localStorage?: unknown }).localStorage;
+            else Object.defineProperty(globalThis, 'localStorage', kept);
+        }
         expect(navigated.at(-1)).toBe(LOADER_TARGET);
         expect(window.localStorage.getItem(LINK_VERSION_STORAGE)).toMatch(/:1$/); // unchanged
         const connects = jest.mocked(
@@ -139,16 +149,16 @@ describe("the loader's skip to the kept link version, across the documents", () 
         expect(connects.mock.calls.length).toBe(before + 1); // the one extra connect
         expect(window.localStorage.getItem(LINK_VERSION_STORAGE)).toBeNull(); // the stale value was cleared
 
-        // The whole flow reads the desktop's hello and goes to its app-version page, keeping nothing for a legacy desktop.
+        // The whole flow reads the desktop's hello and goes to its page, keeping the link version it reached.
         transport.emitJoin('host');
         transport.receiveFromPeer(
-            { t: 'hello', version: '1.15.0', protocolVersion: PROTOCOL_VERSION, host: true },
+            { t: 'hello', version: '9.9.9', protocolVersion: PROTOCOL_VERSION, linkVersion: 2, host: true },
             'host',
         );
         await settle();
-        expect(navigated.at(-1)).toBe(`./1.15.0/index.html#k=${KEY}`);
+        expect(navigated.at(-1)).toBe(`./v2/index.html#k=${KEY}`);
         expect(navigated).toHaveLength(3);
-        expect(window.localStorage.getItem(LINK_VERSION_STORAGE)).toBeNull();
+        expect(window.localStorage.getItem(LINK_VERSION_STORAGE)).toMatch(/:2$/);
     });
 
     test('a value kept for another pairing is cleared and the whole flow runs', async () => {
@@ -166,20 +176,6 @@ describe("the loader's skip to the kept link version, across the documents", () 
         );
         await settle();
         expect(navigated).toEqual([`./v2/index.html#k=${KEY}`]);
-    });
-
-    test("the earlier loader's desktop-version key is removed on a load, and the loader works without it", async () => {
-        window.localStorage.setItem(LEGACY_DESKTOP_VERSION_STORAGE, 'aaaaaaaaaaaaaaaa:1.15.0');
-        const transport = await loadLoader();
-        expect(window.localStorage.getItem(LEGACY_DESKTOP_VERSION_STORAGE)).toBeNull();
-        expect(navigated).toEqual([]);
-        transport.emitJoin('host');
-        transport.receiveFromPeer(
-            { t: 'hello', version: '2.0.0', protocolVersion: PROTOCOL_VERSION, linkVersion: LINK_VERSION, host: true },
-            'host',
-        );
-        await settle();
-        expect(navigated).toEqual([`./v1/index.html#k=${KEY}`]);
     });
 
     test('a return visit after the tab accepted the desktop goes straight on again, even in the same tab', async () => {

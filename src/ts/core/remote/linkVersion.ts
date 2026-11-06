@@ -5,12 +5,11 @@
  * digits of the SHA-256 of the pairing room's id, so a value kept for another pairing is not trusted. It never
  * holds the pairing key (the key stays out of `localStorage`, see pairingKey.ts), and a hash of the room id, itself a
  * hash of the key, tells nothing of it. `N` is written without a leading zero or an exponent and read back under the
- * same rule (`^[1-9]\d{0,2}$`). Only a desktop `hello` that carries a `linkVersion` writes it: a legacy desktop
- * (1.15.0 and its betas) gets no shortcut.
+ * same rule (`^[1-9]\d{0,2}$`). Only a desktop `hello` writes it.
  *
  * The same module keeps the loop guard: a `sessionStorage` mark, "skipped to N", written before the loader goes
  * straight to v<N>'s page. A page that finds another link version stores it and bounces the tab back to the loader,
- * which then goes to the right page; a page that stores nothing (a legacy desktop's hello) bounces the tab back with
+ * which then goes to the right page; a page that stores nothing (a write the browser refused) bounces the tab back with
  * the stored version unchanged, and the mark tells the loader it already went there, so it runs the whole flow
  * instead of looping. Dependency-free apart from the pairing key and the room id.
  */
@@ -20,9 +19,6 @@ import { isLinkVersion } from './protocol';
 
 /** The `localStorage` key the link version is kept under. */
 export const LINK_VERSION_STORAGE = 'gs-remote-link-version';
-
-/** The `localStorage` key an earlier loader kept the desktop's app version under; the loader removes it. */
-export const LEGACY_DESKTOP_VERSION_STORAGE = 'gs-remote-desktop-version';
 
 /** The `sessionStorage` key of the loop guard: the link version this tab already went straight to. */
 export const SKIPPED_TO_STORAGE = 'gs-remote-skipped-to';
@@ -59,15 +55,9 @@ const attempt = <T>(action: () => T, fallback: T): T => {
     }
 };
 
-/** Removes the key an earlier loader kept the desktop's app version under. */
-export const forgetLegacyDesktopVersion = (): void => {
-    attempt(() => globalThis.localStorage?.removeItem(LEGACY_DESKTOP_VERSION_STORAGE), undefined);
-};
-
-/** Forgets the stored link version, and the earlier loader's key beside it (Disconnect, a value that cannot be trusted). */
+/** Forgets the stored link version (Disconnect, a value that cannot be trusted). */
 export const clearLinkVersion = (): void => {
     attempt(() => globalThis.localStorage?.removeItem(LINK_VERSION_STORAGE), undefined);
-    forgetLegacyDesktopVersion();
 };
 
 /** Keeps the link version of the desktop this page's pairing reached. Ignores a value that is not a link version, and a page without a key. */

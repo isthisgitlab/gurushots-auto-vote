@@ -61,13 +61,21 @@ describe('createRemoteAutovoteController', () => {
         },
     );
 
+    /** A state the way the desktop sends it: stamped with its run and count. */
+    const stamped = (state: AutovoteState, hostRun: string, n: number) => ({
+        t: 'autovote-state',
+        state,
+        hostRun,
+        n,
+    });
+
     test('the not-connected error notifies the listeners and the next relayed state replaces it', async () => {
         setRemoteConnectionState('offline');
         const seen: string[] = [];
         controller.subscribe(() => seen.push(controller.getState().status));
         await controller.start();
         expect(seen).toEqual(['Error']);
-        phone.receiveFromPeer({ t: 'autovote-state', state: stateOf({ running: true, status: 'Running' }) }, 'host');
+        phone.receiveFromPeer(stamped(stateOf({ running: true, status: 'Running' }), 'run-a', 1), 'host');
         expect(controller.getState().error).toBeNull();
     });
 
@@ -155,43 +163,36 @@ describe('createRemoteAutovoteController', () => {
     test('the relayed state becomes the controller state and notifies the listeners', () => {
         const seen: AutovoteState[] = [];
         controller.subscribe(() => seen.push(controller.getState()));
-        phone.receiveFromPeer({ t: 'autovote-state', state: stateOf({ running: true, cycles: 1 }) }, 'host');
+        phone.receiveFromPeer(stamped(stateOf({ running: true, cycles: 1 }), 'run-a', 1), 'host');
         expect(controller.getState().running).toBe(true);
         expect(seen).toHaveLength(1);
     });
 
     test('an autovote-state from a fellow phone changes nothing: only the host relays state', () => {
-        phone.receiveFromPeer({ t: 'autovote-state', state: stateOf({ running: true, cycles: 1 }) }, 'fellow');
+        phone.receiveFromPeer(stamped(stateOf({ running: true, cycles: 1 }), 'run-a', 1), 'fellow');
         expect(controller.getState()).toEqual(initialState);
         expect(refreshes).toBe(0);
     });
 
     test('a relayed cycle change triggers the challenge refresh', () => {
-        phone.receiveFromPeer({ t: 'autovote-state', state: stateOf({ running: true, cycles: 1 }) }, 'host');
+        phone.receiveFromPeer(stamped(stateOf({ running: true, cycles: 1 }), 'run-a', 1), 'host');
         expect(refreshes).toBe(1);
         // The same cycle again is not a new one.
-        phone.receiveFromPeer({ t: 'autovote-state', state: stateOf({ running: true, cycles: 1 }) }, 'host');
+        phone.receiveFromPeer(stamped(stateOf({ running: true, cycles: 1 }), 'run-a', 1), 'host');
         expect(refreshes).toBe(1);
-        phone.receiveFromPeer({ t: 'autovote-state', state: stateOf({ running: true, cycles: 2 }) }, 'host');
+        phone.receiveFromPeer(stamped(stateOf({ running: true, cycles: 2 }), 'run-a', 2), 'host');
         expect(refreshes).toBe(2);
     });
 
     test('a cycle that does not change (lastRun updates) does not refresh', () => {
-        phone.receiveFromPeer({ t: 'autovote-state', state: stateOf({ cycles: 1 }) }, 'host');
+        phone.receiveFromPeer(stamped(stateOf({ cycles: 1 }), 'run-a', 1), 'host');
         expect(refreshes).toBe(1);
         // The same cycle again — only its lastRun moved — is not a new one.
-        phone.receiveFromPeer({ t: 'autovote-state', state: stateOf({ cycles: 1, lastRun: 'now' }) }, 'host');
+        phone.receiveFromPeer(stamped(stateOf({ cycles: 1, lastRun: 'now' }), 'run-a', 2), 'host');
         expect(refreshes).toBe(1);
     });
 
     describe('the desktop run and count a state carries', () => {
-        const stamped = (state: AutovoteState, hostRun: string, n: number) => ({
-            t: 'autovote-state',
-            state,
-            hostRun,
-            n,
-        });
-
         test('a state with a lower count of the same run than one applied is stale and ignored; a higher one is applied', () => {
             phone.receiveFromPeer(stamped(stateOf({ cycles: 1 }), 'run-a', 5), 'host');
             expect(controller.getState().cycles).toBe(1);
@@ -215,13 +216,14 @@ describe('createRemoteAutovoteController', () => {
             expect(controller.getState().cycles).toBe(9);
         });
 
-        test('a state with no stamp (an older desktop) is applied as it comes, and so is a stamped one after it', () => {
-            phone.receiveFromPeer(stamped(stateOf({ cycles: 1 }), 'run-a', 5), 'host');
+        test('a state with no stamp is dropped: nothing is applied and nothing notifies', () => {
+            const seen: AutovoteState[] = [];
+            controller.subscribe(() => seen.push(controller.getState()));
             phone.receiveFromPeer({ t: 'autovote-state', state: stateOf({ cycles: 2 }) }, 'host');
-            phone.receiveFromPeer({ t: 'autovote-state', state: stateOf({ cycles: 3 }) }, 'host');
-            expect(controller.getState().cycles).toBe(3);
-            phone.receiveFromPeer(stamped(stateOf({ cycles: 4 }), 'run-a', 1), 'host');
-            expect(controller.getState().cycles).toBe(4);
+            phone.receiveFromPeer({ t: 'autovote-state', state: stateOf({ cycles: 3 }), hostRun: 'run-a' }, 'host');
+            expect(controller.getState()).toEqual(initialState);
+            expect(seen).toEqual([]);
+            expect(refreshes).toBe(0);
         });
     });
 
@@ -240,7 +242,7 @@ describe('createRemoteAutovoteController', () => {
 
     test('dispose stops listening; commands are no longer sent', async () => {
         controller.dispose();
-        phone.receiveFromPeer({ t: 'autovote-state', state: stateOf({ cycles: 1 }) }, 'host');
+        phone.receiveFromPeer(stamped(stateOf({ cycles: 1 }), 'run-a', 1), 'host');
         await controller.start();
         expect(controller.getState()).toEqual(initialState);
         expect(phone.sent).toHaveLength(0);

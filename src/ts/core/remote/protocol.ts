@@ -18,8 +18,8 @@ import * as pkg from '../../../../package.json';
 import type { AutovoteState } from '../autovote/state';
 
 /**
- * The app version this build carries. `hello` announces it for the logs and for a legacy peer (1.15.0 and its
- * betas, which compare it); no current peer compares it, the link version decides compatibility.
+ * The app version this build carries. `hello` announces it for the logs; no peer compares it, the link version
+ * decides compatibility. It stays on the wire because link-version-1 parsers require it.
  */
 export const APP_VERSION: string = pkg.version;
 
@@ -44,7 +44,7 @@ export const isLinkVersion = (value: unknown): value is number =>
     isInteger(value) && value >= 1 && value <= MAX_LINK_VERSION;
 
 /**
- * The legacy protocol shape version, frozen at 1: 1.15.0 and its betas parse a `hello` only when it carries
+ * The protocol shape version, frozen at 1: link-version-1 parsers accept a `hello` only when it carries
  * `protocolVersion`. It is sent, never compared; compatibility is the link version.
  */
 export const PROTOCOL_VERSION = 1 as const;
@@ -63,17 +63,16 @@ export const MAX_PEER_FIELD_LENGTH = 512;
 
 export type AutovoteCommandName = 'start' | 'stop' | 'rearm';
 
-/** Both directions: announces the sender's app version (for the logs and for a legacy peer), the
- * frozen legacy `protocolVersion` and its link version. The phone speaks first; only the desktop's
- * reply carries `host: true`, which is how a phone tells it from a fellow phone. A peer whose
- * `linkVersion` differs from ours is told, not served; a hello without one is a legacy peer
- * (1.15.0 and its betas), which the loader sends to its app-version page. */
+/** Both directions: announces the sender's app version (for the logs), the frozen `protocolVersion`
+ * and its link version. The phone speaks first; only the desktop's reply carries `host: true`, which
+ * is how a phone tells it from a fellow phone. A peer whose `linkVersion` differs from ours is told,
+ * not served; a hello without a valid one is dropped. */
 export type HelloMessage = {
     t: 'hello';
     version: string;
     protocolVersion: number;
-    /** Absent from a legacy peer. Present: an integer from 1 to 999. */
-    linkVersion?: number;
+    /** An integer from 1 to 999. */
+    linkVersion: number;
     host: boolean;
     /** `'loader'` marks the /remote/ loader, which only asks the desktop's version: it takes no peer slot and no snapshot. */
     role?: 'loader';
@@ -90,10 +89,10 @@ export type EventMessage = { t: 'event'; channel: string; payload: unknown };
  * Host → phone: the desktop controller's state, on every change. `hostRun` is a random id the desktop's
  * renderer drew when it started, and `n` counts the states it has sent in that run, only upward: the phone
  * ignores a state with the same `hostRun` and a lower `n` than one it applied, so a stale push still draining on
- * the relay cannot overwrite a newer one. A new `hostRun` (the desktop restarted) is always applied. Both are
- * absent from an older desktop's states, which are applied as they come.
+ * the relay cannot overwrite a newer one. A new `hostRun` (the desktop restarted) is always applied. A state
+ * without the pair is dropped.
  */
-export type AutovoteStateMessage = { t: 'autovote-state'; state: AutovoteState; hostRun?: string; n?: number };
+export type AutovoteStateMessage = { t: 'autovote-state'; state: AutovoteState; hostRun: string; n: number };
 /** Phone → host: start/stop/rearm the desktop's own controller. */
 export type AutovoteCommandMessage = { t: 'autovote-command'; command: AutovoteCommandName };
 /** Both directions: the sender leaves (a refused peer, the host shutting down). `reason: 'full'` is the
@@ -190,8 +189,8 @@ export const parsePeerMessage = (raw: unknown): PeerMessage | null => {
     switch (raw.t) {
         case 'hello': {
             if (raw.role !== undefined && raw.role !== 'loader') return null;
-            if (raw.linkVersion !== undefined && !isLinkVersion(raw.linkVersion)) return null;
             if (
+                !isLinkVersion(raw.linkVersion) ||
                 typeof raw.host !== 'boolean' ||
                 !isBoundedString(raw.version) ||
                 !isInteger(raw.protocolVersion) ||
@@ -203,8 +202,8 @@ export const parsePeerMessage = (raw: unknown): PeerMessage | null => {
                 t: 'hello',
                 version: raw.version,
                 protocolVersion: raw.protocolVersion,
+                linkVersion: raw.linkVersion,
                 host: raw.host,
-                ...(raw.linkVersion === undefined ? {} : { linkVersion: raw.linkVersion }),
             };
             return raw.role === undefined ? hello : { ...hello, role: raw.role };
         }
@@ -233,10 +232,10 @@ export const parsePeerMessage = (raw: unknown): PeerMessage | null => {
                 : null;
         case 'autovote-state':
             if (!isAutovoteState(raw.state)) return null;
-            // The pair is read whole: a lone `hostRun` or `n` is no stamp at all.
+            // The pair is read whole: a state without both `hostRun` and `n` is dropped.
             return isBoundedString(raw.hostRun) && isInteger(raw.n) && raw.n >= 0
                 ? { t: 'autovote-state', state: raw.state, hostRun: raw.hostRun, n: raw.n }
-                : { t: 'autovote-state', state: raw.state };
+                : null;
         case 'autovote-command':
             return raw.command === 'start' || raw.command === 'stop' || raw.command === 'rearm'
                 ? { t: 'autovote-command', command: raw.command }

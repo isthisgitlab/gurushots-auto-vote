@@ -373,16 +373,19 @@ describe('createRemoteHost', () => {
         expect(host.connectedCount()).toBe(1);
     });
 
-    test.each([
-        ['another link version', { linkVersion: LINK_VERSION + 1 }],
-        ['no link version (a legacy phone)', {}],
-    ])('a phone with %s is told our hello and no snapshot is served', async (_label, link) => {
+    test('a phone with another link version is told our hello and no snapshot is served', async () => {
         const { host, deps } = makeHarness();
         await host.start('k');
         const transport = deps.transports[0];
         transport.emitJoin('p1');
         transport.receiveFromPeer(
-            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false, ...link },
+            {
+                t: 'hello',
+                version: HOST_VERSION,
+                protocolVersion: PROTOCOL_VERSION,
+                linkVersion: LINK_VERSION + 1,
+                host: false,
+            },
             'p1',
         );
 
@@ -394,6 +397,21 @@ describe('createRemoteHost', () => {
             linkVersion: LINK_VERSION,
             host: true,
         });
+        expect(host.connectedCount()).toBe(0);
+        expect(deps.notifications).toBe(0);
+    });
+
+    test('a phone hello without a link version is dropped: no answer, no slot, no notice', async () => {
+        const { host, deps } = makeHarness();
+        await host.start('k');
+        const transport = deps.transports[0];
+        transport.emitJoin('p1');
+        transport.receiveFromPeer(
+            { t: 'hello', version: HOST_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
+            'p1',
+        );
+
+        expect(sentBy(transport)).toHaveLength(0);
         expect(host.connectedCount()).toBe(0);
         expect(deps.notifications).toBe(0);
     });

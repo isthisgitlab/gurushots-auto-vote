@@ -2,8 +2,7 @@
 // (core/remote/protocol.ts LINK_VERSION): `/remote/v<N>/` serves every desktop that speaks link
 // version N. The local build stages its own link version; every other link version, older and
 // newer, is unpacked from the GitHub releases' `remote-page-v<N>.zip` assets, each verified
-// against its checksum file. The legacy 1.15.0 page (which named its page by app version) comes from
-// its tag and is checked against a pinned hash.
+// against its checksum file.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,15 +10,9 @@ import { execFileSync } from 'node:child_process';
 import { errorMessage } from '../../src/ts/core/errorMessage';
 import { LINK_VERSION, compareReleaseVersions } from '../../src/ts/core/remote/protocol';
 import { NOTICES_ASSET_NAME } from '../../src/ts/core/thirdPartyNotices';
-import {
-    downloadFromGitHub,
-    getReleaseByTagFromGitHub,
-    listReleasesFromGitHub,
-    selectLinkVersionPages,
-    versionOfTag,
-} from './remoteReleases';
+import { downloadFromGitHub, listReleasesFromGitHub, selectLinkVersionPages, versionOfTag } from './remoteReleases';
 import type { LinkVersionPage, RemoteRelease, RemoteSiteDeps } from './remoteReleases';
-import { LEGACY_PAGE_VERSION, unpackLegacyPage, unpackLinkVersionPage } from './remoteUnpack';
+import { unpackLinkVersionPage } from './remoteUnpack';
 
 const distDir = path.join(__dirname, '..', '..', 'dist');
 
@@ -113,7 +106,7 @@ const requireOlderPages = (localLinkVersion: number, picks: Map<number, LinkVers
 /**
  * Fills `dist-site/remote/`: the thin loader at `remote/index.html`, the local build's page under
  * `remote/v<N>/` (when it stands in for its link version), every other link version unpacked from
- * the newest stable release that carries its `remote-page-v<N>.zip`, and the legacy 1.15.0 page.
+ * the newest stable release that carries its `remote-page-v<N>.zip`.
  * Any page that cannot be fetched or verified fails the build.
  */
 const buildRemoteSite = async (out: string, appVersion: string, deps: RemoteSiteDeps = {}): Promise<void> => {
@@ -141,12 +134,6 @@ const buildRemoteSite = async (out: string, appVersion: string, deps: RemoteSite
         if (linkVersion === localLinkVersion && standsIn) continue;
         await unpackLinkVersionPage(page, path.join(ensureOut(), `v${linkVersion}`), unpackDeps);
     }
-    await unpackLegacyPage(
-        deps.getReleaseByTag ?? getReleaseByTagFromGitHub,
-        path.join(ensureOut(), LEGACY_PAGE_VERSION),
-        unpackDeps,
-        deps.legacyPageSha256,
-    );
 };
 
 export { buildRemoteSite };

@@ -56,15 +56,15 @@ const handleHello = (message: HelloMessage, peerId: string, watch: MessageWatch)
         // Once a desktop is accepted, only that peer can send this page away; before one is, the first desktop's
         // hello decides (the round trip from a stale kept version needs it).
         if (ctx.hostPeerId !== null && peerId !== ctx.hostPeerId) return;
-        // The desktop speaks another link version, or none (a legacy 1.15.0 desktop): the stable loader finds
-        // the page that matches it (or says which side to update), so no notice shows here.
+        // The desktop speaks another link version: the stable loader finds the page that matches it (or says which
+        // side to update), so no notice shows here.
         hello.stop();
         hello.clear();
         // The loader goes straight to the link version this page remembers next time: the one the desktop speaks. A
-        // legacy desktop has none, so nothing is stored for it. A write that fails is a shortcut lost, never a
-        // stranded tab.
-        const stored = message.linkVersion === undefined ? Promise.resolve() : storeLinkVersion(message.linkVersion);
-        void stored.catch(() => undefined).then(() => goToLoader(watch.loaderTarget));
+        // write that fails is a shortcut lost, never a stranded tab.
+        void storeLinkVersion(message.linkVersion)
+            .catch(() => undefined)
+            .then(() => goToLoader(watch.loaderTarget));
         return;
     }
     if (ctx.hostPeerId === null) {

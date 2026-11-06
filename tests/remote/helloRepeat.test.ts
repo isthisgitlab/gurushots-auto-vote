@@ -5,11 +5,17 @@
  */
 
 import { createHelloRepeater, HELLO_RETRY_MS } from '../../src/ts/core/remote/helloRepeat';
-import { PROTOCOL_VERSION } from '../../src/ts/core/remote/protocol';
+import { LINK_VERSION, PROTOCOL_VERSION } from '../../src/ts/core/remote/protocol';
 
 import type { HelloMessage } from '../../src/ts/core/remote/protocol';
 
-const announce: HelloMessage = { t: 'hello', version: '1.0.0', protocolVersion: PROTOCOL_VERSION, host: false };
+const announce: HelloMessage = {
+    t: 'hello',
+    version: '1.0.0',
+    protocolVersion: PROTOCOL_VERSION,
+    linkVersion: LINK_VERSION,
+    host: false,
+};
 
 describe('createHelloRepeater', () => {
     let sent: Array<{ message: unknown; target?: string }>;

@@ -22,7 +22,7 @@ export type RemoteConnectionState =
     | 'network'
     /** like `network`, but this browser has no `CompressionStream`, so the relay fallback could not even run */
     | 'old-browser'
-    /** the desktop is older than this page (a legacy 1.15.0 beta, or a link version the site no longer carries), and no page of its own is published */
+    /** the desktop is older than this page (a link version the site no longer carries), and no page of its own is published */
     | 'update'
     /** the desktop speaks a newer link version than this app carries a page for */
     | 'update-this'

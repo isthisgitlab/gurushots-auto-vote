@@ -30,7 +30,7 @@ const PAIRING_KEY_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const LOADER_PATH_PATTERN = /\/remote(?:\/(?:index\.html)?)?$/;
 
 /**
- * The stable loader's address from a versioned page (`/remote/v<N>/index.html`, or a legacy `/remote/<appVersion>/index.html`): the address bar
+ * The stable loader's address from a versioned page (`/remote/v<N>/index.html`): the address bar
  * shows `../#k=<key>`, so a bookmark or "Add to Home Screen" keeps a link that survives the next
  * desktop update and the next link version.
  */

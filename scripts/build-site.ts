@@ -194,11 +194,9 @@ export {
 export {
     REMOTE_PAGE_ZIP_PATTERN,
     listReleasesFromGitHub,
-    getReleaseByTagFromGitHub,
     downloadFromGitHub,
     selectLinkVersionPages,
 } from './build-site/remoteReleases';
-export { LEGACY_PAGE_SHA256, LEGACY_PAGE_TAG, LEGACY_PAGE_VERSION, LEGACY_PAGE_ZIP } from './build-site/remoteUnpack';
 export { buildRemoteSite } from './build-site/remote';
 
 export type { LinkVersionPage, RemoteRelease, RemoteSiteDeps } from './build-site/remoteReleases';

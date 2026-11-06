@@ -48,7 +48,13 @@ const hostHello = {
     linkVersion: LINK_VERSION,
     host: true,
 };
-const fellowHello = { t: 'hello', version: APP_VERSION, protocolVersion: PROTOCOL_VERSION, host: false };
+const fellowHello = {
+    t: 'hello',
+    version: APP_VERSION,
+    protocolVersion: PROTOCOL_VERSION,
+    linkVersion: LINK_VERSION,
+    host: false,
+};
 
 // The page hands the bridge the loader it must go to on a version mismatch; the harness gives it one fixed target.
 const LOADER_TARGET = 'https://site.test/remote/index.html#k=the-key';
@@ -474,10 +480,7 @@ describe('installPeerBridge (the phone bridge)', () => {
 
     test('only the desktop hello (host: true) connects; a fellow phone does not', () => {
         phone.emitJoin('host');
-        phone.receiveFromPeer(
-            { t: 'hello', version: APP_VERSION, protocolVersion: PROTOCOL_VERSION, host: false },
-            'fellow-phone',
-        );
+        phone.receiveFromPeer(fellowHello, 'fellow-phone');
         expect(remoteConnectionState()).toBe('connecting');
         phone.receiveFromPeer(hostHello, 'host');
         expect(remoteConnectionState()).toBe('connected');
@@ -567,7 +570,7 @@ describe('installPeerBridge (the phone bridge)', () => {
             expect(remoteConnectionState()).toBe('connected');
         });
 
-        test('a legacy desktop (no link version) sends the tab to the loader and stores nothing', async () => {
+        test('a desktop hello without a link version is dropped: no redirect, nothing stored', async () => {
             phone.emitJoin('host');
             phone.receiveFromPeer(
                 { t: 'hello', version: '1.15.0', protocolVersion: PROTOCOL_VERSION, host: true },
@@ -575,7 +578,7 @@ describe('installPeerBridge (the phone bridge)', () => {
             );
             await flushAsync();
             expect(versionCalls).toEqual([]);
-            expect(replaced).toEqual([LOADER_TARGET]);
+            expect(replaced).toEqual([]);
             expect(remoteConnectionState()).toBe('connecting');
         });
 

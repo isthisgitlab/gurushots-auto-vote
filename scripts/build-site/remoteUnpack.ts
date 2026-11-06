@@ -6,20 +6,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { errorMessage } from '../../src/ts/core/errorMessage';
 import { checksumNameOf } from './remoteReleases';
-import type { LinkVersionPage, RemoteRelease } from './remoteReleases';
-
-/**
- * The one legacy page the site keeps: 1.15.0 (and its betas, which fall to the "update" notice) named its page by
- * app version, so its desktops are sent to `/remote/1.15.0/`. It stays until a release removes it on purpose, the
- * moment 1.15.0 desktops are no longer supported. A fix to it needs a new 1.15.x asset and a new pin.
- */
-export const LEGACY_PAGE_VERSION = '1.15.0';
-export const LEGACY_PAGE_TAG = `v${LEGACY_PAGE_VERSION}`;
-export const LEGACY_PAGE_ZIP = 'remote-page.zip';
-/** The SHA-256 of the v1.15.0 release's `remote-page.zip`: the legacy page is checked against this pin, not against anything the release says about itself. */
-export const LEGACY_PAGE_SHA256 = '3e81b7f2964b9ccef1519ead21dfa1aa5b8f742efa48b1d052ff82e76f38cf4d';
+import type { LinkVersionPage } from './remoteReleases';
 
 export type UnpackDeps = {
     download: (url: string) => Promise<Buffer>;
@@ -64,29 +52,4 @@ export const unpackLinkVersionPage = async (page: LinkVersionPage, target: strin
     }
     await unpackVerifiedZip(zipBytes, target, deps.unzip);
     console.log(`✓ remote/v${page.linkVersion}/ (from ${page.tag}, checksum verified)`);
-};
-
-/** The legacy 1.15.0 page, fetched by tag and checked against the pinned hash before it is written or unpacked. */
-export const unpackLegacyPage = async (
-    getReleaseByTag: (tag: string) => Promise<RemoteRelease>,
-    target: string,
-    deps: UnpackDeps,
-    pinnedSha256: string = LEGACY_PAGE_SHA256,
-): Promise<void> => {
-    try {
-        const release = await getReleaseByTag(LEGACY_PAGE_TAG);
-        const zip = release.assets.find((asset) => asset.name === LEGACY_PAGE_ZIP);
-        if (zip === undefined) throw new Error(`${LEGACY_PAGE_TAG} carries no ${LEGACY_PAGE_ZIP}`);
-        const zipBytes = await deps.download(zip.browser_download_url);
-        if (sha256Of(zipBytes) !== pinnedSha256) {
-            throw new Error(`${LEGACY_PAGE_ZIP} does not match the pinned SHA-256`);
-        }
-        await unpackVerifiedZip(zipBytes, target, deps.unzip);
-    } catch (error) {
-        throw new Error(
-            `could not build the legacy ${LEGACY_PAGE_VERSION} phone page: ${errorMessage(error) ?? 'no reason given'}`,
-            { cause: error },
-        );
-    }
-    console.log(`✓ remote/${LEGACY_PAGE_VERSION}/ (from ${LEGACY_PAGE_TAG}, pinned SHA-256 verified)`);
 };

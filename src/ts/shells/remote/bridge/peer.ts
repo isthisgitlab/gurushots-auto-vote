@@ -54,7 +54,7 @@ const installPeerBridge = (transport: RemoteTransport, loaderTarget: string): vo
 
     const ctx = createPeerBridgeContext(transport);
 
-    // The phone's hello: its own app version, the legacy protocol shape version, its link version, not the host. It repeats
+    // The phone's hello: its own app version, the protocol shape version, its link version, not the host. It repeats
     // until the desktop answers (core/remote/helloRepeat.ts: the first one can vanish on the relays).
     const announce: HelloMessage = {
         t: 'hello',

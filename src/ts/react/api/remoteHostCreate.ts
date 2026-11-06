@@ -37,7 +37,7 @@ export type RemoteHostDeps = {
     notify: () => void;
     /** Best-effort renderer logging at INFO (the desktop's own Logs window and log files show these). */
     logInfo: (message: string) => void;
-    /** The app version `hello` announces, for the logs and for a legacy phone (package.json's version). */
+    /** The app version `hello` announces, for the logs (package.json's version). */
     version: string;
 };
 
