@@ -49,6 +49,7 @@ const downloadVideo = async (
     url: URL,
     destination: string,
     deadlineMs: number,
+    // A parameter only so tests can check the streamed cap without writing 256 MiB.
     maxBytes = MAX_VIDEO_BYTES,
 ): Promise<void> =>
     new Promise((resolve, reject) => {
@@ -84,7 +85,9 @@ const downloadVideo = async (
                 }
                 const declaredBytes = contentLength(receivedResponse.headers['content-length']);
                 if (declaredBytes !== null && declaredBytes > maxBytes) {
-                    fail(new Error(`Video download exceeds the supported size (${declaredBytes} bytes)`));
+                    fail(
+                        new Error(`Video download exceeds the supported size (${declaredBytes} of ${maxBytes} bytes)`),
+                    );
                     return;
                 }
                 const stream = requireFs().createWriteStream(destination, { flags: 'wx', mode: 0o600 });
@@ -102,7 +105,11 @@ const downloadVideo = async (
                     if (connection.failure) return;
                     receivedBytes += chunk.length;
                     if (receivedBytes > maxBytes) {
-                        fail(new Error(`Video download exceeds the supported size (${receivedBytes} bytes)`));
+                        fail(
+                            new Error(
+                                `Video download exceeds the supported size (${receivedBytes} of ${maxBytes} bytes)`,
+                            ),
+                        );
                         return;
                     }
                     if (!stream.write(chunk)) receivedResponse.pause();
@@ -114,13 +121,16 @@ const downloadVideo = async (
                 });
                 receivedResponse.once('end', () => {
                     responseEnded = true;
+                    clearTimeout(connection.deadline);
                     stream.end();
                 });
             },
         );
         connection.request = openedRequest;
-        connection.deadline = setTimeout(() => fail(new Error('Video download timed out')), deadlineMs);
-        if (connection.failure) clearTimeout(connection.deadline);
+        connection.deadline = setTimeout(
+            () => fail(new Error(`Video download exceeded its ${Math.round(deadlineMs / 1000)} s deadline`)),
+            deadlineMs,
+        );
         openedRequest.once('timeout', () => fail(new Error('Video download timed out')));
         openedRequest.once('error', (error) => fail(error));
         openedRequest.end();

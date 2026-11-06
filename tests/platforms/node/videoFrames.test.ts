@@ -74,9 +74,15 @@ const temporaryDirectory = (): string => {
     return directory;
 };
 
-/** Lets real file I/O progress; setImmediate stays real under the fake timers used here. */
+const UNTIL_LIMIT_NS = 4_000_000_000n;
+
+/**
+ * Lets real file I/O progress for up to 4 s of real time (under Jest's 5 s test timeout). setImmediate and
+ * hrtime stay real under the fake timers used here (FAKE_TIMERS leaves both).
+ */
 const until = async (condition: () => boolean): Promise<void> => {
-    for (let attempt = 0; attempt < 1_000 && !condition(); attempt += 1) {
+    const start = process.hrtime.bigint();
+    while (!condition() && process.hrtime.bigint() - start < UNTIL_LIMIT_NS) {
         await new Promise<void>((resolve) => setImmediate(resolve));
     }
     expect(condition()).toBe(true);
@@ -94,7 +100,9 @@ const captureStreams = (): fs.WriteStream[] => {
     return streams;
 };
 
-const FAKE_TIMERS: Parameters<typeof jest.useFakeTimers>[0] = { doNotFake: ['nextTick', 'setImmediate'] };
+const FAKE_TIMERS: Parameters<typeof jest.useFakeTimers>[0] = {
+    doNotFake: ['hrtime', 'nextTick', 'setImmediate'],
+};
 
 describe('node video frame extraction', () => {
     afterEach(() => {
@@ -150,6 +158,7 @@ describe('node video frame extraction', () => {
     });
 
     test('rejects an HTTP refusal and removes its temporary directory', async () => {
+        jest.useFakeTimers(FAKE_TIMERS);
         const res = response(302);
         requestFor(res);
         await expect(
@@ -159,13 +168,16 @@ describe('node video frame extraction', () => {
     });
 
     test('rejects a declared download over the byte limit before creating any file', async () => {
+        jest.useFakeTimers(FAKE_TIMERS);
         const declared = response(200, { 'content-length': String(MAX_VIDEO_BYTES + 1) });
         requestFor(declared);
         const makeDirectory = jest.spyOn(fs, 'mkdtempSync');
         const streams = captureStreams();
         await expect(
             extractNodeVideoFrames('https://media.gurushots.com/clip.mp4', 1, [0.2], () => '/decoder'),
-        ).rejects.toThrow(`Video download exceeds the supported size (${MAX_VIDEO_BYTES + 1} bytes)`);
+        ).rejects.toThrow(
+            `Video download exceeds the supported size (${MAX_VIDEO_BYTES + 1} of ${MAX_VIDEO_BYTES} bytes)`,
+        );
         expect(streams).toHaveLength(0);
         expect(fs.existsSync(String(makeDirectory.mock.results[0]!.value))).toBe(false);
     });
@@ -188,7 +200,7 @@ describe('node video frame extraction', () => {
                 closedAtRejection = stream.closed;
                 throw error;
             }),
-        ).rejects.toThrow('Video download exceeds the supported size (5 bytes)');
+        ).rejects.toThrow('Video download exceeds the supported size (5 of 4 bytes)');
         expect(closedAtRejection).toBe(true);
         expect(destroy).toHaveBeenCalledTimes(1);
     });
@@ -220,7 +232,7 @@ describe('node video frame extraction', () => {
         const res = response(200);
         requestFor(res);
         const extraction = extractNodeVideoFrames('https://media.gurushots.com/clip.mp4', 1, [0.2], () => '/decoder');
-        const rejected = expect(extraction).rejects.toThrow('timed out');
+        const rejected = expect(extraction).rejects.toThrow('exceeded its 30 s deadline');
         await jest.advanceTimersByTimeAsync(30_000);
         await rejected;
     });
@@ -239,7 +251,7 @@ describe('node video frame extraction', () => {
             () => (settled = true),
             () => (settled = true),
         );
-        const rejected = expect(extraction).rejects.toThrow('timed out');
+        const rejected = expect(extraction).rejects.toThrow('exceeded its 120 s deadline');
         await jest.advanceTimersByTimeAsync(30_000);
         expect(settled).toBe(false);
         await jest.advanceTimersByTimeAsync(90_000);
@@ -255,7 +267,7 @@ describe('node video frame extraction', () => {
             [0.2],
             () => '/decoder',
         );
-        const rejected = expect(extraction).rejects.toThrow('timed out');
+        const rejected = expect(extraction).rejects.toThrow('exceeded its 30 s deadline');
         await jest.advanceTimersByTimeAsync(30_000);
         await rejected;
     });
@@ -265,12 +277,37 @@ describe('node video frame extraction', () => {
         const res = response(200);
         requestFor(res);
         const extraction = extractNodeVideoFrames('https://media.gurushots.com/clip.mp4', 1, [0.2], () => '/decoder');
-        const rejected = expect(extraction).rejects.toThrow('timed out');
+        const rejected = expect(extraction).rejects.toThrow('exceeded its 30 s deadline');
         for (let tick = 0; tick < 3; tick += 1) {
             res.emit('data', Buffer.from('x'));
             await jest.advanceTimersByTimeAsync(10_000);
         }
         await rejected;
+    });
+
+    test('does not reject on the overall deadline once every byte has arrived', async () => {
+        jest.useFakeTimers(FAKE_TIMERS);
+        const res = response(200);
+        requestFor(res);
+        const streams = captureStreams();
+        const download = downloadVideo(MEDIA_URL, path.join(temporaryDirectory(), 'input.mp4'), 30_000);
+        const stream = streams[0]!;
+        const endStream = stream.end.bind(stream);
+        jest.spyOn(stream, 'end').mockImplementation(() => stream);
+        let settled = false;
+        download.then(
+            () => (settled = true),
+            () => (settled = true),
+        );
+        res.emit('data', Buffer.from('abc'));
+        res.emit('end');
+        await jest.advanceTimersByTimeAsync(30_000);
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(stream.destroyed).toBe(false);
+        expect(settled).toBe(false);
+        endStream();
+        res.emit('close');
+        await download;
     });
 
     test('ignores a response that arrives after the download already failed', async () => {
@@ -726,14 +763,12 @@ describe('node video frame extraction', () => {
                 ),
             ),
         );
-        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'video-frames-test-'));
-        const destination = path.join(directory, 'input.mp4');
+        const destination = path.join(temporaryDirectory(), 'input.mp4');
         try {
             await downloadVideo(new URL('https://media.gurushots.com/clip.mp4'), destination, 30_000);
             expect(fs.statSync(destination).size).toBe(size);
             if (process.platform !== 'win32') expect(fs.statSync(destination).mode & 0o777).toBe(0o600);
         } finally {
-            fs.rmSync(directory, { recursive: true, force: true });
             server.closeAllConnections();
             await new Promise<void>((resolve) => server.close(() => resolve()));
         }
