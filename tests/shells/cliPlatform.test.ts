@@ -24,7 +24,10 @@ const mockExtract = jest.fn(() => ({
 const mockSea = { isSea: jest.fn(() => true), getAsset: jest.fn(() => 'sha') };
 const mockSeaTransformers = { env: {}, pipeline: jest.fn() };
 const mockCreateRequire = jest.fn(() => () => mockSeaTransformers);
-const mockExtractVideoDecoderCliAssets = jest.fn(() => ({ decoderPath: '/extracted/video-decoder/ffmpeg' }));
+const mockExtractVideoDecoderCliAssets = jest.fn(() => ({
+    decoderPath: '/extracted/video-decoder/ffmpeg',
+    probePath: '/extracted/video-decoder/ffprobe',
+}));
 const mockExtractNodeVideoFrames = jest.fn<Promise<string[]>, [string, number, readonly number[], () => string]>();
 
 jest.mock('../../src/ts/shells/cli/visionCliAssets', () => ({

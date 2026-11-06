@@ -210,7 +210,10 @@ describe('videoFrames', () => {
 
     test('uses the injected CLI decoder extractor in a SEA build', async () => {
         mockSea.isSea = () => true;
-        const extractVideoDecoderCliAssets = jest.fn(() => ({ decoderPath: '/sea/video-decoder/ffmpeg' }));
+        const extractVideoDecoderCliAssets = jest.fn(() => ({
+            decoderPath: '/sea/video-decoder/ffmpeg',
+            probePath: '/sea/video-decoder/ffprobe',
+        }));
         await expect(
             createNodeAssets({ extractVideoDecoderCliAssets }).videoFrames(
                 'https://media.gurushots.com/clip.mp4',
@@ -222,7 +225,10 @@ describe('videoFrames', () => {
     });
 
     test('does not use an injected CLI decoder extractor outside SEA', async () => {
-        const extractVideoDecoderCliAssets = jest.fn(() => ({ decoderPath: '/sea/video-decoder/ffmpeg' }));
+        const extractVideoDecoderCliAssets = jest.fn(() => ({
+            decoderPath: '/sea/video-decoder/ffmpeg',
+            probePath: '/sea/video-decoder/ffprobe',
+        }));
         await expect(
             createNodeAssets({ extractVideoDecoderCliAssets }).videoFrames(
                 'https://media.gurushots.com/clip.mp4',

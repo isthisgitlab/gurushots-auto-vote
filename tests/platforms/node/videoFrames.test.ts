@@ -9,11 +9,35 @@ import type { ClientRequest, IncomingMessage } from 'node:http';
 import { invalid } from '../../helpers/invalid';
 
 const request = jest.fn();
-const spawn = jest.fn<ChildProcess, [string, string[], { stdio: 'ignore'; windowsHide: boolean }]>();
+const spawn = jest.fn<
+    ChildProcess,
+    [string, string[], { stdio: 'ignore' | ['ignore', 'pipe', 'ignore']; windowsHide: boolean }]
+>();
 jest.mock('node:https', () => ({ request }));
 jest.mock('node:child_process', () => ({ spawn }));
 
-import { extractNodeVideoFrames } from '../../../src/ts/platforms/node/videoFrames';
+import { extractNodeVideoFrames, probeDuration } from '../../../src/ts/platforms/node/videoFrames';
+
+const probeChild = (output = '1'): ChildProcess => {
+    const child = new EventEmitter() as ChildProcess;
+    const stdout = new EventEmitter();
+    Object.assign(child, { kill: jest.fn(), killed: true, stdout });
+    queueMicrotask(() => {
+        stdout.emit('data', Buffer.from(output));
+        child.emit('close', 0);
+    });
+    return child;
+};
+
+const controlledProbeChild = (
+    withStdout = true,
+): { child: ChildProcess; stdout: EventEmitter; kill: jest.MockedFunction<() => void> } => {
+    const child = new EventEmitter() as ChildProcess;
+    const stdout = new EventEmitter();
+    const kill = jest.fn<void, []>();
+    Object.assign(child, { kill, killed: false, ...(withStdout ? { stdout } : {}) });
+    return { child, stdout, kill };
+};
 
 const response = (statusCode: number, headers: Record<string, string> = {}): IncomingMessage => {
     const stream = new EventEmitter() as IncomingMessage;
@@ -37,14 +61,17 @@ describe('node video frame extraction', () => {
     afterEach(() => {
         jest.useRealTimers();
         jest.restoreAllMocks();
+        request.mockReset();
+        spawn.mockReset();
         jest.clearAllMocks();
     });
 
     test('downloads an allowed MP4, invokes an isolated child, returns ordered JPEG data URLs, and removes temp files', async () => {
         const res = response(200, { 'content-length': '9007199254740992' });
         requestFor(res);
-        spawn.mockImplementationOnce(
+        spawn.mockImplementation(
             invalid((_decoder: string, args: string[]) => {
+                if (!args.some((arg) => arg.endsWith('.jpg'))) return probeChild('10');
                 const child = new EventEmitter() as ChildProcess;
                 Object.assign(child, { kill: jest.fn(), killed: true });
                 setImmediate(() => {
@@ -78,7 +105,7 @@ describe('node video frame extraction', () => {
             expect.arrayContaining(['-threads', '1', '-filter_threads', '1', '-protocol_whitelist', 'file,pipe']),
             { stdio: 'ignore', windowsHide: true },
         );
-        const decoderArgs = spawn.mock.calls[0][1];
+        const decoderArgs = spawn.mock.calls[1][1];
         expect(decoderArgs.filter((arg) => /^[0-9]+:v:0$/.test(arg))).toEqual(['0:v:0', '1:v:0', '2:v:0']);
     });
 
@@ -159,8 +186,9 @@ describe('node video frame extraction', () => {
     ])('rejects %s from the isolated decoder', async (_label, emit, message) => {
         const res = response(200, { 'content-length': '3' });
         requestFor(res);
-        spawn.mockImplementationOnce(
-            invalid(() => {
+        spawn.mockImplementation(
+            invalid((_executable: string, args: string[]) => {
+                if (!args.some((arg) => arg.endsWith('.jpg'))) return probeChild();
                 const child = new EventEmitter() as ChildProcess;
                 Object.assign(child, { kill: jest.fn(), killed: true });
                 setImmediate(() => emit(child));
@@ -179,8 +207,9 @@ describe('node video frame extraction', () => {
     test('rejects an invalid JPEG emitted by the decoder', async () => {
         const res = response(200, { 'content-length': '3' });
         requestFor(res);
-        spawn.mockImplementationOnce(
+        spawn.mockImplementation(
             invalid((_decoder: string, args: string[]) => {
+                if (!args.some((arg) => arg.endsWith('.jpg'))) return probeChild();
                 const child = new EventEmitter() as ChildProcess;
                 Object.assign(child, { kill: jest.fn() });
                 setImmediate(() => {
@@ -207,8 +236,9 @@ describe('node video frame extraction', () => {
             if (String(file).endsWith('.jpg')) return { size: 2 * 1024 * 1024 + 1 } as fs.Stats;
             return statSync(file);
         }) as typeof fs.statSync);
-        spawn.mockImplementationOnce(
+        spawn.mockImplementation(
             invalid((_decoder: string, args: string[]) => {
+                if (!args.some((arg) => arg.endsWith('.jpg'))) return probeChild();
                 const child = new EventEmitter() as ChildProcess;
                 Object.assign(child, { kill: jest.fn() });
                 setImmediate(() => {
@@ -257,8 +287,9 @@ describe('node video frame extraction', () => {
         requestFor(res);
         const child = new EventEmitter() as ChildProcess;
         Object.assign(child, { kill: jest.fn(), killed: false });
-        spawn.mockImplementationOnce(
+        spawn.mockImplementation(
             invalid((_decoder: string, args: string[]) => {
+                if (!args.some((arg) => arg.endsWith('.jpg'))) return probeChild();
                 fs.writeFileSync(args.find((arg) => arg.endsWith('.jpg'))!, Buffer.from([0xff, 0xd8, 1]));
                 return child;
             }),
@@ -279,7 +310,11 @@ describe('node video frame extraction', () => {
         const child = new EventEmitter() as ChildProcess;
         const kill = jest.fn();
         Object.assign(child, { kill, killed: false });
-        spawn.mockReturnValueOnce(child);
+        spawn.mockImplementation(
+            invalid((_executable: string, args: string[]) =>
+                args.some((arg) => arg.endsWith('.jpg')) ? child : probeChild(),
+            ),
+        );
         jest.spyOn(fs, 'statSync').mockImplementation(() => {
             throw null;
         });
@@ -300,7 +335,11 @@ describe('node video frame extraction', () => {
         const child = new EventEmitter() as ChildProcess;
         const kill = jest.fn();
         Object.assign(child, { kill, killed: false });
-        spawn.mockReturnValueOnce(child);
+        spawn.mockImplementation(
+            invalid((_executable: string, args: string[]) =>
+                args.some((arg) => arg.endsWith('.jpg')) ? child : probeChild(),
+            ),
+        );
         jest.spyOn(fs, 'statSync').mockImplementation(() => {
             throw Object.assign(new Error('not generated yet'), { code: 'ENOENT' });
         });
@@ -321,7 +360,11 @@ describe('node video frame extraction', () => {
         const child = new EventEmitter() as ChildProcess;
         const kill = jest.fn();
         Object.assign(child, { kill, killed: false });
-        spawn.mockReturnValueOnce(child);
+        spawn.mockImplementation(
+            invalid((_executable: string, args: string[]) =>
+                args.some((arg) => arg.endsWith('.jpg')) ? child : probeChild(),
+            ),
+        );
         jest.spyOn(fs, 'statSync').mockReturnValue({ size: 2 * 1024 * 1024 + 1 } as fs.Stats);
         const extraction = extractNodeVideoFrames('https://media.gurushots.com/clip.mp4', 1, [0.2], () => '/decoder');
         const rejected = expect(extraction).rejects.toThrow('oversized JPEG');
@@ -340,7 +383,11 @@ describe('node video frame extraction', () => {
         const child = new EventEmitter() as ChildProcess;
         const kill = jest.fn();
         Object.assign(child, { kill, killed: false });
-        spawn.mockReturnValueOnce(child);
+        spawn.mockImplementation(
+            invalid((_executable: string, args: string[]) =>
+                args.some((arg) => arg.endsWith('.jpg')) ? child : probeChild(),
+            ),
+        );
         jest.spyOn(fs, 'statSync').mockImplementation(((file: fs.PathLike) => {
             if (String(file).endsWith('.jpg')) throw Object.assign(new Error('disk failed'), { code: 'EIO' });
             return fs.statSync(file);
@@ -350,11 +397,133 @@ describe('node video frame extraction', () => {
         res.emit('data', Buffer.from('mp4'));
         res.emit('end');
         await jest.advanceTimersByTimeAsync(0);
-        expect(spawn).toHaveBeenCalledTimes(1);
+        expect(spawn).toHaveBeenCalledTimes(2);
         await jest.advanceTimersByTimeAsync(25);
         await rejected;
         expect(kill).toHaveBeenCalledWith('SIGKILL');
         expect(jest.getTimerCount()).toBe(0);
+    });
+
+    test('clamps frame seeks to a shorter probed duration before end of file', async () => {
+        const res = response(200, { 'content-length': '3' });
+        requestFor(res);
+        spawn.mockImplementation(
+            invalid((_executable: string, args: string[]) => {
+                if (!args.some((arg) => arg.endsWith('.jpg'))) return probeChild('2');
+                const child = new EventEmitter() as ChildProcess;
+                Object.assign(child, { kill: jest.fn(), killed: true });
+                setImmediate(() => {
+                    fs.writeFileSync(args.find((arg) => arg.endsWith('.jpg'))!, Buffer.from([0xff, 0xd8, 1]));
+                    child.emit('close', 0);
+                });
+                return child;
+            }),
+        );
+        setImmediate(() => {
+            res.emit('data', Buffer.from('mp4'));
+            res.emit('end');
+        });
+
+        await extractNodeVideoFrames('https://media.gurushots.com/clip.mp4', 10_000, [1], () => '/decoder.exe');
+
+        expect(spawn.mock.calls[0][0]).toBe('/ffprobe.exe');
+        expect(spawn.mock.calls[0][1]).toEqual(
+            expect.arrayContaining([
+                '-threads',
+                '1',
+                '-protocol_whitelist',
+                'file,pipe',
+                '-show_entries',
+                'format=duration',
+                '-max_pixels',
+                '921600',
+            ]),
+        );
+        expect(spawn.mock.calls[1][1]).toContain('1.999');
+    });
+
+    test('rejects malformed structured probe output', async () => {
+        spawn.mockImplementation(invalid(() => probeChild('not-a-duration')));
+
+        await expect(probeDuration('/ffprobe', '/input.mp4')).rejects.toThrow('invalid duration');
+    });
+
+    test.each(['0', '120.001', '9'.repeat(400)])(
+        'rejects an out-of-range structured probe duration: %s',
+        async (output) => {
+            spawn.mockImplementation(invalid(() => probeChild(output)));
+
+            await expect(probeDuration('/ffprobe', '/input.mp4')).rejects.toThrow('invalid duration');
+        },
+    );
+
+    test.each([
+        ['has no output stream', (_probe: ReturnType<typeof controlledProbeChild>) => {}, 'returned no output stream'],
+        [
+            'reports a child error',
+            (probe: ReturnType<typeof controlledProbeChild>) =>
+                probe.child.emit('error', new Error('probe start failed')),
+            'probe start failed',
+        ],
+        [
+            'reports a stdout error',
+            (probe: ReturnType<typeof controlledProbeChild>) =>
+                probe.stdout.emit('error', new Error('probe read failed')),
+            'probe read failed',
+        ],
+        [
+            'reports a non-zero exit',
+            (probe: ReturnType<typeof controlledProbeChild>) => probe.child.emit('close', 1),
+            'probe failed',
+        ],
+        [
+            'exceeds the output limit',
+            (probe: ReturnType<typeof controlledProbeChild>) => probe.stdout.emit('data', Buffer.alloc(1_025)),
+            'probe output exceeds',
+        ],
+    ])('rejects when the probe %s', async (_label, emit, message) => {
+        const probe = controlledProbeChild(_label !== 'has no output stream');
+        spawn.mockImplementation(invalid(() => probe.child));
+        const result = probeDuration('/ffprobe', '/input.mp4');
+        emit(probe);
+        probe.child.emit('close', 1);
+
+        await expect(result).rejects.toThrow(message);
+        expect(probe.kill).toHaveBeenCalledWith('SIGKILL');
+    });
+
+    test('terminates a probe that exceeds its decoder timeout', async () => {
+        jest.useFakeTimers();
+        const probe = controlledProbeChild();
+        spawn.mockImplementation(invalid(() => probe.child));
+        const result = probeDuration('/ffprobe', '/input.mp4');
+        const rejected = expect(result).rejects.toThrow('probe timed out');
+
+        await jest.advanceTimersByTimeAsync(30_000);
+        await rejected;
+        expect(probe.kill).toHaveBeenCalledWith('SIGKILL');
+    });
+
+    test('does not kill an already-killed probe after an error', async () => {
+        const { child, kill } = controlledProbeChild();
+        Object.assign(child, { killed: true });
+        spawn.mockReturnValueOnce(child);
+        const result = probeDuration('/ffprobe', '/input.mp4');
+        child.emit('error', new Error('probe stopped'));
+        await expect(result).rejects.toThrow('probe stopped');
+        expect(kill).not.toHaveBeenCalled();
+    });
+
+    test('ignores stdout data that arrives after a completed probe', async () => {
+        const probe = controlledProbeChild();
+        spawn.mockImplementation(invalid(() => probe.child));
+        const result = probeDuration('/ffprobe', '/input.mp4');
+        probe.stdout.emit('data', Buffer.from('1'));
+        probe.child.emit('close', 0);
+
+        await expect(result).resolves.toBe(1_000);
+        probe.stdout.emit('data', Buffer.alloc(1_025));
+        expect(probe.kill).not.toHaveBeenCalled();
     });
 
     test('rejects an invalid media URL before opening a network request', async () => {

@@ -30,7 +30,12 @@ describe('videoFrames', () => {
     let video: HTMLVideoElement;
     let canvas: HTMLCanvasElement;
 
-    const installMediaDom = (frameDataUrl = 'data:image/jpeg;base64,AAE=', width = 2560, height = 1440): void => {
+    const installMediaDom = (
+        frameDataUrl = 'data:image/jpeg;base64,AAE=',
+        width = 2560,
+        height = 1440,
+        duration = 10,
+    ): void => {
         seekTimes = [];
         presentationTimes = [];
         drawTimes = [];
@@ -41,6 +46,7 @@ describe('videoFrames', () => {
         Object.defineProperties(video, {
             videoWidth: { configurable: true, value: width },
             videoHeight: { configurable: true, value: height },
+            duration: { configurable: true, value: duration },
             load: {
                 configurable: true,
                 writable: true,
@@ -126,6 +132,14 @@ describe('videoFrames', () => {
         expect(canvas.height).toBe(0);
         expect(video.parentElement).toBeNull();
         expect(revokeObjectUrl).toHaveBeenCalledWith('blob:video');
+    });
+
+    test('clamps a final seek to the shorter decoded video duration', async () => {
+        installMediaDom('data:image/jpeg;base64,AAE=', 2560, 1440, 2);
+
+        await createWebviewAssets().videoFrames('https://media.gurushots.com/clip.mp4', 10_000, [1]);
+
+        expect(seekTimes).toEqual([1.999]);
     });
 
     test('rejects before a native request when the core video boundary rejects the request', async () => {

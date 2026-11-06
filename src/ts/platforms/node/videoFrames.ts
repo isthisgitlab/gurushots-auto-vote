@@ -3,7 +3,12 @@
  * bounded. FFmpeg receives a local filename only, never a server URL.
  */
 
-import { validateVideoFrameRequest, validateVideoMediaUrl } from '../../core/platform/videoMedia';
+import {
+    MAX_VIDEO_DURATION_MS,
+    validateVideoFrameRequest,
+    validateVideoMediaUrl,
+    videoFrameTimestampMs,
+} from '../../core/platform/videoMedia';
 
 const DOWNLOAD_TIMEOUT_MS = 30_000;
 const DECODE_TIMEOUT_MS = 30_000;
@@ -12,6 +17,7 @@ const MAX_FRAME_BYTES = 2 * 1024 * 1024;
 const MAX_FRAME_WIDTH = 1_280;
 const MAX_FRAME_HEIGHT = 720;
 const MAX_DECODED_PIXELS = MAX_FRAME_WIDTH * MAX_FRAME_HEIGHT;
+const MAX_PROBE_OUTPUT_BYTES = 1024;
 
 const requireFs = (): typeof import('node:fs') => require('node:fs') as typeof import('node:fs');
 const requireHttps = (): typeof import('node:https') => require('node:https') as typeof import('node:https');
@@ -19,6 +25,12 @@ const requireOs = (): typeof import('node:os') => require('node:os') as typeof i
 const requirePath = (): typeof import('node:path') => require('node:path') as typeof import('node:path');
 const requireChildProcess = (): typeof import('node:child_process') =>
     require('node:child_process') as typeof import('node:child_process');
+
+const probePathOf = (decoder: string): string =>
+    requirePath().join(
+        requirePath().dirname(decoder),
+        requirePath().extname(decoder) === '.exe' ? 'ffprobe.exe' : 'ffprobe',
+    );
 
 const contentLength = (header: string | string[] | undefined): number | null => {
     if (typeof header !== 'string' || !/^[0-9]+$/.test(header)) return null;
@@ -97,6 +109,72 @@ const downloadVideo = async (url: URL, destination: string): Promise<void> =>
     });
 
 type DecoderFrame = { output: string; timestamp: number };
+
+const probeDuration = (probe: string, input: string): Promise<number> =>
+    new Promise((resolve, reject) => {
+        const child = requireChildProcess().spawn(
+            probe,
+            [
+                '-threads',
+                '1',
+                '-max_pixels',
+                String(MAX_DECODED_PIXELS),
+                '-protocol_whitelist',
+                'file,pipe',
+                '-v',
+                'error',
+                '-show_entries',
+                'format=duration',
+                '-of',
+                'default=noprint_wrappers=1:nokey=1',
+                input,
+            ],
+            { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true },
+        );
+        const chunks: Buffer[] = [];
+        let receivedBytes = 0;
+        let finished = false;
+        const finish = (error: Error | null): void => {
+            if (finished) return;
+            finished = true;
+            clearTimeout(timer);
+            if (error) {
+                if (!child.killed) child.kill('SIGKILL');
+                reject(error);
+            } else {
+                const output = Buffer.concat(chunks, receivedBytes).toString('utf8').trim();
+                const seconds = Number(output);
+                const durationMs = seconds * 1_000;
+                if (
+                    !/^\d+(?:\.\d+)?$/.test(output) ||
+                    !Number.isFinite(durationMs) ||
+                    durationMs <= 0 ||
+                    durationMs > MAX_VIDEO_DURATION_MS
+                ) {
+                    reject(new Error('Video probe returned an invalid duration'));
+                    return;
+                }
+                resolve(durationMs);
+            }
+        };
+        const timer = setTimeout(() => finish(new Error('Video probe timed out')), DECODE_TIMEOUT_MS);
+        if (!child.stdout) {
+            finish(new Error('Video probe returned no output stream'));
+            return;
+        }
+        child.stdout.on('data', (chunk: Buffer) => {
+            if (finished) return;
+            receivedBytes += chunk.length;
+            if (receivedBytes > MAX_PROBE_OUTPUT_BYTES) {
+                finish(new Error('Video probe output exceeds the supported size'));
+                return;
+            }
+            chunks.push(chunk);
+        });
+        child.stdout.once('error', (error) => finish(error));
+        child.once('error', (error) => finish(error));
+        child.once('close', (code) => finish(code === 0 ? null : new Error('Video probe failed')));
+    });
 
 const runDecoder = (decoder: string, input: string, frames: readonly DecoderFrame[]): Promise<void> =>
     new Promise((resolve, reject) => {
@@ -198,10 +276,15 @@ const extractNodeVideoFrames = async (
     const outputs = positions.map((_, index) => path.join(directory, `frame-${index}.jpg`));
     try {
         await downloadVideo(url, input);
+        const decoder = decoderPath();
+        const actualDurationMs = await probeDuration(probePathOf(decoder), input);
         await runDecoder(
-            decoderPath(),
+            decoder,
             input,
-            outputs.map((output, index) => ({ output, timestamp: durationMs * positions[index]! })),
+            outputs.map((output, index) => ({
+                output,
+                timestamp: videoFrameTimestampMs(durationMs, actualDurationMs, positions[index]!),
+            })),
         );
         return outputs.map(frameDataUrl);
     } finally {
@@ -213,8 +296,10 @@ export {
     DECODE_TIMEOUT_MS,
     DOWNLOAD_TIMEOUT_MS,
     MAX_FRAME_BYTES,
+    MAX_PROBE_OUTPUT_BYTES,
     MAX_VIDEO_BYTES,
     downloadVideo,
     extractNodeVideoFrames,
+    probeDuration,
     runDecoder,
 };

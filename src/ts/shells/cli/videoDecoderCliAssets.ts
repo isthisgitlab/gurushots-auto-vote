@@ -21,23 +21,41 @@ const readFileNoFollow = (file: string): Buffer => {
 };
 
 const decoderFileName = (): string => (process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
+const probeFileName = (): string => (process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe');
 
-const manifestChecksum = (root: string, expectedManifest: string): string => {
+const manifestChecksum = (root: string, expectedManifest: string): { decoderPath: string; probePath: string } => {
     const manifest = readFileNoFollow(path.join(root, 'MANIFEST.json'));
     if (sha256(manifest) !== expectedManifest) throw new Error('Embedded video decoder manifest checksum mismatch');
     const parsed: unknown = JSON.parse(manifest.toString('utf8'));
-    if (!isPlainObject(parsed) || typeof parsed.binary !== 'string' || typeof parsed.binarySha256 !== 'string') {
+    if (
+        !isPlainObject(parsed) ||
+        typeof parsed.binary !== 'string' ||
+        typeof parsed.binarySha256 !== 'string' ||
+        typeof parsed.probe !== 'string' ||
+        typeof parsed.probeSha256 !== 'string'
+    ) {
         throw new Error('Embedded video decoder manifest is invalid');
     }
-    if (parsed.binary !== decoderFileName()) throw new Error('Embedded video decoder executable name is invalid');
+    if (parsed.binary !== decoderFileName() || parsed.probe !== probeFileName()) {
+        throw new Error('Embedded video decoder executable name is invalid');
+    }
     const binary = path.join(root, parsed.binary);
+    const probe = path.join(root, parsed.probe);
     if (sha256(readFileNoFollow(binary)) !== parsed.binarySha256) {
         throw new Error('Embedded video decoder checksum mismatch');
     }
-    return binary;
+    if (sha256(readFileNoFollow(probe)) !== parsed.probeSha256) {
+        throw new Error('Embedded video probe checksum mismatch');
+    }
+    return { decoderPath: binary, probePath: probe };
 };
 
-const cacheIsValid = (root: string, ready: string, expected: string, expectedManifest: string): string => {
+const cacheIsValid = (
+    root: string,
+    ready: string,
+    expected: string,
+    expectedManifest: string,
+): { decoderPath: string; probePath: string } => {
     const directory = fs.lstatSync(root);
     if (!directory.isDirectory()) {
         throw new Error('Embedded video decoder cache directory is invalid');
@@ -53,14 +71,14 @@ const replaceCache = (root: string): void => {
 };
 
 /** Extracts the checked full-build decoder once per embedded archive checksum. */
-const extractVideoDecoderCliAssets = (): { decoderPath: string } => {
+const extractVideoDecoderCliAssets = (): { decoderPath: string; probePath: string } => {
     const expected = sea.getAsset('video-decoder.sha256', 'utf8').trim();
     const expectedManifest = sea.getAsset('video-decoder.manifest.sha256', 'utf8').trim();
     const parent = path.join(platform().paths.getUserDataDir('gurushots-auto-vote'), 'video-decoder');
     const root = path.join(parent, expected.slice(0, 20));
     const ready = path.join(root, '.ready');
     try {
-        return { decoderPath: cacheIsValid(root, ready, expected, expectedManifest) };
+        return cacheIsValid(root, ready, expected, expectedManifest);
     } catch (error) {
         const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
         if (code !== undefined && code !== 'ENOENT' && code !== 'ENOTDIR' && code !== 'ELOOP') throw error;
@@ -77,8 +95,11 @@ const extractVideoDecoderCliAssets = (): { decoderPath: string } => {
             if (sha256(bytes) !== expected) throw new Error('Embedded video decoder archive checksum mismatch');
             fs.writeFileSync(archive, bytes, { mode: 0o600 });
             tar.x({ file: archive, cwd: temporary, sync: true, strict: true });
-            const decoder = manifestChecksum(temporary, expectedManifest);
-            if (process.platform !== 'win32') fs.chmodSync(decoder, 0o700);
+            const executables = manifestChecksum(temporary, expectedManifest);
+            if (process.platform !== 'win32') {
+                fs.chmodSync(executables.decoderPath, 0o700);
+                fs.chmodSync(executables.probePath, 0o700);
+            }
             fs.writeFileSync(path.join(temporary, '.ready'), expected);
             try {
                 fs.renameSync(temporary, root);
@@ -94,7 +115,7 @@ const extractVideoDecoderCliAssets = (): { decoderPath: string } => {
             fs.rmSync(temporary, { recursive: true, force: true });
         }
     }
-    return { decoderPath: cacheIsValid(root, ready, expected, expectedManifest) };
+    return cacheIsValid(root, ready, expected, expectedManifest);
 };
 
 export { extractVideoDecoderCliAssets };

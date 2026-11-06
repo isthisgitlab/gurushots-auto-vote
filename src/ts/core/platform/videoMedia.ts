@@ -40,4 +40,19 @@ const validateVideoFrameRequest = (durationMs: number, positions: readonly numbe
     }
 };
 
-export { MAX_VIDEO_DURATION_MS, VIDEO_MEDIA_HOST, validateVideoFrameRequest, validateVideoMediaUrl };
+/** Clamps a fractional seek to the shorter decoded duration without seeking exactly to end of file. */
+const videoFrameTimestampMs = (serverDurationMs: number, actualDurationMs: number, position: number): number => {
+    if (!Number.isFinite(actualDurationMs) || actualDurationMs <= 0 || actualDurationMs > MAX_VIDEO_DURATION_MS) {
+        throw new Error('Decoded video duration is outside the supported range');
+    }
+    const durationMs = Math.min(serverDurationMs, actualDurationMs);
+    return Math.min(durationMs * position, Math.max(0, durationMs - 1));
+};
+
+export {
+    MAX_VIDEO_DURATION_MS,
+    VIDEO_MEDIA_HOST,
+    validateVideoFrameRequest,
+    validateVideoMediaUrl,
+    videoFrameTimestampMs,
+};

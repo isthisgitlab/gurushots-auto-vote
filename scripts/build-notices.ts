@@ -26,6 +26,7 @@ import { parseAllDocuments } from 'yaml';
 import { isPlainObject } from '../src/ts/core/plainObject';
 import { GLOVE_URL } from './fetch-embeddings/config';
 import { REPOS } from './fetch-vision-model';
+import { CONFIGURE_ARGS, FFMPEG_ARCHIVE_URL, FFMPEG_REVISION } from './build-video-decoder';
 import { readLicenseText, visionModelNotice } from './lib/licenses';
 import { NOTICE_ID_PREFIX, loadAndroidComponents, loadLicenses, loadNoticeFiles } from './lib/noticeData';
 import type { AndroidComponent, LicenseEntry } from './lib/noticeData';
@@ -213,7 +214,11 @@ const describeOnnxruntimeWeb = (version: string) => {
     return `${version.includes('-dev') ? 'a development build of the ' : 'the '}onnxruntime-web ${line} line`;
 };
 
-const renderRuntimesSection = ({ readText, onnxruntimeVersion, onnxruntimeWebVersion }: NoticeInputs) => [
+const renderRuntimesSection = ({
+    readText,
+    onnxruntimeVersion,
+    onnxruntimeWebVersion,
+}: Pick<NoticeInputs, 'readText' | 'onnxruntimeVersion' | 'onnxruntimeWebVersion'>) => [
     ...heading('5. Runtimes, models and data'),
     '5.1 Node.js',
     '',
@@ -224,7 +229,19 @@ const renderRuntimesSection = ({ readText, onnxruntimeVersion, onnxruntimeWebVer
     ...rule('Node.js LICENSE'),
     readText('Node.js-LICENSE'),
     '',
-    '5.2 ONNX Runtime',
+    '5.2 FFmpeg and FFprobe video tools',
+    '',
+    'Full Electron and CLI builds bundle separate FFmpeg and FFprobe executables for decoding Snap video frames.',
+    'License: GNU Lesser General Public License version 2.1 or later (LGPL-2.1-or-later). Each',
+    'distribution includes the corresponding LICENSE.txt beside those executables.',
+    `Corresponding source archive: ${FFMPEG_ARCHIVE_URL}`,
+    `Source revision: ${FFMPEG_REVISION}`,
+    'Build configuration:',
+    ...CONFIGURE_ARGS.map((argument) => `  ${argument}`),
+    'Windows builds additionally use --extra-ldflags=-static. macOS builds additionally set',
+    'MACOSX_DEPLOYMENT_TARGET=11.0.',
+    '',
+    '5.3 ONNX Runtime',
     '',
     `The local photo check runs on ONNX Runtime (onnxruntime-node ${onnxruntimeVersion} in the desktop app and the CLI,`,
     `${describeOnnxruntimeWeb(onnxruntimeWebVersion)} as WebAssembly in the Android app),`,
@@ -237,13 +254,13 @@ const renderRuntimesSection = ({ readText, onnxruntimeVersion, onnxruntimeWebVer
     ...rule('ONNX Runtime ThirdPartyNotices'),
     readText('onnxruntime-ThirdPartyNotices'),
     '',
-    '5.3 SigLIP vision model',
+    '5.4 SigLIP vision model',
     '',
     visionModelNotice(REPOS).split('\n').slice(2).join('\n').trimEnd(),
     '',
     'License: Apache-2.0 (section 7). The model directory of each build carries the same LICENSE and NOTICE.',
     '',
-    '5.4 GloVe word vectors',
+    '5.5 GloVe word vectors',
     '',
     'The semantic lexicon (semantic-vectors.json) used to rank auto-fill photos contains quantized,',
     'mean-centered and retrofitted derivatives of selected vectors of GloVe 6B (glove.6B.100d):',
@@ -404,5 +421,6 @@ export {
     parseGradleVariables,
     parseLockfile,
     renderNotices,
+    renderRuntimesSection,
 };
 export type { AndroidComponent, LicenseEntry, PackageRef };

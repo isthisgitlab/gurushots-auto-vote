@@ -77,28 +77,53 @@ const packagedDecoder = (resourcesDir: string, target: string) => {
         !('binary' in parsed) ||
         !('target' in parsed) ||
         !('binarySha256' in parsed) ||
+        !('probe' in parsed) ||
+        !('probeSha256' in parsed) ||
         typeof parsed.binary !== 'string' ||
         typeof parsed.binarySha256 !== 'string' ||
+        typeof parsed.probe !== 'string' ||
+        typeof parsed.probeSha256 !== 'string' ||
         parsed.target !== target ||
-        path.basename(parsed.binary) !== parsed.binary
+        path.basename(parsed.binary) !== parsed.binary ||
+        path.basename(parsed.probe) !== parsed.probe
     ) {
         throw new Error(`The packaged FFmpeg decoder manifest does not match ${target}`);
     }
     const decoder = path.join(resourcesDir, 'video-decoder', parsed.binary);
+    const probe = path.join(resourcesDir, 'video-decoder', parsed.probe);
     if (!fs.existsSync(decoder)) throw new Error(`The packaged FFmpeg decoder is missing: ${decoder}`);
-    const actual = crypto.createHash('sha256').update(fs.readFileSync(decoder)).digest('hex');
-    if (actual !== parsed.binarySha256)
+    if (!fs.existsSync(probe)) throw new Error(`The packaged FFmpeg decoder is missing: ${probe}`);
+    const decoderDigest = crypto.createHash('sha256').update(fs.readFileSync(decoder)).digest('hex');
+    const probeDigest = crypto.createHash('sha256').update(fs.readFileSync(probe)).digest('hex');
+    if (decoderDigest !== parsed.binarySha256 || probeDigest !== parsed.probeSha256)
         throw new Error('The packaged FFmpeg decoder checksum does not match its manifest');
-    return { decoder, manifestPath, manifest: { ...parsed, binary: parsed.binary, binarySha256: parsed.binarySha256 } };
+    return {
+        decoder,
+        probe,
+        manifestPath,
+        manifest: {
+            ...parsed,
+            binary: parsed.binary,
+            binarySha256: parsed.binarySha256,
+            probe: parsed.probe,
+            probeSha256: parsed.probeSha256,
+        },
+    };
 };
 
 const verifyAndSignPackagedDecoder = (resourcesDir: string, target: string, signForMac: boolean): void => {
-    const { decoder, manifestPath, manifest } = packagedDecoder(resourcesDir, target);
+    const { decoder, probe, manifestPath, manifest } = packagedDecoder(resourcesDir, target);
     if (signForMac) {
-        execFileSync('codesign', ['--force', '--sign', '-', '--timestamp=none', decoder], { stdio: 'inherit' });
+        for (const executable of [decoder, probe]) {
+            execFileSync('codesign', ['--force', '--sign', '-', '--timestamp=none', executable], { stdio: 'inherit' });
+        }
         fs.writeFileSync(
             manifestPath,
-            `${JSON.stringify({ ...manifest, binarySha256: crypto.createHash('sha256').update(fs.readFileSync(decoder)).digest('hex') })}\n`,
+            `${JSON.stringify({
+                ...manifest,
+                binarySha256: crypto.createHash('sha256').update(fs.readFileSync(decoder)).digest('hex'),
+                probeSha256: crypto.createHash('sha256').update(fs.readFileSync(probe)).digest('hex'),
+            })}\n`,
         );
     }
 };

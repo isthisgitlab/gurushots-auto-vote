@@ -2,6 +2,7 @@ import {
     MAX_VIDEO_DURATION_MS,
     validateVideoFrameRequest,
     validateVideoMediaUrl,
+    videoFrameTimestampMs,
 } from '../../src/ts/core/platform/videoMedia';
 
 describe('video media validation', () => {
@@ -31,5 +32,15 @@ describe('video media validation', () => {
         [10, [Number.NaN]],
     ])('rejects an unsupported frame request', (duration, positions) => {
         expect(() => validateVideoFrameRequest(duration, positions)).toThrow();
+    });
+
+    test('uses the shorter decoded duration and does not seek exactly to its end', () => {
+        expect(videoFrameTimestampMs(10_000, 2_000, 0.5)).toBe(1_000);
+        expect(videoFrameTimestampMs(10_000, 2_000, 1)).toBe(1_999);
+        expect(videoFrameTimestampMs(1_000, 2_000, 1)).toBe(999);
+    });
+
+    test.each([Number.NaN, 0, MAX_VIDEO_DURATION_MS + 1])('rejects an unsupported decoded duration: %s', (duration) => {
+        expect(() => videoFrameTimestampMs(1_000, duration, 0.2)).toThrow('Decoded video duration');
     });
 });

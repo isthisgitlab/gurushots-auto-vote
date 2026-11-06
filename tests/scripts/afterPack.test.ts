@@ -154,7 +154,7 @@ describe('afterPack', () => {
         await expect(afterPack(makeContext('linux'))).rejects.toThrow('boom');
     });
 
-    test('requires, signs, and rechecksums the full macOS decoder', async () => {
+    test('requires, signs, and rechecksums both full macOS video executables', async () => {
         const appOutDir = makeMacApp(INTEGRITY_PLIST);
         const decoder = path.join(
             appOutDir,
@@ -164,21 +164,29 @@ describe('afterPack', () => {
             'video-decoder',
             'ffmpeg',
         );
+        const probe = path.join(path.dirname(decoder), 'ffprobe');
         try {
             fs.mkdirSync(path.dirname(decoder), { recursive: true });
             const bytes = 'decoder';
+            const probeBytes = 'probe';
             fs.writeFileSync(decoder, bytes);
+            fs.writeFileSync(probe, probeBytes);
             fs.writeFileSync(
                 path.join(path.dirname(decoder), 'MANIFEST.json'),
                 JSON.stringify({
                     binary: 'ffmpeg',
                     binarySha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+                    probe: 'ffprobe',
+                    probeSha256: crypto.createHash('sha256').update(probeBytes).digest('hex'),
                     sourceArchive: 'ffmpeg-source.tar.gz',
                     target: 'darwin-arm64',
                 }),
             );
-            execFileSync.mockImplementationOnce((_command, args = []) => {
-                fs.writeFileSync(args[args.length - 1]!, 'signed decoder');
+            execFileSync.mockImplementation((_command, args = []) => {
+                fs.writeFileSync(
+                    args[args.length - 1]!,
+                    args[args.length - 1] === decoder ? 'signed decoder' : 'signed probe',
+                );
                 return Buffer.alloc(0);
             });
             await afterPack(makeContext('darwin', { appOutDir, arch: 3, full: true }));
@@ -187,9 +195,15 @@ describe('afterPack', () => {
                 ['--force', '--sign', '-', '--timestamp=none', decoder],
                 { stdio: 'inherit' },
             );
+            expect(execFileSync).toHaveBeenCalledWith(
+                'codesign',
+                ['--force', '--sign', '-', '--timestamp=none', probe],
+                { stdio: 'inherit' },
+            );
             expect(JSON.parse(fs.readFileSync(path.join(path.dirname(decoder), 'MANIFEST.json'), 'utf8'))).toEqual(
                 expect.objectContaining({
                     binarySha256: crypto.createHash('sha256').update('signed decoder').digest('hex'),
+                    probeSha256: crypto.createHash('sha256').update('signed probe').digest('hex'),
                     sourceArchive: 'ffmpeg-source.tar.gz',
                 }),
             );
@@ -204,17 +218,27 @@ describe('afterPack', () => {
         );
     });
 
-    test('rejects a full-package manifest whose decoder file is missing', async () => {
+    test('rejects a full-package manifest when either executable is missing', async () => {
         const appOutDir = fs.mkdtempSync(path.join(os.tmpdir(), 'after-pack-'));
         const manifest = path.join(appOutDir, 'resources', 'video-decoder', 'MANIFEST.json');
         try {
             fs.mkdirSync(path.dirname(manifest), { recursive: true });
             fs.writeFileSync(
                 manifest,
-                JSON.stringify({ binary: 'ffmpeg', binarySha256: '0'.repeat(64), target: 'linux-arm64' }),
+                JSON.stringify({
+                    binary: 'ffmpeg',
+                    binarySha256: '0'.repeat(64),
+                    probe: 'ffprobe',
+                    probeSha256: '0'.repeat(64),
+                    target: 'linux-arm64',
+                }),
             );
             await expect(afterPack(makeContext('linux', { appOutDir, arch: 3, full: true }))).rejects.toThrow(
                 'packaged FFmpeg decoder is missing',
+            );
+            fs.writeFileSync(path.join(path.dirname(manifest), 'ffmpeg'), 'decoder');
+            await expect(afterPack(makeContext('linux', { appOutDir, arch: 3, full: true }))).rejects.toThrow(
+                path.join(path.dirname(manifest), 'ffprobe'),
             );
             expect(execFileSync).not.toHaveBeenCalled();
         } finally {
@@ -225,15 +249,20 @@ describe('afterPack', () => {
     test('verifies a supported full Linux arm64 decoder without invoking macOS signing', async () => {
         const appOutDir = fs.mkdtempSync(path.join(os.tmpdir(), 'after-pack-'));
         const decoder = path.join(appOutDir, 'resources', 'video-decoder', 'ffmpeg');
+        const probe = path.join(path.dirname(decoder), 'ffprobe');
         try {
             const bytes = 'decoder';
+            const probeBytes = 'probe';
             fs.mkdirSync(path.dirname(decoder), { recursive: true });
             fs.writeFileSync(decoder, bytes);
+            fs.writeFileSync(probe, probeBytes);
             fs.writeFileSync(
                 path.join(path.dirname(decoder), 'MANIFEST.json'),
                 JSON.stringify({
                     binary: 'ffmpeg',
                     binarySha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+                    probe: 'ffprobe',
+                    probeSha256: crypto.createHash('sha256').update(probeBytes).digest('hex'),
                     target: 'linux-arm64',
                 }),
             );
@@ -259,12 +288,20 @@ describe('afterPack', () => {
     test('rejects a full-package decoder whose bytes differ from its manifest', async () => {
         const appOutDir = fs.mkdtempSync(path.join(os.tmpdir(), 'after-pack-'));
         const decoder = path.join(appOutDir, 'resources', 'video-decoder', 'ffmpeg');
+        const probe = path.join(path.dirname(decoder), 'ffprobe');
         try {
             fs.mkdirSync(path.dirname(decoder), { recursive: true });
             fs.writeFileSync(decoder, 'decoder');
+            fs.writeFileSync(probe, 'probe');
             fs.writeFileSync(
                 path.join(path.dirname(decoder), 'MANIFEST.json'),
-                JSON.stringify({ binary: 'ffmpeg', binarySha256: '0'.repeat(64), target: 'linux-arm64' }),
+                JSON.stringify({
+                    binary: 'ffmpeg',
+                    binarySha256: '0'.repeat(64),
+                    probe: 'ffprobe',
+                    probeSha256: crypto.createHash('sha256').update('probe').digest('hex'),
+                    target: 'linux-arm64',
+                }),
             );
             await expect(afterPack(makeContext('linux', { appOutDir, arch: 3, full: true }))).rejects.toThrow(
                 'checksum does not match',

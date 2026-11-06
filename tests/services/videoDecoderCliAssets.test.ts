@@ -40,15 +40,18 @@ const createAssets = (
 ): DecoderAssets => {
     const source = path.join(directory, 'source');
     const executable = binaryName ?? (process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
+    const probeExecutable = process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe';
     const binary = Buffer.from('small bundled video decoder');
+    const probe = Buffer.from('small bundled video probe');
     const manifest = Buffer.from(
-        `${JSON.stringify({ binary: executable, binarySha256: digest(binary), target: `${process.platform}-${process.arch}`, ...manifestOverrides })}\n`,
+        `${JSON.stringify({ binary: executable, binarySha256: digest(binary), probe: probeExecutable, probeSha256: digest(probe), target: `${process.platform}-${process.arch}`, ...manifestOverrides })}\n`,
     );
     fs.mkdirSync(source, { recursive: true });
     fs.writeFileSync(path.join(source, executable), binary, { mode: 0o700 });
+    fs.writeFileSync(path.join(source, probeExecutable), probe, { mode: 0o700 });
     fs.writeFileSync(path.join(source, 'MANIFEST.json'), manifest);
     const archive = path.join(directory, 'decoder.tar.gz');
-    tar.c({ file: archive, cwd: source, gzip: true, sync: true }, [executable, 'MANIFEST.json']);
+    tar.c({ file: archive, cwd: source, gzip: true, sync: true }, [executable, probeExecutable, 'MANIFEST.json']);
     const archiveBytes = fs.readFileSync(archive);
     return { archive: archiveBytes, archiveDigest: digest(archiveBytes), manifestDigest: digest(manifest) };
 };
@@ -99,7 +102,7 @@ describe('videoDecoderCliAssets', () => {
         const first = extractVideoDecoderCliAssets();
         const binary = Buffer.from('altered decoder');
         const manifest = Buffer.from(
-            `${JSON.stringify({ binary: path.basename(first.decoderPath), binarySha256: digest(binary) })}\n`,
+            `${JSON.stringify({ binary: path.basename(first.decoderPath), binarySha256: digest(binary), probe: path.basename(first.probePath), probeSha256: digest(fs.readFileSync(first.probePath)) })}\n`,
         );
         fs.writeFileSync(first.decoderPath, binary);
         fs.writeFileSync(path.join(cacheRoot(), 'MANIFEST.json'), manifest);
@@ -130,6 +133,12 @@ describe('videoDecoderCliAssets', () => {
         assets = createAssets(directory, undefined, { binarySha256: '0'.repeat(64) });
         installAssets(assets);
         expect(() => extractVideoDecoderCliAssets()).toThrow('decoder checksum mismatch');
+    });
+
+    test('rejects an embedded manifest whose probe checksum is corrupt', () => {
+        assets = createAssets(directory, undefined, { probeSha256: '0'.repeat(64) });
+        installAssets(assets);
+        expect(() => extractVideoDecoderCliAssets()).toThrow('probe checksum mismatch');
     });
 
     test('replaces a cache root that is not a directory', () => {

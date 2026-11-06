@@ -1,5 +1,9 @@
 import { isPlainObject } from '../../core/plainObject';
-import { validateVideoFrameRequest, validateVideoMediaUrl } from '../../core/platform/videoMedia';
+import {
+    validateVideoFrameRequest,
+    validateVideoMediaUrl,
+    videoFrameTimestampMs,
+} from '../../core/platform/videoMedia';
 
 import type { CapacitorGlobals } from '../../core/types/capacitor';
 
@@ -176,9 +180,12 @@ const extractWebviewVideoFrames = async (
             video.src = blobUrl;
             video.load();
         });
-        const seconds = durationMs / 1000;
         const frames: string[] = [];
-        for (const position of positions) frames.push(await extractFrame(video, seconds * position));
+        for (const position of positions) {
+            frames.push(
+                await extractFrame(video, videoFrameTimestampMs(durationMs, video.duration * 1_000, position) / 1_000),
+            );
+        }
         return frames;
     } finally {
         video.removeAttribute('src');

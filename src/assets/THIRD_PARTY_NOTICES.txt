@@ -3557,7 +3557,72 @@ The externally maintained libraries used by Node.js are:
     SOFTWARE.
   """
 
-5.2 ONNX Runtime
+5.2 FFmpeg and FFprobe video tools
+
+Full Electron and CLI builds bundle separate FFmpeg and FFprobe executables for decoding Snap video frames.
+License: GNU Lesser General Public License version 2.1 or later (LGPL-2.1-or-later). Each
+distribution includes the corresponding LICENSE.txt beside those executables.
+Corresponding source archive: https://code.ffmpeg.org/FFmpeg/FFmpeg/archive/71403a21b02a92b925e26e609e9bd3e48df451cf.tar.gz
+Source revision: 71403a21b02a92b925e26e609e9bd3e48df451cf
+Build configuration:
+  --disable-autodetect
+  --disable-x86asm
+  --disable-avdevice
+  --disable-bsfs
+  --disable-doc
+  --disable-gpl
+  --disable-network
+  --disable-nonfree
+  --disable-programs
+  --disable-shared
+  --disable-swresample
+  --enable-avcodec
+  --enable-avfilter
+  --enable-avformat
+  --enable-avutil
+  --enable-ffmpeg
+  --enable-ffprobe
+  --enable-filter=scale
+  --enable-muxer=image2
+  --enable-protocol=file
+  --enable-protocol=pipe
+  --enable-small
+  --enable-static
+  --enable-swscale
+  --disable-decoders
+  --enable-decoder=av1
+  --enable-decoder=h264
+  --enable-decoder=hevc
+  --enable-decoder=mjpeg
+  --enable-decoder=mpeg2video
+  --enable-decoder=mpeg4
+  --enable-decoder=prores
+  --enable-decoder=vp8
+  --enable-decoder=vp9
+  --disable-demuxers
+  --enable-demuxer=mov
+  --disable-encoders
+  --enable-encoder=mjpeg
+  --disable-filters
+  --enable-filter=scale
+  --disable-muxers
+  --enable-muxer=image2
+  --disable-parsers
+  --enable-parser=av1
+  --enable-parser=h264
+  --enable-parser=hevc
+  --enable-parser=mjpeg
+  --enable-parser=mpeg4video
+  --enable-parser=mpegvideo
+  --enable-parser=vp8
+  --enable-parser=vp9
+  --disable-protocols
+  --enable-protocol=file
+  --enable-protocol=pipe
+Windows builds additionally use --extra-ldflags=-static. macOS builds additionally set
+MACOSX_DEPLOYMENT_TARGET=11.0.
+
+5.3 ONNX Runtime
 
 The local photo check runs on ONNX Runtime (onnxruntime-node 1.30.0 in the desktop app and the CLI,
 a development build of the onnxruntime-web 1.31 line as WebAssembly in the Android app),
@@ -9960,7 +10025,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-5.3 SigLIP vision model
+5.4 SigLIP vision model
 
 These files are the SigLIP base model (patch 16, 224 px) and its tokenizer, used for the
 optional on-device photo check. SigLIP is Copyright Google LLC, released under the Apache
@@ -9979,7 +10044,7 @@ Model files: onnx-community/siglip-base-patch16-224-ONNX, revision 9f0328bdd0eb4
 
 License: Apache-2.0 (section 7). The model directory of each build carries the same LICENSE and NOTICE.
 
-5.4 GloVe word vectors
+5.5 GloVe word vectors
 
 The semantic lexicon (semantic-vectors.json) used to rank auto-fill photos contains quantized,
 mean-centered and retrofitted derivatives of selected vectors of GloVe 6B (glove.6B.100d):
