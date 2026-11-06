@@ -77,7 +77,7 @@ describe('extractWebviewVideoFrames request', () => {
     });
 
     test.each([
-        ['an URL off the allowed host', 'https://example.com/clip.mp4', 10_000, [0.5], 'allowed HTTPS MP4'],
+        ['an URL off the allowed host', 'https://example.com/clip.mp4', 10_000, [0.5], 'allowed GuruShots media URL'],
         ['a duration out of range', URL_OK, 0, [0.5], 'duration is outside'],
         ['no positions', URL_OK, 10_000, [], 'At least one'],
         ['too many positions', URL_OK, 10_000, Array.from({ length: 9 }, () => 0.5), 'Too many'],

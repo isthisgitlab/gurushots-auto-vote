@@ -850,6 +850,19 @@ describe('judgeSnapVideoFrames', () => {
         }
     });
 
+    test('scores on a scale wider than the former 10-step limit', async () => {
+        const winners = [0, 3, 6];
+        let frame = 0;
+        mockClassifier.mockImplementation(async (_image: Blob, prompts: string[]) => {
+            const winner = winners[frame++];
+            return prompts.map((label, index) => ({ label, score: index === winner ? 0.9 : 0.1 }));
+        });
+
+        const jpeg = 'data:image/jpeg;base64,/9j/2Q==';
+        // ratings 1, 10.5 and 20 on a 20-step scale: the mean 10.5 rounds to 11
+        expect(await judgeSnapVideoFrames('Rate it.', [jpeg, jpeg, jpeg], 20)).toBe(11);
+    });
+
     test('rejects a missing or non-finite model score', async () => {
         mockClassifier.mockResolvedValue([{ label: 'unusable picture. Server caption: Rate it.', score: Number.NaN }]);
         const jpeg = 'data:image/jpeg;base64,/9j/2Q==';
@@ -872,7 +885,7 @@ describe('judgeSnapVideoFrames', () => {
         expect(mockClassifier).not.toHaveBeenCalled();
     });
 
-    test.each([1, 11, 2.5])('rejects invalid score scale %p', async (maxScore) => {
+    test.each([1, 0, 2.5])('rejects invalid score scale %p', async (maxScore) => {
         const jpeg = 'data:image/jpeg;base64,/9j/2Q==';
         expect(await judgeSnapVideoFrames('Rate it.', [jpeg, jpeg, jpeg], maxScore)).toBeNull();
         expect(mockClassifier).not.toHaveBeenCalled();

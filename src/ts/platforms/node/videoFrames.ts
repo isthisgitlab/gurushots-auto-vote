@@ -1,10 +1,10 @@
 /**
- * Node video-frame extraction. The media download and the decoder are both
- * bounded. FFmpeg receives a local filename only, never a server URL.
+ * Node video-frame extraction. The download, the probe and the decoder each stop
+ * when they stall; no limit is placed on the clip itself. FFmpeg receives a local
+ * filename only, never a server URL.
  */
 
 import {
-    MAX_VIDEO_DURATION_MS,
     validateVideoFrameRequest,
     validateVideoMediaUrl,
     videoFrameTimestampMs,
@@ -12,7 +12,7 @@ import {
 
 const DOWNLOAD_IDLE_TIMEOUT_MS = 30_000;
 const DECODE_TIMEOUT_MS = 30_000;
-const MAX_VIDEO_BYTES = 256 * 1024 * 1024;
+const PROBE_TIMEOUT_MS = 30_000;
 const MAX_FRAME_BYTES = 2 * 1024 * 1024;
 const MAX_FRAME_WIDTH = 1_280;
 const MAX_FRAME_HEIGHT = 720;
@@ -42,40 +42,25 @@ const listenForAbort = (signal: AbortSignal | undefined, onAbort: () => void): (
     return () => signal?.removeEventListener('abort', onAbort);
 };
 
-const contentLength = (header: string | string[] | undefined): number | null => {
-    if (typeof header !== 'string' || !/^[0-9]+$/.test(header)) return null;
-    const bytes = Number(header);
-    return Number.isSafeInteger(bytes) ? bytes : null;
-};
-
 /**
- * Downloads an allowed MP4 without request credentials or redirect following,
+ * Downloads an allowed media file without request credentials or redirect following,
  * streaming the body to `destination`. The socket idle timeout is
- * DOWNLOAD_IDLE_TIMEOUT_MS; `deadlineMs` bounds the whole download. The promise
+ * DOWNLOAD_IDLE_TIMEOUT_MS: a body that keeps arriving is never cut off. The promise
  * settles only after the write stream has closed, so the file is never open when
  * the caller removes it. An aborted `signal` fails the download with a cancellation error.
  */
-const downloadVideo = async (
-    url: URL,
-    destination: string,
-    deadlineMs: number,
-    // A parameter only so tests can check the streamed cap without writing 256 MiB.
-    maxBytes = MAX_VIDEO_BYTES,
-    signal?: AbortSignal,
-): Promise<void> =>
+const downloadVideo = async (url: URL, destination: string, signal?: AbortSignal): Promise<void> =>
     new Promise((resolve, reject) => {
         let stopListening = (): void => {};
         const connection: {
             request: import('node:http').ClientRequest | undefined;
             response: import('node:http').IncomingMessage | undefined;
             stream: import('node:fs').WriteStream | undefined;
-            deadline: ReturnType<typeof setTimeout> | undefined;
             failure: Error | null;
-        } = { request: undefined, response: undefined, stream: undefined, deadline: undefined, failure: null };
+        } = { request: undefined, response: undefined, stream: undefined, failure: null };
         const fail = (error: Error): void => {
             if (connection.failure) return;
             connection.failure = error;
-            clearTimeout(connection.deadline);
             connection.request?.destroy(error);
             connection.response?.destroy?.(error);
             if (connection.stream) connection.stream.destroy();
@@ -98,36 +83,18 @@ const downloadVideo = async (
                     fail(new Error('Video download did not return HTTP 200'));
                     return;
                 }
-                const declaredBytes = contentLength(receivedResponse.headers['content-length']);
-                if (declaredBytes !== null && declaredBytes > maxBytes) {
-                    fail(
-                        new Error(`Video download exceeds the supported size (${declaredBytes} of ${maxBytes} bytes)`),
-                    );
-                    return;
-                }
                 const stream = requireFs().createWriteStream(destination, { flags: 'wx', mode: 0o600 });
                 connection.stream = stream;
-                let receivedBytes = 0;
                 let responseEnded = false;
                 stream.on('error', (error) => fail(error));
                 stream.on('drain', () => receivedResponse.resume());
                 stream.once('close', () => {
-                    clearTimeout(connection.deadline);
                     stopListening();
                     if (connection.failure) reject(connection.failure);
                     else resolve();
                 });
                 receivedResponse.on('data', (chunk: Buffer) => {
                     if (connection.failure) return;
-                    receivedBytes += chunk.length;
-                    if (receivedBytes > maxBytes) {
-                        fail(
-                            new Error(
-                                `Video download exceeds the supported size (${receivedBytes} of ${maxBytes} bytes)`,
-                            ),
-                        );
-                        return;
-                    }
                     if (!stream.write(chunk)) receivedResponse.pause();
                 });
                 receivedResponse.once('aborted', () => fail(new Error('Video download was aborted')));
@@ -137,16 +104,11 @@ const downloadVideo = async (
                 });
                 receivedResponse.once('end', () => {
                     responseEnded = true;
-                    clearTimeout(connection.deadline);
                     stream.end();
                 });
             },
         );
         connection.request = openedRequest;
-        connection.deadline = setTimeout(
-            () => fail(new Error(`Video download exceeded its ${Math.round(deadlineMs / 1000)} s deadline`)),
-            deadlineMs,
-        );
         openedRequest.once('timeout', () => fail(new Error('Video download timed out')));
         openedRequest.once('error', (error) => fail(error));
         openedRequest.end();
@@ -155,7 +117,11 @@ const downloadVideo = async (
 
 type DecoderFrame = { output: string; timestamp: number };
 
-const probeDuration = (probe: string, input: string, signal?: AbortSignal): Promise<number> =>
+/**
+ * Reads the container duration in milliseconds, or `null` when the container reports none (`N/A`, empty, not a
+ * positive number). A probe that exits non-zero or stalls rejects.
+ */
+const probeDuration = (probe: string, input: string, signal?: AbortSignal): Promise<number | null> =>
     new Promise((resolve, reject) => {
         let stopListening = (): void => {};
         const child = requireChildProcess().spawn(
@@ -188,21 +154,11 @@ const probeDuration = (probe: string, input: string, signal?: AbortSignal): Prom
                 reject(error);
             } else {
                 const output = Buffer.concat(chunks, receivedBytes).toString('utf8').trim();
-                const seconds = Number(output);
-                const durationMs = seconds * 1_000;
-                if (
-                    !/^\d+(?:\.\d+)?$/.test(output) ||
-                    !Number.isFinite(durationMs) ||
-                    durationMs <= 0 ||
-                    durationMs > MAX_VIDEO_DURATION_MS
-                ) {
-                    reject(new Error('Video probe returned an invalid duration'));
-                    return;
-                }
-                resolve(durationMs);
+                const durationMs = /^\d+(?:\.\d+)?$/.test(output) ? Number(output) * 1_000 : Number.NaN;
+                resolve(Number.isFinite(durationMs) && durationMs > 0 ? durationMs : null);
             }
         };
-        const timer = setTimeout(() => finish(new Error('Video probe timed out')), DECODE_TIMEOUT_MS);
+        const timer = setTimeout(() => finish(new Error('Video probe timed out')), PROBE_TIMEOUT_MS);
         if (!child.stdout) {
             finish(new Error('Video probe returned no output stream'));
             return;
@@ -279,9 +235,10 @@ const runDecoder = (
                 reject(error);
             } else resolve();
         };
+        // One budget per requested frame: a heavy clip that needs more frames gets more time.
         const timer = setTimeout(() => {
             finish(new Error('Video decoder timed out'));
-        }, DECODE_TIMEOUT_MS);
+        }, DECODE_TIMEOUT_MS * frames.length);
         const outputSizeCheck = setInterval(() => {
             try {
                 if (frames.some(({ output }) => requireFs().statSync(output).size > MAX_FRAME_BYTES)) {
@@ -330,7 +287,7 @@ const extractNodeVideoFrames = async (
     const input = path.join(directory, 'input.mp4');
     const outputs = positions.map((_, index) => path.join(directory, `frame-${index}.jpg`));
     try {
-        await downloadVideo(url, input, Math.max(DOWNLOAD_IDLE_TIMEOUT_MS, durationMs), undefined, signal);
+        await downloadVideo(url, input, signal);
         const decoder = decoderPath();
         const actualDurationMs = await probeDuration(probePathOf(decoder), input, signal);
         await runDecoder(
@@ -353,7 +310,6 @@ export {
     DOWNLOAD_IDLE_TIMEOUT_MS,
     MAX_FRAME_BYTES,
     MAX_PROBE_OUTPUT_BYTES,
-    MAX_VIDEO_BYTES,
     downloadVideo,
     extractNodeVideoFrames,
     probeDuration,

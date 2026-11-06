@@ -1,6 +1,5 @@
 /** The only video CDN that a Snap session may ask this app to download. */
 const VIDEO_MEDIA_HOST = 'media.gurushots.com';
-const MAX_VIDEO_DURATION_MS = 120_000;
 const MAX_VIDEO_FRAME_POSITIONS = 8;
 
 /**
@@ -20,17 +19,16 @@ const validateVideoMediaUrl = (rawUrl: string): URL => {
         url.hostname !== VIDEO_MEDIA_HOST ||
         (url.port !== '' && url.port !== '443') ||
         url.username !== '' ||
-        url.password !== '' ||
-        !url.pathname.toLowerCase().endsWith('.mp4')
+        url.password !== ''
     ) {
-        throw new Error('Video media URL is not an allowed HTTPS MP4');
+        throw new Error('Video media URL is not an allowed GuruShots media URL');
     }
     return url;
 };
 
-/** Validates duration and each fractional frame position at the platform boundary. */
+/** Validates the server duration and each fractional frame position at the platform boundary. */
 const validateVideoFrameRequest = (durationMs: number, positions: readonly number[]): void => {
-    if (!Number.isInteger(durationMs) || durationMs < 1 || durationMs > MAX_VIDEO_DURATION_MS) {
+    if (!Number.isInteger(durationMs) || durationMs < 1) {
         throw new Error('Video duration is outside the supported range');
     }
     if (positions.length === 0) throw new Error('At least one video frame position is required');
@@ -42,19 +40,13 @@ const validateVideoFrameRequest = (durationMs: number, positions: readonly numbe
     }
 };
 
-/** Clamps a fractional seek to the shorter decoded duration without seeking exactly to end of file. */
-const videoFrameTimestampMs = (serverDurationMs: number, actualDurationMs: number, position: number): number => {
-    if (!Number.isFinite(actualDurationMs) || actualDurationMs <= 0 || actualDurationMs > MAX_VIDEO_DURATION_MS) {
-        throw new Error('Decoded video duration is outside the supported range');
-    }
-    const durationMs = Math.min(serverDurationMs, actualDurationMs);
+/**
+ * Clamps a fractional seek to the shorter of the server and decoded durations without seeking exactly to end of
+ * file. A clip whose container reports no duration (`null`) is sought by the server duration alone.
+ */
+const videoFrameTimestampMs = (serverDurationMs: number, actualDurationMs: number | null, position: number): number => {
+    const durationMs = actualDurationMs === null ? serverDurationMs : Math.min(serverDurationMs, actualDurationMs);
     return Math.min(durationMs * position, Math.max(0, durationMs - 1));
 };
 
-export {
-    MAX_VIDEO_DURATION_MS,
-    VIDEO_MEDIA_HOST,
-    validateVideoFrameRequest,
-    validateVideoMediaUrl,
-    videoFrameTimestampMs,
-};
+export { VIDEO_MEDIA_HOST, validateVideoFrameRequest, validateVideoMediaUrl, videoFrameTimestampMs };

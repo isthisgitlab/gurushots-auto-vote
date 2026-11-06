@@ -5,7 +5,7 @@ import { ENDPOINTS, createWebHeaders, makeRequireValue } from './constants';
 import { ID_PATTERN } from '../format/photoUrl';
 import { isInteger } from '../numbers';
 import { isPlainObject } from '../plainObject';
-import { MAX_VIDEO_DURATION_MS, validateVideoMediaUrl } from '../platform/videoMedia';
+import { validateVideoMediaUrl } from '../platform/videoMedia';
 
 import type {
     ActionResult,
@@ -60,9 +60,9 @@ const parseSnapScoreVideos = (images: readonly unknown[]): SnapScoreVideo[] | nu
             !isHexId(image.image_id) ||
             !isHexId(image.member_id) ||
             image.media_type !== 'video' ||
-            !isInteger(image.duration_ms) ||
+            typeof image.duration_ms !== 'number' ||
+            !Number.isFinite(image.duration_ms) ||
             image.duration_ms <= 0 ||
-            image.duration_ms > MAX_VIDEO_DURATION_MS ||
             !isAllowedSnapVideoUrl(image.media_url)
         ) {
             return null;
@@ -70,7 +70,7 @@ const parseSnapScoreVideos = (images: readonly unknown[]): SnapScoreVideo[] | nu
         parsed.push({
             imageId: image.image_id,
             memberId: image.member_id,
-            durationMs: image.duration_ms,
+            durationMs: Math.max(1, Math.round(image.duration_ms)),
             mediaUrl: image.media_url,
         });
     }
@@ -88,7 +88,7 @@ const parseSnapSession = (response: StartTurboSessionResponse): TurboSession | n
         return null;
     }
     if (response.kind === 'score') {
-        if (!isInteger(response.max_score) || response.max_score < 2 || response.max_score > 10) return null;
+        if (!isInteger(response.max_score) || response.max_score < 2) return null;
         const images = parseSnapScoreVideos(response.images);
         if (!images || !hasValidPosition(response.position, images.length)) return null;
         return {

@@ -39,10 +39,8 @@ class VideoFrameExtractorTest {
 
     private fun bitmap(width: Int, height: Int): Bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
 
-    private fun seedMetadata(width: String? = "640", height: String? = "360", duration: String? = "10000") {
+    private fun seedMetadata(duration: String? = "10000") {
         val path = clip.absolutePath
-        if (width != null) ShadowMediaMetadataRetriever.addMetadata(path, MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH, width)
-        if (height != null) ShadowMediaMetadataRetriever.addMetadata(path, MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT, height)
         if (duration != null) ShadowMediaMetadataRetriever.addMetadata(path, MediaMetadataRetriever.METADATA_KEY_DURATION, duration)
     }
 
@@ -68,7 +66,8 @@ class VideoFrameExtractorTest {
         serverDurationMs: Long = 10_000,
         extractor: VideoFrameExtractor = VideoFrameExtractor(),
         isCancelled: () -> Boolean = { false },
-    ) = extractor.extract(clip, serverDurationMs, positions, isCancelled)
+        startStep: () -> Runnable = { Runnable {} },
+    ) = extractor.extract(clip, serverDurationMs, positions, isCancelled, startStep)
 
     private fun assertRejected(message: String, block: () -> Unit) {
         try {
@@ -80,15 +79,9 @@ class VideoFrameExtractorTest {
         throw AssertionError("expected a refusal: $message")
     }
 
-    /** A retriever that reports [metadata] and never decodes, so a test can see whether a decode was attempted. */
-    private fun fakeRetriever(
-        width: String? = "640",
-        height: String? = "360",
-        duration: String? = "10000",
-    ): MediaMetadataRetriever {
+    /** A retriever that reports [duration] and decodes only what a test stubs on it. */
+    private fun fakeRetriever(duration: String? = "10000"): MediaMetadataRetriever {
         val retriever = mockk<MediaMetadataRetriever>(relaxed = true)
-        every { retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH) } returns width
-        every { retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT) } returns height
         every { retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION) } returns duration
         return retriever
     }
@@ -112,6 +105,7 @@ class VideoFrameExtractorTest {
             listOf(1.0, 1.0, 0.5, 0.0),
             listOf(2.0, 2.0, 0.5, 1.0),
             listOf(120_000.0, 120_000.0, 1.0, 119_999.0),
+            listOf(300_000.0, 300_000.0, 0.5, 150_000.0),
         )
         for ((server, actual, position, expected) in table) {
             assertEquals(
@@ -120,6 +114,14 @@ class VideoFrameExtractorTest {
                 VideoFrameExtractor.frameTimestampMs(server.toLong(), actual.toLong(), position),
                 0.0,
             )
+        }
+        // No decoded duration: the server duration alone is used.
+        for ((server, position, expected) in listOf(
+            Triple(10_000L, 0.5, 5_000.0),
+            Triple(10_000L, 1.0, 9_999.0),
+            Triple(1L, 1.0, 0.0),
+        )) {
+            assertEquals(expected, VideoFrameExtractor.frameTimestampMs(server, null, position), 0.0)
         }
     }
 
@@ -191,63 +193,44 @@ class VideoFrameExtractorTest {
     }
 
     @Test
-    fun failsClosedOnMissingOrGarbledOrNonPositiveDimensionsBeforeAnyDecode() {
-        val cases = listOf(
-            Triple<String?, String?, String>(null, "360", "no width"),
-            Triple<String?, String?, String>("640", null, "no height"),
-            Triple<String?, String?, String>("wide", "360", "garbled width"),
-            Triple<String?, String?, String>("640", "tall", "garbled height"),
-            Triple<String?, String?, String>("0", "360", "zero width"),
-            Triple<String?, String?, String>("640", "0", "zero height"),
-            Triple<String?, String?, String>("-640", "360", "negative width"),
-            Triple<String?, String?, String>("640", "-360", "negative height"),
-            Triple<String?, String?, String>("3841", "2160", "width past the bound"),
-            Triple<String?, String?, String>("2160", "3841", "height past the bound"),
-            Triple<String?, String?, String>("7680", "4320", "8K"),
-        )
-        for ((width, height, label) in cases) {
-            val retriever = fakeRetriever(width = width, height = height)
-            val extractor = VideoFrameExtractor(retrieverFactory = { retriever })
+    fun doesNotRefuseAnyFrameSizeAndNeverReadsTheDimensions() {
+        // 8K metadata was refused before; now the frame is decoded at full size and fitted afterwards.
+        val retriever = fakeRetriever()
+        every { retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH) } returns "7680"
+        every { retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT) } returns "4320"
+        val large = bitmap(2560, 1440)
+        every { retriever.getFrameAtTime(any<Long>(), any<Int>()) } returns large
+        val extractor = VideoFrameExtractor(retrieverFactory = { retriever })
 
-            assertRejected("Video dimensions are outside the supported range ($label)") {
-                try {
-                    extract(extractor = extractor)
-                } catch (error: VideoMediaDownloader.Rejection) {
-                    throw VideoMediaDownloader.Rejection("${error.message} ($label)")
-                }
-            }
+        val frames = extract(extractor = extractor)
 
-            verify(exactly = 0) { retriever.getFrameAtTime(any<Long>(), any<Int>()) }
-            verify(exactly = 1) { retriever.release() }
-        }
+        assertJpeg(frames.single(), 1280, 720)
+        assertTrue(large.isRecycled)
+        verify(exactly = 1) { retriever.getFrameAtTime(5_000_000L, MediaMetadataRetriever.OPTION_CLOSEST) }
+        verify(exactly = 0) { retriever.getScaledFrameAtTime(any<Long>(), any<Int>(), any<Int>(), any<Int>()) }
+        verify(exactly = 0) { retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH) }
+        verify(exactly = 0) { retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT) }
     }
 
     @Test
-    fun acceptsDimensionsAtTheBound() {
-        seedMetadata(width = "3840", height = "2160")
-        seedFrame(5_000_000, bitmap(64, 36))
-        assertEquals(1, extract().size)
-
-        ShadowMediaMetadataRetriever.reset()
-        seedMetadata(width = "2160", height = "3840")
-        seedFrame(5_000_000, bitmap(36, 64))
-        assertEquals(1, extract().size)
-    }
-
-    @Test
-    fun rejectsAMissingGarbledOrOutOfRangeDecodedDuration() {
-        for (duration in listOf<String?>(null, "long", "0", "-5", "120001")) {
+    fun seeksByTheServerDurationWhenTheDecodedOneIsMissingGarbledOrNotPositive() {
+        for (duration in listOf<String?>(null, "long", "0", "-5")) {
             val retriever = fakeRetriever(duration = duration)
+            every { retriever.getFrameAtTime(any<Long>(), any<Int>()) } returns bitmap(10, 10)
             val extractor = VideoFrameExtractor(retrieverFactory = { retriever })
 
-            assertRejected("Decoded video duration is outside the supported range") { extract(extractor = extractor) }
+            assertEquals(1, extract(extractor = extractor).size)
 
-            verify(exactly = 0) { retriever.getFrameAtTime(any<Long>(), any<Int>()) }
+            verify(exactly = 1) { retriever.getFrameAtTime(5_000_000L, MediaMetadataRetriever.OPTION_CLOSEST) }
         }
+    }
 
-        seedMetadata(duration = "120000")
-        seedFrame(60_000_000, bitmap(10, 10))
-        assertEquals(1, extract(serverDurationMs = 120_000).size)
+    @Test
+    fun acceptsAClipPastTheFormerOneHundredTwentySecondLimit() {
+        seedMetadata(duration = "300000")
+        seedFrame(150_000_000, bitmap(10, 10))
+
+        assertEquals(1, extract(serverDurationMs = 300_000).size)
     }
 
     @Test
@@ -329,6 +312,53 @@ class VideoFrameExtractorTest {
             extract(extractor = VideoFrameExtractor(retrieverFactory = { retriever }, maxJpegBytes = size - 1))
         }
         assertTrue(frame.isRecycled)
+    }
+
+    @Test
+    fun watchesOpeningTheClipAndEveryFrameDecodeAndStopsEachWatchdogWhenItsStepReturns() {
+        val events = mutableListOf<String>()
+        val retriever = fakeRetriever()
+        every { retriever.setDataSource(any<String>()) } answers { events += "open" }
+        every { retriever.getFrameAtTime(any<Long>(), any<Int>()) } answers {
+            events += "frame"
+            bitmap(10, 10)
+        }
+        val extractor = VideoFrameExtractor(retrieverFactory = { retriever })
+
+        extract(
+            positions = listOf(0.1, 0.9),
+            extractor = extractor,
+            startStep = {
+                events += "start"
+                Runnable { events += "stop" }
+            },
+        )
+
+        assertEquals(
+            listOf("start", "open", "stop", "start", "frame", "stop", "start", "frame", "stop"),
+            events,
+        )
+    }
+
+    @Test
+    fun stopsTheWatchdogWhenAStepFails() {
+        val stops = mutableListOf<String>()
+        val retriever = fakeRetriever()
+        every { retriever.setDataSource(any<String>()) } throws IllegalArgumentException("corrupt")
+        val extractor = VideoFrameExtractor(retrieverFactory = { retriever })
+        try {
+            extract(extractor = extractor, startStep = { Runnable { stops += "open" } })
+        } catch (_: IllegalArgumentException) {
+            // surfaces as is
+        }
+
+        every { retriever.setDataSource(any<String>()) } returns Unit
+        every { retriever.getFrameAtTime(any<Long>(), any<Int>()) } throws OutOfMemoryError("bitmap")
+        assertRejected("Video frame decoding ran out of memory") {
+            extract(extractor = extractor, startStep = { Runnable { stops += "frame" } })
+        }
+        // First run: the failed open stopped its watchdog. Second run: the open and the failed decode each stopped one.
+        assertEquals(listOf("open", "frame", "frame"), stops)
     }
 
     @Test

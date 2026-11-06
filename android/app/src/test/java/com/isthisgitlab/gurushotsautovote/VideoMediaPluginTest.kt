@@ -97,7 +97,6 @@ class VideoMediaPluginTest {
     private val extractor = mockk<VideoFrameExtractor>()
     private val httpCall = mockk<Call>(relaxed = true)
     private val gates = mutableMapOf<String, Gate>()
-    private val deadlines = CopyOnWriteArrayList<Long>()
     private val extractions = AtomicInteger()
 
     private val originalDownloaderFactory = VideoMediaPlugin.downloaderFactory
@@ -123,12 +122,11 @@ class VideoMediaPluginTest {
         VideoMediaPlugin.videoDirProvider = { videoDir }
 
         // Default mocked work: write the clip, hand over a call, return three frames' worth.
-        stubDownload { _, file, deadlineMs, _, onCall ->
-            deadlines += deadlineMs
+        stubDownload { _, file, _, onCall ->
             file.writeText("clip")
             onCall(httpCall)
         }
-        every { extractor.extract(any(), any(), any(), any()) } answers {
+        every { extractor.extract(any(), any(), any(), any(), any()) } answers {
             extractions.incrementAndGet()
             listOf(FRAME)
         }
@@ -154,23 +152,39 @@ class VideoMediaPluginTest {
         VideoMediaPlugin.dispatcher = pool.asCoroutineDispatcher()
     }
 
-    private fun stubDownload(handler: (String, File, Long, () -> Boolean, (Call) -> Unit) -> Unit) {
-        every { downloader.download(any(), any(), any(), any(), any()) } answers {
-            handler(arg(0), arg(1), arg(2), arg(3), arg(4))
+    private fun stubDownload(handler: (String, File, () -> Boolean, (Call) -> Unit) -> Unit) {
+        every { downloader.download(any(), any(), any(), any()) } answers {
+            handler(arg(0), arg(1), arg(2), arg(3))
         }
     }
 
     /** Holds each job's download open on its own [Gate] until the test releases it. */
     private fun blockDownloads() {
         useThreads()
-        stubDownload { _, file, deadlineMs, isCancelled, onCall ->
-            deadlines += deadlineMs
+        stubDownload { _, file, isCancelled, onCall ->
             file.writeText("clip")
             onCall(httpCall)
             val gate = gate(file.nameWithoutExtension)
             gate.started.countDown()
             assertTrue(gate.release.await(10, TimeUnit.SECONDS))
             if (isCancelled()) throw VideoJobCancelled()
+        }
+    }
+
+    /** Holds each job's decode open, inside a started step watchdog, on its own [Gate] until the test releases it. */
+    private fun blockExtractions() {
+        useThreads()
+        every { extractor.extract(any(), any(), any(), any(), any()) } answers {
+            val file = arg<File>(0)
+            val isCancelled = arg<() -> Boolean>(3)
+            val stop = arg<() -> Runnable>(4)()
+            val gate = gate(file.nameWithoutExtension)
+            gate.started.countDown()
+            assertTrue(gate.release.await(10, TimeUnit.SECONDS))
+            stop.run()
+            if (isCancelled()) throw VideoJobCancelled()
+            extractions.incrementAndGet()
+            listOf(FRAME)
         }
     }
 
@@ -190,14 +204,17 @@ class VideoMediaPluginTest {
     private fun callFor(
         jobId: String? = "job-a",
         url: String? = VIDEO,
-        durationMs: Int? = 10_000,
+        durationMs: Long? = 10_000,
         positions: String? = "[0.5]",
     ): Probe {
         val call = mockk<PluginCall>(relaxed = true)
         val probe = Probe(call)
         every { call.getString("jobId") } returns jobId
         every { call.getString("url") } returns url
-        every { call.getInt("durationMs") } returns durationMs
+        // The bridge parses a small JSON number as an Integer and a large one as a Long; PluginCall reads each strictly.
+        val fitsInt = durationMs != null && durationMs in Int.MIN_VALUE..Int.MAX_VALUE
+        every { call.getInt("durationMs") } returns if (fitsInt) durationMs.toInt() else null
+        every { call.getLong("durationMs") } returns if (fitsInt) null else durationMs
         every { call.getArray("positions") } returns positions?.let { JSArray(it) }
         every { call.resolve(any<JSObject>()) } answers { probe.resolved += firstArg<JSObject>() }
         every { call.reject(any<String>()) } answers { probe.rejected += firstArg<String>() }
@@ -227,11 +244,11 @@ class VideoMediaPluginTest {
             callFor(jobId = "x".repeat(65)) to "Invalid video job id",
             callFor(url = null) to "No video media URL provided",
             callFor(url = "") to "No video media URL provided",
-            callFor(url = "http://media.gurushots.com/clip.mp4?sig=secret-token") to "Video media URL is not an allowed HTTPS MP4",
+            callFor(url = "http://media.gurushots.com/clip.mp4?sig=secret-token") to "Video media URL is not an allowed GuruShots media URL",
             callFor(url = "not an URL ?sig=secret-token") to "Video media URL is invalid",
             callFor(durationMs = null) to "Video duration is outside the supported range",
             callFor(durationMs = 0) to "Video duration is outside the supported range",
-            callFor(durationMs = 120_001) to "Video duration is outside the supported range",
+            callFor(durationMs = -5) to "Video duration is outside the supported range",
             callFor(positions = null) to "Video frame positions are invalid",
             callFor(positions = "[]") to "Video frame positions are invalid",
             callFor(positions = "[0,0,0,0,0,0,0,0,0]") to "Video frame positions are invalid",
@@ -246,7 +263,7 @@ class VideoMediaPluginTest {
             assertEquals(message, listOf(message), probe.rejected)
             assertFalse(probe.rejected.single()!!.contains("secret-token"))
         }
-        verify(exactly = 0) { downloader.download(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { downloader.download(any(), any(), any(), any()) }
         assertTrue(timeouts.entries.isEmpty())
     }
 
@@ -259,10 +276,23 @@ class VideoMediaPluginTest {
         val second = callFor(jobId = "job-b", durationMs = 120_000, positions = "[0,0.1,0.2,0.3,0.4,0.5,0.6,1]")
         plugin.extractFrames(second.call)
         assertEquals(1, second.resolved.size)
-        verify(exactly = 1) { extractor.extract(any(), 1L, listOf(0.0, 1.0), any()) }
+        verify(exactly = 1) { extractor.extract(any(), 1L, listOf(0.0, 1.0), any(), any()) }
         verify(exactly = 1) {
-            extractor.extract(any(), 120_000L, listOf(0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 1.0), any())
+            extractor.extract(any(), 120_000L, listOf(0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 1.0), any(), any())
         }
+    }
+
+    @Test
+    fun doesNotRefuseAClipByItsLengthWhetherTheBridgeSendsAnIntegerOrALong() {
+        val longerThanBefore = callFor(jobId = "job-a", durationMs = 121_000)
+        plugin.extractFrames(longerThanBefore.call)
+        val pastIntRange = callFor(jobId = "job-b", durationMs = 5_000_000_000L)
+        plugin.extractFrames(pastIntRange.call)
+
+        assertEquals(1, longerThanBefore.resolved.size)
+        assertEquals(1, pastIntRange.resolved.size)
+        verify(exactly = 1) { extractor.extract(any(), 121_000L, any(), any(), any()) }
+        verify(exactly = 1) { extractor.extract(any(), 5_000_000_000L, any(), any(), any()) }
     }
 
     @Test
@@ -290,8 +320,6 @@ class VideoMediaPluginTest {
 
     private fun seedClip(jobId: String) {
         val path = File(videoDir, "$jobId.mp4").absolutePath
-        ShadowMediaMetadataRetriever.addMetadata(path, MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH, "64")
-        ShadowMediaMetadataRetriever.addMetadata(path, MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT, "64")
         ShadowMediaMetadataRetriever.addMetadata(path, MediaMetadataRetriever.METADATA_KEY_DURATION, "10000")
         ShadowMediaMetadataRetriever.addFrame(path, 5_000_000, Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888))
     }
@@ -311,7 +339,9 @@ class VideoMediaPluginTest {
         assertTrue(frames.single().startsWith("data:image/jpeg;base64,"))
         assertTrue(videoDir.isDirectory)
         assertEquals(emptyList<String>(), videoDir.list()!!.toList())
-        assertTrue(timeouts.entries.single().cancelled)
+        // One watchdog for opening the clip and one for the single frame, both stopped when their step returned.
+        assertEquals(listOf(30_000L, 30_000L), timeouts.entries.map { it.delayMs })
+        assertTrue(timeouts.entries.all { it.cancelled })
         assertEquals("/clip.mp4", server.takeRequest().url.encodedPath)
     }
 
@@ -326,7 +356,7 @@ class VideoMediaPluginTest {
         server.enqueue(MockResponse.Builder().code(200).body("ok").build())
         val noFrame = callFor("job-noframe")
         plugin.extractFrames(noFrame.call)
-        assertEquals(listOf<String?>("Video dimensions are outside the supported range"), noFrame.rejected)
+        assertEquals(listOf<String?>("Video frame decoding failed"), noFrame.rejected)
         assertEquals(emptyList<String>(), videoDir.list()!!.toList())
     }
 
@@ -342,10 +372,22 @@ class VideoMediaPluginTest {
     }
 
     @Test
+    fun aDiskWriteErrorRejectsWithAFixedMessageAndDeletesThePartialFile() {
+        stubDownload { _, file, _, _ ->
+            file.writeText("partial")
+            throw IOException("write failed: ENOSPC (No space left on device)")
+        }
+        val probe = callFor("job-full", url = "$VIDEO?sig=secret-token")
+
+        plugin.extractFrames(probe.call)
+
+        assertEquals(listOf<String?>("Video extraction failed"), probe.rejected)
+        assertEquals(emptyList<String>(), videoDir.list()!!.toList())
+    }
+
+    @Test
     fun turnsOutOfMemoryDuringDecodeIntoAFixedRefusal() {
         val retriever = mockk<MediaMetadataRetriever>(relaxed = true)
-        every { retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH) } returns "640"
-        every { retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT) } returns "360"
         every { retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION) } returns "10000"
         every { retriever.getFrameAtTime(any<Long>(), any<Int>()) } throws OutOfMemoryError("bitmap")
         VideoMediaPlugin.extractorFactory = { VideoFrameExtractor(retrieverFactory = { retriever }) }
@@ -427,7 +469,7 @@ class VideoMediaPluginTest {
     fun cancelsTheDownloadCallThatStartsAfterTheCancel() {
         val probe = callFor("job-a")
         val late = mockk<Call>(relaxed = true)
-        stubDownload { _, file, _, _, onCall ->
+        stubDownload { _, file, _, onCall ->
             file.writeText("clip")
             plugin.cancel(cancelCall("job-a"))
             onCall(late)
@@ -443,7 +485,7 @@ class VideoMediaPluginTest {
 
     @Test
     fun aCancelledJobSeenByTheExtractorStaysCancelled() {
-        every { extractor.extract(any(), any(), any(), any()) } answers {
+        every { extractor.extract(any(), any(), any(), any(), any()) } answers {
             plugin.cancel(cancelCall("job-a"))
             if (arg<() -> Boolean>(3)()) throw VideoJobCancelled()
             listOf(FRAME)
@@ -458,17 +500,16 @@ class VideoMediaPluginTest {
 
     @Test
     fun everyCallSettlesExactlyOnceWhicheverComesFirst() {
-        // A result first: a later timeout and cancel change nothing.
+        // A result first: a later cancel changes nothing.
         val done = callFor("job-a")
         plugin.extractFrames(done.call)
         assertEquals(1, done.settles)
-        timeouts.fire()
         plugin.cancel(cancelCall("job-a"))
         assertEquals(1, done.settles)
         assertEquals(1, done.resolved.size)
 
-        // A timeout first: the late result is dropped.
-        blockDownloads()
+        // A watchdog first: the late result is dropped.
+        blockExtractions()
         val timedOut = callFor("job-b")
         plugin.extractFrames(timedOut.call)
         awaitStarted("job-b")
@@ -477,11 +518,22 @@ class VideoMediaPluginTest {
         gate("job-b").release.countDown()
         awaitTrue("timed-out clip deleted") { !File(videoDir, "job-b.mp4").exists() }
         assertEquals(1, timedOut.settles)
+
+        // A cancel first: a later watchdog overrun changes nothing.
+        val cancelled = callFor("job-c")
+        plugin.extractFrames(cancelled.call)
+        awaitStarted("job-c")
+        plugin.cancel(cancelCall("job-c"))
+        timeouts.fire()
+        assertEquals(listOf<String?>(CANCELLED), cancelled.rejected)
+        gate("job-c").release.countDown()
+        awaitTrue("cancelled clip deleted") { !File(videoDir, "job-c.mp4").exists() }
+        assertEquals(1, cancelled.settles)
     }
 
     @Test
-    fun theTimeoutCancelsTheDownloadAndFlagsTheJob() {
-        blockDownloads()
+    fun aWatchdogOverrunCancelsTheDownloadCallAndDropsTheJobsResult() {
+        blockExtractions()
         val probe = callFor("job-a")
         plugin.extractFrames(probe.call)
         awaitStarted("job-a")
@@ -493,38 +545,42 @@ class VideoMediaPluginTest {
         gate("job-a").release.countDown()
         awaitTrue("clip deleted") { !File(videoDir, "job-a.mp4").exists() }
         assertEquals(0, extractions.get())
+        assertEquals(1, probe.settles)
     }
 
     @Test
-    fun boundsTheDownloadAndTheWholeJobByTheClipLength() {
+    fun givesEveryStepTheSameThirtySecondsWhateverTheClipLength() {
+        blockExtractions()
         val short = callFor("job-a", durationMs = 1_000)
         plugin.extractFrames(short.call)
-        val exactlyThirty = callFor("job-b", durationMs = 30_000)
-        plugin.extractFrames(exactlyThirty.call)
-        val long = callFor("job-c", durationMs = 120_000)
+        awaitStarted("job-a")
+        val long = callFor("job-b", durationMs = 3_600_000)
         plugin.extractFrames(long.call)
+        awaitStarted("job-b")
 
-        // max(30 s, duration) for the download, plus 30 s for the job as a whole.
-        assertEquals(listOf(30_000L, 30_000L, 120_000L), deadlines.toList())
-        assertEquals(listOf(60_000L, 60_000L, 150_000L), timeouts.entries.map { it.delayMs })
+        assertEquals(listOf(30_000L, 30_000L), timeouts.entries.map { it.delayMs })
     }
 
     @Test
-    fun theDefaultTimeoutFiresOnTheMainLooperAndIsCancelledWithTheJob() {
+    fun theDefaultWatchdogFiresOnTheMainLooperOnlyWhenAStepOverrunsItsBudget() {
         VideoMediaPlugin.timeoutSource = originalTimeoutSource
-        blockDownloads()
-        val stuck = callFor("job-a", durationMs = 1_000)
+        blockExtractions()
+        val stuck = callFor("job-a")
         plugin.extractFrames(stuck.call)
         awaitStarted("job-a")
 
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(59_999))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(29_999))
         assertEquals(0, stuck.settles)
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1))
         assertEquals(listOf<String?>("Video extraction timed out"), stuck.rejected)
 
+        // Steps that return within their budget stop their watchdog, so no amount of waiting rejects the call.
         VideoMediaPlugin.dispatcher = Dispatchers.Unconfined
-        stubDownload { _, file, _, _, _ -> file.writeText("clip") }
-        val finished = callFor("job-b", durationMs = 1_000)
+        every { extractor.extract(any(), any(), any(), any(), any()) } answers {
+            arg<() -> Runnable>(4)().run()
+            listOf(FRAME)
+        }
+        val finished = callFor("job-b")
         plugin.extractFrames(finished.call)
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMinutes(10))
         assertEquals(1, finished.resolved.size)
@@ -563,7 +619,7 @@ class VideoMediaPluginTest {
         val late = callFor("job-b")
         plugin.extractFrames(late.call)
         assertEquals(0, late.settles)
-        verify(exactly = 1) { downloader.download(any(), any(), any(), any(), any()) }
+        verify(exactly = 1) { downloader.download(any(), any(), any(), any()) }
 
         // Destroying with nothing running is fine.
         plugin.handleOnDestroy()
@@ -592,7 +648,7 @@ class VideoMediaPluginTest {
         val caller = Thread.currentThread()
         val ran = CountDownLatch(1)
         var runner: Thread? = null
-        stubDownload { _, file, _, _, _ ->
+        stubDownload { _, file, _, _ ->
             runner = Thread.currentThread()
             file.writeText("clip")
             ran.countDown()

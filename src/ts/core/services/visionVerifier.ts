@@ -349,7 +349,7 @@ const jpegBlobFromDataUrl = (frame: string): Blob | null => {
 };
 
 const validSnapVideoScoreInput = (caption: string, frames: readonly string[], maxScore: number): boolean =>
-    frames.length === 3 && Number.isInteger(maxScore) && maxScore >= 2 && maxScore <= 10 && caption.trim() !== '';
+    frames.length === 3 && Number.isInteger(maxScore) && maxScore >= 2 && caption.trim() !== '';
 
 const snapVideoScorePrompts = (caption: string): string[] =>
     SNAP_SCORE_DESCRIPTIONS.map((description) => `${description}. Server caption: ${caption}`);

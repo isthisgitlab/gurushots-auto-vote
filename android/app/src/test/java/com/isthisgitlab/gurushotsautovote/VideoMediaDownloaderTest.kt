@@ -22,13 +22,13 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.io.IOException
-import java.io.InterruptedIOException
 import java.net.SocketTimeoutException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -38,7 +38,6 @@ class VideoMediaDownloaderTest {
 
     private companion object {
         const val VIDEO = "https://media.gurushots.com/clip.mp4"
-        const val DEADLINE_MS = 30_000L
     }
 
     @get:Rule
@@ -69,10 +68,9 @@ class VideoMediaDownloaderTest {
 
     private fun download(
         downloader: VideoMediaDownloader,
-        deadlineMs: Long = DEADLINE_MS,
         isCancelled: () -> Boolean = { false },
         onCall: (Call) -> Unit = {},
-    ) = downloader.download(VIDEO, destination, deadlineMs, isCancelled, onCall)
+    ) = downloader.download(VIDEO, destination, isCancelled, onCall)
 
     private fun assertRejected(message: String, block: () -> Unit) {
         try {
@@ -124,7 +122,6 @@ class VideoMediaDownloaderTest {
             "https://user@media.gurushots.com/clip.mp4",
             "https://user:password@media.gurushots.com/clip.mp4",
             "https://:password@media.gurushots.com/clip.mp4",
-            "https://media.gurushots.com/clip.jpg",
         )
         for (url in rejected) {
             try {
@@ -137,6 +134,17 @@ class VideoMediaDownloaderTest {
 
         assertEquals(VIDEO, VideoMediaDownloader.validateUrl(VIDEO).toString())
         assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun acceptsAPathWithoutAnMp4SuffixAndNamesTheRefusalOfAWrongHost() {
+        for (url in listOf("https://media.gurushots.com/clip.mov", "https://media.gurushots.com/clip")) {
+            assertEquals(url, VideoMediaDownloader.validateUrl(url).toString())
+        }
+
+        assertRejected("Video media URL is not an allowed GuruShots media URL") {
+            VideoMediaDownloader.validateUrl("https://other.example/clip.mov")
+        }
     }
 
     @Test
@@ -164,7 +172,7 @@ class VideoMediaDownloaderTest {
     }
 
     @Test
-    fun handsOverTheCallBeforeItStartsAndBoundsItWithTheDeadline() {
+    fun handsOverTheCallBeforeItStartsAndPutsNoTotalBoundOnIt() {
         val events = mutableListOf<String>()
         val callTimeoutMs = AtomicReference<Long>()
         val watcher = Interceptor { chain ->
@@ -174,23 +182,21 @@ class VideoMediaDownloaderTest {
         }
         server.enqueue(MockResponse.Builder().code(200).body("ok").build())
 
-        download(downloaderOver(client(watcher)), deadlineMs = 45_000) { events += "onCall" }
+        download(downloaderOver(client(watcher))) { events += "onCall" }
 
         assertEquals(listOf("onCall", "execute"), events)
-        assertEquals(45_000L, callTimeoutMs.get())
+        assertEquals(0L, callTimeoutMs.get())
     }
 
     @Test
-    fun appliesTheDeadlineToTheWholeCallNotJustToIdleReads() {
-        // Bytes keep arriving inside the 30 s idle limit, but the call as a whole runs past its deadline.
-        server.enqueue(MockResponse.Builder().code(200).body("0123456789").throttleBody(1, 1, TimeUnit.SECONDS).build())
+    fun doesNotCutOffASlowBodyThatKeepsArriving() {
+        // 1 byte every 100 ms for about 1 s: longer than the 300 ms idle limit, but never idle for that long.
+        server.enqueue(MockResponse.Builder().code(200).body("0123456789").throttleBody(1, 100, TimeUnit.MILLISECONDS).build())
+        val quickIdle = client().newBuilder().readTimeout(300, TimeUnit.MILLISECONDS).build()
 
-        try {
-            download(downloaderOver(client()), deadlineMs = 300)
-            fail("expected the call deadline to expire")
-        } catch (_: InterruptedIOException) {
-            assertTrue(destination.length() < 10)
-        }
+        download(downloaderOver(quickIdle))
+
+        assertEquals("0123456789", destination.readText())
     }
 
     @Test
@@ -204,31 +210,39 @@ class VideoMediaDownloaderTest {
     }
 
     @Test
-    fun rejectsADeclaredLengthOverTheCapButAcceptsTheCapItself() {
-        assertRejected("Video media is too large") {
-            download(downloaderOver(client(generatedBody(0, VideoMediaDownloader.MAX_VIDEO_BYTES + 1))))
-        }
-        assertEquals(0, destination.length())
+    fun doesNotRefuseADeclaredLengthPastTheFormerCap() {
+        val declared = 300L * 1024 * 1024
 
-        download(downloaderOver(client(generatedBody(0, VideoMediaDownloader.MAX_VIDEO_BYTES))))
-        assertEquals(0, destination.length())
+        download(downloaderOver(client(generatedBody(1024, declared))))
+
+        assertEquals(1024L, destination.length())
     }
 
     @Test
-    fun capsTheCountedBytesOfABodyWithNoLength() {
-        assertEquals(256L * 1024 * 1024, VideoMediaDownloader.MAX_VIDEO_BYTES)
+    fun streamsAMultiChunkBodyToTheFile() {
+        val total = 4L * 1024 * 1024
 
-        download(downloaderOver(client(generatedBody(VideoMediaDownloader.MAX_VIDEO_BYTES))))
-        assertEquals(VideoMediaDownloader.MAX_VIDEO_BYTES, destination.length())
+        download(downloaderOver(client(generatedBody(total))))
 
-        assertRejected("Video media is too large") {
-            download(downloaderOver(client(generatedBody(VideoMediaDownloader.MAX_VIDEO_BYTES + 1))))
-        }
-        assertEquals(VideoMediaDownloader.MAX_VIDEO_BYTES, destination.length())
+        assertEquals(total, destination.length())
     }
 
     @Test
-    fun capsAChunkedBodyOverTheWire() {
+    fun failsWhenTheDiskCannotTakeTheBodyAndLeavesThePartialFileToTheCaller() {
+        // /dev/full accepts the open and answers every write with ENOSPC.
+        assumeTrue(File("/dev/full").exists())
+        server.enqueue(MockResponse.Builder().code(200).body("0123456789").build())
+
+        try {
+            downloaderOver(client()).download(VIDEO, File("/dev/full"), { false }, {})
+            fail("expected a write failure")
+        } catch (error: IOException) {
+            assertTrue(error.message!!.contains("No space left"))
+        }
+    }
+
+    @Test
+    fun streamsAChunkedBodyWithNoLength() {
         server.enqueue(MockResponse.Builder().code(200).chunkedBody("0123456789", 4).build())
         val body = AtomicReference<Long>()
         val recorder = Interceptor { chain ->

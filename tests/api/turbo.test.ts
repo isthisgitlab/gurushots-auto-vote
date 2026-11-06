@@ -274,7 +274,10 @@ describe('turbo', () => {
             });
             for (const image of [
                 { ...score.images[0], media_type: 'image' },
-                { ...score.images[0], duration_ms: 120_001 },
+                { ...score.images[0], duration_ms: 0 },
+                { ...score.images[0], duration_ms: -5 },
+                { ...score.images[0], duration_ms: Number.POSITIVE_INFINITY },
+                { ...score.images[0], duration_ms: '5000' },
                 { ...score.images[0], media_url: 'https://example.test/clip.mp4' },
                 { ...score.images[0], media_url: 7 },
             ]) {
@@ -283,10 +286,53 @@ describe('turbo', () => {
             }
             makePostRequest.mockResolvedValueOnce({ ...score, images: [] });
             expect(await startTurboSession(1, mockToken)).toBeNull();
-            for (const maxScore of [1, 11, 3.5]) {
+            for (const maxScore of [1, 3.5]) {
                 makePostRequest.mockResolvedValueOnce({ ...score, max_score: maxScore });
                 expect(await startTurboSession(1, mockToken)).toBeNull();
             }
+        });
+
+        test('uses what the server sends: a long clip, a fractional duration, a wide scale, a non-MP4 path', async () => {
+            const score = {
+                success: true,
+                session_type: '2.0',
+                kind: 'score',
+                session_id: 'score-2',
+                position: 0,
+                caption: 'Rate it.',
+                max_score: 20,
+                images: [
+                    {
+                        image_id: hex('a'),
+                        member_id: hex('b'),
+                        media_type: 'video',
+                        duration_ms: 121_000,
+                        media_url: 'https://media.gurushots.com/clip.mov',
+                    },
+                    {
+                        image_id: hex('c'),
+                        member_id: hex('d'),
+                        media_type: 'video',
+                        duration_ms: 15_000.5,
+                        media_url: 'https://media.gurushots.com/clip',
+                    },
+                    {
+                        image_id: hex('e'),
+                        member_id: hex('f'),
+                        media_type: 'video',
+                        duration_ms: 0.4,
+                        media_url: 'https://media.gurushots.com/clip.mp4',
+                    },
+                ],
+            };
+            makePostRequest.mockResolvedValueOnce(score);
+
+            const session = await startTurboSession(1, mockToken);
+
+            expect(session).toMatchObject({ kind: 'score', maxScore: 20 });
+            expect(session?.kind === 'score' ? session.images.map((image) => image.durationMs) : []).toEqual([
+                121_000, 15_001, 1,
+            ]);
         });
 
         test('requires a challenge id and a token', async () => {
