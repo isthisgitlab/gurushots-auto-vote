@@ -267,8 +267,8 @@ const isCachedDecoderManifest = isShape<CachedDecoderManifest>({
     target: isString,
 });
 
-const cachedManifest = (): CachedDecoderManifest =>
-    parseJsonAs(files.get(path.join(decoder.OUTPUT_DIR, 'MANIFEST.json'))!.toString(), isCachedDecoderManifest);
+const cachedManifest = (targetDecoder: typeof videoDecoderModule = decoder): CachedDecoderManifest =>
+    parseJsonAs(files.get(path.join(targetDecoder.OUTPUT_DIR, 'MANIFEST.json'))!.toString(), isCachedDecoderManifest);
 
 const setHash = (): void => {
     mockCreateHash.mockImplementation(() => {
@@ -301,9 +301,9 @@ describe('build-video-decoder', () => {
 
     afterEach(() => jest.restoreAllMocks());
 
-    const primeCompiler = (): void => {
+    const primeCompiler = (targetDecoder: typeof videoDecoderModule = decoder): void => {
         const source = '/tmp/decoder-build/ffmpeg';
-        files.set(decoder.SOURCE_ARCHIVE, Buffer.from('archive'));
+        files.set(targetDecoder.SOURCE_ARCHIVE, Buffer.from('archive'));
         files.set('/verified.tar.gz', Buffer.from('archive'));
         files.set(
             path.join(source, 'libavutil', 'encryption_info.c'),
@@ -311,8 +311,8 @@ describe('build-video-decoder', () => {
         );
         files.set(path.join(source, 'libavformat', 'mov.c'), Buffer.from('av_encryption_init_info_append_side_data'));
         files.set(path.join(source, 'COPYING.LGPLv2.1'), Buffer.from('LGPL'));
-        files.set(path.join(source, decoder.DECODER_NAME), Buffer.from('decoder'));
-        files.set(path.join(source, decoder.PROBE_NAME), Buffer.from('probe'));
+        files.set(path.join(source, targetDecoder.DECODER_NAME), Buffer.from('decoder'));
+        files.set(path.join(source, targetDecoder.PROBE_NAME), Buffer.from('probe'));
     };
 
     test('uses a verified cached source without fetching', async () => {
@@ -847,6 +847,34 @@ describe('build-video-decoder', () => {
             Object.defineProperty(process, 'platform', descriptor);
         }
     });
+
+    test.each(['darwin', 'linux'] as const)(
+        'accepts only a cache with the correct macOS deployment target on %s',
+        (platform) => {
+            const descriptor = Object.getOwnPropertyDescriptor(process, 'platform')!;
+            Object.defineProperty(process, 'platform', { value: platform });
+            try {
+                let platformDecoder: typeof videoDecoderModule;
+                jest.isolateModules(() => {
+                    platformDecoder = require('../../scripts/build-video-decoder') as typeof videoDecoderModule;
+                });
+                primeCompiler(platformDecoder!);
+                platformDecoder!.buildDecoder('/verified.tar.gz');
+                const manifest = cachedManifest(platformDecoder!);
+
+                expect(platformDecoder!.cacheManifestIsValid()).toBe(true);
+                manifest.macosDeploymentTarget = platform === 'darwin' ? null : '11.0';
+                files.set(
+                    path.join(platformDecoder!.OUTPUT_DIR, 'MANIFEST.json'),
+                    Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`),
+                );
+
+                expect(platformDecoder!.cacheManifestIsValid()).toBe(false);
+            } finally {
+                Object.defineProperty(process, 'platform', descriptor);
+            }
+        },
+    );
 
     test('stages only the current target decoder after validating its manifest', async () => {
         primeCompiler();

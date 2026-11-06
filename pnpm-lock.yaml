@@ -191,7 +191,7 @@ importers:
         version: 4.3.2(@types/node@26.6.6)
       '@preact/signals':
         specifier: ^2.11.4
-        version: 2.11.4(preact@11.1.1)
+        version: 2.11.4(preact@11.2.0)
       axios:
         specifier: ^1.21.0
         version: 1.21.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
@@ -199,8 +199,8 @@ importers:
         specifier: ^6.8.11
         version: 6.8.11(supports-color@10.2.2)
       preact:
-        specifier: ^11.1.1
-        version: 11.1.1
+        specifier: ^11.2.0
+        version: 11.2.0
       qrcode-generator:
         specifier: 2.0.4
         version: 2.0.4
@@ -240,7 +240,7 @@ importers:
         version: 10.4.2
       '@testing-library/preact':
         specifier: ^3.2.6
-        version: 3.2.6(preact@11.1.1)
+        version: 3.2.6(preact@11.2.0)
       '@types/jest':
         specifier: ^30.0.0
         version: 30.0.0
@@ -2382,8 +2382,8 @@ packages:
     resolution: {integrity: sha512-Gmy6FhYlCY7uOElZUSbxo2UCDH8owEk996gkbrpsgGtrJLM3J7jGxl9Ic7Qwwj4ivOE5AWZWRMecDdF7hqGjFA==}
     engines: {node: '>=10'}
 
-  caniuse-lite@1.0.30001822:
-    resolution: {integrity: sha512-Y3fvWQWzc69dlCyr07tuNrEhotv+db5FpMSPD3slZnkPKwRNOKwFBz2dP966XUmWMXLTOt+YShkFoQoom3U7hg==}
+  caniuse-lite@1.0.30001823:
+    resolution: {integrity: sha512-TQ5s/djDjNk1axreUW+4rULH+BmdCMLiJkhaXnO5wqivG7tITkSUj4ItIdzqdZHKaXcHAV8dhH3JxOM7/7bwqw==}
 
   chalk@3.0.0:
     resolution: {integrity: sha512-4D3B6Wf41KOYRFdszmDqMCGq5VV/uMAB273JILmO+3jAlh8X4qDtdtgCR3fxtbLEMzSx22QdhnDcJvu2u1fVwg==}
@@ -3736,8 +3736,8 @@ packages:
     engines: {node: '>=14.0.0'}
     hasBin: true
 
-  preact@11.1.1:
-    resolution: {integrity: sha512-vpFVfai437pbuLri7XVeslCPfrEZX6Z1S2gV+MOFrA/kji+NKUXvH7y01EnVjA1guLigfkVp77Sqipd4SIllCg==}
+  preact@11.2.0:
+    resolution: {integrity: sha512-/HfHI/7N84e6GrWBJ3J280z3mLaRJiDcSvj/A+y/4AbLnND/1UlGHe1sR6oYuTGwId0nP7dqDU9OnLxMPZ7xBg==}
     peerDependencies:
       preact-render-to-string: '>=6.7.0'
     peerDependenciesMeta:
@@ -5492,10 +5492,10 @@ snapshots:
 
   '@preact/signals-core@1.14.5': {}
 
-  '@preact/signals@2.11.4(preact@11.1.1)':
+  '@preact/signals@2.11.4(preact@11.2.0)':
     dependencies:
       '@preact/signals-core': 1.14.5
-      preact: 11.1.1
+      preact: 11.2.0
 
   '@protobufjs/aspromise@1.1.2': {}
 
@@ -5687,10 +5687,10 @@ snapshots:
       picocolors: 1.1.1
       pretty-format: 27.5.1
 
-  '@testing-library/preact@3.2.6(preact@11.1.1)':
+  '@testing-library/preact@3.2.6(preact@11.2.0)':
     dependencies:
       '@testing-library/dom': 10.4.2
-      preact: 11.1.1
+      preact: 11.2.0
 
   '@trystero-p2p/core@0.26.0': {}
 
@@ -6148,7 +6148,7 @@ snapshots:
   browserslist@4.29.5:
     dependencies:
       baseline-browser-mapping: 2.11.35
-      caniuse-lite: 1.0.30001822
+      caniuse-lite: 1.0.30001823
       electron-to-chromium: 1.5.478
       node-releases: 2.0.63
       update-browserslist-db: 1.3.4(browserslist@4.29.5)
@@ -6216,7 +6216,7 @@ snapshots:
 
   camelcase@6.3.0: {}
 
-  caniuse-lite@1.0.30001822: {}
+  caniuse-lite@1.0.30001823: {}
 
   chalk@3.0.0:
     dependencies:
@@ -7806,7 +7806,7 @@ snapshots:
     dependencies:
       commander: 9.5.0
 
-  preact@11.1.1: {}
+  preact@11.2.0: {}
 
   prettier@4.0.0-alpha.13: {}
 

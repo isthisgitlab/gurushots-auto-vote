@@ -114,7 +114,7 @@
         "@preact/signals": "^2.11.4",
         "axios": "^1.21.0",
         "electron-updater": "^6.8.11",
-        "preact": "^11.1.1",
+        "preact": "^11.2.0",
         "qrcode-generator": "2.0.4",
         "tar": "^7.5.22",
         "trystero": "0.26.0",
