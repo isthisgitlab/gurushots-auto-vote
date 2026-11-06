@@ -51,7 +51,9 @@ const listenForAbort = (signal: AbortSignal | undefined, onAbort: () => void): (
  */
 const downloadVideo = async (url: URL, destination: string, signal?: AbortSignal): Promise<void> =>
     new Promise((resolve, reject) => {
-        let stopListening = (): void => {};
+        let stopListening = (): void => {
+            /* replaced once the abort listener is installed */
+        };
         const connection: {
             request: import('node:http').ClientRequest | undefined;
             response: import('node:http').IncomingMessage | undefined;
@@ -113,6 +115,8 @@ const downloadVideo = async (url: URL, destination: string, signal?: AbortSignal
         openedRequest.once('error', (error) => fail(error));
         openedRequest.end();
         stopListening = listenForAbort(signal, () => fail(cancelledError()));
+        // A failure that ran before this point (a synchronous request error) found no listener to stop.
+        if (connection.failure) stopListening();
     });
 
 type DecoderFrame = { output: string; timestamp: number };
@@ -123,7 +127,9 @@ type DecoderFrame = { output: string; timestamp: number };
  */
 const probeDuration = (probe: string, input: string, signal?: AbortSignal): Promise<number | null> =>
     new Promise((resolve, reject) => {
-        let stopListening = (): void => {};
+        let stopListening = (): void => {
+            /* replaced once the abort listener is installed */
+        };
         const child = requireChildProcess().spawn(
             probe,
             [
@@ -185,7 +191,9 @@ const runDecoder = (
     signal?: AbortSignal,
 ): Promise<void> =>
     new Promise((resolve, reject) => {
-        let stopListening = (): void => {};
+        let stopListening = (): void => {
+            /* replaced once the abort listener is installed */
+        };
         const args = [
             '-nostdin',
             '-hide_banner',

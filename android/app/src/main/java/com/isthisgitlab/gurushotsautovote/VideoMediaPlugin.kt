@@ -3,6 +3,7 @@ package com.isthisgitlab.gurushotsautovote
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.annotation.VisibleForTesting
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
@@ -194,7 +195,9 @@ class VideoMediaPlugin : Plugin() {
             job.settle { it.resolve(JSObject().put("frames", JSArray(frames))) }
         } catch (error: VideoMediaDownloader.Rejection) {
             job.settle { it.reject(error.message) }
-        } catch (_: Exception) {
+        } catch (error: Throwable) {
+            // Only the class is logged: the message or a cause can carry the signed URL.
+            Log.w("VideoMedia", "Video extraction failed: ${error.javaClass.name}")
             job.settle { it.reject("Video extraction failed") }
         } finally {
             file.delete()

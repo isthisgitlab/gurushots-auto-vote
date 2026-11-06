@@ -476,6 +476,26 @@ describe('runSnapGame', () => {
                 expect(sleeps).toEqual([POLL_MS, POLL_MS, POLL_MS]);
             });
 
+            test('a judgment that settles during a watcher sleep that ends on a microtask still wins', async () => {
+                const pending = deferred<SnapJudgment | null>();
+                vision.judgeSnapImage.mockReturnValue(pending.promise);
+
+                const result = await runSnapGame(
+                    CHALLENGE,
+                    'tok',
+                    deps({
+                        pace: () => 0,
+                        sleep: async (ms) => {
+                            sleeps.push(ms);
+                            pending.resolve(judgment);
+                        },
+                    }),
+                );
+
+                expect(result).toMatchObject({ answered: 1, won: true, stopReason: 'completed' });
+                expect(turbo.submitSnapVote).toHaveBeenCalledWith('sess', 'img0', 'yes', 'tok');
+            });
+
             test('a stop during the judgment returns at once, aborts it and drops its later failure silently', async () => {
                 const pending = deferred<SnapJudgment | null>();
                 let signal: AbortSignal | undefined;

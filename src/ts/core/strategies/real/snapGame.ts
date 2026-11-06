@@ -106,14 +106,13 @@ const raceCancellation = async <T>(
         settled = true;
     });
     judgment.catch(() => {});
+    const result = judgment.then((judged): RacedJudgment<T> => ({ cancelled: false, judged }));
     const watcher = (async (): Promise<RacedJudgment<T>> => {
         while (!settled && !deps.isCancelled()) await deps.sleep(SNAP_CANCEL_POLL_MS);
-        return { cancelled: true };
+        // The loop also ends when the judgment settled: that is its result, never a stop.
+        return deps.isCancelled() ? { cancelled: true } : result;
     })();
-    const first = await Promise.race([
-        judgment.then((judged): RacedJudgment<T> => ({ cancelled: false, judged })),
-        watcher,
-    ]);
+    const first = await Promise.race([result, watcher]);
     if (first.cancelled) controller.abort();
     return first;
 };

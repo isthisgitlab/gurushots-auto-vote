@@ -88,7 +88,7 @@ class VideoFrameExtractorTest {
 
     @Test
     fun clampsTimestampsLikeTheCoreRule() {
-        // The same table is pinned in tests/platforms/webview/videoFrameTimestamps.test.ts against
+        // The same table is pinned in tests/platform/videoFrameTimestamps.test.ts against
         // videoFrameTimestampMs (src/ts/core/platform/videoMedia.ts). Change both together.
         // columns: server ms, decoded ms, position, expected ms
         val table = listOf(

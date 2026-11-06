@@ -251,6 +251,21 @@ describe('node video frame extraction', () => {
         expect(streams).toHaveLength(0);
     });
 
+    test('removes its abort listener when the request fails synchronously, before the listener is installed', async () => {
+        const req = new EventEmitter() as ClientRequest;
+        Object.assign(req, {
+            destroy: jest.fn(),
+            end: jest.fn(() => req.emit('error', new Error('request failed at once'))),
+        });
+        request.mockImplementationOnce(invalid(() => req));
+        const controller = new AbortController();
+        const removeListener = jest.spyOn(controller.signal, 'removeEventListener');
+        await expect(
+            downloadVideo(MEDIA_URL, path.join(temporaryDirectory(), 'input.mp4'), controller.signal),
+        ).rejects.toThrow('request failed at once');
+        expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
+    });
+
     test('ignores data that arrives after the download already failed', async () => {
         const res = response(200);
         requestFor(res);

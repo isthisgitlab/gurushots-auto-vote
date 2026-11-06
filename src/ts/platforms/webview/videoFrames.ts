@@ -13,6 +13,7 @@ const invalidPayload = (): Error => new Error('Video media plugin returned an in
 const checkFrame = (frame: unknown): string => {
     if (typeof frame !== 'string' || !frame.startsWith(JPEG_PREFIX)) throw invalidPayload();
     const base64 = frame.slice(JPEG_PREFIX.length);
+    // This length check only stops an oversized string before it is decoded; the decoded length below is the exact bound.
     if (base64.length > MAX_JPEG_BASE64_CHARS) throw new Error('Video frame JPEG is too large');
     let decoded: string;
     try {

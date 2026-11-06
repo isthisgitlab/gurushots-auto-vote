@@ -4,6 +4,7 @@ import android.app.Application
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.os.Looper
+import android.util.Log
 import androidx.test.core.app.ApplicationProvider
 import com.getcapacitor.Bridge
 import com.getcapacitor.JSArray
@@ -32,6 +33,7 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowLog
 import org.robolectric.shadows.ShadowMediaMetadataRetriever
 import java.io.File
 import java.io.IOException
@@ -369,6 +371,23 @@ class VideoMediaPluginTest {
 
         assertEquals(listOf<String?>("Video extraction failed"), probe.rejected)
         assertEquals(emptyList<String>(), videoDir.list()!!.toList())
+    }
+
+    @Test
+    fun anErrorDuringTheDownloadSettlesTheCallAndLogsOnlyItsClass() {
+        stubDownload { _, file, _, _ ->
+            file.writeText("partial")
+            throw StackOverflowError("secret-token")
+        }
+        val probe = callFor("job-error", url = "$VIDEO?sig=secret-token")
+
+        plugin.extractFrames(probe.call)
+
+        assertEquals(listOf<String?>("Video extraction failed"), probe.rejected)
+        assertEquals(emptyList<String>(), videoDir.list()!!.toList())
+        val logged = ShadowLog.getLogsForTag("VideoMedia").single()
+        assertEquals(Log.WARN, logged.type)
+        assertEquals("Video extraction failed: java.lang.StackOverflowError", logged.msg)
     }
 
     @Test

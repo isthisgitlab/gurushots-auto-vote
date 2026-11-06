@@ -4,7 +4,7 @@
  * cannot drift: change both together.
  */
 
-import { videoFrameTimestampMs } from '../../../src/ts/core/platform/videoMedia';
+import { videoFrameTimestampMs } from '../../src/ts/core/platform/videoMedia';
 
 // server ms, decoded ms (null: the container reports none), position, expected ms
 const TABLE: readonly (readonly [number, number | null, number, number])[] = [
