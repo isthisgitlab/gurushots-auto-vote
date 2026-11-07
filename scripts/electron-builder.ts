@@ -6,8 +6,9 @@
  *
  * The suffix is display only. package.json `version` and `app.getVersion()` stay clean, because electron-updater
  * compares `app.getVersion()` to the GitHub release; `x.y.z-dirty` would sort below `x.y.z` as a prerelease. The
- * build number (CFBundleVersion, `mac.bundleVersion`) is never set, so it stays numeric. The Windows file version
- * must be numeric too, so only the installer name carries the suffix there.
+ * build number (CFBundleVersion, `mac.bundleVersion`) is never set, so it stays numeric. The Windows file and
+ * product versions must be numeric too, so only the installer name carries the suffix there. The AppImage's embedded
+ * X-AppImage-Version also stays clean; only its file name changes.
  *
  * The condition is the one scripts/build-main.ts bakes in. A name without "-dirty" does not prove that GitHub built
  * it, because anyone can set GITHUB_ACTIONS; real provenance comes from the CI build attestation. The variable is
@@ -23,7 +24,7 @@ const dirty = !process.env.GITHUB_ACTIONS;
 const dirtyArtifact = (artifactName: string) =>
     dirty ? artifactName.replace('${version}', '${version}-dirty') : artifactName;
 
-// On a release build every spread below adds nothing, so the export equals package.json's `build`.
+// On a release build the export deep-equals package.json's `build` (tests/scripts/electron-builder.test.ts).
 export default {
     ...build,
     mac: {

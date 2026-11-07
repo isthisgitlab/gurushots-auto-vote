@@ -6,7 +6,7 @@
 
 const mockReleaseAppLock = jest.fn();
 jest.mock('electron', () => ({
-    app: { on: jest.fn(), setAboutPanelOptions: jest.fn() },
+    app: { on: jest.fn(), setAboutPanelOptions: jest.fn(), getVersion: jest.fn(() => '9.8.7') },
     BrowserWindow: { getAllWindows: jest.fn(() => []) },
     powerMonitor: { on: jest.fn() },
 }));
@@ -262,9 +262,12 @@ describe('desktop startup marks the app as running', () => {
             const version = `${(require('../../package.json') as typeof import('../../package.json')).version}${suffix}`;
             // The catalog entry reads 'Running {0} v{1}'.
             expect(cat.infoT).toHaveBeenCalledWith('m956d26ca4fee', ['gurushots-auto-vote-dev', version]);
-            // Only a dirty build sets the About panel's version; a release build leaves Electron's own.
+            // Only a dirty build sets the About panel's version; a release build leaves its bundle's own.
             if (dirty)
-                expect(jest.mocked(app.setAboutPanelOptions)).toHaveBeenCalledWith({ applicationVersion: version });
+                expect(jest.mocked(app.setAboutPanelOptions)).toHaveBeenCalledWith({
+                    applicationVersion: version,
+                    version: '9.8.7',
+                });
             else expect(jest.mocked(app.setAboutPanelOptions)).not.toHaveBeenCalled();
         },
     );
