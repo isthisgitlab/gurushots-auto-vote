@@ -539,13 +539,19 @@ describe('build-cli', () => {
 
     describe('main', () => {
         let originalArgv: string[];
+        let originalGithubActions: string | undefined;
 
+        // The binary names depend on GITHUB_ACTIONS: each case runs as a release build unless it says otherwise.
         beforeEach(() => {
             originalArgv = process.argv;
+            originalGithubActions = process.env.GITHUB_ACTIONS;
+            process.env.GITHUB_ACTIONS = 'true';
         });
 
         afterEach(() => {
             process.argv = originalArgv;
+            if (originalGithubActions === undefined) delete process.env.GITHUB_ACTIONS;
+            else process.env.GITHUB_ACTIONS = originalGithubActions;
         });
 
         const builtOutputs = () => fs.copyFileSync.mock.calls.map(([, dest]) => path.basename(dest as string));
@@ -577,6 +583,22 @@ describe('build-cli', () => {
             expect(builtOutputs()).toEqual([`gurucli-v${version}-mac-lite`]);
             expect(ensureVisionModel).not.toHaveBeenCalled();
             expect(execFileSync).not.toHaveBeenCalledWith('pnpm', expect.anything(), expect.anything());
+            expect(exitSpy).not.toHaveBeenCalled();
+        });
+
+        test('a build outside GitHub Actions names its binaries "-dirty", lite ones too', async () => {
+            delete process.env.GITHUB_ACTIONS;
+            process.argv = ['node', 'build-cli.ts'];
+            await buildCli.main();
+            expect(builtOutputs()).toEqual([
+                `gurucli-v${version}-dirty-mac`,
+                `gurucli-v${version}-dirty-linux`,
+                `gurucli-v${version}-dirty-linux-arm`,
+            ]);
+            fs.copyFileSync.mockClear();
+            process.argv = ['node', 'build-cli.ts', 'gurucli-mac', '--lite'];
+            await buildCli.main();
+            expect(builtOutputs()).toEqual([`gurucli-v${version}-dirty-mac-lite`]);
             expect(exitSpy).not.toHaveBeenCalled();
         });
 

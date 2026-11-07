@@ -354,8 +354,12 @@ async function main() {
         const hostNode = await getOfficialNodeBinary(process.platform, process.arch);
         const seaBlobPath = generateSeaBlob(hostNode, { lite });
 
+        // A build made outside GitHub Actions names its binaries "-dirty" too, like the desktop installers
+        // (scripts/electron-builder.ts); a release build keeps the platform table's names.
+        const versionTag = process.env.GITHUB_ACTIONS ? `v${version}` : `v${version}-dirty`;
         for (const t of targets) {
-            await buildPlatform(lite ? { ...t, output: `${t.output}-lite` } : t, seaBlobPath);
+            const output = `${t.output.replace(`v${version}`, versionTag)}${lite ? '-lite' : ''}`;
+            await buildPlatform({ ...t, output }, seaBlobPath);
         }
 
         console.log('🎉 CLI build completed');
