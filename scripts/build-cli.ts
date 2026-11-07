@@ -17,6 +17,10 @@ import { prepareVideoDecoder } from './build-video-decoder';
 
 const { version } = packageJson;
 
+// A build made outside GitHub Actions is "-dirty" (core/buildInfo.ts): the version it prints and its file name both
+// read this, at build time, so the two always agree.
+const isLocalBuild = () => !process.env.GITHUB_ACTIONS;
+
 // Node SEA fuse sentinel — required by postject so Node knows where to find the embedded blob.
 const SEA_FUSE = 'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2';
 
@@ -68,8 +72,7 @@ async function bundleCli() {
         sourcemap: false,
         define: {
             'process.env.NODE_ENV': '"production"',
-            // A build made outside GitHub Actions reads as -dirty (core/buildInfo.ts).
-            __GS_DIRTY__: JSON.stringify(!process.env.GITHUB_ACTIONS),
+            __GS_DIRTY__: JSON.stringify(isLocalBuild()),
         },
     });
     console.log('✅ CLI bundled');
@@ -354,9 +357,9 @@ async function main() {
         const hostNode = await getOfficialNodeBinary(process.platform, process.arch);
         const seaBlobPath = generateSeaBlob(hostNode, { lite });
 
-        // A build made outside GitHub Actions names its binaries "-dirty" too, like the desktop installers
-        // (scripts/electron-builder.ts); a release build keeps the platform table's names.
-        const versionTag = process.env.GITHUB_ACTIONS ? `v${version}` : `v${version}-dirty`;
+        // A local build names its binaries "-dirty" too, like the desktop installers (scripts/electron-builder.ts);
+        // a release build keeps the platform table's names.
+        const versionTag = isLocalBuild() ? `v${version}-dirty` : `v${version}`;
         for (const t of targets) {
             const output = `${t.output.replace(`v${version}`, versionTag)}${lite ? '-lite' : ''}`;
             await buildPlatform({ ...t, output }, seaBlobPath);
