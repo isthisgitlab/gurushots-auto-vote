@@ -6,7 +6,7 @@
 
 const mockReleaseAppLock = jest.fn();
 jest.mock('electron', () => ({
-    app: { on: jest.fn() },
+    app: { on: jest.fn(), setAboutPanelOptions: jest.fn() },
     BrowserWindow: { getAllWindows: jest.fn(() => []) },
     powerMonitor: { on: jest.fn() },
 }));
@@ -250,19 +250,24 @@ describe('desktop startup marks the app as running', () => {
     test.each([
         [false, ''],
         [true, '-dirty'],
-    ])('names the running build through the log catalog (dirty build: %s)', async (dirty, suffix) => {
-        Object.assign(globalThis, { __GS_DIRTY__: dirty });
-        try {
-            await onReady();
-        } finally {
-            Reflect.deleteProperty(globalThis, '__GS_DIRTY__');
-        }
-        // The catalog entry reads 'Running {0} v{1}'.
-        expect(cat.infoT).toHaveBeenCalledWith('m956d26ca4fee', [
-            'gurushots-auto-vote-dev',
-            `${(require('../../package.json') as typeof import('../../package.json')).version}${suffix}`,
-        ]);
-    });
+    ])(
+        'names the running build through the log catalog and the About panel (dirty build: %s)',
+        async (dirty, suffix) => {
+            Object.assign(globalThis, { __GS_DIRTY__: dirty });
+            try {
+                await onReady();
+            } finally {
+                Reflect.deleteProperty(globalThis, '__GS_DIRTY__');
+            }
+            const version = `${(require('../../package.json') as typeof import('../../package.json')).version}${suffix}`;
+            // The catalog entry reads 'Running {0} v{1}'.
+            expect(cat.infoT).toHaveBeenCalledWith('m956d26ca4fee', ['gurushots-auto-vote-dev', version]);
+            // Only a dirty build sets the About panel's version; a release build leaves Electron's own.
+            if (dirty)
+                expect(jest.mocked(app.setAboutPanelOptions)).toHaveBeenCalledWith({ applicationVersion: version });
+            else expect(jest.mocked(app.setAboutPanelOptions)).not.toHaveBeenCalled();
+        },
+    );
 
     test('a marker that cannot be written is logged and never stops startup', async () => {
         lock.holdDesktopAppLock.mockImplementationOnce(() => {

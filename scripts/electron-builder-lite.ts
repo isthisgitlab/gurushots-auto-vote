@@ -1,6 +1,7 @@
 /**
  * electron-builder config for the lite desktop build (`build:<os>:lite`): the
- * package.json `build` block without the local vision model and its inference
+ * full build config (scripts/electron-builder.ts, package.json's `build` block
+ * plus the local "-dirty" marker) without the local vision model and its inference
  * runtime (services/visionVerifier.ts), for users who don't want either.
  * visionVerifier sees no bundled model and keeps the tag order.
  *
@@ -10,8 +11,7 @@
  * prerelease the GitHub provider would fall back to latest*.yml, the full build.
  */
 
-import packageJson from '../package.json';
-const { build } = packageJson;
+import build from './electron-builder';
 
 // @huggingface/transformers and the native runtimes it loads (the full build
 // already leaves out onnxruntime-web).

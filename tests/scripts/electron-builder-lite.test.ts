@@ -4,9 +4,29 @@
 
 import type * as package_jsonModule from '../../package.json';
 
-const { build } = require('../../package.json') as typeof package_jsonModule;
-const lite = (require('../../scripts/electron-builder-lite') as typeof import('../../scripts/electron-builder-lite'))
-    .default;
+const { build, version } = require('../../package.json') as typeof package_jsonModule;
+
+// Both configs read GITHUB_ACTIONS once, when they load, so each case loads a fresh copy under its own value.
+const liteFor = (githubActions: string | undefined) => {
+    const saved = process.env.GITHUB_ACTIONS;
+    if (githubActions === undefined) delete process.env.GITHUB_ACTIONS;
+    else process.env.GITHUB_ACTIONS = githubActions;
+    try {
+        let config!: (typeof import('../../scripts/electron-builder-lite'))['default'];
+        jest.isolateModules(() => {
+            config = (
+                require('../../scripts/electron-builder-lite') as typeof import('../../scripts/electron-builder-lite')
+            ).default;
+        });
+        return config;
+    } finally {
+        if (saved === undefined) delete process.env.GITHUB_ACTIONS;
+        else process.env.GITHUB_ACTIONS = saved;
+    }
+};
+
+// A release build (what CI runs), whatever the developer's shell holds.
+const lite = liteFor('true');
 
 describe('scripts/electron-builder-lite.ts', () => {
     test('keeps the full build config apart from what the lite build changes', () => {
@@ -39,6 +59,16 @@ describe('scripts/electron-builder-lite.ts', () => {
         expect(lite.linux.artifactName).toBe('GuruShotsAutoVote-v${version}-${arch}-lite.AppImage');
         expect(lite.mac.target).toEqual(build.mac.target);
         expect(lite.publish).toEqual({ ...build.publish, channel: 'lite' });
+    });
+
+    test('a local build names the lite artifacts "-dirty" too, on the same channel', () => {
+        const local = liteFor(undefined);
+        expect(local.mac.artifactName).toBe('GuruShotsAutoVote-v${version}-dirty-${arch}-lite.${ext}');
+        expect(local.win.artifactName).toBe('GuruShotsAutoVote-v${version}-dirty-${arch}-lite.exe');
+        expect(local.linux.artifactName).toBe('GuruShotsAutoVote-v${version}-dirty-${arch}-lite.AppImage');
+        expect(local.mac.bundleShortVersion).toBe(`${version}-dirty`);
+        expect(local.publish).toEqual({ ...build.publish, channel: 'lite' });
+        expect(lite.mac).not.toHaveProperty('bundleShortVersion');
     });
 
     test('both builds ship src/assets, which holds the third-party notices, inside the asar', () => {

@@ -9,6 +9,7 @@ import {
 import { initializeHeaders } from '../../../core/api/randomizer';
 import * as logger from '../../../core/logger';
 import { displayVersion } from '../../../core/appVersion';
+import { isDirtyBuild } from '../../../core/buildInfo';
 import { AutoUpdater } from '../AutoUpdater';
 import { ensureExit } from '../windows/lifecycle';
 import { bypassQuitGuard } from '../windows/quitGuard';
@@ -70,6 +71,9 @@ const holdAppMarker = () => {
 /** Setup that needs no window: permissions, headers, presets, the leftover login, the log cleanup and the menu. */
 const prepareApp = () => {
     logger.withCategory('ui').infoT('m956d26ca4fee', [logger.getAppName(), displayVersion()]);
+    // The About panel shows the bundle's version, which is the clean package.json one under `pnpm dev`; a local
+    // packaged build gets "-dirty" from Info.plist (scripts/electron-builder.ts) and this call says the same.
+    if (isDirtyBuild()) app.setAboutPanelOptions({ applicationVersion: displayVersion() });
     logger.withCategory('ui').info(`[App] UserData path: ${settings.getUserDataPath()}`, null);
 
     // Before any window exists: a page must never see Electron's grant-by-default.
