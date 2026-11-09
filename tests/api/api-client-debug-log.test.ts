@@ -8,6 +8,7 @@
 import axiosModule = require('axios');
 import type { AxiosRequestConfig } from 'axios';
 import { invalid } from '../helpers/invalid';
+import { isPlainObject } from '../../src/ts/core/plainObject';
 import type * as api_clientModule from '../../src/ts/core/api/api-client';
 import type * as constantsModule from '../../src/ts/core/api/constants';
 import type * as loggerModule from '../../src/ts/core/logger';
@@ -79,7 +80,6 @@ describe('the records of one POST', () => {
         axios.mockResolvedValue({ status: 200, headers: { 'content-type': 'application/json' }, data: { ok: true } });
         await makePostRequest(URL, {}, '');
         const [record] = debugRecords('api-in');
-        expect(record.message).toMatch(new RegExp(`^POST ${URL.replace(/\./g, '\\.')} → 200 \\(\\d+ms\\)$`));
         expect(record.data).toEqual({
             url: URL,
             status: 200,
@@ -87,6 +87,10 @@ describe('the records of one POST', () => {
             durationMs: expect.any(Number),
         });
         expect(record.data).not.toHaveProperty('responseData');
+        if (!isPlainObject(record.data)) {
+            throw new Error('Expected api-in data to be an object');
+        }
+        expect(record.message).toBe(`POST ${URL} → 200 (${record.data.durationMs}ms)`);
     });
 
     test('api-in carries the body of an endpoint whose body the normal log leaves out', async () => {

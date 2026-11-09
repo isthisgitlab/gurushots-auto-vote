@@ -22,7 +22,7 @@ const dirty = !process.env.GITHUB_ACTIONS;
 
 // "…-v${version}-${arch}.${ext}" → "…-v${version}-dirty-${arch}.${ext}" (electron-builder fills the macro in).
 const dirtyArtifact = (artifactName: string) =>
-    dirty ? artifactName.replace('${version}', '${version}-dirty') : artifactName;
+    dirty ? artifactName.replace(`\${version}`, `\${version}-dirty`) : artifactName;
 
 // On a release build the export deep-equals package.json's `build` (tests/scripts/electron-builder.test.ts).
 export default {
