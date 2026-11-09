@@ -80,6 +80,24 @@ describe('an upcoming row', () => {
         expect(screen.getAllByText(/Starts in/)).toHaveLength(1);
     });
 
+    test('shows start and Free Boost deadline dates in the selected timezone', async () => {
+        const start = 1_700_000_000;
+        renderSection([open(1, 'Dated', { start_time: start, close_time: start + 4 * 24 * 60 * 60 })]);
+        await settle();
+        expect(screen.getByText('Start time: 15/11/2023, 00:13')).toBeTruthy();
+        expect(screen.getByText('Free Boost join deadline: 16/11/2023, 00:13')).toBeTruthy();
+    });
+
+    test('keeps the Free Boost deadline visible and unchanged after its cutoff', async () => {
+        renderSection([open(1, 'Dated', { start_time: NOW_SEC - 40, close_time: NOW_SEC + 120 })]);
+        await settle();
+        const deadline = screen.getByText(/^Free Boost join deadline:/).textContent;
+        await advance(60 * 1000);
+        fireEvent.click(screen.getByText(app.discoverRefresh));
+        await settle();
+        expect(screen.getByText(deadline!)).toBeTruthy();
+    });
+
     test('has a disabled Join named by its challenge, and clicking does nothing', async () => {
         renderSection([open(1, 'Open One'), upcoming(2, 'Soon', 3600)]);
         await settle();
@@ -135,6 +153,46 @@ describe('an upcoming row', () => {
         await settle();
         expect(screen.getByRole('img', { name: 'Open challenges: 2' }).textContent).toBe('2');
         expect(screen.queryByText(/Starts in|Starting now/)).toBeNull();
+    });
+});
+
+describe('Discover date ordering', () => {
+    test.each([
+        ['end', 'End time'],
+        ['boostDeadline', 'Free Boost join deadline'],
+    ])('keeps the selected %s ordering after refresh and separates the three row groups', async (value, label) => {
+        const { container } = renderSection([
+            open(1, 'Open later', { start_time: 20, close_time: 500 }),
+            open(2, 'Open earlier', { start_time: 10, close_time: 400 }),
+            upcoming(3, 'Starting now', -1, { close_time: 1_000 }),
+            upcoming(4, 'Future', 3600, { close_time: 200 }),
+        ]);
+        await settle();
+        const sort = screen.getByRole<HTMLSelectElement>('combobox', { name: 'Sort by' });
+        expect(screen.getByText('Default order')).toBeTruthy();
+        fireEvent.change(sort, { target: { value } });
+        const listed = () =>
+            Array.from(container.querySelectorAll('[data-testid="discover-section"] ul > li')).map(
+                (row) => row.textContent,
+            );
+        expect(listed()).toEqual([
+            expect.stringContaining('Open earlier'),
+            expect.stringContaining('Open later'),
+            expect.stringContaining('Starting now'),
+            expect.stringContaining('Future'),
+        ]);
+        expect(sort.value).toBe(value);
+        fireEvent.change(sort, { target: { value: 'unexpected' } });
+        fireEvent.click(screen.getByText(app.discoverRefresh));
+        await settle();
+        expect(sort.value).toBe(value);
+        expect(listed()).toEqual([
+            expect.stringContaining('Open earlier'),
+            expect.stringContaining('Open later'),
+            expect.stringContaining('Starting now'),
+            expect.stringContaining('Future'),
+        ]);
+        expect(screen.getByRole('option', { name: label })).toBeTruthy();
     });
 });
 

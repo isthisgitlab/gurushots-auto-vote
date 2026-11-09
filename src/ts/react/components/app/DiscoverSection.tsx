@@ -15,6 +15,8 @@ import * as ipc from '@/api/ipc';
 import { ipcErrorText, joinRefusalText } from '@/api/ipcErrorText';
 import { listedTags } from '../../../core/format/challengeListing';
 import { endTimeOf } from '../../../core/format/endTime';
+import { DISCOVER_SORTS, freeBoostJoinDeadline, orderDiscoverRows } from '../../../core/discoverDates';
+import type { DiscoverSort } from '../../../core/discoverDates';
 // The pure fresh-join guard the facade re-exports (services/VotingLogic) — imported at its home
 // module, so the renderer bundle does not pull the whole voting-decision barrel in for one function.
 import { joinFreshRefusal } from '../../../core/services/decisions/joinDecision';
@@ -218,6 +220,48 @@ function StartLine({ c, nowSec }: { c: OpenChallenge; nowSec: number }) {
     );
 }
 
+function DiscoverDates({ c, timezone }: { c: OpenChallenge; timezone: string }) {
+    const { t } = useTranslation();
+    const startTime = endTimeOf(c.start_time);
+    const deadline = freeBoostJoinDeadline(c.start_time, c.close_time);
+    return (
+        <>
+            {startTime !== null && (
+                <div className="text-xs text-base-content/70 mt-0.5">
+                    {t('app.discoverStartTime', { date: formatEndTime(startTime, timezone) })}
+                </div>
+            )}
+            {deadline !== null && (
+                <div className="text-xs text-base-content/70 mt-0.5">
+                    {t('app.discoverBoostJoinDeadline', { date: formatEndTime(deadline, timezone) })}
+                </div>
+            )}
+        </>
+    );
+}
+
+function DiscoverSortControl({ sort, onSort }: { sort: DiscoverSort; onSort: (sort: DiscoverSort) => void }) {
+    const { t } = useTranslation();
+    return (
+        <label className="flex items-center gap-2 text-sm">
+            <span>{t('app.discoverSortBy')}</span>
+            <select
+                className="select select-sm max-sm:min-h-10"
+                value={sort}
+                onChange={(event) => {
+                    const selected = DISCOVER_SORTS.find((candidate) => candidate === event.currentTarget.value);
+                    if (selected !== undefined) onSort(selected);
+                }}
+            >
+                <option value="default">{t('app.discoverSortDefault')}</option>
+                <option value="start">{t('app.discoverSortStart')}</option>
+                <option value="end">{t('app.discoverSortEnd')}</option>
+                <option value="boostDeadline">{t('app.discoverSortBoostDeadline')}</option>
+            </select>
+        </label>
+    );
+}
+
 /**
  * What a join left behind for its row, as a translated, coloured line. Any result without a mapped
  * status (auth-expiry, an unexpected handler error) still shows a message rather than failing
@@ -367,6 +411,7 @@ function DiscoverRow({
                     </div>
                 )}
                 <StartLine c={c} nowSec={nowSec} />
+                <DiscoverDates c={c} timezone={timezone} />
                 <ChosenMarks c={c} name={name} onChoose={onChoose} />
                 {waiting !== null && c.chosenEffectiveCount > 0 && (
                     <div className="text-xs text-base-content/70 mt-0.5">{t('app.discoverUpcomingChosenHint')}</div>
@@ -447,6 +492,7 @@ export function DiscoverSection({
     const chosen = useOpenChosenAnnotations(rows.map((c) => String(c.id)));
     const [choosing, setChoosing] = useState<OpenChallenge | null>(null); // challenge whose photos are being chosen
     const [forgetting, setForgetting] = useState<OpenChallenge | null>(null); // challenge whose payment is being forgotten
+    const [sort, setSort] = useState<DiscoverSort>('default');
     const { confirm, results, busy, withAnswerCost, ask, onConfirm, dismiss, clearResult } = useDiscoverJoins({
         items,
         refetch,
@@ -456,7 +502,11 @@ export function DiscoverSection({
     if (!isLoggedIn) return null;
 
     // useMemberChallenges guarantees an array.
-    const list = rows.map((c): OpenChallenge => ({ ...withAnswerCost(c), ...chosen.annotations[String(c.id)] }));
+    const list = orderDiscoverRows(
+        rows.map((c): OpenChallenge => ({ ...withAnswerCost(c), ...chosen.annotations[String(c.id)] })),
+        sort,
+        nowSec,
+    );
 
     return (
         <>
@@ -484,7 +534,8 @@ export function DiscoverSection({
                     )}
                 </summary>
                 <div className="collapse-content px-3 pb-3">
-                    <div className="flex justify-end mb-2">
+                    <div className="flex flex-wrap items-center justify-end gap-2 mb-2">
+                        <DiscoverSortControl sort={sort} onSort={setSort} />
                         <button
                             className="btn btn-outline btn-sm max-sm:min-h-10"
                             onClick={() => void refetch()}
