@@ -135,7 +135,7 @@ jobs:
         # JVM unit tests (JUnit + Robolectric + MockWebServer) for the native
         # Kotlin/Java code under android/app/src/main, with JaCoCo coverage.
         needs: classify-dependabot-workflow-pr
-        if: always()
+        if: ${{ !cancelled() }}
         runs-on: ubuntu-latest
         timeout-minutes: 30
         env:
@@ -253,7 +253,7 @@ jobs:
         # Its own job so a type error reads as its own red check, separate from
         # lint and tests.
         needs: classify-dependabot-workflow-pr
-        if: always()
+        if: ${{ !cancelled() }}
         runs-on: ubuntu-latest
         timeout-minutes: 30
         env:
@@ -297,7 +297,7 @@ jobs:
         # raw transfer purely from the platform (64-bit + Node ≥ 22) with no
         # opt-out, so the fix is more memory rather than a flag.
         needs: classify-dependabot-workflow-pr
-        if: always()
+        if: ${{ !cancelled() }}
         runs-on: ubuntu-latest
         env:
             RUN_FULL_CHECKS: ${{ needs.classify-dependabot-workflow-pr.result != 'success' || needs.classify-dependabot-workflow-pr.outputs.workflow_only != 'true' }}

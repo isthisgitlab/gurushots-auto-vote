@@ -54,7 +54,7 @@ jobs:
     analyze:
         name: Analyze (${{ matrix.language }})
         needs: classify-dependabot-workflow-pr
-        if: always()
+        if: ${{ !cancelled() }}
         runs-on: ${{ matrix.runner }}
         timeout-minutes: ${{ matrix.language == 'java-kotlin' && 30 || 20 }}
         env:

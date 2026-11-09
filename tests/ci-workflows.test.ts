@@ -187,7 +187,7 @@ describe('Dependabot workflow-only CI classification', () => {
         ]) {
             const job = testWorkflow.jobs[name];
             expect(needsOf(job)).toEqual(['classify-dependabot-workflow-pr']);
-            expect(job.if).toBe('always()');
+            expect(job.if).toBe('${{ !cancelled() }}');
             expect(stepNamed(job, summary).if).toContain("env.RUN_FULL_CHECKS != 'true'");
         }
     });
@@ -218,7 +218,7 @@ describe('Dependabot workflow-only CI classification', () => {
             'actions',
         ]);
         expect(needsOf(analyze)).toEqual(['classify-dependabot-workflow-pr']);
-        expect(analyze.if).toBe('always()');
+        expect(analyze.if).toBe('${{ !cancelled() }}');
 
         for (const stepName of ['Checkout code', 'Initialize CodeQL', 'Perform CodeQL analysis']) {
             const condition = fullChecks(stepNamed(analyze, stepName));
