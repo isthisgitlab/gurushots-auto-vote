@@ -142,6 +142,21 @@ describe('Gradle dependency verification', () => {
 describe('Dependabot workflow-only CI classification', () => {
     const classifier = (workflow: Workflow) => workflow.jobs['classify-dependabot-workflow-pr'];
     const fullChecks = (step: Step) => step.if ?? '';
+    const runsCodeqlLanguageAnalysis = ({
+        classificationResult,
+        codeqlChanged,
+        language,
+        workflowOnly,
+    }: {
+        classificationResult: string;
+        codeqlChanged?: string;
+        language: string;
+        workflowOnly?: string;
+    }) =>
+        language === 'actions' ||
+        classificationResult !== 'success' ||
+        workflowOnly !== 'true' ||
+        codeqlChanged !== 'false';
 
     test.each([
         ['Test', testWorkflow],
@@ -156,6 +171,9 @@ describe('Dependabot workflow-only CI classification', () => {
         const step = stepNamed(job, 'Classify Dependabot workflow-only PR');
         expect(step.env?.PR_AUTHOR).toBe('${{ github.event.pull_request.user.login }}');
         expect(JSON.stringify(step.env)).not.toContain('github.actor');
+        expect(stepNamed(job, 'Checkout classifier').with?.ref).toBe(
+            '${{ github.event.pull_request.base.sha || github.sha }}',
+        );
     });
 
     test('keeps the main Test check unconditional while skipped checks finish successfully', () => {
@@ -209,11 +227,27 @@ describe('Dependabot workflow-only CI classification', () => {
         expect(analyze.env?.RUN_LANGUAGE_ANALYSIS).toContain("matrix.language == 'actions'");
         expect(analyze.env?.RUN_LANGUAGE_ANALYSIS).toContain("result != 'success'");
         expect(analyze.env?.RUN_LANGUAGE_ANALYSIS).toContain("outputs.workflow_only != 'true'");
-        expect(analyze.env?.RUN_LANGUAGE_ANALYSIS).toContain("outputs.codeql_changed == 'true'");
+        expect(analyze.env?.RUN_LANGUAGE_ANALYSIS).toContain("outputs.codeql_changed != 'false'");
         const summary = stepNamed(analyze, 'CodeQL language analysis skipped for Dependabot workflow-only PR').if ?? '';
         expect(summary).toContain("matrix.language != 'actions'");
         expect(summary).toContain("env.RUN_LANGUAGE_ANALYSIS != 'true'");
     });
+
+    test.each([
+        ['normal source-language skip', 'success', 'true', 'false', 'javascript-typescript', false],
+        ['missing CodeQL output', 'success', 'true', undefined, 'javascript-typescript', true],
+        ['missing workflow-only output', 'success', undefined, 'false', 'java-kotlin', true],
+        ['failed classification', 'failure', 'true', 'false', 'java-kotlin', true],
+        ['CodeQL workflow changed', 'success', 'true', 'true', 'javascript-typescript', true],
+        ['Actions analysis', 'success', 'true', 'false', 'actions', true],
+    ])(
+        '%s selects the required CodeQL outcome',
+        (_scenario, classificationResult, workflowOnly, codeqlChanged, language, runs) => {
+            expect(runsCodeqlLanguageAnalysis({ classificationResult, workflowOnly, codeqlChanged, language })).toBe(
+                runs,
+            );
+        },
+    );
 });
 
 describe('Android signing', () => {

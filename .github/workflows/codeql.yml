@@ -34,6 +34,8 @@ jobs:
         steps:
             - name: Checkout classifier
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+              with:
+                  ref: ${{ github.event.pull_request.base.sha || github.sha }}
 
             - name: Setup Node.js
               uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
@@ -46,7 +48,8 @@ jobs:
                   GITHUB_TOKEN: ${{ github.token }}
                   PR_AUTHOR: ${{ github.event.pull_request.user.login }}
                   PR_NUMBER: ${{ github.event.pull_request.number }}
-              run: node scripts/classify-dependabot-workflow-pr.mts
+              run: >-
+                  node --input-type=module --eval 'const { main } = await import("./scripts/classify-dependabot-workflow-pr.mts"); await main({ env: process.env, fetchImpl: globalThis.fetch })'
 
     analyze:
         name: Analyze (${{ matrix.language }})
@@ -55,7 +58,7 @@ jobs:
         runs-on: ${{ matrix.runner }}
         timeout-minutes: ${{ matrix.language == 'java-kotlin' && 30 || 20 }}
         env:
-            RUN_LANGUAGE_ANALYSIS: ${{ matrix.language == 'actions' || needs.classify-dependabot-workflow-pr.result != 'success' || needs.classify-dependabot-workflow-pr.outputs.workflow_only != 'true' || needs.classify-dependabot-workflow-pr.outputs.codeql_changed == 'true' }}
+            RUN_LANGUAGE_ANALYSIS: ${{ matrix.language == 'actions' || needs.classify-dependabot-workflow-pr.result != 'success' || needs.classify-dependabot-workflow-pr.outputs.workflow_only != 'true' || needs.classify-dependabot-workflow-pr.outputs.codeql_changed != 'false' }}
         permissions:
             actions: read
             contents: read

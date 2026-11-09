@@ -84,18 +84,12 @@ const writeOutputs = ({ outputFile, result }: { outputFile: string | undefined; 
     else process.stdout.write(output);
 };
 
-const main = async ({
-    env = process.env,
-    fetchImpl = globalThis.fetch,
-}: {
-    env?: NodeJS.ProcessEnv;
-    fetchImpl?: FetchImpl;
-} = {}): Promise<void> => {
+const main = async ({ env, fetchImpl }: { env: NodeJS.ProcessEnv; fetchImpl: FetchImpl }): Promise<void> => {
     if (env.GITHUB_EVENT_NAME !== 'pull_request' || !env.PR_NUMBER) {
         writeOutputs({ outputFile: env.GITHUB_OUTPUT, result: { workflowOnly: false, codeqlChanged: false } });
         return;
     }
-    if (!env.GITHUB_REPOSITORY || !env.GITHUB_TOKEN || !fetchImpl) {
+    if (!env.GITHUB_REPOSITORY || !env.GITHUB_TOKEN) {
         throw new Error('Missing GitHub pull-request classification environment');
     }
 
@@ -113,10 +107,3 @@ const main = async ({
 };
 
 export { classifyPullRequest, fetchPullRequestFiles, main };
-
-if (import.meta.main) {
-    void main().catch((error: unknown) => {
-        process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-        process.exitCode = 1;
-    });
-}

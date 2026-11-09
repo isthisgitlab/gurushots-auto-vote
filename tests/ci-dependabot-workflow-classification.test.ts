@@ -3,29 +3,37 @@ import type * as Fs from 'node:fs';
 import type * as Os from 'node:os';
 import { join } from 'node:path';
 
+jest.unmock('node:fs');
+
 const { execFileSync } = jest.requireActual<typeof ChildProcess>('node:child_process');
 const { mkdtempSync, readFileSync, writeFileSync } = jest.requireActual<typeof Fs>('node:fs');
 const { tmpdir } = jest.requireActual<typeof Os>('node:os');
 
 type PullRequestFile = { filename: string; previous_filename?: string };
+type FetchResponse = { ok: boolean; status: number; json: () => Promise<unknown> };
+type FetchImpl = (url: string) => Promise<FetchResponse>;
 
 type Classifier = {
-    classifyPullRequest: (input: { author: string; files: PullRequestFile[] }) => {
+    classifyPullRequest: (input: { author: string; files: unknown }) => {
         workflowOnly: boolean;
         codeqlChanged: boolean;
     };
     fetchPullRequestFiles: (input: {
         apiUrl: string;
-        fetchImpl: (url: string) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
+        fetchImpl: FetchImpl;
         repository: string;
         number: string;
         token: string;
     }) => Promise<PullRequestFile[]>;
+    main: (input: { env: NodeJS.ProcessEnv; fetchImpl: FetchImpl }) => Promise<void>;
 };
 
 const { classifyPullRequest, fetchPullRequestFiles } =
     require('../scripts/classify-dependabot-workflow-pr.mts') as Classifier;
-const script = join(__dirname, '..', 'scripts', 'classify-dependabot-workflow-pr.mts');
+const { main } = require('../scripts/classify-dependabot-workflow-pr.mts') as Classifier;
+const root = join(__dirname, '..');
+const classifierCommand =
+    'const { main } = await import("./scripts/classify-dependabot-workflow-pr.mts"); await main({ env: process.env, fetchImpl: globalThis.fetch })';
 
 const workflowFile = (filename: string, previous_filename?: string): PullRequestFile =>
     previous_filename === undefined ? { filename } : { filename, previous_filename };
@@ -118,11 +126,129 @@ describe('Dependabot workflow-only PR classifier', () => {
         ).rejects.toThrow('403');
     });
 
-    test('non-PR events produce full-check outputs without calling the API', () => {
+    test.each([
+        [
+            'a non-array files response',
+            async (): Promise<FetchResponse> => ({ ok: true, status: 200, json: async () => ({}) }),
+        ],
+        [
+            'a file without a filename',
+            async (): Promise<FetchResponse> => ({ ok: true, status: 200, json: async () => [{}] }),
+        ],
+        [
+            'a file with an invalid previous filename',
+            async (): Promise<FetchResponse> => ({
+                ok: true,
+                status: 200,
+                json: async () => [{ filename: 'x', previous_filename: null }],
+            }),
+        ],
+    ])('rejects %s', async (_scenario, response) => {
+        await expect(
+            fetchPullRequestFiles({
+                apiUrl: 'https://api.github.test',
+                fetchImpl: response,
+                repository: 'owner/repo',
+                number: '42',
+                token: 'token',
+            }),
+        ).rejects.toThrow('GitHub returned');
+    });
+
+    test('rejects a malformed classifier input', () => {
+        expect(() => classifyPullRequest({ author: 'dependabot[bot]', files: {} })).toThrow(
+            'invalid pull-request file list',
+        );
+        expect(() => classifyPullRequest({ author: 'dependabot[bot]', files: [null] })).toThrow('without a filename');
+        expect(() =>
+            classifyPullRequest({ author: 'dependabot[bot]', files: [{ filename: 'x', previous_filename: null }] }),
+        ).toThrow('invalid previous_filename');
+    });
+
+    test('writes full-check outputs for non-PR events without calling the API', async () => {
         const directory = mkdtempSync(join(tmpdir(), 'dependabot-classifier-'));
         const output = join(directory, 'output');
         writeFileSync(output, '');
-        execFileSync(process.execPath, [script], {
+        const fetchImpl = jest.fn<Promise<FetchResponse>, [string]>();
+
+        await main({
+            env: { GITHUB_EVENT_NAME: 'push', GITHUB_OUTPUT: output },
+            fetchImpl,
+        });
+        expect(readFileSync(output, 'utf8')).toBe('workflow_only=false\ncodeql_changed=false\n');
+        expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    test('writes Dependabot workflow-only outputs after fetching the PR files', async () => {
+        const directory = mkdtempSync(join(tmpdir(), 'dependabot-classifier-'));
+        const output = join(directory, 'output');
+        writeFileSync(output, '');
+        const fetchImpl = jest.fn<Promise<FetchResponse>, [string]>().mockResolvedValue({
+            ok: true,
+            status: 200,
+            json: async () => [workflowFile('.github/workflows/test.yml')],
+        });
+
+        await main({
+            env: {
+                GITHUB_API_URL: 'https://api.github.test',
+                GITHUB_EVENT_NAME: 'pull_request',
+                GITHUB_OUTPUT: output,
+                GITHUB_REPOSITORY: 'owner/repo',
+                GITHUB_TOKEN: 'token',
+                PR_AUTHOR: 'dependabot[bot]',
+                PR_NUMBER: '42',
+            },
+            fetchImpl,
+        });
+        expect(readFileSync(output, 'utf8')).toBe('workflow_only=true\ncodeql_changed=false\n');
+    });
+
+    test('uses the default API URL and stdout when no output file is configured', async () => {
+        const write = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+        const fetchImpl = jest.fn<Promise<FetchResponse>, [string]>().mockResolvedValue({
+            ok: true,
+            status: 200,
+            json: async () => [workflowFile('.github/workflows/test.yml')],
+        });
+
+        await main({
+            env: {
+                GITHUB_EVENT_NAME: 'pull_request',
+                GITHUB_REPOSITORY: 'owner/repo',
+                GITHUB_TOKEN: 'token',
+                PR_AUTHOR: 'dependabot[bot]',
+                PR_NUMBER: '42',
+            },
+            fetchImpl,
+        });
+
+        expect(fetchImpl).toHaveBeenCalledWith(
+            'https://api.github.com/repos/owner/repo/pulls/42/files?per_page=100&page=1',
+            expect.anything(),
+        );
+        expect(write).toHaveBeenCalledWith('workflow_only=true\ncodeql_changed=false\n');
+        write.mockRestore();
+    });
+
+    test.each([[{ GITHUB_TOKEN: 'token' }], [{ GITHUB_REPOSITORY: 'owner/repo' }]])(
+        'rejects pull-request classification without required environment',
+        async (partial) => {
+            await expect(
+                main({
+                    env: { GITHUB_EVENT_NAME: 'pull_request', PR_NUMBER: '42', ...partial },
+                    fetchImpl: jest.fn<Promise<FetchResponse>, [string]>(),
+                }),
+            ).rejects.toThrow('Missing GitHub pull-request classification environment');
+        },
+    );
+
+    test('runs natively without dependency installation', () => {
+        const directory = mkdtempSync(join(tmpdir(), 'dependabot-classifier-'));
+        const output = join(directory, 'output');
+        writeFileSync(output, '');
+        execFileSync(process.execPath, ['--input-type=module', '--eval', classifierCommand], {
+            cwd: root,
             env: { ...process.env, GITHUB_EVENT_NAME: 'push', GITHUB_OUTPUT: output },
         });
         expect(readFileSync(output, 'utf8')).toBe('workflow_only=false\ncodeql_changed=false\n');
