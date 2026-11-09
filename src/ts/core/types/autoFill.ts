@@ -67,6 +67,8 @@ export interface FillDeps extends RankDeps {
 /** The dependencies of a fill path that reads its settings unconditionally (auto, emergency, fill-new). */
 export interface SettingsFillDeps extends FillDeps {
     settings: FillSettings;
+    /** Optional live wall-clock seam for a final Auto-Submit eligibility check. */
+    wallClockNow?: () => number;
 }
 
 /** A member whose shape every later reader of the challenge can survive (see isAdoptableMember). */
@@ -82,6 +84,8 @@ interface RefreshVerdict {
     standDown?: boolean;
     picked?: string[];
 }
+
+type FinalEligibilityVerdict = { standDown?: boolean };
 
 /**
  * The loaded candidate set a stand-down probe sees, with the chosen photos as
@@ -107,6 +111,14 @@ export interface FillAttemptParams {
     probeStandDown?: ((loaded: LoadedCandidates) => boolean) | null;
     onEmptyPick?: ((eligible: PickerPhoto[]) => string) | null;
     onRefreshed?: ((picked: string[]) => RefreshVerdict | null) | null;
+    /**
+     * Final submission authorization after verification. It can refresh live
+     * state so a trigger that requires fresh state can decline immediately
+     * before the POST.
+     */
+    finalEligibility?:
+        | ((picked: readonly string[]) => FinalEligibilityVerdict | null | Promise<FinalEligibilityVerdict | null>)
+        | null;
     /**
      * An explicit id pool: when set, the Chosen Photos settings are ignored and
      * the pick is restricted to these ids, in this order (the Boost-pinned

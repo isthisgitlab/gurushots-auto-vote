@@ -236,6 +236,39 @@ describe('headless runOneCycle', () => {
         expect(lastPayload().nextDelayMs).toBe(90_000);
     });
 
+    test('uses the shared fast cadence during an active Auto-Submit clock window', async () => {
+        const now = Math.floor(Date.now() / 1000);
+        const clockTime = new Date(now * 1000).toISOString().slice(11, 16);
+        const clocked = {
+            id: 7,
+            type: 'default',
+            close_time: now + 3600,
+            max_photo_submits: 2,
+            member: { ranking: { entries: [] } },
+        };
+        const fetchChallengesAndVote = jest.fn().mockResolvedValue({ success: true, challenges: [clocked] });
+        const getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [] });
+        apiFactory.getApiStrategy.mockReturnValue(invalid({ fetchChallengesAndVote, getActiveChallenges }));
+        settings.loadSettings.mockReturnValue(
+            invalid({ app: { checkFrequencyMin: 2, checkFrequencyMax: 2, timezone: 'UTC' } }),
+        );
+        settings.getEffectiveSetting.mockImplementation(
+            (key) =>
+                ({
+                    lastMinuteThreshold: 10,
+                    lastMinuteCheckFrequency: 1,
+                    autoSubmit: true,
+                    manualPhotosOnly: false,
+                    autoSubmitTime: [clockTime],
+                    autoSubmitWindowMinutes: 5,
+                })[key],
+        );
+
+        await g.GS!.runOneCycle();
+
+        expect(lastPayload().nextDelayMs).toBe(60_000);
+    });
+
     test('reports ok:false and a fallback delay when the cycle throws', async () => {
         const fetchChallengesAndVote = jest.fn().mockRejectedValue(new Error('boom'));
         apiFactory.getApiStrategy.mockReturnValue(invalid({ fetchChallengesAndVote, getActiveChallenges: jest.fn() }));
@@ -571,6 +604,34 @@ describe('headless runOneCycle', () => {
         // shell would drive in real mode: the same fetch, the same pass, the
         // same lazy net, over the planted store.
         const pass = () => realApiFactory.getApiStrategy({ mock: true }).fetchChallengesAndVote('tok');
+
+        test('a fixed-clock Auto-Submit window performs one mock submission through the full pass', async () => {
+            jest.setSystemTime(new Date(Date.UTC(2026, 0, 15, 12, 0, 0)));
+            settings.setSetting('timezone', 'UTC');
+            const { challenges } = await settle(
+                realApiFactory.getApiStrategy({ mock: true }).getActiveChallenges('tok'),
+            );
+            const joined = challenges.find(
+                (challenge) =>
+                    (challenge.member?.ranking?.entries?.length ?? 0) > 0 &&
+                    (challenge.member?.ranking?.entries?.length ?? 0) < Number(challenge.max_photo_submits),
+            );
+            if (!joined) throw new Error('fixture has no joined challenge with an available photo slot');
+            const id = String(joined.id);
+            const entriesBefore = joined.member!.ranking!.entries!.length;
+            settings.setChallengeOverride('autoSubmit', id, true);
+            settings.setChallengeOverride('autoSubmitTime', id, ['12:00']);
+            settings.setChallengeOverride('autoSubmitWindowMinutes', id, 720);
+            settings.setChallengeOverride('autoSubmitSchedule', id, []);
+            settings.setChallengeOverride('emergencySubmit', id, 0);
+
+            await settle(pass());
+
+            const after = await settle(realApiFactory.getApiStrategy({ mock: true }).getActiveChallenges('tok'));
+            const entriesAfter = after.challenges.find((challenge) => String(challenge.id) === id)!.member!.ranking!
+                .entries!.length;
+            expect(entriesAfter).toBe(entriesBefore + 1);
+        });
 
         test('Only on holds the list across a pass with entries; off, the next pass consumes it and deletes the key', async () => {
             const id = await settle(joinedWithEntries());

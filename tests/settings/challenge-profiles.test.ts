@@ -75,6 +75,18 @@ describe('settings facade — challenge profiles', () => {
             });
         });
 
+        test('round-trips Auto-Submit clock settings in a profile', () => {
+            expect(
+                settings.saveChallengeProfile('clocked', {
+                    autoSubmitTime: ['08:00', '20:00'],
+                    autoSubmitWindowMinutes: 60,
+                }),
+            ).toBe(true);
+            expect(settings.getChallengeProfiles()).toEqual({
+                clocked: { autoSubmitTime: ['08:00', '20:00'], autoSubmitWindowMinutes: 60 },
+            });
+        });
+
         test('trims the name and allows an empty values map', () => {
             expect(settings.saveChallengeProfile('  Reset Preset  ', {})).toBe(true);
             expect(settings.getChallengeProfiles()).toEqual({ 'Reset Preset': {} });
@@ -184,7 +196,14 @@ describe('settings facade — challenge profiles', () => {
         test('returns the sparse override map', () => {
             settings.setChallengeOverride('exposure', '123', 80);
             settings.setChallengeOverride('autoSubmit', '123', true);
-            expect(settings.getChallengeOverrides('123')).toEqual({ exposure: 80, autoSubmit: true });
+            settings.setChallengeOverride('autoSubmitTime', '123', ['08:00']);
+            settings.setChallengeOverride('autoSubmitWindowMinutes', '123', 75);
+            expect(settings.getChallengeOverrides('123')).toEqual({
+                exposure: 80,
+                autoSubmit: true,
+                autoSubmitTime: ['08:00'],
+                autoSubmitWindowMinutes: 75,
+            });
             expect(settings.getChallengeOverrides('456')).toEqual({});
         });
     });

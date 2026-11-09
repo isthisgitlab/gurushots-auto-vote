@@ -5,13 +5,158 @@
 
 import { getScheduleShift } from '../scheduleRemap';
 import { resolveScheduleTarget } from './schedule';
-import { getEntries, getSlotsRemaining, reflectNewEntry } from './challengeState';
+import { getEntries, getSlotsRemaining, reflectNewEntry, refreshChallengeState } from './challengeState';
 import { runFillAttempt } from './pipeline';
 import { finiteOr } from '../../numbers';
 import { isManualPhotosOnly } from '../manualPhotosOnly';
+import { effectiveTimezone } from '../../settings/uiDefaults';
+import { getAutoSubmitClockWindowState } from '../../scheduling/autoSubmitWindow';
+import { isCancelled } from '../../voting/cancellation';
 
 import type { Challenge } from '../../types/gurushots';
 import type { SettingsFillDeps } from '../../types/autoFill';
+
+type AutoSubmitTrigger = {
+    relativeTarget: number;
+    clockTarget: number;
+    desired: number;
+    activeClockTimes: string[];
+    nextClockStart: number | null;
+    timezone: string;
+};
+
+type FinalAuthorization = {
+    trigger: AutoSubmitTrigger;
+    authorizer: 'clock' | 'relative' | 'both';
+    schedule: Parameters<typeof getScheduleShift>[0];
+    desired: number;
+    slotsRemaining: number;
+};
+
+const resolveAutoSubmitTrigger = (
+    challenge: Challenge,
+    challengeId: string,
+    now: number,
+    deps: SettingsFillDeps,
+): AutoSubmitTrigger => {
+    const schedule = deps.settings.getEffectiveSetting('autoSubmitSchedule', challengeId);
+    const closeTime = Number(challenge.close_time);
+    const relativeTarget =
+        Array.isArray(schedule) && Number.isFinite(closeTime)
+            ? resolveScheduleTarget(schedule, closeTime - now, challenge.max_photo_submits)
+            : 0;
+    const clockTimes = deps.settings.getEffectiveSetting('autoSubmitTime', challengeId);
+    if (!Array.isArray(clockTimes) || clockTimes.length === 0) {
+        return {
+            relativeTarget,
+            clockTarget: 0,
+            desired: relativeTarget,
+            activeClockTimes: [],
+            nextClockStart: null,
+            timezone: 'UTC',
+        };
+    }
+    const timezone = effectiveTimezone(deps.settings.getSetting?.('timezone'));
+    const clockState = getAutoSubmitClockWindowState(
+        clockTimes,
+        deps.settings.getEffectiveSetting('autoSubmitWindowMinutes', challengeId),
+        timezone,
+        now,
+    );
+    const clockTarget = clockState.active ? finiteOr(challenge.max_photo_submits, 0) : 0;
+    return {
+        relativeTarget,
+        clockTarget,
+        desired: Math.max(relativeTarget, clockTarget),
+        activeClockTimes: clockState.activeTimes,
+        nextClockStart: clockState.nextStart,
+        timezone,
+    };
+};
+
+const createFinalEligibility =
+    (
+        challenge: Challenge,
+        challengeId: string,
+        token: string,
+        deps: SettingsFillDeps,
+        finalAuthorization: FinalAuthorization,
+    ) =>
+    async (picked: readonly string[]) => {
+        const refresh = await refreshChallengeState(challenge, token, deps, 'autoSubmit', true);
+        if (refresh === 'gone' || refresh === 'invalid') return { standDown: true };
+        const finalNow = deps.wallClockNow?.() ?? Math.floor(Date.now() / 1000);
+        if (
+            isCancelled() ||
+            deps.settings.getEffectiveSetting('autoSubmit', challengeId) !== true ||
+            isManualPhotosOnly(deps.settings, challengeId) ||
+            Number(challenge.close_time) <= finalNow ||
+            getSlotsRemaining(challenge) <= 0
+        ) {
+            return { standDown: true };
+        }
+        const current = resolveAutoSubmitTrigger(challenge, challengeId, finalNow, deps);
+        const entryCount = getEntries(challenge).length;
+        const enteredIds = new Set(
+            getEntries(challenge)
+                .filter((entry) => entry?.id !== undefined && entry.id !== null)
+                .map((entry) => String(entry.id)),
+        );
+        if (picked.some((imageId) => enteredIds.has(String(imageId)))) return { standDown: true };
+        const relativeDue = entryCount < current.relativeTarget;
+        const clockDue = entryCount < current.clockTarget;
+        const clockAuthorizes = clockDue && refresh === 'refreshed';
+        if (!relativeDue && !clockAuthorizes) {
+            const message = clockDue
+                ? `autoSubmit: clock window needs a fresh challenge state for ${deps.logger.challengeTag(challenge)}; standing down until a later cycle`
+                : `autoSubmit: final eligibility check found ${entryCount} entries for ${deps.logger.challengeTag(challenge)}; no active trigger requires another photo`;
+            deps.logger.withCategory('autoSubmit').info(message, null);
+            return { standDown: true };
+        }
+        finalAuthorization.trigger = current;
+        finalAuthorization.authorizer =
+            relativeDue && clockAuthorizes ? 'both' : clockAuthorizes ? 'clock' : 'relative';
+        finalAuthorization.schedule = deps.settings.getEffectiveSetting('autoSubmitSchedule', challengeId);
+        finalAuthorization.desired =
+            finalAuthorization.authorizer === 'clock' ? current.desired : current.relativeTarget;
+        finalAuthorization.slotsRemaining = getSlotsRemaining(challenge);
+        return null;
+    };
+
+const logAutoSubmitSuccess = ({
+    challenge,
+    schedule,
+    desired,
+    slotsRemaining,
+    finalAuthorization,
+    logger,
+}: {
+    challenge: Challenge;
+    schedule: Parameters<typeof getScheduleShift>[0];
+    desired: number;
+    slotsRemaining: number;
+    finalAuthorization: FinalAuthorization;
+    logger: SettingsFillDeps['logger'];
+}): void => {
+    const maxSubmits = challenge.max_photo_submits;
+    const shift = getScheduleShift(schedule, maxSubmits);
+    const shiftNote =
+        (finalAuthorization.authorizer === 'relative' || finalAuthorization.authorizer === 'both') && shift > 0
+            ? `; ${maxSubmits}-image challenge — the target of ${desired} entries follows the Image ${desired + shift} time`
+            : '';
+    const authorizationNote =
+        finalAuthorization.authorizer === 'relative'
+            ? '; the relative schedule authorized this submission'
+            : `; clock ${finalAuthorization.trigger?.activeClockTimes.join(', ')} (${finalAuthorization.trigger?.timezone})${
+                  finalAuthorization.authorizer === 'both' ? ' and the relative schedule' : ''
+              } authorized this submission`;
+    logger
+        .withCategory('autoSubmit')
+        .success(
+            `autoSubmit: submitted 1 entry for ${logger.challengeTag(challenge)} (${slotsRemaining - 1} slots remain${shiftNote}${authorizationNote})`,
+            null,
+        );
+};
 
 /**
  * Cycle-driven, schedule-based auto-fill. Submits at most one photo per
@@ -49,9 +194,10 @@ const maybeAutoFillChallenge = async (
     const schedule = settings.getEffectiveSetting('autoSubmitSchedule', String(challengeId));
     // Distinct from 'disabled' (toggle off): the toggle is on but there is no
     // schedule to act on — a deliberate opt-out state the GUI editor warns about.
-    if (!Array.isArray(schedule) || schedule.length === 0) return 'no-schedule';
+    const trigger = resolveAutoSubmitTrigger(challenge, String(challengeId), now, deps);
+    if ((!Array.isArray(schedule) || schedule.length === 0) && trigger.clockTarget === 0) return 'no-schedule';
 
-    const desired = resolveScheduleTarget(schedule, secondsRemaining, challenge.max_photo_submits);
+    const desired = trigger.desired;
     if (getEntries(challenge).length >= desired) {
         // Schedule satisfied but free slots remain and no further row will ever
         // raise the target — the schedule tops out below what the challenge
@@ -63,7 +209,13 @@ const maybeAutoFillChallenge = async (
         // runs out (secondsRemaining → 0 matches every row), so reuse
         // resolveScheduleTarget instead of re-deriving the clamp-and-max here.
         const maxTarget = resolveScheduleTarget(schedule, 0, max);
-        if (desired > 0 && desired === maxTarget && maxTarget < max) {
+        if (
+            trigger.relativeTarget >= trigger.clockTarget &&
+            desired > 0 &&
+            desired === maxTarget &&
+            maxTarget < max &&
+            (trigger.nextClockStart === null || trigger.nextClockStart >= closeTime)
+        ) {
             logger
                 .withCategory('autoSubmit')
                 .warning(
@@ -78,6 +230,17 @@ const maybeAutoFillChallenge = async (
     const shouldIncludeTags = settings.getEffectiveTagSetting('shouldIncludeTags', challenge);
     const submitWithoutTagMatch = settings.getEffectiveSetting('submitWithoutTagMatch', String(challengeId));
 
+    const finalAuthorization: FinalAuthorization = {
+        trigger,
+        authorizer: 'relative',
+        schedule,
+        desired,
+        slotsRemaining,
+    };
+    // Relative-only submission retains its established refresh policy. A
+    // clock-triggered attempt needs a final wall-clock and live-state check,
+    // because candidate verification can outlast the clock window.
+    const finalEligibility = createFinalEligibility(challenge, String(challengeId), token, deps, finalAuthorization);
     const attempt = await runFillAttempt({
         label: 'autoSubmit',
         challenge,
@@ -90,17 +253,19 @@ const maybeAutoFillChallenge = async (
         onRefreshed: () => {
             slotsRemaining = getSlotsRemaining(challenge);
             const entryCount = getEntries(challenge).length;
-            if (slotsRemaining <= 0 || entryCount >= desired) {
+            const refreshedTrigger = resolveAutoSubmitTrigger(challenge, String(challengeId), now, deps);
+            if (slotsRemaining <= 0 || entryCount >= refreshedTrigger.desired) {
                 logger
                     .withCategory('autoSubmit')
                     .info(
-                        `autoSubmit: live re-check shows ${logger.challengeTag(challenge)} already has ${entryCount} entries (target ${desired}) — an entry was added outside this run (e.g. a manual submission); standing down`,
+                        `autoSubmit: live re-check shows ${logger.challengeTag(challenge)} already has ${entryCount} entries (target ${refreshedTrigger.desired}) — an entry was added outside this run (e.g. a manual submission); standing down`,
                         null,
                     );
                 return { standDown: true };
             }
             return null;
         },
+        finalEligibility,
     });
     if (attempt.status === 'no-pick') return 'no-eligible-photos';
     // 'no-chosen': Submit Only Chosen Photos left the challenge alone (already explained in the log).
@@ -117,34 +282,14 @@ const maybeAutoFillChallenge = async (
     // Reflect the consumed slot locally so a due turbo/boost later this
     // cycle (timer order) sees the new entry and correct slot count.
     reflectNewEntry(challenge, attempt.picked[0]);
-    // When the schedule was end-aligned (challenge allows fewer images
-    // than the schedule's span), say which row's time governed this fill
-    // — the resolved mapping, not a bare shift count. Success-level on
-    // purpose: `debug` is compiled out of packaged builds (it is gated on
-    // isSourceCode() in logger.ts; `info`, `success` and `warning` are NOT),
-    // and the remapped timing is exactly what a user checking "why did it fill
-    // now?" needs to see. Attribute the TARGET's row (`desired + shift`
-    // maps back to the original image number that set the current
-    // target), not the entry number: during catch-up the entry being
-    // submitted may sit on an off row and was never scheduled itself.
-    // Safe to interpolate into the log line: the slotsRemaining > 0 guard at
-    // the top already proved max_photo_submits is a finite number (a malformed
-    // value — e.g. a string with newlines — returns 'skipped' there).
-    const maxSubmits = challenge.max_photo_submits;
-    const shift = getScheduleShift(schedule, maxSubmits);
-    const shiftNote =
-        shift > 0
-            ? `; ${maxSubmits}-image challenge — the target of ${desired} entries follows the Image ${desired + shift} time`
-            : '';
-    // `slotsRemaining` is the pre-reflect snapshot (updated by onRefreshed when
-    // the live re-check merged fresh state), so `- 1` is the post-submit count
-    // — keep this log after the reflect, not before.
-    logger
-        .withCategory('autoSubmit')
-        .success(
-            `autoSubmit: submitted 1 entry for ${logger.challengeTag(challenge)} (${slotsRemaining - 1} slots remain${shiftNote})`,
-            null,
-        );
+    logAutoSubmitSuccess({
+        challenge,
+        schedule: finalAuthorization.schedule,
+        desired: finalAuthorization.desired,
+        slotsRemaining: finalAuthorization.slotsRemaining,
+        finalAuthorization,
+        logger,
+    });
     return 'submitted';
 };
 

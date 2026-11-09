@@ -82,6 +82,7 @@ export const createControllerChain = ({
             host.getEffectiveSetting('lastMinuteCheckFrequency', 'global') as Promise<number>,
         resolveThreshold: resolvers.resolveThreshold,
         resolveScheduledFill: resolvers.resolveScheduledFill,
+        resolveAutoSubmitClock: resolvers.resolveAutoSubmitClock,
         resolveFinalWindowTopUp: resolvers.resolveFinalWindowTopUp,
         resolveBoostPrefill: resolvers.resolveBoostPrefill,
         resolveCurrencyAuto: resolvers.resolveCurrencyAuto,

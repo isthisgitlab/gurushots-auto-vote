@@ -6,6 +6,7 @@ import type { Challenge } from '../../types/gurushots';
  * Which boundary (if any) decided the next cycle's delay.
  */
 export type CadenceMode =
+    | 'auto-submit-clock'
     | 'last-minute'
     | 'approaching'
     | 'scheduled'

@@ -26,6 +26,8 @@ import {
     resolveTurboFillNewMode,
 } from './entryPick';
 import { isManualPhotosOnly } from '../manualPhotosOnly';
+import { effectiveTimezone } from '../../settings/uiDefaults';
+import { getAutoSubmitClockWindowState } from '../../scheduling/autoSubmitWindow';
 
 const tieOrder: Record<string, number> = { autoSubmit: 0, emergencySubmit: 1, boost: 2, turbo: 3 };
 
@@ -59,6 +61,83 @@ const getAutoFillThresholdSec = (challenge: Challenge, challengeId: string): num
     const entryCount = Array.isArray(entries) ? entries.length : 0;
     const schedule = settings.getEffectiveSetting('autoSubmitSchedule', challengeId);
     return getNextScheduleThresholdSec(schedule, entryCount, challenge?.max_photo_submits);
+};
+
+const hasActiveClockAutoSubmit = (challenge: Challenge, challengeId: string, now: number): boolean => {
+    if (settings.getEffectiveSetting('autoSubmit', challengeId) !== true) return false;
+    if (getSlotsRemaining(challenge) <= 0) return false;
+    const timezone = effectiveTimezone(settings.getSetting('timezone'));
+    return getAutoSubmitClockWindowState(
+        settings.getEffectiveSetting('autoSubmitTime', challengeId),
+        settings.getEffectiveSetting('autoSubmitWindowMinutes', challengeId),
+        timezone,
+        now,
+    ).active;
+};
+
+const autoSubmitDueAt = (challenge: Challenge, challengeId: string, now: number): number | null => {
+    if (settings.getEffectiveSetting('autoSubmit', challengeId) !== true || isManualPhotosOnly(settings, challengeId))
+        return null;
+    if (getSlotsRemaining(challenge) <= 0) return null;
+    const closeTime = Number(challenge.close_time);
+    if (!Number.isFinite(closeTime) || closeTime <= now) return null;
+    const clock = getAutoSubmitClockWindowState(
+        settings.getEffectiveSetting('autoSubmitTime', challengeId),
+        settings.getEffectiveSetting('autoSubmitWindowMinutes', challengeId),
+        effectiveTimezone(settings.getSetting('timezone')),
+        now,
+    );
+    const relativeThreshold = getAutoFillThresholdSec(challenge, challengeId);
+    const relativeDueAt = relativeThreshold > 0 ? closeTime - relativeThreshold : null;
+    const clockDueAt = clock.active
+        ? now
+        : clock.nextStart !== null && clock.nextStart < closeTime
+          ? clock.nextStart
+          : null;
+    return (
+        [relativeDueAt, clockDueAt].filter((dueAt): dueAt is number => dueAt !== null).sort((a, b) => a - b)[0] ?? null
+    );
+};
+
+const isVisibleDeadlineAction = ({
+    action,
+    thresholdSec,
+    fillInstant,
+    challenge,
+    challengeId,
+    boostRowHidden,
+    turboRowHidden,
+}: {
+    action: string;
+    thresholdSec: number;
+    fillInstant: number | null;
+    challenge: Challenge;
+    challengeId: string;
+    boostRowHidden: boolean;
+    turboRowHidden: boolean;
+}): boolean => {
+    if (action === 'autoSubmit') return fillInstant !== null;
+    if (!Number.isFinite(thresholdSec) || thresholdSec <= 0) return false;
+    switch (action) {
+        case 'turbo':
+            return (
+                challenge?.member?.turbo?.state === 'WON' &&
+                isKnownTurboMode(challenge?.member?.turbo) &&
+                settings.getEffectiveSetting('useTurbo', challengeId) === true &&
+                !turboRowHidden
+            );
+        case 'boost': {
+            if (settings.getEffectiveSetting('autoBoost', challengeId) !== true || boostRowHidden) return false;
+            const boost = challenge?.member?.boost;
+            const timerBoost = boost?.state === 'AVAILABLE' && typeof boost.timeout === 'number' && boost.timeout > 0;
+            return !timerBoost || getEffectiveBoostTime(challengeId) > 0;
+        }
+        case 'emergencySubmit':
+            return !evaluateEmergencyFill(challenge, challenge?.id, settings).standDown;
+        /* istanbul ignore next */
+        default:
+            return false;
+    }
 };
 
 /**
@@ -111,6 +190,7 @@ const getBoostThresholdSec = (challenge: Challenge, challengeId: string): number
  */
 const orderDeadlineActions = (
     challenge: Challenge,
+    now: number,
 ): Array<{ action: 'autoSubmit' | 'turbo' | 'emergencySubmit' | 'boost'; thresholdSec: number }> => {
     const challengeId = challenge?.id?.toString?.() || '';
     const actions: Array<{ action: 'autoSubmit' | 'turbo' | 'emergencySubmit' | 'boost'; thresholdSec: number }> = [
@@ -119,7 +199,12 @@ const orderDeadlineActions = (
         { action: 'emergencySubmit', thresholdSec: getEmergencyFillThresholdSec(challengeId) },
         { action: 'boost', thresholdSec: getBoostThresholdSec(challenge, challengeId) },
     ];
-    return actions.sort(compareDeadlineActions);
+    const autoSubmit = actions[0]!;
+    const ordered = actions.sort(compareDeadlineActions);
+    if (!hasActiveClockAutoSubmit(challenge, challengeId, now)) return ordered;
+    // A clock window asks to submit every remaining slot, so landing its first
+    // photo before Boost/Turbo lets later deadline actions use that new entry.
+    return [autoSubmit, ...ordered.filter(({ action }) => action !== 'autoSubmit')];
 };
 
 /**
@@ -286,11 +371,6 @@ const describeDeadlineActions = (
 } & Conflicts => {
     const challengeId = challenge?.id?.toString?.() || '';
     const closeTime = Number(challenge?.close_time);
-    const boost = challenge?.member?.boost || {};
-    const boostHasTimeout = typeof boost.timeout === 'number' && boost.timeout > 0;
-    const boostTimerBranch = boost.state === 'AVAILABLE' && boostHasTimeout;
-    const turboState = challenge?.member?.turbo?.state;
-
     const manualOnly = isManualPhotosOnly(settings, challengeId);
     const conflicts = describeConflicts(challenge, challengeId, now, manualOnly, entryAges);
     // The Boost-pinned submit can place the boost on its gone pin right now; while it can, the
@@ -305,11 +385,7 @@ const describeDeadlineActions = (
     // excluded on purpose: it can still submit the photo at the buzzer with autoSubmit off, and
     // the row then reappears the moment the pin hits, so the hide names only the scheduled fill.
     // The pin banner owns both explanations.
-    const fillThresholdSec =
-        settings.getEffectiveSetting('autoSubmit', challengeId) === true
-            ? getAutoFillThresholdSec(challenge, challengeId)
-            : 0;
-    const fillInstant = fillThresholdSec > 0 && Number.isFinite(closeTime) ? closeTime - fillThresholdSec : null;
+    const fillInstant = autoSubmitDueAt(challenge, challengeId, now);
     const boostPinState = resolvePin(challenge, challengeId, 'boost').state;
     const turboPinState = resolvePin(challenge, challengeId, 'turbo').state;
     const ownPinHidesRow = (kind: 'boost' | 'turbo', state: typeof boostPinState) =>
@@ -319,54 +395,25 @@ const describeDeadlineActions = (
     const boostRowHidden = (boostBlocked && boostReleaseAt === null) || ownPinHidesRow('boost', boostPinState);
     const turboRowHidden = (turboBlocked && turboReleaseAt === null) || ownPinHidesRow('turbo', turboPinState);
 
-    const isVisible = (action: string, thresholdSec: number): boolean => {
-        if (!Number.isFinite(thresholdSec) || thresholdSec <= 0) return false;
-        switch (action) {
-            case 'turbo':
-                // A turbo that can't be placed must not appear as an upcoming action either.
-                return (
-                    turboState === 'WON' &&
-                    isKnownTurboMode(challenge?.member?.turbo) &&
-                    settings.getEffectiveSetting('useTurbo', challengeId) === true &&
-                    !turboRowHidden
-                );
-            case 'boost':
-                if (settings.getEffectiveSetting('autoBoost', challengeId) !== true) return false;
-                // A boost that can't be placed (every entry turboed or pinned for
-                // Turbo, the pin never giving way) must not appear as an upcoming
-                // action — the conflict warning owns it.
-                if (boostRowHidden) return false;
-                // Timer branch stays positive at boostTime=0 (off); key-unlocked
-                // branch already resolves to 0 when off and is dropped above.
-                if (boostTimerBranch && !(getEffectiveBoostTime(challengeId) > 0)) return false;
-                return true;
-            case 'autoSubmit':
-                return settings.getEffectiveSetting('autoSubmit', challengeId) === true;
-            case 'emergencySubmit':
-                // thresholdSec > 0 already means enabled (0 = off); the runner
-                // owns the state-only stand-downs, so ask it rather than keeping
-                // a second copy here that could drift from what actually runs.
-                // The RAW id goes in, not the '' -normalised challengeId above:
-                // the shared check treats undefined/null as "no id" exactly as
-                // the runner does, and must not learn this view's normalisation.
-                return !evaluateEmergencyFill(challenge, challenge?.id, settings).standDown;
-            // Exhaustive-switch safety net: orderDeadlineActions emits only the four
-            // cases above today, but an action added there without a matching case
-            // here must stay hidden rather than be treated as visible.
-            /* istanbul ignore next */
-            default:
-                return false;
-        }
-    };
-
     // Manual Only: nothing runs by itself, so the action list is empty and the flag is false with
     // it (canSubmitBoostPin already answers null under Manual Only).
     if (manualOnly) return { actions: [], boostPinSubmits: false, ...conflicts };
 
-    const actions = orderDeadlineActions(challenge)
-        .filter(({ action, thresholdSec }) => isVisible(action, thresholdSec))
+    const actions = orderDeadlineActions(challenge, now)
+        .filter(({ action, thresholdSec }) =>
+            isVisibleDeadlineAction({
+                action,
+                thresholdSec,
+                fillInstant,
+                challenge,
+                challengeId,
+                boostRowHidden,
+                turboRowHidden,
+            }),
+        )
         .map(({ action, thresholdSec }) => {
-            const dueAt = Number.isFinite(closeTime) ? closeTime - thresholdSec : null;
+            const dueAt =
+                action === 'autoSubmit' ? fillInstant : Number.isFinite(closeTime) ? closeTime - thresholdSec : null;
             const ownReleaseAt = action === 'boost' ? boostReleaseAt : action === 'turbo' ? turboReleaseAt : null;
             // Only the feature's own pin moves its row: a gone Boost pin moves the boost row, a
             // gone Turbo pin the turbo row, and the fill rows (autoSubmit, emergencySubmit) keep
@@ -398,8 +445,13 @@ const describeDeadlineActions = (
                       dueAt: Math.max(dueAt, releaseAt),
                   };
         })
-        // A moved row can now sit out of order; order it by its adjusted threshold.
-        .sort(compareDeadlineActions);
+        // A clock-only row has threshold 0 but can be due now, so timeline order
+        // follows its actual instant; the established threshold/tie order resolves
+        // equal instants without changing the transport shape.
+        .sort((a, b) => {
+            if (a.dueAt === null || b.dueAt === null) return compareDeadlineActions(a, b);
+            return a.dueAt !== b.dueAt ? a.dueAt - b.dueAt : compareDeadlineActions(a, b);
+        });
 
     // The banner flag follows the Boost row: the pinned submit is only promised when it is
     // eligible AND the boost row made the action list — Auto Boost off, Boost Time 0 (or a

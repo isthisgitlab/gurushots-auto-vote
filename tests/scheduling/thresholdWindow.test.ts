@@ -214,6 +214,242 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
             expect(result.delayMs).toBe(MIN_GAP);
         });
 
+        describe('Auto-Submit clock cadence', () => {
+            const activeClock = () => ({
+                enabled: true,
+                manualPhotosOnly: false,
+                times: ['12:00'],
+                windowMinutes: 5,
+            });
+
+            it('uses the fast cadence during an active clock window and caps it at window end', async () => {
+                const now = Math.floor(Date.UTC(2026, 0, 15, 12, 4, 30) / 1000);
+                const challenges = [
+                    {
+                        id: 1,
+                        title: 'Clocked',
+                        type: 'regular',
+                        close_time: now + 3600,
+                        max_photo_submits: 2,
+                        member: { ranking: { entries: [] } },
+                    },
+                ];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts(),
+                    resolveAutoSubmitClock: activeClock,
+                    timezone: 'UTC',
+                });
+                expect(result.mode).toBe('auto-submit-clock');
+                expect(result.delayMs).toBe(30_000);
+                expect(result.nextAutoSubmitClock).toMatchObject({ challengeId: 1, active: true });
+            });
+
+            it('caps last-minute cadence to an active clock window end', async () => {
+                const now = Math.floor(Date.UTC(2026, 0, 15, 12, 4, 30) / 1000);
+                const challenges = [
+                    {
+                        id: 1,
+                        title: 'Clocked deadline',
+                        type: 'regular',
+                        close_time: now + 90,
+                        max_photo_submits: 2,
+                        member: { ranking: { entries: [] } },
+                    },
+                ];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts(),
+                    resolveAutoSubmitClock: activeClock,
+                    timezone: 'UTC',
+                });
+                expect(result.mode).toBe('auto-submit-clock');
+                expect(result.delayMs).toBe(30_000);
+            });
+
+            it('floors a clock-window end that is less than the minimum gap away', async () => {
+                const now = Math.floor(Date.UTC(2026, 0, 15, 12, 4, 59) / 1000);
+                const challenges = [
+                    {
+                        id: 1,
+                        title: 'Clocked',
+                        type: 'regular',
+                        close_time: now + 3600,
+                        max_photo_submits: 2,
+                        member: { ranking: { entries: [] } },
+                    },
+                ];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts(),
+                    resolveAutoSubmitClock: activeClock,
+                    timezone: 'UTC',
+                });
+                expect(result.mode).toBe('auto-submit-clock');
+                expect(result.delayMs).toBe(MIN_GAP);
+            });
+
+            it('keeps an earlier held-boost boundary ahead of an active clock window', async () => {
+                const now = Math.floor(Date.UTC(2026, 0, 15, 12, 4, 30) / 1000);
+                const challenges = [
+                    {
+                        id: 1,
+                        title: 'Clocked hold',
+                        type: 'regular',
+                        close_time: now + 3600,
+                        boostHoldUntil: now + 10,
+                        max_photo_submits: 2,
+                        member: { ranking: { entries: [] } },
+                    },
+                ];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts(),
+                    resolveAutoSubmitClock: activeClock,
+                    timezone: 'UTC',
+                });
+                expect(result.mode).toBe('boost-hold');
+                expect(result.delayMs).toBe(10_000);
+            });
+
+            it('caps active clock cadence to a scheduled-fill opening before the fast tick', async () => {
+                const now = Math.floor(Date.UTC(2026, 0, 15, 12, 4, 30) / 1000);
+                const result = await computeNextCycleDelayMs(
+                    invalid([
+                        {
+                            id: 1,
+                            title: 'Clocked scheduled',
+                            type: 'regular',
+                            close_time: now + 3600,
+                            max_photo_submits: 2,
+                            member: { ranking: { entries: [] } },
+                        },
+                    ]),
+                    now,
+                    {
+                        ...opts(),
+                        resolveAutoSubmitClock: activeClock,
+                        resolveScheduledFill: () => ({ enabled: true, timesOfDay: [], beforeEndSecs: [3575] }),
+                        timezone: 'UTC',
+                    },
+                );
+                expect(result).toMatchObject({ mode: 'scheduled', delayMs: 25_000 });
+                expect(result.nextScheduled).toMatchObject({ challengeId: 1 });
+            });
+
+            it('keeps every earlier rule wake in an active clock window', async () => {
+                const now = Math.floor(Date.UTC(2026, 0, 15, 12, 4, 30) / 1000);
+                const result = await computeNextCycleDelayMs(
+                    invalid([
+                        {
+                            id: 1,
+                            title: 'Clocked rule wakes',
+                            type: 'regular',
+                            close_time: now + 200,
+                            max_photo_submits: 2,
+                            fill_enable: true,
+                            member: { boost: { state: 'AVAILABLE_KEY' }, ranking: { entries: [] } },
+                        },
+                    ]),
+                    now,
+                    {
+                        ...opts({ resolveThreshold: () => 0 }),
+                        resolveAutoSubmitClock: activeClock,
+                        resolveFinalWindowTopUp: () => ({ enabled: true, leadSec: 60, durationSec: 120 }),
+                        resolveBoostPrefill: () => ({
+                            enabled: true,
+                            leadSec: 90,
+                            boostTimeSec: 0,
+                            keyUnlockedBoostTimeSec: 60,
+                        }),
+                        resolveCurrencyAuto: () => ({ key: null, swap: null, fill: { beforeEndSec: 120 } }),
+                        timezone: 'UTC',
+                    },
+                );
+
+                expect(result).toMatchObject({ mode: 'pre-final-window', delayMs: 20_000 });
+                expect(result.nextFinalWindowTopUp).toMatchObject({ startTime: now + 20 });
+                expect(result.nextBoostPrefill).toMatchObject({ startTime: now + 50 });
+                expect(result.nextCurrencyRule).toMatchObject({ startTime: now + 80, action: 'fill' });
+            });
+
+            it('caps normal cadence to the upcoming clock window start', async () => {
+                const now = Math.floor(Date.UTC(2026, 0, 15, 11, 59, 0) / 1000);
+                const challenges = [
+                    {
+                        id: 1,
+                        title: 'Clocked',
+                        type: 'regular',
+                        close_time: now + 3600,
+                        max_photo_submits: 2,
+                        member: { ranking: { entries: [] } },
+                    },
+                ];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts(),
+                    resolveAutoSubmitClock: activeClock,
+                    timezone: 'UTC',
+                });
+                expect(result.mode).toBe('auto-submit-clock');
+                expect(result.delayMs).toBe(60_000);
+                expect(result.nextAutoSubmitClock).toMatchObject({ challengeId: 1, active: false });
+            });
+
+            it('caps the fast cadence to another opening while a clock window is already active', async () => {
+                const now = Math.floor(Date.UTC(2026, 0, 15, 12, 4, 30) / 1000);
+                const result = await computeNextCycleDelayMs(
+                    invalid([
+                        {
+                            id: 1,
+                            title: 'Two clock windows',
+                            type: 'regular',
+                            close_time: now + 3600,
+                            max_photo_submits: 2,
+                            member: { ranking: { entries: [] } },
+                        },
+                    ]),
+                    now,
+                    {
+                        ...opts(),
+                        resolveAutoSubmitClock: () => ({
+                            enabled: true,
+                            manualPhotosOnly: false,
+                            times: ['12:00', '12:05'],
+                            windowMinutes: 60,
+                        }),
+                        timezone: 'UTC',
+                    },
+                );
+                expect(result).toMatchObject({ mode: 'auto-submit-clock', delayMs: 30_000 });
+                expect(result.nextAutoSubmitClock).toMatchObject({ active: false, anyActive: true });
+            });
+
+            it('caps last-minute cadence to an inactive future clock start', async () => {
+                const now = Math.floor(Date.UTC(2026, 0, 15, 11, 59, 30) / 1000);
+                const result = await computeNextCycleDelayMs(
+                    invalid([
+                        {
+                            id: 1,
+                            title: 'Deadline before clock start',
+                            type: 'regular',
+                            close_time: now + 120,
+                            max_photo_submits: 2,
+                            member: { ranking: { entries: [] } },
+                        },
+                    ]),
+                    now,
+                    {
+                        ...opts(),
+                        resolveAutoSubmitClock: () => ({
+                            enabled: true,
+                            manualPhotosOnly: false,
+                            times: ['12:00'],
+                            windowMinutes: 60,
+                        }),
+                        timezone: 'UTC',
+                    },
+                );
+                expect(result).toMatchObject({ mode: 'auto-submit-clock', delayMs: 30_000 });
+                expect(result.nextAutoSubmitClock).toMatchObject({ active: false, anyActive: false });
+            });
+        });
+
         describe('scheduled-fill cap', () => {
             // The scheduled-fill resolver mirrors the threshold resolver's dual
             // shape: sync on Node, Promise on the WebView. Reuse the outer

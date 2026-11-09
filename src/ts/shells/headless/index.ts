@@ -32,6 +32,7 @@ import { createMarkedReadCap } from '../../core/scheduling/cadenceChain/decision
 import {
     resolveThreshold,
     resolveScheduledFill,
+    resolveAutoSubmitClock,
     resolveFinalWindowTopUp,
     resolveBoostPrefill,
     resolveCurrencyAuto,
@@ -95,6 +96,7 @@ const computeNextDelayMs = async (token: string, prefetched: Challenge[] | null 
             lastMinuteCheckMinutes,
             minGapMs: MIN_CYCLE_GAP_MS,
             resolveScheduledFill,
+            resolveAutoSubmitClock,
             timezone: effectiveTimezone(userSettings.timezone),
             resolveFinalWindowTopUp,
             resolveBoostPrefill,

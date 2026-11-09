@@ -31,6 +31,9 @@ const CLOSE = 1_000_000;
 const mockSettings = (overrides = {}) => {
     const defaults = {
         autoSubmitSchedule: [{ count: 2, seconds: 900 }],
+        autoSubmitTime: [],
+        autoSubmitWindowMinutes: 60,
+        manualPhotosOnly: false,
         turboTime: 7200,
         emergencySubmit: 300,
         boostTime: 3600,
@@ -44,6 +47,7 @@ const mockSettings = (overrides = {}) => {
     const merged: Record<string, unknown> = { ...defaults, ...overrides };
     settings.getEntryPins.mockReturnValue({ boost: null, turbo: null });
     settings.getEffectiveSetting = invalid(jest.fn((key: string) => merged[key]));
+    settings.getSetting = invalid(jest.fn((key: string) => (key === 'timezone' ? 'UTC' : merged[key])));
     // Tag lists go through the title-aware reader; the title-rule union is not
     // under test here, so resolve it off the same map.
     settings.getEffectiveTagSetting = invalid(jest.fn((key: string) => merged[key]));
@@ -77,6 +81,20 @@ describe('describeDeadlineActions — row gating', () => {
     test('turbo row shown when a turbo is WON and useTurbo is on', () => {
         mockSettings({ useTurbo: true });
         expect(actionsOf(build({ turbo: { state: 'WON', mode: 'classic' } }))).toContain('turbo');
+    });
+
+    test('keeps threshold order for visible rows without finite due times', () => {
+        mockSettings({ autoSubmit: false, emergencySubmit: 0 });
+        const challenge = build({
+            boost: { state: 'AVAILABLE_KEY' },
+            turbo: { state: 'WON', mode: 'classic' },
+        });
+        challenge.close_time = Number.NaN;
+
+        expect(VotingLogic.describeDeadlineActions(challenge, NOW, null).actions).toEqual([
+            { action: 'turbo', thresholdSec: 7200, dueAt: null },
+            { action: 'boost', thresholdSec: 900, dueAt: null },
+        ]);
     });
 
     test('turbo row hidden when a turbo is WON but useTurbo is off', () => {
@@ -429,6 +447,74 @@ describe('describeDeadlineActions — row gating', () => {
         const { actions } = VotingLogic.describeDeadlineActions(build(), NOW, null);
         const autoSubmit = actions.find((a) => a.action === 'autoSubmit');
         expect(autoSubmit!.dueAt).toBe(CLOSE - autoSubmit!.thresholdSec);
+    });
+});
+
+describe('describeDeadlineActions — Auto-Submit clock rows', () => {
+    const clockNow = Date.UTC(2026, 0, 15, 11, 30) / 1000;
+    const clockChallenge = (closeTime: number) => {
+        const challenge = build({ maxSubmits: 2 });
+        challenge.close_time = closeTime;
+        return challenge;
+    };
+    const autoSubmitRow = (challenge: Challenge, now = clockNow) =>
+        VotingLogic.describeDeadlineActions(challenge, now, null).actions.find(({ action }) => action === 'autoSubmit');
+
+    beforeEach(() => jest.clearAllMocks());
+
+    test('shows an upcoming clock-only submission without fabricating a relative threshold', () => {
+        mockSettings({ autoSubmitSchedule: [], autoSubmitTime: ['12:00'] });
+        expect(autoSubmitRow(clockChallenge(clockNow + 7200))).toEqual({
+            action: 'autoSubmit',
+            thresholdSec: 0,
+            dueAt: Date.UTC(2026, 0, 15, 12) / 1000,
+        });
+    });
+
+    test('shows an active clock-only submission as due now', () => {
+        mockSettings({ autoSubmitSchedule: [], autoSubmitTime: ['11:00'] });
+        expect(autoSubmitRow(clockChallenge(clockNow + 7200))).toEqual({
+            action: 'autoSubmit',
+            thresholdSec: 0,
+            dueAt: clockNow,
+        });
+    });
+
+    test('puts an active clock-only submission before future Boost and Turbo timeline rows', () => {
+        mockSettings({ autoSubmitSchedule: [], autoSubmitTime: ['11:00'] });
+        const challenge = build({
+            boost: { state: 'AVAILABLE_KEY' },
+            turbo: { state: 'WON', mode: 'classic' },
+        });
+        challenge.close_time = clockNow + 10_000;
+        const actions = VotingLogic.describeDeadlineActions(challenge, clockNow, null).actions;
+        expect(actions.map(({ action }) => action)).toEqual(['autoSubmit', 'turbo', 'boost']);
+        expect(actions[0]).toEqual({ action: 'autoSubmit', thresholdSec: 0, dueAt: clockNow });
+    });
+
+    test('moves an expired clock window to its next actual daily occurrence', () => {
+        mockSettings({ autoSubmitSchedule: [], autoSubmitTime: ['10:00'] });
+        expect(autoSubmitRow(clockChallenge(clockNow + 30 * 3600))).toMatchObject({
+            dueAt: Date.UTC(2026, 0, 16, 10) / 1000,
+        });
+    });
+
+    test.each([
+        ['the relative due time', clockNow + 40 * 60, clockNow + 40 * 60 - 900],
+        ['the clock due time', clockNow + 4 * 3600, Date.UTC(2026, 0, 15, 12) / 1000],
+    ])('with both forms, selects %s that occurs first', (_name, closeTime, dueAt) => {
+        mockSettings({ autoSubmitTime: ['12:00'] });
+        expect(autoSubmitRow(clockChallenge(closeTime))).toMatchObject({ dueAt });
+    });
+
+    test('omits a clock row when the challenge closes before the next occurrence', () => {
+        mockSettings({ autoSubmitSchedule: [], autoSubmitTime: ['12:00'] });
+        expect(autoSubmitRow(clockChallenge(clockNow + 20 * 60))).toBeUndefined();
+    });
+
+    test('omits a row when the challenge close time is invalid', () => {
+        mockSettings({ autoSubmitSchedule: [], autoSubmitTime: ['12:00'] });
+        expect(autoSubmitRow(clockChallenge(Number.NaN))).toBeUndefined();
     });
 });
 

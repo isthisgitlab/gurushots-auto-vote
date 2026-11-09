@@ -213,6 +213,7 @@ const makeDeps = ({
         submitToChallenge,
         rankVisually,
         getCurrentMemberProfile: member === null ? undefined : jest.fn(async () => ({ id: member, userName: 'u' })),
+        wallClockNow: () => NOW,
         ...extra,
     };
     return deps as typeof deps & FillDeps;

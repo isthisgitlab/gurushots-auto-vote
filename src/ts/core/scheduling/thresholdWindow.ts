@@ -28,9 +28,11 @@ export { calculateNextThresholdEntry, isAnyChallengeInThresholdWindow } from './
 export { computeNextCycleDelayMs } from './thresholdWindow/cadenceDecision';
 export { soonestFinalWindowTopUpStart, soonestBoostPrefillStart } from './thresholdWindow/leadWindows';
 export { soonestCurrencyRuleStart, soonestScenarioWake, soonestBoostHoldEnd } from './thresholdWindow/ruleWakes';
+export { soonestAutoSubmitClockBoundary } from './autoSubmitClock';
 
 export type { CadenceMode } from './thresholdWindow/shared';
 export type { CadenceDecision } from './thresholdWindow/cadenceDecision';
 export type { ResolveThreshold } from './thresholdWindow/thresholds';
 export type { ResolveFinalWindowTopUp, ResolveBoostPrefill } from './thresholdWindow/leadWindows';
 export type { ResolveCurrencyAuto, ResolveScenarioWake } from './thresholdWindow/ruleWakes';
+export type { ResolveAutoSubmitClock } from './autoSubmitClock';

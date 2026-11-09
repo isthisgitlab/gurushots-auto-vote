@@ -444,6 +444,70 @@ describe('createCadenceChain', () => {
         );
     });
 
+    test('active Auto-Submit clock windows use the clock cadence log', async () => {
+        const now = Date.UTC(2026, 0, 15, 12, 4, 30);
+        jest.setSystemTime(now);
+        const deps = makeDeps({
+            resolveAutoSubmitClock: jest.fn(() => ({
+                enabled: true,
+                manualPhotosOnly: false,
+                times: ['12:00'],
+                windowMinutes: 5,
+            })),
+        });
+        const chain = createCadenceChain(invalid(deps));
+
+        await chain.scheduleNext(
+            invalid([
+                {
+                    id: 9,
+                    title: 'Clocked',
+                    type: 'regular',
+                    close_time: now / 1000 + 7200,
+                    max_photo_submits: 2,
+                    member: { ranking: { entries: [] } },
+                },
+            ]),
+        );
+
+        expect(deps.log.cadence).toHaveBeenCalledWith(
+            'auto-submit-clock',
+            expect.stringContaining('Auto-Submit clock window is active for "Clocked"'),
+        );
+    });
+
+    test('upcoming Auto-Submit clock windows use the approaching clock cadence log', async () => {
+        const now = Date.UTC(2026, 0, 15, 11, 59);
+        jest.setSystemTime(now);
+        const deps = makeDeps({
+            resolveAutoSubmitClock: jest.fn(() => ({
+                enabled: true,
+                manualPhotosOnly: false,
+                times: ['12:00'],
+                windowMinutes: 5,
+            })),
+        });
+        const chain = createCadenceChain(invalid(deps));
+
+        await chain.scheduleNext(
+            invalid([
+                {
+                    id: 10,
+                    title: 'Future clock',
+                    type: 'regular',
+                    close_time: now / 1000 + 7200,
+                    max_photo_submits: 2,
+                    member: { ranking: { entries: [] } },
+                },
+            ]),
+        );
+
+        expect(deps.log.cadence).toHaveBeenCalledWith(
+            'auto-submit-clock',
+            expect.stringContaining('Approaching Auto-Submit clock window for "Future clock"'),
+        );
+    });
+
     test('decision error → decisionError log + fallback to the plain random cadence', async () => {
         const deps = makeDeps();
         const boom = new Error('decision boom');

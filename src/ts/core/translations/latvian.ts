@@ -377,11 +377,18 @@ export const app: LatvianApp = {
     autoSubmitSchedule: 'Automātiskās iesniegšanas grafiks',
     autoSubmitScheduleDesc:
         '0h 0min izslēdz attiecīgo foto. Katra rinda: kad līdz beigām atlicis šis laiks, jābūt vismaz tik foto, piemēram, „Foto 2 ≤ 48h”. Atpaliekot, lietotne grafiku panāk pa vienam foto ciklā.',
+    autoSubmitTime: 'Automātiskās iesniegšanas pulksteņa laiki',
+    autoSubmitTimeDesc:
+        'Katrs laiks katru dienu atver logu lietotnes laika joslā. Logā automātiskā iesniegšana mērķē uz visām atlikušajām foto vietām un katrā ciklā iesniedz vienu foto. Pilnībā nokavēts laika logs vēlāk netiek kompensēts. Pulksteņa laiki papildina relatīvo grafiku. Lai foto iesniegtu tikai pulksteņa logā, notīriet automātiskās iesniegšanas grafiku un iestatiet ārkārtas iesniegšanu uz 0. Citas iespējotās foto iesniegšanas funkcijas, piemēram, Boost vai Turbo jauna foto opcijas un scenāriji, paliek neatkarīgas.',
+    autoSubmitWindowMinutes: 'Automātiskās iesniegšanas pulksteņa logs (minūtes)',
+    autoSubmitWindowMinutesDesc:
+        'Cik ilgi katrs pulksteņa laika logs paliek atvērts. Logs ietver sākumu, bet neietver beigas.',
     autoSubmitScheduleShiftHint_other:
         'Šis izaicinājums atļauj {count} foto — mazāk, nekā aptver grafiks, tāpēc laiki nobīdās uz beigām: pēdējais foto izmanto Foto {1} laiku.',
     autoSubmitScheduleImage: 'Foto',
     autoSubmitScheduleOff: 'laiks nav uzstādīts — foto var iesniegt, panākot kādu vēlāku foto',
-    autoSubmitScheduleEmpty: 'Visi foto ir izslēgti — automātiskā iesniegšana neko neiesniegs.',
+    autoSubmitScheduleEmpty:
+        'Visi foto ir izslēgti — relatīvais automātiskās iesniegšanas grafiks neko neiesniegs. Pulksteņa logi joprojām var iesniegt foto.',
     autoSubmitScheduleDominated: 'nekad nenostrādās (vēlākam foto jau ir tāds pats vai garāks laiks)',
     autoSubmitScheduleOutOfRange: 'laiks nedrīkst pārsniegt 30 dienas',
     settingsSaveError: 'Dažus uzstādījumus neizdevās saglabāt — pārbaudi izceltās vērtības un mēģini vēlreiz.',

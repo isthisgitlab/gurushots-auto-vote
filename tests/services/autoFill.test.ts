@@ -92,6 +92,13 @@ const makeChallenge = ({
     });
 
 const NOW = 1_000_000;
+
+beforeEach(() => {
+    jest.spyOn(Date, 'now').mockReturnValue(NOW * 1000);
+});
+
+afterEach(() => jest.restoreAllMocks());
+
 const allowedPhoto = (id: string, labels: string[] = ['Pink'], uploadDate = 9000) => ({
     id,
     labels,
@@ -286,6 +293,9 @@ const makeSettings = ({
     emergencySubmit = 300, // mirrors the schema default (5 minutes in seconds)
     ignoreTitleWords = [],
     manualPhotosOnly = false,
+    autoSubmitTime = [],
+    autoSubmitWindowMinutes = 60,
+    timezone = 'UTC',
 }: {
     autoSubmit?: boolean;
     schedule?: FillSchedule;
@@ -295,6 +305,9 @@ const makeSettings = ({
     emergencySubmit?: number;
     ignoreTitleWords?: string[];
     manualPhotosOnly?: boolean;
+    autoSubmitTime?: string[];
+    autoSubmitWindowMinutes?: number;
+    timezone?: string;
 } = {}): jest.MockedObject<FillSettings> =>
     invalid({
         getEffectiveSetting: jest.fn((key: string) => {
@@ -305,6 +318,8 @@ const makeSettings = ({
             if (key === 'submitWithoutTagMatch') return submitWithoutTagMatch;
             if (key === 'emergencySubmit') return emergencySubmit;
             if (key === 'manualPhotosOnly') return manualPhotosOnly;
+            if (key === 'autoSubmitTime') return autoSubmitTime;
+            if (key === 'autoSubmitWindowMinutes') return autoSubmitWindowMinutes;
             return null;
         }),
         // Title-aware tag resolver. The default stub carries no title rules, so it
@@ -316,6 +331,7 @@ const makeSettings = ({
             return null;
         }),
         getEffectiveIgnoreTitleWords: jest.fn(() => (ignoreTitleWords.length > 0 ? ignoreTitleWords : null)),
+        getSetting: jest.fn((key: string) => (key === 'timezone' ? timezone : null)),
     });
 
 describe('ignore-words setting reaches the real fill path', () => {
@@ -397,6 +413,498 @@ describe('tag-resolution deps reach the real fill path', () => {
 });
 
 describe('maybeAutoFillChallenge — staggered auto-fill', () => {
+    test('clock-only schedule submits one photo with a fresh live re-check', async () => {
+        jest.spyOn(Date, 'now').mockReturnValue(NOW * 1000);
+        const clockTime = new Date(NOW * 1000).toISOString().slice(11, 16);
+        const challenge = makeChallenge({ maxSubmits: 3, entries: [{ id: 'e1' }], closeIn: 3600 });
+        const logger = makeLogger();
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoSubmit: true, schedule: [], autoSubmitTime: [clockTime] }),
+            logger,
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [challenge] }),
+            submitToChallenge,
+        });
+
+        expect(result).toBe('submitted');
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p1'], 'tok');
+        const success = logger.withCategory.mock.results.flatMap(({ value }) =>
+            (value as jest.MockedObject<CategoryLogger>).success.mock.calls.map(([message]) => message),
+        );
+        expect(success).toEqual([expect.stringContaining(`clock ${clockTime} (UTC) authorized`)]);
+    });
+
+    test('a clock-only attempt that expires during verification cancels its POST', async () => {
+        const startMs = NOW * 1000;
+        const clock = jest.spyOn(Date, 'now').mockReturnValue(startMs);
+        const clockTime = new Date(startMs).toISOString().slice(11, 16);
+        const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 3600 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({
+                autoSubmit: true,
+                schedule: [],
+                autoSubmitTime: [clockTime],
+                autoSubmitWindowMinutes: 5,
+            }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [challenge] }),
+            rankVisually: jest.fn(async (_challenge, ids) => {
+                clock.mockReturnValue(startMs + 5 * 60_000);
+                return ids;
+            }),
+            submitToChallenge,
+        });
+
+        expect(result).toBe('skipped');
+        expect(submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('a clock window still open after verification cannot submit after the challenge closes', async () => {
+        const startMs = NOW * 1000;
+        const clock = jest.spyOn(Date, 'now').mockReturnValue(startMs);
+        const clockTime = new Date(startMs).toISOString().slice(11, 16);
+        const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 60 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({
+                autoSubmit: true,
+                schedule: [],
+                autoSubmitTime: [clockTime],
+                autoSubmitWindowMinutes: 60,
+            }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [challenge] }),
+            rankVisually: jest.fn(async (_challenge, ids) => {
+                clock.mockReturnValue((NOW + 61) * 1000);
+                return ids;
+            }),
+            wallClockNow: () => Math.floor(Date.now() / 1000),
+            submitToChallenge,
+        });
+        expect(result).toBe('skipped');
+        expect(submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ['Auto-Submit is turned off', 'autoSubmit'],
+        ['Manual Only is turned on', 'manualPhotosOnly'],
+        ['the relative schedule is cleared', 'autoSubmitSchedule'],
+    ] as const)('rechecks relative-only authorization when %s during verification', async (_label, changedKey) => {
+        let changed = false;
+        const settings = makeSettings({ autoSubmit: true, schedule: [{ count: 2, seconds: 600 }] });
+        const resolveSetting = settings.getEffectiveSetting.getMockImplementation()!;
+        settings.getEffectiveSetting.mockImplementation((key, challengeId) => {
+            if (changed && key === changedKey) {
+                if (changedKey === 'autoSubmit') return false;
+                if (changedKey === 'manualPhotosOnly') return true;
+                return [];
+            }
+            return resolveSetting(key, challengeId);
+        });
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }], closeIn: 9 * 60 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings,
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            rankVisually: jest.fn(async (_challenge, ids) => {
+                changed = true;
+                return ids;
+            }),
+            submitToChallenge,
+        });
+        expect(result).toBe('skipped');
+        expect(submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('a final live capacity update can close every relative-only slot before POST', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }], closeIn: 9 * 60 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoSubmit: true, schedule: [{ count: 3, seconds: 600 }] }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [
+                    {
+                        id: 'c1',
+                        max_photo_submits: 2,
+                        close_time: NOW + 9 * 60,
+                        member: {
+                            boost: { state: 'LOCKED', timeout: 0 },
+                            ranking: { entries: [{ id: 'e1' }, { id: 'manual1' }], exposure: { exposure_factor: 100 } },
+                        },
+                    },
+                ],
+            }),
+            submitToChallenge,
+        });
+        expect(result).toBe('skipped');
+        expect(submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test.each([0, 1.5])(
+        'an invalid final live capacity of %p does not authorize a clock-only submission from stale state',
+        async (liveCapacity) => {
+            jest.spyOn(Date, 'now').mockReturnValue(NOW * 1000);
+            const clockTime = new Date(NOW * 1000).toISOString().slice(11, 16);
+            const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }], closeIn: 3600 });
+            const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+            const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+                settings: makeSettings({ autoSubmit: true, schedule: [], autoSubmitTime: [clockTime] }),
+                logger: makeLogger(),
+                getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+                getActiveChallenges: jest.fn().mockResolvedValue({
+                    challenges: [
+                        {
+                            id: 'c1',
+                            max_photo_submits: liveCapacity,
+                            close_time: NOW + 3600,
+                            member: {
+                                boost: { state: 'LOCKED', timeout: 0 },
+                                ranking: { entries: [{ id: 'e1' }], exposure: { exposure_factor: 100 } },
+                            },
+                        },
+                    ],
+                }),
+                submitToChallenge,
+            });
+            expect(result).toBe('skipped');
+            expect(submitToChallenge).not.toHaveBeenCalled();
+        },
+    );
+
+    test('an invalid final live close time does not authorize a clock-only submission from stale state', async () => {
+        const clockTime = new Date(NOW * 1000).toISOString().slice(11, 16);
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }], closeIn: 3600 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoSubmit: true, schedule: [], autoSubmitTime: [clockTime] }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [
+                    {
+                        id: 'c1',
+                        max_photo_submits: 4,
+                        close_time: Number.NaN,
+                        member: {
+                            boost: { state: 'LOCKED', timeout: 0 },
+                            ranking: { entries: [{ id: 'e1' }], exposure: { exposure_factor: 100 } },
+                        },
+                    },
+                ],
+            }),
+            submitToChallenge,
+        });
+
+        expect(result).toBe('skipped');
+        expect(submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('a final live close-time update cancels a clock-only submission', async () => {
+        const clockTime = new Date(NOW * 1000).toISOString().slice(11, 16);
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }], closeIn: 3600 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoSubmit: true, schedule: [], autoSubmitTime: [clockTime] }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [
+                    {
+                        id: 'c1',
+                        max_photo_submits: 4,
+                        close_time: NOW,
+                        member: {
+                            boost: { state: 'LOCKED', timeout: 0 },
+                            ranking: { entries: [{ id: 'e1' }], exposure: { exposure_factor: 100 } },
+                        },
+                    },
+                ],
+            }),
+            submitToChallenge,
+        });
+
+        expect(result).toBe('skipped');
+        expect(submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ['the selected photo is already entered', [{ id: 'e1' }, { id: 'p1' }], 'skipped'],
+        ['a different manual photo is entered', [{ id: 'e1' }, { id: 'manual1' }], 'submitted'],
+    ] as const)('uses final live entry ids when %s', async (_label, entries, expected) => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }], closeIn: 9 * 60 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoSubmit: true, schedule: [{ count: 3, seconds: 600 }] }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [
+                    {
+                        id: 'c1',
+                        max_photo_submits: 4,
+                        close_time: NOW + 9 * 60,
+                        member: {
+                            boost: { state: 'LOCKED', timeout: 0 },
+                            ranking: { entries, exposure: { exposure_factor: 100 } },
+                        },
+                    },
+                ],
+            }),
+            submitToChallenge,
+        });
+        expect(result).toBe(expected);
+        if (expected === 'skipped') expect(submitToChallenge).not.toHaveBeenCalled();
+        else expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p1'], 'tok');
+    });
+
+    test.each([
+        ['Auto-Submit is turned off', 'autoSubmit'],
+        ['Manual Only is turned on', 'manualPhotosOnly'],
+    ] as const)('rechecks final live settings when %s during verification', async (_label, changedKey) => {
+        const startMs = NOW * 1000;
+        jest.spyOn(Date, 'now').mockReturnValue(startMs);
+        const clockTime = new Date(startMs).toISOString().slice(11, 16);
+        let changed = false;
+        const settings = makeSettings({ autoSubmit: true, schedule: [], autoSubmitTime: [clockTime] });
+        const resolveSetting = settings.getEffectiveSetting.getMockImplementation()!;
+        settings.getEffectiveSetting.mockImplementation((key, challengeId) => {
+            if (changed && key === changedKey) return changedKey === 'autoSubmit' ? false : true;
+            return resolveSetting(key, challengeId);
+        });
+        const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 3600 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings,
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [challenge] }),
+            rankVisually: jest.fn(async (_challenge, ids) => {
+                changed = true;
+                return ids;
+            }),
+            submitToChallenge,
+        });
+        expect(result).toBe('skipped');
+        expect(submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('a manual entry that consumes the final slot during verification cancels a clock submission', async () => {
+        jest.spyOn(Date, 'now').mockReturnValue(NOW * 1000);
+        const clockTime = new Date(NOW * 1000).toISOString().slice(11, 16);
+        const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 3600 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoSubmit: true, schedule: [], autoSubmitTime: [clockTime] }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [
+                    {
+                        id: 'c1',
+                        max_photo_submits: 4,
+                        close_time: NOW + 900,
+                        member: {
+                            boost: { state: 'LOCKED', timeout: 0 },
+                            ranking: { entries: [{ id: 'e1' }, { id: 'manual1' }], exposure: { exposure_factor: 100 } },
+                        },
+                    },
+                ],
+            }),
+            submitToChallenge,
+        });
+        expect(result).toBe('skipped');
+        expect(submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('logs the final relative authorizer after a larger clock target expires and live entries change', async () => {
+        const startMs = NOW * 1000;
+        const clock = jest.spyOn(Date, 'now').mockReturnValue(startMs);
+        const clockTime = new Date(startMs).toISOString().slice(11, 16);
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }], closeIn: 900 });
+        const logger = makeLogger();
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({
+                autoSubmit: true,
+                schedule: [{ count: 3, seconds: 600 }],
+                autoSubmitTime: [clockTime],
+                autoSubmitWindowMinutes: 5,
+            }),
+            logger,
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [
+                    {
+                        id: 'c1',
+                        max_photo_submits: 4,
+                        close_time: NOW + 900,
+                        member: {
+                            boost: { state: 'LOCKED', timeout: 0 },
+                            ranking: { entries: [{ id: 'e1' }, { id: 'manual1' }], exposure: { exposure_factor: 100 } },
+                        },
+                    },
+                ],
+            }),
+            rankVisually: jest.fn(async (_challenge, ids) => {
+                clock.mockReturnValue(startMs + 5 * 60_000);
+                return ids;
+            }),
+            wallClockNow: () => Math.floor(Date.now() / 1000),
+            submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
+        });
+        expect(result).toBe('submitted');
+        const success = logger.withCategory.mock.results.flatMap(({ value }) =>
+            (value as jest.MockedObject<CategoryLogger>).success.mock.calls.map(([message]) => message),
+        );
+        expect(success).toEqual([expect.stringContaining('the relative schedule authorized this submission')]);
+        expect(success).toEqual([expect.stringContaining('1 slots remain')]);
+        expect(success).toEqual([expect.not.stringContaining(`clock ${clockTime}`)]);
+    });
+
+    test('a failed refresh can still submit for an independently due relative target', async () => {
+        jest.spyOn(Date, 'now').mockReturnValue(NOW * 1000);
+        const clockTime = new Date(NOW * 1000).toISOString().slice(11, 16);
+        const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 300 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({
+                autoSubmit: true,
+                schedule: [{ count: 2, seconds: 600 }],
+                autoSubmitTime: [clockTime],
+            }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            getActiveChallenges: jest.fn().mockRejectedValue(new Error('offline')),
+            submitToChallenge,
+        });
+
+        expect(result).toBe('submitted');
+        expect(submitToChallenge).toHaveBeenCalledTimes(1);
+    });
+
+    test('a clock-only attempt stands down when the live refresh fails', async () => {
+        jest.spyOn(Date, 'now').mockReturnValue(NOW * 1000);
+        const clockTime = new Date(NOW * 1000).toISOString().slice(11, 16);
+        const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 3600 });
+        const logger = makeLogger();
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoSubmit: true, schedule: [], autoSubmitTime: [clockTime] }),
+            logger,
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            getActiveChallenges: jest.fn().mockRejectedValue(new Error('offline')),
+            submitToChallenge,
+        });
+
+        expect(result).toBe('skipped');
+        expect(submitToChallenge).not.toHaveBeenCalled();
+        const info = logger.withCategory.mock.results.flatMap(({ value }) =>
+            (value as jest.MockedObject<CategoryLogger>).info.mock.calls.map(([message]) => message),
+        );
+        expect(info).toContainEqual(expect.stringContaining('clock window needs a fresh challenge state'));
+    });
+
+    test.each(['gone', 'invalid'] as const)(
+        'a clock-only attempt stands down when the post-verification refresh is %s',
+        async (state) => {
+            jest.spyOn(Date, 'now').mockReturnValue(NOW * 1000);
+            const clockTime = new Date(NOW * 1000).toISOString().slice(11, 16);
+            const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 3600 });
+            const getActiveChallenges = jest
+                .fn()
+                .mockResolvedValueOnce({ challenges: [challenge] })
+                .mockResolvedValueOnce(
+                    state === 'gone'
+                        ? { challenges: [makeChallenge({ id: 'other' })] }
+                        : { challenges: [], pruneUnsafe: true },
+                );
+            const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+
+            const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+                settings: makeSettings({ autoSubmit: true, schedule: [], autoSubmitTime: [clockTime] }),
+                logger: makeLogger(),
+                getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+                getActiveChallenges,
+                submitToChallenge,
+            });
+
+            expect(result).toBe('skipped');
+            expect(getActiveChallenges).toHaveBeenCalledTimes(2);
+            expect(submitToChallenge).not.toHaveBeenCalled();
+        },
+    );
+
+    test('a smaller challenge records both clock and remapped relative authorization', async () => {
+        jest.spyOn(Date, 'now').mockReturnValue(NOW * 1000);
+        const clockTime = new Date(NOW * 1000).toISOString().slice(11, 16);
+        const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 300 });
+        const logger = makeLogger();
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({
+                autoSubmit: true,
+                schedule: [{ count: 4, seconds: 600 }],
+                autoSubmitTime: [clockTime],
+            }),
+            logger,
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [challenge] }),
+            submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
+        });
+
+        expect(result).toBe('submitted');
+        const success = logger.withCategory.mock.results.flatMap(({ value }) =>
+            (value as jest.MockedObject<CategoryLogger>).success.mock.calls.map(([message]) => message),
+        );
+        expect(success).toEqual([
+            expect.stringContaining('2-image challenge — the target of 2 entries follows the Image 4 time'),
+        ]);
+        expect(success).toEqual([
+            expect.stringContaining(`clock ${clockTime} (UTC) and the relative schedule authorized`),
+        ]);
+    });
+
+    test('both authorization attributes the remap note to the due relative row, not a future row', async () => {
+        jest.spyOn(Date, 'now').mockReturnValue(NOW * 1000);
+        const clockTime = new Date(NOW * 1000).toISOString().slice(11, 16);
+        const challenge = makeChallenge({ maxSubmits: 3, entries: [{ id: 'e1' }], closeIn: 500 });
+        const logger = makeLogger();
+
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({
+                autoSubmit: true,
+                // End-alignment maps Image 3 to target 2. Image 4 stays in
+                // the future, while the active clock window still targets 3.
+                schedule: [
+                    { count: 3, seconds: 600 },
+                    { count: 4, seconds: 300 },
+                ],
+                autoSubmitTime: [clockTime],
+            }),
+            logger,
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [challenge] }),
+            submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
+        });
+
+        expect(result).toBe('submitted');
+        const success = logger.withCategory.mock.results.flatMap(({ value }) =>
+            (value as jest.MockedObject<CategoryLogger>).success.mock.calls.map(([message]) => message),
+        );
+        expect(success).toEqual([
+            expect.stringContaining('3-image challenge — the target of 2 entries follows the Image 3 time'),
+        ]);
+        expect(success).toEqual([expect.not.stringContaining('Image 4 time')]);
+        expect(success).toEqual([
+            expect.stringContaining(`clock ${clockTime} (UTC) and the relative schedule authorized`),
+        ]);
+    });
+
     test('returns disabled when autoSubmit setting is false', async () => {
         const challenge = makeChallenge({ entries: [{ id: 'e1' }] });
         const getEligiblePhotos = jest.fn();
@@ -856,6 +1364,10 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
             expect.stringContaining('3-image challenge — the target of 3 entries follows the Image 4 time'),
             null,
         );
+        expect(success).toHaveBeenCalledWith(
+            expect.stringContaining('the relative schedule authorized this submission'),
+            null,
+        );
     });
 
     test('unshifted fill logs no schedule-shift note', async () => {
@@ -920,6 +1432,30 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         expect(submitToChallenge).not.toHaveBeenCalled();
         expect(warning).toHaveBeenCalledWith(expect.stringContaining('schedule tops out at 4 entries'), null);
         expect(warning).toHaveBeenCalledWith(expect.stringContaining('allows 6'), null);
+    });
+
+    test('does not warn that emergency fill owns remaining slots when a future clock window can submit them', async () => {
+        const warning = jest.fn();
+        const logger = invalid<FillLogger>({
+            withCategory: () => ({ info: jest.fn(), warning, success: jest.fn(), error: jest.fn(), debug: jest.fn() }),
+            challengeTag: (c: Challenge) => `[Challenge ${c.id}]`,
+        });
+        const challenge = makeChallenge({
+            maxSubmits: 6,
+            entries: [{ id: 'e1' }, { id: 'e2' }, { id: 'e3' }, { id: 'e4' }],
+            closeIn: 5 * 60,
+        });
+        const nextClockTime = new Date((NOW + 60) * 1000).toISOString().slice(11, 16);
+
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoSubmit: true, autoSubmitTime: [nextClockTime] }),
+            logger,
+            getEligiblePhotos: jest.fn(),
+            submitToChallenge: jest.fn(),
+        });
+
+        expect(result).toBe('skipped');
+        expect(warning).not.toHaveBeenCalled();
     });
 
     test('2-image challenge: no fill at the Image-2 time and no coverage-gap warning', async () => {
@@ -2985,7 +3521,22 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
         const { logger, lines } = makeCapturingLogger();
         const deps = dueDeps({
             logger,
-            getActiveChallenges: jest.fn().mockResolvedValue(freshList('c1', [{ id: 'e1' }, { id: 'manual1' }])),
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [
+                    {
+                        id: 'c1',
+                        max_photo_submits: 4,
+                        close_time: NOW + 9 * 60,
+                        member: {
+                            boost: { state: 'LOCKED', timeout: 0 },
+                            ranking: {
+                                entries: [{ id: 'e1' }, { id: 'manual1' }],
+                                exposure: { exposure_factor: 100 },
+                            },
+                        },
+                    },
+                ],
+            }),
         });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, deps);
         expect(result).toBe('skipped');
@@ -3102,7 +3653,22 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
         const deps = dueDeps({
             settings: makeSettings({ autoSubmit: true, schedule: [{ count: 4, seconds: 600 }] }),
             logger,
-            getActiveChallenges: jest.fn().mockResolvedValue(freshList('c1', [{ id: 'e1' }, { id: 'manual1' }])),
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [
+                    {
+                        id: 'c1',
+                        max_photo_submits: 4,
+                        close_time: NOW + 9 * 60,
+                        member: {
+                            boost: { state: 'LOCKED', timeout: 0 },
+                            ranking: {
+                                entries: [{ id: 'e1' }, { id: 'manual1' }],
+                                exposure: { exposure_factor: 100 },
+                            },
+                        },
+                    },
+                ],
+            }),
         });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, deps);
         expect(result).toBe('submitted');

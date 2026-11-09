@@ -294,7 +294,7 @@ describe('deadline-action helpers with sparse challenges', () => {
 
     test('orderDeadlineActions tolerates an id-less challenge', () => {
         mockSettings({ emergencySubmit: 300, turboTime: 600 });
-        const order = VotingLogic.orderDeadlineActions(invalid({ close_time: NOW + 100 }));
+        const order = VotingLogic.orderDeadlineActions(invalid({ close_time: NOW + 100 }), NOW);
         expect(order.map((a) => a.action)).toEqual(['turbo', 'emergencySubmit', 'autoSubmit', 'boost']);
         expect(settings.getEffectiveSetting).toHaveBeenCalledWith('turboTime', '');
     });

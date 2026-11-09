@@ -12,8 +12,14 @@ import { invalid } from '../helpers/invalid';
 import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
 import type * as nodeResolversModule from '../../src/ts/core/scheduling/nodeResolvers';
-const { resolveThreshold, resolveScheduledFill, resolveFinalWindowTopUp, resolveBoostPrefill, resolveCurrencyAuto } =
-    require('../../src/ts/core/scheduling/nodeResolvers') as typeof nodeResolversModule;
+const {
+    resolveThreshold,
+    resolveScheduledFill,
+    resolveAutoSubmitClock,
+    resolveFinalWindowTopUp,
+    resolveBoostPrefill,
+    resolveCurrencyAuto,
+} = require('../../src/ts/core/scheduling/nodeResolvers') as typeof nodeResolversModule;
 
 const withSettings = (values: Record<string, unknown>) => {
     settings.getEffectiveSetting.mockImplementation((key) => invalid(values[key]));
@@ -31,6 +37,21 @@ test('resolveScheduledFill passes the lists through raw', () => {
         enabled: true,
         timesOfDay: ['08:00'],
         beforeEndSecs: [14400, 36000],
+    });
+});
+
+test('resolveAutoSubmitClock passes clock settings through and respects Manual Only', () => {
+    withSettings({
+        autoSubmit: true,
+        manualPhotosOnly: true,
+        autoSubmitTime: ['08:00', '20:00'],
+        autoSubmitWindowMinutes: 60,
+    });
+    expect(resolveAutoSubmitClock('c1')).toEqual({
+        enabled: true,
+        manualPhotosOnly: true,
+        times: ['08:00', '20:00'],
+        windowMinutes: 60,
     });
 });
 

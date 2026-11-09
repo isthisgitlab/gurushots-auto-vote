@@ -45,6 +45,26 @@ describe('autovote resolvers', () => {
         await expect(resolveScheduledFill('c1')).resolves.toMatchObject({ enabled: false });
     });
 
+    it('resolveAutoSubmitClock passes the per-challenge clock settings through raw', async () => {
+        const { resolveAutoSubmitClock } = createResolvers(host);
+        withSettings({
+            autoSubmit: true,
+            manualPhotosOnly: false,
+            autoSubmitTime: ['08:00', '20:00'],
+            autoSubmitWindowMinutes: 60,
+        });
+        await expect(resolveAutoSubmitClock('c1')).resolves.toEqual({
+            enabled: true,
+            manualPhotosOnly: false,
+            times: ['08:00', '20:00'],
+            windowMinutes: 60,
+        });
+        expect(host.getEffectiveSetting).toHaveBeenCalledWith('autoSubmit', 'c1');
+        expect(host.getEffectiveSetting).toHaveBeenCalledWith('manualPhotosOnly', 'c1');
+        expect(host.getEffectiveSetting).toHaveBeenCalledWith('autoSubmitTime', 'c1');
+        expect(host.getEffectiveSetting).toHaveBeenCalledWith('autoSubmitWindowMinutes', 'c1');
+    });
+
     it.each([
         [true, true, true],
         [true, false, false],
@@ -172,6 +192,7 @@ describe('autovote resolvers', () => {
                 timezone: opts?.timezone ?? null,
                 resolveThreshold: resolvers.resolveThreshold,
                 resolveScheduledFill: resolvers.resolveScheduledFill,
+                resolveAutoSubmitClock: resolvers.resolveAutoSubmitClock,
                 resolveFinalWindowTopUp: resolvers.resolveFinalWindowTopUp,
                 resolveBoostPrefill: resolvers.resolveBoostPrefill,
                 resolveCurrencyAuto: resolvers.resolveCurrencyAuto,

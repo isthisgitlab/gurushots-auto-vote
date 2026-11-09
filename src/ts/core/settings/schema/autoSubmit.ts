@@ -3,6 +3,7 @@
 import { z } from 'zod';
 import { CHOSEN_PHOTO_ID_RE, MAX_CHOSEN_PHOTOS, MAX_TAG_LENGTH } from '../limits';
 import { MAX_SCHEDULE_SECONDS, nonNegNumber, zBool } from './validators';
+import { timeOfDayList, windowMinutes } from './scheduledFill';
 import type { SettingsSchemaEntry } from './entry';
 
 // Auto-fill schedule: rows of { count, seconds } meaning "have ≥ count entries
@@ -93,6 +94,32 @@ export const autoSubmitSettings = {
         group: 'autoSubmit',
         label: 'app.autoSubmitSchedule',
         description: 'app.autoSubmitScheduleDesc',
+    },
+    // Daily wall-clock windows complement the relative schedule. An empty list
+    // is the off sentinel, so existing schedules and remote-v1 values retain
+    // their exact shape.
+    autoSubmitTime: {
+        type: 'timeOfDayList',
+        default: [],
+        perChallenge: true,
+        validation: timeOfDayList,
+        validationOrder: 1,
+        group: 'autoSubmit',
+        label: 'app.autoSubmitTime',
+        description: 'app.autoSubmitTimeDesc',
+    },
+    autoSubmitWindowMinutes: {
+        type: 'number',
+        default: 60,
+        perChallenge: true,
+        validation: windowMinutes,
+        min: 5,
+        max: 720,
+        unit: 'app.unitMinutes',
+        validationOrder: 1,
+        group: 'autoSubmit',
+        label: 'app.autoSubmitWindowMinutes',
+        description: 'app.autoSubmitWindowMinutesDesc',
     },
     submitWithoutTagMatch: {
         type: 'boolean',

@@ -17,6 +17,7 @@ import type {
     ResolveBoostPrefill,
     ResolveCurrencyAuto,
     ResolveScenarioWake,
+    ResolveAutoSubmitClock,
 } from './thresholdWindow';
 import type { ResolveScheduledFill } from './scheduledFill';
 import type { RuleTiming } from '../voting/currencyAuto';
@@ -36,6 +37,13 @@ const resolveScheduledFill = ((challengeId: string) => ({
     timesOfDay: settings.getEffectiveSetting('scheduledFillTime', challengeId),
     beforeEndSecs: settings.getEffectiveSetting('scheduledFillBeforeEnd', challengeId),
 })) satisfies ResolveScheduledFill;
+
+const resolveAutoSubmitClock = ((challengeId: string) => ({
+    enabled: settings.getEffectiveSetting('autoSubmit', challengeId) === true,
+    manualPhotosOnly: isManualPhotosOnly(settings, challengeId),
+    times: settings.getEffectiveSetting('autoSubmitTime', challengeId),
+    windowMinutes: settings.getEffectiveSetting('autoSubmitWindowMinutes', challengeId),
+})) satisfies ResolveAutoSubmitClock;
 
 // Per-challenge pre-final-window top-up config for the cadence cap (./thresholdWindow/leadWindows.ts).
 // Enabled only when BOTH the final-window feature and this opt-in are on — matching the
@@ -101,6 +109,7 @@ export {
     resolveScenarioWake,
     resolveThreshold,
     resolveScheduledFill,
+    resolveAutoSubmitClock,
     resolveFinalWindowTopUp,
     resolveBoostPrefill,
     resolveCurrencyAuto,

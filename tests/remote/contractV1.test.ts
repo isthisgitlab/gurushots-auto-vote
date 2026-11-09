@@ -413,6 +413,13 @@ const linkVersion: number = LINK_VERSION;
 const whileLinkVersion1 = linkVersion === 1 ? describe : describe.skip;
 
 whileLinkVersion1('the link version 1 contract', () => {
+    test('Auto-Submit clock settings remain outside the frozen V1 setting registry', () => {
+        expect(SETTINGS_SCHEMA).toHaveProperty('autoSubmitTime');
+        expect(SETTINGS_SCHEMA).toHaveProperty('autoSubmitWindowMinutes');
+        expect(FROZEN_SETTING_KEYS).not.toContain('autoSubmitTime');
+        expect(FROZEN_SETTING_KEYS).not.toContain('autoSubmitWindowMinutes');
+    });
+
     test('every frozen channel is still in the manifest', () => {
         expect(channelsMissingFromManifest(FROZEN_CHANNELS, allInvokeChannels())).toEqual([]);
     });

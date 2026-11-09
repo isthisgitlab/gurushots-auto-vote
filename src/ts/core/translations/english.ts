@@ -361,13 +361,20 @@ export const app = {
     autoSubmitSchedule: 'Auto-Submit Schedule',
     autoSubmitScheduleDesc:
         '0h 0m turns an image off. Each row: have at least this many entries once this much time remains — "Image 2 ≤ 48h" submits photo 2 at 48 hours left. Behind schedule it catches up, one photo per cycle.',
+    autoSubmitTime: 'Auto-Submit Clock Times',
+    autoSubmitTimeDesc:
+        'Each time opens a daily window in the app timezone. During a window, Auto-Submit targets all remaining photo slots and submits one photo per cycle. A completely missed window does not catch up later. Clock times add to the relative schedule. For submissions only during clock windows, clear the Auto-Submit Schedule and set Emergency Submit to 0. Other enabled features that submit photos, such as Boost or Turbo new-photo options and scenarios, remain independent.',
+    autoSubmitWindowMinutes: 'Auto-Submit Clock Window (minutes)',
+    autoSubmitWindowMinutesDesc:
+        'How long each clock-time window stays open. Windows include their start and exclude their end.',
     autoSubmitScheduleShiftHint_one:
         'This challenge allows {count} photo, fewer than the schedule covers — times shift toward the end: the final photo uses the Image {1} time.',
     autoSubmitScheduleShiftHint_other:
         'This challenge allows {count} photos, fewer than the schedule covers — times shift toward the end: the final photo uses the Image {1} time.',
     autoSubmitScheduleImage: 'Image',
     autoSubmitScheduleOff: 'no time set — may still be submitted while catching up to a later image',
-    autoSubmitScheduleEmpty: 'All images are off — auto-submit will never submit anything.',
+    autoSubmitScheduleEmpty:
+        'All images are off — the relative Auto-Submit Schedule will not submit anything. Clock windows can still submit photos.',
     autoSubmitScheduleDominated: 'never applies (a later image already has an equal or longer time)',
     autoSubmitScheduleOutOfRange: 'time must be at most 30 days',
     settingsSaveError: 'Some settings could not be saved — check the highlighted values and try again.',

@@ -104,6 +104,15 @@ describe('transport deps', () => {
         expect(getActiveChallenges).toHaveBeenCalledTimes(1);
         expect(mockChainOpts!.resolveLastMinuteCheckMinutes()).toBe(5);
         expect(settings.getEffectiveSetting).toHaveBeenCalledWith('lastMinuteCheckFrequency', 'global');
+        expect(mockChainOpts!.resolveAutoSubmitClock!('42')).toEqual({
+            enabled: false,
+            manualPhotosOnly: false,
+            times: 5,
+            windowMinutes: 5,
+        });
+        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('autoSubmit', '42');
+        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('autoSubmitTime', '42');
+        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('autoSubmitWindowMinutes', '42');
         await expect(mockChainOpts!.runCycle()).resolves.toEqual(['x']);
         expect(runVotingCycle).toHaveBeenCalledWith(1);
     });

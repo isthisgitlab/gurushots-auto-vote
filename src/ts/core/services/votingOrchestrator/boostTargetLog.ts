@@ -2,6 +2,8 @@ import * as logger from '../../logger';
 import * as settings from '../../settings';
 import * as votingLogic from '../VotingLogic';
 import { boostDeadline } from '../../voting/boostWindow';
+import { effectiveTimezone } from '../../settings/uiDefaults';
+import { getAutoSubmitClockWindowState } from '../../scheduling/autoSubmitWindow';
 
 import type { Challenge } from '../../types/gurushots';
 import type { ActionContext } from './context';
@@ -37,12 +39,27 @@ const PIN_WAIT_WAKE_GAP_SEC = 60;
 export const armPinWaitWake = ({ challenge, now }: ActionContext) => {
     const cid = challenge.id.toString();
     if (settings.getEffectiveSetting('autoSubmit', cid) !== true) return;
-    const fillThresholdSec = votingLogic.getAutoFillThresholdSec(challenge, cid);
     const closeTime = Number(challenge.close_time);
-    // A malformed close_time would pass NaN through both `<=` guards below and set a NaN hold;
-    // every sibling fill-instant computation guards the same way.
-    if (fillThresholdSec <= 0 || !Number.isFinite(closeTime)) return;
-    const fillBoundary = closeTime - fillThresholdSec;
+    if (!Number.isFinite(closeTime)) return;
+    const relativeThresholdSec = votingLogic.getAutoFillThresholdSec(challenge, cid);
+    const relativeBoundary = relativeThresholdSec > 0 ? closeTime - relativeThresholdSec : null;
+    const clockTimes = settings.getEffectiveSetting('autoSubmitTime', cid);
+    const clockBoundary =
+        Array.isArray(clockTimes) && clockTimes.length > 0
+            ? (() => {
+                  const clock = getAutoSubmitClockWindowState(
+                      clockTimes,
+                      settings.getEffectiveSetting('autoSubmitWindowMinutes', cid),
+                      effectiveTimezone(settings.getSetting('timezone')),
+                      now,
+                  );
+                  return clock.active ? Math.min(clock.activeUntil!, closeTime) : clock.nextStart;
+              })()
+            : null;
+    const fillBoundary = [relativeBoundary, clockBoundary]
+        .filter((boundary): boundary is number => boundary !== null && boundary < closeTime)
+        .sort((a, b) => a - b)[0];
+    if (fillBoundary === undefined) return;
     if (fillBoundary <= now) return;
     const wakeAt = Math.min(fillBoundary + PIN_WAIT_WAKE_GAP_SEC, boostDeadline(challenge) - PIN_WAIT_WAKE_GAP_SEC);
     if (wakeAt <= now) return;

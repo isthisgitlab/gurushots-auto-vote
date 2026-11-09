@@ -34,7 +34,7 @@ export const beforeEndList = z
     .array(beforeEndEntry)
     .max(MAX_SCHEDULED_FILL_ENTRIES, `at most ${MAX_SCHEDULED_FILL_ENTRIES} offsets`)
     .refine((v) => new Set(v).size === v.length, 'duplicate offsets');
-const windowMinutes = z.number().int().min(5).max(720);
+export const windowMinutes = z.number().int().min(5).max(720);
 
 export const scheduledFillSettings = {
     useScheduledFill: {

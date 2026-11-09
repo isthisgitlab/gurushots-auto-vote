@@ -90,6 +90,16 @@ const isAdoptableMember = (member: ChallengeMember | undefined): member is Adopt
     Boolean(member.boost) &&
     typeof member.boost === 'object';
 
+const hasUsableFinalEligibilityBounds = (challenge: Challenge): boolean =>
+    Number.isInteger(challenge.max_photo_submits) &&
+    Number(challenge.max_photo_submits) > 0 &&
+    Number.isFinite(challenge.close_time);
+
+const adoptFinalEligibilityBounds = (challenge: Challenge, fresh: Challenge): void => {
+    challenge.max_photo_submits = fresh.max_photo_submits;
+    challenge.close_time = fresh.close_time;
+};
+
 /**
  * Merge, don't blindly replace: entries reflected locally earlier this cycle
  * (reflectNewEntry after a fill-new submit) may not have propagated into
@@ -193,6 +203,7 @@ const refreshChallengeState = async (
     token: string,
     { getActiveChallenges, logger }: Pick<RankDeps, 'getActiveChallenges'> & { logger: FillLogger },
     label: string,
+    finalEligibilityGate: boolean = false,
 ): Promise<'refreshed' | 'gone' | 'invalid' | 'unavailable'> => {
     if (typeof getActiveChallenges !== 'function') return 'unavailable';
     const log = logger.withCategory('autoSubmit');
@@ -201,7 +212,9 @@ const refreshChallengeState = async (
     const staleWarning = (cause: unknown) =>
         log.warning(
             `${label}: could not refresh live challenge state for ${logger.challengeTag(challenge)}${cause ? ` (${String(cause).replace(/[\r\n]+/g, ' ')})` : ''}; ` +
-                'proceeding with pass-start data — a manually submitted entry may not be seen and could be duplicated',
+                (finalEligibilityGate
+                    ? 'the final eligibility gate will decide whether pass-start data can submit'
+                    : 'proceeding with pass-start data — a manually submitted entry may not be seen and could be duplicated'),
             null,
         );
     let response;
@@ -231,10 +244,15 @@ const refreshChallengeState = async (
         staleWarning('malformed challenge payload');
         return 'unavailable';
     }
+    if (finalEligibilityGate && !hasUsableFinalEligibilityBounds(fresh)) {
+        staleWarning('malformed live capacity or close time');
+        return 'invalid';
+    }
     // prevEntries is sliced because in mock mode `fresh` can be the identical
     // cached object, making prev and fresh the same array.
     const prevEntries = getEntries(challenge).slice();
     challenge.member = member;
+    if (finalEligibilityGate) adoptFinalEligibilityBounds(challenge, fresh);
     mergeLocalEntries(prevEntries, member.ranking.entries);
     carryLocalEntryFlags(prevEntries, member.ranking.entries);
     return 'refreshed';

@@ -23,6 +23,7 @@ import { createCadenceChain, DECISION_ERROR_MESSAGE, formatOversleptMessage } fr
 import {
     resolveThreshold,
     resolveScheduledFill,
+    resolveAutoSubmitClock,
     resolveFinalWindowTopUp,
     resolveBoostPrefill,
     resolveCurrencyAuto,
@@ -67,6 +68,7 @@ const createScheduler = ({
         resolveLastMinuteCheckMinutes: () => settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global'),
         resolveThreshold,
         resolveScheduledFill,
+        resolveAutoSubmitClock,
         resolveFinalWindowTopUp,
         resolveBoostPrefill,
         resolveCurrencyAuto,

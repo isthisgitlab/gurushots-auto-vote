@@ -1,12 +1,14 @@
 /** The per-cycle cadence decision (`computeNextCycleDelayMs`) over every wake source. Must stay free of settings I/O: the WebView bundle imports it. */
 
 import { soonestScheduledStart } from '../scheduledFill';
+import { soonestAutoSubmitClockBoundary } from '../autoSubmitClock';
 import { soonestFinalWindowTopUpStart, soonestBoostPrefillStart } from './leadWindows';
 import { soonestCurrencyRuleStart, soonestScenarioWake, soonestBoostHoldEnd } from './ruleWakes';
 import { resolveEligibleThresholds, anyInWindow, soonestThresholdEntry } from './thresholds';
 
 import type { Challenge } from '../../types/gurushots';
 import type { ResolveScheduledFill, ScheduledStart } from '../scheduledFill';
+import type { AutoSubmitClockBoundary, ResolveAutoSubmitClock } from '../autoSubmitClock';
 import type {
     CadenceMode,
     LeadWindowStart,
@@ -27,6 +29,7 @@ export interface CadenceDecision {
     mode: CadenceMode;
     nextEntry: ThresholdEntry | null;
     nextScheduled: ScheduledStart | null;
+    nextAutoSubmitClock: AutoSubmitClockBoundary | null;
     nextFinalWindowTopUp: LeadWindowStart | null;
     nextBoostPrefill: LeadWindowStart | null;
     nextCurrencyRule: CurrencyRuleStart | null;
@@ -56,6 +59,94 @@ const capCadenceToBoundary = (
         cadence.mode = mode;
     }
 };
+
+const fastCadenceDecision = ({
+    mode,
+    nextAutoSubmitClock,
+    nextEntry,
+    nextScheduled,
+    nextFinalWindowTopUp,
+    nextBoostPrefill,
+    nextCurrencyRule,
+    nextScenarioWake,
+    nextBoostHold,
+    now,
+    minGapMs,
+    lastMinuteCheckMinutes,
+}: {
+    mode: CadenceMode;
+    nextAutoSubmitClock: AutoSubmitClockBoundary | null;
+    nextEntry: ThresholdEntry | null;
+    nextScheduled: ScheduledStart | null;
+    nextFinalWindowTopUp: LeadWindowStart | null;
+    nextBoostPrefill: LeadWindowStart | null;
+    nextCurrencyRule: CurrencyRuleStart | null;
+    nextScenarioWake: ScenarioWakeStart | null;
+    nextBoostHold: BoostHoldEnd | null;
+    now: number;
+    minGapMs: number;
+    lastMinuteCheckMinutes: number;
+}): CadenceDecision => {
+    const fast: { delayMs: number; mode: CadenceMode } = {
+        delayMs: Math.max(minGapMs, lastMinuteCheckMinutes * 60_000),
+        mode,
+    };
+    if (nextEntry) capCadenceToBoundary(fast, nextEntry.entryTime, now, minGapMs, 'approaching');
+    if (nextScheduled) capCadenceToBoundary(fast, nextScheduled.startTime, now, minGapMs, 'scheduled');
+    if (nextAutoSubmitClock)
+        capCadenceToBoundary(fast, nextAutoSubmitClock.boundaryTime, now, minGapMs, 'auto-submit-clock');
+    if (nextFinalWindowTopUp)
+        capCadenceToBoundary(fast, nextFinalWindowTopUp.startTime, now, minGapMs, 'pre-final-window');
+    if (nextBoostPrefill) capCadenceToBoundary(fast, nextBoostPrefill.startTime, now, minGapMs, 'pre-boost');
+    if (nextBoostHold) capCadenceToBoundary(fast, nextBoostHold.startTime, now, minGapMs, 'boost-hold');
+    if (nextCurrencyRule) capCadenceToBoundary(fast, nextCurrencyRule.startTime, now, minGapMs, 'currency-rule');
+    if (nextScenarioWake) capCadenceToBoundary(fast, nextScenarioWake.startTime, now, minGapMs, 'scenario');
+    return {
+        delayMs: fast.delayMs,
+        mode: fast.mode,
+        nextEntry,
+        nextScheduled,
+        nextAutoSubmitClock,
+        nextFinalWindowTopUp,
+        nextBoostPrefill,
+        nextCurrencyRule,
+        nextScenarioWake,
+        nextBoostHold,
+    };
+};
+
+const resolveSecondaryBoundaries = async ({
+    challenges,
+    eligible,
+    now,
+    timezone,
+    resolveScheduledFill,
+    resolveFinalWindowTopUp,
+    resolveBoostPrefill,
+    resolveCurrencyAuto,
+    resolveScenarioWake,
+}: {
+    challenges: Challenge[];
+    eligible: Challenge[];
+    now: number;
+    timezone: string | null;
+    resolveScheduledFill: ResolveScheduledFill | null;
+    resolveFinalWindowTopUp: ResolveFinalWindowTopUp | null;
+    resolveBoostPrefill: ResolveBoostPrefill | null;
+    resolveCurrencyAuto: ResolveCurrencyAuto | null;
+    resolveScenarioWake: ResolveScenarioWake | null;
+}) => ({
+    nextScheduled:
+        resolveScheduledFill && timezone
+            ? await soonestScheduledStart(eligible, now, resolveScheduledFill, timezone)
+            : null,
+    nextFinalWindowTopUp: resolveFinalWindowTopUp
+        ? await soonestFinalWindowTopUpStart(eligible, now, resolveFinalWindowTopUp)
+        : null,
+    nextBoostPrefill: resolveBoostPrefill ? await soonestBoostPrefillStart(eligible, now, resolveBoostPrefill) : null,
+    nextCurrencyRule: resolveCurrencyAuto ? await soonestCurrencyRuleStart(challenges, now, resolveCurrencyAuto) : null,
+    nextScenarioWake: resolveScenarioWake ? await soonestScenarioWake(challenges, now, resolveScenarioWake) : null,
+});
 
 /**
  * Single source of cadence truth for every host. Decide how long to wait before
@@ -108,6 +199,7 @@ export async function computeNextCycleDelayMs(
         lastMinuteCheckMinutes,
         minGapMs,
         resolveScheduledFill = null,
+        resolveAutoSubmitClock = null,
         timezone = null,
         resolveFinalWindowTopUp = null,
         resolveBoostPrefill = null,
@@ -119,6 +211,7 @@ export async function computeNextCycleDelayMs(
         lastMinuteCheckMinutes: number;
         minGapMs: number;
         resolveScheduledFill?: ResolveScheduledFill | null;
+        resolveAutoSubmitClock?: ResolveAutoSubmitClock | null;
         timezone?: string | null;
         resolveFinalWindowTopUp?: ResolveFinalWindowTopUp | null;
         resolveBoostPrefill?: ResolveBoostPrefill | null;
@@ -130,24 +223,50 @@ export async function computeNextCycleDelayMs(
     // A held boost caps even the last-minute cadence: it is typically released
     // inside the final stretch, where one fast tick late still wastes boost time.
     const nextBoostHold = soonestBoostHoldEnd(challenges, now);
+    const nextAutoSubmitClock =
+        resolveAutoSubmitClock && timezone
+            ? await soonestAutoSubmitClockBoundary(challenges, now, resolveAutoSubmitClock, timezone)
+            : null;
+
+    const nextEntry = soonestThresholdEntry(eligible, thresholds, now);
+    const { nextScheduled, nextFinalWindowTopUp, nextBoostPrefill, nextCurrencyRule, nextScenarioWake } =
+        await resolveSecondaryBoundaries({
+            challenges,
+            eligible,
+            now,
+            timezone,
+            resolveScheduledFill,
+            resolveFinalWindowTopUp,
+            resolveBoostPrefill,
+            resolveCurrencyAuto,
+            resolveScenarioWake,
+        });
+    const fastBoundaries = {
+        nextAutoSubmitClock,
+        nextEntry,
+        nextScheduled,
+        nextFinalWindowTopUp,
+        nextBoostPrefill,
+        nextCurrencyRule,
+        nextScenarioWake,
+        nextBoostHold,
+        now,
+        minGapMs,
+        lastMinuteCheckMinutes,
+    };
 
     if (anyInWindow(eligible, thresholds, now)) {
-        const fast: { delayMs: number; mode: CadenceMode } = {
-            delayMs: Math.max(minGapMs, lastMinuteCheckMinutes * 60_000),
+        return fastCadenceDecision({
             mode: 'last-minute',
-        };
-        if (nextBoostHold) capCadenceToBoundary(fast, nextBoostHold.startTime, now, minGapMs, 'boost-hold');
-        return {
-            delayMs: fast.delayMs,
-            mode: fast.mode,
-            nextEntry: null,
-            nextScheduled: null,
-            nextFinalWindowTopUp: null,
-            nextBoostPrefill: null,
-            nextCurrencyRule: null,
-            nextScenarioWake: null,
-            nextBoostHold,
-        };
+            ...fastBoundaries,
+        });
+    }
+
+    if (nextAutoSubmitClock?.anyActive) {
+        return fastCadenceDecision({
+            mode: 'auto-submit-clock',
+            ...fastBoundaries,
+        });
     }
 
     // Every boundary below is the same "cap to the soonest upcoming boundary"
@@ -157,37 +276,13 @@ export async function computeNextCycleDelayMs(
     const capTo = (boundarySec: number, mode: CadenceMode) =>
         capCadenceToBoundary(cadence, boundarySec, now, minGapMs, mode);
 
-    const nextEntry = soonestThresholdEntry(eligible, thresholds, now);
     if (nextEntry) capTo(nextEntry.entryTime, 'approaching');
-
-    const nextScheduled =
-        resolveScheduledFill && timezone
-            ? await soonestScheduledStart(eligible, now, resolveScheduledFill, timezone)
-            : null;
     if (nextScheduled) capTo(nextScheduled.startTime, 'scheduled');
-
-    const nextFinalWindowTopUp = resolveFinalWindowTopUp
-        ? await soonestFinalWindowTopUpStart(eligible, now, resolveFinalWindowTopUp)
-        : null;
+    if (nextAutoSubmitClock) capTo(nextAutoSubmitClock.boundaryTime, 'auto-submit-clock');
     if (nextFinalWindowTopUp) capTo(nextFinalWindowTopUp.startTime, 'pre-final-window');
-
-    const nextBoostPrefill = resolveBoostPrefill
-        ? await soonestBoostPrefillStart(eligible, now, resolveBoostPrefill)
-        : null;
     if (nextBoostPrefill) capTo(nextBoostPrefill.startTime, 'pre-boost');
     if (nextBoostHold) capTo(nextBoostHold.startTime, 'boost-hold');
-
-    // Currency rules consider every still-open challenge (flash included), not
-    // just the threshold-eligible set.
-    const nextCurrencyRule = resolveCurrencyAuto
-        ? await soonestCurrencyRuleStart(challenges, now, resolveCurrencyAuto)
-        : null;
     if (nextCurrencyRule) capTo(nextCurrencyRule.startTime, 'currency-rule');
-
-    // Scenario boundaries likewise consider every still-open challenge.
-    const nextScenarioWake = resolveScenarioWake
-        ? await soonestScenarioWake(challenges, now, resolveScenarioWake)
-        : null;
     if (nextScenarioWake) capTo(nextScenarioWake.startTime, 'scenario');
 
     return {
@@ -195,6 +290,7 @@ export async function computeNextCycleDelayMs(
         mode: cadence.mode,
         nextEntry,
         nextScheduled,
+        nextAutoSubmitClock,
         nextFinalWindowTopUp,
         nextBoostPrefill,
         nextCurrencyRule,

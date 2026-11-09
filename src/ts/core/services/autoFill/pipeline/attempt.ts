@@ -147,6 +147,11 @@ const explainSubmission = async ({
     await recordUncertainSubmission({ challenge, label, scored, picked, visualEvidence, ignoreWords, chosenIds, deps });
 };
 
+const finalEligibilityStandsDown = async (
+    finalEligibility: FillAttemptParams['finalEligibility'],
+    picked: readonly string[],
+): Promise<boolean> => (await finalEligibility?.(picked))?.standDown === true;
+
 /**
  * The one fill pipeline all four public entry points share:
  *
@@ -209,6 +214,7 @@ const runFillAttempt = async ({
     probeStandDown = null,
     onEmptyPick = null,
     onRefreshed = null,
+    finalEligibility = null,
     onlyIds,
 }: FillAttemptParams): Promise<FillAttemptResult> => {
     const { logger, submitToChallenge } = deps;
@@ -342,6 +348,10 @@ const runFillAttempt = async ({
         inOrder,
     );
     picked = verified.picked;
+
+    if (await finalEligibilityStandsDown(finalEligibility, picked)) {
+        return { status: 'refresh-stand-down' };
+    }
 
     try {
         const result = await submitToChallenge(challenge.id, picked, token);

@@ -8,6 +8,7 @@
 
 jest.mock('../../src/ts/core/settings', () => ({
     getEffectiveSetting: jest.fn(() => false),
+    getSetting: jest.fn(() => 'UTC'),
     getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
     consumeChosenPhotos: jest.fn(() => false),
 }));
@@ -15,6 +16,7 @@ jest.mock('../../src/ts/core/settings', () => ({
 jest.mock('../../src/ts/core/services/VotingLogic', () => ({
     resolvePin: jest.fn(() => ({ state: 'none' })),
     getAutoFillThresholdSec: jest.fn(() => 0),
+    describeDeadlineActions: jest.fn(() => ({ actions: [] })),
     shouldPlayAutoTurbo: jest.fn(() => false),
     isTurboEarnSaved: jest.fn(() => false),
     orderDeadlineActions: jest.fn(() => []),
@@ -988,8 +990,8 @@ describe('pinned photo', () => {
         test('a gone pin waits: no boost, the wait logged, and a wake just after the fill boundary', async () => {
             votingLogic.resolvePin.mockReturnValue({ state: 'gone' });
             settings.getEffectiveSetting.mockImplementation((key) => key === 'autoSubmit');
-            votingLogic.getAutoFillThresholdSec.mockReturnValue(900);
             // Deadline NOW + 1800, fill boundary NOW + 2700: the wake clamps to the deadline − 60 s.
+            votingLogic.getAutoFillThresholdSec.mockReturnValue(900);
             const api = makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 1800 })]);
             const clock = jest.spyOn(Date, 'now').mockReturnValue(NOW * 1000);
             let result: Awaited<ReturnType<typeof run>>;
@@ -1009,14 +1011,61 @@ describe('pinned photo', () => {
             expect(result.challenges![0].boostHoldUntil).toBe(NOW + 1740);
         });
 
+        test('a gone pin wakes just after an upcoming Auto-Submit clock boundary', async () => {
+            const nextClockBoundary = Math.floor(NOW / 60) * 60 + 60;
+            const clockTime = new Date(nextClockBoundary * 1000).toISOString().slice(11, 16);
+            votingLogic.resolvePin.mockReturnValue({ state: 'gone' });
+            votingLogic.getAutoFillThresholdSec.mockReturnValue(900);
+            settings.getEffectiveSetting.mockImplementation((key) => {
+                if (key === 'autoSubmit') return true;
+                if (key === 'autoSubmitTime') return [clockTime];
+                if (key === 'autoSubmitWindowMinutes') return 60;
+                return false;
+            });
+            const clock = jest.spyOn(Date, 'now').mockReturnValue(NOW * 1000);
+            let result: Awaited<ReturnType<typeof run>>;
+            try {
+                result = await run(makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 1800 })]));
+            } finally {
+                clock.mockRestore();
+            }
+            expect(result.challenges![0].boostHoldUntil).toBe(nextClockBoundary + 60);
+        });
+
+        test('an active clock window arms a bounded later wake, while a malformed close time does not', async () => {
+            const activeClockTime = new Date(NOW * 1000).toISOString().slice(11, 16);
+            votingLogic.resolvePin.mockReturnValue({ state: 'gone' });
+            votingLogic.getAutoFillThresholdSec.mockReturnValue(0);
+            settings.getEffectiveSetting.mockImplementation((key) => {
+                if (key === 'autoSubmit') return true;
+                if (key === 'autoSubmitTime') return [activeClockTime];
+                if (key === 'autoSubmitWindowMinutes') return 60;
+                return false;
+            });
+            const clock = jest.spyOn(Date, 'now').mockReturnValue(NOW * 1000);
+            let active: Awaited<ReturnType<typeof run>>;
+            try {
+                active = await run(makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 1800 })]));
+            } finally {
+                clock.mockRestore();
+            }
+            expect(active.challenges![0].boostHoldUntil).toBe(NOW + 1740);
+
+            settings.getEffectiveSetting.mockImplementation((key) => key === 'autoSubmit');
+            votingLogic.getAutoFillThresholdSec.mockReturnValue(900);
+            const malformed = withBoost({ state: 'AVAILABLE', timeout: NOW + 1800 });
+            malformed.close_time = Number.NaN;
+            const invalidClose = await run(makeApi([malformed]));
+            expect(invalidClose.challenges![0].boostHoldUntil).toBeUndefined();
+        });
+
         test('a gone pin with no fill to wait for sets no wake', async () => {
             votingLogic.resolvePin.mockReturnValue({ state: 'gone' });
             // autoSubmit off (the beforeEach default): no wake, even with a threshold ahead.
-            votingLogic.getAutoFillThresholdSec.mockReturnValue(900);
             const off = await run(makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 1800 })]));
             expect(off.challenges![0].boostHoldUntil).toBeUndefined();
 
-            // Threshold 0: the schedule is satisfied, so no fill is coming either.
+            // No deadline row: the schedule is satisfied, so no fill is coming either.
             settings.getEffectiveSetting.mockImplementation((key) => key === 'autoSubmit');
             votingLogic.getAutoFillThresholdSec.mockReturnValue(0);
             const satisfied = await run(makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 1800 })]));
@@ -1033,13 +1082,6 @@ describe('pinned photo', () => {
             votingLogic.getAutoFillThresholdSec.mockReturnValue(900);
             const dying = await run(makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 30 })]));
             expect(dying.challenges![0].boostHoldUntil).toBeUndefined();
-
-            // A malformed close_time would pass NaN through the `<=` guards and set a NaN hold.
-            votingLogic.getAutoFillThresholdSec.mockReturnValue(900);
-            const malformed = withBoost({ state: 'AVAILABLE', timeout: NOW + 1800 });
-            malformed.close_time = Number.NaN;
-            const nan = await run(makeApi([malformed]));
-            expect(nan.challenges![0].boostHoldUntil).toBeUndefined();
         });
 
         test('a conflict pin never fires: skipped with its own reason, and no wake', async () => {

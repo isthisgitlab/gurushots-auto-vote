@@ -135,6 +135,42 @@ describe('computeNextCycleDelayMs — scenario boundary', () => {
         expect(result.nextScenarioWake).toBeNull();
     });
 
+    test('an active Auto-Submit clock window still wakes for an earlier scenario boundary', async () => {
+        const activeTime = new Date(NOW * 1000).toISOString().slice(11, 16);
+        const result = await computeNextCycleDelayMs(
+            [
+                challenge(1, {
+                    max_photo_submits: 2,
+                    member: { ranking: { entries: [] } },
+                }),
+            ],
+            NOW,
+            {
+                ...base,
+                lastMinuteCheckMinutes: 5,
+                resolveAutoSubmitClock: () => ({
+                    enabled: true,
+                    manualPhotosOnly: false,
+                    times: [activeTime],
+                    windowMinutes: 60,
+                }),
+                resolveScenarioWake: () => ({
+                    scenario,
+                    state: invalid<ScenarioEngineState>({
+                        phase: 'later',
+                        phaseEnteredAt: NOW - 60,
+                        fired: {},
+                        memory: {},
+                    }),
+                    timezone: 'UTC',
+                }),
+                timezone: 'UTC',
+            },
+        );
+        expect(result).toMatchObject({ mode: 'scenario', delayMs: 60_000 });
+        expect(result.nextAutoSubmitClock).toMatchObject({ anyActive: true });
+    });
+
     test('the last-minute early return reports no scenario wake', async () => {
         const result = await computeNextCycleDelayMs([challenge(1, { close_time: NOW + 60 })], NOW, {
             ...base,

@@ -39,6 +39,7 @@ const mockSettings = (overrides: Record<string, unknown> = {}) => {
         keyUnlockedBoostTime: 900,
     };
     settings.getEffectiveSetting = invalid(jest.fn((key: string) => ({ ...defaults, ...overrides })[key]));
+    settings.getSetting = invalid(jest.fn((key: string) => (key === 'timezone' ? 'UTC' : null)));
 };
 
 const buildChallenge = ({
@@ -59,7 +60,7 @@ const buildChallenge = ({
         member: { boost, ranking: { entries } },
     });
 
-const order = (challenge: Challenge) => VotingLogic.orderDeadlineActions(challenge).map((a) => a.action);
+const order = (challenge: Challenge) => VotingLogic.orderDeadlineActions(challenge, 0).map((a) => a.action);
 
 describe('orderDeadlineActions', () => {
     beforeEach(() => jest.clearAllMocks());
@@ -79,7 +80,7 @@ describe('orderDeadlineActions', () => {
     test('tie-break: equal auto-fill and turbo thresholds put auto-fill first', () => {
         // Next schedule row at 720s; turbo 720s → tie resolved to autoSubmit before turbo.
         mockSettings({ autoSubmitSchedule: [{ count: 2, seconds: 720 }], turboTime: 720, emergencySubmit: 300 });
-        const result = VotingLogic.orderDeadlineActions(buildChallenge());
+        const result = VotingLogic.orderDeadlineActions(buildChallenge(), 0);
         expect(result.map((a) => a.action)).toEqual(['autoSubmit', 'turbo', 'emergencySubmit', 'boost']);
         expect(result[0].thresholdSec).toBe(720);
         expect(result[1].thresholdSec).toBe(720);
@@ -89,7 +90,7 @@ describe('orderDeadlineActions', () => {
         // key-unlocked boost = 900s; emergencySubmit 900s → tie resolved emergencySubmit before boost.
         mockSettings({ turboTime: 7200, emergencySubmit: 900 });
         const challenge = buildChallenge({ boost: { state: 'AVAILABLE_KEY' } });
-        const result = VotingLogic.orderDeadlineActions(challenge).filter((a) => a.thresholdSec === 900);
+        const result = VotingLogic.orderDeadlineActions(challenge, 0).filter((a) => a.thresholdSec === 900);
         expect(result.map((a) => a.action)).toEqual(['emergencySubmit', 'boost']);
     });
 
@@ -104,7 +105,7 @@ describe('orderDeadlineActions', () => {
         // timeout 1000s before close, boostTime 3600 → 1000 + 3600 = 4600s, sorts first.
         mockSettings({ turboTime: 720, emergencySubmit: 300, boostTime: 3600 });
         const challenge = buildChallenge({ boost: { state: 'AVAILABLE', timeout: 1_000_000 - 1000 } });
-        const result = VotingLogic.orderDeadlineActions(challenge);
+        const result = VotingLogic.orderDeadlineActions(challenge, 0);
         expect(result[0].action).toBe('boost');
         expect(result[0].thresholdSec).toBe(4600);
     });
@@ -122,7 +123,7 @@ describe('orderDeadlineActions', () => {
         // 2 of 4 entries: rows {3 @ 1200} and {4 @ 600} are still unmet → 1200s.
         mockSettings({ turboTime: 720, emergencySubmit: 300 });
         const challenge = buildChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }, { id: 'e2' }] });
-        const result = VotingLogic.orderDeadlineActions(challenge);
+        const result = VotingLogic.orderDeadlineActions(challenge, 0);
         expect(result[0]).toEqual({ action: 'autoSubmit', thresholdSec: 1200 });
     });
 
@@ -133,7 +134,7 @@ describe('orderDeadlineActions', () => {
         // the 2nd (final) photo follows the Image-4 row → 600s, so turbo (720s)
         // sorts first.
         mockSettings({ turboTime: 720, emergencySubmit: 300 });
-        const result = VotingLogic.orderDeadlineActions(buildChallenge());
+        const result = VotingLogic.orderDeadlineActions(buildChallenge(), 0);
         const autoSubmit = result.find((a) => a.action === 'autoSubmit');
         expect(autoSubmit!.thresholdSec).toBe(600);
         expect(result.map((a) => a.action)).toEqual(['turbo', 'autoSubmit', 'emergencySubmit', 'boost']);
@@ -147,9 +148,31 @@ describe('orderDeadlineActions', () => {
 
     test('an empty autoSubmitSchedule gives autoSubmit a threshold of 0', () => {
         mockSettings({ autoSubmitSchedule: [], turboTime: 720, emergencySubmit: 300 });
-        const result = VotingLogic.orderDeadlineActions(buildChallenge());
+        const result = VotingLogic.orderDeadlineActions(buildChallenge(), 0);
         expect(result.find((a) => a.action === 'autoSubmit')!.thresholdSec).toBe(0);
         // The 0 threshold sorts below the real windows, above the absent boost.
         expect(result.map((a) => a.action)).toEqual(['turbo', 'emergencySubmit', 'autoSubmit', 'boost']);
+    });
+
+    test('an active clock submission runs first while Turbo, Boost, and Emergency keep their thresholds and order', () => {
+        const now = Date.UTC(2026, 0, 15, 12, 30) / 1000;
+        mockSettings({
+            autoSubmit: true,
+            autoSubmitTime: ['12:00'],
+            autoSubmitWindowMinutes: 60,
+            autoSubmitSchedule: [{ count: 2, seconds: 600 }],
+            turboTime: 7200,
+            emergencySubmit: 300,
+        });
+        const actions = VotingLogic.orderDeadlineActions(
+            buildChallenge({ closeTime: now + 10_000, boost: { state: 'AVAILABLE_KEY' } }),
+            now,
+        );
+        expect(actions).toEqual([
+            { action: 'autoSubmit', thresholdSec: 600 },
+            { action: 'turbo', thresholdSec: 7200 },
+            { action: 'boost', thresholdSec: 900 },
+            { action: 'emergencySubmit', thresholdSec: 300 },
+        ]);
     });
 });

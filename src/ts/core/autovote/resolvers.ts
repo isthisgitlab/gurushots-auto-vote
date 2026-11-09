@@ -27,6 +27,7 @@ import type {
     ResolveBoostPrefill,
     ResolveCurrencyAuto,
     ResolveScenarioWake,
+    ResolveAutoSubmitClock,
 } from '../scheduling/thresholdWindow';
 import type { ResolveScheduledFill } from '../scheduling/scheduledFill';
 import type { RuleTiming } from '../voting/currencyAuto';
@@ -35,6 +36,7 @@ import type { RuleTiming } from '../voting/currencyAuto';
 export interface CadenceResolvers {
     resolveThreshold: ResolveThreshold;
     resolveScheduledFill: ResolveScheduledFill;
+    resolveAutoSubmitClock: ResolveAutoSubmitClock;
     resolveFinalWindowTopUp: ResolveFinalWindowTopUp;
     resolveBoostPrefill: ResolveBoostPrefill;
     resolveCurrencyAuto: ResolveCurrencyAuto;
@@ -64,6 +66,16 @@ const currencyTimingOf = async (
         : null;
 };
 
+const resolveAutoSubmitClock = async (host: ResolverHost, challengeId: string) => {
+    const [enabled, manualPhotosOnly, times, windowMinutes] = await Promise.all([
+        host.getEffectiveSetting('autoSubmit', challengeId),
+        host.getEffectiveSetting('manualPhotosOnly', challengeId),
+        host.getEffectiveSetting('autoSubmitTime', challengeId),
+        host.getEffectiveSetting('autoSubmitWindowMinutes', challengeId),
+    ]);
+    return { enabled: enabled === true, manualPhotosOnly: manualPhotosOnly === true, times, windowMinutes };
+};
+
 /**
  * Build the WebView resolvers over the host's IPC members. The reads go
  * through the key-agnostic channel, typed `unknown`; the main process
@@ -88,6 +100,8 @@ export const createResolvers = (host: ResolverHost): CadenceResolvers => ({
         ]);
         return { enabled: enabled === true, timesOfDay, beforeEndSecs };
     },
+
+    resolveAutoSubmitClock: (challengeId: string) => resolveAutoSubmitClock(host, challengeId),
 
     // Pre-final-window top-up cadence cap: the per-challenge keys over IPC,
     // batched. Enabled only when BOTH the final-window feature and this

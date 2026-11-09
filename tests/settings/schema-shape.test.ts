@@ -110,6 +110,8 @@ describe('settings schema shape', () => {
             'autoSubmit',
             'protectUncertainAutoSubmits',
             'autoSubmitSchedule',
+            'autoSubmitTime',
+            'autoSubmitWindowMinutes',
             'submitWithoutTagMatch',
             'emergencySubmit',
             'mustIncludeTags',

@@ -8,6 +8,7 @@
 
 jest.mock('../../src/ts/core/settings', () => ({
     getEffectiveSetting: jest.fn(() => false),
+    getSetting: jest.fn(() => 'UTC'),
     getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
     consumeChosenPhotos: jest.fn(() => false),
 }));
