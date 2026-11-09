@@ -22,10 +22,40 @@ env:
     ONNXRUNTIME_NODE_INSTALL: skip
 
 jobs:
+    classify-dependabot-workflow-pr:
+        runs-on: ubuntu-slim
+        permissions:
+            contents: read
+            pull-requests: read
+        outputs:
+            workflow_only: ${{ steps.classify.outputs.workflow_only }}
+            codeql_changed: ${{ steps.classify.outputs.codeql_changed }}
+
+        steps:
+            - name: Checkout classifier
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+            - name: Setup Node.js
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+              with:
+                  node-version: '26'
+
+            - name: Classify Dependabot workflow-only PR
+              id: classify
+              env:
+                  GITHUB_TOKEN: ${{ github.token }}
+                  PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+              run: node scripts/classify-dependabot-workflow-pr.mts
+
     analyze:
         name: Analyze (${{ matrix.language }})
+        needs: classify-dependabot-workflow-pr
+        if: always()
         runs-on: ${{ matrix.runner }}
         timeout-minutes: ${{ matrix.language == 'java-kotlin' && 30 || 20 }}
+        env:
+            RUN_LANGUAGE_ANALYSIS: ${{ matrix.language == 'actions' || needs.classify-dependabot-workflow-pr.result != 'success' || needs.classify-dependabot-workflow-pr.outputs.workflow_only != 'true' || needs.classify-dependabot-workflow-pr.outputs.codeql_changed == 'true' }}
         permissions:
             actions: read
             contents: read
@@ -57,17 +87,18 @@ jobs:
 
         steps:
             - name: Checkout code
+              if: env.RUN_LANGUAGE_ANALYSIS == 'true'
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
             # src/ts uses ESM syntax but is transpiled under the root CommonJS
             # package at runtime. Give CodeQL its source module boundary so
             # cross-file imports resolve instead of yielding false alerts.
             - name: Mark source modules for CodeQL
-              if: matrix.language == 'javascript-typescript'
+              if: matrix.language == 'javascript-typescript' && env.RUN_LANGUAGE_ANALYSIS == 'true'
               run: printf '%s\n' '{"type":"module"}' > src/ts/package.json
 
             - name: Setup Java (JDK 27 — Capacitor 8's Java 21 source/target sets the floor)
-              if: matrix.language == 'java-kotlin'
+              if: matrix.language == 'java-kotlin' && env.RUN_LANGUAGE_ANALYSIS == 'true'
               uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
               with:
                   distribution: 'temurin'
@@ -78,11 +109,11 @@ jobs:
                       android/gradle/wrapper/gradle-wrapper.properties
 
             - name: Setup Android SDK
-              if: matrix.language == 'java-kotlin'
+              if: matrix.language == 'java-kotlin' && env.RUN_LANGUAGE_ANALYSIS == 'true'
               uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
 
             - name: Setup build environment
-              if: matrix.language == 'java-kotlin'
+              if: matrix.language == 'java-kotlin' && env.RUN_LANGUAGE_ANALYSIS == 'true'
               uses: ./.github/actions/setup-build
               with:
                   cache-vision-model: 'true'
@@ -91,32 +122,33 @@ jobs:
             # config assets; it refuses to run without the web build. Runs
             # before CodeQL init so none of it is traced.
             - name: Build renderer
-              if: matrix.language == 'java-kotlin'
+              if: matrix.language == 'java-kotlin' && env.RUN_LANGUAGE_ANALYSIS == 'true'
               run: pnpm build:prep
 
             - name: Sync Capacitor
-              if: matrix.language == 'java-kotlin'
+              if: matrix.language == 'java-kotlin' && env.RUN_LANGUAGE_ANALYSIS == 'true'
               run: pnpm exec cap sync android
 
             # Rejects a tampered gradle-wrapper.jar before ./gradlew runs it.
             - name: Validate Gradle wrapper
-              if: matrix.language == 'java-kotlin'
+              if: matrix.language == 'java-kotlin' && env.RUN_LANGUAGE_ANALYSIS == 'true'
               uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
             # A failed dependency check (android/gradle/verification-metadata.xml) says how to regenerate it.
             - name: Explain Gradle dependency verification failures
-              if: matrix.language == 'java-kotlin'
+              if: matrix.language == 'java-kotlin' && env.RUN_LANGUAGE_ANALYSIS == 'true'
               uses: ./.github/actions/gradle-verification-hint
 
             # Capacitor includes plugin Java sources as Gradle subprojects under
             # node_modules. Compile those dependencies before CodeQL starts so
             # the traced build analyzes only the app's own Kotlin/Java sources.
             - name: Prebuild Android dependencies
-              if: matrix.language == 'java-kotlin'
+              if: matrix.language == 'java-kotlin' && env.RUN_LANGUAGE_ANALYSIS == 'true'
               working-directory: android
               run: ./gradlew --no-daemon --no-build-cache assembleDebug
 
             - name: Initialize CodeQL
+              if: env.RUN_LANGUAGE_ANALYSIS == 'true'
               uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
               with:
                   languages: ${{ matrix.language }}
@@ -152,13 +184,20 @@ jobs:
             # date. --no-build-cache prevents restoring app classes from cache;
             # --no-daemon keeps the compile inside CodeQL's traced process.
             - name: Build Android (manual build-mode)
-              if: matrix.language == 'java-kotlin'
+              if: matrix.language == 'java-kotlin' && env.RUN_LANGUAGE_ANALYSIS == 'true'
               working-directory: android
               run: |
                   ./gradlew --no-daemon --no-build-cache :app:clean
                   ./gradlew --no-daemon --no-build-cache :app:assembleDebug
 
             - name: Perform CodeQL analysis
+              if: env.RUN_LANGUAGE_ANALYSIS == 'true'
               uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
               with:
                   category: '/language:${{ matrix.language }}'
+
+            - name: CodeQL language analysis skipped for Dependabot workflow-only PR
+              if: >-
+                  always() && matrix.language != 'actions' &&
+                  env.RUN_LANGUAGE_ANALYSIS != 'true'
+              run: echo 'CodeQL language analysis skipped for a Dependabot workflow-only PR.'

@@ -25,8 +25,13 @@ interface Step {
 }
 
 interface Job {
+    name?: string;
     needs?: string | string[];
+    if?: string;
     env?: Record<string, string>;
+    permissions?: Record<string, string>;
+    outputs?: Record<string, string>;
+    strategy?: { matrix?: { include?: Array<{ language?: string }> } };
     'runs-on'?: string;
     'timeout-minutes'?: number;
     steps: Step[];
@@ -57,6 +62,7 @@ const indexOfStep = (job: Job, name: string) => job.steps.indexOf(stepNamed(job,
 
 const build = load('.github/workflows/build.yml');
 const testWorkflow = load('.github/workflows/test.yml');
+const codeqlWorkflow = load('.github/workflows/codeql.yml');
 const SHA_PIN = /^[^@]+@[0-9a-f]{40}$/;
 
 describe('every workflow action', () => {
@@ -95,12 +101,11 @@ describe('Gradle wrapper validation', () => {
 
 describe('Gradle dependency verification', () => {
     const HINT = './.github/actions/gradle-verification-hint';
-    const codeql = load('.github/workflows/codeql.yml');
 
     test.each([
         ['build.yml', build],
         ['test.yml', testWorkflow],
-        ['codeql.yml', codeql],
+        ['codeql.yml', codeqlWorkflow],
     ])('%s explains a failed dependency check before every job that runs gradle', (_file, workflow) => {
         const gradleJobs = Object.values(workflow.jobs).filter((job) =>
             job.steps.some((step) => step.run?.includes('./gradlew')),
@@ -131,6 +136,83 @@ describe('Gradle dependency verification', () => {
         expect(metadata).toContain('<verify-metadata>true</verify-metadata>');
         expect(metadata).toMatch(/aapt2-[\d.-]+-linux\.jar/);
         expect(metadata).toMatch(/aapt2-[\d.-]+-osx\.jar/);
+    });
+});
+
+describe('Dependabot workflow-only CI classification', () => {
+    const classifier = (workflow: Workflow) => workflow.jobs['classify-dependabot-workflow-pr'];
+    const fullChecks = (step: Step) => step.if ?? '';
+
+    test.each([
+        ['Test', testWorkflow],
+        ['CodeQL', codeqlWorkflow],
+    ])('%s uses the PR author and read-only classifier permissions', (_name, workflow) => {
+        const job = classifier(workflow);
+        expect(job.permissions).toEqual({ contents: 'read', 'pull-requests': 'read' });
+        expect(job.outputs).toEqual({
+            workflow_only: '${{ steps.classify.outputs.workflow_only }}',
+            codeql_changed: '${{ steps.classify.outputs.codeql_changed }}',
+        });
+        const step = stepNamed(job, 'Classify Dependabot workflow-only PR');
+        expect(step.env?.PR_AUTHOR).toBe('${{ github.event.pull_request.user.login }}');
+        expect(JSON.stringify(step.env)).not.toContain('github.actor');
+    });
+
+    test('keeps the main Test check unconditional while skipped checks finish successfully', () => {
+        expect(testWorkflow.jobs.test.needs).toBeUndefined();
+        expect(testWorkflow.jobs.test.if).toBeUndefined();
+
+        for (const [name, summary] of [
+            ['android', 'Android checks skipped for Dependabot workflow-only PR'],
+            ['typecheck', 'Type-check skipped for Dependabot workflow-only PR'],
+            ['knip', 'Knip skipped for Dependabot workflow-only PR'],
+        ]) {
+            const job = testWorkflow.jobs[name];
+            expect(needsOf(job)).toEqual(['classify-dependabot-workflow-pr']);
+            expect(job.if).toBe('always()');
+            expect(stepNamed(job, summary).if).toContain("env.RUN_FULL_CHECKS != 'true'");
+        }
+    });
+
+    test('runs Test checks when classification fails or an output is missing', () => {
+        for (const [jobName, stepName] of [
+            ['android', 'Run Android unit tests with coverage'],
+            ['typecheck', 'Type-check'],
+            ['knip', 'Dead-code / unused-dependency check'],
+        ]) {
+            const job = testWorkflow.jobs[jobName];
+            expect(fullChecks(stepNamed(job, stepName))).toContain("env.RUN_FULL_CHECKS == 'true'");
+            expect(job.env?.RUN_FULL_CHECKS).toContain("result != 'success'");
+            expect(job.env?.RUN_FULL_CHECKS).toContain("outputs.workflow_only != 'true'");
+        }
+        expect(needsOf(testWorkflow.jobs['coverage-finish'])).toContain('classify-dependabot-workflow-pr');
+        expect(
+            stepNamed(testWorkflow.jobs['coverage-finish'], 'Finish Coveralls parallel build').with?.carryforward,
+        ).toContain("outputs.workflow_only == 'true'");
+    });
+
+    test('keeps all CodeQL languages and names while only allowing Actions analysis for a skipped PR', () => {
+        const analyze = codeqlWorkflow.jobs.analyze;
+        expect(analyze.name).toBe('Analyze (${{ matrix.language }})');
+        expect(analyze.strategy?.matrix?.include?.map((entry) => entry.language)).toEqual([
+            'javascript-typescript',
+            'java-kotlin',
+            'actions',
+        ]);
+        expect(needsOf(analyze)).toEqual(['classify-dependabot-workflow-pr']);
+        expect(analyze.if).toBe('always()');
+
+        for (const stepName of ['Checkout code', 'Initialize CodeQL', 'Perform CodeQL analysis']) {
+            const condition = fullChecks(stepNamed(analyze, stepName));
+            expect(condition).toContain("env.RUN_LANGUAGE_ANALYSIS == 'true'");
+        }
+        expect(analyze.env?.RUN_LANGUAGE_ANALYSIS).toContain("matrix.language == 'actions'");
+        expect(analyze.env?.RUN_LANGUAGE_ANALYSIS).toContain("result != 'success'");
+        expect(analyze.env?.RUN_LANGUAGE_ANALYSIS).toContain("outputs.workflow_only != 'true'");
+        expect(analyze.env?.RUN_LANGUAGE_ANALYSIS).toContain("outputs.codeql_changed == 'true'");
+        const summary = stepNamed(analyze, 'CodeQL language analysis skipped for Dependabot workflow-only PR').if ?? '';
+        expect(summary).toContain("matrix.language != 'actions'");
+        expect(summary).toContain("env.RUN_LANGUAGE_ANALYSIS != 'true'");
     });
 });
 
