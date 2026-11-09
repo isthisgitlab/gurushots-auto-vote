@@ -89,6 +89,13 @@ describe('orderDiscoverRows', () => {
         expect(orderDiscoverRows([b, a], 'end', nowSec)).toEqual([a, b]);
     });
 
+    test('sorts free Boost deadlines independently of end times', () => {
+        const long = row('long', { start_time: 1_000, close_time: 1_000 + 5 * DAY_SEC });
+        const short = row('short', { start_time: 1_000 + DAY_SEC, close_time: 1_000 + 3 * DAY_SEC });
+        expect(orderDiscoverRows([short, long], 'end', nowSec)).toEqual([short, long]);
+        expect(orderDiscoverRows([short, long], 'boostDeadline', nowSec)).toEqual([long, short]);
+    });
+
     test('uses ids when both dates are unreadable', () => {
         const a = row('a');
         const b = row('b');
