@@ -8,16 +8,30 @@ export type DiscoverDateRow = {
     status?: 'upcoming';
     start_time?: unknown;
     close_time?: unknown;
+    type?: string;
+    max_photo_submits?: number;
+    join_coins?: number;
+    member?: { submit_state?: string };
 };
 
 const DAY_SEC = 24 * 60 * 60;
 
-/** The last moment a challenge can be joined and still qualify for a free Boost. */
-export const freeBoostJoinDeadline = (start: unknown, close: unknown): number | null => {
-    const startTime = endTimeOf(start);
-    const closeTime = endTimeOf(close);
+export type DiscoverJoinDeadline = {
+    time: number;
+    kind: 'freeEntry' | 'boost';
+};
+
+/** The applicable free-entry or Boost join cutoff for one Discover row. */
+export const discoverJoinDeadline = (row: DiscoverDateRow): DiscoverJoinDeadline | null => {
+    const startTime = endTimeOf(row.start_time);
+    const closeTime = endTimeOf(row.close_time);
     if (startTime === null || closeTime === null || closeTime <= startTime) return null;
-    return startTime + Math.min((closeTime - startTime) / 4, DAY_SEC);
+    if (row.type === 'flash') return null;
+    if (row.max_photo_submits === 1) {
+        if (row.join_coins !== 0 || row.member?.submit_state === 'join_unlock') return null;
+        return { time: startTime + (closeTime - startTime) / 2, kind: 'freeEntry' };
+    }
+    return { time: startTime + Math.min((closeTime - startTime) / 4, DAY_SEC), kind: 'boost' };
 };
 
 const sortTime = (row: DiscoverDateRow, sort: Exclude<DiscoverSort, 'default'>): number | null =>
@@ -25,7 +39,7 @@ const sortTime = (row: DiscoverDateRow, sort: Exclude<DiscoverSort, 'default'>):
         ? endTimeOf(row.start_time)
         : sort === 'end'
           ? endTimeOf(row.close_time)
-          : freeBoostJoinDeadline(row.start_time, row.close_time);
+          : (discoverJoinDeadline(row)?.time ?? null);
 
 const groupOf = (row: DiscoverDateRow, nowSec: number): number => {
     if (row.status !== 'upcoming') return 0;

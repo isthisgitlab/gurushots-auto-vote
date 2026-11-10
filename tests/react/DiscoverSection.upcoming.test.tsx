@@ -80,12 +80,68 @@ describe('an upcoming row', () => {
         expect(screen.getAllByText(/Starts in/)).toHaveLength(1);
     });
 
-    test('shows start and Free Boost deadline dates in the selected timezone', async () => {
+    test('shows the configured timezone in both Boost and free-entry deadline labels', async () => {
         const start = 1_700_000_000;
-        renderSection([open(1, 'Dated', { start_time: start, close_time: start + 4 * 24 * 60 * 60 })]);
+        renderSection([
+            open(1, 'Multi photo', {
+                start_time: start,
+                close_time: start + 4 * 24 * 60 * 60,
+                max_photo_submits: 2,
+            }),
+            open(2, 'Single photo', {
+                start_time: start,
+                close_time: start + 4 * 24 * 60 * 60,
+                max_photo_submits: 1,
+            }),
+        ]);
         await settle();
-        expect(screen.getByText('Start time: 15/11/2023, 00:13')).toBeTruthy();
+        expect(screen.getAllByText('Start time: 15/11/2023, 00:13')).toHaveLength(2);
         expect(screen.getByText('Free Boost join deadline: 16/11/2023, 00:13')).toBeTruthy();
+        expect(screen.getByText('Free entry deadline: 17/11/2023, 00:13')).toBeTruthy();
+    });
+
+    test('never calls a single-photo row Boost-eligible or promises a deadline when entry is excluded', async () => {
+        const start = 1_700_000_000;
+        renderSection([
+            open(1, 'Eligible single', {
+                start_time: start,
+                close_time: start + 2 * 24 * 60 * 60,
+                max_photo_submits: 1,
+            }),
+            open(2, 'Paid single', {
+                start_time: start,
+                close_time: start + 2 * 24 * 60 * 60,
+                max_photo_submits: 1,
+                join_coins: 1,
+            }),
+            open(3, 'Unknown-price single', {
+                start_time: start,
+                close_time: start + 2 * 24 * 60 * 60,
+                max_photo_submits: 1,
+                join_coins: undefined,
+            }),
+            open(4, 'Locked single', {
+                start_time: start,
+                close_time: start + 2 * 24 * 60 * 60,
+                max_photo_submits: 1,
+                member: { submit_state: 'join_unlock' },
+            }),
+            open(5, 'Flash single', {
+                start_time: start,
+                close_time: start + 2 * 24 * 60 * 60,
+                max_photo_submits: 1,
+                type: 'flash',
+            }),
+            open(6, 'Eligible multi', {
+                start_time: start,
+                close_time: start + 2 * 24 * 60 * 60,
+                max_photo_submits: 2,
+            }),
+        ]);
+        await settle();
+        expect(screen.getByText('Free entry deadline: 16/11/2023, 00:13')).toBeTruthy();
+        expect(screen.getAllByText(/^Free Boost join deadline:/)).toHaveLength(1);
+        expect(screen.queryAllByText(/^Free entry deadline:/)).toHaveLength(1);
     });
 
     test('keeps the Free Boost deadline visible and unchanged after its cutoff', async () => {
@@ -159,7 +215,7 @@ describe('an upcoming row', () => {
 describe('Discover date ordering', () => {
     test.each([
         ['end', 'End time'],
-        ['boostDeadline', 'Free Boost join deadline'],
+        ['boostDeadline', 'Join deadline'],
     ])('keeps the selected %s ordering after refresh and separates the three row groups', async (value, label) => {
         const { container } = renderSection([
             open(1, 'Open later', { start_time: 20, close_time: 500 }),

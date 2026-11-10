@@ -15,7 +15,7 @@ import * as ipc from '@/api/ipc';
 import { ipcErrorText, joinRefusalText } from '@/api/ipcErrorText';
 import { listedTags } from '../../../core/format/challengeListing';
 import { endTimeOf } from '../../../core/format/endTime';
-import { DISCOVER_SORTS, freeBoostJoinDeadline, orderDiscoverRows } from '../../../core/discoverDates';
+import { discoverJoinDeadline, DISCOVER_SORTS, orderDiscoverRows } from '../../../core/discoverDates';
 import type { DiscoverSort } from '../../../core/discoverDates';
 // The pure fresh-join guard the facade re-exports (services/VotingLogic) — imported at its home
 // module, so the renderer bundle does not pull the whole voting-decision barrel in for one function.
@@ -223,7 +223,7 @@ function StartLine({ c, nowSec }: { c: OpenChallenge; nowSec: number }) {
 function DiscoverDates({ c, timezone }: { c: OpenChallenge; timezone: string }) {
     const { t } = useTranslation();
     const startTime = endTimeOf(c.start_time);
-    const deadline = freeBoostJoinDeadline(c.start_time, c.close_time);
+    const deadline = discoverJoinDeadline(c);
     return (
         <>
             {startTime !== null && (
@@ -233,7 +233,12 @@ function DiscoverDates({ c, timezone }: { c: OpenChallenge; timezone: string }) 
             )}
             {deadline !== null && (
                 <div className="text-xs text-base-content/70 mt-0.5">
-                    {t('app.discoverBoostJoinDeadline', { date: formatEndTime(deadline, timezone) })}
+                    {t(
+                        deadline.kind === 'freeEntry'
+                            ? 'app.discoverFreeEntryDeadline'
+                            : 'app.discoverBoostJoinDeadline',
+                        { date: formatEndTime(deadline.time, timezone) },
+                    )}
                 </div>
             )}
         </>
@@ -256,7 +261,7 @@ function DiscoverSortControl({ sort, onSort }: { sort: DiscoverSort; onSort: (so
                 <option value="default">{t('app.discoverSortDefault')}</option>
                 <option value="start">{t('app.discoverSortStart')}</option>
                 <option value="end">{t('app.discoverSortEnd')}</option>
-                <option value="boostDeadline">{t('app.discoverSortBoostDeadline')}</option>
+                <option value="boostDeadline">{t('app.discoverSortJoinDeadline')}</option>
             </select>
         </label>
     );

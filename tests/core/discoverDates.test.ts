@@ -1,15 +1,18 @@
-import { freeBoostJoinDeadline, orderDiscoverRows } from '../../src/ts/core/discoverDates';
+import { discoverJoinDeadline, orderDiscoverRows } from '../../src/ts/core/discoverDates';
 import type { DiscoverDateRow } from '../../src/ts/core/discoverDates';
 
 const DAY_SEC = 24 * 60 * 60;
 
-describe('freeBoostJoinDeadline', () => {
+describe('discoverJoinDeadline', () => {
     test.each([
         ['shorter than four days', 2 * DAY_SEC, DAY_SEC / 2],
         ['exactly four days', 4 * DAY_SEC, DAY_SEC],
         ['longer than four days', 5 * DAY_SEC, DAY_SEC],
-    ])('uses the eligibility window for a duration %s', (_name, duration, offset) => {
-        expect(freeBoostJoinDeadline(1_000, 1_000 + duration)).toBe(1_000 + offset);
+    ])('uses the Boost eligibility window for a duration %s', (_name, duration, offset) => {
+        expect(discoverJoinDeadline(row('normal', { start_time: 1_000, close_time: 1_000 + duration }))).toEqual({
+            time: 1_000 + offset,
+            kind: 'boost',
+        });
     });
 
     test.each([
@@ -20,7 +23,29 @@ describe('freeBoostJoinDeadline', () => {
         [2_000, 1_000],
         [1_000, 1_000],
     ])('rejects unreadable or non-positive durations', (start, close) => {
-        expect(freeBoostJoinDeadline(start, close)).toBeNull();
+        expect(discoverJoinDeadline(row('invalid', { start_time: start, close_time: close }))).toBeNull();
+    });
+
+    test.each([
+        ['short', 2 * DAY_SEC, DAY_SEC],
+        ['long', 5 * DAY_SEC, (5 * DAY_SEC) / 2],
+    ])('uses the free-entry midpoint for a %s free single-photo challenge', (_name, duration, offset) => {
+        expect(
+            discoverJoinDeadline(
+                row('single', { start_time: 1_000, close_time: 1_000 + duration, max_photo_submits: 1, join_coins: 0 }),
+            ),
+        ).toEqual({ time: 1_000 + offset, kind: 'freeEntry' });
+    });
+
+    test.each([
+        ['flash', { type: 'flash', max_photo_submits: 1, join_coins: 0 }],
+        ['paid', { max_photo_submits: 1, join_coins: 1 }],
+        ['unknown price', { max_photo_submits: 1 }],
+        ['locked', { max_photo_submits: 1, join_coins: 0, member: { submit_state: 'join_unlock' } }],
+    ])('has no deadline for a %s single-photo challenge', (_name, values) => {
+        expect(
+            discoverJoinDeadline(row('single', { start_time: 1_000, close_time: 1_000 + DAY_SEC, ...values })),
+        ).toBeNull();
     });
 });
 
@@ -89,11 +114,25 @@ describe('orderDiscoverRows', () => {
         expect(orderDiscoverRows([b, a], 'end', nowSec)).toEqual([a, b]);
     });
 
-    test('sorts free Boost deadlines independently of end times', () => {
-        const long = row('long', { start_time: 1_000, close_time: 1_000 + 5 * DAY_SEC });
-        const short = row('short', { start_time: 1_000 + DAY_SEC, close_time: 1_000 + 3 * DAY_SEC });
-        expect(orderDiscoverRows([short, long], 'end', nowSec)).toEqual([short, long]);
-        expect(orderDiscoverRows([short, long], 'boostDeadline', nowSec)).toEqual([long, short]);
+    test('sorts mixed rows by their applicable deadlines rather than end time or the old Boost cutoff', () => {
+        const freeSingle = row('free-single', {
+            start_time: 1_000,
+            close_time: 1_000 + 8 * DAY_SEC,
+            max_photo_submits: 1,
+            join_coins: 0,
+        });
+        const longNormal = row('long-normal', { start_time: 100_000, close_time: 100_000 + 8 * DAY_SEC });
+        const shortNormal = row('short-normal', { start_time: 260_000, close_time: 260_000 + 2 * DAY_SEC });
+        expect(orderDiscoverRows([freeSingle, longNormal, shortNormal], 'end', nowSec)).toEqual([
+            shortNormal,
+            freeSingle,
+            longNormal,
+        ]);
+        expect(orderDiscoverRows([freeSingle, longNormal, shortNormal], 'boostDeadline', nowSec)).toEqual([
+            longNormal,
+            shortNormal,
+            freeSingle,
+        ]);
     });
 
     test('uses ids when both dates are unreadable', () => {

@@ -286,7 +286,7 @@ asynckit 0.4.0
   License: MIT
   Copyright (c) 2016 Alex Indigo
 
-axios 1.21.0
+axios 1.21.1
   License: MIT
   Copyright (c) 2014-present Matt Zabriskie & Collaborators
 
