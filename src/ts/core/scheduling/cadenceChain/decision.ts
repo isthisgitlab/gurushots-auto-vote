@@ -87,7 +87,7 @@ const describeBoundaryCadence = (decision: CadenceDecision, waitMs: number): str
                 : `⏰ Approaching Auto-Submit clock window for "${decision.nextAutoSubmitClock?.challengeTitle}" — ${inSeconds}`;
         case 'auto-submit-schedule':
             return decision.nextAutoSubmitSchedule?.anyDue
-                ? `⏰ Relative Auto-Submit schedule is due for "${decision.nextAutoSubmitSchedule.challengeTitle}" — ${inSeconds}`
+                ? `⏰ Relative Auto-Submit schedules are due — ${inSeconds}`
                 : `⏰ Approaching relative Auto-Submit schedule for "${decision.nextAutoSubmitSchedule?.challengeTitle}" — ${inSeconds}`;
         case 'pre-boost':
             return `⏰ Approaching pre-boost fill for "${decision.nextBoostPrefill?.challengeTitle}" — ${inSeconds} (capped to the ${decision.nextBoostPrefill?.leadMin}m pre-boost boundary)`;

@@ -107,7 +107,7 @@ const makeHost = (overrides: Partial<AutovoteHost> = {}) => {
     jest.mocked(host.setSetting).mockResolvedValue(invalid(undefined));
     jest.mocked(host.getActiveChallenges).mockResolvedValue({ challenges: far });
     jest.mocked(host.getEffectiveSetting).mockImplementation((key) =>
-        Promise.resolve(key === 'lastMinuteCheckFrequency' ? 1 : 10),
+        Promise.resolve(key === 'autoSubmitSchedule' ? [] : key === 'lastMinuteCheckFrequency' ? 1 : 10),
     );
     jest.mocked(host.runVotingCycle).mockResolvedValue(invalid({ success: true, challenges: far }));
     jest.mocked(host.background.start).mockResolvedValue(undefined);

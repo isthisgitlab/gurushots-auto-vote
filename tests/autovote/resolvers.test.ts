@@ -82,6 +82,22 @@ describe('autovote resolvers', () => {
         expect(host.getEffectiveSetting).toHaveBeenCalledWith('autoSubmitSchedule', 'c1');
     });
 
+    it('resolveAutoSubmitSchedule accepts an empty relative schedule', async () => {
+        const { resolveAutoSubmitSchedule } = createResolvers(host);
+        withSettings({ autoSubmit: true, manualPhotosOnly: false, autoSubmitSchedule: [] });
+        await expect(resolveAutoSubmitSchedule('c1')).resolves.toEqual({
+            enabled: true,
+            manualPhotosOnly: false,
+            schedule: [],
+        });
+    });
+
+    it.each([null, {}])('resolveAutoSubmitSchedule rejects a non-array relative schedule (%p)', async (schedule) => {
+        const { resolveAutoSubmitSchedule } = createResolvers(host);
+        withSettings({ autoSubmit: true, manualPhotosOnly: false, autoSubmitSchedule: schedule });
+        await expect(resolveAutoSubmitSchedule('c1')).rejects.toThrow('Auto-submit schedule is unavailable.');
+    });
+
     it.each([
         [true, true, true],
         [true, false, false],
@@ -289,6 +305,46 @@ describe('autovote resolvers', () => {
                 now,
             );
             expect(result).toMatchObject({ mode: 'auto-submit-schedule', delayMs: 60_000 });
+        });
+
+        it('isolates an unavailable relative schedule while retaining another challenge boundary', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            jest.mocked(host.getEffectiveSetting).mockImplementation(async (key, challengeId) => {
+                if (key === 'lastMinuteThreshold') return 0;
+                if (key === 'autoSubmit') return true;
+                if (key === 'manualPhotosOnly') return false;
+                if (key === 'autoSubmitSchedule') {
+                    return challengeId === '1' ? null : [{ count: 2, seconds: 9 * 60 }];
+                }
+                return undefined;
+            });
+            const result = await decide(
+                invalid([
+                    {
+                        id: 1,
+                        title: 'Unavailable IPC schedule',
+                        type: 'regular',
+                        close_time: now + 10 * 60,
+                        max_photo_submits: 2,
+                        member: { ranking: { entries: [] } },
+                    },
+                    {
+                        id: 2,
+                        title: 'Valid IPC schedule',
+                        type: 'regular',
+                        close_time: now + 10 * 60,
+                        max_photo_submits: 2,
+                        member: { ranking: { entries: [] } },
+                    },
+                ]),
+                now,
+            );
+
+            expect(result).toMatchObject({
+                mode: 'auto-submit-schedule',
+                delayMs: 60_000,
+                nextAutoSubmitSchedule: { challengeId: 2 },
+            });
         });
 
         it('omitting timezone makes no scheduled-fill IPC reads', async () => {

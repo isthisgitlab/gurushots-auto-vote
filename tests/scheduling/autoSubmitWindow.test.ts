@@ -389,6 +389,53 @@ describe('soonestAutoSubmitScheduleBoundary', () => {
         });
     });
 
+    test('starts eligible reads before either settles and retains another result after a rejection', async () => {
+        const now = utc(2026, 1, 15, 12);
+        let rejectFirst!: (reason?: unknown) => void;
+        let resolveSecond!: (value: autoSubmitScheduleModule.AutoSubmitScheduleConfig) => void;
+        const first = new Promise<autoSubmitScheduleModule.AutoSubmitScheduleConfig>((_resolve, reject) => {
+            rejectFirst = reject;
+        });
+        const second = new Promise<autoSubmitScheduleModule.AutoSubmitScheduleConfig>((resolve) => {
+            resolveSecond = resolve;
+        });
+        const resolveSchedule = jest.fn((id: string) => (id === '1' ? first : second));
+
+        const result = soonestAutoSubmitScheduleBoundary(
+            invalid([
+                {
+                    id: 1,
+                    title: 'Rejected',
+                    close_time: now + 1200,
+                    max_photo_submits: 2,
+                    member: { ranking: { entries: [] } },
+                },
+                {
+                    id: 2,
+                    title: 'Resolved',
+                    close_time: now + 900,
+                    max_photo_submits: 2,
+                    member: { ranking: { entries: [] } },
+                },
+            ]),
+            now,
+            resolveSchedule,
+        );
+
+        expect(resolveSchedule).toHaveBeenNthCalledWith(1, '1');
+        expect(resolveSchedule).toHaveBeenNthCalledWith(2, '2');
+        rejectFirst(new Error('settings unavailable'));
+        resolveSecond({ enabled: true, manualPhotosOnly: false, schedule: [{ count: 2, seconds: 600 }] });
+
+        await expect(result).resolves.toEqual({
+            challengeId: 2,
+            challengeTitle: 'Resolved',
+            thresholdSec: 600,
+            boundaryTime: now + 300,
+            anyDue: false,
+        });
+    });
+
     test('reports due work while retaining the earliest future threshold', async () => {
         const now = utc(2026, 1, 15, 12);
         const result = await soonestAutoSubmitScheduleBoundary(

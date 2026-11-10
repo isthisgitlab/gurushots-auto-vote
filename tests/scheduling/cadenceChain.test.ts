@@ -536,8 +536,56 @@ describe('createCadenceChain', () => {
 
         expect(deps.log.cadence).toHaveBeenCalledWith(
             'auto-submit-schedule',
-            expect.stringContaining('Relative Auto-Submit schedule is due for "Relative due"'),
+            expect.stringContaining('⏰ Relative Auto-Submit schedules are due — next cycle in '),
         );
+    });
+
+    test('mixed due and future relative schedules use the generic due log and retain the future wake', async () => {
+        const now = Date.UTC(2026, 0, 15, 12);
+        jest.setSystemTime(now);
+        const deps = makeDeps({
+            resolveThreshold: jest.fn(() => 0),
+            resolveAutoSubmitSchedule: jest.fn(() => ({
+                enabled: true,
+                manualPhotosOnly: false,
+                schedule: [{ count: 2, seconds: 600 }],
+            })),
+        });
+        const chain = createCadenceChain(invalid(deps));
+
+        await chain.scheduleNext(
+            invalid([
+                {
+                    id: 13,
+                    title: 'Relative due',
+                    type: 'regular',
+                    close_time: now / 1000 + 600,
+                    max_photo_submits: 2,
+                    member: { ranking: { entries: [] } },
+                },
+                {
+                    id: 14,
+                    title: 'Relative future',
+                    type: 'regular',
+                    close_time: now / 1000 + 625,
+                    max_photo_submits: 2,
+                    member: { ranking: { entries: [] } },
+                },
+            ]),
+        );
+
+        expect(deps.log.cadence).toHaveBeenCalledWith(
+            'auto-submit-schedule',
+            '⏰ Relative Auto-Submit schedules are due — next cycle in 25s',
+        );
+        expect(deps.log.cadence).not.toHaveBeenCalledWith(
+            'auto-submit-schedule',
+            expect.stringContaining('Relative Auto-Submit schedule is due for "Relative future"'),
+        );
+        await jest.advanceTimersByTimeAsync(24_999);
+        expect(deps.runCycle).not.toHaveBeenCalled();
+        await jest.advanceTimersByTimeAsync(1);
+        expect(deps.runCycle).toHaveBeenCalledTimes(1);
     });
 
     test('upcoming relative Auto-Submit schedules use the approaching schedule cadence log', async () => {

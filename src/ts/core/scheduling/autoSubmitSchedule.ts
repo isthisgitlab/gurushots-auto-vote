@@ -33,22 +33,33 @@ export const soonestAutoSubmitScheduleBoundary = async (
     now: number,
     resolveAutoSubmitSchedule: ResolveAutoSubmitSchedule,
 ): Promise<AutoSubmitScheduleBoundary | null> => {
-    let next: AutoSubmitScheduleBoundary | null = null;
-    let due: AutoSubmitScheduleBoundary | null = null;
-
-    for (const challenge of challenges) {
+    const eligible = challenges.filter((challenge) => {
         const closeTime = Number(challenge.close_time);
         const entries = challenge.member?.ranking?.entries;
         const entryCount = Array.isArray(entries) ? entries.length : 0;
         const maxPhotoSubmits = Number(challenge.max_photo_submits);
-        if (!(closeTime > now) || !Number.isFinite(maxPhotoSubmits) || maxPhotoSubmits <= entryCount) continue;
+        return closeTime > now && Number.isFinite(maxPhotoSubmits) && maxPhotoSubmits > entryCount;
+    });
+    const configs = await Promise.all(
+        eligible.map(async (challenge) => {
+            try {
+                return await resolveAutoSubmitSchedule(String(challenge.id));
+            } catch {
+                return null;
+            }
+        }),
+    );
 
-        let config: AutoSubmitScheduleConfig;
-        try {
-            config = await resolveAutoSubmitSchedule(String(challenge.id));
-        } catch {
-            continue;
-        }
+    let next: AutoSubmitScheduleBoundary | null = null;
+    let due: AutoSubmitScheduleBoundary | null = null;
+
+    for (let index = 0; index < eligible.length; index++) {
+        const challenge = eligible[index]!;
+        const closeTime = Number(challenge.close_time);
+        const entries = challenge.member?.ranking?.entries;
+        const entryCount = Array.isArray(entries) ? entries.length : 0;
+        const config = configs[index];
+        if (!config) continue;
         if (config.enabled !== true || config.manualPhotosOnly === true) continue;
 
         const thresholdSec = getNextScheduleThresholdSec(config.schedule, entryCount, challenge.max_photo_submits);

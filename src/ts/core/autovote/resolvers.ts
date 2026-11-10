@@ -87,6 +87,7 @@ const resolveAutoSubmitSchedule = async (
         host.getEffectiveSetting('manualPhotosOnly', challengeId),
         host.getEffectiveSetting('autoSubmitSchedule', challengeId),
     ]);
+    if (!Array.isArray(schedule)) throw new Error('Auto-submit schedule is unavailable.');
     return {
         enabled: enabled === true,
         manualPhotosOnly: manualPhotosOnly === true,
