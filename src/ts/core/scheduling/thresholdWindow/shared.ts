@@ -7,6 +7,7 @@ import type { Challenge } from '../../types/gurushots';
  */
 export type CadenceMode =
     | 'auto-submit-clock'
+    | 'auto-submit-schedule'
     | 'last-minute'
     | 'approaching'
     | 'scheduled'

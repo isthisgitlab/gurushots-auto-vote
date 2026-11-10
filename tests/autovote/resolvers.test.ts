@@ -65,6 +65,23 @@ describe('autovote resolvers', () => {
         expect(host.getEffectiveSetting).toHaveBeenCalledWith('autoSubmitWindowMinutes', 'c1');
     });
 
+    it('resolveAutoSubmitSchedule reads the effective relative schedule', async () => {
+        const { resolveAutoSubmitSchedule } = createResolvers(host);
+        withSettings({
+            autoSubmit: true,
+            manualPhotosOnly: false,
+            autoSubmitSchedule: [{ count: 2, seconds: 540 }],
+        });
+        await expect(resolveAutoSubmitSchedule('c1')).resolves.toEqual({
+            enabled: true,
+            manualPhotosOnly: false,
+            schedule: [{ count: 2, seconds: 540 }],
+        });
+        expect(host.getEffectiveSetting).toHaveBeenCalledWith('autoSubmit', 'c1');
+        expect(host.getEffectiveSetting).toHaveBeenCalledWith('manualPhotosOnly', 'c1');
+        expect(host.getEffectiveSetting).toHaveBeenCalledWith('autoSubmitSchedule', 'c1');
+    });
+
     it.each([
         [true, true, true],
         [true, false, false],
@@ -193,6 +210,7 @@ describe('autovote resolvers', () => {
                 resolveThreshold: resolvers.resolveThreshold,
                 resolveScheduledFill: resolvers.resolveScheduledFill,
                 resolveAutoSubmitClock: resolvers.resolveAutoSubmitClock,
+                resolveAutoSubmitSchedule: resolvers.resolveAutoSubmitSchedule,
                 resolveFinalWindowTopUp: resolvers.resolveFinalWindowTopUp,
                 resolveBoostPrefill: resolvers.resolveBoostPrefill,
                 resolveCurrencyAuto: resolvers.resolveCurrencyAuto,
@@ -247,6 +265,30 @@ describe('autovote resolvers', () => {
             expect(result.mode).toBe('scheduled');
             expect(result.delayMs).toBe(120_000);
             expect(result.nextScheduled).toMatchObject({ challengeId: 9, form: 'before-end' });
+        });
+
+        it('caps the delay to an upcoming relative schedule threshold resolved over IPC', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            withSettings({
+                lastMinuteThreshold: 0,
+                autoSubmit: true,
+                manualPhotosOnly: false,
+                autoSubmitSchedule: [{ count: 2, seconds: 9 * 60 }],
+            });
+            const result = await decide(
+                invalid([
+                    {
+                        id: 9,
+                        title: 'Relative IPC',
+                        type: 'regular',
+                        close_time: now + 10 * 60,
+                        max_photo_submits: 2,
+                        member: { ranking: { entries: [] } },
+                    },
+                ]),
+                now,
+            );
+            expect(result).toMatchObject({ mode: 'auto-submit-schedule', delayMs: 60_000 });
         });
 
         it('omitting timezone makes no scheduled-fill IPC reads', async () => {

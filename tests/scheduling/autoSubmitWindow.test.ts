@@ -1,5 +1,6 @@
 import type * as autoSubmitWindowModule from '../../src/ts/core/scheduling/autoSubmitWindow';
 import type * as autoSubmitClockModule from '../../src/ts/core/scheduling/autoSubmitClock';
+import type * as autoSubmitScheduleModule from '../../src/ts/core/scheduling/autoSubmitSchedule';
 import type * as wallClockModule from '../../src/ts/core/scheduling/wallClock';
 import { invalid } from '../helpers/invalid';
 
@@ -7,6 +8,8 @@ const { getAutoSubmitClockWindowState } =
     require('../../src/ts/core/scheduling/autoSubmitWindow') as typeof autoSubmitWindowModule;
 const { soonestAutoSubmitClockBoundary } =
     require('../../src/ts/core/scheduling/autoSubmitClock') as typeof autoSubmitClockModule;
+const { soonestAutoSubmitScheduleBoundary } =
+    require('../../src/ts/core/scheduling/autoSubmitSchedule') as typeof autoSubmitScheduleModule;
 const { epochForWallTime } = require('../../src/ts/core/scheduling/wallClock') as typeof wallClockModule;
 
 const utc = (y: number, m: number, d: number, hh = 0, mm = 0) => Date.UTC(y, m - 1, d, hh, mm) / 1000;
@@ -306,6 +309,140 @@ describe('soonestAutoSubmitClockBoundary', () => {
             active: true,
             anyActive: true,
             boundaryTime: utc(2026, 1, 15, 12, 5),
+        });
+    });
+});
+
+describe('soonestAutoSubmitScheduleBoundary', () => {
+    test('skips full, missing, invalid, disabled, manual-only, and exhausted schedules', async () => {
+        const now = utc(2026, 1, 15, 12);
+        const resolveSchedule = jest.fn((id: string) => {
+            if (id === '4') return { enabled: false, manualPhotosOnly: false, schedule: [{ count: 2, seconds: 600 }] };
+            if (id === '5') return { enabled: true, manualPhotosOnly: true, schedule: [{ count: 2, seconds: 600 }] };
+            if (id === '8') return { enabled: true, manualPhotosOnly: false, schedule: [{ count: 2, seconds: 0 }] };
+            return { enabled: true, manualPhotosOnly: false, schedule: [{ count: 2, seconds: 600 }] };
+        });
+
+        const result = await soonestAutoSubmitScheduleBoundary(
+            invalid([
+                { id: 1, close_time: now + 1200, max_photo_submits: 2, member: { ranking: { entries: [{}, {}] } } },
+                { id: 2, close_time: now + 1200, member: { ranking: { entries: [] } } },
+                { id: 3, close_time: now + 1200, max_photo_submits: Number.NaN, member: { ranking: { entries: [] } } },
+                { id: 4, close_time: now + 1200, max_photo_submits: 2, member: { ranking: { entries: [] } } },
+                { id: 5, close_time: now + 1200, max_photo_submits: 2, member: { ranking: { entries: [] } } },
+                { id: 6, close_time: now + 1200, max_photo_submits: 3, member: { ranking: { entries: [{}, {}] } } },
+                { id: 7, close_time: now, max_photo_submits: 2, member: { ranking: { entries: [] } } },
+                { id: 8, close_time: now + 1200, max_photo_submits: 2, member: { ranking: { entries: [] } } },
+            ]),
+            now,
+            resolveSchedule,
+        );
+
+        expect(result).toBeNull();
+        expect(resolveSchedule).toHaveBeenCalledTimes(4);
+        expect(resolveSchedule).not.toHaveBeenCalledWith('1');
+        expect(resolveSchedule).not.toHaveBeenCalledWith('2');
+        expect(resolveSchedule).not.toHaveBeenCalledWith('3');
+        expect(resolveSchedule).not.toHaveBeenCalledWith('7');
+    });
+
+    test('skips a failed resolver and chooses the earliest future threshold with a title fallback', async () => {
+        const now = utc(2026, 1, 15, 12);
+        const result = await soonestAutoSubmitScheduleBoundary(
+            invalid([
+                {
+                    id: 1,
+                    title: 'Unavailable',
+                    close_time: now + 1200,
+                    max_photo_submits: 2,
+                    member: { ranking: { entries: [] } },
+                },
+                {
+                    id: 2,
+                    title: 'Later',
+                    close_time: now + 1800,
+                    max_photo_submits: 2,
+                    member: { ranking: { entries: [] } },
+                },
+                { id: 3, title: '', close_time: now + 900, max_photo_submits: 2, member: { ranking: { entries: [] } } },
+                {
+                    id: 4,
+                    title: 'Latest',
+                    close_time: now + 2100,
+                    max_photo_submits: 2,
+                    member: { ranking: { entries: [] } },
+                },
+            ]),
+            now,
+            (id) => {
+                if (id === '1') throw new Error('settings unavailable');
+                return { enabled: true, manualPhotosOnly: false, schedule: [{ count: 2, seconds: 600 }] };
+            },
+        );
+
+        expect(result).toEqual({
+            challengeId: 3,
+            challengeTitle: 'challenge 3',
+            thresholdSec: 600,
+            boundaryTime: now + 300,
+            anyDue: false,
+        });
+    });
+
+    test('reports due work while retaining the earliest future threshold', async () => {
+        const now = utc(2026, 1, 15, 12);
+        const result = await soonestAutoSubmitScheduleBoundary(
+            invalid([
+                {
+                    id: 1,
+                    title: 'Due',
+                    close_time: now + 600,
+                    max_photo_submits: 2,
+                    member: { ranking: { entries: [] } },
+                },
+                {
+                    id: 2,
+                    title: 'Future',
+                    close_time: now + 900,
+                    max_photo_submits: 2,
+                    member: { ranking: { entries: [] } },
+                },
+            ]),
+            now,
+            () => ({ enabled: true, manualPhotosOnly: false, schedule: [{ count: 2, seconds: 600 }] }),
+        );
+
+        expect(result).toEqual({
+            challengeId: 2,
+            challengeTitle: 'Future',
+            thresholdSec: 600,
+            boundaryTime: now + 300,
+            anyDue: true,
+        });
+    });
+
+    test('reports an only-due threshold without a synthetic future boundary', async () => {
+        const now = utc(2026, 1, 15, 12);
+        const result = await soonestAutoSubmitScheduleBoundary(
+            invalid([
+                {
+                    id: 1,
+                    title: 'Due',
+                    close_time: now + 600,
+                    max_photo_submits: 2,
+                    member: { ranking: { entries: [] } },
+                },
+            ]),
+            now,
+            () => ({ enabled: true, manualPhotosOnly: false, schedule: [{ count: 2, seconds: 600 }] }),
+        );
+
+        expect(result).toEqual({
+            challengeId: 1,
+            challengeTitle: 'Due',
+            thresholdSec: 600,
+            boundaryTime: null,
+            anyDue: true,
         });
     });
 });

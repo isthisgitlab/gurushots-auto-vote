@@ -28,15 +28,17 @@ import type {
     ResolveCurrencyAuto,
     ResolveScenarioWake,
     ResolveAutoSubmitClock,
+    ResolveAutoSubmitSchedule,
 } from '../scheduling/thresholdWindow';
 import type { ResolveScheduledFill } from '../scheduling/scheduledFill';
 import type { RuleTiming } from '../voting/currencyAuto';
 
-/** The six per-challenge resolvers the shared cadence decision consumes. */
+/** The per-challenge resolvers the shared cadence decision consumes. */
 export interface CadenceResolvers {
     resolveThreshold: ResolveThreshold;
     resolveScheduledFill: ResolveScheduledFill;
     resolveAutoSubmitClock: ResolveAutoSubmitClock;
+    resolveAutoSubmitSchedule: ResolveAutoSubmitSchedule;
     resolveFinalWindowTopUp: ResolveFinalWindowTopUp;
     resolveBoostPrefill: ResolveBoostPrefill;
     resolveCurrencyAuto: ResolveCurrencyAuto;
@@ -76,6 +78,22 @@ const resolveAutoSubmitClock = async (host: ResolverHost, challengeId: string) =
     return { enabled: enabled === true, manualPhotosOnly: manualPhotosOnly === true, times, windowMinutes };
 };
 
+const resolveAutoSubmitSchedule = async (
+    host: ResolverHost,
+    challengeId: string,
+): Promise<Awaited<ReturnType<ResolveAutoSubmitSchedule>>> => {
+    const [enabled, manualPhotosOnly, schedule] = await Promise.all([
+        host.getEffectiveSetting('autoSubmit', challengeId),
+        host.getEffectiveSetting('manualPhotosOnly', challengeId),
+        host.getEffectiveSetting('autoSubmitSchedule', challengeId),
+    ]);
+    return {
+        enabled: enabled === true,
+        manualPhotosOnly: manualPhotosOnly === true,
+        schedule: schedule as Awaited<ReturnType<ResolveAutoSubmitSchedule>>['schedule'],
+    };
+};
+
 /**
  * Build the WebView resolvers over the host's IPC members. The reads go
  * through the key-agnostic channel, typed `unknown`; the main process
@@ -102,6 +120,8 @@ export const createResolvers = (host: ResolverHost): CadenceResolvers => ({
     },
 
     resolveAutoSubmitClock: (challengeId: string) => resolveAutoSubmitClock(host, challengeId),
+
+    resolveAutoSubmitSchedule: (challengeId: string) => resolveAutoSubmitSchedule(host, challengeId),
 
     // Pre-final-window top-up cadence cap: the per-challenge keys over IPC,
     // batched. Enabled only when BOTH the final-window feature and this

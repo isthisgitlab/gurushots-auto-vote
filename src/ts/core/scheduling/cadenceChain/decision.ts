@@ -85,6 +85,10 @@ const describeBoundaryCadence = (decision: CadenceDecision, waitMs: number): str
             return decision.nextAutoSubmitClock?.anyActive
                 ? `⏰ Auto-Submit clock window is active for "${decision.nextAutoSubmitClock.challengeTitle}" — ${inSeconds}`
                 : `⏰ Approaching Auto-Submit clock window for "${decision.nextAutoSubmitClock?.challengeTitle}" — ${inSeconds}`;
+        case 'auto-submit-schedule':
+            return decision.nextAutoSubmitSchedule?.anyDue
+                ? `⏰ Relative Auto-Submit schedule is due for "${decision.nextAutoSubmitSchedule.challengeTitle}" — ${inSeconds}`
+                : `⏰ Approaching relative Auto-Submit schedule for "${decision.nextAutoSubmitSchedule?.challengeTitle}" — ${inSeconds}`;
         case 'pre-boost':
             return `⏰ Approaching pre-boost fill for "${decision.nextBoostPrefill?.challengeTitle}" — ${inSeconds} (capped to the ${decision.nextBoostPrefill?.leadMin}m pre-boost boundary)`;
         case 'boost-hold':
@@ -111,6 +115,7 @@ type DecisionDeps = Pick<
     | 'resolveThreshold'
     | 'resolveScheduledFill'
     | 'resolveAutoSubmitClock'
+    | 'resolveAutoSubmitSchedule'
     | 'resolveFinalWindowTopUp'
     | 'resolveBoostPrefill'
     | 'resolveCurrencyAuto'
@@ -164,6 +169,7 @@ const decideNextWait = async (
         minGapMs: MIN_CYCLE_GAP_MS,
         resolveScheduledFill: deps.resolveScheduledFill,
         resolveAutoSubmitClock: deps.resolveAutoSubmitClock,
+        resolveAutoSubmitSchedule: deps.resolveAutoSubmitSchedule,
         timezone: effectiveTimezone(settings.timezone),
         resolveFinalWindowTopUp: deps.resolveFinalWindowTopUp,
         resolveBoostPrefill: deps.resolveBoostPrefill,

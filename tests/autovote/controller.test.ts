@@ -204,6 +204,11 @@ describe('createAutovoteController', () => {
             // Prefetched list handed to the chain → no extra fetch.
             expect(host.getActiveChallenges).not.toHaveBeenCalled();
             expect(controller!.getState().nextRunAt).toBeGreaterThan(Date.now());
+            await expect(captured.chainDeps!.resolveAutoSubmitSchedule!('42')).resolves.toMatchObject({
+                enabled: false,
+                manualPhotosOnly: false,
+            });
+            expect(host.getEffectiveSetting).toHaveBeenCalledWith('autoSubmitSchedule', '42');
 
             // Starting twice is a no-op.
             await controller!.start();

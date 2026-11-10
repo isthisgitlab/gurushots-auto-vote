@@ -214,6 +214,273 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
             expect(result.delayMs).toBe(MIN_GAP);
         });
 
+        it('caps a normal cadence at an imminent relative auto-submit schedule threshold', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            const challenges = [
+                {
+                    id: 1,
+                    title: 'Relative submit',
+                    type: 'regular',
+                    close_time: now + 10 * 60,
+                    max_photo_submits: 2,
+                    member: { ranking: { entries: [] } },
+                },
+            ];
+            const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                ...opts({ resolveThreshold: () => 1 }),
+                resolveAutoSubmitSchedule: () => ({
+                    enabled: true,
+                    manualPhotosOnly: false,
+                    schedule: [{ count: 2, seconds: 9 * 60 }],
+                }),
+            });
+            expect(result.mode).toBe('auto-submit-schedule');
+            expect(result.delayMs).toBe(60_000);
+        });
+
+        describe('relative Auto-Submit schedule cadence', () => {
+            const enabled = (schedule: Array<{ count: number; seconds: number }>) => () => ({
+                enabled: true,
+                manualPhotosOnly: false,
+                schedule,
+            });
+
+            it('uses the fixed fast cadence after a relative threshold is due', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const result = await computeNextCycleDelayMs(
+                    invalid([
+                        {
+                            id: 1,
+                            title: 'Due relative submit',
+                            type: 'regular',
+                            close_time: now + 9 * 60,
+                            max_photo_submits: 2,
+                            member: { ranking: { entries: [] } },
+                        },
+                    ]),
+                    now,
+                    opts({
+                        resolveThreshold: () => 0,
+                        resolveAutoSubmitSchedule: enabled([{ count: 2, seconds: 9 * 60 }]),
+                    }),
+                );
+                expect(result).toMatchObject({ mode: 'auto-submit-schedule', delayMs: FAST * 60_000 });
+                expect(result.nextAutoSubmitSchedule).toMatchObject({
+                    challengeId: 1,
+                    anyDue: true,
+                    boundaryTime: null,
+                });
+            });
+
+            it('floors a due relative schedule cadence at the minimum gap', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const result = await computeNextCycleDelayMs(
+                    invalid([
+                        {
+                            id: 1,
+                            title: 'Immediate relative submit',
+                            type: 'regular',
+                            close_time: now + 9 * 60,
+                            max_photo_submits: 2,
+                            member: { ranking: { entries: [] } },
+                        },
+                    ]),
+                    now,
+                    opts({
+                        lastMinuteCheckMinutes: 0.001,
+                        resolveThreshold: () => 0,
+                        resolveAutoSubmitSchedule: enabled([{ count: 2, seconds: 9 * 60 }]),
+                    }),
+                );
+                expect(result).toMatchObject({ mode: 'auto-submit-schedule', delayMs: MIN_GAP });
+            });
+
+            it('skips disabled, manual-only, full, closed, and exhausted schedules', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const resolveAutoSubmitSchedule = jest.fn((id: string) => {
+                    if (id === '1')
+                        return { enabled: false, manualPhotosOnly: false, schedule: [{ count: 2, seconds: 9 * 60 }] };
+                    if (id === '2')
+                        return { enabled: true, manualPhotosOnly: true, schedule: [{ count: 2, seconds: 9 * 60 }] };
+                    return { enabled: true, manualPhotosOnly: false, schedule: [{ count: 2, seconds: 9 * 60 }] };
+                });
+                const result = await computeNextCycleDelayMs(
+                    invalid([
+                        {
+                            id: 1,
+                            type: 'regular',
+                            close_time: now + 10 * 60,
+                            max_photo_submits: 2,
+                            member: { ranking: { entries: [] } },
+                        },
+                        {
+                            id: 2,
+                            type: 'regular',
+                            close_time: now + 10 * 60,
+                            max_photo_submits: 2,
+                            member: { ranking: { entries: [] } },
+                        },
+                        {
+                            id: 3,
+                            type: 'regular',
+                            close_time: now + 10 * 60,
+                            max_photo_submits: 2,
+                            member: { ranking: { entries: [{ id: 'x' }, { id: 'y' }] } },
+                        },
+                        {
+                            id: 4,
+                            type: 'regular',
+                            close_time: now - 1,
+                            max_photo_submits: 2,
+                            member: { ranking: { entries: [] } },
+                        },
+                        {
+                            id: 5,
+                            type: 'regular',
+                            close_time: now + 10 * 60,
+                            max_photo_submits: 3,
+                            member: { ranking: { entries: [{ id: 'x' }, { id: 'y' }] } },
+                        },
+                    ]),
+                    now,
+                    opts({ resolveThreshold: () => 0, resolveAutoSubmitSchedule }),
+                );
+                expect(result).toMatchObject({ mode: 'normal', delayMs: NORMAL, nextAutoSubmitSchedule: null });
+                expect(resolveAutoSubmitSchedule).toHaveBeenCalledTimes(3);
+            });
+
+            it.each([
+                ['flash', 'flash'],
+                ['unjoined', 'regular'],
+            ])('caps for a %s challenge the submission runner can fill', async (_label, type) => {
+                const now = Math.floor(Date.now() / 1000);
+                const result = await computeNextCycleDelayMs(
+                    invalid([
+                        {
+                            id: 1,
+                            title: 'Eligible submit',
+                            type,
+                            close_time: now + 10 * 60,
+                            max_photo_submits: 2,
+                            member: type === 'flash' ? { ranking: { entries: [] } } : undefined,
+                        },
+                    ]),
+                    now,
+                    opts({
+                        resolveThreshold: () => 0,
+                        resolveAutoSubmitSchedule: enabled([{ count: 2, seconds: 9 * 60 }]),
+                    }),
+                );
+                expect(result).toMatchObject({ mode: 'auto-submit-schedule', delayMs: 60_000 });
+            });
+
+            it('uses the next outstanding row from a staggered schedule', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const result = await computeNextCycleDelayMs(
+                    invalid([
+                        {
+                            id: 1,
+                            title: 'Staggered submit',
+                            type: 'regular',
+                            close_time: now + 3 * 60,
+                            max_photo_submits: 3,
+                            member: { ranking: { entries: [{ id: 'first' }, { id: 'second' }] } },
+                        },
+                    ]),
+                    now,
+                    opts({
+                        resolveThreshold: () => 0,
+                        resolveAutoSubmitSchedule: enabled([
+                            { count: 2, seconds: 5 * 60 },
+                            { count: 3, seconds: 2 * 60 },
+                        ]),
+                    }),
+                );
+                expect(result).toMatchObject({ mode: 'auto-submit-schedule', delayMs: 60_000 });
+                expect(result.nextAutoSubmitSchedule).toMatchObject({ thresholdSec: 2 * 60 });
+            });
+
+            it('caps the existing fast cadence at a nearer future relative threshold', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const result = await computeNextCycleDelayMs(
+                    invalid([
+                        {
+                            id: 1,
+                            type: 'regular',
+                            close_time: now + 30,
+                            max_photo_submits: 2,
+                            member: { ranking: { entries: [] } },
+                        },
+                        {
+                            id: 2,
+                            type: 'regular',
+                            close_time: now + 10 * 60,
+                            max_photo_submits: 2,
+                            member: { ranking: { entries: [] } },
+                        },
+                    ]),
+                    now,
+                    opts({
+                        resolveThreshold: (id) => (id === '1' ? 1 : 0),
+                        resolveAutoSubmitSchedule: (id) =>
+                            id === '2'
+                                ? {
+                                      enabled: true,
+                                      manualPhotosOnly: false,
+                                      schedule: [{ count: 2, seconds: 9 * 60 + 35 }],
+                                  }
+                                : { enabled: false, manualPhotosOnly: false, schedule: [] },
+                    }),
+                );
+                expect(result).toMatchObject({ mode: 'auto-submit-schedule', delayMs: 25_000 });
+            });
+
+            it('keeps the capped delay and due state stable when overdue challenges are reordered', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const challenges = [
+                    {
+                        id: 1,
+                        title: 'First overdue',
+                        type: 'regular',
+                        close_time: now + 600,
+                        max_photo_submits: 2,
+                        member: { ranking: { entries: [] } },
+                    },
+                    {
+                        id: 2,
+                        title: 'Second overdue',
+                        type: 'regular',
+                        close_time: now + 540,
+                        max_photo_submits: 2,
+                        member: { ranking: { entries: [] } },
+                    },
+                    {
+                        id: 3,
+                        title: 'Nearer future',
+                        type: 'regular',
+                        close_time: now + 625,
+                        max_photo_submits: 2,
+                        member: { ranking: { entries: [] } },
+                    },
+                ];
+                const cadenceOptions = opts({
+                    resolveThreshold: () => 0,
+                    resolveAutoSubmitSchedule: enabled([{ count: 2, seconds: 600 }]),
+                });
+
+                const forward = await computeNextCycleDelayMs(invalid(challenges), now, cadenceOptions);
+                const reverse = await computeNextCycleDelayMs(invalid([...challenges].reverse()), now, cadenceOptions);
+
+                for (const result of [forward, reverse]) {
+                    expect(result).toMatchObject({
+                        mode: 'auto-submit-schedule',
+                        delayMs: 25_000,
+                        nextAutoSubmitSchedule: { challengeId: 3, anyDue: true },
+                    });
+                }
+            });
+        });
+
         describe('Auto-Submit clock cadence', () => {
             const activeClock = () => ({
                 enabled: true,

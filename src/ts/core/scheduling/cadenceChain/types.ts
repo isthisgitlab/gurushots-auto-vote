@@ -8,6 +8,7 @@ import type {
     ResolveFinalWindowTopUp,
     ResolveScenarioWake,
     ResolveAutoSubmitClock,
+    ResolveAutoSubmitSchedule,
     ResolveThreshold,
 } from '../thresholdWindow';
 import type { ResolveScheduledFill } from '../scheduledFill';
@@ -46,6 +47,7 @@ export type CadenceChainDeps = {
     resolveThreshold: ResolveThreshold;
     resolveScheduledFill: ResolveScheduledFill;
     resolveAutoSubmitClock?: ResolveAutoSubmitClock | null;
+    resolveAutoSubmitSchedule?: ResolveAutoSubmitSchedule | null;
     resolveFinalWindowTopUp: ResolveFinalWindowTopUp;
     resolveBoostPrefill: ResolveBoostPrefill;
     resolveCurrencyAuto?: ResolveCurrencyAuto | null;

@@ -2,6 +2,7 @@
 
 import { soonestScheduledStart } from '../scheduledFill';
 import { soonestAutoSubmitClockBoundary } from '../autoSubmitClock';
+import { soonestAutoSubmitScheduleBoundary } from '../autoSubmitSchedule';
 import { soonestFinalWindowTopUpStart, soonestBoostPrefillStart } from './leadWindows';
 import { soonestCurrencyRuleStart, soonestScenarioWake, soonestBoostHoldEnd } from './ruleWakes';
 import { resolveEligibleThresholds, anyInWindow, soonestThresholdEntry } from './thresholds';
@@ -9,6 +10,7 @@ import { resolveEligibleThresholds, anyInWindow, soonestThresholdEntry } from '.
 import type { Challenge } from '../../types/gurushots';
 import type { ResolveScheduledFill, ScheduledStart } from '../scheduledFill';
 import type { AutoSubmitClockBoundary, ResolveAutoSubmitClock } from '../autoSubmitClock';
+import type { AutoSubmitScheduleBoundary, ResolveAutoSubmitSchedule } from '../autoSubmitSchedule';
 import type {
     CadenceMode,
     LeadWindowStart,
@@ -30,6 +32,7 @@ export interface CadenceDecision {
     nextEntry: ThresholdEntry | null;
     nextScheduled: ScheduledStart | null;
     nextAutoSubmitClock: AutoSubmitClockBoundary | null;
+    nextAutoSubmitSchedule: AutoSubmitScheduleBoundary | null;
     nextFinalWindowTopUp: LeadWindowStart | null;
     nextBoostPrefill: LeadWindowStart | null;
     nextCurrencyRule: CurrencyRuleStart | null;
@@ -63,6 +66,7 @@ const capCadenceToBoundary = (
 const fastCadenceDecision = ({
     mode,
     nextAutoSubmitClock,
+    nextAutoSubmitSchedule,
     nextEntry,
     nextScheduled,
     nextFinalWindowTopUp,
@@ -76,6 +80,7 @@ const fastCadenceDecision = ({
 }: {
     mode: CadenceMode;
     nextAutoSubmitClock: AutoSubmitClockBoundary | null;
+    nextAutoSubmitSchedule: AutoSubmitScheduleBoundary | null;
     nextEntry: ThresholdEntry | null;
     nextScheduled: ScheduledStart | null;
     nextFinalWindowTopUp: LeadWindowStart | null;
@@ -95,6 +100,8 @@ const fastCadenceDecision = ({
     if (nextScheduled) capCadenceToBoundary(fast, nextScheduled.startTime, now, minGapMs, 'scheduled');
     if (nextAutoSubmitClock)
         capCadenceToBoundary(fast, nextAutoSubmitClock.boundaryTime, now, minGapMs, 'auto-submit-clock');
+    if (nextAutoSubmitSchedule?.boundaryTime != null)
+        capCadenceToBoundary(fast, nextAutoSubmitSchedule.boundaryTime, now, minGapMs, 'auto-submit-schedule');
     if (nextFinalWindowTopUp)
         capCadenceToBoundary(fast, nextFinalWindowTopUp.startTime, now, minGapMs, 'pre-final-window');
     if (nextBoostPrefill) capCadenceToBoundary(fast, nextBoostPrefill.startTime, now, minGapMs, 'pre-boost');
@@ -107,6 +114,7 @@ const fastCadenceDecision = ({
         nextEntry,
         nextScheduled,
         nextAutoSubmitClock,
+        nextAutoSubmitSchedule,
         nextFinalWindowTopUp,
         nextBoostPrefill,
         nextCurrencyRule,
@@ -147,6 +155,61 @@ const resolveSecondaryBoundaries = async ({
     nextCurrencyRule: resolveCurrencyAuto ? await soonestCurrencyRuleStart(challenges, now, resolveCurrencyAuto) : null,
     nextScenarioWake: resolveScenarioWake ? await soonestScenarioWake(challenges, now, resolveScenarioWake) : null,
 });
+
+const resolveCadenceBoundaries = async ({
+    challenges,
+    eligible,
+    thresholds,
+    now,
+    timezone,
+    resolveScheduledFill,
+    resolveAutoSubmitClock,
+    resolveAutoSubmitSchedule,
+    resolveFinalWindowTopUp,
+    resolveBoostPrefill,
+    resolveCurrencyAuto,
+    resolveScenarioWake,
+}: {
+    challenges: Challenge[];
+    eligible: Challenge[];
+    thresholds: number[];
+    now: number;
+    timezone: string | null;
+    resolveScheduledFill: ResolveScheduledFill | null;
+    resolveAutoSubmitClock: ResolveAutoSubmitClock | null;
+    resolveAutoSubmitSchedule: ResolveAutoSubmitSchedule | null;
+    resolveFinalWindowTopUp: ResolveFinalWindowTopUp | null;
+    resolveBoostPrefill: ResolveBoostPrefill | null;
+    resolveCurrencyAuto: ResolveCurrencyAuto | null;
+    resolveScenarioWake: ResolveScenarioWake | null;
+}) => {
+    const [nextAutoSubmitClock, nextAutoSubmitSchedule, secondary] = await Promise.all([
+        resolveAutoSubmitClock && timezone
+            ? soonestAutoSubmitClockBoundary(challenges, now, resolveAutoSubmitClock, timezone)
+            : null,
+        resolveAutoSubmitSchedule
+            ? soonestAutoSubmitScheduleBoundary(challenges, now, resolveAutoSubmitSchedule)
+            : null,
+        resolveSecondaryBoundaries({
+            challenges,
+            eligible,
+            now,
+            timezone,
+            resolveScheduledFill,
+            resolveFinalWindowTopUp,
+            resolveBoostPrefill,
+            resolveCurrencyAuto,
+            resolveScenarioWake,
+        }),
+    ]);
+    return {
+        nextAutoSubmitClock,
+        nextAutoSubmitSchedule,
+        nextEntry: soonestThresholdEntry(eligible, thresholds, now),
+        nextBoostHold: soonestBoostHoldEnd(challenges, now),
+        ...secondary,
+    };
+};
 
 /**
  * Single source of cadence truth for every host. Decide how long to wait before
@@ -200,6 +263,7 @@ export async function computeNextCycleDelayMs(
         minGapMs,
         resolveScheduledFill = null,
         resolveAutoSubmitClock = null,
+        resolveAutoSubmitSchedule = null,
         timezone = null,
         resolveFinalWindowTopUp = null,
         resolveBoostPrefill = null,
@@ -212,6 +276,7 @@ export async function computeNextCycleDelayMs(
         minGapMs: number;
         resolveScheduledFill?: ResolveScheduledFill | null;
         resolveAutoSubmitClock?: ResolveAutoSubmitClock | null;
+        resolveAutoSubmitSchedule?: ResolveAutoSubmitSchedule | null;
         timezone?: string | null;
         resolveFinalWindowTopUp?: ResolveFinalWindowTopUp | null;
         resolveBoostPrefill?: ResolveBoostPrefill | null;
@@ -220,36 +285,22 @@ export async function computeNextCycleDelayMs(
     },
 ): Promise<CadenceDecision> {
     const { eligible, thresholds } = await resolveEligibleThresholds(challenges, now, resolveThreshold);
-    // A held boost caps even the last-minute cadence: it is typically released
-    // inside the final stretch, where one fast tick late still wastes boost time.
-    const nextBoostHold = soonestBoostHoldEnd(challenges, now);
-    const nextAutoSubmitClock =
-        resolveAutoSubmitClock && timezone
-            ? await soonestAutoSubmitClockBoundary(challenges, now, resolveAutoSubmitClock, timezone)
-            : null;
-
-    const nextEntry = soonestThresholdEntry(eligible, thresholds, now);
-    const { nextScheduled, nextFinalWindowTopUp, nextBoostPrefill, nextCurrencyRule, nextScenarioWake } =
-        await resolveSecondaryBoundaries({
-            challenges,
-            eligible,
-            now,
-            timezone,
-            resolveScheduledFill,
-            resolveFinalWindowTopUp,
-            resolveBoostPrefill,
-            resolveCurrencyAuto,
-            resolveScenarioWake,
-        });
+    const boundaries = await resolveCadenceBoundaries({
+        challenges,
+        eligible,
+        thresholds,
+        now,
+        timezone,
+        resolveScheduledFill,
+        resolveAutoSubmitClock,
+        resolveAutoSubmitSchedule,
+        resolveFinalWindowTopUp,
+        resolveBoostPrefill,
+        resolveCurrencyAuto,
+        resolveScenarioWake,
+    });
     const fastBoundaries = {
-        nextAutoSubmitClock,
-        nextEntry,
-        nextScheduled,
-        nextFinalWindowTopUp,
-        nextBoostPrefill,
-        nextCurrencyRule,
-        nextScenarioWake,
-        nextBoostHold,
+        ...boundaries,
         now,
         minGapMs,
         lastMinuteCheckMinutes,
@@ -262,9 +313,16 @@ export async function computeNextCycleDelayMs(
         });
     }
 
-    if (nextAutoSubmitClock?.anyActive) {
+    if (boundaries.nextAutoSubmitClock?.anyActive) {
         return fastCadenceDecision({
             mode: 'auto-submit-clock',
+            ...fastBoundaries,
+        });
+    }
+
+    if (boundaries.nextAutoSubmitSchedule?.anyDue) {
+        return fastCadenceDecision({
+            mode: 'auto-submit-schedule',
             ...fastBoundaries,
         });
     }
@@ -276,25 +334,20 @@ export async function computeNextCycleDelayMs(
     const capTo = (boundarySec: number, mode: CadenceMode) =>
         capCadenceToBoundary(cadence, boundarySec, now, minGapMs, mode);
 
-    if (nextEntry) capTo(nextEntry.entryTime, 'approaching');
-    if (nextScheduled) capTo(nextScheduled.startTime, 'scheduled');
-    if (nextAutoSubmitClock) capTo(nextAutoSubmitClock.boundaryTime, 'auto-submit-clock');
-    if (nextFinalWindowTopUp) capTo(nextFinalWindowTopUp.startTime, 'pre-final-window');
-    if (nextBoostPrefill) capTo(nextBoostPrefill.startTime, 'pre-boost');
-    if (nextBoostHold) capTo(nextBoostHold.startTime, 'boost-hold');
-    if (nextCurrencyRule) capTo(nextCurrencyRule.startTime, 'currency-rule');
-    if (nextScenarioWake) capTo(nextScenarioWake.startTime, 'scenario');
+    if (boundaries.nextEntry) capTo(boundaries.nextEntry.entryTime, 'approaching');
+    if (boundaries.nextScheduled) capTo(boundaries.nextScheduled.startTime, 'scheduled');
+    if (boundaries.nextAutoSubmitClock) capTo(boundaries.nextAutoSubmitClock.boundaryTime, 'auto-submit-clock');
+    if (boundaries.nextAutoSubmitSchedule?.boundaryTime != null)
+        capTo(boundaries.nextAutoSubmitSchedule.boundaryTime, 'auto-submit-schedule');
+    if (boundaries.nextFinalWindowTopUp) capTo(boundaries.nextFinalWindowTopUp.startTime, 'pre-final-window');
+    if (boundaries.nextBoostPrefill) capTo(boundaries.nextBoostPrefill.startTime, 'pre-boost');
+    if (boundaries.nextBoostHold) capTo(boundaries.nextBoostHold.startTime, 'boost-hold');
+    if (boundaries.nextCurrencyRule) capTo(boundaries.nextCurrencyRule.startTime, 'currency-rule');
+    if (boundaries.nextScenarioWake) capTo(boundaries.nextScenarioWake.startTime, 'scenario');
 
     return {
         delayMs: cadence.delayMs,
         mode: cadence.mode,
-        nextEntry,
-        nextScheduled,
-        nextAutoSubmitClock,
-        nextFinalWindowTopUp,
-        nextBoostPrefill,
-        nextCurrencyRule,
-        nextScenarioWake,
-        nextBoostHold,
+        ...boundaries,
     };
 }

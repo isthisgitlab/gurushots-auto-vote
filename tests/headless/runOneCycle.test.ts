@@ -259,6 +259,7 @@ describe('headless runOneCycle', () => {
                     lastMinuteCheckFrequency: 1,
                     autoSubmit: true,
                     manualPhotosOnly: false,
+                    autoSubmitSchedule: [],
                     autoSubmitTime: [clockTime],
                     autoSubmitWindowMinutes: 5,
                 })[key],
@@ -311,6 +312,32 @@ describe('headless runOneCycle', () => {
 
         expect(getActiveChallenges).toHaveBeenCalledWith('tok');
         expect(lastPayload().nextDelayMs).toBe(60000);
+    });
+
+    test('uses the shared relative auto-submit schedule boundary', async () => {
+        const now = Math.floor(FIXED_NOW_MS / 1000);
+        settings.getEffectiveSetting.mockImplementation((key) => {
+            if (key === 'lastMinuteThreshold') return 0;
+            if (key === 'autoSubmit') return true;
+            if (key === 'manualPhotosOnly') return false;
+            if (key === 'autoSubmitSchedule') return [{ count: 2, seconds: 9 * 60 }];
+            return 1;
+        });
+        const delay = await computeNextDelayMs(
+            'tok',
+            invalid([
+                {
+                    id: 1,
+                    type: 'regular',
+                    close_time: now + 10 * 60,
+                    max_photo_submits: 2,
+                    member: { ranking: { entries: [] } },
+                },
+            ]),
+        );
+
+        expect(delay).toBe(60_000);
+        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('autoSubmitSchedule', '1');
     });
 
     // Network-outage recovery: on Android the headless loop schedules its own

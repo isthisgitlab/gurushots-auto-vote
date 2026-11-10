@@ -508,6 +508,70 @@ describe('createCadenceChain', () => {
         );
     });
 
+    test('due relative Auto-Submit schedules use the schedule cadence log', async () => {
+        const now = Date.UTC(2026, 0, 15, 12);
+        jest.setSystemTime(now);
+        const deps = makeDeps({
+            resolveThreshold: jest.fn(() => 0),
+            resolveAutoSubmitSchedule: jest.fn(() => ({
+                enabled: true,
+                manualPhotosOnly: false,
+                schedule: [{ count: 2, seconds: 600 }],
+            })),
+        });
+        const chain = createCadenceChain(invalid(deps));
+
+        await chain.scheduleNext(
+            invalid([
+                {
+                    id: 11,
+                    title: 'Relative due',
+                    type: 'regular',
+                    close_time: now / 1000 + 600,
+                    max_photo_submits: 2,
+                    member: { ranking: { entries: [] } },
+                },
+            ]),
+        );
+
+        expect(deps.log.cadence).toHaveBeenCalledWith(
+            'auto-submit-schedule',
+            expect.stringContaining('Relative Auto-Submit schedule is due for "Relative due"'),
+        );
+    });
+
+    test('upcoming relative Auto-Submit schedules use the approaching schedule cadence log', async () => {
+        const now = Date.UTC(2026, 0, 15, 12);
+        jest.setSystemTime(now);
+        const deps = makeDeps({
+            resolveThreshold: jest.fn(() => 0),
+            resolveAutoSubmitSchedule: jest.fn(() => ({
+                enabled: true,
+                manualPhotosOnly: false,
+                schedule: [{ count: 2, seconds: 600 }],
+            })),
+        });
+        const chain = createCadenceChain(invalid(deps));
+
+        await chain.scheduleNext(
+            invalid([
+                {
+                    id: 12,
+                    title: 'Relative future',
+                    type: 'regular',
+                    close_time: now / 1000 + 625,
+                    max_photo_submits: 2,
+                    member: { ranking: { entries: [] } },
+                },
+            ]),
+        );
+
+        expect(deps.log.cadence).toHaveBeenCalledWith(
+            'auto-submit-schedule',
+            expect.stringContaining('Approaching relative Auto-Submit schedule for "Relative future"'),
+        );
+    });
+
     test('decision error → decisionError log + fallback to the plain random cadence', async () => {
         const deps = makeDeps();
         const boom = new Error('decision boom');

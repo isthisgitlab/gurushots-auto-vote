@@ -83,6 +83,7 @@ export const createControllerChain = ({
         resolveThreshold: resolvers.resolveThreshold,
         resolveScheduledFill: resolvers.resolveScheduledFill,
         resolveAutoSubmitClock: resolvers.resolveAutoSubmitClock,
+        resolveAutoSubmitSchedule: resolvers.resolveAutoSubmitSchedule,
         resolveFinalWindowTopUp: resolvers.resolveFinalWindowTopUp,
         resolveBoostPrefill: resolvers.resolveBoostPrefill,
         resolveCurrencyAuto: resolvers.resolveCurrencyAuto,

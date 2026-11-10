@@ -113,6 +113,12 @@ describe('transport deps', () => {
         expect(settings.getEffectiveSetting).toHaveBeenCalledWith('autoSubmit', '42');
         expect(settings.getEffectiveSetting).toHaveBeenCalledWith('autoSubmitTime', '42');
         expect(settings.getEffectiveSetting).toHaveBeenCalledWith('autoSubmitWindowMinutes', '42');
+        expect(mockChainOpts!.resolveAutoSubmitSchedule!('42')).toEqual({
+            enabled: false,
+            manualPhotosOnly: false,
+            schedule: 5,
+        });
+        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('autoSubmitSchedule', '42');
         await expect(mockChainOpts!.runCycle()).resolves.toEqual(['x']);
         expect(runVotingCycle).toHaveBeenCalledWith(1);
     });
