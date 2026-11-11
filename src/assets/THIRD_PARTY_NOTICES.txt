@@ -51,7 +51,7 @@ Shipped in the desktop app, the CLI binaries and the Android app, or compiled in
   License: MIT
   Copyright (c) 2021-present Toyobayashi
 
-@huggingface/jinja 0.5.11
+@huggingface/jinja 0.5.12
   License: MIT
   Copyright (c) 2023 Hugging Face
 
