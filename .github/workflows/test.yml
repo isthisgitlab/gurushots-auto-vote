@@ -67,6 +67,7 @@ jobs:
               uses: ./.github/actions/setup-build
               with:
                   cache-vision-model: 'true'
+                  turbo-cache-scope: test
 
             - name: Audit dependencies
               # --prod scopes the gate to shipped runtime deps (the ones that
@@ -161,6 +162,7 @@ jobs:
               uses: ./.github/actions/setup-build
               with:
                   cache-vision-model: 'true'
+                  turbo-cache-scope: android
 
             - name: Setup Java (JDK 27 — Capacitor 8's Java 21 source/target sets the floor)
               if: env.RUN_FULL_CHECKS == 'true'
@@ -264,20 +266,11 @@ jobs:
               if: env.RUN_FULL_CHECKS == 'true'
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-            - name: Install pnpm
+            - name: Setup build environment
               if: env.RUN_FULL_CHECKS == 'true'
-              uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-
-            - name: Setup Node.js
-              if: env.RUN_FULL_CHECKS == 'true'
-              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+              uses: ./.github/actions/setup-build
               with:
-                  node-version: '26'
-                  cache: 'pnpm'
-
-            - name: Install dependencies
-              if: env.RUN_FULL_CHECKS == 'true'
-              run: pnpm install --frozen-lockfile
+                  turbo-cache-scope: typecheck
 
             # Strict type-check of the src/ts TypeScript with the native tsc (checker only, noEmit).
             # Lint, including the type-aware promise rules, runs in `pnpm lint`.
@@ -307,20 +300,11 @@ jobs:
               if: env.RUN_FULL_CHECKS == 'true'
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-            - name: Install pnpm
+            - name: Setup build environment
               if: env.RUN_FULL_CHECKS == 'true'
-              uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-
-            - name: Setup Node.js
-              if: env.RUN_FULL_CHECKS == 'true'
-              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+              uses: ./.github/actions/setup-build
               with:
-                  node-version: '26'
-                  cache: 'pnpm'
-
-            - name: Install dependencies
-              if: env.RUN_FULL_CHECKS == 'true'
-              run: pnpm install --frozen-lockfile
+                  turbo-cache-scope: knip
 
             - name: Dead-code / unused-dependency check
               if: env.RUN_FULL_CHECKS == 'true'

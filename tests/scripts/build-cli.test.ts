@@ -61,7 +61,7 @@ import { invalid } from '../helpers/invalid';
 import { parseJsonObject } from '../helpers/parseJson';
 
 const ROOT = path.join(__dirname, '..', '..');
-const DIST_DIR = path.join(ROOT, 'dist');
+const DIST_DIR = path.join(ROOT, 'out', 'cli');
 const BUILD_DIR = path.join(ROOT, 'build', 'cli');
 const NODE_CACHE_DIR = path.join(ROOT, '.cache', 'node-binaries');
 const LEXICON = path.join(ROOT, 'src', 'assets', 'semantic-vectors.json');
@@ -566,6 +566,40 @@ describe('build-cli', () => {
             expect(exitSpy).not.toHaveBeenCalled();
         });
 
+        test('runs only the deterministic JavaScript bundle stage', async () => {
+            process.argv = ['node', 'build-cli.ts', '--stage=bundle'];
+            await buildCli.main();
+
+            expect(build).toHaveBeenCalledTimes(1);
+            expect(fs.copyFileSync).not.toHaveBeenCalled();
+            expect(exitSpy).not.toHaveBeenCalled();
+        });
+
+        test('runs only full native preparation for the prepare stage', async () => {
+            const { ensureVisionModel } = jest.mocked(
+                require('../../scripts/fetch-vision-model') as typeof fetch_vision_modelModule,
+            );
+            process.argv = ['node', 'build-cli.ts', '--stage=prepare'];
+            await buildCli.main();
+
+            expect(build).not.toHaveBeenCalled();
+            expect(ensureVisionModel).toHaveBeenCalled();
+            expect(exitSpy).not.toHaveBeenCalled();
+        });
+
+        test('packages the requested lite platform without bundle or native preparation stages', async () => {
+            const { ensureVisionModel } = jest.mocked(
+                require('../../scripts/fetch-vision-model') as typeof fetch_vision_modelModule,
+            );
+            process.argv = ['node', 'build-cli.ts', 'gurucli-linux', '--lite', '--stage=package'];
+            await buildCli.main();
+
+            expect(build).not.toHaveBeenCalled();
+            expect(ensureVisionModel).not.toHaveBeenCalled();
+            expect(builtOutputs()).toEqual([`gurucli-v${version}-linux-lite`]);
+            expect(exitSpy).not.toHaveBeenCalled();
+        });
+
         test('builds only the requested platform', async () => {
             process.argv = ['node', 'build-cli.ts', 'gurucli-linux-arm'];
             await buildCli.main();
@@ -608,6 +642,14 @@ describe('build-cli', () => {
             expect(errorSpy).toHaveBeenCalledWith('❌ Build failed:', new Error('Unknown platform: gurucli-bogus'));
             expect(exitSpy).toHaveBeenCalledWith(1);
             expect(fs.copyFileSync).not.toHaveBeenCalled();
+        });
+
+        test('rejects an unknown build stage before any build side effect', async () => {
+            process.argv = ['node', 'build-cli.ts', '--stage=unknown'];
+            await expect(buildCli.main()).rejects.toThrow('Unknown CLI build stage: unknown');
+
+            expect(errorSpy).not.toHaveBeenCalled();
+            expect(exitSpy).not.toHaveBeenCalled();
         });
 
         test('refuses to embed a Node other than the one the notices carry the LICENSE of', async () => {

@@ -14,16 +14,32 @@ inputs:
         description: When 'true' (default), run `pnpm install --frozen-lockfile`. Set 'false' for jobs that want to install differently.
         required: false
         default: 'true'
+    turbo-cache-scope:
+        description: A distinct cache partition for each matrix cell that invokes this action.
+        required: false
+        default: default
 
 runs:
     using: composite
     steps:
         - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
-        - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        - id: node
+          uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
           with:
               node-version: '26'
               cache: 'pnpm'
+
+        - id: turbo-runtime
+          shell: bash
+          run: echo "node=$(node --version)" >> "$GITHUB_OUTPUT"
+
+        - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+          with:
+              path: .turbo/cache
+              key: turbo-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.turbo-runtime.outputs.node }}-${{ github.job }}-${{ inputs.turbo-cache-scope }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+              restore-keys: |
+                  turbo-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.turbo-runtime.outputs.node }}-${{ github.job }}-${{ inputs.turbo-cache-scope }}-${{ hashFiles('pnpm-lock.yaml') }}-
 
         - if: inputs.download-bumped == 'true'
           uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8

@@ -120,6 +120,7 @@ jobs:
               uses: ./.github/actions/setup-build
               with:
                   cache-vision-model: 'true'
+                  turbo-cache-scope: codeql-${{ matrix.language }}-${{ matrix.build-mode }}
 
             # cap sync generates the Capacitor gradle subprojects and bridge
             # config assets; it refuses to run without the web build. Runs

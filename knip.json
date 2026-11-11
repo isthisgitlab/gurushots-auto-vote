@@ -21,8 +21,8 @@
     "paths": {
         "@/*": ["src/ts/react/*"]
     },
-    "ignoreDependencies": ["postject"],
-    "ignoreBinaries": ["make", "notify-send", "pgrep"],
+    "ignoreDependencies": ["app-builder-lib", "postject", "turbo"],
+    "ignoreBinaries": ["make", "notify-send"],
     "rules": {
         "exports": "off",
         "nsExports": "off"

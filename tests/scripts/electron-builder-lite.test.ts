@@ -40,7 +40,12 @@ describe('scripts/electron-builder-lite.ts', () => {
     test('leaves the vision model and its runtime packages out', () => {
         expect(lite.extraResources).toEqual([]);
         expect(lite.asarUnpack).toEqual([]);
-        expect(lite.files).toEqual(expect.arrayContaining(build.files));
+        expect(lite.files).toEqual(
+            expect.arrayContaining([
+                ...build.files.filter((pattern) => pattern !== 'dist/**/*'),
+                { from: 'out/assembly/lite', to: 'dist', filter: ['**/*'] },
+            ]),
+        );
         for (const name of [
             '@huggingface',
             'onnxruntime-node',
@@ -77,7 +82,11 @@ describe('scripts/electron-builder-lite.ts', () => {
         expect(fs.existsSync(path.join(__dirname, '..', '..', 'src', 'assets', 'THIRD_PARTY_NOTICES.txt'))).toBe(true);
         for (const config of [build, lite]) {
             expect(config.files).toContain('src/assets/**/*');
-            expect(config.files.filter((pattern) => pattern.startsWith('!') && pattern.includes('assets'))).toEqual([]);
+            expect(
+                config.files.filter(
+                    (pattern) => typeof pattern === 'string' && pattern.startsWith('!') && pattern.includes('assets'),
+                ),
+            ).toEqual([]);
         }
     });
 

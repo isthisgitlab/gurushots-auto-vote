@@ -24,9 +24,17 @@ const dirty = !process.env.GITHUB_ACTIONS;
 const dirtyArtifact = (artifactName: string) =>
     dirty ? artifactName.replace(`\${version}`, `\${version}-dirty`) : artifactName;
 
-// On a release build the export deep-equals package.json's `build` (tests/scripts/electron-builder.test.ts).
+// Package metadata stays aligned with package.json; this maps the isolated full assembly to the established dist path.
 export default {
     ...build,
+    files: [
+        ...build.files.filter((pattern) => pattern !== 'dist/**/*'),
+        {
+            from: 'out/assembly/full',
+            to: 'dist',
+            filter: ['**/*', '!vision-model${/*}', '!ort-wasm-simd-threaded.*'],
+        },
+    ],
     mac: {
         ...build.mac,
         artifactName: dirtyArtifact(build.mac.artifactName),

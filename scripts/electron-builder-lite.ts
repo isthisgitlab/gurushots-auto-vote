@@ -22,7 +22,13 @@ const liteArtifact = (artifactName: string) => artifactName.replace(/(\.[^.]+)$/
 
 export default {
     ...build,
-    files: [...build.files, ...VISION_PACKAGES.map((name) => `!**/node_modules/${name}\${/*}`)],
+    files: [
+        ...build.files.filter((pattern) =>
+            typeof pattern === 'string' ? !pattern.includes('out/assembly/full') : pattern.from !== 'out/assembly/full',
+        ),
+        { from: 'out/assembly/lite', to: 'dist', filter: ['**/*'] },
+        ...VISION_PACKAGES.map((name) => `!**/node_modules/${name}\${/*}`),
+    ],
     extraResources: [],
     asarUnpack: [],
     directories: { ...build.directories, output: 'build/lite' },

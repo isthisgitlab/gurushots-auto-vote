@@ -250,6 +250,57 @@ describe('Dependabot workflow-only CI classification', () => {
     );
 });
 
+describe('Turbo workflow cache contracts', () => {
+    test('partitions every matrix build cache and restores Turbo cache in the standalone validation jobs', () => {
+        const desktop = stepNamed(build.jobs.build, 'Setup build environment');
+        expect(desktop.with?.['turbo-cache-scope']).toBe('desktop-${{ matrix.platform }}-${{ matrix.variant }}');
+
+        const codeql = stepNamed(codeqlWorkflow.jobs.analyze, 'Setup build environment');
+        expect(codeql.with?.['turbo-cache-scope']).toBe('codeql-${{ matrix.language }}-${{ matrix.build-mode }}');
+
+        for (const [jobName, scope] of [
+            ['test', 'test'],
+            ['android', 'android'],
+            ['typecheck', 'typecheck'],
+            ['knip', 'knip'],
+        ]) {
+            const setup = stepNamed(testWorkflow.jobs[jobName], 'Setup build environment');
+            expect(setup.uses).toBe('./.github/actions/setup-build');
+            expect(setup.with?.['turbo-cache-scope']).toBe(scope);
+        }
+    });
+
+    test('keeps credentials task-scoped and outside Turbo hash inputs', () => {
+        const config = text('turbo.json');
+        expect(config).toContain('"passThroughEnv": ["GH_TOKEN"]');
+        expect(config).toContain('"passThroughEnv": ["GITHUB_TOKEN"]');
+        expect(config).toContain('"passThroughEnv": ["ANDROID_HOME", "ANDROID_SDK_ROOT", "JAVA_HOME"]');
+        expect(config).not.toMatch(/"env":\s*\[[^\]]*(GH_TOKEN|GITHUB_TOKEN|ANDROID_HOME|ANDROID_SDK_ROOT|JAVA_HOME)/);
+    });
+
+    test('uses gitignore-aware conservative inputs for validation tasks', () => {
+        const parsed: unknown = JSON.parse(text('turbo.json'));
+        if (!isPlainObject(parsed) || !isPlainObject(parsed.tasks)) throw new Error('turbo.json has no task mapping');
+
+        for (const taskName of ['validate:test', 'validate:coverage']) {
+            const task = parsed.tasks[taskName];
+            if (!isPlainObject(task) || !Array.isArray(task.inputs)) throw new Error(`${taskName} has no inputs`);
+            expect(task.inputs).toEqual(['$TURBO_DEFAULT$']);
+        }
+    });
+
+    test('excludes the ignored embedding download from broad script task inputs', () => {
+        const parsed: unknown = JSON.parse(text('turbo.json'));
+        if (!isPlainObject(parsed) || !isPlainObject(parsed.tasks)) throw new Error('turbo.json has no task mapping');
+
+        for (const task of ['bundle:renderer-full', 'bundle:renderer-lite', 'build:lexicon', 'build:notices']) {
+            const config = parsed.tasks[task];
+            if (!isPlainObject(config) || !Array.isArray(config.inputs)) throw new Error(`${task} has no inputs`);
+            expect(config.inputs).toContain('!scripts/.cache/**');
+        }
+    });
+});
+
 describe('Android signing', () => {
     const secretsIn = (job: Job) => JSON.stringify(job).match(/secrets\.[A-Z_]+/g) ?? [];
 
@@ -307,11 +358,14 @@ describe('Android signing', () => {
         expect(files).toContain('artifacts/remote-page/remote-page-v*.zip.sha256');
         // The zip carries the one link-version directory the build stages (dist/remote/v<N>/), built from the bumped package.
         const job = build.jobs['remote-page'];
-        expect(job.steps.some((step) => step.run?.includes('pnpm build:react'))).toBe(true);
+        const preparation = stepNamed(job, 'Build the remote page').run ?? '';
+        expect(preparation).toContain('pnpm run turbo run prepare:compat-full');
         const zipping = stepNamed(job, 'Zip the remote page with its checksum').run ?? '';
         expect(zipping).toContain('dist/remote/v*/');
         expect(zipping).toContain('-ne 1');
         expect(zipping).toContain('exit 1');
+        expect(zipping).toContain('for REQUIRED in index.html remote-bundle.js styles.css THIRD_PARTY_NOTICES.txt');
+        expect(zipping).toContain('"${DIRS[0]}/$REQUIRED"');
         expect(zipping).toContain('ZIP="remote-page-$NAME.zip"');
         expect(zipping).toContain('sha256sum "$ZIP" > "$ZIP.sha256"');
         // The name never reads the app version or a .ts file: the directory is the single source.

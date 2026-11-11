@@ -40,6 +40,8 @@ const fs = mockFs;
 
 const ROOT = realPath.join(__dirname, '..', '..');
 const DIST = realPath.join(ROOT, 'dist');
+const FULL = realPath.join(ROOT, 'out', 'renderer', 'full', 'bundles');
+const ASSEMBLY = realPath.join(ROOT, 'out', 'assembly');
 const LEXICON = realPath.join(ROOT, 'src', 'assets', 'semantic-vectors.json');
 const NOTICES = realPath.join(ROOT, 'src', 'assets', 'THIRD_PARTY_NOTICES.txt');
 const LOGO = realPath.join(ROOT, 'src', 'assets', 'logo.png');
@@ -96,6 +98,16 @@ describe('scripts/build-react.ts', () => {
         await flush();
     };
 
+    const runMain = async (args: string[] = []) => {
+        process.argv = ['node', 'scripts/build-react.ts', ...args];
+        let result: unknown;
+        jest.isolateModules(() => {
+            result = (require('../../scripts/build-react') as typeof import('../../scripts/build-react')).main();
+        });
+        await result;
+        await flush();
+    };
+
     const logged = () => logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
 
     test('requiring the script does not start a build', async () => {
@@ -109,13 +121,70 @@ describe('scripts/build-react.ts', () => {
         expect(fs.writeFileSync).not.toHaveBeenCalled();
     });
 
+    test('dispatches the bundle stage without compatibility assembly', async () => {
+        await runMain(['--bundles']);
+
+        expect(esbuild.build).toHaveBeenCalledTimes(ENTRY_NAMES.length);
+        expect(fs.rmSync).not.toHaveBeenCalledWith(DIST, expect.anything());
+    });
+
+    test('dispatches the selected production assembly without rebundling', async () => {
+        await runMain(['--assemble=production', '--lite']);
+
+        expect(esbuild.build).not.toHaveBeenCalled();
+        expect(fs.rmSync).toHaveBeenCalledWith(realPath.join(ASSEMBLY, 'lite'), { recursive: true, force: true });
+        expect(fs.rmSync).not.toHaveBeenCalledWith(DIST, expect.anything());
+    });
+
+    test('dispatches the full production assembly without rebundling', async () => {
+        await runMain(['--assemble=production']);
+
+        expect(esbuild.build).not.toHaveBeenCalled();
+        expect(fs.rmSync).toHaveBeenCalledWith(realPath.join(ASSEMBLY, 'full'), { recursive: true, force: true });
+    });
+
+    test('dispatches compatibility assembly to dist without rebundling', async () => {
+        await runMain(['--assemble']);
+
+        expect(esbuild.build).not.toHaveBeenCalled();
+        expect(fs.rmSync).toHaveBeenCalledWith(DIST, { recursive: true, force: true });
+    });
+
+    test('defaults to the complete compatibility build', async () => {
+        await runMain();
+
+        expect(esbuild.build).toHaveBeenCalledTimes(ENTRY_NAMES.length);
+        expect(fs.rmSync).toHaveBeenCalledWith(DIST, { recursive: true, force: true });
+    });
+
+    test('writes the remote version tree into an explicitly selected assembly destination', () => {
+        const selected = realPath.join(ASSEMBLY, 'full');
+        jest.isolateModules(() => {
+            (require('../../scripts/build-react') as typeof import('../../scripts/build-react')).copyRemoteVersionDir(
+                selected,
+            );
+        });
+
+        expect(fs.rmSync).toHaveBeenCalledWith(realPath.join(selected, 'remote'), { recursive: true, force: true });
+        expect(fs.copyFileSync).toHaveBeenCalledWith(
+            realPath.join(selected, 'styles.css'),
+            realPath.join(selected, 'remote', 'v1', 'styles.css'),
+        );
+
+        jest.isolateModules(() => {
+            (require('../../scripts/build-react') as typeof import('../../scripts/build-react')).copyRemoteVersionDir();
+        });
+
+        expect(fs.rmSync).toHaveBeenCalledWith(realPath.join(DIST, 'remote'), { recursive: true, force: true });
+    });
+
     describe('build mode', () => {
         test('writes the HTML shells, copies the lexicon and builds every entry', async () => {
             await run([], 'production');
 
-            // prepareDist assumes dist/ exists; only the staged remote page directory (named by the link
-            // version, not the app version) creates one, after dist/remote/ was emptied.
-            expect(fs.mkdirSync).toHaveBeenCalledTimes(1);
+            expect(fs.rmSync).toHaveBeenCalledWith(DIST, { recursive: true, force: true });
+            expect(fs.mkdirSync).toHaveBeenCalledWith(FULL, { recursive: true });
+            expect(fs.mkdirSync).toHaveBeenCalledWith(DIST, { recursive: true });
             expect(fs.rmSync).toHaveBeenCalledWith(realPath.join(DIST, 'remote'), { recursive: true, force: true });
             expect(fs.mkdirSync).toHaveBeenCalledWith(realPath.join(DIST, 'remote', 'v1'), { recursive: true });
             expect(fs.writeFileSync).toHaveBeenCalledWith(
@@ -166,6 +235,9 @@ describe('scripts/build-react.ts', () => {
             expect(esbuild.build).toHaveBeenCalledTimes(ENTRY_NAMES.length);
             const outfiles = esbuild.build.mock.calls.map(([opts]) => realPath.basename(opts.outfile!));
             expect(outfiles).toEqual(ENTRY_NAMES.map((n) => `${n}-bundle.js`));
+            expect(esbuild.build.mock.calls.map(([opts]) => opts.outfile)).toEqual(
+                ENTRY_NAMES.map((name) => realPath.join(FULL, `${name}-bundle.js`)),
+            );
 
             const appOpts = esbuild.build.mock.calls[1][0];
             expect(appOpts).toMatchObject({

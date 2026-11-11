@@ -23,9 +23,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { runIfMain } from './lib/run-if-main';
+import { CLI_DIR } from './lib/build-paths';
 
 const ROOT = path.join(__dirname, '..');
-const BUNDLE_PATH = path.join(ROOT, 'dist', 'cli-bundled.js');
+const BUNDLE_PATH = path.join(CLI_DIR, 'cli-bundled.js');
 const CLI_BUILD_DIR = path.join(ROOT, 'build', 'cli');
 
 // Guardrail budgets. Generous on purpose — these catch packaging mistakes, not
@@ -62,7 +63,7 @@ function main({ bundlePath = BUNDLE_PATH, cliBuildDir = CLI_BUILD_DIR } = {}) {
 
     console.log('📏 CLI size guard');
 
-    check('dist/cli-bundled.js', bundlePath, MAX_BUNDLE_MB, tally);
+    check('out/cli/cli-bundled.js', bundlePath, MAX_BUNDLE_MB, tally);
 
     if (fs.existsSync(cliBuildDir)) {
         const binaries = fs.readdirSync(cliBuildDir).filter((name) => name.startsWith('gurucli-'));

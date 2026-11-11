@@ -26,7 +26,7 @@ The desktop app is built on Electron. Electron's license (MIT) and the license l
 Chromium components it contains ship with the app as LICENSE.electron.txt and
 LICENSES.chromium.html in its resources directory.
 
-3. npm packages (129)
+3. npm packages (130)
 ---------------------
 
 Shipped in the desktop app, the CLI binaries and the Android app, or compiled into their bundles.
@@ -407,6 +407,10 @@ guid-typescript 1.0.9
   License: ISC
   Copyright nicolas (https://github.com/NicolasDeveloper/guid-typescript)
 
+has-flag 4.0.0
+  License: MIT
+  Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)
+
 has-property-descriptors 1.0.2
   License: MIT
   Copyright (c) 2022 Inspect JS
@@ -544,7 +548,7 @@ sharp 0.35.5
   License: Apache-2.0
   Copyright Lovell Fuller
 
-supports-color 10.2.2
+supports-color 8.1.1
   License: MIT
   Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)
 

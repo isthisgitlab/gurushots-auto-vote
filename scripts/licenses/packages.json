@@ -356,6 +356,11 @@
         "texts": ["ISC"],
         "copyright": ["Copyright nicolas (https://github.com/NicolasDeveloper/guid-typescript)"]
     },
+    "has-flag": {
+        "license": "MIT",
+        "texts": ["MIT"],
+        "copyright": ["Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)"]
+    },
     "has-property-descriptors": {
         "license": "MIT",
         "texts": ["MIT"],

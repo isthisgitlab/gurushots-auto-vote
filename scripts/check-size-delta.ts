@@ -33,22 +33,64 @@ import zlib from 'node:zlib';
 
 import { isPlainObject } from '../src/ts/core/plainObject';
 import { runIfMain } from './lib/run-if-main';
+import { rendererBundleDir } from './lib/build-paths';
 
 const ROOT = path.join(__dirname, '..');
 const BASELINE_PATH = path.join(ROOT, '.size-baseline.json');
 
-// The renderer/service bundles produced by scripts/build-react.ts.
+// The deterministic full renderer bundles produced by scripts/build-react.ts.
+const rendererDir = rendererBundleDir(false);
 const BUNDLES = [
-    { name: 'app', path: 'dist/app-bundle.js', label: 'app (Electron renderer)' },
-    { name: 'login', path: 'dist/login-bundle.js', label: 'login (Electron renderer)' },
-    { name: 'logs', path: 'dist/logs-bundle.js', label: 'logs (Electron renderer)' },
-    { name: 'capacitor', path: 'dist/capacitor-bundle.js', label: 'capacitor (Android WebView)' },
-    { name: 'web', path: 'dist/web-bundle.js', label: 'web (browser tab, pnpm web)' },
-    { name: 'remote', path: 'dist/remote-bundle.js', label: 'remote (phone page)' },
-    { name: 'remoteLoader', path: 'dist/remoteLoader-bundle.js', label: 'remoteLoader (phone /remote/ loader)' },
-    { name: 'headless', path: 'dist/headless-bundle.js', label: 'headless (Android background service)' },
-    { name: 'preload', path: 'dist/preload-bundle.js', label: 'preload (Electron sandboxed preload)' },
-    { name: 'preloadLogs', path: 'dist/preloadLogs-bundle.js', label: 'preloadLogs (Logs window preload)' },
+    {
+        name: 'app',
+        path: path.relative(ROOT, path.join(rendererDir, 'app-bundle.js')),
+        label: 'app (Electron renderer)',
+    },
+    {
+        name: 'login',
+        path: path.relative(ROOT, path.join(rendererDir, 'login-bundle.js')),
+        label: 'login (Electron renderer)',
+    },
+    {
+        name: 'logs',
+        path: path.relative(ROOT, path.join(rendererDir, 'logs-bundle.js')),
+        label: 'logs (Electron renderer)',
+    },
+    {
+        name: 'capacitor',
+        path: path.relative(ROOT, path.join(rendererDir, 'capacitor-bundle.js')),
+        label: 'capacitor (Android WebView)',
+    },
+    {
+        name: 'web',
+        path: path.relative(ROOT, path.join(rendererDir, 'web-bundle.js')),
+        label: 'web (browser tab, pnpm web)',
+    },
+    {
+        name: 'remote',
+        path: path.relative(ROOT, path.join(rendererDir, 'remote-bundle.js')),
+        label: 'remote (phone page)',
+    },
+    {
+        name: 'remoteLoader',
+        path: path.relative(ROOT, path.join(rendererDir, 'remoteLoader-bundle.js')),
+        label: 'remoteLoader (phone /remote/ loader)',
+    },
+    {
+        name: 'headless',
+        path: path.relative(ROOT, path.join(rendererDir, 'headless-bundle.js')),
+        label: 'headless (Android background service)',
+    },
+    {
+        name: 'preload',
+        path: path.relative(ROOT, path.join(rendererDir, 'preload-bundle.js')),
+        label: 'preload (Electron sandboxed preload)',
+    },
+    {
+        name: 'preloadLogs',
+        path: path.relative(ROOT, path.join(rendererDir, 'preloadLogs-bundle.js')),
+        label: 'preloadLogs (Logs window preload)',
+    },
 ];
 
 const THRESHOLD_KB = Number.parseFloat(process.env.SIZE_DELTA_KB || '5');
