@@ -5,7 +5,7 @@
 // esbuild inputs in build-react/entries.ts, and the dist/ staging and bundle
 // loops in build-react/orchestrate.ts — all re-exported here.
 
-import { assembleRenderer, buildReact, buildRendererBundles } from './build-react/orchestrate';
+import { assembleRenderer, assembleStylesheet, buildReact, buildRendererBundles } from './build-react/orchestrate';
 import { assemblyOutputDir } from './lib/build-paths';
 import { runIfMain } from './lib/run-if-main';
 
@@ -22,6 +22,7 @@ export {
 export { entryPoints, commonOptions, perEntryOptions } from './build-react/entries';
 export {
     NOTICES_ASSET_NAME,
+    assembleStylesheet,
     copyRemoteVersionDir,
     buildRendererBundles,
     assembleRenderer,
@@ -30,6 +31,7 @@ export {
 
 const main = () => {
     if (process.argv.includes('--bundles')) return buildRendererBundles();
+    if (process.argv.includes('--assemble=css')) return assembleStylesheet();
     if (process.argv.includes('--assemble=production'))
         return assembleRenderer(assemblyOutputDir(process.argv.includes('--lite')));
     if (process.argv.includes('--assemble')) return assembleRenderer();

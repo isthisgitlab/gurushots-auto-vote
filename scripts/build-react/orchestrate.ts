@@ -23,6 +23,11 @@ import type { EntryName } from './entries';
 const NOTICES_ASSET_NAME = 'THIRD_PARTY_NOTICES.txt';
 const bundleDir = rendererBundleDir(isLite);
 
+const assembleStylesheet = (outputDir = DIST_DIR): void => {
+    fs.mkdirSync(outputDir, { recursive: true });
+    fs.copyFileSync(rendererStylesheetPath, path.join(outputDir, 'styles.css'));
+};
+
 const prepareAssembly = async (distDir: string, bundleSourceDir: string) => {
     fs.rmSync(distDir, { recursive: true, force: true });
     fs.mkdirSync(distDir, { recursive: true });
@@ -30,8 +35,7 @@ const prepareAssembly = async (distDir: string, bundleSourceDir: string) => {
         const source = path.join(bundleSourceDir, `${name}-bundle.js`);
         if (fs.existsSync(source)) fs.copyFileSync(source, path.join(distDir, `${name}-bundle.js`));
     }
-    if (fs.existsSync(rendererStylesheetPath))
-        fs.copyFileSync(rendererStylesheetPath, path.join(distDir, 'styles.css'));
+    if (fs.existsSync(rendererStylesheetPath)) assembleStylesheet(distDir);
     if (isLite) removeVisionWebAssets(distDir);
     else await stageVisionWebAssets(distDir);
 
@@ -171,7 +175,10 @@ const copyRemoteVersionDir = (distDir = DIST_DIR): void => {
             fs.copyFileSync(source, path.join(target, assetName));
             // The loader is a published document too: its stylesheet and the notices sit beside it.
             fs.copyFileSync(source, path.join(loaderDir, assetName));
-        } else console.log(`⏭️  remote/${name}: ${assetName} not built yet — run build:css / build:notices for it`);
+        } else
+            console.log(
+                `⏭️  remote/${name}: ${assetName} not built yet — run pnpm build:react to regenerate the remote page`,
+            );
     }
     console.log(`✓ Staged the remote page under dist/remote/${name}/`);
 };
@@ -206,4 +213,11 @@ async function buildReact() {
     }
 }
 
-export { NOTICES_ASSET_NAME, copyRemoteVersionDir, buildRendererBundles, assembleRenderer, buildReact };
+export {
+    NOTICES_ASSET_NAME,
+    assembleStylesheet,
+    copyRemoteVersionDir,
+    buildRendererBundles,
+    assembleRenderer,
+    buildReact,
+};

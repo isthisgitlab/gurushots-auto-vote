@@ -42,6 +42,7 @@
             "outputs": ["out/renderer/styles.css"],
             "env": ["NODE_ENV"]
         },
+        "assemble:css": { "dependsOn": ["bundle:css"], "cache": false },
         "assemble:renderer-full": {
             "dependsOn": ["bundle:renderer-full", "bundle:css", "build:lexicon", "build:notices"],
             "cache": false
@@ -257,7 +258,11 @@
         "stage:video-decoder-linux-arm": { "cache": false },
         "stage:video-decoder-mac": { "cache": false },
         "stage:video-decoder-win": { "cache": false },
-        "start:electron": { "dependsOn": ["prepare:compat-main-full", "prepare:video-decoder"], "cache": false },
+        "start:electron": {
+            "dependsOn": ["prepare:compat-main-full", "prepare:video-decoder"],
+            "cache": false,
+            "passThroughEnv": ["WAYLAND_DISPLAY"]
+        },
         "dev:prepare": { "dependsOn": ["prepare:compat-full", "build:main", "prepare:video-decoder"], "cache": false },
         "dev:css": { "dependsOn": ["dev:prepare"], "cache": false, "persistent": true },
         "dev:react": { "dependsOn": ["dev:prepare"], "cache": false, "persistent": true },
@@ -266,12 +271,14 @@
             "dependsOn": ["dev:prepare"],
             "cache": false,
             "persistent": true,
+            "passThroughEnv": ["WAYLAND_DISPLAY"],
             "with": ["dev:css", "dev:react", "dev:main"]
         },
         "dev:no-watch:electron": {
             "dependsOn": ["dev:prepare"],
             "cache": false,
             "persistent": true,
+            "passThroughEnv": ["WAYLAND_DISPLAY"],
             "with": ["dev:css"]
         }
     }

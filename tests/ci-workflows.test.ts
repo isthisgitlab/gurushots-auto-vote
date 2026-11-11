@@ -329,6 +329,11 @@ describe('Turbo workflow cache contracts', () => {
         expect(parsed.tasks['bundle:css-full']).toBeUndefined();
         expect(parsed.tasks['bundle:css-lite']).toBeUndefined();
 
+        const stylesheetAssembly = parsed.tasks['assemble:css'];
+        if (!isPlainObject(stylesheetAssembly)) throw new Error('assemble:css has no task configuration');
+        expect(stylesheetAssembly.dependsOn).toEqual(['bundle:css']);
+        expect(stylesheetAssembly.cache).toBe(false);
+
         for (const taskName of [
             'assemble:renderer-full',
             'assemble:renderer-lite',
@@ -340,6 +345,38 @@ describe('Turbo workflow cache contracts', () => {
                 throw new Error(`${taskName} has no dependencies`);
             expect(task.dependsOn).toContain('bundle:css');
         }
+    });
+
+    test('keeps public CSS compatibility staging separate from the cached producer', () => {
+        const manifest: unknown = JSON.parse(text('package.json'));
+        if (!isPlainObject(manifest) || !isPlainObject(manifest.scripts))
+            throw new Error('package.json has no scripts');
+
+        expect(manifest.scripts['assemble:css']).toBe('node --import tsx scripts/build-react.ts --assemble=css');
+        expect(manifest.scripts['build:css']).toBe('pnpm run turbo run assemble:css');
+    });
+
+    test('passes Wayland display only to GUI tasks that launch Electron', () => {
+        const parsed: unknown = JSON.parse(text('turbo.json'));
+        if (!isPlainObject(parsed) || !isPlainObject(parsed.tasks)) throw new Error('turbo.json has no task mapping');
+
+        const taskNames = ['start:electron', 'dev:electron', 'dev:no-watch:electron'];
+        for (const taskName of taskNames) {
+            const task = parsed.tasks[taskName];
+            if (!isPlainObject(task)) throw new Error(`${taskName} has no task configuration`);
+            expect(task.passThroughEnv).toEqual(['WAYLAND_DISPLAY']);
+        }
+
+        const passthroughTasks = Object.entries(parsed.tasks)
+            .flatMap(([taskName, task]) =>
+                isPlainObject(task) &&
+                Array.isArray(task.passThroughEnv) &&
+                task.passThroughEnv.includes('WAYLAND_DISPLAY')
+                    ? [taskName]
+                    : [],
+            )
+            .sort();
+        expect(passthroughTasks).toEqual([...taskNames].sort());
     });
 
     test('excludes the ignored embedding download from broad script task inputs', () => {

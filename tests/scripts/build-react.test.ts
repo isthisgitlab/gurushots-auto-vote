@@ -129,6 +129,35 @@ describe('scripts/build-react.ts', () => {
         expect(fs.rmSync).not.toHaveBeenCalledWith(DIST, expect.anything());
     });
 
+    test('stages only the canonical stylesheet for the public CSS assembly', async () => {
+        await runMain(['--assemble=css']);
+
+        expect(esbuild.build).not.toHaveBeenCalled();
+        expect(fs.mkdirSync).toHaveBeenCalledWith(DIST, { recursive: true });
+        expect(fs.copyFileSync).toHaveBeenCalledWith(STYLESHEET, realPath.join(DIST, 'styles.css'));
+        expect(fs.rmSync).not.toHaveBeenCalled();
+        expect(fs.writeFileSync).not.toHaveBeenCalled();
+        expect(mockVisionAssets.stageVisionWebAssets).not.toHaveBeenCalled();
+        expect(mockVisionAssets.removeVisionWebAssets).not.toHaveBeenCalled();
+    });
+
+    test('creates a stylesheet destination and propagates a missing canonical stylesheet', () => {
+        const output = realPath.join(ASSEMBLY, 'stylesheet-only');
+        fs.copyFileSync.mockImplementationOnce(() => {
+            throw new Error('ENOENT: canonical stylesheet is missing');
+        });
+
+        expect(() => {
+            jest.isolateModules(() => {
+                (require('../../scripts/build-react') as typeof import('../../scripts/build-react')).assembleStylesheet(
+                    output,
+                );
+            });
+        }).toThrow('ENOENT: canonical stylesheet is missing');
+        expect(fs.mkdirSync).toHaveBeenCalledWith(output, { recursive: true });
+        expect(fs.copyFileSync).toHaveBeenCalledWith(STYLESHEET, realPath.join(output, 'styles.css'));
+    });
+
     test('dispatches the selected production assembly without rebundling', async () => {
         await runMain(['--assemble=production', '--lite']);
 
@@ -180,6 +209,23 @@ describe('scripts/build-react.ts', () => {
         });
 
         expect(fs.rmSync).toHaveBeenCalledWith(realPath.join(DIST, 'remote'), { recursive: true, force: true });
+    });
+
+    test('reports the complete compatibility repair command for missing remote assets', () => {
+        const stagedStylesheet = realPath.join(DIST, 'styles.css');
+        const stagedNotices = realPath.join(DIST, 'THIRD_PARTY_NOTICES.txt');
+        fs.existsSync.mockImplementation((source) => source !== stagedStylesheet && source !== stagedNotices);
+
+        jest.isolateModules(() => {
+            (require('../../scripts/build-react') as typeof import('../../scripts/build-react')).copyRemoteVersionDir();
+        });
+
+        expect(logged()).toContain(
+            '⏭️  remote/v1: styles.css not built yet — run pnpm build:react to regenerate the remote page',
+        );
+        expect(logged()).toContain(
+            '⏭️  remote/v1: THIRD_PARTY_NOTICES.txt not built yet — run pnpm build:react to regenerate the remote page',
+        );
     });
 
     describe('build mode', () => {
