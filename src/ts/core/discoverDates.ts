@@ -1,6 +1,6 @@
 import { endTimeOf } from './format/endTime';
 
-export const DISCOVER_SORTS = ['default', 'start', 'end', 'boostDeadline'] as const;
+export const DISCOVER_SORTS = ['default', 'start', 'end', 'boostDeadline', 'freeEntryDeadline'] as const;
 export type DiscoverSort = (typeof DISCOVER_SORTS)[number];
 
 export type DiscoverDateRow = {
@@ -34,12 +34,12 @@ export const discoverJoinDeadline = (row: DiscoverDateRow): DiscoverJoinDeadline
     return { time: startTime + Math.min((closeTime - startTime) / 4, DAY_SEC), kind: 'boost' };
 };
 
-const sortTime = (row: DiscoverDateRow, sort: Exclude<DiscoverSort, 'default'>): number | null =>
-    sort === 'start'
-        ? endTimeOf(row.start_time)
-        : sort === 'end'
-          ? endTimeOf(row.close_time)
-          : (discoverJoinDeadline(row)?.time ?? null);
+const sortTime = (row: DiscoverDateRow, sort: Exclude<DiscoverSort, 'default'>): number | null => {
+    if (sort === 'start') return endTimeOf(row.start_time);
+    if (sort === 'end') return endTimeOf(row.close_time);
+    const deadline = discoverJoinDeadline(row);
+    return sort === 'freeEntryDeadline' && deadline?.kind !== 'freeEntry' ? null : (deadline?.time ?? null);
+};
 
 const groupOf = (row: DiscoverDateRow, nowSec: number): number => {
     if (row.status !== 'upcoming') return 0;

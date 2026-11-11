@@ -761,6 +761,7 @@ export const app = {
     discoverSortStart: 'Start time',
     discoverSortEnd: 'End time',
     discoverSortJoinDeadline: 'Join deadline',
+    discoverSortFreeEntryDeadline: 'Free entry deadline',
     discoverStartTime: 'Start time: {date}',
     discoverBoostJoinDeadline: 'Free Boost join deadline: {date}',
     discoverFreeEntryDeadline: 'Free entry deadline: {date}',

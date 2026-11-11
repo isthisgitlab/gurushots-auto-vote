@@ -85,14 +85,17 @@ describe('orderDiscoverRows', () => {
         expect(rows).toEqual(original);
     });
 
-    test.each(['end', 'boostDeadline'] as const)('puts unreadable dates last for %s ordering', (sort) => {
-        const ordered = orderDiscoverRows(
-            [row('known', { start_time: 10, close_time: 110 }), row('unknown', { start_time: 10 })],
-            sort,
-            nowSec,
-        );
-        expect(ordered.map(({ id }) => id)).toEqual(['known', 'unknown']);
-    });
+    test.each(['end', 'boostDeadline', 'freeEntryDeadline'] as const)(
+        'puts unreadable dates last for %s ordering',
+        (sort) => {
+            const ordered = orderDiscoverRows(
+                [row('known', { start_time: 10, close_time: 110 }), row('unknown', { start_time: 10 })],
+                sort,
+                nowSec,
+            );
+            expect(ordered.map(({ id }) => id)).toEqual(['known', 'unknown']);
+        },
+    );
 
     test('moves an unreadable date after a readable one when it begins on the left', () => {
         const ordered = orderDiscoverRows(
@@ -133,6 +136,79 @@ describe('orderDiscoverRows', () => {
             shortNormal,
             freeSingle,
         ]);
+        expect(orderDiscoverRows([freeSingle, longNormal, shortNormal], 'freeEntryDeadline', nowSec)).toEqual([
+            freeSingle,
+            longNormal,
+            shortNormal,
+        ]);
+    });
+
+    test('sorts only eligible free-entry deadlines within the existing groups', () => {
+        const openFreeLate = row('open-free-late', {
+            start_time: 1,
+            close_time: 401,
+            max_photo_submits: 1,
+            join_coins: 0,
+        });
+        const openFreeEarly = row('open-free-early', {
+            start_time: 20,
+            close_time: 220,
+            max_photo_submits: 1,
+            join_coins: 0,
+        });
+        const rows = [
+            openFreeLate,
+            openFreeEarly,
+            row('open-boost', { start_time: 1, close_time: 121 }),
+            row('open-paid', { start_time: 1, close_time: 121, max_photo_submits: 1, join_coins: 1 }),
+            row('open-unknown', { start_time: 1, close_time: 121, max_photo_submits: 1 }),
+            row('open-locked', {
+                start_time: 1,
+                close_time: 121,
+                max_photo_submits: 1,
+                join_coins: 0,
+                member: { submit_state: 'join_unlock' },
+            }),
+            row('open-flash', { start_time: 1, close_time: 121, type: 'flash', max_photo_submits: 1, join_coins: 0 }),
+            row('open-invalid', { start_time: 200, close_time: 100, max_photo_submits: 1, join_coins: 0 }),
+            row('starting-free', {
+                status: 'upcoming',
+                start_time: 90,
+                close_time: 190,
+                max_photo_submits: 1,
+                join_coins: 0,
+            }),
+            row('starting-boost', { status: 'upcoming', start_time: 90, close_time: 190 }),
+            row('future-free', {
+                status: 'upcoming',
+                start_time: 200,
+                close_time: 400,
+                max_photo_submits: 1,
+                join_coins: 0,
+            }),
+            row('future-boost', { status: 'upcoming', start_time: 200, close_time: 400 }),
+        ];
+        const original = [...rows];
+
+        expect(orderDiscoverRows(rows, 'freeEntryDeadline', nowSec).map(({ id }) => id)).toEqual([
+            'open-free-early',
+            'open-free-late',
+            'open-boost',
+            'open-flash',
+            'open-invalid',
+            'open-locked',
+            'open-paid',
+            'open-unknown',
+            'starting-free',
+            'starting-boost',
+            'future-free',
+            'future-boost',
+        ]);
+        expect(rows).toEqual(original);
+
+        const tieA = row('a', { start_time: 1, close_time: 201, max_photo_submits: 1, join_coins: 0 });
+        const tieB = row('b', { start_time: 1, close_time: 201, max_photo_submits: 1, join_coins: 0 });
+        expect(orderDiscoverRows([tieB, tieA], 'freeEntryDeadline', nowSec)).toEqual([tieA, tieB]);
     });
 
     test('uses ids when both dates are unreadable', () => {
@@ -160,7 +236,7 @@ describe('orderDiscoverRows', () => {
         expect(orderDiscoverRows([first, second], 'end', nowSec)).toEqual([first, second]);
     });
 
-    test.each(['end', 'boostDeadline'] as const)(
+    test.each(['end', 'boostDeadline', 'freeEntryDeadline'] as const)(
         'keeps starting-now rows before future rows for %s ordering',
         (sort) => {
             const ordered = orderDiscoverRows(

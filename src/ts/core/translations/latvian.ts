@@ -776,6 +776,7 @@ export const app: LatvianApp = {
     discoverSortStart: 'Sākuma laiks',
     discoverSortEnd: 'Beigu laiks',
     discoverSortJoinDeadline: 'Pievienošanās termiņš',
+    discoverSortFreeEntryDeadline: 'Bezmaksas dalības termiņš',
     discoverStartTime: 'Sākuma laiks: {date}',
     discoverBoostJoinDeadline: 'Bezmaksas Boost pievienošanās termiņš: {date}',
     discoverFreeEntryDeadline: 'Bezmaksas dalības termiņš: {date}',

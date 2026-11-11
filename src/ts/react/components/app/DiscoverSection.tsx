@@ -262,6 +262,7 @@ function DiscoverSortControl({ sort, onSort }: { sort: DiscoverSort; onSort: (so
                 <option value="start">{t('app.discoverSortStart')}</option>
                 <option value="end">{t('app.discoverSortEnd')}</option>
                 <option value="boostDeadline">{t('app.discoverSortJoinDeadline')}</option>
+                <option value="freeEntryDeadline">{t('app.discoverSortFreeEntryDeadline')}</option>
             </select>
         </label>
     );
