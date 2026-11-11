@@ -16,23 +16,22 @@ import {
     webHtml,
 } from './documents';
 import { LINK_VERSION } from '../../src/ts/core/remote/protocol';
-import { DIST_DIR, rendererBundleDir, rendererOutputDir } from '../lib/build-paths';
+import { DIST_DIR, rendererBundleDir, rendererStylesheetPath } from '../lib/build-paths';
 import { commonOptions, entryPoints, isLite, isWatch, perEntryOptions } from './entries';
 import type { EntryName } from './entries';
 
 const NOTICES_ASSET_NAME = 'THIRD_PARTY_NOTICES.txt';
 const bundleDir = rendererBundleDir(isLite);
-const sourceDir = rendererOutputDir(isLite);
 
-const prepareAssembly = async (distDir: string, bundleSourceDir: string, assetSourceDir: string) => {
+const prepareAssembly = async (distDir: string, bundleSourceDir: string) => {
     fs.rmSync(distDir, { recursive: true, force: true });
     fs.mkdirSync(distDir, { recursive: true });
     for (const name of Object.keys(entryPoints)) {
         const source = path.join(bundleSourceDir, `${name}-bundle.js`);
         if (fs.existsSync(source)) fs.copyFileSync(source, path.join(distDir, `${name}-bundle.js`));
     }
-    const stylesheet = path.join(assetSourceDir, 'styles.css');
-    if (fs.existsSync(stylesheet)) fs.copyFileSync(stylesheet, path.join(distDir, 'styles.css'));
+    if (fs.existsSync(rendererStylesheetPath))
+        fs.copyFileSync(rendererStylesheetPath, path.join(distDir, 'styles.css'));
     if (isLite) removeVisionWebAssets(distDir);
     else await stageVisionWebAssets(distDir);
 
@@ -188,7 +187,7 @@ async function buildRendererBundles() {
 }
 
 async function assembleRenderer(outputDir = DIST_DIR) {
-    await prepareAssembly(outputDir, bundleDir, sourceDir);
+    await prepareAssembly(outputDir, bundleDir);
     copyRemoteVersionDir(outputDir);
 }
 

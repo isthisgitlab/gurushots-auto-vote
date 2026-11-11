@@ -9,6 +9,7 @@ const CLI_DIR = path.join(OUT_DIR, 'cli');
 
 const rendererOutputDir = (lite: boolean): string => path.join(RENDERER_DIR, lite ? 'lite' : 'full');
 const rendererBundleDir = (lite: boolean): string => path.join(rendererOutputDir(lite), 'bundles');
+const rendererStylesheetPath = path.join(RENDERER_DIR, 'styles.css');
 const assemblyOutputDir = (lite: boolean): string => path.join(ASSEMBLY_DIR, lite ? 'lite' : 'full');
 
 export {
@@ -20,5 +21,6 @@ export {
     CLI_DIR,
     rendererOutputDir,
     rendererBundleDir,
+    rendererStylesheetPath,
     assemblyOutputDir,
 };

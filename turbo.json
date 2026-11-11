@@ -28,7 +28,7 @@
             "outputs": ["out/renderer/lite/bundles/**"],
             "env": ["NODE_ENV", "GITHUB_ACTIONS"]
         },
-        "bundle:css-full": {
+        "bundle:css": {
             "inputs": [
                 "src/styles/**",
                 "src/ts/**",
@@ -39,37 +39,23 @@
                 "tailwind.config.*",
                 "postcss.config.*"
             ],
-            "outputs": ["out/renderer/full/styles.css"],
-            "env": ["NODE_ENV"]
-        },
-        "bundle:css-lite": {
-            "inputs": [
-                "src/styles/**",
-                "src/ts/**",
-                "src/html/**",
-                "scripts/build-react.ts",
-                "package.json",
-                "pnpm-lock.yaml",
-                "tailwind.config.*",
-                "postcss.config.*"
-            ],
-            "outputs": ["out/renderer/lite/styles.css"],
+            "outputs": ["out/renderer/styles.css"],
             "env": ["NODE_ENV"]
         },
         "assemble:renderer-full": {
-            "dependsOn": ["bundle:renderer-full", "bundle:css-full", "build:lexicon", "build:notices"],
+            "dependsOn": ["bundle:renderer-full", "bundle:css", "build:lexicon", "build:notices"],
             "cache": false
         },
         "assemble:renderer-lite": {
-            "dependsOn": ["bundle:renderer-lite", "bundle:css-lite", "build:lexicon", "build:notices"],
+            "dependsOn": ["bundle:renderer-lite", "bundle:css", "build:lexicon", "build:notices"],
             "cache": false
         },
         "assemble:compat-full": {
-            "dependsOn": ["bundle:renderer-full", "bundle:css-full", "build:lexicon", "build:notices"],
+            "dependsOn": ["bundle:renderer-full", "bundle:css", "build:lexicon", "build:notices"],
             "cache": false
         },
         "assemble:compat-lite": {
-            "dependsOn": ["bundle:renderer-lite", "bundle:css-lite", "build:lexicon", "build:notices"],
+            "dependsOn": ["bundle:renderer-lite", "bundle:css", "build:lexicon", "build:notices"],
             "cache": false
         },
         "build:main": {
@@ -187,7 +173,15 @@
         "package:cli-linux-arm-lite": { "dependsOn": ["bundle:cli", "prepare:cli-lite"], "cache": false },
         "package:cli-all-lite": { "dependsOn": ["bundle:cli", "prepare:cli-lite"], "cache": false },
         "validate:lint": {
-            "inputs": ["src/**", "scripts/**", "tests/**", ".oxlintrc.json", "package.json"],
+            "inputs": [
+                "src/**",
+                "scripts/**",
+                "tests/**",
+                ".oxlintrc.json",
+                "tsconfig.json",
+                "package.json",
+                "!scripts/.cache/**"
+            ],
             "outputs": []
         },
         "validate:typecheck": {
@@ -198,12 +192,21 @@
                 "tsconfig.json",
                 "tests/tsconfig.json",
                 "package.json",
-                "pnpm-lock.yaml"
+                "pnpm-lock.yaml",
+                "!scripts/.cache/**"
             ],
             "outputs": []
         },
         "validate:knip": {
-            "inputs": ["src/**", "scripts/**", "tests/**", "knip.json", "package.json", "pnpm-lock.yaml"],
+            "inputs": [
+                "src/**",
+                "scripts/**",
+                "tests/**",
+                "knip.json",
+                "package.json",
+                "pnpm-lock.yaml",
+                "!scripts/.cache/**"
+            ],
             "outputs": []
         },
         "validate:test": {
@@ -213,6 +216,19 @@
         "validate:coverage": {
             "inputs": ["$TURBO_DEFAULT$"],
             "outputs": ["coverage/**"]
+        },
+        "validate:format": {
+            "inputs": ["$TURBO_DEFAULT$"],
+            "outputs": []
+        },
+        "validate:readme": {
+            "inputs": ["$TURBO_DEFAULT$"],
+            "outputs": []
+        },
+        "validate:lexicon": {
+            "dependsOn": ["build:lexicon"],
+            "inputs": ["$TURBO_DEFAULT$"],
+            "outputs": []
         },
         "validate:size": {
             "dependsOn": ["bundle:renderer-full"],

@@ -112,7 +112,7 @@ jobs:
             # seeded and deterministic, so a clean tree here also proves the
             # committed asset matches its source.
             - name: Verify lexicon asset is up to date
-              run: pnpm build:lexicon && git diff --exit-code src/assets/semantic-vectors.json
+              run: pnpm run turbo run verify:lexicon-generated
 
             - name: Verify lexicon separates signal from noise at the match floor
               run: pnpm verify:lexicon
@@ -122,12 +122,20 @@ jobs:
             # notices are regenerated and committed.
             - name: Verify third-party notices are up to date
               run: |
-                  pnpm build:notices
-                  if ! git diff --quiet -- src/assets/THIRD_PARTY_NOTICES.txt; then
+                  set +e
+                  pnpm run turbo run verify:notices-generated
+                  VERIFY_STATUS=$?
+                  if [ "$VERIFY_STATUS" -eq 0 ]; then
+                    exit 0
+                  fi
+
+                  git diff --quiet -- src/assets/THIRD_PARTY_NOTICES.txt
+                  DIFF_STATUS=$?
+                  if [ "$DIFF_STATUS" -eq 1 ]; then
                     echo "::error::The third-party notices are out of date: run 'pnpm build:notices' and commit src/assets/THIRD_PARTY_NOTICES.txt"
                     git diff --stat -- src/assets/THIRD_PARTY_NOTICES.txt
-                    exit 1
                   fi
+                  exit "$VERIFY_STATUS"
 
             - name: Bundle size budget (renderer bundles)
               run: pnpm size

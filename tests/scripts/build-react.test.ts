@@ -41,6 +41,7 @@ const fs = mockFs;
 const ROOT = realPath.join(__dirname, '..', '..');
 const DIST = realPath.join(ROOT, 'dist');
 const FULL = realPath.join(ROOT, 'out', 'renderer', 'full', 'bundles');
+const STYLESHEET = realPath.join(ROOT, 'out', 'renderer', 'styles.css');
 const ASSEMBLY = realPath.join(ROOT, 'out', 'assembly');
 const LEXICON = realPath.join(ROOT, 'src', 'assets', 'semantic-vectors.json');
 const NOTICES = realPath.join(ROOT, 'src', 'assets', 'THIRD_PARTY_NOTICES.txt');
@@ -133,6 +134,7 @@ describe('scripts/build-react.ts', () => {
 
         expect(esbuild.build).not.toHaveBeenCalled();
         expect(fs.rmSync).toHaveBeenCalledWith(realPath.join(ASSEMBLY, 'lite'), { recursive: true, force: true });
+        expect(fs.copyFileSync).toHaveBeenCalledWith(STYLESHEET, realPath.join(ASSEMBLY, 'lite', 'styles.css'));
         expect(fs.rmSync).not.toHaveBeenCalledWith(DIST, expect.anything());
     });
 
@@ -141,6 +143,7 @@ describe('scripts/build-react.ts', () => {
 
         expect(esbuild.build).not.toHaveBeenCalled();
         expect(fs.rmSync).toHaveBeenCalledWith(realPath.join(ASSEMBLY, 'full'), { recursive: true, force: true });
+        expect(fs.copyFileSync).toHaveBeenCalledWith(STYLESHEET, realPath.join(ASSEMBLY, 'full', 'styles.css'));
     });
 
     test('dispatches compatibility assembly to dist without rebundling', async () => {
@@ -148,6 +151,7 @@ describe('scripts/build-react.ts', () => {
 
         expect(esbuild.build).not.toHaveBeenCalled();
         expect(fs.rmSync).toHaveBeenCalledWith(DIST, { recursive: true, force: true });
+        expect(fs.copyFileSync).toHaveBeenCalledWith(STYLESHEET, realPath.join(DIST, 'styles.css'));
     });
 
     test('defaults to the complete compatibility build', async () => {

@@ -8,7 +8,7 @@
 import { parse } from 'yaml';
 import { isPlainObject } from '../src/ts/core/plainObject';
 
-const { execFileSync } = jest.requireActual<typeof import('node:child_process')>('node:child_process');
+const { execFileSync, spawnSync } = jest.requireActual<typeof import('node:child_process')>('node:child_process');
 const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
 const os = jest.requireActual<typeof import('node:os')>('node:os');
 const path = jest.requireActual<typeof import('node:path')>('node:path');
@@ -289,6 +289,59 @@ describe('Turbo workflow cache contracts', () => {
         }
     });
 
+    test('caches deterministic raw pure checks with gitignore-aware inputs', () => {
+        const parsed: unknown = JSON.parse(text('turbo.json'));
+        if (!isPlainObject(parsed) || !isPlainObject(parsed.tasks)) throw new Error('turbo.json has no task mapping');
+
+        for (const taskName of ['validate:format', 'validate:readme', 'validate:lexicon']) {
+            const task = parsed.tasks[taskName];
+            if (!isPlainObject(task)) throw new Error(`${taskName} has no task configuration`);
+            expect(task.inputs).toEqual(['$TURBO_DEFAULT$']);
+            expect(task.outputs).toEqual([]);
+        }
+
+        const lexiconTask = parsed.tasks['validate:lexicon'];
+        if (!isPlainObject(lexiconTask)) throw new Error('validate:lexicon has no task configuration');
+        expect(lexiconTask.dependsOn).toEqual(['build:lexicon']);
+    });
+
+    test('keeps public pure-check aliases separate from their raw Turbo tasks', () => {
+        const manifest: unknown = JSON.parse(text('package.json'));
+        if (!isPlainObject(manifest) || !isPlainObject(manifest.scripts))
+            throw new Error('package.json has no scripts');
+
+        expect(manifest.scripts['format:check']).toBe('pnpm run turbo run validate:format');
+        expect(manifest.scripts['verify:readme']).toBe('pnpm run turbo run validate:readme');
+        expect(manifest.scripts['verify:lexicon']).toBe('pnpm run turbo run validate:lexicon');
+        expect(manifest.scripts['validate:format']).toBe('prettier --check .');
+        expect(manifest.scripts['validate:readme']).toBe('node --import tsx scripts/readme-version.ts --check');
+        expect(manifest.scripts['validate:lexicon']).toBe('node --import tsx scripts/validate-lexicon.ts');
+    });
+
+    test('uses one shared CSS producer for every renderer assembly', () => {
+        const parsed: unknown = JSON.parse(text('turbo.json'));
+        if (!isPlainObject(parsed) || !isPlainObject(parsed.tasks)) throw new Error('turbo.json has no task mapping');
+
+        const stylesheet = parsed.tasks['bundle:css'];
+        if (!isPlainObject(stylesheet)) throw new Error('bundle:css has no task configuration');
+        expect(stylesheet.outputs).toEqual(['out/renderer/styles.css']);
+        expect(stylesheet.env).toEqual(['NODE_ENV']);
+        expect(parsed.tasks['bundle:css-full']).toBeUndefined();
+        expect(parsed.tasks['bundle:css-lite']).toBeUndefined();
+
+        for (const taskName of [
+            'assemble:renderer-full',
+            'assemble:renderer-lite',
+            'assemble:compat-full',
+            'assemble:compat-lite',
+        ]) {
+            const task = parsed.tasks[taskName];
+            if (!isPlainObject(task) || !Array.isArray(task.dependsOn))
+                throw new Error(`${taskName} has no dependencies`);
+            expect(task.dependsOn).toContain('bundle:css');
+        }
+    });
+
     test('excludes the ignored embedding download from broad script task inputs', () => {
         const parsed: unknown = JSON.parse(text('turbo.json'));
         if (!isPlainObject(parsed) || !isPlainObject(parsed.tasks)) throw new Error('turbo.json has no task mapping');
@@ -297,6 +350,24 @@ describe('Turbo workflow cache contracts', () => {
             const config = parsed.tasks[task];
             if (!isPlainObject(config) || !Array.isArray(config.inputs)) throw new Error(`${task} has no inputs`);
             expect(config.inputs).toContain('!scripts/.cache/**');
+        }
+    });
+
+    test('excludes the ignored embedding download from validation task inputs', () => {
+        const parsed: unknown = JSON.parse(text('turbo.json'));
+        if (!isPlainObject(parsed) || !isPlainObject(parsed.tasks)) throw new Error('turbo.json has no task mapping');
+
+        const requiredInputs = {
+            'validate:lint': ['src/**', 'scripts/**', '.oxlintrc.json', 'tsconfig.json'],
+            'validate:typecheck': ['src/**', 'scripts/**', 'tsconfig.json'],
+            'validate:knip': ['src/**', 'scripts/**', 'knip.json'],
+        };
+
+        for (const [taskName, expectedInputs] of Object.entries(requiredInputs)) {
+            const config = parsed.tasks[taskName];
+            if (!isPlainObject(config) || !Array.isArray(config.inputs)) throw new Error(`${taskName} has no inputs`);
+            expect(config.inputs).toContain('!scripts/.cache/**');
+            for (const input of expectedInputs) expect(config.inputs).toContain(input);
         }
     });
 });
@@ -832,16 +903,91 @@ describe('Pages', () => {
 });
 
 describe('test workflow', () => {
+    const noticesStep = () => stepNamed(testWorkflow.jobs.test, 'Verify third-party notices are up to date');
+
+    const runNoticesStep = ({ diffStatus, turboStatus }: { diffStatus: number; turboStatus: number }) => {
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'notices-integrity-'));
+        try {
+            const bin = path.join(directory, 'bin');
+            fs.mkdirSync(bin);
+            const pnpm = path.join(bin, 'pnpm');
+            const git = path.join(bin, 'git');
+            fs.writeFileSync(pnpm, '#!/bin/sh\necho turbo-integrity-output\nexit "$TURBO_STATUS"\n');
+            fs.writeFileSync(
+                git,
+                [
+                    '#!/bin/sh',
+                    'if [ "$2" = "--quiet" ]; then exit "$DIFF_STATUS"; fi',
+                    'echo THIRD_PARTY_NOTICES.txt',
+                    'exit 0',
+                    '',
+                ].join('\n'),
+            );
+            fs.chmodSync(pnpm, 0o755);
+            fs.chmodSync(git, 0o755);
+
+            const result = spawnSync('bash', ['-c', noticesStep().run ?? ''], {
+                cwd: directory,
+                encoding: 'utf8',
+                env: {
+                    ...process.env,
+                    PATH: `${bin}:${process.env.PATH ?? ''}`,
+                    DIFF_STATUS: String(diffStatus),
+                    TURBO_STATUS: String(turboStatus),
+                },
+            });
+            return { status: result.status, stderr: result.stderr, stdout: result.stdout };
+        } finally {
+            fs.rmSync(directory, { recursive: true, force: true });
+        }
+    };
+
     test('checks that the committed third-party notices are up to date', () => {
-        const step = stepNamed(testWorkflow.jobs.test, 'Verify third-party notices are up to date');
-        expect(step.run).toContain('pnpm build:notices');
+        const step = noticesStep();
+        expect(step.run).toContain('pnpm run turbo run verify:notices-generated');
         expect(step.run).toContain('git diff --quiet -- src/assets/THIRD_PARTY_NOTICES.txt');
     });
 
+    test('runs the uncached lexicon integrity task through Turbo', () => {
+        const step = stepNamed(testWorkflow.jobs.test, 'Verify lexicon asset is up to date');
+        expect(step.run).toBe('pnpm run turbo run verify:lexicon-generated');
+    });
+
     test('tells a contributor with stale notices how to fix them', () => {
-        const step = stepNamed(testWorkflow.jobs.test, 'Verify third-party notices are up to date');
+        const step = noticesStep();
         expect(step.run).toMatch(/::error::.*pnpm build:notices.*src\/assets\/THIRD_PARTY_NOTICES\.txt/);
-        expect(step.run).toContain('exit 1');
+        expect(step.run).toContain('exit "$VERIFY_STATUS"');
+    });
+
+    test('annotates only confirmed generated-notices drift', () => {
+        const result = runNoticesStep({ turboStatus: 42, diffStatus: 1 });
+        expect(result.status).toBe(42);
+        expect(result.stdout).toContain('turbo-integrity-output');
+        expect(result.stdout).toContain(
+            "::error::The third-party notices are out of date: run 'pnpm build:notices' and commit src/assets/THIRD_PARTY_NOTICES.txt",
+        );
+        expect(result.stdout).toContain('THIRD_PARTY_NOTICES.txt');
+    });
+
+    test('keeps a successful integrity result successful without entering the drift diagnostic', () => {
+        const result = runNoticesStep({ turboStatus: 0, diffStatus: 1 });
+        expect(result.status).toBe(0);
+        expect(result.stdout).toContain('turbo-integrity-output');
+        expect(result.stdout).not.toContain('The third-party notices are out of date');
+    });
+
+    test('retains a generator failure without a drift annotation when notices are unchanged', () => {
+        const result = runNoticesStep({ turboStatus: 42, diffStatus: 0 });
+        expect(result.status).toBe(42);
+        expect(result.stdout).toContain('turbo-integrity-output');
+        expect(result.stdout).not.toContain('The third-party notices are out of date');
+    });
+
+    test('retains a generator failure without a drift annotation when Git diff errors', () => {
+        const result = runNoticesStep({ turboStatus: 42, diffStatus: 128 });
+        expect(result.status).toBe(42);
+        expect(result.stdout).toContain('turbo-integrity-output');
+        expect(result.stdout).not.toContain('The third-party notices are out of date');
     });
 
     test('points at pnpm-workspace.yaml for the audit exceptions that live there', () => {
