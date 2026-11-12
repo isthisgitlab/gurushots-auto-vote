@@ -259,7 +259,7 @@ describe('sends toward the Logs window', () => {
         ],
         [
             'src/ts/core/remote/trystero.ts',
-            'const { send: sendRaw } = room.makeAction<JsonValue>(TRYSTERO_ACTION_NAMESPACE, {',
+            'send: (message, target) => action.send(message as JsonValue, target === undefined ? {} : { target }),',
         ],
         ['src/ts/react/api/remoteHostPeers.ts', 'await transport.send(message, peerId);'],
         [

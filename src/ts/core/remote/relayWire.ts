@@ -15,9 +15,9 @@ import { isInteger } from '../numbers';
 export const RELAY_EVENT_MAX_BYTES = 48_000;
 
 /**
- * The bytes of an event frame around its `content` (trystero's `createEvent`: a 5-digit kind, one
+ * The bytes of an event frame around its `content` (our Nostr event helper: a 5-digit kind, one
  * `x` tag holding the 64-hex topic, a 10-digit `created_at`, the pubkey, the id and the signature).
- * Measured on the real `createEvent`: 428 for an empty content.
+ * Measured on the event helper: 428 for an empty content.
  */
 export const RELAY_EVENT_OVERHEAD_BYTES = 428;
 

@@ -84,6 +84,8 @@ type HybridState = {
     readonly directUp: Set<string>;
     readonly relayUp: Set<string>;
     readonly errorTimers: Map<string, ReturnType<typeof setTimeout>>;
+    readonly pendingErrors: Map<string, JoinErrorDetails>;
+    hasErrorSubscriber: boolean;
     readonly messageHandlers: Set<(peerId: string, message: unknown) => void>;
     readonly joinHandlers: Set<(peerId: string) => void>;
     readonly leaveHandlers: Set<(peerId: string) => void>;
@@ -99,6 +101,7 @@ const stopTimer = (timers: Map<string, ReturnType<typeof setTimeout>>, peerId: s
 
 const join = (state: HybridState, peerId: string, path: RemotePath): void => {
     stopTimer(state.errorTimers, peerId); // reachable after all: a held join error is dropped
+    state.pendingErrors.delete(peerId);
     state.relay?.stopRedirect?.(peerId); // defensive: every way out of `direct` already ends the redirect in `leave`; a join never inherits one
     state.paths.set(peerId, path);
     for (const handler of state.joinHandlers) handler(peerId);
@@ -193,11 +196,19 @@ const deliver = (state: HybridState, peerId: string, message: unknown, path: Rem
     for (const handler of state.messageHandlers) handler(peerId, message);
 };
 
+const deliverJoinError = (state: HybridState, details: JoinErrorDetails): void => {
+    if (!state.hasErrorSubscriber) {
+        state.pendingErrors.set(details.peerId, details);
+        return;
+    }
+    for (const handler of state.errorHandlers) handler(details);
+};
+
 const onDirectJoinError = (state: HybridState, details: JoinErrorDetails): void => {
     const { peerId } = details;
     if (state.paths.has(peerId) || state.relayUp.has(peerId)) return; // reachable another way: the failure is no news
     if (state.relay === null) {
-        for (const handler of state.errorHandlers) handler(details);
+        deliverJoinError(state, details);
         return;
     }
     if (state.errorTimers.has(peerId)) return;
@@ -206,7 +217,7 @@ const onDirectJoinError = (state: HybridState, details: JoinErrorDetails): void 
         // A join (on either path) cancels this timer, so a held error that fires is for a peer nobody reached.
         globalThis.setTimeout(() => {
             state.errorTimers.delete(peerId);
-            for (const handler of state.errorHandlers) handler(details);
+            deliverJoinError(state, details);
         }, JOIN_ERROR_HOLD_MS),
     );
 };
@@ -285,6 +296,8 @@ export const createHybridTransport = ({ direct, relay, role, isSafeDuplicate }: 
         directUp: new Set(),
         relayUp: new Set(),
         errorTimers: new Map(),
+        pendingErrors: new Map(),
+        hasErrorSubscriber: false,
         messageHandlers: new Set(),
         joinHandlers: new Set(),
         leaveHandlers: new Set(),
@@ -297,13 +310,30 @@ export const createHybridTransport = ({ direct, relay, role, isSafeDuplicate }: 
     return {
         send: (message, target) => sendTo(state, message, target),
         onMessage: handlerSet(state.messageHandlers),
-        onPeerJoin: handlerSet(state.joinHandlers),
+        onPeerJoin: (handler) => {
+            state.joinHandlers.add(handler);
+            if (!state.closed) for (const peerId of state.paths.keys()) handler(peerId);
+            return () => state.joinHandlers.delete(handler);
+        },
         onPeerLeave: handlerSet(state.leaveHandlers),
         onPathChange: handlerSet(state.pathHandlers),
-        onJoinError: handlerSet(state.errorHandlers),
+        onJoinError: (handler) => {
+            state.errorHandlers.add(handler);
+            if (!state.hasErrorSubscriber) {
+                state.hasErrorSubscriber = true;
+                const pending = [...state.pendingErrors.values()];
+                state.pendingErrors.clear();
+                for (const details of pending) {
+                    if (state.closed) break;
+                    handler(details);
+                }
+            }
+            return () => state.errorHandlers.delete(handler);
+        },
         leave: async () => {
             state.closed = true;
             for (const peerId of state.errorTimers.keys()) stopTimer(state.errorTimers, peerId);
+            state.pendingErrors.clear();
             for (const peerId of state.draining.keys()) cancelDrain(state, peerId);
             state.holds.clear();
             await Promise.all([relay?.leave(), direct.leave()]);

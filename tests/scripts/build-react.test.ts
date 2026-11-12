@@ -304,10 +304,12 @@ describe('scripts/build-react.ts', () => {
             // Capacitor entry must BUNDLE the Capacitor plugin packages.
             const capOpts = esbuild.build.mock.calls[3][0];
             expect(capOpts.external).not.toContain('@capacitor/core');
+            expect(capOpts.external).toContain('*/nostrFrames');
 
             // The web entry runs in a browser tab: Capacitor packages stay out.
             const webOpts = esbuild.build.mock.calls[4][0];
             expect(webOpts.external).toEqual(expect.arrayContaining(['node:fs', '@capacitor/core']));
+            expect(webOpts.external).toContain('*/nostrFrames');
 
             // Preload is a CJS node bundle with only electron external.
             const preloadOpts = esbuild.build.mock.calls[8][0];

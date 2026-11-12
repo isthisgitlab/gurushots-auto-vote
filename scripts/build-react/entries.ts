@@ -105,6 +105,7 @@ const TRYSTERO_EXTERNALS = [
     '@trystero-p2p/core',
     '*/relayCodec',
     '*/relayLink',
+    '*/nostrFrames',
     '*/relaySockets',
     '*/hybridTransport',
 ];

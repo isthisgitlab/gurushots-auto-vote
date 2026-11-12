@@ -258,11 +258,11 @@ Shipped in the desktop app, the CLI binaries and the Android app, or compiled in
   License: BSD-3-Clause
   Copyright (c) 2016, Daniel Wirtz
 
-@trystero-p2p/core 0.26.0
+@trystero-p2p/core 0.27.0
   License: MIT
   Copyright (c) 2021 Dan Motzenbecker
 
-@trystero-p2p/nostr 0.26.0
+@trystero-p2p/nostr 0.27.0
   License: MIT
   Copyright (c) 2021 Dan Motzenbecker
 
@@ -556,7 +556,7 @@ tailwindcss 4.3.5
   License: MIT
   Copyright (c) Tailwind Labs, Inc.
 
-tar 7.5.22
+tar 7.5.23
   License: BlueOak-1.0.0
   Copyright Isaac Z. Schlueter
 
@@ -564,7 +564,7 @@ tiny-typed-emitter 2.1.0
   License: MIT
   Copyright (c) 2020 Zurab Benashvili (binier) <zura.bena@gmail.com>
 
-trystero 0.26.0
+trystero 0.27.0
   License: MIT
   Copyright (c) 2021 Dan Motzenbecker
 
