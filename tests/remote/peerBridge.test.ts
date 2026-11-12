@@ -26,6 +26,16 @@ import {
     setRemoteHostPeerId,
 } from '../../src/ts/core/remote/connectionState';
 
+// Keep this suite on the unavailable-storage path without reading Node's getter.
+const localStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+beforeAll(() => {
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: undefined });
+});
+afterAll(() => {
+    if (localStorageDescriptor) Object.defineProperty(globalThis, 'localStorage', localStorageDescriptor);
+    else Reflect.deleteProperty(globalThis, 'localStorage');
+});
+
 // What the page keeps for the loader's next visit is the store module's (the real one has its own tests, and the
 // round trips run in remotePathSkip.test.tsx): here a stand-in records what the bridge asks of it, in order.
 const versionCalls: string[] = [];

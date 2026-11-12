@@ -52,7 +52,13 @@ jest.mock('../../src/ts/core/apiFactory', () => {
     return { __mw: mw, getMiddleware: jest.fn(() => mw) };
 });
 
-jest.mock('node:fs', () => ({ readFileSync: jest.fn(), writeFileSync: jest.fn() }));
+jest.mock('node:fs', () => ({
+    readFileSync: jest.fn(),
+    writeFileSync: jest.fn(),
+    chmodSync: jest.fn(),
+    existsSync: jest.fn(() => true),
+    readdirSync: jest.fn(() => []),
+}));
 
 import { invalid } from '../helpers/invalid';
 import fsModule = require('node:fs');

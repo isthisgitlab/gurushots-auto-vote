@@ -874,6 +874,7 @@ describe('Pages', () => {
                     execFileSync('bash', ['-c', script], {
                         cwd: directory,
                         encoding: 'utf8',
+                        stdio: 'pipe',
                         env: {
                             PATH: `${bin}:${process.env.PATH ?? ''}`,
                             GITHUB_OUTPUT: output,
