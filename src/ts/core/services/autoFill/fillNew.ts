@@ -11,7 +11,7 @@ import { runFillAttempt } from './pipeline';
 
 import type { Challenge } from '../../types/gurushots';
 import type { PickerPhoto } from '../../types/photoPicker';
-import type { SettingsFillDeps } from '../../types/autoFill';
+import type { FillAttemptParams, SettingsFillDeps } from '../../types/autoFill';
 import { oneLine } from '../../format/logSafe';
 
 /** What one action submit answers: ok, the submitted photo, and why not when it failed. */
@@ -39,12 +39,16 @@ type ActionSubmitOutcome =
  * The guards, the tag settings reads, the fill attempt and the outcome mapping
  * the two action submits share. `attempt` carries what differs between them:
  * the explicit id pool and the empty-pool line of the Boost-pinned submit.
+ * `finalEligibility` is the last live check before the submit: the Boost-pinned
+ * submit run at Auto-Submit time passes the Auto-Submit one, so it is held to
+ * the same stand-down rules.
  */
 const runForAction = async (
     challenge: Challenge,
     token: string,
     deps: SettingsFillDeps,
     attempt: { onlyIds?: readonly string[]; onEmptyPick?: ((eligible: PickerPhoto[]) => string) | null },
+    finalEligibility?: FillAttemptParams['finalEligibility'],
 ): Promise<ActionSubmitOutcome> => {
     const { settings, logger } = deps;
     const challengeId = challenge?.id;
@@ -89,6 +93,7 @@ const runForAction = async (
         },
         onlyIds: attempt.onlyIds,
         onEmptyPick: attempt.onEmptyPick,
+        finalEligibility,
     });
     if (attemptResult.status === 'fetch-error') {
         return { kind: 'mapped', ok: false, imageId: null, reason: 'fetch-error' };
@@ -108,8 +113,9 @@ const runForAction = async (
     if (attemptResult.status === 'submit-rejected') return { kind: 'submit-rejected' };
     if (attemptResult.status === 'submit-unanswered') return { kind: 'submit-unanswered' };
     if (attemptResult.status === 'submit-threw') return { kind: 'submit-threw' };
-    // No probe is passed here — a stand-down on this path is the live re-check above — so the
-    // attempt cannot end as probe-stand-down; the arm keeps the union total.
+    // No probe is passed here — a stand-down on this path is the live re-check above or the
+    // caller's final check, both of which end as refresh-stand-down — so the attempt cannot
+    // end as probe-stand-down; the arm keeps the union total.
     /* istanbul ignore if */
     if (attemptResult.status === 'probe-stand-down') {
         return { kind: 'mapped', ok: false, imageId: null, reason: 'submit-failed' };
@@ -171,7 +177,7 @@ const submitNewEntryForAction = async (
  * The reasons split definitive from transient failures so the runner can latch
  * the definitive ones for this Boost window and retry the transient ones:
  *   - 'submitted'         — the photo went in; the caller applies the Boost.
- *   - 'no-slots'          — the free-slot guard, or the live re-check stood down. Transient.
+ *   - 'no-slots'          — the free-slot guard, or the live re-check or the caller's final check stood down. Transient.
  *   - 'challenge-gone'    — the attempt found the challenge gone.
  *   - 'data-incomplete'   — the pre-submit re-read cannot be trusted. Transient.
  *   - 'fetch-error'       — the candidate fetch failed. Transient.
@@ -189,26 +195,35 @@ const submitNewEntryForAction = async (
  *
  * @param deps - getActiveChallenges enables the pre-submit live re-check; when
  *   absent the fill proceeds on pass-start data.
+ * @param finalEligibility - the last live check before the submit; the
+ *   Auto-Submit run passes its own, the Boost run passes none.
  */
 const submitPinnedEntry = async (
     challenge: Challenge,
     token: string,
     deps: SettingsFillDeps,
     imageId: string,
+    finalEligibility?: FillAttemptParams['finalEligibility'],
 ): Promise<ActionSubmit> => {
     const { logger } = deps;
     // Whether the candidate fetch offered the pinned photo: recorded by the
     // empty-pool hook, the one place a no-pick explains itself.
     let offered = false;
-    const outcome = await runForAction(challenge, token, deps, {
-        onlyIds: [imageId],
-        onEmptyPick: (eligible) => {
-            offered = eligible.some((photo) => String(photo.id) === imageId);
-            const line = `fillNew: the photo pinned for Boost (${oneLine(imageId)}) cannot be submitted — not offered, not allowed here, or filtered out`;
-            logger.withCategory('autoSubmit').info(line, null);
-            return line;
+    const outcome = await runForAction(
+        challenge,
+        token,
+        deps,
+        {
+            onlyIds: [imageId],
+            onEmptyPick: (eligible) => {
+                offered = eligible.some((photo) => String(photo.id) === imageId);
+                const line = `fillNew: the photo pinned for Boost (${oneLine(imageId)}) cannot be submitted — not offered, not allowed here, or filtered out`;
+                logger.withCategory('autoSubmit').info(line, null);
+                return line;
+            },
         },
-    });
+        finalEligibility,
+    );
     if (outcome.kind === 'submitted') return { ok: true, imageId: outcome.imageId, reason: 'submitted' };
     if (outcome.kind === 'submit-rejected') return { ok: false, imageId: null, reason: 'submit-rejected' };
     if (outcome.kind === 'submit-unanswered' || outcome.kind === 'submit-threw') {

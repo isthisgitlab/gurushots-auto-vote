@@ -106,7 +106,8 @@ const wakeAtPinRelease = ({ challenge, now }: ActionContext) => {
 /**
  * The entry a due boost lands on: the photo pinned for Boost; else — the pin being absolute —
  * nothing while that photo is not an entry (the boost waits for it, or with the Boost-pinned
- * submit on, submits it when the photo is one of the Chosen Photos) or while it carries Turbo
+ * submit on and the photo one of the Chosen Photos, Auto-Submit has submitted it already or this
+ * boost submits it when no Auto-Submit came first) or while it carries Turbo
  * (the boost never fires); else the photo an earlier fill-new submitted and the boost is still
  * waiting on; else, with fill-new on, a fresh photo submitted now (remembered as pending, so a
  * held boost reuses it instead of submitting another); else the configured Boost Entry.
@@ -122,13 +123,14 @@ const resolveBoostTarget = async (ctx: ActionContext): Promise<BoostTarget | nul
     if (named) return named;
     // The pin is absolute: while the pinned photo is not an entry the boost waits for it (no
     // slot pick, no fill-new substitute, no pending-photo substitute) — or, through the
-    // Boost-pinned submit, gets it back by submitting the photo — and while it carries
+    // Boost-pinned submit, gets it back by submitting the photo (here, when no Auto-Submit
+    // came first) — and while it carries
     // Turbo the boost never fires.
     const pin = votingLogic.resolvePin(challenge, cid, 'boost');
     if (pin.state === 'gone' || pin.state === 'conflict') {
         if (pin.state === 'gone') {
             const pinned = await submitBoostPinnedPhoto(ctx);
-            if (pinned.kind === 'target') return pinned.target;
+            if (pinned.kind === 'submitted' || pinned.kind === 'held') return pinned.target;
             if (pinned.kind === 'skip') return null;
             // fallback: the pinned-submit path is not eligible here — the plain wait below stands.
         }

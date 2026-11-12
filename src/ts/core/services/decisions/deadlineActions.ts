@@ -336,8 +336,9 @@ const describeConflicts = (
  *     feature) hides the row, and `gone` (the photo is not in the challenge) moves it past the
  *     fill instant — or hides it when no fill will plausibly run (autoSubmit off, or no
  *     schedule threshold ahead). A gone Boost pin is exempt from both while the Boost-pinned
- *     submit is eligible (boostPinSubmits): the runner submits that photo when the boost is
- *     due, not at the fill instant.
+ *     submit is eligible (boostPinSubmits): the runner submits that photo at the next
+ *     Auto-Submit, or when the boost is due if that comes first, so the boost row keeps its
+ *     own time.
  *   - autoSubmit: gate on the autoSubmit toggle (a schedule can imply a threshold
  *     while auto-fill is disabled).
  *   - emergencySubmit: its threshold is a fixed setting that never reflects live
@@ -375,7 +376,8 @@ const describeDeadlineActions = (
     const conflicts = describeConflicts(challenge, challengeId, now, manualOnly, entryAges);
     // The Boost-pinned submit can place the boost on its gone pin right now; while it can, the
     // gone pin neither hides the boost row for a missing fill nor moves the row to the fill
-    // instant — the submit happens when the boost is due, at the row's own time.
+    // instant — the photo goes in at the next Auto-Submit, or at the boost row's own time
+    // when that comes first.
     const boostPinSubmitActive = canSubmitBoostPin(challenge, challengeId, entryAges) !== null;
     const { boostBlocked, turboBlocked, boostReleaseAt, turboReleaseAt } = conflicts;
     // The pin on a feature's own photo is absolute, so the row must not promise a spend the
@@ -418,8 +420,8 @@ const describeDeadlineActions = (
             // Only the feature's own pin moves its row: a gone Boost pin moves the boost row, a
             // gone Turbo pin the turbo row, and the fill rows (autoSubmit, emergencySubmit) keep
             // their own thresholds — the runner fires them on their own windows regardless of pins.
-            // A gone Boost pin with the pinned submit eligible is exempt: the photo goes in when
-            // the boost is due, so the row keeps its own time.
+            // A gone Boost pin with the pinned submit eligible is exempt: the photo goes in at the
+            // next Auto-Submit or when the boost is due, so the row keeps its own time.
             const ownPinState = action === 'boost' ? boostPinState : action === 'turbo' ? turboPinState : null;
             const waitsForFill = ownPinState === 'gone' && !(action === 'boost' && boostPinSubmitActive);
             // A Boost row never moves past its own deadline's last chance: a fill landing after

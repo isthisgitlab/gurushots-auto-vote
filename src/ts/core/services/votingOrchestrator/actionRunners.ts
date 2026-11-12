@@ -2,7 +2,9 @@ import * as logger from '../../logger';
 import * as votingLogic from '../VotingLogic';
 import * as autoFill from '../autoFill';
 import * as cancellation from '../../voting/cancellation';
+import { oneLine } from '../../format/logSafe';
 import { runBoost } from './boost';
+import { submitBoostPinnedPhoto } from './boostPinSubmit';
 import { runTurboApply } from './turbo';
 import { cancelPass } from './context';
 
@@ -10,8 +12,58 @@ import type { Challenge } from '../../types/gurushots';
 import type { VotingPassResult } from '../../types/votingPass';
 import type { ActionContext, PassContext } from './context';
 
+/**
+ * The Boost-pinned submit at Auto-Submit time: when an Auto-Submit is due and the
+ * photo pinned for Boost will be submitted for the Boost (describeDeadlineActions'
+ * boostPinSubmits), that photo takes the Auto-Submit's slot instead of the usual
+ * pick. Boost time submits it only when no Auto-Submit comes first.
+ *
+ * @returns true when the Auto-Submit is done for this cycle (the pin went in, an
+ *   earlier submit of it stands, or the last free slot is kept for it after a
+ *   transient failure); false to go on with the usual pick
+ */
+const submitBoostPinAtAutoSubmit = async (ctx: ActionContext): Promise<boolean> => {
+    const { challenge, token, now, fillDeps, entryAges } = ctx;
+    const due = autoFill.resolveAutoSubmitDue(challenge, now, fillDeps);
+    if (!due.due || !votingLogic.describeDeadlineActions(challenge, now, entryAges).boostPinSubmits) return false;
+
+    const finalAuthorization = {
+        trigger: due.trigger,
+        authorizer: 'relative' as const,
+        schedule: due.schedule,
+        desired: due.desired,
+        slotsRemaining: due.slotsRemaining,
+    };
+    const finalEligibility = autoFill.createFinalEligibility(
+        challenge,
+        String(challenge.id),
+        token,
+        fillDeps,
+        finalAuthorization,
+    );
+    const pinned = await submitBoostPinnedPhoto(ctx, finalEligibility);
+    if (pinned.kind === 'submitted') {
+        logger
+            .withCategory('autoSubmit')
+            .success(
+                `autoSubmit: submitted the photo pinned for Boost (${oneLine(pinned.target.imageId)}) for ${logger.challengeTag(challenge)}`,
+                null,
+            );
+        return true;
+    }
+    if (pinned.kind === 'held') return true;
+    // A transient failure or a gone challenge with one free slot left: keep that slot for the
+    // pin and try again next cycle. Everything else (definitive, 2+ slots, fallback) goes on.
+    return (
+        pinned.kind === 'skip' &&
+        (pinned.cause === 'transient' || pinned.cause === 'gone') &&
+        autoFill.getSlotsRemaining(challenge) === 1
+    );
+};
+
 const runAutoFill = async (ctx: ActionContext) => {
     const { challenge, token, now, fillDeps } = ctx;
+    if (await submitBoostPinAtAutoSubmit(ctx)) return;
     // Auto-fill missing entries near deadline (one slot per cycle, staggered).
     // On submit it reflects the new entry locally, so a turbo/boost that runs
     // later this cycle (timer order) acts on it instead of waiting a cycle.

@@ -22,6 +22,7 @@ jest.mock('../../src/ts/core/services/VotingLogic', () => ({
 
 jest.mock('../../src/ts/core/services/autoFill', () => ({
     maybeAutoFillChallenge: jest.fn(async () => 'skipped'),
+    resolveAutoSubmitDue: jest.fn(() => ({ due: false, status: 'skipped' })),
     maybeEmergencyFillChallenge: jest.fn(async () => 'skipped'),
 }));
 
