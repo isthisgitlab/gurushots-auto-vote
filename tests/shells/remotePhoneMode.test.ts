@@ -8,6 +8,16 @@ import { invalid } from '../helpers/invalid';
 
 import type { CapacitorGlobals } from '../../src/ts/core/types/capacitor';
 
+// Keep this suite on the unavailable-storage path without reading Node's getter.
+const localStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+beforeAll(() => {
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: undefined });
+});
+afterAll(() => {
+    if (localStorageDescriptor) Object.defineProperty(globalThis, 'localStorage', localStorageDescriptor);
+    else Reflect.deleteProperty(globalThis, 'localStorage');
+});
+
 const g = globalThis as CapacitorGlobals & { location: unknown };
 const assign = jest.fn<void, [string]>();
 const load = () =>
