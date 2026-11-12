@@ -166,7 +166,10 @@ describe('createMetadataEntryTracker', () => {
     beforeEach(() => jest.clearAllMocks());
 
     test('delegates reads and writes to the metadata store', () => {
+        const warning = jest.fn<void, [message: string, data?: unknown]>();
+        jest.spyOn(logger, 'withCategory').mockReturnValue({ warning });
         metadata.getChallengeEntryIds.mockReturnValue(['a']);
+        metadata.setChallengeEntryIds.mockReturnValue(true);
         const tracker = createMetadataEntryTracker();
 
         expect(tracker.get('c1')).toEqual(['a']);
@@ -174,6 +177,7 @@ describe('createMetadataEntryTracker', () => {
 
         tracker.set('c1', ['a', 'b']);
         expect(metadata.setChallengeEntryIds).toHaveBeenCalledWith('c1', ['a', 'b']);
+        expect(warning).not.toHaveBeenCalled();
     });
 });
 
@@ -191,11 +195,15 @@ describe('createMetadataEntryTracker — persistence outcome logging', () => {
         expect(warning).not.toHaveBeenCalled();
 
         metadata.setChallengeEntryIds.mockReturnValueOnce(false);
+        tracker.set('c1', ['a']);
+        expect(warning).toHaveBeenCalledWith('Could not persist entry snapshot for challenge c1', null);
+
+        metadata.setChallengeEntryIds.mockReturnValueOnce(false);
         tracker.set('c\n2', ['a']);
-        expect(warning).toHaveBeenCalledTimes(1);
+        expect(warning).toHaveBeenCalledTimes(2);
         // The API-sourced id is CR/LF-collapsed before interpolation.
-        expect(warning.mock.calls[0][0]).not.toContain('\n');
-        expect(warning.mock.calls[0][0]).toContain('Could not persist entry snapshot');
+        expect(warning.mock.calls[1][0]).not.toContain('\n');
+        expect(warning.mock.calls[1][0]).toContain('Could not persist entry snapshot');
     });
 });
 
