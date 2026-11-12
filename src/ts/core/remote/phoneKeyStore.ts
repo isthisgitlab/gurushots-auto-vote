@@ -11,7 +11,9 @@ import { ANDROID_PAIRING_KEY_PREF, isPairingKey } from './pairingKey';
 import type { CapacitorGlobals } from '../types/capacitor';
 
 /** What reading the stored key came to: the key, none stored, or a stored value that is not a key. */
-export type StoredKey = { kind: 'key'; key: string } | { kind: 'none' } | { kind: 'invalid' };
+export type StoredKey = { kind: 'key'; key: string; linkVersion: number } | { kind: 'none' } | { kind: 'invalid' };
+
+const STORED_TARGET_PATTERN = /^([1-9]\d{0,2}):([A-Za-z0-9_-]{43})$/;
 
 const nativeCall = (method: 'get' | 'set' | 'remove', options: object): Promise<unknown> => {
     const call = (globalThis as CapacitorGlobals).Capacitor?.nativePromise;
@@ -30,12 +32,15 @@ export const readStoredKey = async (): Promise<StoredKey> => {
     const answer = await nativeCall('get', { key: ANDROID_PAIRING_KEY_PREF });
     const value = (answer as { value?: unknown } | null)?.value;
     if (value === undefined || value === null) return { kind: 'none' };
-    return typeof value === 'string' && isPairingKey(value) ? { kind: 'key', key: value } : { kind: 'invalid' };
+    if (typeof value !== 'string') return { kind: 'invalid' };
+    if (isPairingKey(value)) return { kind: 'key', key: value, linkVersion: 1 };
+    const target = STORED_TARGET_PATTERN.exec(value);
+    return target === null ? { kind: 'invalid' } : { kind: 'key', key: target[2]!, linkVersion: Number(target[1]) };
 };
 
-/** Stores the pairing key; rejects when the write fails. */
-export const storeKey = async (key: string): Promise<void> => {
-    await nativeCall('set', { key: ANDROID_PAIRING_KEY_PREF, value: key });
+/** Stores a canonical versioned pairing target; rejects when the write fails. */
+export const storeKey = async (key: string, linkVersion: number): Promise<void> => {
+    await nativeCall('set', { key: ANDROID_PAIRING_KEY_PREF, value: `${linkVersion}:${key}` });
 };
 
 /** Clears the stored pairing key; rejects when that fails. */

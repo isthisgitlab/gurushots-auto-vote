@@ -10,7 +10,7 @@ import { classifyRemoteChannel } from '../../../core/remote/allowlist';
 import { REMOTE_REFUSAL_PREFIX, REMOTE_SAY_HELLO_FIRST, isAllowedWrite } from '../../../core/remote/dispatch';
 import { setRemoteConnectionState, setRemoteHostPath, setRemoteHostPeerId } from '../../../core/remote/connectionState';
 import { rendererTranslator } from '../../../core/translations/renderer';
-import { clearSkipMark, storeLinkVersion } from '../../../core/remote/linkVersion';
+import { clearSkipMark } from '../../../core/remote/linkVersion';
 
 import type { HelloRepeater } from '../../../core/remote/helloRepeat';
 import type { ByeMessage, EventMessage, HelloMessage, ResultMessage } from '../../../core/remote/protocol';
@@ -60,18 +60,17 @@ const handleHello = (message: HelloMessage, peerId: string, watch: MessageWatch)
         // side to update), so no notice shows here.
         hello.stop();
         hello.clear();
-        // The loader goes straight to the link version this page remembers next time: the one the desktop speaks. A
-        // write that fails is a shortcut lost, never a stranded tab.
-        void storeLinkVersion(message.linkVersion)
-            .catch(() => undefined)
-            .then(() => goToLoader(watch.loaderTarget));
+        const target = new URL(watch.loaderTarget);
+        const fragment = new URLSearchParams(target.hash.slice(1));
+        fragment.set('v', String(message.linkVersion));
+        target.hash = fragment.toString();
+        goToLoader(target.href);
         return;
     }
     if (ctx.hostPeerId === null) {
         ctx.hostPeerId = peerId;
         setRemoteHostPeerId(peerId);
-        // This page is the desktop's: remembered for the loader's next visit, and the loader's mark has done its work.
-        void storeLinkVersion(LINK_VERSION).catch(() => undefined);
+        // This page is the desktop's, and the loader's bounded bounce mark has done its work.
         clearSkipMark();
         setRemoteHostPath(ctx.transport.peerPath?.(peerId) ?? 'direct');
         ctx.everConnected = true;

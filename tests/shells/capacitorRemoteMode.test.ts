@@ -10,7 +10,9 @@ import { invalid } from '../helpers/invalid';
 import type { CapacitorGlobals } from '../../src/ts/core/types/capacitor';
 
 const KEY = 'AbC-_9'.repeat(7) + 'A';
-const LINK = `https://example.test/remote/#k=${KEY}`;
+const LINK = `https://example.test/remote/v2/index.html#k=${KEY}`;
+const V1_LINK = `https://example.test/remote/v1/index.html#k=${KEY}`;
+const V3_LINK = `https://example.test/remote/v3/index.html#k=${KEY}`;
 
 const order: string[] = [];
 const mockStop = jest.fn<Promise<unknown>, []>();
@@ -73,9 +75,12 @@ describe('Android remote mode', () => {
         test('stops the service, clears and flushes the running flag, stores the key, then loads the bundled loader', async () => {
             const { enterRemoteMode } = load();
             await expect(enterRemoteMode(LINK)).resolves.toEqual({ success: true });
-            expect(order).toEqual(['stop', 'flag', 'flush', 'set', `go /remote/index.html#k=${KEY}`]);
+            expect(order).toEqual(['stop', 'flag', 'flush', 'set', `go /remote/index.html#k=${KEY}&v=2`]);
             expect(mockSettings.setSetting).toHaveBeenCalledWith('autovoteRunning', false);
-            expect(nativePromise).toHaveBeenCalledWith('Preferences', 'set', { key: 'gs_remote_access', value: KEY });
+            expect(nativePromise).toHaveBeenCalledWith('Preferences', 'set', {
+                key: 'gs_remote_access',
+                value: `2:${KEY}`,
+            });
         });
 
         test('a build without the native service still enters (nothing runs locally to stop)', async () => {
@@ -91,6 +96,22 @@ describe('Android remote mode', () => {
                 error: 'bad-link',
             });
             expect(order).toEqual([]);
+        });
+
+        test('an older link is refused before any service, settings, storage, or navigation side effect', async () => {
+            const { enterRemoteMode } = load();
+            await expect(enterRemoteMode(V1_LINK)).resolves.toEqual({ success: false, error: 'update-computer' });
+            expect(order).toEqual([]);
+            expect(mockSettings.setSetting).not.toHaveBeenCalled();
+            expect(assign).not.toHaveBeenCalled();
+        });
+
+        test('a newer link is refused before any service, settings, storage, or navigation side effect', async () => {
+            const { enterRemoteMode } = load();
+            await expect(enterRemoteMode(V3_LINK)).resolves.toEqual({ success: false, error: 'update-phone' });
+            expect(order).toEqual([]);
+            expect(mockSettings.setSetting).not.toHaveBeenCalled();
+            expect(assign).not.toHaveBeenCalled();
         });
 
         test('a service stop the plugin rejected refuses entering: the service state is unknown', async () => {
@@ -133,7 +154,13 @@ describe('Android remote mode', () => {
     describe('the startup decision', () => {
         test('a stored key keeps the relaunch in remote mode', async () => {
             nativePromise.mockResolvedValue({ value: KEY });
-            await expect(load().readStoredPairingKey()).resolves.toBe(KEY);
+            await expect(load().readStoredPairingKey()).resolves.toEqual({ key: KEY, linkVersion: 1 });
+            expect(mockWarning).not.toHaveBeenCalled();
+        });
+
+        test('a future stored target keeps its version for the native loader gate', async () => {
+            nativePromise.mockResolvedValue({ value: `3:${KEY}` });
+            await expect(load().readStoredPairingKey()).resolves.toEqual({ key: KEY, linkVersion: 3 });
             expect(mockWarning).not.toHaveBeenCalled();
         });
 
@@ -157,9 +184,9 @@ describe('Android remote mode', () => {
         });
     });
 
-    test('loadBundledRemoteLoader moves the WebView to the loader file with the key in the fragment', () => {
-        load().loadBundledRemoteLoader(KEY);
-        expect(assign).toHaveBeenCalledWith(`/remote/index.html#k=${KEY}`);
+    test('loadBundledRemoteLoader moves the WebView to the loader file with the checked target in the fragment', () => {
+        load().loadBundledRemoteLoader({ key: KEY, linkVersion: 2 });
+        expect(assign).toHaveBeenCalledWith(`/remote/index.html#k=${KEY}&v=2`);
     });
 
     test('installRemoteModeEntry offers the paste entry to the React app', () => {

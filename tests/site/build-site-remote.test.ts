@@ -40,7 +40,7 @@ describe('the remote page tree', () => {
     const listing = () => fs.readdirSync(nodePath.join(out, 'remote')).sort();
 
     /** The local build's dist/: the loader, the app stylesheet, and the page it staged for `linkVersion`. */
-    const seedDist = (linkVersion = 1): void => {
+    const seedDist = (linkVersion = 2): void => {
         write(nodePath.join('dist', 'remote-loader.html'), '<!doctype html><title>loader</title>');
         write(nodePath.join('dist', 'remoteLoader-bundle.js'), '// loader');
         write(nodePath.join('dist', 'styles.css'), 'body{}');
@@ -63,19 +63,26 @@ describe('the remote page tree', () => {
     });
 
     describe('what lands in dist-site/remote/', () => {
-        test('the loader, the local build as v1, a newer link version from a pre-release', async () => {
-            seedDist();
-            await buildRemoteSite(
-                out,
-                '9.9.9',
-                remoteSiteDeps(dist, [pageRelease('9.9.10-beta.1', [2], { prerelease: true })]),
-            );
+        test('the loader, the released v1 archive, and the local v2 page land together', async () => {
+            seedDist(2);
+            const v1Archive = 'https://example.com/9.9.8/remote-page-v1.zip';
+            const unzip = jest.fn(async (zipPath: string, dir: string): Promise<void> => {
+                await fakeUnzip(zipPath, dir);
+                const archive = fs.readFileSync(zipPath, 'utf8');
+                fs.writeFileSync(nodePath.join(dir, 'remote-bundle.js'), `bundle:${archive}`);
+            });
+            await buildRemoteSite(out, '9.9.9', remoteSiteDeps(dist, [pageRelease('9.9.8', [1])], { unzip }));
 
             expect(listing()).toEqual(['index.html', 'remoteLoader-bundle.js', 'styles.css', 'v1', 'v2']);
             expect(read('index.html')).toContain('loader');
-            expect(read('v1', 'index.html')).toBe('<html>local</html>');
-            // The beta-only v2 is kept by a stable v1 build, from the beta release that carries it.
-            expect(read('v2', 'index.html')).toContain('9.9.10-beta.1/remote-page-v2.zip');
+            expect(read('v1', 'index.html')).toBe(`<html>${v1Archive}</html>`);
+            expect(read('v1', 'remote-bundle.js')).toBe(`bundle:${v1Archive}`);
+            expect(read('v1', 'styles.css')).toBe(`css:${v1Archive}`);
+            expect(read('v1', 'THIRD_PARTY_NOTICES.txt')).toBe(`notices:${v1Archive}`);
+            expect(read('v2', 'index.html')).toBe('<html>local</html>');
+            expect(read('v2', 'remote-bundle.js')).toBe('// page');
+            expect(read('v2', 'styles.css')).toBe('body{}');
+            expect(read('v2', 'THIRD_PARTY_NOTICES.txt')).toBe('local-notices');
             expect(fs.existsSync(nodePath.join(out, 'remote', '9.9.9'))).toBe(false);
         });
 
@@ -93,15 +100,15 @@ describe('the remote page tree', () => {
         });
 
         test('the app stylesheet lands at the loader root and in the page the local build stands in for, not in a downloaded one', async () => {
-            seedDist(1);
-            await buildRemoteSite(out, '9.9.9', remoteSiteDeps(dist, [pageRelease('9.9.8', [2])]));
+            seedDist(2);
+            await buildRemoteSite(out, '9.9.9', remoteSiteDeps(dist, [pageRelease('9.9.8', [1])]));
             expect(read('styles.css')).toBe('body{}');
-            expect(read('v1', 'styles.css')).toBe('body{}');
+            expect(read('v2', 'styles.css')).toBe('body{}');
             // A downloaded page keeps its own release's stylesheet and notices.
-            expect(read('v2', 'styles.css')).toBe('css:https://example.com/9.9.8/remote-page-v2.zip');
-            expect(read('v2', 'THIRD_PARTY_NOTICES.txt')).toBe('notices:https://example.com/9.9.8/remote-page-v2.zip');
+            expect(read('v1', 'styles.css')).toBe('css:https://example.com/9.9.8/remote-page-v1.zip');
+            expect(read('v1', 'THIRD_PARTY_NOTICES.txt')).toBe('notices:https://example.com/9.9.8/remote-page-v1.zip');
             // The local page keeps the notices it staged.
-            expect(read('v1', 'THIRD_PARTY_NOTICES.txt')).toBe('local-notices');
+            expect(read('v2', 'THIRD_PARTY_NOTICES.txt')).toBe('local-notices');
         });
 
         test('the third-party notices sit beside the loader, and nothing is invented when the build has none', async () => {
@@ -120,15 +127,15 @@ describe('the remote page tree', () => {
             }
         });
 
-        test('a stylesheet without the local page lands at the loader root only', async () => {
+        test('a stylesheet without the local page lands at the loader root while the required v1 archive stays published', async () => {
             write(nodePath.join('dist', 'styles.css'), 'body{}');
             await buildRemoteSite(out, '9.9.9', remoteSiteDeps(dist));
             expect(read('styles.css')).toBe('body{}');
-            expect(fs.existsSync(nodePath.join(out, 'remote', 'v1'))).toBe(false);
+            expect(read('v1', 'index.html')).toContain('9.9.8/remote-page-v1.zip');
         });
 
         test('without the local build nothing is created, and the skipped steps are said', async () => {
-            await buildRemoteSite(out, '9.9.9', remoteSiteDeps(dist));
+            await buildRemoteSite(out, '9.9.9', remoteSiteDeps(dist, [], { linkVersion: 1 }));
             expect(fs.existsSync(nodePath.join(out, 'remote'))).toBe(false);
             expect(logSpy).toHaveBeenCalledWith('⏭️  remote/ loader: build:react has not produced it yet');
             expect(logSpy).toHaveBeenCalledWith('⏭️  remote/v1/: build:react has not staged it yet');
@@ -176,7 +183,11 @@ describe('the remote page tree', () => {
 
         test('a beta local build does not replace the stable page users get', async () => {
             seedDist(1);
-            await buildRemoteSite(out, '9.9.10-beta.1', remoteSiteDeps(dist, [pageRelease('9.9.9', [1])]));
+            await buildRemoteSite(
+                out,
+                '9.9.10-beta.1',
+                remoteSiteDeps(dist, [pageRelease('9.9.9', [1])], { linkVersion: 1 }),
+            );
             expect(read('v1', 'index.html')).toContain('9.9.9/remote-page-v1.zip');
             expect(read('v1', 'styles.css')).toBe('css:https://example.com/9.9.9/remote-page-v1.zip');
             expect(logSpy).not.toHaveBeenCalledWith(expect.stringContaining('(the local build)'));
@@ -187,20 +198,20 @@ describe('the remote page tree', () => {
             await buildRemoteSite(
                 out,
                 '9.9.10-beta.1',
-                remoteSiteDeps(dist, [pageRelease('9.9.10-beta.0', [1], { prerelease: true })]),
+                remoteSiteDeps(dist, [pageRelease('9.9.10-beta.0', [1], { prerelease: true })], { linkVersion: 1 }),
             );
             expect(read('v1', 'index.html')).toBe('<html>local</html>');
         });
 
         test('a stable local build stands in for its own link version, even when an older stable carries it', async () => {
             seedDist(1);
-            await buildRemoteSite(out, '9.9.9', remoteSiteDeps(dist, [pageRelease('9.9.8', [1])]));
+            await buildRemoteSite(out, '9.9.9', remoteSiteDeps(dist, [pageRelease('9.9.8', [1])], { linkVersion: 1 }));
             expect(read('v1', 'index.html')).toBe('<html>local</html>');
         });
 
         test('an older stable local build does not replace a newer stable v1', async () => {
             seedDist(1);
-            await buildRemoteSite(out, '9.9.8', remoteSiteDeps(dist, [pageRelease('9.9.9', [1])]));
+            await buildRemoteSite(out, '9.9.8', remoteSiteDeps(dist, [pageRelease('9.9.9', [1])], { linkVersion: 1 }));
             expect(read('v1', 'index.html')).toContain('9.9.9/remote-page-v1.zip');
         });
 
@@ -209,7 +220,7 @@ describe('the remote page tree', () => {
             await buildRemoteSite(
                 out,
                 '9.9.9',
-                remoteSiteDeps(dist, [pageRelease('9.9.10-beta.1', [1], { prerelease: true })]),
+                remoteSiteDeps(dist, [pageRelease('9.9.10-beta.1', [1], { prerelease: true })], { linkVersion: 1 }),
             );
             expect(read('v1', 'index.html')).toBe('<html>local</html>');
         });
@@ -219,7 +230,7 @@ describe('the remote page tree', () => {
             await buildRemoteSite(
                 out,
                 '9.9.10-beta.1',
-                remoteSiteDeps(dist, [pageRelease('9.9.10-beta.2', [1], { prerelease: true })]),
+                remoteSiteDeps(dist, [pageRelease('9.9.10-beta.2', [1], { prerelease: true })], { linkVersion: 1 }),
             );
             expect(read('v1', 'index.html')).toContain('9.9.10-beta.2/remote-page-v1.zip');
         });
@@ -229,7 +240,7 @@ describe('the remote page tree', () => {
             await buildRemoteSite(
                 out,
                 '9.9.10-beta.3',
-                remoteSiteDeps(dist, [pageRelease('9.9.10-beta.2', [1], { prerelease: true })]),
+                remoteSiteDeps(dist, [pageRelease('9.9.10-beta.2', [1], { prerelease: true })], { linkVersion: 1 }),
             );
             expect(read('v1', 'index.html')).toBe('<html>local</html>');
         });
@@ -324,10 +335,14 @@ describe('the remote page tree', () => {
         });
 
         test('a zip with no checksum beside it fails the build', async () => {
-            seedDist();
+            seedDist(2);
             await expect(
-                buildRemoteSite(out, '9.9.9', remoteSiteDeps(dist, [pageRelease('9.9.8', [2], { checksum: false })])),
-            ).rejects.toThrow('v9.9.8: remote-page-v2.zip has no remote-page-v2.zip.sha256 beside it');
+                buildRemoteSite(
+                    out,
+                    '9.9.9',
+                    remoteSiteDeps(dist, [pageRelease('9.9.8', [1]), pageRelease('9.9.12', [2], { checksum: false })]),
+                ),
+            ).rejects.toThrow('v9.9.12: remote-page-v2.zip has no remote-page-v2.zip.sha256 beside it');
         });
 
         test('a zip whose checksum does not match fails the build and is not unpacked', async () => {
@@ -355,32 +370,35 @@ describe('the remote page tree', () => {
             ['text that is not a hash', 'not a checksum file\n'],
             ['a hash with a non-hex digit', `${'g'.repeat(64)}  x.zip\n`],
         ])(
-            'a checksum file that is %s fails the build as not a SHA-256 file, and nothing is unpacked',
+            'a checksum file that is %s fails the v2 build as not a SHA-256 file, after only the valid v1 archive unpacks',
             async (_name, body) => {
-                seedDist();
+                seedDist(2);
                 const unzip = jest.fn(fakeUnzip);
                 await expect(
                     buildRemoteSite(
                         out,
                         '9.9.9',
-                        remoteSiteDeps(dist, [pageRelease('9.9.8', [2])], {
+                        remoteSiteDeps(dist, [pageRelease('9.9.8', [1]), pageRelease('9.9.12', [2])], {
                             unzip,
                             downloadFile: async (url) =>
-                                url.endsWith('.sha256') ? Buffer.from(body) : fakeDownload(url),
+                                url.includes('remote-page-v2') && url.endsWith('.sha256')
+                                    ? Buffer.from(body)
+                                    : fakeDownload(url),
                         }),
                     ),
-                ).rejects.toThrow('v9.9.8: remote-page-v2.zip.sha256 is not a SHA-256 checksum file');
-                expect(unzip).not.toHaveBeenCalled();
+                ).rejects.toThrow('v9.9.12: remote-page-v2.zip.sha256 is not a SHA-256 checksum file');
+                expect(unzip).toHaveBeenCalledTimes(1);
+                expect(unzip.mock.calls[0]?.[1]).toBe(nodePath.join(out, 'remote', 'v1'));
             },
         );
 
         test('a failed download of a newer link version fails the build', async () => {
-            seedDist();
+            seedDist(2);
             await expect(
                 buildRemoteSite(
                     out,
                     '9.9.9',
-                    remoteSiteDeps(dist, [pageRelease('9.9.12', [2])], {
+                    remoteSiteDeps(dist, [pageRelease('9.9.12', [1, 2])], {
                         downloadFile: async (url) => {
                             if (url.includes('remote-page-v2')) throw new Error('download failed (500)');
                             return fakeDownload(url);
@@ -392,7 +410,7 @@ describe('the remote page tree', () => {
     });
 
     test('the real unzip puts the zip content in place', async () => {
-        seedDist();
+        seedDist(2);
         // A real zip: `zip` is on the runner; skip building it when the tool is absent.
         const zipDir = fs.mkdtempSync(nodePath.join(os.tmpdir(), 'zip-src-'));
         fs.writeFileSync(nodePath.join(zipDir, 'index.html'), '<html>paged</html>');
@@ -407,8 +425,8 @@ describe('the remote page tree', () => {
         const zipBytes = fs.readFileSync(zipPath);
         await buildRemoteSite(
             out,
-            '9.9.9',
-            remoteSiteDeps(dist, [pageRelease('9.9.8', [2])], {
+            '9.9.7',
+            remoteSiteDeps(dist, [pageRelease('9.9.8', [1, 2])], {
                 downloadFile: async (url) =>
                     url.endsWith('.sha256') ? Buffer.from(`${sha256(zipBytes)}  x.zip\n`) : zipBytes,
                 // The real unzip dep (the default) runs here.

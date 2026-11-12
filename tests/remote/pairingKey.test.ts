@@ -113,8 +113,28 @@ describe('the pairing link a phone pastes', () => {
         `${REMOTE_PAGES_ORIGIN}/remote/index.html#k=${KEY}`,
         `  http://192.168.1.5:8080/remote/#k=${KEY}\n`,
         `https://example.test/remote/#x=1&k=${KEY}`,
-    ])('accepts %j and keeps only the key', (link) => {
-        expect(parsePairingLink(link)).toBe(KEY);
+    ])('accepts unversioned loader URLs as v1 targets', (link) => {
+        expect(parsePairingLink(link)).toEqual({ key: KEY, linkVersion: 1 });
+    });
+
+    test('accepts a canonical versioned page URL and retains its link version', () => {
+        expect(parsePairingLink(`https://example.test/remote/v2/index.html#k=${KEY}`)).toEqual({
+            key: KEY,
+            linkVersion: 2,
+        });
+    });
+
+    test.each([
+        [`https://example.test/remote/v1#k=${KEY}`, 1],
+        [`https://example.test/remote/v1/#k=${KEY}`, 1],
+        [`https://example.test/remote/v1/index.html#k=${KEY}`, 1],
+        [`https://example.test/remote/v999#k=${KEY}`, 999],
+        [`https://example.test/remote/v999/#k=${KEY}`, 999],
+        [`https://example.test/remote/v999/index.html#k=${KEY}`, 999],
+        [`https://example.test/remote/#k=${KEY}&v=1`, 1],
+        [`https://example.test/remote/index.html#k=${KEY}&v=999`, 999],
+    ])('accepts canonical link-version boundaries for %s', (link, linkVersion) => {
+        expect(parsePairingLink(link)).toEqual({ key: KEY, linkVersion });
     });
 
     test.each([
@@ -128,6 +148,17 @@ describe('the pairing link a phone pastes', () => {
         ['no k parameter', `https://example.test/remote/#key=${KEY}`],
         ['a short key', 'https://example.test/remote/#k=abc'],
         ['an empty key', 'https://example.test/remote/#k='],
+        ['duplicate keys', `https://example.test/remote/#k=${KEY}&k=${KEY}`],
+        ['duplicate link versions', `https://example.test/remote/#k=${KEY}&v=1&v=2`],
+        ['a zero link version', `https://example.test/remote/#k=${KEY}&v=0`],
+        ['a leading-zero link version', `https://example.test/remote/#k=${KEY}&v=01`],
+        ['a four-digit link version', `https://example.test/remote/#k=${KEY}&v=1000`],
+        ['a non-decimal link version', `https://example.test/remote/#k=${KEY}&v=1e0`],
+        ['a version fragment on a versioned page', `https://example.test/remote/v2/#k=${KEY}&v=2`],
+        ['a conflicting page and fragment version', `https://example.test/remote/v2/#k=${KEY}&v=1`],
+        ['a zero directory version', `https://example.test/remote/v0/#k=${KEY}`],
+        ['a leading-zero directory version', `https://example.test/remote/v01/#k=${KEY}`],
+        ['a four-digit directory version', `https://example.test/remote/v1000/#k=${KEY}`],
         ['the key in the query', `https://example.test/remote/?k=${KEY}`],
     ])('refuses %s', (_name, link) => {
         expect(parsePairingLink(link)).toBeNull();

@@ -29,29 +29,35 @@ const PAIRING_KEY_PATTERN = /^[A-Za-z0-9_-]{43}$/;
  */
 const LOADER_PATH_PATTERN = /\/remote(?:\/(?:index\.html)?)?$/;
 
-/**
- * The stable loader's address from a versioned page (`/remote/v<N>/index.html`): the address bar
- * shows `../#k=<key>`, so a bookmark or "Add to Home Screen" keeps a link that survives the next
- * desktop update and the next link version.
- */
-export const loaderAddressBarUrl = (key: string): string => `../#k=${encodeURIComponent(key)}`;
+/** A versioned remote page path, with a strict decimal link version. */
+const VERSIONED_PAGE_PATH_PATTERN = /\/remote\/v([1-9]\d{0,2})(?:\/(?:index\.html)?)?$/;
+
+/** The fragment version used only when a versioned page redirects to the root loader. */
+const LINK_VERSION_PARAM = 'v';
+
+/** A parsed pairing link keeps the version the phone must run with its persistent pairing key. */
+export type PairingTarget = { key: string; linkVersion: number };
 
 /**
- * The same loader as a navigation target. It is addressed by file name: the Android app's local server
- * answers a directory path with the app's own document, and the Pages site serves the same file.
+ * The root loader as a navigation target. It is addressed by file name: the Android app's local server
+ * answers a directory path with its own document, and the Pages site serves the same file. A modern
+ * versioned page includes its checked version so the loader never needs a stored-version preference.
  */
-export const loaderNavigationUrl = (key: string): string => `../index.html#k=${encodeURIComponent(key)}`;
+export const loaderNavigationUrl = (key: string, linkVersion: number): string => {
+    const fragment = new URLSearchParams({ [PAIRING_KEY_PARAM]: key });
+    fragment.set(LINK_VERSION_PARAM, String(linkVersion));
+    return `../index.html#${fragment.toString()}`;
+};
 
 /** Whether `value` reads as a pairing key (base64url, the desktop key's exact length). */
 export const isPairingKey = (value: string): boolean => PAIRING_KEY_PATTERN.test(value);
 
 /**
- * The pairing key of a pasted pairing link (`<origin>/remote/#k=<key>`, the Pages loader's
- * address or a dev-local origin), or null when the text is not one: only the key is kept,
- * nothing else of the link. A missing or malformed key, a link to some other path of the site,
- * and non-web schemes are refused — the caller shows the same "not a pairing link" message.
+ * The validated pairing target of a pasted link. Unversioned loader URLs are v1. A canonical
+ * versioned page path is authoritative; a loader may carry a `v` fragment from a modern page redirect.
+ * Malformed or conflicting metadata, unrelated paths, and non-web schemes are refused.
  */
-export const parsePairingLink = (link: string): string | null => {
+export const parsePairingLink = (link: string): PairingTarget | null => {
     let url: URL;
     try {
         url = new URL(link.trim());
@@ -59,10 +65,23 @@ export const parsePairingLink = (link: string): string | null => {
         return null;
     }
     if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
-    // The loader's address; a missing trailing slash or an index.html is the same document.
+    const fragment = new URLSearchParams(url.hash.slice(1));
+    const keys = fragment.getAll(PAIRING_KEY_PARAM);
+    const key = keys[0];
+    if (key === undefined || keys.length !== 1 || !isPairingKey(key)) return null;
+    const versions = fragment.getAll(LINK_VERSION_PARAM);
+    if (versions.length > 1) return null;
+    const hinted = versions[0];
+    const hint = hinted !== undefined && /^[1-9]\d{0,2}$/.test(hinted) ? Number(hinted) : null;
+    if (hinted !== undefined && hint === null) return null;
+    const versioned = VERSIONED_PAGE_PATH_PATTERN.exec(url.pathname);
+    if (versioned !== null) {
+        const linkVersion = Number(versioned[1]);
+        if (hinted !== undefined) return null;
+        return { key, linkVersion };
+    }
     if (!LOADER_PATH_PATTERN.test(url.pathname)) return null;
-    const key = new URLSearchParams(url.hash.slice(1)).get(PAIRING_KEY_PARAM);
-    return key !== null && isPairingKey(key) ? key : null;
+    return { key, linkVersion: hint ?? 1 };
 };
 
 const keptKey = (): string | null => {

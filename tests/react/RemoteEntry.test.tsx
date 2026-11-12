@@ -142,12 +142,14 @@ describe('Remote entry', () => {
         }
     });
 
-    test('the address bar shows the stable loader address, so a bookmark survives the next desktop update', async () => {
+    test('the address bar keeps its versioned path and normalizes the pairing fragment', async () => {
+        window.history.pushState(null, '', '/remote/v2/index.html#k=the-key');
         const replaceState = jest.spyOn(window.history, 'replaceState');
         try {
             const m = load({ marker: 'remote-transport' });
             await flush();
-            expect(replaceState).toHaveBeenCalledWith(null, '', '../#k=the-key');
+            expect(replaceState).toHaveBeenCalledWith(null, '', '#k=the-key');
+            expect(window.location.pathname).toBe('/remote/v2/index.html');
             // Before anything connects or mounts: the very first thing a saved link sees is the stable one.
             expect(replaceState.mock.invocationCallOrder[0]).toBeLessThan(m.installed.mock.invocationCallOrder[0]);
         } finally {
@@ -155,14 +157,14 @@ describe('Remote entry', () => {
         }
     });
 
-    test('a key kept only by the tab (a reload with no fragment) still puts the loader address in the bar', async () => {
+    test('a key kept only by the tab (a reload with no fragment) is restored in the page fragment', async () => {
         window.sessionStorage.setItem('remote-pairing-key', 'tab-key');
         window.location.hash = '';
         const replaceState = jest.spyOn(window.history, 'replaceState');
         try {
             load({ marker: 'remote-transport' });
             await flush();
-            expect(replaceState).toHaveBeenCalledWith(null, '', '../#k=tab-key');
+            expect(replaceState).toHaveBeenCalledWith(null, '', '#k=tab-key');
         } finally {
             replaceState.mockRestore();
         }
@@ -197,8 +199,7 @@ describe('Remote entry', () => {
     });
 
     test('a link version mismatch reached from a versioned page goes to the loader beside it, not the site root', async () => {
-        // The document sits at the versioned page; the entry then rewrites the address bar to the
-        // loader directory, so only a target resolved before that rewrite still reaches the loader.
+        // The document keeps its versioned path while the loader target is resolved beside it.
         window.history.pushState(null, '', '/remote/v1/index.html#k=the-key');
         const transport = new TransportStub('phone');
         loadWithRealBridge(transport);
@@ -211,18 +212,17 @@ describe('Remote entry', () => {
             transport.emitJoin('host');
             await flush();
             transport.receiveFromPeer(
-                { t: 'hello', version: '9.9.9', protocolVersion: PROTOCOL_VERSION, linkVersion: 2, host: true },
+                { t: 'hello', version: '9.9.9', protocolVersion: PROTOCOL_VERSION, linkVersion: 1, host: true },
                 'host',
             );
             await flush();
-            // The page keeps the desktop's link version first (the real store hashes the pairing key, which takes a
-            // moment off the microtask queue), then moves the tab to the loader.
+            // The page returns the desktop's checked link version to the root loader.
             for (let waited = 0; waited < 100 && replaced.length === 0; waited += 1) {
                 await new Promise((resolve) => setTimeout(resolve, 10));
             }
             const target = replaced[0];
             expect(target).toBeDefined();
-            expect(window.localStorage.getItem('gs-remote-link-version')).toMatch(/^[0-9a-f]{16}:2$/);
+            expect(new URL(target ?? '', window.location.href).hash).toContain('v=1');
             expect(new URL(target ?? '', window.location.href).pathname.endsWith('/remote/index.html')).toBe(true);
         } finally {
             replaceSpy.mockRestore();

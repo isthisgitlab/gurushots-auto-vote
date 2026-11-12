@@ -14,6 +14,7 @@ import * as settings from '../../core/settings';
 import { installPhoneRemoteMode } from '../../core/remote/phoneMode';
 import { readStoredKey, storeKey } from '../../core/remote/phoneKeyStore';
 import { parsePairingLink } from '../../core/remote/pairingKey';
+import { LINK_VERSION } from '../../core/remote/protocol';
 import { stop as stopNativeService } from './NativeAutovoteBridge';
 
 import type { RemoteModeEntry } from '../../core/remote/phoneMode';
@@ -27,10 +28,10 @@ const BUNDLED_LOADER_PATH = '/remote/index.html';
  * the state unknown or unusable: both start the normal mode (local voting is off in remote mode's
  * wake, so nothing votes) and are said once in the log.
  */
-const readStoredPairingKey = async (): Promise<string | null> => {
+const readStoredPairingKey = async (): Promise<{ key: string; linkVersion: number } | null> => {
     try {
         const stored = await readStoredKey();
-        if (stored.kind === 'key') return stored.key;
+        if (stored.kind === 'key') return { key: stored.key, linkVersion: stored.linkVersion };
         if (stored.kind === 'none') return null;
     } catch {
         // A read the native bridge refused: the state is unknown, said below.
@@ -40,8 +41,8 @@ const readStoredPairingKey = async (): Promise<string | null> => {
 };
 
 /** Navigates this WebView to the bundled remote loader with the key in its fragment. */
-const loadBundledRemoteLoader = (key: string): void => {
-    globalThis.location.assign(`${BUNDLED_LOADER_PATH}#k=${key}`);
+const loadBundledRemoteLoader = ({ key, linkVersion }: { key: string; linkVersion: number }): void => {
+    globalThis.location.assign(`${BUNDLED_LOADER_PATH}#k=${key}&v=${linkVersion}`);
 };
 
 /**
@@ -52,8 +53,10 @@ const loadBundledRemoteLoader = (key: string): void => {
  * not the one remote mode needs — the app then stays in normal mode.
  */
 const enterRemoteMode = async (link: string): Promise<RemoteModeEntry> => {
-    const key = parsePairingLink(link);
-    if (key === null) return { success: false, error: 'bad-link' };
+    const target = parsePairingLink(link);
+    if (target === null) return { success: false, error: 'bad-link' };
+    if (target.linkVersion < LINK_VERSION) return { success: false, error: 'update-computer' };
+    if (target.linkVersion > LINK_VERSION) return { success: false, error: 'update-phone' };
     // The service stops first: remote mode and a local voter never run at once. A call that
     // came back with an error left the service's state unknown, so entering is refused.
     const stopped = await stopNativeService();
@@ -67,11 +70,11 @@ const enterRemoteMode = async (link: string): Promise<RemoteModeEntry> => {
         return { success: false, error: 'settings' };
     }
     try {
-        await storeKey(key);
+        await storeKey(target.key, target.linkVersion);
     } catch {
         return { success: false, error: 'storage' };
     }
-    loadBundledRemoteLoader(key);
+    loadBundledRemoteLoader(target);
     return { success: true };
 };
 

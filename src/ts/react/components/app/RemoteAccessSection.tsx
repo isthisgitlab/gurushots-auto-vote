@@ -20,6 +20,7 @@ const announcePairingChange = (): void => {
 const REMOTE_ACCESS_NAME_KEYS = ['app.remoteAccess', 'app.remoteToggleLabel', 'app.remoteResetPairing'];
 const REMOTE_ACCESS_DESCRIPTION_KEYS = [
     'app.remoteAccessDesc',
+    'app.remoteLinkMigration',
     'app.remoteNote1',
     'app.remoteNote2',
     'app.remoteNote3',
@@ -167,6 +168,7 @@ export function RemoteAccessSection({ showAll }: { showAll?: boolean }) {
                             />
                             <div className="flex flex-col gap-2 min-w-0">
                                 <code className="text-xs break-all max-w-md">{info?.link}</code>
+                                <p className="text-xs text-base-content/70 max-w-md">{t('app.remoteLinkMigration')}</p>
                                 <div className="flex flex-wrap gap-2">
                                     <button
                                         type="button"

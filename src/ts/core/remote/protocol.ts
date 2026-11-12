@@ -27,14 +27,14 @@ export const APP_VERSION: string = pkg.version;
  * The link version: the number of the phone ⇄ desktop contract this build speaks, like a versioned API. The phone
  * page is published under `/remote/v<LINK_VERSION>/` and serves every desktop that speaks the same number, whatever
  * app version either side runs. The pinned shapes are `core/remote/contract/v<N>/`, checked by
- * `tests/remote/contractV1.test.ts`.
+ * their matching `tests/remote/contractV<N>.test.ts` snapshots.
  *
  * The rule inside one link version: a change may only add — new channels, new optional fields, a channel moving
- * from refused to allowed. A new value in an existing closed field (a `reason`, a `role`, a command name), a new
+ * from refused to allowed. A transport compatibility break also requires a new link version. A new value in an existing closed field (a `reason`, a `role`, a command name), a new
  * enum member of an existing setting, or a change to a channel's spend class needs a new number and a new
  * `contract/v<N>/`. New page code must handle a missing field and a channel an older desktop refuses.
  */
-export const LINK_VERSION = 1 as const;
+export const LINK_VERSION = 2 as const;
 
 /** The highest link version a `hello` may carry: a bound on the wire, not a statement of what is published. */
 const MAX_LINK_VERSION = 999;

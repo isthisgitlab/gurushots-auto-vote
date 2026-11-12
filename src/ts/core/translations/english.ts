@@ -114,6 +114,9 @@ export const errors = {
     remoteConnectionLost: 'The connection to your computer dropped.',
     remoteBadLink:
         'That is not a pairing link. Paste the whole link from the Remote access section on your computer — it ends in #k=…',
+    remoteLinkOlder:
+        'This link uses an older remote page. Copy a new link from your computer. Update the computer app if needed.',
+    remoteLinkNewer: 'This link needs a newer app on your phone. Update this app, then paste the link again.',
     remoteEnterFailed: 'Could not switch to remote mode. This app stays in its normal mode — try again.',
     remoteDisconnectFailed: 'Could not disconnect. This page stays connected to your computer — try again.',
     remoteRefused: 'This is done on the computer.',
@@ -1711,7 +1714,7 @@ export const app = {
         'Internal — the version of the "unofficial app" notice you acknowledged; the notice is shown again when its text changes materially',
     // Remote access (the desktop is what gets paired to; the phone shows the states)
     remoteAccess: 'Remote access',
-    remoteAccessDesc: 'Control this app from your phone with one permanent link. It is off by default.',
+    remoteAccessDesc: 'Control this app from your phone. Remote access is off by default.',
     remoteToggleLabel: 'Allow control from your phone',
     remoteStatusOn: 'On — a phone with the link can control this app',
     remoteStatusOff: 'Off',
@@ -1719,6 +1722,8 @@ export const app = {
     remoteHide: 'Hide',
     remoteCopyLink: 'Copy link',
     remoteLinkCopied: 'Link copied',
+    remoteLinkMigration:
+        'After updating the computer app, replace any saved remote link or Home Screen shortcut with this link.',
     remoteResetPairing: 'Reset pairing',
     remoteQrAlt: 'QR code with the pairing link',
     remoteNote1: 'Anyone with this link can control this app. Keep it private; Reset pairing disconnects every phone.',
@@ -1740,6 +1745,9 @@ export const app = {
     remoteUpdateNeeded: 'Update the app on your computer',
     remoteUpdateThis: 'Update this app',
     remotePageUnpublished: "The page for your computer's version is not published yet — try again later.",
+    remoteLinkChanged:
+        'Copy the current remote link from your computer. Open it on your phone. Replace any saved link or Home Screen shortcut if it changed after an update.',
+    remoteNewLinkNeeded: 'Open the current link',
     remoteFull: 'Too many phones are connected — close the app on another phone, then reload this page.',
     remoteFullShort: 'Too many phones',
     remoteChangeFailed:

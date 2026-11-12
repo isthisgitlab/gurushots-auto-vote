@@ -58,7 +58,7 @@ export const fakeUnzip = async (zipPath: string, dir: string): Promise<void> => 
 /** The deps of a build with the given releases, nothing real in it. */
 export const remoteSiteDeps = (
     dist: string,
-    releases: RemoteRelease[] = [],
+    releases: RemoteRelease[] = [pageRelease('9.9.8', [1])],
     extra: RemoteSiteDeps = {},
 ): RemoteSiteDeps => ({
     dist,

@@ -97,9 +97,9 @@ const bootstrap = async () => {
         // Remote mode is decided before anything of the normal app runs: a stored
         // pairing key hands this WebView to the bundled remote page, and this
         // document mounts nothing (AutovoteProvider never mounts in remote mode).
-        const remoteKey = await readStoredPairingKey();
-        if (remoteKey !== null) {
-            loadBundledRemoteLoader(remoteKey);
+        const remoteTarget = await readStoredPairingKey();
+        if (remoteTarget !== null) {
+            loadBundledRemoteLoader(remoteTarget);
             return;
         }
         installBridge();

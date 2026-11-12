@@ -201,7 +201,7 @@ describe('scripts/build-react.ts', () => {
         expect(fs.rmSync).toHaveBeenCalledWith(realPath.join(selected, 'remote'), { recursive: true, force: true });
         expect(fs.copyFileSync).toHaveBeenCalledWith(
             realPath.join(selected, 'styles.css'),
-            realPath.join(selected, 'remote', 'v1', 'styles.css'),
+            realPath.join(selected, 'remote', 'v2', 'styles.css'),
         );
 
         jest.isolateModules(() => {
@@ -221,10 +221,10 @@ describe('scripts/build-react.ts', () => {
         });
 
         expect(logged()).toContain(
-            '⏭️  remote/v1: styles.css not built yet — run pnpm build:react to regenerate the remote page',
+            '⏭️  remote/v2: styles.css not built yet — run pnpm build:react to regenerate the remote page',
         );
         expect(logged()).toContain(
-            '⏭️  remote/v1: THIRD_PARTY_NOTICES.txt not built yet — run pnpm build:react to regenerate the remote page',
+            '⏭️  remote/v2: THIRD_PARTY_NOTICES.txt not built yet — run pnpm build:react to regenerate the remote page',
         );
     });
 
@@ -236,7 +236,7 @@ describe('scripts/build-react.ts', () => {
             expect(fs.mkdirSync).toHaveBeenCalledWith(FULL, { recursive: true });
             expect(fs.mkdirSync).toHaveBeenCalledWith(DIST, { recursive: true });
             expect(fs.rmSync).toHaveBeenCalledWith(realPath.join(DIST, 'remote'), { recursive: true, force: true });
-            expect(fs.mkdirSync).toHaveBeenCalledWith(realPath.join(DIST, 'remote', 'v1'), { recursive: true });
+            expect(fs.mkdirSync).toHaveBeenCalledWith(realPath.join(DIST, 'remote', 'v2'), { recursive: true });
             expect(fs.writeFileSync).toHaveBeenCalledWith(
                 realPath.join(DIST, 'index.html'),
                 expect.stringContaining('capacitor-bundle.js'),
@@ -263,7 +263,7 @@ describe('scripts/build-react.ts', () => {
             const remoteDir = realPath.join(DIST, 'remote');
             expect(fs.copyFileSync).toHaveBeenCalledWith(
                 realPath.join(DIST, 'remote.html'),
-                realPath.join(remoteDir, 'v1', 'index.html'),
+                realPath.join(remoteDir, 'v2', 'index.html'),
             );
             expect(fs.writeFileSync).toHaveBeenCalledWith(
                 realPath.join(remoteDir, 'index.html'),
@@ -275,11 +275,11 @@ describe('scripts/build-react.ts', () => {
             }
             expect(fs.copyFileSync).toHaveBeenCalledWith(
                 realPath.join(DIST, 'THIRD_PARTY_NOTICES.txt'),
-                realPath.join(remoteDir, 'v1', 'THIRD_PARTY_NOTICES.txt'),
+                realPath.join(remoteDir, 'v2', 'THIRD_PARTY_NOTICES.txt'),
             );
             expect(fs.copyFileSync).toHaveBeenCalledWith(
                 realPath.join(DIST, 'styles.css'),
-                realPath.join(remoteDir, 'v1', 'styles.css'),
+                realPath.join(remoteDir, 'v2', 'styles.css'),
             );
 
             expect(esbuild.build).toHaveBeenCalledTimes(ENTRY_NAMES.length);

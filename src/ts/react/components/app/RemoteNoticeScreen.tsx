@@ -4,6 +4,22 @@ import { remoteConnectionState, subscribeRemoteConnectionState } from '../../../
 import { rendererTranslator } from '../../../core/translations/renderer';
 import { RemoteDisconnectButton } from './RemoteDisconnectButton';
 
+const NOTICE_MESSAGE_KEYS = {
+    connecting: 'app.remoteConnecting',
+    connected: 'app.remoteConnecting',
+    offline: 'app.remoteOfflineDetail',
+    network: 'app.remoteNetwork',
+    'old-browser': 'app.remoteOldBrowser',
+    'older-link': 'errors.remoteLinkOlder',
+    'newer-link': 'errors.remoteLinkNewer',
+    update: 'app.remoteUpdateNeeded',
+    'update-this': 'app.remoteUpdateThis',
+    unpublished: 'app.remotePageUnpublished',
+    'link-changed': 'app.remoteLinkChanged',
+    full: 'app.remoteFull',
+    'no-key': 'app.remoteNoKey',
+} as const;
+
 /**
  * The full-screen state the phone page shows when the app itself cannot be shown: no key in
  * the link, or the loader's connecting/offline/update states. Outside the TranslationProvider
@@ -15,28 +31,14 @@ export function RemoteNoticeScreen() {
     // Subscribed in the commit itself, not after the next paint: the loader changes the state while the room
     // is being joined, and a change between the first paint and a later effect would be lost.
     useLayoutEffect(() => subscribeRemoteConnectionState(setState), []);
-    const labelKey =
-        state === 'no-key'
-            ? 'app.remoteNoKey'
-            : state === 'network'
-              ? 'app.remoteNetwork'
-              : state === 'old-browser'
-                ? 'app.remoteOldBrowser'
-                : state === 'update'
-                  ? 'app.remoteUpdateNeeded'
-                  : state === 'update-this'
-                    ? 'app.remoteUpdateThis'
-                    : state === 'unpublished'
-                      ? 'app.remotePageUnpublished'
-                      : state === 'full'
-                        ? 'app.remoteFull'
-                        : state === 'offline'
-                          ? 'app.remoteOfflineDetail'
-                          : 'app.remoteConnecting';
+    const labelKey = NOTICE_MESSAGE_KEYS[state];
     return (
         <main className="min-h-screen flex items-center justify-center p-6">
             <div className="alert alert-warning text-sm" role="status">
                 <span>{rendererTranslator.t(labelKey)}</span>
+                {state === 'link-changed' && (
+                    <span className="badge badge-warning">{rendererTranslator.t('app.remoteNewLinkNeeded')}</span>
+                )}
                 {/* On the Android remote mode the notice must still leave: the app opens here until it does */}
                 <RemoteDisconnectButton t={(key) => rendererTranslator.t(key)} className="btn btn-outline btn-sm" />
             </div>

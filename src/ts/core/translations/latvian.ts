@@ -117,6 +117,9 @@ export const errors: typeof english.errors = {
     remoteConnectionLost: 'Savienojums ar datoru pārtrūka.',
     remoteBadLink:
         'Šī nav savienošanas saite. Ielīmē visu saiti no datora sadaļas „Attālinātā piekļuve” — tā beidzas ar #k=…',
+    remoteLinkOlder:
+        'Šī saite izmanto vecāku attālinātās piekļuves lapu. Nokopē jaunu saiti datorā. Ja nepieciešams, atjaunini lietotni datorā.',
+    remoteLinkNewer: 'Šai saitei vajadzīga jaunāka lietotne telefonā. Atjaunini šo lietotni un vēlreiz ielīmē saiti.',
     remoteEnterFailed: 'Neizdevās pārslēgties uz attālināto vadību. Lietotne paliek parastajā režīmā — mēģini vēlreiz.',
     remoteDisconnectFailed: 'Neizdevās atvienoties. Šī lapa paliek savienota ar datoru — mēģini vēlreiz.',
     remoteRefused: 'Šo veic datorā.',
@@ -1733,7 +1736,7 @@ export const app: LatvianApp = {
         'Iekšējs — tā paziņojuma versija, ko apstiprināji (lietotne nav saistīta ar GuruShots); paziņojums tiek rādīts vēlreiz, ja tā teksts būtiski mainās',
     // Attālinātā piekļuve (dators ir tas, ko savieno pārī; telefons redz stāvokļus)
     remoteAccess: 'Attālinātā piekļuve',
-    remoteAccessDesc: 'Vadi šo lietotni no telefona ar vienu pastāvīgu saiti. Pēc noklusējuma tā ir izslēgta.',
+    remoteAccessDesc: 'Vadi šo lietotni no telefona. Attālinātā piekļuve pēc noklusējuma ir izslēgta.',
     remoteToggleLabel: 'Atļaut vadību no telefona',
     remoteStatusOn: 'Ieslēgta — telefons ar saiti var vadīt šo lietotni',
     remoteStatusOff: 'Izslēgta',
@@ -1741,6 +1744,8 @@ export const app: LatvianApp = {
     remoteHide: 'Paslēpt',
     remoteCopyLink: 'Kopēt saiti',
     remoteLinkCopied: 'Saite nokopēta',
+    remoteLinkMigration:
+        'Pēc lietotnes atjaunināšanas datorā aizstāj saglabāto attālinātās piekļuves saiti vai sākuma ekrāna ikonu ar šo saiti.',
     remoteResetPairing: 'Atiestatīt savienošanu pārī',
     remoteQrAlt: 'QR kods ar savienošanas saiti',
     remoteNote1:
@@ -1764,6 +1769,9 @@ export const app: LatvianApp = {
     remoteUpdateNeeded: 'Atjaunini lietotni datorā',
     remoteUpdateThis: 'Atjaunini šo lietotni',
     remotePageUnpublished: 'Tava datora versijas lapa vēl nav publicēta — mēģini vēlāk vēlreiz.',
+    remoteLinkChanged:
+        'Datorā nokopē pašreizējo attālinātās piekļuves saiti. Atver to telefonā. Ja saite pēc atjaunināšanas mainījusies, aizstāj saglabāto saiti vai sākuma ekrāna ikonu.',
+    remoteNewLinkNeeded: 'Atver pašreizējo saiti',
     remoteFull: 'Ir savienoti pārāk daudz telefonu — aizver lietotni citā telefonā, pēc tam pārlādē šo lapu.',
     remoteFullShort: 'Pārāk daudz telefonu',
     remoteChangeFailed:

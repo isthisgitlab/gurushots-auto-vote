@@ -20,9 +20,12 @@ const STATE_LABEL_KEYS: Record<RemoteConnectionState, string> = {
     offline: 'app.remoteOfflineShort',
     network: 'app.remoteNetwork',
     'old-browser': 'app.remoteOldBrowserShort',
+    'older-link': 'app.remoteUpdateNeeded',
+    'newer-link': 'app.remoteUpdateThis',
     update: 'app.remoteUpdateNeeded',
     'update-this': 'app.remoteUpdateThis',
     unpublished: 'app.remotePageUnpublished',
+    'link-changed': 'app.remoteNewLinkNeeded',
     full: 'app.remoteFullShort',
     'no-key': 'app.remoteNoKey',
 };
@@ -66,7 +69,12 @@ export function RemoteStateBadge() {
             ? 'badge-success'
             : state === 'connecting'
               ? 'badge-ghost'
-              : state === 'update' || state === 'update-this' || state === 'unpublished'
+              : state === 'older-link' ||
+                  state === 'newer-link' ||
+                  state === 'update' ||
+                  state === 'update-this' ||
+                  state === 'unpublished' ||
+                  state === 'link-changed'
                 ? 'badge-warning'
                 : 'badge-error';
 

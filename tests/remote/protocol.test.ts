@@ -59,8 +59,8 @@ describe('parsePeerMessage', () => {
         expect(PROTOCOL_VERSION).toBe(1);
     });
 
-    test('the link version is 1, and the protocol version stays frozen at 1', () => {
-        expect(LINK_VERSION).toBe(1);
+    test('the link version is 2, and the protocol version stays frozen at 1', () => {
+        expect(LINK_VERSION).toBe(2);
         expect(PROTOCOL_VERSION).toBe(1);
     });
 

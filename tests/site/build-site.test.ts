@@ -48,7 +48,12 @@ jest.mock('marked-gfm-heading-id', () => ({
     gfmHeadingId: jest.fn(() => ({})),
     resetHeadings: jest.fn(),
 }));
+jest.mock('node:child_process', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('node:child_process')>('node:child_process'),
+}));
 
+import childProcess = require('node:child_process');
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 import os = require('node:os');
@@ -56,7 +61,7 @@ import nodePathModule = require('node:path');
 const nodePath = jest.mocked(nodePathModule);
 import type * as marked_gfm_heading_idModule from 'marked-gfm-heading-id';
 import { invalid } from '../helpers/invalid';
-import { remoteSiteDeps } from '../helpers/remoteSite';
+import { fakeDownload, pageRelease, remoteSiteDeps } from '../helpers/remoteSite';
 import type * as build_siteModule from '../../scripts/build-site';
 const { resetHeadings } = jest.mocked(require('marked-gfm-heading-id') as typeof marked_gfm_heading_idModule);
 
@@ -290,7 +295,7 @@ describe('main (full render into a temp tree)', () => {
         out,
         layoutFile: nodePath.join(tmp, 'layout.html'),
         // The remote tree reads the repo's dist/ in production; the tests keep it out and
-        // answer an empty release list, so nothing is downloaded.
+        // provide the required released v1 archive.
         remoteSite: remoteSiteDeps(nodePath.join(tmp, 'missing-dist')),
     });
 
@@ -316,12 +321,19 @@ describe('main (full render into a temp tree)', () => {
         // layoutFile, remoteSite) — the repo's real dist/ and the real (stubbed here) GitHub
         // reads. The temp tree carries the files the rest of main() reads.
         const calls: string[] = [];
+        const releasedV1 = pageRelease('9.9.8', [1]);
+        const v1Zip = 'https://example.com/9.9.8/remote-page-v1.zip';
+        const v1Checksum = `${v1Zip}.sha256`;
         globalThis.fetch = invalid<typeof fetch>(
             jest.fn(async (url: string) => {
                 calls.push(url);
                 if (url.includes('/releases?'))
-                    return invalid<Response>({ ok: true, status: 200, json: async () => [] });
-                return invalid<Response>({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(4) });
+                    return invalid<Response>({ ok: true, status: 200, json: async () => [releasedV1] });
+                return invalid<Response>({
+                    ok: true,
+                    status: 200,
+                    arrayBuffer: async () => new Uint8Array(await fakeDownload(url)).buffer,
+                });
             }),
         );
         write('src/assets/logo.png', 'PNG');
@@ -331,15 +343,25 @@ describe('main (full render into a temp tree)', () => {
         for (const page of PAGES) write(page.src, `# ${page.src}`);
         // Whether the repo's dist/ holds a renderer build depends on the machine (CI tests before
         // building), so the default is pinned by the path the remote step looks up, not by its output.
-        const existsSpy = jest.spyOn(fs, 'existsSync');
+        const repoDist = nodePath.join(__dirname, '..', '..', 'dist');
+        const actualExistsSync = fs.existsSync;
+        const existsSpy = jest.spyOn(fs, 'existsSync').mockImplementation((path: fsModule.PathLike): boolean => {
+            if (typeof path === 'string' && path.startsWith(`${repoDist}${nodePath.sep}`)) return false;
+            return actualExistsSync(path);
+        });
+        const unzipSpy = jest.spyOn(childProcess, 'execFileSync').mockImplementation((_file, args) => {
+            const target = args?.[3];
+            if (target === undefined) throw new Error('unzip target is missing');
+            fs.mkdirSync(target, { recursive: true });
+            return Buffer.alloc(0);
+        });
         try {
-            // The empty listing leaves nothing to download, so the build completes after the listing went to
-            // the fixed API address and nothing else was requested.
+            // The release listing and both v1 assets come from the fetch double. No real dist content is read.
             await main({ rootDir: tmp, out, layoutFile: nodePath.join(tmp, 'layout.html') });
-            const repoDist = nodePath.join(__dirname, '..', '..', 'dist');
             expect(existsSpy).toHaveBeenCalledWith(nodePath.join(repoDist, 'remote-loader.html'));
             expect(calls.some((url) => url.includes('api.github.com/repos/') && url.includes('/releases?'))).toBe(true);
-            expect(calls.every((url) => url.includes('/releases?'))).toBe(true);
+            expect(calls).toEqual(expect.arrayContaining([v1Zip, v1Checksum]));
+            expect(unzipSpy).toHaveBeenCalledTimes(1);
         } finally {
             delete (globalThis as { fetch?: unknown }).fetch;
         }
@@ -367,10 +389,21 @@ describe('main (full render into a temp tree)', () => {
             'lv.html',
             'privacy.html',
             'privacy.lv.html',
+            'remote',
             'scheduling.html',
             'usage.html',
             'usage.lv.html',
         ]);
+        expect(fs.readdirSync(nodePath.join(out, 'remote')).sort()).toEqual(['v1']);
+        expect(fs.readFileSync(nodePath.join(out, 'remote', 'v1', 'index.html'), 'utf8')).toBe(
+            '<html>https://example.com/9.9.8/remote-page-v1.zip</html>',
+        );
+        expect(fs.readFileSync(nodePath.join(out, 'remote', 'v1', 'styles.css'), 'utf8')).toBe(
+            'css:https://example.com/9.9.8/remote-page-v1.zip',
+        );
+        expect(fs.readFileSync(nodePath.join(out, 'remote', 'v1', 'THIRD_PARTY_NOTICES.txt'), 'utf8')).toBe(
+            'notices:https://example.com/9.9.8/remote-page-v1.zip',
+        );
         expect(fs.readdirSync(nodePath.join(out, 'badges')).sort()).toEqual(['license.svg']);
         expect(fs.readFileSync(nodePath.join(out, 'badges', 'license.svg'), 'utf8')).toContain(
             'aria-label="license: Apache-2.0"',

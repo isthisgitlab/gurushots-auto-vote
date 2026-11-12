@@ -18,7 +18,7 @@ const calls: Array<{ api: string; args: unknown[] }> = [];
 /** The pairing link exactly as the <code> element renders it — `\S+`, not the 43-char class,
  *  because this file's mock key is the `secret` sentinel; the real key shape is asserted in
  *  tests/remote/pairing.test.ts. */
-const FULL_LINK = /^https:\/\/isthisgitlab\.github\.io\/gurushots-auto-vote\/remote\/#k=\S+$/;
+const FULL_LINK = /^https:\/\/isthisgitlab\.github\.io\/gurushots-auto-vote\/remote\/v2\/index\.html#k=\S+$/;
 /** What the write channels answer; a function throws or rejects, anything else is the answer. */
 const WRITE_ANSWERS: { set: unknown; reset: unknown } = { set: { success: true }, reset: { success: true } };
 const answerWrite = (answer: unknown): unknown => {
@@ -88,7 +88,7 @@ describe('RemoteAccessSection', () => {
         ANSWERS.current = {
             success: true,
             enabled: false,
-            link: 'https://isthisgitlab.github.io/gurushots-auto-vote/remote/#k=secret',
+            link: 'https://isthisgitlab.github.io/gurushots-auto-vote/remote/v2/index.html#k=secret',
             qrDataUrl: 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=',
         };
     });
@@ -130,6 +130,7 @@ describe('RemoteAccessSection', () => {
         expect(qr.getAttribute('src')).toContain('data:image/svg+xml');
         expect(qr.getAttribute('alt')).not.toContain('secret');
         expect(screen.getByText(FULL_LINK)).toBeDefined();
+        expect(screen.getByText('app.remoteLinkMigration')).toBeDefined();
     });
 
     const renderEnabled = async (): Promise<void> => {
@@ -327,7 +328,7 @@ describe('RemoteAccessSection', () => {
             fireEvent.click(screen.getByRole('button', { name: 'app.remoteCopyLink' }));
             await act(async () => Promise.resolve());
             expect(writeText).toHaveBeenCalledWith(
-                'https://isthisgitlab.github.io/gurushots-auto-vote/remote/#k=secret',
+                'https://isthisgitlab.github.io/gurushots-auto-vote/remote/v2/index.html#k=secret',
             );
             expect(screen.getByRole('button', { name: 'app.remoteLinkCopied' })).toBeDefined();
         } finally {

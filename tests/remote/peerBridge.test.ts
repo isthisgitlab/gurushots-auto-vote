@@ -36,16 +36,9 @@ afterAll(() => {
     else Reflect.deleteProperty(globalThis, 'localStorage');
 });
 
-// What the page keeps for the loader's next visit is the store module's (the real one has its own tests, and the
-// round trips run in remotePathSkip.test.tsx): here a stand-in records what the bridge asks of it, in order.
+// The page clears the loader's bounded bounce marker after a matching desktop hello.
 const versionCalls: string[] = [];
-/** Makes the store's write fail, the way a browser that refuses storage does. */
-let storeFails = false;
 jest.mock('../../src/ts/core/remote/linkVersion', () => ({
-    storeLinkVersion: jest.fn(async (linkVersion: number) => {
-        versionCalls.push(`store:${linkVersion}`);
-        if (storeFails) throw new Error('storage refused');
-    }),
     clearSkipMark: jest.fn(() => {
         versionCalls.push('clearSkipMark');
     }),
@@ -78,7 +71,6 @@ const firePage = (type: 'pagehide' | 'pageshow', persisted: boolean): void => {
 };
 beforeEach(() => {
     versionCalls.length = 0;
-    storeFails = false;
     pageListeners = new Map();
     Object.defineProperty(globalThis, 'addEventListener', {
         configurable: true,
@@ -520,16 +512,15 @@ describe('installPeerBridge (the phone bridge)', () => {
                 phone.emitJoin('host');
                 await Promise.resolve();
                 phone.receiveFromPeer(
-                    { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, linkVersion: 2, host: true },
+                    { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, linkVersion: 1, host: true },
                     'host',
                 );
                 // The loader target is whatever the page handed the bridge (the page resolves it from
-                // its own address); the key already rode in it. The version is kept first, so the loader
-                // goes straight to the matching page next.
+                // its own address); the key already rode in it. The peer's checked version is in its fragment.
                 await Promise.resolve();
                 await Promise.resolve();
-                expect(versionCalls).toEqual(['store:2']);
-                expect(replaced).toEqual([LOADER_TARGET]);
+                expect(versionCalls).toEqual([]);
+                expect(replaced).toEqual(['https://site.test/remote/index.html#k=the-key&v=1']);
                 expect(remoteConnectionState()).toBe('connecting');
                 const after = hostReceived.length;
                 jest.advanceTimersByTime(HELLO_RETRY_MS * 3);
@@ -540,16 +531,15 @@ describe('installPeerBridge (the phone bridge)', () => {
             }
         });
 
-        test('a store that refuses the write never strands the tab: it still goes to the loader', async () => {
-            storeFails = true;
+        test('a mismatched desktop goes to the loader even when historical storage is unavailable', async () => {
             phone.emitJoin('host');
             phone.receiveFromPeer(
-                { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, linkVersion: 2, host: true },
+                { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, linkVersion: 1, host: true },
                 'host',
             );
             await flushAsync();
-            expect(versionCalls).toEqual(['store:2']);
-            expect(replaced).toEqual([LOADER_TARGET]);
+            expect(versionCalls).toEqual([]);
+            expect(replaced).toEqual(['https://site.test/remote/index.html#k=the-key&v=1']);
         });
 
         test('once a desktop is accepted, the same peer announcing another version sends the tab to the loader', async () => {
@@ -557,12 +547,12 @@ describe('installPeerBridge (the phone bridge)', () => {
             phone.receiveFromPeer(hostHello, 'host');
             versionCalls.length = 0;
             phone.receiveFromPeer(
-                { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, linkVersion: 2, host: true },
+                { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, linkVersion: 1, host: true },
                 'host',
             );
             await flushAsync();
-            expect(versionCalls).toEqual(['store:2']);
-            expect(replaced).toEqual([LOADER_TARGET]);
+            expect(versionCalls).toEqual([]);
+            expect(replaced).toEqual(['https://site.test/remote/index.html#k=the-key&v=1']);
         });
 
         test('once a desktop is accepted, another peer announcing another version changes nothing', async () => {
@@ -571,7 +561,7 @@ describe('installPeerBridge (the phone bridge)', () => {
             versionCalls.length = 0;
             phone.emitJoin('other');
             phone.receiveFromPeer(
-                { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, linkVersion: 2, host: true },
+                { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, linkVersion: 1, host: true },
                 'other',
             );
             await flushAsync();
@@ -596,8 +586,8 @@ describe('installPeerBridge (the phone bridge)', () => {
             phone.emitJoin('host');
             phone.receiveFromPeer({ ...hostHello, linkVersion: LINK_VERSION + 1 }, 'host');
             await flushAsync();
-            expect(versionCalls).toEqual([`store:${LINK_VERSION + 1}`]);
-            expect(replaced).toEqual([LOADER_TARGET]);
+            expect(versionCalls).toEqual([]);
+            expect(replaced).toEqual([`https://site.test/remote/index.html#k=the-key&v=${LINK_VERSION + 1}`]);
         });
 
         test('a desktop of another app version and the same link version is accepted', async () => {
@@ -609,21 +599,20 @@ describe('installPeerBridge (the phone bridge)', () => {
         });
     });
 
-    test("the desktop of this page's link version is kept for the loader's next visit, and the loader's mark is cleared; a second hello keeps nothing again", () => {
+    test("the desktop of this page's link version clears the loader's mark; a second hello keeps nothing again", () => {
         phone.emitJoin('host');
         phone.receiveFromPeer(hostHello, 'host');
-        expect(versionCalls).toEqual([`store:${LINK_VERSION}`, 'clearSkipMark']);
+        expect(versionCalls).toEqual(['clearSkipMark']);
         phone.receiveFromPeer(hostHello, 'host');
-        expect(versionCalls).toEqual([`store:${LINK_VERSION}`, 'clearSkipMark']);
+        expect(versionCalls).toEqual(['clearSkipMark']);
     });
 
-    test('a store that refuses the write when the desktop is accepted changes nothing: the phone is connected', async () => {
-        storeFails = true;
+    test('a matching desktop connects without writing a historical version preference', async () => {
         phone.emitJoin('host');
         phone.receiveFromPeer(hostHello, 'host');
         await flushAsync();
         expect(remoteConnectionState()).toBe('connected');
-        expect(versionCalls).toEqual([`store:${LINK_VERSION}`, 'clearSkipMark']);
+        expect(versionCalls).toEqual(['clearSkipMark']);
     });
 
     test("a fellow phone's hello keeps nothing", () => {
