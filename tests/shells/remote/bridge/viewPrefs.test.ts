@@ -25,7 +25,7 @@ import type { PeerBridgeContext } from '../../../../src/ts/shells/remote/bridge/
 import type { InvokePipeline } from '../../../../src/ts/shells/remote/bridge/invokes';
 import type { ViewPrefs } from '../../../../src/ts/shells/remote/bridge/viewPrefs';
 
-// ---------------------------------------------------------------- storage doubles (linkVersion.test.ts style)
+// ---------------------------------------------------------------- storage doubles
 
 const memoryStorage = (): Storage => {
     const items = new Map<string, string>();
@@ -1295,7 +1295,6 @@ describe('pruning the inactive challenges from both per-challenge maps', () => {
 
 // ---------------------------------------------------------------- through the installed bridge
 
-const LOADER_TARGET = 'https://site.test/remote/index.html#k=the-key';
 const hostHello = {
     t: 'hello',
     version: APP_VERSION,
@@ -1325,7 +1324,7 @@ describe('through the installed peer bridge', () => {
             },
         });
         [host, phone] = TransportStub.pair('host', 'phone');
-        installPeerBridge(phone, LOADER_TARGET);
+        installPeerBridge(phone);
         api = (globalThis as { api?: Record<string, (...args: unknown[]) => unknown> }).api ?? {};
     });
 

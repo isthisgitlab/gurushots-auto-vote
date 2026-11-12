@@ -8,16 +8,6 @@ import { invalid } from '../helpers/invalid';
 
 import type { CapacitorGlobals } from '../../src/ts/core/types/capacitor';
 
-// Keep this suite on the unavailable-storage path without reading Node's getter.
-const localStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
-beforeAll(() => {
-    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: undefined });
-});
-afterAll(() => {
-    if (localStorageDescriptor) Object.defineProperty(globalThis, 'localStorage', localStorageDescriptor);
-    else Reflect.deleteProperty(globalThis, 'localStorage');
-});
-
 const g = globalThis as CapacitorGlobals & { location: unknown };
 const assign = jest.fn<void, [string]>();
 const load = () =>
@@ -48,22 +38,6 @@ describe('the remote page inside the Android app', () => {
         await disconnect?.();
         expect(nativePromise).toHaveBeenCalledWith('Preferences', 'remove', { key: 'gs_remote_access' });
         expect(assign).toHaveBeenCalledWith('/index.html');
-    });
-
-    test('Disconnect also forgets the link version kept for the loader; a key that could not be cleared keeps it', async () => {
-        const removeItem = jest.fn<void, [string]>();
-        Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { removeItem } });
-        try {
-            nativePromise.mockRejectedValueOnce(new Error('prefs'));
-            await expect(load().disconnectFromComputer()).rejects.toThrow('prefs');
-            expect(removeItem).not.toHaveBeenCalled();
-            await load().disconnectFromComputer();
-            expect(removeItem).toHaveBeenCalledWith('gs-remote-link-version');
-            expect(removeItem).toHaveBeenCalledTimes(1);
-            expect(assign).toHaveBeenCalledWith('/index.html');
-        } finally {
-            delete (globalThis as { localStorage?: unknown }).localStorage;
-        }
     });
 
     test('a key that cannot be cleared leaves the page in remote mode', async () => {

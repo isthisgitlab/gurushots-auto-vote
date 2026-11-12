@@ -1,12 +1,12 @@
 /**
  * Link version 2, frozen: the message envelopes of the phone ⇄ desktop protocol, with their closed unions
- * (`HelloMessage.role`, `ResultMessage.reason`, `ByeMessage.reason`, the `autovote-command` names).
+ * (`ResultMessage.reason`, `ByeMessage.reason`, the `autovote-command` names).
  *
  * A new value in one of these closed unions would reach an older peer that does not know it, so it needs a new
  * LINK_VERSION and a new `contract/v<N>/` (see protocol.ts for the rule); a new optional field does not.
  * `tests/remote/contractV2.test.ts` checks the living types against this file.
  *
- * `hello.linkVersion` and `autovote-state`'s `hostRun`/`n` are required: every link-version-1 peer always sent them.
+ * `hello.linkVersion` and `autovote-state`'s `hostRun`/`n` are required.
  */
 
 import type { AutovoteStateV2 } from './shapesConfig';
@@ -17,7 +17,6 @@ export type HelloMessageV2 = {
     protocolVersion: number;
     linkVersion: number;
     host: boolean;
-    role?: 'loader';
 };
 
 export type InvokeMessageV2 = { t: 'invoke'; id: number; channel: string; args: unknown[]; undefinedAt?: number[] };

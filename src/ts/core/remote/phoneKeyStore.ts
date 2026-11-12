@@ -6,14 +6,14 @@
  * this code. Dependency-free apart from the key's shape.
  */
 
-import { ANDROID_PAIRING_KEY_PREF, isPairingKey } from './pairingKey';
+import { ANDROID_PAIRING_KEY_PREF } from './pairingKey';
 
 import type { CapacitorGlobals } from '../types/capacitor';
 
-/** What reading the stored key came to: the key, none stored, or a stored value that is not a key. */
-export type StoredKey = { kind: 'key'; key: string; linkVersion: number } | { kind: 'none' } | { kind: 'invalid' };
+/** What reading the stored key came to: the current key, none stored, or an invalid stored value. */
+export type StoredKey = { kind: 'key'; key: string } | { kind: 'none' } | { kind: 'invalid' };
 
-const STORED_TARGET_PATTERN = /^([1-9]\d{0,2}):([A-Za-z0-9_-]{43})$/;
+const STORED_KEY_PATTERN = /^2:([A-Za-z0-9_-]{43})$/;
 
 const nativeCall = (method: 'get' | 'set' | 'remove', options: object): Promise<unknown> => {
     const call = (globalThis as CapacitorGlobals).Capacitor?.nativePromise;
@@ -33,14 +33,13 @@ export const readStoredKey = async (): Promise<StoredKey> => {
     const value = (answer as { value?: unknown } | null)?.value;
     if (value === undefined || value === null) return { kind: 'none' };
     if (typeof value !== 'string') return { kind: 'invalid' };
-    if (isPairingKey(value)) return { kind: 'key', key: value, linkVersion: 1 };
-    const target = STORED_TARGET_PATTERN.exec(value);
-    return target === null ? { kind: 'invalid' } : { kind: 'key', key: target[2]!, linkVersion: Number(target[1]) };
+    const key = STORED_KEY_PATTERN.exec(value)?.[1];
+    return key === undefined ? { kind: 'invalid' } : { kind: 'key', key };
 };
 
-/** Stores a canonical versioned pairing target; rejects when the write fails. */
-export const storeKey = async (key: string, linkVersion: number): Promise<void> => {
-    await nativeCall('set', { key: ANDROID_PAIRING_KEY_PREF, value: `${linkVersion}:${key}` });
+/** Stores the canonical current pairing key; rejects when the write fails. */
+export const storeKey = async (key: string): Promise<void> => {
+    await nativeCall('set', { key: ANDROID_PAIRING_KEY_PREF, value: `2:${key}` });
 };
 
 /** Clears the stored pairing key; rejects when that fails. */

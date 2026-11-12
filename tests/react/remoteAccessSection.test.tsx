@@ -130,7 +130,6 @@ describe('RemoteAccessSection', () => {
         expect(qr.getAttribute('src')).toContain('data:image/svg+xml');
         expect(qr.getAttribute('alt')).not.toContain('secret');
         expect(screen.getByText(FULL_LINK)).toBeDefined();
-        expect(screen.getByText('app.remoteLinkMigration')).toBeDefined();
     });
 
     const renderEnabled = async (): Promise<void> => {

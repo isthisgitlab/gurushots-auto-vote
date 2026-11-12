@@ -19,9 +19,7 @@
 
 import { createTrysteroTransport } from '../../core/remote/trystero';
 import { setRemoteConnectionState } from '../../core/remote/connectionState';
-import { loaderNavigationUrl, takePairingKey } from '../../core/remote/pairingKey';
-import { phoneRemoteMode } from '../../core/remote/phoneMode';
-import { LINK_VERSION } from '../../core/remote/protocol';
+import { takePairingKey } from '../../core/remote/pairingKey';
 import { installPeerBridge } from './bridge/peer';
 import { installPhoneDisconnect } from './phoneMode';
 import { mountApp } from '../../react/pages/App';
@@ -37,18 +35,11 @@ void (async () => {
         mountRemoteNotice();
         return;
     }
-    // Resolve the loader target from the page's own address before replacing its key fragment.
-    const loaderTarget = new URL(loaderNavigationUrl(key, LINK_VERSION), globalThis.location.href).href;
     // Inside the Android app's WebView the page also installs its Disconnect,
     // so the Navbar can leave remote mode back to the app's normal mode.
     installPhoneDisconnect();
-    // Keep this versioned page in the address bar. A restored session key must still be visible to
-    // copying or bookmarking, but its transport version belongs in the URL path.
-    if (phoneRemoteMode() === null) {
-        globalThis.history.replaceState(null, '', `#k=${encodeURIComponent(key)}`);
-    }
     const transport = await createTrysteroTransport({ key, role: 'phone' });
-    installPeerBridge(transport, loaderTarget);
+    installPeerBridge(transport);
     // The remote controller rides the same transport; AutovoteProvider builds it from the
     // platform kind the bridge just marked.
     mountApp(noopBackgroundHost, transport);

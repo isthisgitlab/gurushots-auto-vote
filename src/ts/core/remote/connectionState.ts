@@ -22,18 +22,10 @@ export type RemoteConnectionState =
     | 'network'
     /** like `network`, but this browser has no `CompressionStream`, so the relay fallback could not even run */
     | 'old-browser'
-    /** the native app opened a pairing target for an older remote page */
-    | 'older-link'
-    /** the native app opened a pairing target for a newer remote page */
-    | 'newer-link'
-    /** the desktop is older than this page (a link version the site no longer carries), and no page of its own is published */
+    /** the desktop is older than this current page */
     | 'update'
-    /** the desktop speaks a newer link version than this app carries a page for */
+    /** the desktop is newer than this current page */
     | 'update-this'
-    /** the desktop speaks a newer link version than this site publishes a page for, and this page is a browser tab (inside the Android app the state is `update-this`) */
-    | 'unpublished'
-    /** A returned versioned page was already tried in this tab; copy the current link from the desktop. */
-    | 'link-changed'
     /** the desktop already has the most phones it takes */
     | 'full'
     /** the page was opened without a pairing key in its link */

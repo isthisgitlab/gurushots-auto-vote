@@ -89,19 +89,6 @@ describe('RemoteControlEntry', () => {
         },
     );
 
-    test.each([
-        ['update-computer', 'errors.remoteLinkOlder'],
-        ['update-phone', 'errors.remoteLinkNewer'],
-    ] as const)('a %s refusal shows its actionable mismatch message', async (error, message) => {
-        enter.mockResolvedValue({ success: false, error });
-        render(<RemoteControlEntry />);
-        open();
-        paste('https://example.test/remote/v2/index.html#k=abc');
-        fireEvent.click(screen.getByText('app.remoteControlConnect'));
-        await flush();
-        expect(screen.getByRole('alert').textContent).toBe(message);
-    });
-
     test('Escape closes the dialog', () => {
         render(<RemoteControlEntry />);
         open();

@@ -38,12 +38,8 @@ describe('RemoteStateBadge', () => {
         ['offline', 'app.remoteOfflineShort', 'badge-error'],
         ['network', 'app.remoteNetwork', 'badge-error'],
         ['old-browser', 'app.remoteOldBrowserShort', 'badge-error'],
-        ['older-link', 'app.remoteUpdateNeeded', 'badge-warning'],
-        ['newer-link', 'app.remoteUpdateThis', 'badge-warning'],
         ['update', 'app.remoteUpdateNeeded', 'badge-warning'],
         ['update-this', 'app.remoteUpdateThis', 'badge-warning'],
-        ['unpublished', 'app.remotePageUnpublished', 'badge-warning'],
-        ['link-changed', 'app.remoteNewLinkNeeded', 'badge-warning'],
         ['full', 'app.remoteFullShort', 'badge-error'],
         ['no-key', 'app.remoteNoKey', 'badge-error'],
     ] as const)('%s shows its label and tone', (state, key, tone) => {
@@ -204,12 +200,8 @@ describe('RemoteNoticeScreen', () => {
         ['offline', 'app.remoteOfflineDetail'],
         ['network', 'app.remoteNetwork'],
         ['old-browser', 'app.remoteOldBrowser'],
-        ['older-link', 'errors.remoteLinkOlder'],
-        ['newer-link', 'errors.remoteLinkNewer'],
         ['update', 'app.remoteUpdateNeeded'],
         ['update-this', 'app.remoteUpdateThis'],
-        ['unpublished', 'app.remotePageUnpublished'],
-        ['link-changed', 'app.remoteLinkChanged'],
         ['full', 'app.remoteFull'],
         ['connecting', 'app.remoteConnecting'],
     ] as const)('%s names the state', (state, key) => {
@@ -219,7 +211,7 @@ describe('RemoteNoticeScreen', () => {
         expect(remoteConnectionState()).toBe(state);
     });
 
-    test('mounts its real notice in Latvian when the browser language is Latvian', () => {
+    test('mounts its Latvian notice once and safely handles a missing root', () => {
         const navigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
         Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { language: 'lv-LV' } });
         document.body.innerHTML = '<div id="root"></div>';
@@ -244,6 +236,12 @@ describe('RemoteNoticeScreen', () => {
                     expect(document.getElementById('root')?.textContent).toContain(
                         'Skenē datorā redzamo QR kodu, lai savienotu',
                     );
+                    const root = document.getElementById('root');
+                    const notice = root?.firstChild;
+                    act(() => mountRemoteNotice());
+                    expect(root?.firstChild).toBe(notice);
+                    root?.remove();
+                    expect(() => mountRemoteNotice()).not.toThrow();
                 } finally {
                     rendererTranslator.setCurrentLanguage(currentLanguage);
                     setNoticeState('connecting');

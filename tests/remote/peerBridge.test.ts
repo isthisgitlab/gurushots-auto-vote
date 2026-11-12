@@ -36,14 +36,6 @@ afterAll(() => {
     else Reflect.deleteProperty(globalThis, 'localStorage');
 });
 
-// The page clears the loader's bounded bounce marker after a matching desktop hello.
-const versionCalls: string[] = [];
-jest.mock('../../src/ts/core/remote/linkVersion', () => ({
-    clearSkipMark: jest.fn(() => {
-        versionCalls.push('clearSkipMark');
-    }),
-}));
-
 const hostHello = {
     t: 'hello',
     version: APP_VERSION,
@@ -59,9 +51,6 @@ const fellowHello = {
     host: false,
 };
 
-// The page hands the bridge the loader it must go to on a version mismatch; the harness gives it one fixed target.
-const LOADER_TARGET = 'https://site.test/remote/index.html#k=the-key';
-
 // The bridge listens for the page lifecycle; the node test environment has no window, so a stub takes
 // the listeners and the tests fire them.
 type PageEvent = { persisted: boolean };
@@ -70,7 +59,6 @@ const firePage = (type: 'pagehide' | 'pageshow', persisted: boolean): void => {
     for (const handler of pageListeners.get(type) ?? []) handler({ persisted });
 };
 beforeEach(() => {
-    versionCalls.length = 0;
     pageListeners = new Map();
     Object.defineProperty(globalThis, 'addEventListener', {
         configurable: true,
@@ -100,7 +88,7 @@ describe('installPeerBridge (the phone bridge)', () => {
         jest.useFakeTimers();
         setRemoteConnectionState('connecting');
         [host, phone] = TransportStub.pair('host', 'phone');
-        installPeerBridge(phone, LOADER_TARGET);
+        installPeerBridge(phone);
         api = (globalThis as { api?: Record<string, (...args: unknown[]) => unknown> }).api ?? {};
     });
 
@@ -489,84 +477,81 @@ describe('installPeerBridge (the phone bridge)', () => {
     });
 
     describe('a desktop of another link version', () => {
-        let replaced: string[];
-        const realLocation = (globalThis as { location?: unknown }).location;
-
-        beforeEach(() => {
-            replaced = [];
-            (globalThis as { location?: unknown }).location = {
-                hash: '#k=the-key',
-                replace: (url: string) => replaced.push(url),
-            };
-        });
-
-        afterEach(() => {
-            (globalThis as { location?: unknown }).location = realLocation;
-        });
-
-        test('sends the tab to the stable loader, shows no notice, and the hello repeat stops', async () => {
-            jest.useFakeTimers();
+        test('stops the attempted session, ignores every later callback, and keeps the computer-update notice', async () => {
+            const hostReceived: unknown[] = [];
+            host.onMessage((_peerId, raw) => hostReceived.push(raw));
+            const leave = jest.spyOn(phone, 'leave').mockRejectedValueOnce(new Error('leave failed'));
+            phone.emitJoin('host');
+            const pending = api.getSettings() as Promise<unknown>;
             try {
-                const hostReceived: unknown[] = [];
-                host.onMessage((_peerId, raw) => hostReceived.push(raw));
-                phone.emitJoin('host');
-                await Promise.resolve();
                 phone.receiveFromPeer(
                     { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, linkVersion: 1, host: true },
                     'host',
                 );
-                // The loader target is whatever the page handed the bridge (the page resolves it from
-                // its own address); the key already rode in it. The peer's checked version is in its fragment.
-                await Promise.resolve();
-                await Promise.resolve();
-                expect(versionCalls).toEqual([]);
-                expect(replaced).toEqual(['https://site.test/remote/index.html#k=the-key&v=1']);
-                expect(remoteConnectionState()).toBe('connecting');
-                const after = hostReceived.length;
-                jest.advanceTimersByTime(HELLO_RETRY_MS * 3);
-                await Promise.resolve();
-                expect(hostReceived.length).toBe(after);
+                await flushAsync();
+                expect(leave).toHaveBeenCalledTimes(1);
+                expect(remoteConnectionState()).toBe('update');
+                await expect(pending).rejects.toThrow('connection');
+                await expect(api.getSettings()).rejects.toThrow('connection');
+
+                const after = phone.sent.length;
+                phone.emitLeave('host');
+                phone.emitPathChange('host', 'relay');
+                phone.emitJoinError(
+                    'could not connect to peer host after exchanging SDP; configure TURN servers',
+                    'host',
+                );
+                phone.receiveFromPeer({ t: 'result', id: 0, ok: true, result: 'late' }, 'host');
+                phone.emitJoin('new-host');
+                phone.receiveFromPeer(hostHello, 'new-host');
+                firePage('pageshow', true);
+                jest.advanceTimersByTime(HELLO_RETRY_MS * 3 + HOST_ANSWER_TIMEOUT_MS);
+                await flushAsync();
+
+                expect(remoteConnectionState()).toBe('update');
+                expect(remoteHostPeerId()).toBeNull();
+                expect(remoteHostPath()).toBe('direct');
+                expect(
+                    phone.sent
+                        .slice(after)
+                        .filter(({ message }) => ['hello', 'invoke'].includes((message as { t: string }).t)),
+                ).toEqual([]);
+                expect(hostReceived).toHaveLength(after);
             } finally {
-                jest.useRealTimers();
+                leave.mockRestore();
             }
         });
 
-        test('a mismatched desktop goes to the loader even when historical storage is unavailable', async () => {
-            phone.emitJoin('host');
-            phone.receiveFromPeer(
-                { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, linkVersion: 1, host: true },
-                'host',
-            );
-            await flushAsync();
-            expect(versionCalls).toEqual([]);
-            expect(replaced).toEqual(['https://site.test/remote/index.html#k=the-key&v=1']);
+        test('a mismatched accepted host settles an already-sent spend as unclear', async () => {
+            connect();
+            phone.sent.length = 0;
+            const spend = api.keyUnlockBoost('c1', true) as Promise<unknown>;
+            expect(phone.sent.some(({ message }) => (message as { t: string }).t === 'invoke')).toBe(true);
+            phone.receiveFromPeer({ ...hostHello, linkVersion: LINK_VERSION - 1 }, 'host');
+            const answer = (await spend) as { success: boolean; error: string };
+            expect(answer.success).toBe(false);
+            expect(answer.error).toContain('before retrying');
+            expect(remoteConnectionState()).toBe('update');
         });
 
-        test('once a desktop is accepted, the same peer announcing another version sends the tab to the loader', async () => {
+        test('a newer desktop stops the attempted session with the app-update notice', async () => {
             phone.emitJoin('host');
-            phone.receiveFromPeer(hostHello, 'host');
-            versionCalls.length = 0;
-            phone.receiveFromPeer(
-                { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, linkVersion: 1, host: true },
-                'host',
-            );
+            phone.receiveFromPeer({ ...hostHello, linkVersion: LINK_VERSION + 1 }, 'host');
             await flushAsync();
-            expect(versionCalls).toEqual([]);
-            expect(replaced).toEqual(['https://site.test/remote/index.html#k=the-key&v=1']);
+            expect(phone.left).toBe(true);
+            expect(remoteConnectionState()).toBe('update-this');
         });
 
         test('once a desktop is accepted, another peer announcing another version changes nothing', async () => {
             phone.emitJoin('host');
             phone.receiveFromPeer(hostHello, 'host');
-            versionCalls.length = 0;
             phone.emitJoin('other');
             phone.receiveFromPeer(
                 { t: 'hello', version: '0.0.1', protocolVersion: PROTOCOL_VERSION, linkVersion: 1, host: true },
                 'other',
             );
             await flushAsync();
-            expect(versionCalls).toEqual([]);
-            expect(replaced).toEqual([]);
+            expect(phone.left).toBe(false);
             expect(remoteConnectionState()).toBe('connected');
         });
 
@@ -577,48 +562,22 @@ describe('installPeerBridge (the phone bridge)', () => {
                 'host',
             );
             await flushAsync();
-            expect(versionCalls).toEqual([]);
-            expect(replaced).toEqual([]);
             expect(remoteConnectionState()).toBe('connecting');
-        });
-
-        test('a desktop with the same app version but another link version is still sent to the loader', async () => {
-            phone.emitJoin('host');
-            phone.receiveFromPeer({ ...hostHello, linkVersion: LINK_VERSION + 1 }, 'host');
-            await flushAsync();
-            expect(versionCalls).toEqual([]);
-            expect(replaced).toEqual([`https://site.test/remote/index.html#k=the-key&v=${LINK_VERSION + 1}`]);
         });
 
         test('a desktop of another app version and the same link version is accepted', async () => {
             phone.emitJoin('host');
             phone.receiveFromPeer({ ...hostHello, version: '0.0.1' }, 'host');
             await flushAsync();
-            expect(replaced).toEqual([]);
             expect(remoteConnectionState()).toBe('connected');
         });
     });
 
-    test("the desktop of this page's link version clears the loader's mark; a second hello keeps nothing again", () => {
-        phone.emitJoin('host');
-        phone.receiveFromPeer(hostHello, 'host');
-        expect(versionCalls).toEqual(['clearSkipMark']);
-        phone.receiveFromPeer(hostHello, 'host');
-        expect(versionCalls).toEqual(['clearSkipMark']);
-    });
-
-    test('a matching desktop connects without writing a historical version preference', async () => {
+    test('a matching desktop connects', async () => {
         phone.emitJoin('host');
         phone.receiveFromPeer(hostHello, 'host');
         await flushAsync();
         expect(remoteConnectionState()).toBe('connected');
-        expect(versionCalls).toEqual(['clearSkipMark']);
-    });
-
-    test("a fellow phone's hello keeps nothing", () => {
-        phone.emitJoin('other');
-        phone.receiveFromPeer(fellowHello, 'other');
-        expect(versionCalls).toEqual([]);
     });
 
     test('a join failure on the SDP exchange says to try Wi-Fi; a wrong password reads as offline', () => {
@@ -683,7 +642,7 @@ describe('installPeerBridge: which peer counts', () => {
         jest.useFakeTimers();
         setRemoteConnectionState('connecting');
         [host, phone] = TransportStub.pair('host', 'phone');
-        installPeerBridge(phone, LOADER_TARGET);
+        installPeerBridge(phone);
         api = (globalThis as { api?: Record<string, (...args: unknown[]) => unknown> }).api ?? {};
     });
 
@@ -1132,7 +1091,7 @@ describe('installPeerBridge: the relay path, hello again and the page lifecycle'
     });
 
     const install = (): void => {
-        installPeerBridge(phone, LOADER_TARGET);
+        installPeerBridge(phone);
     };
 
     const connect = (): void => {

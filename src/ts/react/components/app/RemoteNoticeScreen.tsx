@@ -10,12 +10,8 @@ const NOTICE_MESSAGE_KEYS = {
     offline: 'app.remoteOfflineDetail',
     network: 'app.remoteNetwork',
     'old-browser': 'app.remoteOldBrowser',
-    'older-link': 'errors.remoteLinkOlder',
-    'newer-link': 'errors.remoteLinkNewer',
     update: 'app.remoteUpdateNeeded',
     'update-this': 'app.remoteUpdateThis',
-    unpublished: 'app.remotePageUnpublished',
-    'link-changed': 'app.remoteLinkChanged',
     full: 'app.remoteFull',
     'no-key': 'app.remoteNoKey',
 } as const;
@@ -36,9 +32,6 @@ export function RemoteNoticeScreen() {
         <main className="min-h-screen flex items-center justify-center p-6">
             <div className="alert alert-warning text-sm" role="status">
                 <span>{rendererTranslator.t(labelKey)}</span>
-                {state === 'link-changed' && (
-                    <span className="badge badge-warning">{rendererTranslator.t('app.remoteNewLinkNeeded')}</span>
-                )}
                 {/* On the Android remote mode the notice must still leave: the app opens here until it does */}
                 <RemoteDisconnectButton t={(key) => rendererTranslator.t(key)} className="btn btn-outline btn-sm" />
             </div>

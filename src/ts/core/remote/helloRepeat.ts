@@ -1,9 +1,7 @@
 /**
  * The phone's hello, repeated until the desktop answers. The first hello can vanish on the relay
- * path (seen end to end: the host logs the peer, but no hello ever arrives), so every page that
- * waits on the desktop's hello — the loader and the peer bridge — announces to each peer it saw
- * at a fixed interval until its owner says the wait is over. One function, so the two never
- * drift apart.
+ * path (seen end to end: the host logs the peer, but no hello ever arrives), so the peer bridge
+ * announces to each peer it saw at a fixed interval until its owner says the wait is over.
  */
 
 import type { HelloMessage } from './protocol';

@@ -22,11 +22,9 @@ export const remoteControlTexts = (t: Translate): SettingFilterTexts => ({
     descriptions: REMOTE_CONTROL_DESCRIPTION_KEYS.map((key) => t(key)),
 });
 
-/** The failure an enter answer carries: link-version mismatch says which app needs updating. */
+/** The failure an enter answer carries. */
 const failureMessageKey = (answer: RemoteModeEntry): string => {
     if (answer.error === 'bad-link') return 'errors.remoteBadLink';
-    if (answer.error === 'update-computer') return 'errors.remoteLinkOlder';
-    if (answer.error === 'update-phone') return 'errors.remoteLinkNewer';
     return 'errors.remoteEnterFailed';
 };
 

@@ -9,7 +9,7 @@
  *     desktop still accepts what an older page sends;
  *   - results, event payloads and the auto-vote state: the current type is assignable to the frozen one, so the
  *     old fields are still there;
- *   - the message envelopes: assignable both ways, with each closed union (role, reasons, command names, status)
+ *   - the message envelopes: assignable both ways, with each closed union (reasons, command names, status)
  *     equal to its frozen copy, so a new value fails;
  *   - settings: the current value type of every frozen key equals its frozen type, so a new enum member fails.
  * Each kind has a broken fixture that must fail (`Equal<IsAssignable<Broken, Current>, false>`), so a check that
@@ -187,7 +187,6 @@ type EnvelopesKept = {
     peer: IsAssignable<PeerMessage, PeerMessageV2>;
     peerBack: IsAssignable<PeerMessageV2, PeerMessage>;
     // The closed unions: a new value would reach an older peer that does not know it.
-    helloRole: Equal<HelloMessage['role'], HelloMessageV2['role']>;
     resultReason: Equal<FailedResult['reason'], FailedResultV2['reason']>;
     byeReason: Equal<ByeMessage['reason'], ByeMessageV2['reason']>;
     commandName: Equal<AutovoteCommandMessage['command'], AutovoteCommandMessageV2['command']>;

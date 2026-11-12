@@ -23,20 +23,10 @@ describe('the phone key store', () => {
         delete g.Capacitor;
     });
 
-    test('reads a historical raw stored key as a v1 target from the Preferences key the wipe knows', async () => {
-        nativePromise.mockResolvedValue({ value: KEY });
-        await expect(readStoredKey()).resolves.toEqual({ kind: 'key', key: KEY, linkVersion: 1 });
-        expect(nativePromise).toHaveBeenCalledWith('Preferences', 'get', { key: 'gs_remote_access' });
-    });
-
-    test('reads a versioned stored target and preserves its version', async () => {
+    test('reads the canonical current record from the Preferences key the wipe knows', async () => {
         nativePromise.mockResolvedValue({ value: `2:${KEY}` });
-        await expect(readStoredKey()).resolves.toEqual({ kind: 'key', key: KEY, linkVersion: 2 });
-    });
-
-    test('reads the highest supported stored link version without reclassifying it', async () => {
-        nativePromise.mockResolvedValue({ value: `999:${KEY}` });
-        await expect(readStoredKey()).resolves.toEqual({ kind: 'key', key: KEY, linkVersion: 999 });
+        await expect(readStoredKey()).resolves.toEqual({ kind: 'key', key: KEY });
+        expect(nativePromise).toHaveBeenCalledWith('Preferences', 'get', { key: 'gs_remote_access' });
     });
 
     test.each([{ value: null }, {}, null])('%j reads as no key stored', async (answer) => {
@@ -46,8 +36,10 @@ describe('the phone key store', () => {
 
     test.each([
         { value: 'not-a-key' },
+        { value: KEY },
         { value: 42 },
         { value: '' },
+        { value: `1:${KEY}` },
         { value: `0:${KEY}` },
         { value: `01:${KEY}` },
         { value: `1000:${KEY}` },
@@ -64,7 +56,7 @@ describe('the phone key store', () => {
 
     test('stores and clears the key under the same Preferences key', async () => {
         nativePromise.mockResolvedValue(undefined);
-        await storeKey(KEY, 2);
+        await storeKey(KEY);
         await clearStoredKey();
         expect(nativePromise).toHaveBeenNthCalledWith(1, 'Preferences', 'set', {
             key: 'gs_remote_access',
@@ -76,7 +68,7 @@ describe('the phone key store', () => {
     test('a document with no native bridge rejects every call', async () => {
         g.Capacitor = { isNativePlatform: () => true };
         await expect(readStoredKey()).rejects.toThrow('No native bridge');
-        await expect(storeKey(KEY, 2)).rejects.toThrow('No native bridge');
+        await expect(storeKey(KEY)).rejects.toThrow('No native bridge');
         await expect(clearStoredKey()).rejects.toThrow('No native bridge');
         delete g.Capacitor;
         await expect(clearStoredKey()).rejects.toThrow('No native bridge');

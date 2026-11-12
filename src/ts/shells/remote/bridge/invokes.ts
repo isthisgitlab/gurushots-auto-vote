@@ -48,6 +48,7 @@ export const createInvokePipeline = (ctx: PeerBridgeContext): InvokePipeline => 
     };
 
     const sendInvoke = (channel: string, args: unknown[]): Promise<unknown> => {
+        if (ctx.stopped) return Promise.reject(lostFailure());
         const id = nextId++;
         const spend = SPEND_REMOTE_CHANNELS.has(channel);
         // JSON has no undefined: send each top-level one as null plus its position, exactly

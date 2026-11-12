@@ -609,8 +609,8 @@ jobs:
 
     # The phone page ships with the release as remote-page-v<N>.zip (+ its SHA-256), N being the
     # link version the page speaks (core/remote/protocol.ts LINK_VERSION), not the app version.
-    # build:site publishes every link version under /remote/v<N>/ from the newest stable release
-    # that carries its zip, so one page serves every desktop that speaks the link.
+    # This is the current page's release artifact. build:site publishes only its local current
+    # page and does not download or unpack release archives.
     remote-page:
         needs: version-bump
         runs-on: ubuntu-latest

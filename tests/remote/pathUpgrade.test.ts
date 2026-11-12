@@ -42,11 +42,6 @@ afterAll(() => {
     else Reflect.deleteProperty(globalThis, 'localStorage');
 });
 
-jest.mock('../../src/ts/core/remote/linkVersion', () => ({
-    storeLinkVersion: async () => undefined,
-    clearSkipMark: () => undefined,
-}));
-
 type Api = Record<string, (...args: unknown[]) => Promise<unknown>>;
 
 /** What an invoke came to, watched from the moment it was made so that a rejection is never unhandled. */
@@ -139,7 +134,7 @@ describe('a path changing under traffic', () => {
             version: APP_VERSION,
         });
         await host.start('the-key');
-        installPeerBridge(phoneHybrid, 'https://site.test/remote/index.html#k=the-key');
+        installPeerBridge(phoneHybrid);
         api = (globalThis as { api?: Api }).api ?? {};
         // The relay alone finds both ends, then the phone says hello and is served.
         await run(1_500);
@@ -472,10 +467,7 @@ describe('the relay link giving up on a peer that is on WebRTC now', () => {
         setRemoteConnectionState('connecting');
         direct = new TransportStub('phone');
         relay = new TransportStub('phone');
-        installPeerBridge(
-            createHybridTransport({ direct, relay, role: 'phone' }),
-            'https://site.test/remote/index.html#k=the-key',
-        );
+        installPeerBridge(createHybridTransport({ direct, relay, role: 'phone' }));
         api = (globalThis as { api?: Api }).api ?? {};
         relay.emitJoin('host');
         relay.receiveFromPeer(hostHello, 'host');

@@ -1,7 +1,7 @@
 /**
  * The Android app's remote mode (shells/capacitor/remoteMode.ts): entering from a pasted link
  * stops the background service, clears and flushes the persisted running flag, stores the key
- * and only then moves the WebView to the bundled remote loader; the startup read says whether
+ * and only then moves the WebView to the bundled current remote page; the startup read says whether
  * the app is in remote mode, so a relaunch stays in it.
  */
 
@@ -11,8 +11,6 @@ import type { CapacitorGlobals } from '../../src/ts/core/types/capacitor';
 
 const KEY = 'AbC-_9'.repeat(7) + 'A';
 const LINK = `https://example.test/remote/v2/index.html#k=${KEY}`;
-const V1_LINK = `https://example.test/remote/v1/index.html#k=${KEY}`;
-const V3_LINK = `https://example.test/remote/v3/index.html#k=${KEY}`;
 
 const order: string[] = [];
 const mockStop = jest.fn<Promise<unknown>, []>();
@@ -72,10 +70,10 @@ describe('Android remote mode', () => {
     });
 
     describe('entering from a pasted link', () => {
-        test('stops the service, clears and flushes the running flag, stores the key, then loads the bundled loader', async () => {
+        test('stops the service, clears and flushes the running flag, stores the key, then loads the bundled current page', async () => {
             const { enterRemoteMode } = load();
             await expect(enterRemoteMode(LINK)).resolves.toEqual({ success: true });
-            expect(order).toEqual(['stop', 'flag', 'flush', 'set', `go /remote/index.html#k=${KEY}&v=2`]);
+            expect(order).toEqual(['stop', 'flag', 'flush', 'set', `go /remote/v2/index.html#k=${KEY}`]);
             expect(mockSettings.setSetting).toHaveBeenCalledWith('autovoteRunning', false);
             expect(nativePromise).toHaveBeenCalledWith('Preferences', 'set', {
                 key: 'gs_remote_access',
@@ -98,21 +96,19 @@ describe('Android remote mode', () => {
             expect(order).toEqual([]);
         });
 
-        test('an older link is refused before any service, settings, storage, or navigation side effect', async () => {
-            const { enterRemoteMode } = load();
-            await expect(enterRemoteMode(V1_LINK)).resolves.toEqual({ success: false, error: 'update-computer' });
-            expect(order).toEqual([]);
-            expect(mockSettings.setSetting).not.toHaveBeenCalled();
-            expect(assign).not.toHaveBeenCalled();
-        });
-
-        test('a newer link is refused before any service, settings, storage, or navigation side effect', async () => {
-            const { enterRemoteMode } = load();
-            await expect(enterRemoteMode(V3_LINK)).resolves.toEqual({ success: false, error: 'update-phone' });
-            expect(order).toEqual([]);
-            expect(mockSettings.setSetting).not.toHaveBeenCalled();
-            expect(assign).not.toHaveBeenCalled();
-        });
+        test.each([
+            `https://example.test/remote/v1/index.html#k=${KEY}`,
+            `https://example.test/remote/v3/index.html#k=${KEY}`,
+        ])(
+            'a non-current link is refused before any service, settings, storage, or navigation side effect',
+            async (link) => {
+                const { enterRemoteMode } = load();
+                await expect(enterRemoteMode(link)).resolves.toEqual({ success: false, error: 'bad-link' });
+                expect(order).toEqual([]);
+                expect(mockSettings.setSetting).not.toHaveBeenCalled();
+                expect(assign).not.toHaveBeenCalled();
+            },
+        );
 
         test('a service stop the plugin rejected refuses entering: the service state is unknown', async () => {
             mockStop.mockResolvedValue({ running: false, available: true, error: 'boom' });
@@ -153,15 +149,15 @@ describe('Android remote mode', () => {
 
     describe('the startup decision', () => {
         test('a stored key keeps the relaunch in remote mode', async () => {
-            nativePromise.mockResolvedValue({ value: KEY });
-            await expect(load().readStoredPairingKey()).resolves.toEqual({ key: KEY, linkVersion: 1 });
+            nativePromise.mockResolvedValue({ value: `2:${KEY}` });
+            await expect(load().readStoredPairingKey()).resolves.toBe(KEY);
             expect(mockWarning).not.toHaveBeenCalled();
         });
 
-        test('a future stored target keeps its version for the native loader gate', async () => {
+        test('a non-current stored record starts normal mode and is said in the log', async () => {
             nativePromise.mockResolvedValue({ value: `3:${KEY}` });
-            await expect(load().readStoredPairingKey()).resolves.toEqual({ key: KEY, linkVersion: 3 });
-            expect(mockWarning).not.toHaveBeenCalled();
+            await expect(load().readStoredPairingKey()).resolves.toBeNull();
+            expect(mockWarning).toHaveBeenCalledTimes(1);
         });
 
         test('no stored key starts the normal mode, silently', async () => {
@@ -184,9 +180,9 @@ describe('Android remote mode', () => {
         });
     });
 
-    test('loadBundledRemoteLoader moves the WebView to the loader file with the checked target in the fragment', () => {
-        load().loadBundledRemoteLoader({ key: KEY, linkVersion: 2 });
-        expect(assign).toHaveBeenCalledWith(`/remote/index.html#k=${KEY}&v=2`);
+    test('loadBundledRemotePage moves the WebView to the current page with its key in the fragment', () => {
+        load().loadBundledRemotePage(KEY);
+        expect(assign).toHaveBeenCalledWith(`/remote/v2/index.html#k=${KEY}`);
     });
 
     test('installRemoteModeEntry offers the paste entry to the React app', () => {

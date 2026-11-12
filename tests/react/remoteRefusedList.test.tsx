@@ -25,7 +25,7 @@ describe('a list channel the desktop refuses', () => {
     beforeEach(() => {
         setRemoteConnectionState('connecting');
         [host, phone] = TransportStub.pair('host', 'phone');
-        installPeerBridge(phone, 'https://site.test/remote/index.html#k=the-key');
+        installPeerBridge(phone);
         phone.emitJoin('host');
         phone.receiveFromPeer(
             {
