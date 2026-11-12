@@ -32,6 +32,16 @@ import type { Bus } from '../helpers/relayBus';
 
 import type { RemoteTransport } from '../../src/ts/core/remote/relays';
 
+// Keep this suite on the unavailable-storage path without reading Node's getter.
+const localStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+beforeAll(() => {
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: undefined });
+});
+afterAll(() => {
+    if (localStorageDescriptor) Object.defineProperty(globalThis, 'localStorage', localStorageDescriptor);
+    else Reflect.deleteProperty(globalThis, 'localStorage');
+});
+
 jest.mock('../../src/ts/core/remote/linkVersion', () => ({
     storeLinkVersion: async () => undefined,
     clearSkipMark: () => undefined,
