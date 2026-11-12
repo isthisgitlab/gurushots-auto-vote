@@ -232,6 +232,7 @@ export const logMessages = {
     m4c4e7b390448: 'Pieteikšanās tokens saglabāts {0} režīmam',
     m4c57716eb494: 'Balsošanai pieejamo foto skaits: {0}',
     m4c650903d803: 'Attālināts izsaukums: {0}',
+    m4c7e1b92d0a3: 'Automātiskā iesniegšana: Boost piesprausto foto ({0}) iesniedza izaicinājumā {1}',
     m4d34df58adb5: 'Norādītais pieteikšanās tokens: {0}',
     m4da881dd3712: '⏰ Tuvojas automātiskais {0} noteikums izaicinājumā "{1}" — nākamais cikls pēc {2} s',
     m4db442090e9c: 'Uzstādījums {0} neatbalsta individuālas vērtības izaicinājumiem',
@@ -327,6 +328,8 @@ export const logMessages = {
     m6c5636455c2d: 'Profils "{0}" piemērots izaicinājumam {1}',
     m6c65118e63fa: '{0} Nevar iesniegt jaunu foto Boost izmantošanai ({1}); izmanto Boost esošajam foto',
     m6c805ef29084: 'Virsraksta profils ir pretrunā ar manuālajām individuālajām vērtībām izaicinājumam "{0}"',
+    m6d2b8e4f1a07:
+        'Automātiskā iesniegšana: Boost piespraustais foto ({0}) izaicinājumā {1} var jau būt iesniegts; automātiskā iesniegšana šajā ciklā neiesniedz citu foto',
     m6db86e0c6306: 'Nospied Ctrl+C, lai apturētu',
     m6de905385e30: 'Balsošana veiksmīgi pabeigta',
     m6e1f23ece4fd: 'Kļūda, atiestatot uzstādījumu "{0}"',
@@ -469,6 +472,7 @@ export const logMessages = {
     m9a274bb9e06b: '🌐 Izmanto īsto API stratēģiju darba videi',
     m9a2f47c1b8e3:
         '{0} automātiskā apmaiņa: GuruShots nesūtīja apmaiņu vēsturi — automātiskās apmaiņas rēķina pati lietotne; manuālās un scenāriju apmaiņas netiek skaitītas',
+    m9a3f60c5e7d1: 'Automātiskā iesniegšana: pēdējo brīvo vietu izaicinājumā {0} patur Boost piespraustajam foto ({1})',
     m9af18ab83ac0: 'Izmanto Boost izaicinājumā {0}',
     m9af941258be6: 'Aktīvo misiju dēļ priekšlaikus pievienojas līdz {0} izaicinājumiem',
     m9b901c6d995c: '⏰ Tuvojas scenārija solis izaicinājumā "{0}" (fāze {1}) — nākamais cikls pēc {2} s',

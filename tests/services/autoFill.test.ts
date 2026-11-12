@@ -463,6 +463,44 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         expect(submitToChallenge).not.toHaveBeenCalled();
     });
 
+    test('a clock window that ends during verification still submits when a relative target is due by then, authorized by the relative schedule', async () => {
+        const startMs = NOW * 1000;
+        const clock = jest.spyOn(Date, 'now').mockReturnValue(startMs);
+        const clockTime = new Date(startMs).toISOString().slice(11, 16);
+        // 2 entries at 20.5 min left: the relative target is 2 (met), only the clock window asks for more.
+        const challenge = makeChallenge({
+            maxSubmits: 4,
+            entries: [{ id: 'e1' }, { id: 'e2' }],
+            closeIn: 20 * 60 + 30,
+        });
+        const logger = makeLogger();
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({
+                autoSubmit: true,
+                autoSubmitTime: [clockTime],
+                autoSubmitWindowMinutes: 5,
+            }),
+            logger,
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [challenge] }),
+            // Verification outlasts the window; by then 15.5 min remain, so the 3-at-20-min row is due.
+            rankVisually: jest.fn(async (_challenge, ids) => {
+                clock.mockReturnValue(startMs + 5 * 60_000);
+                return ids;
+            }),
+            wallClockNow: () => Math.floor(Date.now() / 1000),
+            submitToChallenge,
+        });
+
+        expect(result).toBe('submitted');
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p1'], 'tok');
+        const success = logger.withCategory.mock.results.flatMap(({ value }) =>
+            (value as jest.MockedObject<CategoryLogger>).success.mock.calls.map(([message]) => message),
+        );
+        expect(success).toEqual([expect.stringContaining('the relative schedule authorized this submission')]);
+    });
+
     test('a clock window still open after verification cannot submit after the challenge closes', async () => {
         const startMs = NOW * 1000;
         const clock = jest.spyOn(Date, 'now').mockReturnValue(startMs);

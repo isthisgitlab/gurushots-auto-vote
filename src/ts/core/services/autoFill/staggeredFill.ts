@@ -103,6 +103,11 @@ const createFinalEligibility =
                 .map((entry) => String(entry.id)),
         );
         if (picked.some((imageId) => enteredIds.has(String(imageId)))) return { standDown: true };
+        // The trigger that starts an attempt does not have to be the one that authorizes the
+        // submit: the check re-reads both at the final wall-clock time and any trigger that
+        // still calls for another photo then authorizes it (and is recorded as the authorizer).
+        // A clock window that ended during verification therefore cancels the submit only when
+        // no relative target is due either.
         const relativeDue = entryCount < current.relativeTarget;
         const clockDue = entryCount < current.clockTarget;
         const clockAuthorizes = clockDue && refresh === 'refreshed';

@@ -52,7 +52,7 @@ const submitBoostPinAtAutoSubmit = async (ctx: ActionContext): Promise<boolean> 
         logger
             .withCategory('autoSubmit')
             .info(
-                `autoSubmit: the photo pinned for Boost (${oneLine(pinned.imageId)}) may already be in ${logger.challengeTag(challenge)}; no other photo is submitted this cycle`,
+                `autoSubmit: the photo pinned for Boost (${oneLine(pinned.imageId)}) may already be in ${logger.challengeTag(challenge)}; Auto-Submit submits no other photo this cycle`,
                 null,
             );
         return true;
@@ -63,7 +63,7 @@ const submitBoostPinAtAutoSubmit = async (ctx: ActionContext): Promise<boolean> 
         logger
             .withCategory('autoSubmit')
             .info(
-                `autoSubmit: keeping the last free slot of ${logger.challengeTag(challenge)} for the photo pinned for Boost (${oneLine(pinned.imageId)}); trying again next cycle`,
+                `autoSubmit: keeping the last free slot of ${logger.challengeTag(challenge)} for the photo pinned for Boost (${oneLine(pinned.imageId)})`,
                 null,
             );
         return true;

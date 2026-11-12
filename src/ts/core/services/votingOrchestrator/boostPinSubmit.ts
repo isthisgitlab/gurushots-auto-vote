@@ -97,8 +97,10 @@ const submitBoostPinnedPhoto = async (
         entryAges.markPinSubmitFailed(challenge, eligible, boostDeadline(challenge), ctx.now);
         logBoostTarget(challenge, PIN_SUBMIT_DEFINITIVE_KEY, [oneLine(eligible), reason]);
     } else {
-        // Transient (fetch-error, data-incomplete, submit-unanswered, walk-incomplete,
-        // no-slots, invalid-challenge): no latch, the next due pass tries again.
+        // Transient (fetch-error, data-incomplete, walk-incomplete, no-slots, stood-down,
+        // invalid-challenge, and submit-unanswered — a thrown submit is reported as that too):
+        // no latch, the next due pass tries again. submit-unanswered is cause `unclear` below:
+        // the submit may have landed.
         logBoostTarget(challenge, PIN_SUBMIT_TRANSIENT_KEY, [oneLine(eligible), reason]);
     }
     armPinWaitWake(ctx);

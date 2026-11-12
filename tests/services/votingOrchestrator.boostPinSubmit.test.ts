@@ -529,7 +529,7 @@ describe('runAutoFill — the Boost-pinned submit at Auto-Submit time', () => {
             expect(autoFill.maybeAutoFillChallenge).not.toHaveBeenCalled();
             expect(ledger.pinSubmitFailed('101', PIN, boostDeadline(challenge))).toBe(false);
             expect(infoLines('keeping the last free slot of')).toEqual([
-                expect.stringContaining('for the photo pinned for Boost (pin1); trying again next cycle'),
+                expect.stringContaining('for the photo pinned for Boost (pin1)'),
             ]);
             expect(infoLines('may already be in')).toEqual([]);
         },
@@ -548,9 +548,10 @@ describe('runAutoFill — the Boost-pinned submit at Auto-Submit time', () => {
             expect(autoFill.maybeAutoFillChallenge).not.toHaveBeenCalled();
             expect(ledger.pinSubmitFailed('101', PIN, boostDeadline(challenge))).toBe(false);
             expect(infoLines('may already be in')).toEqual([
-                expect.stringContaining('the photo pinned for Boost (pin1) may already be in'),
+                expect.stringMatching(
+                    /^autoSubmit: the photo pinned for Boost \(pin1\) may already be in .*; Auto-Submit submits no other photo this cycle$/,
+                ),
             ]);
-            expect(infoLines('no other photo is submitted this cycle')).toHaveLength(1);
             expect(infoLines('keeping the last free slot of')).toEqual([]);
         },
     );

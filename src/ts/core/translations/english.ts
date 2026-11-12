@@ -343,7 +343,7 @@ export const app = {
         'A new photo is submitted and boosted only when every existing entry has Turbo or a Turbo pin. A Turbo pin yielding in the Emergency Submit window takes the Boost; the option above overrides.',
     boostPinnedSubmit: 'Submit the Photo Pinned for Boost Automatically',
     boostPinnedSubmitDesc:
-        "When the photo pinned for Boost isn't in the challenge but is one of your Chosen Photos, the next Auto-Submit submits it instead of another photo. If no Auto-Submit comes before Boost is due, it is submitted when Boost is due. Boost is applied to it at its usual time, and not earlier than Wait Before Boosting a New Photo after it goes in. Needs a free slot. When only one free slot is left, Auto-Submit keeps it for this photo instead of using another one. If the photo can't be submitted, Boost keeps waiting for it as before.",
+        "When the photo pinned for Boost isn't in the challenge but is one of your Chosen Photos, the next Auto-Submit submits it instead of another photo. If no Auto-Submit comes before Boost is due, it is submitted when Boost is due. Boost is applied to it at its usual time, and not earlier than Wait Before Boosting a New Photo after it goes in. Needs a free slot. While the photo can still be submitted, Auto-Submit keeps the last free slot for it instead of using another photo. If the photo can't be submitted, Boost keeps waiting for it as before.",
     turboNewSubmit: 'Turbo a Freshly Submitted Photo',
     turboNewSubmitDesc:
         'A new photo (by your Auto-Submit tag rules) is submitted just before Turbo applies and gets it. No free slot or photo: Turbo falls back to your Turbo Entry, or skips this cycle with none yet.',
