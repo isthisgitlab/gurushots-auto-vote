@@ -359,7 +359,7 @@ export const app: LatvianApp = {
         'Boost jaunam foto iesniedz tikai tad, ja neviens esošais foto nevar saņemt Boost — katram ir Turbo vai tā piespraude. Turbo piespraude, kas ārkārtas iesniegšanas laikā atkāpjas, Boost saņem.',
     boostPinnedSubmit: 'Automātiski iesniegt Boost piesprausto foto',
     boostPinnedSubmitDesc:
-        'Ja Boost piespraustā foto izaicinājumā nav, bet tas ir starp „Izvēlētie foto”, nākamajā automātiskajā iesniegšanā to iesniedz cita foto vietā. Ja pirms Boost laika automātiskā iesniegšana nenotiek, to iesniedz, kad pienāk Boost laiks. Boost tam piemēro parastajā laikā, ne agrāk kā „Gaidīt pirms Boost jaunam foto” pēc tā iesniegšanas. Vajadzīga brīva vieta. Ja foto nevar iesniegt, Boost turpina to gaidīt kā līdz šim.',
+        'Ja Boost piespraustā foto izaicinājumā nav, bet tas ir starp „Izvēlētie foto”, nākamajā automātiskajā iesniegšanā to iesniedz cita foto vietā. Ja pirms Boost laika automātiskā iesniegšana nenotiek, to iesniedz, kad pienāk Boost laiks. Boost tam piemēro parastajā laikā, ne agrāk kā „Gaidīt pirms Boost jaunam foto” pēc tā iesniegšanas. Vajadzīga brīva vieta. Ja palikusi tikai viena brīva vieta, automātiskā iesniegšana to patur šim foto, nevis izmanto citam. Ja foto nevar iesniegt, Boost turpina to gaidīt kā līdz šim.',
     turboNewSubmit: 'Turbo jaunam iesniegtam foto',
     turboNewSubmitDesc:
         'Tieši pirms Turbo iesniedz jaunu foto pēc tagu noteikumiem, un Turbo piešķiras jaunajam foto. Nav vietas vai foto — Turbo pāriet uz norādīto Turbo foto, bet bez foto izlaiž ciklu.',

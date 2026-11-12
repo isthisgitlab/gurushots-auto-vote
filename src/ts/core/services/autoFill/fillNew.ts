@@ -66,6 +66,17 @@ const runForAction = async (
     const shouldIncludeTags = settings.getEffectiveTagSetting('shouldIncludeTags', challenge);
     const submitWithoutTagMatch = settings.getEffectiveSetting('submitWithoutTagMatch', String(challengeId));
 
+    // A stand-down from the caller's final check and one from the live re-check both end the
+    // attempt as refresh-stand-down; the flag tells them apart.
+    let finalStoodDown = false;
+    const watchedFinalEligibility: FillAttemptParams['finalEligibility'] = finalEligibility
+        ? async (picked) => {
+              const verdict = await finalEligibility(picked);
+              if (verdict?.standDown === true) finalStoodDown = true;
+              return verdict;
+          }
+        : undefined;
+
     const attemptResult = await runFillAttempt({
         label: 'fillNew',
         challenge,
@@ -93,7 +104,7 @@ const runForAction = async (
         },
         onlyIds: attempt.onlyIds,
         onEmptyPick: attempt.onEmptyPick,
-        finalEligibility,
+        finalEligibility: watchedFinalEligibility,
     });
     if (attemptResult.status === 'fetch-error') {
         return { kind: 'mapped', ok: false, imageId: null, reason: 'fetch-error' };
@@ -107,15 +118,15 @@ const runForAction = async (
         return { kind: 'mapped', ok: false, imageId: null, reason: 'data-incomplete' };
     }
     if (attemptResult.status === 'refresh-stand-down') {
-        return { kind: 'mapped', ok: false, imageId: null, reason: 'no-slots' };
+        return { kind: 'mapped', ok: false, imageId: null, reason: finalStoodDown ? 'stood-down' : 'no-slots' };
     }
     if (attemptResult.status === 'no-pick') return { kind: 'no-pick' };
     if (attemptResult.status === 'submit-rejected') return { kind: 'submit-rejected' };
     if (attemptResult.status === 'submit-unanswered') return { kind: 'submit-unanswered' };
     if (attemptResult.status === 'submit-threw') return { kind: 'submit-threw' };
-    // No probe is passed here — a stand-down on this path is the live re-check above or the
-    // caller's final check, both of which end as refresh-stand-down — so the attempt cannot
-    // end as probe-stand-down; the arm keeps the union total.
+    // No probe is passed here — a stand-down on this path is the live re-check or the caller's
+    // final check, both of which end as refresh-stand-down above — so the attempt cannot end as
+    // probe-stand-down; the arm keeps the union total.
     /* istanbul ignore if */
     if (attemptResult.status === 'probe-stand-down') {
         return { kind: 'mapped', ok: false, imageId: null, reason: 'submit-failed' };
@@ -177,7 +188,9 @@ const submitNewEntryForAction = async (
  * The reasons split definitive from transient failures so the runner can latch
  * the definitive ones for this Boost window and retry the transient ones:
  *   - 'submitted'         — the photo went in; the caller applies the Boost.
- *   - 'no-slots'          — the free-slot guard, or the live re-check or the caller's final check stood down. Transient.
+ *   - 'no-slots'          — the free-slot guard, or the live re-check stood down. Transient.
+ *   - 'stood-down'        — the caller's final check stood down (toggle, Manual Only, cancel, target met,
+ *                           close, clock window). Transient.
  *   - 'challenge-gone'    — the attempt found the challenge gone.
  *   - 'data-incomplete'   — the pre-submit re-read cannot be trusted. Transient.
  *   - 'fetch-error'       — the candidate fetch failed. Transient.

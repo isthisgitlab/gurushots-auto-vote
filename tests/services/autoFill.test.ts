@@ -1716,10 +1716,13 @@ describe('resolveAutoSubmitDue — is an Auto-Submit due now', () => {
 
         expect(result).toEqual({
             due: true,
-            trigger: expect.objectContaining({ relativeTarget: 3, clockTarget: 0, desired: 3 }),
-            schedule: DEFAULT_SCHEDULE,
-            desired: 3,
-            slotsRemaining: 2,
+            authorization: {
+                trigger: expect.objectContaining({ relativeTarget: 3, clockTarget: 0, desired: 3 }),
+                authorizer: 'relative',
+                schedule: DEFAULT_SCHEDULE,
+                desired: 3,
+                slotsRemaining: 2,
+            },
         });
         expect(getSlotsRemaining(challenge)).toBe(2);
     });

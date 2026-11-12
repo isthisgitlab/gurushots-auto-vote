@@ -19,27 +19,20 @@ import type { ActionContext, PassContext } from './context';
  * pick. Boost time submits it only when no Auto-Submit comes first.
  *
  * @returns true when the Auto-Submit is done for this cycle (the pin went in, an
- *   earlier submit of it stands, or the last free slot is kept for it after a
- *   transient failure); false to go on with the usual pick
+ *   earlier submit of it stands, its submit got no answer, or the last free slot
+ *   is kept for it after a transient failure); false to go on with the usual pick
  */
 const submitBoostPinAtAutoSubmit = async (ctx: ActionContext): Promise<boolean> => {
     const { challenge, token, now, fillDeps, entryAges } = ctx;
     const due = autoFill.resolveAutoSubmitDue(challenge, now, fillDeps);
     if (!due.due || !votingLogic.describeDeadlineActions(challenge, now, entryAges).boostPinSubmits) return false;
 
-    const finalAuthorization = {
-        trigger: due.trigger,
-        authorizer: 'relative' as const,
-        schedule: due.schedule,
-        desired: due.desired,
-        slotsRemaining: due.slotsRemaining,
-    };
     const finalEligibility = autoFill.createFinalEligibility(
         challenge,
         String(challenge.id),
         token,
         fillDeps,
-        finalAuthorization,
+        due.authorization,
     );
     const pinned = await submitBoostPinnedPhoto(ctx, finalEligibility);
     if (pinned.kind === 'submitted') {
@@ -52,13 +45,30 @@ const submitBoostPinAtAutoSubmit = async (ctx: ActionContext): Promise<boolean> 
         return true;
     }
     if (pinned.kind === 'held') return true;
+    if (pinned.kind !== 'skip') return false;
+    // A submit that got no answer may have landed: no other photo goes in this cycle, whatever
+    // the free slots.
+    if (pinned.cause === 'unclear') {
+        logger
+            .withCategory('autoSubmit')
+            .info(
+                `autoSubmit: the photo pinned for Boost (${oneLine(pinned.imageId)}) may already be in ${logger.challengeTag(challenge)}; no other photo is submitted this cycle`,
+                null,
+            );
+        return true;
+    }
     // A transient failure or a gone challenge with one free slot left: keep that slot for the
-    // pin and try again next cycle. Everything else (definitive, 2+ slots, fallback) goes on.
-    return (
-        pinned.kind === 'skip' &&
-        (pinned.cause === 'transient' || pinned.cause === 'gone') &&
-        autoFill.getSlotsRemaining(challenge) === 1
-    );
+    // pin and try again next cycle. Everything else (definitive, 2+ slots) goes on.
+    if ((pinned.cause === 'transient' || pinned.cause === 'gone') && autoFill.getSlotsRemaining(challenge) === 1) {
+        logger
+            .withCategory('autoSubmit')
+            .info(
+                `autoSubmit: keeping the last free slot of ${logger.challengeTag(challenge)} for the photo pinned for Boost (${oneLine(pinned.imageId)}); trying again next cycle`,
+                null,
+            );
+        return true;
+    }
+    return false;
 };
 
 const runAutoFill = async (ctx: ActionContext) => {

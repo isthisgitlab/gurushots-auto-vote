@@ -329,16 +329,40 @@ describe('submitPinnedEntry', () => {
         expect(submittedIds(deps)).toEqual([['theme-a']]);
     });
 
-    test('a final check that stands down submits nothing and reports a transient no-slots', async () => {
+    test('a final check that stands down submits nothing and reports a transient stood-down', async () => {
         const deps = makeDeps({ library: [photo('theme-a')] });
         const finalEligibility = jest.fn(async () => ({ standDown: true }));
         expect(await submitPinnedEntry(makeChallenge(), 'tok', deps, 'theme-a', finalEligibility)).toEqual({
             ok: false,
             imageId: null,
-            reason: 'no-slots',
+            reason: 'stood-down',
         });
         expect(finalEligibility).toHaveBeenCalledTimes(1);
         expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('a live re-check that stands down (the slots filled meanwhile) still reports no-slots, and the final check never runs', async () => {
+        const full = makeChallenge({ entries: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }], maxSubmits: 4 });
+        const deps = makeDeps({
+            library: [photo('theme-a')],
+            extra: { getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [full] }) },
+        });
+        const finalEligibility = jest.fn(async () => null);
+        expect(await submitPinnedEntry(makeChallenge(), 'tok', deps, 'theme-a', finalEligibility)).toEqual({
+            ok: false,
+            imageId: null,
+            reason: 'no-slots',
+        });
+        expect(finalEligibility).not.toHaveBeenCalled();
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('a final check that answers a verdict without standDown lets the submit through', async () => {
+        const deps = makeDeps({ library: [photo('theme-a')] });
+        const finalEligibility = jest.fn(async () => ({ standDown: false }));
+        expect((await submitPinnedEntry(makeChallenge(), 'tok', deps, 'theme-a', finalEligibility)).reason).toBe(
+            'submitted',
+        );
     });
 
     test('the invalid-challenge guard comes before settings or the API are touched', async () => {

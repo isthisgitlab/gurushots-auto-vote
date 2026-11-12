@@ -20,12 +20,14 @@ import type { BoostTarget } from './boostTargetLog';
 /**
  * What the caller should do after this ran: `submitted` — the photo went in now;
  * `held` — an earlier pass's pending submit of it stands; `skip` — logged and
- * armed, with the cause of the failure; `fallback` — the path is not eligible.
+ * armed, with the cause of the failure and the pinned photo (`unclear`: the
+ * submit got no answer, so the photo may already have gone in); `fallback` —
+ * the path is not eligible.
  */
 type BoostPinSubmitOutcome =
     | { kind: 'submitted'; target: BoostTarget }
     | { kind: 'held'; target: BoostTarget }
-    | { kind: 'skip'; cause: 'definitive' | 'transient' | 'gone' }
+    | { kind: 'skip'; cause: 'definitive' | 'transient' | 'gone' | 'unclear'; imageId: string }
     | { kind: 'fallback' };
 
 // A server refusal and the library-walk verdicts that mean this photo can never go
@@ -87,7 +89,7 @@ const submitBoostPinnedPhoto = async (
         // The live re-check confirmed the challenge left the active list — the
         // same key the fill-new branch of resolveBoostTarget logs for it.
         logBoostTarget(challenge, 'm68af6d2b3623', []);
-        return { kind: 'skip', cause: 'gone' };
+        return { kind: 'skip', cause: 'gone', imageId: eligible };
     }
     const { reason } = filled;
     const definitive = DEFINITIVE_REASONS.has(reason);
@@ -100,7 +102,9 @@ const submitBoostPinnedPhoto = async (
         logBoostTarget(challenge, PIN_SUBMIT_TRANSIENT_KEY, [oneLine(eligible), reason]);
     }
     armPinWaitWake(ctx);
-    return { kind: 'skip', cause: definitive ? 'definitive' : 'transient' };
+    // A submit that got no answer may have landed: the caller must not follow it with another submit.
+    const cause = definitive ? 'definitive' : reason === 'submit-unanswered' ? 'unclear' : 'transient';
+    return { kind: 'skip', cause, imageId: eligible };
 };
 
 export { submitBoostPinnedPhoto };

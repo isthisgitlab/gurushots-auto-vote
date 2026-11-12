@@ -160,13 +160,7 @@ const logAutoSubmitSuccess = ({
 
 type AutoSubmitDue =
     | { due: false; status: 'skipped' | 'disabled' | 'no-schedule' }
-    | {
-          due: true;
-          trigger: AutoSubmitTrigger;
-          schedule: FinalAuthorization['schedule'];
-          desired: number;
-          slotsRemaining: number;
-      };
+    | { due: true; authorization: FinalAuthorization };
 
 /**
  * Whether a scheduled Auto-Submit is due for the challenge right now: the id,
@@ -177,8 +171,9 @@ type AutoSubmitDue =
  *
  * @param now - unix seconds
  * @returns `due: false` with the status `maybeAutoFillChallenge` reports, or
- *   `due: true` with the trigger, schedule, target and free slots the attempt
- *   is authorized by
+ *   `due: true` with the authorization (the trigger, schedule, target and free
+ *   slots) the attempt starts from; the final eligibility check updates that
+ *   same object when it authorizes the submit
  */
 const resolveAutoSubmitDue = (challenge: Challenge, now: number, deps: SettingsFillDeps): AutoSubmitDue => {
     const { settings, logger } = deps;
@@ -233,7 +228,7 @@ const resolveAutoSubmitDue = (challenge: Challenge, now: number, deps: SettingsF
         }
         return { due: false, status: 'skipped' };
     }
-    return { due: true, trigger, schedule, desired, slotsRemaining };
+    return { due: true, authorization: { trigger, authorizer: 'relative', schedule, desired, slotsRemaining } };
 };
 
 /**
@@ -256,21 +251,14 @@ const maybeAutoFillChallenge = async (
     const { settings, logger } = deps;
     const due = resolveAutoSubmitDue(challenge, now, deps);
     if (!due.due) return due.status;
-    const { trigger, schedule, desired } = due;
-    let { slotsRemaining } = due;
+    const finalAuthorization = due.authorization;
+    let { slotsRemaining } = finalAuthorization;
     const challengeId = challenge.id;
 
     const mustIncludeTags = settings.getEffectiveTagSetting('mustIncludeTags', challenge);
     const shouldIncludeTags = settings.getEffectiveTagSetting('shouldIncludeTags', challenge);
     const submitWithoutTagMatch = settings.getEffectiveSetting('submitWithoutTagMatch', String(challengeId));
 
-    const finalAuthorization: FinalAuthorization = {
-        trigger,
-        authorizer: 'relative',
-        schedule,
-        desired,
-        slotsRemaining,
-    };
     // Relative-only submission retains its established refresh policy. A
     // clock-triggered attempt needs a final wall-clock and live-state check,
     // because candidate verification can outlast the clock window.

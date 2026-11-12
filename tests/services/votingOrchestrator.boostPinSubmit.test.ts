@@ -16,15 +16,20 @@ jest.mock('../../src/ts/core/settings', () => ({
     consumeChosenPhotos: jest.fn(() => false),
 }));
 
-jest.mock('../../src/ts/core/services/VotingLogic', () => ({
-    __esModule: true,
-    ...jest.requireActual<typeof votingLogicModule>('../../src/ts/core/services/VotingLogic'),
-    resolvePin: jest.fn(() => ({ state: 'none' })),
-    shouldApplyBoost: jest.fn(() => false),
-    isBoostDueForMission: jest.fn(() => false),
-    getAutoFillThresholdSec: jest.fn(() => 0),
-    isWithinEmergencyWindow: jest.fn(() => false),
-}));
+jest.mock('../../src/ts/core/services/VotingLogic', () => {
+    const actual = jest.requireActual<typeof votingLogicModule>('../../src/ts/core/services/VotingLogic');
+    return {
+        __esModule: true,
+        ...actual,
+        // The real rule, replaceable once: the runner's gate reads it directly, the submit through this facade.
+        canSubmitBoostPin: jest.fn(actual.canSubmitBoostPin),
+        resolvePin: jest.fn(() => ({ state: 'none' })),
+        shouldApplyBoost: jest.fn(() => false),
+        isBoostDueForMission: jest.fn(() => false),
+        getAutoFillThresholdSec: jest.fn(() => 0),
+        isWithinEmergencyWindow: jest.fn(() => false),
+    };
+});
 
 jest.mock('../../src/ts/core/services/autoFill', () => ({
     submitPinnedEntry: jest.fn(async () => ({ ok: false, imageId: null, reason: 'fetch-error' })),
@@ -163,17 +168,20 @@ const slotsOf = (challenge: Partial<Challenge> | null | undefined) =>
 // The Auto-Submit gate answers due, with the authorization values the final check is built from.
 const DUE = invalid<ReturnType<typeof autoFillModule.resolveAutoSubmitDue>>({
     due: true,
-    trigger: {
-        relativeTarget: 2,
-        clockTarget: 0,
+    authorization: {
+        trigger: {
+            relativeTarget: 2,
+            clockTarget: 0,
+            desired: 2,
+            activeClockTimes: [],
+            nextClockStart: null,
+            timezone: 'UTC',
+        },
+        authorizer: 'relative',
+        schedule: [{ count: 2, seconds: 7000 }],
         desired: 2,
-        activeClockTimes: [],
-        nextClockStart: null,
-        timezone: 'UTC',
+        slotsRemaining: 2,
     },
-    schedule: [{ count: 2, seconds: 7000 }],
-    desired: 2,
-    slotsRemaining: 2,
 });
 const finalCheck = async () => null;
 
@@ -433,6 +441,9 @@ const oneSlotChallenge = () => {
     return challenge;
 };
 
+const infoLines = (needle: string) =>
+    log.info.mock.calls.map(([line]) => String(line)).filter((line) => line.includes(needle));
+
 const failWith = (reason: string) =>
     autoFill.submitPinnedEntry.mockResolvedValue(invalid({ ok: false, imageId: null, reason }));
 
@@ -449,13 +460,14 @@ describe('runAutoFill — the Boost-pinned submit at Auto-Submit time', () => {
 
         await runDeadlineActions(challenge, NOW, pass);
 
-        expect(autoFill.createFinalEligibility).toHaveBeenCalledWith(challenge, '101', 'tok', pass.fillDeps, {
-            trigger: DUE.due ? DUE.trigger : null,
-            authorizer: 'relative',
-            schedule: [{ count: 2, seconds: 7000 }],
-            desired: 2,
-            slotsRemaining: 2,
-        });
+        // The one authorization object the gate built is what the final check updates.
+        expect(autoFill.createFinalEligibility).toHaveBeenCalledWith(
+            challenge,
+            '101',
+            'tok',
+            pass.fillDeps,
+            DUE.due ? DUE.authorization : null,
+        );
         expect(autoFill.submitPinnedEntry).toHaveBeenCalledTimes(1);
         expect(autoFill.submitPinnedEntry).toHaveBeenCalledWith(challenge, 'tok', pass.fillDeps, PIN, finalCheck);
         expect(autoFill.reflectNewEntry).toHaveBeenCalledWith(challenge, PIN);
@@ -466,6 +478,17 @@ describe('runAutoFill — the Boost-pinned submit at Auto-Submit time', () => {
             expect.stringContaining('autoSubmit: submitted the photo pinned for Boost (pin1) for'),
             null,
         );
+    });
+
+    test('a submit path that turns out not to be eligible falls through to the usual pick', async () => {
+        votingLogic.canSubmitBoostPin.mockReturnValueOnce(null);
+        const challenge = goneChallenge();
+
+        await runDeadlineActions(challenge, NOW, passFor(challenge, createMemoryEntryAgeLedger()));
+
+        expect(autoFill.submitPinnedEntry).not.toHaveBeenCalled();
+        expect(autoFill.maybeAutoFillChallenge).toHaveBeenCalledTimes(1);
+        expect(log.success).not.toHaveBeenCalled();
     });
 
     test('a pending submit of the pin is held: no submit, no usual pick, no success log', async () => {
@@ -494,7 +517,7 @@ describe('runAutoFill — the Boost-pinned submit at Auto-Submit time', () => {
     });
 
     test.each([['fetch-error'], ['challenge-gone']])(
-        'a %s failure with one free slot keeps the slot: no usual pick, no latch',
+        'a %s failure with one free slot keeps the slot: no usual pick, no latch, one log line',
         async (reason) => {
             const challenge = oneSlotChallenge();
             const ledger = createMemoryEntryAgeLedger();
@@ -505,6 +528,30 @@ describe('runAutoFill — the Boost-pinned submit at Auto-Submit time', () => {
             expect(autoFill.submitPinnedEntry).toHaveBeenCalledTimes(1);
             expect(autoFill.maybeAutoFillChallenge).not.toHaveBeenCalled();
             expect(ledger.pinSubmitFailed('101', PIN, boostDeadline(challenge))).toBe(false);
+            expect(infoLines('keeping the last free slot of')).toEqual([
+                expect.stringContaining('for the photo pinned for Boost (pin1); trying again next cycle'),
+            ]);
+            expect(infoLines('may already be in')).toEqual([]);
+        },
+    );
+
+    test.each([[1], [2]])(
+        'a submit with no answer and %s free slot(s) submits no other photo this cycle: no latch, one log line',
+        async (slots) => {
+            const challenge = slots === 1 ? oneSlotChallenge() : goneChallenge();
+            const ledger = createMemoryEntryAgeLedger();
+            failWith('submit-unanswered');
+
+            await runDeadlineActions(challenge, NOW, passFor(challenge, ledger));
+
+            expect(autoFill.submitPinnedEntry).toHaveBeenCalledTimes(1);
+            expect(autoFill.maybeAutoFillChallenge).not.toHaveBeenCalled();
+            expect(ledger.pinSubmitFailed('101', PIN, boostDeadline(challenge))).toBe(false);
+            expect(infoLines('may already be in')).toEqual([
+                expect.stringContaining('the photo pinned for Boost (pin1) may already be in'),
+            ]);
+            expect(infoLines('no other photo is submitted this cycle')).toHaveLength(1);
+            expect(infoLines('keeping the last free slot of')).toEqual([]);
         },
     );
 
@@ -519,13 +566,15 @@ describe('runAutoFill — the Boost-pinned submit at Auto-Submit time', () => {
 
             expect(autoFill.submitPinnedEntry).toHaveBeenCalledTimes(1);
             expect(autoFill.maybeAutoFillChallenge).toHaveBeenCalledTimes(1);
+            expect(infoLines('keeping the last free slot of')).toEqual([]);
+            expect(infoLines('may already be in')).toEqual([]);
         },
     );
 
-    test('the final check standing down (reported as no-slots) submits nothing, latches nothing, and keeps the last slot', async () => {
+    test('the final check standing down (reported as stood-down) submits nothing, latches nothing, and keeps the last slot', async () => {
         const challenge = oneSlotChallenge();
         const ledger = createMemoryEntryAgeLedger();
-        failWith('no-slots');
+        failWith('stood-down');
 
         await runDeadlineActions(challenge, NOW, passFor(challenge, ledger));
 
