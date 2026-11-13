@@ -67,6 +67,7 @@ jobs:
               uses: ./.github/actions/setup-build
               with:
                   cache-vision-model: 'true'
+                  turbo-cache-scope: test
 
             - name: Audit dependencies
               # --prod scopes the gate to shipped runtime deps (the ones that
@@ -111,7 +112,7 @@ jobs:
             # seeded and deterministic, so a clean tree here also proves the
             # committed asset matches its source.
             - name: Verify lexicon asset is up to date
-              run: pnpm build:lexicon && git diff --exit-code src/assets/semantic-vectors.json
+              run: pnpm run turbo run verify:lexicon-generated
 
             - name: Verify lexicon separates signal from noise at the match floor
               run: pnpm verify:lexicon
@@ -121,12 +122,20 @@ jobs:
             # notices are regenerated and committed.
             - name: Verify third-party notices are up to date
               run: |
-                  pnpm build:notices
-                  if ! git diff --quiet -- src/assets/THIRD_PARTY_NOTICES.txt; then
+                  set +e
+                  pnpm run turbo run verify:notices-generated
+                  VERIFY_STATUS=$?
+                  if [ "$VERIFY_STATUS" -eq 0 ]; then
+                    exit 0
+                  fi
+
+                  git diff --quiet -- src/assets/THIRD_PARTY_NOTICES.txt
+                  DIFF_STATUS=$?
+                  if [ "$DIFF_STATUS" -eq 1 ]; then
                     echo "::error::The third-party notices are out of date: run 'pnpm build:notices' and commit src/assets/THIRD_PARTY_NOTICES.txt"
                     git diff --stat -- src/assets/THIRD_PARTY_NOTICES.txt
-                    exit 1
                   fi
+                  exit "$VERIFY_STATUS"
 
             - name: Bundle size budget (renderer bundles)
               run: pnpm size
@@ -161,6 +170,7 @@ jobs:
               uses: ./.github/actions/setup-build
               with:
                   cache-vision-model: 'true'
+                  turbo-cache-scope: android
 
             - name: Setup Java (JDK 27 — Capacitor 8's Java 21 source/target sets the floor)
               if: env.RUN_FULL_CHECKS == 'true'
@@ -264,20 +274,11 @@ jobs:
               if: env.RUN_FULL_CHECKS == 'true'
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-            - name: Install pnpm
+            - name: Setup build environment
               if: env.RUN_FULL_CHECKS == 'true'
-              uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-
-            - name: Setup Node.js
-              if: env.RUN_FULL_CHECKS == 'true'
-              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+              uses: ./.github/actions/setup-build
               with:
-                  node-version: '26'
-                  cache: 'pnpm'
-
-            - name: Install dependencies
-              if: env.RUN_FULL_CHECKS == 'true'
-              run: pnpm install --frozen-lockfile
+                  turbo-cache-scope: typecheck
 
             # Strict type-check of the src/ts TypeScript with the native tsc (checker only, noEmit).
             # Lint, including the type-aware promise rules, runs in `pnpm lint`.
@@ -307,20 +308,11 @@ jobs:
               if: env.RUN_FULL_CHECKS == 'true'
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-            - name: Install pnpm
+            - name: Setup build environment
               if: env.RUN_FULL_CHECKS == 'true'
-              uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-
-            - name: Setup Node.js
-              if: env.RUN_FULL_CHECKS == 'true'
-              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+              uses: ./.github/actions/setup-build
               with:
-                  node-version: '26'
-                  cache: 'pnpm'
-
-            - name: Install dependencies
-              if: env.RUN_FULL_CHECKS == 'true'
-              run: pnpm install --frozen-lockfile
+                  turbo-cache-scope: knip
 
             - name: Dead-code / unused-dependency check
               if: env.RUN_FULL_CHECKS == 'true'

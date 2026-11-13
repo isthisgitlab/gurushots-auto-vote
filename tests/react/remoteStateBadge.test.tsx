@@ -17,6 +17,10 @@ import {
 } from '../../src/ts/core/remote/connectionState';
 import { installPhoneRemoteMode } from '../../src/ts/core/remote/phoneMode';
 
+import type * as noticeModule from '../../src/ts/react/components/app/RemoteNoticeScreen';
+import type * as connectionStateModule from '../../src/ts/core/remote/connectionState';
+import type * as rendererModule from '../../src/ts/core/translations/renderer';
+
 describe('RemoteStateBadge', () => {
     beforeEach(() => {
         setRemoteConnectionState('connecting');
@@ -36,7 +40,6 @@ describe('RemoteStateBadge', () => {
         ['old-browser', 'app.remoteOldBrowserShort', 'badge-error'],
         ['update', 'app.remoteUpdateNeeded', 'badge-warning'],
         ['update-this', 'app.remoteUpdateThis', 'badge-warning'],
-        ['unpublished', 'app.remotePageUnpublished', 'badge-warning'],
         ['full', 'app.remoteFullShort', 'badge-error'],
         ['no-key', 'app.remoteNoKey', 'badge-error'],
     ] as const)('%s shows its label and tone', (state, key, tone) => {
@@ -199,13 +202,55 @@ describe('RemoteNoticeScreen', () => {
         ['old-browser', 'app.remoteOldBrowser'],
         ['update', 'app.remoteUpdateNeeded'],
         ['update-this', 'app.remoteUpdateThis'],
-        ['unpublished', 'app.remotePageUnpublished'],
         ['full', 'app.remoteFull'],
         ['connecting', 'app.remoteConnecting'],
     ] as const)('%s names the state', (state, key) => {
         setRemoteConnectionState(state);
         const { container } = render(<RemoteNoticeScreen />);
-        expect(container.textContent).toBe(key);
+        expect(container.textContent).toContain(key);
         expect(remoteConnectionState()).toBe(state);
+    });
+
+    test('mounts its Latvian notice once and safely handles a missing root', () => {
+        const navigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+        Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { language: 'lv-LV' } });
+        document.body.innerHTML = '<div id="root"></div>';
+        try {
+            jest.isolateModules(() => {
+                jest.unmock('../../src/ts/core/translations/renderer');
+                const { mountRemoteNotice } =
+                    require('../../src/ts/react/components/app/RemoteNoticeScreen') as typeof noticeModule;
+                const { rendererTranslator } =
+                    require('../../src/ts/core/translations/renderer') as typeof rendererModule;
+                const { setRemoteConnectionState: setNoticeState } =
+                    require('../../src/ts/core/remote/connectionState') as typeof connectionStateModule;
+                const currentLanguage = rendererTranslator.getCurrentLanguage();
+                rendererTranslator.setCurrentLanguage('en');
+                setNoticeState('no-key');
+                try {
+                    expect(globalThis.navigator.language).toBe('lv-LV');
+                    act(() => {
+                        mountRemoteNotice();
+                    });
+                    expect(rendererTranslator.getCurrentLanguage()).toBe('lv');
+                    expect(document.getElementById('root')?.textContent).toContain(
+                        'Skenē datorā redzamo QR kodu, lai savienotu',
+                    );
+                    const root = document.getElementById('root');
+                    const notice = root?.firstChild;
+                    act(() => mountRemoteNotice());
+                    expect(root?.firstChild).toBe(notice);
+                    root?.remove();
+                    expect(() => mountRemoteNotice()).not.toThrow();
+                } finally {
+                    rendererTranslator.setCurrentLanguage(currentLanguage);
+                    setNoticeState('connecting');
+                }
+            });
+        } finally {
+            if (navigator === undefined) delete (globalThis as { navigator?: unknown }).navigator;
+            else Object.defineProperty(globalThis, 'navigator', navigator);
+            document.body.innerHTML = '';
+        }
     });
 });

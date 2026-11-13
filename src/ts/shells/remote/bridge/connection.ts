@@ -12,6 +12,7 @@ import {
     setRemoteHostPath,
     setRemoteHostPeerId,
 } from '../../../core/remote/connectionState';
+import type { RemoteConnectionState } from '../../../core/remote/connectionState';
 import { HOST_ANSWER_TIMEOUT_MS } from '../../../core/remote/helloRepeat';
 import { isConnectionFailureJoinError } from '../../../core/remote/trystero';
 
@@ -28,6 +29,8 @@ export type ConnectionWatch = {
 export type ConnectionWatchApi = {
     /** Settles every pending invoke once and reads offline — the bye path drives this too. */
     readonly settlePendingForLostConnection: () => void;
+    /** Stops this bridge after a host declares a non-current link version. */
+    readonly stopForIncompatibility: (state: 'update' | 'update-this') => void;
     /** Settles every pending invoke once and reads connecting again, with the offline wait running; the desktop at `peerId` is asked to say hello. */
     readonly reconnect: (peerId: string) => void;
 };
@@ -36,7 +39,7 @@ export type ConnectionWatchApi = {
  * Settle every pending invoke once — the connection is lost. A spend may have run: unclear, never a
  * failure. `next` is what the page reads afterwards: offline, or connecting while a rejoin is awaited.
  */
-const settlePendingForLostConnection = (watch: ConnectionWatch, next: 'offline' | 'connecting' = 'offline'): void => {
+const settlePendingForLostConnection = (watch: ConnectionWatch, next: RemoteConnectionState = 'offline'): void => {
     const { ctx, hello, pipeline } = watch;
     hello.stop();
     ctx.hostPeerId = null;
@@ -47,14 +50,22 @@ const settlePendingForLostConnection = (watch: ConnectionWatch, next: 'offline' 
     }
     ctx.pending.clear();
     ctx.heldSends.length = 0;
+    if (ctx.offlineWait !== null) globalThis.clearTimeout(ctx.offlineWait);
+    ctx.offlineWait = null;
     setRemoteConnectionState(next);
+};
+
+const stopForIncompatibility = (watch: ConnectionWatch, state: 'update' | 'update-this'): void => {
+    watch.ctx.stopped = true;
+    settlePendingForLostConnection(watch, state);
+    void watch.ctx.transport.leave().catch(() => undefined);
 };
 
 /**
  * Whether this join failure ends the session. The leave path never calls this — the rule serves
  * the join-error path only; a leave of a peer that announced itself as a fellow phone is handled
  * on the leave path before any such rule is reached. A peer in `phones` never ends the session
- * either: its own join failure says nothing about the desktop's wait, like the loader's. A join
+ * either: its own join failure says nothing about the desktop's wait. A join
  * failure only ever names a peer that never joined, so the named peer is never in `waiting`;
  * before the desktop has answered, the failure ends the session only when no candidate is left —
  * that peer was the page's last hope.
@@ -76,7 +87,6 @@ const endsSession = (watch: ConnectionWatch, peerId: string): boolean => {
  */
 const waitForDesktop = (watch: ConnectionWatch): void => {
     const { ctx } = watch;
-    if (ctx.offlineWait !== null) globalThis.clearTimeout(ctx.offlineWait);
     ctx.offlineWait = globalThis.setTimeout(() => {
         ctx.offlineWait = null;
         if (ctx.hostPeerId === null && remoteConnectionState() === 'connecting') setRemoteConnectionState('offline');
@@ -123,21 +133,27 @@ const onJoinError = (watch: ConnectionWatch, error: string, peerId: string): voi
 export const watchConnection = (watch: ConnectionWatch): ConnectionWatchApi => {
     const { ctx, hello } = watch;
     ctx.transport.onPeerJoin((peerId) => {
+        if (ctx.stopped) return;
         ctx.waiting.add(peerId);
         hello.join(peerId);
     });
-    ctx.transport.onPeerLeave((peerId) => onPeerLeave(watch, peerId));
+    ctx.transport.onPeerLeave((peerId) => {
+        if (!ctx.stopped) onPeerLeave(watch, peerId);
+    });
     // The desktop moved from the relay to WebRTC with no leave: the badge's path follows, nothing is settled.
     ctx.transport.onPathChange?.((peerId, path) => {
-        if (peerId === ctx.hostPeerId) setRemoteHostPath(path);
+        if (!ctx.stopped && peerId === ctx.hostPeerId) setRemoteHostPath(path);
     });
-    ctx.transport.onJoinError(({ error, peerId }) => onJoinError(watch, error, peerId));
+    ctx.transport.onJoinError(({ error, peerId }) => {
+        if (!ctx.stopped) onJoinError(watch, error, peerId);
+    });
 
     // Nobody answered in time: the desktop is offline (or the link was reset).
     waitForDesktop(watch);
 
     return {
         settlePendingForLostConnection: () => settlePendingForLostConnection(watch),
+        stopForIncompatibility: (state) => stopForIncompatibility(watch, state),
         reconnect: (peerId) => reconnect(watch, peerId),
     };
 };

@@ -1,0 +1,285 @@
+{
+    "$schema": "https://turbo.build/schema.json",
+    "globalDependencies": ["package.json", "pnpm-lock.yaml", ".nvmrc", ".turbo/build-context.json"],
+    "tasks": {
+        "bundle:renderer-full": {
+            "inputs": [
+                "src/**",
+                "scripts/**",
+                "!scripts/.cache/**",
+                "package.json",
+                "pnpm-lock.yaml",
+                "tailwind.config.*",
+                "postcss.config.*"
+            ],
+            "outputs": ["out/renderer/full/bundles/**"],
+            "env": ["NODE_ENV", "GITHUB_ACTIONS"]
+        },
+        "bundle:renderer-lite": {
+            "inputs": [
+                "src/**",
+                "scripts/**",
+                "!scripts/.cache/**",
+                "package.json",
+                "pnpm-lock.yaml",
+                "tailwind.config.*",
+                "postcss.config.*"
+            ],
+            "outputs": ["out/renderer/lite/bundles/**"],
+            "env": ["NODE_ENV", "GITHUB_ACTIONS"]
+        },
+        "bundle:css": {
+            "inputs": [
+                "src/styles/**",
+                "src/ts/**",
+                "src/html/**",
+                "scripts/build-react.ts",
+                "package.json",
+                "pnpm-lock.yaml",
+                "tailwind.config.*",
+                "postcss.config.*"
+            ],
+            "outputs": ["out/renderer/styles.css"],
+            "env": ["NODE_ENV"]
+        },
+        "assemble:css": { "dependsOn": ["bundle:css"], "cache": false },
+        "assemble:renderer-full": {
+            "dependsOn": ["bundle:renderer-full", "bundle:css", "build:lexicon", "build:notices"],
+            "cache": false
+        },
+        "assemble:renderer-lite": {
+            "dependsOn": ["bundle:renderer-lite", "bundle:css", "build:lexicon", "build:notices"],
+            "cache": false
+        },
+        "assemble:compat-full": {
+            "dependsOn": ["bundle:renderer-full", "bundle:css", "build:lexicon", "build:notices"],
+            "cache": false
+        },
+        "assemble:compat-lite": {
+            "dependsOn": ["bundle:renderer-lite", "bundle:css", "build:lexicon", "build:notices"],
+            "cache": false
+        },
+        "build:main": {
+            "inputs": ["src/**", "scripts/build-main.ts", "scripts/lib/**", "package.json", "pnpm-lock.yaml"],
+            "outputs": ["out/main/**"],
+            "env": ["GITHUB_ACTIONS"]
+        },
+        "build:lexicon": {
+            "inputs": [
+                "scripts/**",
+                "!scripts/.cache/**",
+                "src/ts/core/**",
+                "src/assets/**",
+                "!src/assets/semantic-vectors.json",
+                "package.json",
+                "pnpm-lock.yaml"
+            ],
+            "outputs": ["src/assets/semantic-vectors.json"]
+        },
+        "build:notices": {
+            "inputs": [
+                "scripts/**",
+                "!scripts/.cache/**",
+                "src/ts/core/**",
+                "android/variables.gradle",
+                "NOTICE",
+                "pnpm-lock.yaml",
+                "package.json"
+            ],
+            "outputs": ["src/assets/THIRD_PARTY_NOTICES.txt"]
+        },
+        "prepare:desktop-full": { "dependsOn": ["assemble:renderer-full", "build:main"] },
+        "prepare:desktop-lite": { "dependsOn": ["assemble:renderer-lite", "build:main"] },
+        "prepare:compat-full": { "dependsOn": ["assemble:compat-full"], "cache": false },
+        "prepare:compat-lite": { "dependsOn": ["assemble:compat-lite"], "cache": false },
+        "prepare:compat-main-full": { "dependsOn": ["prepare:compat-full", "build:main"], "cache": false },
+        "prepare:compat-main-lite": { "dependsOn": ["prepare:compat-lite", "build:main"], "cache": false },
+        "package:electron": {
+            "dependsOn": ["prepare:desktop-full", "stage:video-decoder"],
+            "cache": false,
+            "env": ["NODE_ENV", "GITHUB_ACTIONS"],
+            "passThroughEnv": ["GH_TOKEN"]
+        },
+        "package:electron-linux": {
+            "dependsOn": ["prepare:desktop-full", "stage:video-decoder-linux"],
+            "cache": false,
+            "env": ["NODE_ENV", "GITHUB_ACTIONS"],
+            "passThroughEnv": ["GH_TOKEN"]
+        },
+        "package:electron-linux-arm": {
+            "dependsOn": ["prepare:desktop-full", "stage:video-decoder-linux-arm"],
+            "cache": false,
+            "env": ["NODE_ENV", "GITHUB_ACTIONS"],
+            "passThroughEnv": ["GH_TOKEN"]
+        },
+        "package:electron-mac": {
+            "dependsOn": ["prepare:desktop-full", "stage:video-decoder-mac"],
+            "cache": false,
+            "env": ["NODE_ENV", "GITHUB_ACTIONS"],
+            "passThroughEnv": ["GH_TOKEN"]
+        },
+        "package:electron-win": {
+            "dependsOn": ["prepare:desktop-full", "stage:video-decoder-win"],
+            "cache": false,
+            "env": ["NODE_ENV", "GITHUB_ACTIONS"],
+            "passThroughEnv": ["GH_TOKEN"]
+        },
+        "package:electron-linux-lite": {
+            "dependsOn": ["prepare:desktop-lite"],
+            "cache": false,
+            "env": ["NODE_ENV", "GITHUB_ACTIONS"],
+            "passThroughEnv": ["GH_TOKEN"]
+        },
+        "package:electron-linux-arm-lite": {
+            "dependsOn": ["prepare:desktop-lite"],
+            "cache": false,
+            "env": ["NODE_ENV", "GITHUB_ACTIONS"],
+            "passThroughEnv": ["GH_TOKEN"]
+        },
+        "package:electron-mac-lite": {
+            "dependsOn": ["prepare:desktop-lite"],
+            "cache": false,
+            "env": ["NODE_ENV", "GITHUB_ACTIONS"],
+            "passThroughEnv": ["GH_TOKEN"]
+        },
+        "package:electron-win-lite": {
+            "dependsOn": ["prepare:desktop-lite"],
+            "cache": false,
+            "env": ["NODE_ENV", "GITHUB_ACTIONS"],
+            "passThroughEnv": ["GH_TOKEN"]
+        },
+        "package:android-full": {
+            "dependsOn": ["prepare:compat-full"],
+            "cache": false,
+            "passThroughEnv": ["ANDROID_HOME", "ANDROID_SDK_ROOT", "JAVA_HOME"]
+        },
+        "package:android-lite": {
+            "dependsOn": ["prepare:compat-lite"],
+            "cache": false,
+            "passThroughEnv": ["ANDROID_HOME", "ANDROID_SDK_ROOT", "JAVA_HOME"]
+        },
+        "bundle:cli": {
+            "inputs": ["src/**", "scripts/build-cli.ts", "scripts/lib/**", "package.json", "pnpm-lock.yaml"],
+            "outputs": ["out/cli/cli-bundled.js"],
+            "env": ["GITHUB_ACTIONS", "NODE_ENV"]
+        },
+        "prepare:cli-full": { "cache": false },
+        "prepare:cli-lite": { "cache": false },
+        "package:cli-mac": { "dependsOn": ["bundle:cli", "prepare:cli-full"], "cache": false },
+        "package:cli-linux": { "dependsOn": ["bundle:cli", "prepare:cli-full"], "cache": false },
+        "package:cli-linux-arm": { "dependsOn": ["bundle:cli", "prepare:cli-full"], "cache": false },
+        "package:cli-all": { "dependsOn": ["bundle:cli", "prepare:cli-full"], "cache": false },
+        "package:cli-mac-lite": { "dependsOn": ["bundle:cli", "prepare:cli-lite"], "cache": false },
+        "package:cli-linux-lite": { "dependsOn": ["bundle:cli", "prepare:cli-lite"], "cache": false },
+        "package:cli-linux-arm-lite": { "dependsOn": ["bundle:cli", "prepare:cli-lite"], "cache": false },
+        "package:cli-all-lite": { "dependsOn": ["bundle:cli", "prepare:cli-lite"], "cache": false },
+        "validate:lint": {
+            "inputs": [
+                "src/**",
+                "scripts/**",
+                "tests/**",
+                ".oxlintrc.json",
+                "tsconfig.json",
+                "package.json",
+                "!scripts/.cache/**"
+            ],
+            "outputs": []
+        },
+        "validate:typecheck": {
+            "inputs": [
+                "src/**",
+                "scripts/**",
+                "tests/**",
+                "tsconfig.json",
+                "tests/tsconfig.json",
+                "package.json",
+                "pnpm-lock.yaml",
+                "!scripts/.cache/**"
+            ],
+            "outputs": []
+        },
+        "validate:knip": {
+            "inputs": [
+                "src/**",
+                "scripts/**",
+                "tests/**",
+                "knip.json",
+                "package.json",
+                "pnpm-lock.yaml",
+                "!scripts/.cache/**"
+            ],
+            "outputs": []
+        },
+        "validate:test": {
+            "inputs": ["$TURBO_DEFAULT$"],
+            "outputs": []
+        },
+        "validate:coverage": {
+            "inputs": ["$TURBO_DEFAULT$"],
+            "outputs": ["coverage/**"]
+        },
+        "validate:format": {
+            "inputs": ["$TURBO_DEFAULT$"],
+            "outputs": []
+        },
+        "validate:readme": {
+            "inputs": ["$TURBO_DEFAULT$"],
+            "outputs": []
+        },
+        "validate:lexicon": {
+            "dependsOn": ["build:lexicon"],
+            "inputs": ["$TURBO_DEFAULT$"],
+            "outputs": []
+        },
+        "validate:size": {
+            "dependsOn": ["bundle:renderer-full"],
+            "inputs": [".size-baseline.json", "scripts/check-size-delta.ts", "scripts/lib/**"],
+            "outputs": [],
+            "env": ["NODE_ENV", "SIZE_DELTA_KB"]
+        },
+        "verify:lexicon-generated": { "cache": false },
+        "verify:notices-generated": { "cache": false },
+        "build:site:html": { "dependsOn": ["prepare:compat-lite"], "cache": false, "passThroughEnv": ["GITHUB_TOKEN"] },
+        "build:site:css": {
+            "dependsOn": ["build:site:html"],
+            "inputs": ["scripts/site/**", "package.json", "pnpm-lock.yaml"],
+            "outputs": ["dist-site/styles.css"],
+            "cache": false
+        },
+        "site:build": { "dependsOn": ["build:site:css"], "cache": false, "passThroughEnv": ["GITHUB_TOKEN"] },
+        "serve:web": {
+            "dependsOn": ["prepare:compat-full", "prepare:video-decoder"],
+            "cache": false,
+            "persistent": true
+        },
+        "prepare:video-decoder": { "cache": false },
+        "stage:video-decoder": { "cache": false },
+        "stage:video-decoder-linux": { "cache": false },
+        "stage:video-decoder-linux-arm": { "cache": false },
+        "stage:video-decoder-mac": { "cache": false },
+        "stage:video-decoder-win": { "cache": false },
+        "start:electron": {
+            "dependsOn": ["prepare:compat-main-full", "prepare:video-decoder"],
+            "cache": false,
+            "passThroughEnv": ["WAYLAND_DISPLAY"]
+        },
+        "dev:prepare": { "dependsOn": ["prepare:compat-full", "build:main", "prepare:video-decoder"], "cache": false },
+        "dev:css": { "dependsOn": ["dev:prepare"], "cache": false, "persistent": true },
+        "dev:react": { "dependsOn": ["dev:prepare"], "cache": false, "persistent": true },
+        "dev:main": { "dependsOn": ["dev:prepare"], "cache": false, "persistent": true },
+        "dev:electron": {
+            "dependsOn": ["dev:prepare"],
+            "cache": false,
+            "persistent": true,
+            "passThroughEnv": ["WAYLAND_DISPLAY"],
+            "with": ["dev:css", "dev:react", "dev:main"]
+        },
+        "dev:no-watch:electron": {
+            "dependsOn": ["dev:prepare"],
+            "cache": false,
+            "persistent": true,
+            "passThroughEnv": ["WAYLAND_DISPLAY"],
+            "with": ["dev:css"]
+        }
+    }
+}

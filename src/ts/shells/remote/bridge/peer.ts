@@ -45,11 +45,9 @@ export { LOCAL_CHANNELS };
 /**
  * Installs the bridge: marks the platform kind (synchronously, before anything mounts),
  * generates the window.api surface, and drives the connection state machine (the state lives
- * in core/remote/connectionState.ts, where the page's React reads it). `loaderTarget` is the
- * absolute loader address the page resolved from its own location — the one place a link version
- * mismatch sends the tab to.
+ * in core/remote/connectionState.ts, where the page's React reads it).
  */
-const installPeerBridge = (transport: RemoteTransport, loaderTarget: string): void => {
+const installPeerBridge = (transport: RemoteTransport): void => {
     markPlatformKind('remote');
 
     const ctx = createPeerBridgeContext(transport);
@@ -69,11 +67,23 @@ const installPeerBridge = (transport: RemoteTransport, loaderTarget: string): vo
     // One view-prefs store per install: the routed window.api calls, the desktop's settings-changed
     // events and the local events a phone write dispatches must reach the same instance.
     const viewPrefs = createViewPrefs({ ctx, sendInvoke: pipeline.sendInvoke });
-    const { settlePendingForLostConnection, reconnect } = watchConnection({ ctx, hello, pipeline });
-    watchPeerMessages({ ctx, hello, pipeline, viewPrefs, settlePendingForLostConnection, reconnect, loaderTarget });
+    const { settlePendingForLostConnection, stopForIncompatibility, reconnect } = watchConnection({
+        ctx,
+        hello,
+        pipeline,
+    });
+    watchPeerMessages({
+        ctx,
+        hello,
+        pipeline,
+        viewPrefs,
+        settlePendingForLostConnection,
+        stopForIncompatibility,
+        reconnect,
+    });
     // The desktop may have forgotten this phone while the page was frozen in the back/forward cache: one hello.
     watchPageLifecycle(transport, () => {
-        if (ctx.hostPeerId !== null) hello.announceOnce(ctx.hostPeerId);
+        if (!ctx.stopped && ctx.hostPeerId !== null) hello.announceOnce(ctx.hostPeerId);
     });
     installApiSurface(ctx, pipeline.sendInvoke, viewPrefs);
 };

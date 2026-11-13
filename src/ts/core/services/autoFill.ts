@@ -24,7 +24,7 @@
  * Facade — the only module callers import. It re-exports the public surface of
  * the internal ./autoFill/* modules:
  *
- *   staggeredFill.ts   maybeAutoFillChallenge (cycle-driven, schedule-based)
+ *   staggeredFill.ts   maybeAutoFillChallenge (cycle-driven, schedule-based), resolveAutoSubmitDue, createFinalEligibility
  *   emergencyFill.ts   maybeEmergencyFillChallenge + its shared stand-down check
  *   manualFill.ts      fillChallengeNow (GUI "Fill Now"), submitPickedPhotos (GUI "Pick…")
  *   fillNew.ts         submitNewEntryForAction (boost/turbo "fill new"), submitPinnedEntry (the Boost-pinned submit)
@@ -37,7 +37,7 @@
  *   schedule.ts        schedule-row validation and threshold math
  */
 
-import { maybeAutoFillChallenge } from './autoFill/staggeredFill';
+import { maybeAutoFillChallenge, resolveAutoSubmitDue, createFinalEligibility } from './autoFill/staggeredFill';
 import { evaluateEmergencyFill, maybeEmergencyFillChallenge } from './autoFill/emergencyFill';
 import { fillChallengeNow, submitPickedPhotos } from './autoFill/manualFill';
 import { submitNewEntryForAction, submitPinnedEntry } from './autoFill/fillNew';
@@ -52,6 +52,9 @@ import { resolveScheduleTarget, getNextScheduleThresholdSec } from './autoFill/s
 
 export {
     maybeAutoFillChallenge,
+    // The Auto-Submit gate and final check, shared with the Boost-pinned submit run at Auto-Submit time.
+    resolveAutoSubmitDue,
+    createFinalEligibility,
     maybeEmergencyFillChallenge,
     fillChallengeNow,
     submitPickedPhotos,

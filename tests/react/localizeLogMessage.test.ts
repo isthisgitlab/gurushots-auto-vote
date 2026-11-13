@@ -84,6 +84,28 @@ describe('Latvian log messages', () => {
         expect(localizeLogMessage('ℹ️ Joining a challenge via the app')).not.toContain('Darbojas');
     });
 
+    test('translates the Boost-pinned submit lines of Auto-Submit', () => {
+        const tag = '[Challenge 42: Sunset]';
+        const lvTag = '[Izaicinājums 42: Sunset]';
+        expect(localizeLogMessage(`✅ autoSubmit: submitted the photo pinned for Boost (pin1) for ${tag}`)).toBe(
+            `✅ Automātiskā iesniegšana: Boost piesprausto foto (pin1) iesniedza izaicinājumā ${lvTag}`,
+        );
+        expect(
+            localizeLogMessage(
+                `ℹ️ autoSubmit: keeping the last free slot of ${tag} for the photo pinned for Boost (pin1)`,
+            ),
+        ).toBe(
+            `ℹ️ Automātiskā iesniegšana: pēdējo brīvo vietu izaicinājumā ${lvTag} patur Boost piespraustajam foto (pin1)`,
+        );
+        expect(
+            localizeLogMessage(
+                `ℹ️ autoSubmit: the photo pinned for Boost (pin1) may already be in ${tag}; Auto-Submit submits no other photo this cycle`,
+            ),
+        ).toBe(
+            `ℹ️ Automātiskā iesniegšana: Boost piespraustais foto (pin1) izaicinājumā ${lvTag} var jau būt iesniegts; automātiskā iesniegšana šajā ciklā neiesniedz citu foto`,
+        );
+    });
+
     test('translates the Manual Only lines', () => {
         const tag = '[Challenge 42: Sunset]';
         expect(localizeLogMessage(`ℹ️ ${tag} Manual Only is on — nothing runs automatically`)).toBe(

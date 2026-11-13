@@ -225,6 +225,7 @@ export const logMessages = {
     m4c4e7b390448: 'Token saved for {0} mode',
     m4c57716eb494: 'Vote images count: {0}',
     m4c650903d803: 'Remote invoke: {0}',
+    m4c7e1b92d0a3: 'autoSubmit: submitted the photo pinned for Boost ({0}) for {1}',
     m4d34df58adb5: 'Token provided: {0}',
     m4da881dd3712: '⏰ Approaching automatic {0} rule for "{1}" — next cycle in {2}s',
     m4db442090e9c: 'Setting {0} does not support per-challenge overrides',
@@ -320,6 +321,8 @@ export const logMessages = {
     m6c5636455c2d: 'Applied profile "{0}" to challenge {1}',
     m6c65118e63fa: '{0} boost fill-new unavailable ({1}); boosting existing entry',
     m6c805ef29084: 'Title profile conflicts with manual overrides for "{0}"',
+    m6d2b8e4f1a07:
+        'autoSubmit: the photo pinned for Boost ({0}) may already be in {1}; Auto-Submit submits no other photo this cycle',
     m6db86e0c6306: 'Press Ctrl+C to stop',
     m6de905385e30: 'Voting process completed successfully',
     m6e1f23ece4fd: "Error resetting setting '{0}'",
@@ -459,6 +462,7 @@ export const logMessages = {
     m9a274bb9e06b: '🌐 Using REAL API strategy for production',
     m9a2f47c1b8e3:
         '{0} auto swap: no swap history from GuruShots — counting auto-swaps locally; manual and scenario swaps are not counted',
+    m9a3f60c5e7d1: 'autoSubmit: keeping the last free slot of {0} for the photo pinned for Boost ({1})',
     m9af18ab83ac0: 'Applying boost to challenge {0}',
     m9af941258be6: 'joining up to {0} challenge(s) early for the active missions',
     m9b901c6d995c: '⏰ Approaching a scenario step for "{0}" (phase {1}) — next cycle in {2}s',

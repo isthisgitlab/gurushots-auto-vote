@@ -26,16 +26,16 @@ The desktop app is built on Electron. Electron's license (MIT) and the license l
 Chromium components it contains ship with the app as LICENSE.electron.txt and
 LICENSES.chromium.html in its resources directory.
 
-3. npm packages (129)
+3. npm packages (130)
 ---------------------
 
 Shipped in the desktop app, the CLI binaries and the Android app, or compiled into their bundles.
 
-@capacitor/android 8.6.0
+@capacitor/android 8.6.2
   License: MIT
   Copyright (c) 2017-present Drifty Co.
 
-@capacitor/core 8.6.0
+@capacitor/core 8.6.2
   License: MIT
   Copyright (c) 2017-present Drifty Co.
 
@@ -51,7 +51,7 @@ Shipped in the desktop app, the CLI binaries and the Android app, or compiled in
   License: MIT
   Copyright (c) 2021-present Toyobayashi
 
-@huggingface/jinja 0.5.11
+@huggingface/jinja 0.5.13
   License: MIT
   Copyright (c) 2023 Hugging Face
 
@@ -258,11 +258,11 @@ Shipped in the desktop app, the CLI binaries and the Android app, or compiled in
   License: BSD-3-Clause
   Copyright (c) 2016, Daniel Wirtz
 
-@trystero-p2p/core 0.26.0
+@trystero-p2p/core 0.27.0
   License: MIT
   Copyright (c) 2021 Dan Motzenbecker
 
-@trystero-p2p/nostr 0.26.0
+@trystero-p2p/nostr 0.27.0
   License: MIT
   Copyright (c) 2021 Dan Motzenbecker
 
@@ -306,7 +306,7 @@ combined-stream 1.0.8
   License: MIT
   Copyright (c) 2011 Debuggable Limited <felix@debuggable.com>
 
-daisyui 5.7.50
+daisyui 5.8.0
   License: MIT
   Copyright (c) 2020 Pouya Saadeghi
 
@@ -399,13 +399,17 @@ gopd 1.2.0
   License: MIT
   Copyright (c) 2022 Jordan Harband
 
-graceful-fs 4.2.11
+graceful-fs 4.2.12
   License: ISC
   Copyright (c) 2011-2022 Isaac Z. Schlueter, Ben Noordhuis, and Contributors
 
 guid-typescript 1.0.9
   License: ISC
   Copyright nicolas (https://github.com/NicolasDeveloper/guid-typescript)
+
+has-flag 4.0.0
+  License: MIT
+  Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)
 
 has-property-descriptors 1.0.2
   License: MIT
@@ -544,7 +548,7 @@ sharp 0.35.5
   License: Apache-2.0
   Copyright Lovell Fuller
 
-supports-color 10.2.2
+supports-color 8.1.1
   License: MIT
   Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)
 
@@ -552,7 +556,7 @@ tailwindcss 4.3.5
   License: MIT
   Copyright (c) Tailwind Labs, Inc.
 
-tar 7.5.22
+tar 7.5.23
   License: BlueOak-1.0.0
   Copyright Isaac Z. Schlueter
 
@@ -560,7 +564,7 @@ tiny-typed-emitter 2.1.0
   License: MIT
   Copyright (c) 2020 Zurab Benashvili (binier) <zura.bena@gmail.com>
 
-trystero 0.26.0
+trystero 0.27.0
   License: MIT
   Copyright (c) 2021 Dan Motzenbecker
 

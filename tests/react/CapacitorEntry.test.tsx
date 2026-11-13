@@ -85,7 +85,7 @@ describe('Capacitor entry', () => {
         clears?: boolean;
         /** A value the mocked clear helper rejects with (the settings refusing the write). */
         clearRejection?: unknown;
-        /** The pairing key the Android remote mode has stored: the entry hands the WebView to the remote loader. */
+        /** The pairing key the Android remote mode has stored: the entry hands the WebView to the current remote page. */
         remoteKey?: string | null;
     } = {}) => {
         // With deferHydrations the eight store hydrations stay pending until a test calls the resolver they leave here.
@@ -104,7 +104,7 @@ describe('Capacitor entry', () => {
             installBridge: jest.fn(),
             readStoredPairingKey: jest.fn((): Promise<string | null> => Promise.resolve(remoteKey)),
             installRemoteModeEntry: jest.fn(),
-            loadBundledRemoteLoader: jest.fn(),
+            loadBundledRemotePage: jest.fn(),
             seedBridgeProfiles: jest.fn(),
             subscribe: jest.fn((event: string, cb: () => void): void => {
                 m.subscribers[event] = cb;
@@ -222,7 +222,7 @@ describe('Capacitor entry', () => {
             jest.doMock(`${SRC}/shells/capacitor/remoteMode`, () => ({
                 readStoredPairingKey: m.readStoredPairingKey,
                 installRemoteModeEntry: m.installRemoteModeEntry,
-                loadBundledRemoteLoader: m.loadBundledRemoteLoader,
+                loadBundledRemotePage: m.loadBundledRemotePage,
             }));
             jest.doMock(`${SRC}/shells/capacitor/bridge/capacitorBackgroundHost`, () => ({
                 capacitorBackgroundHost: m.backgroundHost,
@@ -289,17 +289,17 @@ describe('Capacitor entry', () => {
         expect(m.mountLogin).not.toHaveBeenCalled();
         // Stale DOM from a previous tree is cleared before mounting.
         expect(root.childNodes).toHaveLength(0);
-        // No remote key: the normal mode got the paste entry and nothing was handed to the remote loader.
+        // No remote key: the normal mode got the paste entry and nothing was handed to the remote page.
         expect(m.installRemoteModeEntry).toHaveBeenCalledTimes(1);
-        expect(m.loadBundledRemoteLoader).not.toHaveBeenCalled();
+        expect(m.loadBundledRemotePage).not.toHaveBeenCalled();
     });
 
-    test('a stored remote-mode key hands the WebView to the bundled remote loader before anything else runs', async () => {
+    test('a stored remote-mode key hands the WebView to the bundled current remote page before anything else runs', async () => {
         addRoot('stale');
         const m = load({ remoteKey: 'k'.repeat(43) });
         await flush();
 
-        expect(m.loadBundledRemoteLoader).toHaveBeenCalledWith('k'.repeat(43));
+        expect(m.loadBundledRemotePage).toHaveBeenCalledWith('k'.repeat(43));
         // Nothing of the normal app starts: no bridge, no store hydration, no token clear, no mount
         // (the AutovoteProvider lives under mountApp, so it never mounts in remote mode).
         expect(m.installBridge).not.toHaveBeenCalled();
@@ -315,7 +315,7 @@ describe('Capacitor entry', () => {
         const m = load({ native: false, remoteKey: 'k'.repeat(43) });
         await flush();
         expect(m.readStoredPairingKey).not.toHaveBeenCalled();
-        expect(m.loadBundledRemoteLoader).not.toHaveBeenCalled();
+        expect(m.loadBundledRemotePage).not.toHaveBeenCalled();
         expect(m.installRemoteModeEntry).not.toHaveBeenCalled();
     });
 

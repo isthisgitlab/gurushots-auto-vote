@@ -14,6 +14,7 @@ import { ensureVisionModel } from './fetch-vision-model';
 import { NODE_LICENSE_VERSION } from './build-notices';
 import { digestVisionRuntime } from '../src/ts/shells/cli/visionCliAssets';
 import { prepareVideoDecoder } from './build-video-decoder';
+import { CLI_DIR, ROOT } from './lib/build-paths';
 
 const { version } = packageJson;
 
@@ -48,8 +49,7 @@ const platforms: CliPlatform[] = [
     { input: 'gurucli-linux-arm', output: `gurucli-v${version}-linux-arm`, plat: 'linux', arch: 'arm64' },
 ];
 
-const ROOT = path.join(__dirname, '..');
-const DIST_DIR = path.join(ROOT, 'dist');
+const DIST_DIR = CLI_DIR;
 const BUILD_DIR = path.join(ROOT, 'build', 'cli');
 const NODE_CACHE_DIR = path.join(ROOT, '.cache', 'node-binaries');
 const NODE_EXTRACT_DIR = path.join(ROOT, '.cache', 'node-extract');
@@ -66,7 +66,7 @@ async function bundleCli() {
         platform: 'node',
         target: 'node26',
         format: 'cjs',
-        outfile: path.join(DIST_DIR, 'cli-bundled.js'),
+        outfile: path.join(CLI_DIR, 'cli-bundled.js'),
         external: ['electron', '@huggingface/transformers'],
         minify: false,
         sourcemap: false,
@@ -326,45 +326,64 @@ async function buildPlatform({ output, plat, arch }: CliPlatform, seaBlobPath: s
     console.log(`✅ Built ${output}`);
 }
 
+type BuildStage = 'bundle' | 'prepare' | 'package';
+
+const stageFromArgs = (args: string[]): BuildStage | null => {
+    const value = args.find((arg) => arg.startsWith('--stage='))?.slice('--stage='.length);
+    if (value === undefined) return null;
+    if (value === 'bundle' || value === 'prepare' || value === 'package') return value;
+    throw new Error(`Unknown CLI build stage: ${value}`);
+};
+
+const prepareCliRuntime = async (lite: boolean): Promise<void> => {
+    if (!lite) {
+        await prepareVisionRuntime();
+        await prepareVideoDecoderRuntime();
+    }
+};
+
+const assertNodeLicense = (): void => {
+    if (TARGET_NODE_VERSION !== NODE_LICENSE_VERSION) {
+        throw new Error(
+            `The CLI would embed Node.js ${TARGET_NODE_VERSION}, but the third-party notices carry the LICENSE of ` +
+                `Node.js ${NODE_LICENSE_VERSION}: build with Node.js ${NODE_LICENSE_VERSION}, or vendor the LICENSE ` +
+                `of ${TARGET_NODE_VERSION} and update NODE_LICENSE_VERSION in scripts/build-notices.ts, then run pnpm build:notices.`,
+        );
+    }
+};
+
+const packageCli = async (args: string[], lite: boolean): Promise<void> => {
+    assertNodeLicense();
+    const platformArg = args.find((arg) => !arg.startsWith('--'));
+    const targets = platformArg ? platforms.filter((p) => p.input === platformArg) : platforms;
+    if (platformArg && targets.length === 0) throw new Error(`Unknown platform: ${platformArg}`);
+    const hostNode = await getOfficialNodeBinary(process.platform, process.arch);
+    const seaBlobPath = generateSeaBlob(hostNode, { lite });
+    const versionTag = isLocalBuild() ? `v${version}-dirty` : `v${version}`;
+    for (const target of targets) {
+        const output = `${target.output.replace(`v${version}`, versionTag)}${lite ? '-lite' : ''}`;
+        await buildPlatform({ ...target, output }, seaBlobPath);
+    }
+};
+
 async function main() {
     const args = process.argv.slice(2);
-    // --lite leaves the local vision model and its runtime out of the binary;
-    // services/visionVerifier.ts then skips the visual check.
     const lite = args.includes('--lite');
-    const platformArg = args.find((arg) => !arg.startsWith('--'));
+    const stage = stageFromArgs(args);
 
     ensureDir(DIST_DIR);
     ensureDir(BUILD_DIR);
 
     try {
-        // The binary embeds this Node, and the third-party notices carry the LICENSE of NODE_LICENSE_VERSION.
-        if (TARGET_NODE_VERSION !== NODE_LICENSE_VERSION) {
-            throw new Error(
-                `The CLI would embed Node.js ${TARGET_NODE_VERSION}, but the third-party notices carry the LICENSE of ` +
-                    `Node.js ${NODE_LICENSE_VERSION}: build with Node.js ${NODE_LICENSE_VERSION}, or vendor the LICENSE ` +
-                    `of ${TARGET_NODE_VERSION} and update NODE_LICENSE_VERSION in scripts/build-notices.ts, then run pnpm build:notices.`,
-            );
+        if (stage === 'bundle') await bundleCli();
+        else if (stage === 'prepare') await prepareCliRuntime(lite);
+        else if (stage === 'package') await packageCli(args, lite);
+        else {
+            assertNodeLicense();
+            await bundleCli();
+            await prepareCliRuntime(lite);
+            await packageCli(args, lite);
         }
-        const targets = platformArg ? platforms.filter((p) => p.input === platformArg) : platforms;
-        if (platformArg && targets.length === 0) throw new Error(`Unknown platform: ${platformArg}`);
-        await bundleCli();
-        if (!lite) {
-            await prepareVisionRuntime();
-            await prepareVideoDecoderRuntime();
-        }
-        // Homebrew's Node can disable SEA; the official binary is also the
-        // injection target, so generate the blob with that exact build.
-        const hostNode = await getOfficialNodeBinary(process.platform, process.arch);
-        const seaBlobPath = generateSeaBlob(hostNode, { lite });
-
-        // A local build names its binaries "-dirty" too, like the desktop installers (scripts/electron-builder.ts);
-        // a release build keeps the platform table's names.
-        const versionTag = isLocalBuild() ? `v${version}-dirty` : `v${version}`;
-        for (const t of targets) {
-            const output = `${t.output.replace(`v${version}`, versionTag)}${lite ? '-lite' : ''}`;
-            await buildPlatform({ ...t, output }, seaBlobPath);
-        }
-
         console.log('🎉 CLI build completed');
     } catch (error) {
         console.error('❌ Build failed:', error);
@@ -384,5 +403,9 @@ export {
     generateSeaBlob,
     getOfficialNodeBinary,
     buildPlatform,
+    stageFromArgs,
+    assertNodeLicense,
+    prepareCliRuntime,
+    packageCli,
     main,
 };

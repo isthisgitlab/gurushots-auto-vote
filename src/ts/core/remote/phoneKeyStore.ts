@@ -6,12 +6,14 @@
  * this code. Dependency-free apart from the key's shape.
  */
 
-import { ANDROID_PAIRING_KEY_PREF, isPairingKey } from './pairingKey';
+import { ANDROID_PAIRING_KEY_PREF } from './pairingKey';
 
 import type { CapacitorGlobals } from '../types/capacitor';
 
-/** What reading the stored key came to: the key, none stored, or a stored value that is not a key. */
+/** What reading the stored key came to: the current key, none stored, or an invalid stored value. */
 export type StoredKey = { kind: 'key'; key: string } | { kind: 'none' } | { kind: 'invalid' };
+
+const STORED_KEY_PATTERN = /^2:([A-Za-z0-9_-]{43})$/;
 
 const nativeCall = (method: 'get' | 'set' | 'remove', options: object): Promise<unknown> => {
     const call = (globalThis as CapacitorGlobals).Capacitor?.nativePromise;
@@ -30,12 +32,14 @@ export const readStoredKey = async (): Promise<StoredKey> => {
     const answer = await nativeCall('get', { key: ANDROID_PAIRING_KEY_PREF });
     const value = (answer as { value?: unknown } | null)?.value;
     if (value === undefined || value === null) return { kind: 'none' };
-    return typeof value === 'string' && isPairingKey(value) ? { kind: 'key', key: value } : { kind: 'invalid' };
+    if (typeof value !== 'string') return { kind: 'invalid' };
+    const key = STORED_KEY_PATTERN.exec(value)?.[1];
+    return key === undefined ? { kind: 'invalid' } : { kind: 'key', key };
 };
 
-/** Stores the pairing key; rejects when the write fails. */
+/** Stores the canonical current pairing key; rejects when the write fails. */
 export const storeKey = async (key: string): Promise<void> => {
-    await nativeCall('set', { key: ANDROID_PAIRING_KEY_PREF, value: key });
+    await nativeCall('set', { key: ANDROID_PAIRING_KEY_PREF, value: `2:${key}` });
 };
 
 /** Clears the stored pairing key; rejects when that fails. */

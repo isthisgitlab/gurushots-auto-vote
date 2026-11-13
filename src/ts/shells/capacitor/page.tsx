@@ -29,7 +29,7 @@ import { flushLocalStores, initializeLocalStores } from './localStores';
 import { withCategory } from '../../core/logger';
 import { clearTokenUnlessStayingLoggedIn } from '../../core/services/auth';
 import { getStatus } from './NativeAutovoteBridge';
-import { installRemoteModeEntry, loadBundledRemoteLoader, readStoredPairingKey } from './remoteMode';
+import { installRemoteModeEntry, loadBundledRemotePage, readStoredPairingKey } from './remoteMode';
 import { mountForToken } from '../../react/pages/mountForToken';
 
 // Mount Login or App based on whether we have a token. App gets the real
@@ -97,9 +97,9 @@ const bootstrap = async () => {
         // Remote mode is decided before anything of the normal app runs: a stored
         // pairing key hands this WebView to the bundled remote page, and this
         // document mounts nothing (AutovoteProvider never mounts in remote mode).
-        const remoteKey = await readStoredPairingKey();
-        if (remoteKey !== null) {
-            loadBundledRemoteLoader(remoteKey);
+        const remoteTarget = await readStoredPairingKey();
+        if (remoteTarget !== null) {
+            loadBundledRemotePage(remoteTarget);
             return;
         }
         installBridge();

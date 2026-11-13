@@ -18,9 +18,9 @@ export const handleMessage = (ctx: HostContext, peerId: string, raw: unknown): v
     if (message === null) return;
     switch (message.t) {
         case 'hello': {
-            if (message.role === 'loader' || message.linkVersion !== LINK_VERSION) {
-                // The loader only asks the version, and a phone of another link version is told,
-                // not served: neither gets a snapshot, a peer slot, a count or a desktop notice. The app version is not compared: the link version is the contract.
+            if (message.linkVersion !== LINK_VERSION) {
+                // A phone of another link version is told, not served: it gets no snapshot, peer
+                // slot, count, or desktop notice. The app version is not compared: the link version is the contract.
                 void sendHostHello(ctx, peerId);
                 return;
             }

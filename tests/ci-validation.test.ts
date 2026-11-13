@@ -166,7 +166,8 @@ describe('sends toward the Logs window', () => {
         expect(fs.existsSync(path.join(root, '.eslintignore'))).toBe(false);
         const manifest: unknown = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
         const scripts = isPlainObject(manifest) && isPlainObject(manifest.scripts) ? manifest.scripts : {};
-        expect(scripts.lint).toBe('oxlint src scripts tests');
+        expect(scripts.lint).toBe('pnpm run turbo run validate:lint');
+        expect(scripts['validate:lint']).toBe('oxlint src scripts tests');
     });
 
     // Oxlint ignores src/ts/core/types, so nothing there may run: every top-level statement is a type declaration.
@@ -258,7 +259,7 @@ describe('sends toward the Logs window', () => {
         ],
         [
             'src/ts/core/remote/trystero.ts',
-            'const { send: sendRaw } = room.makeAction<JsonValue>(TRYSTERO_ACTION_NAMESPACE, {',
+            'send: (message, target) => action.send(message as JsonValue, target === undefined ? {} : { target }),',
         ],
         ['src/ts/react/api/remoteHostPeers.ts', 'await transport.send(message, peerId);'],
         [

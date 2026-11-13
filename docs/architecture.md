@@ -977,9 +977,8 @@ repeated six times is one that gets forgotten at one of them.
   `connect-src 'self'`: the renderer makes no fetch/XHR to a remote host (all network calls run in the
   main process). `app.html` — the main window, where the remote-access host runs — adds the pinned Nostr
   relay hosts (`wss://nos.lol`, `wss://relay.primal.net`, `wss://nostr.mom`,
-  `wss://nostr.oxtr.dev`) to `connect-src`, and the remote documents (`remote.html`, `remote-loader.html`) carry a strict
-  policy whose `connect-src` is exactly those relays plus `'self'` (the loader's `HEAD` probe for the version's
-  page); a test pins both lists to the shared constant
+  `wss://nostr.oxtr.dev`) to `connect-src`, and the remote documents carry a strict policy whose `connect-src` is
+  exactly those relays plus `'self'`; a test pins both lists to the shared constant
   (`core/remote/relays.ts`). The Android pages (the Capacitor page and `headless.html`) run network code in the WebView,
   so their `connect-src` also allows `https://api.github.com` and the photo CDN, and their `script-src`
   adds `'wasm-unsafe-eval'` for the vision runtime.
@@ -987,7 +986,7 @@ repeated six times is one that gets forgotten at one of them.
 ### Remote access (the pairing surface)
 
 When Remote access is on (off by default), the desktop main window's renderer joins a WebRTC room signalled
-over the public Nostr relays through Trystero (exact-pinned at 0.26.0; the one adapter is `core/remote/trystero.ts`),
+over the public Nostr relays through Trystero (exact-pinned at 0.27.0; the one adapter is `core/remote/trystero.ts`),
 with the pairing key as the room's AES-GCM password and the room id derived as SHA-256 of it, so the key itself
 never appears in relay traffic. A paired phone drives the desktop through one explicit allowlist
 (`core/remote/allowlist.ts`): every manifest channel is classified as allowed, refused with a pinned reason, or
@@ -1007,9 +1006,7 @@ served while at least one phone wants it.
   carries the same messages then. The versioned page's badge shows "try Wi-Fi" only when neither path reaches the
   desktop: trystero reports the SDP failure after about 23 s and the hybrid transport holds it back 12 s more
   while the relays may still reach the peer, so the text appears after about 35 s (and "your browser is too old"
-  instead when the browser has no `CompressionStream`, so only the direct path exists). The loader gives up after
-  15 s with the offline-or-reset text, or, in such a browser, "too old"; the loader's own "try Wi-Fi" is reached
-  only when the failure is reported inside those 15 s.
+  instead when the browser has no `CompressionStream`, so only the direct path exists).
 - **The relay fallback** (`core/remote/relayLink.ts` and its siblings, behind `core/remote/hybridTransport.ts`).
   When WebRTC cannot connect, the same protocol messages travel as Nostr ephemeral events on a topic of their own
   (SHA-256 of the app id, `relay` and the room id), over WebSockets the link opens itself
@@ -1232,52 +1229,21 @@ served while at least one phone wants it.
   elsewhere. Mitigation: Pages publishes only after a green release (`workflow_dispatch` from `build.yml`), the
   site builds are reproducible from the repo, and the Android remote mode loads the bundled page, not
   the Pages copy. Copies of the link stay in the clipboard after Copy link, in bookmarks and the Home Screen icon,
-  in the tab's session storage, in the browser's history (which a browser may sync to its account) and in the QR
-  scanner's history — that is the same permanence the key's design accepts.
+  in the browser's history (which a browser may sync to its account) and in the QR scanner's history — that is the
+  same permanence the key's design accepts.
 - **Log lines relayed to a paired phone can hold local paths.** A phone that opens its log view receives the
   desktop's log entries as they are written, and an entry can name a local path that contains the OS username.
   That is within what the link's holder may see; the pairing key itself, the link and invoke arguments are never
   logged. The host writes its own activity at INFO (peer connect, leave and refusal, each invoke's channel name,
   each auto-vote command), so it shows in a packaged build's log files.
-- **The phone page is versioned by link version, not by app version.** `LINK_VERSION` (`core/remote/protocol.ts`) names
-  the phone ⇄ desktop contract, like a versioned API: the page is published as `/remote/v<N>/`, and one page serves every
-  desktop that speaks link version N, whatever app version either side runs. A new number (v2, v3…) is made only when a
-  change breaks v1. The `hello` carries `linkVersion` (an integer from 1 to 999; a `hello` without a valid one is
-  dropped); `protocolVersion` stays on the wire, frozen at 1, because link-version-1 parsers require it, and is not
-  compared. The desktop serves a phone whose `linkVersion` equals its own and tells any other phone its `hello` without a
-  snapshot; the phone page accepts a desktop whose `linkVersion` equals its own and sends the tab to the loader
-  otherwise. The app version is announced for the logs only. A 1.15.0 desktop or APK sends no `linkVersion`, so its
-  `hello` is dropped: paired with a current loader or desktop it times out and the phone shows the "offline" notice.
-- **The loader and the versioned page keep the saved link stable.** The versioned page replaces the address bar with
-  the stable loader address (`../#k=<key>`, same origin) through `history.replaceState`, so a bookmark or Home Screen
-  icon saved from it survives the next desktop update and the next link version; a versioned page that hears a
-  `hello` with another link version sends the tab to the loader (`location.replace`) instead of showing a
-  notice. The loader routes a `hello` with `linkVersion: N` to `./v<N>/index.html` (built from the checked number, so
-  nothing a peer sends names another place on the site). A page the site does not publish shows `unpublished` in a browser
-  and `update-this` in the Android app when the desktop's link version is newer than the loader's, and `update` for an
-  older desktop. Results, events and a leave count only from the peer that said `hello` as the desktop; a
-  fellow phone's leave or failed connection never ends a working session.
-- **The loader goes straight to the kept link version.** The phone keeps the link version it last reached in
-  `localStorage` under `gs-remote-link-version` (`core/remote/linkVersion.ts`), as `<fingerprint>:<N>`, where `N`
-  matches `^[1-9]\d{0,2}$` (so `01` and `1e0` are rejected on read).
-  The fingerprint is the first 16 hex digits of the SHA-256 of the pairing room's id (itself the SHA-256 of the key),
-  so a value kept for another pairing is not trusted, and the store never holds the pairing key. The fingerprint is a stable 64-bit id of the pairing, and the value sits in the `localStorage` of
-  `isthisgitlab.github.io`, which every page on that origin can read: another site there learns the id, and cannot get the
-  key or the room id from it (it is a truncated hash of a hash). It is written only from
-  a `hello` with `host: true`, by three writers: the loader when it reads the
-  link version, a versioned page that accepts the desktop, and a versioned page that hears another link version (it keeps
-  that one before it sends the tab to the loader). On load the loader goes to that
-  link version's page **only when** the value passes the `N` rule and carries the current key's fingerprint, the same
-  published check the loader uses after a
-  `hello` passes (one `HEAD` request for the page file, no transport; inside the Android app it asks the app's local
-  server) except when the request cannot run at all: then a return visit does not skip, while the check after a `hello`
-  goes on to the page, and this tab has not already gone straight to that version: before it navigates, the loader writes a
-  `sessionStorage` mark, "skipped to N" (the same `"<N>"` form the stored value has, so the two compare like with like). Otherwise it clears the stored value and runs the whole flow, with its
-  `update`, `unpublished` and `update-this` notices. The mark is the loop guard: a page that keeps nothing on a mismatch
-  (a v1 page whose write the browser refused) sends the tab back with the stored value unchanged, the loader finds its own mark and
-  runs the whole flow, and the worst case is one extra connect; a page that accepts the desktop clears the mark, so a
-  reload of the loader in that tab goes straight on again. **Disconnect** (Navbar and the loader's notice
-  screens) clears the stored link version as it clears the key. In a plain browser there is no Disconnect, so the stored link version stays until a different pairing key is used or the site data is cleared.
+- **The phone page is current link version 2, not an app-version archive.** `LINK_VERSION`
+  (`core/remote/protocol.ts`) is 2 and names the phone ⇄ desktop contract. Desktop links are
+  `/remote/v2/index.html#k=<key>`. The root `/remote/` page validates its fragment and launches that current page;
+  it does not open a transport or select another version. The v2 page validates its own fragment before creating a
+  transport. A non-current desktop stops the attempted session and shows the existing update notice in place.
+  `PROTOCOL_VERSION` remains 1 on the wire. Current-v2 release artifact packaging is separate from site publication.
+  Site publication contains only the locally built current v2 page, current root launcher, styles, and notices; it
+  never selects or unpacks released archives or emits v1 output.
 - **The phone's view preferences are kept in the page origin's `localStorage`.** The `gs-remote-view-prefs` key holds
   only display values — theme, language, the compact flags and the challenge ids they name — on the device itself, as
   the one exception to `config.json` being the only stored settings file. Other pages on the site's origin can read and
@@ -1288,45 +1254,28 @@ served while at least one phone wants it.
   renderer makes). The phone ignores a state with the same `hostRun` and a lower `n` than one it applied, so a state
   still draining on the relay cannot overwrite a newer one that went over WebRTC; a new `hostRun` (the desktop
   restarted or reloaded) is always applied and starts the comparison again. A state without the pair is dropped.
-- **The link version 1 contract is a type-level freeze.** `core/remote/contract/v1/` is type-only and written out as
-  concrete types, copied from the shapes the app resolved when v1 was cut: the arguments and result of every channel the
-  desktop serves a phone, the event payloads, `autovote-state`, the message envelopes with their closed unions
-  (`HelloMessage.role`, `ResultMessage.reason`, `ByeMessage.reason`, the `autovote-command` names) and the value type of
-  every setting key. Within one link version the page and the desktop run different releases in both directions (a newer
-  page against an older desktop, and the APK's bundled page or a stable page against a newer desktop), so
-  `tests/remote/contractV1.test.ts` holds the living types inside it under `pnpm typecheck`: the frozen arguments must be
-  assignable to the current handler's parameters, the current results, payloads and state to the frozen ones, the
-  envelopes both ways, and each closed union and each setting's value type must be _equal_, so a new value fails. Each
-  check has a broken fixture that must fail, so a vacuous check fails too. Runtime checks pin that every frozen channel is
-  still in the manifest and served, that no channel's spend class moved, that the settings schema keeps every frozen key
-  and that the parser drops an unknown result `reason`. The rule: a change inside a link version may only add (new
-  channels, new optional fields, a channel moving from refused to allowed); a new value in an existing closed field, a
-  new enum member of an existing setting or a change of a channel's spend class needs a bump and a new `contract/v<N>/`;
-  new page code handles a missing field and a channel an older desktop refuses. When the desktop refuses a channel that
-  the page's own allowlist allows, the phone shows `errors.remoteUpdateComputer` ("Update the app on your computer to use
-  this."); a channel the page also refuses keeps `errors.remoteRefused`. Beta testers who use the browser page get the
-  stable v1 page, so phone features that are new in a beta show only in the beta APK.
-- **The loader is not a phone.** Its `hello` carries `role: 'loader'`; the host answers it with its version only —
-  no snapshot, no peer slot, no count, no desktop notice. A fourth phone is turned away with `bye` carrying
-  `reason: 'full'`, which the phone reads as "too many phones are connected", not as an offline computer.
+- **The link contract is a type-level freeze.** The active current freeze is
+  `core/remote/contract/v2/` with `tests/remote/contractV2.test.ts`: concrete, type-only copies of every served
+  channel's arguments and results, event payload, auto-vote state, message envelope and closed union, and every
+  setting value at the v2 cut, including `autoSubmitTime` and `autoSubmitWindowMinutes`. Its compile-time tuple
+  proves that the channel and setting registries are complete and preserves the add-only rules within v2; its runtime
+  suite verifies the manifest, service class, spend class, schema, and an unknown result reason. Each check has a
+  deliberately broken fixture so a vacuous check fails.
+- **The root launcher is not a phone.** It sends no `hello` and opens no transport. A fourth full phone is still
+  turned away with `bye` carrying `reason: 'full'`, which the phone reads as "too many phones are connected", not
+  as an offline computer.
 - **Reset pairing is confirmed and loud.** The Settings section asks first, and offers the reset while Remote
   access is off too (a leaked link stays valid until it is reset). When the new key could not be saved, the
   handler answers `success: false` and the section says so — the old link still works — instead of showing a
   reset that did not happen.
-- **The Android app's remote mode** (`shells/capacitor/remoteMode.ts`, `shells/remote/phoneMode.ts`): the
-  login screen and Settings → Application Settings offer "Control my computer", a paste field for the pairing
-  link (the phone's camera opens the link in the browser instead of scanning in-app). Entering stops
-  `AutoVoteService`, writes `autovoteRunning=false` and flushes it, stores the key under `gs_remote_access`
-  (in `LOCAL_DATA_STORES`, so the wipe clears it) and loads `/remote/index.html` from the APK. The startup entry
-  reads that key before anything mounts, so a relaunch stays in remote mode and `AutovoteProvider` never mounts
-  over the Capacitor bridge. The local server answers a directory path with the app's own document, so every
-  bundled page is addressed by its file name (`/remote/v<N>/index.html`; `build:react` empties `dist/remote/` and stages
-  only the build's own link version), and the bundled loader takes the link version from `hello` like the Pages one.
-  A 1.15.0 desktop or APK paired with a current one times out and reads the "offline" notice, because the parser drops
-  its `hello` (it carries no `linkVersion`). Both documents reach Preferences through the native bridge's `nativePromise`
-  (`core/remote/phoneKeyStore.ts`), because the remote bundles register no Capacitor plugin. **Disconnect**
-  (Navbar and the loader's notice screens) clears the key and the kept link version and reloads the app's own
-  document, in normal mode with local voting off.
+- **The Android app's remote mode** (`shells/capacitor/remoteMode.ts`, `shells/remote/phoneMode.ts`): the login
+  screen and Settings → Application Settings offer "Control my computer", with a paste field for the pairing link.
+  It accepts only canonical current-v2 links before stopping `AutoVoteService`, changing settings, writing
+  Preferences, or navigating. A valid link stops the service, flushes `autovoteRunning=false`, stores the canonical
+  `2:<key>` value in the existing `gs_remote_access` Preferences entry (which remains in `LOCAL_DATA_STORES`), then
+  opens the bundled `/remote/v2/index.html#k=<key>` page. Other stored values are invalid and leave the app in normal
+  mode with the existing diagnostic. **Disconnect** clears the same Preferences entry and returns to normal mode with
+  local voting off.
 - On a lost connection an in-flight invoke on a spend channel (`core/remote/allowlist.ts`, the `postOnce`
   spenders) is answered "unclear — check before retrying", never a clean failure; every other channel reports
   the failure. In-flight invokes are never queued or replayed after a reconnect.

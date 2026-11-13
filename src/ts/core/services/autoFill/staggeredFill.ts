@@ -103,6 +103,11 @@ const createFinalEligibility =
                 .map((entry) => String(entry.id)),
         );
         if (picked.some((imageId) => enteredIds.has(String(imageId)))) return { standDown: true };
+        // The trigger that starts an attempt does not have to be the one that authorizes the
+        // submit: the check re-reads both at the final wall-clock time and any trigger that
+        // still calls for another photo then authorizes it (and is recorded as the authorizer).
+        // A clock window that ended during verification therefore cancels the submit only when
+        // no relative target is due either.
         const relativeDue = entryCount < current.relativeTarget;
         const clockDue = entryCount < current.clockTarget;
         const clockAuthorizes = clockDue && refresh === 'refreshed';
@@ -158,44 +163,47 @@ const logAutoSubmitSuccess = ({
         );
 };
 
+type AutoSubmitDue =
+    | { due: false; status: 'skipped' | 'disabled' | 'no-schedule' }
+    | { due: true; authorization: FinalAuthorization };
+
 /**
- * Cycle-driven, schedule-based auto-fill. Submits at most one photo per
- * call; the next call (next scheduler cycle) will see the updated
- * entries.length and either skip (target met) or submit again — so a
- * challenge behind schedule catches up one photo per cycle.
+ * Whether a scheduled Auto-Submit is due for the challenge right now: the id,
+ * Manual Only, the autoSubmit toggle, the close time, a free slot, and a
+ * schedule or clock window whose target exceeds the entries. A target that is
+ * met while free slots remain and no later row raises it logs the top-out
+ * warning. Reads only; the caller acts on the answer.
  *
- * @param challenge - challenge with member.ranking.entries
  * @param now - unix seconds
- * @param deps - getActiveChallenges enables the pre-submit live re-check; when
- *   absent the fill proceeds on pass-start data.
+ * @returns `due: false` with the status `maybeAutoFillChallenge` reports, or
+ *   `due: true` with the authorization (the trigger, schedule, target and free
+ *   slots) the attempt starts from; the final eligibility check updates that
+ *   same object when it authorizes the submit
  */
-const maybeAutoFillChallenge = async (
-    challenge: Challenge,
-    token: string,
-    now: number,
-    deps: SettingsFillDeps,
-): Promise<'submitted' | 'skipped' | 'disabled' | 'no-schedule' | 'no-eligible-photos' | 'error'> => {
+const resolveAutoSubmitDue = (challenge: Challenge, now: number, deps: SettingsFillDeps): AutoSubmitDue => {
     const { settings, logger } = deps;
     const challengeId = challenge?.id;
-    if (challengeId === undefined || challengeId === null) return 'skipped';
-    if (isManualPhotosOnly(settings, challengeId)) return 'disabled';
+    if (challengeId === undefined || challengeId === null) return { due: false, status: 'skipped' };
+    if (isManualPhotosOnly(settings, challengeId)) return { due: false, status: 'disabled' };
 
     const enabled = settings.getEffectiveSetting('autoSubmit', String(challengeId));
-    if (enabled !== true) return 'disabled';
+    if (enabled !== true) return { due: false, status: 'disabled' };
 
     const closeTime = Number(challenge.close_time);
-    if (!Number.isFinite(closeTime)) return 'skipped';
+    if (!Number.isFinite(closeTime)) return { due: false, status: 'skipped' };
     const secondsRemaining = closeTime - now;
-    if (secondsRemaining <= 0) return 'skipped';
+    if (secondsRemaining <= 0) return { due: false, status: 'skipped' };
 
-    let slotsRemaining = getSlotsRemaining(challenge);
-    if (slotsRemaining <= 0) return 'skipped';
+    const slotsRemaining = getSlotsRemaining(challenge);
+    if (slotsRemaining <= 0) return { due: false, status: 'skipped' };
 
     const schedule = settings.getEffectiveSetting('autoSubmitSchedule', String(challengeId));
     // Distinct from 'disabled' (toggle off): the toggle is on but there is no
     // schedule to act on — a deliberate opt-out state the GUI editor warns about.
     const trigger = resolveAutoSubmitTrigger(challenge, String(challengeId), now, deps);
-    if ((!Array.isArray(schedule) || schedule.length === 0) && trigger.clockTarget === 0) return 'no-schedule';
+    if ((!Array.isArray(schedule) || schedule.length === 0) && trigger.clockTarget === 0) {
+        return { due: false, status: 'no-schedule' };
+    }
 
     const desired = trigger.desired;
     if (getEntries(challenge).length >= desired) {
@@ -223,20 +231,39 @@ const maybeAutoFillChallenge = async (
                     null,
                 );
         }
-        return 'skipped';
+        return { due: false, status: 'skipped' };
     }
+    return { due: true, authorization: { trigger, authorizer: 'relative', schedule, desired, slotsRemaining } };
+};
+
+/**
+ * Cycle-driven, schedule-based auto-fill. Submits at most one photo per
+ * call; the next call (next scheduler cycle) will see the updated
+ * entries.length and either skip (target met) or submit again — so a
+ * challenge behind schedule catches up one photo per cycle.
+ *
+ * @param challenge - challenge with member.ranking.entries
+ * @param now - unix seconds
+ * @param deps - getActiveChallenges enables the pre-submit live re-check; when
+ *   absent the fill proceeds on pass-start data.
+ */
+const maybeAutoFillChallenge = async (
+    challenge: Challenge,
+    token: string,
+    now: number,
+    deps: SettingsFillDeps,
+): Promise<'submitted' | 'skipped' | 'disabled' | 'no-schedule' | 'no-eligible-photos' | 'error'> => {
+    const { settings, logger } = deps;
+    const due = resolveAutoSubmitDue(challenge, now, deps);
+    if (!due.due) return due.status;
+    const finalAuthorization = due.authorization;
+    let { slotsRemaining } = finalAuthorization;
+    const challengeId = challenge.id;
 
     const mustIncludeTags = settings.getEffectiveTagSetting('mustIncludeTags', challenge);
     const shouldIncludeTags = settings.getEffectiveTagSetting('shouldIncludeTags', challenge);
     const submitWithoutTagMatch = settings.getEffectiveSetting('submitWithoutTagMatch', String(challengeId));
 
-    const finalAuthorization: FinalAuthorization = {
-        trigger,
-        authorizer: 'relative',
-        schedule,
-        desired,
-        slotsRemaining,
-    };
     // Relative-only submission retains its established refresh policy. A
     // clock-triggered attempt needs a final wall-clock and live-state check,
     // because candidate verification can outlast the clock window.
@@ -293,4 +320,4 @@ const maybeAutoFillChallenge = async (
     return 'submitted';
 };
 
-export { maybeAutoFillChallenge };
+export { maybeAutoFillChallenge, resolveAutoSubmitDue, createFinalEligibility };

@@ -264,6 +264,7 @@ jobs:
               with:
                   download-bumped: 'true'
                   cache-vision-model: ${{ matrix.variant != 'lite' }}
+                  turbo-cache-scope: desktop-${{ matrix.platform }}-${{ matrix.variant }}
 
             - name: Install FFmpeg compiler and make on Windows
               if: matrix.platform == 'win' && matrix.variant == 'full'
@@ -608,8 +609,8 @@ jobs:
 
     # The phone page ships with the release as remote-page-v<N>.zip (+ its SHA-256), N being the
     # link version the page speaks (core/remote/protocol.ts LINK_VERSION), not the app version.
-    # build:site publishes every link version under /remote/v<N>/ from the newest stable release
-    # that carries its zip, so one page serves every desktop that speaks the link.
+    # This is the current page's release artifact. build:site publishes only its local current
+    # page and does not download or unpack release archives.
     remote-page:
         needs: version-bump
         runs-on: ubuntu-latest
@@ -626,7 +627,7 @@ jobs:
                   download-bumped: 'true'
 
             - name: Build the remote page
-              run: pnpm build:css && pnpm build:react
+              run: pnpm run turbo run prepare:compat-full
 
             - name: Zip the remote page with its checksum
               shell: bash
@@ -639,6 +640,12 @@ jobs:
                       echo "expected exactly one dist/remote/v*/ directory, found ${#DIRS[@]}" >&2
                       exit 1
                   fi
+                  for REQUIRED in index.html remote-bundle.js styles.css THIRD_PARTY_NOTICES.txt; do
+                      if [ ! -f "${DIRS[0]}/$REQUIRED" ]; then
+                          echo "missing staged remote page input: $REQUIRED" >&2
+                          exit 1
+                      fi
+                  done
                   NAME=$(basename "${DIRS[0]}")
                   ZIP="remote-page-$NAME.zip"
                   cd "${DIRS[0]}"

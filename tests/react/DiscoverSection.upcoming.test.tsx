@@ -250,6 +250,55 @@ describe('Discover date ordering', () => {
         ]);
         expect(screen.getByRole('option', { name: label })).toBeTruthy();
     });
+
+    test('sorts eligible free-entry deadlines separately and retains the selection after refresh', async () => {
+        const { container } = renderSection([
+            open(1, 'Open free later', { start_time: 20, close_time: 500, max_photo_submits: 1 }),
+            open(2, 'Open free earlier', { start_time: 10, close_time: 400, max_photo_submits: 1 }),
+            open(3, 'Open Boost only', { start_time: 1, close_time: 101, max_photo_submits: 2 }),
+            upcoming(4, 'Starting free', -1, { close_time: NOW_SEC + 199, max_photo_submits: 1 }),
+            upcoming(5, 'Future free', 3600, { close_time: NOW_SEC + 7200, max_photo_submits: 1 }),
+            upcoming(6, 'Future Boost only', 1800, { close_time: NOW_SEC + 3600, max_photo_submits: 2 }),
+        ]);
+        await settle();
+        const sort = screen.getByRole<HTMLSelectElement>('combobox', { name: 'Sort by' });
+        const listed = () =>
+            Array.from(container.querySelectorAll('[data-testid="discover-section"] ul > li')).map(
+                (row) => row.textContent,
+            );
+
+        fireEvent.change(sort, { target: { value: 'boostDeadline' } });
+        expect(listed()).toEqual([
+            expect.stringContaining('Open Boost only'),
+            expect.stringContaining('Open free earlier'),
+            expect.stringContaining('Open free later'),
+            expect.stringContaining('Starting free'),
+            expect.stringContaining('Future Boost only'),
+            expect.stringContaining('Future free'),
+        ]);
+
+        expect(screen.getByRole('option', { name: 'Free entry deadline' })).toBeTruthy();
+        fireEvent.change(sort, { target: { value: 'freeEntryDeadline' } });
+        expect(listed()).toEqual([
+            expect.stringContaining('Open free earlier'),
+            expect.stringContaining('Open free later'),
+            expect.stringContaining('Open Boost only'),
+            expect.stringContaining('Starting free'),
+            expect.stringContaining('Future free'),
+            expect.stringContaining('Future Boost only'),
+        ]);
+        fireEvent.click(screen.getByText(app.discoverRefresh));
+        await settle();
+        expect(sort.value).toBe('freeEntryDeadline');
+        expect(listed()).toEqual([
+            expect.stringContaining('Open free earlier'),
+            expect.stringContaining('Open free later'),
+            expect.stringContaining('Open Boost only'),
+            expect.stringContaining('Starting free'),
+            expect.stringContaining('Future free'),
+            expect.stringContaining('Future Boost only'),
+        ]);
+    });
 });
 
 describe('the count badge', () => {

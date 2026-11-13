@@ -577,6 +577,93 @@ describe('createHybridTransport', () => {
     });
 
     describe('the rest of the surface', () => {
+        test('replays a held direct error to the first subscriber after its relay wait expires', () => {
+            hybrid = createHybridTransport({ direct, relay, role: 'phone' });
+            direct.emitJoinError(SDP_FAILURE, 'early-peer');
+            jest.advanceTimersByTime(JOIN_ERROR_HOLD_MS);
+            const seen: Array<{ error: string; peerId: string }> = [];
+
+            hybrid.onJoinError((details) => seen.push(details));
+
+            expect(seen).toEqual([{ error: SDP_FAILURE, peerId: 'early-peer' }]);
+        });
+
+        test('delivers a retained error once, forwards later errors live, and does not retain errors after unsubscribe', () => {
+            hybrid = createHybridTransport({ direct, relay: null, role: 'phone' });
+            direct.emitJoinError(SDP_FAILURE, 'early-peer');
+            const seen: Array<{ error: string; peerId: string }> = [];
+            const off = hybrid.onJoinError((details) => seen.push(details));
+
+            direct.emitJoinError(SDP_FAILURE, 'live-peer');
+            off();
+            direct.emitJoinError(SDP_FAILURE, 'unsubscribed-peer');
+            const late: Array<{ error: string; peerId: string }> = [];
+            hybrid.onJoinError((details) => late.push(details));
+
+            expect(seen).toEqual([
+                { error: SDP_FAILURE, peerId: 'early-peer' },
+                { error: SDP_FAILURE, peerId: 'live-peer' },
+            ]);
+            expect(late).toEqual([]);
+        });
+
+        test('drops a retained error when the peer joins before the first subscriber', () => {
+            hybrid = createHybridTransport({ direct, relay, role: 'phone' });
+            direct.emitJoinError(SDP_FAILURE, 'recovered-peer');
+            jest.advanceTimersByTime(JOIN_ERROR_HOLD_MS);
+            direct.emitJoin('recovered-peer');
+            const seen: Array<{ error: string; peerId: string }> = [];
+
+            hybrid.onJoinError((details) => seen.push(details));
+
+            expect(seen).toEqual([]);
+        });
+
+        test('clears retained errors on leave and ignores later errors', async () => {
+            hybrid = createHybridTransport({ direct, relay: null, role: 'phone' });
+            direct.emitJoinError(SDP_FAILURE, 'gone-peer');
+            await hybrid.leave();
+            direct.emitJoinError(SDP_FAILURE, 'after-leave-peer');
+            const seen: Array<{ error: string; peerId: string }> = [];
+
+            hybrid.onJoinError((details) => seen.push(details));
+
+            expect(seen).toEqual([]);
+        });
+
+        test('stops draining retained errors when the first callback leaves', () => {
+            hybrid = createHybridTransport({ direct, relay: null, role: 'phone' });
+            direct.emitJoinError(SDP_FAILURE, 'first-peer');
+            direct.emitJoinError(SDP_FAILURE, 'second-peer');
+            const seen: Array<{ error: string; peerId: string }> = [];
+
+            hybrid.onJoinError((details) => {
+                seen.push(details);
+                void hybrid.leave();
+            });
+
+            expect(seen).toEqual([{ error: SDP_FAILURE, peerId: 'first-peer' }]);
+        });
+
+        test('replays a direct peer that joined before a later subscriber registered', () => {
+            direct.emitJoin('early');
+            const seen: string[] = [];
+
+            hybrid.onPeerJoin((peerId) => seen.push(peerId));
+
+            expect(seen).toEqual(['early']);
+        });
+
+        test('does not replay peers to a subscriber added after leave', async () => {
+            direct.emitJoin('early');
+            await hybrid.leave();
+            const seen: string[] = [];
+
+            hybrid.onPeerJoin((peerId) => seen.push(peerId));
+
+            expect(seen).toEqual([]);
+        });
+
         test('answers whether the relay link is there, and no path for a peer that is not joined', () => {
             expect(hybrid.relayAvailable?.()).toBe(true);
             expect(hybrid.peerPath?.('nobody')).toBeNull();

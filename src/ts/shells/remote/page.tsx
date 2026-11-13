@@ -19,8 +19,7 @@
 
 import { createTrysteroTransport } from '../../core/remote/trystero';
 import { setRemoteConnectionState } from '../../core/remote/connectionState';
-import { loaderAddressBarUrl, loaderNavigationUrl, takePairingKey } from '../../core/remote/pairingKey';
-import { phoneRemoteMode } from '../../core/remote/phoneMode';
+import { takePairingKey } from '../../core/remote/pairingKey';
 import { installPeerBridge } from './bridge/peer';
 import { installPhoneDisconnect } from './phoneMode';
 import { mountApp } from '../../react/pages/App';
@@ -36,23 +35,11 @@ void (async () => {
         mountRemoteNotice();
         return;
     }
-    // Resolve the loader target from the page's own address before the address bar moves:
-    // after the replaceState, `../index.html` would resolve against the loader directory and
-    // reach the site root instead of the loader.
-    const loaderTarget = new URL(loaderNavigationUrl(key), globalThis.location.href).href;
     // Inside the Android app's WebView the page also installs its Disconnect,
     // so the Navbar can leave remote mode back to the app's normal mode.
     installPhoneDisconnect();
-    // The address bar shows the stable loader address, not this version's: a bookmark or "Add to
-    // Home Screen" then survives the next desktop update (the loader finds the matching page).
-    // Inside the Android app the local server answers a directory path with the app's own
-    // document, so a reload of the loader address would never reach the loader — the page keeps
-    // its versioned address and only the redirect below moves the tab.
-    if (phoneRemoteMode() === null) {
-        globalThis.history.replaceState(null, '', loaderAddressBarUrl(key));
-    }
     const transport = await createTrysteroTransport({ key, role: 'phone' });
-    installPeerBridge(transport, loaderTarget);
+    installPeerBridge(transport);
     // The remote controller rides the same transport; AutovoteProvider builds it from the
     // platform kind the bridge just marked.
     mountApp(noopBackgroundHost, transport);

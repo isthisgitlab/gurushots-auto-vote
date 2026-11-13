@@ -32,10 +32,15 @@ import type { Bus } from '../helpers/relayBus';
 
 import type { RemoteTransport } from '../../src/ts/core/remote/relays';
 
-jest.mock('../../src/ts/core/remote/linkVersion', () => ({
-    storeLinkVersion: async () => undefined,
-    clearSkipMark: () => undefined,
-}));
+// Keep this suite on the unavailable-storage path without reading Node's getter.
+const localStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+beforeAll(() => {
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: undefined });
+});
+afterAll(() => {
+    if (localStorageDescriptor) Object.defineProperty(globalThis, 'localStorage', localStorageDescriptor);
+    else Reflect.deleteProperty(globalThis, 'localStorage');
+});
 
 type Api = Record<string, (...args: unknown[]) => Promise<unknown>>;
 
@@ -129,7 +134,7 @@ describe('a path changing under traffic', () => {
             version: APP_VERSION,
         });
         await host.start('the-key');
-        installPeerBridge(phoneHybrid, 'https://site.test/remote/index.html#k=the-key');
+        installPeerBridge(phoneHybrid);
         api = (globalThis as { api?: Api }).api ?? {};
         // The relay alone finds both ends, then the phone says hello and is served.
         await run(1_500);
@@ -462,10 +467,7 @@ describe('the relay link giving up on a peer that is on WebRTC now', () => {
         setRemoteConnectionState('connecting');
         direct = new TransportStub('phone');
         relay = new TransportStub('phone');
-        installPeerBridge(
-            createHybridTransport({ direct, relay, role: 'phone' }),
-            'https://site.test/remote/index.html#k=the-key',
-        );
+        installPeerBridge(createHybridTransport({ direct, relay, role: 'phone' }));
         api = (globalThis as { api?: Api }).api ?? {};
         relay.emitJoin('host');
         relay.receiveFromPeer(hostHello, 'host');

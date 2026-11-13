@@ -3,7 +3,10 @@
  * runBoost (the same single-threaded flow resolveBoostTarget reaches when the
  * Boost pin is gone): the pending guard, the exact-photo submit, the
  * definitive/transient failure split (latch vs retry), the challenge-gone and
- * fallback logs, and the fresh-entry hold on the submitted photo.
+ * fallback logs, and the fresh-entry hold on the submitted photo. The same
+ * submit run at Auto-Submit time is driven through runDeadlineActions: it takes
+ * the Auto-Submit's slot when Auto-Submit is due before Boost, and the usual
+ * pick runs only when the pin cannot be (or has been latched as not) submitted.
  */
 
 jest.mock('../../src/ts/core/settings', () => ({
@@ -13,15 +16,20 @@ jest.mock('../../src/ts/core/settings', () => ({
     consumeChosenPhotos: jest.fn(() => false),
 }));
 
-jest.mock('../../src/ts/core/services/VotingLogic', () => ({
-    __esModule: true,
-    ...jest.requireActual<typeof votingLogicModule>('../../src/ts/core/services/VotingLogic'),
-    resolvePin: jest.fn(() => ({ state: 'none' })),
-    shouldApplyBoost: jest.fn(() => false),
-    isBoostDueForMission: jest.fn(() => false),
-    getAutoFillThresholdSec: jest.fn(() => 0),
-    isWithinEmergencyWindow: jest.fn(() => false),
-}));
+jest.mock('../../src/ts/core/services/VotingLogic', () => {
+    const actual = jest.requireActual<typeof votingLogicModule>('../../src/ts/core/services/VotingLogic');
+    return {
+        __esModule: true,
+        ...actual,
+        // The real rule, replaceable once: the runner's gate reads it directly, the submit through this facade.
+        canSubmitBoostPin: jest.fn(actual.canSubmitBoostPin),
+        resolvePin: jest.fn(() => ({ state: 'none' })),
+        shouldApplyBoost: jest.fn(() => false),
+        isBoostDueForMission: jest.fn(() => false),
+        getAutoFillThresholdSec: jest.fn(() => 0),
+        isWithinEmergencyWindow: jest.fn(() => false),
+    };
+});
 
 jest.mock('../../src/ts/core/services/autoFill', () => ({
     submitPinnedEntry: jest.fn(async () => ({ ok: false, imageId: null, reason: 'fetch-error' })),
@@ -29,6 +37,17 @@ jest.mock('../../src/ts/core/services/autoFill', () => ({
     reflectNewEntry: jest.fn(),
     reflectEntryFlag: jest.fn(),
     // The two reads of the autoFill facade the real canSubmitBoostPin makes.
+    maybeAutoFillChallenge: jest.fn(async () => 'skipped'),
+    maybeEmergencyFillChallenge: jest.fn(async () => 'skipped'),
+    resolveAutoSubmitDue: jest.fn(),
+    createFinalEligibility: jest.fn(),
+    // Read by the real describeDeadlineActions: no emergency fill, the real schedule math.
+    evaluateEmergencyFill: jest.fn(() => ({ standDown: true })),
+    getNextScheduleThresholdSec: jest.fn(
+        jest.requireActual<typeof import('../../src/ts/core/services/autoFill/schedule')>(
+            '../../src/ts/core/services/autoFill/schedule',
+        ).getNextScheduleThresholdSec,
+    ),
     resolveChosenPhotos: jest.fn(({ read }: { read: (key: string) => unknown }) => {
         const list = read('chosenPhotos');
         return {
@@ -37,10 +56,7 @@ jest.mock('../../src/ts/core/services/autoFill', () => ({
             inOrder: read('chosenPhotosInOrder') === true,
         };
     }),
-    getSlotsRemaining: jest.fn(
-        (challenge: { max_photo_submits?: number; member?: { ranking?: { entries?: unknown[] } } }) =>
-            Math.max(0, (challenge?.max_photo_submits ?? 0) - (challenge?.member?.ranking?.entries?.length ?? 0)),
-    ),
+    getSlotsRemaining: jest.fn(),
 }));
 
 import logger = require('../../src/ts/core/logger');
@@ -57,7 +73,11 @@ import { renderLogTemplate } from '../helpers/logTemplate';
 import type { Challenge } from '../../src/ts/core/types/gurushots';
 import type { ActionContext } from '../../src/ts/core/services/votingOrchestrator/context';
 import { invalid } from '../helpers/invalid';
+import type * as actionRunnersModule from '../../src/ts/core/services/votingOrchestrator/actionRunners';
+import type { PassContext } from '../../src/ts/core/services/votingOrchestrator/context';
 const { runBoost } = require('../../src/ts/core/services/votingOrchestrator/boost') as typeof boostModule;
+const { runDeadlineActions } =
+    require('../../src/ts/core/services/votingOrchestrator/actionRunners') as typeof actionRunnersModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 const { createMemoryEntryAgeLedger } = require('../../src/ts/core/entryAgeStore') as typeof entryAgeStoreModule;
 const { boostDeadline } =
@@ -72,9 +92,10 @@ const LATCH_DEADLINE = NOW + 900;
 // assertions below keep reading today's rendered lines.
 type SinkFn = jest.Mock<void, unknown[]>;
 type TemplateFn = jest.Mock<void, [string, unknown[], unknown?]>;
-const log: Record<'info' | 'error' | 'debug' | 'startOperation' | 'endOperation', SinkFn> &
+const log: Record<'info' | 'success' | 'error' | 'debug' | 'startOperation' | 'endOperation', SinkFn> &
     Record<'infoT' | 'warningT' | 'errorT', TemplateFn> = {
     info: jest.fn<void, unknown[]>(),
+    success: jest.fn<void, unknown[]>(),
     error: jest.fn<void, unknown[]>(),
     debug: jest.fn<void, unknown[]>(),
     startOperation: jest.fn<void, unknown[]>(),
@@ -113,6 +134,8 @@ const enable = (values: Record<string, unknown> = {}) =>
                 boostFreshEntryWait: 600,
                 autoSubmit: true,
                 chosenPhotos: [PIN],
+                autoBoost: true,
+                autoSubmitSchedule: [{ count: 2, seconds: 7000 }],
                 boostTime: 3600,
                 keyUnlockedBoostTime: 900,
                 ...values,
@@ -139,13 +162,42 @@ const bundle = (challenge: Challenge, entryAges: ReturnType<typeof createMemoryE
 
 const runBoostWith = async ({ ctx }: { ctx: ActionContext }) => runBoost(ctx);
 
+const slotsOf = (challenge: Partial<Challenge> | null | undefined) =>
+    Math.max(0, (challenge?.max_photo_submits ?? 0) - (challenge?.member?.ranking?.entries?.length ?? 0));
+
+// The Auto-Submit gate answers due, with the authorization values the final check is built from.
+const DUE = invalid<ReturnType<typeof autoFillModule.resolveAutoSubmitDue>>({
+    due: true,
+    authorization: {
+        trigger: {
+            relativeTarget: 2,
+            clockTarget: 0,
+            desired: 2,
+            activeClockTimes: [],
+            nextClockStart: null,
+            timezone: 'UTC',
+        },
+        authorizer: 'relative',
+        schedule: [{ count: 2, seconds: 7000 }],
+        desired: 2,
+        slotsRemaining: 2,
+    },
+});
+const finalCheck = async () => null;
+
 beforeEach(() => {
     jest.clearAllMocks();
+    autoFill.getSlotsRemaining.mockImplementation(slotsOf);
+    autoFill.resolveAutoSubmitDue.mockReturnValue(DUE);
+    autoFill.createFinalEligibility.mockReturnValue(finalCheck);
+    autoFill.maybeAutoFillChallenge.mockResolvedValue('skipped');
+    autoFill.reflectNewEntry.mockReset();
     jest.mocked(logger.withCategory).mockImplementation(() => invalid(log));
     enable();
     settings.getEntryPins.mockReturnValue({ boost: PIN, turbo: null });
     votingLogic.resolvePin.mockReturnValue({ state: 'gone' });
     votingLogic.shouldApplyBoost.mockReturnValue(true);
+    votingLogic.isBoostDueForMission.mockReturnValue(false);
     votingLogic.getAutoFillThresholdSec.mockReturnValue(900);
     votingLogic.isWithinEmergencyWindow.mockReturnValue(false);
     autoFill.submitPinnedEntry.mockResolvedValue(invalid({ ok: true, imageId: PIN, reason: 'submitted' }));
@@ -160,7 +212,7 @@ describe('submitBoostPinnedPhoto through runBoost — success', () => {
         await runBoostWith({ ctx });
 
         expect(autoFill.submitPinnedEntry).toHaveBeenCalledTimes(1);
-        expect(autoFill.submitPinnedEntry).toHaveBeenCalledWith(challenge, 'tok', ctx.fillDeps, PIN);
+        expect(autoFill.submitPinnedEntry).toHaveBeenCalledWith(challenge, 'tok', ctx.fillDeps, PIN, undefined);
         expect(autoFill.reflectNewEntry).toHaveBeenCalledWith(challenge, PIN);
         expect(ledger.pending('101')).toBe(PIN);
         // The pinned target is never skipped as uncertain, and the fresh-photo wait holds the boost.
@@ -178,7 +230,7 @@ describe('submitBoostPinnedPhoto through runBoost — success', () => {
 
         await runBoostWith({ ctx });
 
-        expect(autoFill.submitPinnedEntry).toHaveBeenCalledWith(challenge, 'tok', ctx.fillDeps, PIN);
+        expect(autoFill.submitPinnedEntry).toHaveBeenCalledWith(challenge, 'tok', ctx.fillDeps, PIN, undefined);
         expect(ledger.pending('101')).toBe(PIN);
     });
 
@@ -365,5 +417,245 @@ describe('submitBoostPinnedPhoto through runBoost — skips and fallbacks', () =
         expect(autoFill.submitPinnedEntry).not.toHaveBeenCalled();
         expect(infoTKeys()).toContain('m3e7a92c4b518');
         expect(api.applyBoostToEntry).not.toHaveBeenCalled();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// The Boost-pinned submit at Auto-Submit time (runAutoFill through runDeadlineActions)
+// ---------------------------------------------------------------------------
+
+const passFor = (challenge: Challenge, entryAges: ReturnType<typeof createMemoryEntryAgeLedger> | null) =>
+    invalid<PassContext>({
+        token: 'tok',
+        api: { applyBoost: jest.fn(), applyBoostToEntry: jest.fn() },
+        fillDeps: { settings },
+        entryAges,
+        missions: null,
+        allChallenges: [challenge],
+    });
+
+/** Two entries in a three-slot challenge: exactly one free slot. */
+const oneSlotChallenge = () => {
+    const challenge = goneChallenge();
+    challenge.member!.ranking!.entries = [{ id: 'e1' }, { id: 'e2' }];
+    return challenge;
+};
+
+const infoLines = (needle: string) =>
+    log.info.mock.calls.map(([line]) => String(line)).filter((line) => line.includes(needle));
+
+const failWith = (reason: string) =>
+    autoFill.submitPinnedEntry.mockResolvedValue(invalid({ ok: false, imageId: null, reason }));
+
+describe('runAutoFill — the Boost-pinned submit at Auto-Submit time', () => {
+    beforeEach(() => {
+        // Only the Auto-Submit runner acts in these tests; a due Boost is covered below.
+        votingLogic.shouldApplyBoost.mockReturnValue(false);
+    });
+
+    test('Auto-Submit due before Boost submits the pinned photo, skips the usual pick, and logs the success once', async () => {
+        const challenge = goneChallenge();
+        const ledger = createMemoryEntryAgeLedger();
+        const pass = passFor(challenge, ledger);
+
+        await runDeadlineActions(challenge, NOW, pass);
+
+        // The one authorization object the gate built is what the final check updates.
+        expect(autoFill.createFinalEligibility).toHaveBeenCalledWith(
+            challenge,
+            '101',
+            'tok',
+            pass.fillDeps,
+            DUE.due ? DUE.authorization : null,
+        );
+        expect(autoFill.submitPinnedEntry).toHaveBeenCalledTimes(1);
+        expect(autoFill.submitPinnedEntry).toHaveBeenCalledWith(challenge, 'tok', pass.fillDeps, PIN, finalCheck);
+        expect(autoFill.reflectNewEntry).toHaveBeenCalledWith(challenge, PIN);
+        expect(ledger.pending('101')).toBe(PIN);
+        expect(autoFill.maybeAutoFillChallenge).not.toHaveBeenCalled();
+        expect(log.success).toHaveBeenCalledTimes(1);
+        expect(log.success).toHaveBeenCalledWith(
+            expect.stringContaining('autoSubmit: submitted the photo pinned for Boost (pin1) for'),
+            null,
+        );
+    });
+
+    test('a submit path that turns out not to be eligible falls through to the usual pick', async () => {
+        votingLogic.canSubmitBoostPin.mockReturnValueOnce(null);
+        const challenge = goneChallenge();
+
+        await runDeadlineActions(challenge, NOW, passFor(challenge, createMemoryEntryAgeLedger()));
+
+        expect(autoFill.submitPinnedEntry).not.toHaveBeenCalled();
+        expect(autoFill.maybeAutoFillChallenge).toHaveBeenCalledTimes(1);
+        expect(log.success).not.toHaveBeenCalled();
+    });
+
+    test('a pending submit of the pin is held: no submit, no usual pick, no success log', async () => {
+        const challenge = goneChallenge();
+        const ledger = createMemoryEntryAgeLedger();
+        ledger.markPending(challenge, PIN, NOW - 60);
+
+        await runDeadlineActions(challenge, NOW, passFor(challenge, ledger));
+
+        expect(autoFill.submitPinnedEntry).not.toHaveBeenCalled();
+        expect(autoFill.maybeAutoFillChallenge).not.toHaveBeenCalled();
+        expect(log.success).not.toHaveBeenCalled();
+    });
+
+    test('a definitive failure latches and the usual pick runs in the same call', async () => {
+        const challenge = goneChallenge();
+        const ledger = createMemoryEntryAgeLedger();
+        failWith('submit-rejected');
+
+        await runDeadlineActions(challenge, NOW, passFor(challenge, ledger));
+
+        expect(ledger.pinSubmitFailed('101', PIN, boostDeadline(challenge))).toBe(true);
+        expect(autoFill.submitPinnedEntry).toHaveBeenCalledTimes(1);
+        expect(autoFill.maybeAutoFillChallenge).toHaveBeenCalledTimes(1);
+        expect(log.success).not.toHaveBeenCalled();
+    });
+
+    test.each([['fetch-error'], ['challenge-gone']])(
+        'a %s failure with one free slot keeps the slot: no usual pick, no latch, one log line',
+        async (reason) => {
+            const challenge = oneSlotChallenge();
+            const ledger = createMemoryEntryAgeLedger();
+            failWith(reason);
+
+            await runDeadlineActions(challenge, NOW, passFor(challenge, ledger));
+
+            expect(autoFill.submitPinnedEntry).toHaveBeenCalledTimes(1);
+            expect(autoFill.maybeAutoFillChallenge).not.toHaveBeenCalled();
+            expect(ledger.pinSubmitFailed('101', PIN, boostDeadline(challenge))).toBe(false);
+            expect(infoLines('keeping the last free slot of')).toEqual([
+                expect.stringContaining('for the photo pinned for Boost (pin1)'),
+            ]);
+            expect(infoLines('may already be in')).toEqual([]);
+        },
+    );
+
+    test.each([[1], [2]])(
+        'a submit with no answer and %s free slot(s) submits no other photo this cycle: no latch, one log line',
+        async (slots) => {
+            const challenge = slots === 1 ? oneSlotChallenge() : goneChallenge();
+            const ledger = createMemoryEntryAgeLedger();
+            failWith('submit-unanswered');
+
+            await runDeadlineActions(challenge, NOW, passFor(challenge, ledger));
+
+            expect(autoFill.submitPinnedEntry).toHaveBeenCalledTimes(1);
+            expect(autoFill.maybeAutoFillChallenge).not.toHaveBeenCalled();
+            expect(ledger.pinSubmitFailed('101', PIN, boostDeadline(challenge))).toBe(false);
+            expect(infoLines('may already be in')).toEqual([
+                expect.stringMatching(
+                    /^autoSubmit: the photo pinned for Boost \(pin1\) may already be in .*; Auto-Submit submits no other photo this cycle$/,
+                ),
+            ]);
+            expect(infoLines('keeping the last free slot of')).toEqual([]);
+        },
+    );
+
+    test.each([['fetch-error'], ['challenge-gone']])(
+        'a %s failure with two free slots runs the usual pick in the same call',
+        async (reason) => {
+            const challenge = goneChallenge();
+            const ledger = createMemoryEntryAgeLedger();
+            failWith(reason);
+
+            await runDeadlineActions(challenge, NOW, passFor(challenge, ledger));
+
+            expect(autoFill.submitPinnedEntry).toHaveBeenCalledTimes(1);
+            expect(autoFill.maybeAutoFillChallenge).toHaveBeenCalledTimes(1);
+            expect(infoLines('keeping the last free slot of')).toEqual([]);
+            expect(infoLines('may already be in')).toEqual([]);
+        },
+    );
+
+    test('the final check standing down (reported as stood-down) submits nothing, latches nothing, and keeps the last slot', async () => {
+        const challenge = oneSlotChallenge();
+        const ledger = createMemoryEntryAgeLedger();
+        failWith('stood-down');
+
+        await runDeadlineActions(challenge, NOW, passFor(challenge, ledger));
+
+        expect(autoFill.reflectNewEntry).not.toHaveBeenCalled();
+        expect(ledger.pending('101')).toBeNull();
+        expect(ledger.pinSubmitFailed('101', PIN, boostDeadline(challenge))).toBe(false);
+        expect(autoFill.maybeAutoFillChallenge).not.toHaveBeenCalled();
+        expect(log.success).not.toHaveBeenCalled();
+    });
+
+    test('Auto-Submit not due: it runs as usual and the pinned submit waits for Boost time, with no final check', async () => {
+        votingLogic.shouldApplyBoost.mockReturnValue(true);
+        autoFill.resolveAutoSubmitDue.mockReturnValue({ due: false, status: 'skipped' });
+        const challenge = goneChallenge();
+        const ledger = createMemoryEntryAgeLedger();
+        const pass = passFor(challenge, ledger);
+
+        await runDeadlineActions(challenge, NOW, pass);
+
+        expect(autoFill.maybeAutoFillChallenge).toHaveBeenCalledTimes(1);
+        expect(autoFill.createFinalEligibility).not.toHaveBeenCalled();
+        expect(autoFill.submitPinnedEntry).toHaveBeenCalledTimes(1);
+        expect(autoFill.submitPinnedEntry).toHaveBeenCalledWith(challenge, 'tok', pass.fillDeps, PIN, undefined);
+        expect(log.success).not.toHaveBeenCalled();
+    });
+
+    test('Auto Boost off: the pinned submit is not promised, so the usual pick runs', async () => {
+        enable({ autoBoost: false });
+        const challenge = goneChallenge();
+
+        await runDeadlineActions(challenge, NOW, passFor(challenge, createMemoryEntryAgeLedger()));
+
+        expect(autoFill.submitPinnedEntry).not.toHaveBeenCalled();
+        expect(autoFill.maybeAutoFillChallenge).toHaveBeenCalledTimes(1);
+    });
+
+    describe('both due in one pass', () => {
+        beforeEach(() => {
+            votingLogic.shouldApplyBoost.mockReturnValue(true);
+            // The entry the submit adds is visible to the Boost that runs after it.
+            autoFill.reflectNewEntry.mockImplementation((challenge, imageId) => {
+                challenge?.member?.ranking?.entries?.push({ id: String(imageId) });
+            });
+        });
+
+        const expectSubmittedOnceAndBoostOnIt = (challenge: Challenge) => {
+            expect(autoFill.submitPinnedEntry).toHaveBeenCalledTimes(1);
+            expect(autoFill.submitPinnedEntry).toHaveBeenCalledWith(
+                challenge,
+                'tok',
+                expect.anything(),
+                PIN,
+                finalCheck,
+            );
+            expect(autoFill.maybeAutoFillChallenge).not.toHaveBeenCalled();
+            expect(log.success).toHaveBeenCalledTimes(1);
+            // Boost found the live pin and holds on it for the fresh-photo wait.
+            expect(challenge.boostHoldUntil).toBe(NOW + 600);
+        };
+
+        test('with a relative schedule: Auto-Submit runs first and submits the pin; Boost goes on it', async () => {
+            const challenge = goneChallenge();
+
+            await runDeadlineActions(challenge, NOW, passFor(challenge, createMemoryEntryAgeLedger()));
+
+            expectSubmittedOnceAndBoostOnIt(challenge);
+        });
+
+        test('with an active clock window: Auto-Submit sorts first even below the Boost threshold', async () => {
+            const clock = new Date(NOW * 1000).toISOString().slice(11, 16);
+            enable({
+                autoSubmitSchedule: [{ count: 2, seconds: 100 }],
+                autoSubmitTime: [clock],
+                autoSubmitWindowMinutes: 30,
+            });
+            const challenge = goneChallenge();
+
+            await runDeadlineActions(challenge, NOW, passFor(challenge, createMemoryEntryAgeLedger()));
+
+            expectSubmittedOnceAndBoostOnIt(challenge);
+        });
     });
 });

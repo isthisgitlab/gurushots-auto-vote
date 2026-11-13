@@ -41,6 +41,7 @@ jest.mock('../../src/ts/core/settings/storage', () => ({
 
 const {
     maybeAutoFillChallenge,
+    resolveAutoSubmitDue,
     maybeEmergencyFillChallenge,
     evaluateEmergencyFill,
     fillChallengeNow,
@@ -460,6 +461,44 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
 
         expect(result).toBe('skipped');
         expect(submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('a clock window that ends during verification still submits when a relative target is due by then, authorized by the relative schedule', async () => {
+        const startMs = NOW * 1000;
+        const clock = jest.spyOn(Date, 'now').mockReturnValue(startMs);
+        const clockTime = new Date(startMs).toISOString().slice(11, 16);
+        // 2 entries at 20.5 min left: the relative target is 2 (met), only the clock window asks for more.
+        const challenge = makeChallenge({
+            maxSubmits: 4,
+            entries: [{ id: 'e1' }, { id: 'e2' }],
+            closeIn: 20 * 60 + 30,
+        });
+        const logger = makeLogger();
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({
+                autoSubmit: true,
+                autoSubmitTime: [clockTime],
+                autoSubmitWindowMinutes: 5,
+            }),
+            logger,
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [challenge] }),
+            // Verification outlasts the window; by then 15.5 min remain, so the 3-at-20-min row is due.
+            rankVisually: jest.fn(async (_challenge, ids) => {
+                clock.mockReturnValue(startMs + 5 * 60_000);
+                return ids;
+            }),
+            wallClockNow: () => Math.floor(Date.now() / 1000),
+            submitToChallenge,
+        });
+
+        expect(result).toBe('submitted');
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p1'], 'tok');
+        const success = logger.withCategory.mock.results.flatMap(({ value }) =>
+            (value as jest.MockedObject<CategoryLogger>).success.mock.calls.map(([message]) => message),
+        );
+        expect(success).toEqual([expect.stringContaining('the relative schedule authorized this submission')]);
     });
 
     test('a clock window still open after verification cannot submit after the challenge closes', async () => {
@@ -1696,6 +1735,83 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
             submitToChallenge: jest.fn().mockRejectedValue(thrown),
         });
         expect(submitResult).toBe('error');
+    });
+});
+
+describe('resolveAutoSubmitDue — is an Auto-Submit due now', () => {
+    const dueChallenge = () =>
+        makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }, { id: 'e2' }], closeIn: 15 * 60 });
+    const deps = (settings = makeSettings({ autoSubmit: true })) => ({
+        settings,
+        logger: makeLogger(),
+        getEligiblePhotos: jest.fn(),
+        submitToChallenge: jest.fn(),
+    });
+
+    test('due: carries the trigger, the schedule, the target and the free slots, and touches nothing', () => {
+        const challenge = dueChallenge();
+        const result = resolveAutoSubmitDue(challenge, NOW, deps());
+
+        expect(result).toEqual({
+            due: true,
+            authorization: {
+                trigger: expect.objectContaining({ relativeTarget: 3, clockTarget: 0, desired: 3 }),
+                authorizer: 'relative',
+                schedule: DEFAULT_SCHEDULE,
+                desired: 3,
+                slotsRemaining: 2,
+            },
+        });
+        expect(getSlotsRemaining(challenge)).toBe(2);
+    });
+
+    test.each([
+        ['the challenge has no id', () => invalid<Challenge>({ close_time: NOW + 600 }), 'skipped'],
+        ['the close time is not a number', () => ({ ...dueChallenge(), close_time: NaN }), 'skipped'],
+        ['the challenge has closed', () => makeChallenge({ closeIn: -1 }), 'skipped'],
+        [
+            'no slot is free',
+            () => makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }, { id: 'e2' }], closeIn: 15 * 60 }),
+            'skipped',
+        ],
+        [
+            'the target is met',
+            () => makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }], closeIn: 3600 }),
+            'skipped',
+        ],
+    ] as const)('not due, skipped: %s', (_label, build, status) => {
+        expect(resolveAutoSubmitDue(build(), NOW, deps())).toEqual({ due: false, status });
+    });
+
+    test.each([
+        ['the Auto-Submit toggle is off', () => makeSettings({ autoSubmit: false })],
+        ['Manual Only is on', () => makeSettings({ autoSubmit: true, manualPhotosOnly: true })],
+    ])('not due, disabled: %s', (_label, settings) => {
+        expect(resolveAutoSubmitDue(dueChallenge(), NOW, deps(settings()))).toEqual({ due: false, status: 'disabled' });
+    });
+
+    test('not due, no-schedule: the toggle is on but no schedule or clock window exists', () => {
+        const settings = makeSettings({ autoSubmit: true, schedule: [] });
+        expect(resolveAutoSubmitDue(dueChallenge(), NOW, deps(settings))).toEqual({
+            due: false,
+            status: 'no-schedule',
+        });
+    });
+
+    test('a schedule that tops out below the challenge allows logs the warning and is not due', () => {
+        const logger = makeLogger();
+        const challenge = makeChallenge({
+            maxSubmits: 6,
+            entries: [{ id: 'e1' }, { id: 'e2' }, { id: 'e3' }, { id: 'e4' }],
+            closeIn: 5 * 60,
+        });
+        const result = resolveAutoSubmitDue(challenge, NOW, { ...deps(), logger });
+
+        expect(result).toEqual({ due: false, status: 'skipped' });
+        const warnings = logger.withCategory.mock.results.flatMap(({ value }) =>
+            (value as jest.MockedObject<CategoryLogger>).warning.mock.calls.map(([message]) => message),
+        );
+        expect(warnings).toEqual([expect.stringContaining('schedule tops out at 4 entries')]);
     });
 });
 

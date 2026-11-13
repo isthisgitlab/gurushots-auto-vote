@@ -35,6 +35,8 @@ export type PeerBridgeContext = {
     readonly phones: Set<string>;
     hostPeerId: string | null;
     everConnected: boolean;
+    /** A non-current host ended this bridge; every later transport callback is ignored. */
+    stopped: boolean;
     /** The timer that reads the desktop absent when none joins in time; one at a time. */
     offlineWait: ReturnType<typeof setTimeout> | null;
 };
@@ -48,5 +50,6 @@ export const createPeerBridgeContext = (transport: RemoteTransport): PeerBridgeC
     phones: new Set(),
     hostPeerId: null,
     everConnected: false,
+    stopped: false,
     offlineWait: null,
 });

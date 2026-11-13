@@ -1,14 +1,11 @@
 /**
- * Where the phone keeps the pairing key: only in the link's `#k=` fragment and in that tab's
- * `sessionStorage` — never in `localStorage`, because every Pages site under one origin shares
- * it. The fragment stays in the address bar, so a bookmark or "Add to Home Screen" keeps the
- * link and the phone stays paired with no re-scan. On the Android remote mode the key is also
+ * Where the phone keeps the pairing key: only in the link's `#k=` fragment — never in
+ * `localStorage`, because every Pages site under one origin shares it. The fragment stays in the
+ * address bar, so a bookmark or "Add to Home Screen" keeps the link and the phone stays paired
+ * with no re-scan. On the Android remote mode the key is also
  * stored in the app's own Preferences under `gs_remote_access` (the wipe clears it with the
  * rest of the local data; see LOCAL_DATA_STORES in settings/localData.ts). Dependency-free.
  */
-
-/** The sessionStorage key the tab's copy of the pairing key is kept under. */
-export const PAIRING_KEY_STORAGE = 'remote-pairing-key';
 
 /** The fragment parameter the pairing link carries the key in (`#k=<key>`). */
 export const PAIRING_KEY_PARAM = 'k';
@@ -23,33 +20,17 @@ export const ANDROID_PAIRING_KEY_PREF = 'gs_remote_access';
 const PAIRING_KEY_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
 /**
- * The loader document's path: it ends in the `remote` segment, with the trailing slash or an
- * `index.html` optional. What comes before is the site's own base path (the Pages site lives
- * under `/gurushots-auto-vote/`; a dev-local origin has none).
+ * The current remote page's canonical path. What comes before is the site's own base path (the
+ * Pages site lives under `/gurushots-auto-vote/`; a dev-local origin has none).
  */
-const LOADER_PATH_PATTERN = /\/remote(?:\/(?:index\.html)?)?$/;
-
-/**
- * The stable loader's address from a versioned page (`/remote/v<N>/index.html`): the address bar
- * shows `../#k=<key>`, so a bookmark or "Add to Home Screen" keeps a link that survives the next
- * desktop update and the next link version.
- */
-export const loaderAddressBarUrl = (key: string): string => `../#k=${encodeURIComponent(key)}`;
-
-/**
- * The same loader as a navigation target. It is addressed by file name: the Android app's local server
- * answers a directory path with the app's own document, and the Pages site serves the same file.
- */
-export const loaderNavigationUrl = (key: string): string => `../index.html#k=${encodeURIComponent(key)}`;
+const CURRENT_REMOTE_PAGE_PATH_PATTERN = /\/remote\/v2\/(?:index\.html)?$/;
 
 /** Whether `value` reads as a pairing key (base64url, the desktop key's exact length). */
 export const isPairingKey = (value: string): boolean => PAIRING_KEY_PATTERN.test(value);
 
 /**
- * The pairing key of a pasted pairing link (`<origin>/remote/#k=<key>`, the Pages loader's
- * address or a dev-local origin), or null when the text is not one: only the key is kept,
- * nothing else of the link. A missing or malformed key, a link to some other path of the site,
- * and non-web schemes are refused — the caller shows the same "not a pairing link" message.
+ * The validated key in a pasted current pairing link. Canonical current page paths only are
+ * accepted; malformed fragments, unrelated paths, and non-web schemes are refused.
  */
 export const parsePairingLink = (link: string): string | null => {
     let url: URL;
@@ -59,35 +40,20 @@ export const parsePairingLink = (link: string): string | null => {
         return null;
     }
     if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
-    // The loader's address; a missing trailing slash or an index.html is the same document.
-    if (!LOADER_PATH_PATTERN.test(url.pathname)) return null;
-    const key = new URLSearchParams(url.hash.slice(1)).get(PAIRING_KEY_PARAM);
-    return key !== null && isPairingKey(key) ? key : null;
-};
-
-const keptKey = (): string | null => {
-    try {
-        return globalThis.sessionStorage?.getItem(PAIRING_KEY_STORAGE) ?? null;
-    } catch {
-        return null; // a browser that refuses site data: the fragment still carries the key
-    }
-};
-
-const keepKey = (key: string): void => {
-    try {
-        globalThis.sessionStorage?.setItem(PAIRING_KEY_STORAGE, key);
-    } catch {
-        // memory only
-    }
+    const fragment = new URLSearchParams(url.hash.slice(1));
+    const keys = fragment.getAll(PAIRING_KEY_PARAM);
+    const key = keys[0];
+    if (key === undefined || keys.length !== 1 || !isPairingKey(key)) return null;
+    if (fragment.has('v')) return null;
+    return CURRENT_REMOTE_PAGE_PATH_PATTERN.test(url.pathname) ? key : null;
 };
 
 /**
- * The pairing key this page was opened with: taken from the fragment when there is one (and
- * kept for the tab, so a reload keeps working), otherwise from what the tab kept. The
- * fragment itself is left in the address bar. Null when the page was opened without a key.
+ * The pairing key this page was opened with, read only from the fragment. The fragment itself
+ * is left in the address bar. Null when it is absent, malformed, or duplicated.
  */
 export const takePairingKey = (): string | null => {
-    const given = new URLSearchParams(globalThis.location.hash.slice(1)).get(PAIRING_KEY_PARAM);
-    if (given !== null && given.length > 0) keepKey(given);
-    return given && given.length > 0 ? given : keptKey();
+    const keys = new URLSearchParams(globalThis.location.hash.slice(1)).getAll(PAIRING_KEY_PARAM);
+    const key = keys[0];
+    return key !== undefined && keys.length === 1 && isPairingKey(key) ? key : null;
 };

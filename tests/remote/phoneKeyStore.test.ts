@@ -23,8 +23,8 @@ describe('the phone key store', () => {
         delete g.Capacitor;
     });
 
-    test('reads the stored key from the Preferences key the wipe knows', async () => {
-        nativePromise.mockResolvedValue({ value: KEY });
+    test('reads the canonical current record from the Preferences key the wipe knows', async () => {
+        nativePromise.mockResolvedValue({ value: `2:${KEY}` });
         await expect(readStoredKey()).resolves.toEqual({ kind: 'key', key: KEY });
         expect(nativePromise).toHaveBeenCalledWith('Preferences', 'get', { key: 'gs_remote_access' });
     });
@@ -34,13 +34,20 @@ describe('the phone key store', () => {
         await expect(readStoredKey()).resolves.toEqual({ kind: 'none' });
     });
 
-    test.each([{ value: 'not-a-key' }, { value: 42 }, { value: '' }])(
-        '%j reads as an invalid stored value',
-        async (a) => {
-            nativePromise.mockResolvedValue(a);
-            await expect(readStoredKey()).resolves.toEqual({ kind: 'invalid' });
-        },
-    );
+    test.each([
+        { value: 'not-a-key' },
+        { value: KEY },
+        { value: 42 },
+        { value: '' },
+        { value: `1:${KEY}` },
+        { value: `0:${KEY}` },
+        { value: `01:${KEY}` },
+        { value: `1000:${KEY}` },
+        { value: `2:not-a-key` },
+    ])('%j reads as an invalid stored value', async (a) => {
+        nativePromise.mockResolvedValue(a);
+        await expect(readStoredKey()).resolves.toEqual({ kind: 'invalid' });
+    });
 
     test('a refused read rejects: the caller decides what an unknown state means', async () => {
         nativePromise.mockRejectedValue(new Error('plugin refused'));
@@ -51,7 +58,10 @@ describe('the phone key store', () => {
         nativePromise.mockResolvedValue(undefined);
         await storeKey(KEY);
         await clearStoredKey();
-        expect(nativePromise).toHaveBeenNthCalledWith(1, 'Preferences', 'set', { key: 'gs_remote_access', value: KEY });
+        expect(nativePromise).toHaveBeenNthCalledWith(1, 'Preferences', 'set', {
+            key: 'gs_remote_access',
+            value: `2:${KEY}`,
+        });
         expect(nativePromise).toHaveBeenNthCalledWith(2, 'Preferences', 'remove', { key: 'gs_remote_access' });
     });
 

@@ -256,7 +256,7 @@ export const app = {
     pinGoneNote:
         "The photo pinned for {kind} isn't in this challenge right now, so {kind} is waiting for it — it won't be applied to another photo. If it's one of your Chosen Photos and Auto-Submit is on, it is submitted automatically and {kind} is applied then. If {kind} expires before that, it goes unused. Pin another photo or clear the pin to use your usual settings.",
     pinGoneSubmitNote:
-        "The photo pinned for Boost isn't in this challenge right now. It is one of your Chosen Photos, so it will be submitted when Boost is due, and Boost is applied to it after Wait Before Boosting a New Photo. If it can't be submitted, Boost keeps waiting for it and goes unused if it expires. Pin another photo or clear the pin to use your usual settings.",
+        "The photo pinned for Boost isn't in this challenge right now. It is one of your Chosen Photos, so it will be submitted at the next Auto-Submit, or when Boost is due if that comes first. Boost is applied to it at its usual time, and not earlier than Wait Before Boosting a New Photo after it goes in. If it can't be submitted, Boost keeps waiting for it and goes unused if it expires. Pin another photo or clear the pin to use your usual settings.",
     pinConflictNote:
         "The photo pinned for {kind} already has {other}, so {kind} won't be applied. Pin another photo or clear the pin to use your usual settings.",
     pinSwapWarning:
@@ -341,9 +341,9 @@ export const app = {
     boostNewSubmitOnConflict: 'Boost a Freshly Submitted Photo Only on Conflict',
     boostNewSubmitOnConflictDesc:
         'A new photo is submitted and boosted only when every existing entry has Turbo or a Turbo pin. A Turbo pin yielding in the Emergency Submit window takes the Boost; the option above overrides.',
-    boostPinnedSubmit: 'Submit the Photo Pinned for Boost When Boost Is Due',
+    boostPinnedSubmit: 'Submit the Photo Pinned for Boost Automatically',
     boostPinnedSubmitDesc:
-        "When the photo pinned for Boost isn't in the challenge but is one of your Chosen Photos, it is submitted when Boost is due, and Boost is applied to it after Wait Before Boosting a New Photo. Needs a free slot. If the photo can't be submitted, Boost keeps waiting for it as before.",
+        "When the photo pinned for Boost isn't in the challenge but is one of your Chosen Photos, the next Auto-Submit submits it instead of another photo. If no Auto-Submit comes before Boost is due, it is submitted when Boost is due. Boost is applied to it at its usual time, and not earlier than Wait Before Boosting a New Photo after it goes in. Needs a free slot. While the photo can still be submitted, Auto-Submit keeps the last free slot for it instead of using another photo. If the photo can't be submitted, Boost keeps waiting for it as before.",
     turboNewSubmit: 'Turbo a Freshly Submitted Photo',
     turboNewSubmitDesc:
         'A new photo (by your Auto-Submit tag rules) is submitted just before Turbo applies and gets it. No free slot or photo: Turbo falls back to your Turbo Entry, or skips this cycle with none yet.',
@@ -761,6 +761,7 @@ export const app = {
     discoverSortStart: 'Start time',
     discoverSortEnd: 'End time',
     discoverSortJoinDeadline: 'Join deadline',
+    discoverSortFreeEntryDeadline: 'Free entry deadline',
     discoverStartTime: 'Start time: {date}',
     discoverBoostJoinDeadline: 'Free Boost join deadline: {date}',
     discoverFreeEntryDeadline: 'Free entry deadline: {date}',
@@ -1710,7 +1711,7 @@ export const app = {
         'Internal — the version of the "unofficial app" notice you acknowledged; the notice is shown again when its text changes materially',
     // Remote access (the desktop is what gets paired to; the phone shows the states)
     remoteAccess: 'Remote access',
-    remoteAccessDesc: 'Control this app from your phone with one permanent link. It is off by default.',
+    remoteAccessDesc: 'Control this app from your phone. Remote access is off by default.',
     remoteToggleLabel: 'Allow control from your phone',
     remoteStatusOn: 'On — a phone with the link can control this app',
     remoteStatusOff: 'Off',
@@ -1738,7 +1739,6 @@ export const app = {
     remoteNetwork: "Couldn't connect on this network — try Wi-Fi",
     remoteUpdateNeeded: 'Update the app on your computer',
     remoteUpdateThis: 'Update this app',
-    remotePageUnpublished: "The page for your computer's version is not published yet — try again later.",
     remoteFull: 'Too many phones are connected — close the app on another phone, then reload this page.',
     remoteFullShort: 'Too many phones',
     remoteChangeFailed:

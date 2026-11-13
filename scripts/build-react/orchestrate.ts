@@ -16,17 +16,26 @@ import {
     webHtml,
 } from './documents';
 import { LINK_VERSION } from '../../src/ts/core/remote/protocol';
+import { DIST_DIR, rendererBundleDir, rendererStylesheetPath } from '../lib/build-paths';
 import { commonOptions, entryPoints, isLite, isWatch, perEntryOptions } from './entries';
 import type { EntryName } from './entries';
 
-const distDir = path.join(__dirname, '..', '..', 'dist');
 const NOTICES_ASSET_NAME = 'THIRD_PARTY_NOTICES.txt';
+const bundleDir = rendererBundleDir(isLite);
 
-const prepareDist = async () => {
-    // Create dist directory if it doesn't exist
-    if (!fs.existsSync(distDir)) {
-        fs.mkdirSync(distDir, { recursive: true });
+const assembleStylesheet = (outputDir = DIST_DIR): void => {
+    fs.mkdirSync(outputDir, { recursive: true });
+    fs.copyFileSync(rendererStylesheetPath, path.join(outputDir, 'styles.css'));
+};
+
+const prepareAssembly = async (distDir: string, bundleSourceDir: string) => {
+    fs.rmSync(distDir, { recursive: true, force: true });
+    fs.mkdirSync(distDir, { recursive: true });
+    for (const name of Object.keys(entryPoints)) {
+        const source = path.join(bundleSourceDir, `${name}-bundle.js`);
+        if (fs.existsSync(source)) fs.copyFileSync(source, path.join(distDir, `${name}-bundle.js`));
     }
+    if (fs.existsSync(rendererStylesheetPath)) assembleStylesheet(distDir);
     if (isLite) removeVisionWebAssets(distDir);
     else await stageVisionWebAssets(distDir);
 
@@ -82,7 +91,7 @@ const watchEntries = async () => {
             ...commonOptions,
             ...perEntryOptions[name],
             entryPoints: [entry],
-            outfile: path.join(distDir, `${name}-bundle.js`),
+            outfile: path.join(DIST_DIR, `${name}-bundle.js`),
         });
 
         contexts.push({ name, ctx });
@@ -111,7 +120,8 @@ const watchEntries = async () => {
     });
 };
 
-const buildEntries = async () => {
+const buildEntries = async (outputDir = bundleDir) => {
+    fs.mkdirSync(outputDir, { recursive: true });
     // Build mode - build each entry point
     let builtCount = 0;
 
@@ -127,7 +137,7 @@ const buildEntries = async () => {
             ...commonOptions,
             ...perEntryOptions[name],
             entryPoints: [entry],
-            outfile: path.join(distDir, `${name}-bundle.js`),
+            outfile: path.join(outputDir, `${name}-bundle.js`),
         });
 
         console.log(`✅ Built ${name}-bundle.js`);
@@ -146,7 +156,7 @@ const buildEntries = async () => {
 // the network. The directory is named by the link version, not the app version: one page
 // serves every desktop that speaks the link. dist/remote/ is emptied first, so a build carries
 // no folder an earlier build staged. Run after the bundles are built, never in watch mode.
-const copyRemoteVersionDir = (): void => {
+const copyRemoteVersionDir = (distDir = DIST_DIR): void => {
     const loaderDir = path.join(distDir, 'remote');
     fs.rmSync(loaderDir, { recursive: true, force: true });
     const name = `v${LINK_VERSION}`;
@@ -165,21 +175,37 @@ const copyRemoteVersionDir = (): void => {
             fs.copyFileSync(source, path.join(target, assetName));
             // The loader is a published document too: its stylesheet and the notices sit beside it.
             fs.copyFileSync(source, path.join(loaderDir, assetName));
-        } else console.log(`⏭️  remote/${name}: ${assetName} not built yet — run build:css / build:notices for it`);
+        } else
+            console.log(
+                `⏭️  remote/${name}: ${assetName} not built yet — run pnpm build:react to regenerate the remote page`,
+            );
     }
     console.log(`✓ Staged the remote page under dist/remote/${name}/`);
 };
 
+async function buildRendererBundles() {
+    console.log(`🔨 Building ${isLite ? 'lite ' : ''}React bundles...`);
+    try {
+        await buildEntries();
+    } catch (error) {
+        console.error('❌ Build failed:', error);
+        process.exit(1);
+    }
+}
+
+async function assembleRenderer(outputDir = DIST_DIR) {
+    await prepareAssembly(outputDir, bundleDir);
+    copyRemoteVersionDir(outputDir);
+}
+
 async function buildReact() {
     console.log(`🔨 Building ${isLite ? 'lite ' : ''}React bundles${isWatch ? ' (watch mode)' : ''}...`);
-
-    await prepareDist();
 
     try {
         if (isWatch) await watchEntries();
         else {
-            await buildEntries();
-            copyRemoteVersionDir();
+            await buildRendererBundles();
+            await assembleRenderer();
         }
     } catch (error) {
         console.error('❌ Build failed:', error);
@@ -187,4 +213,11 @@ async function buildReact() {
     }
 }
 
-export { NOTICES_ASSET_NAME, copyRemoteVersionDir, buildReact };
+export {
+    NOTICES_ASSET_NAME,
+    assembleStylesheet,
+    copyRemoteVersionDir,
+    buildRendererBundles,
+    assembleRenderer,
+    buildReact,
+};

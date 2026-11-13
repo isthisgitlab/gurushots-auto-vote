@@ -17,6 +17,7 @@ import qrcode from 'qrcode-generator';
 
 import { createJsonStore } from '../../../core/settings/storage';
 import { REMOTE_PAGES_ORIGIN, REMOTE_PAGES_PATH } from '../../../core/remote/relays';
+import { LINK_VERSION } from '../../../core/remote/protocol';
 
 import type { ThroughResult } from '../../../core/types/stores';
 
@@ -124,7 +125,8 @@ const createRemotePairing = (deps: RemotePairingDeps): RemotePairing => {
         return fresh;
     };
 
-    const linkFor = (key: string): string => `${devLinkOrigin ?? REMOTE_PAGES_ORIGIN}${REMOTE_PAGES_PATH}#k=${key}`;
+    const linkFor = (key: string): string =>
+        `${devLinkOrigin ?? REMOTE_PAGES_ORIGIN}${REMOTE_PAGES_PATH}v${LINK_VERSION}/index.html#k=${key}`;
 
     const qrDataUrlFor = (link: string): string => {
         const qr = qrcode(0, 'M');

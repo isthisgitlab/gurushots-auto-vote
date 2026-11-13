@@ -5,8 +5,7 @@
  * the rest of the local data. Entering stops the background service and clears
  * the persisted running flag first — no local voter may survive into or after
  * remote mode — then stores the key and hands the WebView to the bundled
- * remote loader (`/remote/index.html`, which the APK carries with the
- * versioned pages). The document this module runs in mounts nothing after that.
+ * current remote page (`/remote/v2/index.html`). The document this module runs in mounts nothing after that.
  */
 
 import * as logger from '../../core/logger';
@@ -18,8 +17,8 @@ import { stop as stopNativeService } from './NativeAutovoteBridge';
 
 import type { RemoteModeEntry } from '../../core/remote/phoneMode';
 
-/** The bundled remote loader document (scripts/build-react.ts stages it under dist/remote/). */
-const BUNDLED_LOADER_PATH = '/remote/index.html';
+/** The bundled current remote page (scripts/build-react.ts stages it under dist/remote/v2/). */
+const BUNDLED_REMOTE_PAGE_PATH = '/remote/v2/index.html';
 
 /**
  * The pairing key stored for the remote mode, or null when the app is not in remote mode and the
@@ -39,9 +38,9 @@ const readStoredPairingKey = async (): Promise<string | null> => {
     return null;
 };
 
-/** Navigates this WebView to the bundled remote loader with the key in its fragment. */
-const loadBundledRemoteLoader = (key: string): void => {
-    globalThis.location.assign(`${BUNDLED_LOADER_PATH}#k=${key}`);
+/** Navigates this WebView to the bundled current remote page with the key in its fragment. */
+const loadBundledRemotePage = (key: string): void => {
+    globalThis.location.assign(`${BUNDLED_REMOTE_PAGE_PATH}#k=${key}`);
 };
 
 /**
@@ -71,7 +70,7 @@ const enterRemoteMode = async (link: string): Promise<RemoteModeEntry> => {
     } catch {
         return { success: false, error: 'storage' };
     }
-    loadBundledRemoteLoader(key);
+    loadBundledRemotePage(key);
     return { success: true };
 };
 
@@ -84,4 +83,4 @@ const installRemoteModeEntry = (): void => {
     installPhoneRemoteMode({ enter: enterRemoteMode });
 };
 
-export { enterRemoteMode, installRemoteModeEntry, loadBundledRemoteLoader, readStoredPairingKey };
+export { enterRemoteMode, installRemoteModeEntry, loadBundledRemotePage, readStoredPairingKey };

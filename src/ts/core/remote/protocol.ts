@@ -19,7 +19,7 @@ import type { AutovoteState } from '../autovote/state';
 
 /**
  * The app version this build carries. `hello` announces it for the logs; no peer compares it, the link version
- * decides compatibility. It stays on the wire because link-version-1 parsers require it.
+ * decides compatibility. It stays on the wire as part of the message envelope.
  */
 export const APP_VERSION: string = pkg.version;
 
@@ -27,14 +27,14 @@ export const APP_VERSION: string = pkg.version;
  * The link version: the number of the phone ⇄ desktop contract this build speaks, like a versioned API. The phone
  * page is published under `/remote/v<LINK_VERSION>/` and serves every desktop that speaks the same number, whatever
  * app version either side runs. The pinned shapes are `core/remote/contract/v<N>/`, checked by
- * `tests/remote/contractV1.test.ts`.
+ * their matching `tests/remote/contractV<N>.test.ts` snapshots.
  *
  * The rule inside one link version: a change may only add — new channels, new optional fields, a channel moving
- * from refused to allowed. A new value in an existing closed field (a `reason`, a `role`, a command name), a new
+ * from refused to allowed. A transport compatibility break also requires a new link version. A new value in an existing closed field (a `reason` or a command name), a new
  * enum member of an existing setting, or a change to a channel's spend class needs a new number and a new
  * `contract/v<N>/`. New page code must handle a missing field and a channel an older desktop refuses.
  */
-export const LINK_VERSION = 1 as const;
+export const LINK_VERSION = 2 as const;
 
 /** The highest link version a `hello` may carry: a bound on the wire, not a statement of what is published. */
 const MAX_LINK_VERSION = 999;
@@ -44,8 +44,7 @@ export const isLinkVersion = (value: unknown): value is number =>
     isInteger(value) && value >= 1 && value <= MAX_LINK_VERSION;
 
 /**
- * The protocol shape version, frozen at 1: link-version-1 parsers accept a `hello` only when it carries
- * `protocolVersion`. It is sent, never compared; compatibility is the link version.
+ * The protocol shape version, frozen at 1. It is sent, never compared; compatibility is the link version.
  */
 export const PROTOCOL_VERSION = 1 as const;
 
@@ -74,8 +73,6 @@ export type HelloMessage = {
     /** An integer from 1 to 999. */
     linkVersion: number;
     host: boolean;
-    /** `'loader'` marks the /remote/ loader, which only asks the desktop's version: it takes no peer slot and no snapshot. */
-    role?: 'loader';
 };
 /** Phone → host: one window.api invoke. `undefinedAt` restores JSON-lost `undefined` arguments (see bridge/web.ts). */
 export type InvokeMessage = { t: 'invoke'; id: number; channel: string; args: unknown[]; undefinedAt?: number[] };
@@ -128,44 +125,6 @@ const isAutovoteState = (value: unknown): value is AutovoteState =>
         value.statusClass === 'badge-error') &&
     (value.error === null || typeof value.error === 'string');
 
-/**
- * A release version as the `hello` carries it (`1.2.3`, `1.2.3-beta.4`): the only shape the loader
- * builds a page path from, so nothing a peer sends can name another place on the site.
- */
-const RELEASE_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?$/;
-
-/** Whether `version` is a release version, safe to put into a page path. */
-export const isReleaseVersion = (version: string): boolean => RELEASE_VERSION_PATTERN.test(version);
-
-/**
- * Orders two release versions: the number core first, then a pre-release below its release and
- * pre-releases among themselves by their dotted identifiers (numbers as numbers).
- */
-export const compareReleaseVersions = (a: string, b: string): -1 | 0 | 1 => {
-    const split = (version: string): { core: number[]; pre: string[] | null } => {
-        const [core, ...pre] = version.split('-');
-        return { core: core.split('.').map(Number), pre: pre.length === 0 ? null : pre.join('-').split('.') };
-    };
-    const left = split(a);
-    const right = split(b);
-    for (let i = 0; i < 3; i++) {
-        if (left.core[i] !== right.core[i]) return left.core[i] < right.core[i] ? -1 : 1;
-    }
-    if (left.pre === null || right.pre === null) {
-        return left.pre === right.pre ? 0 : left.pre === null ? 1 : -1;
-    }
-    for (let i = 0; i < Math.max(left.pre.length, right.pre.length); i++) {
-        const x = left.pre[i];
-        const y = right.pre[i];
-        if (x === undefined || y === undefined) return x === undefined ? -1 : 1;
-        if (x === y) continue;
-        const bothNumeric = /^\d+$/.test(x) && /^\d+$/.test(y);
-        if (bothNumeric) return Number(x) < Number(y) ? -1 : 1;
-        return x < y ? -1 : 1;
-    }
-    return 0;
-};
-
 /** Why a message can or cannot travel to a peer: it fits, it is over the byte limit, or JSON cannot serialize it at all. */
 export type PeerSendability = 'within' | 'too-large' | 'unserializable';
 
@@ -188,7 +147,6 @@ export const parsePeerMessage = (raw: unknown): PeerMessage | null => {
     if (!isWithinPeerMessageLimit(raw)) return null;
     switch (raw.t) {
         case 'hello': {
-            if (raw.role !== undefined && raw.role !== 'loader') return null;
             if (
                 !isLinkVersion(raw.linkVersion) ||
                 typeof raw.host !== 'boolean' ||
@@ -205,7 +163,7 @@ export const parsePeerMessage = (raw: unknown): PeerMessage | null => {
                 linkVersion: raw.linkVersion,
                 host: raw.host,
             };
-            return raw.role === undefined ? hello : { ...hello, role: raw.role };
+            return hello;
         }
         case 'invoke':
             if (!isInteger(raw.id) || raw.id < 0 || !isBoundedString(raw.channel) || !Array.isArray(raw.args)) {

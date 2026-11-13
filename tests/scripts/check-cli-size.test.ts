@@ -82,7 +82,7 @@ describe('check-cli-size', () => {
         main({ bundlePath, cliBuildDir });
         expect(exitSpy).toHaveBeenCalledWith(1);
         expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('2 CLI artifact(s) over budget'));
-        expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('❌ OVER  dist/cli-bundled.js'));
+        expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('❌ OVER  out/cli/cli-bundled.js'));
     });
 
     test('check returns false and leaves the tally alone for a missing file', () => {
@@ -94,7 +94,7 @@ describe('check-cli-size', () => {
     test('main defaults to the repo artifact paths', () => {
         const existsSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(false);
         main();
-        expect(existsSpy).toHaveBeenCalledWith(path.join(__dirname, '..', '..', 'dist', 'cli-bundled.js'));
+        expect(existsSpy).toHaveBeenCalledWith(path.join(__dirname, '..', '..', 'out', 'cli', 'cli-bundled.js'));
         expect(existsSpy).toHaveBeenCalledWith(path.join(__dirname, '..', '..', 'build', 'cli'));
         expect(exitSpy).toHaveBeenCalledWith(0);
     });

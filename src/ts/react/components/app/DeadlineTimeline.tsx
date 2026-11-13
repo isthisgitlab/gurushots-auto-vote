@@ -32,7 +32,7 @@ export function DeadlineTimeline({
 }: {
     actions: DeadlineAction[];
     compact?: boolean;
-    /** Show the Boost-pinned photo submit as its own row at the boost row's time. */
+    /** Show the Boost-pinned photo submit: the Auto-Submit row when one is due by the boost row's time, else a row at the boost row's time. */
     boostPinSubmits?: boolean;
 }) {
     const { t } = useTranslation();
@@ -46,14 +46,19 @@ export function DeadlineTimeline({
         .map((a) => ({ ...a, remaining: a.dueAt - now }));
     if (rows.length === 0) return null;
 
-    // The Boost-pinned photo submit happens at the Boost row's due time, so its
-    // row takes that time and sits just before Boost; Boost itself follows after
-    // the fresh-photo wait, which the Boost row does not show. The label
-    // resolves here, not through ACTION_LABEL_KEY: the Node notify path owns
-    // that map and has no such action.
+    // The Boost-pinned photo submit happens at the Auto-Submit due at or before
+    // the Boost row's time, so that row is relabelled and no row is added. With
+    // no such Auto-Submit it happens at the Boost row's due time: its row takes
+    // that time and sits just before Boost; Boost itself follows after the
+    // fresh-photo wait, which the Boost row does not show. The label resolves
+    // here, not through ACTION_LABEL_KEY: the Node notify path owns that map and
+    // has no such action.
     const boostIndex = rows.findIndex((r) => r.action === 'boost');
     if (boostPinSubmits && boostIndex !== -1) {
-        rows.splice(boostIndex, 0, { ...rows[boostIndex], action: 'boostPinSubmit' });
+        const boostDueAt = rows[boostIndex].dueAt;
+        const autoSubmitIndex = rows.findIndex((r) => r.action === 'autoSubmit' && r.dueAt <= boostDueAt);
+        if (autoSubmitIndex !== -1) rows[autoSubmitIndex] = { ...rows[autoSubmitIndex], action: 'boostPinSubmit' };
+        else rows.splice(boostIndex, 0, { ...rows[boostIndex], action: 'boostPinSubmit' });
     }
 
     const labelFor = (action: string) =>

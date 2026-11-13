@@ -54,7 +54,7 @@ const NAMES = [
     'preload',
     'preloadLogs',
 ];
-const bundlePath = (name: string) => realPath.join(ROOT, 'dist', `${name}-bundle.js`);
+const bundlePath = (name: string) => realPath.join(ROOT, 'out', 'renderer', 'full', 'bundles', `${name}-bundle.js`);
 
 const brotli = (buf: Buffer) =>
     zlib.brotliCompressSync(buf, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11 } }).length;
@@ -169,7 +169,9 @@ describe('scripts/check-size-delta.ts', () => {
         mockFiles.delete(bundlePath('logs'));
 
         expect(run()).toBe(1);
-        expect(err()).toContain('✗ logs (Electron renderer): bundle not found at dist/logs-bundle.js');
+        expect(err()).toContain(
+            '✗ logs (Electron renderer): bundle not found at out/renderer/full/bundles/logs-bundle.js',
+        );
     });
 
     test.each([
@@ -205,7 +207,7 @@ describe('scripts/check-size-delta.ts', () => {
             const { preload, ...rest } = sizes;
             void preload;
             expect(parseJson(String(mockFiles.get(BASELINE)))).toEqual(rest);
-            expect(err()).toContain('bundle not found at dist/preload-bundle.js');
+            expect(err()).toContain('bundle not found at out/renderer/full/bundles/preload-bundle.js');
         });
     });
 });

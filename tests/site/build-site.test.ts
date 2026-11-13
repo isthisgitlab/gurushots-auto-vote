@@ -48,15 +48,12 @@ jest.mock('marked-gfm-heading-id', () => ({
     gfmHeadingId: jest.fn(() => ({})),
     resetHeadings: jest.fn(),
 }));
-
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 import os = require('node:os');
 import nodePathModule = require('node:path');
 const nodePath = jest.mocked(nodePathModule);
 import type * as marked_gfm_heading_idModule from 'marked-gfm-heading-id';
-import { invalid } from '../helpers/invalid';
-import { remoteSiteDeps } from '../helpers/remoteSite';
 import type * as build_siteModule from '../../scripts/build-site';
 const { resetHeadings } = jest.mocked(require('marked-gfm-heading-id') as typeof marked_gfm_heading_idModule);
 
@@ -289,9 +286,7 @@ describe('main (full render into a temp tree)', () => {
         rootDir: tmp,
         out,
         layoutFile: nodePath.join(tmp, 'layout.html'),
-        // The remote tree reads the repo's dist/ in production; the tests keep it out and
-        // answer an empty release list, so nothing is downloaded.
-        remoteSite: remoteSiteDeps(nodePath.join(tmp, 'missing-dist')),
+        remoteDist: nodePath.join(tmp, 'missing-dist'),
     });
 
     beforeEach(() => {
@@ -311,37 +306,25 @@ describe('main (full render into a temp tree)', () => {
         fs.rmSync(tmp, { recursive: true, force: true });
     });
 
-    it('main without remoteSite uses the real defaults: the repo dist and the real release listing', async () => {
-        // main() with no remoteSite option: every destructuring default runs (rootDir, out,
-        // layoutFile, remoteSite) — the repo's real dist/ and the real (stubbed here) GitHub
-        // reads. The temp tree carries the files the rest of main() reads.
-        const calls: string[] = [];
-        globalThis.fetch = invalid<typeof fetch>(
-            jest.fn(async (url: string) => {
-                calls.push(url);
-                if (url.includes('/releases?'))
-                    return invalid<Response>({ ok: true, status: 200, json: async () => [] });
-                return invalid<Response>({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(4) });
-            }),
-        );
+    it('main without remoteDist uses the real local dist without fetching', async () => {
         write('src/assets/logo.png', 'PNG');
         write('package.json', JSON.stringify({ version: '9.9.9' }));
         write('layout.html', '<main>{{content}}</main>');
         // main() renders every PAGES entry; seed each one it walks.
         for (const page of PAGES) write(page.src, `# ${page.src}`);
-        // Whether the repo's dist/ holds a renderer build depends on the machine (CI tests before
-        // building), so the default is pinned by the path the remote step looks up, not by its output.
-        const existsSpy = jest.spyOn(fs, 'existsSync');
+        const repoDist = nodePath.join(__dirname, '..', '..', 'dist');
+        const actualExistsSync = fs.existsSync;
+        const existsSpy = jest.spyOn(fs, 'existsSync').mockImplementation((path: fsModule.PathLike): boolean => {
+            if (typeof path === 'string' && path.startsWith(`${repoDist}${nodePath.sep}`)) return false;
+            return actualExistsSync(path);
+        });
+        const fetchSpy = jest.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('unexpected fetch'));
         try {
-            // The empty listing leaves nothing to download, so the build completes after the listing went to
-            // the fixed API address and nothing else was requested.
             await main({ rootDir: tmp, out, layoutFile: nodePath.join(tmp, 'layout.html') });
-            const repoDist = nodePath.join(__dirname, '..', '..', 'dist');
             expect(existsSpy).toHaveBeenCalledWith(nodePath.join(repoDist, 'remote-loader.html'));
-            expect(calls.some((url) => url.includes('api.github.com/repos/') && url.includes('/releases?'))).toBe(true);
-            expect(calls.every((url) => url.includes('/releases?'))).toBe(true);
+            expect(fetchSpy).not.toHaveBeenCalled();
         } finally {
-            delete (globalThis as { fetch?: unknown }).fetch;
+            fetchSpy.mockRestore();
         }
     });
 

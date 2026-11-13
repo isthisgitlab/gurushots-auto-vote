@@ -2,12 +2,12 @@
  * The relay link's own WebSockets: one per relay in the list, opened apart from trystero's so a
  * relay's refusal of our data events (`rate-limited`, `blocked`) cannot back off or retire
  * trystero's signalling relays. An event is signed once (`createEvent`, injected from the
- * trystero adapter, the only module that imports the library) and the same string goes to every
+ * relay adapter) and the same string goes to every
  * open relay. To spare mobile data the link listens on at most `MAX_SUBSCRIBED_RELAYS` open
  * relays, in list order, and moves to the next open one when a listening relay closes.
  *
- * Both paths sign with trystero's one pubkey from one IP, so a relay's rate limit or block by
- * pubkey hits both; the link's send budget keeps that unlikely.
+ * The relay fallback signs with one ephemeral pubkey from one IP, so a relay's rate limit or
+ * block by pubkey affects that transport; the link's send budget keeps that unlikely.
  */
 
 import { RELAY_CONTENT_MAX_BYTES, toHex } from './relayWire';
@@ -31,9 +31,9 @@ export type RelaySocketsOptions = {
     urls: readonly string[];
     /** Opens a socket (`new WebSocket(url)` in production). */
     createSocket: (url: string) => SocketLike;
-    /** Signs `content` into a `["EVENT",{…}]` frame for `topic` (trystero's `createEvent`). */
+    /** Signs `content` into a `["EVENT",{…}]` frame for `topic`. */
     createEvent: (topic: string, content: string) => Promise<string>;
-    /** The `["REQ",subId,{…}]` frame that starts listening to `topic` (trystero's `subscribe`). */
+    /** The `["REQ",subId,{…}]` frame that starts listening to `topic`. */
     subscribeFrame: (subId: string, topic: string) => string;
     /** A relay refused one of our events (`OK false`) or closed our subscription. Nothing in the app acts on it; the live probe and tests read it. */
     onRefused?: (url: string, reason: string) => void;
@@ -75,7 +75,7 @@ export const MAX_PENDING_DIGESTS = 64;
 /** The most contents remembered; past it the oldest is forgotten, so memory stays bounded before the decrypt budget applies. */
 export const MAX_REMEMBERED_COPIES = 4096;
 
-/** The `pubkey` of a signed event frame (trystero's `createEvent`): a hex field no base64url content can imitate. */
+/** The `pubkey` of a signed event frame: a hex field no base64url content can imitate. */
 const EVENT_PUBKEY = /"pubkey":"([0-9a-f]{64})"/;
 
 const sha256Hex = async (text: string): Promise<string> =>
@@ -114,7 +114,7 @@ type SocketsState = {
     readonly copies: SeenSet;
     readonly handlers: Set<(content: string) => void>;
     readonly openHandlers: Set<() => void>;
-    /** The pubkey our events are signed with (trystero's, one per page), read off the first one we sign: the relay echoes our own events back. */
+    /** The pubkey our events are signed with, read off the first one we sign: the relay echoes our own events back. */
     ownPubkey: string | null;
     /** How many content digests are being computed right now. */
     digesting: number;

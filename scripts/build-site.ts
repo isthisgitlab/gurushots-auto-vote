@@ -8,10 +8,8 @@
 //
 // The site's content and the pure helpers (hasScheme/toRepoPath/rewriteLink/
 // rewriteImage/badgeSvg/render/srcDirOf, exported for unit tests) live in
-// build-site/pages.ts; the remote-access release pipeline (the /remote/ tree, one
-// page per link version as /remote/v<N>/, and its GitHub fetchers) lives in
-// build-site/remote.ts, remoteReleases.ts and remoteUnpack.ts — all re-exported
-// here. main() runs only when the file is executed directly (via runIfMain),
+// build-site/pages.ts; the current remote-access site tree (the /remote/ launcher and v2 page) lives in
+// build-site/remote.ts — re-exported here. main() runs only when the file is executed directly (via runIfMain),
 // so requiring it has no effect.
 // main() takes the repo root / output dir / layout as overridable paths so the
 // full render can be tested against a temp tree without touching dist-site/.
@@ -38,8 +36,6 @@ import {
     toRepoPath,
 } from './build-site/pages';
 import { buildRemoteSite } from './build-site/remote';
-import { listReleasesFromGitHub } from './build-site/remoteReleases';
-import type { RemoteSiteDeps } from './build-site/remoteReleases';
 
 const root = path.join(__dirname, '..');
 const outDir = path.join(root, 'dist-site');
@@ -109,14 +105,12 @@ const main = async ({
     rootDir = root,
     out = outDir,
     layoutFile = layoutPath,
-    // The remote tree's outer effects (the release listing and downloads); absent, the real GitHub
-    // fetchers run — the tests inject theirs.
-    remoteSite,
+    remoteDist,
 }: {
     rootDir?: string;
     out?: string;
     layoutFile?: string;
-    remoteSite?: RemoteSiteDeps;
+    remoteDist?: string;
 } = {}) => {
     const { renderPage, localImages } = await createMarkdownRenderer();
 
@@ -165,11 +159,11 @@ const main = async ({
     fs.copyFileSync(logoSrc, path.join(out, 'logo.png'));
     console.log(`✓ copied logo.png\n✓ rendered ${PAGES.length} page(s) to dist-site/ for v${version}`);
 
-    await buildRemoteSite(out, version, remoteSite);
+    buildRemoteSite(out, remoteDist);
 };
 
 const runCli = () =>
-    main({ remoteSite: { listReleases: listReleasesFromGitHub } }).catch((err) => {
+    main().catch((err) => {
         console.error(err);
         process.exit(1);
     });
@@ -191,12 +185,4 @@ export {
     runCli,
 };
 
-export {
-    REMOTE_PAGE_ZIP_PATTERN,
-    listReleasesFromGitHub,
-    downloadFromGitHub,
-    selectLinkVersionPages,
-} from './build-site/remoteReleases';
 export { buildRemoteSite } from './build-site/remote';
-
-export type { LinkVersionPage, RemoteRelease, RemoteSiteDeps } from './build-site/remoteReleases';

@@ -270,7 +270,7 @@ export const app: LatvianApp = {
     pinGoneNote:
         'Piespraustā {kind} foto šajā izaicinājumā pašlaik nav, tāpēc {kind} gaida šo foto un netiks piemērots citam foto. Ja tas ir viens no taviem izvēlētajiem foto un automātiskā iesniegšana ir ieslēgta, tas tiks iesniegts automātiski un {kind} tiks piemērots. Ja {kind} beidzas agrāk, tas paliek neizmantots. Piespraud citu foto vai noņem piespraudi, lai izmantotu tavus parastos uzstādījumus.',
     pinGoneSubmitNote:
-        'Boost piespraustā foto šajā izaicinājumā pašlaik nav. Tas ir viens no taviem izvēlētajiem foto, tāpēc to iesniegs, kad pienāks Boost laiks, un Boost tam piemēros pēc „Gaidīt pirms Boost jaunam foto”. Ja to nevar iesniegt, Boost turpina to gaidīt un, ja beidzas, paliek neizmantots. Piespraud citu foto vai noņem piespraudi, lai izmantotu tavus parastos uzstādījumus.',
+        'Boost piespraustā foto šajā izaicinājumā pašlaik nav. Tas ir viens no taviem izvēlētajiem foto, tāpēc to iesniegs nākamajā automātiskajā iesniegšanā vai, ja Boost laiks pienāk agrāk, Boost laikā. Boost tam piemēros parastajā laikā, ne agrāk kā „Gaidīt pirms Boost jaunam foto” pēc tā iesniegšanas. Ja to nevar iesniegt, Boost turpina to gaidīt un, ja beidzas, paliek neizmantots. Piespraud citu foto vai noņem piespraudi, lai izmantotu tavus parastos uzstādījumus.',
     pinConflictNote:
         'Piespraustajam {kind} foto jau ir {other}, tāpēc {kind} netiks piemērots. Piespraud citu foto vai noņem piespraudi, lai izmantotu tavus parastos uzstādījumus.',
     pinSwapWarning:
@@ -357,9 +357,9 @@ export const app: LatvianApp = {
     boostNewSubmitOnConflict: 'Boost jaunam iesniegtam foto tikai konflikta gadījumā',
     boostNewSubmitOnConflictDesc:
         'Boost jaunam foto iesniedz tikai tad, ja neviens esošais foto nevar saņemt Boost — katram ir Turbo vai tā piespraude. Turbo piespraude, kas ārkārtas iesniegšanas laikā atkāpjas, Boost saņem.',
-    boostPinnedSubmit: 'Iesniegt Boost piesprausto foto, kad pienāk Boost laiks',
+    boostPinnedSubmit: 'Automātiski iesniegt Boost piesprausto foto',
     boostPinnedSubmitDesc:
-        'Ja Boost piespraustā foto izaicinājumā nav, bet tas ir starp „Izvēlētie foto”, to iesniedz, kad pienāk Boost laiks, un Boost tam piemēro pēc „Gaidīt pirms Boost jaunam foto”. Vajadzīga brīva vieta. Ja foto nevar iesniegt, Boost turpina to gaidīt kā līdz šim.',
+        'Ja Boost piespraustā foto izaicinājumā nav, bet tas ir starp „Izvēlētie foto”, nākamajā automātiskajā iesniegšanā to iesniedz cita foto vietā. Ja pirms Boost laika automātiskā iesniegšana nenotiek, to iesniedz, kad pienāk Boost laiks. Boost tam piemēro parastajā laikā, ne agrāk kā „Gaidīt pirms Boost jaunam foto” pēc tā iesniegšanas. Vajadzīga brīva vieta. Kamēr foto vēl var iesniegt, automātiskā iesniegšana pēdējo brīvo vietu patur tam, nevis izmanto citam foto. Ja foto nevar iesniegt, Boost turpina to gaidīt kā līdz šim.',
     turboNewSubmit: 'Turbo jaunam iesniegtam foto',
     turboNewSubmitDesc:
         'Tieši pirms Turbo iesniedz jaunu foto pēc tagu noteikumiem, un Turbo piešķiras jaunajam foto. Nav vietas vai foto — Turbo pāriet uz norādīto Turbo foto, bet bez foto izlaiž ciklu.',
@@ -776,6 +776,7 @@ export const app: LatvianApp = {
     discoverSortStart: 'Sākuma laiks',
     discoverSortEnd: 'Beigu laiks',
     discoverSortJoinDeadline: 'Pievienošanās termiņš',
+    discoverSortFreeEntryDeadline: 'Bezmaksas dalības termiņš',
     discoverStartTime: 'Sākuma laiks: {date}',
     discoverBoostJoinDeadline: 'Bezmaksas Boost pievienošanās termiņš: {date}',
     discoverFreeEntryDeadline: 'Bezmaksas dalības termiņš: {date}',
@@ -1732,7 +1733,7 @@ export const app: LatvianApp = {
         'Iekšējs — tā paziņojuma versija, ko apstiprināji (lietotne nav saistīta ar GuruShots); paziņojums tiek rādīts vēlreiz, ja tā teksts būtiski mainās',
     // Attālinātā piekļuve (dators ir tas, ko savieno pārī; telefons redz stāvokļus)
     remoteAccess: 'Attālinātā piekļuve',
-    remoteAccessDesc: 'Vadi šo lietotni no telefona ar vienu pastāvīgu saiti. Pēc noklusējuma tā ir izslēgta.',
+    remoteAccessDesc: 'Vadi šo lietotni no telefona. Attālinātā piekļuve pēc noklusējuma ir izslēgta.',
     remoteToggleLabel: 'Atļaut vadību no telefona',
     remoteStatusOn: 'Ieslēgta — telefons ar saiti var vadīt šo lietotni',
     remoteStatusOff: 'Izslēgta',
@@ -1762,7 +1763,6 @@ export const app: LatvianApp = {
     remoteNetwork: 'Neizdevās izveidot savienojumu šajā tīklā — mēģini Wi-Fi',
     remoteUpdateNeeded: 'Atjaunini lietotni datorā',
     remoteUpdateThis: 'Atjaunini šo lietotni',
-    remotePageUnpublished: 'Tava datora versijas lapa vēl nav publicēta — mēģini vēlāk vēlreiz.',
     remoteFull: 'Ir savienoti pārāk daudz telefonu — aizver lietotni citā telefonā, pēc tam pārlādē šo lapu.',
     remoteFullShort: 'Pārāk daudz telefonu',
     remoteChangeFailed:

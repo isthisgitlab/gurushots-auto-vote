@@ -52,6 +52,7 @@ jest.mock('../../src/ts/core/services/autoFill', () => ({
     submitNewEntryForAction: jest.fn(),
     reflectNewEntry: jest.fn(),
     maybeAutoFillChallenge: jest.fn(() => 'disabled'),
+    resolveAutoSubmitDue: jest.fn(() => ({ due: false, status: 'disabled' })),
     maybeEmergencyFillChallenge: jest.fn(() => 'disabled'),
 }));
 jest.mock('../../src/ts/core/settings', () => ({

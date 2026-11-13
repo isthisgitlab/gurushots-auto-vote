@@ -6,20 +6,15 @@
 
 import {
     MAX_PEER_MESSAGE_BYTES,
-    APP_VERSION,
     LINK_VERSION,
     PROTOCOL_VERSION,
     checkPeerMessageLimit,
-    compareReleaseVersions,
     isLinkVersion,
-    isReleaseVersion,
     isWithinPeerMessageLimit,
     isSafeToSendTwice,
     parsePeerMessage,
     restoreInvokeArgs,
 } from '../../src/ts/core/remote/protocol';
-import * as pkg from '../../package.json';
-
 import type {
     AutovoteCommandMessage,
     AutovoteStateMessage,
@@ -59,8 +54,8 @@ describe('parsePeerMessage', () => {
         expect(PROTOCOL_VERSION).toBe(1);
     });
 
-    test('the link version is 1, and the protocol version stays frozen at 1', () => {
-        expect(LINK_VERSION).toBe(1);
+    test('the link version is 2, and the protocol version stays frozen at 1', () => {
+        expect(LINK_VERSION).toBe(2);
         expect(PROTOCOL_VERSION).toBe(1);
     });
 
@@ -390,30 +385,7 @@ describe('isConnectionFailureJoinError (the try-Wi-Fi classifier)', () => {
     });
 });
 
-describe('the loader role and the full bye', () => {
-    test("a hello may carry role 'loader', and only that role", () => {
-        const loader = {
-            t: 'hello',
-            version: '1.2.3',
-            protocolVersion: PROTOCOL_VERSION,
-            linkVersion: LINK_VERSION,
-            host: false,
-            role: 'loader',
-        };
-        expect(parsePeerMessage(loader)).toEqual(loader);
-        expect(parsePeerMessage({ ...loader, role: 'admin' })).toBeNull();
-        expect(parsePeerMessage({ ...loader, role: 1 })).toBeNull();
-        // Without a role it is a phone's hello, unchanged.
-        const phone = {
-            t: 'hello',
-            version: '1.2.3',
-            protocolVersion: PROTOCOL_VERSION,
-            linkVersion: LINK_VERSION,
-            host: false,
-        };
-        expect(parsePeerMessage(phone)).toEqual(phone);
-    });
-
+describe('the full bye', () => {
     test("a bye may carry reason 'full', and only that reason", () => {
         expect(parsePeerMessage({ t: 'bye' })).toEqual({ t: 'bye' });
         expect(parsePeerMessage({ t: 'bye', reason: 'full' })).toEqual({ t: 'bye', reason: 'full' });
@@ -448,57 +420,6 @@ describe('checkPeerMessageLimit', () => {
     test('a value JSON cannot serialize is unserializable, and undefined serializes to empty', () => {
         expect(checkPeerMessageLimit({ n: 10n })).toBe('unserializable');
         expect(checkPeerMessageLimit(undefined)).toBe('within');
-    });
-});
-
-describe('release versions', () => {
-    test('APP_VERSION is the package version', () => {
-        expect(APP_VERSION).toBe(pkg.version);
-        expect(isReleaseVersion(APP_VERSION)).toBe(true);
-    });
-
-    test.each(['1.2.3', '0.0.1', '10.20.30', '1.2.3-beta', '1.2.3-beta.4', '1.2.3-rc.1.2'])(
-        '%s is a release version',
-        (v) => {
-            expect(isReleaseVersion(v)).toBe(true);
-        },
-    );
-
-    test.each([
-        '',
-        '1.2',
-        '1.2.3.4',
-        'v1.2.3',
-        '1.2.3-',
-        '1.2.3-beta..4',
-        '../1.2.3',
-        '1.2.3/x',
-        ' 1.2.3',
-        '1.2.3\n',
-        'latest',
-    ])('%p is not a release version', (v) => {
-        expect(isReleaseVersion(v)).toBe(false);
-    });
-
-    test.each([
-        ['1.2.3', '1.2.3', 0],
-        ['1.2.4', '1.2.3', 1],
-        ['1.2.3', '1.2.4', -1],
-        ['1.10.0', '1.9.9', 1],
-        ['2.0.0', '1.99.99', 1],
-        ['0.9.0', '1.0.0', -1],
-        ['1.2.3', '1.2.3-beta', 1],
-        ['1.2.3-beta', '1.2.3', -1],
-        ['1.2.3-beta', '1.2.3-beta', 0],
-        ['1.2.3-beta.2', '1.2.3-beta.10', -1],
-        ['1.2.3-beta.10', '1.2.3-beta.2', 1],
-        ['1.2.3-alpha', '1.2.3-beta', -1],
-        ['1.2.3-beta', '1.2.3-alpha', 1],
-        ['1.2.3-beta', '1.2.3-beta.1', -1],
-        ['1.2.3-beta.1', '1.2.3-beta', 1],
-        ['1.2.3-1', '1.2.3-alpha', -1],
-    ] as Array<[string, string, number]>)('compares %s with %s as %i', (a, b, expected) => {
-        expect(compareReleaseVersions(a, b)).toBe(expected);
     });
 });
 

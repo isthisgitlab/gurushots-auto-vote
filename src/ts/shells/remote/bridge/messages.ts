@@ -10,7 +10,6 @@ import { classifyRemoteChannel } from '../../../core/remote/allowlist';
 import { REMOTE_REFUSAL_PREFIX, REMOTE_SAY_HELLO_FIRST, isAllowedWrite } from '../../../core/remote/dispatch';
 import { setRemoteConnectionState, setRemoteHostPath, setRemoteHostPeerId } from '../../../core/remote/connectionState';
 import { rendererTranslator } from '../../../core/translations/renderer';
-import { clearSkipMark, storeLinkVersion } from '../../../core/remote/linkVersion';
 
 import type { HelloRepeater } from '../../../core/remote/helloRepeat';
 import type { ByeMessage, EventMessage, HelloMessage, ResultMessage } from '../../../core/remote/protocol';
@@ -26,8 +25,8 @@ export type MessageWatch = {
     readonly pipeline: InvokePipeline;
     /** Settles the pending invokes and reads offline — owned by connection.ts, driven by the bye path. */
     readonly settlePendingForLostConnection: () => void;
-    /** The absolute loader address a version mismatch sends the tab to. */
-    readonly loaderTarget: string;
+    /** Stops the attempted session and shows the existing incompatibility notice. */
+    readonly stopForIncompatibility: (state: 'update' | 'update-this') => void;
     /** Settles what is in flight and asks the desktop at `peerId` to take this phone back — owned by connection.ts. */
     readonly reconnect: (peerId: string) => void;
     /** The phone-local view settings: a desktop settings-changed payload is seeded and overlaid through it. */
@@ -36,11 +35,6 @@ export type MessageWatch = {
 
 const dispatchEvent = (ctx: PeerBridgeContext, channel: string, payload: unknown): void => {
     for (const listener of ctx.listeners.get(channel) ?? []) listener(payload);
-};
-
-/** This page does not speak the desktop's link version: the loader the page named finds the one that does. */
-const goToLoader = (loaderTarget: string): void => {
-    globalThis.location.replace(loaderTarget);
 };
 
 const handleHello = (message: HelloMessage, peerId: string, watch: MessageWatch): void => {
@@ -53,26 +47,15 @@ const handleHello = (message: HelloMessage, peerId: string, watch: MessageWatch)
         return;
     }
     if (message.linkVersion !== LINK_VERSION) {
-        // Once a desktop is accepted, only that peer can send this page away; before one is, the first desktop's
-        // hello decides (the round trip from a stale kept version needs it).
+        // Once a desktop is accepted, only that peer can stop this page; before one is, the first desktop's
+        // hello decides.
         if (ctx.hostPeerId !== null && peerId !== ctx.hostPeerId) return;
-        // The desktop speaks another link version: the stable loader finds the page that matches it (or says which
-        // side to update), so no notice shows here.
-        hello.stop();
-        hello.clear();
-        // The loader goes straight to the link version this page remembers next time: the one the desktop speaks. A
-        // write that fails is a shortcut lost, never a stranded tab.
-        void storeLinkVersion(message.linkVersion)
-            .catch(() => undefined)
-            .then(() => goToLoader(watch.loaderTarget));
+        watch.stopForIncompatibility(message.linkVersion < LINK_VERSION ? 'update' : 'update-this');
         return;
     }
     if (ctx.hostPeerId === null) {
         ctx.hostPeerId = peerId;
         setRemoteHostPeerId(peerId);
-        // This page is the desktop's: remembered for the loader's next visit, and the loader's mark has done its work.
-        void storeLinkVersion(LINK_VERSION).catch(() => undefined);
-        clearSkipMark();
         setRemoteHostPath(ctx.transport.peerPath?.(peerId) ?? 'direct');
         ctx.everConnected = true;
         ctx.waiting.clear();
@@ -153,6 +136,7 @@ const handleBye = (message: ByeMessage, peerId: string, watch: MessageWatch): vo
 
 export const watchPeerMessages = (watch: MessageWatch): void => {
     watch.ctx.transport.onMessage((peerId, raw) => {
+        if (watch.ctx.stopped) return;
         const message = parsePeerMessage(raw);
         if (message === null) return;
         switch (message.t) {

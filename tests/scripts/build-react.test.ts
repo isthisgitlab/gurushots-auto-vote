@@ -40,6 +40,9 @@ const fs = mockFs;
 
 const ROOT = realPath.join(__dirname, '..', '..');
 const DIST = realPath.join(ROOT, 'dist');
+const FULL = realPath.join(ROOT, 'out', 'renderer', 'full', 'bundles');
+const STYLESHEET = realPath.join(ROOT, 'out', 'renderer', 'styles.css');
+const ASSEMBLY = realPath.join(ROOT, 'out', 'assembly');
 const LEXICON = realPath.join(ROOT, 'src', 'assets', 'semantic-vectors.json');
 const NOTICES = realPath.join(ROOT, 'src', 'assets', 'THIRD_PARTY_NOTICES.txt');
 const LOGO = realPath.join(ROOT, 'src', 'assets', 'logo.png');
@@ -96,6 +99,16 @@ describe('scripts/build-react.ts', () => {
         await flush();
     };
 
+    const runMain = async (args: string[] = []) => {
+        process.argv = ['node', 'scripts/build-react.ts', ...args];
+        let result: unknown;
+        jest.isolateModules(() => {
+            result = (require('../../scripts/build-react') as typeof import('../../scripts/build-react')).main();
+        });
+        await result;
+        await flush();
+    };
+
     const logged = () => logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
 
     test('requiring the script does not start a build', async () => {
@@ -109,15 +122,121 @@ describe('scripts/build-react.ts', () => {
         expect(fs.writeFileSync).not.toHaveBeenCalled();
     });
 
+    test('dispatches the bundle stage without compatibility assembly', async () => {
+        await runMain(['--bundles']);
+
+        expect(esbuild.build).toHaveBeenCalledTimes(ENTRY_NAMES.length);
+        expect(fs.rmSync).not.toHaveBeenCalledWith(DIST, expect.anything());
+    });
+
+    test('stages only the canonical stylesheet for the public CSS assembly', async () => {
+        await runMain(['--assemble=css']);
+
+        expect(esbuild.build).not.toHaveBeenCalled();
+        expect(fs.mkdirSync).toHaveBeenCalledWith(DIST, { recursive: true });
+        expect(fs.copyFileSync).toHaveBeenCalledWith(STYLESHEET, realPath.join(DIST, 'styles.css'));
+        expect(fs.rmSync).not.toHaveBeenCalled();
+        expect(fs.writeFileSync).not.toHaveBeenCalled();
+        expect(mockVisionAssets.stageVisionWebAssets).not.toHaveBeenCalled();
+        expect(mockVisionAssets.removeVisionWebAssets).not.toHaveBeenCalled();
+    });
+
+    test('creates a stylesheet destination and propagates a missing canonical stylesheet', () => {
+        const output = realPath.join(ASSEMBLY, 'stylesheet-only');
+        fs.copyFileSync.mockImplementationOnce(() => {
+            throw new Error('ENOENT: canonical stylesheet is missing');
+        });
+
+        expect(() => {
+            jest.isolateModules(() => {
+                (require('../../scripts/build-react') as typeof import('../../scripts/build-react')).assembleStylesheet(
+                    output,
+                );
+            });
+        }).toThrow('ENOENT: canonical stylesheet is missing');
+        expect(fs.mkdirSync).toHaveBeenCalledWith(output, { recursive: true });
+        expect(fs.copyFileSync).toHaveBeenCalledWith(STYLESHEET, realPath.join(output, 'styles.css'));
+    });
+
+    test('dispatches the selected production assembly without rebundling', async () => {
+        await runMain(['--assemble=production', '--lite']);
+
+        expect(esbuild.build).not.toHaveBeenCalled();
+        expect(fs.rmSync).toHaveBeenCalledWith(realPath.join(ASSEMBLY, 'lite'), { recursive: true, force: true });
+        expect(fs.copyFileSync).toHaveBeenCalledWith(STYLESHEET, realPath.join(ASSEMBLY, 'lite', 'styles.css'));
+        expect(fs.rmSync).not.toHaveBeenCalledWith(DIST, expect.anything());
+    });
+
+    test('dispatches the full production assembly without rebundling', async () => {
+        await runMain(['--assemble=production']);
+
+        expect(esbuild.build).not.toHaveBeenCalled();
+        expect(fs.rmSync).toHaveBeenCalledWith(realPath.join(ASSEMBLY, 'full'), { recursive: true, force: true });
+        expect(fs.copyFileSync).toHaveBeenCalledWith(STYLESHEET, realPath.join(ASSEMBLY, 'full', 'styles.css'));
+    });
+
+    test('dispatches compatibility assembly to dist without rebundling', async () => {
+        await runMain(['--assemble']);
+
+        expect(esbuild.build).not.toHaveBeenCalled();
+        expect(fs.rmSync).toHaveBeenCalledWith(DIST, { recursive: true, force: true });
+        expect(fs.copyFileSync).toHaveBeenCalledWith(STYLESHEET, realPath.join(DIST, 'styles.css'));
+    });
+
+    test('defaults to the complete compatibility build', async () => {
+        await runMain();
+
+        expect(esbuild.build).toHaveBeenCalledTimes(ENTRY_NAMES.length);
+        expect(fs.rmSync).toHaveBeenCalledWith(DIST, { recursive: true, force: true });
+    });
+
+    test('writes the remote version tree into an explicitly selected assembly destination', () => {
+        const selected = realPath.join(ASSEMBLY, 'full');
+        jest.isolateModules(() => {
+            (require('../../scripts/build-react') as typeof import('../../scripts/build-react')).copyRemoteVersionDir(
+                selected,
+            );
+        });
+
+        expect(fs.rmSync).toHaveBeenCalledWith(realPath.join(selected, 'remote'), { recursive: true, force: true });
+        expect(fs.copyFileSync).toHaveBeenCalledWith(
+            realPath.join(selected, 'styles.css'),
+            realPath.join(selected, 'remote', 'v2', 'styles.css'),
+        );
+
+        jest.isolateModules(() => {
+            (require('../../scripts/build-react') as typeof import('../../scripts/build-react')).copyRemoteVersionDir();
+        });
+
+        expect(fs.rmSync).toHaveBeenCalledWith(realPath.join(DIST, 'remote'), { recursive: true, force: true });
+    });
+
+    test('reports the complete compatibility repair command for missing remote assets', () => {
+        const stagedStylesheet = realPath.join(DIST, 'styles.css');
+        const stagedNotices = realPath.join(DIST, 'THIRD_PARTY_NOTICES.txt');
+        fs.existsSync.mockImplementation((source) => source !== stagedStylesheet && source !== stagedNotices);
+
+        jest.isolateModules(() => {
+            (require('../../scripts/build-react') as typeof import('../../scripts/build-react')).copyRemoteVersionDir();
+        });
+
+        expect(logged()).toContain(
+            '⏭️  remote/v2: styles.css not built yet — run pnpm build:react to regenerate the remote page',
+        );
+        expect(logged()).toContain(
+            '⏭️  remote/v2: THIRD_PARTY_NOTICES.txt not built yet — run pnpm build:react to regenerate the remote page',
+        );
+    });
+
     describe('build mode', () => {
         test('writes the HTML shells, copies the lexicon and builds every entry', async () => {
             await run([], 'production');
 
-            // prepareDist assumes dist/ exists; only the staged remote page directory (named by the link
-            // version, not the app version) creates one, after dist/remote/ was emptied.
-            expect(fs.mkdirSync).toHaveBeenCalledTimes(1);
+            expect(fs.rmSync).toHaveBeenCalledWith(DIST, { recursive: true, force: true });
+            expect(fs.mkdirSync).toHaveBeenCalledWith(FULL, { recursive: true });
+            expect(fs.mkdirSync).toHaveBeenCalledWith(DIST, { recursive: true });
             expect(fs.rmSync).toHaveBeenCalledWith(realPath.join(DIST, 'remote'), { recursive: true, force: true });
-            expect(fs.mkdirSync).toHaveBeenCalledWith(realPath.join(DIST, 'remote', 'v1'), { recursive: true });
+            expect(fs.mkdirSync).toHaveBeenCalledWith(realPath.join(DIST, 'remote', 'v2'), { recursive: true });
             expect(fs.writeFileSync).toHaveBeenCalledWith(
                 realPath.join(DIST, 'index.html'),
                 expect.stringContaining('capacitor-bundle.js'),
@@ -144,7 +263,7 @@ describe('scripts/build-react.ts', () => {
             const remoteDir = realPath.join(DIST, 'remote');
             expect(fs.copyFileSync).toHaveBeenCalledWith(
                 realPath.join(DIST, 'remote.html'),
-                realPath.join(remoteDir, 'v1', 'index.html'),
+                realPath.join(remoteDir, 'v2', 'index.html'),
             );
             expect(fs.writeFileSync).toHaveBeenCalledWith(
                 realPath.join(remoteDir, 'index.html'),
@@ -156,16 +275,19 @@ describe('scripts/build-react.ts', () => {
             }
             expect(fs.copyFileSync).toHaveBeenCalledWith(
                 realPath.join(DIST, 'THIRD_PARTY_NOTICES.txt'),
-                realPath.join(remoteDir, 'v1', 'THIRD_PARTY_NOTICES.txt'),
+                realPath.join(remoteDir, 'v2', 'THIRD_PARTY_NOTICES.txt'),
             );
             expect(fs.copyFileSync).toHaveBeenCalledWith(
                 realPath.join(DIST, 'styles.css'),
-                realPath.join(remoteDir, 'v1', 'styles.css'),
+                realPath.join(remoteDir, 'v2', 'styles.css'),
             );
 
             expect(esbuild.build).toHaveBeenCalledTimes(ENTRY_NAMES.length);
             const outfiles = esbuild.build.mock.calls.map(([opts]) => realPath.basename(opts.outfile!));
             expect(outfiles).toEqual(ENTRY_NAMES.map((n) => `${n}-bundle.js`));
+            expect(esbuild.build.mock.calls.map(([opts]) => opts.outfile)).toEqual(
+                ENTRY_NAMES.map((name) => realPath.join(FULL, `${name}-bundle.js`)),
+            );
 
             const appOpts = esbuild.build.mock.calls[1][0];
             expect(appOpts).toMatchObject({
@@ -182,10 +304,12 @@ describe('scripts/build-react.ts', () => {
             // Capacitor entry must BUNDLE the Capacitor plugin packages.
             const capOpts = esbuild.build.mock.calls[3][0];
             expect(capOpts.external).not.toContain('@capacitor/core');
+            expect(capOpts.external).toContain('*/nostrFrames');
 
             // The web entry runs in a browser tab: Capacitor packages stay out.
             const webOpts = esbuild.build.mock.calls[4][0];
             expect(webOpts.external).toEqual(expect.arrayContaining(['node:fs', '@capacitor/core']));
+            expect(webOpts.external).toContain('*/nostrFrames');
 
             // Preload is a CJS node bundle with only electron external.
             const preloadOpts = esbuild.build.mock.calls[8][0];

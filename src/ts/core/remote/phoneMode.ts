@@ -7,7 +7,10 @@
  */
 
 /** What entering remote mode came to: switched, or refused and why (a stable code the UI translates). */
-export type RemoteModeEntry = { success: boolean; error?: 'bad-link' | 'service-stop' | 'settings' | 'storage' };
+export type RemoteModeEntry = {
+    success: boolean;
+    error?: 'bad-link' | 'service-stop' | 'settings' | 'storage';
+};
 
 /** The actions the Android remote mode's shell has installed, per document. */
 export type PhoneRemoteMode = {
