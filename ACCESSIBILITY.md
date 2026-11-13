@@ -9,7 +9,7 @@ It does not claim WCAG conformance or verified compatibility with every assistiv
 ## Dialog keyboard behavior
 
 Dialogs built with the shared modal component move focus into the dialog when it opens.
-Tab and Shift+Tab keep focus inside the dialog. Escape closes the dialog.
+Tab and Shift+Tab keep focus inside the dialog. Escape closes dialogs that allow dismissal.
 When it closes, the component restores focus to the previously focused element.
 Titled dialogs expose their title to assistive technology.
 
