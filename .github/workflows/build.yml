@@ -438,7 +438,8 @@ jobs:
                   name: ${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-linux-arm-builds' || 'linux-arm-builds' }}
                   path: |
                       build/**/*.AppImage
-                      build/**/*latest*.yml
+                      build/latest-linux*.yml
+                      build/lite/lite-linux*.yml
                       build/cli/gurucli-v*-linux-arm*
                   retention-days: 1
 
@@ -692,17 +693,19 @@ jobs:
                       artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}mac-builds/GuruShotsAutoVote-v*.dmg
                       artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}mac-builds/GuruShotsAutoVote-v*.app.zip
                       artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}linux-builds/GuruShotsAutoVote-v*.AppImage
+                      artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}linux-arm-builds/GuruShotsAutoVote-v*.AppImage
                       artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}win-builds/GuruShotsAutoVote-v*.exe
                       artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}mac-builds/lite/GuruShotsAutoVote-v*.dmg
                       artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}mac-builds/lite/GuruShotsAutoVote-v*.app.zip
                       artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}linux-builds/lite/GuruShotsAutoVote-v*.AppImage
+                      artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}linux-arm-builds/lite/GuruShotsAutoVote-v*.AppImage
                       artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}win-lite-builds/lite/GuruShotsAutoVote-v*.exe
                       artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}mac-builds/cli/gurucli-v*-mac
                       artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}mac-builds/cli/gurucli-v*-mac-lite
                       artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}linux-builds/cli/gurucli-v*-linux
                       artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}linux-builds/cli/gurucli-v*-linux-lite
-                      artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}linux-arm-builds/gurucli-v*-linux-arm
-                      artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}linux-arm-builds/gurucli-v*-linux-arm-lite
+                      artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}linux-arm-builds/cli/gurucli-v*-linux-arm
+                      artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}linux-arm-builds/cli/gurucli-v*-linux-arm-lite
                       artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}android-builds/GuruShotsAutoVote-v*.apk
                       artifacts/remote-page/remote-page-v*.zip
 
@@ -864,6 +867,8 @@ jobs:
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/latest-mac.yml
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/GuruShotsAutoVote-v*.AppImage
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/latest-linux*.yml
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-arm-builds/GuruShotsAutoVote-v*.AppImage
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-arm-builds/latest-linux*.yml
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}win-builds/GuruShotsAutoVote-v*.exe
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}win-builds/latest.yml
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/lite/GuruShotsAutoVote-v*.dmg
@@ -871,14 +876,16 @@ jobs:
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/lite/lite-mac.yml
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/lite/GuruShotsAutoVote-v*.AppImage
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/lite/lite-linux*.yml
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-arm-builds/lite/GuruShotsAutoVote-v*.AppImage
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-arm-builds/lite/lite-linux*.yml
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}win-lite-builds/lite/GuruShotsAutoVote-v*.exe
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}win-lite-builds/lite/lite.yml
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/cli/gurucli-v*-mac
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/cli/gurucli-v*-mac-lite
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/cli/gurucli-v*-linux
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/cli/gurucli-v*-linux-lite
-                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-arm-builds/gurucli-v*-linux-arm
-                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-arm-builds/gurucli-v*-linux-arm-lite
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-arm-builds/cli/gurucli-v*-linux-arm
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-arm-builds/cli/gurucli-v*-linux-arm-lite
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}android-builds/GuruShotsAutoVote-v*.apk
                       artifacts/remote-page/remote-page-v*.zip
                       artifacts/remote-page/remote-page-v*.zip.sha256

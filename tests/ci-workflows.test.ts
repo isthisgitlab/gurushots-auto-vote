@@ -65,6 +65,66 @@ const testWorkflow = load('.github/workflows/test.yml');
 const codeqlWorkflow = load('.github/workflows/codeql.yml');
 const SHA_PIN = /^[^@]+@[0-9a-f]{40}$/;
 
+describe('Linux ARM release artifacts', () => {
+    test.each(['', 'develop-'])('selects the intended files with prefix %s', (prefix) => {
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'arm-artifacts-'));
+        const binaries = [
+            'GuruShotsAutoVote-v1.16.0-arm64.AppImage',
+            'lite/GuruShotsAutoVote-v1.16.0-arm64-lite.AppImage',
+            'cli/gurucli-v1.16.0-linux-arm',
+            'cli/gurucli-v1.16.0-linux-arm-lite',
+        ];
+        const manifests = ['latest-linux-arm64.yml', 'lite/lite-linux-arm64.yml'];
+        const files = [...binaries, ...manifests];
+        try {
+            for (const file of [...files, 'unrelated.txt']) {
+                const output = path.join(directory, 'build', file);
+                fs.mkdirSync(path.dirname(output), { recursive: true });
+                fs.writeFileSync(output, 'fixture');
+            }
+            const upload = stepNamed(build.jobs['build-cli-arm'], 'Upload Linux ARM artifacts');
+            expect(upload.with?.name).toBe(
+                "${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-linux-arm-builds' || 'linux-arm-builds' }}",
+            );
+            const uploadPatterns = upload.with?.path;
+            if (typeof uploadPatterns !== 'string') throw new Error('Upload has no path patterns');
+            const uploaded = fs.globSync(uploadPatterns.trim().split('\n'), { cwd: directory }).sort();
+
+            const artifact = `artifacts/${prefix}linux-arm-builds`;
+            for (const file of [...files, 'unrelated.txt']) {
+                const destination = path.join(directory, artifact, file);
+                fs.mkdirSync(path.dirname(destination), { recursive: true });
+                fs.copyFileSync(path.join(directory, 'build', file), destination);
+            }
+            const attestPatterns = stepNamed(build.jobs.attest, 'Attest build provenance').with?.['subject-path'];
+            const releasePatterns = stepNamed(build.jobs['create-release'], 'Create Release').with?.files;
+            if (typeof attestPatterns !== 'string' || typeof releasePatterns !== 'string')
+                throw new Error('Release or attestation has no path patterns');
+            const attestExpression = "${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}";
+            const releaseExpression = '${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}';
+            const match = (patterns: string, expression: string) =>
+                fs
+                    .globSync(
+                        patterns
+                            .trim()
+                            .split('\n')
+                            .map((pattern) => pattern.replace(expression, prefix)),
+                        {
+                            cwd: directory,
+                        },
+                    )
+                    .sort();
+            const expected = (names: string[], base: string) => names.map((file) => path.join(base, file)).sort();
+
+            expect(uploaded).toEqual(expected(files, 'build'));
+            expect(match(attestPatterns, attestExpression)).toEqual(expected(binaries, artifact));
+            expect(match(releasePatterns, releaseExpression)).toEqual(expected(files, artifact));
+        } finally {
+            fs.rmSync(directory, { recursive: true, force: true });
+        }
+    });
+});
+
 describe('every workflow action', () => {
     const files = fs.readdirSync(path.join(root, '.github', 'workflows')).filter((file) => file.endsWith('.yml'));
 
