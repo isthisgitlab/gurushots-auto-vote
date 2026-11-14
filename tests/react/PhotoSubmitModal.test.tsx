@@ -606,7 +606,7 @@ describe('the cap changing while open', () => {
         expect(screen.queryByRole('button', { name: /^Submit/ })).toBeNull();
         expect(screen.queryByRole('button', { name: /^Photo / })).toBeNull();
         expect(screen.queryByLabelText('Search your photos by tag')).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+        fireEvent.click(screen.getByText('Close', { selector: 'button' }));
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 

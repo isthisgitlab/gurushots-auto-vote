@@ -150,11 +150,11 @@ describe('plurals', () => {
     });
 
     test.each([
-        [0, '+0 balsis virs rezervista'],
+        [0, 'Balsu pārsvars pār rezervistu: +0'],
         [1, '+1 balss virs rezervista'],
-        [11, '+11 balsis virs rezervista'],
+        [11, 'Balsu pārsvars pār rezervistu: +11'],
         [21, '+21 balss virs rezervista'],
-        [22, '+22 balsis virs rezervista'],
+        [22, 'Balsu pārsvars pār rezervistu: +22'],
     ])('lv selects count %i', (count, expected) => {
         expect(translator.t('app.teamStandingOverStandby', { count }, 'lv')).toBe(expected);
     });

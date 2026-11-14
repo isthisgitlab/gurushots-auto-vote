@@ -9,7 +9,7 @@ export const common: typeof english.common = {
     languageLatvian: 'Latviešu',
     loading: 'Ielādē…',
     closeModal: 'Aizvērt',
-    logout: 'Iziet',
+    logout: 'Izrakstīties',
     mock: 'Testa režīms:',
     never: 'Nekad',
     no: 'Nē',
@@ -55,7 +55,7 @@ export const errors: typeof english.errors = {
     turboModeUnknown:
         'Turbo veids vēl nav zināms. GuruShots nav paziņojis lietotnei, kāda ir šī Turbo spēle. Mēģini vēlreiz pēc brīža.',
     snapNeedsModel:
-        'Snap netika spēlēts. Tam vajadzīgs vizuālais modelis, kura šajā versijā nav. Turbo uzstādījumos ieslēdz „Atbildēt Snap ar Jā bez vizuālā modeļa”, spēlē to GuruShots vai izmanto versiju ar modeli.',
+        'Snap netika spēlēts. Tam vajadzīgs vizuālais modelis, kura šajā versijā nav. Turbo uzstādījumos ieslēdz „Spēlēt Snap bez vizuālā modeļa”, spēlē to GuruShots vai izmanto versiju ar modeli.',
     snapNotOffered:
         'Snap netika spēlēts. GuruShots to šim izaicinājumam vairs nepiedāvā. Atsvaidzini sarakstu, lai redzētu pašreizējo Turbo.',
     snapUnanswerable:
@@ -81,11 +81,11 @@ export const errors: typeof english.errors = {
     pickUnclear:
         'Foto, iespējams, tika iesniegti. GuruShots neatbildēja skaidri, un kartīte tiek atsvaidzināta. Pārbaudi kartīti, pirms mēģini vēlreiz.',
     suggestNoChosenEntered:
-        'Nav ko ieteikt. „Iesniegt tikai izvēlētos foto” ir ieslēgts, un visi izvēlētie foto jau iesniegti. Poga „Izvēlēties foto…” to nepiemēro — izvēlies foto šeit vai atjauno sarakstu.',
+        'Nav ko ieteikt. „Iesniegt tikai izvēlētos foto” ir ieslēgts, un visi izvēlētie foto jau iesniegti. Poga „Izvēlēties foto…” neņem vērā šo uzstādījumu. Izvēlies jebkuru foto šeit vai atjauno sarakstu „Izvēlētie foto”.',
     suggestNoChosenUnusable:
         'Nav ko ieteikt. Ir ieslēgts uzstādījums „Iesniegt tikai izvēlētos foto”, un neviens izvēlētais foto šim izaicinājumam neder. Izvēlies jebkuru foto šeit vai atjauno izvēlētos foto.',
     suggestNoMatch:
-        'Nav ko ieteikt. Neviens foto neatbilst taviem obligātajiem tagiem. Atbrīvo tagus vai izvēlies foto pats.',
+        'Nav ko ieteikt. Neviens foto neatbilst taviem obligātajiem tagiem. Mazini tagu prasības vai izvēlies foto pats.',
     suggestNoEligible:
         'Nav ko ieteikt. Tavā bibliotēkā šobrīd nav foto, ko šis izaicinājums pieņem. Augšupielādē foto vai pamēģini meklēšanu.',
     suggestNoMore:
@@ -105,13 +105,13 @@ export const errors: typeof english.errors = {
     tokenNotSaved:
         'Pieteikšanās pieņemta, bet nesaglabāta: uzstādījumus neizdevās ierakstīt. Pārbaudi faila atļaujas un brīvo vietu diskā, tad piesakies vēlreiz.',
     tokenNotSavedAndroid:
-        'Pieteikšanās tika pieņemta, bet to neizdevās saglabāt. Ierīces uzstādījumu krātuve to nepieņēma. Restartē lietotni un piesakies vēlreiz.',
+        'Pieteikšanās tika pieņemta, bet to neizdevās saglabāt. Ierīce nevarēja saglabāt pieteikšanos savos uzstādījumos. Restartē lietotni un piesakies vēlreiz.',
     webShellToken:
         'Šī lapa nevar sazināties ar tīmekļa serveri. Tā ir atvērta bez šīs palaišanas piekļuves tokena, vai serveris kopš tā laika ir restartēts. Atver adresi, ko izvadīja pnpm web.',
     joinRefusedFull:
         'Neizdevās pievienoties: izaicinājums ir pilns, brīvu vietu vairs nav. Monētas netika norakstītas. Atsvaidzini sarakstu un pievienojies, tiklīdz atbrīvojas kāda vieta.',
     joinRefusedPriceUnknown:
-        'Neizdevās pievienoties: cenu neizdevās nolasīt kā lietojamu cenu, tāpēc nevarēja apstiprināt tēriņu. Monētas netika norakstītas. Atsvaidzini sarakstu vai pievienojies vietnē.',
+        'Neizdevās pievienoties: lietotne nevarēja noteikt cenu, tāpēc nevarēja apstiprināt tēriņu. Monētas netika norakstītas. Atsvaidzini sarakstu vai pievienojies izaicinājumam vietnē gurushots.com.',
     boundaryBody:
         'Daļa lietotnes pārstāja darboties. Informācija ir saglabāta žurnālos. Pārlādē lietotni, lai turpinātu; ja tas atkārtojas, žurnālos redzams, kas neizdevās.',
     votingFailed:
@@ -133,10 +133,10 @@ export const errors: typeof english.errors = {
 // First-run onboarding
 export const onboarding: typeof english.onboarding = {
     title: 'Laipni lūdzam GuruShots Auto Vote',
-    intro: 'Šī lietotne pēc grafika automātiski balso tavos aktīvajos GuruShots izaicinājumos un uztur tavu redzamību augstu — tev pašam nekas nav jādara.',
+    intro: 'Lietotne pēc grafika automātiski balso tavos aktīvajos GuruShots izaicinājumos, lai uzturētu augstu redzamību.',
     howItWorksTitle: 'Kā tas darbojas',
     howItWorks:
-        'Piesakies, uzstādījumos izvēlies sliekšņus un ieslēdz automātisko balsošanu. Lietotne ik pēc dažām minūtēm pārbauda izaicinājumus un balso, kad vajag.',
+        'Piesakies, uzstādījumos izvēlies redzamības līmeņus, pie kuriem sākt balsot, un ieslēdz automātisko balsošanu. Lietotne ik pēc dažām minūtēm pārbauda izaicinājumus un balso, kad vajag.',
     batteryTitle: 'Darbība fonā',
     batteryBody:
         'Lai balsošana turpinātos ar izslēgtu ekrānu, tālruņa uzstādījumos izslēdz šai lietotnei akumulatora optimizāciju. Daži ražotāji (Samsung, Xiaomi, OnePlus) fona lietotnes aptur īpaši agresīvi.',
@@ -169,7 +169,7 @@ export const menu: typeof english.menu = {
     aboutElectron: 'Electron',
     aboutNode: 'Node.js',
     aboutDescription:
-        'GuruShots Auto Vote — Electron lietotne automātiskai balsošanai GuruShots izaicinājumos ar kopīgu grafisko un komandrindas saskarni (atbalsta gan īsto, gan testa režīmu)',
+        'GuruShots Auto Vote — Electron lietotne automātiskai balsošanai GuruShots izaicinājumos. Grafiskajā saskarnē un komandrindā ir pieejamas kopīgas balsošanas funkcijas. Tā atbalsta gan īsto, gan testa režīmu.',
     checkForUpdates: 'Pārbaudīt atjauninājumus…',
     noUpdates: 'Nav atjauninājumu',
     noUpdatesMessage: 'Tev jau ir jaunākā versija.',
@@ -191,7 +191,7 @@ export const login: typeof english.login = {
     loggingIn: 'Piesakās…',
     loginButton: 'Pieteikties',
     mockMode: 'Testa režīms',
-    mockModeInfo: 'Testa režīms: lietotne izmanto simulētus datus. Der jebkāds lietotājvārds un parole.',
+    mockModeInfo: 'Testa režīms: lietotne izmanto testa datus. Der jebkāds lietotājvārds un parole.',
     password: 'Parole',
     passwordPlaceholder: 'Ievadi savu paroli',
     passwordRequired: 'Parole ir obligāta',
@@ -219,9 +219,8 @@ export const app: LatvianApp = {
     activeChallenges: 'Aktīvie izaicinājumi',
     addCustomTimezone: 'Pievienot pielāgotu laika joslu',
     addTimezone: 'Pievienot laika joslu',
-    apiTimeout: 'Gaidīšanas laiks',
-    apiTimeoutDesc:
-        'Cik ilgi gaidīt GuruShots API atbildi, pirms uzskatīt pieprasījumu par neizdevušos (1–120 sekundes).',
+    apiTimeout: 'GuruShots atbildes gaidīšanas laiks',
+    apiTimeoutDesc: 'Cik ilgi gaidīt GuruShots atbildi, pirms uzskatīt pieprasījumu par neizdevušos (1–120 sekundes).',
     appSetting: 'Lietotnes uzstādījums',
     applicationSettings: 'Lietotnes uzstādījumi',
     autoVote: 'Automātiskā balsošana',
@@ -304,10 +303,10 @@ export const app: LatvianApp = {
     boostTimeDesc:
         'Izmanto Boost, kad Boost laika atskaitē ir atlicis šis laiks. Neattiecas uz Boost, kas atbloķēts ar atslēgu, — tam nav laika atskaites; izmanto „Boost laiks (atbloķēts ar atslēgu)”.',
     boostTimeHelp:
-        'Laiks līdz beigām. 0 izslēdz Boost izmantošanu pēc laika — šeit 0 nozīmē „izslēgts”, atšķirībā no redzamības mērķa uzstādījumiem, kur 0 nozīmē „sekot slieksnim”.',
+        'Laiks līdz Boost loga beigām. 0 izslēdz Boost izmantošanu pēc laika — šeit 0 nozīmē „izslēgts”, atšķirībā no redzamības mērķa uzstādījumiem, kur 0 nozīmē „sekot slieksnim”.',
     keyUnlockedBoostTime: 'Boost laiks (atbloķēts ar atslēgu)',
     keyUnlockedBoostTimeDesc:
-        'Atsevišķs logs Boost, kas atbloķēts ar atslēgu (bez savas laika atskaites). Tā kā tas nekad nebeidzas, to izmanto tikai tad, kad līdz beigām atlicis šis laiks. 0 = nekad neizmanto automātiski.',
+        'Atsevišķs logs Boost, kas atbloķēts ar atslēgu (bez savas laika atskaites). Tā kā tas nekad nebeidzas, to izmanto tikai tad, kad līdz izaicinājuma beigām atlicis šis laiks. 0 = nekad neizmanto automātiski.',
     keyUnlockedBoostTimeHelp:
         'Atsevišķs no „Boost laiks” — viens otru neaizstāj; attiecas tikai uz atslēgas atbloķēto Boost. Tāpat kā citos laika uzstādījumos, 0 nozīmē „izslēgts”.',
     boostFreshEntryWait: 'Gaidīt pirms Boost jaunam foto',
@@ -315,28 +314,28 @@ export const app: LatvianApp = {
         'Boost tiek aizturēts, līdz foto, kuram tas paredzēts, izaicinājumā pavadījis šo laiku, jo svaigam foto tas lielākoties aiziet zudumā. Tā termiņu nepārsniedz; 0 = Boost uzreiz.',
     boostOnSleep: 'Boost pirms miega',
     boostOnSleepDesc:
-        'Darbvirsmā: ja dators pāriet miegā, kamēr darbojas automātiskā balsošana, Boost 30 minūšu laikā tiek izmantots uzreiz, lai neaizietu zudumā; tas arī saīsina „Gaidīt pirms Boost jaunam foto”.',
-    voteBeforeBoost: 'Uzpildīt redzamību pirms Boost',
+        'Darbvirsmas lietotnē: ja dators pāriet miega režīmā, kamēr darbojas automātiskā balsošana, Boost, kas jāizmanto nākamo 30 minūšu laikā, tiek izmantots uzreiz, lai tas neaizietu zudumā. Tas arī saīsina „Gaidīt pirms Boost jaunam foto” noteikto gaidīšanu. Ja izslēgts, Boost izmanto paredzētajā laikā.',
+    voteBeforeBoost: 'Balsot pirms Boost',
     voteBeforeBoostDesc:
         'Īsi pirms automātiskās Boost izmantošanas nobalso šajā izaicinājumā līdz 100 % redzamībai, lai Boost nostrādātu uz pilnībā redzama foto, nevis uz tāda, kura redzamība jau sarukusi.',
     voteBeforeBoostHelp:
-        'Boost pareizina foto redzamību brīdī, kad nostrādā, un katrā izaicinājumā ir tikai viens — ar sarukušu redzamību tas aiziet zudumā. Nobalso līdz 100 % pirms Boost; vajag „Automātiski izmantot Boost”.',
+        'Boost pareizina foto redzamību brīdī, kad to izmanto, un katrā izaicinājumā ir tikai viens — ar sarukušu redzamību tas aiziet zudumā. Lietotne balso līdz 100 % zemāk norādītajā laikā pirms Boost. Vajag „Automātiski izmantot Boost”.',
     voteBeforeBoostOnlyBoostHint:
-        'Ieslēgts „Tikai Boost režīms”, tāpēc lietotne nebalso — šī uzpilde nekad nenotiks. Lai to izmantotu, izslēdz šo režīmu (sadaļā „Vispārīgi”).',
+        'Ieslēgts „Tikai Boost režīms”, tāpēc lietotne nebalso — funkcija „Balsot pirms Boost” nedarbosies. Lai to izmantotu, izslēdz šo režīmu (sadaļā „Vispārīgi”).',
     voteBeforeBoostNoAutoBoostHint:
-        'Izslēgts „Automātiski izmantot Boost”, tāpēc lietotne Boost automātiski neizmanto un nav Boost, pirms kura šai uzpildei nostrādāt.',
+        'Izslēgts „Automātiski izmantot Boost”, tāpēc Boost netiek izmantots automātiski un funkcija „Balsot pirms Boost” nedarbojas.',
     voteBeforeBoostLastMinuteOnlyHint:
-        'Ieslēgts „Balsot tikai pēdējās minūtes laikā”, tāpēc lietotne pirms tam nebalso — šī uzpilde nostrādās tikai tad, ja Boost gadīsies tajā logā, kur balsošana tik un tā notiek līdz 100 %.',
+        'Ieslēgts „Balsot tikai pēdējās minūtes laikā”, tāpēc lietotne pirms tam nebalso — šī balsošana pirms Boost notiks tikai tad, ja Boost izmantos tajā logā, kur balsošana tik un tā notiek līdz 100 %.',
     voteBeforeBoostNoBoostTimeHint:
-        'Gan „Boost laiks”, gan „Boost laiks (atbloķēts ar atslēgu)” ir 0 (izslēgts), tāpēc lietotne Boost automātiski neizmanto un nav Boost, pirms kura šai uzpildei nostrādāt. Uzstādi kaut vienu virs 0.',
+        'Gan „Boost laiks”, gan „Boost laiks (atbloķēts ar atslēgu)” ir 0 (izslēgts), tāpēc Boost netiek izmantots automātiski un funkcija „Balsot pirms Boost” nedarbojas. Uzstādi kaut vienu virs 0.',
     voteBeforeBoostLeadMin: 'Cik laicīgi pirms Boost',
     voteBeforeBoostLeadMinDesc:
-        'Cik ilgi pirms Boost izmantošanas sākas uzpilde. Atvēli pietiekami laika vairākiem balsošanas cikliem — redzamība nesasniedz 100 % vienā piegājienā.',
+        'Cik ilgi pirms Boost izmantošanas sākas balsošana. Atvēli pietiekami laika vairākiem balsošanas cikliem — redzamība nesasniedz 100 % vienā piegājienā.',
     autoBoost: 'Automātiski izmantot Boost',
     autoBoostDesc: 'Automātiski izmanto Boost šajā izaicinājumā, kad tā Boost logs drīz aizvērsies.',
     protectUncertainAutoSubmits: 'Saudzēt automātiski iesniegtos foto bez skaidras atbilstības',
     protectUncertainAutoSubmitsDesc:
-        'Neizmantot Boost un Turbo automātiski iesniegtiem foto bez atbilstības tēmai. Izņēmumi: ārkārtas darbības, Boost termiņa beigas un atvērtas tēmas.',
+        'Automātiski neizmantot Boost un Turbo automātiski iesniegtiem foto bez apstiprinātas atbilstības tēmai. Ārkārtas darbības un Boost, kam drīz beidzas izmantošanas termiņš, joprojām tiek piemēroti. Uz atvērtas tēmas izaicinājumiem tas neattiecas.',
     turbo: 'Turbo',
     autoTurbo: 'Automātiski iegūt Turbo',
     autoTurboDesc: 'Automātiski spēlē Turbo minispēli, lai iegūtu bonusu',
@@ -351,16 +350,16 @@ export const app: LatvianApp = {
         'Laiks līdz beigām, kad lietotne izmanto iegūto Turbo. Uzstādi 0, lai izslēgtu Turbo izmantošanu pēc laika. Tāpat kā citos laika uzstādījumos, 0 šeit nozīmē „izslēgts”, nevis „sekot slieksnim”.',
     turboImageIndex: 'Turbo foto',
     turboImageIndexDesc:
-        'Kuram foto Turbo: 1 = pirmajam, 0 = pēdējam; Boost vai tā piespraude to pārbīda atpakaļ. Piesprausts Boost atkāpjas tikai ārkārtas iesniegšanas laikā — kamēr Boost nav gatavs, Turbo nenotiek.',
+        'Kuram foto izmantot Turbo: 1 = pirmajam, 0 = pēdējam. Boost vai tā piespraude pārbīda Turbo par vienu foto atpakaļ. No pirmā foto tas pāriet uz pēdējo. Ja nav cita pieejama foto, Boost piespraude atkāpjas tikai ārkārtas iesniegšanas laikā, kamēr Boost vēl nav gatavs.',
     boostImageIndex: 'Boost foto',
     boostImageIndexDesc:
-        'Kuram foto Boost: 1 = pirmajam, 0 = pēdējam; Turbo vai tā piespraude to pārbīda atpakaļ. Piesprausts Turbo atkāpjas tikai ārkārtas iesniegšanas laikā — kamēr Turbo nav iegūts, Boost nenotiek.',
+        'Kuram foto izmantot Boost: 1 = pirmajam, 0 = pēdējam. Turbo vai tā piespraude pārbīda Boost par vienu foto atpakaļ. No pirmā foto tas pāriet uz pēdējo. Ja nav cita pieejama foto, Turbo piespraude atkāpjas tikai ārkārtas iesniegšanas laikā, kamēr Turbo vēl nav iegūts.',
     boostNewSubmit: 'Boost jaunam iesniegtam foto',
     boostNewSubmitDesc:
         'Tieši pirms Boost iesniedz jaunu foto (pēc automātiskās iesniegšanas tagu noteikumiem), un Boost piešķiras jaunajam foto. Nav brīvas vietas vai piemērota foto — Boost pāriet uz norādīto Boost foto.',
     boostNewSubmitOnConflict: 'Boost jaunam iesniegtam foto tikai konflikta gadījumā',
     boostNewSubmitOnConflictDesc:
-        'Boost jaunam foto iesniedz tikai tad, ja neviens esošais foto nevar saņemt Boost — katram ir Turbo vai tā piespraude. Turbo piespraude, kas ārkārtas iesniegšanas laikā atkāpjas, Boost saņem.',
+        'Jaunu foto iesniedz un tam izmanto Boost tikai tad, ja katram esošajam foto ir Turbo vai Turbo piespraude. Ja Turbo piespraude ārkārtas iesniegšanas laikā atkāpjas, Boost saņem šis foto. Augstāk esošajam uzstādījumam ir priekšroka.',
     boostPinnedSubmit: 'Automātiski iesniegt Boost piesprausto foto',
     boostPinnedSubmitDesc:
         'Ja Boost piespraustā foto izaicinājumā nav, bet tas ir starp „Izvēlētie foto”, nākamajā automātiskajā iesniegšanā to iesniedz cita foto vietā. Ja pirms Boost laika automātiskā iesniegšana nenotiek, to iesniedz, kad pienāk Boost laiks. Boost tam piemēro parastajā laikā, ne agrāk kā „Gaidīt pirms Boost jaunam foto” pēc tā iesniegšanas. Vajadzīga brīva vieta. Kamēr foto vēl var iesniegt, automātiskā iesniegšana pēdējo brīvo vietu patur tam, nevis izmanto citam foto. Ja foto nevar iesniegt, Boost turpina to gaidīt kā līdz šim.',
@@ -369,7 +368,7 @@ export const app: LatvianApp = {
         'Tieši pirms Turbo iesniedz jaunu foto pēc tagu noteikumiem, un Turbo piešķiras jaunajam foto. Nav vietas vai foto — Turbo pāriet uz norādīto Turbo foto, bet bez foto izlaiž ciklu.',
     turboNewSubmitOnConflict: 'Turbo jaunam iesniegtam foto tikai konflikta gadījumā',
     turboNewSubmitOnConflictDesc:
-        'Turbo jaunam foto iesniedz tikai tad, ja neviens esošais foto nevar saņemt Turbo — katram ir Boost vai tā piespraude. Boost piespraude, kas ārkārtas iesniegšanas laikā atkāpjas, Turbo saņem.',
+        'Jaunu foto iesniedz un tam izmanto Turbo tikai tad, ja katram esošajam foto ir Boost vai Boost piespraude. Ja Boost piespraude ārkārtas iesniegšanas laikā atkāpjas, Turbo saņem šis foto. Augstāk esošajam uzstādījumam ir priekšroka.',
     playAutoTurbo: 'Spēlēt Turbo minispēli, lai iegūtu Turbo',
     autoTurboRunsWithAutovote: 'Automātiskā balsošana jau spēlē Turbo minispēli katrā ciklā',
     earnTurbo: 'Iegūt Turbo',
@@ -529,28 +528,28 @@ export const app: LatvianApp = {
     scenarioStatusPausedManualShort: 'apturēts („Tikai manuāli”)',
     scenarioStatusProblem: 'Pēdējais solis izlaists: {message}',
     scenarioStatusSpendUnclear:
-        'GuruShots neatbildēja uz „{action}”, tāpēc tas, iespējams, tika izpildīts. Tas netiks tērēts atkārtoti: nākamajā ciklā tikai pārbaudīs, vai tas stājās spēkā.',
+        'GuruShots neatbildēja uz „{action}”, tāpēc tas, iespējams, tika izpildīts. Lietotne neatkārtos tēriņu: nākamajā ciklā tikai pārbaudīs, vai tas stājās spēkā.',
     scenarioStatusSpendUnclearManual:
-        'GuruShots neatbildēja uz „{action}”, tāpēc tas, iespējams, tika izpildīts. Tas netiks tērēts atkārtoti: kad „Tikai manuāli” būs izslēgts, nākamajā ciklā tikai pārbaudīs, vai tas stājās spēkā.',
+        'GuruShots neatbildēja uz „{action}”, tāpēc tas, iespējams, tika izpildīts. Lietotne neatkārtos tēriņu: kad „Tikai manuāli” būs izslēgts, nākamajā ciklā tikai pārbaudīs, vai tas stājās spēkā.',
     scenarioStatusSpendUnclearPendingManual:
-        'Lietotne nesaglabāja, vai „{action}” tika nosūtīts, tāpēc tas, iespējams, izpildīts. To netērēs atkārtoti: kad „Tikai manuāli” būs izslēgts, nākamajā ciklā pārbaudīs, vai tas stājās spēkā.',
+        'Lietotne nesaglabāja, vai „{action}” tika nosūtīts, tāpēc tas, iespējams, izpildīts. Lietotne neatkārtos tēriņu: kad „Tikai manuāli” būs izslēgts, nākamajā ciklā tikai pārbaudīs, vai tas stājās spēkā.',
     scenarioStatusSpendUnclearPending:
-        'Lietotne nesaglabāja, vai „{action}” tika nosūtīts, tāpēc tas, iespējams, tika izpildīts. Tas netiks tērēts atkārtoti: nākamajā ciklā tikai pārbaudīs, vai tas stājās spēkā.',
+        'Lietotne nesaglabāja, vai „{action}” tika nosūtīts, tāpēc tas, iespējams, tika izpildīts. Lietotne neatkārtos tēriņu: nākamajā ciklā tikai pārbaudīs, vai tas stājās spēkā.',
     scenarioStatusSpendStopped:
-        'GuruShots neatbildēja uz „{action}”, tāpēc tas, iespējams, tika izpildīts, un tā noteikums tika apturēts, lai to netērētu atkārtoti. Pārbaudi izaicinājumu. {hint}',
+        'GuruShots neatbildēja uz „{action}”, tāpēc tas, iespējams, tika izpildīts, un tā noteikums tika apturēts, lai nepieļautu atkārtotu tēriņu. Pārbaudi izaicinājumu. {hint}',
     scenarioStatusResetHint:
-        '{again} Lai sāktu no jauna, izmanto „Atiestatīt scenāriju” zemāk vai komandrindā palaid scenario-reset --challenge={id}: tas var vēlreiz iztērēt darbību un atsāk tēriņu skaitīšanu.',
+        '{again} Lai sāktu no jauna, izmanto „Atiestatīt scenāriju” zemāk vai komandrindā palaid scenario-reset --challenge={id}: tas var atkārtot tēriņu un atsāk tēriņu skaitīšanu.',
     scenarioStatusSpendStoppedShort:
-        'Spied „{details}”, lai redzētu sīkāk — GuruShots neatbildēja uz „{action}”: tā noteikums tika apturēts, lai to netērētu atkārtoti.',
+        'Spied „{details}”, lai redzētu sīkāk — GuruShots neatbildēja uz „{action}”: tā noteikums tika apturēts, lai nepieļautu atkārtotu tēriņu.',
     scenarioStatusSpendStoppedPending:
-        'Lietotne nesaglabāja, vai „{action}” tika nosūtīts un kas no tā iznāca, tāpēc tas, iespējams, izpildīts, un tā noteikums apturēts, lai to netērētu atkārtoti. Pārbaudi izaicinājumu. {hint}',
+        'Lietotne nesaglabāja, vai „{action}” tika nosūtīts un kas no tā iznāca, tāpēc tas, iespējams, izpildīts, un tā noteikums apturēts, lai nepieļautu atkārtotu tēriņu. Pārbaudi izaicinājumu. {hint}',
     scenarioStatusSpendStoppedPendingShort:
-        'Spied „{details}”, lai redzētu sīkāk — lietotne nesaglabāja, vai „{action}” tika nosūtīts: tā noteikums tika apturēts, lai to netērētu atkārtoti.',
+        'Spied „{details}”, lai redzētu sīkāk — lietotne nesaglabāja, vai „{action}” tika nosūtīts: tā noteikums tika apturēts, lai nepieļautu atkārtotu tēriņu.',
     scenarioReset: 'Atiestatīt scenāriju…',
     scenarioResetAll: 'Atiestatīt visu izaicinājumu progresu…',
     scenarioResetTitle: 'Scenārija progresa atiestatīšana',
     scenarioResetBody:
-        'Tas aizmirst, kurā scenārija vietā ir „{title}”: nākamajā reizē plāns sāksies no pirmās fāzes, noteikumi var darboties (un tērēt) vēlreiz, un darbība ar nezināmu iznākumu var tikt iztērēta atkārtoti.',
+        'Tas aizmirst, kurā scenārija vietā ir „{title}”: nākamajā reizē plāns sāksies no pirmās fāzes, noteikumi var darboties (un tērēt) vēlreiz, un lietotne var atkārtot tēriņu darbībai ar nezināmu iznākumu.',
     scenarioResetAllBody:
         'Saglabāto progresu nevar nolasīt, tāpēc atiestatāms tikai visiem izaicinājumiem uzreiz. Pazūd katra plāna vieta, jau darbojušos noteikumu saraksts (tie var tērēt vēlreiz) un tēriņu skaitītāji.',
     scenarioResetConfirm: 'Atiestatīt',
@@ -606,7 +605,7 @@ export const app: LatvianApp = {
     sbAct_turbo: 'Izmantot Turbo iesniegumam',
     sbAct_unlockBoost: 'Atbloķēt Boost ar atslēgu',
     sbAct_fillExposure: 'Uzpildīt redzamību (tērē uzpildi)',
-    sbAct_vote: 'Balsot līdz redzamībai',
+    sbAct_vote: 'Balsot līdz norādītajai redzamībai',
     sbAct_remember: 'Atcerēties iesnieguma foto',
     sbAct_forget: 'Aizmirst atcerēto foto',
     sbAct_goto: 'Pāriet uz fāzi',
@@ -629,7 +628,7 @@ export const app: LatvianApp = {
     sbEntryField_boosting: 'Boost darbojas tagad',
     sbRepeat_always: 'Katrā palaišanā, kamēr nosacījumi izpildās',
     sbRepeat_once: 'Tikai vienreiz',
-    sbRepeat_oncePerPhase: 'Vienreiz katras fāzes sākumā',
+    sbRepeat_oncePerPhase: 'Vienreiz katrā šīs fāzes sākšanas reizē',
     sbRepeat_oncePerDay: 'Vienreiz dienā',
     sbState_boost_LOCKED: 'Bloķēts',
     sbState_boost_MISSED: 'Nokavēts',
@@ -730,7 +729,7 @@ export const app: LatvianApp = {
     groupAutoJoin: 'Automātiskā pievienošanās',
     autoJoin: 'Automātiski pievienoties izaicinājumiem',
     autoJoinDesc:
-        'Pievienojas atvērtajiem izaicinājumiem katrā balsošanas ciklā. Noklusējumā izslēgts; tad pievienojas VISIEM, ja neierobežo zemāk. Maksas izaicinājumiem vajag monētu limitus (0 = bezmaksas).',
+        'Pievienojas atvērtajiem izaicinājumiem katrā balsošanas ciklā, kamēr darbojas automātiskā balsošana. Pēc noklusējuma izslēgts. Kad ieslēgts, pievienojas VISIEM atvērtajiem izaicinājumiem, ja neierobežo zemāk. Maksas izaicinājumiem vajag zemāk norādītos monētu limitus (0 = tikai bezmaksas).',
     autoJoinTypes: 'Tikai šiem tipiem',
     autoJoinTypesDesc:
         'Ar komatu atdalīti izaicinājumu tipi, kuriem pievienoties, piem., „flash,contest”. Atstāj TUKŠU, lai pievienotos visiem tipiem (noklusējums). Lielajiem un mazajiem burtiem nav nozīmes.',
@@ -757,7 +756,7 @@ export const app: LatvianApp = {
     autoJoinAfterPercentElapsedDesc:
         'Nogaidīt, līdz pagājusi šī izaicinājuma daļa, un tikai tad pievienoties; daļu norāda procentos no izaicinājuma garuma. 75 nozīmē „pievienoties, kad pagājušas trīs ceturtdaļas”. 0 = izslēgts.',
     autoJoinAfterPercentElapsedHelp:
-        'Dažāda garuma izaicinājumiem: 75 % ir 6 stundas pirms beigām 24 stundu izaicinājumā un 5 dienas pirms 3 nedēļu izstādes. Ja vairāk nekā viens pievienošanās laiks ir virs 0, darbojas tikai viens — stundas no sākuma, tad procenti, tad stundas pirms beigām; noteikums, kas uzliek jebkuru pievienošanās laiku, aizstāj visus trīs globālos pievienošanās laikus.',
+        'Dažāda garuma izaicinājumiem: 75 % ir 6 stundas pirms beigām 24 stundu izaicinājumā un aptuveni 5 dienas pirms 3 nedēļu izstādes beigām. Ja vairāk nekā viens pievienošanās laiks ir virs 0, darbojas tikai viens — stundas no sākuma, tad procenti, tad stundas pirms beigām; noteikums, kas uzliek jebkuru pievienošanās laiku, aizstāj visus trīs globālos pievienošanās laikus.',
     autoJoinMaxCoins: 'Maks. monētu par izaicinājumu',
     autoJoinMaxCoinsDesc:
         'Lielākā monētu cena, ko maksāt par pievienošanos vienam izaicinājumam. 0 = tikai bezmaksas. Maksas pievienošanās prasa arī cikla budžetu, kas lielāks par 0.',
@@ -794,7 +793,7 @@ export const app: LatvianApp = {
     discoverPriceUnknown: 'Cena nav zināma',
     discoverJoinPriceUnknownLabel: 'Pievienoties izaicinājumam „{title}” — cena nav zināma',
     discoverPriceUnknownHint:
-        'Šī izaicinājuma cenu neizdevās nolasīt kā lietojamu cenu, tāpēc lietotne nevar lūgt atļauju iztērēt monētas. Atsvaidzini sarakstu vai pievienojies izaicinājumam GuruShots vietnē.',
+        'Lietotne nevarēja noteikt šī izaicinājuma cenu, tāpēc nevar lūgt atļauju iztērēt monētas. Atsvaidzini sarakstu vai pievienojies izaicinājumam GuruShots vietnē.',
     discoverRecommended: 'GuruShots ieteikts',
     discoverJoin: 'Pievienoties',
     discoverJoinPaid: 'Pievienoties (maksas)',
@@ -810,7 +809,7 @@ export const app: LatvianApp = {
     discoverForgetPaymentLabel: 'Monētas netika ieturētas: {title}',
     discoverForgetTitle: 'Aizmirst šo maksājumu?',
     discoverForgetBody:
-        'Pārbaudi monētu vēsturi vietnē; turpini tikai tad, ja monētas par „{title}” netika ieturētas, citādi tās ieturēs otrreiz. Pēc aizmiršanas automātiskā pievienošanās var budžeta ietvaros atkal maksāt.',
+        'Vispirms pārbaudi monētu vēsturi GuruShots vietnē. Turpini tikai tad, ja monētas par „{title}” netika ieturētas. Citādi, pievienojoties vēlreiz, tās ieturēs otrreiz. Pēc maksājuma ieraksta aizmiršanas automātiskā pievienošanās var budžeta ietvaros atkal maksāt.',
     discoverForgetBalances:
         'Monētas pirms maksājuma: {before}; GuruShots tagad rāda: {now}. Citas monētu darbības kopš tā laika (balvas, citas pievienošanās) maina starpību, tāpēc izšķiroša ir vēsture vietnē.',
     discoverForgetBalanceBefore:
@@ -826,7 +825,7 @@ export const app: LatvianApp = {
     discoverForgetUnreadable:
         'Saglabātos maksājumu ierakstus neizdevās nolasīt; nekas netika mainīts. Restartē un mēģini vēlreiz. Ja atkārtojas, joinState.json nav nolasāms: pārbaudi monētu vēsturi, pārvieto failu malā, restartē.',
     discoverForgetUnreadableAndroid:
-        'Saglabātos maksājumu ierakstus neizdevās nolasīt; nekas netika mainīts. Restartē un mēģini vēlreiz. Ja atkārtojas, „Lietotnes uzstādījumi” → „Par lietotni un datiem” → „Dzēst visus vietējos datus…” (izrakstīs un atiestatīs).',
+        'Saglabātos maksājumu ierakstus neizdevās nolasīt; nekas netika mainīts. Restartē lietotni un mēģini vēlreiz. Ja tas atkārtojas, sadaļā „Lietotnes uzstādījumi” → „Par lietotni un datiem” izvēlies „Dzēst visus vietējos datus…”. Tas tevi izrakstīs un atiestatīs uzstādījumus.',
     discoverForgetFailed: 'Pašlaik neizdevās aizmirst maksājumu. Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
     discoverAlreadyJoined:
         'Šis konts jau ir pievienojies šim izaicinājumam, tāpēc nekas netika iztērēts. Saraksts atjaunosies nākamajā pārbaudē.',
@@ -865,22 +864,22 @@ export const app: LatvianApp = {
     teamMatchTied: 'neizšķirts',
     teamStandingActive: 'Tu #{position} · sastāvā',
     teamStandingOverStandby_one: '+{count} balss virs rezervista',
-    teamStandingOverStandby_other: '+{count} balsis virs rezervista',
+    teamStandingOverStandby_other: 'Balsu pārsvars pār rezervistu: +{count}',
     teamStandingStandby_one: 'Rezervists · {count} balss līdz sastāvam',
-    teamStandingStandby_other: 'Rezervists · {count} balsis līdz sastāvam',
+    teamStandingStandby_other: 'Rezervists · līdz sastāvam vajag balsis: {count}',
     teamMatchNotRunning: 'Mačs nenotiek',
     teamChallenge: 'Komandu mačs',
     customBadge: 'pielāgots',
     customSettingsHint: 'Ir pielāgoti uzstādījumi',
     mustIncludeTags: 'Obligātie tagi',
     mustIncludeTagsDesc:
-        'Stingrs filtrs automātiskai iesniegšanai un manuālajām pogām: jāsakrīt ar VISIEM tagiem (tagus nosaka automātiski). Tukšs = visi. Veseli vārdi, reģistrs nav svarīgs: „cat” der „cats”, ne „catamaran”.',
+        'Obligāts filtrs automātiskai iesniegšanai, pogas „Automātiski” ieteikumiem un manuālajām pogām, kas ļauj lietotnei izvēlēties foto: foto jāatbilst VISIEM šiem tagiem (tagus nosaka automātiski). Tukšs = visi. Veseli vārdi, lielajiem un mazajiem burtiem nav nozīmes: „cat” der „cats”, ne „catamaran”.',
     shouldIncludeTags: 'Vēlamie tagi',
     shouldIncludeTagsDesc:
-        'Vēlamais kritērijs automātiskai iesniegšanai un manuālajām pogām: atbilstošie foto iegūst augstāku vietu, nekas netiek izslēgts; ja nekas nesakrīt, kārto kā parasti. Tie paši vārdu noteikumi.',
+        'Vēlamais kritērijs automātiskai iesniegšanai, pogas „Automātiski” ieteikumiem un manuālajām pogām, kas ļauj lietotnei izvēlēties foto: atbilstošie foto iegūst augstāku vietu, nekas netiek izslēgts. Ja nekas nesakrīt, kārto kā parasti. Tie paši vārdu noteikumi kā „Obligātie tagi”.',
     chosenPhotos: 'Izvēlētie foto',
     chosenPhotosDesc:
-        'Foto, ko automātiskā pievienošanās un iesniegšana mēģina pirmos; tiem jāiztur tagu uzstādījumi, un tos kārto kā pašas izvēles vai tavā secībā (uzstādījums zemāk). Vienam foto tikai viens izaicinājums. Ja „Iesniegt tikai izvēlētos foto” ir izslēgts, katrs izvēlētais foto pamet sarakstu, tiklīdz tas ir ievadīts izaicinājumā; iztukšots saraksts noņem paša izaicinājuma uzstādījumu, un tad spēkā stājas noteikuma vai globālais saraksts. Ja „Iesniegt tikai izvēlētos foto” ir ieslēgts, saraksts tiek paturēts (skatīt „Iesniegt tikai izvēlētos foto”).',
+        'Foto, ko automātiskā pievienošanās un iesniegšana izmēģina pirmos. Tiem jāatbilst tagu uzstādījumiem. Tos kārto tāpat kā lietotnes izvēlētos foto vai tavā secībā (uzstādījums zemāk). Vienu foto var iesniegt tikai vienā izaicinājumā. Ja „Iesniegt tikai izvēlētos foto” ir izslēgts, katru izvēlēto foto izņem no saraksta, tiklīdz tas ir iesniegts izaicinājumā. Kad saraksts ir tukšs, noņem paša izaicinājuma uzstādījumu, un tad darbojas noteikuma vai globālais saraksts. Ja „Iesniegt tikai izvēlētos foto” ir ieslēgts, sarakstu patur (skatīt „Iesniegt tikai izvēlētos foto”).',
     chosenPhotosInOrder: 'Izmantot izvēlētos foto tādā secībā, kādā tos izvēlējos',
     chosenPhotosInOrderDesc:
         'Iesniedz izvēlētos foto tavā izvēles secībā (numuri izvēlnē), nevis kārtojot. Neizmantojamus izlaiž un ņem nākamo; atlikušās vietas aizpilda pēc kārtojuma. Pēc noklusējuma izslēgts.',
@@ -901,9 +900,9 @@ export const app: LatvianApp = {
     photoChooserTitle: 'Izvēlēties foto',
     photoRecommended: 'Ieteiktais foto',
     photoChooserHelpAuto:
-        'Tos izmanto pirmos, bet tiem jāiztur tagu filtri. Kārto kā pašas izvēles vai tavā secībā, ja tas uzstādīts. Nevienu foto nelasa, līdz ielādē, meklē vai spiež „Automātiski”.',
+        'Šos foto izmanto pirmos, bet tiem jāatbilst tagu filtriem. Tos kārto tāpat kā lietotnes izvēlētos foto vai tavā secībā, ja šis uzstādījums ir ieslēgts. Foto netiek nolasīti, līdz tos ielādē, meklē vai spied „Automātiski”.',
     photoChooserHelpNoChallenge:
-        'Tos izmanto pirmos, bet tiem jāiztur tagu filtri; ko izaicinājums pieņem, pārbauda iesniedzot. Kārto kā pašas izvēles vai tavā secībā, ja tas uzstādīts.',
+        'Šos foto izmanto pirmos, bet tiem jāatbilst tagu filtriem. Tos kārto tāpat kā lietotnes izvēlētos foto vai tavā secībā, ja šis uzstādījums ir ieslēgts. To, ko izaicinājums pieņem, pārbauda foto iesniegšanas brīdī.',
     photoChooserSearchLabel: 'Meklēt savus foto pēc taga',
     photoChooserSearchPlaceholder: 'piem., saulriets…',
     photoChooserSearch: 'Meklēt',
@@ -962,8 +961,8 @@ export const app: LatvianApp = {
     photoChooserAllowed: 'Var iesniegt',
     photoChooserTileLabel: 'Foto {id}: {labels}. {reason}',
     photoChooserTileStats:
-        'Attiecība {ratio} (balsis pret skatījumu), {likes} atzīmes „Patīk”, {guruPicks} Guru izvēles.',
-    photoChooserTileStatsNoViews: 'Vēl nav skatījumu, {likes} atzīmes „Patīk”, {guruPicks} Guru izvēles.',
+        'Attiecība (balsis pret skatījumu): {ratio}, atzīmes „Patīk”: {likes}, Guru izvēles: {guruPicks}.',
+    photoChooserTileStatsNoViews: 'Vēl nav skatījumu, atzīmes „Patīk”: {likes}, Guru izvēles: {guruPicks}.',
     photoChooserPosition: 'Numurs {n} tavā sarakstā.',
     photoChooserNoTags: 'Bez tagiem',
     photoChooserInheritNote:
@@ -990,7 +989,7 @@ export const app: LatvianApp = {
         'Piespraud izvēlēto foto Boost vai Turbo. Piespraudes saglabājas ar „Izmantot šos foto” un stājas spēkā, kad foto ir izaicinājumā.',
     photoChooserPinElsewhere: '{kind} piespraude ir uz foto, kas šajā sarakstā nav.',
     photoChooserPinsUnreadable:
-        'Piespraudes nevarēja nolasīt, tāpēc tās šeit nevar mainīt. Aizvēri un atver to vēlreiz, lai mēģinātu atkal.',
+        'Piespraudes nevarēja nolasīt, tāpēc tās šeit nevar mainīt. Aizver šo logu un atver to vēlreiz, lai mēģinātu atkal.',
     photoChooserPinSaveError:
         'Izvēlētie foto ir saglabāti, bet {kind} piespraude nav saglabāta: {reason} Spied „Izmantot šos foto”, lai mēģinātu vēlreiz.',
     photoChooserPinSaveErrorBoth:
@@ -1024,7 +1023,7 @@ export const app: LatvianApp = {
     fillPickLabel: 'Izvēlēties, kurus foto iesniegt tagad',
     pickTitle: 'Izvēlēties iesniedzamos foto',
     pickHelp:
-        'Izvēlētie foto šim izaicinājumam tiek iesniegti uzreiz un tieši tādi, kādus izvēlējies: tavi tagu filtri un uzstādījums „Izvēlētie foto” netiek piemēroti, un nekas netiek saglabāts.',
+        'Izvēlētie foto šim izaicinājumam tiek iesniegti uzreiz un tieši tādi, kādus izvēlējies. Tavi tagu filtri un uzstādījums „Izvēlētie foto” netiek piemēroti, un uzstādījumi netiek saglabāti.',
     pickCount: 'Izvēlēti: {count}, brīvās vietas: {max}',
     pickOverCap: 'Izvēlēti: {count}, brīvās vietas: {max}. Noņem dažus, lai iesniegtu.',
     pickFull: 'Visām brīvajām vietām foto izvēlēti',
@@ -1061,9 +1060,9 @@ export const app: LatvianApp = {
     pickStatsRead: 'Statistika nolasīta.',
     pickStatsReordered: 'Statistika nolasīta. Foto pārkārtoti.',
     pickStatsMissing:
-        'Neizdevās nolasīt statistiku par {count} no šiem foto. GuruShots tos nenosūtīja, vai arī lasīšana uz minūti apturēta pēc kļūdām. Pamēģini vēlreiz pēc minūtes.',
+        'Neizdevās nolasīt statistiku par {count} no šiem foto. GuruShots statistiku nenosūtīja, vai arī tās nolasīšana pēc kļūdām ir apturēta uz minūti. Pamēģini vēlreiz pēc minūtes.',
     pickStatsMissingSorted:
-        'Neizdevās nolasīt statistiku par {count} no šiem foto. GuruShots tos nenosūtīja, vai arī lasīšana uz minūti apturēta pēc kļūdām. Tie ir saraksta beigās. Pamēģini vēlreiz pēc minūtes.',
+        'Neizdevās nolasīt statistiku par {count} no šiem foto. GuruShots statistiku nenosūtīja, vai arī tās nolasīšana pēc kļūdām ir apturēta uz minūti. Šie foto ir saraksta beigās. Pamēģini vēlreiz pēc minūtes.',
     pickIdle: 'Foto vēl nav ielādēti. Ielādē foto, meklē vai izmanto pogu „Automātiski”.',
     pickIdleWithPicks: 'Izvēlētos foto var iesniegt jau tagad. Ielādē foto vai meklē, lai redzētu pārējo bibliotēku.',
     pickAutoRunning: 'Foto tiek sarindoti… tas var aizņemt minūti. Nekas netiek iesniegts.',
@@ -1075,10 +1074,10 @@ export const app: LatvianApp = {
     pickAddSuggestions: 'Pievienot ieteikumus',
     pickAddSuggestionsFull: 'Nav brīvu vietu',
     swapPick: 'Nomainīt ar…',
-    swapPickLabel: 'Izvēlēties foto no bibliotēkas, ar ko apmainīt',
-    swapPickTitle: 'Izvēlies foto, ar ko apmainīt',
+    swapPickLabel: 'Izvēlēties no bibliotēkas foto, kas aizstās pašreizējo',
+    swapPickTitle: 'Izvēlies foto, kas aizstās pašreizējo',
     swapPickHelp:
-        'Izvēlētais foto aizstāj pašreizējo; nederīgie ir paslēpti. „Automātiski” kārto pēc tagu noteikumiem un „Izvēlētie foto” — pašam izvēlēts tos apiet. Nekas netērē, kamēr neapstiprini.',
+        'Izvēlētais foto aizstāj pašreizējo; nederīgie ir paslēpti. „Automātiski” kārto pēc tagu noteikumiem un „Izvēlētie foto” — pašam izvēlēts tos apiet. Nekas netiek tērēts, kamēr neapstiprini.',
     swapPickAutoHelp:
         'Šī poga sarindo tavus foto pēc automātiskās iesniegšanas noteikumiem un, kur pieejams, ar vietējo attēlu pārbaudi. Nekas netiek apmainīts; vēlreiz nospiežot, redzēsi nākamos.',
     swapPickAutoRunning: 'Foto tiek sarindoti… tas var aizņemt minūti. Nekas netiek tērēts.',
@@ -1095,14 +1094,14 @@ export const app: LatvianApp = {
     discoverChosenInherited: 'Mantotie izvēlētie foto: {count} (no taviem uzstādījumiem vai noteikumiem)',
     discoverConfirmChosen: 'Tavs izvēlētais foto, ja tas der, citādi automātiski izvēlēts foto.',
     scenarioFlagged:
-        'Pārskati pirms importa: {settings}. „Iesniegt tikai izvēlētos foto” liek izlaist izaicinājumu, kuram nav derīga izvēlētā foto.',
+        'Pārskati pirms importēšanas: {settings}. „Iesniegt tikai izvēlētos foto” izlaiž automātisko pievienošanos un foto iesniegšanu pēc grafika izaicinājumos, kuros nav derīga izvēlētā foto.',
     scenarioExportOmitted: 'Eksportā nav iekļauts, jo pieder tavam kontam: {settings}.',
     ignoreTitleWords: 'Ignorēt šos vārdus izaicinājumu nosaukumos',
     ignoreTitleWordsDesc:
-        'Izņem no nosaukuma pirms foto meklēšanas; liekie vārdi aizmiglo tēmu un tērē izaicinājuma nedaudzās meklēšanas reizes. Saraksts aizpildīts; izņem vārdu, ja izaicinājums tiešām ir par to.',
+        'Šos vārdus izņem no nosaukuma pirms foto meklēšanas. Liekie vārdi padara tēmu neskaidrāku un iztērē izaicinājumam atļautās nedaudzās meklēšanas reizes. Saraksts ir iepriekš aizpildīts. Izņem vārdu, ja izaicinājums tiešām ir par to.',
     submitWithoutTagMatch: 'Iesniegt arī bez tagu sakritības',
     submitWithoutTagMatchDesc:
-        'Attiecas tikai pie obligātajiem tagiem. Ieslēgts (noklusējums): ja neviens foto nesakrīt ar visiem tagiem, tomēr pievieno labāko, lai vieta nav tukša. Izslēgts: vieta paliek tukša līdz sakritībai.',
+        'Attiecas tikai tad, ja ir norādīti obligātie tagi. Ieslēgts (noklusējums): ja neviens foto neatbilst visiem tagiem, tomēr pievieno labāko, lai vieta nepaliktu tukša. Izslēgts: vieta paliek tukša, līdz ir pieejams foto, kas atbilst visiem tagiem.',
     emergencySubmit: 'Ārkārtas iesniegšana',
     emergencySubmitDesc:
         'Pēdējās minūtēs labākie foto aizpilda tukšās vietas arī pret tagu noteikumiem un „Iesniegt tikai izvēlētos foto”; darbojas arī Boost un iegūtais Turbo. 0 = izslēgts, arī Boost/Turbo glābšana.',
@@ -1111,9 +1110,9 @@ export const app: LatvianApp = {
     tagsPlaceholder: 'piem., saulriets, pludmale, okeāns',
     titleTagRules: 'Izaicinājumu noteikumi',
     titleTagRulesDesc:
-        'Piešķir izaicinājumiem profilu, pievienošanās laiku un foto tagus pēc rotācijā nemainīgām pazīmēm: nosaukums, tags, veids, foto skaits, ilgums. Darbojas arī ar jaunu id; manuālie uzstādījumi uzvar.',
+        'Piešķir izaicinājumiem profilu, pievienošanās laiku un foto tagus pēc pazīmēm, kas nemainās, izaicinājumiem atgriežoties: nosaukuma, taga, veida, foto skaita vai ilguma. Noteikumi darbojas arī tad, ja izaicinājums atgriežas ar jaunu ID. Manuālajiem uzstādījumiem ir priekšroka.',
     titleTagRulesSaveError:
-        'Noteikumi nesaglabāti. Pārbaudi profilu nosaukumus, tagu garumus, diapazonus („Ilgst vismaz” ≤ „Ilgst ne vairāk kā”), beigu laikus (HH:MM) un pretrunas ar manuālajiem. Pārējie saglabāti.',
+        'Noteikumi nav saglabāti. Pārbaudi profilu nosaukumus, nosaukumu un tagu garumus, vērtību diapazonus („Ilgst vismaz” ≤ „Ilgst ne vairāk kā”), beigu laikus (HH:MM) un pretrunas ar atvērto izaicinājumu manuālajiem uzstādījumiem. Pārējie uzstādījumi ir saglabāti.',
     titleTagRulesLoadError:
         'Neizdevās ielādēt izaicinājumu noteikumus, tāpēc tie ir paslēpti, lai tos nepārrakstītu. Pārējos uzstādījumus joprojām var saglabāt; lai mēģinātu vēlreiz, aizver uzstādījumus un atver tos no jauna.',
     titleTagRuleTitle: 'Izaicinājuma nosaukums',
@@ -1127,7 +1126,7 @@ export const app: LatvianApp = {
     titleRuleMatchContains: 'Satur',
     titleRuleConditionsLabel: 'Atbilst, ja',
     titleRuleConditionsHint:
-        'Katram aizpildītajam laukam jāatbilst; tukšus neņem vērā. Izaicinājuma tags ir paša izaicinājuma, nevis foto tags. Ilgums no sākuma līdz beigām. Beigu laiks ir kartītes laiks lietotnes laika joslā.',
+        'Katram aizpildītajam laukam jāatbilst. Tukšus laukus neņem vērā. Izaicinājuma tags ir paša izaicinājuma tags, nevis foto tags. Ilgums ir laiks no sākuma līdz beigām. 24 h = 1 diena. Beigu laiks ir kartītē redzamais beigu laiks uzstādījumos izvēlētajā laika joslā.',
     titleRuleChallengeTag: 'Izaicinājuma tags',
     titleRuleChallengeTagPlaceholder: 'piem., Exhibition',
     titleRuleType: 'Izaicinājuma veids',
@@ -1159,7 +1158,7 @@ export const app: LatvianApp = {
         'Šis noteikums uzliek pievienošanās laiku 0, tāpēc globālie pievienošanās laiki uz to neattiecas, un atbilstošie izaicinājumi tiek pievienoti, tiklīdz tie parādās.',
     titleRuleOverridesLabel: 'Uzvedība',
     titleRuleBroadWarning:
-        'Šim noteikumam nav nosaukuma, tāpēc tas ieslēdz šo iespēju katram atbilstošajam izaicinājumam — tas var tērēt monētas vai foto veselai izaicinājumu grupai.',
+        'Šim noteikumam nav izaicinājuma nosaukuma nosacījuma, tāpēc tas ieslēdz šo iespēju katram atbilstošajam izaicinājumam. Tas var tērēt monētas vai foto veselai izaicinājumu grupai.',
     titleRuleOrderHint:
         'Noteikumus pārbauda no augšas uz leju: katram uzstādījumam uzvar pirmais atbilstošais noteikums, kas to uzstāda; ko tas atstāj tukšu, ņem no nākamā, tad no globālā noklusējuma.',
     titleRuleSortDefault: 'Kārtot noklusējuma secībā',
@@ -1194,7 +1193,7 @@ export const app: LatvianApp = {
     autoKeyAfterStart: 'Atslēga: pēc laika no sākuma',
     autoKeyAfterStartDesc:
         'Izmantot atslēgu tikai tad, kad izaicinājums ilgst jau tik ilgi (piem., 11 h). 0 = bez nosacījuma.',
-    autoKeyBeforeEnd: 'Atslēga: pēdējā laikā līdz beigām',
+    autoKeyBeforeEnd: 'Atslēga: kad līdz beigām atlicis ne vairāk kā',
     autoKeyBeforeEndDesc:
         'Izmantot atslēgu tikai tad, kad līdz beigām atlicis tik daudz laika vai mazāk (piem., 7 h). 0 = bez nosacījuma.',
     autoKeyAfterPercent: 'Atslēga: pēc % no izaicinājuma',
@@ -1204,7 +1203,7 @@ export const app: LatvianApp = {
         'Iztērēt apmaiņu, lai kādu no taviem foto aizstātu ar piemērotāko foto no bibliotēkas, kad pienācis zemāk norādītais laiks. Uzstāda globāli, profilā vai atsevišķam izaicinājumam.',
     autoSwapAfterStart: 'Apmaiņa: pēc laika no sākuma',
     autoSwapAfterStartDesc: 'Apmainīt tikai tad, kad izaicinājums ilgst jau tik ilgi. 0 = bez nosacījuma.',
-    autoSwapBeforeEnd: 'Apmaiņa: pēdējā laikā līdz beigām',
+    autoSwapBeforeEnd: 'Apmaiņa: kad līdz beigām atlicis ne vairāk kā',
     autoSwapBeforeEndDesc: 'Apmainīt tikai tad, kad līdz beigām atlicis tik daudz laika vai mazāk. 0 = bez nosacījuma.',
     autoSwapAfterPercent: 'Apmaiņa: pēc % no izaicinājuma',
     autoSwapAfterPercentDesc: 'Apmainīt tikai tad, kad pagājusi šī izaicinājuma daļa. 0 = bez nosacījuma.',
@@ -1224,13 +1223,13 @@ export const app: LatvianApp = {
         'Pārtraukt automātisko apmaiņu, kad šajā izaicinājumā izdarīts tik daudz apmaiņu (manuālās arī skaitās). Ja GuruShots nesūta apmaiņu vēsturi, lietotne skaita tikai savas automātiskās apmaiņas; manuālās un scenāriju apmaiņas tā neskaita.',
     autoExposureFill: 'Automātiski izmantot uzpildi',
     autoExposureFillDesc:
-        'Iztērē uzpildi, lai paceltu redzamību līdz 100 %, — tikai ja tā ir zem zemāk norādītā sliekšņa UN balsot to nesasniedz. Parasti noder zibens izaicinājumos.',
+        'Iztērē uzpildi, lai palielinātu redzamību līdz 100 %, bet tikai tad, ja redzamība ir zem tālāk norādītā sliekšņa UN ar balsošanu nepietiek. Parasti vajadzīgs zibens izaicinājumos.',
     autoExposureFillBelow: 'Uzpildīt, ja redzamība zem',
     autoExposureFillBelowDesc:
         'Uzpildi tērē tikai tad, ja redzamība ir zem šīs vērtības un balsojot to sasniegt nevar.',
     autoExposureFillAfterStart: 'Uzpilde: pēc laika no sākuma',
     autoExposureFillAfterStartDesc: 'Uzpildīt tikai tad, kad izaicinājums ilgst jau tik ilgi. 0 = bez nosacījuma.',
-    autoExposureFillBeforeEnd: 'Uzpilde: pēdējā laikā līdz beigām',
+    autoExposureFillBeforeEnd: 'Uzpilde: kad līdz beigām atlicis ne vairāk kā',
     autoExposureFillBeforeEndDesc:
         'Uzpildīt tikai tad, kad līdz beigām atlicis tik daudz laika vai mazāk. 0 = bez nosacījuma.',
     autoExposureFillAfterPercent: 'Uzpilde: pēc % no izaicinājuma',
@@ -1248,7 +1247,7 @@ export const app: LatvianApp = {
     currencyReserveFillsDesc:
         'Automātiskā tērēšana nekad nesamazina uzpilžu skaitu zem šīs vērtības. Manuālo tērēšanu no kartītes tas neierobežo. 0 = bez rezerves.',
     currencyRuleTimingHelp:
-        'Katrai darbībai trīs neobligāti nosacījumi: pēc laika no sākuma, pēdējā laikā līdz beigām, pēc % — visiem uzstādītajiem jāizpildās; 0 = uzreiz. Katrā ciklā ne vairāk kā viens tēriņš; rezerve paliek.',
+        'Katrai darbībai ir trīs neobligāti nosacījumi: laiks kopš sākuma, atlikušais laiks līdz beigām un pagājusī izaicinājuma daļa procentos. Visiem norādītajiem nosacījumiem jāizpildās. Vērtība 0 nepievieno aizkavi. Katrā ciklā ne vairāk kā viens tēriņš, saglabājot rezervi.',
     groupGeneral: 'Vispārīgi',
     groupBoost: 'Boost',
     groupTurbo: 'Turbo',
@@ -1275,16 +1274,16 @@ export const app: LatvianApp = {
         'Automātiski saņem balvas par noslēgtajiem izaicinājumiem un izpildītajām misijām (automātiskajai balsošanai jādarbojas). Pārbauda ne biežāk kā reizi stundā. Pēc noklusējuma izslēgts.',
     missionSaveTurbos: 'Taupīt Turbo misijām',
     missionSaveTurbosDesc:
-        'Aizturas katra izaicinājuma Turbo iegūšanu, lai misijai „Win Turbo” būtu ko iegūt. Pietaupīto Turbo iegūst, kad misija aktīva vai stundu pirms izmantošanas laika. Pēc noklusējuma izslēgts.',
+        'Atliek izaicinājuma Turbo iegūšanu, lai misijā „Win Turbo” būtu pieejami Turbo, ko iegūt. Pietaupīto Turbo tomēr iegūst, kad šī misija ir aktīva vai stundu pirms tā automātiskās izmantošanas laika. Pēc noklusējuma izslēgts.',
     missionJoinEarly: 'Pievienoties nekavējoties misiju laikā',
     missionJoinEarlyDesc:
-        'Kamēr aktīva misija „Join challenges” vai „Win Turbo”, pievienojas, negaidot automātiskās pievienošanās laiku. „Join challenges” misija pievienojas nekavējoties tikai tad, ja atvērto izaicinājumu pietiek, lai misiju izpildītu; citādi tās pievienošanās gaida automātiskās pievienošanās laiku. Tipu, tagu un monētu filtri joprojām darbojas. Pēc noklusējuma izslēgts.',
+        'Kamēr ir aktīva misija „Join N challenges” vai „Win Turbo”, lietotne pievienojas izaicinājumiem, negaidot automātiskās pievienošanās laiku. Misijai „Join N challenges” tā pievienojas agrāk tikai tad, ja atvērto izaicinājumu pietiek misijas izpildei. Citādi tā gaida automātiskās pievienošanās laiku. Veida, tagu un monētu filtri joprojām darbojas. Pēc noklusējuma izslēgts.',
     missionUseFills: 'Izmantot uzpildes misijām',
     missionUseFillsDesc:
         'Kamēr aktīva misija „Use Fill”, lietotne izmanto uzpildes izaicinājumos, kuros redzamība ir zem 100 %, līdz misija izpildīta. Uzpilžu rezerve paliek neskarta. Pēc noklusējuma izslēgts.',
     missionUseBoosts: 'Izmantot Boost misijām',
     missionUseBoostsDesc:
-        'Kamēr aktīva misija „Use a boost”, izmanto jau pieejamu Boost, negaidot tā automātiskās izmantošanas laiku. Atslēgas netērē; Boost, kura laika uzstādījums 0 (izslēgts), neizmanto.',
+        'Kamēr ir aktīva misija „Use a boost”, lietotne izmanto jau pieejamu Boost, negaidot tā automātiskās izmantošanas laiku. Atslēgas netērē. Boost, kura laika uzstādījums ir 0 (izslēgts), neizmanto. Pēc noklusējuma izslēgts.',
     missionVote: 'Balsot misijām',
     missionVoteDesc:
         'Kamēr aktīva misija „Vote on photos”, balso katrā ciklā, negaidot redzamības slieksni, sadalot balsis pa izaicinājumiem līdz 100 % katram. Flash izlaiž. Noklusējumā izslēgts.',
@@ -1301,7 +1300,7 @@ export const app: LatvianApp = {
     notifyLeadTime: 'Cik laicīgi brīdināt',
     notifyLeadTimeDesc: 'Cik minūtes pirms darbības parādīt brīdinājumu.',
     notifyLeadTimeHelp:
-        'Ne vienmēr precīzi: lietotne brīdina tikai pārbaudes brīdī, tāpēc, ja šis laiks ir garāks par pārbaudes biežumu, brīdinājums var pienākt vēlāk. Visdrošāk tas darbojas pēdējās minūtes logā.',
+        'Lietotne brīdina tikai tad, kad notiek pārbaudes cikls, tāpēc brīdinājums var pienākt vēlāk par norādīto laiku. Ja intervāls starp pārbaudēm ir garāks par brīdinājuma laiku, brīdinājums var neparādīties. Visdrošāk brīdinājumi darbojas pēdējās minūtes logā.',
     // Paziņojuma virsraksta/teksta veidnes. {action} izmanto darbību
     // nosaukumus; {title} ir izaicinājuma nosaukums; {minutes}/{count}
     // aizpilda paziņojumu slānis.
@@ -1320,7 +1319,7 @@ export const app: LatvianApp = {
         'Rādīt izaicinājumus mazākās kartītēs, lai ekrānā ietilptu vairāk; izslēdz, lai redzētu pilna izmēra kartītes ar vairāk informācijas.',
     compactCardActions: 'Darbības kompaktajās kartītēs',
     compactCardActionsDesc:
-        'Rādīt darbību pogas arī kompaktajās kartītēs, lai rīkotos bez pilnās kartītes. Darbības ar atsevišķiem foto paliek pilnajā kartītē.',
+        'Rādīt izaicinājuma darbību pogas („Balsot”, „Palaist”, „Iegūt Turbo”, foto iesniegšana, „Uzstādījumi”) arī kompaktajās kartītēs, lai tās varētu izmantot, neatverot pilno kartīti. Darbības ar atsevišķiem foto paliek pilnajā kartītē.',
     compact: 'Kompakts',
     details: 'Detaļas',
     configureBoost: 'Boost uzstādījumi izaicinājumam:',
@@ -1348,7 +1347,7 @@ export const app: LatvianApp = {
     exposureTargetDesc:
         'Līdz kādam procentam balsot, kad nostrādā parastais redzamības noteikums (0 = tāds pats kā redzamības slieksnis)',
     exposureTargetHelp:
-        '0 NENOZĪMĒ „izslēgts”. 0 nozīmē „balsot līdz redzamības sliekšņa vērtībai” — noteikums paliek aktīvs. 1–100 balsots tālāk par slieksni. Laika uzstādījumos ir otrādi: 0 nozīmē „izslēgts”.',
+        '0 NENOZĪMĒ „izslēgts”. 0 nozīmē „balsot līdz redzamības sliekšņa vērtībai” — noteikums paliek aktīvs. Vērtība 1–100 liek turpināt balsot pēc sliekšņa sasniegšanas līdz norādītajai redzamībai. Laika uzstādījumos ir otrādi: 0 nozīmē „izslēgts”.',
     fast: 'ĀTRS',
     global: 'Globāls',
     globalDefault: 'Globālais noklusējums',
@@ -1377,23 +1376,23 @@ export const app: LatvianApp = {
     onePhoto: '1 foto',
     manualPhotosOnly: 'Tikai manuāli',
     manualPhotosOnlyDesc:
-        'Lietotne šajā izaicinājumā pati neko nedara: ne pievienošanās, foto iesniegšana vai apmaiņa, balsošana, Boost, Turbo, atslēgas, uzpilde, scenāriju soļi. Kartītes pogas darbojas; „Palaist” paslēpts.',
+        'Lietotne šajā izaicinājumā pati neko nedara: nepievienojas, neiesniedz un neapmaina foto, nebalso, neizmanto Boost vai Turbo, neatbloķē ar atslēgu, neizmanto uzpildes un neveic scenārija soļus. Kartītes pogas joprojām darbojas. „Palaist” ir paslēpts. Izaicinājumiem, kuriem vēl neesi pievienojies, vajadzīgs izaicinājumu noteikums.',
     manualOnlyLabel: '„Tikai manuāli” ir ieslēgts — nekas nenotiek automātiski',
     manualOnlyAlert:
-        '„Tikai manuāli”: lietotne pati neko nedara — ne pievienošanās, iesniegšana, apmaiņa, balsošana, Boost, Turbo, atslēgas, uzpilde, scenāriji. Kartītes pogas darbojas; „Palaist” paslēpts.',
+        '„Tikai manuāli” ir ieslēgts: lietotne pati neko nedara — nepievienojas, neiesniedz un neapmaina foto, nebalso, neizmanto Boost vai Turbo, neatbloķē ar atslēgu, neizmanto uzpildes un neveic scenārija soļus. Kartītes pogas joprojām darbojas. „Palaist” ir paslēpts. „Balsot visur” šo izaicinājumu izlaiž.',
     manualPhotosOnlyRuleHint:
-        'Kad ieslēgts „Tikai manuāli”, noteikuma izaicinājumos lietotne nebalso, neizmanto Boost un Turbo, nepievienojas un neiesniedz, ja vien paša uzstādījums to neizslēdz.',
+        'Kad ir ieslēgts „Tikai manuāli”, lietotne šim noteikumam atbilstošajos izaicinājumos nebalso, neizmanto Boost vai Turbo, nepievienojas un neiesniedz foto, ja vien paša izaicinājuma uzstādījumos šo iespēju neizslēdz.',
     onlyBoost: 'Tikai Boost režīms',
     onlyBoostDesc: 'Šajā izaicinājumā pilnībā izlaist parasto balsošanu un tikai izmantot Boost.',
-    voteOnNewEntry: 'Balsot par jaunu foto',
+    voteOnNewEntry: 'Balsot pēc jauna foto pievienošanas',
     voteOnNewEntryDesc:
-        'Jauns foto šeit saņem vienu balsi arī virs sliekšņa, līdz izaicinājuma parastajai robežai; beigu logā — beigu loga mērķim. „Tikai Boost režīms” un pārējie ierobežojumi joprojām spēkā.',
+        'Kad šeit parādās jauns foto, lietotne vienreiz balso šajā izaicinājumā arī tad, ja redzamība ir sasniegusi vai pārsniegusi slieksni. Balsošana nepārsniedz parasto redzamības robežu, arī beigu loga mērķi beigu logā. „Tikai Boost režīms” un pārējie balsošanas ierobežojumi joprojām ir spēkā.',
     discoverUpcomingHours: 'Cik stundas uz priekšu rādīt gaidāmos izaicinājumus',
     discoverUpcomingHoursDesc:
         'Cik tālu „Atrast izaicinājumus” rāda vēl nesākušos izaicinājumus, lai foto varētu izvēlēties iepriekš. Pievienoties var tikai pēc sākuma. 0 = tikai atvērtie.',
     autovoteStartupDelay: 'Gaidīt pēc palaišanas, pirms atsākt automātisko balsošanu',
     autovoteStartupDelayDesc:
-        'Ja lietotne aizvērta, kamēr balsošana bija ieslēgta, cik ilgi pēc palaišanas uzgaida, pirms atsāk pati, lai vari pārbaudīt uzstādījumus. Attiecas uz lietotni, ne komandrindu. 0 = izslēgts.',
+        'Ja lietotne tika aizvērta ar ieslēgtu automātisko balsošanu, šis uzstādījums nosaka, cik ilgi tā pēc palaišanas gaida pirms automātiskas atsākšanas. Šajā laikā vari pārbaudīt uzstādījumus. Attiecas uz lietotnes automātisko atsākšanu, nevis komandrindu. 0 = gaidīšana izslēgta: balsošana atsākas uzreiz.',
     override: 'Pielāgots',
     overrideForChallenge: 'Pielāgot uzstādījumus izaicinājumam',
     photo: 'foto',
@@ -1401,7 +1400,7 @@ export const app: LatvianApp = {
     noActiveChallenges: 'Nav aktīvu izaicinājumu',
     players: 'Spēlētāji',
     pleaseLogin: 'Piesakies, lai redzētu izaicinājumus',
-    prerelease: 'Testa (beta) versija',
+    prerelease: 'Pirmsizlaides versija',
     prize: 'Balva',
     rank: 'Vieta',
     // Izaicinājuma detaļas: Top rezultāti, balvu pakāpes, treku nozīmītes
@@ -1432,7 +1431,7 @@ export const app: LatvianApp = {
     resetAllConfirmTitle: 'Atiestatīt visus uzstādījumus',
     resetAllConfirmMessage: 'Vai tiešām atiestatīt VISUS uzstādījumus uz noklusējumu?',
     resetAllConfirmDetails:
-        'Atiestatīs saskarnes uzstādījumus, izaicinājumu noklusējumus, preferences, laika joslas, pieteikšanās preferences.\\n\\nPaliek: tokens, atjauninājumu pārbaudes laiks, testa režīms. Nevar atsaukt.',
+        'Atiestatīs saskarnes uzstādījumus, izaicinājumu noklusējumus, lietotnes preferences, logu novietojumu, laika joslas un pieteikšanās preferences.\\n\\nPaliek: pieteikšanās tokens, atjauninājumu pārbaudes laiks, testa režīms un API galvenes. To nevar atsaukt.',
     resetAllSuccess: 'Visi uzstādījumi ir atiestatīti. Lapa tiks pārlādēta, lai izmaiņas stātos spēkā.',
     save: 'Saglabāt',
     savedOnThisDevice: 'Saglabāts tikai šajā ierīcē.',
@@ -1483,7 +1482,7 @@ export const app: LatvianApp = {
     reliability: 'Uzticamība',
     apiMaxRetries: 'Atkārtoti mēģinājumi',
     apiMaxRetriesDesc:
-        'Cik reizes mēģināt neizdevušos pieprasījumu (0 = izslēgts): tīkla kļūdas, noildze, 429, 5xx. „Pauze starp mēģinājumiem” ir sākuma pauze ms, kas aptuveni dubultojas katrā mēģinājumā.',
+        'Cik reizes atkārtot neizdevušos API pieprasījumu (0 izslēdz atkārtošanu): īslaicīgu tīkla kļūdu, noildzes, pārāk daudzu pieprasījumu (429) un servera kļūdu (5xx) gadījumā. „Pauze starp mēģinājumiem” ir sākuma gaidīšanas laiks milisekundēs, kas aptuveni dubultojas katrā mēģinājumā.',
     apiRetryBaseDelayMs: 'Pauze starp mēģinājumiem (ms)',
     voteOnlyInLastMinute: 'Balsot tikai pēdējās minūtes laikā',
     voteOnlyInLastMinuteDesc:
@@ -1511,10 +1510,10 @@ export const app: LatvianApp = {
     scheduledFillSourceBeforeEnd: '{0} pirms beigām',
     scheduledFillWindowMinutes: 'Balsošanas logs (minūtes)',
     scheduledFillWindowMinutesDesc:
-        'Cik ilgi katrs logs paliek atvērts: loga laikā izaicinājums notur 100 %, pēc tam atkal darbojas parastie noteikumi. Uzstādi garāku par pārbaudes biežumu, lai cikls noteikti iekrīt logā.',
+        'Cik ilgi katrs balsošanas logs paliek atvērts. Tā laikā lietotne uztur izaicinājuma redzamību 100 % līmenī, pēc tam atkal darbojas parastie noteikumi. Iestati logu garāku par pārbaudes intervālu, lai tajā notiktu balsošanas cikls.',
     scheduledFillReplaces: 'Tikai plānotā balsošana',
     scheduledFillReplacesDesc:
-        'Plānotie logi kļūst par vienīgo automātisko balsošanu; Flash un pēdējās minūtes noteikumi joprojām balso, manuālo neietekmē. Izlaists logs neatgūstas — izaicinājums var palikt ar nepilnu redzamību.',
+        'Plānotie logi kļūst par vienīgo automātiskās balsošanas laiku. Flash un pēdējās minūtes noteikumi joprojām balso. Manuālo balsošanu tas neietekmē. Izlaistu logu vēlāk nekompensē, un rezerves balsošana nenotiek: izaicinājums var beigties ar nepilnu redzamību.',
     scheduledFillNextHint: 'Nākamais balsošanas logs: {0}–{1} ({2}) — no {3}',
     scheduledFillNoTimesHint:
         'Nav uzstādīts neviens balsošanas laiks — plānotā balsošana nedarbojas, kamēr zemāk nav uzstādīts kāds laiks.',
@@ -1528,7 +1527,7 @@ export const app: LatvianApp = {
         'Šī profila piemērošana šim izaicinājumam ieslēgs „Tikai plānotā balsošana” — pirms saglabāšanas pārskati balsošanas laikus.',
     useVotingPause: 'Balsošanas pauze',
     useVotingPauseDesc:
-        'Aptur automātisko balsošanu izvēlētos logos, piem., naktī starp kārtām. Flash un pēdējās minūtes joprojām balso — pauzes laikā beidzošs izaicinājums nav pamests. Manuālā balsošana nav bloķēta.',
+        'Aptur automātisko balsošanu izvēlētajos laika posmos, piemēram, naktī starp kārtām. Flash un pēdējās minūtes noteikumi joprojām balso, tāpēc izaicinājums, kas beidzas pauzes laikā, netiek atstāts bez balsošanas. Manuālā balsošana nekad netiek bloķēta.',
     votingPauseTime: 'Pauzes laiki',
     votingPauseTimeDesc:
         'Ikdienas pulksteņa laiki (24 h), kuros sākas pauze, pēc „Laika josla”, nevis ierīces pulksteņa. Katrs sāk savu pauzi; noņem visas rindas, lai izslēgtu. Nakts pauzei 01:30-06:00: 01:30 un 270 min.',
@@ -1537,7 +1536,7 @@ export const app: LatvianApp = {
         'Sāk vienreizēju pauzi tik ilgi pirms beigām. Skaita no katra izaicinājuma beigām. Arī pauze pāri termiņam piekāpjas pēdējās minūtes noteikumiem, kuri balso vienmēr.',
     votingPauseDurationMinutes: 'Pauzes ilgums (minūtes)',
     votingPauseDurationMinutesDesc:
-        'Cik ilgi katra pauze ilgst no sākuma. Kad beidzas, atkal darbojas parastie noteikumi. Piemērs: 270 min no 01:30 notur pauzi līdz 06:00.',
+        'Cik ilgi katra pauze ilgst no tās sākuma. Kad pauze beidzas, atkal darbojas parastie noteikumi un nākamajā balsošanas ciklā lietotne palielina redzamību. Piemērs: 270 minūšu pauze no 01:30 ilgst līdz 06:00.',
     votingPauseNextHint: 'Nākamā pauze: {0}–{1} ({2}) — no {3}',
     votingPauseActiveHint:
         'Pauze ir aktīva līdz {0} ({1}) — balsos tikai pēdējās minūtes un Flash noteikumi. Boost un Turbo lietotne joprojām izmanto pēc to laika atskaitēm.',
@@ -1559,16 +1558,16 @@ export const app: LatvianApp = {
     finalWindowExposureTargetDesc:
         'Līdz kādam procentam balsot, kad nostrādā beigu loga noteikums (0 = tāds pats kā beigu loga slieksnis)',
     finalWindowExposureTargetHelp:
-        '0 NENOZĪMĒ „izslēgts”. 0 nozīmē „balsot līdz beigu loga slieksnim” — beigu loga noteikums paliek aktīvs. 1–100 balsots tālāk par slieksni. Laika uzstādījumos 0 nozīmē „izslēgts”.',
+        '0 NENOZĪMĒ „izslēgts”. 0 nozīmē „balsot līdz beigu loga redzamības slieksnim” — beigu loga noteikums paliek aktīvs. Vērtība 1–100 liek balsot tālāk par šo slieksni. Laika uzstādījumos ir otrādi: 0 nozīmē „izslēgts”.',
     useFinalWindowExposure: 'Izmantot beigu loga redzamību',
     useFinalWindowExposureDesc:
         'Beigu logā pirms izaicinājuma beigām parastā redzamības uzstādījuma vietā izmantot atsevišķu beigu loga redzamības slieksni un mērķi.',
     voteBeforeFinalWindow: 'Balsot pirms beigu loga',
     voteBeforeFinalWindowDesc:
-        'Ap beigu loga sākumu balsot līdz parastajam mērķim, lai zemu nokritušais izaicinājums nepaliktu pie zema zemākā beigu loga sliekšņa dēļ; darbojas norādītās minūtes pirms un pēc robežas.',
+        'Ap beigu loga sākumu lietotne balso līdz parastajam redzamības mērķim, lai izaicinājuma redzamība nepaliktu zema beigu loga sliekšņa dēļ. Darbojas norādīto minūšu skaitu pirms un pēc beigu loga sākuma.',
     voteBeforeFinalWindowLeadMin: 'Cik laicīgi pirms beigu loga',
     voteBeforeFinalWindowLeadMinDesc:
-        'Cik minūtes ap beigu loga sākumu uzpilde paliek aktīva. Logs atveras tik minūšu pirms beigu loga un aizveras tikpat minūšu pēc tā sākuma, un tad darbu pārņem beigu loga redzamības noteikums.',
+        'Cik minūtes ap beigu loga sākumu šī balsošana paliek aktīva. Tā sākas norādīto minūšu skaitu pirms beigu loga sākuma un beidzas tikpat minūšu pēc tā. Pēc tam darbojas beigu loga redzamības noteikums.',
     validationInvalidValue: 'Nederīga vērtība',
     validationMustBeLessOrEqual: 'Jābūt ≤ {0} (pašlaik {1})',
     whatsNew: 'Kas jauns:',
@@ -1580,7 +1579,7 @@ export const app: LatvianApp = {
     challengeOverridesLoadError:
         'Neizdevās ielādēt šī izaicinājuma saglabātos uzstādījumus, tāpēc tos tagad nevar labot — saglabāšana tos pārrakstītu. Aizver dialoglodziņu un atver vēlreiz; ja atkārtojas, skaties kļūdu žurnālā.',
     mockMode: 'Testa režīms',
-    logout: 'Iziet',
+    logout: 'Izrakstīties',
     status: 'Statuss',
     title: 'GuruShots Auto Vote',
     mainContent: 'Automātiskā balsošana un izaicinājumi',
@@ -1695,7 +1694,7 @@ export const app: LatvianApp = {
     sbDurationHint: 'Sekundes vai laika posms, piemēram, „90m”, „6h” vai „1d 6h” (līdz 60 dienām).',
     timeLeft: 'atlicis {time}',
     noReleaseNotes: 'Laidiena piezīmju nav',
-    scenarioIssueNoJson: 'Scenārijs nav ievadīts. Ielīmē scenārija failu.',
+    scenarioIssueNoJson: 'Scenārijs nav ievadīts. Ielīmē scenārija faila saturu.',
     scenarioIssueTooLarge: 'Fails ir lielāks par {kb} KB.',
     scenarioIssueNotJson: 'Šis nav derīgs JSON.',
     scenarioIssuePhaseScenario: 'Fāze nevar mainīt, kurš scenārijs ir piešķirts.',
@@ -1706,7 +1705,7 @@ export const app: LatvianApp = {
         'Šīs vērtības ir pretrunā ar globālajiem noklusējumiem, ar kuriem tās darbojas kopā.',
     scenarioIssueNoPhase: 'Nav fāzes ar nosaukumu „{name}”.',
     scenarioIssueDuplicateRuleId: 'Likuma identifikators „{id}” ir izmantots divreiz.',
-    scenarioIssueConditionDepth: 'Nosacījumi ir ieklāti dziļāk par {depth} līmeņiem.',
+    scenarioIssueConditionDepth: 'Nosacījumi ir ievietoti cits citā vairāk nekā {depth} līmeņos.',
     scenarioIssueMemoryNeverSet: 'Atmiņas vieta „{slot}” netiek aizpildīta ne ar vienu darbību.',
     scenarioIssueControlChars: 'Noņem rindu pārtraukumus un citas vadības rakstzīmes.',
     scenarioIssueIdentifier: 'Lieto burtus, ciparus, „-” vai „_”, sākot ar burtu (ne vairāk kā 32 rakstzīmes).',
@@ -1891,13 +1890,13 @@ export const notice: typeof english.notice = {
     recoveryUnreadableWhyAndroid:
         'Lietotne nevarēja nolasīt saglabātos uzstādījumus. Iespējams, ierīces krātuve ir aizņemta vai pilna.',
     recoveryUnreadableNextAndroid:
-        'Restartē lietotni. Nekas netika pārrakstīts, un saglabāšana paliek izslēgta, kamēr uzstādījumus nevar nolasīt. Ja atkārtojas, sadaļā „Lietotnes uzstādījumi” → „Par lietotni un datiem” izmanto „Dzēst visus vietējos datus”.',
+        'Restartē lietotni. Nekas netika pārrakstīts, un saglabāšana paliek izslēgta, kamēr uzstādījumus nevar nolasīt. Ja tas atkārtojas, sadaļā „Lietotnes uzstādījumi” → „Par lietotni un datiem” izmanto „Dzēst visus vietējos datus”, lai sāktu ar noklusētajiem uzstādījumiem.',
     recoveryImportWhat:
         'Tavus uzstādījumus no settings.json neizdevās importēt, tāpēc uzstādījumu saglabāšana ir izslēgta un lietotne izmanto noklusētos uzstādījumus.',
     recoveryImportWhatAndroid:
         'Tavus saglabātos uzstādījumus neizdevās importēt, tāpēc uzstādījumu saglabāšana ir izslēgta un lietotne izmanto noklusētos uzstādījumus.',
     recoveryImportWhy:
-        'Failu settings.json (šeit: {path}) šobrīd neizdevās nolasīt (iespējams, to izmanto cita programma, vai arī saglabāšana neizgāja).',
+        'Failu settings.json šeit: {path} pašlaik neizdevās nolasīt. Iespējams, to izmanto cita programma vai saglabāšana neizdevās.',
     recoveryImportNext:
         'Nekas netika pārrakstīts; lietotne mēģina vēlreiz nākamajā palaišanā. Izvēlies „Mēģināt vēlreiz” (tagad) vai „Sākt no jauna” (noklusētie uzstādījumi); settings.json paliek kā ir.',
     recoveryImportWhyAndroid: 'Saglabātos uzstādījumus šobrīd neizdevās nolasīt.',
@@ -1912,7 +1911,7 @@ export const notice: typeof english.notice = {
     recoveryImportWhyMigration:
         'Tajā esošos uzstādījumus nevar pārveidot uz pašreizējo uzstādījumu formātu. Fails ir paturēts, kāds ir, un importēšana pēc savas iniciatīvas vairs netiek mēģināta.',
     recoveryImportSettledNext:
-        'Lai importētu savus uzstādījumus, kad settings.json ir salabots: aizvēr lietotni un mapē, kurā atrodas settings.json ({path}), izdzēs failus config.json un v2-import.json, kā arī izņem no tās visas config.json.corrupt-… kopijas (paturi settings.json tajā). Atkal palaid lietotni; nākamajā palaišanā salabotais fails tiek importēts vienreiz, un līdz šim lietotie uzstādījumi — arī tas, ko mainīji pēc noklusēto uzstādījumu ierakstīšanas, un pašreizējā pieteikšanās — tiek aizstāti ar importētajiem.',
+        'Lai importētu savus uzstādījumus pēc settings.json salabošanas, aizver lietotni. Mapē, kurā atrodas settings.json ({path}), izdzēs config.json un v2-import.json. Pārvieto no šīs mapes arī visas config.json.corrupt-… kopijas. Failu settings.json atstāj šajā mapē. Palaid lietotni vēlreiz. Nākamajā palaišanā tā vienreiz importēs salaboto failu. Importētie uzstādījumi aizstās līdz tam lietotos uzstādījumus, arī visas izmaiņas kopš noklusēto uzstādījumu saglabāšanas un pašreizējos pieteikšanās datus.',
     recoveryImportSettledNextAndroid:
         'Lietotne izmanto noklusētos uzstādījumus. Iestati savus vēlreiz; jaunus uzstādījumus vari saglabāt kā parasti.',
     recoverySignInKept:
@@ -1945,9 +1944,9 @@ export const notice: typeof english.notice = {
         'Sākt ar noklusētajiem uzstādījumiem neizdevās: jaunos neizdevās saglabāt. Nekas netika mainīts. Mēģini vēlreiz; ja atkārtojas, pārbaudi, vai lietotne var rakstīt krātuvē. Sīkāk žurnālā.',
     importReportTitle: 'Uzstādījumi importēti',
     importReportIntro:
-        'Tavi uzstādījumi no settings.json importēti. Atsauces uz profiliem un scenārijiem paturētas un, kā iepriekš, vēl nedarbojas — izveido vai salabo to, ko katra nosauc.',
+        'Tavi uzstādījumi ir importēti no settings.json. Šīs atsauces uz profiliem un scenārijiem ir paturētas, bet joprojām nedarbojas, tāpat kā pirms importēšanas. Izveido vai salabo katrā atsaucē norādīto profilu vai scenāriju.',
     importReportIntroAndroid:
-        'Tavi saglabātie uzstādījumi importēti. Atsauces uz profiliem un scenārijiem paturētas un, kā iepriekš, vēl nedarbojas — izveido vai salabo to, ko katra nosauc.',
+        'Tavi saglabātie uzstādījumi ir importēti. Šīs atsauces uz profiliem un scenārijiem ir paturētas, bet joprojām nedarbojas, tāpat kā pirms importēšanas. Izveido vai salabo katrā atsaucē norādīto profilu vai scenāriju.',
     importReportFailed:
         'Lietotne nevarēja saglabāt, ka šis paziņojums ir redzēts. Tas parādīsies vēlreiz nākamajā startā. Pārbaudi, vai lietotne var rakstīt savā krātuvē.',
     importRefLine: '{where}: {problem}',

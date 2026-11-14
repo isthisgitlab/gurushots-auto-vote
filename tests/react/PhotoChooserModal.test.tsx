@@ -340,7 +340,7 @@ describe('closing with unsaved picks', () => {
         );
         expect(screen.queryByText(discardTitle)).toBeNull();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Close modal' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Close' }));
         fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }));
         expect(onClose).toHaveBeenCalledTimes(1);
         expect(onSave).not.toHaveBeenCalled();

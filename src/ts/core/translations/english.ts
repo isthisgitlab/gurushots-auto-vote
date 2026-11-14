@@ -6,9 +6,9 @@ export const common = {
     languageEnglish: 'English',
     languageLatvian: 'Latviešu',
     loading: 'Loading…',
-    closeModal: 'Close modal',
-    logout: 'Logout',
-    mock: 'Mock:',
+    closeModal: 'Close',
+    logout: 'Log out',
+    mock: 'Test mode:',
     never: 'Never',
     no: 'No',
     off: 'OFF',
@@ -53,7 +53,7 @@ export const errors = {
     turboModeUnknown:
         'Turbo mode is not known yet. GuruShots has not told the app which game this Turbo is. Try again in a moment.',
     snapNeedsModel:
-        'Snap was not played: it needs the vision model, which this build lacks. Turn on "Answer Snap with Yes without the vision model" in Turbo settings, play it on GuruShots, or use a build with the model.',
+        'Snap was not played: it needs the vision model, which this version does not include. Turn on "Play Snap without the vision model" in Turbo settings, play it on GuruShots, or use a version with the model.',
     snapNotOffered:
         'Snap was not played. GuruShots no longer offers it for this challenge. Refresh the list to see the current Turbo.',
     snapUnanswerable:
@@ -79,7 +79,7 @@ export const errors = {
     pickUnclear:
         'The photos may have been submitted. GuruShots did not answer clearly, and the card is refreshing. Check the card before you try again.',
     suggestNoChosenEntered:
-        'Nothing to suggest. Submit Only Chosen Photos is on and every chosen photo is already entered. Pick photos… does not apply Submit Only, so pick any photo here, or update your Chosen Photos.',
+        'Nothing to suggest. Submit Only Chosen Photos is on and every chosen photo is already entered. “Pick photos…” ignores Submit Only Chosen Photos, so pick any photo here, or update your Chosen Photos.',
     suggestNoChosenUnusable:
         'Nothing to suggest. Submit Only Chosen Photos is on and none of your chosen photos can go in this challenge. Pick any photo here, or update your Chosen Photos.',
     suggestNoMatch: 'Nothing to suggest. No photo matches your Must Include Tags. Loosen the tags, or pick by hand.',
@@ -102,11 +102,11 @@ export const errors = {
     joinRefusedFull:
         'Could not join: the challenge is full, so no player slot is left. Nothing was charged. Refresh the list, and join if a slot frees up.',
     joinRefusedPriceUnknown:
-        'Could not join: the price could not be read as a usable price, so the app could not confirm a spend. Nothing was charged. Refresh the list, or join the challenge on gurushots.com.',
+        'Could not join: the app could not determine the price, so it could not confirm a spend. Nothing was charged. Refresh the list, or join the challenge on gurushots.com.',
     tokenNotSaved:
         "Your login was accepted but could not be saved: the settings could not be written. Check the settings file's permissions and free disk space, then log in again.",
     tokenNotSavedAndroid:
-        "Your login was accepted, but it could not be saved. The device's settings storage did not take it. Restart the app, then log in again.",
+        'Your login was accepted, but it could not be saved. The device could not store your login in its settings. Restart the app, then log in again.',
     webShellToken:
         "This page can't talk to the web server. It was opened without this run's access token, or the server was restarted since. Open the URL that pnpm web printed.",
     boundaryBody:
@@ -131,10 +131,10 @@ export const errors = {
 // First-run onboarding
 export const onboarding = {
     title: 'Welcome to GuruShots Auto Vote',
-    intro: 'This app votes on your active GuruShots challenges automatically on a schedule, keeping your exposure up without you lifting a finger.',
+    intro: 'This app votes automatically in your active GuruShots challenges on a schedule to keep your exposure high.',
     howItWorksTitle: 'How it works',
     howItWorks:
-        'Log in, pick your thresholds in Settings, and toggle Auto-vote on. The app checks your challenges every few minutes and votes when needed.',
+        'Log in, choose in Settings the exposure levels at which voting starts, and turn on Auto-vote. The app checks your challenges every few minutes and votes when needed.',
     batteryTitle: 'Keep it running in the background',
     batteryBody:
         'To keep voting while the screen is off, exclude this app from battery optimization in your phone settings. Some vendors (Samsung, Xiaomi, OnePlus) aggressively kill background apps.',
@@ -167,7 +167,7 @@ export const menu = {
     aboutElectron: 'Electron',
     aboutNode: 'Node.js',
     aboutDescription:
-        'GuruShots Auto Vote - An Electron application for automated voting on GuruShots challenges with unified GUI and CLI interfaces (supports both real and mock modes)',
+        'GuruShots Auto Vote - An Electron app that votes automatically in GuruShots challenges. Its graphical and command-line interfaces use the same voting functions. It supports real and test modes.',
     checkForUpdates: 'Check for Updates…',
     noUpdates: 'No Updates',
     noUpdatesMessage: 'You are using the latest version.',
@@ -188,12 +188,13 @@ export const login = {
     loadingModeInfo: 'Loading mode information…',
     loggingIn: 'Logging in…',
     loginButton: 'Login',
-    mockMode: 'Mock mode',
-    mockModeInfo: 'Mock mode: Using simulated data for testing. Any credentials will work.',
+    mockMode: 'Test mode',
+    mockModeInfo: 'Test mode: The app uses test data. Any username and password will work.',
     password: 'Password',
     passwordPlaceholder: 'Enter your password',
     passwordRequired: 'Password is required',
-    productionModeInfo: 'Production mode: Using real GuruShots API. Valid credentials required.',
+    productionModeInfo:
+        'Real mode: The app connects to your GuruShots account. A valid username and password are required.',
     stayLoggedIn: 'Stay logged in',
     title: 'Login - GuruShots Auto Vote',
     username: 'Username',
@@ -205,9 +206,9 @@ export const app = {
     activeChallenges: 'Active Challenges',
     addCustomTimezone: 'Add custom timezone',
     addTimezone: 'Add custom timezone',
-    apiTimeout: 'API Timeout',
+    apiTimeout: 'GuruShots Response Wait Time',
     apiTimeoutDesc:
-        'How long to wait for a GuruShots API response before the request counts as failed (1–120 seconds).',
+        'How long to wait for a response from GuruShots before the request counts as failed (1–120 seconds).',
     appSetting: 'App Setting',
     applicationSettings: 'Application Settings',
     autoVote: 'Auto Vote',
@@ -238,7 +239,7 @@ export const app = {
     deadlineDue: 'due now',
     deadlineActionAutoSubmit: 'Auto-submit',
     deadlineActionBoost: 'Boost',
-    deadlineActionBoostPinSubmit: 'Boost pin submit',
+    deadlineActionBoostPinSubmit: 'Submit photo pinned for Boost',
     deadlineActionTurbo: 'Turbo',
     deadlineActionEmergencySubmit: 'Emergency submit',
     donate: 'Donate',
@@ -288,7 +289,7 @@ export const app = {
     boostTimeDesc:
         'Apply Boost when this much time is left on the Boost’s own timer. Does not apply to a key-unlocked Boost, which has no timer — that one uses Key-Unlocked Boost Time.',
     boostTimeHelp:
-        'Measured as time-before-close. 0 turns timed Boost off — here 0 means "off", unlike the Exposure Target settings, where 0 means "follow the trigger".',
+        'Time remaining on the Boost’s own timer. 0 turns timed Boost off — here 0 means "off", unlike the Exposure Target settings, where 0 means "follow the trigger".',
     keyUnlockedBoostTime: 'Key-Unlocked Boost Time',
     keyUnlockedBoostTimeDesc:
         'Separate window for a key-unlocked Boost (no timer of its own). It never expires, so it is applied only when this much time remains before the challenge closes. 0 = never auto-apply it.',
@@ -300,22 +301,22 @@ export const app = {
     boostOnSleep: 'Boost Before Sleep',
     boostOnSleepDesc:
         'Desktop app: if the computer sleeps while auto-vote runs, a boost due within 30 min is applied at once so it is not lost; Wait Before Boosting a New Photo is cut short too. Off keeps the set time.',
-    voteBeforeBoost: 'Fill Exposure Before Boost',
+    voteBeforeBoost: 'Vote Before Boost',
     voteBeforeBoostDesc:
         'Vote this challenge up to 100% exposure for a short window before Boost is auto-applied, so the Boost lands on a fully exposed entry instead of a decayed one.',
     voteBeforeBoostHelp:
-        'A Boost multiplies the entry’s exposure when it lands, and you get one per challenge — a decayed entry wastes it. It votes to 100% over the lead below before Boost applies. Needs Auto-Apply Boost.',
+        'A Boost multiplies the entry’s exposure when it is applied, and you get one per challenge — low exposure wastes it. The app votes to 100% during the time set below, before Boost is applied. Needs Auto-Apply Boost.',
     voteBeforeBoostOnlyBoostHint:
-        'Only Boost Mode is on, so the bot never votes — this fill will never run. Turn off Only Boost Mode (in General) to use it.',
+        'Only Boost Mode is on, so the app never votes. Turn off Only Boost Mode (in General) to allow voting before Boost.',
     voteBeforeBoostNoAutoBoostHint:
-        'Auto-Apply Boost is off, so no Boost is applied automatically and there is nothing to fill ahead of.',
+        'Auto-Apply Boost is off, so no Boost is applied automatically and Vote Before Boost cannot run.',
     voteBeforeBoostLastMinuteOnlyHint:
-        'Vote Only In Last Minutes is on, so the bot does not vote before then — this fill runs only if the Boost happens to land inside that window, where voting already goes to 100% anyway.',
+        'Vote Only In Last Minutes is on, so the app does not vote before then. Voting before Boost only happens if Boost is applied inside that window, where voting already goes to 100% anyway.',
     voteBeforeBoostNoBoostTimeHint:
-        'Both Boost Time and Key-Unlocked Boost Time are 0 (off), so no Boost is ever applied automatically and there is no moment to fill ahead of. Set at least one of them above 0.',
-    voteBeforeBoostLeadMin: 'Fill Before Boost Lead',
+        'Both Boost Time and Key-Unlocked Boost Time are 0 (off), so no Boost is ever applied automatically and Vote Before Boost cannot run. Set at least one of them above 0.',
+    voteBeforeBoostLeadMin: 'Start Voting This Long Before Boost',
     voteBeforeBoostLeadMinDesc:
-        'How long before the Boost is applied the fill starts. Allow enough time for several voting rounds — exposure does not reach 100% in one go.',
+        'How long before Boost is applied the voting starts. Allow enough time for several voting rounds — exposure does not reach 100% in one go.',
     autoBoost: 'Auto-Apply Boost',
     autoBoostDesc: 'Automatically apply Boost on this challenge as its Boost window is about to close.',
     protectUncertainAutoSubmits: 'Protect uncertain auto-submitted photos',
@@ -326,7 +327,7 @@ export const app = {
     autoTurboDesc: 'Play the Turbo mini-game automatically to earn the bonus',
     snapYesWithoutModel: 'Play Snap without the vision model',
     snapYesWithoutModelDesc:
-        'In a build without the vision model, answer Yes to photo questions and give scored videos the highest rating. With the model, the model answers. Off by default.',
+        'In a version without the vision model, answer Yes to photo questions and give scored videos the highest rating. With the model, the model answers. Off by default.',
     useTurbo: 'Auto-Apply Turbo',
     useTurboDesc: 'Automatically apply an earned Turbo to one of your entries',
     turboTime: 'Turbo Apply Time',
@@ -335,10 +336,10 @@ export const app = {
         'Time-before-close at which an earned Turbo is applied. Set to 0 to turn timed Turbo apply off. Like the other time settings, 0 here means "off" — not "follow a trigger".',
     turboImageIndex: 'Turbo Entry',
     turboImageIndexDesc:
-        'Which entry gets Turbo: 1 = first, 0 = last. Boost or a Boost pin shifts Turbo one entry back (1 wraps). A Boost pin yields only in the Emergency Submit window — until Boost is ready, no Turbo.',
+        'Which entry gets Turbo: 1 = first, 0 = last. Boost or a Boost pin shifts Turbo back by one entry. From the first entry, it moves to the last. If no other photo is available, a Boost pin yields only in the Emergency Submit window while Boost is not ready.',
     boostImageIndex: 'Boost Entry',
     boostImageIndexDesc:
-        'Which entry gets Boost: 1 = first, 0 = last. Turbo or a Turbo pin shifts Boost one entry back (1 wraps). A Turbo pin yields only in the Emergency Submit window — until Turbo is won, no Boost.',
+        'Which entry gets Boost: 1 = first, 0 = last. Turbo or a Turbo pin shifts Boost back by one entry. From the first entry, it moves to the last. If no other photo is available, a Turbo pin yields only in the Emergency Submit window while Turbo has not been won.',
     boostNewSubmit: 'Boost a Freshly Submitted Photo',
     boostNewSubmitDesc:
         'A new photo (by your Auto-Submit tag rules) is submitted just before boosting and gets the Boost. No free slot or photo: the Boost falls back to your Boost Entry.',
@@ -514,28 +515,28 @@ export const app = {
     scenarioStatusPausedManualShort: 'paused (Manual Only)',
     scenarioStatusProblem: 'Last step skipped: {message}',
     scenarioStatusSpendUnclear:
-        'GuruShots gave no answer to “{action}”, so it may have gone through. It will not be spent again: the next cycle only checks whether it took effect.',
+        'GuruShots gave no answer to “{action}”, so it may have gone through. The app will not repeat the spend: the next cycle only checks whether it took effect.',
     scenarioStatusSpendUnclearManual:
-        'GuruShots gave no answer to “{action}”, so it may have gone through. It will not be spent again: once Manual Only is off, the next cycle only checks whether it took effect.',
+        'GuruShots gave no answer to “{action}”, so it may have gone through. The app will not repeat the spend: once Manual Only is off, the next cycle only checks whether it took effect.',
     scenarioStatusSpendUnclearPendingManual:
-        'The app did not record whether “{action}” was sent, so it may have gone through. It will not be spent again: once Manual Only is off, the next cycle only checks whether it took effect.',
+        'The app did not record whether “{action}” was sent, so it may have gone through. The app will not repeat the spend: once Manual Only is off, the next cycle only checks whether it took effect.',
     scenarioStatusSpendUnclearPending:
-        'The app did not record whether “{action}” was sent, so it may have gone through. It will not be spent again: the next cycle only checks whether it took effect.',
+        'The app did not record whether “{action}” was sent, so it may have gone through. The app will not repeat the spend: the next cycle only checks whether it took effect.',
     scenarioStatusSpendStopped:
-        'GuruShots gave no answer to “{action}”, so it may have gone through, and its rule was stopped so that it is not spent again. Check the challenge. {hint}',
+        'GuruShots gave no answer to “{action}”, so it may have gone through, and its rule was stopped to prevent another spend. Check the challenge. {hint}',
     scenarioStatusResetHint:
-        '{again} To start over, use Reset scenario below or run scenario-reset --challenge={id} in the CLI: that may spend the action again and restarts the spend counter.',
+        '{again} To start over, use Reset scenario below or run scenario-reset --challenge={id} in the CLI: that may repeat the spend and restarts the spend counter.',
     scenarioStatusSpendStoppedShort:
-        'Press “{details}” for more — GuruShots gave no answer to “{action}”: its rule was stopped so that it is not spent again.',
+        'Press “{details}” for more — GuruShots gave no answer to “{action}”: its rule was stopped to prevent another spend.',
     scenarioStatusSpendStoppedPending:
-        'The app did not record whether “{action}” was sent or what came of it, so it may have gone through; its rule was stopped so it is not spent again. Check the challenge. {hint}',
+        'The app did not record whether “{action}” was sent or what came of it, so it may have gone through; its rule was stopped to prevent another spend. Check the challenge. {hint}',
     scenarioStatusSpendStoppedPendingShort:
-        'Press “{details}” for more — the app did not record whether “{action}” was sent: its rule was stopped so that it is not spent again.',
+        'Press “{details}” for more — the app did not record whether “{action}” was sent: its rule was stopped to prevent another spend.',
     scenarioReset: 'Reset scenario…',
     scenarioResetAll: 'Reset every challenge’s progress…',
     scenarioResetTitle: 'Reset scenario progress',
     scenarioResetBody:
-        'This forgets where “{title}” is in its scenario: the plan restarts from phase one on the next pass, rules that ran can run (and spend) again, and an action with an unknown outcome may be spent again.',
+        'This forgets where “{title}” is in its scenario: the plan restarts from phase one on the next pass, rules that ran can run (and spend) again, and the app may spend again on an action with an unknown outcome.',
     scenarioResetAllBody:
         'The saved scenario progress cannot be read, so every challenge must be reset at once. This drops each plan’s position, its already-run rules (they can run and spend again) and the spend counters.',
     scenarioResetConfirm: 'Reset',
@@ -571,7 +572,7 @@ export const app = {
     sbCond_beforeEnd: 'Time left until the end',
     sbCond_afterStart: 'Time since the start',
     sbCond_inPhaseFor: 'Time in this phase',
-    sbCond_elapsedPercent: 'Share of the challenge run (%)',
+    sbCond_elapsedPercent: 'Share of Challenge Time Elapsed (%)',
     sbCond_entries: 'Number of entries',
     sbCond_freeSlots: 'Free entry slots',
     sbCond_exposure: 'Exposure (%)',
@@ -591,7 +592,7 @@ export const app = {
     sbAct_turbo: 'Turbo an entry',
     sbAct_unlockBoost: 'Unlock the boost with a key',
     sbAct_fillExposure: 'Fill exposure (spends a fill)',
-    sbAct_vote: 'Vote up to an exposure',
+    sbAct_vote: 'Vote until exposure reaches the target',
     sbAct_remember: "Remember an entry's photo",
     sbAct_forget: 'Forget a remembered photo',
     sbAct_goto: 'Go to a phase',
@@ -742,7 +743,7 @@ export const app = {
     autoJoinAfterPercentElapsedDesc:
         'Wait until this much of a challenge has already run before joining it, as a percentage of its own length. 75 means "join once three-quarters is over". 0 = off.',
     autoJoinAfterPercentElapsedHelp:
-        'For challenges of varying length: 75% is 6 h before the end of a 24-hour challenge, 5 days before a 3-week exhibition. When more than one join timing is above 0, only one applies — hours from start, then this percent, then hours before end — and a challenge rule that sets any join timing replaces all three global join timings.',
+        'For challenges of varying length: 75% is 6 h before the end of a 24-hour challenge, about 5 days before the end of a 3-week exhibition. When more than one join timing is above 0, only one applies — hours from start, then this percent, then hours before end — and a challenge rule that sets any join timing replaces all three global join timings.',
     autoJoinMaxCoins: 'Max Coins Per Challenge',
     autoJoinMaxCoinsDesc:
         'Highest coin cost to pay to join a single challenge. 0 = free challenges only. Paid joins also require a per-cycle budget above 0.',
@@ -780,7 +781,7 @@ export const app = {
     discoverPriceUnknown: 'Price unknown',
     discoverJoinPriceUnknownLabel: 'Join {title} — its price is unknown',
     discoverPriceUnknownHint:
-        'The price of this challenge could not be read as a usable price, so the app cannot ask you to confirm a spend. Refresh the list, or join the challenge on gurushots.com.',
+        'The app could not determine this challenge’s price, so it cannot ask you to confirm a spend. Refresh the list, or join the challenge on gurushots.com.',
     discoverRecommended: 'Recommended by GuruShots',
     discoverJoin: 'Join',
     discoverJoinPaid: 'Join (paid)',
@@ -797,7 +798,7 @@ export const app = {
     discoverForgetPaymentLabel: "I wasn't charged for {title}",
     discoverForgetTitle: 'Forget this payment?',
     discoverForgetBody:
-        'First check your coin history on the GuruShots website; continue only if the coins for {title} were not taken, or a rejoin charges twice. Once forgotten, auto-join may pay again within its budget.',
+        'First check your coin history on the GuruShots website. Continue only if the coins for {title} were not taken. Otherwise, joining again charges you twice. Once the payment record is forgotten, auto-join may pay again within its budget.',
     discoverForgetBalances:
         "Coins before this payment: {before}; GuruShots reports {now} now. Other coin activity since (rewards, other joins) changes the difference, so only the website's coin history settles it.",
     discoverForgetBalanceBefore:
@@ -864,10 +865,10 @@ export const app = {
     customSettingsHint: 'Has custom settings',
     mustIncludeTags: 'Must Include Tags',
     mustIncludeTagsDesc:
-        'Hard filter for auto-submit and the manual buttons: photos must match ALL these tags (labels are auto-detected). Empty = all. Whole-word, case-insensitive: "cat" fits "cats" but not "catamaran".',
+        'Required filter for auto-submit, Auto suggestions and manual buttons that let the app choose photos: photos must match ALL these tags (labels are auto-detected). Empty = all. Whole-word, case-insensitive: "cat" fits "cats" but not "catamaran".',
     shouldIncludeTags: 'Should Include Tags',
     shouldIncludeTagsDesc:
-        'Soft preference for auto-submit and the manual buttons: matching photos rank higher but nothing is excluded; if none match, the normal ranking decides. Same word rules as Must Include Tags.',
+        'Preference for auto-submit, Auto suggestions and manual buttons that let the app choose photos: matching photos rank higher but nothing is excluded; if none match, the normal ranking decides. Same word rules as Must Include Tags.',
     chosenPhotos: 'Chosen Photos',
     chosenPhotosDesc:
         "Photos auto-join and auto-submit try first; they must still fit your tag settings and rank like the app's own picks, or go in your pick order (setting below). A photo can be in only one challenge. With Submit Only off, each chosen photo leaves the list once it is entered in the challenge; an emptied list removes the challenge's own setting, and a rule or global list then applies. With Submit Only on, the list is kept (see Submit Only Chosen Photos).",
@@ -1017,7 +1018,7 @@ export const app = {
     fillPickLabel: 'Choose which photos to submit now',
     pickTitle: 'Choose photos to submit',
     pickHelp:
-        'The photos you pick are submitted to this challenge right away, exactly as picked: your tag filters and Chosen Photos settings are not applied, and nothing is saved.',
+        'The photos you pick are submitted to this challenge right away, exactly as picked. Your tag filters and Chosen Photos settings are not applied, and no settings are saved.',
     pickCount: 'Picked: {count}/{max} open slots',
     pickOverCap: 'Picked: {count}, open slots: {max}. Remove some to submit.',
     pickFull: 'All open slots picked',
@@ -1088,11 +1089,11 @@ export const app = {
     discoverChosenInherited: 'Inherited chosen photos: {count} (from your settings or rules)',
     discoverConfirmChosen: "Your chosen photo if it's eligible, otherwise an automatic pick.",
     scenarioFlagged:
-        'Review before importing: {settings}. Submit Only Chosen Photos makes joins and fills skip a challenge with no usable chosen photo.',
+        'Review before importing: {settings}. Submit Only Chosen Photos skips automatic joining and scheduled photo submission for challenges with no usable chosen photo.',
     scenarioExportOmitted: 'Left out of this export because it belongs to your account: {settings}.',
     ignoreTitleWords: 'Ignore These Words in Challenge Titles',
     ignoreTitleWordsDesc:
-        'Stripped from the title before photo searches; extra words blur the theme and spend the few searches a challenge has. Pre-filled; remove one if a challenge really is about it.',
+        'These words are removed from the title before photo searches. Extra words make the theme less clear and use up the few searches allowed per challenge. The list is pre-filled. Remove a word if a challenge really is about it.',
     submitWithoutTagMatch: 'Submit Even Without a Tag Match',
     submitWithoutTagMatchDesc:
         'Only matters when Must Include Tags is set. On (default): no photo matches all the tags — the best one is still added so the slot is not empty. Off leaves it empty until a full match exists.',
@@ -1104,7 +1105,7 @@ export const app = {
     tagsPlaceholder: 'e.g. sunset, beach, ocean',
     titleTagRules: 'Challenge Rules',
     titleTagRulesDesc:
-        'Give challenges a profile, join timing and photo tags by what survives rotation: title, tag, type, photo count or length. Rules reapply when a challenge returns with a new id; manual settings win.',
+        'Assign a profile, join timing and photo tags using challenge details that stay the same when challenges return: title, tag, type, photo count or length. Rules apply again when a challenge returns with a new ID. Manual settings take priority.',
     titleTagRulesSaveError:
         'Rules not saved. Check profile names, title/tag lengths, value ranges ("runs at least" ≤ "runs at most"), close times (HH:MM), and manual-setting conflicts for open challenges. Other settings saved.',
     titleTagRulesLoadError:
@@ -1152,7 +1153,7 @@ export const app = {
         'This rule sets the join timing to 0, so the global join timings do not apply to it and matching challenges are joined as soon as they are seen.',
     titleRuleOverridesLabel: 'Behaviour',
     titleRuleBroadWarning:
-        'This rule has no title, so it turns this on for every challenge it matches — which can spend coins or photos across a whole group of challenges.',
+        'This rule has no challenge title condition, so it turns this on for every challenge it matches. This can spend coins or photos across a whole group of challenges.',
     titleRuleOrderHint:
         'Rules apply top to bottom: the first matching rule that sets a setting wins; what it leaves empty comes from the next matching rule, then the global default.',
     titleRuleSortDefault: 'Sort by default order',
@@ -1235,7 +1236,7 @@ export const app = {
     currencyReserveFillsDesc:
         'Automatic spending never takes your fills below this. Manual spending from the card is not limited. 0 = no reserve.',
     currencyRuleTimingHelp:
-        'Each action has three optional conditions — after time from start, within time before end, after % run. Set ones must all hold; 0 acts as soon as possible. One spend per cycle, and the reserve holds.',
+        'Each action has three optional conditions: time since the start, time left before the end, and percentage of the challenge elapsed. All conditions you set must be met. A value of 0 adds no delay. One spend per cycle, while keeping the reserve.',
     groupGeneral: 'General',
     groupBoost: 'Boost',
     groupTurbo: 'Turbo',
@@ -1285,7 +1286,7 @@ export const app = {
     notifyLeadTime: 'Warn this far ahead',
     notifyLeadTimeDesc: 'How many minutes before an action a warning is shown.',
     notifyLeadTimeHelp:
-        'Best-effort: warnings only happen on a cycle the app actually runs, so a lead longer than the check frequency may arrive late. Most reliable inside the last-minute window.',
+        'Warnings only happen when the app runs a cycle, so they may arrive later than the lead time you set. If the time between checks is longer than the lead time, a warning may be missed. Warnings are most reliable inside the last-minute window.',
     // Notification title/body templates. {action} reuses the deadline
     // action labels; {title} is the challenge name; {minutes}/{count}
     // are filled in by the notification layer.
@@ -1369,9 +1370,9 @@ export const app = {
         "With Manual Only on, the app does no voting, boosting, Turbo or photo entry at all on the challenges this rule matches, unless a challenge's own setting turns the switch off.",
     onlyBoost: 'Only Boost Mode',
     onlyBoostDesc: 'Skip regular voting for this challenge entirely and only apply Boost.',
-    voteOnNewEntry: 'Vote on New Entry',
+    voteOnNewEntry: 'Vote After a New Entry',
     voteOnNewEntryDesc:
-        'A new photo here gets one vote even at or above your threshold, up to the normal ceiling including the Final Window target in the final window. Only Boost Mode and the other voting blocks still hold.',
+        'When a new photo appears here, the app votes once in this challenge even at or above your exposure threshold. Voting stops at the normal exposure limit, including the Final Window target during the final window. Only Boost Mode and the other voting blocks still apply.',
     discoverUpcomingHours: 'Show upcoming challenges starting within',
     discoverUpcomingHoursDesc:
         'How far ahead Discover lists challenges that have not started, so you can choose photos early. They cannot be joined until they start. 0 = open challenges only.',
@@ -1416,7 +1417,7 @@ export const app = {
     resetAllConfirmTitle: 'Reset All Settings',
     resetAllConfirmMessage: 'Are you sure you want to reset ALL settings to their default values?',
     resetAllConfirmDetails:
-        'Resets UI settings, challenge defaults, app preferences, window positions, timezones and sign-in preferences.\\n\\nKept: login token, update-check time, mock mode, API headers. This cannot be undone.',
+        'Resets UI settings, challenge defaults, app preferences, window positions, timezones and sign-in preferences.\\n\\nKept: login token, update-check time, test mode, API headers. This cannot be undone.',
     resetAllSuccess: 'All settings have been reset to their default values. The page will reload to apply changes.',
     save: 'Save',
     savedOnThisDevice: 'Saved on this device only.',
@@ -1464,7 +1465,7 @@ export const app = {
     reliability: 'Reliability',
     apiMaxRetries: 'API Retries',
     apiMaxRetriesDesc:
-        'How many times a failed API request is retried (0 disables): transient network errors, timeouts, 429 and 5xx. Retry Delay is the base backoff in ms, roughly doubling each attempt.',
+        'How many times to retry a failed API request (0 disables retries): temporary network errors, timeouts, too many requests (429), and server errors (5xx). Retry Delay is the initial wait in milliseconds, roughly doubling with each attempt.',
     apiRetryBaseDelayMs: 'Retry Delay (ms)',
     voteOnlyInLastMinute: 'Vote Only in Last Minute',
     voteOnlyInLastMinuteDesc:
@@ -1558,8 +1559,8 @@ export const app = {
     challengeOverrideInfo: 'Settings configured here will override global defaults for this challenge only.',
     challengeOverridesLoadError:
         "Couldn't load this challenge's saved settings, so they can't be edited now — saving would overwrite them. Close this dialog and open it again; if it keeps failing, check the error log.",
-    mockMode: 'Mock Mode',
-    logout: 'Logout',
+    mockMode: 'Test Mode',
+    logout: 'Log out',
     status: 'Status',
     title: 'GuruShots Auto Vote',
     mainContent: 'Auto-vote controls and challenges',
@@ -1674,7 +1675,7 @@ export const app = {
     sbDurationHint: 'Seconds, or a length of time such as "90m", "6h" or "1d 6h" (up to 60 days).',
     timeLeft: '{time} left',
     noReleaseNotes: 'No release notes available',
-    scenarioIssueNoJson: 'No scenario was given. Paste the scenario file.',
+    scenarioIssueNoJson: 'No scenario was given. Paste the contents of the scenario file.',
     scenarioIssueTooLarge: 'The file is larger than {kb} KB.',
     scenarioIssueNotJson: 'This is not valid JSON.',
     scenarioIssuePhaseScenario: 'A phase cannot change which scenario is assigned.',
@@ -1687,7 +1688,7 @@ export const app = {
     scenarioIssueConditionDepth: 'Conditions are nested more than {depth} levels deep.',
     scenarioIssueMemoryNeverSet: 'The memory slot "{slot}" is never filled by any action.',
     scenarioIssueControlChars: 'Remove line breaks and other control characters.',
-    scenarioIssueIdentifier: 'Use letters, digits, "-" or "_", starting with a letter (at most 32).',
+    scenarioIssueIdentifier: 'Use letters, digits, "-" or "_". Start with a letter. Use at most 32 characters.',
     scenarioIssueReserved: 'This name is reserved.',
     scenarioIssueNameRequired: 'A name is required.',
     scenarioIssueNameTooLong: 'The name is longer than {max} characters.',
@@ -1702,7 +1703,7 @@ export const app = {
     scenarioIssueCompareNumber: '{field} is compared with a number.',
     scenarioIssueSameTime: 'The start and the end are the same time.',
     scenarioIssueWriteMessage: 'Write the message.',
-    scenarioIssueIdChars: 'Use letters, digits, "-" or "_" (at most 40).',
+    scenarioIssueIdChars: 'Use letters, digits, "-" or "_" (at most 40 characters).',
     scenarioIssueNeedsAction: 'A rule needs at least one action.',
     scenarioIssuePhaseNeeded: 'A scenario needs at least one phase.',
     scenarioIssueTooManyPhases: 'A scenario has at most {max} phases.',
@@ -1774,14 +1775,14 @@ export const logs = {
     empty: 'No logs yet.',
     connected: 'Connected',
     disconnected: 'Disconnected',
-    levels: { DEBUG: 'DEBUG', INFO: 'INFO', WARN: 'WARN', ERROR: 'ERROR' },
+    levels: { DEBUG: 'DEBUG', INFO: 'Information', WARN: 'Warning', ERROR: 'ERROR' },
     categories: {
         api: 'api',
-        authentication: 'authentication',
-        autoSubmit: 'autoSubmit',
+        authentication: 'Sign-in',
+        autoSubmit: 'Auto-submit',
         boost: 'boost',
         challenges: 'challenges',
-        claim: 'claim',
+        claim: 'Claim rewards',
         currency: 'currency',
         error: 'error',
         general: 'general',
@@ -1793,7 +1794,7 @@ export const logs = {
         settings: 'settings',
         translation: 'translation',
         turbo: 'turbo',
-        ui: 'ui',
+        ui: 'Interface',
         update: 'update',
         voting: 'voting',
     },
@@ -1884,7 +1885,7 @@ export const notice = {
     recoveryImportWhyMigration:
         'The settings in it cannot be converted to the current settings format. The file was left as it is, and the import is not tried again by itself.',
     recoveryImportSettledNext:
-        'To import your settings once settings.json is fixed: quit the app, then in the folder that holds settings.json ({path}) delete config.json and v2-import.json, and move any config.json.corrupt-… copy out of that folder too (keep settings.json there). Start the app again; the next start imports the fixed file once, and the settings in use until then — any you changed since the defaults were written, and the current sign-in — are replaced by the imported ones.',
+        'To import your settings after you fix settings.json, quit the app. In the folder that holds settings.json ({path}), delete config.json and v2-import.json. Move any config.json.corrupt-… copies out of that folder too. Keep settings.json there. Start the app again. On the next start, the app imports the fixed file once. The imported settings replace the settings in use until then, including any changes since the defaults were written and your current sign-in.',
     recoveryImportSettledNextAndroid:
         'The default settings are in use. Set your settings again; you can save new settings as usual.',
     recoverySignInKept:
