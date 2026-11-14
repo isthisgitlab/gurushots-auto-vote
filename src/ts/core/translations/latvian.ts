@@ -1536,7 +1536,7 @@ export const app: LatvianApp = {
         'Sāk vienreizēju pauzi tik ilgi pirms beigām. Skaita no katra izaicinājuma beigām. Arī pauze pāri termiņam piekāpjas pēdējās minūtes noteikumiem, kuri balso vienmēr.',
     votingPauseDurationMinutes: 'Pauzes ilgums (minūtes)',
     votingPauseDurationMinutesDesc:
-        'Cik ilgi katra pauze ilgst no tās sākuma. Kad pauze beidzas, atkal darbojas parastie noteikumi un nākamajā balsošanas ciklā lietotne palielina redzamību. Piemērs: 270 minūšu pauze no 01:30 ilgst līdz 06:00.',
+        'Cik ilgi katra pauze ilgst no tās sākuma. Kad pauze beidzas, atkal darbojas parastie balsošanas noteikumi. Piemērs: 270 minūšu pauze no 01:30 ilgst līdz 06:00.',
     votingPauseNextHint: 'Nākamā pauze: {0}–{1} ({2}) — no {3}',
     votingPauseActiveHint:
         'Pauze ir aktīva līdz {0} ({1}) — balsos tikai pēdējās minūtes un Flash noteikumi. Boost un Turbo lietotne joprojām izmanto pēc to laika atskaitēm.',

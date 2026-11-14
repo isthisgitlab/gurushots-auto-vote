@@ -1518,7 +1518,7 @@ export const app = {
         "Starts a one-shot pause this long before the challenge closes. Relative to each challenge's own deadline. A pause past the deadline still yields to the Last Minute rules, which always vote.",
     votingPauseDurationMinutes: 'Pause Duration (minutes)',
     votingPauseDurationMinutesDesc:
-        'How long each pause lasts from its start time. When it ends, normal rules apply again and exposure is topped up on the next voting cycle. Example: 270 minutes starting at 01:30 pauses until 06:00.',
+        'How long each pause lasts from its start time. When it ends, normal voting rules apply again. Example: 270 minutes starting at 01:30 pauses until 06:00.',
     votingPauseNextHint: 'Next pause: {0}–{1} ({2}) — from {3}',
     votingPauseActiveHint:
         'Paused now until {0} ({1}) — only Last Minute and flash voting will run. Boost and Turbo still apply on their own timers.',
