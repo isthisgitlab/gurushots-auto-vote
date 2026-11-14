@@ -341,6 +341,7 @@ describe('challenges', () => {
                 challenges: [{ id: '1', start_time: 1, close_time: 2 }],
                 fetchFailed: false,
                 pruneUnsafe: false,
+                suggestionsFetchFailed: true,
             });
             expect(r2).toBe(r1);
         });
@@ -1099,9 +1100,21 @@ describe('challenges', () => {
 
                 makePostRequest.mockResolvedValueOnce(list());
                 makePostRequest.mockResolvedValueOnce(null);
-                await getActiveChallenges(mockToken);
+                const failed = await getActiveChallenges(mockToken);
 
+                expect(failed.suggestionsFetchFailed).toBe(true);
                 await expect(getSuggestedPhotoIds(mockToken, 10)).resolves.toEqual([photoId(1)]);
+            });
+
+            test('a failed web read marks an empty suggestion cache', async () => {
+                makePostRequest.mockResolvedValueOnce(list());
+                makePostRequest.mockResolvedValueOnce(webRead([]));
+                await getActiveChallenges(mockToken);
+                makePostRequest.mockResolvedValueOnce(list());
+                makePostRequest.mockResolvedValueOnce(null);
+                const failed = await getActiveChallenges(mockToken);
+                expect(failed.suggestionsFetchFailed).toBe(true);
+                await expect(getSuggestedPhotoIds(mockToken, 10)).resolves.toEqual([]);
             });
 
             test('a failed mobile read leaves the cache alone', async () => {

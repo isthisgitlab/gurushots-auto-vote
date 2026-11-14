@@ -44,6 +44,7 @@ const fetchAndPin = async (token: string): Promise<ActiveChallengesResponse> => 
     const response = await mobileRead;
     if (!response.fetchFailed && Array.isArray(response.challenges)) {
         const webOverlay = await webRead;
+        if (!webOverlay) response.suggestionsFetchFailed = true;
         // Only the read that started a refresh waits for it, and for 2 s at most; every other read takes the
         // cache as it is, so a slow team read delays one list read per refresh window, never the spend-critical re-reads.
         const teamMatch = await settledTeamMatch(token, startedRefresh ? TEAM_MATCH_WAIT_MS : 0);

@@ -87,6 +87,9 @@ export const errors = {
         'Nothing to suggest. Your library has no photo this challenge accepts right now. Upload one, or try a search.',
     suggestNoMore:
         'No more suggestions. Every photo that fits has been shown. Press Auto to start again from the best.',
+    suggestGsEmpty: 'GuruShots has no eligible suggestions for this challenge. Use Auto or load photos to choose one.',
+    suggestGsIncomplete:
+        'Some GuruShots suggestions could not be loaded. Load photos to browse your library, or try again.',
     suggestBusy: 'The photos were not ranked. Another ranking is still running. Wait for it to finish, then try again.',
     suggestChallengeEnded:
         'The photos were not ranked. This challenge has ended or could not be read. Close this dialog and try again.',
@@ -1023,6 +1026,9 @@ export const app = {
     pickSubmit: 'Submit',
     pickSubmitCount: 'Submit {count}',
     pickAuto: 'Auto',
+    pickGsSuggestions: 'GS suggestions',
+    pickGsHelp: 'Load GuruShots suggestions for challenges you have not joined.',
+    pickGsLoading: 'Loading GuruShots suggestions…',
     pickAutoNext: 'Next suggestions',
     pickAutoHelp:
         'Auto ranks your photos by your auto-submit rules, and by the local image check where your build has it. Nothing is submitted. Press it again for the next ones.',

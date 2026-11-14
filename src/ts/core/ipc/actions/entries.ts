@@ -15,7 +15,44 @@ import { mapPhoto } from './library';
 
 import type { IpcReplyFn } from '../invokeHandler';
 import type { ActiveChallengesResponse } from '../../types/gurushots';
-import type { LibraryUsage } from '../../types/photoPicker';
+import type { LibraryUsage, PhotoSuggestionSource } from '../../types/photoPicker';
+
+const suggestGuruShots = async (
+    strategy: apiFactory.ApiStrategy,
+    token: string,
+    challengeId: string | number,
+    usage: LibraryUsage | undefined,
+) => {
+    const ids = [
+        ...new Set(
+            (await strategy.getSuggestedPhotoIds(token, challengeId)).filter((id) => CHOSEN_PHOTO_ID_RE.test(id)),
+        ),
+    ];
+    if (ids.length === 0) return { success: false as const, error: 'no-gs-suggestions' as const };
+    const requested = new Set(ids);
+    let walk;
+    try {
+        walk = await strategy.getEligiblePhotosWalk(challengeId, token, {
+            usage,
+            skip: (photo) => !requested.has(String(photo.id)),
+            maxKept: ids.length,
+        });
+    } catch {
+        return { success: false as const, error: 'fetch-failed' as const };
+    }
+    if (walk.stop === 'failed') return { success: false as const, error: 'fetch-failed' as const };
+    const found = new Map(walk.items.map((photo) => [String(photo.id), photo]));
+    if (walk.truncated && found.size < ids.length) {
+        return { success: false as const, error: 'gs-suggestions-incomplete' as const };
+    }
+    const photos = ids.flatMap((id) => {
+        const photo = found.get(id);
+        return photo?.permission?.allowed === true ? [mapPhoto(photo)] : [];
+    });
+    if (photos.length === 0) return { success: false as const, error: 'no-gs-suggestions' as const };
+    const memberId = await autoFill.resolveMemberId(token, strategy.getCurrentMemberProfile, logger, 'suggest');
+    return { success: true as const, source: 'gurushots' as const, memberId, photos, statsLimited: false };
+};
 
 /**
  * Map a fillChallengeNow result to the handler's reply.
@@ -168,11 +205,13 @@ const handleSuggestPhotos = (async (
     challengeId: string | number,
     usage?: LibraryUsage,
     exclude?: string[],
+    source?: PhotoSuggestionSource,
 ) => {
     if (
         !isIdArg(challengeId) ||
         (usage !== undefined && !isUsageArg(usage)) ||
-        (exclude !== undefined && !isExcludeIds(exclude))
+        (exclude !== undefined && !isExcludeIds(exclude)) ||
+        (source !== undefined && source !== 'auto' && source !== 'gurushots')
     ) {
         return refuseInvalidArgs('autoSubmit', 'suggest-photos');
     }
@@ -192,6 +231,9 @@ const handleSuggestPhotos = (async (
 
         const strategy = apiFactory.getApiStrategy();
         const response: ActiveChallengesResponse | null = await strategy.getActiveChallenges(guard.token);
+        if (source === 'gurushots' && (!response || response.fetchFailed || response.suggestionsFetchFailed)) {
+            return { success: false as const, error: 'fetch-failed' as const };
+        }
         const live = findActionableChallenge(response, challengeId);
         // A MARKED challenge never falls through to the open list: the refusal
         // is the answer, not a miss. A data-incomplete that comes from absence
@@ -222,6 +264,8 @@ const handleSuggestPhotos = (async (
             fromDiscover = challenge !== null;
         }
         if (!challenge) return { success: false as const, error: 'challenge-ended' as const };
+
+        if (source === 'gurushots') return await suggestGuruShots(strategy, guard.token, challengeId, usage);
 
         const result = await autoFill.suggestFillPhotos(
             challenge,

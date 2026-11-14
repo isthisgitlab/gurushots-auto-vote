@@ -1059,6 +1059,130 @@ describe('suggest-photos', () => {
         stubLive();
     });
 
+    test('GS suggestions preserve order and use eligible library records', async () => {
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }),
+            getSuggestedPhotoIds: jest.fn().mockResolvedValue(['b2', 'a1', 'b2', 'bad id', 'c3']),
+            getEligiblePhotosWalk: jest
+                .fn<
+                    ReturnType<apiFactoryModule.ApiStrategy['getEligiblePhotosWalk']>,
+                    Parameters<apiFactoryModule.ApiStrategy['getEligiblePhotosWalk']>
+                >()
+                .mockResolvedValue({
+                    items: [photo('a1'), photo('b2'), photo('c3', { permission: { allowed: false } })],
+                    truncated: true,
+                    stop: 'batch',
+                    nextStart: 100,
+                }),
+        });
+        await expect(buildHandlers()['suggest-photos']({}, '123', 'swap', [], 'gurushots')).resolves.toEqual({
+            success: true,
+            source: 'gurushots',
+            memberId: 'member-9',
+            photos: [mapped('b2'), mapped('a1')],
+            statsLimited: false,
+        });
+        const options = strategy.getEligiblePhotosWalk.mock.calls[0][2];
+        expect(options?.usage).toBe('swap');
+        expect(options?.maxKept).toBe(3);
+        expect(options?.skip?.(photo('foreign'))).toBe(true);
+        expect(options?.skip?.(photo('a1'))).toBe(false);
+        expect(autoFill.suggestFillPhotos).not.toHaveBeenCalled();
+    });
+
+    test.each([null, { challenges: [], fetchFailed: true }, { challenges: [], suggestionsFetchFailed: true }])(
+        'GS refuses an unsuccessful fresh challenge read: %p',
+        async (response) => {
+            const strategy = stubStrategy({
+                getActiveChallenges: jest.fn().mockResolvedValue(response),
+                getSuggestedPhotoIds: jest.fn(),
+            });
+            await expect(buildHandlers()['suggest-photos']({}, '123', 'submit', [], 'gurushots')).resolves.toEqual({
+                success: false,
+                error: 'fetch-failed',
+            });
+            expect(strategy.getSuggestedPhotoIds).not.toHaveBeenCalled();
+        },
+    );
+
+    test.each([
+        [{ items: [], truncated: true, stop: 'failed' }, 'fetch-failed'],
+        [{ items: [photo('a1')], truncated: true, stop: 'failed' }, 'fetch-failed'],
+        [{ items: [], truncated: true, stop: 'budget' }, 'gs-suggestions-incomplete'],
+        [{ items: [], truncated: true, stop: 'page-cap' }, 'gs-suggestions-incomplete'],
+        [{ items: [], truncated: true, stop: 'batch' }, 'gs-suggestions-incomplete'],
+        [{ items: [], truncated: false, stop: 'end' }, 'no-gs-suggestions'],
+    ])('GS reports walk outcome %p', async (walk, error) => {
+        stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }),
+            getSuggestedPhotoIds: jest.fn().mockResolvedValue(['a1']),
+            getEligiblePhotosWalk: jest.fn().mockResolvedValue(walk),
+        });
+        await expect(buildHandlers()['suggest-photos']({}, '123', 'submit', [], 'gurushots')).resolves.toEqual({
+            success: false,
+            error,
+        });
+    });
+
+    test('GS reports an empty suggestion list and a thrown walk', async () => {
+        const ids = jest.fn().mockResolvedValueOnce([]).mockResolvedValueOnce(['a1']);
+        stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }),
+            getSuggestedPhotoIds: ids,
+            getEligiblePhotosWalk: jest.fn().mockRejectedValue(new Error('read failed')),
+        });
+        const request = () => buildHandlers()['suggest-photos']({}, '123', 'submit', [], 'gurushots');
+        await expect(request()).resolves.toEqual({ success: false, error: 'no-gs-suggestions' });
+        await expect(request()).resolves.toEqual({ success: false, error: 'fetch-failed' });
+    });
+
+    test('GS refuses an unauthenticated request', async () => {
+        stubAuthGuardFail();
+        const strategy = stubLive();
+        await expect(buildHandlers()['suggest-photos']({}, '123', 'submit', [], 'gurushots')).resolves.toEqual({
+            success: false,
+            error: 'No authentication token found',
+        });
+        expect(strategy.getActiveChallenges).not.toHaveBeenCalled();
+    });
+
+    test('GS returns empty when all resolved photos are refused', async () => {
+        stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }),
+            getSuggestedPhotoIds: jest.fn().mockResolvedValue(['a1']),
+            getEligiblePhotosWalk: jest.fn().mockResolvedValue({
+                items: [photo('a1', { permission: { allowed: false } })],
+                truncated: false,
+                stop: 'end',
+            }),
+        });
+        await expect(buildHandlers()['suggest-photos']({}, '123', 'swap', [], 'gurushots')).resolves.toEqual({
+            success: false,
+            error: 'no-gs-suggestions',
+        });
+    });
+
+    test('a completed GS walk omits an absent requested photo', async () => {
+        stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }),
+            getSuggestedPhotoIds: jest.fn().mockResolvedValue(['a1', 'b2']),
+            getEligiblePhotosWalk: jest.fn().mockResolvedValue({ items: [photo('a1')], truncated: false, stop: 'end' }),
+        });
+        await expect(buildHandlers()['suggest-photos']({}, '123', 'submit', [], 'gurushots')).resolves.toEqual({
+            success: true,
+            source: 'gurushots',
+            memberId: 'member-9',
+            photos: [mapped('a1')],
+            statsLimited: false,
+        });
+    });
+
+    test('rejects an invalid suggestion source', async () => {
+        await expect(
+            buildHandlers()['suggest-photos']({}, '123', 'submit', [], invalid<'auto'>('other')),
+        ).resolves.toMatchObject({ success: false, error: 'invalid-args' });
+    });
+
     test('rejects when the auth guard fails, without ranking', async () => {
         stubAuthGuardFail();
         await expect(suggest()).resolves.toEqual({ success: false, error: 'No authentication token found' });

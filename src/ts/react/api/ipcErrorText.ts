@@ -81,6 +81,8 @@ const SUGGEST_ERRORS: Record<string, string> = {
     'no-match': 'errors.suggestNoMatch',
     'no-eligible': 'errors.suggestNoEligible',
     'no-more-suggestions': 'errors.suggestNoMore',
+    'no-gs-suggestions': 'errors.suggestGsEmpty',
+    'gs-suggestions-incomplete': 'errors.suggestGsIncomplete',
     'suggest-busy': 'errors.suggestBusy',
     'challenge-ended': 'errors.suggestChallengeEnded',
 };

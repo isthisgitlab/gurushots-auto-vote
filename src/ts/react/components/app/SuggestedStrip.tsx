@@ -6,11 +6,12 @@ import { PhotoTile } from './PhotoTile';
 import type { LibraryPhoto } from '@/hooks/useLibraryListing';
 
 /**
- * The photos Auto ranked, best first, each with its fixed rank. A tap picks or un-picks one like a tile of the
+ * Suggested photos in source order, each with its fixed position. A tap picks or un-picks one like a tile of the
  * listing; "Add suggestions" fills the free slots with the best ones not picked yet.
  */
 export function SuggestedStrip({
     photos,
+    source,
     rankOffset,
     memberId,
     statsLimited,
@@ -24,6 +25,7 @@ export function SuggestedStrip({
     onAdd,
 }: {
     photos: LibraryPhoto[];
+    source: 'auto' | 'gurushots';
     /** How many photos earlier sets named: the first tile here ranks one past it. */
     rankOffset: number;
     memberId: string | null;
@@ -50,7 +52,7 @@ export function SuggestedStrip({
         <section aria-labelledby={headingId} className="space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 id={headingId} className="text-sm font-semibold">
-                    {t('app.pickSuggestedTitle')}
+                    {t(source === 'gurushots' ? 'app.pickGsSuggestions' : 'app.pickSuggestedTitle')}
                 </h3>
                 <button type="button" className="btn btn-outline btn-sm" disabled={addDisabled} onClick={onAdd}>
                     {t(atCap ? 'app.pickAddSuggestionsFull' : 'app.pickAddSuggestions')}

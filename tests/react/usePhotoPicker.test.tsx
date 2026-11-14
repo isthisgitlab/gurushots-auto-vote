@@ -33,6 +33,134 @@ const failure = (error: string): Answer => ({ success: false, error });
 
 const listingOf = (state: { status: string; listing?: Listing }) => (state.status === 'ready' ? state.listing : null);
 
+test('a GS request rejects an Auto response without a source receipt', async () => {
+    mockApi.suggestPhotos.mockResolvedValueOnce({
+        success: true,
+        photos: [photo('a')],
+        memberId: 'member-1',
+        statsLimited: false,
+    });
+    const { result } = renderHook(() =>
+        usePhotoPicker({ challengeId: 7, usage: 'submit', alwaysFresh: false, selected: [] }),
+    );
+    await act(async () => result.current.gsSuggest());
+    expect(result.current.suggested).toBeNull();
+    expect(result.current.suggestFailure).toBe('suggest-failed');
+});
+
+test('a missing GS receipt clears a previous GS result', async () => {
+    mockApi.suggestPhotos
+        .mockResolvedValueOnce({
+            success: true,
+            source: 'gurushots',
+            photos: [photo('a')],
+            memberId: 'member-1',
+            statsLimited: false,
+        })
+        .mockResolvedValueOnce({ success: true, photos: [photo('b')], memberId: 'member-1', statsLimited: false });
+    const { result } = renderHook(() =>
+        usePhotoPicker({ challengeId: 7, usage: 'submit', alwaysFresh: false, selected: [] }),
+    );
+    await act(async () => result.current.gsSuggest());
+    expect(result.current.suggested?.source).toBe('gurushots');
+    await act(async () => result.current.gsSuggest());
+    expect(result.current.suggested).toBeNull();
+    expect(result.current.suggestFailure).toBe('suggest-failed');
+});
+
+test('GS results do not change Auto paging', async () => {
+    mockApi.suggestPhotos
+        .mockResolvedValueOnce({ success: true, photos: [photo('a')], memberId: 'member-1', statsLimited: false })
+        .mockResolvedValueOnce({
+            success: true,
+            source: 'gurushots',
+            photos: [photo('b')],
+            memberId: 'member-1',
+            statsLimited: false,
+        })
+        .mockResolvedValueOnce({ success: true, photos: [photo('c')], memberId: 'member-1', statsLimited: false });
+    const { result } = renderHook(() =>
+        usePhotoPicker({ challengeId: 7, usage: 'submit', alwaysFresh: false, selected: [] }),
+    );
+    await act(async () => result.current.autoSuggest());
+    await act(async () => result.current.gsSuggest());
+    expect(result.current.suggested?.source).toBe('gurushots');
+    expect(result.current.shownIds).toEqual(['a']);
+    await act(async () => result.current.autoSuggest());
+    expect(mockApi.suggestPhotos).toHaveBeenLastCalledWith(7, 'submit', ['a']);
+    expect(result.current.suggested?.source).toBe('auto');
+});
+
+test('refresh invalidates a pending GS result', async () => {
+    type Result = Awaited<ReturnType<WindowApi['suggestPhotos']>>;
+    let finish!: (value: Result) => void;
+    mockApi.suggestPhotos.mockReturnValueOnce(
+        new Promise<Result>((resolve) => {
+            finish = resolve;
+        }),
+    );
+    const { result } = renderHook(() =>
+        usePhotoPicker({ challengeId: 7, usage: 'submit', alwaysFresh: false, selected: [] }),
+    );
+    let pending!: Promise<void>;
+    act(() => {
+        pending = result.current.gsSuggest();
+    });
+    act(() => result.current.resetLoadPhotos());
+    await act(async () => {
+        finish({ success: true, source: 'gurushots', photos: [photo('a')], memberId: 'member-1', statsLimited: false });
+        await pending;
+    });
+    expect(result.current.suggested).toBeNull();
+    expect(result.current.suggestedKnown.size).toBe(0);
+});
+
+test('Auto retains its strip while paging and clears it when switching from GS', async () => {
+    type Result = Awaited<ReturnType<WindowApi['suggestPhotos']>>;
+    let finish!: (value: Result) => void;
+    mockApi.suggestPhotos
+        .mockResolvedValueOnce({ success: true, photos: [photo('a')], memberId: 'member-1', statsLimited: false })
+        .mockReturnValueOnce(
+            new Promise<Result>((resolve) => {
+                finish = resolve;
+            }),
+        );
+    const { result } = renderHook(() =>
+        usePhotoPicker({ challengeId: 7, usage: 'submit', alwaysFresh: false, selected: [] }),
+    );
+    await act(async () => result.current.autoSuggest());
+    let pending!: Promise<void>;
+    act(() => {
+        pending = result.current.autoSuggest();
+    });
+    expect(result.current.suggested?.photos[0].id).toBe('a');
+    await act(async () => {
+        finish({ success: true, photos: [photo('b')], memberId: 'member-1', statsLimited: false });
+        await pending;
+    });
+    mockApi.suggestPhotos.mockResolvedValueOnce({
+        success: true,
+        source: 'gurushots',
+        photos: [photo('c')],
+        memberId: 'member-1',
+        statsLimited: false,
+    });
+    await act(async () => result.current.gsSuggest());
+    mockApi.suggestPhotos.mockReturnValueOnce(
+        new Promise<Result>((resolve) => {
+            finish = resolve;
+        }),
+    );
+    act(() => {
+        pending = result.current.autoSuggest();
+    });
+    expect(result.current.suggested).toBeNull();
+    await act(async () => {
+        finish({ success: true, photos: [photo('d')], memberId: 'member-1', statsLimited: false });
+        await pending;
+    });
+});
+
 test('a ranking asked for with no challenge to rank for is refused at the door', async () => {
     const { result } = renderHook(() =>
         usePhotoPicker({ challengeId: null, usage: 'submit', alwaysFresh: false, selected: [] }),

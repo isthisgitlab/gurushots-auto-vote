@@ -15,6 +15,7 @@ export type ChallengeText = Partial<Pick<Challenge, 'id' | 'title' | 'url' | 'we
 
 /** What a library listing's eligibility marks are read for: entering a challenge, or swapping an entry's photo. */
 export type LibraryUsage = 'submit' | 'swap';
+export type PhotoSuggestionSource = 'auto' | 'gurushots';
 
 /** Title words the user asked the picker to ignore (the `ignoreTitleWords` setting). */
 export type IgnoreWords = Iterable<string> | null;

@@ -90,6 +90,10 @@ export const errors: typeof english.errors = {
         'Nav ko ieteikt. Tavā bibliotēkā šobrīd nav foto, ko šis izaicinājums pieņem. Augšupielādē foto vai pamēģini meklēšanu.',
     suggestNoMore:
         'Vairāk ieteikumu nav. Visi piemērotie foto jau ir parādīti. Spied „Automātiski”, lai sāktu no jauna ar labākajiem.',
+    suggestGsEmpty:
+        'GuruShots šim izaicinājumam neiesaka nevienu piemērotu foto. Izmanto automātisko atlasi vai ielādē foto, lai izvēlētos pats.',
+    suggestGsIncomplete:
+        'Dažus GuruShots ieteikumus neizdevās ielādēt. Ielādē foto, lai pārlūkotu savu bibliotēku, vai mēģini vēlreiz.',
     suggestBusy: 'Foto netika sarindoti. Cita rindošana vēl turpinās. Pagaidi, kamēr tā beidzas, un mēģini vēlreiz.',
     suggestChallengeEnded:
         'Foto netika sarindoti. Izaicinājums ir beidzies vai to nevarēja nolasīt. Aizver šo dialoglodziņu un mēģini vēlreiz.',
@@ -1030,6 +1034,9 @@ export const app: LatvianApp = {
     pickSubmit: 'Iesniegt',
     pickSubmitCount: 'Iesniegt {count} foto',
     pickAuto: 'Automātiski',
+    pickGsSuggestions: 'GS ieteikumi',
+    pickGsHelp: 'Ielādē GuruShots ieteikumus izaicinājumiem, kuriem vēl neesi pievienojies.',
+    pickGsLoading: 'Ielādē GuruShots ieteikumus…',
     pickAutoNext: 'Nākamie ieteikumi',
     pickAutoHelp:
         'Šī poga sarindo tavus foto pēc automātiskās iesniegšanas noteikumiem un, kur pieejams, ar vietējo attēlu pārbaudi. Nekas netiek iesniegts; vēlreiz nospiežot, redzēsi nākamos.',

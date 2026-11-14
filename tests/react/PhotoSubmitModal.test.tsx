@@ -799,6 +799,30 @@ describe('Auto suggestions', () => {
         suggestPhotos().mockResolvedValue(suggestion([photo(1)]));
     });
 
+    test('GS suggestions hold both controls and add the returned photos', async () => {
+        const answer = deferred<Suggestion>();
+        suggestPhotos().mockReturnValueOnce(answer.promise);
+        setup();
+        await loadedAll();
+        const gs = screen.getByRole('button', { name: 'GS suggestions' });
+        fireEvent.click(gs);
+        await waitFor(() => expect(gs.getAttribute('aria-busy')).toBe('true'));
+        expect(autoButton().getAttribute('aria-disabled')).toBe('true');
+        expect(screen.getByText('Loading GuruShots suggestions…')).toBeTruthy();
+        fireEvent.click(gs);
+        fireEvent.click(autoButton());
+        expect(suggestPhotos()).toHaveBeenCalledTimes(1);
+        expect(suggestPhotos()).toHaveBeenCalledWith(7, 'submit', [], 'gurushots');
+        await act(async () => answer.resolve({ ...suggestion([photo(2)]), source: 'gurushots' }));
+        const gsStrip = await screen.findByRole('region', { name: 'GS suggestions' });
+        fireEvent.click(within(gsStrip).getByRole('button', { name: 'Add suggestions' }));
+        expect(
+            within(gsStrip)
+                .getByRole('button', { name: /^Photo/ })
+                .getAttribute('aria-pressed'),
+        ).toBe('true');
+    });
+
     test('the help line is shown always, and the texts can name another one', async () => {
         const { unmount } = setup();
         await loadedAll();

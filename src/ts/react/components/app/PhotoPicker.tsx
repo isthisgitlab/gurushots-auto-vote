@@ -1,7 +1,7 @@
 /**
  * The picker's controls, shared by the submit picker and the Chosen Photos chooser: the help line,
  * Search with Load photos (nothing is read until one of them asks), the library order and
- * loaded-photo sort selects with Show stats (the picker hook's session state), Auto with its ranking
+ * loaded-photo sort selects with Show stats (the picker hook's session state), both suggestion sources
  * and the suggestions strip (only where `canSuggest`). `children` renders between the help lines and
  * Auto's status — the caller's count line — so every chooser keeps its live regions in the same order.
  */
@@ -252,6 +252,34 @@ function PickerStatsControls({ picker }: { picker: ReturnType<typeof usePhotoPic
     );
 }
 
+function SuggestButton({
+    label,
+    held,
+    busy,
+    onSuggest,
+}: {
+    label: string;
+    held: boolean;
+    busy: boolean;
+    onSuggest: () => Promise<void>;
+}) {
+    return (
+        <button
+            type="button"
+            className={`btn btn-sm ${held ? 'btn-disabled' : ''}`}
+            aria-disabled={held}
+            aria-busy={busy}
+            onClick={() => {
+                if (!held) void onSuggest();
+            }}
+        >
+            <BusyContent busy={busy} label={label}>
+                {label}
+            </BusyContent>
+        </button>
+    );
+}
+
 export function PhotoPickerToolbar({
     picker,
     selected,
@@ -271,7 +299,7 @@ export function PhotoPickerToolbar({
 }: {
     picker: ReturnType<typeof usePhotoPicker>;
     selected: string[];
-    /** Whether Auto can rank here; without it the button, its help and the strip are not shown. */
+    /** Whether suggestions are available here. */
     canSuggest: boolean;
     /** Load photos is held too (a submit is in flight). */
     held: boolean;
@@ -303,7 +331,7 @@ export function PhotoPickerToolbar({
     // Once a set has been shown, the button pages on to the next-best ones.
     const autoKey = picker.shownIds.length > 0 ? 'app.pickAutoNext' : 'app.pickAuto';
     let autoStatus = '';
-    if (picker.suggesting) autoStatus = t(autoRunningKey);
+    if (picker.suggesting) autoStatus = t(picker.suggestSource === 'gurushots' ? 'app.pickGsLoading' : autoRunningKey);
     else if (picker.suggested) autoStatus = t('app.pickSuggestedCount', { count: picker.suggested.photos.length });
     // Add suggestions has nothing to do when every suggestion is picked already; with one slot it swaps
     // in #1, so it has nothing to do only when #1 is the whole pick.
@@ -337,24 +365,25 @@ export function PhotoPickerToolbar({
                         </BusyContent>
                     </button>
                     {canSuggest && (
-                        <button
-                            type="button"
-                            className={`btn btn-sm ${picker.suggesting ? 'btn-disabled' : ''}`}
-                            // aria-disabled, not disabled: a disabled button drops the keyboard focus to <body>.
-                            aria-disabled={picker.suggesting}
-                            aria-busy={picker.suggesting}
-                            onClick={() => {
-                                if (!picker.suggesting) void picker.autoSuggest();
-                            }}
-                        >
-                            <BusyContent busy={picker.suggesting} label={t(autoKey)}>
-                                {t(autoKey)}
-                            </BusyContent>
-                        </button>
+                        <>
+                            <SuggestButton
+                                label={t(autoKey)}
+                                held={picker.suggesting}
+                                busy={picker.suggesting && picker.suggestSource === 'auto'}
+                                onSuggest={picker.autoSuggest}
+                            />
+                            <SuggestButton
+                                label={t('app.pickGsSuggestions')}
+                                held={picker.suggesting}
+                                busy={picker.suggesting && picker.suggestSource === 'gurushots'}
+                                onSuggest={picker.gsSuggest}
+                            />
+                        </>
                     )}
                 </div>
                 <PickerStatsControls picker={picker} />
                 {canSuggest && <p className="text-base-content/70 text-xs">{t(autoHelpKey)}</p>}
+                {canSuggest && <p className="text-base-content/70 text-xs">{t('app.pickGsHelp')}</p>}
             </div>
             {children}
             {canSuggest && (
@@ -375,6 +404,7 @@ export function PhotoPickerToolbar({
                     )}
                     {suggested && (
                         <SuggestedStrip
+                            source={suggested.source}
                             photos={suggested.photos}
                             rankOffset={suggested.rankOffset}
                             memberId={suggested.memberId}
