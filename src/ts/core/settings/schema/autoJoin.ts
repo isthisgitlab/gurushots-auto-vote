@@ -55,6 +55,16 @@ export const autoJoinSettings = {
         label: 'app.autoJoin',
         description: 'app.autoJoinDesc',
     },
+    autoJoinShortChallengesImmediately: {
+        type: 'boolean',
+        default: false,
+        perChallenge: false,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'autoJoin',
+        label: 'app.autoJoinShortChallengesImmediately',
+        description: 'app.autoJoinShortChallengesImmediatelyDesc',
+    },
     // Scope: comma-separated challenge types to join (e.g. "flash,contest").
     // EMPTY = all types (the default once auto-join is on). A title matching a
     // saved profile is always in scope regardless of this.

@@ -32,9 +32,8 @@ const decideCandidateJoin = (
     pass: JoinPassState,
     alreadyPaid: boolean,
 ) => {
-    // Join Early for Missions lifts the timing window while a mission wants
-    // joins: these would join later anyway, the mission wants them now.
-    const joinEarly = pass.earlyJoins > 0;
+    // Missions and the short-challenge setting can lift the timing window.
+    const joinEarly = pass.earlyJoins > 0 || cfg.joinImmediately;
     if (joinEarly) {
         const closeTime = Number(challenge?.close_time);
         if (!Number.isFinite(closeTime) || closeTime <= 0) {

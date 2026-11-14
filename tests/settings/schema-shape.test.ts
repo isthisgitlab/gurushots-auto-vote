@@ -98,6 +98,7 @@ describe('settings schema shape', () => {
             'votingPauseBeforeEnd',
             'votingPauseDurationMinutes',
             'autoJoin',
+            'autoJoinShortChallengesImmediately',
             'autoJoinTypes',
             'autoJoinExcludeTypes',
             'autoJoinChallengeTags',

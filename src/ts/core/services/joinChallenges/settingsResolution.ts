@@ -160,7 +160,18 @@ const resolveCandidateConfig = (challenge: Challenge) => {
     const group = settings.resolveRuleSettingGroup?.(JOIN_TIMING_KEYS, challenge) ?? null;
     const timingValue = (key: string): unknown =>
         group === null ? settings.getEffectiveSetting(key, null) : (group.values[key] ?? 0);
+    const startTime = Number(challenge?.start_time);
+    const closeTime = Number(challenge?.close_time);
+    const runtime = closeTime - startTime;
     return {
+        joinImmediately:
+            settings.getEffectiveSetting('autoJoinShortChallengesImmediately', null) === true &&
+            Number.isFinite(startTime) &&
+            Number.isFinite(closeTime) &&
+            startTime > 0 &&
+            closeTime > 0 &&
+            runtime > 0 &&
+            runtime < 86400,
         // Empty include list = all types (the default scope once auto-join is on).
         includeTypes: parseTypeList(resolveJoinSetting('autoJoinTypes', challenge)),
         excludeTypes: parseTypeList(resolveJoinSetting('autoJoinExcludeTypes', challenge)),

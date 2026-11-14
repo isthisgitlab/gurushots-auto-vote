@@ -3363,6 +3363,92 @@ describe('runJoinPass \u2014 join timing from class rules', () => {
             Object.prototype.hasOwnProperty.call(map, k) ? map[k] : DEFAULT_SETTINGS[k],
         );
 
+    test.each([
+        ['after start', { autoJoinAfterHoursFromStart: 30 }],
+        ['percent', { autoJoinAfterPercentElapsed: 95 }],
+        ['before end', { autoJoinWithinHoursOfEnd: 1 }],
+    ])('short challenges bypass %s timing, including rule timing', async (_name, timing) => {
+        globalSetting({ autoJoinShortChallengesImmediately: true, ...timing });
+        rulesGiveGroup(() => timing);
+        const deps = makeDeps({ getMemberChallenges: openList([candidate({ start_time: NOW_SEC - 10 * HOUR })]) });
+        await runJoinPass('tok', NOW_MS, deps);
+        expect(deps.submitToChallenge).toHaveBeenCalledTimes(1);
+    });
+
+    test.each([
+        ['after start', { autoJoinAfterHoursFromStart: 30 }],
+        ['percent', { autoJoinAfterPercentElapsed: 95 }],
+        ['before end', { autoJoinWithinHoursOfEnd: 1 }],
+    ])('short challenges bypass global %s timing', async (_name, timing) => {
+        globalSetting({ autoJoinShortChallengesImmediately: true, ...timing });
+        const deps = makeDeps({ getMemberChallenges: openList([candidate({ start_time: NOW_SEC - 10 * HOUR })]) });
+        await runJoinPass('tok', NOW_MS, deps);
+        expect(deps.submitToChallenge).toHaveBeenCalledTimes(1);
+    });
+
+    test.each([
+        ['disabled', false, NOW_SEC - 10 * HOUR, NOW_SEC + 4 * HOUR, false],
+        ['86399 seconds', true, NOW_SEC - 10 * HOUR, NOW_SEC - 10 * HOUR + 86399, true],
+        ['86400 seconds', true, NOW_SEC - 20 * HOUR, NOW_SEC + 4 * HOUR, false],
+        ['long near end', true, NOW_SEC - 30 * HOUR, NOW_SEC + 4 * HOUR, false],
+        ['missing start', true, undefined, NOW_SEC + 4 * HOUR, false],
+        ['missing close', true, NOW_SEC - HOUR, undefined, false],
+        ['zero start', true, 0, NOW_SEC + HOUR, false],
+        ['negative start', true, -1, NOW_SEC + HOUR, false],
+        ['zero close', true, NOW_SEC - HOUR, 0, false],
+        ['negative close', true, NOW_SEC - HOUR, -1, false],
+        ['infinite start', true, Infinity, NOW_SEC + HOUR, false],
+        ['infinite close', true, NOW_SEC - HOUR, Infinity, false],
+        ['reversed', true, NOW_SEC + 2 * HOUR, NOW_SEC + HOUR, false],
+        ['zero runtime', true, NOW_SEC + HOUR, NOW_SEC + HOUR, false],
+    ])('%s retains the correct timing decision', async (_name, enabled, start_time, close_time, joins) => {
+        globalSetting({ autoJoinShortChallengesImmediately: enabled, autoJoinAfterHoursFromStart: 100 });
+        const deps = makeDeps({ getMemberChallenges: openList([candidate({ start_time, close_time })]) });
+        await runJoinPass('tok', NOW_MS, deps);
+        expect(deps.submitToChallenge).toHaveBeenCalledTimes(joins ? 1 : 0);
+    });
+
+    test('an incomplete mission does not prevent a short challenge joining', async () => {
+        globalSetting({
+            autoJoinShortChallengesImmediately: true,
+            autoJoinWithinHoursOfEnd: 1,
+            missionJoinEarly: true,
+        });
+        const deps = makeDeps({ getMemberChallenges: openList([candidate({ start_time: NOW_SEC - 10 * HOUR })]) });
+        const missions = { join: 2, fill: 0, turbo: 0, boost: 0, vote: 0 };
+        await runJoinPass('tok', NOW_MS, deps, missions);
+        expect(deps.submitToChallenge).toHaveBeenCalledTimes(1);
+        expect(missions.join).toBe(1);
+    });
+
+    test('does not report an after-start clamp when short timing is bypassed', async () => {
+        globalSetting({ autoJoinShortChallengesImmediately: true, autoJoinAfterHoursFromStart: 100 });
+        const deps = makeDeps({ getMemberChallenges: openList([candidate({ start_time: NOW_SEC - 10 * HOUR })]) });
+        await runJoinPass('tok', NOW_MS, deps);
+        expect(deps.submitToChallenge).toHaveBeenCalledTimes(1);
+        const logger: LoggerMock = invalid(require('../../src/ts/core/logger'));
+        expect(
+            logger.withCategory().info.mock.calls.some(([message]) => message.includes('99% of the challenge')),
+        ).toBe(false);
+    });
+
+    test.each([
+        ['disabled auto join', { autoJoin: false }, {}],
+        ['manual only', { manualPhotosOnly: true }, {}],
+        ['excluded type', { autoJoinExcludeTypes: 'default' }, {}],
+        ['full', {}, { players: 100, max_players: 100 }],
+        ['closed', {}, { close_time: NOW_SEC - 1 }],
+        ['coin cap', { autoJoinMaxCoins: 0 }, { join_coins: 100 }],
+        ['coin budget', { autoJoinCycleCoinBudget: 0 }, { join_coins: 100 }],
+    ])('%s still prevents a short challenge joining', async (_name, setting, fields) => {
+        globalSetting({ autoJoinShortChallengesImmediately: true, autoJoinAfterHoursFromStart: 100, ...setting });
+        const deps = makeDeps({
+            getMemberChallenges: openList([candidate({ start_time: NOW_SEC - 10 * HOUR, ...fields })]),
+        });
+        await runJoinPass('tok', NOW_MS, deps);
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
     test('a photo-count rule overrides the global window for its class', async () => {
         // Global says "only in the last hour" \u2014 this candidate has 4h left.
         globalSetting({ autoJoinWithinHoursOfEnd: 1 });

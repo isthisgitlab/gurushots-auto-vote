@@ -132,9 +132,9 @@ const noteAfterStartClamp = (
     pass: JoinPassState,
 ) => {
     if (!decision.join && decision.reason !== 'too-early') return;
-    // Early-join mode lifts the window wholesale (the candidate joins with the
+    // Either early-join cause lifts the window wholesale (the candidate joins with the
     // after-start value passed as 0), so no clamp applies to it.
-    if (pass.earlyJoins > 0 || cfg.joinAfterSecFromStart <= 0) return;
+    if (pass.earlyJoins > 0 || cfg.joinImmediately || cfg.joinAfterSecFromStart <= 0) return;
     if (pass.afterStartClampLogged) return;
     if (!joinAfterStartClamped(challenge, pass.nowSec, cfg.joinAfterSecFromStart)) return;
     pass.afterStartClampLogged = true;

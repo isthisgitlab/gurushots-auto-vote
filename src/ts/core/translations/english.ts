@@ -717,6 +717,9 @@ export const app = {
     autoJoin: 'Auto-Join Challenges',
     autoJoinDesc:
         'Joins open challenges each voting cycle (autovote must run). Off by default; when on it joins ALL open challenges unless narrowed below. Paid challenges need the coin caps below (0 = free only).',
+    autoJoinShortChallengesImmediately: 'Join Short Challenges Immediately',
+    autoJoinShortChallengesImmediatelyDesc:
+        'Join challenges lasting less than 24 hours as soon as they open. Ignores join timing; other auto-join rules still apply.',
     autoJoinTypes: 'Only These Types',
     autoJoinTypesDesc:
         'Comma-separated challenge types to join, e.g. "flash,contest". Leave EMPTY to join all types (the default). Case-insensitive.',

@@ -10,6 +10,15 @@ import type * as defaultsModule from '../../src/ts/core/settings/defaults';
 const { SETTINGS_SCHEMA, schemaDefault } = require('../../src/ts/core/settings/schema') as typeof schemaModule;
 
 describe('schema defaults', () => {
+    test('short challenge immediate join is a global boolean that defaults to false', () => {
+        const entry = SETTINGS_SCHEMA.autoJoinShortChallengesImmediately;
+        expect(entry.default).toBe(false);
+        expect(entry.perChallenge).toBe(false);
+        expect(entry.validation.safeParse(true).success).toBe(true);
+        expect(entry.validation.safeParse(false).success).toBe(true);
+        expect(entry.validation.safeParse('true').success).toBe(false);
+        expect(entry.validation.safeParse(1).success).toBe(false);
+    });
     test.each(Object.keys(SETTINGS_SCHEMA) as SettingKey[])('%s: the default passes its own validation', (key) => {
         const { validation, default: fallback } = SETTINGS_SCHEMA[key];
         expect(validation.safeParse(fallback).success).toBe(true);

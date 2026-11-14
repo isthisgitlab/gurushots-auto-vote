@@ -730,6 +730,9 @@ export const app: LatvianApp = {
     autoJoin: 'Automātiski pievienoties izaicinājumiem',
     autoJoinDesc:
         'Pievienojas atvērtajiem izaicinājumiem katrā balsošanas ciklā, kamēr darbojas automātiskā balsošana. Pēc noklusējuma izslēgts. Kad ieslēgts, pievienojas VISIEM atvērtajiem izaicinājumiem, ja neierobežo zemāk. Maksas izaicinājumiem vajag zemāk norādītos monētu limitus (0 = tikai bezmaksas).',
+    autoJoinShortChallengesImmediately: 'Uzreiz pievienoties īsiem izaicinājumiem',
+    autoJoinShortChallengesImmediatelyDesc:
+        'Pievienoties izaicinājumiem, kas ilgst mazāk nekā 24 stundas, tiklīdz tiem var pievienoties. Ignorēt pievienošanās laika nosacījumus. Pārējie automātiskās pievienošanās noteikumi paliek spēkā.',
     autoJoinTypes: 'Tikai šiem tipiem',
     autoJoinTypesDesc:
         'Ar komatu atdalīti izaicinājumu tipi, kuriem pievienoties, piem., „flash,contest”. Atstāj TUKŠU, lai pievienotos visiem tipiem (noklusējums). Lielajiem un mazajiem burtiem nav nozīmes.',

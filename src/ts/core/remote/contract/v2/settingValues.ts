@@ -78,6 +78,7 @@ export type SettingValuesV2 = {
     votingPauseBeforeEnd: number[];
     votingPauseDurationMinutes: number;
     autoJoin: boolean;
+    autoJoinShortChallengesImmediately: boolean;
     autoJoinTypes: string;
     autoJoinExcludeTypes: string;
     autoJoinChallengeTags: string;

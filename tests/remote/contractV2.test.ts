@@ -423,6 +423,7 @@ const FROZEN_SETTING_KEYS = [
     'votingPauseBeforeEnd',
     'votingPauseDurationMinutes',
     'autoJoin',
+    'autoJoinShortChallengesImmediately',
     'autoJoinTypes',
     'autoJoinExcludeTypes',
     'autoJoinChallengeTags',
