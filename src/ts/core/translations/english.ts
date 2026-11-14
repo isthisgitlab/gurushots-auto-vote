@@ -87,7 +87,8 @@ export const errors = {
         'Nothing to suggest. Your library has no photo this challenge accepts right now. Upload one, or try a search.',
     suggestNoMore:
         'No more suggestions. Every photo that fits has been shown. Press Auto to start again from the best.',
-    suggestGsEmpty: 'GuruShots has no eligible suggestions for this challenge. Use Auto or load photos to choose one.',
+    suggestGsEmpty:
+        'There are no suggested photos you can use for this challenge. Use Auto or load photos to choose one.',
     suggestGsIncomplete:
         'Some GuruShots suggestions could not be loaded. Load photos to browse your library, or try again.',
     suggestBusy: 'The photos were not ranked. Another ranking is still running. Wait for it to finish, then try again.',
