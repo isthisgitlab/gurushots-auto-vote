@@ -1,12 +1,12 @@
 {
-    "app": 278114,
+    "app": 278026,
     "login": 79446,
     "logs": 100605,
-    "capacitor": 577150,
-    "web": 205068,
+    "capacitor": 577006,
+    "web": 205190,
     "headless": 371878,
     "preload": 1224,
     "preloadLogs": 553,
-    "remote": 282586,
+    "remote": 282410,
     "remoteLoader": 70231
 }

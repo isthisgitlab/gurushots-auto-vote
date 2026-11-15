@@ -306,7 +306,7 @@ combined-stream 1.0.8
   License: MIT
   Copyright (c) 2011 Debuggable Limited <felix@debuggable.com>
 
-daisyui 5.8.0
+daisyui 5.8.1
   License: MIT
   Copyright (c) 2020 Pouya Saadeghi
 
