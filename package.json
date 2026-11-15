@@ -157,7 +157,7 @@
     "engines": {
         "node": ">=26.12.1"
     },
-    "packageManager": "pnpm@12.18.0",
+    "packageManager": "pnpm@12.21.0",
     "dependencies": {
         "@capacitor/android": "^8.6.2",
         "@capacitor/core": "^8.6.2",
@@ -189,7 +189,7 @@
         "@types/yauzl": "^3.4.0",
         "cross-env": "^10.1.0",
         "daisyui": "^5.8.0",
-        "electron": "^45.3.1",
+        "electron": "^45.3.2",
         "electron-builder": "^26.18.0",
         "electronmon": "^2.0.4",
         "esbuild": "^0.28.2",

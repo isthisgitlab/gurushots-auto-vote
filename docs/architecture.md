@@ -137,7 +137,8 @@ Domain terms used throughout, in reader's terms:
   master off, either inline on the rule itself or through the named profile it inherits. The pass only
   short-circuits wholesale when the master is off **and** no rule turns it on (a rule that only adds photo
   tags never does); everything else (scope/coin caps/join window) is rule-resolved too, except
-  `autoJoinCycleCoinBudget`, which is genuinely pass-global.
+  `autoJoinCycleCoinBudget` and `autoJoinShortChallengesImmediately`, which are global only.
+- **Short challenges can bypass the join window.** The global `autoJoinShortChallengesImmediately` defaults to `false`. When enabled, `resolveCandidateConfig` marks candidates with valid positive timestamps and a total runtime (`close_time` - `start_time`) strictly below 86400 seconds. `decideCandidateJoin` reuses the early-join timing bypass, including its closed-challenge check. This does not require a mission and preserves candidate enablement, scope, photo selection, capacity and coin limits. Exactly 24 hours, longer runtimes and unreadable runtimes retain normal timing.
 - **The join window gates WHEN, never WHETHER.** Three settings express it, all on the `0` = off sentinel:
   `autoJoinWithinHoursOfEnd` joins a candidate once it is within that many hours of its own `close_time`,
   `autoJoinAfterPercentElapsed` joins it once that percentage of its own lifetime (`close_time` - `start_time`)
