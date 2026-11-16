@@ -7,9 +7,12 @@
  * x-api-version: 13).
  */
 
+import * as logger from '../logger';
+import { isPlainObject } from '../plainObject';
 import { makePostRequest } from './api-client';
 import { ENDPOINTS, createWebHeaders, makeRequireValue } from './constants';
 import {
+    buildPhotoPageBody,
     fetchPhotoPage,
     markFirstPageFailed,
     normalizeLibraryOptions,
@@ -17,7 +20,15 @@ import {
     MAX_LIBRARY_PAGES,
 } from './libraryWalk';
 
-import type { ActionResult, ImageDataResponse, ImageRecord, LibraryPhoto, SuccessResponse } from '../types/gurushots';
+import type {
+    ActionResult,
+    ImageDataResponse,
+    ImageRecord,
+    LibraryPhoto,
+    PhotosPrivateResponse,
+    SuccessResponse,
+} from '../types/gurushots';
+import type { LibraryUsage } from '../types/photoPicker';
 import type { LibraryOptions, LibraryWalk } from './libraryWalk';
 
 const requireValue = makeRequireValue('submissions');
@@ -94,6 +105,52 @@ const getEligiblePhotosWalk = async (
 };
 
 /**
+ * The photo ids GuruShots itself suggests for a challenge, joined or not: the
+ * top-level `suggested` array of a one-photo get_photos_private read. The
+ * server leaves `suggested` out when it has no suggestions. The records carry
+ * more than the ids (`member`, `comments`), so only the ids are kept and nothing
+ * of the body is logged.
+ *
+ * @param usage - 'swap' stays 'swap'; anything else reads as 'submit'
+ * @returns the ids in server order, `[]` when the server names none, or null when the read failed or the
+ *   payload was unreadable
+ */
+const getLibrarySuggestedIds = async (
+    challengeId: string | number,
+    token: string,
+    usage?: LibraryUsage,
+): Promise<string[] | null> => {
+    requireValue(challengeId, 'challengeId');
+    requireValue(token, 'token');
+    const headers = createWebHeaders(token);
+    const body = buildPhotoPageBody(challengeId, {
+        limit: 1,
+        start: 0,
+        usage: usage === 'swap' ? 'swap' : 'submit',
+        // No order pair: the server's own order, which carries `suggested` just the same.
+        order: 'default',
+    });
+    const response = await makePostRequest<PhotosPrivateResponse>(ENDPOINTS.photosPrivate, headers, body);
+    if (!response || !Array.isArray(response.items)) {
+        return null;
+    }
+    if (!Array.isArray(response.suggested)) {
+        return [];
+    }
+    const records: unknown[] = response.suggested;
+    const ids: string[] = [];
+    for (const record of records) {
+        if (isPlainObject(record) && (typeof record.id === 'string' || typeof record.id === 'number')) {
+            ids.push(String(record.id));
+        }
+    }
+    logger
+        .withCategory('api')
+        .debug(`Suggested photos for challenge ${String(challengeId)}: ${ids.length} id(s)`, null);
+    return ids;
+};
+
+/**
  * Fetches the full per-photo record, including the popularity signals the
  * library endpoint does not carry.
  *
@@ -154,4 +211,11 @@ const submitToChallenge = async (
     };
 };
 
-export { getEligiblePhotos, getEligiblePhotosWalk, getImageData, submitToChallenge, MAX_LIBRARY_PAGES };
+export {
+    getEligiblePhotos,
+    getEligiblePhotosWalk,
+    getLibrarySuggestedIds,
+    getImageData,
+    submitToChallenge,
+    MAX_LIBRARY_PAGES,
+};

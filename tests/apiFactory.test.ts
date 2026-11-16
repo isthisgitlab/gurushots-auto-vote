@@ -51,6 +51,7 @@ jest.mock('../src/ts/core/mock', () => ({
         applyTurbo: jest.fn(),
         getEligiblePhotos: jest.fn(),
         getEligiblePhotosWalk: jest.fn(),
+        getLibrarySuggestedIds: jest.fn(),
         getImageData: jest.fn(),
         submitToChallenge: jest.fn(),
         getMemberChallenges: jest.fn(),

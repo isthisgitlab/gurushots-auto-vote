@@ -1062,7 +1062,7 @@ describe('suggest-photos', () => {
     test('GS suggestions preserve order and use eligible library records', async () => {
         const strategy = stubStrategy({
             getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }),
-            getSuggestedPhotoIds: jest.fn().mockResolvedValue(['b2', 'a1', 'b2', 'bad id', 'c3']),
+            getLibrarySuggestedIds: jest.fn().mockResolvedValue(['b2', 'a1', 'b2', 'bad id', 'c3']),
             getEligiblePhotosWalk: jest
                 .fn<
                     ReturnType<apiFactoryModule.ApiStrategy['getEligiblePhotosWalk']>,
@@ -1090,20 +1090,91 @@ describe('suggest-photos', () => {
         expect(autoFill.suggestFillPhotos).not.toHaveBeenCalled();
     });
 
-    test.each([null, { challenges: [], fetchFailed: true }, { challenges: [], suggestionsFetchFailed: true }])(
+    test.each([null, { challenges: [], fetchFailed: true }])(
         'GS refuses an unsuccessful fresh challenge read: %p',
         async (response) => {
             const strategy = stubStrategy({
                 getActiveChallenges: jest.fn().mockResolvedValue(response),
-                getSuggestedPhotoIds: jest.fn(),
+                getLibrarySuggestedIds: jest.fn(),
             });
             await expect(buildHandlers()['suggest-photos']({}, '123', 'submit', [], 'gurushots')).resolves.toEqual({
                 success: false,
                 error: 'fetch-failed',
             });
+            expect(strategy.getLibrarySuggestedIds).not.toHaveBeenCalled();
+        },
+    );
+
+    test.each<['submit' | 'swap']>([['submit'], ['swap']])(
+        'GS suggestions for a joined challenge come from one library read (usage %s)',
+        async (usage) => {
+            const strategy = stubStrategy({
+                getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }),
+                getLibrarySuggestedIds: jest.fn().mockResolvedValue(['a1', 'b2']),
+                getSuggestedPhotoIds: jest.fn().mockResolvedValue(['old1']),
+                getEligiblePhotosWalk: jest
+                    .fn()
+                    .mockResolvedValue({ items: [photo('a1'), photo('b2')], truncated: false, stop: 'end' }),
+            });
+            await expect(buildHandlers()['suggest-photos']({}, '123', usage, [], 'gurushots')).resolves.toEqual({
+                success: true,
+                source: 'gurushots',
+                memberId: 'member-9',
+                photos: [mapped('a1'), mapped('b2')],
+                statsLimited: false,
+            });
+            expect(strategy.getLibrarySuggestedIds).toHaveBeenCalledTimes(1);
+            expect(strategy.getLibrarySuggestedIds).toHaveBeenCalledWith('123', 'tok', usage);
             expect(strategy.getSuggestedPhotoIds).not.toHaveBeenCalled();
         },
     );
+
+    test('GS ignores the un-joined suggestion cache when the library read names none', async () => {
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }),
+            getLibrarySuggestedIds: jest.fn().mockResolvedValue([]),
+            getSuggestedPhotoIds: jest.fn().mockResolvedValue(['a1']),
+            getEligiblePhotosWalk: jest.fn(),
+        });
+        await expect(buildHandlers()['suggest-photos']({}, '123', 'submit', [], 'gurushots')).resolves.toEqual({
+            success: false,
+            error: 'no-gs-suggestions',
+        });
+        expect(strategy.getSuggestedPhotoIds).not.toHaveBeenCalled();
+        expect(strategy.getEligiblePhotosWalk).not.toHaveBeenCalled();
+    });
+
+    test('GS answers fetch-failed when the library read fails, without a walk', async () => {
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }),
+            getLibrarySuggestedIds: jest.fn().mockResolvedValue(null),
+            getEligiblePhotosWalk: jest.fn(),
+        });
+        await expect(buildHandlers()['suggest-photos']({}, '123', 'submit', [], 'gurushots')).resolves.toEqual({
+            success: false,
+            error: 'fetch-failed',
+        });
+        expect(strategy.getEligiblePhotosWalk).not.toHaveBeenCalled();
+    });
+
+    test('GS looks up at most the first 20 suggested ids', async () => {
+        const many = Array.from({ length: 25 }, (_, i) => `p${i}`);
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }),
+            getLibrarySuggestedIds: jest.fn().mockResolvedValue(many),
+            getEligiblePhotosWalk: jest
+                .fn<
+                    ReturnType<apiFactoryModule.ApiStrategy['getEligiblePhotosWalk']>,
+                    Parameters<apiFactoryModule.ApiStrategy['getEligiblePhotosWalk']>
+                >()
+                .mockResolvedValue({ items: [], truncated: false, nextStart: 100, stop: 'end' }),
+        });
+        await buildHandlers()['suggest-photos']({}, '123', 'submit', [], 'gurushots');
+        const options = strategy.getEligiblePhotosWalk.mock.calls[0][2];
+        expect(options?.maxKept).toBe(20);
+        expect(options?.skip?.(photo('p19'))).toBe(false);
+        expect(options?.skip?.(photo('p20'))).toBe(true);
+    });
 
     test.each([
         [{ items: [], truncated: true, stop: 'failed' }, 'fetch-failed'],
@@ -1115,7 +1186,7 @@ describe('suggest-photos', () => {
     ])('GS reports walk outcome %p', async (walk, error) => {
         stubStrategy({
             getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }),
-            getSuggestedPhotoIds: jest.fn().mockResolvedValue(['a1']),
+            getLibrarySuggestedIds: jest.fn().mockResolvedValue(['a1']),
             getEligiblePhotosWalk: jest.fn().mockResolvedValue(walk),
         });
         await expect(buildHandlers()['suggest-photos']({}, '123', 'submit', [], 'gurushots')).resolves.toEqual({
@@ -1128,7 +1199,7 @@ describe('suggest-photos', () => {
         const ids = jest.fn().mockResolvedValueOnce([]).mockResolvedValueOnce(['a1']);
         stubStrategy({
             getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }),
-            getSuggestedPhotoIds: ids,
+            getLibrarySuggestedIds: ids,
             getEligiblePhotosWalk: jest.fn().mockRejectedValue(new Error('read failed')),
         });
         const request = () => buildHandlers()['suggest-photos']({}, '123', 'submit', [], 'gurushots');
@@ -1149,7 +1220,7 @@ describe('suggest-photos', () => {
     test('GS returns empty when all resolved photos are refused', async () => {
         stubStrategy({
             getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }),
-            getSuggestedPhotoIds: jest.fn().mockResolvedValue(['a1']),
+            getLibrarySuggestedIds: jest.fn().mockResolvedValue(['a1']),
             getEligiblePhotosWalk: jest.fn().mockResolvedValue({
                 items: [photo('a1', { permission: { allowed: false } })],
                 truncated: false,
@@ -1165,7 +1236,7 @@ describe('suggest-photos', () => {
     test('a completed GS walk omits an absent requested photo', async () => {
         stubStrategy({
             getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }),
-            getSuggestedPhotoIds: jest.fn().mockResolvedValue(['a1', 'b2']),
+            getLibrarySuggestedIds: jest.fn().mockResolvedValue(['a1', 'b2']),
             getEligiblePhotosWalk: jest.fn().mockResolvedValue({ items: [photo('a1')], truncated: false, stop: 'end' }),
         });
         await expect(buildHandlers()['suggest-photos']({}, '123', 'submit', [], 'gurushots')).resolves.toEqual({

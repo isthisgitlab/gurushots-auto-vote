@@ -38,6 +38,8 @@ export interface LibraryPhoto {
 /** get_photos_private. */
 export interface PhotosPrivateResponse {
     items?: LibraryPhoto[];
+    /** GuruShots' own picks for the challenge, as photo records; absent when it has none. Unvalidated. */
+    suggested?: unknown;
 }
 
 /** get_image_data `data`: the per-photo popularity record. */

@@ -8,8 +8,14 @@ import type { CategoryLogger } from '../../src/ts/core/logger';
 import { LIBRARY_BATCH_PHOTOS, MAX_LIBRARY_KEEP_PHOTOS } from '../../src/ts/core/settings/limits';
 import { invalid } from '../helpers/invalid';
 
-const { getEligiblePhotos, getEligiblePhotosWalk, getImageData, submitToChallenge, MAX_LIBRARY_PAGES } =
-    require('../../src/ts/core/api/submissions') as typeof submissionsModule;
+const {
+    getEligiblePhotos,
+    getEligiblePhotosWalk,
+    getLibrarySuggestedIds,
+    getImageData,
+    submitToChallenge,
+    MAX_LIBRARY_PAGES,
+} = require('../../src/ts/core/api/submissions') as typeof submissionsModule;
 
 jest.mock('../../src/ts/core/api/api-client', () => ({
     makePostRequest: jest.fn(),
@@ -594,6 +600,93 @@ describe('submissions', () => {
         test('still refuses a missing challenge id or token', async () => {
             await expect(getEligiblePhotosWalk('', token)).rejects.toThrow();
             await expect(getEligiblePhotosWalk('c1', '')).rejects.toThrow();
+        });
+    });
+
+    describe('getLibrarySuggestedIds', () => {
+        const record = (id: unknown) => ({ id, permission: { allowed: true } });
+        const loggerMock = jest.mocked(
+            require('../../src/ts/core/logger') as typeof import('../../src/ts/core/logger'),
+        );
+
+        test('returns the suggested ids in server order, a numeric id as a string', async () => {
+            makePostRequest.mockResolvedValueOnce({
+                items: [{ id: 'lib1' }],
+                suggested: [record('b'.repeat(32)), record(42), record('a'.repeat(32))],
+            });
+            await expect(getLibrarySuggestedIds('125319', token)).resolves.toEqual([
+                'b'.repeat(32),
+                '42',
+                'a'.repeat(32),
+            ]);
+        });
+
+        test('skips elements that are not a plain object with a string or number id', async () => {
+            makePostRequest.mockResolvedValueOnce({
+                items: [],
+                suggested: [
+                    null,
+                    'x',
+                    ['y'],
+                    {},
+                    { id: null },
+                    { id: true },
+                    { id: { n: 1 } },
+                    record('keep'),
+                    record(7),
+                ],
+            });
+            await expect(getLibrarySuggestedIds('125319', token)).resolves.toEqual(['keep', '7']);
+        });
+
+        test('a missing or non-array `suggested` is an empty list', async () => {
+            makePostRequest.mockResolvedValueOnce({ items: [] });
+            await expect(getLibrarySuggestedIds('125319', token)).resolves.toEqual([]);
+            makePostRequest.mockResolvedValueOnce({ items: [], suggested: { id: 'x' } });
+            await expect(getLibrarySuggestedIds('125319', token)).resolves.toEqual([]);
+        });
+
+        test('a null response, or a body without an items array, is null', async () => {
+            makePostRequest.mockResolvedValueOnce(null);
+            await expect(getLibrarySuggestedIds('125319', token)).resolves.toBeNull();
+            makePostRequest.mockResolvedValueOnce(invalid({ suggested: [record('x')] }));
+            await expect(getLibrarySuggestedIds('125319', token)).resolves.toBeNull();
+            makePostRequest.mockResolvedValueOnce(invalid({ items: 'nope', suggested: [record('x')] }));
+            await expect(getLibrarySuggestedIds('125319', token)).resolves.toBeNull();
+        });
+
+        test('sends one one-photo read with web headers, usage=submit by default, and no order', async () => {
+            makePostRequest.mockResolvedValueOnce({ items: [] });
+            await getLibrarySuggestedIds('125319', token);
+            expect(makePostRequest).toHaveBeenCalledTimes(1);
+            const [url, headers, body] = makePostRequest.mock.calls[0];
+            expect(url).toBe('https://api.gurushots.com/rest/get_photos_private');
+            expect(headers).toEqual(expect.objectContaining({ 'x-token': token, 'x-env': 'WEB' }));
+            expect(body).toBe('c_id=125319&limit=1&start=0&usage=submit');
+        });
+
+        test("'swap' is sent as usage=swap and any other usage reads as submit", async () => {
+            makePostRequest.mockResolvedValue({ items: [] });
+            await getLibrarySuggestedIds(125319, token, 'swap');
+            expect(makePostRequest.mock.calls[0][2]).toBe('c_id=125319&limit=1&start=0&usage=swap');
+            await getLibrarySuggestedIds('125319', token, 'submit');
+            expect(makePostRequest.mock.calls[1][2]).toBe('c_id=125319&limit=1&start=0&usage=submit');
+            await getLibrarySuggestedIds('125319', token, invalid<'swap'>('other'));
+            expect(makePostRequest.mock.calls[2][2]).toBe('c_id=125319&limit=1&start=0&usage=submit');
+        });
+
+        test('logs the challenge and the id count only, never the body or the records', async () => {
+            makePostRequest.mockResolvedValueOnce({ items: [], suggested: [record('secret-id'), record('other')] });
+            await getLibrarySuggestedIds('125319', token);
+            const debug = loggerMock.withCategory('api').debug;
+            expect(debug).toHaveBeenCalledTimes(1);
+            expect(debug).toHaveBeenCalledWith('Suggested photos for challenge 125319: 2 id(s)', null);
+        });
+
+        test('requires a challenge id and a token', async () => {
+            await expect(getLibrarySuggestedIds('', token)).rejects.toThrow('submissions: challengeId is required');
+            await expect(getLibrarySuggestedIds('125319', '')).rejects.toThrow('submissions: token is required');
+            expect(makePostRequest).not.toHaveBeenCalled();
         });
     });
 

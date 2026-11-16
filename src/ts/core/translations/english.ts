@@ -1032,7 +1032,7 @@ export const app = {
     pickSubmitCount: 'Submit {count}',
     pickAuto: 'Auto',
     pickGsSuggestions: 'GS suggestions',
-    pickGsHelp: 'Load GuruShots suggestions for challenges you have not joined.',
+    pickGsHelp: 'Load the photos GuruShots suggests for this challenge.',
     pickGsLoading: 'Loading GuruShots suggestions…',
     pickAutoNext: 'Next suggestions',
     pickAutoHelp:

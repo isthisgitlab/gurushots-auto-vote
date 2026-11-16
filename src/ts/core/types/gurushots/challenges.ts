@@ -124,7 +124,6 @@ export interface Challenge {
 export interface ActiveChallengesResponse {
     challenges: Challenge[];
     fetchFailed?: boolean;
-    suggestionsFetchFailed?: boolean;
     pruneUnsafe?: boolean;
 }
 

@@ -31,7 +31,7 @@ import {
 import { getVoteImages, submitVotes } from './api/voting';
 import { applyBoostToEntry } from './api/boost';
 import { applyTurbo } from './api/turbo';
-import { getEligiblePhotos, getEligiblePhotosWalk, getImageData } from './api/submissions';
+import { getEligiblePhotos, getEligiblePhotosWalk, getLibrarySuggestedIds, getImageData } from './api/submissions';
 import { getMemberChallenges, getBankroll } from './api/join';
 import { getCurrentMemberProfile, searchTagAutocomplete } from './api/tags';
 import { keyUnlock, exposureAutofill } from './api/currency';
@@ -50,6 +50,7 @@ const realApi = {
     applyTurbo,
     getEligiblePhotos,
     getEligiblePhotosWalk,
+    getLibrarySuggestedIds,
     getImageData,
     submitToChallenge,
     getMemberChallenges,

@@ -6,7 +6,9 @@
 import * as logger from '../../logger';
 import { LIBRARY_BATCH_PHOTOS } from '../../settings/limits';
 import { simulateApiResponse, mockMethod } from '../simulate';
-import { buildLibraryPhotos, buildImageStats } from '../photoLibrary';
+import { buildLibraryPhotos, buildImageStats, SUGGESTED_PHOTO_IDS } from '../photoLibrary';
+import { SUGGESTED_IDS_BY_CHALLENGE } from './join';
+import { LIBRARY_ID_RE } from '../../strategies/real/suggestedPhotos';
 import type * as submissionsModule from '../../api/submissions';
 
 import type { LibraryOrder } from '../../librarySort';
@@ -177,6 +179,34 @@ const getEligiblePhotosWalk: typeof submissionsModule.getEligiblePhotosWalk = mo
 );
 
 /**
+ * Simulate the library read's `suggested` list: the challenge's own pool (shape-filtered) where
+ * the fixture names one (900001's pool; 900002's empty one, a challenge GuruShots suggests
+ * nothing for), else the three suggested library photos, so every joined mock challenge shows
+ * suggestions (mock active challenge ids are built at run time, which no static map can name).
+ * All of them are library photos with `permission.allowed: true`. No token resolves null, a
+ * failed read.
+ */
+const getLibrarySuggestedIds: typeof submissionsModule.getLibrarySuggestedIds = mockMethod(
+    {
+        name: 'getLibrarySuggestedIds',
+        tokenArg: 1,
+        debug: (challengeId) => {
+            logger.withCategory('challenges').debug(`Challenge ID: ${challengeId}`, null);
+        },
+        noTokenMessage: 'No token provided, returning null',
+        onNoToken: () => null,
+    },
+    async (challengeId) => {
+        await simulateApiResponse({}, 150);
+        // The live server names only 32-hex library ids, so the fixture pool passes the same shape filter
+        // the mock getSuggestedPhotoIds applies (its `photo_pink_flower_001` is not one).
+        return (SUGGESTED_IDS_BY_CHALLENGE[String(challengeId)] ?? SUGGESTED_PHOTO_IDS).filter((id) =>
+            LIBRARY_ID_RE.test(id),
+        );
+    },
+);
+
+/**
  * Simulate the per-photo record. Mirrors /rest/get_image_data, which is
  * where the REAL popularity signals live: the library endpoint above
  * returns votes=0 and no achievements for every photo on the live API, so
@@ -245,4 +275,4 @@ const submitToChallenge: typeof submissionsModule.submitToChallenge = mockMethod
     },
 );
 
-export { getEligiblePhotos, getEligiblePhotosWalk, getImageData, submitToChallenge };
+export { getEligiblePhotos, getEligiblePhotosWalk, getLibrarySuggestedIds, getImageData, submitToChallenge };

@@ -1037,7 +1037,7 @@ export const app: LatvianApp = {
     pickSubmitCount: 'Iesniegt {count} foto',
     pickAuto: 'Automātiski',
     pickGsSuggestions: 'GS ieteikumi',
-    pickGsHelp: 'Ielādē GuruShots ieteikumus izaicinājumiem, kuriem vēl neesi pievienojies.',
+    pickGsHelp: 'Ielādē foto, ko GuruShots iesaka šim izaicinājumam.',
     pickGsLoading: 'Ielādē GuruShots ieteikumus…',
     pickAutoNext: 'Nākamie ieteikumi',
     pickAutoHelp:

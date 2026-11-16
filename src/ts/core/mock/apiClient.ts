@@ -15,6 +15,7 @@ import { applyTurbo, runTurboGame } from './endpoints/turbo';
 import {
     getEligiblePhotos,
     getEligiblePhotosWalk,
+    getLibrarySuggestedIds,
     getImageData,
     submitToChallenge as submitToChallengeRaw,
 } from './endpoints/submissions';
@@ -57,6 +58,7 @@ const endpoints = {
     runTurboGame,
     getEligiblePhotos,
     getEligiblePhotosWalk,
+    getLibrarySuggestedIds,
     getImageData,
     submitToChallenge,
     getMemberChallenges,

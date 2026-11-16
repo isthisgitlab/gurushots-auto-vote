@@ -55,6 +55,38 @@ const orderParams = (order: LibraryOrder | 'default' | undefined): string[] => {
 };
 
 /**
+ * The request body of one get_photos_private read: `c_id`, `limit`, `start`, the
+ * order pair, `usage`, then a non-empty `search`, in that fixed order.
+ *
+ * @param usage - the library view the server filters `permission.allowed` for ('submit' or 'swap')
+ * @param order - the whole-library server sort: absent sends votes desc, 'default' sends nothing
+ */
+const buildPhotoPageBody = (
+    challengeId: string | number,
+    {
+        limit,
+        start,
+        search,
+        usage,
+        order,
+    }: { limit: number; start: number; search?: string; usage: string; order?: LibraryOrder | 'default' },
+): string => {
+    // The vote-ordered path sorts by the server's real count even though items
+    // report `votes: 0` (see getImageData). The default path omits the sort.
+    const params = [
+        `c_id=${encodeURIComponent(String(challengeId))}`,
+        `limit=${encodeURIComponent(String(limit))}`,
+        `start=${encodeURIComponent(String(start))}`,
+        `usage=${encodeURIComponent(String(usage))}`,
+    ];
+    params.splice(2, 0, ...orderParams(order));
+    if (typeof search === 'string' && search.trim() !== '') {
+        params.push(`search=${encodeURIComponent(search.trim())}`);
+    }
+    return params.join('&');
+};
+
+/**
  * Fetch ONE page of the eligible-photo library.
  *
  * @param opts
@@ -70,28 +102,14 @@ const orderParams = (order: LibraryOrder | 'default' | undefined): string[] => {
 const fetchPhotoPage = async (
     challengeId: string | number,
     token: string,
-    {
-        limit,
-        start,
-        search,
-        usage,
-        order,
-    }: { limit: number; start: number; search?: string; usage: string; order?: LibraryOrder | 'default' },
+    opts: { limit: number; start: number; search?: string; usage: string; order?: LibraryOrder | 'default' },
 ): Promise<LibraryPhoto[] | null> => {
     const headers = createWebHeaders(token);
-    // The vote-ordered path sorts by the server's real count even though items
-    // report `votes: 0` (see getImageData). The default path omits the sort.
-    const params = [
-        `c_id=${encodeURIComponent(String(challengeId))}`,
-        `limit=${encodeURIComponent(String(limit))}`,
-        `start=${encodeURIComponent(String(start))}`,
-        `usage=${encodeURIComponent(String(usage))}`,
-    ];
-    params.splice(2, 0, ...orderParams(order));
-    if (typeof search === 'string' && search.trim() !== '') {
-        params.push(`search=${encodeURIComponent(search.trim())}`);
-    }
-    const response = await makePostRequest<PhotosPrivateResponse>(ENDPOINTS.photosPrivate, headers, params.join('&'));
+    const response = await makePostRequest<PhotosPrivateResponse>(
+        ENDPOINTS.photosPrivate,
+        headers,
+        buildPhotoPageBody(challengeId, opts),
+    );
     if (!response || !Array.isArray(response.items)) {
         return null;
     }
@@ -311,5 +329,12 @@ const walkLibrary = async (
     return result(true, stoppedAs);
 };
 
-export { fetchPhotoPage, normalizeLibraryOptions, markFirstPageFailed, walkLibrary, MAX_LIBRARY_PAGES };
+export {
+    fetchPhotoPage,
+    buildPhotoPageBody,
+    normalizeLibraryOptions,
+    markFirstPageFailed,
+    walkLibrary,
+    MAX_LIBRARY_PAGES,
+};
 export type { LibraryOptions, LibraryWalk };

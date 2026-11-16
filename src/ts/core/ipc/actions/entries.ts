@@ -23,11 +23,10 @@ const suggestGuruShots = async (
     challengeId: string | number,
     usage: LibraryUsage | undefined,
 ) => {
-    const ids = [
-        ...new Set(
-            (await strategy.getSuggestedPhotoIds(token, challengeId)).filter((id) => CHOSEN_PHOTO_ID_RE.test(id)),
-        ),
-    ];
+    // GuruShots' own list for this challenge, joined or not, read from the library endpoint.
+    const suggested = await strategy.getLibrarySuggestedIds(challengeId, token, usage);
+    if (suggested === null) return { success: false as const, error: 'fetch-failed' as const };
+    const ids = [...new Set(suggested.filter((id) => CHOSEN_PHOTO_ID_RE.test(id)))].slice(0, MAX_CHOSEN_PHOTOS);
     if (ids.length === 0) return { success: false as const, error: 'no-gs-suggestions' as const };
     const requested = new Set(ids);
     let walk;
@@ -231,7 +230,7 @@ const handleSuggestPhotos = (async (
 
         const strategy = apiFactory.getApiStrategy();
         const response: ActiveChallengesResponse | null = await strategy.getActiveChallenges(guard.token);
-        if (source === 'gurushots' && (!response || response.fetchFailed || response.suggestionsFetchFailed)) {
+        if (source === 'gurushots' && (!response || response.fetchFailed)) {
             return { success: false as const, error: 'fetch-failed' as const };
         }
         const live = findActionableChallenge(response, challengeId);

@@ -147,6 +147,7 @@ describe('no-token contract for every endpoint not covered elsewhere', () => {
             { status: 'not-authenticated', challengeId: 1 },
         ],
         ['getSuggestedPhotoIds', () => mockApiClient.getSuggestedPhotoIds(invalid(null), 900001), []],
+        ['getLibrarySuggestedIds', () => mockApiClient.getLibrarySuggestedIds(900001, invalid(null)), null],
     ])('%s resolves its failure shape and logs the auth error', async (_name, call, expected) => {
         await expect(call()).resolves.toEqual(expected);
         expect(cat.error).toHaveBeenCalledWith(expect.stringMatching(/^No token provided/), null);
@@ -724,6 +725,38 @@ describe('getSuggestedPhotoIds', () => {
 
     test.each([[900002], ['no-such-challenge']])('a challenge without suggestions (%p) answers none', async (id) => {
         await expect(settle(mockApiClient.getSuggestedPhotoIds('tok', id))).resolves.toEqual([]);
+    });
+});
+
+describe('getLibrarySuggestedIds', () => {
+    test('answers the existing pool for 900001 (shape-filtered, uncapped), as a string or a number', async () => {
+        const fromNumber = await settle(mockApiClient.getLibrarySuggestedIds(900001, 'tok'));
+        expect(fromNumber).toEqual(await settle(mockApiClient.getLibrarySuggestedIds('900001', 'tok')));
+        // 3 photos plus 18 padding ids; `photo_pink_flower_001` is not 32-hex and is dropped.
+        expect(fromNumber).toHaveLength(21);
+        expect(fromNumber?.slice(0, 3)).toEqual([...SUGGESTED_PHOTO_IDS]);
+        expect(fromNumber).not.toContain('photo_pink_flower_001');
+    });
+
+    test.each([[900003], ['no-such-challenge'], [1700000000123]])(
+        'any other challenge (%p), joined mock ones included, answers the three library photos',
+        async (id) => {
+            await expect(settle(mockApiClient.getLibrarySuggestedIds(id, 'tok', 'swap'))).resolves.toEqual([
+                ...SUGGESTED_PHOTO_IDS,
+            ]);
+        },
+    );
+
+    test('900002, which GuruShots suggests nothing for, answers an empty list', async () => {
+        await expect(settle(mockApiClient.getLibrarySuggestedIds(900002, 'tok'))).resolves.toEqual([]);
+    });
+
+    test('the fallback ids are library photos the server would allow', async () => {
+        const ids = await settle(mockApiClient.getLibrarySuggestedIds(1, 'tok'));
+        const library = buildLibraryPhotos(Math.floor(Date.now() / 1000));
+        for (const id of ids ?? []) {
+            expect(library.find((photo) => photo.id === id)?.permission?.allowed).toBe(true);
+        }
     });
 });
 

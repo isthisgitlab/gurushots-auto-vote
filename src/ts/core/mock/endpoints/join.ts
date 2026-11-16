@@ -78,8 +78,9 @@ const getMemberChallenges: typeof joinModule.getMemberChallenges = mockMethod(
 );
 
 /**
- * The one open challenge the suggestion fixture hangs off (900001, the free
- * one), and its pool. The first three ids are library photos in the server's
+ * The suggestion fixture's pools, by open challenge: 900001 (the free one) has
+ * a pool, and 900002 has an empty one (GuruShots suggests nothing for it). In
+ * 900001's pool the first three ids are library photos in the server's
  * 32-hex shape, so a picker join can actually match them; `photo_pink_flower_001`
  * exists in the library too but is not 32-hex, so the shape filter must drop it;
  * the hex padding pushes the pool past the 20-per-challenge cap so the cap is
@@ -91,6 +92,8 @@ const SUGGESTED_IDS_BY_CHALLENGE: Record<string, string[]> = {
         'photo_pink_flower_001',
         ...Array.from({ length: 18 }, (_, i) => hexPhotoId(i + 10)),
     ],
+    // An open challenge GuruShots suggests nothing for, as the live server does for some challenges.
+    '900002': [],
 };
 
 /** The mock counterpart's signature, mirroring the real getSuggestedPhotoIds. */
@@ -152,4 +155,4 @@ const coinsUnlock: typeof joinModule.coinsUnlock = mockMethod(
     },
 );
 
-export { getMemberChallenges, getSuggestedPhotoIds, getBankroll, coinsUnlock };
+export { getMemberChallenges, getSuggestedPhotoIds, getBankroll, coinsUnlock, SUGGESTED_IDS_BY_CHALLENGE };

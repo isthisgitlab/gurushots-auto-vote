@@ -341,7 +341,6 @@ describe('challenges', () => {
                 challenges: [{ id: '1', start_time: 1, close_time: 2 }],
                 fetchFailed: false,
                 pruneUnsafe: false,
-                suggestionsFetchFailed: true,
             });
             expect(r2).toBe(r1);
         });
@@ -1100,9 +1099,8 @@ describe('challenges', () => {
 
                 makePostRequest.mockResolvedValueOnce(list());
                 makePostRequest.mockResolvedValueOnce(null);
-                const failed = await getActiveChallenges(mockToken);
+                await getActiveChallenges(mockToken);
 
-                expect(failed.suggestionsFetchFailed).toBe(true);
                 await expect(getSuggestedPhotoIds(mockToken, 10)).resolves.toEqual([photoId(1)]);
             });
 
@@ -1112,8 +1110,7 @@ describe('challenges', () => {
                 await getActiveChallenges(mockToken);
                 makePostRequest.mockResolvedValueOnce(list());
                 makePostRequest.mockResolvedValueOnce(null);
-                const failed = await getActiveChallenges(mockToken);
-                expect(failed.suggestionsFetchFailed).toBe(true);
+                await getActiveChallenges(mockToken);
                 await expect(getSuggestedPhotoIds(mockToken, 10)).resolves.toEqual([]);
             });
 
