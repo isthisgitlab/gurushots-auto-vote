@@ -183,8 +183,8 @@ const getEligiblePhotosWalk: typeof submissionsModule.getEligiblePhotosWalk = mo
  * the fixture names one (900001's pool; 900002's empty one, a challenge GuruShots suggests
  * nothing for), else the three suggested library photos, so every joined mock challenge shows
  * suggestions (mock active challenge ids are built at run time, which no static map can name).
- * All of them are library photos with `permission.allowed: true`. No token resolves null, a
- * failed read.
+ * The three fallback photos are library photos with `permission.allowed: true`; 900001's padding
+ * ids are not in the library. No token resolves null, a failed read.
  */
 const getLibrarySuggestedIds: typeof submissionsModule.getLibrarySuggestedIds = mockMethod(
     {
