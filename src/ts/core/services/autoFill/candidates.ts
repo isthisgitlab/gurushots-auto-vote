@@ -18,7 +18,7 @@ import { getSemanticScores } from '../semantic';
 import * as lexicon from '../semantic/lexicon';
 import { resolveTermsToTags } from '../tagResolver';
 import { resolveMemberId } from './memberIdentity';
-import { hasEligible, readUnfilteredLibrary } from './unfilteredLibrary';
+import { dedupById, hasEligible, readUnfilteredLibrary } from './unfilteredLibrary';
 
 import type { Challenge } from '../../types/gurushots';
 import type { ChallengeTheme, IgnoreWords, PickerPhoto, SemanticScore, TagOptions } from '../../types/photoPicker';
@@ -183,6 +183,19 @@ const describeTheme = (theme: ChallengeTheme, challenge: Challenge, ignoreWords:
  * The returned set is fed unchanged into pickPhotosForChallenge, so the
  * must/should/submitWithoutTagMatch ranking semantics are preserved.
  *
+ * The eligibility DECISIONS are exclusion-aware: `excludeIds` (photos the
+ * challenge's swap history took out) makes a themed result count as empty when
+ * it holds only those, so an all-swapped-out themed search runs the same
+ * fallback chain a miss does (tag-resolution retry, then the unfiltered walk)
+ * instead of returning photos the fill's swapped filter would drop anyway. The
+ * returned themed lists themselves are NOT filtered — a themed result with at
+ * least one usable (non-swapped) hit still returns early, exactly as before.
+ * On the fallback the themed/resolved unions are merged back into the walk
+ * result, walk-first and deduped by id: in the all-swapped-out case the unions
+ * hold exactly the swapped-out photos, which the caller's swapped filter drops
+ * again — except chosen ids, which it re-allows. (The chosen-photos lookup
+ * cannot repair that corner: it is disabled once the walk ran.)
+ *
  * @param challenge - challenge with id and (optional) title
  * @param deps
  *   logLabel: the calling flow ('autoSubmit' default, or 'join') — used as the log
@@ -193,6 +206,9 @@ const describeTheme = (theme: ChallengeTheme, challenge: Challenge, ignoreWords:
  *   is what keeps every existing caller and test valid.
  *   usage: 'submit' (default) or 'swap' — which server-side eligibility view the
  *   library reads (a swap replaces an entry instead of adding one).
+ *   excludeIds: OPTIONAL, default null. Photos the challenge's swap history took
+ *   out; they make the fallback DECISIONS above fire but are still returned in
+ *   the lists (the caller's filter owns the pool).
  *   trace: optional out-parameter; `walkedUnfiltered` is set when the fetch had
  *   to walk the whole unfiltered library, i.e. when every photo it can reach is
  *   already in the result (the chosen-photos lookup then has nothing to add);
@@ -210,10 +226,12 @@ const fetchCandidatesForChallenge = async (
         searchTagAutocomplete,
         getCurrentMemberProfile,
         usage = 'submit',
+        excludeIds = null,
         trace,
     }: Pick<RankDeps, 'getEligiblePhotos' | 'searchTagAutocomplete' | 'getCurrentMemberProfile' | 'logger'> & {
         logLabel?: string;
         usage?: string;
+        excludeIds?: Set<string> | null;
         trace?: { walkedUnfiltered: boolean; readFailed?: boolean };
     },
 ): Promise<PickerPhoto[]> => {
@@ -333,6 +351,12 @@ const fetchCandidatesForChallenge = async (
         });
         return Array.from(byId.values());
     };
+    // The themed results, kept in scope so the fallback below can merge them
+    // into the walk (see the merge comment at the bottom). Empty when the
+    // themed phase never ran (no search terms).
+    let union: PickerPhoto[] = [];
+    let relatedUnion: PickerPhoto[] = [];
+    let resolvedUnion: PickerPhoto[] = [];
     if (terms.length > 0) {
         const fromUserTags = buildSearchTerms(null, tagOpts).length > 0;
         // A compound term ("close-up") is also searched under its two derived
@@ -342,10 +366,10 @@ const fetchCandidatesForChallenge = async (
         // keep the canonical terms — costing at most two extra walks per
         // compound title term inside the shared themed budget.
         const spellings = Array.from(new Set(terms.flatMap((term) => compoundSpellings(term))));
-        const union = await searchUnion([...terms, ...spellings]);
-        const relatedUnion = await searchUnion(fromUserTags ? [] : lexicon.relatedSearchTerms(terms));
-        if (hasEligible(union) || hasEligible(relatedUnion)) {
-            return [...new Map([...union, ...relatedUnion].map((photo) => [photo.id, photo])).values()];
+        union = await searchUnion([...terms, ...spellings]);
+        relatedUnion = await searchUnion(fromUserTags ? [] : lexicon.relatedSearchTerms(terms));
+        if (hasEligible(union, excludeIds) || hasEligible(relatedUnion, excludeIds)) {
+            return dedupById([...union, ...relatedUnion]);
         }
 
         // Exact and related tag searches found nothing. Before giving up on the
@@ -366,8 +390,8 @@ const fetchCandidatesForChallenge = async (
             ignoreWords,
         });
         if (resolved.length > 0) {
-            const resolvedUnion = await searchUnion(resolved);
-            if (hasEligible(resolvedUnion)) {
+            resolvedUnion = await searchUnion(resolved);
+            if (hasEligible(resolvedUnion, excludeIds)) {
                 logger
                     .withCategory(logLabel)
                     .info(
@@ -411,7 +435,20 @@ const fetchCandidatesForChallenge = async (
     // the time it runs the themed searches have already found nothing, and this
     // is the last chance to put ANY photo in the slot.
     if (trace) trace.walkedUnfiltered = true;
-    return readUnfilteredLibrary(challengeId, token, getEligiblePhotos, { logLabel, usageOpt, trace });
+    const walked = await readUnfilteredLibrary(challengeId, token, getEligiblePhotos, {
+        logLabel,
+        usageOpt,
+        trace,
+        excludeIds,
+    });
+    // Merge, don't discard: the themed phase found photos, they just all count
+    // as swapped out here. The caller's swapped filter drops them again —
+    // except chosen ids, which it re-allows — so this merge is what keeps a
+    // chosen photo that was swapped out and is the sole themed hit reachable
+    // (the chosen-photos lookup is disabled once the walk ran, so nothing else
+    // restores it). Walk-first order: the walk's vote-ordered photos lead, the
+    // themed hits trail, deduped by id.
+    return dedupById([...walked, ...union, ...relatedUnion, ...resolvedUnion]);
 };
 
 export { resolveSemanticScores, resolveIgnoreWords, formatTagSearchFallbackMessage, fetchCandidatesForChallenge };

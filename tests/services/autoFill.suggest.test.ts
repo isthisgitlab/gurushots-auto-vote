@@ -265,6 +265,54 @@ describe('suggestFillPhotos', () => {
             const ids = suggestedIds(await suggestFillPhotos(swappedOut(), 'tok', deps)) as string[];
             expect(ids[0]).toBe('swapped');
         });
+
+        test('submit usage falls back to the walk when every themed hit is swapped out', async () => {
+            // The themed search surfaces only the swapped-out photo; the
+            // unfiltered read returns the whole library.
+            const getEligiblePhotos = jest.fn(
+                async (_id: string | number, _token: string, opts: { search?: string } = {}) =>
+                    opts.search ? [photo('swapped', ['Pink'], { upload_date: 9500 })] : photos(),
+            );
+            const deps = { ...makeDeps({ photos: photos() }), getEligiblePhotos };
+            const ids = suggestedIds(await suggestFillPhotos(swappedOut(), 'tok', deps)) as string[];
+            expect(ids).not.toContain('swapped');
+            expect(ids).toHaveLength(SUGGEST_COUNT);
+            expect(deps.getEligiblePhotos.mock.calls.filter(([, , opts]) => !opts?.search).length).toBeGreaterThan(0);
+        });
+
+        test('swap usage does not fall back: the swapped-out photo is the themed hit that ends the fetch', async () => {
+            const getEligiblePhotos = jest.fn(
+                async (_id: string | number, _token: string, opts: { search?: string } = {}) =>
+                    opts.search ? [photo('swapped', ['Pink'], { upload_date: 9500 })] : photos(),
+            );
+            const deps = { ...makeDeps({ photos: photos() }), getEligiblePhotos };
+            const ids = suggestedIds(
+                await suggestFillPhotos(swappedOut(), 'tok', deps, SUGGEST_COUNT, { usage: 'swap' }),
+            ) as string[];
+            expect(ids[0]).toBe('swapped');
+            expect(deps.getEligiblePhotos.mock.calls.filter(([, , opts]) => !opts?.search)).toEqual([]);
+        });
+
+        test('swap usage through the fallback: the walk answer keeps the swapped-out photo, the merge never surfaces a not-allowed themed hit', async () => {
+            // The themed searches answer with a photo the challenge does not
+            // allow, so even swap usage (which reads no swap exclusions) misses
+            // and the unfiltered walk runs. No resolution deps are injected, so
+            // the tag-resolution retry is unavailable and the fallback fires
+            // right after the themed miss — merging the not-allowed themed hit
+            // into the walk result, where the picker must still drop it.
+            const blocked = photo('blocked', ['Pink'], { permission: { allowed: false, message: null } });
+            const getEligiblePhotos = jest.fn(
+                async (_id: string | number, _token: string, opts: { search?: string } = {}) =>
+                    opts.search ? [blocked] : photos(),
+            );
+            const deps = { ...makeDeps({ photos: photos() }), getEligiblePhotos };
+            const result = await suggestFillPhotos(swappedOut(), 'tok', deps, SUGGEST_COUNT, { usage: 'swap' });
+            expect(deps.getEligiblePhotos.mock.calls.filter(([, , opts]) => !opts?.search).length).toBeGreaterThan(0);
+            // The suggestions come from the walk: swap usage may swap a
+            // swapped-out photo back in, so it ranks (and leads, being newest).
+            expect(suggestedIds(result)[0]).toBe('swapped');
+            expect(suggestedIds(result)).not.toContain('blocked');
+        });
     });
 
     test('drops an id the visual check answers that is not among the candidates', async () => {

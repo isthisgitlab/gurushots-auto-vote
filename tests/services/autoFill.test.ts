@@ -1233,6 +1233,54 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         expect(submitToChallenge).not.toHaveBeenCalled();
     });
 
+    test('every themed hit swapped out falls back to the unfiltered walk and submits an off-theme photo', async () => {
+        const challenge = makeChallenge({ entries: [{ id: 'e1' }], swaps: [{ id: 'swapped' }] });
+        const submitToChallenge = jest
+            .fn<ReturnType<SubmitToChallenge>, Parameters<SubmitToChallenge>>()
+            .mockResolvedValue({ ok: true, raw: { success: true } });
+        const logger = makeLogger();
+        // Themed calls (they carry a `search` term) surface only the swapped-out
+        // photo; the unfiltered walk (no `search`) returns the rest of the library.
+        const getEligiblePhotos = jest.fn<ReturnType<GetEligiblePhotos>, Parameters<GetEligiblePhotos>>(
+            async (_id, _tok, opts: EligibleOptions = {}) =>
+                opts.search ? [allowedPhoto('swapped', ['Pink'], 9500)] : [allowedPhoto('off', ['Car'], 9000)],
+        );
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoSubmit: true }),
+            logger,
+            getEligiblePhotos,
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+        expect(submitToChallenge.mock.calls[0][1]).toEqual(['off']);
+        const walkCalls = getEligiblePhotos.mock.calls.filter(([, , opts]) => !opts?.search);
+        expect(walkCalls.length).toBeGreaterThan(0);
+        const warnings = logger.withCategory.mock.results.flatMap(({ value }) =>
+            jest.mocked(value as jest.MockedObject<CategoryLogger>).warning.mock.calls.map(([m]) => m),
+        );
+        expect(warnings.some((m) => m.includes('tag search found nothing'))).toBe(true);
+    });
+
+    test('a themed hit that is not swapped out still returns early — no unfiltered walk', async () => {
+        const challenge = makeChallenge({ entries: [{ id: 'e1' }], swaps: [{ id: 'swapped' }] });
+        const submitToChallenge = jest
+            .fn<ReturnType<SubmitToChallenge>, Parameters<SubmitToChallenge>>()
+            .mockResolvedValue({ ok: true, raw: { success: true } });
+        const getEligiblePhotos = jest.fn<ReturnType<GetEligiblePhotos>, Parameters<GetEligiblePhotos>>(
+            async (_id, _tok, opts: EligibleOptions = {}) =>
+                opts.search ? [allowedPhoto('fresh', ['Pink'], 9500)] : [allowedPhoto('off', ['Car'], 9000)],
+        );
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoSubmit: true }),
+            logger: makeLogger(),
+            getEligiblePhotos,
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+        expect(submitToChallenge.mock.calls[0][1]).toEqual(['fresh']);
+        expect(getEligiblePhotos.mock.calls.filter(([, , opts]) => !opts?.search)).toEqual([]);
+    });
+
     test('returns error when getEligiblePhotos throws', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
         const getEligiblePhotos = jest.fn().mockRejectedValue(new Error('network'));
@@ -2167,6 +2215,69 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         });
         expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoSubmit' }); // unfiltered fallback
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['off'], 'tok');
+    });
+
+    test('every themed hit swapped out → unfiltered fallback still fills at the buzzer', async () => {
+        // The highest-stakes consumer of the swapped-aware fallback: behind its
+        // schedule target and inside the emergency window, the themed searches
+        // surface only the swapped-out photo, so the fetch falls back to the
+        // unfiltered walk and the off-theme walk photo fills the slot. The
+        // swapped photo the fallback merge carried in is dropped by the
+        // pipeline's swapped filter.
+        const challenge = makeChallenge({
+            maxSubmits: 4,
+            entries: [],
+            swaps: [{ id: 'swapped' }],
+            closeIn: 3 * 60,
+        });
+        const getEligiblePhotos = jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) =>
+            opts && opts.search ? [allowedPhoto('swapped', ['Pink'], 9500)] : [allowedPhoto('off', ['Cat'], 9000)],
+        );
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoSubmit: true, emergencySubmit: 300 }),
+            logger: makeLogger(),
+            getEligiblePhotos,
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoSubmit' }); // unfiltered fallback
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['off'], 'tok');
+    });
+
+    test('probe-applies shape: caught up, must filter, all themed hits swapped — merge keeps the probe standing down', async () => {
+        // The probe consumes the post-swapped-filter eligible set, which the
+        // fallback merge keeps populated: the chosen photo that was swapped out
+        // and is the sole themed hit survives the pipeline filter (chosen
+        // re-allow) because the merge carries it, so the probe picks it and
+        // emergency fill stands down — the staggered path can fill the slot.
+        // Without the merge the pool would hold only the off-theme walk photo;
+        // with submitWithoutTagMatch off the probe's must filter would empty
+        // its pick and emergency fill would submit instead of standing down.
+        const challenge = makeChallenge({
+            maxSubmits: 4,
+            entries: [{ id: 'e1' }],
+            swaps: [{ id: 'swapped' }],
+            closeIn: 3 * 60,
+        });
+        const getEligiblePhotos = jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) =>
+            opts && opts.search ? [allowedPhoto('swapped', ['Pink'], 9500)] : [allowedPhoto('off', ['Cat'], 9000)],
+        );
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({
+                autoSubmit: true,
+                schedule: [],
+                mustIncludeTags: ['pink'],
+                submitWithoutTagMatch: false,
+                chosenPhotos: ['swapped'],
+            }),
+            logger: makeLogger(),
+            getEligiblePhotos,
+            submitToChallenge,
+        });
+        expect(result).toBe('skipped');
+        expect(submitToChallenge).not.toHaveBeenCalled();
     });
 
     test('resolves tag lists via getEffectiveTagSetting with the full challenge (enables title rules)', async () => {
@@ -3249,7 +3360,9 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
             {},
             { getEligiblePhotos, logger: makeLogger(), logLabel: 'join' },
         );
-        expect(out.map((p) => p.id)).toEqual(['new']);
+        // The default order leads; the ineligible vote-sorted photo trails (the
+        // walk merge keeps byVotes when byDefault runs) — the picker drops it.
+        expect(out.map((p) => p.id)).toEqual(['new', 'old']);
         expect(getEligiblePhotos).toHaveBeenNthCalledWith(1, 'c1', 'tok', { paginate: true, logLabel: 'join' });
         expect(getEligiblePhotos).toHaveBeenNthCalledWith(2, 'c1', 'tok', { order: 'default', logLabel: 'join' });
     });
@@ -3434,7 +3547,9 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
             { mustIncludeTags: ['cat'] },
             { getEligiblePhotos, logger: makeLogger() },
         );
-        expect(out.map((p) => p.id)).toEqual(['full']);
+        // The walk leads; the themed hit trails (the merge, don't discard rule).
+        // It is not allowed, so the picker drops it before any scoring.
+        expect(out.map((p) => p.id)).toEqual(['full', 'b']);
         expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoSubmit' });
     });
 

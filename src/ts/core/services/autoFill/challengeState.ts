@@ -7,6 +7,7 @@
 import { finiteOr } from '../../numbers';
 
 import type { Challenge, ChallengeMember, RankingEntry } from '../../types/gurushots';
+import type { LibraryUsage } from '../../types/photoPicker';
 import type { AdoptableMember, FillLogger, RankDeps } from '../../types/autoFill';
 import { errorMessage } from '../../errorMessage';
 import { dropChallenge } from '../libraryCache';
@@ -23,6 +24,15 @@ const swappedOutIds = (challenge: Partial<Challenge> | null | undefined): Set<st
             String(s?.id),
         ),
     );
+
+/**
+ * The swapped-out ids a fill for `usage` must exclude, or null when none: the
+ * swap picker may swap a swapped-out photo back in, so swap usage reads none.
+ */
+const swappedOutIdsForUsage = (
+    challenge: Partial<Challenge> | null | undefined,
+    usage: LibraryUsage | undefined,
+): Set<string> | null => (usage === 'swap' ? null : swappedOutIds(challenge));
 
 const getSlotsRemaining = (challenge: Partial<Challenge> | null | undefined): number => {
     const max = finiteOr(challenge?.max_photo_submits, 0);
@@ -258,4 +268,12 @@ const refreshChallengeState = async (
     return 'refreshed';
 };
 
-export { getEntries, getSlotsRemaining, swappedOutIds, reflectNewEntry, reflectEntryFlag, refreshChallengeState };
+export {
+    getEntries,
+    getSlotsRemaining,
+    swappedOutIds,
+    swappedOutIdsForUsage,
+    reflectNewEntry,
+    reflectEntryFlag,
+    refreshChallengeState,
+};

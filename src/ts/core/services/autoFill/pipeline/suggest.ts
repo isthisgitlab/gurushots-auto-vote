@@ -5,7 +5,7 @@
 import { finalizePick } from '../../photoPicker';
 import { createStatsBudget, statsBudgetTripped } from '../../photoStats';
 import { enteredIds } from '../chosenPhotos';
-import { swappedOutIds } from '../challengeState';
+import { swappedOutIdsForUsage } from '../challengeState';
 import type { Challenge } from '../../../types/gurushots';
 import type { LibraryUsage, PickerPhoto } from '../../../types/photoPicker';
 import type { FetchErrorResult, RankDeps } from '../../../types/autoFill';
@@ -131,7 +131,7 @@ const suggestFillPhotos = async (
     // A photo the swap history took out is hidden too — the suggestions match what the fill would enter —
     // unless the user chose it; the swap picker keeps them, since it is what can swap one back in.
     const entered = enteredIds(challenge);
-    const swapped = usage !== 'swap' ? swappedOutIds(challenge) : null;
+    const swapped = swappedOutIdsForUsage(challenge, usage);
     const pool = eligible.filter(
         (photo) =>
             !entered.has(String(photo.id)) &&

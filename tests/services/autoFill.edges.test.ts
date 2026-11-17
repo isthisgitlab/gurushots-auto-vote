@@ -503,7 +503,9 @@ describe('themed search edge shapes', () => {
             },
         );
         expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', expect.objectContaining({ search: 'pinks' }));
-        expect(result).toEqual(LIB);
+        // The walk leads; the not-allowed themed hit trails (the merge, don't
+        // discard rule) — the picker drops it before any scoring.
+        expect(result).toEqual([...LIB, { id: 'blocked', permission: { allowed: false } }]);
         expect(lines.info.some((m) => m.includes('resolved theme'))).toBe(false);
     });
 
@@ -584,5 +586,32 @@ describe('themed search edge shapes', () => {
                 ),
             ).toEqual([]);
         });
+    });
+
+    test('a byVotes walk holding only swapped-out photos reads the default order before giving up', async () => {
+        const { logger } = makeCapturingLogger();
+        const swapped = allowedPhoto('swapped');
+        const byDefault = [allowedPhoto('default1')];
+        // Themed searches and the walk's vote-ordered page surface only the
+        // swapped-out photo; the default-order page holds a usable one.
+        const getEligiblePhotos = jest.fn<
+            ReturnType<FillDeps['getEligiblePhotos']>,
+            Parameters<FillDeps['getEligiblePhotos']>
+        >(async (_id, _tok, opts: { search?: string; order?: string } = {}) =>
+            opts.order === 'default' ? byDefault : [swapped],
+        );
+        const result = await fetchCandidatesForChallenge(
+            invalid({ id: 'c1', title: 'Pink' }),
+            'tok',
+            {},
+            { getEligiblePhotos, logger, excludeIds: new Set(['swapped']) },
+        );
+        expect(getEligiblePhotos).toHaveBeenCalledWith(
+            'c1',
+            'tok',
+            expect.objectContaining({ order: 'default', logLabel: 'autoSubmit' }),
+        );
+        // Walk-first merge: the default-order photos lead, the swapped themed hit trails.
+        expect(result.map((p) => p.id)).toEqual(['default1', 'swapped']);
     });
 });

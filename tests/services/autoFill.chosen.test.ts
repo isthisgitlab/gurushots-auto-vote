@@ -295,6 +295,43 @@ describe('chosen photos rank first', () => {
         expect(submittedIds(chosen)).toEqual([['swapped']]);
     });
 
+    describe('a chosen photo swapped out and the sole themed hit', () => {
+        // The themed search surfaces only the swapped-out chosen photo; the
+        // unfiltered walk (no `search` term) returns what `walk` names. The
+        // fetch's swapped-aware decisions send this case to the walk, and the
+        // walk result alone decides whether the merge has to carry the photo.
+        const cornerDeps = (walk: PickerPhoto[]) => {
+            const deps = makeDeps({
+                library: [photo('swapped', ['Pink'], { upload_date: 9500 })],
+                settings: { chosen: ['swapped'] },
+            });
+            deps.getEligiblePhotos = jest.fn(
+                async (_id: string | number, _tok: string, opts: { search?: string } = {}) =>
+                    opts.search ? [photo('swapped', ['Pink'], { upload_date: 9500 })] : walk,
+            );
+            return deps;
+        };
+
+        test('the walk finds it and it is submitted', async () => {
+            const deps = cornerDeps([photo('swapped', ['Pink'], { upload_date: 9500 })]);
+            expect(await maybeAutoFillChallenge(makeChallenge({ swaps: [{ id: 'swapped' }] }), 'tok', NOW, deps)).toBe(
+                'submitted',
+            );
+            expect(submittedIds(deps)).toEqual([['swapped']]);
+        });
+
+        test('the walk misses it and the fallback merge still submits it', async () => {
+            // The walk mock deliberately OMITS the chosen photo: a whole-library
+            // mock would pass it vacuously. Only the merge of the themed result
+            // into the walk keeps it in the pool.
+            const deps = cornerDeps([photo('offtheme', ['Car'])]);
+            expect(await maybeAutoFillChallenge(makeChallenge({ swaps: [{ id: 'swapped' }] }), 'tok', NOW, deps)).toBe(
+                'submitted',
+            );
+            expect(submittedIds(deps)).toEqual([['swapped']]);
+        });
+    });
+
     test('the visual re-rank only chooses between chosen photos, and a block it cannot reorder is left alone', async () => {
         const deps = makeDeps({
             library: [photo('theme-a'), photo('theme-b'), photo('theme-c'), photo('theme-d')],

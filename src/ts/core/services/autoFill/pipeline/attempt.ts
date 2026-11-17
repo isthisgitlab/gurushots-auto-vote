@@ -254,7 +254,10 @@ const runFillAttempt = async ({
         onlyIds,
     });
     // A photo the swap history took out is not picked again on its own; listing
-    // it in Chosen Photos allows it.
+    // it in Chosen Photos allows it. The fetch's eligibility decisions are
+    // already swapped-aware — an all-swapped-out themed result fell back to the
+    // unfiltered walk above — so this filter remains the single place the pool
+    // is narrowed, re-allowing chosen ids.
     const swapped = swappedOutIds(challenge);
     const eligible = fetched.filter(
         (photo) => !swapped.has(String(photo.id)) || chosenSettings.ids.includes(String(photo.id)),

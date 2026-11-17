@@ -6,13 +6,24 @@
 import type { PickerPhoto } from '../../types/photoPicker';
 import type { RankDeps } from '../../types/autoFill';
 
-/** Whether a candidate list holds a photo the challenge allows. */
-const hasEligible = (list: PickerPhoto[]) =>
-    list.some((p) => p && p.permission && p.permission.allowed === true && p.id);
+/**
+ * Whether a candidate list holds a photo the challenge allows. `excludeIds`
+ * names the photos the challenge's swap history took out; a list holding only
+ * those counts as empty, so the caller falls back rather than returning photos
+ * the fill would filter away anyway.
+ */
+const hasEligible = (list: PickerPhoto[], excludeIds?: Set<string> | null) =>
+    list.some((p) => p && p.permission && p.permission.allowed === true && p.id && !excludeIds?.has(String(p.id)));
+
+/** Dedupe a photo list by id, first occurrence winning. */
+const dedupById = (photos: PickerPhoto[]): PickerPhoto[] => [
+    ...new Map(photos.map((photo) => [photo.id, photo])).values(),
+];
 
 /**
  * The unfiltered library read: the vote-ordered walk, then the API's default order when that holds nothing
- * eligible. A caller that started `trace.readFailed` at false is told when both reads failed on their first page.
+ * eligible. `excludeIds` (photos the swap history took out) makes a page count as empty when it holds only
+ * those. A caller that started `trace.readFailed` at false is told when both reads failed on their first page.
  */
 const readUnfilteredLibrary = async (
     challengeId: string | number,
@@ -22,7 +33,13 @@ const readUnfilteredLibrary = async (
         logLabel,
         usageOpt,
         trace,
-    }: { logLabel: string; usageOpt: { usage?: string }; trace?: { walkedUnfiltered: boolean; readFailed?: boolean } },
+        excludeIds,
+    }: {
+        logLabel: string;
+        usageOpt: { usage?: string };
+        trace?: { walkedUnfiltered: boolean; readFailed?: boolean };
+        excludeIds?: Set<string> | null;
+    },
 ): Promise<PickerPhoto[]> => {
     // Only a caller that asked (by starting `readFailed` at false) gets the read tracked.
     const byVotesRead = { firstPageFailed: false };
@@ -34,7 +51,7 @@ const readUnfilteredLibrary = async (
         ...tracked(byVotesRead),
         ...usageOpt,
     });
-    if (hasEligible(byVotes)) return byVotes;
+    if (hasEligible(byVotes, excludeIds)) return byVotes;
     const byDefault = await getEligiblePhotos(challengeId, token, {
         order: 'default',
         logLabel,
@@ -42,7 +59,13 @@ const readUnfilteredLibrary = async (
         ...usageOpt,
     });
     if (trace && byVotesRead.firstPageFailed && defaultRead.firstPageFailed) trace.readFailed = true;
-    return byDefault;
+    // Merge, don't discard — symmetric with the themed merge in candidates.ts:
+    // the default-order page leads, the vote-ordered page trails, deduped by
+    // id. The trailing photos may be swap-history removals the caller's filter
+    // re-allows for chosen ids, or photos the server disallowed (which every
+    // consumer's allowed filter drops), and a byDefault read that failed
+    // (empty) must not lose them either.
+    return dedupById([...byDefault, ...byVotes]);
 };
 
-export { hasEligible, readUnfilteredLibrary };
+export { hasEligible, dedupById, readUnfilteredLibrary };

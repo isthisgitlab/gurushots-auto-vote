@@ -6,11 +6,13 @@ import { buildChosenCandidates, selectBlockEnrichmentSet } from '../../photoPick
 import { enrichCandidates } from '../../photoStats';
 import * as lexicon from '../../semantic/lexicon';
 import { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge } from '../candidates';
+import { swappedOutIdsForUsage } from '../challengeState';
 import { makeFallbackLogger } from '../fillLogging';
 import type { Challenge } from '../../../types/gurushots';
 import type {
     ChosenPick,
     IgnoreWords,
+    LibraryUsage,
     PickerPhoto,
     ScoredCandidate,
     SemanticScoreMap,
@@ -41,7 +43,7 @@ const loadFillCandidates = async ({
     deps: RankDeps;
     mustIncludeTags: readonly string[] | null;
     shouldIncludeTags: readonly string[] | null;
-    usage?: string;
+    usage?: LibraryUsage;
 }): Promise<
     | FetchErrorResult
     | {
@@ -56,6 +58,10 @@ const loadFillCandidates = async ({
     // One lookup for the whole fill — see resolveIgnoreWords for why it is not
     // threaded in from each caller like the tag settings are.
     const ignoreWords = resolveIgnoreWords(deps.settings, challenge);
+    // The fetch's eligibility decisions are swapped-aware (an all-swapped-out
+    // themed result falls back to the unfiltered walk); swap usage reads none,
+    // since the swap picker may swap a swapped-out photo back in.
+    const excludeIds = swappedOutIdsForUsage(challenge, usage);
 
     let eligible;
     const trace = { walkedUnfiltered: false };
@@ -66,7 +72,7 @@ const loadFillCandidates = async ({
             { mustIncludeTags, shouldIncludeTags, ignoreWords },
             // The whole deps bundle, so a dep added upstream reaches this path
             // (auto-fill, emergency fill and manual fill alike) unnamed.
-            { ...deps, usage, trace },
+            { ...deps, usage, trace, excludeIds },
         );
     } catch (error) {
         logger

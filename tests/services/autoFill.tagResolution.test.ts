@@ -175,6 +175,42 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
         expect(category.warning).toHaveBeenCalledWith(expect.stringContaining('tag search found nothing'), null);
     });
 
+    test('a resolved tag whose only hit is swapped out still falls back to the library', async () => {
+        jest.spyOn(lexicon, 'relatedSearchTerms').mockReturnValue([]);
+        const { logger, category } = makeLogger();
+        // Every themed search — raw terms and the resolved tag alike — surfaces
+        // only the swapped-out photo; the unfiltered walk returns the library.
+        const swapped = allowed('swapped', ['Staircase']);
+        const getEligiblePhotos = jest.fn(
+            async (_id: string | number, _token: string, options: EligibleOptions = {}) =>
+                options.search ? [swapped] : LIBRARY,
+        );
+        const result = await fetchCandidatesForChallenge(
+            STAIRS,
+            'tok',
+            {},
+            {
+                getEligiblePhotos,
+                logger,
+                excludeIds: new Set(['swapped']),
+                searchTagAutocomplete: jest.fn(async (_t, term) => (term === 'stair' ? ['staircase'] : [])),
+                getCurrentMemberProfile: jest.fn(async () => ({ id: 'member-hash', userName: 'guru' })),
+            },
+        );
+
+        // The resolved-tag search ran but its hit counts as empty, so the
+        // 'resolved theme' success line never fires and the walk answers.
+        expect(getEligiblePhotos).toHaveBeenCalledWith(
+            'c-stairs',
+            'tok',
+            expect.objectContaining({ search: 'staircase' }),
+        );
+        expect(category.info).not.toHaveBeenCalledWith(expect.stringContaining('resolved theme'), null);
+        expect(category.warning).toHaveBeenCalledWith(expect.stringContaining('tag search found nothing'), null);
+        // Walk-first merge: the walk's photos lead, the swapped themed hit trails.
+        expect(result.map((p) => p.id)).toEqual(['stairs_1', 'stairs_2', 'yoga_1', 'misc_1', 'swapped']);
+    });
+
     test('logs how the theme was read, with the description it was read from', async () => {
         const { logger, category } = makeLogger();
         await fetchCandidatesForChallenge(
