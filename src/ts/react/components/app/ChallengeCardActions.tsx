@@ -195,6 +195,7 @@ function usePickModal({
                 isOpen={isOpen}
                 onClose={close}
                 challengeId={challenge.id}
+                challengeTitle={challenge.title}
                 max={slotsRemaining}
                 submitting={picking}
                 error={ipcErrorText(failure, t)}
@@ -344,6 +345,7 @@ function useSwapPickModal({
                     isOpen={candidate === null}
                     onClose={() => close(flow)}
                     challengeId={challenge.id}
+                    challengeTitle={challenge.title}
                     max={1}
                     submitting={preview.loading}
                     error={pickError && currencyOutcomeText(t, pickError)}

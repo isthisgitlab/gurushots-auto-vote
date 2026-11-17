@@ -327,6 +327,7 @@ function PhotoSubmitBody({
  * answer to a submit in flight. While a submit is in flight nothing can close it.
  *
  * @param max - the card's live count of open slots
+ * @param challengeTitle - the challenge's name, shown under the title so the user can see which challenge it is for
  * @param error - the translated text of the last failed submit
  * @param texts - the translation keys of the title and every line of the body (the Pick… submit's by default)
  * @param notice - a line shown at the top of the body, e.g. why the modal opened
@@ -340,6 +341,7 @@ export function PhotoSubmitModal({
     isOpen,
     onClose,
     challengeId,
+    challengeTitle,
     max,
     submitting,
     error,
@@ -352,6 +354,7 @@ export function PhotoSubmitModal({
     isOpen: boolean;
     onClose: () => void;
     challengeId: string | number;
+    challengeTitle: string;
     max: number;
     submitting: boolean;
     error: string | null;
@@ -367,7 +370,12 @@ export function PhotoSubmitModal({
         <Modal
             isOpen
             onClose={submitting ? undefined : onClose}
-            title={t(texts.title)}
+            title={
+                <>
+                    <span className="block">{t(texts.title)}</span>{' '}
+                    <span className="block text-sm font-normal opacity-70 break-words">{challengeTitle}</span>
+                </>
+            }
             size="xl"
             className={STICKY_FOOTER_SCROLL_PADDING}
             showCloseButton={!submitting}

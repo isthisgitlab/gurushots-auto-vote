@@ -85,6 +85,7 @@ const baseProps = (over: Partial<Props> = {}): Props => ({
     isOpen: true,
     onClose: jest.fn(),
     challengeId: 7,
+    challengeTitle: 'Golden Hour',
     max: 3,
     submitting: false,
     error: null,
@@ -136,6 +137,12 @@ describe('opening', () => {
         expect(countLine().textContent).toBe('Picked: 0/3 open slots');
         expect(submitButton().hasAttribute('disabled')).toBe(true);
         expect(submitButton().textContent).toBe('Submit');
+    });
+
+    test('the title heading names the challenge', async () => {
+        setupLoaded();
+        await opened();
+        expect(screen.getByRole('heading', { name: 'Choose photos to submit Golden Hour' })).toBeTruthy();
     });
 
     test('Submit sits in a footer pinned to the bottom of the modal box, which keeps focus above it', async () => {
@@ -714,6 +721,12 @@ describe('texts, notice and blocked photos (the swap picker)', () => {
         fireEvent.click(tile(1));
         expect(useButton().textContent).toBe('Use this photo');
         expect(useButton().hasAttribute('disabled')).toBe(false);
+    });
+
+    test('texts keep the challenge name under the swap title', async () => {
+        setupLoaded({ max: 1, texts: swapTexts });
+        await opened();
+        expect(screen.getByRole('heading', { name: 'Choose the photo to swap in Golden Hour' })).toBeTruthy();
     });
 
     test('texts name the no-slots line too', () => {
