@@ -195,8 +195,9 @@
                 ]
             }
         },
-        // The type-aware promise rules (via oxlint-tsgolint, over the tsconfig
-        // program) and the core rules that went with them.
+        // The type-aware promise rules (via tsrs-lint, the type backend Oxlint
+        // discovers from the installed tsrs package, over the tsconfig program)
+        // and the core rules that went with them.
         {
             "files": ["src/ts/**/*.ts", "src/ts/**/*.tsx"],
             "rules": {
