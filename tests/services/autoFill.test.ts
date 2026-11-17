@@ -2277,6 +2277,13 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
             submitToChallenge,
         });
         expect(result).toBe('skipped');
+        // Guard against vacuous passing: the run must reach the network and
+        // the fallback walk before the probe can stand down — a state-only
+        // stand-down ahead of the fetch would otherwise pass with the merge
+        // deleted.
+        const walkCalls = getEligiblePhotos.mock.calls.filter(([, , opts]) => !opts?.search);
+        expect(getEligiblePhotos).toHaveBeenCalled();
+        expect(walkCalls.length).toBeGreaterThan(0);
         expect(submitToChallenge).not.toHaveBeenCalled();
     });
 

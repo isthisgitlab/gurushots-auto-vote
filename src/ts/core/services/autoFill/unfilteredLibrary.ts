@@ -15,7 +15,7 @@ import type { RankDeps } from '../../types/autoFill';
 const hasEligible = (list: PickerPhoto[], excludeIds?: Set<string> | null) =>
     list.some((p) => p && p.permission && p.permission.allowed === true && p.id && !excludeIds?.has(String(p.id)));
 
-/** Dedupe a photo list by id, first occurrence winning. */
+/** Dedupe a photo list by raw id, first occurrence winning. */
 const dedupById = (photos: PickerPhoto[]): PickerPhoto[] => [
     ...new Map(photos.map((photo) => [photo.id, photo])).values(),
 ];
