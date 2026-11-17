@@ -28,13 +28,6 @@ updates:
       labels:
           - 'dependencies'
       groups:
-          # oxlint drives oxlint-tsgolint (its type-aware engine), so the two
-          # bump together in one PR; listed before the catch-all groups so this
-          # match wins.
-          oxlint-toolchain:
-              patterns:
-                  - 'oxlint'
-                  - 'oxlint-tsgolint'
           # Batch low-risk dev-dependency minor/patch bumps into one PR.
           dev-minor-patch:
               dependency-type: 'development'

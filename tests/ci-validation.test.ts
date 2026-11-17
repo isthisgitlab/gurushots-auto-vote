@@ -32,7 +32,7 @@ describe('CI Environment Validation', () => {
 
 describe('source language', () => {
     // The codebase is TypeScript end to end; a .js/.jsx/.mjs/.cjs file slips
-    // past tsc and the no-`any` lint rules. Tracked and untracked-but-not-ignored
+    // past the tsrs checker and the no-`any` lint rules. Tracked and untracked-but-not-ignored
     // files both count, so a new file fails locally before it is ever staged.
     test('the repository contains no JavaScript files', () => {
         const { execFileSync } = jest.requireActual<typeof import('node:child_process')>('node:child_process');
