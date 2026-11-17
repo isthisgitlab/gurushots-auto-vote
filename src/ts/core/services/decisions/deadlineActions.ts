@@ -105,6 +105,7 @@ const isVisibleDeadlineAction = ({
     fillInstant,
     challenge,
     challengeId,
+    now,
     boostRowHidden,
     turboRowHidden,
 }: {
@@ -113,6 +114,7 @@ const isVisibleDeadlineAction = ({
     fillInstant: number | null;
     challenge: Challenge;
     challengeId: string;
+    now: number;
     boostRowHidden: boolean;
     turboRowHidden: boolean;
 }): boolean => {
@@ -133,7 +135,7 @@ const isVisibleDeadlineAction = ({
             return !timerBoost || getEffectiveBoostTime(challengeId) > 0;
         }
         case 'emergencySubmit':
-            return !evaluateEmergencyFill(challenge, challenge?.id, settings).standDown;
+            return !evaluateEmergencyFill(challenge, challenge?.id, settings, now).standDown;
         /* istanbul ignore next */
         default:
             return false;
@@ -343,8 +345,8 @@ const describeConflicts = (
  *     while auto-fill is disabled).
  *   - emergencySubmit: its threshold is a fixed setting that never reflects live
  *     state, so defer to the runner's own evaluateEmergencyFill (no id, no free
- *     slot, or normal auto-fill already owning the fill). Shared code, not a
- *     copy, so the row cannot drift from what actually runs.
+ *     slot, or a caught-up auto-submit schedule that owns the fill). Shared
+ *     code, not a copy, so the row cannot drift from what actually runs.
  *   - a threshold of 0 / -Infinity means off/n-a (auto-fill satisfied,
  *     emergency-fill off, key-unlocked boost off) — always omitted.
  *
@@ -409,6 +411,7 @@ const describeDeadlineActions = (
                 fillInstant,
                 challenge,
                 challengeId,
+                now,
                 boostRowHidden,
                 turboRowHidden,
             }),

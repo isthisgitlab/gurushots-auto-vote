@@ -405,10 +405,18 @@ describe('describeDeadlineActions — row gating', () => {
     });
 
     test('no phantom emergency-fill row when normal auto-fill already owns the challenge', () => {
-        // The common configuration: auto-fill on, no must-include filter. The
-        // runner returns 'skipped' before any network call, so the row would be
-        // permanent noise on every challenge.
-        mockSettings({ autoSubmit: true, mustIncludeTags: [] });
+        // The common configuration, caught up: auto-fill on, no must-include
+        // filter, and the schedule's target met with a later row still ahead.
+        // The runner returns 'skipped' before any network call, so the row
+        // would be permanent noise on every challenge.
+        mockSettings({
+            autoSubmit: true,
+            mustIncludeTags: [],
+            autoSubmitSchedule: [
+                { count: 1, seconds: 900 },
+                { count: 2, seconds: 60 },
+            ],
+        });
         expect(actionsOf(build())).not.toContain('emergencySubmit');
     });
 
@@ -440,6 +448,21 @@ describe('describeDeadlineActions — row gating', () => {
         mockSettings({ autoSubmit: false });
         const full = build({ entries: [{ id: 'e1' }, { id: 'e2' }], maxSubmits: 2 });
         expect(actionsOf(full)).not.toContain('emergencySubmit');
+    });
+
+    test('emergency-fill row listed while the auto-submit schedule is BEHIND', () => {
+        // Default schedule wants 2 entries by T-15m; at T-100s only 1 exists —
+        // the schedule cannot catch up inside the window, so the row stays.
+        mockSettings({ autoSubmit: true });
+        expect(actionsOf(build())).toContain('emergencySubmit');
+    });
+
+    test('emergency-fill row listed when the schedule TOPS OUT with slots left', () => {
+        // Sole row targets 1 of a 2-slot challenge, entry in: caught up, but no
+        // later row will raise the target — the slot above the top is the
+        // emergency fill's, so the row stays.
+        mockSettings({ autoSubmit: true, autoSubmitSchedule: [{ count: 1, seconds: 900 }] });
+        expect(actionsOf(build())).toContain('emergencySubmit');
     });
 
     test('dueAt = close_time − thresholdSec', () => {
@@ -481,7 +504,10 @@ describe('describeDeadlineActions — Auto-Submit clock rows', () => {
     });
 
     test('puts an active clock-only submission before future Boost and Turbo timeline rows', () => {
-        mockSettings({ autoSubmitSchedule: [], autoSubmitTime: ['11:00'] });
+        // Emergency Submit off: with the clock window open the schedule is
+        // behind until the challenge is full, so its row would otherwise join
+        // the list — this test pins the ordering of the other three.
+        mockSettings({ autoSubmitSchedule: [], autoSubmitTime: ['11:00'], emergencySubmit: 0 });
         const challenge = build({
             boost: { state: 'AVAILABLE_KEY' },
             turbo: { state: 'WON', mode: 'classic' },

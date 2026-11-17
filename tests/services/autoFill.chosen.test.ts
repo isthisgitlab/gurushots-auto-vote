@@ -12,6 +12,7 @@ import type * as photoPickerModule from '../../src/ts/core/services/photoPicker'
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import type * as entryAgeStoreModule from '../../src/ts/core/entryAgeStore';
 import type { FillDeps, FillLogger, FillSettings, RankDeps } from '../../src/ts/core/types/autoFill';
+import type { FillSchedule } from '../../src/ts/core/services/scheduleRemap';
 import type { PickerPhoto, ScoredCandidate } from '../../src/ts/core/types/photoPicker';
 import { invalid } from '../helpers/invalid';
 
@@ -117,6 +118,7 @@ type SettingsSpec = {
     must?: string[];
     submitWithoutTagMatch?: boolean;
     emergencySubmit?: number;
+    schedule?: FillSchedule;
 };
 
 const makeSettings = ({
@@ -127,6 +129,11 @@ const makeSettings = ({
     must = [],
     submitWithoutTagMatch = true,
     emergencySubmit = 300,
+    schedule = [
+        { count: 2, seconds: 1800 },
+        { count: 3, seconds: 1200 },
+        { count: 4, seconds: 600 },
+    ],
 }: SettingsSpec = {}): jest.MockedObject<FillSettings> =>
     invalid({
         getEffectiveSetting: jest.fn((key: string) => {
@@ -134,11 +141,7 @@ const makeSettings = ({
                 case 'autoSubmit':
                     return autoSubmit;
                 case 'autoSubmitSchedule':
-                    return [
-                        { count: 2, seconds: 1800 },
-                        { count: 3, seconds: 1200 },
-                        { count: 4, seconds: 600 },
-                    ];
+                    return schedule;
                 case 'submitWithoutTagMatch':
                     return submitWithoutTagMatch;
                 case 'emergencySubmit':
@@ -1400,8 +1403,16 @@ describe('chosen photos in the order they were picked', () => {
 
     test('the stand-down probe goes by the same order', async () => {
         // Auto-fill on with Submit Only and a list: the probe asks what the staggered path would submit.
+        // The schedule's only row lands inside the emergency window (T-100s), so the
+        // challenge is caught up at T-200s and the probe — not the schedule — decides.
         const deps = makeDeps({
-            settings: { autoSubmit: true, chosen: ['theme-b'], inOrder: true, only: true },
+            settings: {
+                autoSubmit: true,
+                chosen: ['theme-b'],
+                inOrder: true,
+                only: true,
+                schedule: [{ count: 1, seconds: 100 }],
+            },
         });
         expect(await maybeEmergencyFillChallenge(makeChallenge({ entries: [], closeIn: 200 }), 'tok', NOW, deps)).toBe(
             'skipped',
@@ -1539,20 +1550,24 @@ describe('emergency fill', () => {
         expect(submittedIds(deps)).toEqual([['theme-d', 'theme-c', 'theme-a', 'theme-b']]);
     });
 
+    // On-schedule at T-200s: the schedule's only row lands inside the emergency
+    // window (T-100s), so the schedule is caught up and the probe decides — the
+    // state these probe tests exist for.
+    const caughtUp = { schedule: [{ count: 1, seconds: 100 }] };
     describe('the stand-down probe sees the chosen photos the way the staggered path would', () => {
         test('Only with nothing usable: staggered would skip, so emergency steps in', async () => {
-            const deps = makeDeps({ settings: { autoSubmit: true, chosen: ['car'], only: true } });
+            const deps = makeDeps({ settings: { autoSubmit: true, chosen: ['car'], only: true, ...caughtUp } });
             expect(await maybeEmergencyFillChallenge(emergencyChallenge(), 'tok', NOW, deps)).toBe('submitted');
         });
 
         test('Only with a usable chosen photo: staggered fills it, so emergency stands down', async () => {
-            const deps = makeDeps({ settings: { autoSubmit: true, chosen: ['theme-a'], only: true } });
+            const deps = makeDeps({ settings: { autoSubmit: true, chosen: ['theme-a'], only: true, ...caughtUp } });
             expect(await maybeEmergencyFillChallenge(emergencyChallenge(), 'tok', NOW, deps)).toBe('skipped');
             expect(deps.submitToChallenge).not.toHaveBeenCalled();
         });
 
         test('Only with every chosen photo entered: staggered would skip, so emergency steps in', async () => {
-            const deps = makeDeps({ settings: { autoSubmit: true, chosen: ['existing'], only: true } });
+            const deps = makeDeps({ settings: { autoSubmit: true, chosen: ['existing'], only: true, ...caughtUp } });
             expect(
                 await maybeEmergencyFillChallenge(
                     emergencyChallenge({ entries: [{ id: 'existing' }] }),
@@ -1581,7 +1596,7 @@ describe('emergency fill', () => {
                 },
                 label: 'autoSubmit',
             });
-            const standsDown = makeDeps({ settings: { autoSubmit: true, chosen: ['car'], only: true } });
+            const standsDown = makeDeps({ settings: { autoSubmit: true, chosen: ['car'], only: true, ...caughtUp } });
             expect(await maybeEmergencyFillChallenge(challenge, 'tok', NOW, standsDown)).toBe('skipped');
 
             // Not found, by contrast: emergency fill takes over.
@@ -1599,14 +1614,15 @@ describe('emergency fill', () => {
                 },
                 label: 'autoSubmit',
             });
-            const steps = makeDeps({ settings: { autoSubmit: true, chosen: ['car'], only: true } });
+            const steps = makeDeps({ settings: { autoSubmit: true, chosen: ['car'], only: true, ...caughtUp } });
             expect(await maybeEmergencyFillChallenge(challenge, 'tok', NOW, steps)).toBe('submitted');
         });
     });
 
     test('the deadline view and the runner agree on whether auto-fill owns the challenge', () => {
         const challenge = emergencyChallenge();
-        const verdict = (spec: SettingsSpec) => evaluateEmergencyFill(challenge, 'c1', makeSettings(spec)).standDown;
+        const verdict = (spec: SettingsSpec) =>
+            evaluateEmergencyFill(challenge, 'c1', makeSettings({ ...caughtUp, ...spec }), NOW).standDown;
         expect(verdict({ autoSubmit: true })).toBe(true);
         expect(verdict({ autoSubmit: true, chosen: ['car'], only: false })).toBe(true);
         expect(verdict({ autoSubmit: true, chosen: [], only: true })).toBe(true);
@@ -1614,8 +1630,8 @@ describe('emergency fill', () => {
         expect(verdict({ autoSubmit: true, chosen: 'not-a-list', only: true })).toBe(true);
         // Auto-fill off, or a must-include filter: already "may fill" without reading them.
         const read = (spec: SettingsSpec) => {
-            const settings = makeSettings(spec);
-            evaluateEmergencyFill(challenge, 'c1', settings);
+            const settings = makeSettings({ ...caughtUp, ...spec });
+            evaluateEmergencyFill(challenge, 'c1', settings, NOW);
             return settings.getEffectiveSetting.mock.calls.map((call) => call[0]);
         };
         expect(read({ autoSubmit: false, chosen: ['car'], only: true })).not.toContain('chosenPhotos');

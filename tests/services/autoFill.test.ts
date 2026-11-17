@@ -297,6 +297,8 @@ const makeSettings = ({
     autoSubmitTime = [],
     autoSubmitWindowMinutes = 60,
     timezone = 'UTC',
+    chosenPhotos = [],
+    chosenPhotosOnly = false,
 }: {
     autoSubmit?: boolean;
     schedule?: FillSchedule;
@@ -309,6 +311,8 @@ const makeSettings = ({
     autoSubmitTime?: string[];
     autoSubmitWindowMinutes?: number;
     timezone?: string;
+    chosenPhotos?: unknown[];
+    chosenPhotosOnly?: boolean;
 } = {}): jest.MockedObject<FillSettings> =>
     invalid({
         getEffectiveSetting: jest.fn((key: string) => {
@@ -321,6 +325,8 @@ const makeSettings = ({
             if (key === 'manualPhotosOnly') return manualPhotosOnly;
             if (key === 'autoSubmitTime') return autoSubmitTime;
             if (key === 'autoSubmitWindowMinutes') return autoSubmitWindowMinutes;
+            if (key === 'chosenPhotos') return chosenPhotos;
+            if (key === 'chosenPhotosOnly') return chosenPhotosOnly;
             return null;
         }),
         // Title-aware tag resolver. The default stub carries no title rules, so it
@@ -1822,35 +1828,139 @@ describe('evaluateEmergencyFill — the state-only stand-downs, shared with the 
     // notification) on it. Testing it directly is what keeps those two honest.
     const full = () => makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }, { id: 'e2' }] });
     const open = () => makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }] });
+    // On-schedule with a slot still free: the first row (target 1) is satisfied
+    // at NOW, the second (target 2, T-120s) is still to come — the caught-up
+    // state whose stand-down this gate owns.
+    const CAUGHT_UP_SCHEDULE = [
+        { count: 1, seconds: 1800 },
+        { count: 2, seconds: 120 },
+    ];
 
     test('stands down when there is no free slot left', () => {
-        expect(evaluateEmergencyFill(full(), 'c1', makeSettings({ autoSubmit: false })).standDown).toBe(true);
+        expect(evaluateEmergencyFill(full(), 'c1', makeSettings({ autoSubmit: false }), NOW).standDown).toBe(true);
     });
 
     test('acts when a slot is free and auto-fill is off', () => {
-        expect(evaluateEmergencyFill(open(), 'c1', makeSettings({ autoSubmit: false })).standDown).toBe(false);
+        expect(evaluateEmergencyFill(open(), 'c1', makeSettings({ autoSubmit: false }), NOW).standDown).toBe(false);
     });
 
-    test('stands down when auto-fill is on with no must-include filter', () => {
+    test('stands down when auto-fill is on with no must-include filter and the schedule is caught up', () => {
         // The common configuration — the staggered path owns the fill.
-        expect(evaluateEmergencyFill(open(), 'c1', makeSettings({ autoSubmit: true })).standDown).toBe(true);
+        const gate = evaluateEmergencyFill(
+            open(),
+            'c1',
+            makeSettings({ autoSubmit: true, schedule: CAUGHT_UP_SCHEDULE }),
+            NOW,
+        );
+        expect(gate.standDown).toBe(true);
+        expect(gate.probeApplies).toBe(true);
+    });
+
+    test('acts when auto-fill is on with no filter and the schedule is BEHIND (entries below target)', () => {
+        // The app slept through cycles: the default schedule wants 2 entries by
+        // T-10m and only 1 exists, so one pick per cycle cannot catch up inside
+        // the window — the batch fills, and the probe must not decide.
+        const gate = evaluateEmergencyFill(open(), 'c1', makeSettings({ autoSubmit: true }), NOW);
+        expect(gate.standDown).toBe(false);
+        expect(gate.probeApplies).toBe(false);
+    });
+
+    test('acts when the schedule tops out below what the challenge allows with slots left', () => {
+        // Sole row targets 2 of a 4-slot challenge and both entries are in: the
+        // schedule is caught up but no later row will ever raise the target, so
+        // the slots above it belong to emergency fill.
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }, { id: 'e2' }] });
+        const gate = evaluateEmergencyFill(
+            challenge,
+            'c1',
+            makeSettings({ autoSubmit: true, schedule: [{ count: 2, seconds: 1800 }] }),
+            NOW,
+        );
+        expect(gate.standDown).toBe(false);
+        expect(gate.probeApplies).toBe(false);
+    });
+
+    test('stands down on an empty schedule with no clock window (the deliberate opt-out)', () => {
+        // No schedule and no clock: desired is 0, so the challenge is neither
+        // behind nor topped out — the opt-out falls out of the two conditions
+        // with no special branch.
+        const gate = evaluateEmergencyFill(open(), 'c1', makeSettings({ autoSubmit: true, schedule: [] }), NOW);
+        expect(gate.standDown).toBe(true);
+    });
+
+    test('counts an active clock-window target in desired', () => {
+        // 1_000_000 s epoch is 13:46:40 UTC; the 13:46 window (60 min) is open,
+        // so the clock demands every slot regardless of the empty schedule.
+        // This is also the state where desired (max) exceeds the schedule's own
+        // ceiling (maxTarget 0): the challenge stays behind until it is full,
+        // so it must act, never stand down.
+        const settings = makeSettings({ autoSubmit: true, schedule: [], autoSubmitTime: ['13:46'] });
+        const gate = evaluateEmergencyFill(open(), 'c1', settings, NOW);
+        expect(gate.standDown).toBe(false);
+        expect(gate.probeApplies).toBe(false);
+    });
+
+    test('stands down when a FUTURE clock window will still claim the slots', () => {
+        // The schedule is met at its ceiling (2 of a 4-slot challenge) and the
+        // 20:00 UTC clock window (next start NOW + 22 400 s) has not opened yet
+        // — but it opens before the challenge closes (T-25 000 s), so it will
+        // raise the demand then. The window owns those slots: stand down. Pins
+        // the nextClockStart >= close_time clause with a non-null start BELOW
+        // the close time (the opposite of the active-window case above).
+        const settings = makeSettings({
+            autoSubmit: true,
+            schedule: [{ count: 2, seconds: 86_400 }],
+            autoSubmitTime: ['20:00'],
+        });
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }, { id: 'e2' }], closeIn: 25_000 });
+        const gate = evaluateEmergencyFill(challenge, 'c1', settings, NOW);
+        expect(gate.standDown).toBe(true);
+        expect(gate.probeApplies).toBe(true);
+    });
+
+    test('acts when a LATER clock window never arrives before the close: topped out through the clock clause', () => {
+        // Same top-out shape as the warning, but with a clock window configured:
+        // the 20:00 UTC window's next start is NOW + 22 400 s, AFTER the close
+        // (T-20 000 s), so it can never raise the demand. The schedule tops out
+        // at 2 of a 4-slot challenge with both entries in — the 2 slots above
+        // the top are the emergency fill's. Pins the nextClockStart >=
+        // close_time clause's TRUE arm (the future-window test above pins the
+        // false arm; nulling the clause must fail this test).
+        const settings = makeSettings({
+            autoSubmit: true,
+            schedule: [{ count: 2, seconds: 86_400 }],
+            autoSubmitTime: ['20:00'],
+        });
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }, { id: 'e2' }], closeIn: 20_000 });
+        const gate = evaluateEmergencyFill(challenge, 'c1', settings, NOW);
+        expect(gate.standDown).toBe(false);
+        expect(gate.probeApplies).toBe(false);
     });
 
     test('acts when auto-fill is on but a must-include filter is set', () => {
         const settings = makeSettings({ autoSubmit: true, mustIncludeTags: ['sunset'] });
-        expect(evaluateEmergencyFill(open(), 'c1', settings).standDown).toBe(false);
+        expect(evaluateEmergencyFill(open(), 'c1', settings, NOW).standDown).toBe(false);
     });
 
     test('a non-array truthy mustIncludeTags counts as no filter (corrupt settings blob)', () => {
         // Settings are read back without zod re-validation, so a corrupted value
         // must not be mistaken for an active filter and re-enable the feature.
-        const settings = makeSettings({ autoSubmit: true, mustIncludeTags: invalid('sunset') });
-        expect(evaluateEmergencyFill(open(), 'c1', settings).standDown).toBe(true);
+        const settings = makeSettings({
+            autoSubmit: true,
+            mustIncludeTags: invalid('sunset'),
+            schedule: CAUGHT_UP_SCHEDULE,
+        });
+        expect(evaluateEmergencyFill(open(), 'c1', settings, NOW).standDown).toBe(true);
     });
 
     test('an empty-array mustIncludeTags counts as no filter', () => {
         expect(
-            evaluateEmergencyFill(open(), 'c1', makeSettings({ autoSubmit: true, mustIncludeTags: [] })).standDown,
+            evaluateEmergencyFill(
+                open(),
+                'c1',
+                makeSettings({ autoSubmit: true, mustIncludeTags: [], schedule: CAUGHT_UP_SCHEDULE }),
+                NOW,
+            ).standDown,
         ).toBe(true);
     });
 
@@ -1861,7 +1971,9 @@ describe('evaluateEmergencyFill — the state-only stand-downs, shared with the 
         // Exactly the runner's own guard, so the view must not advertise a fill
         // the runner would refuse outright. describeDeadlineActions therefore
         // passes the RAW id rather than its ''-normalised one.
-        expect(evaluateEmergencyFill(open(), challengeId, makeSettings({ autoSubmit: false })).standDown).toBe(true);
+        expect(evaluateEmergencyFill(open(), challengeId, makeSettings({ autoSubmit: false }), NOW).standDown).toBe(
+            true,
+        );
     });
 
     test.each([
@@ -1871,33 +1983,55 @@ describe('evaluateEmergencyFill — the state-only stand-downs, shared with the 
         // The guard names undefined/null explicitly rather than testing
         // falsiness, matching maybeEmergencyFillChallenge — widening it to ''
         // would silently stop the runner filling such a challenge.
-        expect(evaluateEmergencyFill(open(), challengeId, makeSettings({ autoSubmit: false })).standDown).toBe(false);
+        expect(evaluateEmergencyFill(open(), challengeId, makeSettings({ autoSubmit: false }), NOW).standDown).toBe(
+            false,
+        );
     });
 
     test('hands back the settings it resolved so the runner need not re-read them', () => {
         // Every getEffectiveSetting is an uncached readFileSync + merge; the
         // runner reuses these instead of paying for them twice near a deadline.
-        const settings = makeSettings({ autoSubmit: true, mustIncludeTags: ['sunset'] });
-        const gate = evaluateEmergencyFill(open(), 'c1', settings);
-        expect(gate).toEqual({ standDown: false, autoSubmitEnabled: true, mustIncludeTags: ['sunset'] });
-        // Manual Only and autoSubmit: nothing else is read.
-        expect(settings.getEffectiveSetting).toHaveBeenCalledTimes(2);
+        const settings = makeSettings({ autoSubmit: true, mustIncludeTags: ['sunset'], schedule: CAUGHT_UP_SCHEDULE });
+        const gate = evaluateEmergencyFill(open(), 'c1', settings, NOW);
+        expect(gate).toEqual({
+            standDown: false,
+            autoSubmitEnabled: true,
+            mustIncludeTags: ['sunset'],
+            probeApplies: true,
+            desired: 1,
+            scheduleCatchUp: false,
+        });
+        // Manual Only, autoSubmit, and the schedule + clock window inside the
+        // one trigger read: exactly the reads the verdict needs — the must
+        // filter short-circuits the chosen list, so it is never read, and the
+        // schedule is not read twice for the top-out ceiling.
+        expect(settings.getEffectiveSetting).toHaveBeenCalledTimes(4);
         expect(settings.getEffectiveTagSetting).toHaveBeenCalledTimes(1);
+    });
+
+    test('skips the schedule reads while auto-fill is off', () => {
+        const settings = makeSettings({ autoSubmit: false });
+        evaluateEmergencyFill(open(), 'c1', settings, NOW);
+        const keys = settings.getEffectiveSetting.mock.calls.map((call) => call[0]);
+        expect(keys).not.toContain('autoSubmitSchedule');
     });
 
     test('stands down while Manual Only is on, however auto-fill is set', () => {
         const settings = makeSettings({ autoSubmit: false, manualPhotosOnly: true });
-        expect(evaluateEmergencyFill(open(), 'c1', settings)).toEqual({
+        expect(evaluateEmergencyFill(open(), 'c1', settings, NOW)).toEqual({
             standDown: true,
             autoSubmitEnabled: false,
             mustIncludeTags: null,
+            probeApplies: false,
+            desired: 0,
+            scheduleCatchUp: false,
         });
         expect(settings.getEffectiveTagSetting).not.toHaveBeenCalled();
     });
 
     test('reads no settings at all when it can decide from state alone', () => {
         const settings = makeSettings({ autoSubmit: false });
-        expect(evaluateEmergencyFill(full(), 'c1', settings).standDown).toBe(true);
+        expect(evaluateEmergencyFill(full(), 'c1', settings, NOW).standDown).toBe(true);
         expect(settings.getEffectiveSetting).not.toHaveBeenCalled();
         expect(settings.getEffectiveTagSetting).not.toHaveBeenCalled();
     });
@@ -1907,13 +2041,13 @@ describe('evaluateEmergencyFill — the state-only stand-downs, shared with the 
         // toward showing the row ("may fill") rather than hiding a fill that the
         // runner's own photo probe is the real authority on.
         const settings = makeSettings({ autoSubmit: true, mustIncludeTags: [''] });
-        expect(evaluateEmergencyFill(open(), 'c1', settings).standDown).toBe(false);
+        expect(evaluateEmergencyFill(open(), 'c1', settings, NOW).standDown).toBe(false);
     });
 
     test('reads the must-include list with the challenge OBJECT so title rules apply', () => {
-        const settings = makeSettings({ autoSubmit: true });
+        const settings = makeSettings({ autoSubmit: true, schedule: CAUGHT_UP_SCHEDULE });
         const challenge = open();
-        evaluateEmergencyFill(challenge, 'c1', settings);
+        evaluateEmergencyFill(challenge, 'c1', settings, NOW);
         expect(settings.getEffectiveTagSetting).toHaveBeenCalledWith('mustIncludeTags', challenge);
     });
 
@@ -1925,7 +2059,33 @@ describe('evaluateEmergencyFill — the state-only stand-downs, shared with the 
         // ('no phantom emergency-fill row when every slot is already full').
         const malformed = invalid<Challenge>({ id: 'c1', close_time: 1_000_000 + 600 });
         expect(getSlotsRemaining(malformed)).toBe(0);
-        expect(evaluateEmergencyFill(malformed, 'c1', makeSettings({ autoSubmit: false })).standDown).toBe(true);
+        expect(evaluateEmergencyFill(malformed, 'c1', makeSettings({ autoSubmit: false }), NOW).standDown).toBe(true);
+    });
+
+    test('a challenge with an unreadable close time follows the caught-up path without throwing', () => {
+        // The relative target needs a finite close time; without one desired is
+        // 0, so the challenge is caught up — stand down, and no NaN may leak
+        // into the verdict.
+        const malformed = invalid<Challenge>({
+            id: 'c1',
+            close_time: Number.NaN,
+            max_photo_submits: 2,
+            member: { ranking: { entries: [{ id: 'e1' }] } },
+        });
+        const gate = evaluateEmergencyFill(
+            malformed,
+            'c1',
+            makeSettings({ autoSubmit: true, schedule: CAUGHT_UP_SCHEDULE }),
+            NOW,
+        );
+        expect(gate).toEqual({
+            standDown: true,
+            autoSubmitEnabled: true,
+            mustIncludeTags: [],
+            probeApplies: true,
+            desired: 0,
+            scheduleCatchUp: false,
+        });
     });
 });
 
@@ -2076,6 +2236,9 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
     });
 
     test('auto-fill ON, must tags set with no match and fallback off: relaxes filter and submits', async () => {
+        // On-schedule (sole due row already satisfied, a later row to come), so
+        // the probe decides — and with no matching photo it lets the batch
+        // relax the filter rather than leave the slot empty.
         const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 3 * 60 });
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
@@ -2084,6 +2247,10 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
                 emergencySubmit: 300,
                 mustIncludeTags: ['sunset'],
                 submitWithoutTagMatch: false,
+                schedule: [
+                    { count: 1, seconds: 1800 },
+                    { count: 2, seconds: 120 },
+                ],
             }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1', ['Cat'])]),
@@ -2095,13 +2262,20 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
     });
 
     test('auto-fill ON, tags match: stands down so it never double-fills', async () => {
-        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
+        // On-schedule (the sole due row is satisfied at T-3m, the T-2m row still
+        // to come), so the staggered path owns the challenge and the probe sees
+        // a matching photo it can still pick.
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }], closeIn: 3 * 60 });
         const submitToChallenge = jest.fn();
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({
                 autoSubmit: true,
                 emergencySubmit: 300,
                 mustIncludeTags: ['sunset'],
+                schedule: [
+                    { count: 1, seconds: 1800 },
+                    { count: 4, seconds: 120 },
+                ],
             }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1', ['Sunset'])]),
@@ -2111,25 +2285,170 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         expect(submitToChallenge).not.toHaveBeenCalled();
     });
 
-    test('auto-fill ON, no tag filter: stands down without fetching photos', async () => {
-        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
+    test('auto-fill ON, no tag filter: stands down without fetching photos while the schedule is caught up', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }], closeIn: 3 * 60 });
         const getEligiblePhotos = jest.fn();
         const submitToChallenge = jest.fn();
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoSubmit: true, emergencySubmit: 300 }),
+            settings: makeSettings({
+                autoSubmit: true,
+                emergencySubmit: 300,
+                schedule: [
+                    { count: 1, seconds: 1800 },
+                    { count: 4, seconds: 120 },
+                ],
+            }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge,
         });
         expect(result).toBe('skipped');
-        // Common config: normal auto-fill owns it, so emergency fill must not
-        // burn an API call fetching eligible photos it would only discard.
+        // Common config, caught up: normal auto-fill owns it, so emergency fill
+        // must not burn an API call fetching eligible photos it would only discard.
         expect(getEligiblePhotos).not.toHaveBeenCalled();
         expect(submitToChallenge).not.toHaveBeenCalled();
     });
 
-    test('auto-fill ON, must tags set but submitWithoutTagMatch on: stands down (staggered path has a fallback)', async () => {
+    test('auto-fill ON, no filter, schedule BEHIND inside the window: one batch fills every slot, no probe', async () => {
+        // The user's scenario: the renderer was throttled through its staggered
+        // submits, so the schedule wants 4 entries by T-3m and none exist. The
+        // eligible pool holds an on-theme photo the staggered path could still
+        // pick — a probe that consulted it would stand down — yet the batch
+        // fills directly: behind schedule, the probe never applies.
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
+        const logger = makeLogger();
+        const submitToChallenge = jest
+            .fn<ReturnType<SubmitToChallenge>, Parameters<SubmitToChallenge>>()
+            .mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoSubmit: true, emergencySubmit: 300 }),
+            logger,
+            getEligiblePhotos: jest
+                .fn()
+                .mockResolvedValue([
+                    allowedPhoto('p1', ['Pink']),
+                    allowedPhoto('p2', ['Misc']),
+                    allowedPhoto('p3', ['Misc']),
+                    allowedPhoto('p4', ['Misc']),
+                ]),
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+        expect(submitToChallenge).toHaveBeenCalledTimes(1);
+        expect(submitToChallenge.mock.calls[0][1]).toHaveLength(4);
+        // The shortfall the batch cleared is named in the success log.
+        const successes = logger.withCategory.mock.results.flatMap(({ value }) =>
+            (value as jest.MockedObject<CategoryLogger>).success.mock.calls.map(([m]) => m),
+        );
+        expect(successes).toEqual([expect.stringContaining('(0 of 4 target entries in)')]);
+    });
+
+    test('auto-fill ON, must tags set, schedule BEHIND inside the window: fills directly, no probe', async () => {
+        // Behind schedule the probe never applies, filter or not: the eligible
+        // pool holds must-tag matches the probe would pick (standing down), yet
+        // the batch fills every slot — one pick per cycle cannot clear the
+        // shortfall. (The must filter stays hard within the batch, so the pool
+        // is all-matching: the picker only relaxes when nothing matches.)
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
+        const logger = makeLogger();
+        const submitToChallenge = jest
+            .fn<ReturnType<SubmitToChallenge>, Parameters<SubmitToChallenge>>()
+            .mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoSubmit: true, emergencySubmit: 300, mustIncludeTags: ['pink'] }),
+            logger,
+            getEligiblePhotos: jest
+                .fn()
+                .mockResolvedValue([
+                    allowedPhoto('m1', ['Pink']),
+                    allowedPhoto('m2', ['Pink']),
+                    allowedPhoto('m3', ['Pink']),
+                    allowedPhoto('m4', ['Pink']),
+                ]),
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+        expect(submitToChallenge).toHaveBeenCalledTimes(1);
+        expect(submitToChallenge.mock.calls[0][1]).toHaveLength(4);
+        // The filter path keeps the plain wording: no shortfall note.
+        const successes = logger.withCategory.mock.results.flatMap(({ value }) =>
+            (value as jest.MockedObject<CategoryLogger>).success.mock.calls.map(([m]) => m),
+        );
+        expect(successes).toEqual([expect.stringContaining('near deadline')]);
+        expect(successes[0]).not.toContain('target entries in');
+    });
+
+    test('auto-fill ON, Submit Only Chosen with a list, schedule BEHIND inside the window: fills directly, no probe', async () => {
+        // Same bypass for the chosen-only filter: the list has a usable photo
+        // the probe would submit (standing down), but behind schedule the batch
+        // fills every slot and ranks the chosen photo first.
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
+        const logger = makeLogger();
+        const submitToChallenge = jest
+            .fn<ReturnType<SubmitToChallenge>, Parameters<SubmitToChallenge>>()
+            .mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({
+                autoSubmit: true,
+                emergencySubmit: 300,
+                chosenPhotos: ['p1'],
+                chosenPhotosOnly: true,
+            }),
+            logger,
+            getEligiblePhotos: jest
+                .fn()
+                .mockResolvedValue([allowedPhoto('p1'), allowedPhoto('p2'), allowedPhoto('p3'), allowedPhoto('p4')]),
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+        expect(submitToChallenge).toHaveBeenCalledTimes(1);
+        expect(submitToChallenge.mock.calls[0][1]).toHaveLength(4);
+    });
+
+    test('auto-fill ON, schedule TOPPED OUT with entries at target inside the window: fills the slots above the top', async () => {
+        // Sole row targets 2 of a 4-slot challenge and both entries are in: the
+        // schedule can never demand more, so the 2 remaining slots belong to
+        // emergency fill — submitted in one batch, without the probe.
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }, { id: 'e2' }], closeIn: 3 * 60 });
+        const logger = makeLogger();
+        const submitToChallenge = jest
+            .fn<ReturnType<SubmitToChallenge>, Parameters<SubmitToChallenge>>()
+            .mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({
+                autoSubmit: true,
+                emergencySubmit: 300,
+                schedule: [{ count: 2, seconds: 1800 }],
+            }),
+            logger,
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p3'), allowedPhoto('p4')]),
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+        expect(submitToChallenge).toHaveBeenCalledTimes(1);
+        expect(submitToChallenge.mock.calls[0][1]).toHaveLength(2);
+        // Caught up but topped out: the note names the met target, not a shortfall.
+        const successes = logger.withCategory.mock.results.flatMap(({ value }) =>
+            (value as jest.MockedObject<CategoryLogger>).success.mock.calls.map(([m]) => m),
+        );
+        expect(successes).toEqual([expect.stringContaining('(2 of 2 target entries in)')]);
+    });
+
+    test('auto-fill ON, no filter, schedule behind but OUTSIDE the window: skipped', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 30 * 60 });
+        const getEligiblePhotos = jest.fn();
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoSubmit: true, emergencySubmit: 300 }),
+            logger: makeLogger(),
+            getEligiblePhotos,
+            submitToChallenge: jest.fn(),
+        });
+        expect(result).toBe('skipped');
+        expect(getEligiblePhotos).not.toHaveBeenCalled();
+    });
+
+    test('auto-fill ON, must tags set but submitWithoutTagMatch on: stands down (staggered path has a fallback)', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }], closeIn: 3 * 60 });
         const submitToChallenge = jest.fn();
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({
@@ -2138,6 +2457,10 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
                 mustIncludeTags: ['sunset'],
                 // submitWithoutTagMatch defaults true → the picker relaxes, so the
                 // normal staggered path can still fill the slot. Emergency stands down.
+                schedule: [
+                    { count: 1, seconds: 1800 },
+                    { count: 4, seconds: 120 },
+                ],
             }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1', ['Cat'])]),
@@ -3419,6 +3742,8 @@ describe('letter challenges ("Begins With L") — tag-based fill, end to end', (
         // autoSubmit on + no C-labelled photo: the probe's pick relaxes internally
         // and returns a photo, so emergency fill stands down ('skipped'). A probe
         // never submits, so it must never warn about an off-theme submission.
+        // On-schedule (the second row lands at T-60s, after this instant), so the
+        // probe — not a behind-schedule batch — decides.
         const challenge = makeChallenge({
             title: 'C is for…',
             url: '',
@@ -3429,7 +3754,14 @@ describe('letter challenges ("Begins With L") — tag-based fill, end to end', (
         const getEligiblePhotos = jest.fn().mockResolvedValue([allowedPhoto('dog', ['Dog'], 9000)]);
         const submitToChallenge = jest.fn();
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoSubmit: true, emergencySubmit: 300 }),
+            settings: makeSettings({
+                autoSubmit: true,
+                emergencySubmit: 300,
+                schedule: [
+                    { count: 1, seconds: 1800 },
+                    { count: 2, seconds: 60 },
+                ],
+            }),
             logger,
             getEligiblePhotos,
             submitToChallenge,
@@ -4485,7 +4817,17 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         });
 
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoSubmit: true, mustIncludeTags: ['boy'] }),
+            settings: makeSettings({
+                autoSubmit: true,
+                mustIncludeTags: ['boy'],
+                // On-schedule (the sole due row is already satisfied; the next
+                // row lands after this instant), so the probe — not a
+                // behind-schedule batch — decides.
+                schedule: [
+                    { count: 1, seconds: 1800 },
+                    { count: 4, seconds: 30 },
+                ],
+            }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([libraryPhoto('soccer', 1203, 9000)]),
             getImageData,

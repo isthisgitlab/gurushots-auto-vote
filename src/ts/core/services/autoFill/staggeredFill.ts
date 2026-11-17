@@ -4,6 +4,8 @@
  */
 
 import { getScheduleShift } from '../scheduleRemap';
+
+import type { FillSchedule } from '../scheduleRemap';
 import { resolveScheduleTarget } from './schedule';
 import { getEntries, getSlotsRemaining, reflectNewEntry, refreshChallengeState } from './challengeState';
 import { runFillAttempt } from './pipeline';
@@ -14,12 +16,14 @@ import { getAutoSubmitClockWindowState } from '../../scheduling/autoSubmitWindow
 import { isCancelled } from '../../voting/cancellation';
 
 import type { Challenge } from '../../types/gurushots';
-import type { SettingsFillDeps } from '../../types/autoFill';
+import type { FillSettings, SettingsFillDeps } from '../../types/autoFill';
 
 type AutoSubmitTrigger = {
     relativeTarget: number;
     clockTarget: number;
     desired: number;
+    /** The effective autoSubmitSchedule read for the targets; callers reuse it instead of re-reading. */
+    schedule: FillSchedule;
     activeClockTimes: string[];
     nextClockStart: number | null;
     timezone: string;
@@ -33,33 +37,41 @@ type FinalAuthorization = {
     slotsRemaining: number;
 };
 
+/**
+ * What the schedule and any active clock window demand for the challenge at
+ * `now`: `desired` is the higher of the two targets, so both the staggered
+ * fill and the emergency fill's schedule-progress check read one number.
+ * Reads only `settings` (not the whole deps) so callers that hold the facade
+ * directly can reuse it.
+ */
 const resolveAutoSubmitTrigger = (
     challenge: Challenge,
     challengeId: string,
     now: number,
-    deps: SettingsFillDeps,
+    settings: FillSettings,
 ): AutoSubmitTrigger => {
-    const schedule = deps.settings.getEffectiveSetting('autoSubmitSchedule', challengeId);
+    const schedule = settings.getEffectiveSetting('autoSubmitSchedule', challengeId);
     const closeTime = Number(challenge.close_time);
     const relativeTarget =
         Array.isArray(schedule) && Number.isFinite(closeTime)
             ? resolveScheduleTarget(schedule, closeTime - now, challenge.max_photo_submits)
             : 0;
-    const clockTimes = deps.settings.getEffectiveSetting('autoSubmitTime', challengeId);
+    const clockTimes = settings.getEffectiveSetting('autoSubmitTime', challengeId);
     if (!Array.isArray(clockTimes) || clockTimes.length === 0) {
         return {
             relativeTarget,
             clockTarget: 0,
             desired: relativeTarget,
+            schedule,
             activeClockTimes: [],
             nextClockStart: null,
             timezone: 'UTC',
         };
     }
-    const timezone = effectiveTimezone(deps.settings.getSetting?.('timezone'));
+    const timezone = effectiveTimezone(settings.getSetting?.('timezone'));
     const clockState = getAutoSubmitClockWindowState(
         clockTimes,
-        deps.settings.getEffectiveSetting('autoSubmitWindowMinutes', challengeId),
+        settings.getEffectiveSetting('autoSubmitWindowMinutes', challengeId),
         timezone,
         now,
     );
@@ -68,6 +80,7 @@ const resolveAutoSubmitTrigger = (
         relativeTarget,
         clockTarget,
         desired: Math.max(relativeTarget, clockTarget),
+        schedule,
         activeClockTimes: clockState.activeTimes,
         nextClockStart: clockState.nextStart,
         timezone,
@@ -95,7 +108,7 @@ const createFinalEligibility =
         ) {
             return { standDown: true };
         }
-        const current = resolveAutoSubmitTrigger(challenge, challengeId, finalNow, deps);
+        const current = resolveAutoSubmitTrigger(challenge, challengeId, finalNow, deps.settings);
         const entryCount = getEntries(challenge).length;
         const enteredIds = new Set(
             getEntries(challenge)
@@ -197,10 +210,11 @@ const resolveAutoSubmitDue = (challenge: Challenge, now: number, deps: SettingsF
     const slotsRemaining = getSlotsRemaining(challenge);
     if (slotsRemaining <= 0) return { due: false, status: 'skipped' };
 
-    const schedule = settings.getEffectiveSetting('autoSubmitSchedule', String(challengeId));
     // Distinct from 'disabled' (toggle off): the toggle is on but there is no
     // schedule to act on — a deliberate opt-out state the GUI editor warns about.
-    const trigger = resolveAutoSubmitTrigger(challenge, String(challengeId), now, deps);
+    // The trigger carries the schedule it read, so nothing here re-reads it.
+    const trigger = resolveAutoSubmitTrigger(challenge, String(challengeId), now, settings);
+    const { schedule } = trigger;
     if ((!Array.isArray(schedule) || schedule.length === 0) && trigger.clockTarget === 0) {
         return { due: false, status: 'no-schedule' };
     }
@@ -280,7 +294,7 @@ const maybeAutoFillChallenge = async (
         onRefreshed: () => {
             slotsRemaining = getSlotsRemaining(challenge);
             const entryCount = getEntries(challenge).length;
-            const refreshedTrigger = resolveAutoSubmitTrigger(challenge, String(challengeId), now, deps);
+            const refreshedTrigger = resolveAutoSubmitTrigger(challenge, String(challengeId), now, deps.settings);
             if (slotsRemaining <= 0 || entryCount >= refreshedTrigger.desired) {
                 logger
                     .withCategory('autoSubmit')
@@ -320,4 +334,4 @@ const maybeAutoFillChallenge = async (
     return 'submitted';
 };
 
-export { maybeAutoFillChallenge, resolveAutoSubmitDue, createFinalEligibility };
+export { maybeAutoFillChallenge, resolveAutoSubmitDue, createFinalEligibility, resolveAutoSubmitTrigger };
