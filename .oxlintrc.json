@@ -25,7 +25,7 @@
         "node": true,
         "es2024": true
     },
-    // Type-only declaration files carry no code to lint; tsc checks them.
+    // Type-only declaration files carry no code to lint; the type checker checks them.
     "ignorePatterns": ["src/ts/core/types/**"],
     // eslint:recommended (Oxlint lacks only no-dupe-args and no-octal, both
     // syntax errors in the strict src/ts modules), plus: logging goes through
@@ -117,7 +117,7 @@
                 "no-console": "off"
             }
         },
-        // TypeScript resolves every identifier in the strict tsc programs, type
+        // TypeScript resolves every identifier in the strict type-checked programs, type
         // queries such as `typeof ServiceWorkerContainer` included, which
         // no-undef cannot see; the compiler's check replaces it.
         {

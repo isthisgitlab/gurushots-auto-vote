@@ -170,7 +170,7 @@ const _sanitizeRuleClassConditions = (rule: RuleLike): ClassConditions | null =>
 // first title, else its tag or type, else its close times (only strict
 // 'HH:MM' values, so renderer input never reaches the log), else a generic
 // marker (a photo-count/runtime-only rule has no name). `name` is a required
-// parameter so tsc finds every caller: the notes built outside the sanitizer
+// parameter so the type checker finds every caller: the notes built outside the sanitizer
 // (titleRules.ts) must pass the stored rule's sanitized name.
 const ruleLogLabel = (rule: RuleLike, title: string | undefined, name: unknown): string => {
     const closeTimes = normalizeRuleCloseTimes(rule);

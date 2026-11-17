@@ -280,7 +280,7 @@ jobs:
               with:
                   turbo-cache-scope: typecheck
 
-            # Strict type-check of the src/ts TypeScript with the native tsc (checker only, noEmit).
+            # Strict type-check of the src/ts TypeScript with tsrs (checker only, noEmit).
             # Lint, including the type-aware promise rules, runs in `pnpm lint`.
             - name: Type-check
               if: env.RUN_FULL_CHECKS == 'true'
