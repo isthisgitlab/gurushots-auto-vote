@@ -95,7 +95,7 @@
         "test:watch": "jest --watch",
         "typecheck": "pnpm run turbo run validate:typecheck",
         "turbo": "node --import tsx scripts/run-turbo.ts",
-        "validate:lint": "oxlint src scripts tests",
+        "validate:lint": "oxlint --type-aware --type-check src scripts tests",
         "validate:typecheck": "tsrs --noEmit && tsrs --noEmit -p tests",
         "validate:knip": "knip",
         "validate:test": "jest --runInBand",
