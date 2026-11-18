@@ -87,6 +87,15 @@ const BANKROLL_FIELDS: Record<string, keyof Bankroll> = {
 };
 
 /**
+ * A currency amount as the payload sends it: a finite number, or a non-empty numeric string; anything else is
+ * unreadable (null), never zero.
+ */
+const bankrollAmount = (raw: unknown): number | null => {
+    const amount = typeof raw === 'number' ? raw : typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : NaN;
+    return Number.isFinite(amount) ? amount : null;
+};
+
+/**
  * Reads the account bankroll and normalizes it to a flat balance object.
  *
  * The raw payload is `{bankroll:{challenges:[{type,amount},...]}}`. We map only
@@ -94,8 +103,9 @@ const BANKROLL_FIELDS: Record<string, keyof Bankroll> = {
  * unexpected new field on the upstream response is never forwarded to the
  * renderer/CLI.
  *
- *   null on transport failure or an unsuccessful/malformed payload (callers must
- *   distinguish this from a genuine zero balance).
+ *   null on transport failure or an unsuccessful/malformed payload, and when a
+ *   recognized currency carries an amount that is not a number: a balance that
+ *   cannot be read is not a zero balance (callers must tell the two apart).
  */
 const getBankroll = async (token: string): Promise<Bankroll | null> => {
     requireValue(token, 'token');
@@ -112,8 +122,9 @@ const getBankroll = async (token: string): Promise<Bankroll | null> => {
     for (const entry of entries) {
         const field = BANKROLL_FIELDS[entry?.type ?? ''];
         if (field) {
-            const amount = Number(entry?.amount);
-            balances[field] = Number.isFinite(amount) ? amount : 0;
+            const amount = bankrollAmount(entry?.amount);
+            if (amount === null) return null;
+            balances[field] = amount;
         }
     }
     return balances;

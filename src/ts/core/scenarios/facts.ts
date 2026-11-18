@@ -12,6 +12,7 @@
 
 import type { Bankroll, Challenge, RankingEntry } from '../types/gurushots';
 import type { Duration, FactName, Quantity, ScenarioSelector, ScenarioStage } from '../types/scenario';
+import { isBoostWindowOpen, isKeyUnlockedBoost } from '../voting/boostWindow';
 import { isOneOf } from './vocabulary';
 import { selectEntry, entriesOf, rankOf, readableEntries, votesOf, windowOf } from './selectors';
 import { speedRatio, votesPerHour } from './speed';
@@ -19,6 +20,57 @@ import { absent, known, unknownOf } from './valueState';
 
 import type { VoteHistory } from './speed';
 import type { ValueState } from './valueState';
+
+/**
+ * Evidence a loader fetched for a snapshot: what it read, or why it could not read it. A field a loader did not fetch is
+ * absent from the snapshot ("not loaded"), which is not the same as unreadable.
+ */
+export type Evidence<T> = ({ readable: true } & T) | { readable: false; reason: string };
+
+/** What the missions need of the app, from one read of the mission list (every kind, whatever the mission settings). */
+export interface MissionEvidence {
+    needs: Record<'join' | 'fill' | 'turbo' | 'boost' | 'vote', number>;
+    /** The kinds with a recognized mission whose progress could not be read: their need cannot be told. */
+    unreadable: readonly string[];
+    /** The earliest expiry (unix seconds) of an unfinished mission, null when none has one. */
+    nextExpiry: number | null;
+    /** A mission carries an expiry that is not a number. */
+    expiryUnreadable: boolean;
+}
+
+/** The completed challenges one read of the list showed, by id. */
+export interface RewardEvidence {
+    /** Ids whose rewards wait to be claimed. */
+    claimable: readonly string[];
+    /** Every id the read listed. */
+    listed: readonly string[];
+    /** The listing reached its end (a short page); false when it stopped at the page cap. */
+    complete: boolean;
+}
+
+/** When each entry of the subject challenge went in (the entry-age ledger): the time, and whether the app made it exact. */
+export interface EntryAgeEvidence {
+    times: Readonly<Record<string, { at: number; exact: boolean }>>;
+}
+
+/** The ids of the subject challenge's entries the app marked as a doubtful subject match. */
+export interface UncertainEvidence {
+    ids: readonly string[];
+}
+
+/** The photos the subject challenge's Boost and Turbo are pinned to. */
+export interface PinEvidence {
+    boost: string | null;
+    turbo: string | null;
+}
+
+/** One read-only scan of the photos a submission would consider (the same rules as submitting). */
+export interface PhotoScanEvidence {
+    eligible: number;
+    /** False when the scan stopped early (a read failed, a cap or time limit, no vision model): `eligible` is a lower bound. */
+    complete: boolean;
+    firstReason?: string;
+}
 
 /** What a fact reads from. */
 export interface FactSnapshot {
@@ -29,7 +81,19 @@ export interface FactSnapshot {
     /** IANA zone */
     timezone: string;
     bankroll?: Bankroll | null;
+    missions?: Evidence<MissionEvidence>;
+    rewards?: Evidence<RewardEvidence>;
+    entryAges?: Evidence<EntryAgeEvidence>;
+    uncertain?: Evidence<UncertainEvidence>;
+    pins?: Evidence<PinEvidence>;
+    photoScan?: Evidence<PhotoScanEvidence>;
 }
+
+/** The evidence fields a loader may add to a snapshot (every one optional: absent means not loaded). */
+export type FactEvidence = Pick<
+    FactSnapshot,
+    'bankroll' | 'missions' | 'rewards' | 'entryAges' | 'uncertain' | 'pins' | 'photoScan'
+>;
 
 export type FactValue = number | boolean | string | string[];
 
@@ -192,14 +256,228 @@ const entryFact =
     (snapshot, select, window) =>
         readEntryFact(field, snapshot, select, window);
 
+/**
+ * Loaded evidence, or why it is not usable: not fetched for this snapshot, unreadable, or not of the shape a loader
+ * produces. Evidence is never read as a default.
+ */
+const loaded = <T>(
+    evidence: Evidence<T> | undefined,
+    dependency: string,
+): ValueState<Extract<Evidence<T>, { readable: true }>> => {
+    if (evidence === undefined) return unknownOf('evidence-not-loaded', [dependency]);
+    if (!isObject(evidence)) return unknownOf('evidence-malformed', [dependency]);
+    if (evidence.readable === true) return known(evidence);
+    return evidence.readable === false && typeof evidence.reason === 'string'
+        ? unknownOf(evidence.reason, [dependency])
+        : unknownOf('evidence-malformed', [dependency]);
+};
+
+/** A count the evidence carries: a finite number of at least zero. */
+const countOf = (value: unknown): number | null => {
+    const count = finite(value);
+    return count !== null && count >= 0 ? count : null;
+};
+
+const MISSIONS = 'missions';
+const REWARDS = 'rewards';
+const ENTRY_AGES = 'entry-ages';
+const ENTRY_UNCERTAIN = 'entry-uncertain';
+const ENTRY_PINS = 'entry-pins';
+const PHOTO_SCAN = 'photo-scan';
+
+type MissionKindName = keyof MissionEvidence['needs'];
+
+/**
+ * What one kind of mission still needs: unknown when the list was not read, or the progress of a mission of this kind
+ * could not be read. A mission the classifier could not place never reached the evidence, so it adds to no need.
+ */
+const missionNeed =
+    (kind: MissionKindName) =>
+    (snapshot: FactSnapshot): ValueState<number> => {
+        const evidence = loaded(snapshot.missions, MISSIONS);
+        if (evidence.state !== 'known') return evidence;
+        const { needs, unreadable } = evidence.value;
+        if (Array.isArray(unreadable) && unreadable.includes(kind)) {
+            return unknownOf('mission-progress-unreadable', [MISSIONS]);
+        }
+        const need = countOf(isObject(needs) ? needs[kind] : undefined);
+        return need === null ? unknownOf('mission-need-malformed', [MISSIONS]) : known(need);
+    };
+
+const nextMissionExpiry = (snapshot: FactSnapshot): ValueState<number> => {
+    const evidence = loaded(snapshot.missions, MISSIONS);
+    if (evidence.state !== 'known') return evidence;
+    const { nextExpiry, expiryUnreadable } = evidence.value;
+    if (expiryUnreadable === true) return unknownOf('mission-expiry-unreadable', [MISSIONS]);
+    if (nextExpiry === null) return absent('not-present');
+    const expiry = finite(nextExpiry);
+    return expiry === null ? unknownOf('mission-expiry-unreadable', [MISSIONS]) : known(expiry);
+};
+
+/** The id lists of a reward read, or why they cannot be used. */
+const rewardLists = (
+    snapshot: FactSnapshot,
+): ValueState<{ claimable: readonly string[]; listed: readonly string[]; complete: boolean }> => {
+    const evidence = loaded(snapshot.rewards, REWARDS);
+    if (evidence.state !== 'known') return evidence;
+    const { claimable, listed, complete } = evidence.value;
+    return Array.isArray(claimable) && Array.isArray(listed) && typeof complete === 'boolean'
+        ? known({ claimable, listed, complete })
+        : unknownOf('evidence-malformed', [REWARDS]);
+};
+
+/**
+ * Whether the subject challenge's rewards wait to be claimed. Known true when the read lists it as claimable; known false
+ * when it lists it otherwise, or the listing reached its end without it; unknown when a capped listing never reached it.
+ */
+const rewardsClaimable = (snapshot: FactSnapshot): ValueState<boolean> => {
+    const lists = rewardLists(snapshot);
+    if (lists.state !== 'known') return lists;
+    const id = snapshot.challenge?.id;
+    if (typeof id !== 'string' && typeof id !== 'number') return unknownOf('id-unreadable', ['challenge.id']);
+    const { claimable, listed, complete } = lists.value;
+    if (claimable.includes(String(id))) return known(true);
+    return listed.includes(String(id)) || complete ? known(false) : unknownOf('rewards-list-incomplete', [REWARDS]);
+};
+
+const rewardsClaimableCount = (snapshot: FactSnapshot): ValueState<number> => {
+    const lists = rewardLists(snapshot);
+    if (lists.state !== 'known') return lists;
+    return lists.value.complete ? known(lists.value.claimable.length) : unknownOf('rewards-list-incomplete', [REWARDS]);
+};
+
+/** The recorded time of the entry a selector picks: the evidence of one entry, or why there is none. */
+const entryTime = (snapshot: FactSnapshot, select?: ScenarioSelector): ValueState<{ at: number; exact: boolean }> => {
+    const selected = selectedEntry(snapshot, select);
+    if (selected.state !== 'known') return selected;
+    const evidence = loaded(snapshot.entryAges, ENTRY_AGES);
+    if (evidence.state !== 'known') return evidence;
+    const { times } = evidence.value;
+    const time: unknown = isObject(times) ? times[String(selected.value.id)] : undefined;
+    const at = isObject(time) ? finite(time.at) : null;
+    return at !== null && at > 0 && isObject(time) && typeof time.exact === 'boolean'
+        ? known({ at, exact: time.exact })
+        : unknownOf('entry-age-unrecorded', [ENTRY_AGES]);
+};
+
+/**
+ * The entry's age at `now`. An exact time gives the age; an observed one only a lower bound (the entry went in at or
+ * before it), so only `lowerBound` reads it.
+ */
+const entryAge =
+    (lowerBound: boolean): FactReader =>
+    (snapshot, select) => {
+        const time = entryTime(snapshot, select);
+        if (time.state !== 'known') return time;
+        if (!lowerBound && !time.value.exact) return unknownOf('age-observed-only', [ENTRY_AGES]);
+        return withClock(snapshot, (now) =>
+            now < time.value.at ? unknownOf('age-in-future', ['clock', ENTRY_AGES]) : known(now - time.value.at),
+        );
+    };
+
+const entryAgeExact: FactReader = (snapshot, select) => {
+    const time = entryTime(snapshot, select);
+    return time.state === 'known' ? known(time.value.exact) : time;
+};
+
+const entryUncertain: FactReader = (snapshot, select) => {
+    const selected = selectedEntry(snapshot, select);
+    if (selected.state !== 'known') return selected;
+    const evidence = loaded(snapshot.uncertain, ENTRY_UNCERTAIN);
+    if (evidence.state !== 'known') return evidence;
+    const { ids } = evidence.value;
+    return Array.isArray(ids)
+        ? known(ids.includes(String(selected.value.id)))
+        : unknownOf('evidence-malformed', [ENTRY_UNCERTAIN]);
+};
+
+const entryPinned: FactReader = (snapshot, select) => {
+    const selected = selectedEntry(snapshot, select);
+    if (selected.state !== 'known') return selected;
+    const evidence = loaded(snapshot.pins, ENTRY_PINS);
+    if (evidence.state !== 'known') return evidence;
+    const { boost, turbo } = evidence.value;
+    const id = String(selected.value.id);
+    return known(boost === id || turbo === id);
+};
+
+/**
+ * Whether the boost window is open, by the boost rule (voting/boostWindow.ts), once its state and timer are readable: a
+ * missing or unrecognized state, or a malformed timer on a timed boost, cannot be told open or closed.
+ */
+const boostOpen: FactReader = (snapshot) => {
+    const timer = boostTimer(snapshot);
+    if (timer.state === 'unknown') return timer;
+    const now = finite(snapshot.now);
+    return now === null ? clockUnreadable() : known(isBoostWindowOpen(snapshot.challenge?.member?.boost, now));
+};
+
+/** Whether the boost is key-unlocked (nothing counts down), by the same rule file; unreadable like `boostOpen`. */
+const boostKeyUnlocked: FactReader = (snapshot) => {
+    const timer = boostTimer(snapshot);
+    return timer.state === 'unknown' ? timer : known(isKeyUnlockedBoost(snapshot.challenge?.member?.boost));
+};
+
+/**
+ * A challenge's head count or cap as the listing gives it: unknown when the field is not a count. `capped` reads a
+ * missing or zero cap as "no cap" (absent), the meaning the join decision gives it (joinDecision.joinFreshRefusal).
+ */
+const challengeCount =
+    (field: 'players' | 'max_players' | 'max_photo_submits', capped: boolean): FactReader =>
+    ({ challenge }) => {
+        const raw: unknown = challenge?.[field];
+        if (capped && (raw === undefined || raw === null || raw === 0)) return absent('not-applicable');
+        const count = countOf(raw);
+        return count === null ? unknownOf(`${field}-unreadable`, [`challenge.${field}`]) : known(count);
+    };
+
+/**
+ * The coins a join costs, `join_coins`: a missing field is a free challenge ("0 or absent when free"). A price that is
+ * a fraction is no price to consent to, and a challenge that still owes the unlock needs a positive whole price: both
+ * are unreadable, as the join decision reads them (joinDecision.joinFreshRefusal).
+ */
+const joinPrice: FactReader = ({ challenge }) => {
+    const raw: unknown = challenge?.join_coins;
+    const price = raw === undefined || raw === null ? 0 : countOf(raw);
+    const owesUnlock = challenge?.member?.submit_state === 'join_unlock';
+    if (price === null || (price > 0 && !Number.isInteger(price)) || (owesUnlock && !(price > 0))) {
+        return unknownOf('join-price-unreadable', ['challenge.join_coins', 'member.submit_state']);
+    }
+    return known(price);
+};
+
+/** The member's submit state as the listing gives it, never inferred from the member object being there. */
+const membership: FactReader = ({ challenge }) => {
+    const state: unknown = challenge?.member?.submit_state;
+    return typeof state === 'string' && state !== ''
+        ? known(state)
+        : unknownOf('membership-unreadable', ['member.submit_state']);
+};
+
+/** The photo scan the snapshot carries, or why it cannot be used. */
+const photoScan = (snapshot: FactSnapshot): ValueState<{ eligible: number; complete: boolean }> => {
+    const evidence = loaded(snapshot.photoScan, PHOTO_SCAN);
+    if (evidence.state !== 'known') return evidence;
+    const eligible = countOf(evidence.value.eligible);
+    return eligible === null || typeof evidence.value.complete !== 'boolean'
+        ? unknownOf('evidence-malformed', [PHOTO_SCAN])
+        : known({ eligible, complete: evidence.value.complete });
+};
+
+/** A scan that stopped early proves only a lower bound. */
+const INCOMPLETE_SCAN = 'photo-scan-incomplete';
+
 const ENTRY_DEPENDENCIES = ['member.ranking.entries', 'vote-history'] as const;
 const ALL_STAGES = ['account', 'preJoin', 'active', 'postClose'] as const;
 const CHALLENGE_STAGES = ['preJoin', 'active', 'postClose'] as const;
 const ACTIVE = ['active'] as const;
+const PRE_JOIN_ACTIVE = ['preJoin', 'active'] as const;
+const ACCOUNT_ACTIVE = ['account', 'active'] as const;
 
 interface FactOptions {
     optional?: boolean;
     stages?: readonly ScenarioStage[];
+    classification?: FactTraits['classification'];
     dependencies: readonly string[];
     takesSelect?: boolean;
     takesWindow?: boolean;
@@ -208,7 +486,7 @@ interface FactOptions {
 const traits = (read: FactReader, options: FactOptions): FactTraits => ({
     optional: options.optional ?? false,
     stages: options.stages ?? ACTIVE,
-    classification: 'raw',
+    classification: options.classification ?? 'raw',
     dependencies: options.dependencies,
     takesSelect: options.takesSelect ?? false,
     takesWindow: options.takesWindow ?? false,
@@ -367,6 +645,28 @@ const FACTS: Record<FactName, FactDefinition> = {
         { dependencies: ['member.ranking.total'] },
     ),
 
+    'challenge.players': numberFact('count', challengeCount('players', false), {
+        stages: PRE_JOIN_ACTIVE,
+        dependencies: ['challenge.players'],
+    }),
+    'challenge.maxPlayers': numberFact('count', challengeCount('max_players', true), {
+        optional: true,
+        stages: PRE_JOIN_ACTIVE,
+        dependencies: ['challenge.max_players'],
+    }),
+    'challenge.maxPhotoSubmits': numberFact('count', challengeCount('max_photo_submits', false), {
+        stages: PRE_JOIN_ACTIVE,
+        dependencies: ['challenge.max_photo_submits'],
+    }),
+    'challenge.joinPrice': numberFact('coins', joinPrice, {
+        stages: PRE_JOIN_ACTIVE,
+        dependencies: ['challenge.join_coins', 'member.submit_state'],
+    }),
+    'challenge.membership': fact('string', membership, {
+        stages: PRE_JOIN_ACTIVE,
+        dependencies: ['member.submit_state'],
+    }),
+
     'boost.state': fact(
         'string',
         ({ challenge }) => {
@@ -392,6 +692,13 @@ const FACTS: Record<FactName, FactDefinition> = {
             dependencies: ['clock', 'member.boost.state', 'member.boost.timeout'],
         },
     ),
+
+    'boost.open': fact('boolean', boostOpen, {
+        dependencies: ['clock', 'member.boost.state', 'member.boost.timeout'],
+    }),
+    'boost.keyUnlocked': fact('boolean', boostKeyUnlocked, {
+        dependencies: ['member.boost.state', 'member.boost.timeout'],
+    }),
 
     'turbo.state': fact(
         'string',
@@ -445,6 +752,70 @@ const FACTS: Record<FactName, FactDefinition> = {
         dependencies: ['bankroll'],
     }),
 
+    'missions.joinNeed': numberFact('count', missionNeed('join'), {
+        stages: ACCOUNT_ACTIVE,
+        dependencies: [MISSIONS],
+    }),
+    'missions.fillNeed': numberFact('count', missionNeed('fill'), {
+        stages: ACCOUNT_ACTIVE,
+        dependencies: [MISSIONS],
+    }),
+    'missions.turboNeed': numberFact('count', missionNeed('turbo'), {
+        stages: ACCOUNT_ACTIVE,
+        dependencies: [MISSIONS],
+    }),
+    'missions.boostNeed': numberFact('count', missionNeed('boost'), {
+        stages: ACCOUNT_ACTIVE,
+        dependencies: [MISSIONS],
+    }),
+    'missions.voteNeed': numberFact('count', missionNeed('vote'), {
+        stages: ACCOUNT_ACTIVE,
+        dependencies: [MISSIONS],
+    }),
+    'missions.nextExpiry': numberFact('instant', nextMissionExpiry, {
+        optional: true,
+        stages: ACCOUNT_ACTIVE,
+        dependencies: [MISSIONS],
+    }),
+
+    'rewards.claimable': fact('boolean', rewardsClaimable, {
+        stages: ['postClose'],
+        dependencies: [REWARDS, 'challenge.id'],
+    }),
+    'rewards.claimableCount': numberFact('count', rewardsClaimableCount, {
+        stages: ['account'],
+        dependencies: [REWARDS],
+    }),
+
+    'photos.eligibleCount': numberFact(
+        'count',
+        (snapshot) => {
+            const scan = photoScan(snapshot);
+            if (scan.state !== 'known') return scan;
+            return scan.value.complete ? known(scan.value.eligible) : unknownOf(INCOMPLETE_SCAN, [PHOTO_SCAN]);
+        },
+        { stages: PRE_JOIN_ACTIVE, classification: 'policy', dependencies: [PHOTO_SCAN] },
+    ),
+    'photos.eligibleAtLeast': numberFact(
+        'count',
+        (snapshot) => {
+            const scan = photoScan(snapshot);
+            return scan.state === 'known' ? known(scan.value.eligible) : scan;
+        },
+        { stages: PRE_JOIN_ACTIVE, classification: 'policy', dependencies: [PHOTO_SCAN] },
+    ),
+    'photos.hasEligible': fact(
+        'boolean',
+        (snapshot) => {
+            const scan = photoScan(snapshot);
+            if (scan.state !== 'known') return scan;
+            const { eligible, complete } = scan.value;
+            if (eligible > 0) return known(true);
+            return complete ? known(false) : unknownOf(INCOMPLETE_SCAN, [PHOTO_SCAN]);
+        },
+        { stages: PRE_JOIN_ACTIVE, classification: 'policy', dependencies: [PHOTO_SCAN] },
+    ),
+
     'entry.votes': numberFact('votes', entryFact('votes'), {
         optional: true,
         dependencies: ENTRY_DEPENDENCIES,
@@ -480,6 +851,31 @@ const FACTS: Record<FactName, FactDefinition> = {
     'entry.boosting': fact('boolean', entryFact('boosting'), {
         optional: true,
         dependencies: ENTRY_DEPENDENCIES,
+        takesSelect: true,
+    }),
+    'entry.age': numberFact('duration', entryAge(false), {
+        optional: true,
+        dependencies: [...ENTRY_DEPENDENCIES, 'clock', ENTRY_AGES],
+        takesSelect: true,
+    }),
+    'entry.minAge': numberFact('duration', entryAge(true), {
+        optional: true,
+        dependencies: [...ENTRY_DEPENDENCIES, 'clock', ENTRY_AGES],
+        takesSelect: true,
+    }),
+    'entry.ageExact': fact('boolean', entryAgeExact, {
+        optional: true,
+        dependencies: [...ENTRY_DEPENDENCIES, ENTRY_AGES],
+        takesSelect: true,
+    }),
+    'entry.uncertainSubmission': fact('boolean', entryUncertain, {
+        optional: true,
+        dependencies: [...ENTRY_DEPENDENCIES, ENTRY_UNCERTAIN],
+        takesSelect: true,
+    }),
+    'entry.pinned': fact('boolean', entryPinned, {
+        optional: true,
+        dependencies: [...ENTRY_DEPENDENCIES, ENTRY_PINS],
         takesSelect: true,
     }),
 };

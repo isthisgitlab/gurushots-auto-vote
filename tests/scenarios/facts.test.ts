@@ -102,8 +102,55 @@ describe('the registry', () => {
         }
     });
 
-    test('every fact is usable during an active challenge', () => {
-        for (const name of vocabulary.FACT_NAMES) expect(factStageIssues(name, 'active', 'p')).toEqual([]);
+    test('a fact is usable in a rule when its stage list holds the active stage, and refused with the stage message otherwise', () => {
+        const refused = vocabulary.FACT_NAMES.filter((name) => factStageIssues(name, 'active', 'p').length > 0);
+        expect(refused).toEqual(['rewards.claimable', 'rewards.claimableCount']);
+        expect(factStageIssues('rewards.claimable', 'active', 'p')).toEqual([
+            { path: 'p', message: 'rewards.claimable is not available while a challenge is active' },
+        ]);
+        expect(factStageIssues('rewards.claimableCount', 'active', 'p')).toEqual([
+            { path: 'p', message: 'rewards.claimableCount is not available while a challenge is active' },
+        ]);
+        for (const name of vocabulary.FACT_NAMES.filter((item) => !refused.includes(item))) {
+            expect(FACTS[name].stages).toContain('active');
+        }
+    });
+
+    test('the new facts list the stages the plan gives them', () => {
+        const stages = (prefix: string) =>
+            Object.fromEntries(
+                Object.entries(FACTS)
+                    .filter(([name]) => name.startsWith(prefix))
+                    .map(([name, fact]) => [name, [...fact.stages]]),
+            );
+        expect(stages('missions.')).toEqual({
+            'missions.joinNeed': ['account', 'active'],
+            'missions.fillNeed': ['account', 'active'],
+            'missions.turboNeed': ['account', 'active'],
+            'missions.boostNeed': ['account', 'active'],
+            'missions.voteNeed': ['account', 'active'],
+            'missions.nextExpiry': ['account', 'active'],
+        });
+        expect(stages('rewards.')).toEqual({
+            'rewards.claimable': ['postClose'],
+            'rewards.claimableCount': ['account'],
+        });
+        expect(stages('photos.')).toEqual({
+            'photos.eligibleCount': ['preJoin', 'active'],
+            'photos.eligibleAtLeast': ['preJoin', 'active'],
+            'photos.hasEligible': ['preJoin', 'active'],
+        });
+        expect(FACTS['challenge.joinPrice'].stages).toEqual(['preJoin', 'active']);
+        expect(FACTS['challenge.membership'].stages).toEqual(['preJoin', 'active']);
+        expect(FACTS['boost.open'].stages).toEqual(['active']);
+        expect(FACTS['entry.minAge'].stages).toEqual(['active']);
+    });
+
+    test('photo facts depend on settings (policy); every other new fact is raw evidence', () => {
+        const policy = Object.entries(FACTS)
+            .filter(([, fact]) => fact.classification === 'policy')
+            .map(([name]) => name);
+        expect(policy.sort()).toEqual(['photos.eligibleAtLeast', 'photos.eligibleCount', 'photos.hasEligible']);
     });
 
     test('a fact is refused in a stage it does not list', () => {
@@ -133,7 +180,19 @@ describe('the registry', () => {
                     ranking: { entries: 'x', total: 'x' },
                 },
             },
-            { id: {}, title: 5, type: 5, tags: 'x', start_time: 'x', close_time: 'x', max_photo_submits: 'x' },
+            {
+                id: {},
+                title: 5,
+                type: 5,
+                tags: 'x',
+                start_time: 'x',
+                close_time: 'x',
+                max_photo_submits: 'x',
+                players: 'x',
+                max_players: 'x',
+                join_coins: 'x',
+            },
+            { join_coins: 2.5, member: { submit_state: 'join_unlock' } },
             {
                 start_time: NOW + 1,
                 close_time: NOW - 1,
@@ -146,6 +205,20 @@ describe('the registry', () => {
             { state: { phaseEnteredAt: 'x', memory: {} } },
             { bankroll: { keys: 'x' } },
             { bankroll: null },
+            {
+                missions: {
+                    readable: true,
+                    needs: { join: 'x' },
+                    unreadable: ['join'],
+                    nextExpiry: 'x',
+                    expiryUnreadable: true,
+                },
+            },
+            { rewards: { readable: true, claimable: [], listed: [], complete: false } },
+            { entryAges: { readable: true, times: { a: { at: 'x', exact: 'x' } } } },
+            { uncertain: { readable: true, ids: 'x' } },
+            { photoScan: { readable: true, eligible: 'x', complete: 'x' } },
+            { pins: null, rewards: null, missions: 'x' },
         ];
         const unknownSeen = new Set<string>();
         for (const challenge of hostile) {
@@ -555,5 +628,441 @@ describe('entry facts', () => {
         expect(readEntryField('votesPerHour', first, snap)).toEqual(unknown('insufficient-history', ['vote-history']));
         expect(readableEntries(snap.challenge)).toHaveLength(3);
         expect(readableEntries(invalid<Challenge>({}))).toBeNull();
+    });
+});
+
+const readSel = (
+    name: string,
+    select: ScenarioSelector | undefined,
+    extra: Partial<Record<keyof FactSnapshot, unknown>> = {},
+    challenge?: Record<string, unknown>,
+) => readScenarioFact(invalid(name), snapshot(challenge, extra), select);
+
+const withSubmitState = (state: unknown, extra: Record<string, unknown> = {}) => ({
+    ...baseChallenge(),
+    ...extra,
+    member: { ...(baseChallenge().member as Record<string, unknown>), submit_state: state },
+});
+
+describe('membership, capacity and join price', () => {
+    test('players, caps and the price read from the listing', () => {
+        const challenge = { ...withSubmitState('join'), players: 40, max_players: 100, join_coins: 25 };
+        expect(read('challenge.players', challenge)).toEqual(known(40));
+        expect(read('challenge.maxPlayers', challenge)).toEqual(known(100));
+        expect(read('challenge.maxPhotoSubmits', challenge)).toEqual(known(4));
+        expect(read('challenge.joinPrice', challenge)).toEqual(known(25));
+        expect(read('challenge.membership', challenge)).toEqual(known('join'));
+    });
+
+    test('no cap (a missing, null or zero max_players) is confirmed absent', () => {
+        for (const max of [undefined, null, 0]) {
+            expect(read('challenge.maxPlayers', { ...baseChallenge(), max_players: max })).toEqual(
+                absent('not-applicable'),
+            );
+        }
+    });
+
+    test('a free challenge has a zero price, whether the field is zero or missing', () => {
+        expect(read('challenge.joinPrice', { ...baseChallenge(), join_coins: 0 })).toEqual(known(0));
+        expect(read('challenge.joinPrice', baseChallenge())).toEqual(known(0));
+        expect(read('challenge.joinPrice', { ...baseChallenge(), join_coins: null })).toEqual(known(0));
+    });
+
+    test.each([
+        ['players', 'challenge.players', 'players'],
+        ['max_players', 'challenge.maxPlayers', 'max_players'],
+        ['max_photo_submits', 'challenge.maxPhotoSubmits', 'max_photo_submits'],
+    ])('a malformed %s count is unknown, never zero', (field, name, dependency) => {
+        for (const bad of ['x', -1, Number.NaN, {}]) {
+            expect(read(name, { ...baseChallenge(), [field]: bad })).toEqual(
+                unknown(`${field}-unreadable`, [`challenge.${dependency}`]),
+            );
+        }
+    });
+
+    test('a missing players or max_photo_submits count is unknown', () => {
+        expect(read('challenge.players', baseChallenge())).toEqual(
+            unknown('players-unreadable', ['challenge.players']),
+        );
+        expect(read('challenge.maxPhotoSubmits', without('max_photo_submits'))).toEqual(
+            unknown('max_photo_submits-unreadable', ['challenge.max_photo_submits']),
+        );
+    });
+
+    test.each([
+        ['a text price', { join_coins: 'x' }, 'join'],
+        ['a negative price', { join_coins: -5 }, 'join'],
+        ['a fractional price', { join_coins: 2.5 }, 'join'],
+        ['a fractional price on an unlock', { join_coins: 2.5 }, 'join_unlock'],
+        ['an unlock owed with no price', {}, 'join_unlock'],
+        ['an unlock owed with a zero price', { join_coins: 0 }, 'join_unlock'],
+    ])('%s is an unreadable price', (_name, extra, state) => {
+        expect(read('challenge.joinPrice', withSubmitState(state, extra))).toEqual(
+            unknown('join-price-unreadable', ['challenge.join_coins', 'member.submit_state']),
+        );
+    });
+
+    test('an unlock owed with a whole positive price reads that price', () => {
+        expect(read('challenge.joinPrice', withSubmitState('join_unlock', { join_coins: 40 }))).toEqual(known(40));
+    });
+
+    test('membership is the submit state, and is not inferred from the member object being there', () => {
+        for (const state of ['join', 'join_unlock', 'OPEN', 'FULL']) {
+            expect(read('challenge.membership', withSubmitState(state))).toEqual(known(state));
+        }
+        for (const bad of [undefined, null, '', 5]) {
+            expect(read('challenge.membership', withSubmitState(bad))).toEqual(
+                unknown('membership-unreadable', ['member.submit_state']),
+            );
+        }
+        // a member object with ranking, boost and turbo is not evidence of anything
+        expect(read('challenge.membership', baseChallenge()).state).toBe('unknown');
+        expect(read('challenge.membership', { ...baseChallenge(), member: undefined }).state).toBe('unknown');
+    });
+});
+
+describe('boost readiness', () => {
+    test('open: a key-unlocked boost, a timed boost with time left, and an untimed one are open', () => {
+        expect(read('boost.open', withBoost({ state: 'AVAILABLE_KEY' }))).toEqual(known(true));
+        expect(read('boost.open', withBoost({ state: 'AVAILABLE', timeout: NOW + 60 }))).toEqual(known(true));
+        expect(read('boost.open', withBoost({ state: 'AVAILABLE' }))).toEqual(known(true));
+    });
+
+    test('open: a timer that has run out, and a state that is not available, are closed', () => {
+        expect(read('boost.open', withBoost({ state: 'AVAILABLE', timeout: NOW - 1 }))).toEqual(known(false));
+        for (const state of ['LOCKED', 'MISSED', 'USED', 'UNAVAILABLE']) {
+            expect(read('boost.open', withBoost({ state }))).toEqual(known(false));
+        }
+    });
+
+    test('keyUnlocked: AVAILABLE_KEY and AVAILABLE with no countdown; a timed or closed boost is not', () => {
+        expect(read('boost.keyUnlocked', withBoost({ state: 'AVAILABLE_KEY' }))).toEqual(known(true));
+        expect(read('boost.keyUnlocked', withBoost({ state: 'AVAILABLE', timeout: 0 }))).toEqual(known(true));
+        expect(read('boost.keyUnlocked', withBoost({ state: 'AVAILABLE', timeout: NOW + 60 }))).toEqual(known(false));
+        expect(read('boost.keyUnlocked', withBoost({ state: 'USED' }))).toEqual(known(false));
+    });
+
+    test.each([
+        ['a missing state', withBoost({}), 'boost-state-unreadable', ['member.boost.state']],
+        ['an unrecognized state', withBoost({ state: 'WEIRD' }), 'boost-state-unrecognized', ['member.boost.state']],
+        [
+            'a malformed timer on a timed boost',
+            withBoost({ state: 'AVAILABLE', timeout: 'x' }),
+            'boost-timeout-malformed',
+            ['member.boost.timeout'],
+        ],
+    ])('%s: open and keyUnlocked are unknown, never false', (_name, challenge, reason, dependencies) => {
+        expect(read('boost.open', challenge)).toEqual(unknown(reason, dependencies));
+        expect(read('boost.keyUnlocked', challenge)).toEqual(unknown(reason, dependencies));
+    });
+
+    test('open needs the clock; keyUnlocked does not', () => {
+        const boost = withBoost({ state: 'AVAILABLE', timeout: NOW + 60 });
+        expect(read('boost.open', boost, { now: Number.NaN })).toEqual(unknown('clock-unreadable', ['clock']));
+        expect(read('boost.keyUnlocked', boost, { now: Number.NaN })).toEqual(known(false));
+    });
+});
+
+const mission = (over: Record<string, unknown> = {}) => ({
+    readable: true,
+    needs: { join: 5, fill: 2, turbo: 0, boost: 1, vote: 300 },
+    unreadable: [],
+    nextExpiry: NOW + 600,
+    expiryUnreadable: false,
+    ...over,
+});
+
+describe('missions', () => {
+    test.each([
+        ['missions.joinNeed', 5],
+        ['missions.fillNeed', 2],
+        ['missions.turboNeed', 0],
+        ['missions.boostNeed', 1],
+        ['missions.voteNeed', 300],
+    ])('%s reads its need from the evidence (a read list with no need is a known zero)', (name, need) => {
+        expect(read(name, undefined, { missions: mission() })).toEqual(known(need));
+    });
+
+    test('the next expiry is the earliest of an unfinished mission, absent when none has one', () => {
+        expect(read('missions.nextExpiry', undefined, { missions: mission() })).toEqual(known(NOW + 600));
+        expect(read('missions.nextExpiry', undefined, { missions: mission({ nextExpiry: null }) })).toEqual(
+            absent('not-present'),
+        );
+    });
+
+    test('mission facts are unknown until the evidence is loaded', () => {
+        for (const name of ['missions.joinNeed', 'missions.voteNeed', 'missions.nextExpiry']) {
+            expect(read(name)).toEqual(unknown('evidence-not-loaded', ['missions']));
+        }
+    });
+
+    test('a failed mission read makes every mission fact unknown, never zero or absent', () => {
+        const failed = { missions: { readable: false, reason: 'missions-unreadable' } };
+        for (const name of [
+            'missions.joinNeed',
+            'missions.fillNeed',
+            'missions.turboNeed',
+            'missions.boostNeed',
+            'missions.voteNeed',
+            'missions.nextExpiry',
+        ]) {
+            expect(read(name, undefined, failed)).toEqual(unknown('missions-unreadable', ['missions']));
+        }
+    });
+
+    test('a kind with a mission whose progress cannot be read is unknown; the other kinds are not', () => {
+        const evidence = { missions: mission({ unreadable: ['fill'] }) };
+        expect(read('missions.fillNeed', undefined, evidence)).toEqual(
+            unknown('mission-progress-unreadable', ['missions']),
+        );
+        expect(read('missions.joinNeed', undefined, evidence)).toEqual(known(5));
+    });
+
+    test('a malformed need or expiry is unknown, never zero', () => {
+        expect(read('missions.joinNeed', undefined, { missions: mission({ needs: { join: 'x' } }) })).toEqual(
+            unknown('mission-need-malformed', ['missions']),
+        );
+        expect(read('missions.joinNeed', undefined, { missions: mission({ needs: {} }) })).toEqual(
+            unknown('mission-need-malformed', ['missions']),
+        );
+        expect(read('missions.joinNeed', undefined, { missions: mission({ needs: -1 }) })).toEqual(
+            unknown('mission-need-malformed', ['missions']),
+        );
+        expect(read('missions.nextExpiry', undefined, { missions: mission({ expiryUnreadable: true }) })).toEqual(
+            unknown('mission-expiry-unreadable', ['missions']),
+        );
+        expect(read('missions.nextExpiry', undefined, { missions: mission({ nextExpiry: 'soon' }) })).toEqual(
+            unknown('mission-expiry-unreadable', ['missions']),
+        );
+    });
+
+    test('evidence of the wrong shape is unknown (evidence-malformed)', () => {
+        for (const bad of ['x', {}, { readable: 'yes' }, { readable: false }, null]) {
+            expect(read('missions.joinNeed', undefined, { missions: bad })).toEqual(
+                unknown('evidence-malformed', ['missions']),
+            );
+        }
+    });
+});
+
+describe('rewards', () => {
+    const rewards = (over: Record<string, unknown> = {}) => ({
+        readable: true,
+        claimable: ['7', '12'],
+        listed: ['7', '12', '30'],
+        complete: true,
+        ...over,
+    });
+
+    test('claimable: true when the read lists the subject as claimable', () => {
+        expect(read('rewards.claimable', undefined, { rewards: rewards() })).toEqual(known(true));
+    });
+
+    test('claimable: false when the read lists the subject as not claimable, or the finished listing lacks it', () => {
+        expect(read('rewards.claimable', { ...baseChallenge(), id: 30 }, { rewards: rewards() })).toEqual(known(false));
+        expect(read('rewards.claimable', { ...baseChallenge(), id: 99 }, { rewards: rewards() })).toEqual(known(false));
+    });
+
+    test('claimable: unknown when a capped listing never reached the subject', () => {
+        expect(
+            read('rewards.claimable', { ...baseChallenge(), id: 99 }, { rewards: rewards({ complete: false }) }),
+        ).toEqual(unknown('rewards-list-incomplete', ['rewards']));
+        // a lower bound still proves a claimable subject
+        expect(read('rewards.claimable', undefined, { rewards: rewards({ complete: false }) })).toEqual(known(true));
+    });
+
+    test('claimable: unknown for a subject with no readable id', () => {
+        expect(read('rewards.claimable', without('id'), { rewards: rewards() })).toEqual(
+            unknown('id-unreadable', ['challenge.id']),
+        );
+    });
+
+    test('claimableCount: the claimable ones of a finished listing; unknown while it is capped', () => {
+        expect(read('rewards.claimableCount', undefined, { rewards: rewards() })).toEqual(known(2));
+        expect(read('rewards.claimableCount', undefined, { rewards: rewards({ claimable: [] }) })).toEqual(known(0));
+        expect(read('rewards.claimableCount', undefined, { rewards: rewards({ complete: false }) })).toEqual(
+            unknown('rewards-list-incomplete', ['rewards']),
+        );
+    });
+
+    test('not loaded, a failed read and malformed lists are unknown for both facts', () => {
+        for (const name of ['rewards.claimable', 'rewards.claimableCount']) {
+            expect(read(name)).toEqual(unknown('evidence-not-loaded', ['rewards']));
+            expect(read(name, undefined, { rewards: { readable: false, reason: 'rewards-unreadable' } })).toEqual(
+                unknown('rewards-unreadable', ['rewards']),
+            );
+            expect(read(name, undefined, { rewards: rewards({ claimable: 'x' }) })).toEqual(
+                unknown('evidence-malformed', ['rewards']),
+            );
+            expect(read(name, undefined, { rewards: rewards({ complete: 'x' }) })).toEqual(
+                unknown('evidence-malformed', ['rewards']),
+            );
+        }
+    });
+});
+
+describe('entry age', () => {
+    const slotA: ScenarioSelector = { by: 'slot', index: 1 };
+    const ages = (times: Record<string, unknown>) => ({ entryAges: { readable: true, times } });
+
+    test('an exact time gives the age, the lower bound and the flag', () => {
+        const evidence = ages({ a: { at: NOW - 900, exact: true } });
+        expect(readSel('entry.age', slotA, evidence)).toEqual(known(900));
+        expect(readSel('entry.minAge', slotA, evidence)).toEqual(known(900));
+        expect(readSel('entry.ageExact', slotA, evidence)).toEqual(known(true));
+    });
+
+    test('an observed time gives only a lower bound: age is unknown, minAge and the flag are known', () => {
+        const evidence = ages({ a: { at: NOW - 900, exact: false } });
+        expect(readSel('entry.age', slotA, evidence)).toEqual(unknown('age-observed-only', ['entry-ages']));
+        expect(readSel('entry.minAge', slotA, evidence)).toEqual(known(900));
+        expect(readSel('entry.ageExact', slotA, evidence)).toEqual(known(false));
+    });
+
+    test('an entry the ledger has no time for is unknown, not new', () => {
+        for (const name of ['entry.age', 'entry.minAge', 'entry.ageExact']) {
+            expect(readSel(name, slotA, ages({ b: { at: NOW - 5, exact: true } }))).toEqual(
+                unknown('entry-age-unrecorded', ['entry-ages']),
+            );
+            expect(readSel(name, slotA, ages({ a: { at: 'x', exact: true } })).state).toBe('unknown');
+            expect(readSel(name, slotA, ages({ a: { at: 0, exact: true } })).state).toBe('unknown');
+            expect(readSel(name, slotA, ages({ a: { at: NOW - 5, exact: 'yes' } })).state).toBe('unknown');
+        }
+        expect(readSel('entry.age', slotA, { entryAges: { readable: true, times: 'x' } }).state).toBe('unknown');
+    });
+
+    test('a time in the future is unknown, never a negative age', () => {
+        const evidence = ages({ a: { at: NOW + 60, exact: true } });
+        expect(readSel('entry.age', slotA, evidence)).toEqual(unknown('age-in-future', ['clock', 'entry-ages']));
+        expect(readSel('entry.minAge', slotA, evidence)).toEqual(unknown('age-in-future', ['clock', 'entry-ages']));
+        expect(readSel('entry.ageExact', slotA, evidence)).toEqual(known(true));
+    });
+
+    test('an unreadable clock makes the ages unknown', () => {
+        const evidence = ages({ a: { at: NOW - 900, exact: true } });
+        expect(readSel('entry.age', slotA, { ...evidence, now: Number.NaN })).toEqual(
+            unknown('clock-unreadable', ['clock']),
+        );
+    });
+
+    test('not loaded and a failed ledger read are unknown for all three facts', () => {
+        for (const name of ['entry.age', 'entry.minAge', 'entry.ageExact']) {
+            expect(readSel(name, slotA)).toEqual(unknown('evidence-not-loaded', ['entry-ages']));
+            expect(readSel(name, slotA, { entryAges: { readable: false, reason: 'entry-ages-unreadable' } })).toEqual(
+                unknown('entry-ages-unreadable', ['entry-ages']),
+            );
+        }
+    });
+
+    test('the selection rules stay in front: an unreadable entry list, no entry and no selector', () => {
+        const evidence = ages({ a: { at: NOW - 900, exact: true } });
+        expect(readSel('entry.age', slotA, evidence, withMember({}))).toEqual(
+            unknown('entries-unreadable', ['member.ranking.entries']),
+        );
+        expect(readSel('entry.age', { by: 'memory', slot: 'gone' }, evidence)).toEqual(absent('not-present'));
+        expect(readSel('entry.age', undefined, evidence)).toEqual(unknown('selector-missing', []));
+    });
+});
+
+describe('entry flags', () => {
+    const slotA: ScenarioSelector = { by: 'slot', index: 1 };
+    const held: ScenarioSelector = { by: 'memory', slot: 'held' };
+
+    test('uncertainSubmission: true for a marked entry, false for an unmarked one', () => {
+        const evidence = { uncertain: { readable: true, ids: ['b'] } };
+        expect(readSel('entry.uncertainSubmission', held, evidence)).toEqual(known(true));
+        expect(readSel('entry.uncertainSubmission', slotA, evidence)).toEqual(known(false));
+    });
+
+    test('pinned: true for the Boost or Turbo pin of the entry, false otherwise', () => {
+        expect(readSel('entry.pinned', held, { pins: { readable: true, boost: 'b', turbo: null } })).toEqual(
+            known(true),
+        );
+        expect(readSel('entry.pinned', held, { pins: { readable: true, boost: null, turbo: 'b' } })).toEqual(
+            known(true),
+        );
+        expect(readSel('entry.pinned', slotA, { pins: { readable: true, boost: 'b', turbo: 'b' } })).toEqual(
+            known(false),
+        );
+        expect(readSel('entry.pinned', held, { pins: { readable: true, boost: null, turbo: null } })).toEqual(
+            known(false),
+        );
+    });
+
+    test('not loaded, unreadable or malformed evidence is unknown', () => {
+        expect(readSel('entry.uncertainSubmission', held)).toEqual(unknown('evidence-not-loaded', ['entry-uncertain']));
+        expect(readSel('entry.pinned', held)).toEqual(unknown('evidence-not-loaded', ['entry-pins']));
+        expect(
+            readSel('entry.uncertainSubmission', held, {
+                uncertain: { readable: false, reason: 'entry-ages-unreadable' },
+            }),
+        ).toEqual(unknown('entry-ages-unreadable', ['entry-uncertain']));
+        expect(readSel('entry.pinned', held, { pins: { readable: false, reason: 'pins-unreadable' } })).toEqual(
+            unknown('pins-unreadable', ['entry-pins']),
+        );
+        expect(readSel('entry.uncertainSubmission', held, { uncertain: { readable: true, ids: 'x' } })).toEqual(
+            unknown('evidence-malformed', ['entry-uncertain']),
+        );
+    });
+
+    test('an entry that is not there is absent, and the selection rules stay in front', () => {
+        expect(
+            readSel(
+                'entry.pinned',
+                { by: 'memory', slot: 'gone' },
+                { pins: { readable: true, boost: 'b', turbo: null } },
+            ),
+        ).toEqual(absent('not-present'));
+        expect(readSel('entry.uncertainSubmission', held, {}, withMember({}))).toEqual(
+            unknown('entries-unreadable', ['member.ranking.entries']),
+        );
+    });
+});
+
+describe('photo candidates', () => {
+    const scan = (over: Record<string, unknown> = {}) => ({
+        photoScan: { readable: true, eligible: 3, complete: true, ...over },
+    });
+
+    test('a complete scan: the count is exact, the lower bound equals it, and eligibility is known', () => {
+        expect(read('photos.eligibleCount', undefined, scan())).toEqual(known(3));
+        expect(read('photos.eligibleAtLeast', undefined, scan())).toEqual(known(3));
+        expect(read('photos.hasEligible', undefined, scan())).toEqual(known(true));
+    });
+
+    test('a complete scan that found none proves there are none', () => {
+        expect(read('photos.eligibleCount', undefined, scan({ eligible: 0 }))).toEqual(known(0));
+        expect(read('photos.eligibleAtLeast', undefined, scan({ eligible: 0 }))).toEqual(known(0));
+        expect(read('photos.hasEligible', undefined, scan({ eligible: 0 }))).toEqual(known(false));
+    });
+
+    test('an incomplete scan gives a lower bound, and cannot prove zero', () => {
+        expect(read('photos.eligibleCount', undefined, scan({ complete: false }))).toEqual(
+            unknown('photo-scan-incomplete', ['photo-scan']),
+        );
+        expect(read('photos.eligibleAtLeast', undefined, scan({ complete: false }))).toEqual(known(3));
+        expect(read('photos.hasEligible', undefined, scan({ complete: false }))).toEqual(known(true));
+        expect(read('photos.eligibleAtLeast', undefined, scan({ complete: false, eligible: 0 }))).toEqual(known(0));
+        expect(read('photos.hasEligible', undefined, scan({ complete: false, eligible: 0 }))).toEqual(
+            unknown('photo-scan-incomplete', ['photo-scan']),
+        );
+    });
+
+    test('not loaded, a failed scan and a malformed scan are unknown for all three facts', () => {
+        for (const name of ['photos.eligibleCount', 'photos.eligibleAtLeast', 'photos.hasEligible']) {
+            expect(read(name)).toEqual(unknown('evidence-not-loaded', ['photo-scan']));
+            expect(read(name, undefined, { photoScan: { readable: false, reason: 'photo-scan-failed' } })).toEqual(
+                unknown('photo-scan-failed', ['photo-scan']),
+            );
+            expect(read(name, undefined, scan({ eligible: 'x' }))).toEqual(
+                unknown('evidence-malformed', ['photo-scan']),
+            );
+            expect(read(name, undefined, scan({ eligible: -1 }))).toEqual(
+                unknown('evidence-malformed', ['photo-scan']),
+            );
+            expect(read(name, undefined, scan({ complete: 'x' }))).toEqual(
+                unknown('evidence-malformed', ['photo-scan']),
+            );
+        }
     });
 });

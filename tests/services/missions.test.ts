@@ -29,6 +29,7 @@ import type * as missionsModule from '../../src/ts/core/services/missions';
 const {
     classifyMission,
     loadMissionNeeds,
+    missionEvidence,
     consumeMission,
     neediestFillMission,
     isMissionVoteCandidate,
@@ -180,7 +181,7 @@ describe('classifyMission', () => {
 });
 
 describe('loadMissionNeeds', () => {
-    const deps = (list: Mission[]) => ({ getMyMissions: jest.fn(async () => list) });
+    const deps = (list: Mission[] | null) => ({ getMyMissions: jest.fn(async () => list) });
 
     test('reads what each active mission still needs', async () => {
         const d = deps([
@@ -317,14 +318,38 @@ describe('loadMissionNeeds', () => {
         expect(d.getMyMissions).not.toHaveBeenCalled();
     });
 
-    test('a non-array list reads as no missions; a throw is logged and yields null', async () => {
+    test('a failed read gives the no-needs value marked unreadable, says so, and is not summarised as "none active"', async () => {
+        await expect(loadMissionNeeds('tok', NOW_MS, deps(null))).resolves.toEqual({
+            join: 0,
+            fill: 0,
+            turbo: 0,
+            boost: 0,
+            vote: 0,
+            readable: false,
+        });
         await expect(loadMissionNeeds('tok', NOW_MS, deps(invalid(undefined)))).resolves.toEqual({
             join: 0,
             fill: 0,
             turbo: 0,
             boost: 0,
             vote: 0,
+            readable: false,
         });
+        expect(logger.__level.warning).toHaveBeenCalledWith(
+            'could not read missions (the request failed or the answer held no list)',
+            null,
+        );
+        expect(infoMessages()).toEqual([]);
+    });
+
+    test('a confirmed empty list is a read: no needs, not marked unreadable, and no failure warning', async () => {
+        const needs = await loadMissionNeeds('tok', NOW_MS, deps([]));
+        expect(needs).toEqual({ join: 0, fill: 0, turbo: 0, boost: 0, vote: 0 });
+        expect(needs?.readable).toBeUndefined();
+        expect(logger.__level.warning).not.toHaveBeenCalled();
+    });
+
+    test('a throw is logged and yields null', async () => {
         await expect(
             loadMissionNeeds('tok', NOW_MS, { getMyMissions: jest.fn().mockRejectedValue(new Error('down')) }),
         ).resolves.toBeNull();
@@ -344,6 +369,67 @@ describe('loadMissionNeeds', () => {
         await loadMissionNeeds('tok', NOW_MS, deps([]));
         expect(infoMessages()).toEqual(['🎯 Active missions: turbo 3 to go', 'No automatable mission active']);
         expect(logger.withCategory).toHaveBeenCalledWith('missions');
+    });
+});
+
+describe('missionEvidence', () => {
+    test('reads every kind regardless of the mission settings, and the earliest expiry of an unfinished mission', () => {
+        enable();
+        const evidence = missionEvidence(
+            [
+                mission('Join 7 challenges', 2, 7, { expiration_timestamp: NOW_SEC + 7200 }),
+                mission('Use Fill 3 times', 1, 3, { expiration_timestamp: NOW_SEC + 600 }),
+                mission('Win Turbo 4 times', 0, 4),
+                mission('Vote on 400 photos', 100, 400),
+                mission('Use a boost', 0, 1),
+            ],
+            NOW_SEC,
+        );
+        expect(evidence).toEqual({
+            needs: { join: 5, fill: 2, turbo: 4, boost: 1, vote: 300 },
+            unreadable: [],
+            nextExpiry: NOW_SEC + 600,
+            expiryUnreadable: false,
+        });
+    });
+
+    test('an unclassified mission adds to no need and no expiry; a claimable or expired one needs nothing', () => {
+        const evidence = missionEvidence(
+            [
+                mission('Play 6 Duels', 0, 6, { expiration_timestamp: NOW_SEC + 10 }),
+                mission('Reach Allstar Level 2 times', 0, 2, { expiration_timestamp: NOW_SEC + 20 }),
+                mission('Join 3 challenges', 3, 3, { claim_state: 'CLAIM', expiration_timestamp: NOW_SEC + 30 }),
+                mission('Use Fill 3 times', 0, 3, { expiration_timestamp: NOW_SEC - 5 }),
+                mission('Win Turbo 4 times', 4, 4, { expiration_timestamp: NOW_SEC + 40 }),
+            ],
+            NOW_SEC,
+        );
+        expect(evidence.needs).toEqual({ join: 0, fill: 0, turbo: 0, boost: 0, vote: 0 });
+        expect(evidence.nextExpiry).toBeNull();
+        expect(evidence.unreadable).toEqual([]);
+    });
+
+    test('a recognized mission whose progress cannot be read marks its kind unreadable, never zero', () => {
+        const evidence = missionEvidence(
+            [
+                mission('Join 7 challenges', 0, 7, { progress: invalid({ current: 'x', required: 7 }) }),
+                mission('Use Fill 3 times', 0, 3, { progress: invalid({ current: null, required: null }) }),
+                mission('Use a boost', 0, 1, { progress: invalid(undefined) }),
+                mission('Use 2 boosts', 0, 2),
+            ],
+            NOW_SEC,
+        );
+        expect(evidence.unreadable).toEqual(['join', 'fill', 'boost']);
+        expect(evidence.needs.boost).toBe(2);
+    });
+
+    test('an expiry that is present but not a number makes the expiry unreadable; a missing one is no expiry', () => {
+        expect(
+            missionEvidence([mission('Join 7 challenges', 0, 7, { expiration_timestamp: invalid('soon') })], NOW_SEC),
+        ).toMatchObject({ nextExpiry: null, expiryUnreadable: true });
+        expect(
+            missionEvidence([mission('Join 7 challenges', 0, 7, { expiration_timestamp: undefined })], NOW_SEC),
+        ).toMatchObject({ nextExpiry: null, expiryUnreadable: false, needs: { join: 7 } });
     });
 });
 

@@ -41,7 +41,7 @@ import { maybeAutoFillChallenge, resolveAutoSubmitDue, createFinalEligibility } 
 import { evaluateEmergencyFill, maybeEmergencyFillChallenge } from './autoFill/emergencyFill';
 import { fillChallengeNow, submitPickedPhotos } from './autoFill/manualFill';
 import { submitNewEntryForAction, submitPinnedEntry } from './autoFill/fillNew';
-import { rankCandidatesForChallenge, suggestFillPhotos } from './autoFill/pipeline';
+import { rankCandidatesForChallenge, scanFillCandidates, suggestFillPhotos } from './autoFill/pipeline';
 import { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge } from './autoFill/candidates';
 import { resolveMemberId, __resetMemberIdCache } from './autoFill/memberIdentity';
 import { resolveChosenPhotos, logChosenSkipOnce, clearChosenSkip, enteredIds } from './autoFill/chosenPhotos';
@@ -75,6 +75,8 @@ export {
     fetchCandidatesForChallenge,
     rankCandidatesForChallenge,
     suggestFillPhotos,
+    // The read-only scan of the photos a submission would consider (the scenario facts read it).
+    scanFillCandidates,
     resolveMemberId,
     __resetMemberIdCache,
     resolveSemanticScores,

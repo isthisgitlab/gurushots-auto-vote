@@ -44,6 +44,8 @@ export const VOTING_PASS_ENDPOINTS = [
     'runTurboGame',
     'searchTagAutocomplete',
     'getCurrentMemberProfile',
+    'getMyCompletedChallenges',
+    'getMyMissions',
 ] as const;
 
 /**

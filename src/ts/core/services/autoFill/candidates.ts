@@ -214,6 +214,9 @@ const describeTheme = (theme: ChallengeTheme, challenge: Challenge, ignoreWords:
  *   already in the result (the chosen-photos lookup then has nothing to add);
  *   `readFailed` (a caller starts it at false to ask for it) is set when that unfiltered read could not be made at all (both attempts failed on their first
  *   page), so an empty result is a read that failed, not a library with nothing eligible in it.
+ *   `truncated` (a caller starts it at false to ask for it) is set when any read stopped before the library was
+ *   exhausted — a walk that hit the page cap or the time budget, a page that failed, a search that failed, or a single
+ *   page that came back full — so the result may lack photos the library holds.
  */
 const fetchCandidatesForChallenge = async (
     challenge: Challenge,
@@ -232,7 +235,7 @@ const fetchCandidatesForChallenge = async (
         logLabel?: string;
         usage?: string;
         excludeIds?: Set<string> | null;
-        trace?: { walkedUnfiltered: boolean; readFailed?: boolean };
+        trace?: { walkedUnfiltered: boolean; readFailed?: boolean; truncated?: boolean };
     },
 ): Promise<PickerPhoto[]> => {
     const challengeId = challenge.id;
@@ -295,6 +298,8 @@ const fetchCandidatesForChallenge = async (
     // One search per term, unioned by id. A shared helper so the resolution retry
     // below runs the identical fetch/dedupe/fault-tolerance path rather than a
     // second copy of it.
+    // A caller that asked about truncation gets every read of this fetch tracked in one place.
+    const readState = trace?.truncated === undefined ? null : { firstPageFailed: false, truncated: false };
     const searchUnion = async (searchTerms: string[]): Promise<PickerPhoto[]> => {
         // Run the per-term searches concurrently — they're independent reads and
         // serialising them would add a round-trip of latency per extra term to
@@ -322,12 +327,15 @@ const fetchCandidatesForChallenge = async (
                     budgetMs: remainingThemedBudgetMs(),
                     logLabel,
                     ...usageOpt,
+                    ...(readState ? { readState } : {}),
                 }),
             ),
         );
+        if (trace && readState && (readState.firstPageFailed || readState.truncated)) trace.truncated = true;
         const byId: Map<string, PickerPhoto> = new Map();
         settled.forEach((result, i) => {
             if (result.status === 'rejected') {
+                if (trace?.truncated !== undefined) trace.truncated = true;
                 const reason = result.reason as unknown;
                 logger
                     .withCategory(logLabel)

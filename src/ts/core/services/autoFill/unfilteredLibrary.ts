@@ -37,21 +37,33 @@ const readUnfilteredLibrary = async (
     }: {
         logLabel: string;
         usageOpt: { usage?: string };
-        trace?: { walkedUnfiltered: boolean; readFailed?: boolean };
+        trace?: { walkedUnfiltered: boolean; readFailed?: boolean; truncated?: boolean };
         excludeIds?: Set<string> | null;
     },
 ): Promise<PickerPhoto[]> => {
-    // Only a caller that asked (by starting `readFailed` at false) gets the read tracked.
-    const byVotesRead = { firstPageFailed: false };
-    const defaultRead = { firstPageFailed: false };
-    const tracked = (readState: typeof byVotesRead) => (trace?.readFailed === undefined ? {} : { readState });
+    // Only a caller that asked (by starting `readFailed` or `truncated` at false) gets the read tracked.
+    const asked = trace?.readFailed !== undefined || trace?.truncated !== undefined;
+    const readStateOf = (): { firstPageFailed: boolean; truncated?: boolean } =>
+        trace?.truncated === undefined ? { firstPageFailed: false } : { firstPageFailed: false, truncated: false };
+    const byVotesRead = readStateOf();
+    const defaultRead = readStateOf();
+    const tracked = (readState: typeof byVotesRead) => (asked ? { readState } : {});
     const byVotes = await getEligiblePhotos(challengeId, token, {
         paginate: true,
         logLabel,
         ...tracked(byVotesRead),
         ...usageOpt,
     });
-    if (hasEligible(byVotes, excludeIds)) return byVotes;
+    // Either way out, the walk that was just read may have stopped early.
+    const noteTruncated = () => {
+        if (trace?.truncated !== undefined && (byVotesRead.truncated === true || defaultRead.truncated === true)) {
+            trace.truncated = true;
+        }
+    };
+    if (hasEligible(byVotes, excludeIds)) {
+        noteTruncated();
+        return byVotes;
+    }
     const byDefault = await getEligiblePhotos(challengeId, token, {
         order: 'default',
         logLabel,
@@ -59,6 +71,7 @@ const readUnfilteredLibrary = async (
         ...usageOpt,
     });
     if (trace && byVotesRead.firstPageFailed && defaultRead.firstPageFailed) trace.readFailed = true;
+    noteTruncated();
     // Merge, don't discard — symmetric with the themed merge in candidates.ts:
     // the default-order page leads, the vote-ordered page trails, deduped by
     // id. The trailing photos may be swap-history removals the caller's filter

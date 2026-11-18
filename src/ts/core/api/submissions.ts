@@ -15,6 +15,7 @@ import {
     buildPhotoPageBody,
     fetchPhotoPage,
     markFirstPageFailed,
+    markTruncated,
     normalizeLibraryOptions,
     walkLibrary,
     MAX_LIBRARY_PAGES,
@@ -82,6 +83,8 @@ const getEligiblePhotos = async (
         const { limit, start, search, usage, order } = normalizeLibraryOptions(options);
         const items = await fetchPhotoPage(challengeId, token, { limit, start, search, usage, order });
         if (items === null) markFirstPageFailed(options.readState, 0);
+        // A full single page may be only the first of more: the read is cut short.
+        else markTruncated(options.readState, items.length >= limit);
         return items ?? [];
     }
     return (await walkLibrary(challengeId, token, options)).items;

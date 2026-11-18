@@ -15,6 +15,7 @@ import type { Bankroll, Challenge } from '../types/gurushots';
 import type { ScenarioEngineState } from '../types/scenario';
 import type { ScenarioDocument, ScenarioRule } from '../settings/scenarioSchema';
 import { firstFailing } from './conditions';
+import type { FactEvidence } from './facts';
 import { nextWakeAt } from './nextWake';
 
 export interface EvaluateInput {
@@ -25,6 +26,8 @@ export interface EvaluateInput {
     now: number;
     timezone: string;
     bankroll?: Bankroll | null;
+    /** The evidence a loader fetched for the facts the rules read (a field it did not fetch reads as not loaded). */
+    evidence?: FactEvidence;
     /** rules already fired in this pass */
     skipRuleIds?: Set<string>;
     /** false for a plan that has not started: it has no phase clock, so no in-phase bound is a wake (nextWake.ts) */
@@ -114,7 +117,14 @@ const evaluateScenario = (
         };
     }
 
-    const ctx = { challenge: input.challenge, state, now, timezone, bankroll: input.bankroll ?? null };
+    const ctx = {
+        challenge: input.challenge,
+        state,
+        now,
+        timezone,
+        bankroll: input.bankroll ?? null,
+        ...input.evidence,
+    };
     let fire: { ruleId: string; rule: ScenarioRule; startIndex: number } | null = null;
     const explain = [];
     for (const rule of rules) {

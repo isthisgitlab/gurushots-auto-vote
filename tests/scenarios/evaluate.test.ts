@@ -127,6 +127,52 @@ describe('evaluateScenario', () => {
             expect(result.fire?.ruleId).toBe('r1');
         });
 
+        describe('the evidence a loader fetched reaches the facts', () => {
+            const needsJoin = {
+                type: 'compare',
+                left: { kind: 'fact', name: 'missions.joinNeed' },
+                op: '>',
+                right: { kind: 'literal', value: 0, quantity: 'count' },
+            };
+            const missions = (join: number) => ({
+                readable: true as const,
+                needs: { join, fill: 0, turbo: 0, boost: 0, vote: 0 },
+                unreadable: [],
+                nextExpiry: null,
+                expiryUnreadable: false,
+            });
+
+            test('without it the rule waits: the evidence was not loaded', () => {
+                const result = explained([needsJoin]);
+                expect(result.fire).toBeNull();
+                expect(result.explain[0].reason).toBe('condition 1 (compare) cannot be decided: evidence-not-loaded');
+            });
+
+            test('with it the rule decides, and a failed read keeps it waiting with the reason', () => {
+                const fires = run(scenario([rule('r1', [needsJoin])]), undefined, {
+                    evidence: { missions: missions(3) },
+                });
+                expect(fires.fire?.ruleId).toBe('r1');
+                const holds = run(scenario([rule('r1', [needsJoin])]), undefined, {
+                    evidence: { missions: missions(0) },
+                });
+                expect(holds.fire).toBeNull();
+                expect(holds.explain[0].reason).toBe('condition 1 (compare) does not hold');
+                const failed = run(scenario([rule('r1', [needsJoin])]), undefined, {
+                    evidence: { missions: { readable: false, reason: 'missions-unreadable' } },
+                });
+                expect(failed.fire).toBeNull();
+                expect(failed.explain[0].reason).toBe('condition 1 (compare) cannot be decided: missions-unreadable');
+            });
+
+            test('a bankroll in the evidence reads like the bankroll input', () => {
+                const result = run(scenario([rule('r1', [noBankroll])]), undefined, {
+                    evidence: { bankroll: { keys: 1, swaps: 0, fills: 0, coins: 0 } },
+                });
+                expect(result.fire?.ruleId).toBe('r1');
+            });
+        });
+
         test('a rule asking a setting question waits until a reader supplies the setting', () => {
             const askSetting = {
                 type: 'compare',

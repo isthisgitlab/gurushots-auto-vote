@@ -24,9 +24,9 @@ import { errorMessage } from '../errorMessage';
  * The endpoints the claim pass calls (api/rewards.ts, or the mock mirror).
  */
 interface ClaimDeps {
-    getMyCompletedChallenges: (token: string, start?: number, limit?: number) => Promise<CompletedChallenge[]>;
+    getMyCompletedChallenges: (token: string, start?: number, limit?: number) => Promise<CompletedChallenge[] | null>;
     claimChallengeResources: (challengeId: string | number, token: string) => Promise<boolean>;
-    getMyMissions: (token: string) => Promise<Mission[]>;
+    getMyMissions: (token: string) => Promise<Mission[] | null>;
     claimMissionPrize: (missionId: string | number, token: string) => Promise<boolean>;
 }
 
@@ -78,20 +78,40 @@ const challengePrizes = (challenge: CompletedChallenge) =>
     challenge?.member?.rewards_by_section?.sections?.find((s) => s?.type === 'TOTAL')?.resources;
 
 /**
- * Reads completed challenges page by page (stopping at a short page) and keeps
- * the claimable ones.
+ * Whether a finished challenge's rewards wait to be claimed (the server says `claim_state` is CLAIM).
  */
-const listClaimableChallenges = async (token: string, deps: ClaimDeps): Promise<CompletedChallenge[]> => {
-    const claimable = [];
+const isClaimable = (challenge: CompletedChallenge): boolean =>
+    challenge?.member?.rewards_by_section?.claim_state === CLAIMABLE;
+
+/**
+ * Reads the completed challenges page by page, stopping at a short page or at the page cap. `complete`: the listing
+ * reached its end. `failedPage` (1-based): a page that was not read, which ends the listing there; what the earlier pages
+ * held is returned all the same.
+ */
+const readCompletedChallenges = async (
+    token: string,
+    deps: Pick<ClaimDeps, 'getMyCompletedChallenges'>,
+): Promise<{ challenges: CompletedChallenge[]; complete: boolean; failedPage: number | null }> => {
+    const challenges: CompletedChallenge[] = [];
     for (let page = 0; page < MAX_COMPLETED_PAGES; page++) {
         const items = await deps.getMyCompletedChallenges(token, page * COMPLETED_PAGE_SIZE, COMPLETED_PAGE_SIZE);
-        const list = Array.isArray(items) ? items : [];
-        for (const challenge of list) {
-            if (challenge?.member?.rewards_by_section?.claim_state === CLAIMABLE) claimable.push(challenge);
-        }
-        if (list.length < COMPLETED_PAGE_SIZE) break;
+        if (!Array.isArray(items)) return { challenges, complete: false, failedPage: page + 1 };
+        challenges.push(...items);
+        if (items.length < COMPLETED_PAGE_SIZE) return { challenges, complete: true, failedPage: null };
     }
-    return claimable;
+    return { challenges, complete: false, failedPage: null };
+};
+
+/**
+ * Reads completed challenges page by page (stopping at a short page) and keeps
+ * the claimable ones. A page that was not read is logged, and the ones read before it are still claimed.
+ */
+const listClaimableChallenges = async (token: string, deps: ClaimDeps): Promise<CompletedChallenge[]> => {
+    const { challenges, failedPage } = await readCompletedChallenges(token, deps);
+    if (failedPage !== null) {
+        cat().warning(`could not read completed challenges (page ${failedPage}); claiming what was read`, null);
+    }
+    return challenges.filter(isClaimable);
 };
 
 /**
@@ -171,7 +191,11 @@ const runClaimPass = async (
         'mission',
         async () => {
             const missions = await deps.getMyMissions(token);
-            return (Array.isArray(missions) ? missions : []).filter((m) => m?.claim_state === CLAIMABLE);
+            if (!Array.isArray(missions)) {
+                cat().warning('could not read missions; nothing claimed from them this time', null);
+                return [];
+            }
+            return missions.filter((m) => m?.claim_state === CLAIMABLE);
         },
         (id) => deps.claimMissionPrize(id, token),
         (mission) => describePrizes(mission.prizes),
@@ -191,4 +215,11 @@ const resetClaimThrottle = () => {
     lastClaimAt = 0;
 };
 
-export { CLAIM_INTERVAL_MS, getAutoClaimStatus, runClaimPass, resetClaimThrottle };
+export {
+    CLAIM_INTERVAL_MS,
+    getAutoClaimStatus,
+    runClaimPass,
+    resetClaimThrottle,
+    readCompletedChallenges,
+    isClaimable,
+};

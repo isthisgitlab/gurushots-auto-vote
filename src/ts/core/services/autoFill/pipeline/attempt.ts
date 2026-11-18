@@ -8,7 +8,14 @@ import { resolveSemanticScores } from '../candidates';
 import { clearChosenSkip, enteredIds, logChosenSkipOnce, resolveChosenPhotos } from '../chosenPhotos';
 import { refuseRememberedChosen, resolveMissingChosen } from '../chosenWalkMemo';
 import { describeSubmitFailure, logPopularityPicks, logSelectionDetails } from '../fillLogging';
-import type { FillAttemptParams, FillAttemptResult, FillLabel, RankDeps } from '../../../types/autoFill';
+import type {
+    FetchErrorResult,
+    FillAttemptParams,
+    FillAttemptResult,
+    FillLabel,
+    FillLogger,
+    RankDeps,
+} from '../../../types/autoFill';
 import type { Challenge } from '../../../types/gurushots';
 import type { ChosenPick, IgnoreWords, LibraryUsage, PickerPhoto, ScoredCandidate } from '../../../types/photoPicker';
 import { errorMessage } from '../../../errorMessage';
@@ -20,14 +27,14 @@ import { recordUncertainSubmission, verifyFillPick } from './verify';
 // explicit user intent, so neither does; both still rank the chosen photos first.
 // A swap ranking honours it only when its caller enforces it. The automatic swap and a scenario
 // swap step do. The manual Swap suggestion and the swap picker's Auto pass `ignoreOnly`.
-const ONLY_LABELS: ReadonlySet<string> = new Set(['autoSubmit', 'fillNew', 'suggest', 'swap']);
+const ONLY_LABELS: ReadonlySet<string> = new Set(['autoSubmit', 'fillNew', 'suggest', 'swap', 'scenarioScan']);
 
 /**
  * The log prefix of a ranking that reads the Chosen Photos settings: a fill path, or the
- * submit-free rankings (the photo suggestions and the swap ranking), which are not a FillLabel,
- * so runFillAttempt never takes them.
+ * submit-free rankings (the photo suggestions, the swap ranking and the scenario scan), which are not a FillLabel,
+ * so runFillAttempt never takes them. The scan reads the settings as the scheduled fill does (Submit Only included).
  */
-type ChosenLabel = FillLabel | 'suggest' | 'swap';
+type ChosenLabel = FillLabel | 'suggest' | 'swap' | 'scenarioScan';
 
 /** What the chosen-photo steps read: no submitter, so the suggestions cannot reach one. */
 type ChosenParams = { label: ChosenLabel; challenge: Challenge; token: string; deps: RankDeps };
@@ -152,6 +159,199 @@ const finalEligibilityStandsDown = async (
     picked: readonly string[],
 ): Promise<boolean> => (await finalEligibility?.(picked))?.standDown === true;
 
+/** Why a fill stops before it picks anything: the outcomes of the preparation that are not a pick. */
+type PrepareStop =
+    | FetchErrorResult
+    | { status: 'probe-stand-down' }
+    | { status: 'no-chosen' }
+    | { status: 'no-pick'; detail: string | null };
+
+/** What the preparation leaves for the steps after the pick: the live re-check, the visual check and the submit. */
+type PreparedPick = {
+    eligible: PickerPhoto[];
+    scored: ScoredCandidate[];
+    contested: PickerPhoto[];
+    contestedIds: Set<string>;
+    chosenIds: ReadonlySet<string> | null;
+    inOrder: boolean;
+    picked: string[];
+    ignoreWords: IgnoreWords;
+};
+
+/**
+ * `incomplete`: some read of the library stopped early or failed, or (a scan) a chosen photo the themed search missed
+ * was not looked up, so the pool may lack photos the library holds. Only a scan tracks it. `stop` or `ready`, never both.
+ */
+type Preparation = { incomplete: boolean } & (
+    | { stop: PrepareStop; ready?: undefined }
+    | { stop?: undefined; ready: PreparedPick }
+);
+
+type PrepareParams = Pick<
+    FillAttemptParams,
+    | 'challenge'
+    | 'token'
+    | 'wantCount'
+    | 'mustIncludeTags'
+    | 'shouldIncludeTags'
+    | 'submitWithoutTagMatch'
+    | 'probeStandDown'
+    | 'onEmptyPick'
+    | 'onlyIds'
+> & {
+    label: FillLabel | 'scenarioScan';
+    deps: RankDeps;
+    /**
+     * The read-only scan: tracks whether any read stopped early, and leaves everything a real fill remembers alone —
+     * the Submit-Only skip-log latch is neither read nor set, and the chosen-photo walk (whose memo and log line a
+     * later fill owns) is not made. A submission never sets it.
+     */
+    scan?: boolean;
+};
+
+/**
+ * Everything a fill does before it spends anything: plan the chosen photos, load and score the candidates, apply the
+ * swap history, run the stand-down probe, rank, and pick. Submission (runFillAttempt) and the read-only scan
+ * (scanFillCandidates) both run exactly this, so one rule decides which photos are eligible. It submits nothing and
+ * touches no entry.
+ */
+const prepareFillPick = async ({
+    label,
+    challenge,
+    token,
+    deps,
+    wantCount,
+    mustIncludeTags,
+    shouldIncludeTags,
+    submitWithoutTagMatch,
+    probeStandDown = null,
+    onEmptyPick = null,
+    onlyIds,
+    scan = false,
+}: PrepareParams): Promise<Preparation> => {
+    const { logger } = deps;
+    const {
+        settings: chosenSettings,
+        enforceOnly,
+        unentered,
+        chosen,
+    } = planChosen({
+        label,
+        challenge,
+        token,
+        deps,
+        onlyIds,
+    });
+    // Every chosen photo is already an entry here: nothing is left to choose,
+    // so there is nothing to fetch either.
+    if (enforceOnly && unentered.length === 0) {
+        if (!scan) logChosenSkipOnce(logger, challenge, label, 'all-entered');
+        return { incomplete: false, stop: { status: 'no-chosen' } };
+    }
+
+    const loaded = await loadFillCandidates({
+        label,
+        challenge,
+        token,
+        deps,
+        mustIncludeTags,
+        shouldIncludeTags,
+        trackReads: scan,
+        // The scan's lines carry its own label, never a fill's.
+        ...(scan ? { logLabel: label } : {}),
+    });
+    if (loaded.status === 'fetch-error') {
+        return { incomplete: true, stop: loaded };
+    }
+    const { ignoreWords } = loaded;
+    // A scan does not look up a chosen photo the themed search missed (that lookup keeps a memo and writes a line a
+    // later fill owns): a pool that lacks one is a lower bound.
+    const missedChosen = scan
+        ? unentered.some((id) => !loaded.eligible.some((photo) => String(photo.id) === id))
+        : false;
+    const incomplete = loaded.incomplete || missedChosen;
+    const { eligible: fetched, semanticScores } = scan
+        ? loaded
+        : await addMissedChosen({
+              label,
+              challenge,
+              token,
+              deps,
+              wantCount,
+              unentered,
+              inOrder: chosenSettings.inOrder,
+              loaded,
+              onlyIds,
+          });
+    // A photo the swap history took out is not picked again on its own; listing
+    // it in Chosen Photos allows it. The fetch's eligibility decisions are
+    // already swapped-aware — an all-swapped-out themed result fell back to the
+    // unfiltered walk above — so this filter remains the single place the pool
+    // is narrowed, re-allowing chosen ids.
+    const swapped = swappedOutIds(challenge);
+    const eligible = fetched.filter(
+        (photo) => !swapped.has(String(photo.id)) || chosenSettings.ids.includes(String(photo.id)),
+    );
+
+    // The stand-down probe asks what the NORMAL path would do, so it sees the
+    // setting as saved even where this path would not honour Submit Only.
+    if (
+        probeStandDown &&
+        probeStandDown({ eligible, semanticScores, chosen: chosen && { ...chosen, only: chosenSettings.only } })
+    ) {
+        return { incomplete, stop: { status: 'probe-stand-down' } };
+    }
+
+    // Everything below is submission-bound. The probe above deliberately runs
+    // FIRST and on unenriched data: it decides only WHETHER to stand down, never
+    // WHICH photo to submit, so it does not need real vote counts — and it runs
+    // on every scheduler cycle inside the emergency window, usually to stand
+    // down. Enriching before it would spend a burst of get_image_data requests
+    // per cycle to submit nothing. Do not "fix" this asymmetry.
+    const { scored, contested, contestedIds, chosenIds, orderedIds } = await scoreFillCandidates({
+        label,
+        challenge,
+        token,
+        deps,
+        eligible,
+        semanticScores,
+        ignoreWords,
+        wantCount,
+        mustIncludeTags,
+        shouldIncludeTags,
+        submitWithoutTagMatch,
+        chosen,
+    });
+
+    // With Submit Only the pool holds nothing but chosen photos, so an empty
+    // pool means none of them can be submitted. That is a deliberate skip, not
+    // an empty library.
+    if (enforceOnly && scored.length === 0) {
+        if (!scan) logChosenSkipOnce(logger, challenge, label, 'none-usable');
+        return { incomplete, stop: { status: 'no-chosen' } };
+    }
+    // An explicit id pool (the Boost-pinned submit) is not a Submit Only skip:
+    // it leaves the scheduled fill's skip line — its explaining and its
+    // clearing — alone.
+    if (onlyIds === undefined && !scan) clearChosenSkip(challenge);
+
+    const inOrder = chosenSettings.inOrder;
+    const picked = finalizePick(scored, wantCount, chosenIds, inOrder ? orderedIds : null);
+    if (picked.length === 0) {
+        if (onEmptyPick) {
+            return { incomplete, stop: { status: 'no-pick', detail: onEmptyPick(eligible) } };
+        }
+        logger
+            .withCategory('autoSubmit')
+            .info(`${label}: no eligible photos for ${logger.challengeTag(challenge)}`, null);
+        return { incomplete, stop: { status: 'no-pick', detail: null } };
+    }
+    return {
+        incomplete,
+        ready: { eligible, scored, contested, contestedIds, chosenIds, inOrder, picked, ignoreWords },
+    };
+};
+
 /**
  * The one fill pipeline all four public entry points share:
  *
@@ -218,104 +418,22 @@ const runFillAttempt = async ({
     onlyIds,
 }: FillAttemptParams): Promise<FillAttemptResult> => {
     const { logger, submitToChallenge } = deps;
-    const {
-        settings: chosenSettings,
-        enforceOnly,
-        unentered,
-        chosen,
-    } = planChosen({
+    const prepared = await prepareFillPick({
         label,
         challenge,
         token,
         deps,
-        onlyIds,
-    });
-    // Every chosen photo is already an entry here: nothing is left to choose,
-    // so there is nothing to fetch either.
-    if (enforceOnly && unentered.length === 0) {
-        logChosenSkipOnce(logger, challenge, label, 'all-entered');
-        return { status: 'no-chosen' };
-    }
-
-    const loaded = await loadFillCandidates({ label, challenge, token, deps, mustIncludeTags, shouldIncludeTags });
-    if (loaded.status === 'fetch-error') {
-        return loaded;
-    }
-    const { ignoreWords } = loaded;
-    const { eligible: fetched, semanticScores } = await addMissedChosen({
-        label,
-        challenge,
-        token,
-        deps,
-        wantCount,
-        unentered,
-        inOrder: chosenSettings.inOrder,
-        loaded,
-        onlyIds,
-    });
-    // A photo the swap history took out is not picked again on its own; listing
-    // it in Chosen Photos allows it. The fetch's eligibility decisions are
-    // already swapped-aware — an all-swapped-out themed result fell back to the
-    // unfiltered walk above — so this filter remains the single place the pool
-    // is narrowed, re-allowing chosen ids.
-    const swapped = swappedOutIds(challenge);
-    const eligible = fetched.filter(
-        (photo) => !swapped.has(String(photo.id)) || chosenSettings.ids.includes(String(photo.id)),
-    );
-
-    // The stand-down probe asks what the NORMAL path would do, so it sees the
-    // setting as saved even where this path would not honour Submit Only.
-    if (
-        probeStandDown &&
-        probeStandDown({ eligible, semanticScores, chosen: chosen && { ...chosen, only: chosenSettings.only } })
-    ) {
-        return { status: 'probe-stand-down' };
-    }
-
-    // Everything below is submission-bound. The probe above deliberately runs
-    // FIRST and on unenriched data: it decides only WHETHER to stand down, never
-    // WHICH photo to submit, so it does not need real vote counts — and it runs
-    // on every scheduler cycle inside the emergency window, usually to stand
-    // down. Enriching before it would spend a burst of get_image_data requests
-    // per cycle to submit nothing. Do not "fix" this asymmetry.
-    const { scored, contested, contestedIds, chosenIds, orderedIds } = await scoreFillCandidates({
-        label,
-        challenge,
-        token,
-        deps,
-        eligible,
-        semanticScores,
-        ignoreWords,
         wantCount,
         mustIncludeTags,
         shouldIncludeTags,
         submitWithoutTagMatch,
-        chosen,
+        probeStandDown,
+        onEmptyPick,
+        onlyIds,
     });
-
-    // With Submit Only the pool holds nothing but chosen photos, so an empty
-    // pool means none of them can be submitted. That is a deliberate skip, not
-    // an empty library.
-    if (enforceOnly && scored.length === 0) {
-        logChosenSkipOnce(logger, challenge, label, 'none-usable');
-        return { status: 'no-chosen' };
-    }
-    // An explicit id pool (the Boost-pinned submit) is not a Submit Only skip:
-    // it leaves the scheduled fill's skip line — its explaining and its
-    // clearing — alone.
-    if (onlyIds === undefined) clearChosenSkip(challenge);
-
-    const inOrder = chosenSettings.inOrder;
-    let picked = finalizePick(scored, wantCount, chosenIds, inOrder ? orderedIds : null);
-    if (picked.length === 0) {
-        if (onEmptyPick) {
-            return { status: 'no-pick', detail: onEmptyPick(eligible) };
-        }
-        logger
-            .withCategory('autoSubmit')
-            .info(`${label}: no eligible photos for ${logger.challengeTag(challenge)}`, null);
-        return { status: 'no-pick', detail: null };
-    }
+    if (prepared.stop) return prepared.stop;
+    const { eligible, scored, contested, contestedIds, chosenIds, inOrder, ignoreWords } = prepared.ready;
+    let { picked } = prepared.ready;
 
     // Live re-check just before consuming a slot: the pass-start snapshot can
     // be minutes old, and an entry added outside this run (e.g. a manual
@@ -408,4 +526,53 @@ const runFillAttempt = async ({
     }
 };
 
-export { runFillAttempt, planChosen, addMissedChosen };
+/** What a read-only scan of the photos a submission would consider found. */
+type PhotoScan = {
+    /** How many photos the submission's ranking pool holds (a lower bound while `complete` is false). */
+    eligible: number;
+    /** False when the scan stopped early: a read failed or was cut short, or the visual check cannot run. */
+    complete: boolean;
+    /** Why there is nothing to submit, or why the scan is incomplete. */
+    firstReason?: string;
+};
+
+/**
+ * Reads, without submitting anything, what a scheduled fill of this challenge would find: the same candidate listing
+ * and scoring a submission runs (prepareFillPick). The vision check is not run: it only reorders a pick and cannot
+ * change the count. A scan that stopped early is incomplete: it proves a lower bound, never zero.
+ *
+ * It leaves no trace a real fill would notice: its log lines go to the `scenarioScan` category and carry that label,
+ * and it neither reads nor sets the Submit-Only skip-log latch or the chosen-photo walk memo.
+ */
+const scanFillCandidates = async (
+    params: Pick<
+        FillAttemptParams,
+        'challenge' | 'token' | 'mustIncludeTags' | 'shouldIncludeTags' | 'submitWithoutTagMatch'
+    > & { deps: RankDeps },
+): Promise<PhotoScan> => {
+    const label = 'scenarioScan';
+    const { logger } = params.deps;
+    const scanLogger: FillLogger = {
+        withCategory: () => logger.withCategory(label),
+        challengeTag: logger.challengeTag,
+    };
+    const prepared = await prepareFillPick({
+        ...params,
+        deps: { ...params.deps, logger: scanLogger },
+        label,
+        wantCount: 1,
+        scan: true,
+    });
+    if (prepared.stop) {
+        const { status } = prepared.stop;
+        if (status === 'fetch-error') return { eligible: 0, complete: false, firstReason: 'photo-read-failed' };
+        const reason = status === 'no-chosen' ? 'no-chosen-photo' : 'no-eligible-photo';
+        return { eligible: 0, complete: !prepared.incomplete, firstReason: reason };
+    }
+    const eligible = prepared.ready.scored.length;
+    return prepared.incomplete
+        ? { eligible, complete: false, firstReason: 'photo-read-incomplete' }
+        : { eligible, complete: true };
+};
+
+export { runFillAttempt, scanFillCandidates, planChosen, addMissedChosen };

@@ -318,7 +318,8 @@ describe('one process at a time per challenge', () => {
         );
         setup(single([{ type: 'fillExposure' }]));
         const first = run();
-        await Promise.resolve();
+        // Let the first pass reach its spend (the evidence load is one await before the evaluation).
+        await new Promise<void>((resolve) => setImmediate(resolve));
         await run();
         finish();
         await first;
@@ -2070,6 +2071,78 @@ describe('rule execution', () => {
         await run();
         expect(pass.currency.strategy.getBankroll).toHaveBeenCalled();
         expect(currencyActions.fillExposure).toHaveBeenCalled();
+    });
+
+    test('a balance fact read only inside a compare expression loads the bankroll for the evaluation', async () => {
+        const swaps = (op: string, value: number) => ({
+            type: 'compare',
+            left: { kind: 'fact', name: 'balance.swaps' },
+            op,
+            right: { kind: 'literal', value, quantity: 'swaps' },
+        });
+        currencyActions.fillExposure.mockResolvedValue(invalid({ ok: true }));
+        setup(single([{ type: 'fillExposure' }], { if: [swaps('>', 100)] }));
+        await run();
+        expect(pass.currency.strategy.getBankroll).toHaveBeenCalledWith('tok');
+        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+
+        ledger = createMemoryStateLedger();
+        pass.scenarios = { ledger };
+        setup(single([{ type: 'fillExposure' }], { if: [swaps('>=', 5)] }));
+        await run();
+        expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
+    });
+
+    test('a bankroll that cannot be read makes its condition unknown: that rule waits, the others still run, and nothing throws', async () => {
+        // Only the evaluation's read fails; the spend's own reserve check reads the bankroll again, and that works.
+        pass.currency.strategy.getBankroll.mockRejectedValueOnce(new Error('offline'));
+        currencyActions.fillExposure.mockResolvedValue(invalid({ ok: true }));
+        const swapsAbove = { type: 'balance', currency: 'swaps', op: '>', value: 0 };
+        setup(
+            plan({
+                main: {
+                    rules: [
+                        rule('needsBalance', [{ type: 'goto', phase: 'never' }], { if: [swapsAbove] }),
+                        rule('plain', [{ type: 'fillExposure' }]),
+                    ],
+                },
+                never: {},
+            }),
+        );
+        await run();
+        // The rule that needs the balance waited while it was unreadable, so `plain` ran first; once the next
+        // evaluation could read the balance, the waiting rule fired and went on to its phase.
+        expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
+        expect(state().phase).toBe('never');
+        expect(log.warning).toHaveBeenCalledWith(
+            expect.stringContaining('could not read the balance for the scenario: offline'),
+            null,
+        );
+        // A bankroll the producer answers null for is unknown the same way.
+        pass.currency.strategy.getBankroll.mockResolvedValue(null);
+        ledger = createMemoryStateLedger();
+        pass.scenarios = { ledger };
+        currencyActions.fillExposure.mockClear();
+        await run();
+        expect(state().phase).toBe('main');
+        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+    });
+
+    test('the evidence is loaded again for each evaluation of one pass (as the bankroll always was)', async () => {
+        const swaps = { type: 'balance', currency: 'swaps', op: '>', value: 0 };
+        setup(
+            plan({
+                main: {
+                    rules: [
+                        rule('first', [{ type: 'forget', slot: 'a' }], { if: [swaps] }),
+                        rule('second', [{ type: 'forget', slot: 'b' }], { if: [swaps] }),
+                    ],
+                },
+            }),
+        );
+        await run();
+        // two rules fire, then one more evaluation finds nothing left to fire
+        expect(pass.currency.strategy.getBankroll).toHaveBeenCalledTimes(3);
     });
 
     test('a scenario without balance conditions never reads the bankroll for evaluation', async () => {

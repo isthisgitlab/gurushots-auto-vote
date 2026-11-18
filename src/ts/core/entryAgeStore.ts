@@ -81,7 +81,7 @@ const pinSubmitLatch = (read: () => State, write: (edit: (state: State) => State
  * @param refreshStore - re-reads the stored value where the cache can be behind it (the app window); true when it did
  */
 const createEntryAgeLedger = (store: RawJsonStore, refreshStore?: () => Promise<boolean>) => {
-    const { read, write: writeChange, refresh } = createStateLog(store, refreshStore);
+    const { read, write: writeChange, refresh, health } = createStateLog(store, refreshStore);
     const observing = (edit: (state: State) => State | null) => writeChange('observe', edit);
     const write = (edit: (state: State) => State | null) => writeChange('mark', edit);
     return {
@@ -111,6 +111,21 @@ const createEntryAgeLedger = (store: RawJsonStore, refreshStore?: () => Promise<
          * a read that wants the service's marks. A read that fails is logged and the cache stays.
          */
         refresh,
+
+        /**
+         * Whether the last read of the ledger and the last refresh worked. A ledger that could not be read answers as
+         * an empty one; this tells the two apart.
+         */
+        health,
+
+        /**
+         * When each entry of `challenge` went in, read-only: per entry id, the time and whether it is exact (the app
+         * submitted it) or only observed (the first fetch that showed it, so the entry went in at or before). An entry
+         * of unknown age is answered with the record's `firstSeen`, observed; an entry the ledger does not hold is left
+         * out.
+         */
+        entryTimes: (challenge: Challenge): EntryTimes[string] =>
+            knownTimes(read(), [challenge])[String(challenge?.id ?? '')] ?? {},
 
         /**
          * When the entry entered the challenge (Unix seconds), 0 when that is

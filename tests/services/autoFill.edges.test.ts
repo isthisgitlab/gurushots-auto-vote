@@ -615,3 +615,94 @@ describe('themed search edge shapes', () => {
         expect(result.map((p) => p.id)).toEqual(['default1', 'swapped']);
     });
 });
+
+describe('trace.truncated: a read that stopped early is not "the library holds nothing more"', () => {
+    const { fetchCandidatesForChallenge } = require('../../src/ts/core/services/autoFill') as typeof autoFillModule;
+    const LIB = [allowedPhoto('lib1'), allowedPhoto('lib2')];
+    type Options = Parameters<FillDeps['getEligiblePhotos']>[2];
+    const reads = (onRead: (opts: NonNullable<Options>) => void, themed: LibraryPhoto[] = []) =>
+        jest.fn<ReturnType<FillDeps['getEligiblePhotos']>, Parameters<FillDeps['getEligiblePhotos']>>(
+            async (_id, _tok, opts = {}) => {
+                onRead(opts);
+                return opts.search ? themed : LIB;
+            },
+        );
+    const fetchWith = async (
+        getEligiblePhotos: ReturnType<typeof reads>,
+        trace: { walkedUnfiltered: boolean; readFailed?: boolean; truncated?: boolean },
+    ) => {
+        const { logger } = makeCapturingLogger();
+        await fetchCandidatesForChallenge(
+            invalid({ id: 'c1', title: 'Pink' }),
+            'tok',
+            {},
+            { getEligiblePhotos, logger, trace },
+        );
+        return trace;
+    };
+
+    test('nothing stopped early: truncated stays false and every themed read carries the readState', async () => {
+        const getEligiblePhotos = reads(() => undefined, [allowedPhoto('t1')]);
+        const trace = await fetchWith(getEligiblePhotos, { walkedUnfiltered: false, truncated: false });
+        expect(trace.truncated).toBe(false);
+        const searches = getEligiblePhotos.mock.calls.filter(([, , opts]) => opts?.search);
+        expect(searches.length).toBeGreaterThan(0);
+        for (const [, , opts] of searches)
+            expect(opts?.readState).toEqual({ firstPageFailed: false, truncated: false });
+    });
+
+    test('a themed search that was cut short (or whose first page failed) makes the fetch truncated', async () => {
+        const cut = reads(
+            (opts) => {
+                if (opts.search && opts.readState) opts.readState.truncated = true;
+            },
+            [allowedPhoto('t1')],
+        );
+        expect((await fetchWith(cut, { walkedUnfiltered: false, truncated: false })).truncated).toBe(true);
+        const failedFirst = reads(
+            (opts) => {
+                if (opts.search && opts.readState) opts.readState.firstPageFailed = true;
+            },
+            [allowedPhoto('t1')],
+        );
+        expect((await fetchWith(failedFirst, { walkedUnfiltered: false, truncated: false })).truncated).toBe(true);
+    });
+
+    test('a themed search that rejects makes the fetch truncated, and the fetch still falls back', async () => {
+        const rejecting = jest.fn<ReturnType<FillDeps['getEligiblePhotos']>, Parameters<FillDeps['getEligiblePhotos']>>(
+            async (_id, _tok, opts = {}) => {
+                if (opts.search) throw new Error('search down');
+                return LIB;
+            },
+        );
+        const trace = await fetchWith(rejecting, { walkedUnfiltered: false, truncated: false });
+        expect(trace).toEqual({ walkedUnfiltered: true, truncated: true });
+    });
+
+    test('an unfiltered read that stopped early makes the fetch truncated, whichever of its two reads it was', async () => {
+        const walkCut = reads((opts) => {
+            if (!opts.search && opts.paginate && opts.readState) opts.readState.truncated = true;
+        });
+        expect((await fetchWith(walkCut, { walkedUnfiltered: false, truncated: false })).truncated).toBe(true);
+        // the default-order page is read only when the vote-ordered walk holds nothing eligible
+        const defaultCut = jest.fn<
+            ReturnType<FillDeps['getEligiblePhotos']>,
+            Parameters<FillDeps['getEligiblePhotos']>
+        >(async (_id, _tok, opts = {}) => {
+            if (opts.order === 'default' && opts.readState) opts.readState.truncated = true;
+            return opts.order === 'default' ? LIB : [];
+        });
+        expect((await fetchWith(defaultCut, { walkedUnfiltered: false, truncated: false })).truncated).toBe(true);
+    });
+
+    test('a fetch that did not ask sends exactly the options it always sent, and an unfiltered-only ask tracks first pages only', async () => {
+        const plain = reads(() => undefined);
+        await fetchWith(plain, { walkedUnfiltered: false });
+        for (const [, , opts] of plain.mock.calls) expect(opts).not.toHaveProperty('readState');
+        const firstPagesOnly = reads(() => undefined);
+        await fetchWith(firstPagesOnly, { walkedUnfiltered: false, readFailed: false });
+        for (const [, , opts] of firstPagesOnly.mock.calls.filter(([, , o]) => !o?.search)) {
+            expect(opts?.readState).toEqual({ firstPageFailed: false });
+        }
+    });
+});

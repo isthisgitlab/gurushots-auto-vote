@@ -10,14 +10,12 @@ import { refreshChallengeState } from '../autoFill';
 import type { BoostState } from '../../types/gurushots';
 import type { ScenarioState } from '../../types/stores';
 import type { SpendOutcome } from '../currencyActions';
-import type { ScenarioDocument } from '../../settings/scenarioSchema';
 import type {
     ActionEffects,
     DoneOutcome,
     NotDoneOutcome,
     RunnerContext,
     ScenarioAction,
-    ScenarioRule,
     SpendAction,
     SpendKind,
 } from './types';
@@ -88,20 +86,6 @@ const unclearHalted = (actionType: SpendAction, from: Retry): NotDoneOutcome => 
     // A spend recovered from its marker was never counted: it is now, as if it had gone through.
     ...(from.count ? { spent: SPEND[actionType].limit } : {}),
 });
-
-/**
- * True when any rule of the scenario compares a currency balance.
- */
-const usesBalance = (scenario: ScenarioDocument) => {
-    const walk = (conditions: ScenarioRule['if']): boolean =>
-        (conditions ?? []).some(
-            (item) =>
-                item.type === 'balance' ||
-                ((item.type === 'any' || item.type === 'all') && walk(item.of)) ||
-                (item.type === 'not' && walk([item.condition])),
-        );
-    return Object.values(scenario.phases).some((phase) => (phase.rules ?? []).some((rule) => walk(rule.if)));
-};
 
 /**
  * Re-read the challenge live (merged into the pass object in place).
@@ -231,7 +215,6 @@ export {
     skipped,
     failed,
     deferred,
-    usesBalance,
     refreshLive,
     spendAllowed,
     lockedCurrencySpend,

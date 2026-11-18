@@ -26,6 +26,10 @@ import type {
     getCurrentMemberProfile as GetCurrentMemberProfile,
     searchTagAutocomplete as SearchTagAutocomplete,
 } from '../api/tags';
+import type {
+    getMyCompletedChallenges as GetMyCompletedChallenges,
+    getMyMissions as GetMyMissions,
+} from '../api/rewards';
 import type { CurrencyPassDeps } from '../services/currencyAuto';
 import type { createStateLedger as CreateScenarioStateLedger } from '../scenarioStateStore';
 import type { EntryTracker } from '../services/newEntryTracker';
@@ -51,6 +55,14 @@ export interface VotingPassApi {
         ...args: Parameters<typeof GetCurrentMemberProfile>
     ): ReturnType<typeof GetCurrentMemberProfile>;
     searchTagAutocomplete?(...args: Parameters<typeof SearchTagAutocomplete>): ReturnType<typeof SearchTagAutocomplete>;
+    /**
+     * Optional: the read-only list reads the scenario facts use (null when the read failed, a list, possibly empty,
+     * when it was made). Without one, the facts that need it are unreadable.
+     */
+    getMyCompletedChallenges?(
+        ...args: Parameters<typeof GetMyCompletedChallenges>
+    ): ReturnType<typeof GetMyCompletedChallenges>;
+    getMyMissions?(...args: Parameters<typeof GetMyMissions>): ReturnType<typeof GetMyMissions>;
 }
 
 export type ScenarioStateLedger = ReturnType<typeof CreateScenarioStateLedger>;

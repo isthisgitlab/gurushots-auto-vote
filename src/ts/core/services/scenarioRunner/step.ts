@@ -19,7 +19,8 @@ import type { ScenarioState } from '../../types/stores';
 import type { PassContext } from '../votingOrchestrator';
 import { errorMessage } from '../../errorMessage';
 import type { RunnerContext, ScenarioAction, ScenarioPass } from './types';
-import { log, nowSec, usesBalance } from './support';
+import { log, nowSec } from './support';
+import { loadScenarioSnapshot } from './facts';
 import { runRule, withNotice } from './rule';
 
 const NO_LOCK: StateLock = { ok: true, release: () => {} };
@@ -81,16 +82,16 @@ const advance = async (ctx: RunnerContext, now: number): Promise<void> => {
 
     const firedThisPass: Set<string> = new Set();
     const visited = new Set([state.phase]);
-    const needsBankroll = usesBalance(scenario);
     for (;;) {
-        const bankroll = needsBankroll ? await ctx.pass.currency.strategy.getBankroll(ctx.pass.token) : null;
+        // The evidence the rules of this phase read, fetched fresh for each evaluation (the bankroll as before).
+        const evidence = await loadScenarioSnapshot(scenario, ctx, state.phase);
         const decision = evaluateScenario({
             scenario,
             state,
             challenge,
             now: nowSec(),
             timezone,
-            bankroll,
+            evidence,
             skipRuleIds: firedThisPass,
         });
         if (decision.halted) {

@@ -623,6 +623,8 @@ describe('fetchChallengesAndVote', () => {
                 'getEligiblePhotos',
                 'getEligiblePhotosWalk',
                 'getImageData',
+                'getMyCompletedChallenges',
+                'getMyMissions',
                 'getVoteImages',
                 'runTurboGame',
                 'searchTagAutocomplete',

@@ -56,7 +56,7 @@ beforeEach(() => {
 
 describe('mock prize-claim endpoints', () => {
     test('getMyCompletedChallenges returns one claimable and one claimed challenge', async () => {
-        const items = await mockApiClient.getMyCompletedChallenges('tok', 0, 20);
+        const items = (await mockApiClient.getMyCompletedChallenges('tok', 0, 20)) ?? [];
         expect(items.map((c) => [c.id, c.member!.rewards_by_section!.claim_state])).toEqual([
             [900301, 'CLAIM'],
             [900302, 'CLAIMED'],
@@ -67,7 +67,7 @@ describe('mock prize-claim endpoints', () => {
     });
 
     test('getMyMissions returns one claimable and three in-progress missions', async () => {
-        const list = await mockApiClient.getMyMissions('tok');
+        const list = (await mockApiClient.getMyMissions('tok')) ?? [];
         expect(list.map((m) => [m.id, m.claim_state])).toEqual([
             [900201, 'CLAIM'],
             [900202, 'DISABLED'],
@@ -81,9 +81,9 @@ describe('mock prize-claim endpoints', () => {
         await expect(mockApiClient.claimMissionPrize(900201, 'tok')).resolves.toBe(true);
     });
 
-    test('no token resolves the empty / unconfirmed shapes', async () => {
-        await expect(mockApiClient.getMyCompletedChallenges(invalid(null))).resolves.toEqual([]);
-        await expect(mockApiClient.getMyMissions('')).resolves.toEqual([]);
+    test('no token resolves the unread / unconfirmed shapes: a list read that cannot be made is null, not empty', async () => {
+        await expect(mockApiClient.getMyCompletedChallenges(invalid(null))).resolves.toBeNull();
+        await expect(mockApiClient.getMyMissions('')).resolves.toBeNull();
         await expect(mockApiClient.claimChallengeResources(1, invalid(null))).resolves.toBe(false);
         await expect(mockApiClient.claimMissionPrize(1, invalid(undefined))).resolves.toBe(false);
     });

@@ -279,6 +279,33 @@ describe('validateScenario — expressions and expression conditions', () => {
         );
     });
 
+    test('a fact whose stage list holds the active stage is accepted; the reward facts are refused until a rule can run in their stage', () => {
+        const count0 = count(0, 'count');
+        for (const name of [
+            'missions.voteNeed',
+            'photos.eligibleAtLeast',
+            'challenge.players',
+            'challenge.maxPlayers',
+        ]) {
+            expect(validate(ruleWith(compare(fact(name), count0, '>'))).ok).toBe(true);
+        }
+        expect(validate(ruleWith(compare(fact('challenge.joinPrice'), count(1, 'coins'), '<='))).ok).toBe(true);
+        expect(validate(ruleWith(compare(fact('boost.open'), { kind: 'literal', value: true }, '='))).ok).toBe(true);
+        expect(
+            validate(ruleWith(compare(fact('entry.minAge', { select: { by: 'mostVotes' } }), hours(1), '>'))).ok,
+        ).toBe(true);
+        expectIssue(
+            ruleWith(compare(fact('rewards.claimable'), { kind: 'literal', value: true }, '=')),
+            `${IF}.left`,
+            'rewards.claimable is not available while a challenge is active',
+        );
+        expectIssue(
+            ruleWith(compare(fact('rewards.claimableCount'), count0, '>')),
+            `${IF}.left`,
+            'rewards.claimableCount is not available while a challenge is active',
+        );
+    });
+
     test('a setting must be readable by value and usable in an expression', () => {
         expectIssue(
             ruleWith(compare(setting('windowBounds'), hours(1))),

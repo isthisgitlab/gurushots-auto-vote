@@ -187,6 +187,40 @@ describe('claiming', () => {
         expect(res2).toEqual({ ran: true, challengesClaimed: 0, missionsClaimed: 0, results: [] });
     });
 
+    test('a list that was not read (null) is a logged failure; a confirmed empty list is not', async () => {
+        const failed = makeDeps({
+            getMyCompletedChallenges: jest.fn(async () => null),
+            getMyMissions: jest.fn(async () => null),
+        });
+        const result = await runClaimPass('tok', T0, failed);
+        expect(result).toEqual({ ran: true, challengesClaimed: 0, missionsClaimed: 0, results: [] });
+        expect(warningMessages()).toEqual([
+            'could not read completed challenges (page 1); claiming what was read',
+            'could not read missions; nothing claimed from them this time',
+        ]);
+
+        jest.clearAllMocks();
+        resetClaimThrottle();
+        const empty = makeDeps({
+            getMyCompletedChallenges: jest.fn(async () => []),
+            getMyMissions: jest.fn(async () => []),
+        });
+        await runClaimPass('tok', T0, empty);
+        expect(warningMessages()).toEqual([]);
+    });
+
+    test('a page that fails to read after claimable ones were found still claims them and stops paging', async () => {
+        const full = [challenge(7, 'CLAIM'), ...Array.from({ length: 19 }, (_, i) => challenge(100 + i, 'CLAIMED'))];
+        const deps = makeDeps({
+            getMyCompletedChallenges: jest.fn().mockResolvedValueOnce(full).mockResolvedValueOnce(null),
+            getMyMissions: jest.fn(async () => []),
+        });
+        await runClaimPass('tok', T0, deps);
+        expect(deps.getMyCompletedChallenges).toHaveBeenCalledTimes(2);
+        expect(deps.claimChallengeResources).toHaveBeenCalledWith(7, 'tok');
+        expect(warningMessages()).toContain('could not read completed challenges (page 2); claiming what was read');
+    });
+
     test('an unconfirmed claim is recorded and warned, not counted', async () => {
         const deps = makeDeps({ claimChallengeResources: jest.fn(async () => false) });
         const res = await runClaimPass('tok', T0, deps);

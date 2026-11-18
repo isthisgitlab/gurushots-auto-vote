@@ -88,7 +88,6 @@ type ActionHandler<A extends ScenarioAction> = (
 ) => Promise<ActionOutcome>;
 
 export type {
-    ScenarioRule,
     ValidatedRule,
     ScenarioAction,
     ActionType,
