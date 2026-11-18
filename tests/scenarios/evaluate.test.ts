@@ -77,6 +77,69 @@ describe('evaluateScenario', () => {
         expect(run({ ...scenario([]), phases: { main: {} } }).fire).toBeNull();
     });
 
+    describe('a rule fires only on a known true result', () => {
+        const noBankroll = { type: 'balance', currency: 'keys', op: '>=', value: 0 };
+        const explained = (conditions: unknown[]) => run(scenario([rule('r1', conditions)]));
+
+        test('an unknown condition keeps the rule from firing, and the reason says it could not be decided', () => {
+            const result = explained([noBankroll]);
+            expect(result.fire).toBeNull();
+            expect(result.explain).toEqual([
+                {
+                    ruleId: 'r1',
+                    label: 'r1',
+                    status: 'waiting',
+                    reason: 'condition 1 (balance) cannot be decided: bankroll-unavailable',
+                },
+            ]);
+        });
+
+        test('the reason names the first condition that is not true, and whether it is false or unknown', () => {
+            expect(explained([yes, noBankroll]).explain[0].reason).toBe(
+                'condition 2 (balance) cannot be decided: bankroll-unavailable',
+            );
+            expect(explained([no, noBankroll]).explain[0].reason).toBe('condition 1 (entries) does not hold');
+            expect(explained([noBankroll, no]).explain[0].reason).toBe(
+                'condition 1 (balance) cannot be decided: bankroll-unavailable',
+            );
+        });
+
+        test('not over unreadable data does not fire', () => {
+            const result = explained([{ type: 'not', condition: noBankroll }]);
+            expect(result.fire).toBeNull();
+            expect(result.explain[0].reason).toBe('condition 1 (not) cannot be decided: bankroll-unavailable');
+        });
+
+        test('any with one known true and one unknown fires', () => {
+            expect(explained([{ type: 'any', of: [noBankroll, yes] }]).fire?.ruleId).toBe('r1');
+        });
+
+        test('all with one known false and one unknown does not fire, and reports false', () => {
+            const result = explained([{ type: 'all', of: [noBankroll, no] }]);
+            expect(result.fire).toBeNull();
+            expect(result.explain[0].reason).toBe('condition 1 (all) does not hold');
+        });
+
+        test('a known bankroll lets the same rule fire', () => {
+            const result = run(scenario([rule('r1', [noBankroll])]), undefined, {
+                bankroll: { keys: 1, swaps: 0, fills: 0, coins: 0 },
+            });
+            expect(result.fire?.ruleId).toBe('r1');
+        });
+
+        test('a rule asking a setting question waits until a reader supplies the setting', () => {
+            const askSetting = {
+                type: 'compare',
+                left: { kind: 'setting', key: 'boostTime', view: 'base' },
+                op: '>',
+                right: { kind: 'literal', value: 0, quantity: 'duration', unit: 'seconds' },
+            };
+            expect(explained([askSetting]).explain[0].reason).toBe(
+                'condition 1 (compare) cannot be decided: settings-unavailable',
+            );
+        });
+    });
+
     test('rules already fired in this pass are skipped', () => {
         const result = run(scenario([rule('r1', [yes])]), undefined, { skipRuleIds: new Set(['r1']) });
         expect(result.fire).toBeNull();

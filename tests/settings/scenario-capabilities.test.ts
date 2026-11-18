@@ -5,7 +5,12 @@
 
 import type * as settingsModule from '../../src/ts/core/settings';
 import type * as scenarioSchemaModule from '../../src/ts/core/settings/scenarioSchema';
-import type { ScenarioCapabilityRow, ScenarioScope, SettingDisposition } from '../../src/ts/core/types/settings';
+import type {
+    ScenarioCapabilityRow,
+    ScenarioScope,
+    ScenarioValueDescriptor,
+    SettingDisposition,
+} from '../../src/ts/core/types/settings';
 
 const settings = require('../../src/ts/core/settings') as typeof settingsModule;
 const { validateScenario } = require('../../src/ts/core/settings/scenarioSchema') as typeof scenarioSchemaModule;
@@ -122,11 +127,103 @@ describe('settings capability catalogue', () => {
             read: 'value',
             phaseWrite: ['challenge'],
             owner: 'challenge',
+            value: { kind: 'number', quantity: 'percent' },
         });
         expect(scenarioCapability('token')).toBeUndefined();
         expect(scenarioCapability('nonsense')).toBeUndefined();
         expect(scenarioCapability('constructor')).toBeUndefined();
         expect(scenarioCapability('__proto__')).toBeUndefined();
+    });
+});
+
+describe('setting value descriptors', () => {
+    const valueOf = (key: string) => byKey(key).value;
+    /** The values of an enum descriptor (a mutable view, so a test can try to change the copy it was handed). */
+    const enumValues = (value: ScenarioValueDescriptor | undefined): string[] => {
+        if (value?.kind !== 'enum') throw new Error('not an enum descriptor');
+        return value.values as string[];
+    };
+
+    test('every key has one descriptor of a known kind', () => {
+        for (const row of rows) {
+            expect(['boolean', 'number', 'string', 'enum', 'list', 'other']).toContain(row.value.kind);
+        }
+    });
+
+    test('a number with a time unit is a duration in that unit; a time setting is a duration in seconds', () => {
+        expect(valueOf('voteBeforeBoostLeadMin')).toEqual({ kind: 'number', quantity: 'duration', unit: 'minutes' });
+        expect(valueOf('autoJoinAfterHoursFromStart')).toEqual({ kind: 'number', quantity: 'duration', unit: 'hours' });
+        expect(valueOf('discoverUpcomingHours')).toEqual({ kind: 'number', quantity: 'duration', unit: 'hours' });
+        expect(valueOf('autovoteStartupDelay')).toEqual({ kind: 'number', quantity: 'duration', unit: 'seconds' });
+        expect(valueOf('boostTime')).toEqual({ kind: 'number', quantity: 'duration', unit: 'seconds' });
+        expect(valueOf('finalWindowDuration')).toEqual({ kind: 'number', quantity: 'duration', unit: 'seconds' });
+        const timeKeys = Object.entries(SETTINGS_SCHEMA)
+            .filter(([, entry]) => (entry as { type?: string }).type === 'time')
+            .map(([key]) => key);
+        expect(timeKeys.length).toBeGreaterThan(0);
+        for (const key of timeKeys)
+            expect(valueOf(key)).toEqual({ kind: 'number', quantity: 'duration', unit: 'seconds' });
+    });
+
+    test('the unit of a number names its quantity', () => {
+        expect(valueOf('exposure')).toEqual({ kind: 'number', quantity: 'percent' });
+        expect(valueOf('autoSwapMaxVotes')).toEqual({ kind: 'number', quantity: 'votes' });
+        expect(valueOf('autoSwapMax')).toEqual({ kind: 'number', quantity: 'swaps' });
+        expect(valueOf('autoExposureFillMax')).toEqual({ kind: 'number', quantity: 'fills' });
+        expect(valueOf('currencyReserveKeys')).toEqual({ kind: 'number', quantity: 'keys' });
+        expect(valueOf('autoJoinMaxCoins')).toEqual({ kind: 'number', quantity: 'coins' });
+        expect(valueOf('boostImageIndex')).toEqual({ kind: 'number', quantity: 'count' });
+        expect(valueOf('noticeAcknowledgedVersion')).toEqual({ kind: 'number', quantity: 'count' });
+    });
+
+    test('keeps each setting zero sentinel: nothing about a descriptor changes the stored value', () => {
+        expect(valueOf('exposureTarget')).toEqual({ kind: 'number', quantity: 'percent' });
+        expect(valueOf('keyUnlockedBoostTime')).toEqual({ kind: 'number', quantity: 'duration', unit: 'seconds' });
+    });
+
+    test('booleans, strings, lists and the theme enum', () => {
+        expect(valueOf('autoBoost')).toEqual({ kind: 'boolean' });
+        expect(valueOf('mock')).toEqual({ kind: 'boolean' });
+        expect(valueOf('autoJoinTypes')).toEqual({ kind: 'string' });
+        expect(valueOf('scenario')).toEqual({ kind: 'string' });
+        expect(valueOf('timezone')).toEqual({ kind: 'string' });
+        expect(valueOf('language')).toEqual({ kind: 'string' });
+        expect(valueOf('mustIncludeTags')).toEqual({ kind: 'list' });
+        expect(valueOf('scheduledFillTime')).toEqual({ kind: 'list' });
+        expect(valueOf('customTimezones')).toEqual({ kind: 'list' });
+        expect(valueOf('theme')).toMatchObject({ kind: 'enum' });
+        expect(enumValues(valueOf('theme'))).toContain('dark');
+    });
+
+    test('app keys outside the schema', () => {
+        expect(valueOf('apiTimeout')).toEqual({ kind: 'number', quantity: 'duration', unit: 'seconds' });
+        expect(valueOf('checkFrequencyMin')).toEqual({ kind: 'number', quantity: 'duration', unit: 'minutes' });
+        expect(valueOf('checkFrequencyMax')).toEqual({ kind: 'number', quantity: 'duration', unit: 'minutes' });
+        expect(valueOf('apiMaxRetries')).toEqual({ kind: 'number', quantity: 'count' });
+    });
+
+    test('values with no expression form are other: structured lists, photos, window geometry, milliseconds', () => {
+        for (const key of [
+            'autoSubmitSchedule',
+            'chosenPhotos',
+            'scheduledFillBeforeEnd',
+            'windowBounds',
+            'apiRetryBaseDelayMs',
+            'autovoteStartedLaunch',
+        ]) {
+            expect(valueOf(key)).toEqual({ kind: 'other' });
+        }
+    });
+
+    test('the descriptor of a looked-up key is the one the projection lists', () => {
+        for (const row of rows) expect(scenarioCapability(row.key)?.value).toEqual(row.value);
+    });
+
+    test('hands out copies of an enum list too', () => {
+        enumValues(valueOf('theme')).push('mutated');
+        const fresh = getScenarioCapabilities().settings.find((row) => row.key === 'theme')?.value;
+        expect(enumValues(fresh)).not.toContain('mutated');
+        expect(enumValues(scenarioCapability('theme')?.value)).not.toContain('mutated');
     });
 });
 
@@ -147,6 +244,7 @@ describe('capability projection', () => {
             phaseWrite: [],
             owner: 'controller',
             restriction: 'Only the user enables remote access or rotates its key',
+            value: { kind: 'other' },
         });
     });
 
@@ -159,6 +257,7 @@ describe('capability projection', () => {
             'phaseWrite',
             'read',
             'restriction',
+            'value',
         ]);
     });
 

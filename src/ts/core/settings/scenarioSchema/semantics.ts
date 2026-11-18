@@ -4,12 +4,21 @@
  * (see ../scenarioSchema.ts).
  */
 
+import {
+    checkExpression,
+    compareIssue,
+    exprReferences,
+    exprTypeOfDescriptor,
+    listIssue,
+} from '../../scenarios/expressions';
+import { factStageIssues } from '../../scenarios/facts';
 import * as vocabulary from '../../scenarios/vocabulary';
 import { challengeValueSetIsValid } from '../defaults';
 import { schemaEntry, validateSetting, getValidationError } from '../schema';
 import { scenarioCapability } from '../scenarioCapabilities';
 
-import type { ScenarioCondition } from '../../types/scenario';
+import type { ExprType, SettingTypeLookup } from '../../scenarios/expressions';
+import type { ScenarioCondition, ScenarioExpr } from '../../types/scenario';
 import type { ParsedScenarioDocument, ScenarioDocument, ScenarioPhase } from './shapes';
 
 export type ScenarioIssue = { path: string; message: string };
@@ -54,14 +63,100 @@ const conditionDepth = (conditions: readonly ScenarioCondition[]): number => {
 };
 
 /**
+ * The expressions a condition holds directly (not those of its nested conditions).
+ */
+const conditionExpressions = (condition: ScenarioCondition): ScenarioExpr[] => {
+    switch (condition.type) {
+        case 'compare':
+            return [condition.left, condition.right];
+        case 'present':
+        case 'absent':
+            return [condition.value];
+        case 'contains':
+        case 'containsAny':
+        case 'containsAll':
+            return [condition.list, condition.value];
+        default:
+            return [];
+    }
+};
+
+/**
  * Every memory slot a condition list reads.
  */
 const collectConditionReads = (conditions: readonly ScenarioCondition[], into: Set<string>) => {
     for (const item of conditions) {
         if (item.type === 'memorySet') into.add(item.slot);
         if (item.type === 'entry' && item.select.by === 'memory') into.add(item.select.slot);
+        for (const expr of conditionExpressions(item)) {
+            for (const { select } of exprReferences(expr).facts) if (select?.by === 'memory') into.add(select.slot);
+        }
         if (item.type === 'not') collectConditionReads([item.condition], into);
         if (item.type === 'any' || item.type === 'all') collectConditionReads(item.of, into);
+    }
+};
+
+/**
+ * What a setting key reads as in an expression: its type, or why it cannot be read (it is no configuration key, only a
+ * restricted projection of it can be observed, or its value has no expression form).
+ */
+const settingExprType: SettingTypeLookup = (key) => {
+    const capability = scenarioCapability(key);
+    if (!capability) return `"${key}" is not a configuration setting`;
+    if (capability.read !== 'value') return `"${key}" cannot be read in an expression`;
+    return exprTypeOfDescriptor(capability.value) ?? `"${key}" has no value an expression can use`;
+};
+
+/**
+ * One expression slot of a condition: its own issues, then (when it is sound) that every fact it reads is available
+ * while a challenge is active, the only stage a scenario runs in.
+ */
+const expressionIssues = (expr: ScenarioExpr, path: string): { type: ExprType | null; issues: ScenarioIssue[] } => {
+    const checked = checkExpression(expr, settingExprType, path);
+    const stage = checked.issues.length
+        ? []
+        : exprReferences(expr).facts.flatMap(({ name }) => factStageIssues(name, 'active', path));
+    return { type: checked.type, issues: [...checked.issues, ...stage] };
+};
+
+/**
+ * The issues of the expressions in a condition and its nested conditions: each expression is sound, the two sides of a
+ * comparison relate, a list condition gets lists and strings, and an entry count has 1 to 8 predicates.
+ */
+const conditionExpressionIssues = (condition: ScenarioCondition, path: string): ScenarioIssue[] => {
+    switch (condition.type) {
+        case 'compare': {
+            const left = expressionIssues(condition.left, `${path}.left`);
+            const right = expressionIssues(condition.right, `${path}.right`);
+            const relation = left.type && right.type ? compareIssue(condition.op, left.type, right.type) : null;
+            return [...left.issues, ...right.issues, ...(relation ? [{ path, message: relation }] : [])];
+        }
+        case 'present':
+        case 'absent':
+            return expressionIssues(condition.value, `${path}.value`).issues;
+        case 'contains':
+        case 'containsAny':
+        case 'containsAll': {
+            const list = expressionIssues(condition.list, `${path}.list`);
+            const value = expressionIssues(condition.value, `${path}.value`);
+            const relation = list.type && value.type ? listIssue(condition.type, list.type, value.type) : null;
+            return [...list.issues, ...value.issues, ...(relation ? [{ path, message: relation }] : [])];
+        }
+        case 'entriesWhere':
+        case 'entryCount': {
+            const { entryPredicates } = SCENARIO_CAPS;
+            const count = condition.where.length;
+            return count >= 1 && count <= entryPredicates
+                ? []
+                : [{ path: `${path}.where`, message: `${condition.type} takes 1 to ${entryPredicates} predicates` }];
+        }
+        case 'all':
+        case 'any':
+            return condition.of.flatMap((item, index) => conditionExpressionIssues(item, `${path}.of[${index}]`));
+        case 'not':
+            return conditionExpressionIssues(condition.condition, `${path}.condition`);
+        default:
+            return [];
     }
 };
 
@@ -160,6 +255,9 @@ export const semanticIssues = (
                     message: `Conditions nest deeper than ${SCENARIO_CAPS.conditionDepth} levels`,
                 });
             }
+            conditions.forEach((condition, conditionIndex) =>
+                issues.push(...conditionExpressionIssues(condition, `${rulePath}.if[${conditionIndex}]`)),
+            );
             const conditionReads = new Set<string>();
             collectConditionReads(conditions, conditionReads);
             for (const slot of conditionReads) reads.push({ slot, path: `${rulePath}.if` });

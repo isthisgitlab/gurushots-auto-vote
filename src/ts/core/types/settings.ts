@@ -10,6 +10,7 @@
 
 import type { SettingKey, SettingValues } from '../settings/schema';
 import type { ConfigAuthV2, ConfigV2 } from './config';
+import type { Quantity } from './scenario';
 
 /** A plain object whose values are not trusted yet (hand-edited file, IPC payload). */
 export type LooseRecord = { [key: string]: unknown };
@@ -47,17 +48,35 @@ type SettingCapabilityOwner =
     | 'authentication';
 
 /**
- * What a scenario may do with one setting. `read` is the value itself or a restricted projection of it,
- * `phaseWrite` the scopes a phase overlay may write (none: no overlay may), and `restriction` the plain reason
- * when none may.
+ * What an expression reads a setting as. A number with a time unit is stored in that unit and converts to a duration
+ * in seconds when it is read into an expression; every other number keeps its stored value and names what it counts.
+ * `other` is a value with no expression form (a schedule, photos, window geometry, milliseconds).
  */
-export type ScenarioSettingCapability = {
+export type ScenarioValueDescriptor =
+    | { kind: 'boolean' }
+    | { kind: 'number'; quantity: 'duration'; unit: 'seconds' | 'minutes' | 'hours' }
+    | { kind: 'number'; quantity: Exclude<Quantity, 'duration'> }
+    | { kind: 'string' }
+    | { kind: 'enum'; values: readonly string[] }
+    | { kind: 'list' }
+    | { kind: 'other' };
+
+/**
+ * How one setting is classified: `read` is the value itself or a restricted projection of it, `phaseWrite` the scopes a
+ * phase overlay may write (none: no overlay may), and `restriction` the plain reason when none may.
+ */
+export type ScenarioSettingClass = {
     disposition: SettingDisposition;
     read: 'value' | 'projection';
     phaseWrite: readonly ScenarioScope[];
     owner: SettingCapabilityOwner;
     restriction?: string;
 };
+
+/**
+ * What a scenario may do with one setting: its class, and the value descriptor of what it holds.
+ */
+export type ScenarioSettingCapability = ScenarioSettingClass & { value: ScenarioValueDescriptor };
 
 /**
  * The keys of the `app` block that are not schema keys: the form settings of the shared UI defaults, plus the mock

@@ -1,22 +1,32 @@
 /**
  * What a scenario may do with each named configuration key: one row per schema key and per app key outside the
- * schema, classified once. The phase-overlay gate (scenarioSchema/semantics.ts) and the renderer's projection both
- * read it, so a key a phase may write is decided in one place.
+ * schema, classified once, with the descriptor of the value it holds. The phase-overlay gate
+ * (scenarioSchema/semantics.ts), the expression checks and the renderer's projection all read it, so what a key allows
+ * is decided in one place.
  *
- * Private to settings/: callers use the facade. Type-only imports, so nothing here pulls zod or storage in.
+ * The value descriptor is derived from the schema entry (its `type` and the translation key of its `unit`) and written
+ * out for the app keys outside the schema. It describes the value as stored: a setting's own zero sentinel is
+ * untouched, and only a time unit converts (to seconds) when the value is read into an expression.
+ *
+ * Private to settings/: callers use the facade.
  */
 
-import type { SettingKey } from './schema';
+import { schemaEntry } from './schema';
+import { THEMES } from './uiDefaults';
+
+import type { SettingKey, SettingsSchemaEntry } from './schema';
 import type {
     AppExtraKey,
     CapabilityKey,
     ScenarioCapabilityProjection,
     ScenarioCapabilityRow,
     ScenarioSettingCapability,
+    ScenarioSettingClass,
+    ScenarioValueDescriptor,
 } from '../types/settings';
 
 /** Writable by a challenge phase overlay (an exposure target of zero and a boost time of zero keep their meanings). */
-const challengePolicy: ScenarioSettingCapability = Object.freeze({
+const challengePolicy: ScenarioSettingClass = Object.freeze({
     disposition: 'challengePolicy',
     read: 'value',
     phaseWrite: Object.freeze(['challenge'] as const),
@@ -24,7 +34,7 @@ const challengePolicy: ScenarioSettingCapability = Object.freeze({
 });
 
 /** Account behaviour: read anywhere, written only by the selected installation phase overlay. */
-const accountPolicy: ScenarioSettingCapability = Object.freeze({
+const accountPolicy: ScenarioSettingClass = Object.freeze({
     disposition: 'accountPolicy',
     read: 'value',
     phaseWrite: Object.freeze(['installation'] as const),
@@ -32,7 +42,7 @@ const accountPolicy: ScenarioSettingCapability = Object.freeze({
 });
 
 /** An application preference: read anywhere, written only by the selected installation phase overlay. */
-const appPreference: ScenarioSettingCapability = Object.freeze({
+const appPreference: ScenarioSettingClass = Object.freeze({
     disposition: 'appPreference',
     read: 'value',
     phaseWrite: Object.freeze(['installation'] as const),
@@ -40,7 +50,7 @@ const appPreference: ScenarioSettingCapability = Object.freeze({
 });
 
 /** A preference of the host device's presentation. */
-const devicePreference: ScenarioSettingCapability = Object.freeze({
+const devicePreference: ScenarioSettingClass = Object.freeze({
     disposition: 'devicePreference',
     read: 'value',
     phaseWrite: Object.freeze(['installation'] as const),
@@ -48,7 +58,7 @@ const devicePreference: ScenarioSettingCapability = Object.freeze({
 });
 
 /** A user-only control of the lifecycle: observable, and changed only by the owner's own operation. */
-const lifecycleControl = (owner: ScenarioSettingCapability['owner'], restriction: string): ScenarioSettingCapability =>
+const lifecycleControl = (owner: ScenarioSettingClass['owner'], restriction: string): ScenarioSettingClass =>
     Object.freeze({
         disposition: 'lifecycleControl',
         read: 'value',
@@ -58,7 +68,7 @@ const lifecycleControl = (owner: ScenarioSettingCapability['owner'], restriction
     });
 
 /** State a subsystem owns: observed through a restricted projection, never written by a scenario. */
-const internalState = (owner: ScenarioSettingCapability['owner'], restriction: string): ScenarioSettingCapability =>
+const internalState = (owner: ScenarioSettingClass['owner'], restriction: string): ScenarioSettingClass =>
     Object.freeze({
         disposition: 'internalState',
         read: 'projection',
@@ -227,7 +237,7 @@ const CAPABILITIES = {
     skipUpdateVersion: internalState('updates', 'Only the user skips an update version'),
     noticeAcknowledgedVersion: internalState('updates', 'Only the user acknowledges a notice'),
     onboardingCompleted: internalState('onboarding', 'Only the welcome screen marks onboarding as done'),
-} as const satisfies Record<SettingKey | AppExtraKey, ScenarioSettingCapability>;
+} as const satisfies Record<SettingKey | AppExtraKey, ScenarioSettingClass>;
 
 /**
  * The remote-access switch: a lifecycle control, but not a configuration key. Only a sanitized status is ever
@@ -239,24 +249,98 @@ const REMOTE_ENABLED_CAPABILITY: ScenarioSettingCapability = Object.freeze({
     phaseWrite: Object.freeze([]),
     owner: 'controller',
     restriction: 'Only the user enables remote access or rotates its key',
+    value: Object.freeze({ kind: 'other' }),
 });
+
+const count: ScenarioValueDescriptor = Object.freeze({ kind: 'number', quantity: 'count' });
+const duration = (unit: 'seconds' | 'minutes' | 'hours'): ScenarioValueDescriptor =>
+    Object.freeze({ kind: 'number', quantity: 'duration', unit });
+
+/** What a number setting counts or measures, by the translation key of the unit its schema entry shows. */
+const NUMBER_UNITS: Record<string, ScenarioValueDescriptor> = {
+    'app.unitPercent': { kind: 'number', quantity: 'percent' },
+    'app.unitVotes': { kind: 'number', quantity: 'votes' },
+    'app.unitKeys': { kind: 'number', quantity: 'keys' },
+    'app.unitSwaps': { kind: 'number', quantity: 'swaps' },
+    'app.unitFills': { kind: 'number', quantity: 'fills' },
+    'app.unitCoins': { kind: 'number', quantity: 'coins' },
+    'app.unitSeconds': duration('seconds'),
+    'app.unitMinutes': duration('minutes'),
+    'app.unitHours': duration('hours'),
+    // no quantity measures milliseconds, so an expression cannot read them
+    'app.unitMilliseconds': { kind: 'other' },
+};
+
+/**
+ * The descriptor a schema entry implies: a flag is a boolean, a `time` setting is stored in seconds, a number is named
+ * by its unit (or counts, with none), text is a string, tag and time-of-day lists are string lists, and the structured
+ * values (schedules, photos, time lists) have no expression form.
+ */
+const descriptorFromSchema = (entry: SettingsSchemaEntry): ScenarioValueDescriptor => {
+    switch (entry.type) {
+        case 'boolean':
+            return { kind: 'boolean' };
+        case 'time':
+            return duration('seconds');
+        case 'number':
+            return NUMBER_UNITS[entry.unit ?? ''] ?? count;
+        case 'string':
+        case 'scenario':
+            return { kind: 'string' };
+        case 'tags':
+        case 'timeOfDayList':
+            return { kind: 'list' };
+        default:
+            return { kind: 'other' };
+    }
+};
+
+/** The app keys outside the schema: written out, since there is no entry to derive them from. */
+const APP_EXTRA_DESCRIPTORS: Record<AppExtraKey, ScenarioValueDescriptor> = {
+    theme: { kind: 'enum', values: THEMES },
+    language: { kind: 'string' },
+    timezone: { kind: 'string' },
+    customTimezones: { kind: 'list' },
+    stayLoggedIn: { kind: 'boolean' },
+    apiTimeout: duration('seconds'),
+    checkFrequencyMin: duration('minutes'),
+    checkFrequencyMax: duration('minutes'),
+    apiMaxRetries: count,
+    apiRetryBaseDelayMs: { kind: 'other' },
+    mock: { kind: 'boolean' },
+    onboardingCompleted: { kind: 'boolean' },
+    windowBounds: { kind: 'other' },
+};
 
 const isCapabilityKey = (key: string): key is CapabilityKey => Object.hasOwn(CAPABILITIES, key);
 
-/**
- * The capability of a key known only at runtime, or undefined for a name that is no configuration key (an
- * Object.prototype member included).
- */
-const scenarioCapability = (key: string): ScenarioSettingCapability | undefined =>
-    isCapabilityKey(key) ? CAPABILITIES[key] : undefined;
+const valueDescriptor = (key: CapabilityKey): ScenarioValueDescriptor => {
+    const entry = schemaEntry(key);
+    // a key with no schema entry is one of the app keys outside the schema (tests pin that the two sets are the catalogue)
+    return entry ? descriptorFromSchema(entry) : APP_EXTRA_DESCRIPTORS[key as AppExtraKey];
+};
 
-const copyCapability = (capability: ScenarioSettingCapability): ScenarioSettingCapability => ({
+const copyValue = (value: ScenarioValueDescriptor): ScenarioValueDescriptor =>
+    value.kind === 'enum' ? { kind: 'enum', values: [...value.values] } : { ...value };
+
+const copyCapability = (
+    capability: ScenarioSettingClass,
+    value: ScenarioValueDescriptor,
+): ScenarioSettingCapability => ({
     disposition: capability.disposition,
     read: capability.read,
     phaseWrite: [...capability.phaseWrite],
     owner: capability.owner,
     ...(capability.restriction === undefined ? {} : { restriction: capability.restriction }),
+    value: copyValue(value),
 });
+
+/**
+ * The capability of a key known only at runtime, or undefined for a name that is no configuration key (an
+ * Object.prototype member included). A fresh object each time.
+ */
+const scenarioCapability = (key: string): ScenarioSettingCapability | undefined =>
+    isCapabilityKey(key) ? copyCapability(CAPABILITIES[key], valueDescriptor(key)) : undefined;
 
 /**
  * The catalogue as plain JSON (rows sorted by key, the remote switch apart), freshly built so a caller cannot change
@@ -265,8 +349,8 @@ const copyCapability = (capability: ScenarioSettingCapability): ScenarioSettingC
 const getScenarioCapabilities = (): ScenarioCapabilityProjection => ({
     settings: (Object.keys(CAPABILITIES) as CapabilityKey[])
         .sort()
-        .map((key): ScenarioCapabilityRow => ({ key, ...copyCapability(CAPABILITIES[key]) })),
-    remoteEnabled: copyCapability(REMOTE_ENABLED_CAPABILITY),
+        .map((key): ScenarioCapabilityRow => ({ key, ...copyCapability(CAPABILITIES[key], valueDescriptor(key)) })),
+    remoteEnabled: copyCapability(REMOTE_ENABLED_CAPABILITY, REMOTE_ENABLED_CAPABILITY.value),
 });
 
 export { getScenarioCapabilities, scenarioCapability };

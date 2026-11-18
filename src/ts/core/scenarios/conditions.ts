@@ -1,100 +1,83 @@
-import type { Bankroll, Challenge } from '../types/gurushots';
-import type { ComparisonOp, EntryCondition, NumericConditionType, ScenarioCondition } from '../types/scenario';
-import type { VoteHistory } from './speed';
+import type { RankingEntry } from '../types/gurushots';
+import type {
+    ComparisonOp,
+    EntryCondition,
+    EntryPredicate,
+    FactName,
+    NumericConditionType,
+    ScenarioCondition,
+} from '../types/scenario';
 /**
  * Evaluates a scenario rule's conditions against the live challenge. Pure:
  * everything comes in through `ctx`.
  *
- * Unknown data fails closed — a missing close_time, an unreadable exposure,
- * an unranked entry, an unknown balance all make the condition FALSE, so a
- * rule never fires on data the app could not read.
+ * Every condition answers known true, known false, or unknown. Data the app
+ * could not read — a missing close_time, an unreadable exposure, an unranked
+ * entry, an unknown balance — makes the condition unknown, never false, and a
+ * rule fires only on a known true result. The values are read through the same
+ * registry readers (facts.ts) the expressions use, so one rule decides each.
  */
 
 import { occurrencesOf } from '../scheduling/wallClock';
 import { parseDuration } from './duration';
-import { selectEntry, entriesOf, rankOf, votesOf, windowOf } from './selectors';
-import { votesPerHour, speedRatio } from './speed';
+import {
+    compare,
+    compareValues,
+    evaluateExpression,
+    listTruth,
+    presentTruth,
+    absentTruth,
+    allTruth,
+    anyTruth,
+    notTruth,
+    known,
+    unknownOf,
+} from './expressions';
+import { finite, readEntryFact, readEntryField, readNumericFact, readScenarioFact } from './facts';
+import { readableEntries } from './selectors';
+import { pending } from './valueState';
 
-export interface ConditionContext {
-    challenge: Challenge;
-    state: { phaseEnteredAt: number; memory: Record<string, string>; history?: VoteHistory };
-    /** unix seconds */
-    now: number;
-    /** IANA zone for dailyWindow */
-    timezone: string;
-    bankroll?: Bankroll | null;
-}
+import type { ExpressionContext } from './expressions';
+import type { ValueState, Verdict } from './valueState';
+
+/** What a condition reads: the fact snapshot, and the settings reader when the snapshot owner supplies one. */
+export type ConditionContext = ExpressionContext;
 
 /**
- * Numbers compare with every op; booleans (entry flags) only with = / !=,
- * which the validator enforces.
+ * A decided value as a verdict: known stays known, unknown stays unknown, absent (the value is confirmed not there)
+ * leaves the condition unknown.
  */
-const compare = (a: number | boolean, op: ComparisonOp, b: number | boolean): boolean => {
-    switch (op) {
-        case '<':
-            return a < b;
-        case '<=':
-            return a <= b;
-        case '>':
-            return a > b;
-        case '>=':
-            return a >= b;
-        case '!=':
-            return a !== b;
-        default:
-            return a === b;
-    }
+const settle = <T>(state: ValueState<T>, decide: (value: T) => boolean): Verdict => {
+    if (state.state === 'known') return known(decide(state.value));
+    return state.state === 'absent' ? pending([state]) : state;
 };
 
-const finite = (value: number | null | undefined) =>
-    value !== null && value !== undefined && Number.isFinite(Number(value)) ? Number(value) : null;
-
 /**
- * `min <= value <= max` over the bounds that are set; false for an unknown value.
+ * `min <= value <= max` over the bounds that are set; unknown for an unknown value.
  */
-const within = (value: number | null, min: number | null, max: number | null) =>
-    value !== null && (min === null || value >= min) && (max === null || value <= max);
+const within = (state: ValueState<number>, min: number | null, max: number | null): Verdict =>
+    settle(state, (value) => (min === null || value >= min) && (max === null || value <= max));
 
 const durationBound = (bound: string | number | undefined) => (bound === undefined ? null : parseDuration(bound));
 
 const numberBound = (bound: number | undefined) => (bound === undefined ? null : bound);
 
 /**
- * The challenge-level numbers `{op, value}` conditions compare.
+ * The challenge-level numbers `{op, value}` conditions compare, and the facts that read them.
  */
-const CHALLENGE_NUMBERS: Record<NumericConditionType, (challenge: Challenge) => number | null> = {
-    entries: (challenge) => entriesOf(challenge).length,
-    freeSlots: (challenge) => {
-        const max = finite(challenge?.max_photo_submits);
-        return max === null ? null : Math.max(0, max - entriesOf(challenge).length);
-    },
-    exposure: (challenge) => finite(challenge?.member?.ranking?.exposure?.exposure_factor),
-    challengeRank: (challenge) => {
-        const rank = finite(challenge?.member?.ranking?.total?.rank);
-        return rank !== null && rank > 0 ? rank : null;
-    },
-    challengeVotes: (challenge) => finite(challenge?.member?.ranking?.total?.votes),
+const CHALLENGE_NUMBER_FACTS: Record<NumericConditionType, FactName> = {
+    entries: 'challenge.entries',
+    freeSlots: 'challenge.freeSlots',
+    exposure: 'challenge.exposure',
+    challengeRank: 'challenge.rank',
+    challengeVotes: 'challenge.votes',
 };
 
-/**
- * Seconds left until close, or null when the challenge has no readable
- * close_time or has already closed.
- */
-const secondsLeft = (challenge: Challenge, now: number) => {
-    const close = finite(challenge?.close_time);
-    return close === null || now >= close ? null : close - now;
-};
-
-const secondsSinceStart = (challenge: Challenge, now: number) => {
-    const start = finite(challenge?.start_time);
-    return start === null || now < start ? null : now - start;
-};
-
-const percentElapsed = (challenge: Challenge, now: number) => {
-    const start = finite(challenge?.start_time);
-    const close = finite(challenge?.close_time);
-    if (start === null || close === null || close <= start || now < start) return null;
-    return ((now - start) / (close - start)) * 100;
+const BALANCE_FACTS: Record<'keys' | 'swaps' | 'fills' | 'coins', FactName> = {
+    keys: 'balance.keys',
+    swaps: 'balance.swaps',
+    fills: 'balance.fills',
+    coins: 'balance.coins',
 };
 
 /**
@@ -107,79 +90,172 @@ const inDailyWindow = ({ from, to }: { from: string; to: string }, timezone: str
     (occurrencesOf(from, timezone, now) as { prev: number }).prev >
     (occurrencesOf(to, timezone, now) as { prev: number }).prev;
 
-const evaluateCondition = (condition: ScenarioCondition, ctx: ConditionContext): boolean => {
-    const { challenge, state, now } = ctx;
+const evaluateCondition = (condition: ScenarioCondition, ctx: ConditionContext): Verdict => {
+    const { state, now } = ctx;
     switch (condition.type) {
         case 'dailyWindow':
-            return inDailyWindow(condition, ctx.timezone, now);
+            return known(inDailyWindow(condition, ctx.timezone, now));
         case 'beforeEnd':
-            return within(secondsLeft(challenge, now), durationBound(condition.min), durationBound(condition.max));
+            return within(
+                readNumericFact('challenge.timeLeft', ctx),
+                durationBound(condition.min),
+                durationBound(condition.max),
+            );
         case 'afterStart':
             return within(
-                secondsSinceStart(challenge, now),
+                readNumericFact('challenge.elapsed', ctx),
                 durationBound(condition.min),
                 durationBound(condition.max),
             );
         case 'inPhaseFor':
-            return within(now - state.phaseEnteredAt, durationBound(condition.min), durationBound(condition.max));
+            return within(
+                readNumericFact('phase.elapsed', ctx),
+                durationBound(condition.min),
+                durationBound(condition.max),
+            );
         case 'elapsedPercent':
-            return within(percentElapsed(challenge, now), numberBound(condition.min), numberBound(condition.max));
+            return within(
+                readNumericFact('challenge.elapsedPercent', ctx),
+                numberBound(condition.min),
+                numberBound(condition.max),
+            );
         case 'boostState':
-        case 'turboState': {
-            const holder = condition.type === 'boostState' ? challenge?.member?.boost : challenge?.member?.turbo;
-            return typeof holder?.state === 'string' && condition.in.includes(holder.state);
-        }
-        case 'balance': {
-            const balance = finite(ctx.bankroll?.[condition.currency]);
-            return balance !== null && compare(balance, condition.op, condition.value);
-        }
+        case 'turboState':
+            return settle(
+                readScenarioFact(condition.type === 'boostState' ? 'boost.state' : 'turbo.state', ctx),
+                (value) => condition.in.includes(String(value)),
+            );
+        case 'balance':
+            return settle(readNumericFact(BALANCE_FACTS[condition.currency], ctx), (value) =>
+                compare(value, condition.op, condition.value),
+            );
         case 'memorySet':
-            return typeof state.memory?.[condition.slot] === 'string';
+            return known(typeof state.memory?.[condition.slot] === 'string');
         case 'entry':
             return evaluateEntryCondition(condition, ctx);
+        case 'compare':
+            return compareValues(
+                evaluateExpression(condition.left, ctx),
+                condition.op,
+                evaluateExpression(condition.right, ctx),
+            );
+        case 'present':
+            return presentTruth(evaluateExpression(condition.value, ctx));
+        case 'absent':
+            return absentTruth(evaluateExpression(condition.value, ctx));
+        case 'contains':
+        case 'containsAny':
+        case 'containsAll':
+            return listTruth(
+                condition.type,
+                evaluateExpression(condition.list, ctx),
+                evaluateExpression(condition.value, ctx),
+            );
+        case 'entriesWhere':
+            return evaluateEntriesWhere(condition, ctx);
+        case 'entryCount':
+            return evaluateEntryCount(condition, ctx);
         case 'all':
-            return condition.of.every((item) => evaluateCondition(item, ctx));
+            return allTruth(condition.of.map((item) => evaluateCondition(item, ctx)));
         case 'any':
-            return condition.of.some((item) => evaluateCondition(item, ctx));
+            return anyTruth(condition.of.map((item) => evaluateCondition(item, ctx)));
         case 'not':
-            return !evaluateCondition(condition.condition, ctx);
+            return notTruth(evaluateCondition(condition.condition, ctx));
+        default:
+            return settle(readNumericFact(CHALLENGE_NUMBER_FACTS[condition.type], ctx), (value) =>
+                compare(value, condition.op, condition.value),
+            );
+    }
+};
+
+const evaluateEntryCondition = (condition: EntryCondition, ctx: ConditionContext): Verdict =>
+    settle(readEntryFact(condition.field, ctx, condition.select, condition.window), (value) =>
+        compare(value, condition.op, condition.value),
+    );
+
+/**
+ * Whether `count`, known only to lie in [low, high], satisfies `count op value` for every count in the range (true),
+ * for none (false), or for some (null).
+ */
+const rangeHolds = (low: number, high: number, op: ComparisonOp, value: number): boolean | null => {
+    switch (op) {
+        case '<':
+            return high < value ? true : low >= value ? false : null;
+        case '<=':
+            return high <= value ? true : low > value ? false : null;
+        case '>':
+            return low > value ? true : high <= value ? false : null;
+        case '>=':
+            return low >= value ? true : high < value ? false : null;
         default: {
-            const value = CHALLENGE_NUMBERS[condition.type](challenge);
-            return value !== null && compare(value, condition.op, condition.value);
+            const equal = low === high ? low === value : value < low || value > high ? false : null;
+            return op === '=' || equal === null ? equal : !equal;
         }
     }
 };
 
-const evaluateEntryCondition = (condition: EntryCondition, ctx: ConditionContext) => {
-    const { history, memory } = ctx.state;
-    const entry = selectEntry(condition.select, ctx.challenge, { memory, history, now: ctx.now });
-    if (!entry) return false;
-    if (condition.field === 'votes') return compare(votesOf(entry), condition.op, condition.value);
-    if (condition.field === 'votesPerHour' || condition.field === 'speedRatio') {
-        const window = windowOf(condition.window);
-        const speed =
-            condition.field === 'votesPerHour'
-                ? votesPerHour(history, entry, ctx.now, window)
-                : speedRatio(history, entriesOf(ctx.challenge), entry, ctx.now, window);
-        return speed !== null && compare(speed, condition.op, condition.value);
-    }
-    if (condition.field === 'rank') {
-        const rank = rankOf(entry);
-        return rank !== null && compare(rank, condition.op, condition.value);
-    }
-    return compare(entry[condition.field] === true, condition.op, condition.value);
+/**
+ * Whether one entry meets every predicate: known false as soon as one predicate is known false, known true when all are.
+ */
+const entryMeets = (entry: RankingEntry, where: readonly EntryPredicate[], ctx: ConditionContext) =>
+    allTruth(
+        where.map((predicate) =>
+            settle(readEntryField(predicate.field, entry, ctx), (value) =>
+                compare(value, predicate.op, predicate.value),
+            ),
+        ),
+    );
+
+/**
+ * `entriesWhere`: whether any (or every) entry meets every predicate. An unreadable entry list is unknown; with no
+ * entries, `any` is false and `all` is true. A known entry decides, as in any / all conditions.
+ */
+const evaluateEntriesWhere = (
+    condition: Extract<ScenarioCondition, { type: 'entriesWhere' }>,
+    ctx: ConditionContext,
+): Verdict => {
+    const entries = readableEntries(ctx.challenge);
+    if (entries === null) return unknownOf('entries-unreadable', ['member.ranking.entries']);
+    const verdicts = entries.map((entry) => entryMeets(entry, condition.where, ctx));
+    return condition.quantifier === 'any' ? anyTruth(verdicts) : allTruth(verdicts);
 };
 
 /**
- * True when every condition in the list holds (an empty list always holds).
+ * `entryCount`: how many of the member's entries meet every predicate. An unreadable entry list is unknown; entries that
+ * cannot be judged leave the count a range, and the comparison is known only when every count in that range agrees.
  */
-const allHold = (conditions: readonly ScenarioCondition[] | undefined, ctx: ConditionContext) =>
-    (conditions ?? []).every((condition) => evaluateCondition(condition, ctx));
+const evaluateEntryCount = (
+    condition: Extract<ScenarioCondition, { type: 'entryCount' }>,
+    ctx: ConditionContext,
+): Verdict => {
+    const entries = readableEntries(ctx.challenge);
+    if (entries === null) return unknownOf('entries-unreadable', ['member.ranking.entries']);
+    const verdicts = entries.map((entry) => entryMeets(entry, condition.where, ctx));
+    const low = verdicts.filter((verdict) => verdict.state === 'known' && verdict.value).length;
+    const undecided = verdicts.filter((verdict) => verdict.state === 'unknown');
+    const holds = rangeHolds(low, low + undecided.length, condition.op, condition.value);
+    return holds === null ? pending(undecided) : known(holds);
+};
 
 /**
- * Index of the first condition in the list that does not hold, or -1.
+ * The verdict of a rule's whole list: every condition must hold (an empty list holds).
  */
-const firstFailing = (conditions: readonly ScenarioCondition[] | undefined, ctx: ConditionContext) =>
-    (conditions ?? []).findIndex((condition) => !evaluateCondition(condition, ctx));
+const conditionsTruth = (conditions: readonly ScenarioCondition[] | undefined, ctx: ConditionContext): Verdict =>
+    allTruth((conditions ?? []).map((condition) => evaluateCondition(condition, ctx)));
 
-export { evaluateCondition, allHold, firstFailing, compare, finite, durationBound };
+/**
+ * The first condition in the list that is not known true, with its verdict (known false or unknown), or null when
+ * every one holds.
+ */
+const firstFailing = (
+    conditions: readonly ScenarioCondition[] | undefined,
+    ctx: ConditionContext,
+): { index: number; truth: Verdict } | null => {
+    for (const [index, condition] of (conditions ?? []).entries()) {
+        const truth = evaluateCondition(condition, ctx);
+        if (!(truth.state === 'known' && truth.value)) return { index, truth };
+    }
+    return null;
+};
+
+export { evaluateCondition, conditionsTruth, firstFailing, compare, finite, durationBound };

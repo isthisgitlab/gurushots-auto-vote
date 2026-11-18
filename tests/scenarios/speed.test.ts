@@ -161,19 +161,23 @@ describe('speed selector and conditions', () => {
             value,
             ...extra,
         });
-        expect(evaluateCondition(entry('votesPerHour', '>=', 25), ctx)).toBe(true);
-        expect(evaluateCondition(entry('speedRatio', '>=', 2, { window: '2h' }), ctx)).toBe(true);
+        expect(evaluateCondition(entry('votesPerHour', '>=', 25), ctx)).toEqual({ state: 'known', value: true });
+        expect(evaluateCondition(entry('speedRatio', '>=', 2, { window: '2h' }), ctx)).toEqual({
+            state: 'known',
+            value: true,
+        });
+        // no history for the others: the ratio cannot be measured, so it is unknown rather than false
         expect(
             evaluateCondition(entry('speedRatio', '>=', 2), {
                 ...ctx,
                 state: { ...ctx.state, history: { fast: history.fast } },
             }),
-        ).toBe(false);
+        ).toMatchObject({ state: 'unknown', reason: 'insufficient-history' });
         expect(
             evaluateCondition(
                 { type: 'entry', select: { by: 'slot', index: 3 }, field: 'votesPerHour', op: '>=', value: 0 },
                 ctx,
             ),
-        ).toBe(false);
+        ).toMatchObject({ state: 'unknown', reason: 'insufficient-history' });
     });
 });

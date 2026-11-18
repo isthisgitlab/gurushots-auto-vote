@@ -148,6 +148,323 @@ describe('validateScenario — accepted documents', () => {
     });
 });
 
+describe('validateScenario — expressions and expression conditions', () => {
+    const hours = (value: number) => ({ kind: 'literal', value, quantity: 'duration', unit: 'hours' });
+    const instant = (value: number) => ({ kind: 'literal', value, quantity: 'instant' });
+    const count = (value: number, quantity = 'keys') => ({ kind: 'literal', value, quantity });
+    const fact = (name: string, extra: Record<string, unknown> = {}) => ({ kind: 'fact', name, ...extra });
+    const setting = (key: string, view = 'base') => ({ kind: 'setting', key, view });
+    const compare = (left: unknown, right: unknown, op = '<') => ({ type: 'compare', left, op, right });
+    const ruleWith = (condition: unknown) => withRule({ if: [condition] });
+    const IF = 'phases.main.rules[0].if[0]';
+
+    const issue94 = {
+        kind: 'earlier',
+        of: [
+            { kind: 'offset', from: fact('challenge.end'), by: hours(10), direction: 'before' },
+            { kind: 'offset', from: fact('boost.freeExpiry'), by: hours(1), direction: 'before' },
+        ],
+    };
+
+    test('every new condition form and expression kind is accepted', () => {
+        const conditions = [
+            compare(issue94, fact('clock.now')),
+            compare(fact('challenge.timeLeft'), hours(2), '<='),
+            compare(setting('boostTime', 'effective'), hours(1), '>'),
+            compare(fact('boost.state'), { kind: 'literal', value: 'AVAILABLE' }, '='),
+            compare(fact('challenge.tags'), { kind: 'literal', value: ['a'] }, '!='),
+            compare({ kind: 'literal', value: true }, setting('autoBoost'), '='),
+            compare({ kind: 'difference', from: fact('clock.now'), to: fact('challenge.end') }, hours(1)),
+            compare({ kind: 'add', left: count(1), right: count(2) }, { kind: 'max', of: [count(1), count(2)] }),
+            compare(
+                { kind: 'subtract', left: fact('challenge.end'), right: hours(1) },
+                { kind: 'later', of: [instant(1), instant(2)] },
+            ),
+            compare({ kind: 'min', of: [fact('balance.keys'), count(5)] }, count(3)),
+            compare(
+                fact('entry.votesPerHour', { select: { by: 'fastest', window: '2h' }, window: '2h' }),
+                { kind: 'literal', value: 3, quantity: 'votesPerHour' },
+                '>=',
+            ),
+            { type: 'present', value: fact('boost.freeExpiry') },
+            { type: 'absent', value: fact('boost.freeExpiry') },
+            { type: 'contains', list: fact('challenge.tags'), value: { kind: 'literal', value: 'sea' } },
+            { type: 'containsAny', list: fact('challenge.tags'), value: { kind: 'literal', value: ['sea'] } },
+            { type: 'containsAll', list: setting('mustIncludeTags'), value: { kind: 'literal', value: ['sea'] } },
+            {
+                type: 'entriesWhere',
+                quantifier: 'any',
+                where: [{ field: 'rank', op: '<=', value: 3 }],
+            },
+            {
+                type: 'entryCount',
+                where: [
+                    { field: 'votes', op: '>=', value: 10 },
+                    { field: 'boosted', op: '=', value: true },
+                ],
+                op: '>=',
+                value: 1,
+            },
+            { type: 'not', condition: { type: 'present', value: fact('boost.freeExpiry') } },
+        ];
+        for (const condition of conditions)
+            expect(validate(ruleWith(condition))).toEqual(expect.objectContaining({ ok: true }));
+    });
+
+    test('a document with a new condition keeps the condition as written', () => {
+        const result = validate(ruleWith(compare(issue94, fact('clock.now')))) as Accepted;
+        expect(result.scenario.phases.main.rules![0].if).toEqual([compare(issue94, fact('clock.now'))]);
+    });
+
+    test('a duration literal needs a unit, and a unit belongs to a duration only', () => {
+        expectIssue(
+            ruleWith(compare(fact('challenge.timeLeft'), { kind: 'literal', value: 1, quantity: 'duration' })),
+            `${IF}.right`,
+            'A duration needs a unit',
+        );
+        expectIssue(
+            ruleWith(
+                compare(fact('challenge.timeLeft'), { kind: 'literal', value: 1, quantity: 'keys', unit: 'hours' }),
+            ),
+            `${IF}.right`,
+            'Only a duration has a unit',
+        );
+        expectIssue(
+            ruleWith(
+                compare(fact('challenge.timeLeft'), { kind: 'literal', value: 1, quantity: 'duration', unit: 'weeks' }),
+            ),
+            `${IF}.right`,
+            'Not a valid expression',
+        );
+    });
+
+    test('only a literal number has a quantity', () => {
+        expectIssue(
+            ruleWith(compare(fact('challenge.timeLeft'), { kind: 'literal', value: 'x', quantity: 'keys' })),
+            `${IF}.right`,
+            'Unrecognized key',
+        );
+        expectIssue(
+            ruleWith(compare(fact('challenge.timeLeft'), { kind: 'literal', value: 5 })),
+            `${IF}.right`,
+            'Not a valid expression',
+        );
+    });
+
+    test('unknown fact names and unknown expression kinds are refused', () => {
+        expectIssue(ruleWith(compare(fact('challenge.nonsense'), hours(1))), `${IF}.left`, 'Not a valid expression');
+        expectIssue(
+            ruleWith(compare({ kind: 'script', code: '1+1' }, hours(1))),
+            `${IF}.left`,
+            'Not a valid expression',
+        );
+        expectIssue(ruleWith(compare({ kind: 'fact', name: 'clock.now', extra: 1 }, hours(1))), `${IF}.left`, '');
+    });
+
+    test('a select belongs to entry facts only, and entry facts need one', () => {
+        expectIssue(
+            ruleWith(compare(fact('entry.votes'), count(1, 'votes'))),
+            `${IF}.left`,
+            'entry.votes needs a select',
+        );
+        expectIssue(
+            ruleWith(compare(fact('challenge.end', { select: { by: 'mostVotes' } }), instant(1))),
+            `${IF}.left`,
+            'challenge.end does not take a select',
+        );
+        expectIssue(
+            ruleWith(compare(fact('challenge.end', { window: '1h' }), instant(1))),
+            `${IF}.left`,
+            'challenge.end does not take a window',
+        );
+    });
+
+    test('a setting must be readable by value and usable in an expression', () => {
+        expectIssue(
+            ruleWith(compare(setting('windowBounds'), hours(1))),
+            `${IF}.left`,
+            'cannot be read in an expression',
+        );
+        expectIssue(
+            ruleWith(compare(setting('autovoteRunning'), { kind: 'literal', value: true }, '=')),
+            `${IF}.left`,
+            'cannot be read in an expression',
+        );
+        expectIssue(ruleWith(compare(setting('nonsense'), hours(1))), `${IF}.left`, 'is not a configuration setting');
+        expectIssue(
+            ruleWith(compare(setting('autoSubmitSchedule'), hours(1))),
+            `${IF}.left`,
+            'has no value an expression can use',
+        );
+        expectIssue(ruleWith(compare(setting('boostTime', 'later'), hours(1))), `${IF}.left`, 'Not a valid expression');
+    });
+
+    test('incompatible quantities are refused for ordered operators, equality and arithmetic', () => {
+        expectIssue(
+            ruleWith(compare(fact('challenge.timeLeft'), fact('challenge.end'))),
+            IF,
+            'Cannot compare duration with instant',
+        );
+        expectIssue(
+            ruleWith(compare(fact('boost.state'), { kind: 'literal', value: 'a' }, '<')),
+            IF,
+            '< compares numbers only',
+        );
+        expectIssue(ruleWith(compare(fact('boost.state'), hours(1), '=')), IF, 'Cannot compare a string with a number');
+        expectIssue(
+            ruleWith(compare({ kind: 'add', left: count(1), right: count(1, 'swaps') }, count(1))),
+            `${IF}.left`,
+            'add needs two values of one quantity',
+        );
+        expectIssue(
+            ruleWith(compare({ kind: 'offset', from: hours(1), by: hours(1), direction: 'before' }, instant(1))),
+            `${IF}.left`,
+            'offset moves an instant by a duration',
+        );
+        expectIssue(
+            ruleWith(compare({ kind: 'earlier', of: [instant(1), hours(1)] }, instant(1))),
+            `${IF}.left`,
+            'earlier needs instants',
+        );
+        expectIssue(
+            ruleWith(compare({ kind: 'min', of: [count(1), count(1, 'swaps')] }, count(1))),
+            `${IF}.left`,
+            'min needs numbers of one quantity',
+        );
+    });
+
+    test('list conditions need the right kinds', () => {
+        expectIssue(
+            ruleWith({ type: 'contains', list: fact('boost.state'), value: { kind: 'literal', value: 'a' } }),
+            IF,
+            'contains needs a list',
+        );
+        expectIssue(
+            ruleWith({ type: 'containsAny', list: fact('challenge.tags'), value: { kind: 'literal', value: 'a' } }),
+            IF,
+            'containsAny needs a list to look for',
+        );
+        expectIssue(
+            ruleWith({ type: 'contains', list: fact('challenge.tags'), value: { kind: 'literal', value: ['a'] } }),
+            IF,
+            'contains needs a string to look for',
+        );
+    });
+
+    test('a list condition reports an expression of its own that is wrong, and does not also relate it', () => {
+        const lookup = { type: 'contains', list: setting('nonsense'), value: { kind: 'literal', value: 'a' } };
+        expect(issuesOf(ruleWith(lookup))).toEqual([
+            { path: `${IF}.list`, message: '"nonsense" is not a configuration setting' },
+        ]);
+    });
+
+    test('the quantity of an expression inside a nested condition is checked too', () => {
+        const nested = {
+            type: 'any',
+            of: [{ type: 'not', condition: compare(fact('challenge.timeLeft'), fact('challenge.end')) }],
+        };
+        expectIssue(ruleWith(nested), `${IF}.of[0].condition`, 'Cannot compare');
+    });
+
+    test('expressions nest at most 8 levels deep', () => {
+        const nest = (levels: number): unknown => {
+            let expr: unknown = instant(1);
+            for (let level = 1; level < levels; level++)
+                expr = { kind: 'offset', from: expr, by: hours(1), direction: 'before' };
+            return expr;
+        };
+        expect(validate(ruleWith(compare(nest(8), instant(2)))).ok).toBe(true);
+        expectIssue(ruleWith(compare(nest(9), instant(2))), `${IF}.left`, 'nests deeper than 8 levels');
+    });
+
+    test('an aggregate has 2 to 8 operands', () => {
+        const of = (n: number) => Array.from({ length: n }, () => instant(1));
+        expect(validate(ruleWith(compare({ kind: 'later', of: of(8) }, instant(2)))).ok).toBe(true);
+        expectIssue(ruleWith(compare({ kind: 'later', of: of(9) }, instant(2))), `${IF}.left.of`, '');
+        expectIssue(ruleWith(compare({ kind: 'earlier', of: of(1) }, instant(2))), `${IF}.left.of`, '');
+        expectIssue(
+            ruleWith(compare({ kind: 'min', of: Array.from({ length: 9 }, () => count(1)) }, count(2))),
+            `${IF}.left.of`,
+            '',
+        );
+    });
+
+    test('entriesWhere has 1 to 8 predicates, a quantifier, and entry-typed values', () => {
+        const predicate = { field: 'votes', op: '>=', value: 1 };
+        const make = (where: unknown[], quantifier: unknown = 'all') =>
+            ruleWith({ type: 'entriesWhere', quantifier, where });
+        expect(validate(make(Array.from({ length: 8 }, () => predicate))).ok).toBe(true);
+        expectIssue(
+            make(Array.from({ length: 9 }, () => predicate)),
+            `${IF}.where`,
+            'entriesWhere takes 1 to 8 predicates',
+        );
+        expectIssue(make([]), `${IF}.where`, 'entriesWhere takes 1 to 8 predicates');
+        expectIssue(make([predicate], 'some'), `${IF}.quantifier`, 'Invalid option');
+        expectIssue(
+            make([{ field: 'boosted', op: '=', value: 3 }]),
+            `${IF}.where[0].value`,
+            'boosted compares with true or false',
+        );
+        expectIssue(make([{ field: 'nonsense', op: '=', value: 1 }]), `${IF}.where[0].field`, 'Invalid option');
+    });
+
+    test('an entry count has 1 to 8 predicates, each with a value of the right kind', () => {
+        const predicate = { field: 'votes', op: '>=', value: 1 };
+        expect(
+            validate(
+                ruleWith({ type: 'entryCount', where: Array.from({ length: 8 }, () => predicate), op: '>=', value: 1 }),
+            ).ok,
+        ).toBe(true);
+        expectIssue(
+            ruleWith({ type: 'entryCount', where: Array.from({ length: 9 }, () => predicate), op: '>=', value: 1 }),
+            `${IF}.where`,
+            '',
+        );
+        expectIssue(ruleWith({ type: 'entryCount', where: [], op: '>=', value: 1 }), `${IF}.where`, '');
+        expectIssue(
+            ruleWith({ type: 'entryCount', where: [{ field: 'boosted', op: '=', value: 3 }], op: '>=', value: 1 }),
+            `${IF}.where[0].value`,
+            'boosted compares with true or false',
+        );
+        expectIssue(
+            ruleWith({ type: 'entryCount', where: [{ field: 'boosted', op: '>', value: true }], op: '>=', value: 1 }),
+            `${IF}.where[0].op`,
+            'boosted only supports = and !=',
+        );
+        expectIssue(
+            ruleWith({ type: 'entryCount', where: [{ field: 'votes', op: '>', value: true }], op: '>=', value: 1 }),
+            `${IF}.where[0].value`,
+            'votes compares with a number',
+        );
+        expectIssue(
+            ruleWith({ type: 'entryCount', where: [{ field: 'nonsense', op: '>', value: 1 }], op: '>=', value: 1 }),
+            `${IF}.where[0].field`,
+            'Invalid option',
+        );
+        expectIssue(ruleWith({ type: 'entryCount', where: [predicate], op: '>=', value: 'x' }), `${IF}.value`, '');
+    });
+
+    test('a memory slot an expression reads must be remembered by some action', () => {
+        const reads = compare(fact('entry.votes', { select: { by: 'memory', slot: 'held' } }), count(1, 'votes'));
+        expectIssue(ruleWith(reads), 'phases.main.rules[0].if', 'Memory slot "held" is never remembered');
+        const remembered = withRule({
+            if: [reads],
+            do: [{ type: 'remember', slot: 'held', entry: { by: 'mostVotes' } }],
+        });
+        expect(validate(remembered).ok).toBe(true);
+    });
+
+    test('a scenario that validated before still validates: the old conditions are unchanged', () => {
+        const old = [
+            { type: 'entries', op: '<', value: 3 },
+            { type: 'entry', select: { by: 'slot', index: 0 }, field: 'votes', op: '>', value: 10 },
+            { type: 'not', condition: { type: 'exposure', op: '>', value: 90 } },
+        ];
+        expect(validate(withRule({ if: old })).ok).toBe(true);
+    });
+});
+
 describe('validateScenario — shape errors carry readable paths', () => {
     test('unknown keys are rejected at every level', () => {
         expectIssue(doc({ extra: 1 }), '', 'Unrecognized key');

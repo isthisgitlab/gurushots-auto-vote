@@ -16,8 +16,13 @@ import { isProtectedEntry } from '../voting/currencyAuto';
 import { parseDuration } from './duration';
 import { votesPerHour, DEFAULT_WINDOW_SEC } from './speed';
 
-const entriesOf = (challenge: Challenge): RankingEntry[] =>
-    Array.isArray(challenge?.member?.ranking?.entries) ? challenge.member.ranking.entries.filter(Boolean) : [];
+/**
+ * The member's entries, or null when the challenge carries no readable entry list (an empty list is a readable one).
+ */
+const readableEntries = (challenge: Challenge): RankingEntry[] | null =>
+    Array.isArray(challenge?.member?.ranking?.entries) ? challenge.member.ranking.entries.filter(Boolean) : null;
+
+const entriesOf = (challenge: Challenge): RankingEntry[] => readableEntries(challenge) ?? [];
 
 const votesOf = (entry: RankingEntry) => (Number.isFinite(Number(entry?.votes)) ? Number(entry.votes) : 0);
 
@@ -97,4 +102,4 @@ const selectEntry = (
     return RANKING[selector.by](candidates);
 };
 
-export { selectEntry, entriesOf, rankOf, votesOf, windowOf };
+export { selectEntry, entriesOf, readableEntries, rankOf, votesOf, windowOf };

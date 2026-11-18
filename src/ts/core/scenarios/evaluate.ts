@@ -5,7 +5,7 @@
  * (services/scenarioRunner.ts) executes the result and persists state.
  *
  * Rules are tried in phase order; the first whose `repeat` mode allows it
- * and whose conditions all hold fires. A rule interrupted mid-way (an action
+ * and whose conditions are all known true fires. A rule interrupted mid-way (an action
  * failed, or the app stopped) resumes from that action before anything else.
  */
 
@@ -126,8 +126,14 @@ const evaluateScenario = (
         }
         const conditions = rule.if ?? [];
         const failing = firstFailing(conditions, ctx);
-        if (failing !== -1) {
-            const reason = `condition ${failing + 1} (${conditions[failing].type}) does not hold`;
+        if (failing) {
+            // A rule fires only on a known true result: a false condition and one the data could not decide both wait,
+            // and the reason says which.
+            const subject = `condition ${failing.index + 1} (${conditions[failing.index].type})`;
+            const reason =
+                failing.truth.state === 'unknown'
+                    ? `${subject} cannot be decided: ${failing.truth.reason}`
+                    : `${subject} does not hold`;
             explain.push({ ruleId: rule.id, label, status: 'waiting' as const, reason });
             continue;
         }

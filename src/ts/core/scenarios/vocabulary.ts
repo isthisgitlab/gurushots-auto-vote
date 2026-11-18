@@ -29,6 +29,74 @@ const NUMERIC_ENTRY_FIELDS = ['votes', 'rank', 'votesPerHour', 'speedRatio'] as 
 const SPEED_ENTRY_FIELDS = ['votesPerHour', 'speedRatio'] as const;
 const BOOLEAN_ENTRY_FIELDS = ['boosted', 'turbo', 'boosting'] as const;
 
+/** `present` / `absent` test one expression for a known value or a confirmed absence. */
+const PRESENCE_CONDITIONS = ['present', 'absent'] as const;
+
+/** The list conditions: `list` holds `value` (one string), any of it, or all of it. */
+const LIST_CONDITIONS = ['contains', 'containsAny', 'containsAll'] as const;
+
+/** What an expression's number measures. Instants are Unix seconds; a duration is held in seconds. */
+const QUANTITIES = [
+    'instant',
+    'duration',
+    'percent',
+    'ratio',
+    'count',
+    'votes',
+    'votesPerHour',
+    'keys',
+    'swaps',
+    'fills',
+    'coins',
+] as const;
+
+/** The units a duration literal is written in; every one normalizes to seconds. */
+const DURATION_UNITS = ['seconds', 'minutes', 'hours', 'days'] as const;
+
+/** Where a setting reference reads: the value below the phase overlay, or the value with it. */
+const SETTING_VIEWS = ['base', 'effective'] as const;
+
+/** The stages of a challenge's life a fact may be read in. */
+const SCENARIO_STAGES = ['account', 'preJoin', 'active', 'postClose'] as const;
+
+/** Every fact an expression may read (the registry in scenarios/facts.ts defines each one). */
+const FACT_NAMES = [
+    'clock.now',
+    'phase.enteredAt',
+    'phase.elapsed',
+    'challenge.id',
+    'challenge.title',
+    'challenge.type',
+    'challenge.tags',
+    'challenge.start',
+    'challenge.end',
+    'challenge.timeLeft',
+    'challenge.elapsed',
+    'challenge.elapsedPercent',
+    'challenge.entries',
+    'challenge.freeSlots',
+    'challenge.exposure',
+    'challenge.rank',
+    'challenge.votes',
+    'boost.state',
+    'boost.freeExpiry',
+    'boost.freeRemaining',
+    'turbo.state',
+    'turbo.mode',
+    'turbo.opensAt',
+    'balance.keys',
+    'balance.swaps',
+    'balance.fills',
+    'balance.coins',
+    'entry.votes',
+    'entry.rank',
+    'entry.votesPerHour',
+    'entry.speedRatio',
+    'entry.boosted',
+    'entry.turbo',
+    'entry.boosting',
+] as const;
+
 /** Selectors that pick an entry by comparing entries; `slot`, `memory` and `fastest` take an argument. */
 const RANKING_SELECTORS = ['mostVotes', 'fewestVotes', 'bestRank', 'worstRank', 'boosted', 'turbo'] as const;
 
@@ -45,6 +113,9 @@ const SCENARIO_CAPS = {
     conditionsPerList: 20,
     actionsPerRule: 10,
     conditionDepth: 4,
+    expressionDepth: 8,
+    aggregateOperands: 8,
+    entryPredicates: 8,
     nameLength: 60,
     noticeLength: 120,
     descriptionLength: 500,
@@ -71,9 +142,60 @@ const VOCABULARY_REFERENCE = [
         'entry',
         `select: selector, field: ${[...NUMERIC_ENTRY_FIELDS, ...BOOLEAN_ENTRY_FIELDS].join('|')}, op, value, window?: duration (speed fields, default 1h)`,
     ],
+    [
+        'condition',
+        'compare',
+        'left: expression, op, right: expression — numbers of one quantity, or equal kinds with = / !=; unknown when a side is absent or unreadable',
+    ],
+    ['condition', 'present', 'value: expression — has a known value (false when confirmed absent)'],
+    ['condition', 'absent', 'value: expression — is confirmed absent (false when it has a value)'],
+    ['condition', 'contains', 'list: expression, value: expression — the list holds this string'],
+    ['condition', 'containsAny', 'list: expression, value: expression — the list holds any of these strings'],
+    ['condition', 'containsAll', 'list: expression, value: expression — the list holds all of these strings'],
+    [
+        'condition',
+        'entriesWhere',
+        `quantifier: any|all, where: [{field: ${[...NUMERIC_ENTRY_FIELDS, ...BOOLEAN_ENTRY_FIELDS].join('|')}, op, value}, …] (1-${SCENARIO_CAPS.entryPredicates}) — any / every entry matches every predicate; unknown when the entries cannot be read`,
+    ],
+    [
+        'condition',
+        'entryCount',
+        `where: [{field: ${[...NUMERIC_ENTRY_FIELDS, ...BOOLEAN_ENTRY_FIELDS].join('|')}, op, value}, …] (1-${SCENARIO_CAPS.entryPredicates}), op, value: number — how many entries match every predicate`,
+    ],
     ['condition', 'all', 'of: [condition, …] — every one holds'],
     ['condition', 'any', 'of: [condition, …] — at least one holds'],
     ['condition', 'not', 'condition: condition — it does not hold'],
+    [
+        'expression',
+        'literal',
+        `value: number + quantity (${QUANTITIES.join('|')}) [+ unit ${DURATION_UNITS.join('|')} for a duration] | boolean | text | [text, …]`,
+    ],
+    [
+        'expression',
+        'fact',
+        `name: ${FACT_NAMES.join('|')}; select: selector (entry.* facts only); window?: duration (entry.votesPerHour, entry.speedRatio)`,
+    ],
+    ['expression', 'setting', `key: setting name, view: ${SETTING_VIEWS.join('|')}`],
+    ['expression', 'offset', 'from: instant, by: duration, direction: before|after — an instant'],
+    ['expression', 'difference', 'from: instant, to: instant — to minus from, a duration'],
+    ['expression', 'add', 'left, right: one quantity, or an instant plus a duration'],
+    [
+        'expression',
+        'subtract',
+        'left, right: one quantity, or an instant minus a duration (use difference for two instants)',
+    ],
+    ['expression', 'earlier', `of: [instant, …] (2-${SCENARIO_CAPS.aggregateOperands}) — absent ones are left out`],
+    ['expression', 'later', `of: [instant, …] (2-${SCENARIO_CAPS.aggregateOperands}) — absent ones are left out`],
+    [
+        'expression',
+        'min',
+        `of: [number, …] (2-${SCENARIO_CAPS.aggregateOperands}), one quantity — absent ones are left out`,
+    ],
+    [
+        'expression',
+        'max',
+        `of: [number, …] (2-${SCENARIO_CAPS.aggregateOperands}), one quantity — absent ones are left out`,
+    ],
     ['selector', 'slot', 'index: 1-4 (0 = last entry)'],
     ...RANKING_SELECTORS.map((by) => [
         'selector',
@@ -161,6 +283,13 @@ export {
     NUMERIC_ENTRY_FIELDS,
     SPEED_ENTRY_FIELDS,
     BOOLEAN_ENTRY_FIELDS,
+    PRESENCE_CONDITIONS,
+    LIST_CONDITIONS,
+    QUANTITIES,
+    DURATION_UNITS,
+    SETTING_VIEWS,
+    SCENARIO_STAGES,
+    FACT_NAMES,
     RANKING_SELECTORS,
     SPENDING_ACTIONS,
     LIMIT_KEYS,

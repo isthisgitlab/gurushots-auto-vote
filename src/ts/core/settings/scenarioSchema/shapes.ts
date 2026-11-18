@@ -8,7 +8,7 @@ import { parseDuration } from '../../scenarios/duration';
 import * as vocabulary from '../../scenarios/vocabulary';
 import { RESERVED_PROFILE_NAMES } from '../profileStore';
 
-import type { ScenarioCondition } from '../../types/scenario';
+import type { ScenarioCondition, ScenarioExpr } from '../../types/scenario';
 
 const { SCENARIO_CAPS } = vocabulary;
 
@@ -88,11 +88,33 @@ const selector = z.discriminatedUnion('by', [
     ),
 ]);
 
+const entryField = oneOf([...vocabulary.NUMERIC_ENTRY_FIELDS, ...vocabulary.BOOLEAN_ENTRY_FIELDS]);
+
+/**
+ * An entry field's comparison: a flag compares with true or false and only with = / !=, every other field with a number.
+ */
+const checkEntryValue = (value: { field: string; op: string; value: number | boolean }, ctx: z.RefinementCtx) => {
+    if (vocabulary.isOneOf(vocabulary.BOOLEAN_ENTRY_FIELDS, value.field)) {
+        if (typeof value.value !== 'boolean') {
+            ctx.addIssue({
+                code: 'custom',
+                path: ['value'],
+                message: `${value.field} compares with true or false`,
+            });
+        }
+        if (value.op !== '=' && value.op !== '!=') {
+            ctx.addIssue({ code: 'custom', path: ['op'], message: `${value.field} only supports = and !=` });
+        }
+    } else if (typeof value.value !== 'number') {
+        ctx.addIssue({ code: 'custom', path: ['value'], message: `${value.field} compares with a number` });
+    }
+};
+
 const entryCondition = z
     .strictObject({
         type: z.literal('entry'),
         select: selector,
-        field: oneOf([...vocabulary.NUMERIC_ENTRY_FIELDS, ...vocabulary.BOOLEAN_ENTRY_FIELDS]),
+        field: entryField,
         op,
         value: z.union([finiteNumber, z.boolean()]),
         window: duration.optional(),
@@ -105,21 +127,65 @@ const entryCondition = z
                 message: `window only applies to ${vocabulary.SPEED_ENTRY_FIELDS.join(' and ')}`,
             });
         }
-        if (vocabulary.isOneOf(vocabulary.BOOLEAN_ENTRY_FIELDS, value.field)) {
-            if (typeof value.value !== 'boolean') {
-                ctx.addIssue({
-                    code: 'custom',
-                    path: ['value'],
-                    message: `${value.field} compares with true or false`,
-                });
-            }
-            if (value.op !== '=' && value.op !== '!=') {
-                ctx.addIssue({ code: 'custom', path: ['op'], message: `${value.field} only supports = and !=` });
-            }
-        } else if (typeof value.value !== 'number') {
-            ctx.addIssue({ code: 'custom', path: ['value'], message: `${value.field} compares with a number` });
-        }
+        checkEntryValue(value, ctx);
     });
+
+/**
+ * One test an `entryCount` or `entriesWhere` applies to every entry. How many there are (1-8) is checked with the expressions, in
+ * semantics.ts.
+ */
+const entryPredicate = z
+    .strictObject({ field: entryField, op, value: z.union([finiteNumber, z.boolean()]) })
+    .superRefine(checkEntryValue);
+
+/**
+ * A short text of an expression literal: plain, so a shared file cannot smuggle control characters into the logs.
+ */
+const literalText = plainText(SCENARIO_CAPS.nameLength);
+
+/**
+ * A typed expression (scenarios/expressions.ts). Operand counts, nesting depth, quantities and what a fact or setting
+ * may be are checked with the document (semantics.ts), where the expression's type is known.
+ */
+const expression: z.ZodType<ScenarioExpr> = z.lazy(() =>
+    z.union(
+        [
+            z.strictObject({
+                kind: z.literal('literal'),
+                value: finiteNumber,
+                quantity: oneOf(vocabulary.QUANTITIES),
+                unit: oneOf(vocabulary.DURATION_UNITS).optional(),
+            }),
+            z.strictObject({ kind: z.literal('literal'), value: z.boolean() }),
+            z.strictObject({ kind: z.literal('literal'), value: literalText }),
+            z.strictObject({
+                kind: z.literal('literal'),
+                value: z.array(literalText).max(SCENARIO_CAPS.conditionsPerList),
+            }),
+            z.strictObject({
+                kind: z.literal('fact'),
+                name: oneOf(vocabulary.FACT_NAMES),
+                select: selector.optional(),
+                window: duration.optional(),
+            }),
+            z.strictObject({
+                kind: z.literal('setting'),
+                key: z.string().max(SCENARIO_CAPS.nameLength),
+                view: oneOf(vocabulary.SETTING_VIEWS),
+            }),
+            z.strictObject({
+                kind: z.literal('offset'),
+                from: expression,
+                by: expression,
+                direction: oneOf(['before', 'after']),
+            }),
+            z.strictObject({ kind: z.literal('difference'), from: expression, to: expression }),
+            z.strictObject({ kind: oneOf(['add', 'subtract']), left: expression, right: expression }),
+            z.strictObject({ kind: oneOf(['earlier', 'later', 'min', 'max']), of: z.array(expression) }),
+        ],
+        { error: 'Not a valid expression: check its kind and fields' },
+    ),
+);
 
 const condition: z.ZodType<ScenarioCondition> = z.lazy(() =>
     z.discriminatedUnion('type', [
@@ -139,6 +205,22 @@ const condition: z.ZodType<ScenarioCondition> = z.lazy(() =>
         z.strictObject({ type: z.literal('balance'), currency: oneOf(vocabulary.CURRENCIES), op, value: finiteNumber }),
         z.strictObject({ type: z.literal('memorySet'), slot: identifier }),
         entryCondition,
+        z.strictObject({ type: z.literal('compare'), left: expression, op, right: expression }),
+        ...vocabulary.PRESENCE_CONDITIONS.map((type) => z.strictObject({ type: z.literal(type), value: expression })),
+        ...vocabulary.LIST_CONDITIONS.map((type) =>
+            z.strictObject({ type: z.literal(type), list: expression, value: expression }),
+        ),
+        z.strictObject({
+            type: z.literal('entriesWhere'),
+            quantifier: oneOf(['any', 'all']),
+            where: z.array(entryPredicate),
+        }),
+        z.strictObject({
+            type: z.literal('entryCount'),
+            where: z.array(entryPredicate),
+            op,
+            value: finiteNumber,
+        }),
         z.strictObject({
             type: z.literal('all'),
             of: z.array(condition).min(1).max(SCENARIO_CAPS.conditionsPerList),
