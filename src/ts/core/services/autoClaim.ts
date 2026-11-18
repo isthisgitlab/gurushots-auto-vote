@@ -16,6 +16,7 @@
 import * as logger from '../logger';
 import * as settings from '../settings';
 import * as cancellation from '../voting/cancellation';
+import { clockMs, isolateWhileSimulating } from '../simulationScope';
 
 import type { CompletedChallenge, Mission } from '../types/gurushots';
 import type { OperationRecord } from '../scenarios/runtime';
@@ -59,6 +60,13 @@ const COMPLETED_PAGE_SIZE = 20;
 const MAX_COMPLETED_PAGES = 5;
 
 let lastClaimAt = 0;
+
+isolateWhileSimulating(() => {
+    const saved = lastClaimAt;
+    return () => {
+        lastClaimAt = saved;
+    };
+});
 
 const cat = () => logger.withCategory('claim');
 
@@ -251,7 +259,7 @@ type ScenarioClaimResult = 'claimed' | 'nothing' | 'unreadable' | 'failed' | 'ca
  * @returns false when the throttle refuses: nothing is called
  */
 const takeClaimSlot = (): boolean => {
-    const now = Date.now();
+    const now = clockMs();
     if (now - lastClaimAt < CLAIM_INTERVAL_MS) return false;
     lastClaimAt = now;
     return true;

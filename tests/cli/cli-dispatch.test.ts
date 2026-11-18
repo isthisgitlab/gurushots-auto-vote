@@ -193,7 +193,7 @@ jest.mock('../../src/ts/shells/cli/commands/scenarios', () =>
             'scenarioResetCmd',
             'scenarioResetAllCmd',
             'scenarioDryRunCmd',
-            'scenarioSimulateCmd',
+            'scenarioSimulateCommand',
             'scenarioVocabulary',
         ].map((name) => [name, jest.fn(async () => 0)]),
     ),
@@ -597,7 +597,9 @@ const COMMANDS_BLOCK = `Commands:
   delete-scenario "<name>" - Delete a scenario and clear its assignments
   scenario-status --challenge=<id> - Where a challenge is in its scenario
   scenario-dry-run --challenge=<id> - What the scenario would do right now (spends nothing)
-  scenario-simulate --challenge=<id> - A what-if timeline until the challenge closes (spends nothing)
+  scenario-simulate <name> --subject=installation|candidate|active|completed --until=<ISO 8601> [--challenge=<id>]
+             [--assumptions=<file>] - A what-if run of the whole lifecycle until that time (spends nothing). A
+             challenge subject needs --challenge. The file assumes outcomes ({"outcomes":{"submit":"success"}}).
   scenario-reset --challenge=<id> - Forget a challenge's scenario progress (the plan restarts). It may spend again an action
              whose outcome is unknown (no answer, or the app could not record it), and it restarts the scenario's
              spend counter.
@@ -1422,7 +1424,11 @@ describe('scenario commands', () => {
         [['delete-scenario', 'My plan'], 'deleteScenarioCmd', ['My plan']],
         [['scenario-status', '--challenge=7'], 'scenarioStatusCmd', ['7']],
         [['scenario-dry-run', '--challenge=7'], 'scenarioDryRunCmd', ['7']],
-        [['scenario-simulate', '--challenge=7'], 'scenarioSimulateCmd', ['7']],
+        [
+            ['scenario-simulate', 'Plan', '--subject=active', '--challenge=7', '--until=2026-12-01T18:00:00Z'],
+            'scenarioSimulateCommand',
+            [['Plan', '--subject=active', '--challenge=7', '--until=2026-12-01T18:00:00Z']],
+        ],
         [['scenario-reset', '--challenge=7'], 'scenarioResetCmd', ['7']],
         [['scenario-reset', '--all'], 'scenarioResetAllCmd', []],
         [['scenario-vocabulary'], 'scenarioVocabulary', []],

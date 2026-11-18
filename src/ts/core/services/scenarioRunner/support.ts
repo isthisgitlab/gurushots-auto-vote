@@ -4,6 +4,7 @@
 
 import * as logger from '../../logger';
 import * as settings from '../../settings';
+import { clockSec } from '../../simulationScope';
 import { reserveAllows, lockedSpend } from '../currencyAuto';
 import { CURRENCY_OUTCOME } from '../../voting/currencyActions';
 import { refreshChallengeState } from '../autoFill';
@@ -74,7 +75,7 @@ type Retry = { count: boolean; origin: 'unclear' | 'pending' };
 // The outcome of a spend that was not made because its marker could not be written down first.
 const NOT_WRITTEN = 'not-written';
 
-const nowSec = () => Math.floor(Date.now() / 1000);
+const nowSec = clockSec;
 
 /**
  * The scenario `limits` / `spent` key a spend counts against.

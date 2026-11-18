@@ -56,6 +56,7 @@ jest.mock('../src/ts/core/mock', () => ({
         submitToChallenge: jest.fn(),
         getMemberChallenges: jest.fn(),
         getBankroll: jest.fn(),
+        getMyCompletedChallenges: jest.fn(),
         getSuggestedPhotoIds: jest.fn(),
         getCurrentMemberProfile: jest.fn(),
         searchTagAutocomplete: jest.fn(),

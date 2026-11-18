@@ -24,6 +24,7 @@
 
 import * as logger from '../logger';
 import * as settings from '../settings';
+import { isolateWhileSimulating } from '../simulationScope';
 
 import type { Challenge, Mission } from '../types/gurushots';
 import { errorMessage } from '../errorMessage';
@@ -322,6 +323,15 @@ const neediestFillMission = (needs: MissionNeeds | null | undefined): FillMissio
 };
 
 let lastMissionExpiry: number | null = null;
+
+isolateWhileSimulating(() => {
+    const expiry = lastMissionExpiry;
+    const summary = lastSummary;
+    return () => {
+        lastMissionExpiry = expiry;
+        lastSummary = summary;
+    };
+});
 
 /** The earliest expiry (epoch seconds) of an unfinished mission in the last mission list that was read, or null when none. */
 const getNextMissionExpiry = (): number | null => lastMissionExpiry;

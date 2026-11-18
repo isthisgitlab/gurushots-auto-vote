@@ -61,6 +61,7 @@ import { createJsonStore } from './settings/storage';
 import { fileErrorMessage } from './errorMessage';
 import { createMemoryRawJsonStore } from './parseUntrustedJson';
 import { acquireUnlockLock } from './joinStateStore';
+import { clockMs, simulationScope } from './simulationScope';
 import {
     INSTALLATION_KEY,
     createStateFile,
@@ -204,7 +205,7 @@ const createStateLedger = (
                     made.changed = true;
                     return null;
                 }
-                const record = { ...state, gen: current.gen, updatedAt: Date.now() };
+                const record = { ...state, gen: current.gen, updatedAt: clockMs() };
                 made.text = JSON.stringify(record);
                 return { ...map, [key]: record };
             });
@@ -289,7 +290,7 @@ const createStateLedger = (
                     const state = { ...next };
                     delete state.epoch;
                     delete state.publicationUnreadable;
-                    out.written = { ...state, gen: epoch.gen, updatedAt: Date.now() };
+                    out.written = { ...state, gen: epoch.gen, updatedAt: clockMs() };
                     return { ...map, [key]: out.written };
                 });
             } catch (error) {
@@ -365,9 +366,10 @@ const mockScenarioStateLedger = createMemoryStateLedger();
 
 /**
  * The progress ledger of a mode: the in-memory one in mock mode, the persisted one otherwise. Mock mode never reads or
- * writes the persisted `scenarioState` store.
+ * writes the persisted `scenarioState` store. Inside a simulation scope it is the scope's memory ledger, whatever the mode.
  */
-const ledgerFor = (mock: boolean) => (mock ? mockScenarioStateLedger : scenarioStateLedger);
+const ledgerFor = (mock: boolean) =>
+    simulationScope()?.ledger ?? (mock ? mockScenarioStateLedger : scenarioStateLedger);
 
 export const initializeScenarioStateAsync = async () => {
     await scenarioStateStore.initializeAsync();

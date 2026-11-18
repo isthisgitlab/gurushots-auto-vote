@@ -4,6 +4,7 @@
  */
 
 import * as logger from '../../logger';
+import { clockMs } from '../../simulationScope';
 import * as settings from '../../settings';
 import * as cancellation from '../../voting/cancellation';
 import { joinFreshRefusalWhy, joinAfterStartClamped } from '../VotingLogic';
@@ -107,7 +108,7 @@ const JOIN_POLICY_KEYS = ['autoJoinCycleCoinBudget', 'missionJoinEarly', 'autoJo
  * epoch ms. A caller that omits it falls back to the wall clock rather than
  * computing a window against 0, which would fail every candidate closed.
  */
-const toPassNowSec = (now: number): number => Math.floor((Number.isFinite(now) && now > 0 ? now : Date.now()) / 1000);
+const toPassNowSec = (now: number): number => Math.floor((Number.isFinite(now) && now > 0 ? now : clockMs()) / 1000);
 
 /**
  * Both timing fields get the same one-per-pass diagnostic: each means the window

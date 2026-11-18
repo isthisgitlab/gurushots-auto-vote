@@ -10,7 +10,7 @@ import * as fs from 'node:fs';
 import * as logger from '../../../core/logger';
 import { formatDateTime } from '../../../core/dateFormat';
 import { SCENARIO_TEMPLATES } from '../../../core/scenarios/templates';
-import { VOCABULARY_REFERENCE } from '../../../core/scenarios/vocabulary';
+import { SCENARIO_CAPS, VOCABULARY_REFERENCE } from '../../../core/scenarios/vocabulary';
 import { finiteOr } from '../../../core/numbers';
 import { escapeTerminalUnsafe, stripTerminalControl } from '../../../core/format/logSafe';
 
@@ -18,6 +18,7 @@ import { escapeTerminalUnsafe, stripTerminalControl } from '../../../core/format
 // the handler set or pull in its transitive dependencies.
 import type { NullEventHandlers } from '../../../core/types/cli';
 import type { ScenarioIssue } from '../../../core/settings/scenarioSchema';
+import type { SimulationEvent } from '../../../core/types/scenario';
 import type * as scenarios_handlersModule from '../../../core/ipc/scenarios.handlers';
 import type * as settingsModule from '../../../core/settings';
 import { errorMessage } from '../../../core/errorMessage';
@@ -336,27 +337,194 @@ const scenarioDryRunCmd = async (challengeId: string) => {
 };
 
 const STOP_REASONS: Record<string, string> = {
-    closed: 'the challenge closes',
-    idle: 'nothing more is time-based — the plan now waits on live data (votes, rank, boost) the simulation holds still',
+    horizon: 'the time you asked for is reached',
+    idle: 'nothing more is time-based — the plan now waits on live data (votes, rank, boost) the simulation does not know',
+    needsEvidence: 'it needs an outcome you have not assumed',
     halted: 'the scenario halts',
     limit: 'the timeline is long — only the first steps are shown',
 };
 
-const scenarioSimulateCmd = async (challengeId: string) => {
-    // The CLI simulates the assigned scenario, so it passes no draft.
-    const result = await handlers()['simulate-scenario'](null, challengeId);
-    if (!result.success) return reportFailure(result, 'Simulation failed');
-    ui().info(`Scenario "${result.scenario}" from phase ${result.startPhase}, assuming every step succeeds:`);
+const SIMULATE_USAGE =
+    'Usage: scenario-simulate <name> --subject=installation|candidate|active|completed --until=<ISO 8601> [--challenge=<id>] [--assumptions=<file>]';
+
+/** The `--name=value` flags of the command; any other flag, or one given twice, is refused. */
+const SIMULATE_FLAGS = ['subject', 'until', 'challenge', 'assumptions'] as const;
+
+type SimulateArgs =
+    | { ok: true; name: string; subject: string; until: string; challenge: string | null; assumptions: string | null }
+    | { ok: false; message: string };
+
+/**
+ * The arguments of `scenario-simulate`: one scenario name, and the flags, each at most once. Says what is missing or extra, in
+ * plain words.
+ */
+const parseSimulateArgs = (argv: string[]): SimulateArgs => {
+    const positionals = argv.filter((arg) => !arg.startsWith('--'));
+    const flags = new Map<string, string>();
+    for (const arg of argv.filter((entry) => entry.startsWith('--'))) {
+        const [name, ...value] = arg.slice(2).split('=');
+        if (!SIMULATE_FLAGS.some((known) => known === name)) return { ok: false, message: `Unknown option --${name}.` };
+        if (flags.has(name)) return { ok: false, message: `--${name} is given twice.` };
+        flags.set(name, value.join('='));
+    }
+    if (positionals.length === 0) return { ok: false, message: 'Name the scenario to simulate.' };
+    if (positionals.length > 1)
+        return { ok: false, message: 'Name one scenario only (put a name with spaces in quotes).' };
+    const subject = flags.get('subject');
+    if (!subject) return { ok: false, message: '--subject is missing: installation, candidate, active or completed.' };
+    const until = flags.get('until');
+    if (!until)
+        return {
+            ok: false,
+            message: '--until is missing: the time to simulate until, as ISO 8601 (2026-12-01T18:00:00Z).',
+        };
+    const challenge = flags.get('challenge') ?? null;
+    if (subject === 'installation' && challenge !== null) {
+        return {
+            ok: false,
+            message: '--challenge is not used with an installation subject: the installation has no challenge.',
+        };
+    }
+    if (subject !== 'installation' && !challenge) {
+        return { ok: false, message: `--challenge=<id> is required for a ${subject} subject.` };
+    }
+    return { ok: true, name: positionals[0], subject, until, challenge, assumptions: flags.get('assumptions') ?? null };
+};
+
+const ISO_8601 = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})?)?$/;
+
+/** An ISO 8601 date or date and time as unix seconds, or null when it is not one. */
+const isoToSeconds = (text: string): number | null => {
+    if (!ISO_8601.test(text)) return null;
+    const ms = Date.parse(text);
+    return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
+};
+
+/** The assumptions file as JSON: refused when it is too big (the same bound as an imported scenario), or is not JSON. */
+const readAssumptionsFile = (file: string): { ok: true; value: unknown } | { ok: false; message: string } => {
+    try {
+        if (fs.statSync(file).size > SCENARIO_CAPS.importBytes) {
+            return {
+                ok: false,
+                message: `The assumptions file is larger than ${SCENARIO_CAPS.importBytes / 1024} KB.`,
+            };
+        }
+        return { ok: true, value: JSON.parse(fs.readFileSync(file, 'utf8')) as unknown };
+    } catch (error) {
+        return {
+            ok: false,
+            message: `The assumptions file could not be read as JSON: ${errorMessage(error) || error}`,
+        };
+    }
+};
+
+const ASSUMPTION_ERRORS: Record<string, string> = {
+    'invalid-assumptions':
+        'The assumptions are not valid: use { "outcomes": { "<operation>": "success|refused|unclear" }, "snapshots": [...] }.',
+    'assumptions-too-large': 'The assumptions are too large.',
+    'until-in-past': '--until is already past.',
+    'simulation-busy': 'Another simulation is running; try again when it has finished.',
+    'scenario-scope-mismatch':
+        'This scenario does not fit that subject: installation scenarios run on the installation, challenge scenarios on a challenge.',
+    'subjects-unreadable': 'The list that subject comes from could not be read, so nothing was simulated.',
+    'challenge-not-found': 'That challenge is not in the list its kind comes from.',
+    'unknown-scenario': 'There is no saved scenario with that name.',
+};
+
+const eventLine = (event: SimulationEvent): string | null => {
+    switch (event.type) {
+        case 'operation':
+            return `${event.operation} ${event.subject}: ${event.outcome}`;
+        case 'rule':
+            return `[${stripTerminalControl(event.phase)}] rule ${stripTerminalControl(event.ruleId)} ran`;
+        case 'phase':
+            return `phase ${stripTerminalControl(event.from)} → ${stripTerminalControl(event.to)}`;
+        case 'published':
+            return `[${stripTerminalControl(event.phase)}] settings published`;
+        case 'notice':
+            return `notice: ${stripTerminalControl(event.message)}`;
+        case 'preview':
+            return null;
+    }
+};
+
+const printSimulation = (
+    result: Extract<Awaited<ReturnType<ScenarioHandlers['simulate-scenario']>>, { success: true }>,
+) => {
+    const outcomes = Object.entries(result.assumptions.outcomes ?? {});
+    ui().info(
+        `Scenario "${stripTerminalControl(result.scenario)}" on ${result.subject.kind === 'installation' ? 'the installation' : `${result.subject.kind} challenge ${result.subject.challengeId}`}, until ${at(result.until)}.`,
+    );
+    ui().info(
+        outcomes.length > 0
+            ? `  Assumed: ${outcomes.map(([operation, outcome]) => `${operation} ${outcome}`).join(', ')}. Nothing else is assumed.`
+            : '  Assumed: nothing — a step that needs an outcome stops the run.',
+    );
     if (result.manualOnly) ui().info('  Paused (Manual Only): this is what would run if the switch were off now.');
-    if (result.events.length === 0) ui().info('  Nothing would run.');
-    for (const event of result.events) {
-        const move = event.toPhase ? ` → phase ${event.toPhase}` : '';
-        ui().info(
-            `  ${at(event.at)}  [${stripTerminalControl(event.phase)}] ${stripTerminalControl(event.label)}: ${event.actions.join(', ')}${move}`,
+    const lines = result.events.flatMap((event) => {
+        const line = eventLine(event);
+        return line === null ? [] : [`  ${at(event.at)}  ${line}`];
+    });
+    if (lines.length === 0) ui().info('  Nothing would run.');
+    for (const line of lines) ui().info(line);
+    for (const deadline of result.deadlines) {
+        if (deadline.kind === 'submit') ui().info(`  Submit ${deadline.count} by ${at(deadline.at)}`);
+        else if (deadline.kind === 'publication') ui().info(`  Settings valid until ${at(deadline.validUntil)}`);
+        else ui().info(`  ${deadline.kind} window ${at(deadline.start)} to ${at(deadline.end)}`);
+    }
+    const preview = result.events.find((event) => event.type === 'preview');
+    if (preview) ui().info(`  Next look after that: ${at(preview.at)} (not simulated)`);
+    ui().info(`  Stops at ${at(result.stoppedAt)}: ${STOP_REASONS[result.stopReason]}.`);
+    if (result.needs) {
+        ui().warning(
+            `  Needs the outcome of "${result.needs.operation}" for ${result.needs.subject} (${at(result.needs.at)}). Add it to the assumptions file: { "outcomes": { "${result.needs.operation}": "success" } }`,
         );
     }
-    ui().info(`  Stops at ${at(result.stoppedAt)}: ${STOP_REASONS[result.stoppedBecause]}.`);
-    if (result.halted) ui().warning(`  ${result.halted}`);
+    if (result.halted) ui().warning(`  ${stripTerminalControl(result.halted)}`);
+};
+
+/**
+ * `scenario-simulate`: the same request the app's builder makes, built from the flags. Nothing is changed or spent.
+ */
+const scenarioSimulateCommand = async (argv: string[]) => {
+    const args = parseSimulateArgs(argv);
+    if (!args.ok) {
+        ui().error(args.message);
+        ui().info(SIMULATE_USAGE);
+        return 1;
+    }
+    const until = isoToSeconds(args.until);
+    if (until === null) {
+        ui().error(`--until is not a time ISO 8601 knows: ${escapeTerminalUnsafe(args.until)}`);
+        return 1;
+    }
+    let assumptions: unknown;
+    if (args.assumptions !== null) {
+        const file = readAssumptionsFile(args.assumptions);
+        if (!file.ok) {
+            ui().error(file.message);
+            return 1;
+        }
+        assumptions = file.value;
+    }
+    const result = await handlers()['simulate-scenario'](null, {
+        scenario: { name: args.name },
+        subject:
+            args.subject === 'installation'
+                ? { kind: 'installation' }
+                : { kind: args.subject, challengeId: args.challenge },
+        until,
+        ...(assumptions === undefined ? {} : { assumptions }),
+    });
+    if (!result.success) {
+        const known = ASSUMPTION_ERRORS[String(result.error)];
+        if (known) {
+            ui().error(known);
+            return 1;
+        }
+        return reportFailure(result, 'Simulation failed');
+    }
+    printSimulation(result);
     return 0;
 };
 
@@ -377,6 +545,8 @@ export {
     scenarioResetCmd,
     scenarioResetAllCmd,
     scenarioDryRunCmd,
-    scenarioSimulateCmd,
+    scenarioSimulateCommand,
+    parseSimulateArgs,
+    isoToSeconds,
     scenarioVocabulary,
 };

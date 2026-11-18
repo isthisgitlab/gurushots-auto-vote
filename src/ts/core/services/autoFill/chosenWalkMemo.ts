@@ -7,6 +7,7 @@
  */
 
 import { getEntries } from './challengeState';
+import { clockMs, isolateMapWhileSimulating } from '../../simulationScope';
 
 import type { Challenge } from '../../types/gurushots';
 import type { FillLogger, RankDeps } from '../../types/autoFill';
@@ -67,6 +68,8 @@ const MAX_WALK_MEMOS = 64;
 // server filters `allowed` per usage), so a swap's memo is kept apart from the submit one, which keeps the bare
 // challenge id as its key.
 const walkMemos: Map<string, WalkMemo> = new Map();
+// A simulation's memos of the walks it made are dropped when it ends.
+isolateMapWhileSimulating(walkMemos);
 
 const memoKey = (challenge: Challenge, usage: LibraryUsage): string =>
     usage === 'swap' ? `${challenge.id}:swap` : String(challenge.id);
@@ -267,7 +270,7 @@ const resolveMissingChosen = async ({
     const usable = inOrder ? ids.slice(0, ids.indexOf(missing[0])).filter(isUsable) : ids.filter(isUsable);
     if (usable.length >= (inOrder ? wantCount : Math.min(ids.length, wantCount))) return [];
 
-    const now = Date.now();
+    const now = clockMs();
     const memo = readMemo(challenge, now, usage);
     const unresolved = missing.filter((id) => !memo?.outcomes.has(id));
     // The wait holds for every id already looked for: only a newly chosen id is looked up at once.
@@ -321,7 +324,7 @@ const resolveMissingChosen = async ({
  * verdict.
  */
 const chosenWalkOutcome = (challenge: Challenge, id: string): WalkOutcome | null =>
-    readMemo(challenge, Date.now(), 'submit')?.outcomes.get(id) ?? null;
+    readMemo(challenge, clockMs(), 'submit')?.outcomes.get(id) ?? null;
 
 /**
  * Whether the submit-usage walk that last ran for this challenge stopped only at the page cap
@@ -334,7 +337,7 @@ const chosenWalkOutcome = (challenge: Challenge, id: string): WalkOutcome | null
  * is outside what the app can read.
  */
 const lastWalkStoppedAtPageCap = (challenge: Challenge): boolean =>
-    readMemo(challenge, Date.now(), 'submit')?.pageCapped === true;
+    readMemo(challenge, clockMs(), 'submit')?.pageCapped === true;
 
 /** The walk-memo half of forgetChosenPhotosMemory: drop every challenge's walk memos. */
 const forgetWalkMemo = (): void => {

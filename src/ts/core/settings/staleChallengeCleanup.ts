@@ -7,6 +7,7 @@ import { loadSettings, saveSettings } from './persistence';
 import { getOpenChallengeIds, getUpcomingChallengeIds } from './openChallenges';
 import { getActiveChallengeIds } from './challengeFacts';
 import { scenarioStateLedger } from '../scenarioStateStore';
+import { isolateWhileSimulating } from '../simulationScope';
 import { unresolvedWork } from './scenarioMutationGate';
 import { getScenario } from './scenarios';
 import { DEFAULT_STAGES } from '../scenarios/vocabulary';
@@ -57,6 +58,13 @@ const POST_CLOSE_RETENTION_SEC = POST_CLOSE_RETENTION_DAYS * 24 * 3600;
 type PostCloseListing = { listed: ReadonlySet<string>; settled: ReadonlyMap<string, string> };
 
 let postCloseListing: PostCloseListing | null = null;
+
+isolateWhileSimulating(() => {
+    const saved = postCloseListing;
+    return () => {
+        postCloseListing = saved;
+    };
+});
 
 /**
  * Remembers what a complete post-close pass found, or (null) forgets it: a pass that did not complete (cancelled, a failed

@@ -35,6 +35,7 @@ import { applyBoostToEntry } from './api/boost';
 import { applyTurbo } from './api/turbo';
 import { getEligiblePhotos, getEligiblePhotosWalk, getLibrarySuggestedIds, getImageData } from './api/submissions';
 import { getMemberChallenges, getBankroll } from './api/join';
+import { getMyCompletedChallenges } from './api/rewards';
 import { getCurrentMemberProfile, searchTagAutocomplete } from './api/tags';
 import { keyUnlock, exposureAutofill } from './api/currency';
 import { mockApiClient, mockEntryAgeLedger } from './mock';
@@ -57,6 +58,7 @@ const realApi = {
     submitToChallenge,
     getMemberChallenges,
     getBankroll,
+    getMyCompletedChallenges,
     getCurrentMemberProfile,
     searchTagAutocomplete,
     joinChallenge,

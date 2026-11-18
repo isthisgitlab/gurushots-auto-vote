@@ -51,6 +51,7 @@
  */
 
 import * as logger from '../logger';
+import { clockSec } from '../simulationScope';
 import * as votingLogic from './VotingLogic';
 import * as photoStats from './photoStats';
 import * as currencyAuto from './currencyAuto';
@@ -426,7 +427,7 @@ const runVotingPass = async (
             // pass-start clock would evaluate every later challenge against a time biased
             // into the past, missing last-minute/emergency/boost/turbo windows that opened
             // mid-pass and treating an already-closed challenge as still open.
-            const now = Math.floor(Date.now() / 1000);
+            const now = clockSec();
 
             // One malformed challenge must not cost the pass every challenge after it: an
             // unguarded property read would otherwise throw into the single outer catch

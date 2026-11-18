@@ -12,6 +12,7 @@
  */
 
 import * as logger from '../logger';
+import { clockSec } from '../simulationScope';
 import { errorKind } from '../errorMessage';
 import { consumeChosenPhotos, recordPhotoPoolEvents } from '../settings';
 import { isMarkedChallenge } from '../challengeMarks';
@@ -21,7 +22,7 @@ import type { ActiveChallengesResponse, Challenge, RankingEntry } from '../types
 import type { EntryAgeLedger } from '../types/stores';
 import type { PoolEvents } from '../scenarios/runtime';
 
-const nowSeconds = (): number => Math.floor(Date.now() / 1000);
+const nowSeconds = clockSec;
 
 // The photos a scenario step's submits and swaps put in or may have put in, by challenge: while a step runs, what a photo
 // pool is owed is handed to the step's reducer (collectPoolEvents), because a write to the progress record behind the

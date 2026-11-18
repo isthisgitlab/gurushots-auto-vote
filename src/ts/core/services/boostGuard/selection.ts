@@ -12,6 +12,7 @@
 
 import { openBoostWindows } from '../../voting/boostWindow';
 import { scenarioSubjectAvailable } from '../../settings';
+import { isolateWhileSimulating } from '../../simulationScope';
 
 import type { Challenge } from '../../types/gurushots';
 import type { EntryAgeLedger } from '../../types/stores';
@@ -34,6 +35,15 @@ const SUSPEND_BOOST_HORIZON_SEC = 30 * 60;
 // it was fetched under (null until one has been).
 let lastChallenges: readonly Challenge[] = [];
 let lastChallengesMock: boolean | null = null;
+
+isolateWhileSimulating(() => {
+    const challenges = lastChallenges;
+    const mock = lastChallengesMock;
+    return () => {
+        lastChallenges = challenges;
+        lastChallengesMock = mock;
+    };
+});
 
 /**
  * @param challenges - the get-active-challenges list (ignored unless an array)

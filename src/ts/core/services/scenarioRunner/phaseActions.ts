@@ -12,6 +12,7 @@ import * as settings from '../../settings';
 import { evaluateExpression, storedSettingValue } from '../../scenarios/expressions';
 import type { ExpressionContext } from '../../scenarios/expressions';
 import { INSTALLATION_KEY } from '../../scenarioStateStore';
+import { simulationScope } from '../../simulationScope';
 import type { ScenarioExpr } from '../../types/scenario';
 import type { ScenarioState } from '../../types/stores';
 import type { ScenarioValueDescriptor } from '../../types/settings';
@@ -36,6 +37,9 @@ type PhaseActionType =
     | 'handoffScenario'
     | 'startAutovote'
     | 'stopAutovote';
+
+/** Why a handoff step fails inside a simulation (it would change the saved assignment). */
+const HANDOFF_NOT_SIMULATED = 'a handoff changes the saved assignment, which a simulation does not do';
 
 /** A setSetting value is an expression when it is an object (a literal is a flag, a number, a text or a list). */
 const isExpression = (value: unknown): value is ScenarioExpr =>
@@ -170,6 +174,8 @@ const PHASE_ACTIONS: { [K in PhaseActionType]: ActionHandler<Extract<ScenarioAct
         const from = state.inFlight
             ? { ruleId: state.inFlight.ruleId, actionIndex: state.inFlight.actionIndex }
             : undefined;
+        // A handoff changes the saved assignment, which a simulation never writes: the step fails, and the rule stays at it.
+        if (simulationScope()) return failed(HANDOFF_NOT_SIMULATED);
         const result = await settings.requestScenarioHandoff(ctx.challengeId, action.to, generation, from);
         if (result.ok) return done({ handedOff: true });
         const message = `the handoff was refused (${result.reason})`;

@@ -66,11 +66,11 @@ const scenarioRows: readonly CommandRow[] = [
         challengeCommand('Usage: scenario-dry-run --challenge=<id>', (id) => scenarioCommands.scenarioDryRunCmd(id)),
         ['  scenario-dry-run --challenge=<id> - What the scenario would do right now (spends nothing)'],
     ),
-    row(
-        'scenario-simulate',
-        challengeCommand('Usage: scenario-simulate --challenge=<id>', (id) => scenarioCommands.scenarioSimulateCmd(id)),
-        ['  scenario-simulate --challenge=<id> - A what-if timeline until the challenge closes (spends nothing)'],
-    ),
+    row('scenario-simulate', scenarioCommands.scenarioSimulateCommand, [
+        '  scenario-simulate <name> --subject=installation|candidate|active|completed --until=<ISO 8601> [--challenge=<id>]',
+        '             [--assumptions=<file>] - A what-if run of the whole lifecycle until that time (spends nothing). A',
+        '             challenge subject needs --challenge. The file assumes outcomes ({"outcomes":{"submit":"success"}}).',
+    ]),
     row(
         'scenario-reset',
         runScenarioReset,

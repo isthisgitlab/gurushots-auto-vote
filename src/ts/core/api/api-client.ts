@@ -9,6 +9,7 @@ import axios from 'axios';
 import * as logger from '../logger';
 import { generateRandomHeaders } from './randomizer';
 import { sleep } from '../timing';
+import { refuseInSimulation } from '../simulationScope';
 import * as settings from '../settings';
 import { platform } from '../platform/port';
 import { ENDPOINTS, FORM_CONTENT_TYPE } from './constants';
@@ -211,6 +212,8 @@ const sendPost = async <T extends object>(
     retainRefusedResponse: boolean,
     explicitPolicy?: TransportPolicy,
 ): Promise<PostOutcome<T>> => {
+    // No request leaves the app while a simulation runs (it throws, and marks the simulation breached).
+    refuseInSimulation('a request to GuruShots');
     // Captured here, once, before the first attempt: every attempt of this call runs under it.
     const policy = explicitPolicy ?? captureTransportPolicy();
     // Nothing is sent without a policy: the failure the caller already handles (`refused` for a spend, which is never sent).

@@ -187,7 +187,7 @@ const CLI_PARITY: Record<InvokeChannel, ParityEntry> = {
     'reset-scenario-state': { commands: ['scenario-reset'], flag: '--challenge' },
     'reset-all-scenario-state': { commands: ['scenario-reset'], flag: '--all' },
     'dry-run-scenario': { commands: ['scenario-dry-run'], flag: '--challenge' },
-    'simulate-scenario': { commands: ['scenario-simulate'], flag: '--challenge' },
+    'simulate-scenario': { commands: ['scenario-simulate'], flag: '--subject' },
 
     // Window control
     'reload-window': { reason: 'Window and OS shell.' },

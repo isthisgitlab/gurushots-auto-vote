@@ -241,6 +241,15 @@ const SCOPE_STAGES = {
 /** Currency caps a scenario may set on itself (`limits`). */
 const LIMIT_KEYS = ['swaps', 'keys', 'fills'] as const;
 
+/** The requests a simulation can be told the outcome of (types/scenario.ts SimulationOperation). */
+const SIMULATION_OPERATIONS = ['submit', 'join', 'claim', 'boost', 'turbo', 'swap', 'fill', 'keyUnlock'] as const;
+
+/** The outcomes an assumption may give one: through, refused by the server, or no answer. */
+const SIMULATION_OUTCOMES = ['success', 'refused', 'unclear'] as const;
+
+/** The kinds of subject a simulation runs on. */
+const SIMULATION_SUBJECT_KINDS = ['installation', 'candidate', 'active', 'completed'] as const;
+
 const SCENARIO_CAPS = {
     scenarios: 50,
     phases: 20,
@@ -568,5 +577,8 @@ export {
     SCOPE_STAGES,
     LIMIT_KEYS,
     SCENARIO_CAPS,
+    SIMULATION_OPERATIONS,
+    SIMULATION_OUTCOMES,
+    SIMULATION_SUBJECT_KINDS,
     VOCABULARY_REFERENCE,
 };

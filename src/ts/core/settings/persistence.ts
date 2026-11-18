@@ -21,6 +21,7 @@ import {
 } from './storage';
 import type { QueuedWriteOutcome, SaveDroppedCause } from './storage';
 import { errorMessage } from '../errorMessage';
+import { simulationScope } from '../simulationScope';
 import { getDefaultSettings } from './defaults';
 import { isAuthKey, isPrototypeKey } from './loadValidation';
 import { retryLegacyImport, startFreshConfig } from './legacyImport';
@@ -55,6 +56,12 @@ type SettingsSaveDropped = { code: 'settings-save-dropped'; path: string; cause:
  * Load the configuration from the userData directory (on the first load without one, importing `settings.json`).
  */
 const loadSettings = (): ConfigV2 => {
+    const stored = loadStoredSettings();
+    // Inside a simulation scope: the same configuration with the simulated scenario and assignment applied in memory.
+    return simulationScope()?.patchSettings(stored) ?? stored;
+};
+
+const loadStoredSettings = (): ConfigV2 => {
     let settingsData: string | null;
     try {
         // Read via the storage adapter so the Capacitor cache path is exercised

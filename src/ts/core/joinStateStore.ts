@@ -23,6 +23,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { platform } from './platform/port';
+import { refuseInSimulation } from './simulationScope';
 import * as logger from './logger';
 import { createJsonStore, getSettingsPath } from './settings/storage';
 import { errorMessage } from './errorMessage';
@@ -263,6 +264,8 @@ const acquireUnlockLock = (
     id: string | number,
     { category = 'join', internal = false }: { category?: 'join' | 'scenario' | 'settings'; internal?: boolean } = {},
 ): UnlockLock => {
+    // A lock is a file in the data folder: none is made while a simulation runs.
+    refuseInSimulation('a lock file');
     // Only the platforms with a file lock (`lockPolicy: 'file'` — the real-fs platforms, Electron/CLI) can run two
     // processes against one account; on Android the claims are changed by the native compare-and-write instead
     // (see joinStateFile).

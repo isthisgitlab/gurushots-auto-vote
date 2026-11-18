@@ -6,6 +6,8 @@
  */
 
 import type * as vocabulary from '../scenarios/vocabulary';
+import type { ScenarioDocument } from '../settings/scenarioSchema';
+import type { Bankroll, Challenge, LibraryPhoto } from './gurushots';
 import type { ScenarioState } from './stores';
 
 type OneOf<T extends readonly string[]> = T[number];
@@ -127,3 +129,81 @@ export type ScenarioCondition =
     | { type: 'all'; of: ScenarioCondition[] }
     | { type: 'any'; of: ScenarioCondition[] }
     | { type: 'not'; condition: ScenarioCondition };
+
+/** What a simulation may be asked to assume the outcome of: each is one kind of request that changes the account. */
+export type SimulationOperation = OneOf<typeof vocabulary.SIMULATION_OPERATIONS>;
+
+/** The outcome an assumption gives an operation: it went through, the server refused it, or it got no answer. */
+export type SimulationOutcome = OneOf<typeof vocabulary.SIMULATION_OUTCOMES>;
+
+/**
+ * What a simulation runs on: the installation (no challenge), or one challenge in the stage of its life the kind names — a
+ * candidate it has not joined, an active one, a completed one.
+ */
+export type SimulationSubject =
+    | { kind: 'installation' }
+    | { kind: 'candidate' | 'active' | 'completed'; challengeId: string };
+
+/** What a timed evidence snapshot may replace: the subject's challenge, the bankroll, the library the submits draw from. */
+export type SimulationFacts = { challenge?: Challenge; bankroll?: Bankroll; library?: LibraryPhoto[] };
+
+/**
+ * Everything a simulation assumes, and nothing else: the outcome of each kind of operation, and evidence that changes at a
+ * given instant (unix seconds). Whatever is not assumed here is not assumed.
+ */
+export type SimulationAssumptions = {
+    outcomes?: Partial<Record<SimulationOperation, SimulationOutcome>>;
+    snapshots?: Array<{ at: number; facts: SimulationFacts }>;
+};
+
+/** The one request of both the GUI and the CLI: which scenario, on what, until when (unix seconds), assuming what. */
+export type SimulationRequest = {
+    scenario: { name: string } | { draft: ScenarioDocument };
+    subject: SimulationSubject;
+    until: number;
+    assumptions?: SimulationAssumptions;
+};
+
+/** Why a simulation stopped: it reached `until`, nothing more is due, an outcome is needed, the scenario halted, or a cap was reached. */
+export type SimulationStopReason = 'horizon' | 'idle' | 'needsEvidence' | 'halted' | 'limit';
+
+/**
+ * One thing a simulation shows. `applied: true` is what the run's own steps did to the simulated record; a `preview` is
+ * prospective (where the run would look next) and is never applied.
+ */
+export type SimulationEvent =
+    | { type: 'operation'; at: number; subject: string; operation: string; outcome: SimulationOutcome; applied: true }
+    | { type: 'rule'; at: number; subject: string; phase: string; ruleId: string; applied: true }
+    | { type: 'phase'; at: number; subject: string; from: string; to: string; applied: true }
+    | { type: 'published'; at: number; subject: string; phase: string; validUntil: number | null; applied: true }
+    | { type: 'notice'; at: number; subject: string; message: string; applied: true }
+    | { type: 'preview'; at: number; subject: string; reason: 'next-wake'; applied: false };
+
+/** A value the run used, and where it came from. */
+export type SimulationDiagnostic = { key: string; value: string | number | boolean | null; provenance: string };
+
+/** One resolved deadline of the final published phase: a submit row, a vote or pause window, or the publication's own validity. */
+export type SimulationDeadline =
+    | { kind: 'submit'; count: number; at: number | null }
+    | { kind: 'vote' | 'pause'; start: number | null; end: number | null }
+    | { kind: 'publication'; validUntil: number | null };
+
+/** The operation a run could not go on without an assumed outcome for. */
+export type SimulationNeed = { operation: SimulationOperation; subject: string; at: number };
+
+export type SimulationResult = {
+    events: SimulationEvent[];
+    assumptions: SimulationAssumptions;
+    diagnostics: SimulationDiagnostic[];
+    deadlines: SimulationDeadline[];
+    finalState: ScenarioState | null;
+    stopReason: SimulationStopReason;
+    /** Unix seconds the run stopped at. */
+    stoppedAt: number;
+    /** The instant of each pass the run made, in order: where a live run of the same evidence is replayed. */
+    passes: number[];
+    /** With `needsEvidence`: the outcome the run needs. */
+    needs: SimulationNeed | null;
+    /** With `halted`: why. */
+    halted: string | null;
+};

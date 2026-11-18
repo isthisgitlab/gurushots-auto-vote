@@ -3,6 +3,7 @@
  */
 
 import { finalizePick } from '../../photoPicker';
+import { clockMs } from '../../../simulationScope';
 import { refreshChallengeState, swappedOutIds } from '../challengeState';
 import { resolveSemanticScores } from '../candidates';
 import { clearChosenSkip, enteredIds, logChosenSkipOnce, logPoolBlockOnce, resolveChosenPhotos } from '../chosenPhotos';
@@ -518,7 +519,7 @@ const runFillAttempt = async ({
         // Any body that came back with a submit that was not ok is the server's answer: the remembered
         // photos in this pick are held back for a short while (it does not say which one it refused).
         // Only no body at all (null raw) or a throw is "no answer", and teaches nothing.
-        if (result?.raw) refuseRememberedChosen(challenge, picked, Date.now());
+        if (result?.raw) refuseRememberedChosen(challenge, picked, clockMs());
         const reason = describeSubmitFailure(result && result.raw);
         // A body is the server's refusal; no body at all is no answer — the request may not have
         // landed. The two log differently and travel apart as statuses, so a caller can latch the

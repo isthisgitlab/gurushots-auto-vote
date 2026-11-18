@@ -416,6 +416,46 @@ function JsonTab({
     );
 }
 
+/** The outcomes the builder's simulation assumes: every request goes through (its note says so). */
+const ASSUME_SUCCESS = {
+    submit: 'success',
+    join: 'success',
+    claim: 'success',
+    boost: 'success',
+    turbo: 'success',
+    swap: 'success',
+    fill: 'success',
+    keyUnlock: 'success',
+} as const;
+
+/** The stop-line of each reason the simulation can stop for: the run goes to the challenge's close, so the horizon is it. */
+const STOP_KEY = {
+    horizon: 'closed',
+    idle: 'idle',
+    halted: 'halted',
+    limit: 'limit',
+    needsEvidence: 'halted',
+} as const;
+
+/** One event of the timeline, as identifiers: a rule that ran, a request and its outcome, a phase change, a notice. */
+const eventText = (
+    event: Extract<SimulationResult['events'][number], { applied: true }>,
+    t: ReturnType<typeof useTranslation>['t'],
+): string => {
+    switch (event.type) {
+        case 'rule':
+            return `[${event.phase}] ${event.ruleId}`;
+        case 'operation':
+            return `${event.operation} (${event.outcome})`;
+        case 'phase':
+            return t('app.sbToPhase', { phase: event.to });
+        case 'published':
+            return `[${event.phase}]`;
+        case 'notice':
+            return event.message;
+    }
+};
+
 /**
  * A what-if timeline of the draft on one live challenge.
  */
@@ -427,7 +467,16 @@ function SimulatePanel({ draft }: { draft: ScenarioDraft }) {
     const [error, setError] = useState<ScenarioErrorInfo | null>(null);
 
     const run = async () => {
-        const response = await ipc.callOrNull(() => ipc.simulateScenario(challengeId, draft));
+        // On an active challenge, to its close, assuming every step succeeds (the request states it, the result shows it).
+        const close = Number(challenges.find((challenge) => String(challenge.id) === challengeId)?.close_time);
+        const response = await ipc.callOrNull(() =>
+            ipc.simulateScenario({
+                scenario: { draft },
+                subject: { kind: 'active', challengeId },
+                until: Number.isFinite(close) ? Math.floor(close) : Math.floor(Date.now() / 1000),
+                assumptions: { outcomes: ASSUME_SUCCESS },
+            }),
+        );
         if (response?.success) {
             setResult(response);
             setError(null);
@@ -474,16 +523,19 @@ function SimulatePanel({ draft }: { draft: ScenarioDraft }) {
                         <p>{t('app.sbSimulateNothing')}</p>
                     ) : (
                         <ol className="space-y-0.5">
-                            {result.events.map((event, index) => (
-                                <li key={`${event.at}:${event.ruleId}:${index}`}>
-                                    <span className="font-mono">{new Date(event.at * 1000).toLocaleString()}</span> · [
-                                    {event.phase}] {event.label}: {event.actions.join(', ')}
-                                    {event.toPhase && ` · ${t('app.sbToPhase', { phase: event.toPhase })}`}
-                                </li>
-                            ))}
+                            {result.events.flatMap((event, index) =>
+                                event.applied ? (
+                                    <li key={`${event.at}:${event.type}:${index}`}>
+                                        <span className="font-mono">{new Date(event.at * 1000).toLocaleString()}</span>{' '}
+                                        · {eventText(event, t)}
+                                    </li>
+                                ) : (
+                                    []
+                                ),
+                            )}
                         </ol>
                     )}
-                    <p>{t(`app.sbStop_${result.stoppedBecause}`)}</p>
+                    <p>{t(`app.sbStop_${STOP_KEY[result.stopReason]}`)}</p>
                     {result.halted && <ToneNote tone="warning">{result.halted}</ToneNote>}
                 </div>
             )}

@@ -82,3 +82,24 @@ describe('remembered list — suspend selection', () => {
         expect(timed.member?.boost?.state).toBe('AVAILABLE');
     });
 });
+
+describe('a simulation', () => {
+    test('leaves the remembered list as it was: the list it remembers is put back when its scope closes', async () => {
+        const { runInSimulationScope } =
+            require('../../../src/ts/core/simulationScope') as typeof import('../../../src/ts/core/simulationScope');
+        const { createMemoryStateLedger } =
+            require('../../../src/ts/core/scenarioStateStore') as typeof import('../../../src/ts/core/scenarioStateStore');
+        selection.rememberChallenges([timed], true);
+        const run = await runInSimulationScope(
+            { nowMs: () => 1, ledger: createMemoryStateLedger(), patchSettings: (config) => config, breach: null },
+            async () => {
+                selection.rememberChallenges([keyed], false);
+                return selection.rememberedChallengesMock();
+            },
+        );
+        expect(run).toEqual({ ok: true, value: false });
+        expect(selection.rememberedChallengesMock()).toBe(true);
+        selection.markBoostApplied(timed.id);
+        expect(timed.member?.boost?.state).toBe('USED');
+    });
+});

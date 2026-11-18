@@ -4,6 +4,7 @@
  */
 
 import { authorizeSubmit, lowerSubmitSchedule, submitCeiling, submitShift } from './schedule';
+import { clockSec } from '../../simulationScope';
 import { getEntries, getSlotsRemaining, reflectNewEntry, refreshChallengeState } from './challengeState';
 import { runFillAttempt } from './pipeline';
 import { finiteOr } from '../../numbers';
@@ -134,7 +135,7 @@ const createFinalEligibility =
     async (picked: readonly string[]) => {
         const refresh = await refreshChallengeState(challenge, token, deps, 'autoSubmit', true);
         if (refresh === 'gone' || refresh === 'invalid') return { standDown: true };
-        const finalNow = deps.wallClockNow?.() ?? Math.floor(Date.now() / 1000);
+        const finalNow = deps.wallClockNow?.() ?? clockSec();
         if (
             isCancelled() ||
             deps.settings.getEffectiveSetting('autoSubmit', challengeId) !== true ||

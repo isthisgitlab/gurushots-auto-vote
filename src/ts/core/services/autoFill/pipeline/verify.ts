@@ -15,6 +15,7 @@ import {
     startsWithLetter,
 } from '../../photoPicker';
 import * as lexicon from '../../semantic/lexicon';
+import { clockSec } from '../../../simulationScope';
 import { createStatsBudget, createVotesLoader } from '../../photoStats';
 import type { StatsBudget } from '../../photoStats';
 import { rankVisually } from '../../visionVerifier';
@@ -186,7 +187,7 @@ const recordUncertainSubmission = async ({
               ? `no subject match (the title also names ${leftovers.map((s) => `"${s}"`).join(', ')})`
               : 'no subject match';
         try {
-            deps.entryAges.markUncertain(challenge, id, Math.floor(Date.now() / 1000));
+            deps.entryAges.markUncertain(challenge, id, clockSec());
             deps.logger
                 .withCategory('autoSubmit')
                 .warning(

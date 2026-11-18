@@ -21,6 +21,7 @@
  */
 
 import * as logger from '../logger';
+import { clockSec } from '../simulationScope';
 import { isPlainObject } from '../plainObject';
 import { INSTALLATION_KEY, initialState, ledgerFor, refreshScenarioStateAsync } from '../scenarioStateStore';
 import { isCount, isReservedSubject } from '../scenarioStateFile';
@@ -40,7 +41,7 @@ import type { ScenarioState, ScenarioStopFence } from '../types/stores';
 import type { ScenarioDocument } from './scenarioSchema';
 
 const log = () => logger.withCategory('scenario');
-const nowSec = (): number => Math.floor(Date.now() / 1000);
+const nowSec = clockSec;
 
 /** The progress ledger of the mode a loaded configuration is in: mock mode never touches the persisted one. */
 const ledgerOf = (settings: ConfigV2) => ledgerFor(settings.app.mock === true);

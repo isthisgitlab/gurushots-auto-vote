@@ -8,6 +8,7 @@
 import { MAX_TITLE_RULES, MAX_TITLE_LENGTH } from './titleRuleSanitize';
 import { pinnedTitleFor } from './titlePins';
 import { isMarkedChallenge } from '../challengeMarks';
+import { isolateWhileSimulating } from '../simulationScope';
 
 import type { ChallengeFacts, RuleMatchChallenge } from '../types/settings';
 import type { Challenge } from '../types/gurushots';
@@ -75,6 +76,16 @@ const _observedFacts = (challenge: Partial<Challenge>): ChallengeFacts => {
  * needed to resolve a rule for a challenge in the current list. An in-memory
  * map costs no file growth and cannot go stale across restarts.
  */
+// A simulation remembers the challenges of its own run; what the real list held is put back when it ends.
+isolateWhileSimulating(() => {
+    const titles = activeChallengeTitles;
+    const facts = activeChallengeFacts;
+    return () => {
+        activeChallengeTitles = titles;
+        activeChallengeFacts = facts;
+    };
+});
+
 const rememberChallengeTitles = (
     challenges: ReadonlyArray<Partial<Challenge>> | null | undefined,
     pruneUnsafe = false,

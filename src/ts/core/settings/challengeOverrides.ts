@@ -7,6 +7,7 @@
  */
 
 import * as logger from '../logger';
+import { clockSec } from '../simulationScope';
 import { schemaEntry, schemaDefault, getValidationError } from './schema';
 import type { SettingKey, SettingsSchemaEntry } from './schema';
 import { loadSettings, saveSettings } from './persistence';
@@ -414,7 +415,7 @@ const replaceChallengeOverrides = (
 /**
  * The unix second now: the clock a publication's validity is judged on.
  */
-const nowSec = (): number => Math.floor(Date.now() / 1000);
+const nowSec = clockSec;
 
 /**
  * A challenge's scenario layer over an already loaded settings blob (settings/scenarioOverlay.ts). The scenario name is

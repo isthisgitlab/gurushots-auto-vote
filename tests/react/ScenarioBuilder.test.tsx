@@ -307,32 +307,47 @@ describe('JSON tab', () => {
 });
 
 describe('simulate', () => {
-    test('runs the draft on the picked challenge and shows the timeline', async () => {
+    const response = (patch: Record<string, unknown> = {}) =>
+        invalid<Awaited<ReturnType<typeof window.api.simulateScenario>>>({
+            success: true,
+            events: [],
+            stopReason: 'idle',
+            halted: null,
+            manualOnly: false,
+            ...patch,
+        });
+    const SHOW = { id: 7, title: 'Show', close_time: 1_800_000_000 };
+
+    test('runs the draft on the picked active challenge, to its close, assuming every step succeeds, and shows the timeline', async () => {
         jest.mocked(window.api.simulateScenario).mockResolvedValueOnce(
-            invalid({
-                success: true,
+            response({
                 events: [
+                    { type: 'rule', at: 1_800_000_000, subject: '7', phase: 'main', ruleId: 'r1', applied: true },
                     {
-                        at: 1_800_000_000,
-                        phase: 'main',
-                        ruleId: 'r1',
-                        label: 'First',
-                        actions: ['goto'],
-                        toPhase: 'later',
+                        type: 'operation',
+                        at: 1_800_000_010,
+                        subject: '7',
+                        operation: 'submitToChallenge',
+                        outcome: 'success',
+                        applied: true,
                     },
+                    { type: 'phase', at: 1_800_000_020, subject: '7', from: 'main', to: 'later', applied: true },
                     {
-                        at: 1_800_000_060,
+                        type: 'published',
+                        at: 1_800_000_030,
+                        subject: '7',
                         phase: 'later',
-                        ruleId: 'r3',
-                        label: 'Next',
-                        actions: ['notify'],
-                        toPhase: null,
+                        validUntil: null,
+                        applied: true,
                     },
+                    { type: 'notice', at: 1_800_000_040, subject: '7', message: 'Halted by hand', applied: true },
+                    { type: 'preview', at: 1_800_009_000, subject: '7', reason: 'next-wake', applied: false },
                 ],
-                stoppedBecause: 'halted',
+                stopReason: 'halted',
                 halted: 'Phase gone',
             }),
         );
+        jest.mocked(window.api.getActiveChallenges).mockResolvedValue({ challenges: [invalid(SHOW)] });
         await renderBuilder();
         const picker = await screen.findByLabelText<HTMLSelectElement>('app.sbSimulateOn');
         await waitFor(() => expect(within(picker).getByText('Show')).toBeTruthy());
@@ -340,19 +355,71 @@ describe('simulate', () => {
         changeSelect(picker, '7');
         click('app.sbSimulate');
         await screen.findByText('app.sbSimulateAssume');
-        expect(window.api.simulateScenario).toHaveBeenCalledWith('7', expect.objectContaining({ name: 'Plan' }));
-        expect(screen.getByText(/\[main\] First: goto/).textContent).toContain('app.sbToPhase');
+        expect(window.api.simulateScenario).toHaveBeenCalledWith({
+            scenario: { draft: expect.objectContaining({ name: 'Plan' }) },
+            subject: { kind: 'active', challengeId: '7' },
+            until: 1_800_000_000,
+            assumptions: {
+                outcomes: {
+                    submit: 'success',
+                    join: 'success',
+                    claim: 'success',
+                    boost: 'success',
+                    turbo: 'success',
+                    swap: 'success',
+                    fill: 'success',
+                    keyUnlock: 'success',
+                },
+            },
+        });
+        expect(screen.getByText(/\[main\] r1/)).toBeTruthy();
+        expect(screen.getByText(/submitToChallenge \(success\)/)).toBeTruthy();
+        expect(screen.getByText(/app\.sbToPhase/)).toBeTruthy();
+        expect(screen.getByText(/\[later\]/)).toBeTruthy();
+        expect(screen.getByText(/Halted by hand/)).toBeTruthy();
+        // The preview is prospective: it is not listed with what the run did.
+        expect(screen.getAllByRole('listitem')).toHaveLength(5);
         expect(screen.getByText('app.sbStop_halted')).toBeTruthy();
         expect(screen.getByText('Phase gone')).toBeTruthy();
+    });
+
+    test('a challenge with no close time is simulated to now, never to a made-up close', async () => {
+        jest.mocked(window.api.simulateScenario).mockResolvedValueOnce(response());
+        jest.mocked(window.api.getActiveChallenges).mockResolvedValue({
+            challenges: [invalid({ id: 7, title: 'Show' })],
+        });
+        jest.spyOn(Date, 'now').mockReturnValue(1_700_000_000_500);
+        await renderBuilder();
+        const picker = await screen.findByLabelText<HTMLSelectElement>('app.sbSimulateOn');
+        await waitFor(() => expect(within(picker).getByText('Show')).toBeTruthy());
+        changeSelect(picker, '7');
+        click('app.sbSimulate');
+        await screen.findByText('app.sbSimulateNothing');
+        expect(window.api.simulateScenario).toHaveBeenCalledWith(expect.objectContaining({ until: 1_700_000_000 }));
+    });
+
+    test.each([
+        ['horizon', 'app.sbStop_closed'],
+        ['needsEvidence', 'app.sbStop_halted'],
+        ['limit', 'app.sbStop_limit'],
+    ])('the stop reason %s reads as %s', async (stopReason, key) => {
+        jest.mocked(window.api.simulateScenario).mockResolvedValueOnce(response({ stopReason }));
+        jest.mocked(window.api.getActiveChallenges).mockResolvedValue({ challenges: [invalid(SHOW)] });
+        await renderBuilder();
+        const picker = await screen.findByLabelText<HTMLSelectElement>('app.sbSimulateOn');
+        await waitFor(() => expect(within(picker).getByText('Show')).toBeTruthy());
+        changeSelect(picker, '7');
+        click('app.sbSimulate');
+        expect(await screen.findByText(key)).toBeTruthy();
     });
 
     test('a Manual Only challenge keeps the timeline and says it is paused; a plain one does not', async () => {
         jest.mocked(window.api.simulateScenario)
             .mockResolvedValueOnce(
-                invalid({ success: true, events: [], stoppedBecause: 'idle', halted: null, manualOnly: true }),
+                invalid({ success: true, events: [], stopReason: 'idle', halted: null, manualOnly: true }),
             )
             .mockResolvedValueOnce(
-                invalid({ success: true, events: [], stoppedBecause: 'idle', halted: null, manualOnly: false }),
+                invalid({ success: true, events: [], stopReason: 'idle', halted: null, manualOnly: false }),
             );
         jest.mocked(window.api.getActiveChallenges).mockResolvedValue({
             challenges: [invalid({ id: 7, title: 'Show' })],
@@ -371,7 +438,7 @@ describe('simulate', () => {
 
     test('an empty timeline, and a failed run with its problems', async () => {
         jest.mocked(window.api.simulateScenario)
-            .mockResolvedValueOnce(invalid({ success: true, events: [], stoppedBecause: 'idle', halted: null }))
+            .mockResolvedValueOnce(invalid({ success: true, events: [], stopReason: 'idle', halted: null }))
             .mockResolvedValueOnce(invalid({ success: false, issues: [{ path: 'start', message: 'No phase' }] }));
         jest.mocked(window.api.getActiveChallenges).mockResolvedValue({
             challenges: [invalid({ id: 7, title: 'Show' })],
