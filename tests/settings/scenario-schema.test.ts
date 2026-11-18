@@ -895,3 +895,188 @@ test('formatPath joins keys and indexes', () => {
     expect(formatPath(['phases', 'a', 'rules', 1, 'do', 0, 'with'])).toBe('phases.a.rules[1].do[0].with');
     expect(formatPath([])).toBe('');
 });
+
+describe('validateScenario — the scope of a scenario', () => {
+    const installation = (phase: Record<string, unknown>, extra = {}) =>
+        doc({ scope: 'installation', phases: { main: phase }, ...extra });
+    const fact = (name: string) => ({ kind: 'fact', name });
+    const count = (value: number) => ({ kind: 'literal', value, quantity: 'count' });
+    const amount = (value: number, quantity: string) => ({ kind: 'literal', value, quantity });
+    const compare = (left: unknown, right: unknown) => ({ type: 'compare', left, op: '>', right });
+
+    test('an omitted scope is a challenge scenario, and a challenge scope may be written out', () => {
+        expect((validate(doc()) as Accepted).scenario.scope).toBeUndefined();
+        expect(validate(doc({ scope: 'challenge' })).ok).toBe(true);
+        expectIssue(doc({ scope: 'account' }), 'scope', 'expected one of');
+    });
+
+    test("a challenge scenario keeps today's rule: an account setting is not a per-challenge setting", () => {
+        expectIssue(
+            doc({ phases: { main: { settings: { autoClaimPrizes: true } } } }),
+            'phases.main.settings.autoClaimPrizes',
+            'Not a per-challenge setting',
+        );
+    });
+
+    test('an installation scenario writes installation settings, with no challenge setting among them', () => {
+        expect(validate(installation({ settings: { autoClaimPrizes: true, missionVote: false } })).ok).toBe(true);
+        expect(validate(installation({ settings: { currencyReserveKeys: 2 } })).ok).toBe(true);
+        expectIssue(
+            installation({ settings: { exposure: 10 } }),
+            'phases.main.settings.exposure',
+            'Not a setting an installation scenario can change',
+        );
+        expectIssue(
+            installation({ settings: { mock: true } }),
+            'phases.main.settings.mock',
+            'Only the user switches between real and mock mode',
+        );
+        expectIssue(
+            installation({ settings: { notASetting: 1 } }),
+            'phases.main.settings.notASetting',
+            'Not a setting an installation scenario can change',
+        );
+    });
+
+    test('an installation setting is checked like any value: by its schema, or by its descriptor outside it', () => {
+        expectIssue(
+            installation({ settings: { currencyReserveKeys: -3 } }),
+            'phases.main.settings.currencyReserveKeys',
+            '',
+        );
+        expect(validate(installation({ settings: { theme: 'light', customTimezones: ['Europe/Riga'] } })).ok).toBe(
+            true,
+        );
+        expectIssue(
+            installation({ settings: { theme: 'neon' } }),
+            'phases.main.settings.theme',
+            'does not take this value',
+        );
+        expectIssue(
+            installation({ settings: { customTimezones: [1] } }),
+            'phases.main.settings.customTimezones',
+            'does not take',
+        );
+        expectIssue(installation({ settings: { language: 5 } }), 'phases.main.settings.language', 'does not take');
+        expectIssue(
+            installation({ settings: { checkFrequencyMin: 'x' } }),
+            'phases.main.settings.checkFrequencyMin',
+            '',
+        );
+        expect(validate(installation({ settings: { apiTimeout: 30 } })).ok).toBe(true);
+        expectIssue(
+            installation({ settings: { apiTimeout: '30' } }),
+            'phases.main.settings.apiTimeout',
+            'does not take',
+        );
+        expect(validate(installation({ settings: { stayLoggedIn: true } })).ok).toBe(false);
+    });
+
+    test('a pair that only challenge scenarios share (exposure and its target) is not asked of an installation', () => {
+        expectIssue(
+            installation({ settings: { exposure: 10, exposureTarget: 12 } }),
+            'phases.main.settings.exposure',
+            'Not a setting',
+        );
+    });
+
+    test('bindings: an installation key bound from account facts, never a challenge key or a challenge fact', () => {
+        expect(validate(installation({ bindings: { missionVote: { kind: 'literal', value: true } } })).ok).toBe(true);
+        expectIssue(
+            installation({ bindings: { exposure: count(3) } }),
+            'phases.main.bindings.exposure',
+            'Not a setting an installation scenario can change',
+        );
+        expectIssue(
+            installation({ bindings: { currencyReserveKeys: fact('challenge.entries') } }),
+            'phases.main.bindings.currencyReserveKeys',
+            'not available outside a challenge',
+        );
+        expect(validate(installation({ bindings: { currencyReserveKeys: fact('balance.keys') } })).ok).toBe(true);
+    });
+
+    test('conditions: account facts are readable, a challenge fact is not, and the challenge conditions are refused', () => {
+        const rule = (condition: unknown) =>
+            installation({ rules: [{ if: [condition], do: [{ type: 'notify', message: 'x' }] }] });
+        expect(validate(rule(compare(fact('balance.keys'), amount(1, 'keys')))).ok).toBe(true);
+        expect(validate(rule({ type: 'dailyWindow', from: '01:00', to: '02:00' })).ok).toBe(true);
+        expect(validate(rule({ type: 'balance', currency: 'keys', op: '>', value: 1 })).ok).toBe(true);
+        expect(validate(rule({ type: 'inPhaseFor', min: '1h' })).ok).toBe(true);
+        expectIssue(
+            rule(compare(fact('challenge.exposure'), amount(1, 'percent'))),
+            'phases.main.rules[0].if[0].left',
+            'not available outside a challenge',
+        );
+        for (const challengeOnly of [
+            { type: 'beforeEnd', max: '1d' },
+            { type: 'afterStart', min: '1d' },
+            { type: 'elapsedPercent', min: 10 },
+            { type: 'entries', op: '>', value: 1 },
+            { type: 'freeSlots', op: '>', value: 1 },
+            { type: 'exposure', op: '>', value: 1 },
+            { type: 'challengeRank', op: '>', value: 1 },
+            { type: 'challengeVotes', op: '>', value: 1 },
+            { type: 'boostState', in: ['AVAILABLE'] },
+            { type: 'turboState', in: ['WON'] },
+            { type: 'entry', select: { by: 'slot', index: 0 }, field: 'votes', op: '>', value: 1 },
+            { type: 'entriesWhere', quantifier: 'any', where: [{ field: 'votes', op: '>', value: 1 }] },
+            { type: 'entryCount', where: [{ field: 'votes', op: '>', value: 1 }], op: '>', value: 1 },
+        ]) {
+            expectIssue(
+                rule(challengeOnly),
+                'phases.main.rules[0].if[0]',
+                `${challengeOnly.type} reads a challenge: an installation scenario cannot use it`,
+            );
+        }
+        // Nested too: a challenge condition under all / any / not.
+        expectIssue(
+            rule({ type: 'not', condition: { type: 'any', of: [{ type: 'exposure', op: '>', value: 1 }] } }),
+            'phases.main.rules[0].if[0].condition.of[0]',
+            'reads a challenge',
+        );
+    });
+
+    test('the same challenge conditions stay valid in a challenge scenario', () => {
+        const rule = (condition: unknown) => withRule({ if: [condition] });
+        expect(validate(rule({ type: 'beforeEnd', max: '1d' })).ok).toBe(true);
+        expect(validate(rule(compare(fact('challenge.exposure'), amount(1, 'percent')))).ok).toBe(true);
+    });
+});
+
+describe('validateScenario — an installation setting outside the schema, by its descriptor', () => {
+    test('a flag takes a flag, and a value with no form to write takes nothing', () => {
+        jest.isolateModules(() => {
+            jest.doMock('../../src/ts/core/settings/scenarioCapabilities', () => {
+                const actual = jest.requireActual<typeof import('../../src/ts/core/settings/scenarioCapabilities')>(
+                    '../../src/ts/core/settings/scenarioCapabilities',
+                );
+                const writable = (value: { kind: 'boolean' } | { kind: 'other' }) => ({
+                    disposition: 'appPreference' as const,
+                    read: 'value' as const,
+                    phaseWrite: ['installation' as const],
+                    owner: 'installation' as const,
+                    value,
+                });
+                return {
+                    ...actual,
+                    scenarioCapability: (key: string) =>
+                        key === 'testFlag'
+                            ? writable({ kind: 'boolean' })
+                            : key === 'testBlob'
+                              ? writable({ kind: 'other' })
+                              : actual.scenarioCapability(key),
+                };
+            });
+            const isolated = require('../../src/ts/core/settings/scenarioSchema') as typeof scenarioSchemaModule;
+            const installation = (settings: Record<string, unknown>) =>
+                doc({ scope: 'installation', phases: { main: { settings } } });
+            expect(isolated.validateScenario(installation({ testFlag: true }), globalDefaults).ok).toBe(true);
+            const refused = isolated.validateScenario(installation({ testFlag: 'yes', testBlob: 1 }), globalDefaults);
+            expect((refused as Refused).issues).toEqual([
+                { path: 'phases.main.settings.testFlag', message: 'testFlag does not take this value' },
+                { path: 'phases.main.settings.testBlob', message: 'testBlob does not take this value' },
+            ]);
+        });
+        jest.dontMock('../../src/ts/core/settings/scenarioCapabilities');
+    });
+});

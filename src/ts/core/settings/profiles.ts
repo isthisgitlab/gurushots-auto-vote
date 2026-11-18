@@ -20,8 +20,15 @@ import {
 } from './profileStore';
 import { sanitizeTitleRuleInline } from './titleRuleSanitize';
 import { titleProfileComposesWithKnownOverrides } from './ruleResolution';
-import { ownChallengeValues, replaceChallengeOverridesInSettings, trimmedChallengeId } from './challengeOverrides';
+import {
+    ownChallengeValues,
+    replaceChallengeOverridesInSettings,
+    trimmedChallengeId,
+    writeAssignmentAware,
+} from './challengeOverrides';
 import { ON_ONLY_KEYS } from './ruleBehaviour';
+import { runGated } from './scenarioMutationGate';
+import { isPlainObject } from '../plainObject';
 
 import type { ConfigV2 } from '../types/config';
 import type { ChallengeIdInput, ChallengeValues, TitleRule } from '../types/settings';
@@ -109,13 +116,40 @@ const saveChallengeProfile = (name: unknown, values: unknown): boolean => {
         return false;
     }
 
-    const settings = loadSettings();
-    const globalDefaults = globalChallengeValues(settings);
-    const sanitized = sanitizeProfileValues(values, true, globalDefaults);
-    if (sanitized === null) {
+    // The scenario a profile holds is an assignment (a rule that uses the profile, and every challenge it was applied
+    // to, runs it): moving it is gated like any other assignment (scenarioLifecycle.ts). Anything else is written as ever.
+    const probe = loadSettings();
+    const sanitizedProbe = sanitizeProfileValues(values, true, globalChallengeValues(probe));
+    if (sanitizedProbe === null) {
         return false;
     }
+    const before = _profileScenario(probe, normalized);
+    const after = normalizeProfileName(sanitizedProbe.scenario);
+    if (before === after) return _writeProfile(probe, trimmed, normalized, sanitizedProbe);
+    const gated = runGated(
+        () => ({ names: [before, after] }),
+        (settings) => {
+            const sanitized = sanitizeProfileValues(values, true, globalChallengeValues(settings));
+            return sanitized !== null && _writeProfile(settings, trimmed, normalized, sanitized);
+        },
+    );
+    return gated.ok && gated.value;
+};
 
+/** The scenario a stored profile holds, normalized ('' when none or when there is no such profile). */
+const _profileScenario = (settings: ConfigV2, normalized: string): string => {
+    const key = findProfileKey(settings.profiles, normalized);
+    const values = key === null ? null : settings.profiles[key];
+    return isPlainObject(values) ? normalizeProfileName(values.scenario) : '';
+};
+
+/** Stores a sanitized profile on a loaded configuration (the profile cap and the rules that use it are checked). */
+const _writeProfile = (
+    settings: ConfigV2,
+    trimmed: string,
+    normalized: string,
+    sanitized: ChallengeValues,
+): boolean => {
     // Rebuilt via own-property copy: drops prototype-named keys a corrupted
     // blob might carry.
     const { profiles, existed } = _profilesWithout(settings.profiles, normalized);
@@ -156,24 +190,30 @@ const deleteChallengeProfile = (name: unknown): boolean => {
     if (!normalized || RESERVED_PROFILE_NAMES.has(normalized)) {
         return false;
     }
-    const settings = loadSettings();
-    const stored = settings.profiles;
-    const storedKey = findProfileKey(stored, normalized);
-    if (storedKey === null) {
+    const probe = loadSettings();
+    if (findProfileKey(probe.profiles, normalized) === null) {
         return false;
     }
-    delete stored[storedKey];
-    settings.profiles = stored;
+    const removeFrom = (settings: ConfigV2): boolean => {
+        const stored = settings.profiles;
+        for (const key of Object.keys(stored)) if (normalizeProfileName(key) === normalized) delete stored[key];
+        settings.profiles = stored;
 
-    // A deleted profile cannot remain as an invisible stale assignment. Keep
-    // any tags or inline overrides on the same rule; drop the row only when the
-    // profile was its sole contribution.
-    settings.rules = settings.rules.flatMap((rule) => {
-        if (normalizeProfileName(rule?.profile) !== normalized) return [rule];
-        const kept = _ruleWithoutProfile(rule);
-        return kept ? [kept] : [];
-    });
-    return saveSettings(settings);
+        // A deleted profile cannot remain as an invisible stale assignment. Keep
+        // any tags or inline overrides on the same rule; drop the row only when the
+        // profile was its sole contribution.
+        settings.rules = settings.rules.flatMap((rule) => {
+            if (normalizeProfileName(rule?.profile) !== normalized) return [rule];
+            const kept = _ruleWithoutProfile(rule);
+            return kept ? [kept] : [];
+        });
+        return saveSettings(settings);
+    };
+    // A profile that holds a scenario takes that assignment away from the rules that use it: gated like any other.
+    const held = _profileScenario(probe, normalized);
+    if (held === '') return removeFrom(probe);
+    const gated = runGated(() => ({ names: [held] }), removeFrom);
+    return gated.ok && gated.value;
 };
 
 /**
@@ -203,37 +243,42 @@ const applyChallengeProfile = (name: unknown, challengeId: ChallengeIdInput): bo
         return false;
     }
 
-    const settings = loadSettings();
-    const stored = settings.profiles;
-    const storedKey = findProfileKey(stored, normalized);
-    if (storedKey === null) {
-        logger.withCategory('settings').error(`Profile not found: "${profileNameForLog(name)}"`, null);
-        return false;
-    }
+    const overridesFrom = (settings: ConfigV2): ChallengeValues | null => {
+        const stored = settings.profiles;
+        const storedKey = findProfileKey(stored, normalized);
+        if (storedKey === null) {
+            logger.withCategory('settings').error(`Profile not found: "${profileNameForLog(name)}"`, null);
+            return null;
+        }
 
-    const globalDefaults = globalChallengeValues(settings);
-    // Fail-closed: sanitizeProfileValues logs the failing key, so a
-    // schema-drifted profile's failure is diagnosable from the log.
-    const sanitized = sanitizeProfileValues(stored[storedKey], true, globalDefaults);
-    if (sanitized === null) {
-        return false;
-    }
+        const globalDefaults = globalChallengeValues(settings);
+        // Fail-closed: sanitizeProfileValues logs the failing key, so a
+        // schema-drifted profile's failure is diagnosable from the log.
+        const sanitized = sanitizeProfileValues(stored[storedKey], true, globalDefaults);
+        if (sanitized === null) {
+            return null;
+        }
 
-    // Safety net: sanitizeProfileValues already validated these values against
-    // the same {globals + profile} context, so this only fails if a schema rule
-    // starts depending on the challenge id. Kept so nothing invalid is persisted.
-    // A profile never holds an on-only key's `false`, so replacing every override would silently
-    // switch the challenge's own Manual Only off: that value stays, unless the profile sets the key itself
-    // (a profile's "on" turns it on even over the challenge's own `false`).
-    const own = ownChallengeValues(settings, id) ?? {};
-    const kept = Object.fromEntries(
-        ON_ONLY_KEYS.filter((key) => Object.hasOwn(own, key) && !Object.hasOwn(sanitized, key)).map((key) => [
-            key,
-            own[key],
-        ]),
-    );
-    if (!replaceChallengeOverridesInSettings(settings, id, { ...sanitized, ...kept }, true)) return false;
-    return saveSettings(settings);
+        // Safety net: sanitizeProfileValues already validated these values against
+        // the same {globals + profile} context, so this only fails if a schema rule
+        // starts depending on the challenge id. Kept so nothing invalid is persisted.
+        // A profile never holds an on-only key's `false`, so replacing every override would silently
+        // switch the challenge's own Manual Only off: that value stays, unless the profile sets the key itself
+        // (a profile's "on" turns it on even over the challenge's own `false`).
+        const own = ownChallengeValues(settings, id) ?? {};
+        const kept = Object.fromEntries(
+            ON_ONLY_KEYS.filter((key) => Object.hasOwn(own, key) && !Object.hasOwn(sanitized, key)).map((key) => [
+                key,
+                own[key],
+            ]),
+        );
+        return { ...sanitized, ...kept };
+    };
+    // Applying a profile that sets (or leaves out) `scenario` moves the challenge's assignment: gated by writeAssignmentAware.
+    return writeAssignmentAware(id, (settings) => {
+        const overrides = overridesFrom(settings);
+        return overrides !== null && replaceChallengeOverridesInSettings(settings, id, overrides, true);
+    });
 };
 
 /**

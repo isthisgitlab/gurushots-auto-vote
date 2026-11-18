@@ -16,6 +16,7 @@
 import type { RuleMatchChallenge } from '../../src/ts/core/types/settings';
 import type { SettingKey } from '../../src/ts/core/settings/schema';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
+import type { MemoryStore } from '../helpers/headlessStore';
 import settings = require('../../src/ts/core/settings');
 import { ruleLogLabel, MAX_CLOSE_TIMES_PER_RULE } from '../../src/ts/core/settings/titleRuleSanitize';
 import { ruleDisplayName, MAX_TITLE_LENGTH } from '../../src/ts/core/settings/challengeRules';
@@ -1060,5 +1061,102 @@ describe('settings facade — title-keyed tag rules', () => {
             expect(ruleDisplayName(null)).toBe('');
             expect(ruleDisplayName(undefined)).toBe('');
         });
+    });
+});
+
+/**
+ * Scenario assignments move only at a safe boundary (settings/scenarioLifecycle.ts): a progress record in the middle of a
+ * step holds every write that would move the scenario it names, and nothing is written for a refused one.
+ */
+describe('settings facade — rules of a scenario assignment', () => {
+    let store: MemoryStore;
+    const plan = (name: string) => ({
+        name,
+        version: 1,
+        start: 'main',
+        phases: { main: { rules: [{ id: 'fill', do: [{ type: 'fillExposure' }] }] } },
+    });
+    // Challenge 7 runs Plan, with a spend that may have landed.
+    const busy = (key = '7') => {
+        const { scenarioStateLedger, initialState } =
+            require('../../src/ts/core/scenarioStateStore') as typeof import('../../src/ts/core/scenarioStateStore');
+        scenarioStateLedger.change(key, () => ({
+            ...initialState('Plan', 'main', 1),
+            inFlight: { ruleId: 'fill', actionIndex: 0, pending: 'fillExposure' },
+        }));
+    };
+    const idle = () => {
+        const { scenarioStateLedger, initialState } =
+            require('../../src/ts/core/scenarioStateStore') as typeof import('../../src/ts/core/scenarioStateStore');
+        scenarioStateLedger.change('7', () => initialState('Plan', 'main', 1));
+    };
+
+    beforeEach(async () => {
+        store = installHeadlessStore();
+        const storage =
+            require('../../src/ts/core/settings/storage') as typeof import('../../src/ts/core/settings/storage');
+        await storage.discardPendingWrites();
+        storage.resumeWrites();
+        settings.rememberChallengeTitles([{ id: 7, title: 'Big show', type: 'exhibition' }]);
+        settings.saveScenario(plan('Plan'));
+        settings.saveScenario(plan('Next'));
+        settings.setChallengeOverride('scenario', '7', 'Plan');
+    });
+
+    afterEach(() => {
+        removeHeadlessStore();
+        settings.rememberChallengeTitles([]);
+    });
+
+    test('the rules that assign a scenario cannot change while a plan that uses it is in the middle of a step', () => {
+        expect(settings.setTitleRules([{ type: 'exhibition', scenario: 'Plan' }])).toBe(true);
+        busy();
+        const before = store.value;
+        expect(settings.setTitleRules([{ type: 'exhibition', scenario: 'Next' }])).toBe(false);
+        expect(settings.setTitleRules([])).toBe(false);
+        expect(
+            settings.setTitleRules([
+                { type: 'exhibition', scenario: 'Plan' },
+                { title: 'Other', scenario: 'Next' },
+            ]),
+        ).toBe(false);
+        expect(store.value).toBe(before);
+        idle();
+        expect(settings.setTitleRules([{ type: 'exhibition', scenario: 'Next' }])).toBe(true);
+    });
+
+    test('a rule that gets its scenario from a profile is a scenario rule too', () => {
+        settings.saveChallengeProfile('Tactic', { scenario: 'Plan' });
+        expect(settings.setTitleRules([{ type: 'exhibition', profile: 'Tactic' }])).toBe(true);
+        busy();
+        expect(settings.setTitleRules([])).toBe(false);
+        expect(settings.setTitleRules([{ type: 'exhibition', profile: 'Tactic', autoSubmit: true }])).toBe(false);
+    });
+
+    test('rules without a scenario, and edits that leave the scenario rules as they are, are written without the gate', () => {
+        busy();
+        expect(settings.setTitleRules([{ type: 'exhibition', autoSubmit: true }])).toBe(true);
+        expect(
+            settings.setTitleRules([
+                { type: 'exhibition', autoSubmit: false },
+                { title: 'Other', mustIncludeTags: ['sea'] },
+            ]),
+        ).toBe(true);
+        idle();
+        expect(settings.setTitleRules([{ type: 'exhibition', scenario: 'Plan' }])).toBe(true);
+        busy();
+        // A rule that assigns nothing is added or reordered around the one that does: the assignment is untouched.
+        expect(
+            settings.setTitleRules([
+                { title: 'Other', autoSubmit: true },
+                { type: 'exhibition', scenario: 'Plan' },
+            ]),
+        ).toBe(true);
+    });
+
+    test('a list the write refuses is refused before the gate, whatever any plan is doing', () => {
+        busy();
+        expect(settings.setTitleRules('not a list')).toBe(false);
+        expect(settings.setTitleRules([{ type: 'exhibition', profile: 'Missing' }])).toBe(false);
     });
 });

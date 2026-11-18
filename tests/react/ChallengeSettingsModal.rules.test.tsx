@@ -52,7 +52,7 @@ beforeEach(() => {
     mockApi.getChallengeProfiles.mockReset().mockResolvedValue({});
     mockApi.getScenarios
         .mockReset()
-        .mockResolvedValue({ success: true, scenarios: invalid({ Plan: {} }), templates: [] });
+        .mockResolvedValue({ success: true, scenarios: invalid({ Plan: {} }), revision: 0, templates: [] });
     mockApi.replaceChallengeOverrides.mockReset().mockResolvedValue(true);
     mockApi.logError.mockReset().mockResolvedValue(invalid(undefined));
 });

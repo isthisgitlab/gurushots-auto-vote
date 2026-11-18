@@ -136,6 +136,8 @@ describe('Capacitor entry', () => {
             flushEntryAgeWrites: jest.fn(),
             initializeScenarioStateAsync: hydration(),
             flushScenarioStateWrites: jest.fn(async () => {}),
+            initializeStopFenceAsync: hydration(),
+            flushStopFenceWrites: jest.fn(async () => {}),
             initializeDiagnosticsAsync: hydration(),
             flushDiagnosticsWrites: jest.fn(),
             initializePhotoStatsAsync: hydration(),
@@ -198,6 +200,10 @@ describe('Capacitor entry', () => {
                 initializeScenarioStateAsync: m.initializeScenarioStateAsync,
                 flushScenarioStateWrites: m.flushScenarioStateWrites,
             }));
+            jest.doMock(`${SRC}/core/settings/scenarioLifecycle`, () => ({
+                initializeStopFenceAsync: m.initializeStopFenceAsync,
+                flushStopFenceWrites: m.flushStopFenceWrites,
+            }));
             jest.doMock(`${SRC}/core/services/semantic/diagnostics`, () => ({
                 initializeDiagnosticsAsync: m.initializeDiagnosticsAsync,
                 flushDiagnosticsWrites: m.flushDiagnosticsWrites,
@@ -259,7 +265,7 @@ describe('Capacitor entry', () => {
         );
         expect(first).toEqual([...first].sort((a, b) => a - b));
 
-        // All eight hydrations have started while none has resolved, so the App has not mounted.
+        // All nine hydrations have started while none has resolved, so the App has not mounted.
         const hydrations = [
             m.initializeMetadataAsync,
             m.initializeJoinStateAsync,
@@ -267,6 +273,7 @@ describe('Capacitor entry', () => {
             m.initializeAutoSpendAsync,
             m.initializeEntryAgesAsync,
             m.initializeScenarioStateAsync,
+            m.initializeStopFenceAsync,
             m.initializeDiagnosticsAsync,
             m.initializePhotoStatsAsync,
         ];
@@ -274,7 +281,7 @@ describe('Capacitor entry', () => {
             expect(fn).toHaveBeenCalledTimes(1);
             expect(fn.mock.invocationCallOrder[0]).toBeGreaterThan(m.seedBridgeProfiles.mock.invocationCallOrder[0]);
         }
-        expect(m.releases).toHaveLength(8);
+        expect(m.releases).toHaveLength(9);
         expect(m.mountApp).not.toHaveBeenCalled();
 
         // It mounts only once the last of them has resolved.
@@ -330,6 +337,7 @@ describe('Capacitor entry', () => {
             m.flushAutoSpendWrites,
             m.flushEntryAgeWrites,
             m.flushScenarioStateWrites,
+            m.flushStopFenceWrites,
             m.flushDiagnosticsWrites,
             m.flushPhotoStatsWrites,
         ];

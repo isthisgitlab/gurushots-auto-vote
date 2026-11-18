@@ -20,8 +20,8 @@ import { isPlainObject } from '../../plainObject';
 import { scenarioCapability } from '../scenarioCapabilities';
 
 import type { ExprType, SettingTypeLookup } from '../../scenarios/expressions';
-import type { ScenarioValueDescriptor } from '../../types/settings';
-import type { ScenarioCondition, ScenarioExpr } from '../../types/scenario';
+import type { ScenarioScope, ScenarioValueDescriptor } from '../../types/settings';
+import type { ScenarioCondition, ScenarioExpr, ScenarioStage } from '../../types/scenario';
 import type { ParsedScenarioDocument, ScenarioDocument, ScenarioPhase } from './shapes';
 
 export type ScenarioIssue = { path: string; message: string };
@@ -46,10 +46,52 @@ const SETTING_PAIRS = [
  * is refused with the reason its capability states. Any other key, an unknown one included, is not a per-challenge
  * setting.
  */
-const phaseRefusal = (key: string): string | undefined => {
+const phaseRefusal = (key: string, scope: ScenarioScope = 'challenge'): string | undefined => {
     const capability = scenarioCapability(key);
-    if (capability?.phaseWrite.includes('challenge')) return undefined;
+    if (capability?.phaseWrite.includes(scope)) return undefined;
+    if (scope === 'installation') {
+        return capability?.restriction ?? 'Not a setting an installation scenario can change';
+    }
     return (schemaEntry(key)?.perChallenge ? capability?.restriction : undefined) ?? 'Not a per-challenge setting';
+};
+
+/**
+ * The stage a scenario's facts are read in: a challenge scenario runs while its challenge is active, an installation
+ * scenario outside any challenge.
+ */
+const stageOf = (scope: ScenarioScope): ScenarioStage => (scope === 'installation' ? 'account' : 'active');
+
+// The conditions that read the challenge a scenario runs on: an installation scenario has none.
+const CHALLENGE_CONDITIONS: ReadonlySet<string> = new Set([
+    'beforeEnd',
+    'afterStart',
+    'elapsedPercent',
+    ...vocabulary.NUMERIC_CONDITIONS,
+    ...vocabulary.STATE_CONDITIONS,
+    'entry',
+    'entriesWhere',
+    'entryCount',
+]);
+
+/**
+ * Whether a value is one a non-schema setting's descriptor accepts (the keys the schema does not hold have no validator
+ * of their own).
+ */
+const descriptorAccepts = (descriptor: ScenarioValueDescriptor, value: unknown): boolean => {
+    switch (descriptor.kind) {
+        case 'boolean':
+            return typeof value === 'boolean';
+        case 'number':
+            return typeof value === 'number' && Number.isFinite(value);
+        case 'string':
+            return typeof value === 'string';
+        case 'enum':
+            return descriptor.values.some((allowed) => allowed === value);
+        case 'list':
+            return Array.isArray(value) && value.every((item) => typeof item === 'string');
+        default:
+            return false;
+    }
 };
 
 /**
@@ -112,36 +154,47 @@ const settingExprType: SettingTypeLookup = (key) => {
 
 /**
  * One expression slot of a condition: its own issues, then (when it is sound) that every fact it reads is available
- * while a challenge is active, the only stage a scenario runs in.
+ * in the stage the scenario runs in.
  */
-const expressionIssues = (expr: ScenarioExpr, path: string): { type: ExprType | null; issues: ScenarioIssue[] } => {
+const expressionIssues = (
+    expr: ScenarioExpr,
+    path: string,
+    stage: ScenarioStage,
+): { type: ExprType | null; issues: ScenarioIssue[] } => {
     const checked = checkExpression(expr, settingExprType, path);
-    const stage = checked.issues.length
+    const unavailable = checked.issues.length
         ? []
-        : exprReferences(expr).facts.flatMap(({ name }) => factStageIssues(name, 'active', path));
-    return { type: checked.type, issues: [...checked.issues, ...stage] };
+        : exprReferences(expr).facts.flatMap(({ name }) => factStageIssues(name, stage, path));
+    return { type: checked.type, issues: [...checked.issues, ...unavailable] };
 };
 
 /**
  * The issues of the expressions in a condition and its nested conditions: each expression is sound, the two sides of a
  * comparison relate, a list condition gets lists and strings, and an entry count has 1 to 8 predicates.
  */
-const conditionExpressionIssues = (condition: ScenarioCondition, path: string): ScenarioIssue[] => {
+const conditionExpressionIssues = (
+    condition: ScenarioCondition,
+    path: string,
+    stage: ScenarioStage,
+): ScenarioIssue[] => {
+    if (stage === 'account' && CHALLENGE_CONDITIONS.has(condition.type)) {
+        return [{ path, message: `${condition.type} reads a challenge: an installation scenario cannot use it` }];
+    }
     switch (condition.type) {
         case 'compare': {
-            const left = expressionIssues(condition.left, `${path}.left`);
-            const right = expressionIssues(condition.right, `${path}.right`);
+            const left = expressionIssues(condition.left, `${path}.left`, stage);
+            const right = expressionIssues(condition.right, `${path}.right`, stage);
             const relation = left.type && right.type ? compareIssue(condition.op, left.type, right.type) : null;
             return [...left.issues, ...right.issues, ...(relation ? [{ path, message: relation }] : [])];
         }
         case 'present':
         case 'absent':
-            return expressionIssues(condition.value, `${path}.value`).issues;
+            return expressionIssues(condition.value, `${path}.value`, stage).issues;
         case 'contains':
         case 'containsAny':
         case 'containsAll': {
-            const list = expressionIssues(condition.list, `${path}.list`);
-            const value = expressionIssues(condition.value, `${path}.value`);
+            const list = expressionIssues(condition.list, `${path}.list`, stage);
+            const value = expressionIssues(condition.value, `${path}.value`, stage);
             const relation = list.type && value.type ? listIssue(condition.type, list.type, value.type) : null;
             return [...list.issues, ...value.issues, ...(relation ? [{ path, message: relation }] : [])];
         }
@@ -155,9 +208,11 @@ const conditionExpressionIssues = (condition: ScenarioCondition, path: string): 
         }
         case 'all':
         case 'any':
-            return condition.of.flatMap((item, index) => conditionExpressionIssues(item, `${path}.of[${index}]`));
+            return condition.of.flatMap((item, index) =>
+                conditionExpressionIssues(item, `${path}.of[${index}]`, stage),
+            );
         case 'not':
-            return conditionExpressionIssues(condition.condition, `${path}.condition`);
+            return conditionExpressionIssues(condition.condition, `${path}.condition`, stage);
         default:
             return [];
     }
@@ -174,14 +229,21 @@ const phaseSettingsIssues = (
     basePath: string,
     globalDefaults: Record<string, unknown>,
     boundKeys: ReadonlySet<string>,
+    scope: ScenarioScope,
 ): ScenarioIssue[] => {
     const issues = [];
     const context = { ...globalDefaults, ...values };
     for (const [key, value] of Object.entries(values)) {
         const path = `${basePath}.${key}`;
-        const refusal = phaseRefusal(key);
+        const refusal = phaseRefusal(key, scope);
         if (refusal !== undefined) {
             issues.push({ path, message: refusal });
+        } else if (!schemaEntry(key)) {
+            // An installation setting outside the schema (an app preference): its descriptor is its only check.
+            const capability = scenarioCapability(key) as { value: ScenarioValueDescriptor };
+            if (!descriptorAccepts(capability.value, value)) {
+                issues.push({ path, message: `${key} does not take this value` });
+            }
         } else if (!validateSetting(key, value, context)) {
             issues.push({ path, message: String(getValidationError(key, value, context)) });
         }
@@ -194,7 +256,7 @@ const phaseSettingsIssues = (
             issues.push({ path: `${basePath}.${missing}`, message: `Set ${pair.join(' and ')} together` });
         }
     }
-    if (issues.length === 0 && !challengeValueSetIsValid(context, values)) {
+    if (issues.length === 0 && scope === 'challenge' && !challengeValueSetIsValid(context, values)) {
         issues.push({ path: basePath, message: 'These values conflict with the global defaults they combine with' });
     }
     return issues;
@@ -222,17 +284,18 @@ const bindingIssues = (
     expr: ScenarioExpr,
     basePath: string,
     literals: Record<string, unknown> | undefined,
+    scope: ScenarioScope,
 ): ScenarioIssue[] => {
     const path = `${basePath}.bindings.${key}`;
     if (literals && Object.prototype.hasOwnProperty.call(literals, key)) {
         return [{ path, message: `${key} is set in settings and bound: use one of them` }];
     }
-    const refusal = phaseRefusal(key);
+    const refusal = phaseRefusal(key, scope);
     if (refusal !== undefined) return [{ path, message: refusal }];
-    // phaseRefusal returned nothing: the key has a capability a challenge phase may write.
+    // phaseRefusal returned nothing: the key has a capability a phase of this scope may write.
     const target = exprTypeOfDescriptor((scenarioCapability(key) as { value: ScenarioValueDescriptor }).value);
     if (target === null) return [{ path, message: `"${key}" has no value an expression can set` }];
-    const checked = expressionIssues(expr, path);
+    const checked = expressionIssues(expr, path, stageOf(scope));
     const issues = [...checked.issues];
     if (checked.type && !sameType(checked.type, target)) {
         issues.push({
@@ -327,6 +390,8 @@ export const semanticIssues = (
     profiles: Record<string, unknown> | null,
 ): ScenarioIssue[] => {
     const issues = [];
+    const scope: ScenarioScope = doc.scope ?? 'challenge';
+    const stage = stageOf(scope);
     const phaseNames = new Set(Object.keys(doc.phases));
     if (!phaseNames.has(doc.start)) issues.push({ path: 'start', message: `No phase named "${doc.start}"` });
 
@@ -339,11 +404,17 @@ export const semanticIssues = (
         const boundKeys = new Set(Object.keys(bindings));
         if (phaseDoc.settings || boundKeys.size > 0) {
             issues.push(
-                ...phaseSettingsIssues(phaseDoc.settings ?? {}, `${phasePath}.settings`, globalDefaults, boundKeys),
+                ...phaseSettingsIssues(
+                    phaseDoc.settings ?? {},
+                    `${phasePath}.settings`,
+                    globalDefaults,
+                    boundKeys,
+                    scope,
+                ),
             );
         }
         for (const [key, expr] of Object.entries(bindings)) {
-            issues.push(...bindingIssues(key, expr, phasePath, phaseDoc.settings));
+            issues.push(...bindingIssues(key, expr, phasePath, phaseDoc.settings, scope));
         }
         for (const slot of bindingMemoryReads(bindings)) reads.push({ slot, path: `${phasePath}.bindings` });
         if (phaseDoc.profile !== undefined && profiles) {
@@ -365,7 +436,7 @@ export const semanticIssues = (
                 });
             }
             conditions.forEach((condition, conditionIndex) =>
-                issues.push(...conditionExpressionIssues(condition, `${rulePath}.if[${conditionIndex}]`)),
+                issues.push(...conditionExpressionIssues(condition, `${rulePath}.if[${conditionIndex}]`, stage)),
             );
             const conditionReads = new Set<string>();
             collectConditionReads(conditions, conditionReads);

@@ -182,7 +182,12 @@ describe('published scenario settings', () => {
     });
 
     const assign = (doc: unknown = plan()) => {
-        expect(settings.saveScenario(doc)).toEqual({ ok: true, name: 'Plan' });
+        // A replacement states the revision of the collection it was edited on.
+        expect(
+            settings.saveScenario(doc, {
+                expectedDefinitionRevision: settings.getScenarioLibrary().revision as number,
+            }),
+        ).toEqual({ ok: true, name: 'Plan' });
         settings.setChallengeOverride('scenario', String(OWNED), 'Plan');
     };
 

@@ -65,7 +65,7 @@ const scenario = (conditions: object[], other: object[] = []) =>
 
 type Ledger = {
     refresh: jest.Mock<Promise<void>, []>;
-    entryTimes: jest.Mock;
+    entryTimes: jest.Mock<Record<string, { at: number; exact: boolean }>, []>;
     isUncertain: jest.Mock<boolean, [string | number, string | number]>;
     health: jest.Mock<{ read: boolean; refresh: boolean }, []>;
 };

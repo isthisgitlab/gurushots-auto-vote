@@ -5,7 +5,7 @@
 
 jest.mock('../../src/ts/core/settings', () => ({
     checkScenario: jest.fn(),
-    getScenarios: jest.fn(() => ({})),
+    getScenarioLibrary: jest.fn(() => ({ scenarios: {}, revision: 0 })),
     saveScenario: jest.fn(),
     renameScenario: jest.fn(),
     deleteScenario: jest.fn(),
@@ -90,11 +90,12 @@ const scenario: ScenarioDocument = {
 
 beforeEach(() => jest.clearAllMocks());
 
-test('get-scenarios returns the stored scenarios and the templates', async () => {
-    settings.getScenarios.mockReturnValue({ Plan: scenario });
+test('get-scenarios returns the stored scenarios, the revision they were read at, and the templates', async () => {
+    settings.getScenarioLibrary.mockReturnValue({ scenarios: { Plan: scenario }, revision: 3 });
     await expect(handlers['get-scenarios']()).resolves.toEqual({
         success: true,
         scenarios: { Plan: scenario },
+        revision: 3,
         templates: SCENARIO_TEMPLATES,
     });
 });
@@ -103,14 +104,49 @@ describe('save / rename / delete', () => {
     test('save passes overwrite through and maps issues', async () => {
         settings.saveScenario.mockReturnValueOnce({ ok: true, name: 'Plan' });
         await expect(handlers['save-scenario'](null, scenario)).resolves.toEqual({ success: true, name: 'Plan' });
-        expect(settings.saveScenario).toHaveBeenCalledWith(scenario, { overwrite: true });
+        expect(settings.saveScenario).toHaveBeenCalledWith(scenario, {
+            overwrite: true,
+            expectedDefinitionRevision: undefined,
+        });
         settings.saveScenario.mockReturnValueOnce({ ok: false, issues: [issue] });
         await expect(handlers['save-scenario'](null, scenario, { overwrite: false })).resolves.toEqual({
             success: false,
             error: issue.message,
             issues: [issue],
         });
-        expect(settings.saveScenario).toHaveBeenLastCalledWith(scenario, { overwrite: false });
+        expect(settings.saveScenario).toHaveBeenLastCalledWith(scenario, {
+            overwrite: false,
+            expectedDefinitionRevision: undefined,
+        });
+    });
+
+    test('an overwrite states the revision it was edited on, and a refusal says why', async () => {
+        settings.saveScenario.mockReturnValueOnce({
+            ok: false,
+            reason: 'conflict',
+            issues: [{ path: '', message: 'conflict' }],
+        });
+        await expect(
+            handlers['save-scenario'](null, scenario, { overwrite: true, expectedDefinitionRevision: 4 }),
+        ).resolves.toEqual({
+            success: false,
+            error: 'conflict',
+            issues: [{ path: '', message: 'conflict' }],
+            reason: 'conflict',
+        });
+        expect(settings.saveScenario).toHaveBeenLastCalledWith(scenario, {
+            overwrite: true,
+            expectedDefinitionRevision: 4,
+        });
+    });
+
+    test.each([-1, 1.5, '3', null, Number.NaN])('a revision that is not a count (%p) is invalid', async (bad) => {
+        const options = { expectedDefinitionRevision: invalid<number>(bad) };
+        const refused = { success: false, error: 'invalid-args' };
+        await expect(handlers['save-scenario'](null, scenario, options)).resolves.toEqual(refused);
+        await expect(handlers['rename-scenario'](null, 'Old', 'New', options)).resolves.toEqual(refused);
+        await expect(handlers['delete-scenario'](null, 'Plan', options)).resolves.toEqual(refused);
+        await expect(handlers['import-scenario'](null, '{}', options)).resolves.toEqual(refused);
     });
 
     test('an issue list without entries still yields an error', async () => {
@@ -122,9 +158,10 @@ describe('save / rename / delete', () => {
 
     test('rename checks its arguments', async () => {
         settings.renameScenario.mockReturnValueOnce({ ok: true, name: 'New' });
-        await expect(handlers['rename-scenario'](null, 'Old', 'New')).resolves.toEqual(
-            expect.objectContaining({ success: true, name: 'New' }),
-        );
+        await expect(
+            handlers['rename-scenario'](null, 'Old', 'New', { expectedDefinitionRevision: 2 }),
+        ).resolves.toEqual(expect.objectContaining({ success: true, name: 'New' }));
+        expect(settings.renameScenario).toHaveBeenCalledWith('Old', 'New', { expectedDefinitionRevision: 2 });
         await expect(handlers['rename-scenario'](null, '', 'New')).resolves.toEqual({
             success: false,
             error: 'invalid-args',
@@ -135,12 +172,21 @@ describe('save / rename / delete', () => {
         });
     });
 
-    test('delete reports a missing scenario', async () => {
-        settings.deleteScenario.mockReturnValueOnce(true).mockReturnValueOnce(false);
+    test('delete reports a missing scenario, and why a refused one was not deleted', async () => {
+        settings.deleteScenario
+            .mockReturnValueOnce({ ok: true })
+            .mockReturnValueOnce({ ok: false, reason: 'not-found' })
+            .mockReturnValueOnce({ ok: false, reason: 'unresolved-work' });
         await expect(handlers['delete-scenario'](null, 'Plan')).resolves.toEqual({ success: true });
-        await expect(handlers['delete-scenario'](null, 'Plan')).resolves.toEqual({
+        expect(settings.deleteScenario).toHaveBeenCalledWith('Plan', { expectedDefinitionRevision: undefined });
+        await expect(handlers['delete-scenario'](null, 'Plan', { expectedDefinitionRevision: 2 })).resolves.toEqual({
             success: false,
             error: 'not-found',
+        });
+        expect(settings.deleteScenario).toHaveBeenLastCalledWith('Plan', { expectedDefinitionRevision: 2 });
+        await expect(handlers['delete-scenario'](null, 'Plan')).resolves.toEqual({
+            success: false,
+            error: 'unresolved-work',
         });
         await expect(handlers['delete-scenario'](null, invalid(null))).resolves.toEqual({
             success: false,
@@ -174,9 +220,15 @@ describe('import / export', () => {
         );
         settings.importScenario.mockReturnValue({ ok: true, name: 'Plan' });
         await handlers['import-scenario'](null, '{}');
-        expect(settings.importScenario).toHaveBeenLastCalledWith('{}', { overwrite: false });
-        await handlers['import-scenario'](null, '{}', { overwrite: true });
-        expect(settings.importScenario).toHaveBeenLastCalledWith('{}', { overwrite: true });
+        expect(settings.importScenario).toHaveBeenLastCalledWith('{}', {
+            overwrite: false,
+            expectedDefinitionRevision: undefined,
+        });
+        await handlers['import-scenario'](null, '{}', { overwrite: true, expectedDefinitionRevision: 6 });
+        expect(settings.importScenario).toHaveBeenLastCalledWith('{}', {
+            overwrite: true,
+            expectedDefinitionRevision: 6,
+        });
     });
 
     test('export returns the JSON or not-found', async () => {

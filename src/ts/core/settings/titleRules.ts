@@ -18,6 +18,7 @@ import {
     titleProfileComposesWithKnownOverrides,
 } from './ruleResolution';
 import { getEffectiveSetting } from './challengeOverrides';
+import { ruleAssignments, runGated } from './scenarioMutationGate';
 
 import type { ConfigV2 } from '../types/config';
 import type { RuleMatchChallenge, SettingValueOf, TitleRule, TitleRuleInfo } from '../types/settings';
@@ -255,8 +256,33 @@ const setTitleRules = (rules: unknown): boolean => {
     }
 
     // The list is saved in the order the user gave, which IS the precedence.
-    checked.settings.rules = checked.rules;
-    return saveSettings(checked.settings);
+    const write = (settings: ConfigV2, stored: TitleRule[]): boolean => {
+        settings.rules = stored;
+        return saveSettings(settings);
+    };
+    // The rules that assign a scenario (their own, or through their profile) decide which challenges run it, in order:
+    // changing them moves assignments, so it is gated like any other (scenarioLifecycle.ts). Any other change of the
+    // list is written as ever.
+    const assigning = (settings: ConfigV2, list: TitleRule[]) =>
+        list.filter((rule) => ruleAssignments(settings, [rule]).length > 0);
+    const before = assigning(checked.settings, checked.settings.rules);
+    if (JSON.stringify(before) === JSON.stringify(assigning(checked.settings, checked.rules))) {
+        return write(checked.settings, checked.rules);
+    }
+    const gated = runGated(
+        () => ({
+            names: [
+                ...ruleAssignments(checked.settings, checked.settings.rules),
+                ...ruleAssignments(checked.settings, checked.rules),
+            ],
+        }),
+        () => {
+            // Checked again on what the locks found: the list is the caller's, the rest of the configuration is not.
+            const again = _checkedRules(rules);
+            return again.ok && write(again.settings, again.rules);
+        },
+    );
+    return gated.ok && gated.value;
 };
 
 /**

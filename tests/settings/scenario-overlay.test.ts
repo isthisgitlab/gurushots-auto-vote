@@ -9,7 +9,7 @@ import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessSt
 import type { MemoryStore } from '../helpers/headlessStore';
 import settings = require('../../src/ts/core/settings');
 import type * as scenarioStateStoreModule from '../../src/ts/core/scenarioStateStore';
-import { isNumber, isRecordOf, isShape, parseJsonAs } from '../helpers/parseJson';
+import { isNumber, isRecordOf, isShape, isUnknown, parseJsonAs } from '../helpers/parseJson';
 import { invalid } from '../helpers/invalid';
 import type * as expressionsModule from '../../src/ts/core/scenarios/expressions';
 import type { ExpressionContext } from '../../src/ts/core/scenarios/expressions';
@@ -180,7 +180,12 @@ describe('scenario phase bindings and profile', () => {
     });
 
     const assign = (doc: unknown = bindingPlan()) => {
-        expect(settings.saveScenario(doc)).toEqual({ ok: true, name: 'Plan' });
+        // A replacement states the revision of the collection it was edited on.
+        expect(
+            settings.saveScenario(doc, {
+                expectedDefinitionRevision: settings.getScenarioLibrary().revision as number,
+            }),
+        ).toEqual({ ok: true, name: 'Plan' });
         settings.setChallengeOverride('scenario', '7', 'Plan');
         scenarioStateLedger.set(7, initialState('Plan', 'push', 1000));
     };
@@ -351,7 +356,9 @@ describe('scenario phase bindings and profile', () => {
         assign();
         publish();
         expect(settings.scenarioSubjectAvailable('7')).toBe(true);
-        settings.saveScenario(bindingPlan({ settings: { exposureTarget: 95 } }));
+        settings.saveScenario(bindingPlan({ settings: { exposureTarget: 95 } }), {
+            expectedDefinitionRevision: settings.getScenarioLibrary().revision as number,
+        });
         expect(settings.scenarioSubjectReason('7')).toBe(
             'the scenario or its profile changed after its settings were published',
         );
@@ -375,10 +382,7 @@ describe('scenario phase bindings and profile', () => {
     test('a malformed publication makes it unreadable, not the whole record', () => {
         assign();
         publish();
-        const blob = JSON.parse(store.keys.get('gs_scenario_state') as string) as Record<
-            string,
-            Record<string, unknown>
-        >;
+        const blob = parseJsonAs(store.keys.get('gs_scenario_state')!, isRecordOf(isRecordOf(isUnknown)));
         blob['7'].published = { revision: 'x' };
         store.keys.set('gs_scenario_state', JSON.stringify(blob));
         const read = scenarioStateLedger.get(7);
@@ -399,6 +403,8 @@ describe('scenario phase bindings and profile', () => {
         expect(() => settings.getEffectiveSetting('exposure', '7')).toThrow(settings.ScenarioSettingUnavailableError);
         expect(settings.scenarioOverlayStatus('7')).toMatchObject({ bound: true, available: false });
         expect(settings.readScenarioSetting('exposure', 'effective', '7')).toMatchObject({ state: 'unknown' });
+        // A scenario is replaced only over progress that can be read: it is repaired (reset) first.
+        store.keys.set('gs_scenario_state', '{}');
         assign({
             name: 'Plan',
             version: 1,
@@ -564,7 +570,10 @@ describe('scenario phase bindings and profile', () => {
             const doc = bindingPlan();
             doc.phases.push.bindings = { exposure: expression };
             // an expression the document validator would refuse is stored as the engine reads it back: written raw
-            const settingsBlob = JSON.parse(store.value as string) as { scenarios: Record<string, unknown> };
+            const settingsBlob = parseJsonAs(
+                store.value!,
+                isShape<{ scenarios: Record<string, unknown> }>({ scenarios: isRecordOf(isUnknown) }),
+            );
             settingsBlob.scenarios.Plan = { ...doc, name: 'Plan' };
             store.value = JSON.stringify(settingsBlob);
             const scenario = invalid<ScenarioDocument>(doc);
@@ -686,7 +695,10 @@ describe('scenario phase bindings and profile', () => {
             [
                 'malformed',
                 () => {
-                    const blob = JSON.parse(store.value as string) as { profiles: Record<string, unknown> };
+                    const blob = parseJsonAs(
+                        store.value!,
+                        isShape<{ profiles: Record<string, unknown> }>({ profiles: isRecordOf(isUnknown) }),
+                    );
                     blob.profiles.Tactic = ['bad'];
                     store.value = JSON.stringify(blob);
                 },
@@ -695,9 +707,12 @@ describe('scenario phase bindings and profile', () => {
             [
                 'holding a key a phase may not write',
                 () => {
-                    const blob = JSON.parse(store.value as string) as {
-                        profiles: Record<string, Record<string, unknown>>;
-                    };
+                    const blob = parseJsonAs(
+                        store.value!,
+                        isShape<{ profiles: Record<string, Record<string, unknown>> }>({
+                            profiles: isRecordOf(isRecordOf(isUnknown)),
+                        }),
+                    );
                     blob.profiles.Tactic.manualPhotosOnly = true;
                     store.value = JSON.stringify(blob);
                 },

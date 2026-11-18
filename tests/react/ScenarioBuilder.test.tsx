@@ -58,6 +58,7 @@ const renderBuilder = async (props: Partial<ComponentProps<typeof ScenarioBuilde
         <ScenarioBuilder
             initial={doc()}
             originalName="Plan"
+            revision={5}
             onSaved={onSaved}
             onCancel={onCancel}
             onDirtyChange={onDirtyChange}
@@ -115,7 +116,10 @@ describe('header', () => {
         expect(draft).toEqual(
             expect.objectContaining({ name: 'Plan B', start: 'later', description: 'Mine', limits: { swaps: 3 } }),
         );
-        expect(window.api.saveScenario).toHaveBeenCalledWith(expect.any(Object), { overwrite: false });
+        expect(window.api.saveScenario).toHaveBeenCalledWith(expect.any(Object), {
+            overwrite: false,
+            expectedDefinitionRevision: 5,
+        });
         expect(window.api.renameScenario).not.toHaveBeenCalled();
         await waitFor(() => expect(onSaved).toHaveBeenCalled());
     });
@@ -408,9 +412,24 @@ describe('save', () => {
         await renderBuilder();
         fireEvent.change(screen.getByLabelText('app.sbName'), { target: { value: 'New' } });
         await saveDraft();
-        expect(window.api.renameScenario).toHaveBeenCalledWith('Plan', 'New');
+        expect(window.api.renameScenario).toHaveBeenCalledWith('Plan', 'New', { expectedDefinitionRevision: 5 });
+        // The rename moved the collection by one change, which the overwrite expects.
         expect(window.api.saveScenario).toHaveBeenCalledWith(expect.objectContaining({ name: 'New' }), {
             overwrite: true,
+            expectedDefinitionRevision: 6,
+        });
+    });
+
+    test('a builder opened before the revision was readable states none', async () => {
+        await renderBuilder({ revision: null });
+        fireEvent.change(screen.getByLabelText('app.sbName'), { target: { value: 'New' } });
+        await saveDraft();
+        expect(window.api.renameScenario).toHaveBeenCalledWith('Plan', 'New', {
+            expectedDefinitionRevision: undefined,
+        });
+        expect(window.api.saveScenario).toHaveBeenCalledWith(expect.objectContaining({ name: 'New' }), {
+            overwrite: true,
+            expectedDefinitionRevision: undefined,
         });
     });
 
@@ -465,8 +484,10 @@ describe('save', () => {
         click('app.sbSave');
         await waitFor(() => expect(onSaved).toHaveBeenCalled());
         expect(window.api.renameScenario).toHaveBeenCalledTimes(1);
+        // Both saves expect the revision the rename left, and the retry does not fall back to the one before it.
         expect(window.api.saveScenario).toHaveBeenLastCalledWith(expect.objectContaining({ name: 'New' }), {
             overwrite: true,
+            expectedDefinitionRevision: 6,
         });
     });
 

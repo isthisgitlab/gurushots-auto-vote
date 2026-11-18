@@ -16,6 +16,10 @@ jest.mock('../../src/ts/core/settings', () => ({
     getEffectiveSetting: jest.fn(),
     getScenario: jest.fn(),
     getSetting: jest.fn(() => 'UTC'),
+    // The lifecycle reads of the runner (settings/scenarioLifecycle.ts): what a handoff intent and an unresolved step
+    // mean are tested in tests/settings/scenario-lifecycle.test.ts.
+    unresolvedScenarioWork: jest.fn(() => false),
+    settleHandoff: jest.fn(() => 'finished'),
     // A phase without bindings or a profile prepares nothing to publish; the settings themselves are tested in
     // tests/settings/scenario-overlay.test.ts and tests/integration/scenarioSnapshotIsolation.test.ts.
     prepareScenarioSnapshot: jest.fn(() => ({
@@ -2176,5 +2180,99 @@ describe('backgroundServiceOwnsScenarios', () => {
         expect(backgroundServiceOwnsScenarios()).toBe(true);
         installHeadlessTestPlatform();
         expect(backgroundServiceOwnsScenarios()).toBe(false);
+    });
+});
+
+describe('the lifecycle fence of a step', () => {
+    const fill = () => single([{ type: 'fillExposure' }, { type: 'fillExposure' }]);
+
+    test('a paused challenge runs no action, publishes nothing and records nothing', async () => {
+        setup(fill());
+        const paused = { ...initialState('Plan', 'main', NOW), paused: { at: NOW, reason: 'asked' } };
+        ledger.set(7, paused);
+        const before = JSON.stringify(ledger.get(7).state);
+        await run();
+        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+        expect(settings.prepareScenarioSnapshot).not.toHaveBeenCalled();
+        expect(JSON.stringify(ledger.get(7).state)).toBe(before);
+    });
+
+    test.each([
+        ['finished', 'info', 'handoff finished'],
+        ['failed', 'warning', 'could not be finished'],
+        ['conflict', 'error', 'conflicts with the assignment'],
+    ] as const)('a handoff intent holds the challenge: settled as %s, nothing runs', async (settled, level, words) => {
+        setup(fill());
+        settings.settleHandoff.mockReturnValueOnce(settled);
+        ledger.set(7, {
+            ...initialState('Plan', 'main', NOW),
+            handoff: { from: 'Plan', to: 'Next', generation: 0, at: NOW },
+        });
+        await run();
+        expect(settings.settleHandoff).toHaveBeenCalledWith('7', expect.objectContaining({ scenario: 'Plan' }));
+        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+        expect(log[level]).toHaveBeenCalledWith(expect.stringContaining(words), null);
+        // Only a conflict is told to the user, as a halt.
+        expect(state().lastError?.message).toBe(settled === 'conflict' ? 'handoff-conflict' : undefined);
+    });
+
+    test('a scenario assigned over unresolved work starts nothing and is told as a halt', async () => {
+        setup(fill());
+        settings.unresolvedScenarioWork.mockReturnValueOnce(true);
+        ledger.set(7, {
+            ...initialState('Other', 'x', 1),
+            inFlight: { ruleId: 'r', actionIndex: 0, pending: 'fillExposure' },
+        });
+        await run();
+        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+        expect(state().scenario).toBe('Other');
+        expect(state().inFlight).toEqual({ ruleId: 'r', actionIndex: 0, pending: 'fillExposure' });
+        expect(state().lastError?.message).toBe('scenario-changed-with-unresolved-work');
+    });
+
+    test('a scenario started over an idle record keeps the generation the record was at', async () => {
+        setup(plan({ main: {} }));
+        ledger.change('7', () => ({ ...initialState('Other', 'x', 1), generation: 4 }));
+        await run();
+        expect(state()).toEqual(expect.objectContaining({ scenario: 'Plan', generation: 4 }));
+    });
+
+    test('a write refused as stale stops the step at once: the next action is never sent', async () => {
+        setup(fill());
+        currencyActions.fillExposure.mockImplementationOnce(async () => {
+            // A handoff or an owner change moves the generation while this step is running.
+            ledger.change('7', (current) => (current ? { ...current, generation: 1 } : { refuse: 'none' }));
+            return { ok: true, outcome: 'done' } as never;
+        });
+        await run();
+        expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
+        expect(state().generation).toBe(1);
+        expect(state().fired.r1).toBeUndefined();
+    });
+
+    test('a first write refused as stale ends the step before any evaluation', async () => {
+        setup(fill());
+        ledger.set(7, initialState('Plan', 'main', NOW));
+        const stale = jest.spyOn(ledger, 'set').mockReturnValueOnce('stale');
+        await run();
+        stale.mockRestore();
+        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+    });
+
+    test('a result refused as stale is not written again', async () => {
+        setup(fill());
+        ledger.set(7, initialState('Plan', 'main', NOW));
+        const write = jest.spyOn(ledger, 'set');
+        let calls = 0;
+        write.mockImplementation(() => {
+            calls++;
+            // the vote sample and the write-ahead marker land; the result of the first step is stale
+            return calls <= 2 ? 'saved' : 'stale';
+        });
+        currencyActions.fillExposure.mockResolvedValueOnce({ ok: true, outcome: 'done' } as never);
+        await run();
+        write.mockRestore();
+        expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
+        expect(calls).toBe(3);
     });
 });

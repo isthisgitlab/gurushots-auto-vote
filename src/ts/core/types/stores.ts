@@ -210,6 +210,20 @@ export interface ScenarioState {
     /** The overlay the runner published for the active phase (see ScenarioPublication). */
     published?: ScenarioPublication;
     /**
+     * The assignment generation of this subject (absent: 0). A runner step writes only while the stored generation is the
+     * one it read; a handoff and an owner change of the installation scenario advance it, so a former owner fails its next write.
+     */
+    generation?: number;
+    /** Set while the subject is paused: no rule action and no publication update runs (`at`: unix seconds). */
+    paused?: { at: number; reason: string } | null;
+    /**
+     * A handoff to another scenario that was begun and not finished: the assignment it left (`from`), the one it goes to
+     * (`to`; null: none) and the generation it was begun at. While it stands the subject runs no action.
+     */
+    handoff?: { from: string; to: string | null; generation: number; at: number } | null;
+    /** The last lifecycle request applied to the subject (unix seconds), for a repeated request to answer the same. */
+    lastRequest?: { id: string; result: string; at: number } | null;
+    /**
      * Not stored: set when the stored record held a `published` field that is malformed. The field is left out of the
      * state (the next write drops it), and the publication reads as unavailable; the rest of the record is intact.
      */
@@ -225,4 +239,14 @@ export interface ScenarioState {
 export interface ScenarioEpoch {
     all: number;
     gen: number;
+}
+
+/**
+ * The priority Stop fence (scenarioStopFence.json): one small cell, apart from the progress ledger and from any control
+ * inbox. `stopEpoch` counts the full Stops; `blocked` is set by a Stop and cleared only by a fresh explicit user re-arm.
+ */
+export interface ScenarioStopFence {
+    stopEpoch: number;
+    blocked: boolean;
+    lastStop: { requestId: string; at: number; durable: boolean } | null;
 }

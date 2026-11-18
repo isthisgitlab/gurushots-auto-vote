@@ -37,6 +37,24 @@ const corruptText = (kind: 'file' | 'record' | 'unloaded', challengeId: string) 
           : `scenario state of this challenge is unreadable — reset it (scenario-reset --challenge=${challengeId}, or the Reset button on its card) to start the plan again`;
 
 /**
+ * A challenge with a handoff intent: finishes the handoff when the assignment is one the intent names, otherwise says
+ * so. The step runs nothing this pass either way (a finished handoff starts the new scenario on the next one).
+ */
+const heldByHandoff = (ctx: RunnerContext, state: ScenarioState): null => {
+    const settled = settings.settleHandoff(ctx.challengeId, state);
+    const tag = logger.challengeTag(ctx.challenge);
+    if (settled === 'conflict') {
+        noteHalt(ctx, state, 'handoff-conflict');
+        log().error(`${tag} scenario handoff conflicts with the assignment — nothing runs`, null);
+    } else if (settled === 'failed') {
+        log().warning(`${tag} scenario handoff could not be finished — nothing runs until it can`, null);
+    } else {
+        log().info(`${tag} scenario handoff finished — the new scenario starts next pass`, null);
+    }
+    return null;
+};
+
+/**
  * The challenge's state for `scenario`, starting it (at the start phase) when
  * it has none or was running a different scenario. Null when unreadable.
  *
@@ -48,9 +66,26 @@ const loadState = (ctx: RunnerContext, now: number): ScenarioState | null => {
         log().error(`${logger.challengeTag(ctx.challenge)} ${corruptText(corrupt, ctx.challengeId)}`, null);
         return null;
     }
+    // A handoff begun and not finished holds the challenge: it is finished (or reported) first, and nothing runs meanwhile.
+    if (state?.handoff) return heldByHandoff(ctx, state);
+    // A paused challenge runs no action and publishes nothing: its progress and its publication stay as they are.
+    if (state?.paused) {
+        log().debug(`${logger.challengeTag(ctx.challenge)} scenario is paused — nothing runs`, null);
+        return null;
+    }
     if (state && state.scenario.toLowerCase() === ctx.scenario.name.toLowerCase()) return state;
-    // Stamped with the resets it starts under, like any state read: a reset in between is not undone by it.
-    const fresh = { ...initialState(ctx.scenario.name, ctx.scenario.start, now), epoch };
+    // A different scenario is assigned over a step that may have spent something: no fresh progress is made over it.
+    if (state && settings.unresolvedScenarioWork(state)) {
+        noteHalt(ctx, state, 'scenario-changed-with-unresolved-work');
+        return null;
+    }
+    // Stamped with the resets and the generation it starts under, like any state read: neither a reset in between nor a
+    // handoff is undone by it.
+    const fresh = {
+        ...initialState(ctx.scenario.name, ctx.scenario.start, now),
+        ...(state?.generation === undefined ? {} : { generation: state.generation }),
+        epoch,
+    };
     if (ctx.ledger.set(ctx.challengeId, fresh) !== 'saved') return null;
     log().info(
         `${logger.challengeTag(ctx.challenge)} scenario "${ctx.scenario.name}" started in phase ${fresh.phase}`,

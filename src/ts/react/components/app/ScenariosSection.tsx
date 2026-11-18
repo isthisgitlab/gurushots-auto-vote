@@ -79,8 +79,18 @@ function ImportPreview({ preview }: { preview: ImportPreviewResult['preview'] })
 /**
  * Paste shared scenario JSON, see what it does, then import it.
  */
-function ImportPanel({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
+function ImportPanel({
+    revision,
+    onDone,
+    onCancel,
+}: {
+    revision: number | null;
+    onDone: () => void;
+    onCancel: () => void;
+}) {
     const { t } = useTranslation();
+    // The collection as it was when the panel opened: an overwrite is refused if another editor changed it since.
+    const [loadedRevision] = useState(revision);
     const [text, setText] = useState('');
     const [preview, setPreview] = useState<ImportPreviewResult | null>(null);
     const [overwrite, setOverwrite] = useState(false);
@@ -101,7 +111,9 @@ function ImportPanel({ onDone, onCancel }: { onDone: () => void; onCancel: () =>
     };
 
     const runImport = async () => {
-        const result = await ipc.callOrNull(() => ipc.importScenario(text, { overwrite }));
+        const result = await ipc.callOrNull(() =>
+            ipc.importScenario(text, { overwrite, expectedDefinitionRevision: loadedRevision ?? undefined }),
+        );
         if (result?.success) onDone();
         else
             setError({
@@ -342,7 +354,7 @@ export function ScenariosSection({
     onDirtyChange: (dirty: boolean) => void;
 }) {
     const { t } = useTranslation();
-    const { scenarios, templates, loading, error: loadError, refetch } = useScenarios(isOpen);
+    const { scenarios, templates, revision, loading, error: loadError, refetch } = useScenarios(isOpen);
     const [importing, setImporting] = useState(false);
     const [templateId, setTemplateId] = useState('');
     const [error, setError] = useState<ScenarioErrorInfo | null>(null);
@@ -383,6 +395,7 @@ export function ScenariosSection({
                 <ScenarioBuilder
                     initial={editing.initial}
                     originalName={editing.originalName}
+                    revision={revision}
                     onSaved={() => {
                         setEditing(null);
                         changed();
@@ -451,6 +464,7 @@ export function ScenariosSection({
                     </div>
                     {importing && (
                         <ImportPanel
+                            revision={revision}
                             onDone={() => {
                                 setImporting(false);
                                 changed();

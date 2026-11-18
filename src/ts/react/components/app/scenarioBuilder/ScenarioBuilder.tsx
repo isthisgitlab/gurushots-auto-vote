@@ -494,17 +494,20 @@ function SimulatePanel({ draft }: { draft: ScenarioDraft }) {
 /**
  * @param props
  *   originalName: the stored name being edited, or null for a new scenario
+ *   revision: the revision of the stored scenarios when the builder opened; an overwrite states it
  *   onDirtyChange: told whether the draft (or the JSON tab's text) differs from what was opened; false when it closes
  */
 export function ScenarioBuilder({
     initial,
     originalName,
+    revision,
     onSaved,
     onCancel,
     onDirtyChange,
 }: {
     initial: ScenarioDraft;
     originalName: string | null;
+    revision: number | null;
     onSaved: () => void;
     onCancel: () => void;
     onDirtyChange: (dirty: boolean) => void;
@@ -512,6 +515,8 @@ export function ScenarioBuilder({
     const { t } = useTranslation();
     const [draft, setDraft] = useState(initial);
     const [baseline] = useState(initial);
+    // The collection as it was when the builder opened: a save over it is refused if another editor changed it since.
+    const [loadedRevision, setLoadedRevision] = useState(revision);
     const [jsonDirty, setJsonDirty] = useState(false);
     const dirty = jsonDirty || !valuesEqual(draft, baseline);
     const report = useLatestRef(onDirtyChange);
@@ -547,8 +552,11 @@ export function ScenarioBuilder({
             return;
         }
         const renamed = storedName !== null && storedName.toLowerCase() !== String(draft.name).toLowerCase();
+        let expectedDefinitionRevision = loadedRevision ?? undefined;
         if (renamed) {
-            const moved = await ipc.callOrNull(() => ipc.renameScenario(storedName, draft.name));
+            const moved = await ipc.callOrNull(() =>
+                ipc.renameScenario(storedName, draft.name, { expectedDefinitionRevision: loadedRevision ?? undefined }),
+            );
             if (!moved?.success) {
                 setError({
                     what: 'app.sbSaveFailed',
@@ -557,8 +565,13 @@ export function ScenarioBuilder({
                 return;
             }
             setStoredName(moved.name);
+            // The rename advanced the collection by one change: what follows (a retry too) expects exactly that.
+            if (expectedDefinitionRevision !== undefined) expectedDefinitionRevision += 1;
+            setLoadedRevision(expectedDefinitionRevision ?? null);
         }
-        const result = await ipc.callOrNull(() => ipc.saveScenario(draft, { overwrite: storedName !== null }));
+        const result = await ipc.callOrNull(() =>
+            ipc.saveScenario(draft, { overwrite: storedName !== null, expectedDefinitionRevision }),
+        );
         if (result?.success) onSaved();
         else
             setError({

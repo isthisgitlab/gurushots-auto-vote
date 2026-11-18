@@ -44,6 +44,12 @@ const FILE_LOCK_ID = 'scenariostate';
 const FILE_LOCK_WAIT_MS = 500;
 // The file's count of resets of every challenge (a challenge id is never a key like it).
 const ALL_KEY = '@all';
+// The one subject that is not a challenge: the installation scenario's own record (its progress and, once the
+// configuration forgets the assignment, the count of its generations). Every other `@` key is reserved.
+const INSTALLATION_KEY = '@installation';
+
+/** Whether `key` is a key no scenario subject may have: `@all`, and any other `@` key but the installation's. */
+const isReservedSubject = (key: string): boolean => key.startsWith('@') && key !== INSTALLATION_KEY;
 
 const SPEND_ACTIONS: ReadonlySet<unknown> = new Set<SpendAction>(['swap', 'unlockBoost', 'fillExposure']);
 
@@ -77,6 +83,34 @@ const isNotice = (value: unknown): boolean =>
     typeof value.id === 'string' &&
     Number.isFinite(value.at) &&
     typeof value.message === 'string';
+
+// An object with exactly these keys (the lifecycle fields are strict: no other key, nothing missing).
+const hasExactKeys = (value: Record<string, unknown>, keys: readonly string[]): boolean =>
+    Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
+
+const isPaused = (value: unknown): boolean =>
+    value === null ||
+    (isPlainObject(value) &&
+        hasExactKeys(value, ['at', 'reason']) &&
+        Number.isFinite(value.at) &&
+        typeof value.reason === 'string');
+
+const isHandoff = (value: unknown): boolean =>
+    value === null ||
+    (isPlainObject(value) &&
+        hasExactKeys(value, ['from', 'to', 'generation', 'at']) &&
+        typeof value.from === 'string' &&
+        (value.to === null || typeof value.to === 'string') &&
+        isCount(value.generation) &&
+        Number.isFinite(value.at));
+
+const isLastRequest = (value: unknown): boolean =>
+    value === null ||
+    (isPlainObject(value) &&
+        hasExactKeys(value, ['id', 'result', 'at']) &&
+        typeof value.id === 'string' &&
+        typeof value.result === 'string' &&
+        Number.isFinite(value.at));
 
 const isInFlight = (value: unknown): boolean =>
     isPlainObject(value) &&
@@ -132,7 +166,11 @@ const isRecord = (r: unknown): r is ScenarioState =>
     (r.history === undefined || isHistory(r.history)) &&
     (r.outbox === undefined || (Array.isArray(r.outbox) && r.outbox.every(isNotice))) &&
     (r.inFlight === null || isInFlight(r.inFlight)) &&
-    (r.gen === undefined || isCount(r.gen));
+    (r.gen === undefined || isCount(r.gen)) &&
+    (r.generation === undefined || isCount(r.generation)) &&
+    (r.paused === undefined || isPaused(r.paused)) &&
+    (r.handoff === undefined || isHandoff(r.handoff)) &&
+    (r.lastRequest === undefined || isLastRequest(r.lastRequest));
 
 // What a reset of one challenge leaves in its place: the record is gone, its count of resets is not.
 const isTombstone = (r: unknown): boolean => isPlainObject(r) && r.tombstone === true && isCount(r.gen);
@@ -214,7 +252,7 @@ const withRequests = (map: Record<string, unknown>, asked: ResetRequests): Recor
  * touched it: such a record is small, and an unattended stop is for the user to look at, not for a clock to forget.
  */
 const holdsStop = (record: ScenarioState): boolean =>
-    Boolean(record.inFlight?.unclear?.length || record.inFlight?.pending) ||
+    Boolean(record.inFlight?.unclear?.length || record.inFlight?.pending || record.handoff) ||
     Object.values(record.fired).some((fired) => fired.unclearHalt !== undefined);
 
 /**
@@ -226,6 +264,8 @@ const pruned = (map: Record<string, unknown>): Record<string, unknown> => {
     const cutoff = Date.now() - MAX_AGE_MS;
     const keep = (key: string, entry: unknown): boolean =>
         key === ALL_KEY ||
+        // The installation's record holds the count that fences a former owner: it is never aged out.
+        key === INSTALLATION_KEY ||
         !(isRecord(entry) || isTombstone(entry)) ||
         (isRecord(entry) && holdsStop(entry)) ||
         (isPlainObject(entry) && typeof entry.updatedAt === 'number' && entry.updatedAt > cutoff);
@@ -451,5 +491,15 @@ const createStateFile = (
     return { read, mutate, ...createResets({ store, acquireLock, read, asRequests, write }) };
 };
 
-export { ALL_KEY, createStateFile, epochOf, isPublication, isRecord, isTombstone };
+export {
+    ALL_KEY,
+    INSTALLATION_KEY,
+    createStateFile,
+    epochOf,
+    isCount,
+    isPublication,
+    isRecord,
+    isReservedSubject,
+    isTombstone,
+};
 export type { Mutation, ResetResult, StateLock };

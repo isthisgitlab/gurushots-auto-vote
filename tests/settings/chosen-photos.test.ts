@@ -323,7 +323,7 @@ describe('Chosen Photos settings', () => {
             expect(settings.setTitleRules([{ ...rule, profile: 'Mine', scenario: 'Plan' }])).toBe(true);
             expect(settings.deleteChallengeProfile('Mine')).toBe(true);
             expect(settings.getTitleRules()).toEqual([expect.objectContaining({ chosenPhotos: ['a'] })]);
-            expect(settings.deleteScenario('Plan')).toBe(true);
+            expect(settings.deleteScenario('Plan')).toEqual({ ok: true });
             const [kept] = settings.getTitleRules();
             expect(kept).toEqual(expect.objectContaining({ chosenPhotos: ['a'] }));
             expect(kept).not.toHaveProperty('scenario');

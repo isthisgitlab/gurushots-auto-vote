@@ -197,11 +197,12 @@ const spendWriter =
 const saveResult = (ctx: RunnerContext, state: ScenarioState): boolean => {
     const first = ctx.ledger.set(ctx.challengeId, state);
     if (first === 'saved') return true;
-    // Reset meanwhile: its progress is not to be brought back, so there is nothing to try again or to warn about.
-    if (first === 'refused') return false;
+    // Reset meanwhile (its progress is not to be brought back), or moved to another generation (a handoff, an owner change:
+    // this step is a former one's): nothing to try again, and the step sends nothing further.
+    if (first === 'refused' || first === 'stale') return false;
     const second = ctx.ledger.set(ctx.challengeId, state);
     if (second === 'saved') return true;
-    if (second === 'refused') return false;
+    if (second === 'refused' || second === 'stale') return false;
     log().warning(
         `${logger.challengeTag(ctx.challenge)} the result of the last step could not be written down: the next pass may stop this rule needlessly`,
         null,

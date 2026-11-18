@@ -288,6 +288,9 @@ export const scenarioDocument = z.strictObject({
     name: scenarioName,
     version: z.literal(1),
     description: plainText(SCENARIO_CAPS.descriptionLength).optional(),
+    // Where the scenario runs: one challenge each (omitted), or the whole installation. Each scope has its own
+    // settings, facts and assignment (settings/scenarioLifecycle.ts); the document says which it is.
+    scope: z.enum(['challenge', 'installation']).optional(),
     start: identifier,
     limits: z
         .strictObject({ swaps: limitCount.optional(), keys: limitCount.optional(), fills: limitCount.optional() })

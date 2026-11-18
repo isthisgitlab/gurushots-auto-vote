@@ -18,7 +18,7 @@ const template = { id: 'evening', scenario: { name: 'Evening', start: 'main', ph
 const withScenarios = (scenarios: Record<string, unknown> = { Plan: plan }) =>
     jest
         .mocked(window.api.getScenarios)
-        .mockResolvedValue(invalid({ success: true, scenarios, templates: [template] }));
+        .mockResolvedValue(invalid({ success: true, scenarios, revision: 7, templates: [template] }));
 
 // The section renders inside the modal's tab panel; give it a navigation that shows it.
 const shownNav = (active: SettingsTabId): SettingsNav => ({
@@ -294,6 +294,24 @@ describe('import', () => {
         expect(box.getAttribute('autocapitalize')).toBe('off');
     });
 
+    test('an import over a collection whose revision cannot be read states none', async () => {
+        jest.mocked(window.api.getScenarios).mockResolvedValue(
+            invalid({ success: true, scenarios: { Plan: plan }, revision: null, templates: [template] }),
+        );
+        jest.mocked(window.api.previewScenarioImport).mockResolvedValue(invalid(preview()));
+        jest.mocked(window.api.importScenario).mockResolvedValue({ success: true, name: 'Shared' });
+        await openImport();
+        click('app.scenarioPreview');
+        expect(await screen.findByText('From a friend')).toBeTruthy();
+        click('app.scenarioImportConfirm');
+        await waitFor(() =>
+            expect(window.api.importScenario).toHaveBeenCalledWith('{"name":"Shared"}', {
+                overwrite: false,
+                expectedDefinitionRevision: undefined,
+            }),
+        );
+    });
+
     test('check shows what it does; import stores it and closes the panel', async () => {
         jest.mocked(window.api.previewScenarioImport).mockResolvedValue(invalid(preview()));
         jest.mocked(window.api.importScenario).mockResolvedValue({ success: true, name: 'Shared' });
@@ -307,7 +325,10 @@ describe('import', () => {
         expect(screen.getByText('app.scenarioLimits')).toBeTruthy();
         click('app.scenarioImportConfirm');
         await waitFor(() =>
-            expect(window.api.importScenario).toHaveBeenCalledWith('{"name":"Shared"}', { overwrite: false }),
+            expect(window.api.importScenario).toHaveBeenCalledWith('{"name":"Shared"}', {
+                overwrite: false,
+                expectedDefinitionRevision: 7,
+            }),
         );
         await waitFor(() => expect(screen.queryByLabelText('app.scenarioImportLabel')).toBeNull());
     });

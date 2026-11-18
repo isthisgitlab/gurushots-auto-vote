@@ -222,11 +222,40 @@ describe('import-scenario', () => {
     });
 
     test('with --yes it imports', async () => {
+        h['get-scenarios'].mockResolvedValue(invalid({ success: true, scenarios: {}, revision: 4 }));
         h['preview-scenario-import'].mockResolvedValue(preview());
         h['import-scenario'].mockResolvedValue({ success: true, name: 'Plan' });
         await expect(cmd.importScenarioCmd('plan.json', { yes: true, overwrite: true })).resolves.toBe(0);
-        expect(h['import-scenario']).toHaveBeenCalledWith(null, '{"name":"Plan"}', { overwrite: true });
+        expect(h['import-scenario']).toHaveBeenCalledWith(null, '{"name":"Plan"}', {
+            overwrite: true,
+            expectedDefinitionRevision: 4,
+        });
         expect(text('success')).toContain('Imported scenario "Plan"');
+    });
+
+    test('an overwrite states the revision of the scenarios it read; a plain import reads nothing', async () => {
+        h['preview-scenario-import'].mockResolvedValue(preview());
+        h['import-scenario'].mockResolvedValue({ success: true, name: 'Plan' });
+        h['get-scenarios'].mockClear();
+        await cmd.importScenarioCmd('plan.json', { yes: true });
+        expect(h['get-scenarios']).not.toHaveBeenCalled();
+        expect(h['import-scenario']).toHaveBeenLastCalledWith(null, '{"name":"Plan"}', {
+            overwrite: false,
+            expectedDefinitionRevision: undefined,
+        });
+        // A revision that cannot be read, or a list that cannot be loaded, states none: the overwrite is a conflict.
+        h['get-scenarios'].mockResolvedValueOnce(invalid({ success: true, scenarios: {}, revision: null }));
+        await cmd.importScenarioCmd('plan.json', { yes: true, overwrite: true });
+        expect(h['import-scenario']).toHaveBeenLastCalledWith(null, '{"name":"Plan"}', {
+            overwrite: true,
+            expectedDefinitionRevision: undefined,
+        });
+        h['get-scenarios'].mockResolvedValueOnce(invalid({ success: false, error: 'x' }));
+        await cmd.importScenarioCmd('plan.json', { yes: true, overwrite: true });
+        expect(h['import-scenario']).toHaveBeenLastCalledWith(null, '{"name":"Plan"}', {
+            overwrite: true,
+            expectedDefinitionRevision: undefined,
+        });
     });
 
     test('an unreadable file, an invalid scenario and a failed import', async () => {

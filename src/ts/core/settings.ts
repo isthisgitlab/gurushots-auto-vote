@@ -19,6 +19,7 @@
  *   entryPins.ts          the photo a challenge's Boost and Turbo are pinned to
  *   scenarioSchema.ts     validation of user-defined scenario documents (scenarioSchema/)
  *   scenarios.ts          stored scenarios, JSON import/export
+ *   scenarioLifecycle.ts  the gate every assignment change runs under, the installation scenario, handoff, the Stop fence
  *   scenarioOverlay.ts    the active scenario phase's overlay: literals, bindings, one profile, and the owner's publication
  *   scenarioCapabilities.ts what a scenario may read or write per configuration key (the phase gate, the projection)
  *   reset.ts              reset helpers and "modified" checks
@@ -52,6 +53,7 @@ import * as profiles from './settings/profiles';
 import * as titlePins from './settings/titlePins';
 import * as entryPins from './settings/entryPins';
 import * as scenarios from './settings/scenarios';
+import * as scenarioLifecycle from './settings/scenarioLifecycle';
 import * as scenarioCapabilities from './settings/scenarioCapabilities';
 import * as reset from './settings/reset';
 
@@ -139,6 +141,7 @@ export const MAX_PROFILE_NAME_LENGTH = profiles.MAX_PROFILE_NAME_LENGTH;
 // User-defined scenarios (survive challenge rotation) and their JSON
 // import/export. Results are {ok, name} / {ok: false, issues}.
 export const getScenarios = scenarios.getScenarios;
+export const getScenarioLibrary = scenarios.getScenarioLibrary;
 export const getScenario = scenarios.getScenario;
 export const saveScenario = scenarios.saveScenario;
 export const renameScenario = scenarios.renameScenario;
@@ -150,6 +153,24 @@ export const importScenario = scenarios.importScenario;
 export const exportScenario = scenarios.exportScenario;
 export const exportScenarioWithNotes = scenarios.exportScenarioWithNotes;
 export const MAX_SCENARIOS = scenarios.MAX_SCENARIOS;
+// The lifecycle of an assignment (settings/scenarioLifecycle.ts): the installation scenario and its owner, the handoff
+// to another scenario, the interrupted handoff the runner finishes, and the priority Stop fence.
+export const getInstallationScenario = scenarioLifecycle.getInstallationScenario;
+export const installationGeneration = scenarioLifecycle.installationGeneration;
+export const setInstallationScenario = scenarioLifecycle.setInstallationScenario;
+export const transferInstallationOwner = scenarioLifecycle.transferInstallationOwner;
+export const requestScenarioHandoff = scenarioLifecycle.requestScenarioHandoff;
+export const settleHandoff = scenarioLifecycle.settleHandoff;
+export const unresolvedScenarioWork = scenarioLifecycle.unresolvedWork;
+export const readStopFence = scenarioLifecycle.readStopFence;
+export const initializeStopFence = scenarioLifecycle.initializeStopFence;
+export const recordFullStop = scenarioLifecycle.recordFullStop;
+export const clearStopBlock = scenarioLifecycle.clearStopBlock;
+export const isArmAllowed = scenarioLifecycle.isArmAllowed;
+export type ScenarioRefusal = scenarios.ScenarioRefusal;
+export type InstallationResult = scenarioLifecycle.InstallationResult;
+export type HandoffResult = scenarioLifecycle.HandoffResult;
+export type StopFenceRead = scenarioLifecycle.StopFenceRead;
 // What a scenario may read or write per configuration key: the serialized projection, and one key's capability.
 export const getScenarioCapabilities = scenarioCapabilities.getScenarioCapabilities;
 export const scenarioCapability = scenarioCapabilities.scenarioCapability;

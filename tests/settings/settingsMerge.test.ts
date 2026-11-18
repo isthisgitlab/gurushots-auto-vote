@@ -210,3 +210,85 @@ describe('rebaseConfigText: a three-way merge of the documents', () => {
         });
     });
 });
+
+describe('rebaseConfigText: the lifecycle members of the configuration', () => {
+    const config = (members: Record<string, unknown>) => ({ ...getDefaultSettings(), ...members });
+    const merged = (base: object, ours: object, theirs: object): Record<string, unknown> => {
+        const parsed: unknown = JSON.parse(rebaseConfigText(text(base), text(ours), text(theirs)));
+        if (!isPlainObject(parsed)) throw new Error('not an object');
+        return parsed;
+    };
+    const assignment = (generation: number, executor = 'electron', scenario = 'Whole') => ({
+        scenario,
+        executor,
+        generation,
+    });
+
+    test('an installation assignment the other writer saved survives a stale copy of it', () => {
+        const base = config({ installationScenario: assignment(1) });
+        const ours = config({
+            installationScenario: assignment(1),
+            app: { ...getDefaultSettings().app, theme: 'dark' },
+        });
+        const theirs = config({ installationScenario: assignment(2, 'cli') });
+        const result = merged(base, ours, theirs);
+        expect(result.installationScenario).toEqual(assignment(2, 'cli'));
+        expect(isPlainObject(result.app) && result.app.theme).toBe('dark');
+    });
+
+    test('an assignment this side changed is kept when the other did not touch it, or removed it', () => {
+        const base = config({ installationScenario: assignment(1) });
+        // The other writer saved something else meanwhile, so the texts differ and the members are merged.
+        const elsewhere = config({
+            installationScenario: assignment(1),
+            app: { ...getDefaultSettings().app, theme: 'dark' },
+        });
+        expect(
+            merged(base, config({ installationScenario: assignment(2, 'web') }), elsewhere).installationScenario,
+        ).toEqual(assignment(2, 'web'));
+        expect(merged(base, base, config({})).installationScenario).toBeUndefined();
+        expect(
+            merged(config({}), config({ installationScenario: assignment(1) }), config({})).installationScenario,
+        ).toEqual(assignment(1));
+    });
+
+    test('two assignments never mix field by field: the later generation stands whole', () => {
+        const base = config({ installationScenario: assignment(1) });
+        const ours = config({ installationScenario: assignment(2, 'web', 'Mine') });
+        const theirs = config({ installationScenario: assignment(3, 'cli', 'Theirs') });
+        expect(merged(base, ours, theirs).installationScenario).toEqual(assignment(3, 'cli', 'Theirs'));
+        // The same generation on both sides: this side's.
+        expect(
+            merged(base, ours, config({ installationScenario: assignment(2, 'cli', 'Theirs') })).installationScenario,
+        ).toEqual(assignment(2, 'web', 'Mine'));
+        // A removed assignment against a newer one: the newer one, which a stale copy cannot erase.
+        expect(merged(base, config({}), theirs).installationScenario).toEqual(assignment(3, 'cli', 'Theirs'));
+    });
+
+    test('a malformed assignment on either side reads as none, as a load does', () => {
+        const bad = config({ installationScenario: { scenario: 'Whole', executor: 'browser', generation: 1 } });
+        expect(merged(bad, bad, config({ installationScenario: assignment(2) })).installationScenario).toEqual(
+            assignment(2),
+        );
+    });
+
+    test('the revision of the collection: the one side that changed it, or one past both when both did', () => {
+        const base = config({ scenarioDefinitionsRevision: 3 });
+        expect(merged(base, config({ scenarioDefinitionsRevision: 4 }), base).scenarioDefinitionsRevision).toBe(4);
+        expect(merged(base, base, config({ scenarioDefinitionsRevision: 5 })).scenarioDefinitionsRevision).toBe(5);
+        expect(
+            merged(base, config({ scenarioDefinitionsRevision: 4 }), config({ scenarioDefinitionsRevision: 6 }))
+                .scenarioDefinitionsRevision,
+        ).toBe(7);
+        // Two edits that both made revision 4 are two changes the other lacks: the same number stays, as it is one write.
+        expect(
+            merged(base, config({ scenarioDefinitionsRevision: 4 }), config({ scenarioDefinitionsRevision: 4 }))
+                .scenarioDefinitionsRevision,
+        ).toBe(4);
+        // Not a count on one side: this side's.
+        expect(
+            merged(base, config({ scenarioDefinitionsRevision: 'x' }), config({ scenarioDefinitionsRevision: 6 }))
+                .scenarioDefinitionsRevision,
+        ).toBe('x');
+    });
+});

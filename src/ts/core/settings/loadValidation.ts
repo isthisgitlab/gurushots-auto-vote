@@ -28,6 +28,24 @@ const dropRemovedStoredKeys = (config: ConfigV2): void => {
     if (isPlainObject(config.app)) delete config.app.chosenPhotosClearedAt;
 };
 
+/** The runtimes that may own the installation scenario (types/config.ts InstallationScenarioV2). */
+const INSTALLATION_EXECUTORS = ['electron', 'cli', 'web', 'android-service', 'android-app'] as const;
+
+const isCount = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+
+/**
+ * Whether a value is a stored installation scenario: exactly its three fields, a scenario name, one known executor
+ * and a generation that is a whole count.
+ */
+const isInstallationScenario = (value: unknown): value is NonNullable<ConfigV2['installationScenario']> =>
+    isPlainObject(value) &&
+    Object.keys(value).length === 3 &&
+    typeof value.scenario === 'string' &&
+    value.scenario.trim() !== '' &&
+    INSTALLATION_EXECUTORS.some((executor) => executor === value.executor) &&
+    isCount(value.generation);
+
 /**
  * Fill a parsed configuration over the defaults so every container and every `app` key exists, and resolve the
  * environment-aware mock default. A container of the wrong kind is left for dropInvalidValues to replace.
@@ -219,6 +237,11 @@ const dropInvalidContainers = (config: ConfigV2, dropped: string[]) => {
         delete config.imported;
         dropped.push('imported');
     }
+    // A malformed installation assignment leaves none: nothing runs for the installation until the user selects one again.
+    if (config.installationScenario !== undefined && !isInstallationScenario(config.installationScenario)) {
+        delete config.installationScenario;
+        dropped.push('installationScenario');
+    }
 };
 
 const dropInvalidChallenges = (config: ConfigV2, dropped: string[]) => {
@@ -266,6 +289,7 @@ const dropInvalidValues = (config: ConfigV2): string[] => {
 
 export {
     AUTH_KEYS,
+    INSTALLATION_EXECUTORS,
     appValueAllowed,
     authValueAllowed,
     dropInvalidValues,

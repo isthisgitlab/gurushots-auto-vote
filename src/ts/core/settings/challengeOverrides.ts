@@ -10,6 +10,7 @@ import * as logger from '../logger';
 import { schemaEntry, schemaDefault, getValidationError } from './schema';
 import type { SettingsSchemaEntry } from './schema';
 import { loadSettings, saveSettings } from './persistence';
+import { runGated } from './scenarioMutationGate';
 import { valuesEqual, globalChallengeValues, challengeValueSetIsValid } from './defaults';
 import { ruleValuesForChallengeId, isTitleProfileSuppressed } from './ruleResolution';
 import {
@@ -212,17 +213,65 @@ const _applyChallengeOverride = (
 };
 
 /**
+ * The scenario a challenge resolves to over an already loaded configuration: its own override, else a matching rule, else
+ * the default; '' when none.
+ */
+const assignedScenarioIn = (settings: ConfigV2, challengeId: string | number): string =>
+    // A stored scenario name is validated on load: a text.
+    _resolveEffectiveSetting(settings, 'scenario', challengeId) as string;
+
+/**
+ * Writes a challenge's own `scenario` override onto a loaded configuration, or removes it (`null`). The same write a
+ * single-key override makes: a name equal to what the challenge inherits is stored as no override.
+ */
+const assignScenarioIn = (settings: ConfigV2, challengeId: string, name: string | null): boolean => {
+    if (name !== null) {
+        if (_applyChallengeOverride(settings, 'scenario', challengeId, name) === 'invalid') return false;
+        dropEmptyChallengeRecord(settings, challengeId);
+        return true;
+    }
+    const own = ownChallengeValues(settings, challengeId);
+    if (!own || !Object.hasOwn(own, 'scenario')) return true;
+    const next = { ...own };
+    delete next.scenario;
+    return replaceChallengeOverridesInSettings(
+        settings,
+        challengeId,
+        next,
+        isTitleProfileSuppressed(settings, challengeId),
+    );
+};
+
+/**
+ * Makes `change` on the stored configuration and saves it. When the change moves the scenario the challenge runs, it is
+ * made under the scenario lifecycle gate instead (settings/scenarioLifecycle.ts), which refuses it while the challenge
+ * has unresolved work: a different scenario would start over a spend that may have landed. Any other change is written
+ * as it always was.
+ */
+const writeAssignmentAware = (challengeId: string | number, change: (settings: ConfigV2) => boolean): boolean => {
+    const probe = loadSettings();
+    const before = assignedScenarioIn(probe, challengeId);
+    if (!change(probe)) return false;
+    if (assignedScenarioIn(probe, challengeId) === before) return saveSettings(probe);
+    const gated = runGated(
+        () => ({ challengeIds: [String(challengeId)] }),
+        (settings) => change(settings) && saveSettings(settings),
+    );
+    return gated.ok && gated.value;
+};
+
+/**
  * Set per-challenge override value for a setting.
  */
-const setChallengeOverride = (settingKey: string, challengeId: string | number, value: unknown): boolean => {
-    const settings = loadSettings();
-    const result = _applyChallengeOverride(settings, settingKey, challengeId, value);
-    if (result === 'invalid') return false;
+const setChallengeOverride = (settingKey: string, challengeId: string | number, value: unknown): boolean =>
+    writeAssignmentAware(challengeId, (settings) => {
+        const result = _applyChallengeOverride(settings, settingKey, challengeId, value);
+        if (result === 'invalid') return false;
 
-    // If the cleared override left the challenge container empty, drop it.
-    dropEmptyChallengeRecord(settings, challengeId);
-    return saveSettings(settings);
-};
+        // If the cleared override left the challenge container empty, drop it.
+        dropEmptyChallengeRecord(settings, challengeId);
+        return true;
+    });
 
 const _challengeOverrideEntries = (overrides: unknown): Array<[string, unknown]> | null => {
     if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) return null;
@@ -287,13 +336,11 @@ const replaceChallengeOverridesInSettings = (
 const setChallengeOverrides = (challengeId: ChallengeIdInput, overrides: unknown): boolean => {
     const id = trimmedChallengeId(challengeId);
     if (!id || !overrides || typeof overrides !== 'object' || Array.isArray(overrides)) return false;
-    const settings = loadSettings();
-    const current = ownChallengeValues(settings, id) || {};
-    const next = { ...current, ...overrides };
-    if (!replaceChallengeOverridesInSettings(settings, id, next, isTitleProfileSuppressed(settings, id))) {
-        return false;
-    }
-    return saveSettings(settings);
+    return writeAssignmentAware(id, (settings) => {
+        const current = ownChallengeValues(settings, id) || {};
+        const next = { ...current, ...overrides };
+        return replaceChallengeOverridesInSettings(settings, id, next, isTitleProfileSuppressed(settings, id));
+    });
 };
 
 /**
@@ -301,24 +348,19 @@ const setChallengeOverrides = (challengeId: ChallengeIdInput, overrides: unknown
  */
 const removeChallengeOverride = (settingKey: string, challengeId: string): boolean => {
     if (isUnsafeId(challengeId)) return false;
-    const settings = loadSettings();
-    const current = ownChallengeValues(settings, challengeId);
+    const current = ownChallengeValues(loadSettings(), challengeId);
     if (!current || !Object.hasOwn(current, settingKey)) return true; // Nothing to remove
 
-    const next = { ...current };
-    delete next[settingKey];
-    if (
-        !replaceChallengeOverridesInSettings(
+    return writeAssignmentAware(challengeId, (settings) => {
+        const next = { ...ownChallengeValues(settings, challengeId) };
+        delete next[settingKey];
+        return replaceChallengeOverridesInSettings(
             settings,
             challengeId,
             next,
             isTitleProfileSuppressed(settings, challengeId),
-        )
-    ) {
-        return false;
-    }
-
-    return saveSettings(settings);
+        );
+    });
 };
 
 /**
@@ -349,9 +391,9 @@ const replaceChallengeOverrides = (
 ): boolean => {
     const id = trimmedChallengeId(challengeId);
     if (!id || typeof suppressTitleProfile !== 'boolean') return false;
-    const settings = loadSettings();
-    if (!replaceChallengeOverridesInSettings(settings, id, overrides, suppressTitleProfile)) return false;
-    return saveSettings(settings);
+    return writeAssignmentAware(id, (settings) =>
+        replaceChallengeOverridesInSettings(settings, id, overrides, suppressTitleProfile),
+    );
 };
 
 /**
@@ -722,6 +764,9 @@ export {
     getChallengeOverrides,
     replaceChallengeOverrides,
     replaceChallengeOverridesInSettings,
+    assignedScenarioIn,
+    assignScenarioIn,
+    writeAssignmentAware,
     getEffectiveSetting,
     getScenarioBaseSettings,
     readScenarioSetting,

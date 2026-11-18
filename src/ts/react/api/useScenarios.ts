@@ -8,7 +8,7 @@ import type { IpcQueryTools } from './useIpcQuery';
 type ScenariosResult = Awaited<ReturnType<WindowApi['getScenarios']>>;
 export type StoredScenarios = Extract<ScenariosResult, { success: true }>['scenarios'];
 export type ScenarioTemplates = Extract<ScenariosResult, { success: true }>['templates'];
-type ScenariosData = { scenarios: StoredScenarios; templates: ScenarioTemplates };
+type ScenariosData = { scenarios: StoredScenarios; templates: ScenarioTemplates; revision: number | null };
 
 /**
  * The stored scenarios and the example templates (get-scenarios). Revalidates
@@ -18,22 +18,29 @@ type ScenariosData = { scenarios: StoredScenarios; templates: ScenarioTemplates 
 export function useScenarios(enabled: boolean = true): {
     scenarios: StoredScenarios;
     templates: ScenarioTemplates;
+    /** The revision of the collection these were read at, which an overwrite states (null: unreadable, or not loaded). */
+    revision: number | null;
     loading: boolean;
     error: Error | string | null;
     refetch: () => Promise<void>;
 } {
     const apply = useCallback(
         (result: ScenariosResult, { setData, setError }: IpcQueryTools<ScenariosData, Error | string>) => {
-            if (result?.success) setData({ scenarios: result.scenarios ?? {}, templates: result.templates ?? [] });
-            else setError(result?.error ?? 'failed');
+            if (result?.success) {
+                setData({
+                    scenarios: result.scenarios ?? {},
+                    templates: result.templates ?? [],
+                    revision: result.revision,
+                });
+            } else setError(result?.error ?? 'failed');
         },
         [],
     );
     const { data, loading, error, refetch } = useIpcQuery(ipc.getScenarios, {
-        initialData: { scenarios: {}, templates: [] } as ScenariosData,
+        initialData: { scenarios: {}, templates: [], revision: null } as ScenariosData,
         subscribe: true,
         enabled,
         apply,
     });
-    return { scenarios: data.scenarios, templates: data.templates, loading, error, refetch };
+    return { scenarios: data.scenarios, templates: data.templates, revision: data.revision, loading, error, refetch };
 }

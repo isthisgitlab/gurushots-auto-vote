@@ -28,20 +28,66 @@ const equal = (a: unknown, b: unknown): boolean => {
     return false;
 };
 
-// `undefined` is a value that is not there: a key that `ours` removed comes out undefined, and is left out.
-const merge = (base: unknown, ours: unknown, theirs: unknown): unknown => {
-    if (equal(ours, base)) return theirs;
-    if (equal(theirs, base)) return ours;
-    if (!isPlainObject(ours) || !isPlainObject(theirs)) return ours;
-    const from = isPlainObject(base) ? base : {};
+// The keys of three objects merged one by one, each by `decide(key)`; `undefined` is a value that is not there: a key that `ours`
+// removed comes out undefined, and is left out.
+const mergeKeys = (
+    from: Record<string, unknown>,
+    ours: Record<string, unknown>,
+    theirs: Record<string, unknown>,
+    decide: (key: string) => (base: unknown, ours: unknown, theirs: unknown) => unknown,
+): Record<string, unknown> => {
     const entries: Array<[string, unknown]> = [];
     for (const key of new Set([...Object.keys(from), ...Object.keys(ours), ...Object.keys(theirs)])) {
-        const value = merge(own(from, key), own(ours, key), own(theirs, key));
+        const value = decide(key)(own(from, key), own(ours, key), own(theirs, key));
         if (value !== undefined) entries.push([key, value]);
     }
     // fromEntries defines own properties, so a stored `__proto__` key stays data and never reaches the prototype.
     return Object.fromEntries(entries);
 };
+
+const merge = (base: unknown, ours: unknown, theirs: unknown): unknown => {
+    if (equal(ours, base)) return theirs;
+    if (equal(theirs, base)) return ours;
+    if (!isPlainObject(ours) || !isPlainObject(theirs)) return ours;
+    return mergeKeys(isPlainObject(base) ? base : {}, ours, theirs, () => merge);
+};
+
+// What one side changed against `base` wins; where both changed, `both` decides.
+const leaf = (
+    base: unknown,
+    ours: unknown,
+    theirs: unknown,
+    both: (ours: unknown, theirs: unknown) => unknown,
+): unknown => {
+    if (equal(ours, base)) return theirs;
+    if (equal(theirs, base)) return ours;
+    return both(ours, theirs);
+};
+
+const generationOf = (value: unknown): number =>
+    isPlainObject(value) && typeof value.generation === 'number' ? value.generation : -1;
+
+// The installation assignment is one record with a fence: two changes are never mixed field by field, the later generation
+// stands whole (a stale copy of it never overwrites a newer one).
+const fencedAssignment = (ours: unknown, theirs: unknown): unknown =>
+    generationOf(theirs) > generationOf(ours) ? theirs : ours;
+
+// The collection's revision counts changes: two writers that both changed it made a change the other lacks, so the
+// merged collection is a newer revision than either.
+const advancedRevision = (ours: unknown, theirs: unknown): unknown =>
+    typeof ours === 'number' && typeof theirs === 'number' && ours !== theirs ? Math.max(ours, theirs) + 1 : ours;
+
+// The top-level members that are merged as units rather than field by field.
+const UNITS: Record<string, (base: unknown, ours: unknown, theirs: unknown) => unknown> = {
+    installationScenario: (base, ours, theirs) => leaf(base, ours, theirs, fencedAssignment),
+    scenarioDefinitionsRevision: (base, ours, theirs) => leaf(base, ours, theirs, advancedRevision),
+};
+
+const mergeConfig = (
+    base: Record<string, unknown>,
+    ours: Record<string, unknown>,
+    theirs: Record<string, unknown>,
+): Record<string, unknown> => mergeKeys(base, ours, theirs, (key) => (Object.hasOwn(UNITS, key) ? UNITS[key] : merge));
 
 // An absent text is no settings at all.
 const parseObject = (text: string | null, what: string): Record<string, unknown> => {
@@ -76,7 +122,7 @@ const parseConfig = (text: string | null, what: string): Record<string, unknown>
 export const rebaseConfigText = (base: string | null, ours: string, theirs: string | null): string => {
     if (theirs === base) return ours;
     return JSON.stringify(
-        merge(parseConfig(base, 'earlier'), parseObject(ours, 'new'), parseConfig(theirs, 'stored')),
+        mergeConfig(parseConfig(base, 'earlier'), parseObject(ours, 'new'), parseConfig(theirs, 'stored')),
         null,
         2,
     );

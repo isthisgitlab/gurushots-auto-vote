@@ -7,9 +7,9 @@
  *
  *   get-scenarios            stored scenarios + the example templates
  *   check-scenario           validate a document without storing it
- *   save-scenario            validate and store a document
- *   rename-scenario          rename (assignments follow)
- *   delete-scenario          delete (assignments are cleared)
+ *   save-scenario            validate and store a document (an overwrite names the revision it was edited on)
+ *   rename-scenario          rename (assignments and progress follow)
+ *   delete-scenario          delete (refused while an assignment names it)
  *   preview-scenario-import  validate shared JSON and describe what it does, storing nothing
  *   import-scenario          validate and store shared JSON
  *   export-scenario          a stored scenario as JSON text
@@ -48,7 +48,7 @@ import type { ActiveChallengesResponse, Bankroll, Challenge } from '../types/gur
  * A facade `{ok, ...}` result mapped onto the IPC `{success, ...}` shape.
  */
 type FromResult<R> = R extends { ok: false }
-    ? { success: false; error: string; issues: ScenarioIssue[] }
+    ? { success: false; error: string; issues: ScenarioIssue[]; reason?: settings.ScenarioRefusal }
     : Omit<R, 'ok'> & { success: true };
 
 type ScenarioStatus = ReturnType<typeof getScenarioStatus>;
@@ -56,6 +56,15 @@ type ScenarioStatus = ReturnType<typeof getScenarioStatus>;
 const log = () => logger.withCategory('scenario');
 
 const isName = (value: unknown): value is string => typeof value === 'string' && value.trim() !== '';
+
+/** The revision of the scenario collection an options argument names: absent, or a count (anything else is invalid). */
+const revisionOf = (
+    options: { expectedDefinitionRevision?: unknown } | null | undefined,
+): number | undefined | null => {
+    const revision = options?.expectedDefinitionRevision;
+    if (revision === undefined) return undefined;
+    return typeof revision === 'number' && Number.isSafeInteger(revision) && revision >= 0 ? revision : null;
+};
 
 // `issues?: undefined` keeps this arm distinct from the validation failures that
 // do carry issues, so a renderer narrowing on `'issues' in result` keeps them.
@@ -73,6 +82,8 @@ const fromResult = <R extends { ok: boolean; issues?: ScenarioIssue[] }>({ ok, .
               success: false as const,
               error: (result as { issues: ScenarioIssue[] }).issues[0]?.message ?? 'Invalid scenario',
               issues: (result as { issues: ScenarioIssue[] }).issues,
+              // A refusal of the lifecycle gate says why (`busy`, `conflict`, `unresolved-work`, ...).
+              ...('reason' in result ? { reason: result.reason } : {}),
           }) as FromResult<R>;
 
 /**
@@ -223,7 +234,8 @@ const buildHandlers = () =>
         'get-scenarios': async () =>
             safely('get-scenarios', () => ({
                 success: true as const,
-                scenarios: settings.getScenarios(),
+                // `revision`: what an overwrite states it was edited on (null: the stored one is malformed).
+                ...settings.getScenarioLibrary(),
                 templates: SCENARIO_TEMPLATES,
             })),
 
@@ -233,32 +245,67 @@ const buildHandlers = () =>
                 return result.ok ? { success: true as const } : fromResult(result);
             }),
 
-        'save-scenario': async (event: unknown, doc: unknown, options?: { overwrite?: boolean } | null) =>
-            safely('save-scenario', () =>
-                fromResult(settings.saveScenario(doc, { overwrite: options?.overwrite !== false })),
-            ),
-
-        'rename-scenario': async (event: unknown, oldName: string, newName: string) => {
-            if (!isName(oldName) || typeof newName !== 'string') return invalidArgs;
-            return safely('rename-scenario', () => fromResult(settings.renameScenario(oldName, newName)));
+        'save-scenario': async (
+            event: unknown,
+            doc: unknown,
+            options?: { overwrite?: boolean; expectedDefinitionRevision?: number } | null,
+        ) => {
+            const expectedDefinitionRevision = revisionOf(options);
+            if (expectedDefinitionRevision === null) return invalidArgs;
+            return safely('save-scenario', () =>
+                fromResult(
+                    settings.saveScenario(doc, { overwrite: options?.overwrite !== false, expectedDefinitionRevision }),
+                ),
+            );
         },
 
-        'delete-scenario': async (event: unknown, name: string) => {
-            if (!isName(name)) return invalidArgs;
-            return safely('delete-scenario', () =>
-                settings.deleteScenario(name)
-                    ? { success: true as const }
-                    : { success: false as const, error: 'not-found' },
+        'rename-scenario': async (
+            event: unknown,
+            oldName: string,
+            newName: string,
+            options?: { expectedDefinitionRevision?: number } | null,
+        ) => {
+            const expectedDefinitionRevision = revisionOf(options);
+            if (!isName(oldName) || typeof newName !== 'string' || expectedDefinitionRevision === null) {
+                return invalidArgs;
+            }
+            return safely('rename-scenario', () =>
+                fromResult(settings.renameScenario(oldName, newName, { expectedDefinitionRevision })),
             );
+        },
+
+        'delete-scenario': async (
+            event: unknown,
+            name: string,
+            options?: { expectedDefinitionRevision?: number } | null,
+        ) => {
+            const expectedDefinitionRevision = revisionOf(options);
+            if (!isName(name) || expectedDefinitionRevision === null) return invalidArgs;
+            return safely('delete-scenario', () => {
+                const result = settings.deleteScenario(name, { expectedDefinitionRevision });
+                return result.ok ? { success: true as const } : { success: false as const, error: result.reason };
+            });
         },
 
         'preview-scenario-import': async (event: unknown, text: string) =>
             safely('preview-scenario-import', () => fromResult(settings.previewScenarioImport(text))),
 
-        'import-scenario': async (event: unknown, text: string, options?: { overwrite?: boolean } | null) =>
-            safely('import-scenario', () =>
-                fromResult(settings.importScenario(text, { overwrite: options?.overwrite === true })),
-            ),
+        'import-scenario': async (
+            event: unknown,
+            text: string,
+            options?: { overwrite?: boolean; expectedDefinitionRevision?: number } | null,
+        ) => {
+            const expectedDefinitionRevision = revisionOf(options);
+            if (expectedDefinitionRevision === null) return invalidArgs;
+            return safely('import-scenario', () =>
+                fromResult(
+                    settings.importScenario(text, {
+                        overwrite: options?.overwrite === true,
+                        expectedDefinitionRevision,
+                    }),
+                ),
+            );
+        },
 
         'export-scenario': async (event: unknown, name: string) => {
             if (!isName(name)) return invalidArgs;

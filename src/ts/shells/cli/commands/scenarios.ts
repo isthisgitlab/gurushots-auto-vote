@@ -159,7 +159,10 @@ const importScenarioCmd = async (
         );
         return 0;
     }
-    const result = await handlers()['import-scenario'](null, text, { overwrite });
+    // An overwrite states the revision of the scenarios it read: another editor's change is not replaced unseen.
+    const library = overwrite ? await handlers()['get-scenarios']() : null;
+    const expectedDefinitionRevision = library?.success ? (library.revision ?? undefined) : undefined;
+    const result = await handlers()['import-scenario'](null, text, { overwrite, expectedDefinitionRevision });
     if (!result.success) return reportFailure(result, 'Import failed');
     ui().success(`Imported scenario "${result.name}".`);
     return 0;
