@@ -14,6 +14,12 @@
  *   controller   scenario-stop-fence, record-full-stop, arm-autovote, arm-if-allowed, withdraw-installation,
  *                rearm-installation, get-account-wake
  *
+ * While the Android service owns scenarios (`backgroundServiceOwnsScenarios()`), the five lifecycle effects that change a
+ * subject's assignment or pause (set-installation-scenario, pause-scenario, resume-scenario, handoff-scenario,
+ * clear-scenario-assignment) are queued in the control inbox for the service and answered as pending; the window never
+ * writes the progress ledger for them. The service applies them through these same handlers (where it owns nothing, so they
+ * apply directly) and records the result. A full Stop never uses the inbox.
+ *
  * Authority: `arm-autovote` is the only handler that reaches `clearStopBlock`. Whose Run it is comes from the route,
  * never from an argument: a startup resume or a scenario request has `arm-if-allowed`, which cannot lift a block.
  */
@@ -27,6 +33,7 @@ import { announceEffectiveChange, readEffective } from '../services/effectiveEve
 import { nodeStopFence, reArmInstallation, withdrawInstallation } from '../autovote/nodeSeams';
 import { resolveAccountWake } from '../scheduling/nodeResolvers';
 import { isPlainObject } from '../plainObject';
+import { backgroundServiceOwnsScenarios } from '../services/scenarioRunner';
 import { isIdArg } from './isIdArg';
 import { isRendererHiddenKey } from './rendererSettings';
 import { invalidArgs, isCount, isName, safely } from './scenarioSupport';
@@ -155,6 +162,28 @@ const fenceOptions = (options: unknown): { initialize: boolean; armEpoch: number
     return { initialize: initialize === true, armEpoch: armEpoch ?? null };
 };
 
+let queuedCount = 0;
+
+/**
+ * Queues one lifecycle effect in the control inbox for the Android service, which applies it on its next cycle: the request is
+ * persisted as pending and answered as such (`pending: true`), never as applied. The identity is made here (a window call
+ * carries none); the arguments are the handler's own, validated by the caller and again by the service.
+ */
+const queueForService = async (operation: string, target: string, args: unknown[]) => {
+    const requestId = `app-${Date.now().toString(36)}-${(queuedCount++).toString(36)}`;
+    const begun = await settings.beginControlRequest({
+        requestId,
+        operation,
+        target,
+        args: JSON.stringify(args),
+        stopEpoch: currentStopEpoch(),
+        at: Date.now(),
+        executor: settings.SERVICE_EXECUTOR,
+    });
+    if (!begun.ok) return refused(begun.reason);
+    return { success: true as const, pending: true as const, requestId, target, revision: begun.revision };
+};
+
 /** The current Stop epoch, or null where the fence cannot be read. */
 const currentStopEpoch = (): number | null => {
     const read = settings.readStopFence();
@@ -267,10 +296,11 @@ const buildLifecycleHandlers = () =>
         'get-scenario-request-status': async (event: unknown, query: ControlStatusQuery) => {
             const asked = statusQuery(query);
             if (asked === null) return invalidArgs;
-            return safely('get-scenario-request-status', () => ({
-                success: true as const,
-                ...settings.readControlStatus(asked, currentStopEpoch()),
-            }));
+            return safely('get-scenario-request-status', async () => {
+                // The service records results behind this window's cache of the inbox: it is read again first.
+                if (backgroundServiceOwnsScenarios()) await settings.refreshScenarioControlsAsync();
+                return { success: true as const, ...settings.readControlStatus(asked, currentStopEpoch()) };
+            });
         },
 
         'begin-scenario-request': async (event: unknown, request: unknown) => {
@@ -304,6 +334,15 @@ const buildLifecycleHandlers = () =>
             if ((name !== null && !isName(name)) || typeof executor !== 'string' || !isCount(expectedGeneration)) {
                 return invalidArgs;
             }
+            if (backgroundServiceOwnsScenarios()) {
+                return safely('set-installation-scenario', () =>
+                    queueForService('set-installation-scenario', INSTALLATION_KEY, [
+                        name,
+                        executor,
+                        expectedGeneration,
+                    ]),
+                );
+            }
             return safely('set-installation-scenario', () =>
                 installationResult(settings.setInstallationScenario(name, executor, expectedGeneration)),
             );
@@ -325,6 +364,15 @@ const buildLifecycleHandlers = () =>
             if (reason !== undefined && (typeof reason !== 'string' || reason.length > MAX_PAUSE_REASON)) {
                 return invalidArgs;
             }
+            if (backgroundServiceOwnsScenarios()) {
+                return safely('pause-scenario', () =>
+                    queueForService(
+                        'pause-scenario',
+                        String(subject),
+                        reason === undefined ? [subject] : [subject, reason],
+                    ),
+                );
+            }
             return safely('pause-scenario', () => {
                 const result = settings.setScenarioPaused(String(subject), true, reason ?? '');
                 if (!result.ok) return refused(result.reason);
@@ -335,6 +383,9 @@ const buildLifecycleHandlers = () =>
 
         'resume-scenario': async (event: unknown, subject: string | number) => {
             if (!isSubject(subject)) return invalidArgs;
+            if (backgroundServiceOwnsScenarios()) {
+                return safely('resume-scenario', () => queueForService('resume-scenario', String(subject), [subject]));
+            }
             return safely('resume-scenario', () => {
                 const result = settings.setScenarioPaused(String(subject), false);
                 if (!result.ok) return refused(result.reason);
@@ -350,6 +401,11 @@ const buildLifecycleHandlers = () =>
             expectedGeneration: number,
         ) => {
             if (!isSubject(subject) || !isName(to) || !isCount(expectedGeneration)) return invalidArgs;
+            if (backgroundServiceOwnsScenarios()) {
+                return safely('handoff-scenario', () =>
+                    queueForService('handoff-scenario', String(subject), [subject, to, expectedGeneration]),
+                );
+            }
             return safely('handoff-scenario', async () =>
                 handoffResult(await settings.requestScenarioHandoff(String(subject), to, expectedGeneration)),
             );
@@ -357,6 +413,11 @@ const buildLifecycleHandlers = () =>
 
         'clear-scenario-assignment': async (event: unknown, subject: string | number, expectedGeneration: number) => {
             if (!isSubject(subject) || !isCount(expectedGeneration)) return invalidArgs;
+            if (backgroundServiceOwnsScenarios()) {
+                return safely('clear-scenario-assignment', () =>
+                    queueForService('clear-scenario-assignment', String(subject), [subject, expectedGeneration]),
+                );
+            }
             return safely('clear-scenario-assignment', async () => {
                 if (subject !== INSTALLATION_KEY) {
                     return handoffResult(

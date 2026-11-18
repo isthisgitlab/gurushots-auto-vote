@@ -313,27 +313,22 @@ describe('AutovoteContext', () => {
             expect(window.api.armIfAllowed).toHaveBeenCalledWith(0);
         });
 
-        it('the Android app has none yet: its controller stays local, and a Stop is local only', async () => {
+        it('the Android app is wired the same way: its Run is armed through the fence and its Stop is recorded there', async () => {
             markPlatformKind('capacitor');
             makeStartable();
+            statefulFence();
             renderProvider();
             await act(async () => {
                 await ctx.start();
             });
             expect(ctx.running).toBe(true);
+            expect(window.api.armIfAllowed).toHaveBeenCalledWith(0);
             await act(async () => {
                 await ctx.stop();
             });
-            for (const route of [
-                'scenarioStopFence',
-                'recordFullStop',
-                'armAutovote',
-                'armIfAllowed',
-                'withdrawInstallation',
-                'rearmInstallation',
-            ] as const) {
-                expect(window.api[route]).not.toHaveBeenCalled();
-            }
+            // The Capacitor bridge answers this channel through the native Stop first (tests/bridge/capacitor-bridge.test.ts).
+            expect(window.api.recordFullStop).toHaveBeenCalledTimes(1);
+            expect(window.api.withdrawInstallation).toHaveBeenCalledTimes(1);
         });
     });
 

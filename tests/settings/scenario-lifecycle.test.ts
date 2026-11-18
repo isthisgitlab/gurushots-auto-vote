@@ -44,6 +44,7 @@ import storageModule = require('../../src/ts/core/settings/storage');
 import currencyActionsModule = require('../../src/ts/core/services/currencyActions');
 const currencyActions = jest.mocked(currencyActionsModule);
 import type * as scenarioStateStoreModule from '../../src/ts/core/scenarioStateStore';
+import type * as scenarioLifecycleModule from '../../src/ts/core/settings/scenarioLifecycle';
 import type * as runnerModule from '../../src/ts/core/services/scenarioRunner';
 import type { ConfigV2 } from '../../src/ts/core/types/config';
 import type { Challenge } from '../../src/ts/core/types/gurushots';
@@ -1132,6 +1133,38 @@ describe('the priority Stop fence', () => {
         const before = fenceText();
         expect(await settings.initializeStopFence()).toEqual({ ok: true, created: false });
         expect(fenceText()).toBe(before);
+    });
+
+    test('clearing the scenario progress alone never removes the fence', async () => {
+        await settings.initializeStopFence();
+        expect(await settings.recordFullStop('stop-1', 1700)).toEqual({ ok: true, epoch: 1 });
+        const before = fenceText();
+        seed('7');
+        await scenarioStateLedger.removeAll();
+        expect(record('7')).toBeNull();
+        expect(fenceText()).toBe(before);
+        expect(settings.readStopFence()).toMatchObject({ state: 'ok', fence: { stopEpoch: 1, blocked: true } });
+    });
+
+    test('the cache is read again on request (the Android native Stop writes the fence behind it), and answers what is stored', async () => {
+        await settings.initializeStopFence();
+        expect(settings.readStopFence()).toMatchObject({ state: 'ok', fence: { stopEpoch: 0, blocked: false } });
+        // Another context (the native Stop) saved the fence; the next read of the cache answers it only once refreshed.
+        store.keys.set(
+            FENCE_KEY,
+            JSON.stringify({
+                stopEpoch: 3,
+                blocked: true,
+                lastStop: { requestId: 'native', at: 1, durable: true },
+                lastArm: null,
+            }),
+        );
+        await expect(
+            (
+                require('../../src/ts/core/settings/scenarioLifecycle') as typeof scenarioLifecycleModule
+            ).refreshStopFenceAsync(),
+        ).resolves.toBe(true);
+        expect(settings.readStopFence()).toMatchObject({ state: 'ok', fence: { stopEpoch: 3, blocked: true } });
     });
 
     test('a fence that cannot be read is never initialized over, nor read as epoch 0', async () => {

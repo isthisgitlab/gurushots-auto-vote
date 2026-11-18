@@ -718,6 +718,8 @@ const isArmAllowed = (capturedEpoch: number): boolean => {
 };
 
 const initializeStopFenceAsync = (): Promise<void> => stopFenceStore.initializeAsync();
+/** Reads what is stored into the cache again (the Android app window: the native Stop writes the fence behind its cache); false when the read failed. */
+const refreshStopFenceAsync = (): Promise<boolean> => stopFenceStore.refreshAsync();
 const flushStopFenceWrites = (): Promise<void> => stopFenceStore.flushPendingWrites();
 
 export {
@@ -740,6 +742,7 @@ export {
     restoreInstallationPublication,
     isArmAllowed,
     initializeStopFenceAsync,
+    refreshStopFenceAsync,
     flushStopFenceWrites,
 };
 export type { PauseResult, HandoffResult, InstallationResult, StopFenceRead };

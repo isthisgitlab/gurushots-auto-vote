@@ -26,6 +26,7 @@ import './platform';
 import * as settings from '../../core/settings';
 import * as apiFactory from '../../core/apiFactory';
 import * as logger from '../../core/logger';
+import * as cancellation from '../../core/voting/cancellation';
 import { getRandomCheckFrequencyMs, MIN_CYCLE_GAP_MS, OFFLINE_RETRY_MS } from '../../core/scheduling/randomDelay';
 import { computeNextCycleDelayMs } from '../../core/scheduling/thresholdWindow';
 import { createMarkedReadCap } from '../../core/scheduling/cadenceChain/decision';
@@ -38,9 +39,11 @@ import {
     resolveBoostPrefill,
     resolveCurrencyAuto,
     resolveScenarioWake,
+    resolveAccountWake,
     loadCadenceSettings,
 } from '../../core/scheduling/nodeResolvers';
 import { effectiveTimezone } from '../../core/settings/uiDefaults';
+import { processServiceControls } from './serviceControls';
 
 import type { ActiveChallengesResponse, Challenge } from '../../core/types/gurushots';
 import type { HeadlessGlobals } from '../../core/types/capacitor';
@@ -114,6 +117,10 @@ const computeNextDelayMs = async (token: string, prefetched: Challenge[] | null 
             resolveBoostPrefill,
             resolveCurrencyAuto,
             resolveScenarioWake,
+            // The installation scenario this service owns (and the account's other boundaries: pre-join candidates, the claim
+            // throttle, a mission's expiry) cap the next alarm like any challenge boundary, so an armed installation with no
+            // challenge open still wakes on its own instants.
+            resolveAccountWake,
         });
         // A new degraded read (a marked-id set that differs from the previous
         // tick's) caps the wait once to a short retry, whatever mode decided
@@ -153,8 +160,21 @@ const fallbackDelay = () => {
     }
 };
 
+/**
+ * A full Stop reached the service: the cycle in the page stops at its next work boundary (the native side calls this the
+ * moment the Stop arrives, before it ends the service; nothing polls). Work authorized before then may finish.
+ */
+const cancel = (): void => {
+    cancellation.setCancelled(true);
+};
+
 const runOneCycle = async () => {
+    // A latch from an earlier Stop belongs to that run: an alarm admitted by the fence starts a cycle that may work.
+    cancellation.reset();
     try {
+        // Before any scenario work: what the app queued for this service (a pause, a handoff, ...) is applied first. Mock
+        // mode uses memory stores only and never reads the inbox.
+        if (!settings.getSetting('mock')) await processServiceControls();
         const token = settings.getSetting('token');
         if (!token) {
             log('no token — skipping cycle (log in via the app first)');
@@ -185,7 +205,7 @@ const runOneCycle = async () => {
     }
 };
 
-(globalThis as HeadlessGlobals).GS = { runOneCycle };
+(globalThis as HeadlessGlobals).GS = { runOneCycle, cancel };
 log('headless bundle loaded');
 
-export { runOneCycle, computeNextDelayMs, __resetMarkedReadCapForTests };
+export { runOneCycle, cancel, computeNextDelayMs, __resetMarkedReadCapForTests };

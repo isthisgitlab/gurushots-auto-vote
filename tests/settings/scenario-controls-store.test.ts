@@ -28,6 +28,7 @@ const { mockStore } = jest.requireMock<{ mockStore: StoreMock }>('../../src/ts/c
 
 import {
     beginControlRequest,
+    claimServiceRequests,
     finishControlRequest,
     flushScenarioControlsWrites,
     initializeScenarioControlsAsync,
@@ -56,6 +57,14 @@ describe('the control inbox over a failing store', () => {
         await expect(
             finishControlRequest({ requestId: 'r1', target: '7', ok: true, error: null, at: 1 }),
         ).resolves.toEqual({
+            ok: false,
+            reason: 'not-saved',
+        });
+    });
+
+    test('a claim whose write rejects is not made', async () => {
+        mockStore.updateThrough.mockRejectedValue(new Error('preferences refused the write'));
+        await expect(claimServiceRequests({ runId: 'run-a', epoch: 0, at: 1 })).resolves.toEqual({
             ok: false,
             reason: 'not-saved',
         });

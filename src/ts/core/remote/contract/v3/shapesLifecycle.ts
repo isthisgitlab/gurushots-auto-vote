@@ -14,6 +14,12 @@ import type { ScenarioOverlayStatusV3 } from './shapesScenarios';
 /** A failure answer: its reason, and the generation the facade says it is at when it does. */
 export type LifecycleFailureV3 = { success: false; error: string; issues?: undefined; generation?: number };
 
+/**
+ * The answer of a lifecycle effect the Android service applies: the request is persisted and pending, not applied. Only the
+ * Android app answers it (its host is the service); the recorded result is read back by `get-scenario-request-status`.
+ */
+export type QueuedForServiceV3 = { success: true; pending: true; requestId: string; target: string; revision: number };
+
 export type InstallationExecutorV3 = 'electron' | 'cli' | 'web' | 'android-service' | 'android-app';
 
 export type InstallationV3 = { scenario: string; executor: InstallationExecutorV3; generation: number };

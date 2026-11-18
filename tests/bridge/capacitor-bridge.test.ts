@@ -11,6 +11,9 @@ import type * as settingsModule from '../../src/ts/core/settings';
 import type * as updateCheckerModule from '../../src/ts/core/services/UpdateChecker';
 import type * as installerModule from '../../src/ts/shells/capacitor/AndroidUpdateInstaller';
 import type * as logHandlersModule from '../../src/ts/core/ipc/log.handlers';
+import type * as nativeAutovoteModule from '../../src/ts/shells/capacitor/NativeAutovoteBridge';
+import type * as scenarioLifecycleModule from '../../src/ts/core/settings/scenarioLifecycle';
+import type * as effectiveEventsModule from '../../src/ts/core/services/effectiveEvents';
 import type * as authModule from '../../src/ts/core/services/auth';
 import type * as loggerModule from '../../src/ts/core/logger';
 import type { CategoryLogger, GuiLogSink } from '../../src/ts/core/logger';
@@ -53,6 +56,16 @@ jest.mock('../../src/ts/core/settings', () => ({
     setSetting: jest.fn(),
     seedIntentProfiles: jest.fn(),
     getPhotoPools: jest.fn(() => ({ pool: ['1', '2'] })),
+    recordFullStop: jest.fn(async () => ({ ok: true, epoch: 9 })),
+}));
+jest.mock('../../src/ts/shells/capacitor/NativeAutovoteBridge', () => ({ stopAll: jest.fn() }));
+jest.mock('../../src/ts/core/settings/scenarioLifecycle', () => ({ refreshStopFenceAsync: jest.fn(async () => true) }));
+jest.mock('../../src/ts/core/services/effectiveEvents', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/core/services/effectiveEvents')>(
+        '../../src/ts/core/services/effectiveEvents',
+    ),
+    announceEffectiveChange: jest.fn(),
 }));
 
 import pkg = require('../../package.json');
@@ -182,6 +195,73 @@ describe('Capacitor bridge', () => {
             expect(() => bridge.seedBridgeProfiles()).not.toThrow();
 
             expect(log.warning).toHaveBeenCalledWith('Intent profile seeding failed (non-fatal):', expect.any(Error));
+        });
+    });
+
+    describe("the user's full Stop", () => {
+        let nativeAutovote: jest.MockedObject<typeof nativeAutovoteModule>;
+        let scenarioLifecycle: jest.MockedObject<typeof scenarioLifecycleModule>;
+        let effectiveEvents: jest.MockedObject<typeof effectiveEventsModule>;
+
+        beforeEach(() => {
+            nativeAutovote = jest.mocked(
+                require('../../src/ts/shells/capacitor/NativeAutovoteBridge') as typeof nativeAutovoteModule,
+            );
+            scenarioLifecycle = jest.mocked(
+                require('../../src/ts/core/settings/scenarioLifecycle') as typeof scenarioLifecycleModule,
+            );
+            effectiveEvents = jest.mocked(
+                require('../../src/ts/core/services/effectiveEvents') as typeof effectiveEventsModule,
+            );
+        });
+
+        test('reaches the native service first, then reads the fence again, and answers the epoch the fence holds', async () => {
+            nativeAutovote.stopAll.mockResolvedValue({ durable: true, epoch: 4 });
+            await expect(api.recordFullStop('stop-a', 1700)).resolves.toEqual({ success: true, epoch: 4 });
+            expect(nativeAutovote.stopAll).toHaveBeenCalledWith('stop-a', 1700);
+            // The native Stop wrote the fence behind the window's cache: it is read again before anyone reads it.
+            expect(nativeAutovote.stopAll.mock.invocationCallOrder[0]).toBeLessThan(
+                scenarioLifecycle.refreshStopFenceAsync.mock.invocationCallOrder[0],
+            );
+            expect(effectiveEvents.announceEffectiveChange).toHaveBeenCalledTimes(1);
+            // The window's own record was not made: the native one is the Stop.
+            expect(settings.recordFullStop).not.toHaveBeenCalled();
+        });
+
+        test('a Stop the native fence did not take is not saved, with its reason, and announces nothing', async () => {
+            nativeAutovote.stopAll.mockResolvedValue({ durable: false, reason: 'unreadable' });
+            await expect(api.recordFullStop('stop-a', 1700)).resolves.toEqual({
+                success: false,
+                error: 'unreadable',
+            });
+            expect(scenarioLifecycle.refreshStopFenceAsync).not.toHaveBeenCalled();
+            expect(effectiveEvents.announceEffectiveChange).not.toHaveBeenCalled();
+            expect(settings.recordFullStop).not.toHaveBeenCalled();
+        });
+
+        test('a native Stop that was saved stays a saved one when the window cannot read the fence again, and says so', async () => {
+            nativeAutovote.stopAll.mockResolvedValue({ durable: true, epoch: 2 });
+            scenarioLifecycle.refreshStopFenceAsync.mockResolvedValueOnce(false);
+            await expect(api.recordFullStop('stop-a', 1700)).resolves.toEqual({ success: true, epoch: 2 });
+            expect(log.warning).toHaveBeenCalledWith('The Stop fence could not be read again after the native Stop');
+        });
+
+        test("with no native plugin the window's own record is the Stop", async () => {
+            nativeAutovote.stopAll.mockResolvedValue(null);
+            await expect(api.recordFullStop('stop-a', 1700)).resolves.toEqual({ success: true, epoch: 9 });
+            expect(settings.recordFullStop).toHaveBeenCalledWith('stop-a', 1700);
+        });
+
+        test('a call that is not a request id and a time never reaches the native side', async () => {
+            await expect(api.recordFullStop(invalid<string>(5), 1)).resolves.toEqual({
+                success: false,
+                error: 'invalid-args',
+            });
+            await expect(api.recordFullStop('stop-a', invalid<number>('now'))).resolves.toEqual({
+                success: false,
+                error: 'invalid-args',
+            });
+            expect(nativeAutovote.stopAll).not.toHaveBeenCalled();
         });
     });
 

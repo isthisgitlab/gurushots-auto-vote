@@ -29,9 +29,15 @@ jest.mock('../../src/ts/core/settings', () => ({
     readControlStatus: jest.fn(),
     beginControlRequest: jest.fn(),
     finishControlRequest: jest.fn(),
+    refreshScenarioControlsAsync: jest.fn(async () => true),
+    SERVICE_EXECUTOR: 'android-service',
     CONTROL_ID_PATTERN: /^[A-Za-z0-9_-]{1,64}$/,
     CONTROL_NAME_PATTERN: /^[A-Za-z0-9@:._-]{1,64}$/,
     CONTROL_MAX_ERROR: 120,
+}));
+// Where the lifecycle effects are applied: here (false) or by the Android service (true), per test.
+jest.mock('../../src/ts/core/services/scenarioRunner', () => ({
+    backgroundServiceOwnsScenarios: jest.fn(() => false),
 }));
 jest.mock('../../src/ts/core/services/scenarioStatus', () => ({
     ledgerForMode: jest.fn(),
@@ -83,6 +89,8 @@ import eventsModule = require('../../src/ts/core/services/effectiveEvents');
 const events = jest.mocked(eventsModule);
 import authModule = require('../../src/ts/core/services/auth');
 const auth = jest.mocked(authModule);
+import runnerModule = require('../../src/ts/core/services/scenarioRunner');
+const runner = jest.mocked(runnerModule);
 
 const { buildLifecycleHandlers } = require('../../src/ts/core/ipc/scenarioLifecycle.handlers') as typeof handlersModule;
 const handlers = buildLifecycleHandlers();
@@ -537,6 +545,153 @@ describe('pause / resume / handoff', () => {
         await expect(handlers['handoff-scenario'](null, invalid<number>('@x'), 'Next', 2)).resolves.toEqual(bad);
         await expect(handlers['handoff-scenario'](null, 12, invalid<string>(''), 2)).resolves.toEqual(bad);
         await expect(handlers['handoff-scenario'](null, 12, 'Next', invalid<number>(-2))).resolves.toEqual(bad);
+    });
+});
+
+describe('while the Android service owns scenarios', () => {
+    const OK_FENCE = { state: 'ok', fence: FENCE } as const;
+
+    beforeEach(() => {
+        runner.backgroundServiceOwnsScenarios.mockReturnValue(true);
+        settings.readStopFence.mockReturnValue(OK_FENCE);
+        settings.beginControlRequest.mockResolvedValue({ ok: true, outcome: 'accepted', revision: 4 });
+    });
+
+    afterEach(() => {
+        runner.backgroundServiceOwnsScenarios.mockReturnValue(false);
+    });
+
+    const queued = (target: string, revision = 4) => ({
+        success: true,
+        pending: true,
+        requestId: expect.stringMatching(/^app-[a-z0-9]+-[a-z0-9]+$/),
+        target,
+        revision,
+    });
+
+    test.each([
+        ['set-installation-scenario', ['Plan', 'android-service', 3], '@installation'],
+        ['pause-scenario', [12, 'later'], '12'],
+        ['pause-scenario', ['@installation'], '@installation'],
+        ['resume-scenario', [12], '12'],
+        ['handoff-scenario', [12, 'Plan', 2], '12'],
+        ['clear-scenario-assignment', ['@installation', 5], '@installation'],
+        ['clear-scenario-assignment', [9, 5], '9'],
+    ] as const)(
+        '%s %j is queued for the service as pending, never applied, never announced',
+        async (operation, args, target) => {
+            const call = handlers[operation] as (event: null, ...rest: unknown[]) => Promise<unknown>;
+            await expect(call(null, ...args)).resolves.toEqual(queued(target));
+            expect(settings.beginControlRequest).toHaveBeenCalledWith({
+                requestId: expect.any(String),
+                operation,
+                target,
+                args: JSON.stringify(args),
+                stopEpoch: 2,
+                at: expect.any(Number),
+                executor: 'android-service',
+            });
+            // The window writes no progress or configuration for these operations.
+            expect(settings.setInstallationScenario).not.toHaveBeenCalled();
+            expect(settings.setScenarioPaused).not.toHaveBeenCalled();
+            expect(settings.requestScenarioHandoff).not.toHaveBeenCalled();
+            expect(events.announceEffectiveChange).not.toHaveBeenCalled();
+        },
+    );
+
+    test('each call is a request of its own identity', async () => {
+        await handlers['resume-scenario'](null, 12);
+        await handlers['resume-scenario'](null, 12);
+        const ids = settings.beginControlRequest.mock.calls.map(([asked]) => asked.requestId);
+        expect(new Set(ids).size).toBe(2);
+    });
+
+    test('a pause with no reason queues the subject alone', async () => {
+        await handlers['pause-scenario'](null, 12);
+        expect(settings.beginControlRequest.mock.calls[0][0].args).toBe('[12]');
+    });
+
+    test('with no readable fence the request carries no epoch', async () => {
+        settings.readStopFence.mockReturnValue({ state: 'missing' });
+        await handlers['resume-scenario'](null, 12);
+        expect(settings.beginControlRequest.mock.calls[0][0].stopEpoch).toBeNull();
+    });
+
+    test.each(['busy', 'full', 'unreadable', 'not-saved', 'too-large'] as const)(
+        'an inbox that answers %s refuses the request, and nothing is applied',
+        async (reason) => {
+            settings.beginControlRequest.mockResolvedValue({ ok: false, reason });
+            await expect(handlers['pause-scenario'](null, 12)).resolves.toEqual({ success: false, error: reason });
+            expect(settings.setScenarioPaused).not.toHaveBeenCalled();
+        },
+    );
+
+    test('arguments are still checked before anything is queued', async () => {
+        await expect(handlers['pause-scenario'](null, invalid<number>('@x'))).resolves.toEqual({
+            success: false,
+            error: 'invalid-args',
+        });
+        await expect(handlers['handoff-scenario'](null, 12, invalid<string>(1), 1)).resolves.toEqual({
+            success: false,
+            error: 'invalid-args',
+        });
+        expect(settings.beginControlRequest).not.toHaveBeenCalled();
+    });
+
+    test('an inbox that throws is a failure, never a throw', async () => {
+        settings.beginControlRequest.mockRejectedValue(new Error('inbox down'));
+        await expect(handlers['resume-scenario'](null, 12)).resolves.toEqual({ success: false, error: 'inbox down' });
+    });
+
+    test('the effects that keep their own path are applied here: pools and the owner transfer', async () => {
+        settings.setPhotoPool.mockReturnValue('ok');
+        settings.transferInstallationOwner.mockReturnValue({ ok: true, installation: null, generation: 1 });
+        await expect(handlers['set-photo-pool'](null, 'a', ['1'])).resolves.toEqual({ success: true });
+        await handlers['transfer-installation-scenario-owner'](null, 'cli', 1);
+        expect(settings.setPhotoPool).toHaveBeenCalled();
+        expect(settings.transferInstallationOwner).toHaveBeenCalled();
+        expect(settings.beginControlRequest).not.toHaveBeenCalled();
+    });
+
+    test('a full Stop never uses the inbox', async () => {
+        seams.nodeStopFence.recordFullStop.mockResolvedValue({ ok: true, epoch: 3 });
+        await expect(handlers['record-full-stop'](null, 'stop-1', 1700)).resolves.toEqual({ success: true, epoch: 3 });
+        expect(settings.beginControlRequest).not.toHaveBeenCalled();
+        expect(settings.finishControlRequest).not.toHaveBeenCalled();
+    });
+
+    test('a status read looks at what the service recorded, not at the window cache', async () => {
+        settings.readControlStatus.mockReturnValue({ state: 'not-recorded' });
+        await handlers['get-scenario-request-status'](null, { requestId: 'r1' });
+        expect(settings.refreshScenarioControlsAsync).toHaveBeenCalledTimes(1);
+        expect(settings.refreshScenarioControlsAsync.mock.invocationCallOrder[0]).toBeLessThan(
+            settings.readControlStatus.mock.invocationCallOrder[0],
+        );
+    });
+});
+
+describe('without service ownership the window applies the effects directly', () => {
+    test('each of the five calls reaches the facade, and none touches the inbox', async () => {
+        settings.setInstallationScenario.mockReturnValue({ ok: true, installation: null, generation: 1 });
+        settings.setScenarioPaused.mockReturnValue({ ok: true, paused: true });
+        settings.requestScenarioHandoff.mockResolvedValue({ ok: true, generation: 2 });
+        settings.getInstallationScenario.mockReturnValue({ scenario: 'Plan', executor: 'cli', generation: 1 });
+        await handlers['set-installation-scenario'](null, 'Plan', 'cli', 0);
+        await handlers['pause-scenario'](null, 12);
+        await handlers['resume-scenario'](null, 12);
+        await handlers['handoff-scenario'](null, 12, 'Plan', 1);
+        await handlers['clear-scenario-assignment'](null, '@installation', 1);
+        expect(settings.setInstallationScenario).toHaveBeenCalledTimes(2);
+        expect(settings.setScenarioPaused).toHaveBeenCalledTimes(2);
+        expect(settings.requestScenarioHandoff).toHaveBeenCalledTimes(1);
+        expect(settings.beginControlRequest).not.toHaveBeenCalled();
+    });
+
+    test('a status read does not refresh a cache nobody else writes', async () => {
+        settings.readStopFence.mockReturnValue({ state: 'missing' });
+        settings.readControlStatus.mockReturnValue({ state: 'not-recorded' });
+        await handlers['get-scenario-request-status'](null, { requestId: 'r1' });
+        expect(settings.refreshScenarioControlsAsync).not.toHaveBeenCalled();
     });
 });
 

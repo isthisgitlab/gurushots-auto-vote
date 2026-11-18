@@ -129,6 +129,13 @@ describe('the webview platform', () => {
         expect(mockRemovePreferenceKeys).toHaveBeenCalledWith(['gs_k']);
     });
 
+    test('the wipe removes the Stop fence and the control inbox keys together, as it is told to', async () => {
+        const p = createWebviewPlatform(parts());
+        const both = ['gs_scenario_stop_fence', 'gs_scenario_controls'];
+        await p.wipe.removePreferenceKeys?.(both);
+        expect(mockRemovePreferenceKeys).toHaveBeenLastCalledWith(both);
+    });
+
     test('no user-data markers exist on a WebView: the desktop processes that hold them never run here', async () => {
         const wipe = createWebviewPlatform(parts()).wipe;
         await expect(wipe.markers.isCliSessionActive()).resolves.toBe(false);

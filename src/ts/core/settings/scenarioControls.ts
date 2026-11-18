@@ -7,6 +7,12 @@
  *     request with the same identity answers what is recorded; the same identity with other arguments is a `conflict`.
  *   - One pending request per target and Stop epoch. A request of an older Stop epoch, or of an earlier run of the app that
  *     never recorded its result, no longer holds the slot: it is kept as `superseded` / `interrupted`, never dropped.
+ *   - A request for the Android service (`executor: 'android-service'`) is applied by the service, not by the app run that
+ *     queued it: the app-run `interrupted` rule does not touch it while it is unclaimed, so it stays pending across app
+ *     restarts and service downtime. At the start of a cycle the service claims each one (`claimedBy` its run id, `claimedAt`)
+ *     in one compare-and-write, applies it, and records the result. A request that is still claimed when the next claim pass
+ *     runs was not finished by the run that claimed it (the service restarted, or the result was not saved): it is recorded
+ *     `interrupted` and never applied again by itself.
  *   - Each applied change advances the target's revision. Compaction drops the oldest recorded results only, never a pending
  *     request and never a target's latest revision, so a request that expected an older revision cannot apply again after
  *     its result was removed (`stale`).
@@ -34,6 +40,9 @@ const MAX_RESULTS = 8;
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const NAME_PATTERN = /^[A-Za-z0-9@:._-]{1,64}$/;
 const MAX_ERROR = 120;
+/** The executor a request is queued for when the Android service applies it. */
+const SERVICE_EXECUTOR = 'android-service';
+type ControlExecutor = typeof SERVICE_EXECUTOR;
 
 // `shared`: the Android service writes this key too. `strict`: a request the native bridge did not persist is not accepted.
 const controlsStore = createJsonStore({
@@ -56,6 +65,11 @@ type ControlPending = {
     at: number;
     /** The request's arguments as JSON text, for the executor that applies it. */
     args: string;
+    /** Who applies it: the Android service, or null (the run of the app that queued it). */
+    executor: ControlExecutor | null;
+    /** The run id of the service run that claimed it, and when; null while unclaimed. */
+    claimedBy: string | null;
+    claimedAt: number | null;
 };
 
 type ControlFinal = 'applied' | 'failed' | 'superseded' | 'interrupted';
@@ -85,13 +99,23 @@ const bytesOf = (text: string): number => new TextEncoder().encode(text).length;
 const hasOnly = (value: Record<string, unknown>, keys: readonly string[]): boolean =>
     Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
 
-const PENDING_KEYS = ['requestId', 'operation', 'digest', 'stopEpoch', 'at', 'args'];
+const PENDING_KEYS = [
+    'requestId',
+    'operation',
+    'digest',
+    'stopEpoch',
+    'at',
+    'args',
+    'executor',
+    'claimedBy',
+    'claimedAt',
+];
 const RESULT_KEYS = ['requestId', 'operation', 'digest', 'status', 'error', 'revision', 'at'];
 const TARGET_KEYS = ['revision', 'pending', 'results'];
 
 const parsePending = (value: unknown): ControlPending | null => {
     if (!isPlainObject(value) || !hasOnly(value, PENDING_KEYS)) return null;
-    const { requestId, operation, digest, stopEpoch, at, args } = value;
+    const { requestId, operation, digest, stopEpoch, at, args, executor, claimedBy, claimedAt } = value;
     if (
         !isText(requestId, ID_PATTERN) ||
         !isText(operation, NAME_PATTERN) ||
@@ -99,11 +123,17 @@ const parsePending = (value: unknown): ControlPending | null => {
         !(stopEpoch === null || isCount(stopEpoch)) ||
         !isCount(at) ||
         typeof args !== 'string' ||
-        bytesOf(args) > CONTROL_PAYLOAD_MAX_BYTES
+        bytesOf(args) > CONTROL_PAYLOAD_MAX_BYTES ||
+        !(executor === null || executor === SERVICE_EXECUTOR) ||
+        !(claimedBy === null || isText(claimedBy, ID_PATTERN)) ||
+        !(claimedAt === null || isCount(claimedAt)) ||
+        // A claim is a pair, and only a request for the service is ever claimed.
+        (claimedBy === null) !== (claimedAt === null) ||
+        (claimedBy !== null && executor === null)
     ) {
         return null;
     }
-    return { requestId, operation, digest, stopEpoch, at, args };
+    return { requestId, operation, digest, stopEpoch, at, args, executor, claimedBy, claimedAt };
 };
 
 const parseResult = (value: unknown): ControlResult | null => {
@@ -222,9 +252,13 @@ const locate = (inbox: ControlInbox, requestId: string): Located | null => {
     return null;
 };
 
-/** What a pending request is now: still pending, superseded by a Stop, or never finished by an earlier run. */
+/**
+ * What a pending request is now: still pending, superseded by a Stop, or never finished by an earlier run of the app. A request
+ * for the service is not tied to an app run: it is pending until the service records its result.
+ */
 const pendingStatus = (pending: ControlPending, epoch: number | null): 'pending' | 'superseded' | 'interrupted' => {
     if (pending.stopEpoch !== epoch) return 'superseded';
+    if (pending.executor !== null) return 'pending';
     return pending.at < RUN_STARTED_AT ? 'interrupted' : 'pending';
 };
 
@@ -245,6 +279,8 @@ type BeginInput = {
     expectedRevision?: number;
     stopEpoch: number | null;
     at: number;
+    /** `android-service` when the service applies it (it stays pending until the service records a result). */
+    executor?: ControlExecutor;
 };
 
 type BeginRefusal = 'invalid' | 'too-large' | 'conflict' | 'stale' | 'busy' | 'full' | 'unreadable' | 'not-saved';
@@ -256,7 +292,7 @@ type BeginOutcome =
 
 /** Persists a request as pending, or answers what is already recorded for its identity. Applies nothing. */
 const beginControlRequest = async (input: BeginInput): Promise<BeginOutcome> => {
-    const { requestId, operation, target, args, expectedRevision, stopEpoch, at } = input;
+    const { requestId, operation, target, args, expectedRevision, stopEpoch, at, executor } = input;
     if (!isText(requestId, ID_PATTERN) || !isText(operation, NAME_PATTERN) || !isText(target, NAME_PATTERN)) {
         return { ok: false, reason: 'invalid' };
     }
@@ -323,7 +359,17 @@ const beginControlRequest = async (input: BeginInput): Promise<BeginOutcome> => 
                     at: entry.pending.at,
                 });
             }
-            entry.pending = { requestId, operation, digest, stopEpoch, at, args };
+            entry.pending = {
+                requestId,
+                operation,
+                digest,
+                stopEpoch,
+                at,
+                args,
+                executor: executor ?? null,
+                claimedBy: null,
+                claimedAt: null,
+            };
             inbox.targets[target] = entry;
             if (compactToFit(inbox) > CONTROLS_MAX_BYTES) {
                 out.value = { ok: false, reason: 'full' };
@@ -382,6 +428,82 @@ const finishControlRequest = async (input: FinishInput): Promise<FinishOutcome> 
             compactToFit(read.inbox);
             out.value = { ok: true, status, revision };
             return JSON.stringify(read.inbox);
+        })
+        .catch(() => 'failed' as const);
+    return saved === 'failed' ? { ok: false, reason: 'not-saved' } : out.value;
+};
+
+/** A request the service claimed: what it applies. */
+type ClaimedRequest = { requestId: string; operation: string; target: string; args: string };
+
+type ClaimInput = {
+    /** This service run's id (a random id made when the service process started). */
+    runId: string;
+    /** The Stop epoch now; a request queued under another one is superseded and left alone. */
+    epoch: number | null;
+    at: number;
+};
+
+type ClaimOutcome =
+    | { ok: true; claimed: ClaimedRequest[]; interrupted: number }
+    | { ok: false; reason: 'invalid' | 'unreadable' | 'full' | 'not-saved' };
+
+/**
+ * The service's claim pass, in one compare-and-write: every unclaimed request for the service of the current Stop epoch is
+ * claimed by `runId` and returned for the service to apply; every request that is already claimed (by this run or an
+ * earlier one) did not finish and is recorded `interrupted`. Nothing is applied here. Nothing is written when there is
+ * nothing to claim or settle.
+ */
+const claimServiceRequests = async (input: ClaimInput): Promise<ClaimOutcome> => {
+    const { runId, epoch, at } = input;
+    if (!isText(runId, ID_PATTERN)) return { ok: false, reason: 'invalid' };
+    const out: { value: ClaimOutcome } = { value: { ok: false, reason: 'not-saved' } };
+    const saved = await controlsStore
+        .updateThrough((current) => {
+            const read = readInboxText(current);
+            if (read.state === 'unreadable') {
+                out.value = { ok: false, reason: 'unreadable' };
+                return null;
+            }
+            const { inbox } = read;
+            const claimed: ClaimedRequest[] = [];
+            let interrupted = 0;
+            for (const [target, entry] of Object.entries(inbox.targets)) {
+                const { pending } = entry;
+                if (pending === null || pending.executor === null) continue;
+                if (pending.claimedBy !== null) {
+                    interrupted++;
+                    entry.pending = null;
+                    pushResult(entry, {
+                        requestId: pending.requestId,
+                        operation: pending.operation,
+                        digest: pending.digest,
+                        status: 'interrupted',
+                        error: null,
+                        revision: entry.revision,
+                        at,
+                    });
+                } else if (pending.stopEpoch === epoch) {
+                    pending.claimedBy = runId;
+                    pending.claimedAt = at;
+                    claimed.push({
+                        requestId: pending.requestId,
+                        operation: pending.operation,
+                        target,
+                        args: pending.args,
+                    });
+                }
+            }
+            if (claimed.length === 0 && interrupted === 0) {
+                out.value = { ok: true, claimed, interrupted };
+                return null;
+            }
+            if (compactToFit(inbox) > CONTROLS_MAX_BYTES) {
+                out.value = { ok: false, reason: 'full' };
+                return null;
+            }
+            out.value = { ok: true, claimed, interrupted };
+            return JSON.stringify(inbox);
         })
         .catch(() => 'failed' as const);
     return saved === 'failed' ? { ok: false, reason: 'not-saved' } : out.value;
@@ -464,6 +586,8 @@ const readControlStatus = (query: ControlStatusQuery, epoch: number | null): Con
 };
 
 const initializeScenarioControlsAsync = (): Promise<void> => controlsStore.initializeAsync();
+/** Reads the stored inbox into the cache again (the Android app window: the service records results behind its cache); false when the read failed. */
+const refreshScenarioControlsAsync = (): Promise<boolean> => controlsStore.refreshAsync();
 const flushScenarioControlsWrites = (): Promise<void> => controlsStore.flushPendingWrites();
 
 export {
@@ -473,10 +597,13 @@ export {
     ID_PATTERN as CONTROL_ID_PATTERN,
     NAME_PATTERN as CONTROL_NAME_PATTERN,
     MAX_ERROR as CONTROL_MAX_ERROR,
+    SERVICE_EXECUTOR,
     beginControlRequest,
     finishControlRequest,
+    claimServiceRequests,
     readControlStatus,
     initializeScenarioControlsAsync,
+    refreshScenarioControlsAsync,
     flushScenarioControlsWrites,
 };
-export type { ControlStatusQuery };
+export type { ControlStatusQuery, ClaimedRequest };

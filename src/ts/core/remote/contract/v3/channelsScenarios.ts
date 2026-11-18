@@ -25,6 +25,7 @@ import type {
     InstallationExecutorV3,
     InstallationV3,
     LifecycleFailureV3,
+    QueuedForServiceV3,
     ScenarioCapabilityRowV3,
     SnapshotBodyV3,
 } from './shapesLifecycle';
@@ -231,23 +232,26 @@ export type ScenariosChannelsV3 = {
     };
     'set-installation-scenario': {
         args: [name: string | null, executor: InstallationExecutorV3, expectedGeneration: number];
-        result: LifecycleFailureV3 | { success: true; installation: InstallationV3 | null; generation: number };
+        result:
+            | LifecycleFailureV3
+            | QueuedForServiceV3
+            | { success: true; installation: InstallationV3 | null; generation: number };
     };
     'pause-scenario': {
         args: [subject: string | number, reason?: string];
-        result: LifecycleFailureV3 | { success: true; paused: boolean };
+        result: LifecycleFailureV3 | QueuedForServiceV3 | { success: true; paused: boolean };
     };
     'resume-scenario': {
         args: [subject: string | number];
-        result: LifecycleFailureV3 | { success: true; paused: boolean };
+        result: LifecycleFailureV3 | QueuedForServiceV3 | { success: true; paused: boolean };
     };
     'handoff-scenario': {
         args: [subject: string | number, to: string, expectedGeneration: number];
-        result: LifecycleFailureV3 | { success: true; generation: number };
+        result: LifecycleFailureV3 | QueuedForServiceV3 | { success: true; generation: number };
     };
     'clear-scenario-assignment': {
         args: [subject: string | number, expectedGeneration: number];
-        result: LifecycleFailureV3 | { success: true; generation: number };
+        result: LifecycleFailureV3 | QueuedForServiceV3 | { success: true; generation: number };
     };
     'set-photo-pool': {
         args: [name: string, ids: string[]];

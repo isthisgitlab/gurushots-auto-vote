@@ -48,6 +48,7 @@ const plugin = {
             current: null,
         }),
     ),
+    stopAll: jest.fn(),
     wipeLocalData: jest.fn(async (): Promise<{ ok: boolean }> => ({ ok: true })),
 };
 

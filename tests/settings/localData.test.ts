@@ -141,6 +141,15 @@ describe('the local-data registry', () => {
         );
     });
 
+    test('the priority Stop fence and the control inbox are in it, as two entries of their own', () => {
+        expect(LOCAL_DATA_STORES).toEqual(
+            expect.arrayContaining([
+                { fileName: 'scenarioStopFence.json', prefKey: 'gs_scenario_stop_fence' },
+                { fileName: 'scenarioControls.json', prefKey: 'gs_scenario_controls' },
+            ]),
+        );
+    });
+
     test('names are unique', () => {
         expect(new Set(LOCAL_DATA_STORES.map((s) => s.fileName)).size).toBe(LOCAL_DATA_STORES.length);
         expect(new Set(LOCAL_DATA_STORES.map((s) => s.prefKey)).size).toBe(LOCAL_DATA_STORES.length);
@@ -786,6 +795,11 @@ describe('wipeLocalData', () => {
                     'gs_title_pins',
                     'gs_title_pins_corrupt',
                     'gs_scenario_state',
+                    // A full wipe clears the Stop fence and the control inbox together.
+                    'gs_scenario_stop_fence',
+                    'gs_scenario_stop_fence_corrupt',
+                    'gs_scenario_controls',
+                    'gs_scenario_controls_corrupt',
                     'gs_join_state',
                     'gurushots-metadata',
                     // The Android remote mode's stored pairing key (shells/capacitor/remoteMode.ts): after a
