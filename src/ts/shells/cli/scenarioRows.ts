@@ -72,6 +72,74 @@ const scenarioRows: readonly CommandRow[] = [
         '             challenge subject needs --challenge. The file assumes outcomes ({"outcomes":{"submit":"success"}}).',
     ]),
     row(
+        'scenario-installation',
+        scenarioCommands.scenarioInstallationCommand,
+        [
+            '  scenario-installation ["<name>"|--clear] [--executor=electron|cli|web|android-service|android-app] - Show the installation',
+            '             scenario; with a name, set it (run by --executor, else by its current runtime, else by the CLI); --clear clears it',
+        ],
+        { usage: 'Usage: scenario-installation ["<name>"|--clear] [--executor=<runtime>]' },
+    ),
+    row(
+        'scenario-owner-transfer',
+        scenarioCommands.scenarioOwnerTransferCommand,
+        [
+            '  scenario-owner-transfer --executor=<runtime> --generation=<n> - Hand the installation scenario to another runtime;',
+            '             <n> is the generation scenario-installation or scenario-snapshot showed',
+        ],
+        { usage: 'Usage: scenario-owner-transfer --executor=<runtime> --generation=<n>' },
+    ),
+    row(
+        'scenario-pause',
+        scenarioCommands.scenarioPauseCommand,
+        [
+            '  scenario-pause <challenge id|installation> - Pause a scenario: no rule runs and nothing is published until it resumes',
+        ],
+        { usage: 'Usage: scenario-pause <challenge id|installation>' },
+    ),
+    row(
+        'scenario-resume',
+        scenarioCommands.scenarioResumeCommand,
+        ['  scenario-resume <challenge id|installation> - Resume a paused scenario'],
+        { usage: 'Usage: scenario-resume <challenge id|installation>' },
+    ),
+    row(
+        'scenario-handoff',
+        scenarioCommands.scenarioHandoffCommand,
+        [
+            '  scenario-handoff <challenge id|installation> "<scenario>"|--clear --generation=<n> - Give a subject another scenario, or',
+            '             none; <n> is the generation scenario-snapshot showed',
+        ],
+        { usage: 'Usage: scenario-handoff <challenge id|installation> "<scenario>"|--clear --generation=<n>' },
+    ),
+    row(
+        'photo-pool',
+        scenarioCommands.photoPoolCommand,
+        [
+            '  photo-pool list|save "<name>" <photo id>...|delete "<name>"|rename "<name>" "<new name>" - The named photo pools a',
+            '             scenario phase draws from',
+        ],
+        {
+            usage: 'Usage: photo-pool list  |  photo-pool save "<name>" <photo id>...  |  photo-pool delete "<name>"  |  photo-pool rename "<name>" "<new name>"',
+        },
+    ),
+    row(
+        'scenario-snapshot',
+        scenarioCommands.scenarioSnapshotCommand,
+        [
+            '  scenario-snapshot <challenge id|installation> - Where a subject stands: its scenario, generation, pause, settings in force, pins and pool',
+        ],
+        { usage: 'Usage: scenario-snapshot <challenge id|installation>' },
+    ),
+    row(
+        'stop-status',
+        scenarioCommands.stopStatusCommand,
+        [
+            '  stop-status - The Stop fence: whether it blocks a start, whether the last Stop is saved, and whether the owner acknowledged it',
+        ],
+        { usage: 'Usage: stop-status' },
+    ),
+    row(
         'scenario-reset',
         runScenarioReset,
         [

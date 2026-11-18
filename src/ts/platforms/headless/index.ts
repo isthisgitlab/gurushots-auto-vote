@@ -23,6 +23,8 @@ import { createHeadlessPaths } from './paths';
 import { createHeadlessStorage } from './store';
 import { createHeadlessWipe } from './wipe';
 
+import { unsupportedScenarioHostStatus } from '../../core/platform/port';
+
 import type { Platform, PlatformWindows } from '../../core/platform/port';
 
 type HeadlessHttpModule = typeof import('./http');
@@ -64,7 +66,13 @@ const createHeadlessPlatform = (windows: PlatformWindows): Platform => ({
     paths: createHeadlessPaths(),
     assets: createHeadlessAssets(),
     wipe: createHeadlessWipe(),
-    native: { autovote: null, foregroundService: null, apkInstaller: null },
+    native: {
+        autovote: null,
+        foregroundService: null,
+        apkInstaller: null,
+        // The service has no remote-access pairing to observe.
+        readScenarioHostStatus: unsupportedScenarioHostStatus,
+    },
     windows,
     capabilities: createHeadlessCapabilities(),
 });

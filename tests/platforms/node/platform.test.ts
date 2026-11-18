@@ -38,14 +38,36 @@ import type { PlatformWindows } from '../../../src/ts/core/platform/port';
 // command run has no windows to broadcast to or relaunch).
 const windows: PlatformWindows = {
     broadcastSettingsChanged: () => undefined,
+    broadcastEvent: () => undefined,
     afterWipe: () => undefined,
 };
+
+describe('the node platform: the remote-access status', () => {
+    test('a shell with no pairing reports it unsupported', async () => {
+        await expect(createNodePlatform(windows, 'cli').native.readScenarioHostStatus()).resolves.toEqual({
+            supported: false,
+        });
+    });
+
+    test('a shell that has one supplies its own reader, which the family hands on untouched', async () => {
+        const status = { supported: true as const, remoteEnabled: true, remoteConnected: null };
+        const read = jest.fn(async () => status);
+        const p = createNodePlatform(windows, 'electron', {}, read);
+        expect(p.native.readScenarioHostStatus).toBe(read);
+        await expect(p.native.readScenarioHostStatus()).resolves.toBe(status);
+    });
+});
 
 describe('the node platform', () => {
     test('it has no adapter, native services or Capacitor transport', () => {
         const p = createNodePlatform(windows, 'cli');
         expect(p.http.adapter).toBeNull();
-        expect(p.native).toEqual({ autovote: null, foregroundService: null, apkInstaller: null });
+        expect(p.native).toEqual({
+            autovote: null,
+            foregroundService: null,
+            apkInstaller: null,
+            readScenarioHostStatus: expect.any(Function),
+        });
         expect(p.wipe.clearSession).toBeNull();
         expect(p.wipe.reloadAfterWipe).toBe(false);
         expect(p.wipe.listPreferenceKeys).toBeNull();

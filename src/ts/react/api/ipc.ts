@@ -14,6 +14,9 @@
  */
 
 import type { WindowApi } from '../../core/types/ipc';
+import type { FenceFailure, StopFencePort, WithdrawalOutcome } from '../../core/autovote/runGate';
+import type { AccountWakeSources } from '../../core/scheduling/thresholdWindow';
+import type { StopFenceRead } from '../../core/settings';
 
 /**
  * The bridge seen as untyped callables, for the pass-throughs below that only
@@ -137,6 +140,93 @@ export const resetScenarioState = forward('resetScenarioState');
 export const resetAllScenarioState = forward('resetAllScenarioState');
 export const dryRunScenario = forward('dryRunScenario');
 export const simulateScenario = forward('simulateScenario');
+
+// The window controller's routes to the host: the priority Stop fence, the withdrawal and the lifting of the installation's
+// publication, and the account's scheduling boundaries (autovote/controller.ts takes them as host seams).
+const scenarioStopFence = forward('scenarioStopFence');
+const recordFullStop = forward('recordFullStop');
+const armAutovote = forward('armAutovote');
+const armIfAllowed = forward('armIfAllowed');
+const withdrawInstallation = forward('withdrawInstallation');
+const rearmInstallation = forward('rearmInstallation');
+const getAccountWake = forward('getAccountWake');
+
+type Failed = { success: false; error: string } | null;
+
+/** Why a fence route failed, in the words the gate knows: a route that failed to answer is a Stop that was not saved. */
+const fenceFailure = (result: Failed): FenceFailure =>
+    result?.error === 'unreadable' || result?.error === 'oversize' ? result.error : 'not-saved';
+
+const FENCE_UNREADABLE: StopFenceRead = { state: 'unreadable', reason: 'read-failed' };
+
+/**
+ * The priority Stop fence as the controller uses it, through the host's routes (the fence is the main process's: the window
+ * reaches it by IPC). Each member only forwards the call and words the answer; a route that cannot be reached answers the
+ * failure the gate already handles (an unreadable fence, a Stop not saved). `clearStopBlock` goes through `arm-autovote`, the one
+ * route that lifts a block; every other member goes through routes that cannot.
+ */
+export const createStopFencePort = (): StopFencePort => ({
+    read: async () => {
+        const result = await callOrNull(() => scenarioStopFence());
+        return result?.success ? result.fence : FENCE_UNREADABLE;
+    },
+    initialize: async () => {
+        const result = await callOrNull(() => scenarioStopFence({ initialize: true }));
+        return result?.success
+            ? { ok: true, created: result.created === true }
+            : { ok: false, reason: fenceFailure(result) };
+    },
+    recordFullStop: async (requestId, at) => {
+        const result = await callOrNull(() => recordFullStop(requestId, at));
+        return result?.success ? { ok: true, epoch: result.epoch } : { ok: false, reason: fenceFailure(result) };
+    },
+    clearStopBlock: async (expectedEpoch) => {
+        const result = await callOrNull(() => armAutovote(expectedEpoch));
+        if (result?.success) return { ok: true };
+        return {
+            ok: false,
+            reason:
+                result?.error === 'stale-epoch' || result?.error === 'missing' ? result.error : fenceFailure(result),
+        };
+    },
+    isArmAllowed: async (capturedEpoch) => {
+        const result = await callOrNull(() => scenarioStopFence({ armEpoch: capturedEpoch }));
+        return result?.success === true && result.armAllowed === true;
+    },
+    armIfAllowed: async (capturedEpoch) => {
+        const result = await callOrNull(() => armIfAllowed(capturedEpoch));
+        if (result?.success) return { ok: true };
+        const reason = result?.error;
+        return {
+            ok: false,
+            reason:
+                reason === 'stale-epoch' || reason === 'blocked' || reason === 'missing'
+                    ? reason
+                    : fenceFailure(result),
+        };
+    },
+});
+
+/** A full Stop's withdrawal of the installation's publication, under the epoch it is made under; `failed` when it did not land. */
+export const withdrawInstallationOnHost = async (epoch: number): Promise<Exclude<WithdrawalOutcome, 'no-route'>> => {
+    const result = await callOrNull(() => withdrawInstallation(epoch));
+    return result?.success ? result.outcome : 'failed';
+};
+
+/** The explicit re-arm's lifting of that withdrawal; `failed` when it still stands. */
+export const rearmInstallationOnHost = async (): Promise<'restored' | 'none' | 'failed'> => {
+    const result = await callOrNull(() => rearmInstallation());
+    return result?.success ? result.outcome : 'failed';
+};
+
+/** The account's own scheduling boundaries as the main process works them out; null when it cannot. */
+export const getAccountWakeFromHost = async (): Promise<AccountWakeSources | null> => {
+    const result = await callOrNull(() => getAccountWake());
+    return result?.success ? result.wake : null;
+};
+
+/** One installation-only cycle (the installation scenario's publication and account rules; no voting stage runs). */
+export const runArmedCycle = () => runVotingCycle('armed');
 
 // Challenges and voting
 export const getActiveChallenges = forward('getActiveChallenges');

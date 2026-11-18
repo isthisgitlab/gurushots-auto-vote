@@ -139,7 +139,12 @@ describe('the CLI shell platform module', () => {
     test('the module installs the platform, and the windows are the explicit no-ops', () => {
         expect(installed).toBeDefined();
         expect(() => installed.windows.broadcastSettingsChanged({})).not.toThrow();
+        expect(() => installed.windows.broadcastEvent('effective-settings-changed', {})).not.toThrow();
         expect(() => installed.windows.afterWipe()).not.toThrow();
+    });
+
+    test('the CLI has no pairing to observe', async () => {
+        await expect(installed.native.readScenarioHostStatus()).resolves.toEqual({ supported: false });
     });
 
     test('without the extracted root the family location stands (the source checkout cache)', () => {

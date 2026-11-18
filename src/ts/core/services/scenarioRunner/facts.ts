@@ -24,11 +24,12 @@ import { scanFillCandidates } from '../autoFill';
 import { isClaimable, readCompletedChallenges } from '../autoClaim';
 import { missionEvidence } from '../missions';
 import { pendingBoostTarget } from '../votingOrchestrator/boost';
+import { platform } from '../../platform/port';
 import { log, nowSec } from './support';
 
 import { baselineTransportPolicy } from '../../api/transportPolicy';
 import type { TransportPolicy } from '../../api/transportPolicy';
-import type { FactEvidence, Evidence } from '../../scenarios/facts';
+import type { FactEvidence, Evidence, HostEvidence } from '../../scenarios/facts';
 import type { Bankroll, CompletedChallenge, Mission } from '../../types/gurushots';
 import type { ScenarioCondition, ScenarioExpr, ScenarioSelector, ScenarioStage } from '../../types/scenario';
 import type { ScenarioDocument } from '../../settings/scenarioSchema';
@@ -50,6 +51,7 @@ const EVIDENCE_OF_DEPENDENCY: Readonly<Record<string, EvidenceKind>> = {
     'entry-pins': 'pins',
     'entry-pending-boost': 'pendingBoost',
     'photo-scan': 'photoScan',
+    host: 'host',
 };
 
 /**
@@ -248,18 +250,36 @@ const readRewards = (reads: AccountReads, policy: TransportPolicy): Promise<NonN
     });
 
 /**
- * The account evidence (balance, missions, completed challenges) among the `needed` kinds, fetched under the saved
+ * What the host knows of the remote-access pairing, through the platform port: only a sanitized status (no key, link or peer).
+ * A shell with no pairing answers `supported: false`, which is not a failed read.
+ */
+const readHost = (reads: AccountReads): Promise<NonNullable<FactEvidence['host']>> =>
+    guarded<HostEvidence>(reads.subject, 'the remote-access status', 'remote-status-unreadable', async () => {
+        const status = await platform().native.readScenarioHostStatus();
+        return status.supported
+            ? {
+                  readable: true,
+                  supported: true,
+                  remoteEnabled: status.remoteEnabled,
+                  remoteConnected: status.remoteConnected,
+              }
+            : { readable: true, supported: false };
+    });
+
+/**
+ * The account evidence (balance, missions, completed challenges, the host's remote status) among the `needed` kinds, fetched under the saved
  * transport policy. Nothing is fetched for a kind that is not needed.
  */
 const loadAccountEvidence = async (
     needed: ReadonlySet<EvidenceKind>,
     reads: AccountReads,
-): Promise<Pick<FactEvidence, 'bankroll' | 'missions' | 'rewards'>> => {
+): Promise<Pick<FactEvidence, 'bankroll' | 'missions' | 'rewards' | 'host'>> => {
     const policy = baselineTransportPolicy();
-    const evidence: Pick<FactEvidence, 'bankroll' | 'missions' | 'rewards'> = {};
+    const evidence: Pick<FactEvidence, 'bankroll' | 'missions' | 'rewards' | 'host'> = {};
     if (needed.has('bankroll')) evidence.bankroll = await readBankroll(reads, policy);
     if (needed.has('missions')) evidence.missions = await readMissions(reads, policy);
     if (needed.has('rewards')) evidence.rewards = await readRewards(reads, policy);
+    if (needed.has('host')) evidence.host = await readHost(reads);
     return evidence;
 };
 

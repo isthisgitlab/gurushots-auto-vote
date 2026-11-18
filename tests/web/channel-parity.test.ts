@@ -29,6 +29,18 @@ test('server channels and browser channels partition the manifest invoke surface
     expect([...served, ...browser].sort()).toEqual([...allInvokeChannels()].sort());
 });
 
+test('the web server answers the scenario lifecycle and Stop-fence channels with the shared handlers', async () => {
+    const handlers = buildWebHandlers(() => {});
+    for (const channel of ['get-photo-pools', 'arm-autovote', 'record-full-stop', 'get-effective-presentation']) {
+        expect(typeof handlers[channel]).toBe('function');
+    }
+    // Argument validation is the shared handler's: a bad epoch is refused before any fence is touched.
+    await expect((handlers['arm-autovote'] as (event: null, epoch: number) => unknown)(null, -1)).resolves.toEqual({
+        success: false,
+        error: 'invalid-args',
+    });
+});
+
 test('the remote-access pairing and host-log channels answer not-applicable in the web UI', async () => {
     const handlers = buildWebHandlers(() => {});
     for (const channel of ['get-remote-access', 'set-remote-access', 'reset-remote-pairing', 'log-remote-info']) {

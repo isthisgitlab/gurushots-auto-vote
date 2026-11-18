@@ -104,7 +104,7 @@ describe('the registry', () => {
 
     test('a fact is usable in a rule when its stage list holds the active stage, and refused with the stage message otherwise', () => {
         const refused = vocabulary.FACT_NAMES.filter((name) => factStageIssues(name, 'active', 'p').length > 0);
-        expect(refused).toEqual(['rewards.claimable', 'rewards.claimableCount']);
+        expect(refused).toEqual(['rewards.claimable', 'rewards.claimableCount', 'remote.enabled', 'remote.connected']);
         expect(factStageIssues('rewards.claimable', 'active', 'p')).toEqual([
             { path: 'p', message: 'rewards.claimable is not available while a challenge is active' },
         ]);
@@ -135,6 +135,7 @@ describe('the registry', () => {
             'rewards.claimable': ['postClose'],
             'rewards.claimableCount': ['account'],
         });
+        expect(stages('remote.')).toEqual({ 'remote.enabled': ['account'], 'remote.connected': ['account'] });
         expect(stages('photos.')).toEqual({
             'photos.eligibleCount': ['preJoin', 'active'],
             'photos.eligibleAtLeast': ['preJoin', 'active'],
@@ -896,6 +897,63 @@ describe('rewards', () => {
     // The subject of a post-close read: a completed challenge as the completed listing gives it.
     const completed = (id: unknown) => ({
         subject: { kind: 'completed', challenge: { id }, provenance: 'completed-list' },
+    });
+
+    describe("remote.enabled and remote.connected (the host's sanitized remote-access status)", () => {
+        const host = (over: Record<string, unknown> = {}) => ({
+            readable: true,
+            supported: true,
+            remoteEnabled: true,
+            remoteConnected: false,
+            ...over,
+        });
+
+        test('are raw evidence of the account stage that can be confirmed absent', () => {
+            for (const name of ['remote.enabled', 'remote.connected'] as const) {
+                expect(FACTS[name]).toMatchObject({
+                    kind: 'boolean',
+                    optional: true,
+                    classification: 'raw',
+                    dependencies: ['host'],
+                });
+            }
+        });
+
+        test('read the two flags of a shell that has a pairing', () => {
+            expect(read('remote.enabled', undefined, { host: host() })).toEqual(known(true));
+            expect(read('remote.connected', undefined, { host: host() })).toEqual(known(false));
+            expect(read('remote.connected', undefined, { host: host({ remoteConnected: true }) })).toEqual(known(true));
+            expect(read('remote.enabled', undefined, { host: host({ remoteEnabled: false }) })).toEqual(known(false));
+        });
+
+        test('are absent (not applicable) where the shell has no pairing to observe', () => {
+            const none = { readable: true, supported: false };
+            expect(read('remote.enabled', undefined, { host: none })).toEqual(absent('not-applicable'));
+            expect(read('remote.connected', undefined, { host: none })).toEqual(absent('not-applicable'));
+        });
+
+        test('are unknown when the status was not loaded, could not be read, or the shell cannot tell a connection', () => {
+            expect(read('remote.enabled')).toEqual(unknown('evidence-not-loaded', ['host']));
+            expect(
+                read('remote.enabled', undefined, { host: { readable: false, reason: 'remote-status-unreadable' } }),
+            ).toEqual(unknown('remote-status-unreadable', ['host']));
+            expect(read('remote.connected', undefined, { host: host({ remoteConnected: null }) })).toEqual(
+                unknown('remote-status-unknown', ['host']),
+            );
+            expect(read('remote.enabled', undefined, { host: host() })).toEqual(known(true));
+        });
+
+        test('malformed evidence is unknown, never a default', () => {
+            expect(read('remote.enabled', undefined, { host: host({ supported: 'yes' }) })).toEqual(
+                unknown('evidence-malformed', ['host']),
+            );
+            expect(read('remote.enabled', undefined, { host: host({ remoteEnabled: 1 }) })).toEqual(
+                unknown('evidence-malformed', ['host']),
+            );
+            expect(read('remote.connected', undefined, { host: host({ remoteConnected: 'x' }) })).toEqual(
+                unknown('evidence-malformed', ['host']),
+            );
+        });
     });
 
     test('claimable: true when the read lists the subject as claimable', () => {

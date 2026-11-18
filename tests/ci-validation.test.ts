@@ -249,7 +249,10 @@ describe('sends toward the Logs window', () => {
             'src/ts/shells/electron/registerHandlers.ts',
             "return event.senderFrame?.url ?? event.sender?.getURL?.() ?? '<unknown>';",
         ],
-        ['src/ts/shells/electron/registerHandlers.ts', 'webContents.send = (channel: string, ...args: unknown[]) =>'],
+        [
+            'src/ts/shells/electron/registerHandlers.ts',
+            'webContents.send = (channel: string, ...args: unknown[]) => sendToLogsWindow(send, webContents, channel, args);',
+        ],
         ['src/ts/shells/electron/preloadApi.ts', 'api[method] = () => ipcRenderer.send(channel);'],
         // The remote pairing transport is a WebRTC data channel, not a frame; every .send on
         // it is a protocol message to the paired peer.

@@ -585,8 +585,11 @@ describe('the installation scenario publication', () => {
     const actAs = (executor: 'android-service' | 'electron') =>
         installHeadlessTestPlatform({
             capabilities: {
-                ...createHeadlessPlatform({ broadcastSettingsChanged: () => undefined, afterWipe: () => undefined })
-                    .capabilities,
+                ...createHeadlessPlatform({
+                    broadcastSettingsChanged: () => undefined,
+                    broadcastEvent: () => undefined,
+                    afterWipe: () => undefined,
+                }).capabilities,
                 executor,
             },
         });

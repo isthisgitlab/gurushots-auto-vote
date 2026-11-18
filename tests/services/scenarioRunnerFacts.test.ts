@@ -29,6 +29,7 @@ import type { RunnerContext } from '../../src/ts/core/services/scenarioRunner/ty
 import type { CompletedChallenge, Mission } from '../../src/ts/core/types/gurushots';
 import type { CategoryLogger } from '../../src/ts/core/logger';
 import { invalid } from '../helpers/invalid';
+import { installTestPlatform } from '../helpers/platform';
 
 const settings = jest.mocked(settingsModule);
 const { scanFillCandidates } = jest.mocked(autoFillModule);
@@ -242,6 +243,7 @@ describe('what is fetched', () => {
             ['uncertain', present('entry.uncertainSubmission', { by: 'slot', index: 1 }), ['uncertain']],
             ['pins', present('entry.pinned', { by: 'slot', index: 1 }), ['pins']],
             ['photos', present('photos.hasEligible'), ['photoScan']],
+            ['host', present('remote.enabled'), ['host']],
         ];
         for (const [, condition, expected] of kinds) {
             jest.clearAllMocks();
@@ -260,6 +262,7 @@ describe('what is fetched', () => {
             'entry-uncertain': 'uncertain',
             'entry-pins': 'pins',
             'photo-scan': 'photoScan',
+            host: 'host',
         };
         for (const [name, fact] of Object.entries(FACTS)) {
             jest.clearAllMocks();
@@ -351,6 +354,49 @@ describe('missions', () => {
         const { missions } = await loadScenarioSnapshot(scenario([compare('missions.joinNeed')]), ctx());
         expect(missions).toEqual({ readable: false, reason: 'missions-unreadable' });
         expect(warnings()).toEqual(['[7] could not read the missions for the scenario: boom']);
+    });
+});
+
+describe('the remote-access status', () => {
+    const hostScenario = scenario([present('remote.enabled')]);
+    const readHostStatus = jest.fn();
+    const withStatus = (status: unknown) => {
+        readHostStatus.mockReset();
+        if (status instanceof Error) readHostStatus.mockRejectedValue(status);
+        else readHostStatus.mockResolvedValue(status);
+        installTestPlatform({
+            native: {
+                autovote: null,
+                foregroundService: null,
+                apkInstaller: null,
+                readScenarioHostStatus: readHostStatus,
+            },
+        });
+    };
+
+    test('a shell with a pairing gives the two flags, and only the flags', async () => {
+        withStatus({ supported: true, remoteEnabled: true, remoteConnected: null, key: 'never copied' });
+        const { host } = await loadScenarioSnapshot(hostScenario, ctx());
+        expect(host).toEqual({ readable: true, supported: true, remoteEnabled: true, remoteConnected: null });
+    });
+
+    test('a shell with none is supported: false, which is not a failed read', async () => {
+        withStatus({ supported: false });
+        const { host } = await loadScenarioSnapshot(hostScenario, ctx());
+        expect(host).toEqual({ readable: true, supported: false });
+    });
+
+    test('a failed read is unreadable, logged, never a default', async () => {
+        withStatus(new Error('pairing not ready'));
+        const { host } = await loadScenarioSnapshot(hostScenario, ctx());
+        expect(host).toEqual({ readable: false, reason: 'remote-status-unreadable' });
+        expect(warnings()).toEqual(['[7] could not read the remote-access status for the scenario: pairing not ready']);
+    });
+
+    test('the status is read only for a scenario that reads it', async () => {
+        withStatus({ supported: false });
+        await loadScenarioSnapshot(scenario([present('clock.now')]), ctx());
+        expect(readHostStatus).not.toHaveBeenCalled();
     });
 });
 

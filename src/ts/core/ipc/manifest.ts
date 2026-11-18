@@ -127,6 +127,40 @@ const invokeChannels = [
     'reset-all-scenario-state',
     'dry-run-scenario',
     'simulate-scenario',
+    // The scenario capability catalogue, the per-subject snapshot, and the installation scenario's reads and lifecycle
+    // (settings/scenarioLifecycle.ts): the assignment and its owner, pause and resume, handoff, the photo pools.
+    'get-scenario-capabilities',
+    'get-scenario-snapshot',
+    'get-installation-scenario',
+    'list-simulation-subjects',
+    'set-installation-scenario',
+    // Local only: a paired phone cannot move the installation scenario to another host.
+    'transfer-installation-scenario-owner',
+    'pause-scenario',
+    'resume-scenario',
+    'handoff-scenario',
+    'clear-scenario-assignment',
+    'get-photo-pools',
+    'set-photo-pool',
+    'delete-photo-pool',
+    'rename-photo-pool',
+    'get-effective-entry-pins',
+    // What applies now, for a client that mounts or missed an event: the installation's effective settings, and the
+    // presentation-only projection the Login and Logs windows read.
+    'get-effective-installation-settings',
+    'get-effective-presentation',
+    // The priority Stop fence and the controller's routes to it. `scenario-stop-fence` reads (it may create a fence that was
+    // never created); `record-full-stop` is a user's full Stop; `arm-autovote` is the one route that lifts a Stop block,
+    // the user's own Run / Resume / re-arm; `arm-if-allowed` is the compare-and-set alone (a startup or a scenario request
+    // can never lift a block); the installation's publication is withdrawn on a Stop and lifted on that re-arm.
+    'get-stop-status',
+    'scenario-stop-fence',
+    'record-full-stop',
+    'arm-autovote',
+    'arm-if-allowed',
+    'withdraw-installation',
+    'rearm-installation',
+    'get-account-wake',
     'reload-window',
     'refresh-menu',
     // Remote access pairing (shells/electron/remote/pairing.ts). Answered for the main window
@@ -178,10 +212,13 @@ const eventMethods = {
     onUpdateError: 'update-error',
     onLogMessage: 'log-message',
     onSettingsChanged: 'settings-changed',
+    // Host to client: what applies now. Each carries a monotonic `revision`; a client ignores one older than what it holds.
+    onEffectiveSettingsChanged: 'effective-settings-changed',
+    onEffectivePresentationChanged: 'effective-presentation-changed',
 } as const;
 
-// What the Logs window may use: the log feed, its own diagnostics line, and the
-// settings reads it makes (the UI language and the theme). Its preload (preloadLogs.ts)
+// What the Logs window may use: the log feed, its own diagnostics line, the
+// settings reads it makes (the UI language and the theme) and the presentation-only projection. Its preload (preloadLogs.ts)
 // exposes only this subset and the main process refuses every other channel from that window
 // (registerHandlers.ts), so a compromised Logs renderer reaches no spend, no settings
 // write and no other log channel. Every name must exist in the full manifest above
@@ -192,6 +229,7 @@ const logsWindowInvokeChannels = [
     'get-log-backlog',
     'start-log-stream',
     'stop-log-stream',
+    'get-effective-presentation',
 ] as const satisfies readonly (typeof invokeChannels)[number][];
 
 // The settings the Logs window may read or be told about: its get-setting answers only these keys, and the
@@ -201,6 +239,7 @@ const logsWindowSettingKeys = ['language', 'theme'] as const;
 const logsWindowEventMethods = {
     onLogMessage: eventMethods.onLogMessage,
     onSettingsChanged: eventMethods.onSettingsChanged,
+    onEffectivePresentationChanged: eventMethods.onEffectivePresentationChanged,
 } as const satisfies Partial<typeof eventMethods>;
 
 // Shared kebab-case → camelCase (both shells must agree on this mapping).

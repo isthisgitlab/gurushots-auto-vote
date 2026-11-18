@@ -20,6 +20,7 @@ import * as settings from '../../settings';
 import { errorMessage } from '../../errorMessage';
 import { platform } from '../../platform/port';
 import { captureInstallationTimezone } from '../installationTimezone';
+import { announceEffectiveChange } from '../effectiveEvents';
 import { evaluateExpression } from '../../scenarios/expressions';
 import { INSTALLATION_KEY, initialState } from '../../scenarioStateStore';
 import type { StateLock } from '../../scenarioStateStore';
@@ -324,6 +325,8 @@ const write = (
         if (!prepared.ok) {
             log().error(`installation scenario halted: ${blockedText(at.phase, prepared.key, prepared.reason)}`, null);
         }
+        // What applies to the installation may have changed (a phase published, or none stands any more): the windows are told.
+        announceEffectiveChange();
         return outcome.status;
     }
     // A write the record refused (a generation, a pause) is no failure of this runtime: it is no longer the owner's step.

@@ -23,6 +23,7 @@ describe('the scripts platform module', () => {
     test('the module installs the platform, and the windows are the explicit no-ops', () => {
         expect(installed).toBeDefined();
         expect(() => installed.windows.broadcastSettingsChanged({})).not.toThrow();
+        expect(() => installed.windows.broadcastEvent('effective-settings-changed', {})).not.toThrow();
         expect(() => installed.windows.afterWipe()).not.toThrow();
     });
 

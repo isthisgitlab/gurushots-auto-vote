@@ -14,6 +14,7 @@ import { createHeadlessPlatform } from '../../platforms/headless';
 installPlatform(
     createHeadlessPlatform({
         broadcastSettingsChanged: () => undefined,
+        broadcastEvent: () => undefined,
         afterWipe: () => undefined,
     }),
 );

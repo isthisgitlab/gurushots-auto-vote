@@ -44,13 +44,25 @@ const webviewHttp = jest.mocked(
 
 type WebviewParts = Parameters<typeof createWebviewPlatform>[0];
 
+const NO_NATIVE: PlatformNative = {
+    autovote: null,
+    foregroundService: null,
+    apkInstaller: null,
+    readScenarioHostStatus: async () => ({ supported: false }),
+};
+const NO_WINDOWS = {
+    broadcastSettingsChanged: () => undefined,
+    broadcastEvent: () => undefined,
+    afterWipe: () => undefined,
+};
+
 // The parts a test passes where it wants none of the shell's members: nulls,
 // and the no-op windows of a test run.
 const parts = (over: Partial<WebviewParts> = {}): WebviewParts => ({
     cas: null,
     nativeWipe: async () => null,
-    native: { autovote: null, foregroundService: null, apkInstaller: null },
-    windows: { broadcastSettingsChanged: () => undefined, afterWipe: () => undefined },
+    native: NO_NATIVE,
+    windows: NO_WINDOWS,
     ...over,
 });
 
@@ -67,14 +79,19 @@ describe('the webview platform', () => {
 
     test('the native members are the nulls the parts pass, and the wipe finds no plugin', async () => {
         const p = createWebviewPlatform(parts());
-        expect(p.native).toEqual({ autovote: null, foregroundService: null, apkInstaller: null });
+        expect(p.native).toEqual({
+            autovote: null,
+            foregroundService: null,
+            apkInstaller: null,
+            readScenarioHostStatus: expect.any(Function),
+        });
         await expect(p.wipe.nativeWipe()).resolves.toBeNull();
     });
 
     test('the native wipe, the native services and the windows arrive through the parts', () => {
         const nativeWipe = jest.fn<Promise<{ ok: boolean } | null>, []>();
-        const native: PlatformNative = { autovote: null, foregroundService: null, apkInstaller: null };
-        const windows = { broadcastSettingsChanged: () => undefined, afterWipe: () => undefined };
+        const native = NO_NATIVE;
+        const windows = NO_WINDOWS;
         const p = createWebviewPlatform(parts({ nativeWipe, native, windows }));
         expect(p.wipe.nativeWipe).toBe(nativeWipe);
         expect(p.native).toBe(native);
@@ -133,11 +150,14 @@ describe('the webview platform', () => {
 
 describe('the webview test installer', () => {
     test('it installs the family with the null parts, and overrides replace a member group whole', () => {
-        const installed = installWebviewTestPlatform({
-            windows: { broadcastSettingsChanged: () => undefined, afterWipe: () => undefined },
-        });
+        const installed = installWebviewTestPlatform({ windows: NO_WINDOWS });
         expect(platform()).toBe(installed);
-        expect(installed.native).toEqual({ autovote: null, foregroundService: null, apkInstaller: null });
+        expect(installed.native).toEqual({
+            autovote: null,
+            foregroundService: null,
+            apkInstaller: null,
+            readScenarioHostStatus: expect.any(Function),
+        });
     });
 
     test('a plain install puts the family on the port', () => {

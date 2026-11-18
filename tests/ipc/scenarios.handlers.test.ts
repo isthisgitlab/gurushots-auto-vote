@@ -96,6 +96,38 @@ const scenario: ScenarioDocument = {
 
 beforeEach(() => jest.clearAllMocks());
 
+test('the lifecycle, pool, projection and Stop-fence handlers are part of the scenario handler map', () => {
+    for (const channel of [
+        'get-installation-scenario',
+        'set-installation-scenario',
+        'transfer-installation-scenario-owner',
+        'pause-scenario',
+        'resume-scenario',
+        'handoff-scenario',
+        'clear-scenario-assignment',
+        'get-photo-pools',
+        'set-photo-pool',
+        'delete-photo-pool',
+        'rename-photo-pool',
+        'get-scenario-capabilities',
+        'get-scenario-snapshot',
+        'list-simulation-subjects',
+        'get-effective-entry-pins',
+        'get-effective-installation-settings',
+        'get-effective-presentation',
+        'get-stop-status',
+        'scenario-stop-fence',
+        'record-full-stop',
+        'arm-autovote',
+        'arm-if-allowed',
+        'withdraw-installation',
+        'rearm-installation',
+        'get-account-wake',
+    ]) {
+        expect(typeof (handlers as Record<string, unknown>)[channel]).toBe('function');
+    }
+});
+
 test('get-scenarios returns the stored scenarios, the revision they were read at, and the templates', async () => {
     settings.getScenarioLibrary.mockReturnValue({ scenarios: { Plan: scenario }, revision: 3 });
     await expect(handlers['get-scenarios']()).resolves.toEqual({

@@ -54,6 +54,7 @@ const removeNodeTestUserDataDir = (): void => {
 // them.
 const testWindows: PlatformWindows = {
     broadcastSettingsChanged: () => undefined,
+    broadcastEvent: () => undefined,
     afterWipe: () => undefined,
 };
 
@@ -97,7 +98,12 @@ const installWebviewTestPlatform = (overrides?: Partial<Platform>): Platform => 
         createWebviewPlatform({
             cas: null,
             nativeWipe: async () => null,
-            native: { autovote: null, foregroundService: null, apkInstaller: null },
+            native: {
+                autovote: null,
+                foregroundService: null,
+                apkInstaller: null,
+                readScenarioHostStatus: async () => ({ supported: false }),
+            },
             windows: testWindows,
         }),
         overrides,

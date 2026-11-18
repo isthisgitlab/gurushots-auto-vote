@@ -52,6 +52,7 @@ jest.mock('../../src/ts/core/settings', () => ({
     getSetting: jest.fn(),
     setSetting: jest.fn(),
     seedIntentProfiles: jest.fn(),
+    getPhotoPools: jest.fn(() => ({ pool: ['1', '2'] })),
 }));
 
 import pkg = require('../../package.json');
@@ -108,6 +109,12 @@ describe('Capacitor bridge', () => {
             // Installing reads and writes no setting: the stored ones are not hydrated yet (see seedBridgeProfiles).
             expect(settings.seedIntentProfiles).not.toHaveBeenCalled();
             await expect(api.getSettings()).resolves.toEqual({ theme: 'dark' });
+            // The scenario lifecycle channels are answered in-process too (scenarios.handlers spreads them in).
+            await expect(api.getPhotoPools()).resolves.toEqual({ success: true, pools: { pool: ['1', '2'] } });
+            await expect(api.armAutovote(invalid<number>(-1))).resolves.toEqual({
+                success: false,
+                error: 'invalid-args',
+            });
             await expect(api.guiVote()).resolves.toEqual({ success: true, via: 'gui-vote' });
         });
 

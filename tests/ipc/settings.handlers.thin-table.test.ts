@@ -13,6 +13,7 @@
  */
 
 jest.mock('../../src/ts/core/settings');
+jest.mock('../../src/ts/core/services/effectiveEvents', () => ({ announceEffectiveChange: jest.fn() }));
 jest.mock('../../src/ts/core/apiFactory', () => ({
     refreshApi: jest.fn(),
     getApiStrategy: jest.fn(),
@@ -40,6 +41,7 @@ const { buildHandlers } = require('../../src/ts/core/ipc/settings.handlers') as 
 const installWindows = (): PlatformWindows => {
     const windows: PlatformWindows = {
         broadcastSettingsChanged: jest.fn<void, [object]>(),
+        broadcastEvent: jest.fn(),
         afterWipe: jest.fn<void, []>(),
     };
     installTestPlatform({ windows });

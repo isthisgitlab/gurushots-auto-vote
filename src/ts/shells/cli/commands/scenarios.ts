@@ -19,6 +19,8 @@ import { escapeTerminalUnsafe, stripTerminalControl } from '../../../core/format
 import type { NullEventHandlers } from '../../../core/types/cli';
 import type { ScenarioIssue } from '../../../core/settings/scenarioSchema';
 import type { SimulationEvent } from '../../../core/types/scenario';
+import type { ExprValue } from '../../../core/scenarios/expressions';
+import type { ValueState } from '../../../core/scenarios/valueState';
 import type * as scenarios_handlersModule from '../../../core/ipc/scenarios.handlers';
 import type * as settingsModule from '../../../core/settings';
 import { errorMessage } from '../../../core/errorMessage';
@@ -528,6 +530,323 @@ const scenarioSimulateCommand = async (argv: string[]) => {
     return 0;
 };
 
+// --- the installation scenario, pause and handoff, photo pools, snapshot and Stop status --------------------------------------
+// Each reuses the lifecycle handlers (ipc/scenarioLifecycle.handlers.ts) called with a null event.
+
+const LIFECYCLE_REASONS: Record<string, string> = {
+    busy: 'it is in use right now — try again in a moment',
+    'unresolved-work': 'a step or a spend is not finished',
+    'unresolved-spend': 'a spend may not be finished',
+    'rule-in-progress': 'a rule is running',
+    'handoff-pending': 'a handover is not finished',
+    'state-unreadable': 'the saved progress cannot be read',
+    'stale-generation': 'it changed since you looked — read it again',
+    'unknown-scenario': 'there is no scenario with that name',
+    'incompatible-scope': 'that scenario is not an installation scenario',
+    'invalid-executor': 'that is not a runtime name',
+    'no-installation': 'the installation has no scenario',
+    'no-progress': 'it has no progress yet',
+    'invalid-subject': 'that is not a challenge id or "installation"',
+    'assignment-unchanged': 'it already has that scenario',
+    'not-saved': 'it could not be saved',
+    cap: 'the account is at its pool limit',
+    invalid: 'the name or the photo ids are not valid',
+    'write-failed': 'it could not be saved',
+    'not-found': 'there is no pool with that name',
+    exists: 'a pool with that name exists',
+};
+
+const EXECUTORS = ['electron', 'cli', 'web', 'android-service', 'android-app'] as const;
+
+/** A lifecycle failure in plain words: `what` could not be done, and why. */
+const lifecycleFailure = (result: { error?: unknown }, what: string): number => {
+    const code = String(result.error);
+    ui().error(`Could not ${what}: ${LIFECYCLE_REASONS[code] ?? code}`);
+    return 1;
+};
+
+const wrongArguments = (usage: string): number => {
+    ui().error('Wrong arguments');
+    ui().info(usage);
+    return 1;
+};
+
+type LifecycleArgs = { positionals: string[]; values: Map<string, string>; switches: Set<string> };
+
+/**
+ * The arguments of a lifecycle command: positionals, `--name=value` flags and bare `--switch`es, each flag at most once.
+ * Null for a flag it does not know, a repeat, a switch with a value, or a value flag with none.
+ */
+const lifecycleArgs = (
+    argv: string[],
+    valueFlags: readonly string[] = [],
+    switchFlags: readonly string[] = [],
+): LifecycleArgs | null => {
+    const parsed: LifecycleArgs = { positionals: [], values: new Map(), switches: new Set() };
+    for (const arg of argv) {
+        if (!arg.startsWith('--')) {
+            parsed.positionals.push(arg);
+            continue;
+        }
+        const [name, ...rest] = arg.slice(2).split('=');
+        if (switchFlags.includes(name) && rest.length === 0 && !parsed.switches.has(name)) parsed.switches.add(name);
+        else if (valueFlags.includes(name) && rest.length > 0 && !parsed.values.has(name))
+            parsed.values.set(name, rest.join('='));
+        else return null;
+    }
+    return parsed;
+};
+
+/** A generation or an epoch as a whole number, or null. */
+const wholeNumber = (text: string | undefined): number | null =>
+    text !== undefined && /^\d+$/.test(text) && Number.isSafeInteger(Number(text)) ? Number(text) : null;
+
+/** A subject as the handlers name it: `installation` (or `@installation`) is the installation, anything else a challenge id. */
+const subjectOf = (word: string): string => (word === 'installation' ? '@installation' : word);
+
+const subjectName = (subject: string): string =>
+    subject === '@installation' ? 'the installation' : `challenge ${stripTerminalControl(subject)}`;
+
+const INSTALLATION_USAGE = `Usage: scenario-installation ["<name>"|--clear] [--executor=${EXECUTORS.join('|')}]`;
+
+/**
+ * `scenario-installation`: shows the installation's scenario; with a name sets it (run by --executor, else by the runtime it
+ * has now, else by the CLI); with --clear clears it.
+ */
+const scenarioInstallationCommand = async (argv: string[]): Promise<number> => {
+    const args = lifecycleArgs(argv, ['executor'], ['clear']);
+    const clear = args?.switches.has('clear') === true;
+    const executor = args?.values.get('executor');
+    if (
+        !args ||
+        args.positionals.length > 1 ||
+        (clear && (args.positionals.length > 0 || executor !== undefined)) ||
+        (executor !== undefined && args.positionals.length === 0)
+    ) {
+        return wrongArguments(INSTALLATION_USAGE);
+    }
+    const current = await handlers()['get-installation-scenario'](null);
+    if (!current.success) return reportFailure(current, 'Could not read the installation scenario');
+    const assigned = current.installation;
+    if (args.positionals.length === 0 && !clear) {
+        ui().info(
+            assigned
+                ? `Installation scenario: "${stripTerminalControl(assigned.scenario)}", run by ${assigned.executor} (generation ${assigned.generation}).`
+                : 'The installation has no scenario.',
+        );
+        return 0;
+    }
+    if (current.generation === null)
+        return lifecycleFailure({ error: 'state-unreadable' }, 'change the installation scenario');
+    if (clear) {
+        const cleared = await handlers()['clear-scenario-assignment'](null, '@installation', current.generation);
+        if (!cleared.success) return lifecycleFailure(cleared, 'change the installation scenario');
+        ui().success('Installation scenario cleared.');
+        return 0;
+    }
+    const name = args.positionals[0];
+    const runner = executor ?? assigned?.executor ?? 'cli';
+    const set = await handlers()['set-installation-scenario'](
+        null,
+        name,
+        runner as (typeof EXECUTORS)[number],
+        current.generation,
+    );
+    if (!set.success) return lifecycleFailure(set, 'change the installation scenario');
+    ui().success(`Installation scenario "${stripTerminalControl(name)}" is set, run by ${runner}.`);
+    return 0;
+};
+
+const OWNER_USAGE = `Usage: scenario-owner-transfer --executor=${EXECUTORS.join('|')} --generation=<n>`;
+
+/** `scenario-owner-transfer`: hands the installation scenario to another runtime, under the generation the user saw. */
+const scenarioOwnerTransferCommand = async (argv: string[]): Promise<number> => {
+    const args = lifecycleArgs(argv, ['executor', 'generation']);
+    const executor = args?.values.get('executor');
+    const generation = wholeNumber(args?.values.get('generation'));
+    if (!args || args.positionals.length > 0 || executor === undefined || generation === null) {
+        return wrongArguments(OWNER_USAGE);
+    }
+    const result = await handlers()['transfer-installation-scenario-owner'](
+        null,
+        executor as (typeof EXECUTORS)[number],
+        generation,
+    );
+    if (!result.success) return lifecycleFailure(result, 'hand over the installation scenario');
+    ui().success(`The installation scenario is now run by ${executor} (generation ${result.generation}).`);
+    return 0;
+};
+
+/** `scenario-pause` and `scenario-resume`: one subject, a challenge id or `installation`. */
+const pauseOrResume =
+    (paused: boolean) =>
+    async (argv: string[]): Promise<number> => {
+        const usage = `Usage: scenario-${paused ? 'pause' : 'resume'} <challenge id|installation>`;
+        const args = lifecycleArgs(argv);
+        if (!args || args.positionals.length !== 1) return wrongArguments(usage);
+        const subject = subjectOf(args.positionals[0]);
+        const result = paused
+            ? await handlers()['pause-scenario'](null, subject)
+            : await handlers()['resume-scenario'](null, subject);
+        if (!result.success) return lifecycleFailure(result, paused ? 'pause the scenario' : 'resume the scenario');
+        ui().success(`${paused ? 'Paused' : 'Resumed'} the scenario of ${subjectName(subject)}.`);
+        return 0;
+    };
+
+const scenarioPauseCommand = pauseOrResume(true);
+const scenarioResumeCommand = pauseOrResume(false);
+
+const HANDOFF_USAGE = 'Usage: scenario-handoff <challenge id|installation> "<scenario>"|--clear --generation=<n>';
+
+/** `scenario-handoff`: gives a subject another scenario, or none, under the generation the user saw. */
+const scenarioHandoffCommand = async (argv: string[]): Promise<number> => {
+    const args = lifecycleArgs(argv, ['generation'], ['clear']);
+    const generation = wholeNumber(args?.values.get('generation'));
+    const clear = args?.switches.has('clear') === true;
+    if (!args || generation === null || args.positionals.length !== (clear ? 1 : 2))
+        return wrongArguments(HANDOFF_USAGE);
+    const subject = subjectOf(args.positionals[0]);
+    if (clear) {
+        const cleared = await handlers()['clear-scenario-assignment'](null, subject, generation);
+        if (!cleared.success) return lifecycleFailure(cleared, 'hand over the scenario');
+        ui().success(`${capitalised(subjectName(subject))} has no scenario now.`);
+        return 0;
+    }
+    const name = args.positionals[1];
+    const result = await handlers()['handoff-scenario'](null, subject, name, generation);
+    if (!result.success) return lifecycleFailure(result, 'hand over the scenario');
+    ui().success(`${capitalised(subjectName(subject))} now follows "${stripTerminalControl(name)}".`);
+    return 0;
+};
+
+const capitalised = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
+
+const POOL_USAGE =
+    'Usage: photo-pool list  |  photo-pool save "<name>" <photo id>...  |  photo-pool delete "<name>"  |  photo-pool rename "<name>" "<new name>"';
+
+/** `photo-pool`: the account's named photo pools. */
+const photoPoolCommand = async (argv: string[]): Promise<number> => {
+    const args = lifecycleArgs(argv);
+    const [action, ...rest] = args?.positionals ?? [];
+    if (!args || (action === 'list' && rest.length > 0)) return wrongArguments(POOL_USAGE);
+    if (action === 'list') {
+        const listed = await handlers()['get-photo-pools'](null);
+        if (!listed.success) return reportFailure(listed, 'Could not list the photo pools');
+        const names = Object.keys(listed.pools);
+        ui().info(names.length ? `Photo pools (${names.length}):` : 'No photo pools yet.');
+        for (const name of names)
+            ui().info(`  • ${stripTerminalControl(name)} — ${listed.pools[name].length} photo(s)`);
+        return 0;
+    }
+    if (action === 'save' && rest.length >= 2) {
+        const [name, ...ids] = rest;
+        const saved = await handlers()['set-photo-pool'](null, name, ids);
+        if (!saved.success) return lifecycleFailure(saved, 'save the pool');
+        ui().success(`Saved the pool "${stripTerminalControl(name)}" (${ids.length} photo(s)).`);
+        return 0;
+    }
+    if (action === 'delete' && rest.length === 1) {
+        const deleted = await handlers()['delete-photo-pool'](null, rest[0]);
+        if (!deleted.success) return lifecycleFailure(deleted, 'delete the pool');
+        ui().success(`Deleted the pool "${stripTerminalControl(rest[0])}".`);
+        return 0;
+    }
+    if (action === 'rename' && rest.length === 2) {
+        const renamed = await handlers()['rename-photo-pool'](null, rest[0], rest[1]);
+        if (!renamed.success) return lifecycleFailure(renamed, 'rename the pool');
+        ui().success(`Renamed the pool "${stripTerminalControl(rest[0])}" to "${stripTerminalControl(rest[1])}".`);
+        return 0;
+    }
+    return wrongArguments(POOL_USAGE);
+};
+
+/** A typed value as one word of text: its plain value (a list as its items). */
+const shown = (state: ValueState<ExprValue>): string => {
+    if (state.state !== 'known') return `(${state.state})`;
+    const { value } = state.value;
+    return stripTerminalControl(Array.isArray(value) ? value.join(', ') : String(value));
+};
+
+/** `scenario-snapshot`: where a subject's scenario stands, in a few plain lines. */
+const scenarioSnapshotCommand = async (argv: string[]): Promise<number> => {
+    const args = lifecycleArgs(argv);
+    if (!args || args.positionals.length !== 1)
+        return wrongArguments('Usage: scenario-snapshot <challenge id|installation>');
+    const result = await handlers()['get-scenario-snapshot'](null, subjectOf(args.positionals[0]));
+    if (!result.success) return reportFailure(result, 'Could not read the scenario snapshot');
+    const { assignment } = result;
+    const owner = assignment !== null && typeof assignment === 'object' ? `, run by ${assignment.executor}` : '';
+    const name = assignment !== null && typeof assignment === 'object' ? assignment.scenario : assignment;
+    const generation = result.generation === null ? 'unknown' : String(result.generation);
+    ui().info(
+        `${capitalised(subjectName(result.subject))}: ${name ? `scenario "${stripTerminalControl(name)}"${owner}` : 'no scenario'}, generation ${generation}.`,
+    );
+    if (result.corrupt) ui().warning('The saved progress cannot be read.');
+    ui().info(
+        result.paused
+            ? `Paused since ${at(result.paused.at)}${result.paused.reason ? `: ${stripTerminalControl(result.paused.reason)}` : ''}.`
+            : 'Not paused.',
+    );
+    if (result.withdrawn)
+        ui().info('A full Stop withdrew its settings: they apply again only after you start it again.');
+    if (result.publication) ui().info(`Settings published (revision ${result.publication.revision}).`);
+    const differing = Object.keys(result.effective).filter((key) => {
+        const effective = result.effective[key];
+        const saved = result.base[key];
+        return (
+            effective.state !== 'known' ||
+            saved?.state !== 'known' ||
+            JSON.stringify(saved.value) !== JSON.stringify(effective.value)
+        );
+    });
+    for (const key of differing) {
+        const effective = result.effective[key];
+        ui().info(
+            effective.state === 'known'
+                ? `  ${key}: ${shown(result.base[key] ?? { state: 'absent' })} → ${shown(effective)}`
+                : `  ${key}: not available (${effective.state === 'unknown' ? stripTerminalControl(effective.reason) : effective.reason})`,
+        );
+    }
+    if (result.pins) {
+        ui().info(`Boost pin: ${result.pins.effective.boost ?? 'none'}`);
+        ui().info(`Turbo pin: ${result.pins.effective.turbo ?? 'none'}`);
+    }
+    if (result.pool)
+        ui().info(`Photo pool "${stripTerminalControl(result.pool.name)}": ${result.pool.ids.length} photo(s)`);
+    return 0;
+};
+
+/** `stop-status`: the priority Stop fence, whether the last Stop is saved for every runtime, and whether the owner acknowledged it. */
+const stopStatusCommand = async (argv: string[]): Promise<number> => {
+    if (argv.length > 0) return wrongArguments('Usage: stop-status');
+    const result = await handlers()['get-stop-status'](null);
+    if (!result.success) return reportFailure(result, 'Could not read the Stop status');
+    const { fence } = result;
+    if (fence.state === 'missing') {
+        ui().info('Stop fence: not created yet.');
+        return 0;
+    }
+    if (fence.state === 'unreadable') {
+        ui().error(`The Stop fence cannot be read (${fence.reason}): nothing can be started until it can.`);
+        return 1;
+    }
+    ui().info(`Stop fence: epoch ${fence.stopEpoch}, ${fence.blocked ? 'blocked' : 'open'}.`);
+    if (!fence.lastStop) {
+        ui().info('No Stop has been recorded.');
+    } else {
+        ui().info(
+            `Last Stop: ${at(fence.lastStop.at)}, ${result.durable ? 'saved for every runtime and for a restart' : 'only this runtime stopped — the Stop could not be saved'}.`,
+        );
+    }
+    if (result.ownerAcknowledged === null)
+        ui().info('It is not known whether the installation owner has acknowledged it.');
+    else
+        ui().info(
+            `The installation owner ${result.ownerAcknowledged ? 'has acknowledged it' : 'has not acknowledged it yet'}.`,
+        );
+    return 0;
+};
+
 const scenarioVocabulary = async () => {
     for (const [kind, type, fields] of VOCABULARY_REFERENCE)
         ui().info(`  ${kind.padEnd(9)} ${type.padEnd(16)} ${fields}`);
@@ -546,6 +865,14 @@ export {
     scenarioResetAllCmd,
     scenarioDryRunCmd,
     scenarioSimulateCommand,
+    scenarioInstallationCommand,
+    scenarioOwnerTransferCommand,
+    scenarioPauseCommand,
+    scenarioResumeCommand,
+    scenarioHandoffCommand,
+    photoPoolCommand,
+    scenarioSnapshotCommand,
+    stopStatusCommand,
     parseSimulateArgs,
     isoToSeconds,
     scenarioVocabulary,

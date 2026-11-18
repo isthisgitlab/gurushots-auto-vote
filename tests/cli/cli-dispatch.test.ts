@@ -600,6 +600,18 @@ const COMMANDS_BLOCK = `Commands:
   scenario-simulate <name> --subject=installation|candidate|active|completed --until=<ISO 8601> [--challenge=<id>]
              [--assumptions=<file>] - A what-if run of the whole lifecycle until that time (spends nothing). A
              challenge subject needs --challenge. The file assumes outcomes ({"outcomes":{"submit":"success"}}).
+  scenario-installation ["<name>"|--clear] [--executor=electron|cli|web|android-service|android-app] - Show the installation
+             scenario; with a name, set it (run by --executor, else by its current runtime, else by the CLI); --clear clears it
+  scenario-owner-transfer --executor=<runtime> --generation=<n> - Hand the installation scenario to another runtime;
+             <n> is the generation scenario-installation or scenario-snapshot showed
+  scenario-pause <challenge id|installation> - Pause a scenario: no rule runs and nothing is published until it resumes
+  scenario-resume <challenge id|installation> - Resume a paused scenario
+  scenario-handoff <challenge id|installation> "<scenario>"|--clear --generation=<n> - Give a subject another scenario, or
+             none; <n> is the generation scenario-snapshot showed
+  photo-pool list|save "<name>" <photo id>...|delete "<name>"|rename "<name>" "<new name>" - The named photo pools a
+             scenario phase draws from
+  scenario-snapshot <challenge id|installation> - Where a subject stands: its scenario, generation, pause, settings in force, pins and pool
+  stop-status - The Stop fence: whether it blocks a start, whether the last Stop is saved, and whether the owner acknowledged it
   scenario-reset --challenge=<id> - Forget a challenge's scenario progress (the plan restarts). It may spend again an action
              whose outcome is unknown (no answer, or the app could not record it), and it restarts the scenario's
              spend counter.

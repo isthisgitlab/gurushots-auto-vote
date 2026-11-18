@@ -71,6 +71,14 @@ export interface PendingBoostEvidence {
     id: string | null;
 }
 
+/**
+ * What the host knows of the remote-access pairing (the platform's readScenarioHostStatus): `supported` false where the shell has
+ * no pairing; `remoteConnected` null where it cannot tell. Never a key, link or peer identity.
+ */
+export type HostEvidence =
+    | { supported: true; remoteEnabled: boolean; remoteConnected: boolean | null }
+    | { supported: false };
+
 /** One read-only scan of the photos a submission would consider (the same rules as submitting). */
 export interface PhotoScanEvidence {
     eligible: number;
@@ -109,12 +117,13 @@ export interface FactSnapshot {
     pins?: Evidence<PinEvidence>;
     pendingBoost?: Evidence<PendingBoostEvidence>;
     photoScan?: Evidence<PhotoScanEvidence>;
+    host?: Evidence<HostEvidence>;
 }
 
 /** The evidence fields a loader may add to a snapshot (every one optional: absent means not loaded). */
 export type FactEvidence = Pick<
     FactSnapshot,
-    'bankroll' | 'missions' | 'rewards' | 'entryAges' | 'uncertain' | 'pins' | 'pendingBoost' | 'photoScan'
+    'bankroll' | 'missions' | 'rewards' | 'entryAges' | 'uncertain' | 'pins' | 'pendingBoost' | 'photoScan' | 'host'
 >;
 
 export type FactValue = number | boolean | string | string[];
@@ -339,6 +348,7 @@ const ENTRY_UNCERTAIN = 'entry-uncertain';
 const ENTRY_PINS = 'entry-pins';
 const ENTRY_PENDING_BOOST = 'entry-pending-boost';
 const PHOTO_SCAN = 'photo-scan';
+const HOST = 'host';
 
 type MissionKindName = keyof MissionEvidence['needs'];
 
@@ -403,6 +413,23 @@ const rewardsClaimableCount = (snapshot: FactSnapshot): ValueState<number> => {
     if (lists.state !== 'known') return lists;
     return lists.value.complete ? known(lists.value.claimable.length) : unknownOf('rewards-list-incomplete', [REWARDS]);
 };
+
+/**
+ * One flag of the remote-access status: absent where the shell has no pairing to observe, unknown where the read failed or the
+ * shell cannot tell (a connection the main process does not see).
+ */
+const hostFlag =
+    (field: 'remoteEnabled' | 'remoteConnected') =>
+    (snapshot: FactSnapshot): ValueState<boolean> => {
+        const evidence = loaded(snapshot.host, HOST);
+        if (evidence.state !== 'known') return evidence;
+        const host: Record<string, unknown> = evidence.value;
+        if (host.supported === false) return absent('not-applicable');
+        if (host.supported !== true) return unknownOf('evidence-malformed', [HOST]);
+        const flag = host[field];
+        if (typeof flag === 'boolean') return known(flag);
+        return flag === null ? unknownOf('remote-status-unknown', [HOST]) : unknownOf('evidence-malformed', [HOST]);
+    };
 
 /** The recorded time of the entry a selector picks: the evidence of one entry, or why there is none. */
 const entryTime = (snapshot: FactSnapshot, select?: ScenarioSelector): ValueState<{ at: number; exact: boolean }> => {
@@ -871,6 +898,17 @@ const FACTS: Record<FactName, FactDefinition> = {
     'rewards.claimableCount': subjectNumberFact('count', rewardsClaimableCount, {
         stages: ['account'],
         dependencies: [REWARDS],
+    }),
+
+    'remote.enabled': subjectFact('boolean', hostFlag('remoteEnabled'), {
+        optional: true,
+        stages: ['account'],
+        dependencies: [HOST],
+    }),
+    'remote.connected': subjectFact('boolean', hostFlag('remoteConnected'), {
+        optional: true,
+        stages: ['account'],
+        dependencies: [HOST],
     }),
 
     'photos.eligibleCount': numberFact(

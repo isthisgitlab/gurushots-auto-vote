@@ -74,8 +74,23 @@ const logsWindowSettings = (payload: unknown): Record<string, unknown> => {
 };
 
 /**
+ * What reaches the Logs window of an event: the settings-changed payload cut down to its keys, the presentation projection
+ * as it is, and nothing of the effective settings (the complete projection is not the Logs window's to know).
+ */
+const sendToLogsWindow = (
+    send: WebContents['send'],
+    webContents: WebContents,
+    channel: string,
+    args: unknown[],
+): void => {
+    if (channel === 'effective-settings-changed') return;
+    send.call(webContents, channel, ...(channel === 'settings-changed' ? args.map(logsWindowSettings) : args));
+};
+
+/**
  * Limits every call from this window to the Logs channel set, whatever its preload exposes, and cuts what is sent to
- * it down to what it may know: its settings-changed events carry only the logsWindowSettingKeys. Only
+ * it down to what it may know: its settings-changed events carry only the logsWindowSettingKeys, and it is sent no
+ * effective-settings-changed (its presentation event is the only projection it receives). Only
  * `webContents.send` is filtered: `postMessage` and `mainFrame.send` are not, so nothing may use them toward this window
  * (the frame-guard lint rule enforces it over src/ts; the line-level exemptions are pinned in tests/ci-validation.test.ts).
  * @param webContents - the Logs window's, registered before its page loads
@@ -85,8 +100,7 @@ const restrictToLogsChannels = (webContents: WebContents): void => {
     const send = webContents.send;
     if (typeof send !== 'function') return;
     // oxlint-disable-next-line frame-guard/no-unfiltered-frame-send -- installs the Logs-window channel filter
-    webContents.send = (channel: string, ...args: unknown[]) =>
-        send.call(webContents, channel, ...(channel === 'settings-changed' ? args.map(logsWindowSettings) : args));
+    webContents.send = (channel: string, ...args: unknown[]) => sendToLogsWindow(send, webContents, channel, args);
 };
 
 /**

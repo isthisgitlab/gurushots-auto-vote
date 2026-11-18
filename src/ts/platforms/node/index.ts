@@ -23,7 +23,9 @@ import { createNodePaths } from './paths';
 import { createNodeStorage } from './store';
 import { createNodeWipe } from './wipe';
 
-import type { Platform, PlatformWindows } from '../../core/platform/port';
+import { unsupportedScenarioHostStatus } from '../../core/platform/port';
+
+import type { Platform, PlatformNative, PlatformWindows } from '../../core/platform/port';
 import type { InstallationExecutor } from '../../core/types/config';
 
 type ContextModule = typeof import('../../core/logger/context');
@@ -37,10 +39,11 @@ const paths = (): PathsModule => require('./paths') as PathsModule;
 
 const createNodeHttp = (): Platform['http'] => ({ adapter: null });
 
-const createNodeNative = (): Platform['native'] => ({
+const createNodeNative = (readScenarioHostStatus: PlatformNative['readScenarioHostStatus']): Platform['native'] => ({
     autovote: null,
     foregroundService: null,
     apkInstaller: null,
+    readScenarioHostStatus,
 });
 
 const createNodeCapabilities = (executor: NodeExecutor): Platform['capabilities'] => ({
@@ -68,19 +71,21 @@ const createNodeCapabilities = (executor: NodeExecutor): Platform['capabilities'
  * relaunch, the web server's, or the CLI's explicit no-ops — each shell
  * module passes its own), `executor` is the runtime the shell is, and `parts`
  * carries the shell-only members a shell injects (the CLI's vision-runtime
- * extractor).
+ * extractor). `readScenarioHostStatus` is the shell's look at its remote-access
+ * pairing (Electron's); a shell with none reports it unsupported.
  */
 const createNodePlatform = (
     windows: PlatformWindows,
     executor: NodeExecutor,
     parts: NodeAssetParts = {},
+    readScenarioHostStatus: PlatformNative['readScenarioHostStatus'] = unsupportedScenarioHostStatus,
 ): Platform => ({
     http: createNodeHttp(),
     storage: createNodeStorage(),
     paths: createNodePaths(),
     assets: createNodeAssets(parts),
     wipe: createNodeWipe(),
-    native: createNodeNative(),
+    native: createNodeNative(readScenarioHostStatus),
     windows,
     capabilities: createNodeCapabilities(executor),
 });

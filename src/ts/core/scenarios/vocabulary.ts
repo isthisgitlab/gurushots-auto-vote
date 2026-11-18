@@ -105,6 +105,8 @@ const FACT_NAMES = [
     'missions.nextExpiry',
     'rewards.claimable',
     'rewards.claimableCount',
+    'remote.enabled',
+    'remote.connected',
     'photos.eligibleCount',
     'photos.eligibleAtLeast',
     'photos.hasEligible',

@@ -29,6 +29,7 @@ const videoDecoderCliAssets = (): VideoDecoderCliAssetsModule =>
 // The CLI has no windows to broadcast to or relaunch.
 const windows: PlatformWindows = {
     broadcastSettingsChanged: () => undefined,
+    broadcastEvent: () => undefined,
     afterWipe: () => undefined,
 };
 

@@ -37,6 +37,8 @@ const setWebShellRun = (next: WebShellRun | null): void => {
 const windows: PlatformWindows = {
     // The connected browsers of the run that is live when the change lands.
     broadcastSettingsChanged: (newSettings) => run?.emit('settings-changed', newSettings),
+    // The effective-projection events reach the same browsers.
+    broadcastEvent: (channel, payload) => run?.emit(channel, payload),
     // The wipe stop: it ends the event streams and stops listening once the reply is out.
     afterWipe: () => run?.afterWipe(),
 };

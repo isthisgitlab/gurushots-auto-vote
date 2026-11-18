@@ -61,6 +61,22 @@ function createRendererDeadlineNotifier(): CycleNotifier | null {
 }
 
 /**
+ * The controller's routes to the host (the priority Stop fence, the installation's publication, the account's wake sources and
+ * the installation-only cycle), over IPC. The Android app's window has none yet: its native stores do not hold the fence until
+ * the Android durability work is in, so its controller stays local and its Stop says so.
+ */
+const hostRoutes = (): Partial<AutovoteHost> =>
+    platformKind() === 'capacitor'
+        ? {}
+        : {
+              stopFence: ipc.createStopFencePort(),
+              runArmedCycle: ipc.runArmedCycle,
+              getAccountWake: ipc.getAccountWakeFromHost,
+              withdrawInstallation: ipc.withdrawInstallationOnHost,
+              reArmInstallation: ipc.rearmInstallationOnHost,
+          };
+
+/**
  * Provider for the autovote state machine. A thin adapter over the autovote
  * controller (src/ts/core/autovote/controller.ts, which owns the renderer's
  * cadence chain): it builds the controller's host once per mount — the bridge
@@ -117,6 +133,7 @@ export function AutovoteProvider({
             translate: rendererTranslator.t,
             notifier: createRendererDeadlineNotifier(),
             getOnChallengesRefresh: () => refreshRef.current,
+            ...hostRoutes(),
         };
     }
 

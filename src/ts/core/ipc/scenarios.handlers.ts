@@ -20,16 +20,19 @@
  *   dry-run-scenario         what would fire right now and why; spends nothing
  *   simulate-scenario        a what-if run of a stored scenario or an unsaved draft over the same lifecycle and automation as live
  *                            (see services/scenarioRunner/simulation.ts): one request naming the scenario, the subject, the
- *                            horizon and the assumptions. The subject list (listSimulationSubjects, services/scenarioStatus.ts) is
- *                            a facade function: no channel for it yet.
+ *                            horizon and the assumptions.
+ *
+ * The installation scenario, pause / resume / handoff, the photo pools, the snapshot and capability reads, the effective
+ * projections and the controller's Stop-fence routes are in scenarioLifecycle.handlers.ts, spread into this map.
  */
 
 import * as logger from '../logger';
 import * as settings from '../settings';
 import * as apiFactory from '../apiFactory';
 import * as auth from '../services/auth';
-import { errorResult } from './errorResult';
 import { isIdArg } from './isIdArg';
+import { invalidArgs, isName, log, safely } from './scenarioSupport';
+import { buildLifecycleHandlers } from './scenarioLifecycle.handlers';
 import { getScenarioStatus, ledgerForMode, readSubjectRows, stepLockForMode } from '../services/scenarioStatus';
 import { findActionableChallenge } from '../services/findActiveChallenge';
 import { runSimulation } from '../services/scenarioRunner/simulation';
@@ -59,10 +62,6 @@ type FromResult<R> = R extends { ok: false }
 
 type ScenarioStatus = ReturnType<typeof getScenarioStatus>;
 
-const log = () => logger.withCategory('scenario');
-
-const isName = (value: unknown): value is string => typeof value === 'string' && value.trim() !== '';
-
 /** The revision of the scenario collection an options argument names: absent, or a count (anything else is invalid). */
 const revisionOf = (
     options: { expectedDefinitionRevision?: unknown } | null | undefined,
@@ -71,10 +70,6 @@ const revisionOf = (
     if (revision === undefined) return undefined;
     return typeof revision === 'number' && Number.isSafeInteger(revision) && revision >= 0 ? revision : null;
 };
-
-// `issues?: undefined` keeps this arm distinct from the validation failures that
-// do carry issues, so a renderer narrowing on `'issues' in result` keeps them.
-const invalidArgs: { success: false; error: string; issues?: undefined } = { success: false, error: 'invalid-args' };
 
 /**
  * A facade `{ok, issues}` result as an IPC result.
@@ -91,21 +86,6 @@ const fromResult = <R extends { ok: boolean; issues?: ScenarioIssue[] }>({ ok, .
               // A refusal of the lifecycle gate says why (`busy`, `conflict`, `unresolved-work`, ...).
               ...('reason' in result ? { reason: result.reason } : {}),
           }) as FromResult<R>;
-
-/**
- * Runs a handler body, turning a throw into an error result.
- */
-const safely = async <T>(
-    label: string,
-    body: () => T | Promise<T>,
-): Promise<T | { success: false; error: string; issues?: undefined }> => {
-    try {
-        return await body();
-    } catch (error) {
-        log().error(`Error handling ${label} request:`, error);
-        return errorResult(error, `The ${label} request failed`);
-    }
-};
 
 /**
  * The state with this pass's vote sample recorded, the transform the live pass applies first
@@ -288,6 +268,8 @@ const readStartingEvidence = async (
 
 const buildHandlers = () =>
     ({
+        ...buildLifecycleHandlers(),
+
         'get-scenarios': async () =>
             safely('get-scenarios', () => ({
                 success: true as const,

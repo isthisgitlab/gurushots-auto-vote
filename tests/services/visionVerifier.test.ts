@@ -67,6 +67,7 @@ const {
 // The service's windows: the explicit no-ops its shell module passes.
 const windows: PlatformWindows = {
     broadcastSettingsChanged: () => undefined,
+    broadcastEvent: () => undefined,
     afterWipe: () => undefined,
 };
 

@@ -150,6 +150,8 @@ describe('loading the Capacitor shell platform module defers the wrapped modules
             expect(platform().capabilities.backgroundServiceOwnsScenarios()).toBe(true);
             platform().windows.broadcastSettingsChanged({});
             expect(bridgeMock.emit).toHaveBeenCalledWith('settings-changed', {});
+            platform().windows.broadcastEvent('effective-presentation-changed', { revision: 1 });
+            expect(bridgeMock.emit).toHaveBeenCalledWith('effective-presentation-changed', { revision: 1 });
             void platform().windows.afterWipe();
             expect(bridgeMock.reloadWindow).toHaveBeenCalledTimes(1);
         });
@@ -192,6 +194,10 @@ describe('the Capacitor shell platform module', () => {
         expect(capacitorBridge.emit).toHaveBeenCalledWith('settings-changed', settings);
         installed.windows.afterWipe();
         expect(capacitorBridge.reloadWindow).toHaveBeenCalledTimes(1);
+    });
+
+    test('the app has no pairing to observe', async () => {
+        await expect(installed.native.readScenarioHostStatus()).resolves.toEqual({ supported: false });
     });
 
     test('the installed capability answers through the plugin-backed native part', () => {
