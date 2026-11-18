@@ -1,0 +1,11 @@
+# npm-check-updates config, applied to `npx ncu` and `pnpm bump`.
+#
+# tsrs is an intentional exact pin (see CONTRIBUTING.md). npm's `latest`
+# dist-tag for tsrs lags its published releases, and the pin and the tagged
+# version are prereleases with different identifiers, so ncu treats them as
+# incomparable and offers the older tagged version as an "upgrade". Reject
+# tsrs here and bump the pin by hand after checking `npm view tsrs versions` —
+# the same manual-bump policy as electron-builder's stale `latest` tag (see
+# .github/dependabot.yml).
+reject:
+    - tsrs
