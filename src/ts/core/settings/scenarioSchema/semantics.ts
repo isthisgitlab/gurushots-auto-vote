@@ -11,13 +11,16 @@ import {
     exprTypeOfDescriptor,
     listIssue,
 } from '../../scenarios/expressions';
-import { factStageIssues } from '../../scenarios/facts';
+import { FACTS, factStageIssues } from '../../scenarios/facts';
 import * as vocabulary from '../../scenarios/vocabulary';
 import { challengeValueSetIsValid } from '../defaults';
 import { schemaEntry, validateSetting, getValidationError } from '../schema';
+import { findProfileKey, normalizeProfileName } from '../profileStore';
+import { isPlainObject } from '../../plainObject';
 import { scenarioCapability } from '../scenarioCapabilities';
 
 import type { ExprType, SettingTypeLookup } from '../../scenarios/expressions';
+import type { ScenarioValueDescriptor } from '../../types/settings';
 import type { ScenarioCondition, ScenarioExpr } from '../../types/scenario';
 import type { ParsedScenarioDocument, ScenarioDocument, ScenarioPhase } from './shapes';
 
@@ -163,12 +166,14 @@ const conditionExpressionIssues = (condition: ScenarioCondition, path: string): 
 /**
  * Per-key validation of one phase's settings overlay, against the global
  * defaults as context. Mirrors a profile value set, with explicit errors
- * instead of silent drops.
+ * instead of silent drops. `boundKeys` are the keys the phase binds instead of
+ * setting: they complete a pair but are not values to check here.
  */
 const phaseSettingsIssues = (
     values: Record<string, unknown>,
     basePath: string,
     globalDefaults: Record<string, unknown>,
+    boundKeys: ReadonlySet<string>,
 ): ScenarioIssue[] => {
     const issues = [];
     const context = { ...globalDefaults, ...values };
@@ -181,8 +186,9 @@ const phaseSettingsIssues = (
             issues.push({ path, message: String(getValidationError(key, value, context)) });
         }
     }
+    // A pair is supplied together across the phase's settings and its bindings combined.
     for (const pair of SETTING_PAIRS) {
-        const present = pair.filter((key) => Object.prototype.hasOwnProperty.call(values, key));
+        const present = pair.filter((key) => Object.prototype.hasOwnProperty.call(values, key) || boundKeys.has(key));
         if (present.length === 1) {
             const missing = pair.find((key) => !present.includes(key));
             issues.push({ path: `${basePath}.${missing}`, message: `Set ${pair.join(' and ')} together` });
@@ -192,6 +198,92 @@ const phaseSettingsIssues = (
         issues.push({ path: basePath, message: 'These values conflict with the global defaults they combine with' });
     }
     return issues;
+};
+
+/**
+ * What an expression of this type is called in a message.
+ */
+const describeType = (type: ExprType): string => (type.kind === 'number' ? `a ${type.quantity}` : `a ${type.kind}`);
+
+/**
+ * Whether two expression types are the same: one kind, and for numbers one quantity.
+ */
+const sameType = (a: ExprType, b: ExprType): boolean =>
+    a.kind === b.kind && (a.kind !== 'number' || (b.kind === 'number' && a.quantity === b.quantity));
+
+/**
+ * The issues of one binding: its key is one a challenge phase may write and is not also set literally, the expression is
+ * sound and of the type the setting holds, and it reads only what a binding may. A binding is worked out before the
+ * phase's overlay exists, so it may read base settings and raw facts: a policy fact is derived from the effective
+ * settings, and an effective setting is the overlay itself.
+ */
+const bindingIssues = (
+    key: string,
+    expr: ScenarioExpr,
+    basePath: string,
+    literals: Record<string, unknown> | undefined,
+): ScenarioIssue[] => {
+    const path = `${basePath}.bindings.${key}`;
+    if (literals && Object.prototype.hasOwnProperty.call(literals, key)) {
+        return [{ path, message: `${key} is set in settings and bound: use one of them` }];
+    }
+    const refusal = phaseRefusal(key);
+    if (refusal !== undefined) return [{ path, message: refusal }];
+    // phaseRefusal returned nothing: the key has a capability a challenge phase may write.
+    const target = exprTypeOfDescriptor((scenarioCapability(key) as { value: ScenarioValueDescriptor }).value);
+    if (target === null) return [{ path, message: `"${key}" has no value an expression can set` }];
+    const checked = expressionIssues(expr, path);
+    const issues = [...checked.issues];
+    if (checked.type && !sameType(checked.type, target)) {
+        issues.push({
+            path,
+            message: `This gives ${describeType(checked.type)}, but ${key} takes ${describeType(target)}`,
+        });
+    }
+    if (checked.issues.length === 0) {
+        const { facts, settings } = exprReferences(expr);
+        for (const { name } of facts) {
+            if (FACTS[name].classification === 'policy') {
+                issues.push({
+                    path,
+                    message: `${name} depends on the effective settings: a binding cannot read it`,
+                });
+            }
+        }
+        for (const reference of settings) {
+            if (reference.view === 'effective') {
+                issues.push({
+                    path,
+                    message: `${reference.key} is read with the phase applied: a binding reads base settings only`,
+                });
+            }
+        }
+    }
+    return issues;
+};
+
+/**
+ * Every memory slot the expressions of a phase's bindings read.
+ */
+const bindingMemoryReads = (bindings: Record<string, ScenarioExpr>): string[] =>
+    Object.values(bindings).flatMap((expr) =>
+        exprReferences(expr).facts.flatMap(({ select }) => (select?.by === 'memory' ? [select.slot] : [])),
+    );
+
+/**
+ * Why a stored profile cannot be a phase's profile: it sets a key a phase may not write (the scenario assignment, Manual
+ * Only), which is refused rather than left out silently. Nothing when the profile is not saved (it can be saved later:
+ * a missing one blocks the challenge when the phase is published) or sets only keys a phase may write.
+ */
+const profileIssue = (name: string, path: string, profiles: Record<string, unknown>): ScenarioIssue | null => {
+    const key = findProfileKey(profiles, normalizeProfileName(name));
+    const values = key === null ? null : profiles[key];
+    if (!isPlainObject(values)) return null;
+    for (const settingKey of Object.keys(values)) {
+        const refusal = schemaEntry(settingKey)?.perChallenge ? phaseRefusal(settingKey) : undefined;
+        if (refusal !== undefined) return { path, message: `Profile "${name}" sets ${settingKey}. ${refusal}` };
+    }
+    return null;
 };
 
 /**
@@ -224,11 +316,15 @@ export const assignRuleIds = (doc: ParsedScenarioDocument): ScenarioDocument => 
 
 /**
  * Checks the zod shape cannot express: references, unique rule ids, nesting
- * depth, and the phase settings overlays.
+ * depth, and the phase settings overlays. `profiles` are the saved profiles a
+ * phase's profile is looked up in (null: not checked, which is how a stored
+ * scenario is read back: editing a profile later must not make the scenarios that
+ * name it vanish — the phase is blocked when it is published instead).
  */
 export const semanticIssues = (
     doc: ParsedScenarioDocument,
     globalDefaults: Record<string, unknown>,
+    profiles: Record<string, unknown> | null,
 ): ScenarioIssue[] => {
     const issues = [];
     const phaseNames = new Set(Object.keys(doc.phases));
@@ -239,8 +335,21 @@ export const semanticIssues = (
     const writes = new Set();
     for (const [phaseName, phaseDoc] of Object.entries(doc.phases)) {
         const phasePath = `phases.${phaseName}`;
-        if (phaseDoc.settings)
-            issues.push(...phaseSettingsIssues(phaseDoc.settings, `${phasePath}.settings`, globalDefaults));
+        const bindings = phaseDoc.bindings ?? {};
+        const boundKeys = new Set(Object.keys(bindings));
+        if (phaseDoc.settings || boundKeys.size > 0) {
+            issues.push(
+                ...phaseSettingsIssues(phaseDoc.settings ?? {}, `${phasePath}.settings`, globalDefaults, boundKeys),
+            );
+        }
+        for (const [key, expr] of Object.entries(bindings)) {
+            issues.push(...bindingIssues(key, expr, phasePath, phaseDoc.settings));
+        }
+        for (const slot of bindingMemoryReads(bindings)) reads.push({ slot, path: `${phasePath}.bindings` });
+        if (phaseDoc.profile !== undefined && profiles) {
+            const refused = profileIssue(phaseDoc.profile, `${phasePath}.profile`, profiles);
+            if (refused) issues.push(refused);
+        }
         (phaseDoc.rules ?? []).forEach((item, ruleIndex) => {
             const rulePath = `${phasePath}.rules[${ruleIndex}]`;
             if (item.id) {

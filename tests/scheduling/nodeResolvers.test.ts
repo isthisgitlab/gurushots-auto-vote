@@ -5,7 +5,10 @@
  * onlyBoost off.
  */
 
-jest.mock('../../src/ts/core/settings', () => ({ getEffectiveSetting: jest.fn() }));
+jest.mock('../../src/ts/core/settings', () => ({
+    getEffectiveSetting: jest.fn(),
+    scenarioSubjectAvailable: jest.fn(() => true),
+}));
 
 import { invalid } from '../helpers/invalid';
 
@@ -52,6 +55,20 @@ test('resolveAutoSubmitClock passes clock settings through and respects Manual O
         manualPhotosOnly: true,
         times: ['08:00', '20:00'],
         windowMinutes: 60,
+    });
+});
+
+describe('resolveThreshold — scenario settings', () => {
+    test('a challenge whose scenario settings are unavailable has no threshold, and its settings are not read', () => {
+        settings.scenarioSubjectAvailable.mockReturnValueOnce(false);
+        expect(resolveThreshold('7')).toBeNaN();
+        expect(settings.getEffectiveSetting).not.toHaveBeenCalledWith('lastMinuteThreshold', '7');
+    });
+
+    test('a readable one keeps its own', () => {
+        settings.getEffectiveSetting.mockReturnValueOnce(12);
+        expect(resolveThreshold('7')).toBe(12);
+        expect(settings.scenarioSubjectAvailable).toHaveBeenCalledWith('7');
     });
 });
 

@@ -23,9 +23,14 @@ import type {
 import type { ResolveScheduledFill } from './scheduledFill';
 import type { RuleTiming } from '../voting/currencyAuto';
 
-// Per-challenge lastMinuteThreshold for the shared threshold math.
+// Per-challenge lastMinuteThreshold for the shared threshold math. A challenge whose scenario settings are unavailable
+// (settings.scenarioSubjectAvailable) has no threshold to wake for: NaN is compared with nothing, so it is left out of
+// the decision and the others keep theirs. The resolvers below are fail-soft (a throw skips the challenge), which is
+// what their reads of an unavailable challenge do (ScenarioSettingUnavailableError).
 const resolveThreshold = ((challengeId: string) =>
-    settings.getEffectiveSetting('lastMinuteThreshold', challengeId)) satisfies ResolveThreshold;
+    settings.scenarioSubjectAvailable(challengeId) === false
+        ? Number.NaN
+        : settings.getEffectiveSetting('lastMinuteThreshold', challengeId)) satisfies ResolveThreshold;
 
 // Per-challenge scheduled-fill config for the cadence cap (./scheduledFill.ts).
 // Both trigger values are LISTS and are passed RAW — scheduledFill.ts owns the

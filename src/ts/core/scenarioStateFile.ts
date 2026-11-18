@@ -87,6 +87,35 @@ const isInFlight = (value: unknown): boolean =>
     (value.lost === undefined || (Array.isArray(value.lost) && value.lost.every(isSpendAction))) &&
     (value.unclearAt === undefined || Number.isFinite(value.unclearAt));
 
+const PUBLICATION_KEYS: ReadonlySet<string> = new Set([
+    'revision',
+    'documentFingerprint',
+    'phase',
+    'phaseEnteredAt',
+    'observedAt',
+    'validUntil',
+    'bindings',
+    'profile',
+]);
+
+/**
+ * The overlay a runner published (types/stores.ts ScenarioPublication). Strict: every field, no other. A malformed one
+ * is not read as a publication, but it does not make the record unreadable: it is derived data, and the next step
+ * publishes it again.
+ */
+const isPublication = (value: unknown): value is NonNullable<ScenarioState['published']> =>
+    isPlainObject(value) &&
+    Object.keys(value).every((key) => PUBLICATION_KEYS.has(key)) &&
+    isCount(value.revision) &&
+    typeof value.documentFingerprint === 'string' &&
+    value.documentFingerprint !== '' &&
+    typeof value.phase === 'string' &&
+    Number.isFinite(value.phaseEnteredAt) &&
+    Number.isFinite(value.observedAt) &&
+    (value.validUntil === null || Number.isFinite(value.validUntil)) &&
+    isPlainObject(value.bindings) &&
+    (value.profile === null || typeof value.profile === 'string');
+
 /**
  * @param r - an untrusted parsed-JSON value
  */
@@ -422,5 +451,5 @@ const createStateFile = (
     return { read, mutate, ...createResets({ store, acquireLock, read, asRequests, write }) };
 };
 
-export { ALL_KEY, createStateFile, epochOf, isRecord, isTombstone };
+export { ALL_KEY, createStateFile, epochOf, isPublication, isRecord, isTombstone };
 export type { Mutation, ResetResult, StateLock };

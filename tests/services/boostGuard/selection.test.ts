@@ -23,6 +23,26 @@ beforeEach(() => {
     selection = require('../../../src/ts/core/services/boostGuard/selection') as typeof selection;
 });
 
+describe('scenario settings', () => {
+    afterEach(() => jest.dontMock('../../../src/ts/core/settings'));
+
+    test('a challenge whose scenario settings are unavailable has no boost time to judge: it is left out', () => {
+        jest.resetModules();
+        jest.doMock('../../../src/ts/core/settings', () => ({
+            scenarioSubjectAvailable: (id: string | number) => id !== 3,
+        }));
+        const guarded = require('../../../src/ts/core/services/boostGuard/selection') as typeof selectionModule;
+        const bound = invalid<Challenge>({ id: 3, title: 'Bound', member: { boost: { state: 'AVAILABLE_KEY' } } });
+        guarded.rememberChallenges([keyed, bound], false);
+        const due = () => ({ actions: [{ action: 'boost', dueAt: NOW + 60 }] });
+        expect(
+            guarded
+                .imminentBoostChallenges(NOW, due, guarded.SUSPEND_BOOST_HORIZON_SEC, null)
+                .map((b) => b.challenge.id),
+        ).toEqual([2]);
+    });
+});
+
 describe('remembered list — suspend selection', () => {
     test('the suspend horizon is 30 min: due at exactly 30 min is selected, 31 min is not', () => {
         selection.rememberChallenges([keyed], false);

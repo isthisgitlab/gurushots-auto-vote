@@ -246,6 +246,11 @@ const handleSuggestPhotos = (async (
         ) {
             return liveRefusalError(live.refused);
         }
+        // The ranking reads the challenge's own settings: an active challenge whose scenario settings are
+        // unavailable is refused, not ranked on inherited values.
+        if ('challenge' in live && settings.scenarioSubjectAvailable(challengeId) === false) {
+            return liveRefusalError('scenario-unavailable');
+        }
         // A Discover row's challenge is un-joined; it resolves from the open/upcoming lists and still ranks —
         // the same library read the join flow makes. A failed list read is indistinguishable from a miss and
         // answers challenge-ended (pre-existing conflation, kept).

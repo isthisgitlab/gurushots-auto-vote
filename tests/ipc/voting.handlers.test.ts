@@ -197,6 +197,18 @@ describe('vote-on-challenge — full flow outcomes', () => {
         expect(result).toEqual({ success: false, error: 'Challenge "Missing" not found' });
     });
 
+    test('refuses a challenge whose scenario settings are unavailable, with the fixed code', async () => {
+        setToken('tok');
+        stubStrategy([buildChallenge({ id: 123, title: 'C' })]);
+        settings.scenarioSubjectAvailable.mockReturnValueOnce(false);
+        const handlers = buildHandlers();
+        await expect(handlers['vote-on-challenge-manual']({}, '123', 'C')).resolves.toEqual({
+            success: false,
+            error: 'scenario-settings-unavailable',
+        });
+        expect(manualVote.submitVotesForChallenge).not.toHaveBeenCalled();
+    });
+
     test('returns "not started" when challenge start_time is in future', async () => {
         setToken('tok');
         stubStrategy([buildChallenge({ id: 123, title: 'Future', startInPast: false })]);

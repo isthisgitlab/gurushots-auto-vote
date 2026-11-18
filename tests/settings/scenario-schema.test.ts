@@ -697,6 +697,180 @@ describe('validateScenario — semantic checks', () => {
     });
 });
 
+describe('validateScenario — phase bindings and profile', () => {
+    const percent = (value: number) => ({ kind: 'literal', value, quantity: 'percent' });
+    const seconds = (value: number) => ({ kind: 'literal', value, quantity: 'duration', unit: 'seconds' });
+    const baseSetting = (key: string) => ({ kind: 'setting', key, view: 'base' });
+    const phaseDoc = (phase: Record<string, unknown>) => doc({ phases: { main: phase } });
+    const accepted = (phase: Record<string, unknown>) => {
+        const result = validate(phaseDoc(phase));
+        expect(result).toEqual(expect.objectContaining({ ok: true }));
+        return (result as Accepted).scenario.phases.main;
+    };
+
+    test('a binding is kept beside the literals, with a profile name', () => {
+        const phase = accepted({
+            settings: { autoBoost: true },
+            bindings: { boostFreshEntryWait: baseSetting('boostFreshEntryWait') },
+            profile: '  Tactic ',
+        });
+        expect(phase.bindings).toEqual({ boostFreshEntryWait: baseSetting('boostFreshEntryWait') });
+        expect(phase.profile).toBe('Tactic');
+    });
+
+    test('a binding may read raw facts and base settings in an expression', () => {
+        accepted({
+            bindings: {
+                boostTime: {
+                    kind: 'difference',
+                    from: { kind: 'fact', name: 'clock.now' },
+                    to: { kind: 'fact', name: 'challenge.end' },
+                },
+            },
+        });
+    });
+
+    test('a key set literally and bound is refused', () => {
+        expectIssue(
+            phaseDoc({ settings: { boostTime: 60 }, bindings: { boostTime: seconds(30) } }),
+            'phases.main.bindings.boostTime',
+            'set in settings and bound',
+        );
+    });
+
+    test.each([
+        ['a key no phase may write', 'manualPhotosOnly', { kind: 'literal', value: true }, 'Manual Only'],
+        ['the assignment', 'scenario', { kind: 'literal', value: 'x' }, 'scenario assignment'],
+        ['a key that is not a setting', 'bogus', { kind: 'literal', value: true }, 'Not a per-challenge setting'],
+        ['an installation setting', 'language', { kind: 'literal', value: 'en' }, 'Not a per-challenge setting'],
+    ])('%s cannot be bound', (label, key, expression, message) => {
+        expectIssue(phaseDoc({ bindings: { [key]: expression } }), `phases.main.bindings.${key}`, message);
+    });
+
+    test('a setting whose value has no expression form cannot be bound', () => {
+        expectIssue(
+            phaseDoc({ bindings: { chosenPhotos: baseSetting('chosenPhotos') } }),
+            'phases.main.bindings.chosenPhotos',
+            'no value an expression can set',
+        );
+    });
+
+    test.each([
+        ['another quantity', 'exposure', seconds(30), 'This gives a duration, but exposure takes a percent'],
+        ['another kind', 'autoBoost', percent(5), 'This gives a percent, but autoBoost takes a boolean'],
+        [
+            'a list for a boolean',
+            'autoBoost',
+            { kind: 'literal', value: ['a'] },
+            'a list, but autoBoost takes a boolean',
+        ],
+    ])('a binding of %s is refused', (label, key, expression, message) => {
+        expectIssue(phaseDoc({ bindings: { [key]: expression } }), `phases.main.bindings.${key}`, message);
+    });
+
+    test('an expression with a mistake reports it once, at the binding', () => {
+        expectIssue(
+            phaseDoc({
+                bindings: { boostTime: { kind: 'offset', from: percent(1), by: percent(2), direction: 'after' } },
+            }),
+            'phases.main.bindings.boostTime',
+            'offset moves an instant by a duration',
+        );
+    });
+
+    test('a binding cannot read a setting with the phase applied', () => {
+        expectIssue(
+            phaseDoc({ bindings: { boostTime: { kind: 'setting', key: 'boostTime', view: 'effective' } } }),
+            'phases.main.bindings.boostTime',
+            'a binding reads base settings only',
+        );
+    });
+
+    test('a binding cannot read a fact that depends on the effective settings', () => {
+        expectIssue(
+            phaseDoc({ bindings: { exposure: { kind: 'fact', name: 'photos.eligibleCount' } } }),
+            'phases.main.bindings.exposure',
+            'depends on the effective settings',
+        );
+    });
+
+    test('a binding reads only facts available while a challenge is active', () => {
+        expectIssue(
+            phaseDoc({ bindings: { autoBoost: { kind: 'fact', name: 'rewards.claimable' } } }),
+            'phases.main.bindings.autoBoost',
+            'is not available',
+        );
+    });
+
+    test('a memory slot a binding reads must be remembered by some action', () => {
+        const binding = {
+            boostTime: { kind: 'fact', name: 'entry.votes', select: { by: 'memory', slot: 'pick' } },
+        };
+        expect(issuesOf(phaseDoc({ bindings: binding }))).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ path: 'phases.main.bindings', message: expect.stringContaining('pick') }),
+            ]),
+        );
+    });
+
+    test('a pair must be supplied together across the literals and the bindings', () => {
+        accepted({ settings: { exposureTarget: 100 }, bindings: { exposure: baseSetting('exposure') } });
+        accepted({ settings: { exposure: 50 }, bindings: { exposureTarget: baseSetting('exposureTarget') } });
+        expectIssue(
+            phaseDoc({ bindings: { exposure: baseSetting('exposure') } }),
+            'phases.main.settings.exposureTarget',
+            'Set exposure and exposureTarget together',
+        );
+        expectIssue(
+            phaseDoc({ bindings: { finalWindowExposureTarget: baseSetting('finalWindowExposureTarget') } }),
+            'phases.main.settings.finalWindowExposure',
+            'together',
+        );
+    });
+
+    test('a bad profile name or a non-string profile is a shape error', () => {
+        expectIssue(phaseDoc({ profile: '' }), 'phases.main.profile', 'Name a profile');
+        expectIssue(phaseDoc({ profile: 'x'.repeat(61) }), 'phases.main.profile', '<=60 characters');
+        expect(validate(phaseDoc({ profile: 7 })).ok).toBe(false);
+    });
+
+    describe('the stored profile it names', () => {
+        const stored = (values: unknown) => ({ Tactic: values });
+        const check = (profiles: Record<string, unknown> | null, name = 'tactic') =>
+            validateScenario(phaseDoc({ profile: name }), globalDefaults, profiles);
+
+        test.each([
+            [
+                'the scenario assignment',
+                { scenario: 'Other' },
+                'sets scenario. A phase cannot change the scenario assignment itself',
+            ],
+            ['Manual Only', { manualPhotosOnly: true }, 'sets manualPhotosOnly. A phase cannot change Manual Only'],
+        ])('is refused when it sets %s, not left out silently', (label, values, message) => {
+            const result = check(stored(values));
+            expect(result.ok).toBe(false);
+            expect((result as Refused).issues).toEqual([
+                { path: 'phases.main.profile', message: `Profile "tactic" ${message}` },
+            ]);
+        });
+
+        test('is accepted when it sets only keys a phase may write', () => {
+            expect(check(stored({ autoBoost: true, boostTime: 60 })).ok).toBe(true);
+        });
+
+        test('may be saved after the scenario, and is not looked at when a stored scenario is read back', () => {
+            expect(check({}).ok).toBe(true);
+            expect(check(stored('not an object')).ok).toBe(true);
+            expect(check(null).ok).toBe(true);
+            expect(validate(phaseDoc({ profile: 'Tactic' })).ok).toBe(true);
+        });
+
+        test('a stale key outside the schema in it is not a refusal here', () => {
+            expect(check(stored({ retired: 1 })).ok).toBe(true);
+        });
+    });
+});
+
 describe('parseScenarioJson', () => {
     test('parses JSON text', () => {
         expect(parseScenarioJson('{"a":1}')).toEqual({ ok: true, value: { a: 1 } });

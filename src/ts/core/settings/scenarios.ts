@@ -131,7 +131,7 @@ const storeScenario = (
     },
 ): ScenarioSaveResult => {
     const settings = loadSettings();
-    const result = validateScenario(doc, globalChallengeValues(settings));
+    const result = validateScenario(doc, globalChallengeValues(settings), settings.profiles);
     if (!result.ok) return failure(result.issues);
     const { scenario } = result;
 
@@ -243,7 +243,10 @@ const describeScenario = (scenario: ScenarioDocument) => {
  * Validate a scenario document without storing it (the builder's draft, the
  * simulation of an unsaved edit).
  */
-const checkScenario = (doc: unknown) => validateScenario(doc, globalChallengeValues(loadSettings()));
+const checkScenario = (doc: unknown) => {
+    const settings = loadSettings();
+    return validateScenario(doc, globalChallengeValues(settings), settings.profiles);
+};
 
 /**
  * Parse and validate shared scenario JSON without storing it — the preview
@@ -253,7 +256,12 @@ const previewScenarioImport = (text: unknown): ScenarioImportPreview => {
     const parsed = parseScenarioJson(text);
     if (!parsed.ok) return failure(parsed.issues);
     // A shared file written under settings format 1 names its settings by their format 1 keys.
-    const result = validateScenario(renameV1ScenarioDocument(parsed.value), globalChallengeValues(loadSettings()));
+    const settings = loadSettings();
+    const result = validateScenario(
+        renameV1ScenarioDocument(parsed.value),
+        globalChallengeValues(settings),
+        settings.profiles,
+    );
     if (!result.ok) return failure(result.issues);
     return {
         ok: true,

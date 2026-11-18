@@ -80,6 +80,7 @@ jest.mock('../../src/ts/core/settings', () => ({
     hasRuleJoinOptIn: jest.fn(() => false),
     getChallengeOverride: jest.fn(() => null),
     getSetting: jest.fn(() => false),
+    scenarioSubjectAvailable: jest.fn(() => true),
 }));
 
 import cancellationModule = require('../../src/ts/core/voting/cancellation');
@@ -742,6 +743,21 @@ describe('runJoinPass', () => {
         expect(byId[1]).toBe('joined');
         expect(byId[2]).toBe('skipped:autojoin-off');
         expect(res.joined).toBe(1);
+    });
+
+    test('a candidate whose scenario settings are unavailable is left alone, the others join', async () => {
+        settings.scenarioSubjectAvailable.mockImplementation((id) => String(id) !== '1');
+        const deps = makeDeps({
+            getMemberChallenges: openList([
+                { id: 1, join_coins: 0, type: 'flash', title: 'Bound' },
+                { id: 2, join_coins: 0, type: 'flash', title: 'Other' },
+            ]),
+        });
+        const res = await runJoinPass('tok', Date.now(), deps);
+        const byId = Object.fromEntries(res.results.map((r) => [r.id, r.status])) as Record<string, string>;
+        expect(byId[1]).toBe('skipped:scenario-unavailable');
+        expect(byId[2]).toBe('joined');
+        settings.scenarioSubjectAvailable.mockReset().mockReturnValue(true);
     });
 
     test('master ON but a rule disables autoJoin → that title is skipped, others join', async () => {

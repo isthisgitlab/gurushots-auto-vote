@@ -13,6 +13,8 @@
  */
 
 jest.mock('../../src/ts/core/settings', () => ({
+    scenarioSubjectAvailable: jest.fn(() => true),
+    scenarioSubjectReason: jest.fn(() => null),
     getEffectiveSetting: jest.fn(() => false),
     getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
     consumeChosenPhotos: jest.fn(() => false),
@@ -1501,6 +1503,30 @@ describe('per-challenge error isolation', () => {
 
         expect(votingLogic.evaluateVotingDecision).toHaveBeenCalledTimes(2);
         expect(result.success).toBe(true);
+    });
+
+    // A phase with bindings or a profile is read through the settings its runner published: with none valid, nothing
+    // below the scenario step may run on inherited values — for that challenge alone.
+    test('a challenge whose scenario settings are unavailable is skipped with a reason, and the rest of the pass runs', async () => {
+        const api = makeApi([makeChallenge({ id: 1 }), makeChallenge({ id: 2 })]);
+        settingsMock.scenarioSubjectAvailable.mockImplementation((id) => String(id) !== '1');
+        settingsMock.scenarioSubjectReason.mockReturnValue('nothing is published for this phase yet');
+
+        const result = await runVotingPass('tok', null, deps(api));
+
+        expect(result.success).toBe(true);
+        // only the second challenge was decided
+        expect(votingLogic.evaluateVotingDecision).toHaveBeenCalledTimes(1);
+        expect(votingLogic.evaluateVotingDecision.mock.calls[0][0]).toMatchObject({ id: 2 });
+        const warnings = jest
+            .mocked(logger.withCategory)
+            .mock.results.flatMap((r) =>
+                jest.mocked(r.value as CategoryLogger).warning.mock.calls.map((call) => String(call[0])),
+            );
+        expect(warnings).toContain(
+            '[Challenge 1: Orchestrated] scenario settings unavailable — skipped this pass (nothing is published for this phase yet)',
+        );
+        settingsMock.scenarioSubjectAvailable.mockReset().mockReturnValue(true);
     });
 
     // The cancellation checkpoints inside that body use `return`, which a try/catch does not

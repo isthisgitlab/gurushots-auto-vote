@@ -218,8 +218,18 @@ const warnMissingCloseTime = (challenge: Challenge, reason: string) => {
     );
 };
 
+/**
+ * Whether the candidate's scenario settings cannot be read (its phase has bindings or a profile and none is published).
+ * Optional-chained like the other per-challenge reads here: a partial settings facade degrades to "readable".
+ */
+const isScenarioUnavailable = (challenge: Partial<Challenge>): boolean =>
+    challenge?.id !== undefined &&
+    challenge?.id !== null &&
+    settings.scenarioSubjectAvailable?.(challenge.id) === false;
+
 export {
     PER_ID_JOIN_KEYS,
+    isScenarioUnavailable,
     resolveJoinSetting,
     anyTitleRuleEnablesAutoJoin,
     isAutoJoinActive,

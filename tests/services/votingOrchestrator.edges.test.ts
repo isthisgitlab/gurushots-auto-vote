@@ -7,6 +7,8 @@
  */
 
 jest.mock('../../src/ts/core/settings', () => ({
+    scenarioSubjectAvailable: jest.fn(() => true),
+    scenarioSubjectReason: jest.fn(() => null),
     getEffectiveSetting: jest.fn(() => false),
     getSetting: jest.fn(() => 'UTC'),
     getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),

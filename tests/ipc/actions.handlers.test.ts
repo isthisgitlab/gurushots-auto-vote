@@ -723,6 +723,16 @@ describe('fill-challenge-now', () => {
         expect(result).toEqual({ success: false, error: 'Challenge no longer active' });
     });
 
+    test('refuses a challenge whose scenario settings are unavailable, with the fixed code', async () => {
+        stubAuthGuardOk();
+        stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [{ id: 123, title: 'C' }] }) });
+        autoFill.fillChallengeNow = jest.fn();
+        settings.scenarioSubjectAvailable.mockReturnValueOnce(false);
+        const result = await buildHandlers()['fill-challenge-now']({}, '123', 'one');
+        expect(result).toEqual({ success: false, error: 'scenario-settings-unavailable' });
+        expect(autoFill.fillChallengeNow).not.toHaveBeenCalled();
+    });
+
     test('passes normalised mode (anything other than "all" → "one") to autoSubmit', async () => {
         stubAuthGuardOk();
         const liveChallenge = { id: 123, title: 'C' };
@@ -1057,6 +1067,12 @@ describe('suggest-photos', () => {
         autoFill.resolveMemberId.mockReset().mockResolvedValue('member-9');
         stubAuthGuardOk();
         stubLive();
+    });
+
+    test('an active challenge whose scenario settings are unavailable is refused, not ranked', async () => {
+        settings.scenarioSubjectAvailable.mockReturnValueOnce(false);
+        await expect(suggest()).resolves.toEqual({ success: false, error: 'scenario-settings-unavailable' });
+        expect(autoFill.suggestFillPhotos).not.toHaveBeenCalled();
     });
 
     test('GS suggestions preserve order and use eligible library records', async () => {

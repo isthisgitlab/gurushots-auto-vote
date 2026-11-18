@@ -12,6 +12,8 @@
  */
 
 jest.mock('../../src/ts/core/settings', () => ({
+    scenarioSubjectAvailable: jest.fn(() => true),
+    scenarioSubjectReason: jest.fn(() => null),
     loadSettings: jest.fn(),
     getSetting: jest.fn(),
     getEffectiveSetting: jest.fn(),

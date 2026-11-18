@@ -145,6 +145,30 @@ export interface ScenarioFiredRecord {
     haltOrigin?: 'pending';
 }
 
+/**
+ * What the scenario runner published for a challenge's active phase: the one prepared settings overlay everything else
+ * reads (settings/scenarioOverlay.ts). Only the resolved binding values are held; the phase's literals and its profile
+ * are read from the current configuration, and `documentFingerprint` proves they still are what the publication was
+ * made from.
+ */
+export interface ScenarioPublication {
+    /** Counts the publications of this record (1 for the first). */
+    revision: number;
+    /** A hash of the phase's definition and of the profile it selects, as they were when this was published. */
+    documentFingerprint: string;
+    phase: string;
+    /** The phase entry this was published for: a publication does not outlive its phase entry. */
+    phaseEnteredAt: number;
+    /** unix seconds: when the evidence the bindings were resolved from was observed */
+    observedAt: number;
+    /** unix seconds: the next instant a binding result can change at, or null when none is known */
+    validUntil: number | null;
+    /** setting key → resolved value, one per binding of the phase */
+    bindings: Record<string, unknown>;
+    /** The profile the phase selected, or null. */
+    profile: string | null;
+}
+
 /** A challenge's runtime position in its scenario (scenarioStateStore record). */
 export interface ScenarioState {
     scenario: string;
@@ -183,6 +207,13 @@ export interface ScenarioState {
     updatedAt?: number;
     /** how many times this challenge's record was reset when the stored one was written (see ScenarioEpoch) */
     gen?: number;
+    /** The overlay the runner published for the active phase (see ScenarioPublication). */
+    published?: ScenarioPublication;
+    /**
+     * Not stored: set when the stored record held a `published` field that is malformed. The field is left out of the
+     * state (the next write drops it), and the publication reads as unavailable; the rest of the record is intact.
+     */
+    publicationUnreadable?: true;
     /**
      * Not stored: the resets this state was read under. A write of a state read under older ones is refused, so a
      * step that was running when its challenge (or every challenge) was reset cannot bring the old progress back.

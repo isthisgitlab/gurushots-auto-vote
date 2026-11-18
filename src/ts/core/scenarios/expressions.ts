@@ -312,6 +312,39 @@ const settingValue = (descriptor: ScenarioValueDescriptor, raw: unknown): ValueS
 };
 
 /**
+ * The stored form of an expression value for a setting of this descriptor: the counterpart of `settingValue`, for a
+ * binding. A duration goes back to the setting's own time unit; a value of another kind or quantity, or one with no
+ * stored form, is refused rather than coerced, and nothing is rounded or clamped (the setting's own validation judges
+ * the result).
+ */
+const storedSettingValue = (
+    descriptor: ScenarioValueDescriptor,
+    value: ExprValue,
+): { ok: true; value: unknown } | { ok: false; reason: string } => {
+    const refused = (reason: string) => ({ ok: false as const, reason });
+    switch (descriptor.kind) {
+        case 'number':
+            if (value.kind !== 'number' || value.quantity !== descriptor.quantity) return refused('type-mismatch');
+            return {
+                ok: true,
+                value: descriptor.quantity === 'duration' ? value.value / UNIT_SECONDS[descriptor.unit] : value.value,
+            };
+        case 'boolean':
+            return value.kind === 'boolean' ? { ok: true, value: value.value } : refused('type-mismatch');
+        case 'string':
+            return value.kind === 'string' ? { ok: true, value: value.value } : refused('type-mismatch');
+        case 'enum':
+            return value.kind === 'string' && descriptor.values.includes(value.value)
+                ? { ok: true, value: value.value }
+                : refused('type-mismatch');
+        case 'list':
+            return value.kind === 'list' ? { ok: true, value: [...value.value] } : refused('type-mismatch');
+        default:
+            return refused('setting-not-expressible');
+    }
+};
+
+/**
  * The type an expression reads from a setting of this descriptor, or null when the setting has no expression form.
  */
 const exprTypeOfDescriptor = (descriptor: ScenarioValueDescriptor): ExprType | null => {
@@ -568,6 +601,7 @@ export {
     absentTruth,
     listTruth,
     settingValue,
+    storedSettingValue,
     exprTypeOfDescriptor,
     checkExpression,
     compareIssue,

@@ -10,12 +10,16 @@ import * as settings from '../../settings';
 import { platform } from '../../platform/port';
 import { effectiveTimezone } from '../../settings/uiDefaults';
 import { evaluateScenario } from '../../scenarios/evaluate';
+import { evaluateExpression } from '../../scenarios/expressions';
 import { entriesOf } from '../../scenarios/selectors';
 import { recordVoteSample } from '../../scenarios/speed';
 import { initialState } from '../../scenarioStateStore';
 import type { StateLock } from '../../scenarioStateStore';
 import type { Challenge } from '../../types/gurushots';
+import type { ScenarioExpr } from '../../types/scenario';
 import type { ScenarioState } from '../../types/stores';
+import type { ExpressionContext } from '../../scenarios/expressions';
+import type { FactEvidence } from '../../scenarios/facts';
 import type { PassContext } from '../votingOrchestrator';
 import { errorMessage } from '../../errorMessage';
 import type { RunnerContext, ScenarioAction, ScenarioPass } from './types';
@@ -68,6 +72,133 @@ const noteHalt = (ctx: RunnerContext, state: ScenarioState, halted: string): voi
 };
 
 /**
+ * The state without its published overlay (and the flag that a stored one was malformed): the same object when there is
+ * nothing to drop.
+ */
+const withoutPublication = (state: ScenarioState): ScenarioState => {
+    if (!state.published && !state.publicationUnreadable) return state;
+    const rest = { ...state };
+    delete rest.published;
+    delete rest.publicationUnreadable;
+    return rest;
+};
+
+/**
+ * The expressions of a phase's bindings and the sub-expressions of each, depth first.
+ */
+const expressionNodes = (expr: ScenarioExpr): ScenarioExpr[] => {
+    switch (expr.kind) {
+        case 'offset':
+            return [expr, ...expressionNodes(expr.from), ...expressionNodes(expr.by)];
+        case 'difference':
+            return [expr, ...expressionNodes(expr.from), ...expressionNodes(expr.to)];
+        case 'add':
+        case 'subtract':
+            return [expr, ...expressionNodes(expr.left), ...expressionNodes(expr.right)];
+        case 'earlier':
+        case 'later':
+        case 'min':
+        case 'max':
+            return [expr, ...expr.of.flatMap(expressionNodes)];
+        default:
+            return [expr];
+    }
+};
+
+/**
+ * The next clock boundary that can change what the bindings resolve to: the earliest instant in the future that any part of
+ * them stands for (a close time, a point offset from it). Null when there is none. A published overlay is valid until
+ * then, and is made again after it.
+ *
+ * @param now - unix seconds
+ */
+const nextBindingInstant = (bindings: readonly ScenarioExpr[], ctx: ExpressionContext, now: number): number | null => {
+    const instants = bindings
+        .flatMap(expressionNodes)
+        .map((node) => evaluateExpression(node, ctx))
+        .flatMap((value) =>
+            value.state === 'known' && value.value.kind === 'number' && value.value.quantity === 'instant'
+                ? [value.value.value]
+                : [],
+        )
+        .filter((instant) => instant > now);
+    return instants.length ? Math.min(...instants) : null;
+};
+
+/**
+ * The words of a phase whose settings could not be prepared, for the halt notice: the phase, the setting that failed
+ * (none when it is the profile), and why.
+ */
+const blockedText = (phase: string, key: string | null, reason: string): string =>
+    key === null ? `phase ${phase}: ${reason}` : `phase ${phase}: ${key}: ${reason}`;
+
+/**
+ * Stops a challenge whose phase settings could not be prepared: its stale publication is cleared (so every reader finds
+ * the settings unavailable rather than the previous values), and the halt is recorded as a notice. No rule runs.
+ */
+const blockPhase = (
+    ctx: RunnerContext,
+    state: ScenarioState,
+    failure: { key: string | null; reason: string },
+): void => {
+    const cleared = withoutPublication(state);
+    if (cleared !== state && ctx.ledger.set(ctx.challengeId, cleared) !== 'saved') return;
+    const halted = blockedText(state.phase, failure.key, failure.reason);
+    noteHalt(ctx, cleared, halted);
+    log().error(`${logger.challengeTag(ctx.challenge)} scenario halted: ${halted}`, null);
+};
+
+/**
+ * What one evaluation of a phase reads: its evidence, and its settings. A phase with bindings or a profile gets its overlay
+ * prepared and published here (the step lock is held, and the ledger write is the one that already holds the state), and
+ * the evidence that derives from the effective settings is loaded only once that overlay stands. Null when the phase's
+ * settings could not be prepared (the challenge is stopped) or the publication was not saved: no rule may run.
+ */
+const prepareEvaluation = async (
+    ctx: RunnerContext,
+    state: ScenarioState,
+): Promise<{ state: ScenarioState; evidence: FactEvidence; readSetting?: ExpressionContext['readSetting'] } | null> => {
+    const { challenge, challengeId, scenario, timezone } = ctx;
+    const raw = await loadScenarioSnapshot(scenario, ctx, state.phase, 'raw');
+    const phase = scenario.phases[state.phase];
+    // A phase the scenario no longer has is the engine's to halt.
+    if (!phase) return { state, evidence: raw };
+    const observedAt = nowSec();
+    const prepared = settings.prepareScenarioSnapshot(
+        challengeId,
+        scenario,
+        state,
+        (readBase) => {
+            const facts: ExpressionContext = {
+                challenge,
+                state,
+                now: observedAt,
+                timezone,
+                ...raw,
+                readSetting: readBase,
+            };
+            const expressions = phase.bindings ?? {};
+            return {
+                bound: Object.fromEntries(
+                    Object.entries(expressions).map(([key, expr]) => [key, evaluateExpression(expr, facts)]),
+                ),
+                validUntil: nextBindingInstant(Object.values(expressions), facts, observedAt),
+            };
+        },
+        observedAt,
+    );
+    if (!prepared.ok) {
+        blockPhase(ctx, state, prepared);
+        return null;
+    }
+    const { publication, readSetting } = prepared.snapshot;
+    const next = publication ? { ...withoutPublication(state), published: publication } : withoutPublication(state);
+    if (next !== state && ctx.ledger.set(challengeId, next) !== 'saved') return null;
+    const policy = await loadScenarioSnapshot(scenario, ctx, state.phase, 'policy');
+    return { state: next, evidence: { ...raw, ...policy }, readSetting };
+};
+
+/**
  * Runs the rules of the challenge's scenario that are due, one after another, until none is or one stops.
  *
  * @param now - unix seconds
@@ -83,15 +214,19 @@ const advance = async (ctx: RunnerContext, now: number): Promise<void> => {
     const firedThisPass: Set<string> = new Set();
     const visited = new Set([state.phase]);
     for (;;) {
-        // The evidence the rules of this phase read, fetched fresh for each evaluation (the bankroll as before).
-        const evidence = await loadScenarioSnapshot(scenario, ctx, state.phase);
+        // The settings of this phase and the evidence its rules read, fetched fresh for each evaluation (the bankroll as
+        // before). A phase with bindings or a profile is published here, again after every confirmed action and phase change.
+        const prepared = await prepareEvaluation(ctx, state);
+        if (!prepared) return;
+        ({ state } = prepared);
         const decision = evaluateScenario({
             scenario,
             state,
             challenge,
             now: nowSec(),
             timezone,
-            evidence,
+            evidence: prepared.evidence,
+            readSetting: prepared.readSetting,
             skipRuleIds: firedThisPass,
         });
         if (decision.halted) {

@@ -282,6 +282,8 @@ const buildHandlers = () =>
                     ...getScenarioStatus(challengeId),
                     serviceRuns: backgroundServiceOwnsScenarios(),
                     manualOnly: isManualPhotosOnly(settings, challengeId),
+                    // `overlay`: where the phase's settings come from, and whether they can be read (a phase with bindings or a profile needs its runner's publication).
+                    overlay: settings.scenarioOverlayStatus(challengeId),
                 };
             });
         },
@@ -301,7 +303,13 @@ const buildHandlers = () =>
                 if (!loaded.ok) return loaded.response;
                 const { status } = loaded;
                 // A plan that has not started has no phase clock yet: its in-phase bounds are left out.
-                const decision = evaluateScenario({ ...runInput(loaded), phaseClock: status.state !== null });
+                // Its own private read: the base settings, and the effective ones as the runner last published them. It
+                // never writes or clears a publication.
+                const decision = evaluateScenario({
+                    ...runInput(loaded),
+                    phaseClock: status.state !== null,
+                    readSetting: (key, view) => settings.readScenarioSetting(key, view, challengeId),
+                });
                 // Manual Only pauses the scenario: nothing fires and no wake is due.
                 const manualOnly = isManualPhotosOnly(settings, challengeId);
                 return {

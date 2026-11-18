@@ -6,7 +6,7 @@
 import { z } from 'zod';
 import { parseDuration } from '../../scenarios/duration';
 import * as vocabulary from '../../scenarios/vocabulary';
-import { RESERVED_PROFILE_NAMES } from '../profileStore';
+import { MAX_PROFILE_NAME_LENGTH, RESERVED_PROFILE_NAMES } from '../profileStore';
 
 import type { ScenarioCondition, ScenarioExpr } from '../../types/scenario';
 
@@ -273,6 +273,12 @@ const rule = z.strictObject({
 
 const phase = z.strictObject({
     settings: z.record(z.string(), z.unknown()).optional(),
+    // Settings whose value is worked out when the phase is published, one typed expression per setting key. Which keys
+    // may be bound, and what each expression may read, is checked with the document (semantics.ts).
+    bindings: z.record(z.string(), expression).optional(),
+    // The name of one saved challenge profile the phase applies below its own settings. Whether it exists is a runtime
+    // question: a profile can be saved after the scenario.
+    profile: z.string().trim().min(1, 'Name a profile').max(MAX_PROFILE_NAME_LENGTH).optional(),
     rules: z.array(rule).max(SCENARIO_CAPS.rulesPerPhase).optional(),
 });
 

@@ -16,6 +16,12 @@ jest.mock('../../src/ts/core/settings', () => ({
     getEffectiveSetting: jest.fn(),
     getScenario: jest.fn(),
     getSetting: jest.fn(() => 'UTC'),
+    // A phase without bindings or a profile prepares nothing to publish; the settings themselves are tested in
+    // tests/settings/scenario-overlay.test.ts and tests/integration/scenarioSnapshotIsolation.test.ts.
+    prepareScenarioSnapshot: jest.fn(() => ({
+        ok: true,
+        snapshot: { publication: null, readSetting: () => ({ state: 'unknown', reason: 'test', dependencies: [] }) },
+    })),
 }));
 jest.mock('../../src/ts/core/services/currencyActions', () => ({
     withSpendLock: jest.fn(async (spend: () => Promise<unknown>) => ({ busy: false, value: await spend() })),

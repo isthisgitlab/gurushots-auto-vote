@@ -44,7 +44,11 @@ jest.mock('../../src/ts/core/services/autoFill', () => ({
     submitNewEntryForAction: jest.fn(async () => ({ ok: false, reason: 'none' })),
     reflectNewEntry: jest.fn(),
 }));
-jest.mock('../../src/ts/core/settings', () => ({ getEffectiveSetting: jest.fn(() => false) }));
+jest.mock('../../src/ts/core/settings', () => ({
+    getEffectiveSetting: jest.fn(() => false),
+    scenarioSubjectAvailable: jest.fn(() => true),
+    scenarioSubjectReason: jest.fn(() => null),
+}));
 
 const { getActiveChallenges } = jest.mocked(
     require('../../src/ts/core/strategies/real/activeChallenges') as typeof activeChallengesModule,

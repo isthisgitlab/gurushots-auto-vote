@@ -21,6 +21,9 @@
  *       spent: { swaps, keys, fills },
  *       history: { photoId: [[unixSec, votes], …] },   // vote samples (scenarios/speed.ts)
  *       outbox: [{ id, at, message }],                // notices for the host notifiers
+ *       published?: { revision, documentFingerprint, phase, phaseEnteredAt, observedAt, validUntil, bindings, profile },
+ *           // the overlay the runner prepared for the active phase (settings/scenarioOverlay.ts); a malformed one reads
+ *           // as an unavailable publication, never as a corrupt record
  *       lastAction: { at, ruleId, action, outcome } | null,
  *       lastError: { at, message } | null,
  *       gen,                                    // how many times this challenge was reset when it was written
@@ -58,7 +61,7 @@ import { createJsonStore } from './settings/storage';
 import { fileErrorMessage } from './errorMessage';
 import { createMemoryRawJsonStore } from './parseUntrustedJson';
 import { acquireUnlockLock } from './joinStateStore';
-import { createStateFile, epochOf, isRecord, isTombstone } from './scenarioStateFile';
+import { createStateFile, epochOf, isPublication, isRecord, isTombstone } from './scenarioStateFile';
 import type { Mutation, ResetResult, StateLock } from './scenarioStateFile';
 
 const STATE_KEY = 'gs_scenario_state';
@@ -136,7 +139,10 @@ const createStateLedger = (
     const bases = new WeakMap<ScenarioEpoch, () => string | null>();
 
     // Writes one challenge's state into the file as it is now (see `set` for what it answers).
-    const persist = (key: string, { epoch, ...state }: ScenarioState): SetResult => {
+    const persist = (
+        key: string,
+        { epoch, publicationUnreadable: _unreadable, ...state }: ScenarioState,
+    ): SetResult => {
         const log = logger.withCategory('scenario');
         let result: Mutation = 'unreadable';
         const made: { text: string | null; changed: boolean } = { text: null, changed: false };
@@ -190,7 +196,13 @@ const createStateLedger = (
             bases.set(epoch, () => textOf(record));
             if (record === undefined || isTombstone(record)) return { corrupt: false, state: null, epoch };
             if (!isRecord(record)) return { corrupt: 'record', state: null, epoch };
-            return { corrupt: false, state: { ...structuredClone(record), epoch }, epoch };
+            // A malformed publication is left out of the state and flagged, never the whole record unreadable: it is
+            // derived data, and the next step publishes it again.
+            const { published, ...rest } = structuredClone(record);
+            if (published === undefined || isPublication(published)) {
+                return { corrupt: false, state: { ...rest, ...(published ? { published } : {}), epoch }, epoch };
+            }
+            return { corrupt: false, state: { ...rest, publicationUnreadable: true, epoch }, epoch };
         },
 
         /**

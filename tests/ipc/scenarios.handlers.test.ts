@@ -14,6 +14,14 @@ jest.mock('../../src/ts/core/settings', () => ({
     exportScenario: jest.fn(),
     exportScenarioWithNotes: jest.fn(),
     getEffectiveSetting: jest.fn(() => false),
+    scenarioOverlayStatus: jest.fn(() => ({
+        bound: false,
+        available: true,
+        reason: null,
+        sources: { literals: [], bindings: [], profile: [] },
+        published: null,
+    })),
+    readScenarioSetting: jest.fn(),
 }));
 jest.mock('../../src/ts/core/services/scenarioStatus', () => {
     const ledger = { remove: jest.fn(async () => 'removed'), removeAll: jest.fn(async () => 'removed') };
@@ -199,6 +207,22 @@ describe('status and reset', () => {
         expect(refreshScenarioStateAsync).toHaveBeenCalled();
     });
 
+    test('status carries where the phase settings come from, read from the settings', async () => {
+        const overlay = {
+            bound: true,
+            available: false,
+            reason: 'nothing is published for this phase yet',
+            sources: { literals: [], bindings: ['exposure'], profile: [] },
+            published: null,
+        };
+        settings.scenarioOverlayStatus.mockReturnValueOnce(overlay);
+        scenarioStatus.getScenarioStatus.mockReturnValueOnce(
+            invalid({ assigned: 'Plan', scenario, state: null, corrupt: false }),
+        );
+        await expect(handlers['get-scenario-status'](null, 7)).resolves.toMatchObject({ success: true, overlay });
+        expect(settings.scenarioOverlayStatus).toHaveBeenLastCalledWith(7);
+    });
+
     test('status carries Manual Only, read from the settings and never from the caller', async () => {
         scenarioStatus.getScenarioStatus.mockReturnValue(
             invalid({ assigned: 'Plan', scenario, state: null, corrupt: false }),
@@ -356,6 +380,47 @@ describe('dry-run-scenario', () => {
         expect((result as Extract<typeof result, { success: true }>).explain[0]).toEqual(
             expect.objectContaining({ ruleId: 'r1', status: 'waiting' }),
         );
+    });
+
+    test('a setting a rule reads is read privately: the base and the effective value the settings give, no write', async () => {
+        const reading: ScenarioDocument = {
+            name: 'Reads',
+            version: 1,
+            start: 'main',
+            phases: {
+                main: {
+                    rules: [
+                        {
+                            id: 'r',
+                            if: [
+                                {
+                                    type: 'compare',
+                                    left: { kind: 'setting', key: 'exposure', view: 'effective' },
+                                    op: '=',
+                                    right: { kind: 'literal', value: 60, quantity: 'percent' },
+                                },
+                            ],
+                            do: [{ type: 'notify', message: 'x' }],
+                        },
+                    ],
+                },
+            },
+        };
+        scenarioStatus.getScenarioStatus.mockReturnValue({
+            assigned: 'Reads',
+            scenario: reading,
+            state: null,
+            corrupt: false,
+            timezone: 'UTC',
+        });
+        settings.readScenarioSetting.mockReturnValueOnce({
+            state: 'known',
+            value: { kind: 'number', value: 60, quantity: 'percent' },
+        });
+        await expect(handlers['dry-run-scenario'](null, 7)).resolves.toEqual(
+            expect.objectContaining({ fire: expect.objectContaining({ ruleId: 'r' }) }),
+        );
+        expect(settings.readScenarioSetting).toHaveBeenCalledWith('exposure', 'effective', 7);
     });
 
     test('Manual Only pauses the plan: manualOnly is set, nothing fires and no wake is due', async () => {

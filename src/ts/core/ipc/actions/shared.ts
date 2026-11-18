@@ -1,4 +1,5 @@
 import * as logger from '../../logger';
+import * as settings from '../../settings';
 import { findActionableChallenge } from '../../services/findActiveChallenge';
 import { invalidArgs } from '../isIdArg';
 
@@ -25,27 +26,46 @@ const isUsageArg = (value: unknown): value is LibraryUsage => value === 'submit'
 const DATA_INCOMPLETE_ERROR = 'challenge-data-incomplete';
 
 /**
+ * The fixed error code a request on a challenge refuses with while its scenario phase has bindings or a profile and no
+ * valid settings are published for it (settings.scenarioSubjectAvailable): the settings it would act on cannot be read.
+ */
+const SCENARIO_UNAVAILABLE_ERROR = 'scenario-settings-unavailable';
+
+/**
  * Re-fetch the active list and resolve one challenge the way an action sees
  * it: the challenge itself, or why it cannot be acted on — not listed
- * (`not-found`), or marked by the boundary / dropped by a prune-unsafe read
- * (`data-incomplete`).
+ * (`not-found`), marked by the boundary / dropped by a prune-unsafe read
+ * (`data-incomplete`), or its scenario settings are unavailable (`scenario-unavailable`).
  */
 const fetchLiveChallenge = async (
     strategy: ApiStrategy,
     token: string,
     challengeId: string | number,
-): Promise<{ challenge: Challenge } | { refused: 'not-found' | 'data-incomplete' }> => {
+): Promise<{ challenge: Challenge } | { refused: 'not-found' | 'data-incomplete' | 'scenario-unavailable' }> => {
     const challengesResponse: ActiveChallengesResponse | null = await strategy.getActiveChallenges(token);
-    return findActionableChallenge(challengesResponse, challengeId);
+    const found = findActionableChallenge(challengesResponse, challengeId);
+    if ('challenge' in found && settings.scenarioSubjectAvailable(challengeId) === false) {
+        return { refused: 'scenario-unavailable' };
+    }
+    return found;
 };
 
 /**
  * The IPC error a refused live lookup answers with: data-incomplete gets the
  * fixed code, a plain miss reads as the challenge being gone.
  */
-const liveRefusalError = (refused: 'not-found' | 'data-incomplete') =>
+const liveRefusalError = (refused: 'not-found' | 'data-incomplete' | 'scenario-unavailable') =>
     refused === 'data-incomplete'
         ? ({ success: false as const, error: DATA_INCOMPLETE_ERROR } as const)
-        : ({ success: false as const, error: 'Challenge no longer active' } as const);
+        : refused === 'scenario-unavailable'
+          ? ({ success: false as const, error: SCENARIO_UNAVAILABLE_ERROR } as const)
+          : ({ success: false as const, error: 'Challenge no longer active' } as const);
 
-export { sanitizeForLog, refuseInvalidArgs, isUsageArg, fetchLiveChallenge, liveRefusalError };
+export {
+    sanitizeForLog,
+    refuseInvalidArgs,
+    isUsageArg,
+    fetchLiveChallenge,
+    liveRefusalError,
+    SCENARIO_UNAVAILABLE_ERROR,
+};

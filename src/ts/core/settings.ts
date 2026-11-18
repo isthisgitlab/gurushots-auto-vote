@@ -19,7 +19,7 @@
  *   entryPins.ts          the photo a challenge's Boost and Turbo are pinned to
  *   scenarioSchema.ts     validation of user-defined scenario documents (scenarioSchema/)
  *   scenarios.ts          stored scenarios, JSON import/export
- *   scenarioOverlay.ts    the active scenario phase's settings layer
+ *   scenarioOverlay.ts    the active scenario phase's overlay: literals, bindings, one profile, and the owner's publication
  *   scenarioCapabilities.ts what a scenario may read or write per configuration key (the phase gate, the projection)
  *   reset.ts              reset helpers and "modified" checks
  */
@@ -96,6 +96,20 @@ export const setChallengeOverrides = challengeOverrides.setChallengeOverrides;
 export const removeChallengeOverride = challengeOverrides.removeChallengeOverride;
 export const consumeChosenPhotos = challengeOverrides.consumeChosenPhotos;
 export const getEffectiveSetting = challengeOverrides.getEffectiveSetting;
+// A challenge's scenario settings as typed values: the base view (below its phase overlay), the effective view (with the
+// overlay its runner published), whether they can be read at all, and the snapshot the runner prepares and publishes.
+// getEffectiveSetting throws ScenarioSettingUnavailableError for a setting a phase with bindings or a profile would
+// write when none is published; a route checks scenarioSubjectAvailable first.
+export const getScenarioBaseSettings = challengeOverrides.getScenarioBaseSettings;
+export const readScenarioSetting = challengeOverrides.readScenarioSetting;
+export const scenarioSubjectAvailable = challengeOverrides.scenarioSubjectAvailable;
+export const scenarioSubjectReason = challengeOverrides.scenarioSubjectReason;
+export const scenarioOverlayStatus = challengeOverrides.scenarioOverlayStatus;
+export const prepareScenarioSnapshot = challengeOverrides.prepareScenarioSnapshot;
+export const ScenarioSettingUnavailableError = challengeOverrides.ScenarioSettingUnavailableError;
+export type ScenarioOverlayStatus = challengeOverrides.ScenarioOverlayStatus;
+export type ScenarioSnapshot = challengeOverrides.ScenarioSnapshot;
+export type BindingResolution = challengeOverrides.BindingResolution;
 // Challenge rules (survive challenge rotation)
 export const getTitleRules = titleRules.getTitleRules;
 export const setTitleRules = titleRules.setTitleRules;

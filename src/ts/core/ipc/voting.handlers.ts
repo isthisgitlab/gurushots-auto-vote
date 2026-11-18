@@ -20,6 +20,7 @@ import * as cancellation from '../voting/cancellation';
 import { submitVotesForChallenge, voteAllChallengesManual } from '../services/manualVote';
 import { findActiveChallenge } from '../services/findActiveChallenge';
 import { isIdArg } from './isIdArg';
+import { SCENARIO_UNAVAILABLE_ERROR } from './actions/shared';
 
 import type { IpcHandlerMap, IpcReplyFn } from './invokeHandler';
 import type { ActiveChallengesResponse } from '../types/gurushots';
@@ -101,6 +102,11 @@ const voteOnSingleChallenge = (async (
             .withCategory(logger.CATEGORIES.CHALLENGES)
             .warning('❌ Challenge not found:', { challengeId, challengeTitle });
         return { success: false as const, error: `Challenge "${challengeTitle}" not found` };
+    }
+
+    // A manual vote reads the challenge's own settings: not on inherited values while its scenario settings are unavailable.
+    if (settings.scenarioSubjectAvailable(challenge.id) === false) {
+        return { success: false as const, error: SCENARIO_UNAVAILABLE_ERROR };
     }
 
     const now = Math.floor(Date.now() / 1000);

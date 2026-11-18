@@ -12,14 +12,32 @@ import type { SettingsSchemaEntry } from './schema';
 import { loadSettings, saveSettings } from './persistence';
 import { valuesEqual, globalChallengeValues, challengeValueSetIsValid } from './defaults';
 import { ruleValuesForChallengeId, isTitleProfileSuppressed } from './ruleResolution';
-import { scenarioPhaseSettings } from './scenarioOverlay';
+import {
+    ScenarioSettingUnavailableError,
+    isBoundPhase,
+    isOverlayKey,
+    overlaySources,
+    prepareOverlay,
+    readLayer,
+    readOverlay,
+    subjectLayer,
+} from './scenarioOverlay';
+import { getScenarioCapabilities, scenarioCapability } from './scenarioCapabilities';
 import { JOIN_KEPT_KEYS } from './staleChallengeCleanup';
 import { isActiveChallengeId, challengeTargetForId } from './challengeFacts';
 import { loggableSettingValue } from './logValue';
 import { isUnsafeChallengeKey } from '../challengeKey';
+import { settingValue } from '../scenarios/expressions';
+import { unknownOf } from '../scenarios/valueState';
 
+import type { ExprValue } from '../scenarios/expressions';
+import type { ValueState } from '../scenarios/valueState';
 import type { ConfigV2 } from '../types/config';
+import type { SettingView } from '../types/scenario';
 import type { ChallengeIdInput, ChallengeValues, SettingValueOf } from '../types/settings';
+import type { ScenarioPublication, ScenarioState } from '../types/stores';
+import type { ResolvedOverlay, SubjectLayer } from './scenarioOverlay';
+import type { ScenarioDocument } from './scenarioSchema';
 
 /**
  * Whether an override equal to the inherited value is still stored. The join keys
@@ -337,8 +355,44 @@ const replaceChallengeOverrides = (
 };
 
 /**
+ * The unix second now: the clock a publication's validity is judged on.
+ */
+const nowSec = (): number => Math.floor(Date.now() / 1000);
+
+/**
+ * A challenge's scenario layer over an already loaded settings blob (settings/scenarioOverlay.ts). The scenario name is
+ * resolved without the overlay: the assignment itself is never overlaid.
+ */
+const _subjectLayer = (settings: ConfigV2, challengeId: ChallengeIdInput): SubjectLayer =>
+    subjectLayer(
+        settings,
+        String(challengeId),
+        () => _resolveEffectiveSetting(settings, 'scenario', challengeId) as string,
+        nowSec(),
+    );
+
+/**
+ * Why a challenge's scenario layer cannot be read, or null when it can. Only a phase with bindings or a profile, or a
+ * scenario state that cannot be read for a scenario that has one, is ever unavailable.
+ */
+const _unavailableReason = (subject: SubjectLayer): string | null => {
+    if (subject.kind === 'unreadable') return subject.reason;
+    return subject.kind === 'phase' && !subject.layer.overlay.ok ? subject.layer.overlay.reason : null;
+};
+
+/**
+ * Whether a phase overlay would write this setting: a key whose capability lets a challenge phase write it.
+ */
+const _phaseWritesKey = (settingKey: string): boolean =>
+    scenarioCapability(settingKey)?.phaseWrite.includes('challenge') === true;
+
+/**
  * Get the effective value for a setting: the active scenario phase's value,
  * then the per-challenge override, matching rules, and the global default.
+ *
+ * A challenge whose phase has bindings or a profile reads them from the overlay its owner published. With no valid
+ * publication a setting the phase may write is never answered from inherited values: it throws
+ * ScenarioSettingUnavailableError (see scenarioSubjectAvailable for the check a route makes first).
  */
 const getEffectiveSetting = <K extends string>(
     settingKey: K,
@@ -352,18 +406,17 @@ const getEffectiveSetting = <K extends string>(
 
     const settings = loadSettings();
 
-    // A scenario phase's settings sit above every other layer while the
+    // A scenario phase's values sit above every other layer while the
     // challenge is in that phase (settings/scenarioOverlay.ts). The
     // assignment itself is never overlaid.
     if (challengeId && settingKey !== 'scenario' && entry.perChallenge) {
-        const phaseSettings = scenarioPhaseSettings(
-            settings,
-            String(challengeId),
-            () => _resolveEffectiveSetting(settings, 'scenario', challengeId) as string,
-        );
-        if (phaseSettings && Object.prototype.hasOwnProperty.call(phaseSettings, settingKey)) {
-            return phaseSettings[settingKey] as SettingValueOf<K>;
+        const subject = _subjectLayer(settings, challengeId);
+        const unavailable = _unavailableReason(subject);
+        if (unavailable !== null && _phaseWritesKey(settingKey)) {
+            throw new ScenarioSettingUnavailableError(settingKey, String(challengeId), unavailable);
         }
+        const found = subject.kind === 'phase' ? readLayer(subject.layer, settingKey) : null;
+        if (found) return found.value as SettingValueOf<K>;
     }
     return _resolveEffectiveSetting(settings, settingKey, challengeId) as SettingValueOf<K>;
 };
@@ -400,6 +453,174 @@ const _resolveEffectiveSetting = (settings: ConfigV2, settingKey: string, challe
     return Object.prototype.hasOwnProperty.call(settings.defaults, settingKey)
         ? settings.defaults[settingKey]
         : entry.default;
+};
+
+/**
+ * The base value of every named setting for a challenge, raw: everything below the phase overlay (the challenge's
+ * override, its rules, the stored defaults, the schema defaults). A key outside the schema is an app setting, read from
+ * the configuration's app block.
+ */
+const _baseRawValues = (settings: ConfigV2, challengeId: ChallengeIdInput): Record<string, unknown> =>
+    Object.fromEntries(
+        getScenarioCapabilities().settings.map(({ key }) => [
+            key,
+            schemaEntry(key) ? _resolveEffectiveSetting(settings, key, challengeId) : settings.app[key],
+        ]),
+    );
+
+/**
+ * One setting as a typed value state: converted at the setting boundary (settings/scenarioCapabilities.ts describes
+ * what it holds), unknown when the key is no setting, only a restricted projection of it can be observed, or the value
+ * has the wrong shape.
+ */
+const _typedValue = (settingKey: string, raw: unknown): ValueState<ExprValue> => {
+    const capability = scenarioCapability(settingKey);
+    if (!capability) return unknownOf('setting-unknown', [`setting:${settingKey}`]);
+    if (capability.read !== 'value') return unknownOf('setting-not-readable', [`setting:${settingKey}`]);
+    return settingValue(capability.value, raw);
+};
+
+const _baseStates = (settings: ConfigV2, challengeId: ChallengeIdInput): Record<string, ValueState<ExprValue>> =>
+    Object.fromEntries(
+        Object.entries(_baseRawValues(settings, challengeId)).map(([key, raw]) => [key, _typedValue(key, raw)]),
+    );
+
+/**
+ * The base settings of a challenge as typed values: everything below its phase overlay.
+ */
+const getScenarioBaseSettings = (challengeId: ChallengeIdInput = null): Record<string, ValueState<ExprValue>> =>
+    _baseStates(loadSettings(), challengeId);
+
+/**
+ * One setting of a challenge as a typed value, in the base view (below the phase overlay) or the effective view (with
+ * the published overlay applied). An effective read of a setting the phase would write is unknown, with the reason,
+ * when no valid overlay is published: it never answers with an inherited value. Never throws, never writes.
+ */
+const readScenarioSetting = (
+    settingKey: string,
+    view: SettingView,
+    challengeId: ChallengeIdInput = null,
+): ValueState<ExprValue> => {
+    const settings = loadSettings();
+    const base = () => _typedValue(settingKey, _baseRawValues(settings, challengeId)[settingKey]);
+    if (view === 'base' || !challengeId || !isOverlayKey(settingKey)) return base();
+    const subject = _subjectLayer(settings, challengeId);
+    const unavailable = _unavailableReason(subject);
+    if (unavailable !== null && _phaseWritesKey(settingKey)) return unknownOf(unavailable, [`setting:${settingKey}`]);
+    const found = subject.kind === 'phase' ? readLayer(subject.layer, settingKey) : null;
+    return found ? _typedValue(settingKey, found.value) : base();
+};
+
+/**
+ * Why a challenge's scenario settings are unavailable, or null when they are readable (a challenge with no scenario, or in
+ * a phase without bindings or a profile, always is).
+ */
+const scenarioSubjectReason = (challengeId: ChallengeIdInput): string | null =>
+    challengeId ? _unavailableReason(_subjectLayer(loadSettings(), challengeId)) : null;
+
+/**
+ * Whether a route may read this challenge's settings: false while its phase has bindings or a profile and no valid
+ * overlay is published (the reads would throw ScenarioSettingUnavailableError).
+ */
+const scenarioSubjectAvailable = (challengeId: ChallengeIdInput): boolean =>
+    scenarioSubjectReason(challengeId) === null;
+
+/** Where a challenge's scenario settings come from and whether they can be read (a status read; it changes nothing). */
+type ScenarioOverlayStatus = {
+    /** The phase has bindings or a profile, so its settings are read through a publication. */
+    bound: boolean;
+    available: boolean;
+    reason: string | null;
+    /** The keys each source of the phase sets: its literals, its bindings, the profile it selects. */
+    sources: { literals: string[]; bindings: string[]; profile: string[] };
+    /** The publication in the ledger, when there is a valid one. */
+    published: Pick<ScenarioPublication, 'revision' | 'observedAt' | 'validUntil' | 'profile'> | null;
+};
+
+const scenarioOverlayStatus = (challengeId: ChallengeIdInput): ScenarioOverlayStatus => {
+    const none = {
+        bound: false,
+        available: true,
+        reason: null,
+        sources: { literals: [], bindings: [], profile: [] },
+        published: null,
+    };
+    if (!challengeId) return none;
+    const subject = _subjectLayer(loadSettings(), challengeId);
+    if (subject.kind === 'none') return none;
+    if (subject.kind === 'unreadable') return { ...none, bound: true, available: false, reason: subject.reason };
+    const { layer } = subject;
+    const published = layer.overlay.ok && layer.bound ? layer.state.published : undefined;
+    return {
+        bound: layer.bound,
+        available: layer.overlay.ok,
+        reason: layer.overlay.ok ? null : layer.overlay.reason,
+        sources: overlaySources(layer),
+        published: published
+            ? {
+                  revision: published.revision,
+                  observedAt: published.observedAt,
+                  validUntil: published.validUntil,
+                  profile: published.profile,
+              }
+            : null,
+    };
+};
+
+/** What the runner holds for one evaluation of a phase: what to publish, and how to read settings in it. */
+type ScenarioSnapshot = {
+    /** The overlay to publish, or null when the phase has no bindings or profile (there is nothing to publish). */
+    publication: ScenarioPublication | null;
+    readSetting: (settingKey: string, view: SettingView) => ValueState<ExprValue>;
+};
+
+/** What a phase's bindings resolved to, as the runner works them out from the base reads it is handed. */
+type BindingResolution = { bound: Record<string, ValueState<ExprValue>>; validUntil: number | null };
+
+/**
+ * Prepares the settings of a challenge's phase: the base values, and the overlay the phase gives with its bindings
+ * resolved. Nothing is stored; the owner publishes `publication`. A binding that is not known, does not fit its
+ * setting or fails validation, or a profile that cannot be used, is refused with the key and reason: there is no partial
+ * overlay.
+ *
+ * @param resolveBindings - the runner's evaluation of the phase's bindings (called only for a phase that has any); it
+ *   reads base settings through what it is handed, and raw facts itself. `validUntil` is the next instant (unix
+ *   seconds) a binding result can change at, or null
+ * @param now - unix seconds
+ */
+const prepareScenarioSnapshot = (
+    challengeId: string | number,
+    scenario: ScenarioDocument,
+    state: Pick<ScenarioState, 'phase' | 'phaseEnteredAt' | 'published'>,
+    resolveBindings: (readBase: (settingKey: string, view: SettingView) => ValueState<ExprValue>) => BindingResolution,
+    now: number,
+): { ok: true; snapshot: ScenarioSnapshot } | { ok: false; key: string | null; reason: string } => {
+    const settings = loadSettings();
+    const phase = scenario.phases[state.phase];
+    const baseRaw = _baseRawValues(settings, challengeId);
+    const baseStates = Object.fromEntries(Object.entries(baseRaw).map(([key, raw]) => [key, _typedValue(key, raw)]));
+    const baseOf = (settingKey: string): ValueState<ExprValue> =>
+        Object.hasOwn(baseStates, settingKey)
+            ? baseStates[settingKey]
+            : unknownOf('setting-unknown', [`setting:${settingKey}`]);
+    const reader =
+        (overlay: ResolvedOverlay, boundPhase: boolean): ScenarioSnapshot['readSetting'] =>
+        (settingKey, view) => {
+            const found = view === 'effective' ? readOverlay(overlay, boundPhase, settingKey) : null;
+            return found ? _typedValue(settingKey, found.value) : baseOf(settingKey);
+        };
+    // A phase with literals only is read straight from the document, as it always was: nothing to publish.
+    if (!isBoundPhase(phase)) {
+        const overlay: ResolvedOverlay = { literals: phase.settings ?? {}, bindings: {}, profile: null };
+        return { ok: true, snapshot: { publication: null, readSetting: reader(overlay, false) } };
+    }
+    // A binding is worked out before the overlay exists, so it reads the base view only.
+    const { bound, validUntil } = resolveBindings((settingKey, view) =>
+        view === 'base' ? baseOf(settingKey) : unknownOf('binding-reads-base-only', [`setting:${settingKey}`]),
+    );
+    const prepared = prepareOverlay(settings, scenario, state, baseRaw, bound, String(challengeId), validUntil, now);
+    if (!prepared.ok) return prepared;
+    return { ok: true, snapshot: { publication: prepared.publication, readSetting: reader(prepared.overlay, true) } };
 };
 
 // The one wording for the chosen-photos consume lines — the log catalog's
@@ -442,14 +663,13 @@ const consumeChosenPhotos = (challengeId: string | number, enteredIds: readonly 
     if (!isActiveChallengeId(challengeId)) return false;
 
     // Submit Only Chosen Photos over the same layer stack getEffectiveSetting
-    // reads, resolved over this snapshot.
-    const phaseSettings = scenarioPhaseSettings(
-        settings,
-        String(challengeId),
-        () => _resolveEffectiveSetting(settings, 'scenario', challengeId) as string,
-    );
-    if (phaseSettings && Object.prototype.hasOwnProperty.call(phaseSettings, 'chosenPhotosOnly')) {
-        if (phaseSettings.chosenPhotosOnly) return false;
+    // reads, resolved over this snapshot. A phase whose overlay cannot be read
+    // consumes nothing: whether Only is on is not known.
+    const subject = _subjectLayer(settings, challengeId);
+    if (_unavailableReason(subject) !== null) return false;
+    const phaseOnly = subject.kind === 'phase' ? readLayer(subject.layer, 'chosenPhotosOnly') : null;
+    if (phaseOnly) {
+        if (phaseOnly.value) return false;
     } else if (_resolveEffectiveSetting(settings, 'chosenPhotosOnly', challengeId)) {
         return false;
     }
@@ -488,6 +708,9 @@ const consumeChosenPhotos = (challengeId: string | number, enteredIds: readonly 
     return true;
 };
 
+export type { BindingResolution, ScenarioOverlayStatus, ScenarioSnapshot };
+export { ScenarioSettingUnavailableError };
+
 export {
     getGlobalDefault,
     setGlobalDefault,
@@ -500,6 +723,12 @@ export {
     replaceChallengeOverrides,
     replaceChallengeOverridesInSettings,
     getEffectiveSetting,
+    getScenarioBaseSettings,
+    readScenarioSetting,
+    scenarioSubjectAvailable,
+    scenarioSubjectReason,
+    scenarioOverlayStatus,
+    prepareScenarioSnapshot,
     trimmedChallengeId,
     ownChallengeValues,
     dropEmptyChallengeRecord,

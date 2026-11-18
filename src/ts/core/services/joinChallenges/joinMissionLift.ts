@@ -8,7 +8,7 @@
 
 import { shouldJoinChallenge } from '../VotingLogic';
 import type { Bankroll, Challenge } from '../../types/gurushots';
-import { resolveCandidateConfig, resolveJoinSetting } from './settingsResolution';
+import { isScenarioUnavailable, resolveCandidateConfig, resolveJoinSetting } from './settingsResolution';
 
 /**
  * Mutable per-pass join state: the balance and budget kept locally accurate as
@@ -67,9 +67,11 @@ const decideCandidateJoin = (
  */
 const joinCandidateGateRefusal = (
     challenge: Challenge,
-): 'skipped:autojoin-off' | 'skipped:manual-photos-only' | null => {
+): 'skipped:autojoin-off' | 'skipped:manual-photos-only' | 'skipped:scenario-unavailable' | null => {
     // Per-candidate enable (master → profile): skip titles auto-join is off
     // for, BEFORE resolving the rest of the config (avoid redundant work).
+    // A candidate whose scenario settings cannot be read is left alone: nothing is joined on inherited values.
+    if (isScenarioUnavailable(challenge)) return 'skipped:scenario-unavailable';
     if (resolveJoinSetting('autoJoin', challenge) !== true) return 'skipped:autojoin-off';
     // Manual Only: the join would enter a photo by itself, so it is left to the user.
     if (resolveJoinSetting('manualPhotosOnly', challenge) === true) return 'skipped:manual-photos-only';

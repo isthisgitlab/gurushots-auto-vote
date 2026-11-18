@@ -92,17 +92,27 @@ const collectExpressionEvidence = (
 };
 
 /**
- * The evidence the rules of a scenario read. Given `phase`, only the rules of that phase (the engine evaluates one phase at a
- * time); without it, every phase.
+ * The evidence the rules and the bindings of a scenario read. Given `phase`, only those of that phase (the engine
+ * evaluates one phase at a time); without it, every phase.
  */
 const evidenceNeeded = (scenario: ScenarioDocument, phase?: string): Set<EvidenceKind> => {
     const needed = new Set<EvidenceKind>();
     const phases = phase === undefined ? Object.values(scenario.phases) : [scenario.phases[phase]];
     for (const item of phases) {
         for (const rule of item?.rules ?? []) collectEvidence(rule.if, needed);
+        collectExpressionEvidence(Object.values(item?.bindings ?? {}), needed);
     }
     return needed;
 };
+
+/**
+ * The evidence that derives from the effective settings (the photo scan reads tag settings): it can be loaded only once
+ * the phase's overlay is prepared. Every other kind is raw, and what a binding may read.
+ */
+const POLICY_EVIDENCE: ReadonlySet<EvidenceKind> = new Set<EvidenceKind>(['photoScan']);
+
+/** Which evidence a load fetches: the raw kinds, the policy kinds, or both. */
+type EvidenceStage = 'raw' | 'policy' | 'all';
 
 const unreadable = (reason: string): { readable: false; reason: string } => ({ readable: false, reason });
 
@@ -225,17 +235,25 @@ const readPhotoScan = (ctx: RunnerContext): Promise<NonNullable<FactEvidence['ph
     });
 
 /**
- * The evidence the scenario's rules read, fetched for this evaluation: nothing is fetched for a fact no rule reads, and
- * every field that is returned was asked for. A read that failed is unreadable evidence, which its facts read as unknown.
+ * The evidence the scenario's rules and bindings read, fetched for this evaluation: nothing is fetched for a fact nothing
+ * reads, and every field that is returned was asked for. A read that failed is unreadable evidence, which its facts read
+ * as unknown.
  *
- * @param phase - the phase being evaluated; its rules alone decide what is fetched (all phases when omitted)
+ * @param phase - the phase being evaluated; its rules and bindings alone decide what is fetched (all phases when omitted)
+ * @param stage - `raw` (what a binding may read), then `policy` once the overlay is prepared (the photo scan reads the
+ *   effective tag settings); `all` fetches both in one go, for a phase that has no overlay to prepare
  */
 const loadScenarioSnapshot = async (
     scenario: ScenarioDocument,
     ctx: RunnerContext,
     phase?: string,
+    stage: EvidenceStage = 'all',
 ): Promise<FactEvidence> => {
-    const needed = evidenceNeeded(scenario, phase);
+    const needed = new Set(
+        [...evidenceNeeded(scenario, phase)].filter(
+            (kind) => stage === 'all' || (stage === 'policy') === POLICY_EVIDENCE.has(kind),
+        ),
+    );
     const evidence: FactEvidence = {};
     if (needed.has('bankroll')) evidence.bankroll = await readBankroll(ctx);
     if (needed.has('missions')) evidence.missions = await readMissions(ctx);
@@ -247,3 +265,4 @@ const loadScenarioSnapshot = async (
 };
 
 export { loadScenarioSnapshot };
+export type { EvidenceStage };

@@ -28,6 +28,7 @@ const {
     absentTruth,
     listTruth,
     settingValue,
+    storedSettingValue,
     checkExpression,
     compareIssue,
     listIssue,
@@ -501,6 +502,87 @@ describe('presence and lists', () => {
         expect(listTruth('contains', item('a'), item('a'))).toEqual(mismatch);
         expect(listTruth('contains', list(['a']), list(['a']))).toEqual(mismatch);
         expect(listTruth('containsAny', list(['a']), item('a'))).toEqual(mismatch);
+    });
+});
+
+describe('storedSettingValue (the binding boundary)', () => {
+    const numberOf = (value: number, quantity: string) => invalid<ExprValue>({ kind: 'number', value, quantity });
+
+    test('a duration goes back to the unit the setting stores it in', () => {
+        expect(
+            storedSettingValue({ kind: 'number', quantity: 'duration', unit: 'seconds' }, numberOf(3600, 'duration')),
+        ).toEqual({
+            ok: true,
+            value: 3600,
+        });
+        expect(
+            storedSettingValue({ kind: 'number', quantity: 'duration', unit: 'minutes' }, numberOf(900, 'duration')),
+        ).toEqual({
+            ok: true,
+            value: 15,
+        });
+        expect(
+            storedSettingValue({ kind: 'number', quantity: 'duration', unit: 'hours' }, numberOf(5400, 'duration')),
+        ).toEqual({
+            ok: true,
+            value: 1.5,
+        });
+    });
+
+    test('another quantity, kind or shape is refused, never coerced', () => {
+        const refused = { ok: false, reason: 'type-mismatch' };
+        expect(storedSettingValue({ kind: 'number', quantity: 'percent' }, numberOf(5, 'duration'))).toEqual(refused);
+        expect(storedSettingValue({ kind: 'number', quantity: 'percent' }, { kind: 'string', value: '5' })).toEqual(
+            refused,
+        );
+        expect(storedSettingValue({ kind: 'boolean' }, { kind: 'string', value: 'true' })).toEqual(refused);
+        expect(storedSettingValue({ kind: 'string' }, { kind: 'boolean', value: true })).toEqual(refused);
+        expect(storedSettingValue({ kind: 'list' }, { kind: 'string', value: 'a' })).toEqual(refused);
+    });
+
+    test('a number is stored as it is: percent, counts and a zero sentinel included', () => {
+        expect(storedSettingValue({ kind: 'number', quantity: 'percent' }, numberOf(60, 'percent'))).toEqual({
+            ok: true,
+            value: 60,
+        });
+        expect(
+            storedSettingValue({ kind: 'number', quantity: 'duration', unit: 'seconds' }, numberOf(0, 'duration')),
+        ).toEqual({
+            ok: true,
+            value: 0,
+        });
+    });
+
+    test('a boolean, a string, an enum member and a list are passed on (a list as a copy)', () => {
+        expect(storedSettingValue({ kind: 'boolean' }, { kind: 'boolean', value: false })).toEqual({
+            ok: true,
+            value: false,
+        });
+        expect(storedSettingValue({ kind: 'string' }, { kind: 'string', value: 'x' })).toEqual({
+            ok: true,
+            value: 'x',
+        });
+        const enumeration = { kind: 'enum' as const, values: ['a', 'b'] };
+        expect(storedSettingValue(enumeration, { kind: 'string', value: 'b' })).toEqual({ ok: true, value: 'b' });
+        expect(storedSettingValue(enumeration, { kind: 'string', value: 'c' })).toEqual({
+            ok: false,
+            reason: 'type-mismatch',
+        });
+        expect(storedSettingValue(enumeration, { kind: 'boolean', value: true })).toEqual({
+            ok: false,
+            reason: 'type-mismatch',
+        });
+        const list = ['a', 'b'];
+        const stored = storedSettingValue({ kind: 'list' }, { kind: 'list', value: list });
+        expect(stored).toEqual({ ok: true, value: ['a', 'b'] });
+        expect((stored as { value: string[] }).value).not.toBe(list);
+    });
+
+    test('a value with no stored form is refused', () => {
+        expect(storedSettingValue({ kind: 'other' }, { kind: 'boolean', value: true })).toEqual({
+            ok: false,
+            reason: 'setting-not-expressible',
+        });
     });
 });
 

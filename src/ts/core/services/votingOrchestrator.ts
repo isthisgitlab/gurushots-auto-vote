@@ -61,7 +61,7 @@ import * as cancellation from '../voting/cancellation';
 import { beginVotingPass, isVotingPassRunning } from '../voting/passActivity';
 import { failureText } from '../format/logSafe';
 import { errorKind, errorMessage } from '../errorMessage';
-import { consumeChosenPhotos } from '../settings';
+import { consumeChosenPhotos, scenarioSubjectAvailable, scenarioSubjectReason } from '../settings';
 import { isMarkedChallenge } from '../challengeMarks';
 import { getEntries } from './autoFill/challengeState';
 import { buildFillDeps, cancelPass } from './votingOrchestrator/context';
@@ -221,6 +221,19 @@ const processChallenge = async (
     // the history as sent, never on the object at call time.
     const swapHistorySent = Array.isArray(challenge.member?.ranking?.swaps);
     await runScenarioStep(challenge, now, pass);
+
+    // A phase with bindings or a profile is read through the settings its runner published. Without a valid
+    // publication (the step could not prepare it, another process owns it) nothing below may run on inherited
+    // values: this challenge waits for the next pass, the rest of the pass goes on.
+    if (scenarioSubjectAvailable(challenge.id) === false) {
+        logger
+            .withCategory('voting')
+            .warning(
+                `${logger.challengeTag(challenge)} scenario settings unavailable — skipped this pass (${scenarioSubjectReason(challenge.id)})`,
+                null,
+            );
+        return null;
+    }
 
     await playAutoTurbo(challenge, now, pass);
 
