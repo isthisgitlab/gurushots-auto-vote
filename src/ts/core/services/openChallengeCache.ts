@@ -27,9 +27,12 @@ const rememberOpenChallenges = (items: ReadonlyArray<DiscoverChallenge | null>, 
 /** The remembered challenge with this id, if the latest list held it. */
 const getOpenChallenge = (id: string | number): DiscoverChallenge | undefined => openChallenges.get(String(id));
 
+/** Every remembered open or upcoming challenge (the scheduler's candidates for a pre-join wake). */
+const listOpenChallenges = (): DiscoverChallenge[] => [...openChallenges.values()];
+
 /** Forget every remembered open challenge. */
 const clearOpenChallenges = (): void => {
     openChallenges = new Map();
 };
 
-export { rememberOpenChallenges, getOpenChallenge, clearOpenChallenges };
+export { rememberOpenChallenges, getOpenChallenge, listOpenChallenges, clearOpenChallenges };

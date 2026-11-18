@@ -18,6 +18,8 @@
 
 import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
+import { answerInstallationReadFromSaved } from '../helpers/savedInstallationRead';
+answerInstallationReadFromSaved(settings);
 import VotingLogic = require('../../src/ts/core/services/VotingLogic');
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import { invalid } from '../helpers/invalid';
@@ -83,6 +85,22 @@ describe('getVotingPauseState — the timezone setting', () => {
     test('a missing timezone reads them in the default zone, Europe/Riga', () => {
         expect(pausedAtNoon(undefined)).toBe(false);
         expect(pausedAtNoon('Europe/Riga')).toBe(false);
+    });
+
+    test('a zone the installation cannot read opens no window: the saved zone never takes its place', () => {
+        mockSettings({ useVotingPause: true, votingPauseTime: ['12:00'], votingPauseDurationMinutes: 30 });
+        expect(VotingLogic.getVotingPauseState(buildChallenge(), '777', NOW).inWindow).toBe(true);
+        settings.captureInstallationSettings = invalid(
+            jest.fn(() => ({ ok: false, key: 'timezone', reason: 'the published settings have expired' })),
+        );
+        try {
+            expect(VotingLogic.getVotingPauseState(buildChallenge(), '777', NOW)).toEqual({
+                active: false,
+                inWindow: false,
+            });
+        } finally {
+            answerInstallationReadFromSaved(settings);
+        }
     });
 });
 

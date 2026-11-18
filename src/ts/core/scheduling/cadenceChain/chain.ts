@@ -3,7 +3,7 @@
 import { decideNextWaitOrFallBack } from './decision';
 import { oversleptBy } from './oversleep';
 
-import type { CadenceChainDeps, CycleResult, TimerHandle } from './types';
+import type { CadenceChainDeps, CycleResult, RunCapture, TimerHandle } from './types';
 
 /**
  * Run a best-effort observability hook without letting it touch scheduling: a
@@ -49,6 +49,11 @@ const fireAndForget = (hook: () => unknown) => {
  *   per-challenge currency-automation timing resolver for the shared math
  * @param deps.resolveScenarioWake -
  *   per-challenge scenario resolver for the shared math
+ * @param deps.resolveAccountWake -
+ *   the account's own boundaries (installation scenario, pre-join candidates, claim throttle, mission expiry) for the shared math
+ * @param deps.isArmed -
+ *   OPTIONAL: whether the chain is armed for the installation scenario only (voting stages paused): no active challenge is
+ *   then read, and only the account's boundaries and the normal cadence decide the wait
  * @param deps.runCycle - run one voting cycle; the resolved
  *   value is handed to the next decision as the prefetched list candidate
  *   (any non-array means "fetch fresh"). A rejection is logged via
@@ -72,6 +77,11 @@ const fireAndForget = (hook: () => unknown) => {
  *   null when the chain stops arming. Used by the GUI to surface a live
  *   next-action countdown; Node hosts (CLI/Android) omit it, so it is
  *   optional-chained and never required.
+ * @param deps.gate - OPTIONAL: the Stop fence. The run's capture is taken when a
+ *   decision starts and checked at the arm boundary (and again, synchronously, in the
+ *   step that arms) and at every timer dispatch: an obsolete run arms nothing.
+ * @param deps.onObsolete - OPTIONAL: a timer the fence refused (a Stop recorded
+ *   elsewhere), so the host can end its own run.
  * @param deps.onCycleChallenges -
  *   OPTIONAL: called once per cycle with the freshly-resolved active-challenge
  *   list and the cycle's `now` (Unix seconds), for hosts that want to react to
@@ -96,9 +106,13 @@ export const createCadenceChain = ({
     resolveBoostPrefill,
     resolveCurrencyAuto = null,
     resolveScenarioWake = null,
+    resolveAccountWake = null,
+    isArmed,
     runCycle,
     log,
     onScheduled,
+    gate = null,
+    onObsolete,
     onCycleChallenges,
 }: CadenceChainDeps): {
     scheduleNext: (prefetched?: CycleResult, previousCycleStartMs?: number | null) => Promise<void>;
@@ -115,6 +129,8 @@ export const createCadenceChain = ({
         resolveBoostPrefill,
         resolveCurrencyAuto,
         resolveScenarioWake,
+        resolveAccountWake,
+        isArmed,
         log,
     };
 
@@ -126,10 +142,24 @@ export const createCadenceChain = ({
     // The armed timer's callback. A newer chain may have taken over (host
     // re-armed / stopped); only the timer that is still current — identity
     // against the host's slot — may run + reschedule.
-    const runArmedCycle = async (timeoutId: TimerHandle, waitMs: number, armedAtMs: number) => {
+    const runArmedCycle = async (
+        timeoutId: TimerHandle,
+        waitMs: number,
+        armedAtMs: number,
+        capture: RunCapture | null,
+    ) => {
         if (!isRunning() || getTimer() !== timeoutId) {
             return;
         }
+        // The dispatch boundary: a timer armed before a Stop (here, or recorded elsewhere) authorizes no work.
+        if (gate && capture && !(await gate.admits(capture))) {
+            if (getTimer() === timeoutId) {
+                stopArming();
+                onObsolete?.();
+            }
+            return;
+        }
+        if (getTimer() !== timeoutId) return;
         const cycleStartMs = Date.now();
         // Say so when the timer was held far past its due time (OS
         // suspend / App Nap / hidden-page freezing). Any boundary that
@@ -163,6 +193,8 @@ export const createCadenceChain = ({
             stopArming();
             return;
         }
+        // The run this decision serves: its capture is what the timer carries.
+        const capture = gate ? gate.run() : null;
 
         const { waitMs, cycleChallenges, cycleNow } = await decideNextWaitOrFallBack(
             decisionDeps,
@@ -171,6 +203,15 @@ export const createCadenceChain = ({
         );
 
         if (!isRunning()) {
+            stopArming();
+            return;
+        }
+        // The arm boundary: the fence, then the local re-check in the same step that arms.
+        if (gate && capture && !(await gate.admits(capture))) {
+            stopArming();
+            return;
+        }
+        if (gate && capture && !gate.current(capture)) {
             stopArming();
             return;
         }
@@ -191,7 +232,7 @@ export const createCadenceChain = ({
 
         const armedAtMs = Date.now();
         const timeoutId = setTimeout(() => {
-            void runArmedCycle(timeoutId, waitMs, armedAtMs);
+            void runArmedCycle(timeoutId, waitMs, armedAtMs, capture);
         }, waitMs);
         setTimer(timeoutId);
     };

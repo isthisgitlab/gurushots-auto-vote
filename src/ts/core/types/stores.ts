@@ -234,6 +234,13 @@ export interface ScenarioState {
     /** Set while the subject is paused: no rule action and no publication update runs (`at`: unix seconds). */
     paused?: { at: number; reason: string } | null;
     /**
+     * Set on the installation's record by a full user Stop (`epoch`: the Stop epoch it was made under): its publication is
+     * withdrawn, so every installation setting reads its saved value at once, with nothing written to the configuration. It is no
+     * pause and no reset: phase and progress are kept, and an explicit user re-arm clears it before the next publication.
+     * Until then nothing is published.
+     */
+    withdrawn?: { at: number; epoch: number } | null;
+    /**
      * A handoff to another scenario that was begun and not finished: the assignment it left (`from`), the one it goes to
      * (`to`; null: none) and the generation it was begun at. While it stands the subject runs no action.
      */
@@ -284,10 +291,12 @@ export interface ScenarioEpoch {
 
 /**
  * The priority Stop fence (scenarioStopFence.json): one small cell, apart from the progress ledger and from any control
- * inbox. `stopEpoch` counts the full Stops; `blocked` is set by a Stop and cleared only by a fresh explicit user re-arm.
+ * inbox. `stopEpoch` counts the full Stops; `blocked` is set by a Stop and cleared only by a fresh explicit user re-arm;
+ * `lastArm` is the last arming the fence allowed (the epoch it was allowed at, and when).
  */
 export interface ScenarioStopFence {
     stopEpoch: number;
     blocked: boolean;
     lastStop: { requestId: string; at: number; durable: boolean } | null;
+    lastArm: { epoch: number; at: number } | null;
 }

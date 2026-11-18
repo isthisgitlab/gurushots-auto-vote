@@ -587,6 +587,31 @@ describe('headless runOneCycle', () => {
             expect(lastPayload()).toEqual({ ok: false, error: 'cycle-failed', nextDelayMs: 120_000 });
         });
 
+        test('the beat after a failed cycle is the installation’s cadence, captured once; one it cannot read is the plain default beat, never the saved cadence', async () => {
+            apiFactory.getApiStrategy.mockReturnValue(
+                invalid({
+                    fetchChallengesAndVote: jest.fn().mockRejectedValue(new Error('boom')),
+                    getActiveChallenges: jest.fn(),
+                }),
+            );
+            // The installation's phase gives a 5-minute cadence over the saved 2 minutes.
+            settings.captureInstallationSettings.mockReturnValueOnce({
+                ok: true,
+                values: { timezone: 'UTC', checkFrequencyMin: 5, checkFrequencyMax: 5 },
+            });
+            await g.GS!.runOneCycle();
+            expect(lastPayload()).toEqual({ ok: false, error: 'cycle-failed', nextDelayMs: 300_000 });
+            onCycleComplete.mockClear();
+
+            settings.captureInstallationSettings.mockReturnValueOnce({
+                ok: false,
+                key: 'checkFrequencyMin',
+                reason: 'the published settings of this phase have expired',
+            });
+            await g.GS!.runOneCycle();
+            expect(lastPayload()).toEqual({ ok: false, error: 'cycle-failed', nextDelayMs: 180_000 });
+        });
+
         test('a throwing native bridge callback is logged, never rethrown', async () => {
             onCycleComplete.mockImplementation(() => {
                 throw new Error('bridge detached');

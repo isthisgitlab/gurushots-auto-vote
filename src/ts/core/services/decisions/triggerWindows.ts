@@ -9,7 +9,7 @@ import * as settings from '../../settings';
 // Pure wall-clock math for the scheduled-fill feature (no import cycle:
 // wallClock.ts imports nothing).
 import { occurrencesOf } from '../../scheduling/wallClock';
-import { effectiveTimezone } from '../../settings/uiDefaults';
+import { captureInstallationTimezone } from '../installationTimezone';
 // From settings/limits (not settings/schema) — keeps zod out of any bundle
 // that reaches this module. No `any` cast needed: limits.ts exports a plain
 // number literal, so inference is already exact.
@@ -154,7 +154,10 @@ const _triggerWindowState = (
         effectiveDurationMin = keys.maxDurationMin;
     }
     const durationSec = effectiveDurationMin * 60;
-    const timezone = effectiveTimezone(settings.getSetting('timezone'));
+    // The installation's effective zone, read once for this evaluation; one that cannot be read opens no window (the saved
+    // zone never takes its place).
+    const timezone = captureInstallationTimezone();
+    if (timezone === null) return { active: false, inWindow: false };
     // Both triggers are LISTS — every entry opens its own window, all OR'd.
     // Non-array corruption = form off; a corrupt ENTRY inside the array is
     // skipped (contributes nothing, not even `active`). The slice bounds

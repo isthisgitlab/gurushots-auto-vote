@@ -264,6 +264,7 @@ const finishedRecord = (state: ScenarioState, next: ScenarioDocument | null, gen
         generation,
         handoff: null,
         ...(state.paused ? { paused: state.paused } : {}),
+        ...(state.withdrawn ? { withdrawn: state.withdrawn } : {}),
         ...(state.lastRequest ? { lastRequest: state.lastRequest } : {}),
     };
 };
@@ -445,6 +446,49 @@ const setScenarioPaused = (subject: string, paused: boolean, reason = ''): Pause
     return gated.ok ? gated.value : { ok: false, reason: gated.reason };
 };
 
+// --- withdrawal of the installation's publication on a full Stop ----------------------------------------------------------
+
+type WithdrawalResult = { ok: true; changed: boolean } | { ok: false; reason: 'state-unreadable' | 'not-saved' };
+
+/**
+ * A full Stop's withdrawal: marks the installation's record `withdrawn: { at, epoch }` and drops its publication, so every
+ * installation setting reads its saved value at once. Phase and progress are kept. It never waits: one short change under the
+ * ledger's own lock, no gate and no step lock (a Stop is refused by nothing). No record (the installation scenario never ran) has
+ * nothing to withdraw.
+ */
+const withdrawInstallationPublication = (epoch: number, at: number = nowSec()): WithdrawalResult => {
+    const ledger = ledgerOf(loadSettings());
+    const { corrupt, state } = ledger.get(INSTALLATION_KEY);
+    if (corrupt) return { ok: false, reason: 'state-unreadable' };
+    if (state === null) return { ok: true, changed: false };
+    const changed = ledger.change(INSTALLATION_KEY, (current) => {
+        if (!current) return { refuse: 'no-progress' };
+        const next: ScenarioState = { ...current, withdrawn: { at, epoch } };
+        delete next.published;
+        delete next.publicationUnreadable;
+        return next;
+    });
+    return changed.ok ? { ok: true, changed: true } : { ok: false, reason: 'not-saved' };
+};
+
+/**
+ * An explicit user re-arm lifts the withdrawal, before the next publication. Nothing else lifts it. A record that was not
+ * withdrawn is left as it is.
+ */
+const restoreInstallationPublication = (): WithdrawalResult => {
+    const ledger = ledgerOf(loadSettings());
+    const { corrupt, state } = ledger.get(INSTALLATION_KEY);
+    if (corrupt) return { ok: false, reason: 'state-unreadable' };
+    if (!state?.withdrawn) return { ok: true, changed: false };
+    const changed = ledger.change(INSTALLATION_KEY, (current) => {
+        if (!current?.withdrawn) return { refuse: 'not-withdrawn' };
+        const next = { ...current };
+        delete next.withdrawn;
+        return next;
+    });
+    return changed.ok ? { ok: true, changed: true } : { ok: false, reason: 'not-saved' };
+};
+
 // --- the priority Stop fence -------------------------------------------------------------------------------------------
 
 const STOP_FENCE_KEY = 'gs_scenario_stop_fence';
@@ -464,8 +508,9 @@ type StopFenceRead =
     | { state: 'missing' }
     | { state: 'unreadable'; reason: 'not-loaded' | 'oversize' | 'malformed' | 'read-failed' };
 
-const FENCE_KEYS = ['stopEpoch', 'blocked', 'lastStop'];
+const FENCE_KEYS = ['stopEpoch', 'blocked', 'lastStop', 'lastArm'];
 const LAST_STOP_KEYS = ['requestId', 'at', 'durable'];
+const LAST_ARM_KEYS = ['epoch', 'at'];
 
 const hasOnly = (value: Record<string, unknown>, keys: readonly string[]): boolean =>
     Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
@@ -479,9 +524,21 @@ const parseFence = (raw: string): ScenarioStopFence | null => {
         return null;
     }
     if (!isPlainObject(value) || !hasOnly(value, FENCE_KEYS)) return null;
-    const { stopEpoch, blocked, lastStop } = value;
+    const { stopEpoch, blocked, lastStop, lastArm } = value;
     if (!isCount(stopEpoch) || typeof blocked !== 'boolean') return null;
-    if (lastStop === null) return { stopEpoch, blocked, lastStop: null };
+    let arm: ScenarioStopFence['lastArm'] = null;
+    if (lastArm !== null) {
+        if (
+            !isPlainObject(lastArm) ||
+            !hasOnly(lastArm, LAST_ARM_KEYS) ||
+            !isCount(lastArm.epoch) ||
+            !Number.isFinite(lastArm.at)
+        ) {
+            return null;
+        }
+        arm = { epoch: lastArm.epoch, at: Number(lastArm.at) };
+    }
+    if (lastStop === null) return { stopEpoch, blocked, lastStop: null, lastArm: arm };
     if (
         !isPlainObject(lastStop) ||
         !hasOnly(lastStop, LAST_STOP_KEYS) ||
@@ -495,6 +552,7 @@ const parseFence = (raw: string): ScenarioStopFence | null => {
         stopEpoch,
         blocked,
         lastStop: { requestId: lastStop.requestId, at: Number(lastStop.at), durable: lastStop.durable },
+        lastArm: arm,
     };
 };
 
@@ -534,7 +592,7 @@ type StopFenceFailure = 'unreadable' | 'oversize' | 'not-saved';
 const initializeStopFence = async (): Promise<
     { ok: true; created: boolean } | { ok: false; reason: StopFenceFailure }
 > => {
-    const initial = fenceText({ stopEpoch: 0, blocked: false, lastStop: null }) as string;
+    const initial = fenceText({ stopEpoch: 0, blocked: false, lastStop: null, lastArm: null }) as string;
     const saved = await stopFenceStore
         .updateThrough((current) => (current === null ? initial : null))
         .catch(() => 'failed' as const);
@@ -561,7 +619,8 @@ const recordFullStop = async (
                 out.reason = 'unreadable';
                 return null;
             }
-            const before = read.state === 'ok' ? read.fence : { stopEpoch: 0, blocked: false, lastStop: null };
+            const before =
+                read.state === 'ok' ? read.fence : { stopEpoch: 0, blocked: false, lastStop: null, lastArm: null };
             if (before.lastStop?.requestId === requestId) {
                 out.epoch = before.stopEpoch;
                 return null;
@@ -570,6 +629,7 @@ const recordFullStop = async (
                 stopEpoch: before.stopEpoch + 1,
                 blocked: true,
                 lastStop: { requestId, at, durable: true },
+                lastArm: before.lastArm,
             });
             if (text === null) {
                 out.reason = 'oversize';
@@ -612,6 +672,44 @@ const clearStopBlock = async (
     return out.reason ? { ok: false, reason: out.reason } : { ok: true };
 };
 
+/**
+ * The final arming decision, in one compare-and-set on the fence alone: it succeeds only while the fence is readable, not
+ * `blocked`, and still at `capturedEpoch`, and it writes `lastArm` in the same step. A Stop that advanced the epoch first, or
+ * lands after, cannot be overtaken: the write is refused (`stale-epoch` / `blocked`) or is followed by the Stop's own advance.
+ * Nothing but the fence is read or written.
+ */
+const armIfAllowed = async (
+    capturedEpoch: number,
+    at: number,
+): Promise<{ ok: true } | { ok: false; reason: StopFenceFailure | 'stale-epoch' | 'blocked' | 'missing' }> => {
+    const out: { reason: StopFenceFailure | 'stale-epoch' | 'blocked' | 'missing' | null } = { reason: null };
+    const saved = await stopFenceStore
+        .updateThrough((current) => {
+            const read = readFenceText(current);
+            if (read.state !== 'ok') {
+                out.reason = read.state === 'missing' ? 'missing' : 'unreadable';
+                return null;
+            }
+            if (read.fence.blocked) {
+                out.reason = 'blocked';
+                return null;
+            }
+            if (read.fence.stopEpoch !== capturedEpoch) {
+                out.reason = 'stale-epoch';
+                return null;
+            }
+            const text = fenceText({ ...read.fence, lastArm: { epoch: capturedEpoch, at } });
+            if (text === null) {
+                out.reason = 'oversize';
+                return null;
+            }
+            return text;
+        })
+        .catch(() => 'failed' as const);
+    if (saved === 'failed') return { ok: false, reason: 'not-saved' };
+    return out.reason ? { ok: false, reason: out.reason } : { ok: true };
+};
+
 /** Whether arming is allowed for a request that captured `capturedEpoch`: the fence reads, is not blocked, and has not moved. */
 const isArmAllowed = (capturedEpoch: number): boolean => {
     const read = readStopFence();
@@ -636,6 +734,9 @@ export {
     initializeStopFence,
     recordFullStop,
     clearStopBlock,
+    armIfAllowed,
+    withdrawInstallationPublication,
+    restoreInstallationPublication,
     isArmAllowed,
     initializeStopFenceAsync,
     flushStopFenceWrites,

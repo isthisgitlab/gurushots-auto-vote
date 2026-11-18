@@ -14,6 +14,8 @@
 
 import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
+import { answerInstallationReadFromSaved } from '../helpers/savedInstallationRead';
+answerInstallationReadFromSaved(settings);
 import VotingLogic = require('../../src/ts/core/services/VotingLogic');
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import { invalid } from '../helpers/invalid';
@@ -55,6 +57,24 @@ const mockSettings = (overrides = {}) => {
 };
 
 beforeEach(() => jest.clearAllMocks());
+
+describe('getScheduledFillState — a zone the installation cannot read', () => {
+    test('opens no window, and the saved zone never takes its place', () => {
+        mockSettings({ useScheduledFill: true, scheduledFillTime: ['12:00'], scheduledFillBeforeEnd: [] });
+        expect(VotingLogic.getScheduledFillState(buildChallenge(), '777', NOW).inWindow).toBe(true);
+        settings.captureInstallationSettings = invalid(
+            jest.fn(() => ({ ok: false, key: 'timezone', reason: 'the published settings have expired' })),
+        );
+        try {
+            expect(VotingLogic.getScheduledFillState(buildChallenge(), '777', NOW)).toMatchObject({
+                active: false,
+                inWindow: false,
+            });
+        } finally {
+            answerInstallationReadFromSaved(settings);
+        }
+    });
+});
 
 describe('getScheduledFillState — active semantics', () => {
     test('inactive when useScheduledFill is off, even with times configured', () => {

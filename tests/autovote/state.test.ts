@@ -82,3 +82,47 @@ describe('autovoteReducer — other transitions', () => {
         expect(autovoteReducer(initialState, invalid({ type: 'NOPE' }))).toBe(initialState);
     });
 });
+
+describe('autovoteReducer — the execution mode', () => {
+    test('starts stopped; START is voting and STOP is stopped again', () => {
+        expect(initialState).toMatchObject({
+            executionMode: 'stopped',
+            running: false,
+            stopEpoch: null,
+            lastStop: null,
+        });
+        const voting = autovoteReducer(initialState, { type: ACTIONS.START });
+        expect(voting).toMatchObject({ executionMode: 'voting', running: true });
+        expect(autovoteReducer(voting, { type: ACTIONS.STOP })).toMatchObject({
+            executionMode: 'stopped',
+            running: false,
+        });
+    });
+
+    test('armed is not running: the voting stages are paused while the chain stays', () => {
+        const armed = autovoteReducer(initialState, { type: ACTIONS.SET_EXECUTION_MODE, payload: 'armed' });
+        expect(armed).toMatchObject({ executionMode: 'armed', running: false });
+        const voting = autovoteReducer(armed, { type: ACTIONS.SET_EXECUTION_MODE, payload: 'voting' });
+        expect(voting).toMatchObject({ executionMode: 'voting', running: true });
+    });
+
+    test('a mode change clears the last refusal; the Stop result, epoch and refusal are kept as given', () => {
+        const refused = autovoteReducer(initialState, { type: ACTIONS.SET_START_REFUSAL, payload: 'superseded' });
+        expect(refused.startRefusal).toBe('superseded');
+        expect(
+            autovoteReducer(refused, { type: ACTIONS.SET_EXECUTION_MODE, payload: 'armed' }).startRefusal,
+        ).toBeNull();
+        expect(autovoteReducer(refused, { type: ACTIONS.START }).startRefusal).toBeNull();
+        const stopped = autovoteReducer(initialState, {
+            type: ACTIONS.SET_STOP_RESULT,
+            payload: { outcome: 'stopped-locally', durable: false, reason: 'not-saved', withdrawal: 'none' },
+        });
+        expect(stopped.lastStop).toEqual({
+            outcome: 'stopped-locally',
+            durable: false,
+            reason: 'not-saved',
+            withdrawal: 'none',
+        });
+        expect(autovoteReducer(initialState, { type: ACTIONS.SET_STOP_EPOCH, payload: 4 }).stopEpoch).toBe(4);
+    });
+});

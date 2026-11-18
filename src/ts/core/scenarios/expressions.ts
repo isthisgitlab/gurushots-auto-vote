@@ -567,8 +567,31 @@ const exprReferences = (
     return { facts, settings };
 };
 
+/**
+ * An expression and the sub-expressions of it, depth first (the nodes an instant can be read off).
+ */
+const expressionNodes = (expr: ScenarioExpr): ScenarioExpr[] => {
+    switch (expr.kind) {
+        case 'offset':
+            return [expr, ...expressionNodes(expr.from), ...expressionNodes(expr.by)];
+        case 'difference':
+            return [expr, ...expressionNodes(expr.from), ...expressionNodes(expr.to)];
+        case 'add':
+        case 'subtract':
+            return [expr, ...expressionNodes(expr.left), ...expressionNodes(expr.right)];
+        case 'earlier':
+        case 'later':
+        case 'min':
+        case 'max':
+            return [expr, ...expr.of.flatMap(expressionNodes)];
+        default:
+            return [expr];
+    }
+};
+
 export {
     known,
+    expressionNodes,
     absent,
     unknownOf,
     isKnown,

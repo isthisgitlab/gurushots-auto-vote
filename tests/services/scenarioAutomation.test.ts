@@ -21,7 +21,9 @@ jest.mock('../../src/ts/core/settings', () => {
         getEffectiveSetting,
         captureInstallationSettings: jest.fn((keys: string[]) => ({
             ok: true,
-            values: Object.fromEntries(keys.map((key) => [key, getEffectiveSetting(key, null)])),
+            values: Object.fromEntries(
+                keys.map((key) => [key, key === 'timezone' ? 'UTC' : getEffectiveSetting(key, null)]),
+            ),
         })),
         getScenario: jest.fn(),
         getSetting: jest.fn(() => 'UTC'),

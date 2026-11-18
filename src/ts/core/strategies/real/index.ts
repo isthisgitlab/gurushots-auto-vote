@@ -39,7 +39,8 @@ import {
     refreshScenarioStateAsync,
 } from '../../scenarioStateStore';
 import { backgroundServiceOwnsScenarios } from '../../services/scenarioRunner';
-import { createLifecycle } from '../../services/scenarioRunner/lifecycle';
+import { createLifecycle, runArmedCycle } from '../../services/scenarioRunner/lifecycle';
+import type { CycleMode } from '../../types/votingPass';
 import { sleep, getRandomDelay } from '../../timing';
 import * as logger from '../../logger';
 import * as settings from '../../settings';
@@ -266,6 +267,7 @@ const leftToServiceIsOn = (): boolean =>
  * effect.
  *
  * @param token - Authentication token
+ * @param mode - `armed` runs the installation stage only (an armed controller, voting stages paused); `full` is the whole cycle.
  * @param challengeIdFilter - When set, restricts the strategy pass to a single challenge (per-card "Run"). Stale-metadata cleanup still runs against the full active list before filtering.
  *   `challenges` is the *full* active list this cycle fetched (not the per-challenge
  *   filtered subset), so callers can reuse it for threshold scheduling instead of
@@ -274,6 +276,7 @@ const leftToServiceIsOn = (): boolean =>
 const fetchChallengesAndVote = async (
     token: string,
     challengeIdFilter: string | number | null = null,
+    mode: CycleMode = 'full',
 ): Promise<{ success: boolean; message?: string; error?: string; challenges?: Challenge[] }> => {
     // One coordinator routes this cycle's scenario work through the stages of a subject's life (see
     // services/scenarioRunner/lifecycle.ts). The installation stage comes first: its settings are published by its owner
@@ -288,6 +291,8 @@ const fetchChallengesAndVote = async (
         // The Android window leaves scenarios to the background service.
         enabled: () => !backgroundServiceOwnsScenarios(),
     });
+    // Armed: the installation stage only (see runArmedCycle); no mission read, join, claim, pass or post-close work.
+    if (mode === 'armed') return runArmedCycle(lifecycle, challengeIdFilter);
     await lifecycle.installation({ rules: challengeIdFilter === null });
     // What the active missions still need — read only while a mission setting is
     // on, shared by the join pre-step and the pass, which count it down.

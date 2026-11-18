@@ -21,7 +21,7 @@
 import * as logger from '../../logger';
 import * as settings from '../../settings';
 import { errorMessage } from '../../errorMessage';
-import { effectiveTimezone } from '../../settings/uiDefaults';
+import { captureInstallationTimezone } from '../installationTimezone';
 import * as cancellation from '../../voting/cancellation';
 import { DEFAULT_STAGES } from '../../scenarios/vocabulary';
 import { admitsAtCountOne } from '../../scenarios/evaluate';
@@ -32,6 +32,7 @@ import type { ScenarioStage } from '../../types/scenario';
 import type { ScenarioDocument } from '../../settings/scenarioSchema';
 import type { RuleMatchChallenge } from '../../types/settings';
 import type { StateLock } from '../../scenarioStateStore';
+import { currentAutovoteControl } from '../../autovote/control';
 import { isClaimable, readCompletedChallenges } from '../autoClaim';
 import type { ClaimDeps } from '../autoClaim';
 import { publishInstallationOverlay, runInstallationStage } from './installation';
@@ -132,13 +133,20 @@ const runPreJoinStep = async (
         return null;
     }
     const tag = logger.challengeTag(candidate);
+    // The zone, captured once for this step; one that cannot be read runs nothing (the saved zone never takes its place).
+    const timezone = captureInstallationTimezone();
+    if (timezone === null) {
+        lock.release();
+        log().warning(`${tag} the time zone is unavailable — the pre-join rules wait`, null);
+        return null;
+    }
     const made: { attempt: JoinAttempt | null } = { attempt: null };
     const ctx: PreJoinContext = {
         stage: 'preJoin',
         challenge: candidate,
         challengeId,
         scenario,
-        timezone: effectiveTimezone(settings.getSetting('timezone')),
+        timezone,
         ledger: deps.ledger,
         stepLock: lock,
         beforeSpend: null,
@@ -186,12 +194,19 @@ const runPostCloseStep = async (
         log().debug(`${tag} another process is running its scenario — skipped this pass`, null);
         return null;
     }
+    // The zone, captured once for this step; one that cannot be read runs nothing (the saved zone never takes its place).
+    const timezone = captureInstallationTimezone();
+    if (timezone === null) {
+        lock.release();
+        log().warning(`${tag} the time zone is unavailable — the post-close rules wait`, null);
+        return null;
+    }
     const ctx: PostCloseContext = {
         stage: 'postClose',
         completed,
         challengeId,
         scenario,
-        timezone: effectiveTimezone(settings.getSetting('timezone')),
+        timezone,
         ledger: deps.ledger,
         stepLock: lock,
         beforeSpend: null,
@@ -254,17 +269,42 @@ const runPostClose = async (deps: LifecycleDeps, operations: OperationRecord): P
  * The coordinator of one cycle. `operations` is the cycle's record of what was done, shared with the join pass, the claim
  * pass and the voting pass.
  */
-const createLifecycle = (deps: LifecycleDeps, operations: OperationRecord = createOperationRecord()): Lifecycle => ({
-    operations,
-    installation: ({ rules }) =>
-        rules ? runInstallationStage({ ...deps, operations }, { rules }) : publishInstallationOverlay(deps),
-    preJoin: {
+const createLifecycle = (deps: LifecycleDeps, operations: OperationRecord = createOperationRecord()): Lifecycle => {
+    // The installation's requests for the voting stages are bound to the Stop capture of the moment this cycle began: a Stop
+    // that lands while it runs makes them obsolete, and a user Run after it does not make them current again.
+    const control = currentAutovoteControl();
+    const captured = control?.capture();
+    const autovote = control && captured ? (on: boolean) => control.request(on, captured) : null;
+    const obsolete = control && captured ? async () => !(await control.admits(captured)) : undefined;
+    return {
         operations,
-        armed: () => deps.enabled?.() !== false && stageInUse('preJoin'),
-        run: (candidate, join) => runPreJoinStep(deps, operations, candidate, join),
-    },
-    postClose: () => runPostClose(deps, operations),
-});
+        installation: ({ rules }) =>
+            rules
+                ? runInstallationStage({ ...deps, operations, autovote, obsolete }, { rules })
+                : publishInstallationOverlay({ ...deps, obsolete }),
+        preJoin: {
+            operations,
+            armed: () => deps.enabled?.() !== false && stageInUse('preJoin'),
+            run: (candidate, join) => runPreJoinStep(deps, operations, candidate, join),
+        },
+        postClose: () => runPostClose(deps, operations),
+    };
+};
 
-export { createLifecycle, hasStage };
+/**
+ * The cycle of an armed controller (cycle mode `armed`): the installation stage and nothing else. It covers no challenge, so a
+ * scoped one is refused. The stage's account rules may claim a mission reward or ask the controller for the voting stages; the
+ * pre-steps, the voting pass, the pre-join and post-close stages never run.
+ */
+const runArmedCycle = async (
+    lifecycle: Lifecycle,
+    challengeIdFilter: string | number | null,
+): Promise<{ success: boolean; message?: string; error?: string }> => {
+    if (challengeIdFilter !== null)
+        return { success: false, error: 'An installation cycle covers no single challenge' };
+    await lifecycle.installation({ rules: true });
+    return { success: true, message: 'Installation cycle completed' };
+};
+
+export { createLifecycle, hasStage, runArmedCycle };
 export type { Lifecycle, LifecycleDeps, PreJoinHook };

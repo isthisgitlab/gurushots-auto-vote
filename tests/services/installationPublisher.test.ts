@@ -14,6 +14,8 @@ jest.mock('../../src/ts/core/settings', () => ({
     installationGeneration: jest.fn(),
     prepareInstallationSnapshot: jest.fn(),
     getSetting: jest.fn(() => 'UTC'),
+    // The installation's own read of the time zone: the saved one while no installation scenario overlays it.
+    captureInstallationSettings: jest.fn(() => ({ ok: true, values: { timezone: 'UTC' } })),
 }));
 
 import { createStateLedger, initialState } from '../../src/ts/core/scenarioStateStore';
@@ -129,6 +131,34 @@ describe('who publishes', () => {
     });
 });
 
+describe('the time zone of the cycle', () => {
+    const zoneReads = () =>
+        jest.mocked(settings.captureInstallationSettings).mock.calls.filter(([keys]) => keys.join() === 'timezone');
+
+    test('is the installation’s effective one, captured once, after ownership', async () => {
+        await expect(publishInstallationOverlay(pass())).resolves.toBe('published');
+        expect(zoneReads()).toHaveLength(1);
+        // An installation with no scenario here (or one another runtime owns) reads no zone.
+        jest.mocked(settings.captureInstallationSettings).mockClear();
+        settings.getInstallationScenario.mockReturnValue(null);
+        await publishInstallationOverlay(pass());
+        settings.getInstallationScenario.mockReturnValue({ scenario: 'Account plan', executor: 'cli', generation: 1 });
+        await publishInstallationOverlay(pass());
+        expect(zoneReads()).toHaveLength(0);
+    });
+
+    test('one that cannot be read publishes nothing: the saved zone never takes its place', async () => {
+        jest.mocked(settings.captureInstallationSettings).mockReturnValueOnce({
+            ok: false,
+            key: 'timezone',
+            reason: 'the published settings of this phase have expired',
+        });
+        await expect(publishInstallationOverlay(pass())).resolves.toBe('unavailable');
+        expect(settings.prepareInstallationSnapshot).not.toHaveBeenCalled();
+        expect(ledger.get(KEY).state).toBeNull();
+    });
+});
+
 describe('the step lock', () => {
     test('is taken for the installation, and released when the step ends', async () => {
         const release = jest.fn();
@@ -171,6 +201,7 @@ describe('what stops it under the lock', () => {
 
     test.each([
         ['paused', { paused: { at: NOW, reason: 'test' } }],
+        ['withdrawn by a full Stop', { withdrawn: { at: NOW, epoch: 1 } }],
         ['a handoff not finished', { handoff: { from: 'Account plan', to: null, generation: 1, at: NOW } }],
     ])('a subject %s publishes nothing and reads no evidence', async (_name, over) => {
         seed(over);

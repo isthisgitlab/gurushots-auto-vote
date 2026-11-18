@@ -809,6 +809,20 @@ describe('handoff', () => {
         expect(settings.installationGeneration()).toBe(3);
     });
 
+    test('a handoff of the installation scenario keeps the withdrawal a Stop made: only an explicit re-arm lifts it', async () => {
+        settings.saveScenario(installationDoc('First'));
+        settings.saveScenario(installationDoc('Second'));
+        expect(settings.setInstallationScenario('First', 'electron', 0).ok).toBe(true);
+        expect(settings.withdrawInstallationPublication(4, 1700)).toEqual({ ok: true, changed: true });
+        expect(await settings.requestScenarioHandoff(INSTALLATION_KEY, 'Second', 1)).toEqual({
+            ok: true,
+            generation: 2,
+        });
+        expect(record(INSTALLATION_KEY)).toMatchObject({ scenario: 'Second', withdrawn: { at: 1700, epoch: 4 } });
+        expect(settings.restoreInstallationPublication()).toEqual({ ok: true, changed: true });
+        expect(record(INSTALLATION_KEY)?.withdrawn).toBeUndefined();
+    });
+
     describe('a storage failure at any step leaves nothing that can spend', () => {
         test('(a) the intent cannot be written: nothing changed at all', async () => {
             assigned();
@@ -1112,7 +1126,7 @@ describe('the priority Stop fence', () => {
         expect(await settings.initializeStopFence()).toEqual({ ok: true, created: true });
         expect(settings.readStopFence()).toEqual({
             state: 'ok',
-            fence: { stopEpoch: 0, blocked: false, lastStop: null },
+            fence: { stopEpoch: 0, blocked: false, lastStop: null, lastArm: null },
         });
         expect(settings.isArmAllowed(0)).toBe(true);
         const before = fenceText();
@@ -1131,7 +1145,12 @@ describe('the priority Stop fence', () => {
         expect(await settings.recordFullStop('stop-1', 1700)).toEqual({ ok: true, epoch: 1 });
         expect(settings.readStopFence()).toEqual({
             state: 'ok',
-            fence: { stopEpoch: 1, blocked: true, lastStop: { requestId: 'stop-1', at: 1700, durable: true } },
+            fence: {
+                stopEpoch: 1,
+                blocked: true,
+                lastStop: { requestId: 'stop-1', at: 1700, durable: true },
+                lastArm: null,
+            },
         });
         const before = fenceText();
         expect(await settings.recordFullStop('stop-1', 1800)).toEqual({ ok: true, epoch: 1 });
@@ -1173,6 +1192,7 @@ describe('the priority Stop fence', () => {
                         stopEpoch: 4,
                         blocked: true,
                         lastStop: { requestId: 'other', at: 2, durable: true },
+                        lastArm: null,
                     }),
                 );
                 return false;
@@ -1203,38 +1223,52 @@ describe('the priority Stop fence', () => {
         // A stored fence past the boundary reads as unreadable, never as a fence.
         store.keys.set(
             FENCE_KEY,
-            JSON.stringify({ stopEpoch: 1, blocked: true, lastStop: null, pad: 'x'.repeat(1100) }),
+            JSON.stringify({ stopEpoch: 1, blocked: true, lastStop: null, lastArm: null, pad: 'x'.repeat(1100) }),
         );
         expect(settings.readStopFence()).toEqual({ state: 'unreadable', reason: 'oversize' });
         const longest = 'y'.repeat(900);
-        store.keys.set(FENCE_KEY, JSON.stringify({ stopEpoch: 0, blocked: false, lastStop: null }));
+        store.keys.set(FENCE_KEY, JSON.stringify({ stopEpoch: 0, blocked: false, lastStop: null, lastArm: null }));
         expect(await settings.recordFullStop(longest, 1)).toEqual({ ok: true, epoch: 1 });
     });
 
     test.each([
         ['not an object', '[]'],
         ['not JSON', '{'],
-        ['an extra key', '{"stopEpoch":0,"blocked":false,"lastStop":null,"x":1}'],
-        ['a missing key', '{"stopEpoch":0,"blocked":false}'],
-        ['a negative epoch', '{"stopEpoch":-1,"blocked":false,"lastStop":null}'],
-        ['a fractional epoch', '{"stopEpoch":1.5,"blocked":false,"lastStop":null}'],
-        ['a text block flag', '{"stopEpoch":0,"blocked":"no","lastStop":null}'],
-        ['a lastStop that is not an object', '{"stopEpoch":0,"blocked":false,"lastStop":3}'],
+        ['an extra key', '{"stopEpoch":0,"blocked":false,"lastStop":null,"lastArm":null,"x":1}'],
+        ['a missing key', '{"stopEpoch":0,"blocked":false,"lastArm":null}'],
+        ['a missing lastArm', '{"stopEpoch":0,"blocked":false,"lastStop":null}'],
+        ['a lastArm that is not an object', '{"stopEpoch":0,"blocked":false,"lastStop":null,"lastArm":3}'],
+        [
+            'a lastArm with an extra key',
+            '{"stopEpoch":0,"blocked":false,"lastStop":null,"lastArm":{"epoch":0,"at":1,"x":1}}',
+        ],
+        [
+            'a lastArm with a fractional epoch',
+            '{"stopEpoch":0,"blocked":false,"lastStop":null,"lastArm":{"epoch":0.5,"at":1}}',
+        ],
+        [
+            'a lastArm with a text time',
+            '{"stopEpoch":0,"blocked":false,"lastStop":null,"lastArm":{"epoch":0,"at":"1"}}',
+        ],
+        ['a negative epoch', '{"stopEpoch":-1,"blocked":false,"lastStop":null,"lastArm":null}'],
+        ['a fractional epoch', '{"stopEpoch":1.5,"blocked":false,"lastStop":null,"lastArm":null}'],
+        ['a text block flag', '{"stopEpoch":0,"blocked":"no","lastStop":null,"lastArm":null}'],
+        ['a lastStop that is not an object', '{"stopEpoch":0,"blocked":false,"lastStop":3,"lastArm":null}'],
         [
             'a lastStop with an extra key',
-            '{"stopEpoch":0,"blocked":false,"lastStop":{"requestId":"a","at":1,"durable":true,"x":1}}',
+            '{"stopEpoch":0,"blocked":false,"lastStop":{"requestId":"a","at":1,"durable":true,"x":1},"lastArm":null}',
         ],
         [
             'a lastStop with a number id',
-            '{"stopEpoch":0,"blocked":false,"lastStop":{"requestId":1,"at":1,"durable":true}}',
+            '{"stopEpoch":0,"blocked":false,"lastStop":{"requestId":1,"at":1,"durable":true},"lastArm":null}',
         ],
         [
             'a lastStop with a text time',
-            '{"stopEpoch":0,"blocked":false,"lastStop":{"requestId":"a","at":"1","durable":true}}',
+            '{"stopEpoch":0,"blocked":false,"lastStop":{"requestId":"a","at":"1","durable":true},"lastArm":null}',
         ],
         [
             'a lastStop with a text durable flag',
-            '{"stopEpoch":0,"blocked":false,"lastStop":{"requestId":"a","at":1,"durable":"y"}}',
+            '{"stopEpoch":0,"blocked":false,"lastStop":{"requestId":"a","at":1,"durable":"y"},"lastArm":null}',
         ],
     ])('malformed data (%s) is unreadable: never epoch 0, nothing may arm', async (label, text) => {
         store.keys.set(FENCE_KEY, text);
@@ -1277,6 +1311,139 @@ describe('the priority Stop fence', () => {
     const handoffAfter = async () => {
         await settings.requestScenarioHandoff('7', 'Next', 0);
     };
+
+    describe('armIfAllowed: the final arming decision, one compare-and-set', () => {
+        const stored = () => parseJsonObject(fenceText()!);
+
+        test('succeeds while the fence is readable, open and at the captured epoch, and records the arming', async () => {
+            await settings.initializeStopFence();
+            expect(await settings.armIfAllowed(0, 1700)).toEqual({ ok: true });
+            expect(stored()).toEqual({ stopEpoch: 0, blocked: false, lastStop: null, lastArm: { epoch: 0, at: 1700 } });
+            // A Stop keeps what was recorded of the last arming.
+            expect(await settings.recordFullStop('s', 1800)).toEqual({ ok: true, epoch: 1 });
+            expect(stored()).toMatchObject({ stopEpoch: 1, blocked: true, lastArm: { epoch: 0, at: 1700 } });
+        });
+
+        test('a blocked fence, a stale epoch, a missing or an unreadable one refuse, and nothing is written', async () => {
+            expect(await settings.armIfAllowed(0, 1)).toEqual({ ok: false, reason: 'missing' });
+            await settings.initializeStopFence();
+            await settings.recordFullStop('s', 1);
+            const blocked = fenceText();
+            expect(await settings.armIfAllowed(1, 2)).toEqual({ ok: false, reason: 'blocked' });
+            expect(await settings.clearStopBlock(1)).toEqual({ ok: true });
+            expect(await settings.armIfAllowed(0, 2)).toEqual({ ok: false, reason: 'stale-epoch' });
+            expect(fenceText()).not.toBe(blocked);
+            const before = fenceText();
+            expect(await settings.armIfAllowed(0, 3)).toEqual({ ok: false, reason: 'stale-epoch' });
+            expect(fenceText()).toBe(before);
+            store.keys.set(FENCE_KEY, '{"nope":1}');
+            expect(await settings.armIfAllowed(0, 3)).toEqual({ ok: false, reason: 'unreadable' });
+            expect(fenceText()).toBe('{"nope":1}');
+        });
+
+        test('a write that does not land, and one that would not fit the cell, are refused', async () => {
+            await settings.initializeStopFence();
+            const real = store.compareAndWriteKey!;
+            store.compareAndWriteKey = () => false;
+            expect(await settings.armIfAllowed(0, 1)).toEqual({ ok: false, reason: 'not-saved' });
+            store.compareAndWriteKey = real;
+            // A Stop whose text fills the cell leaves no room for the arming.
+            const overhead = JSON.stringify({
+                stopEpoch: 1,
+                blocked: true,
+                lastStop: { requestId: '', at: 1, durable: true },
+                lastArm: null,
+            }).length;
+            expect(await settings.recordFullStop('z'.repeat(1020 - overhead), 1)).toEqual({ ok: true, epoch: 1 });
+            expect(await settings.clearStopBlock(1)).toEqual({ ok: true });
+            const full = fenceText();
+            expect(await settings.armIfAllowed(1, 2)).toEqual({ ok: false, reason: 'oversize' });
+            expect(fenceText()).toBe(full);
+        });
+
+        describe('against a Stop from another runtime over the same backing store', () => {
+            type Lifecycle = typeof import('../../src/ts/core/settings/scenarioLifecycle');
+            let other: Lifecycle;
+
+            beforeEach(() => {
+                // A second copy of the module: its own store handle, the same native store underneath.
+                jest.isolateModules(() => {
+                    (
+                        require('../helpers/platform') as typeof import('../helpers/platform')
+                    ).installHeadlessTestPlatform();
+                    other = require('../../src/ts/core/settings/scenarioLifecycle') as Lifecycle;
+                });
+            });
+
+            test('the arming first: it lands, the Stop after it advances the epoch, and the older epoch arms no more', async () => {
+                await settings.initializeStopFence();
+                expect(await settings.armIfAllowed(0, 10)).toEqual({ ok: true });
+                expect(await other.recordFullStop('other', 11)).toEqual({ ok: true, epoch: 1 });
+                expect(await settings.armIfAllowed(0, 12)).toEqual({ ok: false, reason: 'blocked' });
+                expect(await other.armIfAllowed(0, 12)).toEqual({ ok: false, reason: 'blocked' });
+                expect(stored()).toMatchObject({ stopEpoch: 1, blocked: true, lastArm: { epoch: 0, at: 10 } });
+            });
+
+            test('the Stop first: the arming from the older epoch is refused', async () => {
+                await settings.initializeStopFence();
+                expect(await other.recordFullStop('other', 10)).toEqual({ ok: true, epoch: 1 });
+                expect(await settings.armIfAllowed(0, 11)).toEqual({ ok: false, reason: 'blocked' });
+                expect(await settings.clearStopBlock(1)).toEqual({ ok: true });
+                expect(await settings.armIfAllowed(0, 12)).toEqual({ ok: false, reason: 'stale-epoch' });
+                expect(await other.armIfAllowed(1, 13)).toEqual({ ok: true });
+            });
+
+            test('a Stop that lands between the arming’s read and its write: the write loses, and is made again on what is there', async () => {
+                await settings.initializeStopFence();
+                const real = store.compareAndWriteKey!;
+                let raced = false;
+                store.compareAndWriteKey = (key, expected, data) => {
+                    if (key === FENCE_KEY && !raced) {
+                        raced = true;
+                        // The other runtime's Stop is saved first.
+                        store.keys.set(
+                            FENCE_KEY,
+                            JSON.stringify({
+                                stopEpoch: 1,
+                                blocked: true,
+                                lastStop: { requestId: 'o', at: 5, durable: true },
+                                lastArm: null,
+                            }),
+                        );
+                        return false;
+                    }
+                    return real(key, expected, data);
+                };
+                expect(await settings.armIfAllowed(0, 6)).toEqual({ ok: false, reason: 'blocked' });
+                expect(stored()).toMatchObject({ stopEpoch: 1, blocked: true, lastArm: null });
+            });
+
+            test('an arming that lands between the Stop’s read and its write: the Stop loses, is made again, and wins the epoch', async () => {
+                await settings.initializeStopFence();
+                const real = store.compareAndWriteKey!;
+                let raced = false;
+                store.compareAndWriteKey = (key, expected, data) => {
+                    if (key === FENCE_KEY && !raced) {
+                        raced = true;
+                        store.keys.set(
+                            FENCE_KEY,
+                            JSON.stringify({
+                                stopEpoch: 0,
+                                blocked: false,
+                                lastStop: null,
+                                lastArm: { epoch: 0, at: 5 },
+                            }),
+                        );
+                        return false;
+                    }
+                    return real(key, expected, data);
+                };
+                expect(await other.recordFullStop('mine', 6)).toEqual({ ok: true, epoch: 1 });
+                expect(stored()).toMatchObject({ stopEpoch: 1, blocked: true, lastArm: { epoch: 0, at: 5 } });
+                expect(await settings.armIfAllowed(0, 7)).toEqual({ ok: false, reason: 'blocked' });
+            });
+        });
+    });
 
     test('the boot hydrates the fence and the teardown flushes it', async () => {
         const lifecycle =
@@ -1332,6 +1499,7 @@ describe('the priority Stop fence', () => {
         await expect(isolated!.initializeStopFence()).resolves.toEqual({ ok: false, reason: 'not-saved' });
         await expect(isolated!.recordFullStop('s', 1)).resolves.toEqual({ ok: false, reason: 'not-saved' });
         await expect(isolated!.clearStopBlock(0)).resolves.toEqual({ ok: false, reason: 'not-saved' });
+        await expect(isolated!.armIfAllowed(0, 1)).resolves.toEqual({ ok: false, reason: 'not-saved' });
     });
 });
 

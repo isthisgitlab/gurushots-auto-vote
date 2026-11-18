@@ -8,8 +8,15 @@
  */
 
 import * as settings from '../settings';
-import { getScenarioStatus, scenarioWakeInput } from '../services/scenarioStatus';
+import { getScenarioStatus, scenarioWakeInput, ledgerForMode } from '../services/scenarioStatus';
 import { isManualPhotosOnly } from '../services/manualPhotosOnly';
+import { captureInstallationTimezone } from '../services/installationTimezone';
+import { getAutoClaimStatus } from '../services/autoClaim';
+import { getNextMissionExpiry } from '../services/missions';
+import { listOpenChallenges } from '../services/openChallengeCache';
+import { hasStage } from '../services/scenarioRunner/lifecycle';
+import { platform } from '../platform/port';
+import { INSTALLATION_KEY } from '../scenarioStateStore';
 
 import type {
     ResolveThreshold,
@@ -19,6 +26,7 @@ import type {
     ResolveScenarioWake,
     ResolveAutoSubmitClock,
     ResolveAutoSubmitSchedule,
+    ResolveAccountWake,
 } from './thresholdWindow';
 import type { ResolveScheduledFill } from './scheduledFill';
 import type { ConfigApp } from '../types/config';
@@ -66,11 +74,18 @@ const resolveAutoSubmitClock = ((challengeId: string) => ({
     windowMinutes: settings.getEffectiveSetting('autoSubmitWindowMinutes', challengeId),
 })) satisfies ResolveAutoSubmitClock;
 
-const resolveAutoSubmitSchedule = ((challengeId: string) => ({
-    enabled: settings.getEffectiveSetting('autoSubmit', challengeId) === true,
-    manualPhotosOnly: isManualPhotosOnly(settings, challengeId),
-    schedule: settings.getEffectiveSetting('autoSubmitSchedule', challengeId),
-})) satisfies ResolveAutoSubmitSchedule;
+// A phase's dynamic submit schedule, as its owner published it, is what the deadlines are worked out from while the phase holds
+// it (`resolved`); one that cannot be read gives no deadline (unknown evidence supplies none), and the saved schedule never
+// takes its place.
+const resolveAutoSubmitSchedule = ((challengeId: string) => {
+    const phase = settings.getPhaseSchedules(challengeId);
+    return {
+        enabled: settings.getEffectiveSetting('autoSubmit', challengeId) === true && phase.kind !== 'unavailable',
+        manualPhotosOnly: isManualPhotosOnly(settings, challengeId),
+        schedule: settings.getEffectiveSetting('autoSubmitSchedule', challengeId),
+        ...(phase.kind === 'resolved' && phase.schedules.submit ? { resolved: phase.schedules.submit } : {}),
+    };
+}) satisfies ResolveAutoSubmitSchedule;
 
 // Per-challenge pre-final-window top-up config for the cadence cap (./thresholdWindow/leadWindows.ts).
 // Enabled only when BOTH the final-window feature and this opt-in are on — matching the
@@ -132,8 +147,57 @@ const resolveCurrencyAuto = ((challengeId: string) => ({
 const resolveScenarioWake = ((challengeId: string) =>
     scenarioWakeInput(getScenarioStatus(challengeId))) satisfies ResolveScenarioWake;
 
+// The account's own boundaries, read once as a decision starts: the installation scenario this runtime owns (looking ahead to
+// `discoverUpcomingHours`, never to a challenge's close), the open challenges whose scenario has pre-join rules, the claim
+// throttle and the earliest mission expiry the last read showed. The time zone is the installation's effective one, captured
+// once for the whole evaluation; one that cannot be read leaves out what needs it.
+const resolveAccountWake = (() => {
+    const timezone = captureInstallationTimezone();
+    const assignment = settings.getInstallationScenario();
+    const scenario = assignment ? settings.getScenario(assignment.scenario) : null;
+    const hours = settings.getEffectiveSetting('discoverUpcomingHours', 'global');
+    const record = ledgerForMode().get(INSTALLATION_KEY);
+    const owned =
+        timezone !== null &&
+        assignment !== null &&
+        scenario?.scope === 'installation' &&
+        platform().capabilities.executor === assignment.executor &&
+        // The assignment's generation is the one the progress is at: a former owner's runtime wakes for nothing.
+        settings.installationGeneration() === assignment.generation &&
+        !record.corrupt &&
+        Number.isFinite(hours);
+    const now = Math.floor(Date.now() / 1000);
+    const claim = getAutoClaimStatus();
+    return {
+        installation: owned
+            ? {
+                  scenario,
+                  state:
+                      record.state && record.state.scenario.toLowerCase() === scenario.name.toLowerCase()
+                          ? record.state
+                          : null,
+                  timezone,
+                  horizon: now + hours * 3600,
+              }
+            : null,
+        candidates:
+            timezone === null
+                ? []
+                : listOpenChallenges().flatMap((challenge) => {
+                      const name = settings.getEffectiveSetting('scenario', String(challenge.id)) || '';
+                      const doc = name ? settings.getScenario(name) : null;
+                      return doc && hasStage(doc, 'preJoin') && Number(challenge.close_time) > now
+                          ? [{ challenge, scenario: doc, timezone }]
+                          : [];
+                  }),
+        claimAt: claim.enabled && claim.nextClaimAt > 0 ? Math.ceil(claim.nextClaimAt / 1000) : null,
+        missionExpiry: getNextMissionExpiry(),
+    };
+}) satisfies ResolveAccountWake;
+
 export {
     loadCadenceSettings,
+    resolveAccountWake,
     resolveScenarioWake,
     resolveThreshold,
     resolveScheduledFill,

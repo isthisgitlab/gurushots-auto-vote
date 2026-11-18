@@ -19,7 +19,7 @@
 import * as settings from '../../settings';
 import { errorMessage } from '../../errorMessage';
 import { platform } from '../../platform/port';
-import { effectiveTimezone } from '../../settings/uiDefaults';
+import { captureInstallationTimezone } from '../installationTimezone';
 import { evaluateExpression } from '../../scenarios/expressions';
 import { INSTALLATION_KEY, initialState } from '../../scenarioStateStore';
 import type { StateLock } from '../../scenarioStateStore';
@@ -49,6 +49,11 @@ type InstallationPass = {
     ledger: ScenarioStateLedger;
     lock?: (key: string) => StateLock;
     reads: Pick<AccountReads, 'getBankroll' | 'getMyMissions' | 'getMyCompletedChallenges'>;
+    /**
+     * Whether a full Stop made this cycle obsolete (the run epoch it began under is no longer current): nothing is then
+     * published and no account rule runs. Absent where no Stop fence is in play.
+     */
+    obsolete?: () => Promise<boolean>;
 };
 
 /**
@@ -56,7 +61,9 @@ type InstallationPass = {
  * assignment is at another generation, or the record is not this scenario's: nothing is written), `held` (paused, or a
  * handoff not finished), `busy` (another process holds the step), `unreadable` (the progress cannot be read), `blocked`
  * (the phase could not be prepared: its publication is cleared and the reason recorded), `published`, `cleared` (the
- * phase sets nothing: no publication stands) and `failed` (a write did not land).
+ * phase sets nothing: no publication stands), `fenced` (a full Stop came after this cycle began: nothing is published),
+ * `unavailable` (the installation's effective time zone cannot be read: nothing is published or run, and the saved zone never
+ * takes its place) and `failed` (a write did not land).
  */
 type InstallationPublishStatus =
     | 'none'
@@ -68,6 +75,8 @@ type InstallationPublishStatus =
     | 'blocked'
     | 'published'
     | 'cleared'
+    | 'fenced'
+    | 'unavailable'
     | 'failed';
 
 const withoutPublication = (state: ScenarioState): ScenarioState => {
@@ -97,6 +106,9 @@ const publishInstallationOverlay = async (pass: InstallationPass): Promise<Insta
     }
 };
 
+/** A pass with the time zone captured once for the cycle: every evaluation of the cycle runs on that one value. */
+type CyclePass = InstallationPass & { timezone: string };
+
 /** The scenario the installation runs and the generation it runs under, once this runtime is known to be its owner. */
 type Owned = { scenario: ScenarioDocument; generation: number };
 
@@ -120,10 +132,13 @@ const ownedScenario = (): { owned: Owned } | { status: InstallationPublishStatus
 const publishUnderOwnership = async (pass: InstallationPass): Promise<InstallationPublishStatus> => {
     const own = ownedScenario();
     if ('status' in own) return own.status;
+    // Captured once for this cycle, after ownership (an installation with no scenario here reads nothing).
+    const timezone = captureInstallationTimezone();
+    if (timezone === null) return 'unavailable';
     const lock = pass.lock ? pass.lock(INSTALLATION_KEY) : NO_LOCK;
     if (!lock.ok) return 'busy';
     try {
-        return await publishLocked(pass, own.owned);
+        return await publishLocked({ ...pass, timezone }, own.owned);
     } finally {
         lock.release();
     }
@@ -132,13 +147,13 @@ const publishUnderOwnership = async (pass: InstallationPass): Promise<Installati
 /**
  * The publication itself, with the installation's step lock already held by the caller.
  */
-const publishLocked = async (
-    pass: InstallationPass,
-    { scenario, generation }: Owned,
-): Promise<InstallationPublishStatus> => {
+const publishLocked = async (pass: CyclePass, { scenario, generation }: Owned): Promise<InstallationPublishStatus> => {
+    // Publishing needs the run epoch the cycle began under to be current: after a full Stop it is not.
+    if (await pass.obsolete?.()) return 'fenced';
     const { corrupt, state } = pass.ledger.get(INSTALLATION_KEY);
     if (corrupt) return 'unreadable';
-    if (state?.paused || state?.handoff) return 'held';
+    // Paused, a handoff not finished, or withdrawn by a full Stop (until an explicit user re-arm clears it): nothing is published.
+    if (state?.paused || state?.handoff || state?.withdrawn) return 'held';
     if (state && state.scenario.toLowerCase() !== scenario.name.toLowerCase()) return 'stale';
     const now = nowSec();
     const phase = state?.phase ?? scenario.start;
@@ -151,7 +166,12 @@ const publishLocked = async (
 };
 
 /** What the installation stage needs of the cycle beyond the publication: the claim endpoints, and the record of what was done. */
-type InstallationStagePass = InstallationPass & { claims: ClaimDeps; operations: OperationRecord };
+type InstallationStagePass = InstallationPass & {
+    claims: ClaimDeps;
+    operations: OperationRecord;
+    /** What the installation's `startAutovote` / `stopAutovote` actions ask of the autovote controller (null: none here). */
+    autovote?: AccountContext['autovote'];
+};
 
 /**
  * The installation stage of one cycle, when this runtime owns the installation scenario: starts or recovers its progress,
@@ -165,10 +185,13 @@ const runInstallationStage = async (
     try {
         const own = ownedScenario();
         if ('status' in own) return own.status;
+        // Captured once for this cycle, after ownership: the publication, the rules and every republish run on this one value.
+        const timezone = captureInstallationTimezone();
+        if (timezone === null) return 'unavailable';
         const lock = pass.lock ? pass.lock(INSTALLATION_KEY) : NO_LOCK;
         if (!lock.ok) return 'busy';
         try {
-            return await stageLocked(pass, own.owned, lock, rules);
+            return await stageLocked({ ...pass, timezone }, own.owned, lock, rules);
         } finally {
             lock.release();
         }
@@ -179,7 +202,7 @@ const runInstallationStage = async (
 };
 
 const stageLocked = async (
-    pass: InstallationStagePass,
+    pass: InstallationStagePass & CyclePass,
     owned: Owned,
     lock: StateLock,
     rules: boolean,
@@ -188,7 +211,7 @@ const stageLocked = async (
         stage: 'account',
         challengeId: INSTALLATION_KEY,
         scenario: owned.scenario,
-        timezone: effectiveTimezone(settings.getSetting('timezone')),
+        timezone: pass.timezone,
         ledger: pass.ledger,
         stepLock: lock,
         beforeSpend: null,
@@ -196,6 +219,7 @@ const stageLocked = async (
         reads: { subject: 'the installation', token: pass.token, ...pass.reads },
         operations: pass.operations,
         claims: { deps: pass.claims },
+        autovote: pass.autovote ?? null,
         overlay: {
             // The step lock is the caller's: the publication is made again under it, from the record as it now stands.
             republish: async () => {
@@ -220,7 +244,7 @@ const stageLocked = async (
 };
 
 const prepare = async (
-    pass: InstallationPass,
+    pass: CyclePass,
     scenario: NonNullable<ReturnType<typeof settings.getScenario>>,
     at: Pick<ScenarioState, 'phase' | 'phaseEnteredAt' | 'published' | 'phasePatch'>,
     state: ScenarioState | null,
@@ -235,7 +259,7 @@ const prepare = async (
         token: pass.token,
         ...pass.reads,
     });
-    const timezone = effectiveTimezone(settings.getSetting('timezone'));
+    const { timezone } = pass;
     return settings.prepareInstallationSnapshot(
         scenario,
         at,
@@ -277,7 +301,7 @@ const write = (
         if (current && ((current.generation ?? 0) !== generation || current.phaseEnteredAt !== at.phaseEnteredAt)) {
             return { refuse: 'stale' };
         }
-        if (current?.paused || current?.handoff) return { refuse: 'held' };
+        if (current?.paused || current?.handoff || current?.withdrawn) return { refuse: 'held' };
         const base: ScenarioState = {
             ...(current ?? initialState(scenarioName, at.phase, at.phaseEnteredAt)),
             generation,

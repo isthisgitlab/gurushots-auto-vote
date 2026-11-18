@@ -3,11 +3,19 @@
  * scheduler resolver built on them.
  */
 
-jest.mock('../../src/ts/core/settings', () => ({
-    getSetting: jest.fn(),
-    getEffectiveSetting: jest.fn(),
-    getScenario: jest.fn(),
-}));
+jest.mock('../../src/ts/core/settings', () => {
+    const getSetting = jest.fn();
+    return {
+        getSetting,
+        // The installation's own read of the time zone: the saved one while no installation scenario overlays it.
+        captureInstallationSettings: jest.fn((keys: string[]) => ({
+            ok: true,
+            values: Object.fromEntries(keys.map((key) => [key, getSetting(key)])),
+        })),
+        getEffectiveSetting: jest.fn(),
+        getScenario: jest.fn(),
+    };
+});
 jest.mock('../../src/ts/core/joinStateStore', () => ({
     acquireUnlockLock: jest.fn((id: string | number, _category?: string) => ({
         ok: id !== 'scenario-9',
@@ -67,6 +75,13 @@ describe('getScenarioStatus', () => {
         expect(getScenarioStatus(7, ledger).state).toBeNull();
         const broken = { get: () => ({ corrupt: true, state: null }) };
         expect(getScenarioStatus(7, invalid(broken)).corrupt).toBe(true);
+    });
+
+    test('a zone the installation cannot read is the empty one, and gives the scheduler no input', () => {
+        settings.captureInstallationSettings.mockReturnValueOnce({ ok: false, key: 'timezone', reason: 'expired' });
+        const status = getScenarioStatus(7, createMemoryStateLedger());
+        expect(status.timezone).toBe('');
+        expect(scenarioWakeInput(status)).toBeNull();
     });
 
     test('reads an empty timezone as UTC', () => {

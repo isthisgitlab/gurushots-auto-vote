@@ -8,7 +8,7 @@
 import * as logger from '../../logger';
 import * as settings from '../../settings';
 import { platform } from '../../platform/port';
-import { effectiveTimezone } from '../../settings/uiDefaults';
+import { captureInstallationTimezone } from '../installationTimezone';
 import { ADMISSION_RULE_ID, evaluateScenario } from '../../scenarios/evaluate';
 import { entriesOf } from '../../scenarios/selectors';
 import { recordVoteSample } from '../../scenarios/speed';
@@ -294,7 +294,13 @@ const runScenarioStep = async (challenge: Challenge, now: number, pass: PassCont
             );
             return;
         }
-        const timezone = effectiveTimezone(settings.getSetting('timezone'));
+        // The zone the step's time conditions read, captured once for the step. One that cannot be read runs nothing: the
+        // saved zone never takes its place, and no progress is written.
+        const timezone = captureInstallationTimezone();
+        if (timezone === null) {
+            log().warning(`${logger.challengeTag(challenge)} the time zone is unavailable — the scenario waits`, null);
+            return;
+        }
         // The GUI and the CLI can run a pass at once: one rule step of a challenge runs at a time, or both would spend.
         const lock: StateLock = deps.lock ? deps.lock(challengeId) : NO_LOCK;
         if (!lock.ok) {

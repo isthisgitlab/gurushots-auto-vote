@@ -1897,3 +1897,156 @@ describe('a count-1 absolute submit row joins the candidate once it is due', () 
         expect(performJoin).toHaveBeenCalledTimes(2);
     });
 });
+
+// --- the autovote control, the Stop fence and an unreadable zone ------------------------------------------------------
+
+describe('the installation’s requests for the voting stages, and the Stop fence', () => {
+    const { registerAutovoteControl } =
+        require('../../src/ts/core/autovote/control') as typeof import('../../src/ts/core/autovote/control');
+    const publication = (phase = 'main') => ({
+        revision: 1,
+        documentFingerprint: 'f',
+        phase,
+        phaseEnteredAt: NOW,
+        observedAt: NOW,
+        validUntil: null,
+        bindings: {},
+        profile: null,
+        generation: 1,
+    });
+    const own = (actions: object[]) => {
+        scenarios['Account plan'] = account(actions);
+        settings.getInstallationScenario.mockReturnValue({
+            scenario: 'Account plan',
+            executor: 'electron',
+            generation: 1,
+        });
+        settings.installationGeneration.mockReturnValue(1);
+        settings.prepareInstallationSnapshot.mockImplementation(((_scenario: unknown, at: { phase: string }) => ({
+            ok: true,
+            publication: publication(at.phase),
+        })) as unknown as typeof settings.prepareInstallationSnapshot);
+    };
+    const installation = () => ledger.get(KEY).state as ScenarioState;
+    const control = (
+        answer: Awaited<ReturnType<import('../../src/ts/core/autovote/control').AutovoteControl['request']>>,
+        admitted = true,
+    ) => {
+        const request = jest.fn(async () => answer);
+        const captured = { epoch: 3, generation: 1 };
+        const unregister = registerAutovoteControl({
+            capture: () => captured,
+            admits: jest.fn(async () => admitted),
+            request,
+        });
+        return { request, captured, unregister };
+    };
+
+    test('startAutovote and stopAutovote ask the registered control, bound to the capture the cycle began under', async () => {
+        own([{ type: 'startAutovote' }, { type: 'stopAutovote' }]);
+        const { request, captured, unregister } = control({ ok: true, mode: 'voting', changed: true });
+        try {
+            await expect(lifecycle().installation({ rules: true })).resolves.toBe('published');
+        } finally {
+            unregister();
+        }
+        expect(request.mock.calls).toEqual([
+            [true, captured],
+            [false, captured],
+        ]);
+        expect(installation().fired.r1).toBeDefined();
+    });
+
+    test('an obsolete request is retried by a later run: the rule stays at that step', async () => {
+        own([{ type: 'startAutovote' }, { type: 'notify', message: 'after' }]);
+        const { unregister } = control({ ok: false, reason: 'obsolete' });
+        try {
+            await lifecycle().installation({ rules: true });
+        } finally {
+            unregister();
+        }
+        expect(log.warning).toHaveBeenCalledWith(
+            expect.stringContaining('autovote was stopped, so the request was not applied'),
+            null,
+        );
+        // Not finished, and nothing after it ran.
+        expect(installation().fired.r1).toBeUndefined();
+        expect(installation().outbox?.map((item) => item.message) ?? []).not.toContain('after');
+    });
+
+    test.each([
+        ['not-armed', 'autovote is not armed'],
+        ['unsupported', 'this runtime cannot pause the voting stages'],
+    ] as const)('a request the controller refuses as %s is passed over, with its reason', async (reason, message) => {
+        // A passed-over step of a rule that has already acted: the rule carries on.
+        own([{ type: 'notify', message: 'before' }, { type: 'stopAutovote' }, { type: 'notify', message: 'after' }]);
+        const { unregister } = control({ ok: false, reason });
+        try {
+            await lifecycle().installation({ rules: true });
+        } finally {
+            unregister();
+        }
+        expect(log.warning).toHaveBeenCalledWith(expect.stringContaining(message), null);
+        expect(installation().outbox?.map((item) => item.message)).toContain('after');
+    });
+
+    test('the installation’s time zone is captured once for the cycle, whatever the rules republish; one it cannot read runs nothing', async () => {
+        own([
+            { type: 'notify', message: 'one' },
+            { type: 'notify', message: 'two' },
+        ]);
+        await lifecycle().installation({ rules: true });
+        const zoneReads = () =>
+            settings.captureInstallationSettings.mock.calls.filter(([keys]) => keys.join() === 'timezone');
+        // Published again after each confirmed action, and every one on the same capture.
+        expect(settings.prepareInstallationSnapshot.mock.calls.length).toBeGreaterThan(2);
+        expect(zoneReads()).toHaveLength(1);
+
+        settings.captureInstallationSettings.mockReturnValueOnce({ ok: false, key: 'timezone', reason: 'expired' });
+        await expect(lifecycle().installation({ rules: true })).resolves.toBe('unavailable');
+        settings.captureInstallationSettings.mockReturnValueOnce({ ok: false, key: 'timezone', reason: 'expired' });
+        await expect(lifecycle().installation({ rules: false })).resolves.toBe('unavailable');
+    });
+
+    test('with no controller in this runtime the request is passed over', async () => {
+        own([{ type: 'notify', message: 'before' }, { type: 'startAutovote' }, { type: 'notify', message: 'after' }]);
+        await lifecycle().installation({ rules: true });
+        expect(log.warning).toHaveBeenCalledWith(
+            expect.stringContaining('this runtime has no autovote controller'),
+            null,
+        );
+        expect(installation().outbox?.map((item) => item.message)).toContain('after');
+    });
+
+    test('a cycle that began before a Stop publishes nothing and runs no account rule', async () => {
+        own([{ type: 'notify', message: 'account rule ran' }]);
+        const { unregister } = control({ ok: true, mode: 'voting', changed: false }, false);
+        try {
+            await expect(lifecycle().installation({ rules: true })).resolves.toBe('fenced');
+            await expect(lifecycle().installation({ rules: false })).resolves.toBe('fenced');
+        } finally {
+            unregister();
+        }
+        expect(settings.prepareInstallationSnapshot).not.toHaveBeenCalled();
+        expect(ledger.get(KEY).state).toBeNull();
+    });
+
+    test('a zone the installation cannot read holds a candidate’s pre-join rules and a closed challenge’s post-close rules', async () => {
+        scenarios.Plan = preJoin([{ type: 'join' }]);
+        assigned['7'] = 'Plan';
+        settings.captureInstallationSettings.mockReturnValue({ ok: false, key: 'timezone', reason: 'expired' });
+        const join = jest.fn(async () => ({ status: 'joined', charged: 0, maybeCharged: 0 }));
+        await expect(lifecycle().preJoin.run(candidate(), join)).resolves.toBeNull();
+        expect(join).not.toHaveBeenCalled();
+        expect(log.warning).toHaveBeenCalledWith(expect.stringContaining('the pre-join rules wait'), null);
+        expect(ledger.get(7).state).toBeNull();
+
+        scenarios.Plan = postClose([{ type: 'notify', message: 'done' }]);
+        assigned['9'] = 'Plan';
+        seed(9, 'Plan');
+        completed = [claimable(9, 'NONE')];
+        await lifecycle().postClose();
+        expect(log.warning).toHaveBeenCalledWith(expect.stringContaining('the post-close rules wait'), null);
+        expect(record(9).outbox ?? []).toEqual([]);
+    });
+});

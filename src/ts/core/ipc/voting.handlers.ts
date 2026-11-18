@@ -24,13 +24,14 @@ import { SCENARIO_UNAVAILABLE_ERROR } from './actions/shared';
 
 import type { IpcHandlerMap, IpcReplyFn } from './invokeHandler';
 import type { ActiveChallengesResponse } from '../types/gurushots';
+import type { CycleMode } from '../types/votingPass';
 
 // Run one full strategy pass — global when challengeId is null, scoped
 // to a single card otherwise. Delegates to BaseMiddleware so the
 // auth-check, cancellation-reset, and IPC-envelope shape live in one
 // place that the gui-vote handler also reaches via guiVote().
-const runStrategyOnceViaMiddleware = (challengeId: string | number | null) =>
-    apiFactory.getMiddleware().runVotingCycle(challengeId);
+const runStrategyOnceViaMiddleware = (challengeId: string | number | null, mode: CycleMode = 'full') =>
+    apiFactory.getMiddleware().runVotingCycle(challengeId, mode);
 
 // Single-target vote entry shared by vote-on-challenge and
 // vote-on-challenge-manual. The two channels differ only in log wording;
@@ -208,10 +209,16 @@ const buildHandlers = () =>
             }
         },
 
-        'run-voting-cycle': async () => {
+        // `mode` is the cycle mode (types/votingPass.ts CycleMode): absent is `full`; `armed` runs the installation stage only.
+        'run-voting-cycle': async (_event: unknown, mode?: CycleMode) => {
             try {
-                logger.withCategory('voting').info('🔄 Starting voting cycle...', null);
-                return await runStrategyOnceViaMiddleware(null);
+                if (mode !== undefined && mode !== 'full' && mode !== 'armed') {
+                    return { success: false as const, error: 'Unknown cycle mode' };
+                }
+                logger
+                    .withCategory('voting')
+                    .info(mode === 'armed' ? '🔄 Starting installation cycle...' : '🔄 Starting voting cycle...', null);
+                return await runStrategyOnceViaMiddleware(null, mode ?? 'full');
             } catch (error) {
                 logger.withCategory('voting').error('Error handling run-voting-cycle request:', error);
                 return errorResult(error, 'Failed to run voting cycle');

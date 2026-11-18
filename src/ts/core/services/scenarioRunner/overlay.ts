@@ -8,7 +8,7 @@
  */
 
 import * as settings from '../../settings';
-import { evaluateExpression } from '../../scenarios/expressions';
+import { evaluateExpression, expressionNodes } from '../../scenarios/expressions';
 import { evaluateSchedules } from '../autoFill/schedule';
 import type { ExpressionContext } from '../../scenarios/expressions';
 import type { FactEvidence } from '../../scenarios/facts';
@@ -31,28 +31,6 @@ const withoutPublication = (state: ScenarioState): ScenarioState => {
     delete rest.published;
     delete rest.publicationUnreadable;
     return rest;
-};
-
-/**
- * The expressions of a phase's bindings and the sub-expressions of each, depth first.
- */
-const expressionNodes = (expr: ScenarioExpr): ScenarioExpr[] => {
-    switch (expr.kind) {
-        case 'offset':
-            return [expr, ...expressionNodes(expr.from), ...expressionNodes(expr.by)];
-        case 'difference':
-            return [expr, ...expressionNodes(expr.from), ...expressionNodes(expr.to)];
-        case 'add':
-        case 'subtract':
-            return [expr, ...expressionNodes(expr.left), ...expressionNodes(expr.right)];
-        case 'earlier':
-        case 'later':
-        case 'min':
-        case 'max':
-            return [expr, ...expr.of.flatMap(expressionNodes)];
-        default:
-            return [expr];
-    }
 };
 
 /**
@@ -158,7 +136,6 @@ const checkOverlay = (ctx: OverlayContext, candidate: ScenarioState): Promise<st
 export {
     checkChallengeOverlay,
     checkOverlay,
-    expressionNodes,
     nextBindingInstant,
     preparedSettings,
     publishChallengeOverlay,

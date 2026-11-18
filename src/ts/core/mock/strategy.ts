@@ -29,13 +29,13 @@ import { mockSwapBackLedger } from '../swapBackStore';
 import { createMemoryAutoSpendLedger } from '../currencyAutoStore';
 import { createMemoryEntryAgeLedger } from '../entryAgeStore';
 import { mockScenarioStateLedger } from '../scenarioStateStore';
-import { createLifecycle } from '../services/scenarioRunner/lifecycle';
+import { createLifecycle, runArmedCycle } from '../services/scenarioRunner/lifecycle';
 import type { Lifecycle } from '../services/scenarioRunner/lifecycle';
 import { mockMethod } from './simulate';
 
 import type { MissionNeeds } from '../services/missions';
 import type { JoinDeps } from '../services/joinChallenges';
-import type { VotingPassDeps } from '../types/votingPass';
+import type { CycleMode, VotingPassDeps } from '../types/votingPass';
 import { CURRENCY_ENDPOINTS } from '../services/currencyAuto';
 import type { MockEndpoints } from './apiClient';
 import type * as realModule from '../strategies/real';
@@ -180,7 +180,11 @@ const createMockStrategy = (client: MockEndpoints) => {
      * turbo-earn, timer-ordered deadline actions, and the shared
      * cancellation/logging path instead of a hand-maintained fork.
      */
-    const fetchChallengesAndVote = async (token: string, challengeIdFilter: string | number | null = null) => {
+    const fetchChallengesAndVote = async (
+        token: string,
+        challengeIdFilter: string | number | null = null,
+        mode: CycleMode = 'full',
+    ) => {
         logger.withCategory('voting').api('Mock fetchChallengesAndVote', null);
         logger.withCategory('api').debug(`Token provided: ${!!token}`, null);
         if (!token) {
@@ -201,6 +205,8 @@ const createMockStrategy = (client: MockEndpoints) => {
             },
             claims: pickEndpoints(client, CLAIM_ENDPOINTS),
         });
+        // Armed: the installation stage only, as in real.
+        if (mode === 'armed') return runArmedCycle(lifecycle, challengeIdFilter);
         await lifecycle.installation({ rules: challengeIdFilter === null });
         // Mission read (only while a mission setting is on), as in real.
         const missions = await loadMissionNeeds(token, Date.now(), { getMyMissions: client.getMyMissions });

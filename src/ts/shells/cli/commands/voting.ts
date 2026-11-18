@@ -20,6 +20,7 @@ import { clearTokenUnlessStayingLoggedIn } from '../../../core/services/auth';
 // a null event.
 import type { NullEventHandlers } from '../../../core/types/cli';
 import type { Challenge } from '../../../core/types/gurushots';
+import type { CycleMode } from '../../../core/types/votingPass';
 import type * as voting_handlersModule from '../../../core/ipc/voting.handlers';
 import { errorMessage } from '../../../core/errorMessage';
 type VotingHandlers = NullEventHandlers<ReturnType<typeof voting_handlersModule.buildHandlers>>;
@@ -33,7 +34,7 @@ const votingHandlers = (): VotingHandlers =>
  * Run a single voting cycle. Pass {isManual: true} to use the manual
  * vote path (votes to 100% regardless of threshold settings). Pass
  * {challengeId} to scope a strategy cycle to a single challenge —
- * ignored when isManual is true.
+ * ignored when isManual is true. Pass {mode: 'armed'} for the installation cycle of an armed scheduler (no voting stage).
  *
  * @returns `challenges` is the
  *   full active list the strategy cycle fetched (null for the manual path or any
@@ -41,10 +42,14 @@ const votingHandlers = (): VotingHandlers =>
  */
 const runVotingCycle = async (
     cycleNumber: number = 1,
-    { isManual = false, challengeId = null }: { isManual?: boolean; challengeId?: string | null } = {},
+    {
+        isManual = false,
+        challengeId = null,
+        mode = 'full',
+    }: { isManual?: boolean; challengeId?: string | null; mode?: CycleMode } = {},
 ): Promise<{ success: boolean; challenges: Challenge[] | null }> => {
     const scopeSuffix = !isManual && challengeId != null ? ` (challenge ${challengeId})` : '';
-    const label = isManual ? 'Manual Voting' : 'Voting';
+    const label = isManual ? 'Manual Voting' : mode === 'armed' ? 'Installation' : 'Voting';
     const opId = isManual ? `manual-vote-cycle-${cycleNumber}` : `vote-cycle-${cycleNumber}`;
     try {
         const userSettings = settings.loadSettings();
@@ -73,7 +78,7 @@ const runVotingCycle = async (
         if (isManual) {
             await getMiddleware().cliVoteManual();
         } else {
-            const result = await getMiddleware().cliVote(challengeId);
+            const result = await getMiddleware().cliVote(challengeId, mode);
             // Reflect the strategy's real outcome rather than always reporting
             // success on the non-throw path.
             success = result?.success !== false;
@@ -167,6 +172,8 @@ const startContinuousVoting = async () => {
 
     const scheduler = createScheduler({
         runVotingCycle: (cycleNumber) => runVotingCycle(cycleNumber),
+        // An armed scheduler runs the installation stage only.
+        runArmedCycle: (cycleNumber) => runVotingCycle(cycleNumber, { mode: 'armed' }),
         getActiveChallenges: () => getMiddleware().getActiveChallenges(),
     });
 

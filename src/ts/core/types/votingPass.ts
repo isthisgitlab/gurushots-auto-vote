@@ -10,6 +10,13 @@
  */
 
 import type { Challenge } from './gurushots';
+
+/**
+ * What one cycle of the voting loop runs. `full`: everything (the installation stage, the mission read, the join and claim
+ * pre-steps, the voting pass, the post-close stage). `armed`: only the installation stage (its publication and account rules),
+ * for a controller armed with the voting stages paused: no join, claim sweep, vote, power, submission or currency spend.
+ */
+export type CycleMode = 'full' | 'armed';
 import type { getActiveChallenges as GetActiveChallenges } from '../strategies/real/activeChallenges';
 import type { applyBoost as ApplyBoost } from '../strategies/real/applyBoost';
 import type { runTurboGame as RunTurboGame } from '../strategies/real';

@@ -29,6 +29,7 @@ import type {
     ResolveScenarioWake,
     ResolveAutoSubmitClock,
     ResolveAutoSubmitSchedule,
+    ResolveAccountWake,
 } from '../scheduling/thresholdWindow';
 import type { ResolveScheduledFill } from '../scheduling/scheduledFill';
 import type { RuleTiming } from '../voting/currencyAuto';
@@ -43,9 +44,10 @@ export interface CadenceResolvers {
     resolveBoostPrefill: ResolveBoostPrefill;
     resolveCurrencyAuto: ResolveCurrencyAuto;
     resolveScenarioWake: ResolveScenarioWake;
+    resolveAccountWake: ResolveAccountWake;
 }
 
-type ResolverHost = Pick<AutovoteHost, 'getEffectiveSetting' | 'getScenarioStatus'>;
+type ResolverHost = Pick<AutovoteHost, 'getEffectiveSetting' | 'getScenarioStatus' | 'getAccountWake'>;
 
 /**
  * One currency rule's three timing conditions, read over IPC, batched; null
@@ -82,16 +84,29 @@ const resolveAutoSubmitSchedule = async (
     host: ResolverHost,
     challengeId: string,
 ): Promise<Awaited<ReturnType<ResolveAutoSubmitSchedule>>> => {
-    const [enabled, manualPhotosOnly, schedule] = await Promise.all([
+    const [enabled, manualPhotosOnly, schedule, status] = await Promise.all([
         host.getEffectiveSetting('autoSubmit', challengeId),
         host.getEffectiveSetting('manualPhotosOnly', challengeId),
         host.getEffectiveSetting('autoSubmitSchedule', challengeId),
+        host.getScenarioStatus(challengeId),
     ]);
     if (!Array.isArray(schedule)) throw new Error('Auto-submit schedule is unavailable.');
+    // The schedule the phase's owner published for the phase the challenge is in, while it is valid: the deadlines are worked out
+    // from it. (The main process re-checks the whole publication where a photo is actually submitted; this only places a wake.)
+    const state = status?.success ? status.state : null;
+    const published = state?.published;
+    const nowSec = Math.floor(Date.now() / 1000);
+    const resolved =
+        published &&
+        published.phase === state?.phase &&
+        (published.validUntil === null || published.validUntil > nowSec)
+            ? published.schedules?.submit
+            : undefined;
     return {
         enabled: enabled === true,
         manualPhotosOnly: manualPhotosOnly === true,
         schedule: schedule as Awaited<ReturnType<ResolveAutoSubmitSchedule>>['schedule'],
+        ...(resolved ? { resolved } : {}),
     };
 };
 
@@ -184,9 +199,13 @@ export const createResolvers = (host: ResolverHost): CadenceResolvers => ({
     // when no scenario can run for it (the async-IPC twin of
     // nodeResolvers.resolveScenarioWake; the IPC channel answers the
     // `{success, ...}` wrapper, so the guard reads the wrapped shape).
+    // The account's boundaries come from the main process in one answer (it owns the ledgers, the caches and the clocks they are
+    // read from); a host that has none collects none.
+    resolveAccountWake: async () => (host.getAccountWake ? await host.getAccountWake() : null),
+
     resolveScenarioWake: async (challengeId: string) => {
         const status = await host.getScenarioStatus(challengeId);
-        return status?.success && status.scenario && !status.corrupt
+        return status?.success && status.scenario && !status.corrupt && status.timezone !== ''
             ? { scenario: status.scenario, state: status.state, timezone: status.timezone }
             : null;
     },

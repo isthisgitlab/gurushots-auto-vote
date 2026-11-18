@@ -165,7 +165,17 @@ const SPENDING_ACTIONS = [
  * available in every one of them. `active` keeps every action a rule had before stages existed.
  */
 const STAGE_ACTIONS = {
-    account: ['notify', 'goto', 'claimMissionReward', 'setSetting', 'clearSetting', 'pauseScenario', 'handoffScenario'],
+    account: [
+        'notify',
+        'goto',
+        'claimMissionReward',
+        'setSetting',
+        'clearSetting',
+        'startAutovote',
+        'stopAutovote',
+        'pauseScenario',
+        'handoffScenario',
+    ],
     preJoin: [
         'notify',
         'goto',
@@ -430,6 +440,16 @@ const VOCABULARY_REFERENCE = [
         'action',
         'useProfile',
         "name: saved profile name | null — uses that profile for this phase instead of the phase's own (null: none); a challenge scenario only",
+    ],
+    [
+        'action',
+        'startAutovote',
+        'asks the autovote controller to turn the voting stages on under the armed chain (installation scenarios only); never starts a chain and never lifts a Stop by the user',
+    ],
+    [
+        'action',
+        'stopAutovote',
+        'asks the autovote controller to turn the voting stages off; the chain stays armed for this scenario (installation scenarios only); not a full Stop',
     ],
     [
         'action',

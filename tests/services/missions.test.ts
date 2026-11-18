@@ -35,6 +35,7 @@ const {
     isMissionVoteCandidate,
     missionVoteQuota,
     registerMissionNeeds,
+    getNextMissionExpiry,
     recordManualTurboWin,
     resetMissionLog,
 } = require('../../src/ts/core/services/missions') as typeof missionsModule;
@@ -205,6 +206,18 @@ describe('loadMissionNeeds', () => {
             fillMissions: [{ id: 'Use Fill 3 times', required: 3, current: 1, remaining: 2, spentThisPass: 0 }],
         });
         expect(d.getMyMissions).toHaveBeenCalledWith('tok');
+    });
+
+    test('the earliest expiry of an unfinished mission the list showed is kept for the scheduler, and cleared by a list with none', async () => {
+        const d = deps([
+            mission('Join 7 challenges', 2, 7, { expiration_timestamp: NOW_SEC + 900 }),
+            mission('Use Fill 3 times', 1, 3, { expiration_timestamp: NOW_SEC + 300 }),
+            mission('Vote on 400 photos', 400, 400, { expiration_timestamp: NOW_SEC + 60 }),
+        ]);
+        await loadMissionNeeds('tok', NOW_MS, d);
+        expect(getNextMissionExpiry()).toBe(NOW_SEC + 300);
+        await loadMissionNeeds('tok', NOW_MS, deps([mission('Join 7 challenges', 7, 7)]));
+        expect(getNextMissionExpiry()).toBeNull();
     });
 
     test('the switches are captured together as the cycle starts, from the installation read', async () => {

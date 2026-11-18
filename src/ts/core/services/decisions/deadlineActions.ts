@@ -28,7 +28,7 @@ import {
     resolveTurboFillNewMode,
 } from './entryPick';
 import { isManualPhotosOnly } from '../manualPhotosOnly';
-import { effectiveTimezone } from '../../settings/uiDefaults';
+import { captureInstallationTimezone } from '../installationTimezone';
 import { getAutoSubmitClockWindowState } from '../../scheduling/autoSubmitWindow';
 
 const tieOrder: Record<string, number> = { autoSubmit: 0, emergencySubmit: 1, boost: 2, turbo: 3 };
@@ -76,10 +76,15 @@ const getAutoFillThresholdSec = (challenge: Challenge, challengeId: string): num
     return getNextScheduleThresholdSec(schedule, entryCount, challenge?.max_photo_submits);
 };
 
+/** The clock windows of a zone that cannot be read: none (the saved zone never takes its place). */
+const NO_CLOCK = { active: false, activeTimes: [], activeUntil: null, nextStart: null } as const;
+
 const hasActiveClockAutoSubmit = (challenge: Challenge, challengeId: string, now: number): boolean => {
     if (settings.getEffectiveSetting('autoSubmit', challengeId) !== true) return false;
     if (getSlotsRemaining(challenge) <= 0) return false;
-    const timezone = effectiveTimezone(settings.getSetting('timezone'));
+    const timezone = captureInstallationTimezone();
+    // A zone that cannot be read gives no clock window (unknown evidence supplies no deadline).
+    if (timezone === null) return false;
     return getAutoSubmitClockWindowState(
         settings.getEffectiveSetting('autoSubmitTime', challengeId),
         settings.getEffectiveSetting('autoSubmitWindowMinutes', challengeId),
@@ -94,12 +99,16 @@ const autoSubmitDueAt = (challenge: Challenge, challengeId: string, now: number)
     if (getSlotsRemaining(challenge) <= 0) return null;
     const closeTime = Number(challenge.close_time);
     if (!Number.isFinite(closeTime) || closeTime <= now) return null;
-    const clock = getAutoSubmitClockWindowState(
-        settings.getEffectiveSetting('autoSubmitTime', challengeId),
-        settings.getEffectiveSetting('autoSubmitWindowMinutes', challengeId),
-        effectiveTimezone(settings.getSetting('timezone')),
-        now,
-    );
+    const timezone = captureInstallationTimezone();
+    const clock =
+        timezone === null
+            ? NO_CLOCK
+            : getAutoSubmitClockWindowState(
+                  settings.getEffectiveSetting('autoSubmitTime', challengeId),
+                  settings.getEffectiveSetting('autoSubmitWindowMinutes', challengeId),
+                  timezone,
+                  now,
+              );
     const relativeThreshold = getAutoFillThresholdSec(challenge, challengeId);
     const relativeDueAt = relativeThreshold > 0 ? closeTime - relativeThreshold : null;
     const clockDueAt = clock.active

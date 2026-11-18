@@ -96,6 +96,10 @@ const isPaused = (value: unknown): boolean =>
         Number.isFinite(value.at) &&
         typeof value.reason === 'string');
 
+const isWithdrawn = (value: unknown): boolean =>
+    value === null ||
+    (isPlainObject(value) && hasExactKeys(value, ['at', 'epoch']) && Number.isFinite(value.at) && isCount(value.epoch));
+
 const isHandoff = (value: unknown): boolean =>
     value === null ||
     (isPlainObject(value) &&
@@ -271,6 +275,7 @@ const isRecord = (r: unknown): r is ScenarioState =>
     (r.gen === undefined || isCount(r.gen)) &&
     (r.generation === undefined || isCount(r.generation)) &&
     (r.paused === undefined || isPaused(r.paused)) &&
+    (r.withdrawn === undefined || isWithdrawn(r.withdrawn)) &&
     (r.handoff === undefined || isHandoff(r.handoff)) &&
     (r.phasePatch === undefined || isPhasePatch(r.phasePatch)) &&
     (r.phaseProfile === undefined || isPhaseProfile(r.phaseProfile)) &&

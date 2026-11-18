@@ -14,6 +14,8 @@
 
 import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
+import { answerInstallationReadFromSaved } from '../helpers/savedInstallationRead';
+answerInstallationReadFromSaved(settings);
 import VotingLogic = require('../../src/ts/core/services/VotingLogic');
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import type { Challenge } from '../../src/ts/core/types/gurushots';
@@ -174,6 +176,33 @@ describe('orderDeadlineActions', () => {
             { action: 'boost', thresholdSec: 900 },
             { action: 'emergencySubmit', thresholdSec: 300 },
         ]);
+    });
+});
+
+describe('orderDeadlineActions — a zone the installation cannot read', () => {
+    test('opens no clock window and sets no clock deadline; the relative schedule still orders the submission', () => {
+        const now = Date.UTC(2026, 0, 15, 12, 30) / 1000;
+        mockSettings({
+            autoSubmit: true,
+            autoSubmitTime: ['12:00'],
+            autoSubmitWindowMinutes: 60,
+            autoSubmitSchedule: [{ count: 2, seconds: 600 }],
+            turboTime: 7200,
+        });
+        settings.captureInstallationSettings = invalid(
+            jest.fn(() => ({ ok: false, key: 'timezone', reason: 'the published settings have expired' })),
+        );
+        try {
+            const actions = VotingLogic.orderDeadlineActions(
+                buildChallenge({ closeTime: now + 10_000, boost: { state: 'AVAILABLE_KEY' } }),
+                now,
+            );
+            // The clock window is not active, so the submission keeps its own (relative) place and runs by its schedule.
+            expect(actions[0]).toEqual({ action: 'turbo', thresholdSec: 7200 });
+            expect(actions).toContainEqual({ action: 'autoSubmit', thresholdSec: 600 });
+        } finally {
+            answerInstallationReadFromSaved(settings);
+        }
     });
 });
 

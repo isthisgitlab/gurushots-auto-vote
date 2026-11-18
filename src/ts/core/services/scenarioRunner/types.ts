@@ -25,6 +25,7 @@ import type {
     SpendKind,
 } from '../../scenarios/runtime';
 import type { AccountReads } from './facts';
+import type { VotingStagesResult } from '../../autovote/types';
 
 type ScenarioRule = NonNullable<ScenarioDocument['phases'][string]['rules']>[number];
 
@@ -105,8 +106,19 @@ type ClaimPass = { deps: ClaimDeps };
 /** A closed challenge as the completed listing gives it. */
 type PostCloseContext = RunnerBase & { stage: 'postClose'; completed: CompletedChallenge; claims: ClaimPass };
 
+/**
+ * What an installation action asks of the autovote controller: turn the voting stages on or off. Bound to the Stop capture the
+ * cycle began under (autovote/control.ts); null where this runtime has no controller.
+ */
+type AutovoteRequest = (on: boolean) => Promise<VotingStagesResult>;
+
 /** The installation: no challenge. `republish` publishes the overlay again after a change of phase or progress. */
-type AccountContext = RunnerBase & { stage: 'account'; claims: ClaimPass; overlay: OverlayControl };
+type AccountContext = RunnerBase & {
+    stage: 'account';
+    claims: ClaimPass;
+    overlay: OverlayControl;
+    autovote?: AutovoteRequest | null;
+};
 
 type RunnerContext = ActiveContext | PreJoinContext | PostCloseContext | AccountContext;
 
@@ -127,7 +139,7 @@ type ContextOf<K extends ActionType> = K extends 'join'
     ? PreJoinContext
     : K extends 'claimChallengeReward'
       ? PostCloseContext
-      : K extends 'claimMissionReward'
+      : K extends 'claimMissionReward' | 'startAutovote' | 'stopAutovote'
         ? AccountContext
         : K extends 'goto' | 'notify' | 'pauseScenario' | 'handoffScenario'
           ? RunnerContext

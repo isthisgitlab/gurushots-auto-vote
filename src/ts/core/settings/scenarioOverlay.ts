@@ -576,7 +576,7 @@ const readInstallationPublication = (
 
 /**
  * What the installation scenario overlays now. No overlay is expected without an assignment, for a scenario that does not
- * run (unknown, or not an installation one), while the installation is paused (a known withdrawal: the saved values
+ * run (unknown, or not an installation one), while the installation is paused or withdrawn by a Stop (a known withdrawal: the saved values
  * apply at once), or when the current phase sets nothing. With no record of the assigned scenario (a scenario never
  * started) its start phase is the one whose settings are expected. The assignment is checked first: an installation
  * with none never reads the progress record.
@@ -595,7 +595,8 @@ const installationLayer = (settings: ConfigV2, now: number): InstallationLayer =
             ? { kind: 'none' }
             : { kind: 'unreadable', reason: 'the saved progress of the installation scenario cannot be read', keys };
     }
-    if (state?.paused) return { kind: 'none' };
+    // Paused, or withdrawn by a full Stop: the saved values apply at once (nothing is written to the configuration).
+    if (state?.paused || state?.withdrawn) return { kind: 'none' };
     const recorded = state !== null && normalizeProfileName(state.scenario) === normalizeProfileName(scenario.name);
     const phaseName = recorded ? state.phase : scenario.start;
     const phase = scenario.phases[phaseName];

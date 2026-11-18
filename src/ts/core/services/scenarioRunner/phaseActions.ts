@@ -18,9 +18,24 @@ import type { ScenarioValueDescriptor } from '../../types/settings';
 import { expressionEvidence, loadEvidence } from './facts';
 import { checkOverlay } from './overlay';
 import { deferred, done, failed, nowSec, skipped } from './support';
-import type { ActionHandler, ActionOutcome, ContextOf, OverlayContext, RunnerContext, ScenarioAction } from './types';
+import type {
+    AccountContext,
+    ActionHandler,
+    ActionOutcome,
+    ContextOf,
+    OverlayContext,
+    RunnerContext,
+    ScenarioAction,
+} from './types';
 
-type PhaseActionType = 'setSetting' | 'clearSetting' | 'useProfile' | 'pauseScenario' | 'handoffScenario';
+type PhaseActionType =
+    | 'setSetting'
+    | 'clearSetting'
+    | 'useProfile'
+    | 'pauseScenario'
+    | 'handoffScenario'
+    | 'startAutovote'
+    | 'stopAutovote';
 
 /** A setSetting value is an expression when it is an object (a literal is a flag, a number, a text or a list). */
 const isExpression = (value: unknown): value is ScenarioExpr =>
@@ -143,6 +158,10 @@ const PHASE_ACTIONS: { [K in PhaseActionType]: ActionHandler<Extract<ScenarioAct
     // The reason is the scenario author's, shown on the status line as written (none: an empty one).
     pauseScenario: async (action) => done({ pause: action.reason ?? '' }),
 
+    startAutovote: (_action, ctx) => requestVotingStages(ctx, true),
+
+    stopAutovote: (_action, ctx) => requestVotingStages(ctx, false),
+
     handoffScenario: async (action, ctx: RunnerContext, state) => {
         const generation =
             ctx.challengeId === INSTALLATION_KEY ? settings.installationGeneration() : (state.generation ?? 0);
@@ -158,6 +177,24 @@ const PHASE_ACTIONS: { [K in PhaseActionType]: ActionHandler<Extract<ScenarioAct
             ? deferred(message)
             : failed(message);
     },
+};
+
+/**
+ * A request for the voting stages, through the controller the cycle was given. A refusal is typed: an obsolete request (a Stop
+ * came after the cycle began, or is in effect) is retried by a later run, never forced; the others pass the step over.
+ */
+const requestVotingStages = async (ctx: AccountContext, on: boolean): Promise<ActionOutcome> => {
+    if (!ctx.autovote) return skipped('this runtime has no autovote controller');
+    const result = await ctx.autovote(on);
+    if (result.ok) return done();
+    switch (result.reason) {
+        case 'obsolete':
+            return deferred('autovote was stopped, so the request was not applied');
+        case 'not-armed':
+            return skipped('autovote is not armed');
+        default:
+            return skipped('this runtime cannot pause the voting stages');
+    }
 };
 
 export { PHASE_ACTIONS };

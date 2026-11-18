@@ -37,6 +37,10 @@ import type { AutovoteState } from '../../src/ts/core/autovote/state';
 
 const state = {
     running: true,
+    executionMode: 'voting',
+    stopEpoch: null,
+    lastStop: null,
+    startRefusal: null,
     cycles: 3,
     lastRun: '12:00:00',
     nextRunAt: 1,
@@ -153,6 +157,10 @@ describe('parsePeerMessage', () => {
             t: 'autovote-state',
             state: {
                 running: false,
+                executionMode: 'stopped',
+                stopEpoch: null,
+                lastStop: null,
+                startRefusal: null,
                 cycles: 0,
                 lastRun: null,
                 nextRunAt: null,
@@ -168,6 +176,10 @@ describe('parsePeerMessage', () => {
             t: 'autovote-state',
             state: {
                 running: true,
+                executionMode: 'voting',
+                stopEpoch: null,
+                lastStop: null,
+                startRefusal: null,
                 cycles: 1,
                 lastRun: null,
                 nextRunAt: 5,

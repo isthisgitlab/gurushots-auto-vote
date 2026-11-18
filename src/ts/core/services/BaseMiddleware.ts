@@ -12,6 +12,7 @@ import { voteAllChallengesManual } from './manualVote';
 
 import type { ApiStrategy } from '../apiFactory';
 import type { Challenge } from '../types/gurushots';
+import type { CycleMode } from '../types/votingPass';
 import { errorMessage } from '../errorMessage';
 
 const requireToken = () => {
@@ -79,12 +80,12 @@ class BaseMiddleware {
         }
     }
 
-    async _runVote(challengeId: string | number | null = null) {
+    async _runVote(challengeId: string | number | null = null, mode: CycleMode = 'full') {
         const token = settings.getSetting('token');
         if (!token) {
             return { ok: false, error: 'No authentication token found. Please login first.' };
         }
-        const result = await this.apiStrategy.fetchChallengesAndVote(token, challengeId);
+        const result = await this.apiStrategy.fetchChallengesAndVote(token, challengeId, mode);
         return { ok: true, result };
     }
 
@@ -94,9 +95,9 @@ class BaseMiddleware {
      * matching what the renderer expects. `challengeId` is optional; null/undefined
      * means run the full active set.
      */
-    async runVotingCycle(challengeId: string | number | null = null) {
+    async runVotingCycle(challengeId: string | number | null = null, mode: CycleMode = 'full') {
         cancellation.reset();
-        const { ok, error, result } = await this._runVote(challengeId);
+        const { ok, error, result } = await this._runVote(challengeId, mode);
         if (!ok) {
             logger.withCategory('authentication').warning(`❌ ${error}`, null);
             return { success: false, error };
@@ -131,7 +132,7 @@ class BaseMiddleware {
         return token;
     }
 
-    async cliVote(challengeId: string | number | null = null) {
+    async cliVote(challengeId: string | number | null = null, mode: CycleMode = 'full') {
         const scopeLabel = challengeId == null ? '' : ` (challenge ${challengeId})`;
         logger.withCategory('voting').info(`=== GuruShots Auto Voter - CLI Voting${scopeLabel} ===`, null);
         const token = this._requireCliToken();
@@ -141,7 +142,7 @@ class BaseMiddleware {
             // Return the strategy result so the scheduler can reuse its
             // already-fetched challenge list for threshold scheduling instead
             // of issuing a second getActiveChallenges request.
-            const result = await this.apiStrategy.fetchChallengesAndVote(token, challengeId);
+            const result = await this.apiStrategy.fetchChallengesAndVote(token, challengeId, mode);
             // Reflect the actual outcome in the operation log — a non-error
             // failure (e.g. cancelled, or a filtered challenge that isn't active)
             // must not be reported as a success.

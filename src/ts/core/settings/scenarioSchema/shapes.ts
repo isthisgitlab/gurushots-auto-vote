@@ -316,6 +316,10 @@ const action = z.discriminatedUnion('type', [
     z.strictObject({ type: z.literal('setPin'), power: pinPower, entry: selector }),
     z.strictObject({ type: z.literal('clearPin'), power: pinPower }),
     z.strictObject({ type: z.literal('pauseScenario'), reason: plainText(SCENARIO_CAPS.noticeLength).optional() }),
+    // Installation scenarios only (the `account` stage): ask the autovote controller to turn the voting stages on or off under the
+    // chain that is armed. Neither is a full Stop, neither creates a chain, and neither can lift a user Stop.
+    z.strictObject({ type: z.literal('startAutovote') }),
+    z.strictObject({ type: z.literal('stopAutovote') }),
     // Must be the last action of its rule (semantics.ts).
     z.strictObject({ type: z.literal('handoffScenario'), to: scenarioName.nullable() }),
 ]);

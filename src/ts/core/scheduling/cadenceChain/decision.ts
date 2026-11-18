@@ -95,6 +95,8 @@ const describeBoundaryCadence = (decision: CadenceDecision, waitMs: number): str
             return `⏰ Held boost for "${decision.nextBoostHold?.challengeTitle}" becomes due — ${inSeconds}`;
         case 'currency-rule':
             return `⏰ Approaching automatic ${decision.nextCurrencyRule?.action} rule for "${decision.nextCurrencyRule?.challengeTitle}" — ${inSeconds}`;
+        case 'account':
+            return `⏰ Approaching ${decision.nextAccountWake?.label} (${decision.nextAccountWake?.kind}) — ${inSeconds}`;
         case 'scenario':
             return `⏰ Approaching a scenario step for "${decision.nextScenarioWake?.challengeTitle}" (phase ${decision.nextScenarioWake?.phase}) — ${inSeconds}`;
         case 'pre-final-window':
@@ -120,6 +122,8 @@ type DecisionDeps = Pick<
     | 'resolveBoostPrefill'
     | 'resolveCurrencyAuto'
     | 'resolveScenarioWake'
+    | 'resolveAccountWake'
+    | 'isArmed'
     | 'log'
 >;
 
@@ -139,14 +143,16 @@ type DecisionDeps = Pick<
  * the wait once to OFFLINE_RETRY_MS, in either mode.
  *
  * @param deps - the chain's host transport (see createCadenceChain)
+ * @param settings - the cycle's cadence settings, captured once at the cycle boundary (the check frequency and the zone, the
+ *   installation's effective values): the decision, and the fallback after a failed one, run on this one capture
  *   the wait plus the list/clock snapshot for the onCycleChallenges hook
  */
 const decideNextWait = async (
     deps: DecisionDeps,
+    settings: Awaited<ReturnType<CadenceChainDeps['loadSettings']>>,
     prefetched: CycleResult,
     previousCycleStartMs: number | null,
 ): Promise<{ waitMs: number; cycleChallenges: Challenge[]; cycleNow: number }> => {
-    const settings = await deps.loadSettings();
     const normalDelayMs = getRandomCheckFrequencyMs(settings);
     // When no list was handed over we fetch fresh — and keep the
     // fetchFailed flag, not just the list. An outage resolves to
@@ -154,9 +160,13 @@ const decideNextWait = async (
     // otherwise decide a full normal-cadence wait indistinguishable from
     // "nothing to vote on". The flag lets the normal branch shorten
     // the wait so the loop re-probes soon after connectivity returns.
-    const fetched: ActiveChallengesResponse | null = Array.isArray(prefetched)
-        ? { challenges: prefetched }
-        : await deps.fetchChallenges(settings);
+    // Armed for the installation scenario only: no voting stage runs, so no active challenge is read and none decides the wait.
+    const armed = deps.isArmed?.() === true;
+    const fetched: ActiveChallengesResponse | null = armed
+        ? { challenges: [] }
+        : Array.isArray(prefetched)
+          ? { challenges: prefetched }
+          : await deps.fetchChallenges(settings);
     const challenges = fetched?.challenges || [];
     const fetchFailedNow = fetched?.fetchFailed === true;
     const now = Math.floor(Date.now() / 1000);
@@ -175,6 +185,7 @@ const decideNextWait = async (
         resolveBoostPrefill: deps.resolveBoostPrefill,
         resolveCurrencyAuto: deps.resolveCurrencyAuto,
         resolveScenarioWake: deps.resolveScenarioWake,
+        resolveAccountWake: deps.resolveAccountWake,
     });
 
     // A new degraded read caps the next wait once, whatever mode decided it.
@@ -213,16 +224,25 @@ export const decideNextWaitOrFallBack = async (
     | { waitMs: number; cycleChallenges: Challenge[]; cycleNow: number }
     | { waitMs: number; cycleChallenges: null; cycleNow: null }
 > => {
+    // The cycle's cadence settings are captured once, here, and frozen for the whole decision: a publication that lands while it
+    // runs applies from the next cycle. One that is unavailable (the host throws) is never replaced by the saved value: the
+    // fallback beat is the plain default cadence.
+    let captured: Awaited<ReturnType<CadenceChainDeps['loadSettings']>> | null = null;
     try {
-        return await decideNextWait(deps, prefetched, previousCycleStartMs);
+        captured = await deps.loadSettings();
+        return await decideNextWait(deps, captured, prefetched, previousCycleStartMs);
     } catch (error) {
         await deps.log.decisionError(error);
-        let waitMs;
-        try {
-            waitMs = getRandomCheckFrequencyMs(await deps.loadSettings());
-        } catch {
-            waitMs = getRandomCheckFrequencyMs({});
+        // The capture is kept when the decision failed after it was made; a capture that itself failed is tried once more, and
+        // when that fails too the plain default cadence stands.
+        let snapshot = captured;
+        if (snapshot === null) {
+            try {
+                snapshot = await deps.loadSettings();
+            } catch {
+                snapshot = null;
+            }
         }
-        return { waitMs, cycleChallenges: null, cycleNow: null };
+        return { waitMs: getRandomCheckFrequencyMs(snapshot), cycleChallenges: null, cycleNow: null };
     }
 };

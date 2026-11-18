@@ -123,8 +123,11 @@ describe('AutovoteContext', () => {
         jest.mocked(window.api.getSetting).mockResolvedValue(null);
         jest.mocked(window.api.setSetting).mockResolvedValue(invalid(undefined));
         jest.mocked(window.api.getActiveChallenges).mockResolvedValue({ challenges: far });
+        // The cadence settings are the installation's effective values: with no scenario, the saved ones.
         jest.mocked(window.api.getEffectiveSetting).mockImplementation((key) =>
-            Promise.resolve(key === 'lastMinuteCheckFrequency' ? 1 : 10),
+            key === 'checkFrequencyMin' || key === 'checkFrequencyMax'
+                ? Promise.resolve(5)
+                : Promise.resolve(key === 'lastMinuteCheckFrequency' ? 1 : 10),
         );
         jest.mocked(window.api.runVotingCycle).mockResolvedValue(invalid({ success: true, challenges: far }));
         jest.mocked(window.api.getEnvironmentInfo).mockResolvedValue(invalid({ launchedAt: Date.now() - 600_000 }));

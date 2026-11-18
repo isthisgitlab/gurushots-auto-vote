@@ -13,8 +13,7 @@ import { stripTerminalControl } from '../../../core/format/logSafe';
 import { formatDuration } from '../../../core/format/duration';
 import { challengeKind, challengePhotoCount, listedTags } from '../../../core/format/challengeListing';
 import { endTimeOf, formatEndTimeIn } from '../../../core/format/endTime';
-import * as settings from '../../../core/settings';
-import { effectiveTimezone } from '../../../core/settings/uiDefaults';
+import { captureInstallationTimezone } from '../../../core/services/installationTimezone';
 import { joinFreshRefusal } from '../../../core/services/VotingLogic';
 
 import type { NullEventHandlers } from '../../../core/types/cli';
@@ -91,7 +90,12 @@ const showDiscover = async () => {
         return;
     }
     const nowSec = Date.now() / 1000;
-    const timezone = effectiveTimezone(settings.getSetting('timezone'));
+    // The installation's effective zone; one that cannot be read shows no local times (the saved zone never takes its place).
+    const timezone = captureInstallationTimezone();
+    if (timezone === null) {
+        logger.withCategory('ui').info('  (unavailable — the time zone cannot be read)');
+        return;
+    }
     items.forEach((c) => logger.withCategory('ui').info(discoverLine(c, nowSec, timezone)));
     const upcoming = items.filter((c) => c?.status === 'upcoming');
     // Only a challenge that has started can be joined: a list of upcoming ones alone has nothing to join yet.

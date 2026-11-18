@@ -124,7 +124,7 @@ describe('runVotingCycle', () => {
         settings.loadSettings.mockReturnValue(config({ app: { mock: false } }));
         mw.cliVote.mockResolvedValue({ success: true, challenges: [] });
         await expect(runVotingCycle()).resolves.toEqual({ success: true, challenges: [] });
-        expect(mw.cliVote).toHaveBeenCalledWith(null);
+        expect(mw.cliVote).toHaveBeenCalledWith(null, 'full');
         expect(msgs('info')[0]).toBe('--- Voting Cycle 1 (REAL MODE) ---');
         expect(logger.__calls.find((c) => c.level === 'startOperation')!.msg).toBe('vote-cycle-1');
     });
@@ -132,8 +132,15 @@ describe('runVotingCycle', () => {
     test('scoped strategy cycle names the challenge', async () => {
         mw.cliVote.mockResolvedValue(invalid(undefined));
         await expect(runVotingCycle(4, { challengeId: '9' })).resolves.toEqual({ success: true, challenges: null });
-        expect(mw.cliVote).toHaveBeenCalledWith('9');
+        expect(mw.cliVote).toHaveBeenCalledWith('9', 'full');
         expect(msgs('info')[0]).toBe('--- Voting Cycle 4 (challenge 9) (MOCK MODE) ---');
+    });
+
+    test('the armed cycle asks the middleware for the installation cycle only, and names it so', async () => {
+        mw.cliVote.mockResolvedValue({ success: true, challenges: [] });
+        await expect(runVotingCycle(3, { mode: 'armed' })).resolves.toEqual({ success: true, challenges: [] });
+        expect(mw.cliVote).toHaveBeenCalledWith(null, 'armed');
+        expect(msgs('info')[0]).toBe('--- Installation Cycle 3 (MOCK MODE) ---');
     });
 
     test('manual cycle votes to 100%, ignores the scope and surfaces no list', async () => {
@@ -277,6 +284,16 @@ describe('startContinuousVoting', () => {
         await startContinuousVoting();
         expect(msgs('info')[0]).toBe('=== Starting Continuous Voting Mode (REAL MODE) ===');
         expect(createScheduler).not.toHaveBeenCalled();
+    });
+
+    test('hands the scheduler the full cycle and the installation-only cycle of an armed one', async () => {
+        mw.cliVote.mockResolvedValue({ success: true, challenges: [] });
+        await startContinuousVoting();
+        const deps = createScheduler.mock.calls[0][0];
+        await deps.runVotingCycle(1);
+        expect(mw.cliVote).toHaveBeenLastCalledWith(null, 'full');
+        await deps.runArmedCycle!(2);
+        expect(mw.cliVote).toHaveBeenLastCalledWith(null, 'armed');
     });
 
     test('wires the scheduler, registers signal handlers and keeps the process alive', async () => {

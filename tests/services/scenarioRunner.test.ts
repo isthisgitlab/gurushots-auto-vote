@@ -20,7 +20,10 @@ jest.mock('../../src/ts/core/settings', () => {
         // the value a test gives the effective read.
         captureInstallationSettings: jest.fn((keys: string[]) => ({
             ok: true,
-            values: Object.fromEntries(keys.map((key) => [key, getEffectiveSetting(key, null)])),
+            // The time zone is the saved one ('UTC' here) while no installation scenario overlays it.
+            values: Object.fromEntries(
+                keys.map((key) => [key, key === 'timezone' ? 'UTC' : getEffectiveSetting(key, null)]),
+            ),
         })),
         getScenario: jest.fn(),
         getSetting: jest.fn(() => 'UTC'),
@@ -218,6 +221,15 @@ describe('when nothing runs', () => {
         await run();
         expect(log.warning).toHaveBeenCalledWith(expect.stringContaining('"Missing", which does not exist'), null);
         expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+    });
+
+    test('a time zone the installation cannot read holds the step: nothing runs, nothing is written, and it is said', async () => {
+        setup(single([{ type: 'fillExposure' }]));
+        settings.captureInstallationSettings.mockReturnValueOnce({ ok: false, key: 'timezone', reason: 'expired' });
+        await run();
+        expect(ledger.get(7).state).toBeNull();
+        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+        expect(log.warning).toHaveBeenCalledWith(expect.stringContaining('the time zone is unavailable'), null);
     });
 
     test('unreadable state halts the challenge without starting over', async () => {

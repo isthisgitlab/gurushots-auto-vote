@@ -208,6 +208,8 @@ const readMissionNeeds = async (
         cat().warning('could not read missions (the request failed or the answer held no list)', null);
         return { join: 0, fill: 0, turbo: 0, boost: 0, vote: 0, readable: false };
     }
+    // The earliest expiry this read showed, for the scheduler: it wakes there so a mission is not slept past.
+    lastMissionExpiry = missionEvidence(missions, nowSec).nextExpiry;
     const needs: MissionNeeds = { join: 0, fill: 0, turbo: 0, boost: 0, vote: 0 };
     for (const mission of missions) {
         const kind = classifyMission(mission);
@@ -319,6 +321,11 @@ const neediestFillMission = (needs: MissionNeeds | null | undefined): FillMissio
     return neediest;
 };
 
+let lastMissionExpiry: number | null = null;
+
+/** The earliest expiry (epoch seconds) of an unfinished mission in the last mission list that was read, or null when none. */
+const getNextMissionExpiry = (): number | null => lastMissionExpiry;
+
 const registerMissionNeeds = (token: string, needs: MissionNeeds | null): (() => void) | null => {
     if (!needs) return null;
     const active = activeNeedsByToken.get(token) ?? new Map<MissionNeeds, number>();
@@ -353,6 +360,7 @@ export {
     isMissionVoteCandidate,
     missionVoteQuota,
     registerMissionNeeds,
+    getNextMissionExpiry,
     recordManualTurboWin,
     resetMissionLog,
 };

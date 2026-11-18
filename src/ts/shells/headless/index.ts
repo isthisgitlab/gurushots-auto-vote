@@ -108,6 +108,7 @@ const computeNextDelayMs = async (token: string, prefetched: Challenge[] | null 
             resolveScheduledFill,
             resolveAutoSubmitClock,
             resolveAutoSubmitSchedule,
+            // The zone is the installation's effective one, captured with the rest of the cycle's cadence settings above.
             timezone: effectiveTimezone(userSettings.timezone),
             resolveFinalWindowTopUp,
             resolveBoostPrefill,
@@ -142,7 +143,15 @@ const reportComplete = (payload: object) => {
     }
 };
 
-const fallbackDelay = () => getRandomCheckFrequencyMs(settings.loadSettings().app);
+// The beat after a cycle that could not decide its own: the installation's effective cadence, captured once; one that cannot be
+// read (its phase overlays it and no valid publication stands) is the plain default beat, never the saved cadence.
+const fallbackDelay = () => {
+    try {
+        return getRandomCheckFrequencyMs(loadCadenceSettings());
+    } catch {
+        return getRandomCheckFrequencyMs({});
+    }
+};
 
 const runOneCycle = async () => {
     try {
