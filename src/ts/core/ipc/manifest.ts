@@ -154,6 +154,12 @@ const invokeChannels = [
     // the user's own Run / Resume / re-arm; `arm-if-allowed` is the compare-and-set alone (a startup or a scenario request
     // can never lift a block); the installation's publication is withdrawn on a Stop and lifted on that re-arm.
     'get-stop-status',
+    // The ordinary control inbox (settings/scenarioControls.ts). `get-scenario-request-status` answers where a request or a
+    // target stands; `begin-scenario-request` persists a request before it is applied and `finish-scenario-request` records its
+    // result: the two are the host's own routes (a phone never calls them).
+    'get-scenario-request-status',
+    'begin-scenario-request',
+    'finish-scenario-request',
     'scenario-stop-fence',
     'record-full-stop',
     'arm-autovote',

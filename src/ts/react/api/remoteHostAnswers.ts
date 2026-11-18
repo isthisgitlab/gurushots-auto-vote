@@ -6,7 +6,7 @@
  */
 
 import { dispatchRemoteInvoke } from '../../core/remote/dispatch';
-import { classifyRemoteChannel } from '../../core/remote/allowlist';
+import { classifyRemoteChannel, classifyRemoteCommand } from '../../core/remote/allowlist';
 import { errorMessage } from '../../core/errorMessage';
 import {
     checkPeerMessageLimit,
@@ -17,9 +17,10 @@ import {
     REMOTE_RESULT_UNSENDABLE,
 } from '../../core/remote/protocol';
 
-import type { AutovoteCommandName } from '../../core/remote/protocol';
+import type { AutovoteCommandMessage, CommandAck, ControlReport } from '../../core/remote/protocol';
+import type { RemoteInvokeRequest } from '../../core/remote/dispatch';
 import type { HostContext } from './remoteHostPeers';
-import { clippedId, sendTo, stampedAutovoteState } from './remoteHostPeers';
+import { MAX_COMMAND_IDS, clippedId, sendTo, stampedAutovoteState } from './remoteHostPeers';
 
 /** A short, single-line error text for a phone: bounded to what a `result` message accepts. */
 const shortError = (error: unknown): string => {
@@ -94,8 +95,9 @@ export const sendResult = async (
     id: number,
     channel: string,
     result: unknown,
+    control?: ControlReport,
 ): Promise<void> => {
-    const answer = { t: 'result', id, ok: true, result };
+    const answer = { t: 'result', id, ok: true, result, ...(control === undefined ? {} : { control }) };
     const limit = checkPeerMessageLimit(answer);
     if (limit === 'within') {
         await sendTo(ctx, peerId, answer);
@@ -117,19 +119,20 @@ export const answerInvoke = async (
     id: number,
     channel: string,
     args: unknown[],
+    request: RemoteInvokeRequest,
 ): Promise<void> => {
     try {
         if (classifyRemoteChannel(channel).kind === 'host') {
             await answerHostChannel(ctx, peerId, id, channel);
             return;
         }
-        const outcome = await dispatchRemoteInvoke(channel, args, { invoke: ctx.deps.invoke });
+        const outcome = await dispatchRemoteInvoke(channel, args, { invoke: ctx.deps.invoke }, request);
         if (outcome.kind === 'refused') {
             ctx.deps.logInfo(`Remote invoke refused: ${clippedId(channel)}`);
             await sendTo(ctx, peerId, { t: 'result', id, ok: false, error: outcome.error });
             return;
         }
-        await sendResult(ctx, peerId, id, channel, outcome.result);
+        await sendResult(ctx, peerId, id, channel, outcome.result, outcome.control);
     } catch (error) {
         // Every failure answers the phone: an unanswered invoke would hang there until the connection drops.
         ctx.deps.logInfo(`Remote invoke failed: ${clippedId(channel)}`);
@@ -137,11 +140,39 @@ export const answerInvoke = async (
     }
 };
 
-/** Runs a phone's start/stop/rearm; a failure is logged, the controller's own state tells the phone. */
-export const runCommand = async (ctx: HostContext, command: AutovoteCommandName): Promise<void> => {
+/** Remembers a Start or re-arm identity; the oldest is forgotten past MAX_COMMAND_IDS. */
+const rememberCommand = (ctx: HostContext, requestId: string): void => {
+    ctx.commandIds.add(requestId);
+    for (const old of ctx.commandIds) {
+        if (ctx.commandIds.size <= MAX_COMMAND_IDS) break;
+        ctx.commandIds.delete(old);
+    }
+};
+
+/**
+ * Runs a phone's start/stop/rearm and answers that phone with the controller's state stamped as the acknowledgment of its
+ * identity. A Stop is the priority operation: it goes straight to the controller (which cancels and records the fence), with no
+ * identity check and no control inbox, so nothing that is busy, full or unreadable can hold it back. A Start or re-arm is run
+ * once per identity, and not at all when a Stop has moved the epoch since the state the phone saw: a delayed or repeated
+ * Start never runs after a Stop. A failure is logged; the state and the ack tell the phone.
+ */
+export const runCommand = async (ctx: HostContext, peerId: string, message: AutovoteCommandMessage): Promise<void> => {
+    const { command, requestId, expectedStopEpoch } = message;
+    const answer = (outcome: CommandAck['outcome']): Promise<void> =>
+        sendTo(ctx, peerId, stampedAutovoteState(ctx.deps.getAutovoteState(), { requestId, command, outcome }));
+    if (classifyRemoteCommand(command) === 'effect') {
+        if (ctx.commandIds.has(requestId)) return answer('duplicate');
+        rememberCommand(ctx, requestId);
+        const epoch = ctx.deps.getAutovoteState().stopEpoch;
+        if (expectedStopEpoch !== undefined && epoch !== null && epoch !== expectedStopEpoch) {
+            return answer('stop-epoch-moved');
+        }
+    }
     try {
         await ctx.deps.runAutovoteCommand(command);
     } catch {
         ctx.deps.logInfo(`Remote auto-vote command failed: ${command}`);
+        return answer('failed');
     }
+    return answer('ran');
 };

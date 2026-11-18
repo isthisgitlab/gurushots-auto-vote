@@ -277,3 +277,5 @@ export const resetRemotePairing = forward('resetRemotePairing');
  * `undefined` on a host without the event.
  */
 export const onSettingsChanged = forwardOptional('onSettingsChanged');
+export const onEffectiveSettingsChanged = forwardOptional('onEffectiveSettingsChanged');
+export const onEffectivePresentationChanged = forwardOptional('onEffectivePresentationChanged');

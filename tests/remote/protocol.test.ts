@@ -191,10 +191,11 @@ describe('parsePeerMessage', () => {
             ...stamp,
         };
         expect(parsePeerMessage(errored)).toEqual(errored);
-        const command: AutovoteCommandMessage = { t: 'autovote-command', command: 'rearm' };
+        const command: AutovoteCommandMessage = { t: 'autovote-command', command: 'rearm', requestId: 'r1' };
         expect(parsePeerMessage(command)).toEqual({
             t: 'autovote-command',
             command: 'rearm',
+            requestId: 'r1',
         });
         const bye: ByeMessage = { t: 'bye' };
         expect(parsePeerMessage(bye)).toEqual({ t: 'bye' });

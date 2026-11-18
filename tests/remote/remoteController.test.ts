@@ -13,6 +13,9 @@ import { setRemoteConnectionState, setRemoteHostPeerId } from '../../src/ts/core
 
 import type { AutovoteState } from '../../src/ts/core/autovote/state';
 
+/** A request identity the way the phone draws one: 32 hex characters. */
+const ID = /^[0-9a-f]{32}$/;
+
 const stateOf = (overrides: Partial<AutovoteState> = {}): AutovoteState => ({ ...initialState, ...overrides });
 
 describe('createRemoteAutovoteController', () => {
@@ -85,17 +88,35 @@ describe('createRemoteAutovoteController', () => {
         await controller.rearmSchedule();
         const commands = phone.sent.map(({ message }) => message as { t: string; command?: string });
         expect(commands).toEqual([
-            { t: 'autovote-command', command: 'start' },
-            { t: 'autovote-command', command: 'stop' },
-            { t: 'autovote-command', command: 'rearm' },
+            { t: 'autovote-command', command: 'start', requestId: expect.stringMatching(ID) },
+            { t: 'autovote-command', command: 'stop', requestId: expect.stringMatching(ID) },
+            { t: 'autovote-command', command: 'rearm', requestId: expect.stringMatching(ID) },
         ]);
-        // The state is untouched: the desktop's relay is the only input.
-        expect(controller.getState()).toEqual(initialState);
+        // Three commands, three identities.
+        expect(new Set(commands.map((command) => (command as { requestId?: string }).requestId)).size).toBe(3);
+        // The state is the desktop's relay, apart from the Stop the desktop has not answered yet.
+        expect(controller.getState()).toEqual({ ...initialState, lastStop: { outcome: 'requested', durable: false } });
     });
 
     test('start sends the command to the desktop the phone is connected to', async () => {
         await controller.start();
-        expect(phone.sent).toEqual([{ message: { t: 'autovote-command', command: 'start' }, target: 'host' }]);
+        expect(phone.sent).toEqual([
+            {
+                message: { t: 'autovote-command', command: 'start', requestId: expect.stringMatching(ID) },
+                target: 'host',
+            },
+        ]);
+    });
+
+    test('a command with no host peer known goes to the transport with no target', async () => {
+        setRemoteHostPeerId(null);
+        await controller.start();
+        expect(phone.sent).toEqual([
+            {
+                message: { t: 'autovote-command', command: 'start', requestId: expect.stringMatching(ID) },
+                target: undefined,
+            },
+        ]);
     });
 
     test('a send that fails says the phone is not connected instead of rejecting', async () => {
@@ -139,7 +160,11 @@ describe('createRemoteAutovoteController', () => {
             phoneDirect.emitJoin('host');
             await controller.start();
             expect(received).toEqual([
-                { via: 'direct', peerId: 'phone', message: { t: 'autovote-command', command: 'start' } },
+                {
+                    via: 'direct',
+                    peerId: 'phone',
+                    message: { t: 'autovote-command', command: 'start', requestId: expect.stringMatching(ID) },
+                },
             ]);
             expect(controller.getState()).toEqual(initialState);
         });
@@ -148,7 +173,11 @@ describe('createRemoteAutovoteController', () => {
             phoneRelay.emitJoin('host');
             await controller.start();
             expect(received).toEqual([
-                { via: 'relay', peerId: 'phone', message: { t: 'autovote-command', command: 'start' } },
+                {
+                    via: 'relay',
+                    peerId: 'phone',
+                    message: { t: 'autovote-command', command: 'start', requestId: expect.stringMatching(ID) },
+                },
             ]);
             expect(controller.getState()).toEqual(initialState);
         });
@@ -165,6 +194,15 @@ describe('createRemoteAutovoteController', () => {
         controller.subscribe(() => seen.push(controller.getState()));
         phone.receiveFromPeer(stamped(stateOf({ running: true, cycles: 1 }), 'run-a', 1), 'host');
         expect(controller.getState().running).toBe(true);
+        expect(seen).toHaveLength(1);
+    });
+
+    test('an unsubscribed listener hears nothing more', () => {
+        const seen: AutovoteState[] = [];
+        const unsubscribe = controller.subscribe(() => seen.push(controller.getState()));
+        phone.receiveFromPeer(stamped(stateOf({ cycles: 1 }), 'run-a', 1), 'host');
+        unsubscribe();
+        phone.receiveFromPeer(stamped(stateOf({ cycles: 2 }), 'run-a', 2), 'host');
         expect(seen).toHaveLength(1);
     });
 
@@ -224,6 +262,95 @@ describe('createRemoteAutovoteController', () => {
             expect(controller.getState()).toEqual(initialState);
             expect(seen).toEqual([]);
             expect(refreshes).toBe(0);
+        });
+    });
+
+    describe('a Stop is pending until the desktop answers it', () => {
+        const stoppedAt = (epoch: number, overrides: Partial<AutovoteState> = {}) =>
+            stateOf({
+                executionMode: 'stopped',
+                stopEpoch: epoch,
+                lastStop: { outcome: 'stopped', durable: true, epoch, withdrawal: 'withdrawn' },
+                ...overrides,
+            });
+        const sentStopId = (): string =>
+            (
+                phone.sent
+                    .map(({ message }) => message as { command?: string; requestId?: string })
+                    .find((message) => message.command === 'stop') as { requestId: string }
+            ).requestId;
+
+        test('it reads requested from the send, whatever the desktop is told, and never as stopped', async () => {
+            await controller.stop();
+            expect(controller.getState().lastStop).toEqual({ outcome: 'requested', durable: false });
+            // A state that does not answer it (no acknowledgment, no higher epoch) leaves it pending.
+            phone.receiveFromPeer(
+                stamped(stateOf({ running: true, executionMode: 'voting', stopEpoch: null }), 'run-a', 1),
+                'host',
+            );
+            expect(controller.getState()).toMatchObject({ running: true, lastStop: { outcome: 'requested' } });
+        });
+
+        test('the desktop acknowledging that identity ends it with what the desktop did', async () => {
+            await controller.stop();
+            const ack = { requestId: sentStopId(), command: 'stop', outcome: 'ran' };
+            const local = stateOf({
+                executionMode: 'stopped',
+                lastStop: { outcome: 'stopped-locally', durable: false, reason: 'not-saved', withdrawal: 'none' },
+            });
+            phone.receiveFromPeer({ ...stamped(local, 'run-a', 1), ack }, 'host');
+            // Local cancellation only: the fence was not saved, and the phone says exactly that.
+            expect(controller.getState().lastStop).toEqual(local.lastStop);
+            // The next state no longer carries the pending Stop.
+            phone.receiveFromPeer(stamped(stateOf({ running: true }), 'run-a', 2), 'host');
+            expect(controller.getState().lastStop).toBeNull();
+        });
+
+        test('a fresh stopped state with a higher epoch ends it without an acknowledgment', async () => {
+            phone.receiveFromPeer(
+                stamped(stoppedAt(2, { executionMode: 'voting', running: true }), 'run-a', 1),
+                'host',
+            );
+            await controller.stop();
+            // Stopped, but at the epoch the phone already knew: not an answer.
+            phone.receiveFromPeer(stamped(stoppedAt(2), 'run-a', 2), 'host');
+            expect(controller.getState().lastStop).toEqual({ outcome: 'requested', durable: false });
+            phone.receiveFromPeer(stamped(stoppedAt(3), 'run-a', 3), 'host');
+            expect(controller.getState().lastStop).toMatchObject({ outcome: 'stopped', durable: true, epoch: 3 });
+        });
+
+        test('with no epoch known, a stopped state at any epoch answers it', async () => {
+            await controller.stop();
+            phone.receiveFromPeer(stamped(stoppedAt(1), 'run-a', 1), 'host');
+            expect(controller.getState().lastStop).toMatchObject({ outcome: 'stopped', epoch: 1 });
+        });
+
+        test('a lost connection leaves it pending; it is not sent again', async () => {
+            await controller.stop();
+            setRemoteConnectionState('offline');
+            await controller.stop();
+            expect(phone.sent).toHaveLength(1);
+            expect(controller.getState().lastStop).toEqual({ outcome: 'requested', durable: false });
+            expect(controller.getState().error).toContain('Not connected');
+        });
+
+        test('a send that failed leaves it pending too: the desktop may have received it', async () => {
+            phone.failNextSendOnce();
+            await controller.stop();
+            expect(controller.getState()).toMatchObject({ lastStop: { outcome: 'requested' }, status: 'Error' });
+        });
+
+        test('a Start or re-arm carries the Stop epoch of the state the phone saw; a Stop carries none', async () => {
+            phone.receiveFromPeer(stamped(stoppedAt(4), 'run-a', 1), 'host');
+            await controller.start();
+            await controller.rearmSchedule();
+            await controller.stop();
+            const sent = phone.sent.map(({ message }) => message as { command: string; expectedStopEpoch?: number });
+            expect(sent.map((message) => [message.command, message.expectedStopEpoch])).toEqual([
+                ['start', 4],
+                ['rearm', 4],
+                ['stop', undefined],
+            ]);
         });
     });
 

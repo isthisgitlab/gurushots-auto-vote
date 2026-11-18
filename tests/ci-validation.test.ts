@@ -256,10 +256,7 @@ describe('sends toward the Logs window', () => {
         ['src/ts/shells/electron/preloadApi.ts', 'api[method] = () => ipcRenderer.send(channel);'],
         // The remote pairing transport is a WebRTC data channel, not a frame; every .send on
         // it is a protocol message to the paired peer.
-        [
-            'src/ts/core/autovote/remote.ts',
-            "await deps.transport.send({ t: 'autovote-command', command }, remoteHostPeerId() ?? undefined);",
-        ],
+        ['src/ts/core/autovote/remote.ts', 'await deps.transport.send(message, remoteHostPeerId() ?? undefined);'],
         [
             'src/ts/core/remote/trystero.ts',
             'send: (message, target) => action.send(message as JsonValue, target === undefined ? {} : { target }),',

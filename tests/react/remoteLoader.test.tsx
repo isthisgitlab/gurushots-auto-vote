@@ -1,4 +1,4 @@
-/** The root remote entry launches only the current v2 page. */
+/** The root remote entry launches only the current v3 page. */
 
 import { setRemoteConnectionState } from '../../src/ts/core/remote/connectionState';
 import { waitFor } from '@testing-library/preact';
@@ -19,7 +19,7 @@ const load = (): void => {
     });
 };
 
-describe('the current-v2 remote launcher', () => {
+describe('the current-v3 remote launcher', () => {
     beforeEach(() => {
         document.body.innerHTML = '<div id="root"></div>';
         window.history.replaceState(null, '', `/remote/index.html#k=${KEY}`);
@@ -36,9 +36,9 @@ describe('the current-v2 remote launcher', () => {
         jest.resetModules();
     });
 
-    test('opens only the current v2 page with its key in the fragment', () => {
+    test('opens only the current v3 page with its key in the fragment', () => {
         load();
-        expect(navigated).toEqual([`./v2/index.html#k=${KEY}`]);
+        expect(navigated).toEqual([`./v3/index.html#k=${KEY}`]);
     });
 
     test.each([

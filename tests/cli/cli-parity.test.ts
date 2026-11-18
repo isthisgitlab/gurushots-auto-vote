@@ -212,6 +212,15 @@ const CLI_PARITY: Record<InvokeChannel, ParityEntry> = {
         reason: 'The theme and language the Login and Logs windows paint; the CLI has no window.',
     },
     'get-stop-status': { commands: ['stop-status'], flag: null },
+    'get-scenario-request-status': {
+        reason: 'The control inbox answers a paired phone about its own requests; the CLI changes a scenario directly.',
+    },
+    'begin-scenario-request': {
+        reason: "The remote host persists a paired phone's request before applying it; the CLI changes a scenario directly.",
+    },
+    'finish-scenario-request': {
+        reason: "The remote host records the result of a paired phone's request; the CLI changes a scenario directly.",
+    },
     'scenario-stop-fence': {
         reason: 'The controller route of the window controller; the CLI scheduler reads the fence itself (autovote/nodeSeams).',
     },

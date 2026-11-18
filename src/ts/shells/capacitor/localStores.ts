@@ -23,6 +23,7 @@ import { initializeAutoSpendAsync, flushAutoSpendWrites } from '../../core/curre
 import { initializeEntryAgesAsync, flushEntryAgeWrites } from '../../core/entryAgeStore';
 import { initializeScenarioStateAsync, flushScenarioStateWrites } from '../../core/scenarioStateStore';
 import { initializeStopFenceAsync, flushStopFenceWrites } from '../../core/settings/scenarioLifecycle';
+import { initializeScenarioControlsAsync, flushScenarioControlsWrites } from '../../core/settings/scenarioControls';
 import { initializeDiagnosticsAsync, flushDiagnosticsWrites } from '../../core/services/semantic/diagnostics';
 import { initializePhotoStatsAsync, flushPhotoStatsWrites } from '../../core/services/photoStats';
 import { withCategory } from '../../core/logger';
@@ -77,6 +78,14 @@ const LOCAL_STORES = [
         initialize: initializeStopFenceAsync,
         flush: () =>
             void flushStopFenceWrites().catch((err) => withCategory('general').error('Stop fence not persisted', err)),
+    },
+    {
+        // The ordinary control inbox (requests and their recorded results): hydrated so a relaunch reads what is pending.
+        initialize: initializeScenarioControlsAsync,
+        flush: () =>
+            void flushScenarioControlsWrites().catch((err) =>
+                withCategory('general').error('Scenario controls not persisted', err),
+            ),
     },
     {
         initialize: initializeDiagnosticsAsync,

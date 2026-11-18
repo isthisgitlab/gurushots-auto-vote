@@ -44,6 +44,8 @@ const LOCAL_DATA_STORES: readonly LocalDataStore[] = [
     { fileName: 'scenarioResets.json', prefKey: 'gs_scenario_resets' },
     // The priority Stop fence: the epoch and block of full Stops, apart from the scenario ledger.
     { fileName: 'scenarioStopFence.json', prefKey: 'gs_scenario_stop_fence' },
+    // The ordinary control inbox: the requests a paired phone sent to change a scenario, and what became of each.
+    { fileName: 'scenarioControls.json', prefKey: 'gs_scenario_controls' },
     { fileName: 'photo-stats.json', prefKey: 'gurushots-photo-stats' },
     { fileName: 'lexicon-diagnostics.json', prefKey: 'gs_lexicon_diagnostics' },
     { fileName: 'swapBacks.json', prefKey: 'gs_swap_backs' },

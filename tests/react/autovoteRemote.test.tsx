@@ -20,6 +20,10 @@ const captured: { local: number; remote: number } = { local: 0, remote: 0 };
 /** The state one relayed cycle change carries. */
 const relayedState = {
     running: true,
+    executionMode: 'voting' as const,
+    stopEpoch: null,
+    lastStop: null,
+    startRefusal: null,
     cycles: 1,
     lastRun: null,
     nextRunAt: null,
@@ -111,10 +115,11 @@ describe('AutovoteProvider on the remote kind', () => {
         await act(() => latest!.stop());
         await act(() => latest!.rearmSchedule());
         const commands = phone.sent.map(({ message }) => message as { t: string; command?: string });
+        const requestId = expect.stringMatching(/^[0-9a-f]{32}$/);
         expect(commands).toEqual([
-            { t: 'autovote-command', command: 'start' },
-            { t: 'autovote-command', command: 'stop' },
-            { t: 'autovote-command', command: 'rearm' },
+            { t: 'autovote-command', command: 'start', requestId },
+            { t: 'autovote-command', command: 'stop', requestId },
+            { t: 'autovote-command', command: 'rearm', requestId },
         ]);
     });
 

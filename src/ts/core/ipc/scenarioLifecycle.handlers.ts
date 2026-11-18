@@ -7,7 +7,8 @@
  *
  *   reads        get-scenario-capabilities, get-scenario-snapshot, get-installation-scenario, list-simulation-subjects,
  *                get-photo-pools, get-effective-entry-pins, get-effective-installation-settings,
- *                get-effective-presentation, get-stop-status
+ *                get-effective-presentation, get-stop-status, get-scenario-request-status
+ *   inbox        begin-scenario-request, finish-scenario-request (the remote host's routes into the control inbox)
  *   effects      set-installation-scenario, transfer-installation-scenario-owner, pause-scenario, resume-scenario,
  *                handoff-scenario, clear-scenario-assignment, set-photo-pool, delete-photo-pool, rename-photo-pool
  *   controller   scenario-stop-fence, record-full-stop, arm-autovote, arm-if-allowed, withdraw-installation,
@@ -31,7 +32,7 @@ import { isRendererHiddenKey } from './rendererSettings';
 import { invalidArgs, isCount, isName, safely } from './scenarioSupport';
 
 import type { IpcHandlerMap } from './invokeHandler';
-import type { StopFenceRead } from '../settings';
+import type { ControlStatusQuery, StopFenceRead } from '../settings';
 import type { SubjectKind } from '../services/scenarioStatus';
 import type { ExprValue } from '../scenarios/expressions';
 import type { ValueState } from '../scenarios/valueState';
@@ -154,6 +155,53 @@ const fenceOptions = (options: unknown): { initialize: boolean; armEpoch: number
     return { initialize: initialize === true, armEpoch: armEpoch ?? null };
 };
 
+/** The current Stop epoch, or null where the fence cannot be read. */
+const currentStopEpoch = (): number | null => {
+    const read = settings.readStopFence();
+    return read.state === 'ok' ? read.fence.stopEpoch : null;
+};
+
+/** The query of `get-scenario-request-status`: exactly a request identity or exactly a target. */
+const statusQuery = (query: unknown): ControlStatusQuery | null => {
+    if (!isPlainObject(query)) return null;
+    const keys = Object.keys(query);
+    if (keys.length !== 1) return null;
+    if (query.requestId !== undefined)
+        return isControlText(query.requestId, settings.CONTROL_ID_PATTERN) ? { requestId: query.requestId } : null;
+    return isControlText(query.target, settings.CONTROL_NAME_PATTERN) ? { target: query.target } : null;
+};
+
+const isControlText = (value: unknown, pattern: RegExp): value is string =>
+    typeof value === 'string' && pattern.test(value);
+
+/** The request a host asks to have persisted: exactly its identity, operation, target and argument text, and the revision it expects. */
+const beginRequest = (request: unknown) => {
+    if (!isPlainObject(request)) return null;
+    const { requestId, operation, target, args, expectedRevision } = request;
+    const allowed = ['requestId', 'operation', 'target', 'args', 'expectedRevision'];
+    if (!Object.keys(request).every((key) => allowed.includes(key)) || typeof args !== 'string') return null;
+    if (expectedRevision !== undefined && !isCount(expectedRevision)) return null;
+    if (
+        !isControlText(requestId, settings.CONTROL_ID_PATTERN) ||
+        !isControlText(operation, settings.CONTROL_NAME_PATTERN)
+    )
+        return null;
+    if (!isControlText(target, settings.CONTROL_NAME_PATTERN)) return null;
+    return { requestId, operation, target, args, ...(expectedRevision === undefined ? {} : { expectedRevision }) };
+};
+
+/** The result a host asks to have recorded: exactly the identity, the target, whether it landed, and a bounded reason. */
+const finishRequest = (request: unknown) => {
+    if (!isPlainObject(request)) return null;
+    const { requestId, target, ok, error } = request;
+    const allowed = ['requestId', 'target', 'ok', 'error'];
+    if (!Object.keys(request).every((key) => allowed.includes(key)) || typeof ok !== 'boolean') return null;
+    if (error !== undefined && (typeof error !== 'string' || error.length > settings.CONTROL_MAX_ERROR)) return null;
+    if (!isControlText(requestId, settings.CONTROL_ID_PATTERN) || !isControlText(target, settings.CONTROL_NAME_PATTERN))
+        return null;
+    return { requestId, target, ok, error: error ?? null };
+};
+
 const buildLifecycleHandlers = () =>
     ({
         'get-scenario-capabilities': async () =>
@@ -215,6 +263,37 @@ const buildLifecycleHandlers = () =>
                     ownerAcknowledged: ownerAcknowledged(read),
                 };
             }),
+
+        'get-scenario-request-status': async (event: unknown, query: ControlStatusQuery) => {
+            const asked = statusQuery(query);
+            if (asked === null) return invalidArgs;
+            return safely('get-scenario-request-status', () => ({
+                success: true as const,
+                ...settings.readControlStatus(asked, currentStopEpoch()),
+            }));
+        },
+
+        'begin-scenario-request': async (event: unknown, request: unknown) => {
+            const asked = beginRequest(request);
+            if (asked === null) return invalidArgs;
+            return safely('begin-scenario-request', async () => {
+                const begun = await settings.beginControlRequest({
+                    ...asked,
+                    stopEpoch: currentStopEpoch(),
+                    at: Date.now(),
+                });
+                return begun.ok ? { success: true as const, ...begun } : refused(begun.reason);
+            });
+        },
+
+        'finish-scenario-request': async (event: unknown, request: unknown) => {
+            const asked = finishRequest(request);
+            if (asked === null) return invalidArgs;
+            return safely('finish-scenario-request', async () => {
+                const finished = await settings.finishControlRequest({ ...asked, at: Date.now() });
+                return finished.ok ? { success: true as const, ...finished } : refused(finished.reason);
+            });
+        },
 
         'set-installation-scenario': async (
             event: unknown,

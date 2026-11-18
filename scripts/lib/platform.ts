@@ -13,6 +13,7 @@ installPlatform(
     createNodePlatform(
         {
             broadcastSettingsChanged: () => undefined,
+            broadcastEvent: () => undefined,
             afterWipe: () => undefined,
         },
         'cli',

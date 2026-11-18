@@ -29,7 +29,7 @@ export type RemoteHostDeps = {
     getAutovoteState: () => AutovoteState;
     /** Runs start/stop/rearm on the caller's own controller. */
     runAutovoteCommand: (command: AutovoteCommandName) => Promise<void>;
-    /** The events forwarded to every validated phone: settings-changed and the update-* set. */
+    /** The events forwarded to every validated phone: settings-changed, the two effective projections and the update-* set. */
     onForwardedEvent: (channel: ForwardedEventChannel, handler: (payload: unknown) => void) => () => void;
     /** The desktop's log feed; the host forwards it only to phones that asked for logs. */
     onLogMessage: (handler: (entry: unknown) => void) => () => void;
@@ -64,6 +64,8 @@ type EventChannel = (typeof eventMethods)[keyof typeof eventMethods];
 /** The events forwarded to every validated phone. */
 const FORWARDED_EVENT_CHANNEL_NAMES = [
     'settings-changed',
+    'effective-settings-changed',
+    'effective-presentation-changed',
     'update-checking',
     'update-available',
     'update-not-available',
@@ -86,6 +88,7 @@ export const createRemoteHost = (deps: RemoteHostDeps): RemoteHost => {
         peers: new Set<string>(),
         notified: new Set<string>(),
         logPeers: new Set<string>(),
+        commandIds: new Set<string>(),
         countListeners: new Set<() => void>(),
     };
     const unsubs: Array<() => void> = [];
@@ -142,6 +145,7 @@ export const createRemoteHost = (deps: RemoteHostDeps): RemoteHost => {
             ctx.peers.clear();
             ctx.notified.clear();
             ctx.logPeers.clear();
+            ctx.commandIds.clear();
             notifyCount(ctx);
             deps.logInfo('Remote access host stopped');
             if (heldLogStream) void releaseLogStream(ctx);

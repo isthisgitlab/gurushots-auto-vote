@@ -26,6 +26,12 @@ jest.mock('../../src/ts/core/settings', () => ({
     scenarioOverlayStatus: jest.fn(),
     getEffectiveSetting: jest.fn(),
     readStopFence: jest.fn(),
+    readControlStatus: jest.fn(),
+    beginControlRequest: jest.fn(),
+    finishControlRequest: jest.fn(),
+    CONTROL_ID_PATTERN: /^[A-Za-z0-9_-]{1,64}$/,
+    CONTROL_NAME_PATTERN: /^[A-Za-z0-9@:._-]{1,64}$/,
+    CONTROL_MAX_ERROR: 120,
 }));
 jest.mock('../../src/ts/core/services/scenarioStatus', () => ({
     ledgerForMode: jest.fn(),
@@ -739,5 +745,177 @@ describe('the controller seams', () => {
     test('a seam that rejects answers a failure instead of throwing', async () => {
         seams.nodeStopFence.recordFullStop.mockRejectedValue(new Error('disk'));
         await expect(handlers['record-full-stop'](null, 'r', 1)).resolves.toEqual({ success: false, error: 'disk' });
+    });
+});
+
+describe('the control inbox routes', () => {
+    const OK_FENCE = { state: 'ok', fence: FENCE } as const;
+
+    describe('get-scenario-request-status', () => {
+        test.each([
+            ['by identity', { requestId: 'r1' }],
+            ['by target', { target: '7' }],
+        ])("answers %s with the inbox's status under the current Stop epoch", async (_label, query) => {
+            settings.readStopFence.mockReturnValue(OK_FENCE);
+            settings.readControlStatus.mockReturnValue({ state: 'not-recorded' });
+            await expect(handlers['get-scenario-request-status'](null, query)).resolves.toEqual({
+                success: true,
+                state: 'not-recorded',
+            });
+            expect(settings.readControlStatus).toHaveBeenCalledWith(query, 2);
+        });
+
+        test('reads the epoch as unknown where the fence cannot be read', async () => {
+            settings.readStopFence.mockReturnValue({ state: 'unreadable', reason: 'malformed' });
+            settings.readControlStatus.mockReturnValue({ state: 'unknown' });
+            await expect(handlers['get-scenario-request-status'](null, { target: '7' })).resolves.toEqual({
+                success: true,
+                state: 'unknown',
+            });
+            expect(settings.readControlStatus).toHaveBeenCalledWith({ target: '7' }, null);
+        });
+
+        test.each([
+            ['nothing', undefined],
+            ['a string', 'r1'],
+            ['an empty query', {}],
+            ['both keys', { requestId: 'r1', target: '7' }],
+            ['an identity that is not bounded text', { requestId: 'a b' }],
+            ['a target that is not text', { target: 7 }],
+            ['an extra key', { target: '7', also: 1 }],
+        ])('refuses %s', async (_label, query) => {
+            await expect(handlers['get-scenario-request-status'](null, invalid(query))).resolves.toEqual({
+                success: false,
+                error: 'invalid-args',
+            });
+        });
+
+        test('never throws to the renderer', async () => {
+            settings.readStopFence.mockImplementation(() => {
+                throw new Error('fence');
+            });
+            await expect(handlers['get-scenario-request-status'](null, { target: '7' })).resolves.toEqual({
+                success: false,
+                error: 'fence',
+            });
+        });
+    });
+
+    describe('begin-scenario-request', () => {
+        const asked = { requestId: 'r1', operation: 'pause-scenario', target: '7', args: '["7"]' };
+
+        test("persists the request under the current Stop epoch and the clock, and answers the inbox's outcome", async () => {
+            settings.readStopFence.mockReturnValue(OK_FENCE);
+            settings.beginControlRequest.mockResolvedValue({ ok: true, outcome: 'accepted', revision: 1 });
+            await expect(handlers['begin-scenario-request'](null, { ...asked, expectedRevision: 1 })).resolves.toEqual({
+                success: true,
+                ok: true,
+                outcome: 'accepted',
+                revision: 1,
+            });
+            expect(settings.beginControlRequest).toHaveBeenCalledWith({
+                ...asked,
+                expectedRevision: 1,
+                stopEpoch: 2,
+                at: expect.any(Number),
+            });
+        });
+
+        test('without an expected revision passes none, and with no readable fence passes no epoch', async () => {
+            settings.readStopFence.mockReturnValue({ state: 'missing' });
+            settings.beginControlRequest.mockResolvedValue({ ok: true, outcome: 'accepted', revision: 0 });
+            await handlers['begin-scenario-request'](null, asked);
+            expect(settings.beginControlRequest).toHaveBeenCalledWith({
+                ...asked,
+                stopEpoch: null,
+                at: expect.any(Number),
+            });
+        });
+
+        test.each(['conflict', 'stale', 'busy', 'full', 'too-large', 'unreadable', 'not-saved', 'invalid'] as const)(
+            'answers a refusal (%s) as its reason',
+            async (reason) => {
+                settings.readStopFence.mockReturnValue(OK_FENCE);
+                settings.beginControlRequest.mockResolvedValue({ ok: false, reason });
+                await expect(handlers['begin-scenario-request'](null, asked)).resolves.toEqual({
+                    success: false,
+                    error: reason,
+                });
+            },
+        );
+
+        test.each([
+            ['nothing', undefined],
+            ['arguments that are not text', { ...asked, args: ['7'] }],
+            ['an expected revision that is not a count', { ...asked, expectedRevision: -1 }],
+            ['an identity that is not bounded text', { ...asked, requestId: 'a b' }],
+            ['an operation that is not bounded text', { ...asked, operation: '' }],
+            ['a target that is not bounded text', { ...asked, target: 7 }],
+            ['an extra key', { ...asked, also: 1 }],
+        ])('refuses %s', async (_label, request) => {
+            await expect(handlers['begin-scenario-request'](null, invalid(request))).resolves.toEqual({
+                success: false,
+                error: 'invalid-args',
+            });
+            expect(settings.beginControlRequest).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('finish-scenario-request', () => {
+        const asked = { requestId: 'r1', target: '7', ok: true };
+
+        test("records the result with the clock and answers the inbox's outcome", async () => {
+            settings.finishControlRequest.mockResolvedValue({ ok: true, status: 'applied', revision: 2 });
+            await expect(handlers['finish-scenario-request'](null, asked)).resolves.toEqual({
+                success: true,
+                ok: true,
+                status: 'applied',
+                revision: 2,
+            });
+            expect(settings.finishControlRequest).toHaveBeenCalledWith({
+                ...asked,
+                error: null,
+                at: expect.any(Number),
+            });
+        });
+
+        test('passes the reason of a failed one', async () => {
+            settings.finishControlRequest.mockResolvedValue({ ok: true, status: 'failed', revision: 2 });
+            await handlers['finish-scenario-request'](null, { ...asked, ok: false, error: 'busy' });
+            expect(settings.finishControlRequest).toHaveBeenCalledWith({
+                requestId: 'r1',
+                target: '7',
+                ok: false,
+                error: 'busy',
+                at: expect.any(Number),
+            });
+        });
+
+        test.each(['not-pending', 'unreadable', 'not-saved', 'invalid'] as const)(
+            'answers a refusal (%s) as its reason',
+            async (reason) => {
+                settings.finishControlRequest.mockResolvedValue({ ok: false, reason });
+                await expect(handlers['finish-scenario-request'](null, asked)).resolves.toEqual({
+                    success: false,
+                    error: reason,
+                });
+            },
+        );
+
+        test.each([
+            ['nothing', undefined],
+            ['a result that is not a boolean', { ...asked, ok: 'yes' }],
+            ['a reason that is not text', { ...asked, error: 5 }],
+            ['a reason over the bound', { ...asked, error: 'x'.repeat(121) }],
+            ['an identity that is not bounded text', { ...asked, requestId: 'a b' }],
+            ['a target that is not bounded text', { ...asked, target: 'a b' }],
+            ['an extra key', { ...asked, also: 1 }],
+        ])('refuses %s', async (_label, request) => {
+            await expect(handlers['finish-scenario-request'](null, invalid(request))).resolves.toEqual({
+                success: false,
+                error: 'invalid-args',
+            });
+            expect(settings.finishControlRequest).not.toHaveBeenCalled();
+        });
     });
 });
